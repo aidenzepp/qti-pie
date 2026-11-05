@@ -6,6 +6,8 @@ import { Effect, FileSystem } from "effect";
 import { SaxesParser } from "saxes";
 import { readXml } from "#crust/read.ts";
 import type { Child, Element, XmlDocument } from "#crust/tree.ts";
+import { declared } from "#crust/test/bytes.ts";
+import { withoutBuffer } from "#crust/test/without-buffer.ts";
 
 /**
  * The events one `saxes` parse reported: every text run in order, every attribute value in order,
@@ -109,6 +111,37 @@ layer(NodeServices.layer, { excludeTestServices: true })("read.ts", (suite) => {
       }),
     );
   }
+
+  suite.effect("reads a UTF-8 document without Node's Buffer", () => {
+    const bytes = new TextEncoder().encode('<a x="1"/>');
+
+    return withoutBuffer(
+      Effect.gen(function* readsUtf8WithoutBuffer() {
+        assert.isFalse("Buffer" in globalThis);
+
+        const document = yield* readXml(bytes);
+
+        assert.strictEqual(document.root.qname, "a");
+        assert.strictEqual(attr(document.root, "x"), "1");
+      }),
+    );
+  });
+
+  suite.effect("reads an ISO-8859-1 document without Node's Buffer", () => {
+    const bytes = declared("ISO-8859-1", [0xe9]);
+
+    return withoutBuffer(
+      Effect.gen(function* readsLatin1WithoutBuffer() {
+        assert.isFalse("Buffer" in globalThis);
+
+        const document = yield* readXml(bytes);
+
+        assert.deepStrictEqual(document.root.children, [
+          { cdata: false, kind: "text", value: "é" },
+        ]);
+      }),
+    );
+  });
 
   suite.effect("reads dtd/markup.xml with a b element under a", () =>
     Effect.gen(function* readMarkup() {

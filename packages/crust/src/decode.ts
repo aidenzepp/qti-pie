@@ -46,10 +46,22 @@ const declarationPattern =
 const declarationWindow = 1024;
 
 /**
+ * How many bytes one `String.fromCodePoint` call takes: a call over a whole large document
+ * overflows the call stack.
+ */
+const latin1Chunk = 0x80_00;
+
+/**
  * Read each byte of `bytes` as the character whose code point is the byte's value.
  */
-const latin1Text = (bytes: Uint8Array): string =>
-  Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString("latin1");
+const latin1Text = (bytes: Uint8Array): string => {
+  const chunks: string[] = [];
+  for (let start = 0; start < bytes.length; start += latin1Chunk) {
+    chunks.push(String.fromCodePoint(...bytes.subarray(start, start + latin1Chunk)));
+  }
+
+  return chunks.join("");
+};
 
 /**
  * Test whether `bytes` begins with `prefix`.
@@ -214,15 +226,16 @@ type ClassDecoder = (
 /**
  * The decoder for each encoder class `xml/charset.ts` assigns.
  *
- * `latin1` reads each byte as the code point of the same value through `Buffer`, never through a
- * `TextDecoder`: the WHATWG table maps `ISO-8859-1` to `windows-1252`, which turns bytes 0x80 to
- * 0x9F into printable characters where ISO-8859-1 and XML 1.0 section 4.3.3 give the C1 controls
- * U+0080 to U+009F. `ascii` admits only bytes below 0x80 and then reads them the same way. `utf16`
- * decodes in the byte order a byte order mark or an Appendix F pattern chose, keeping the label as
- * spelled even when it names the other order. The unmarked label `UTF-16` requires the mark (XML
- * 1.0 section 4.3.3), so without one it is `bare-utf16`; `UTF-16LE` and `UTF-16BE` need none, but
- * a document that begins with neither a mark nor a UTF-16 declaration has no order to decode in,
- * and is refused as `decode`. A `decode-only` label goes to `TextDecoder` under its own name.
+ * `latin1` reads each byte as the code point of the same value through `String.fromCodePoint`,
+ * never through a `TextDecoder`: the WHATWG table maps `ISO-8859-1` to `windows-1252`, which turns
+ * bytes 0x80 to 0x9F into printable characters where ISO-8859-1 and XML 1.0 section 4.3.3 give the
+ * C1 controls U+0080 to U+009F. `ascii` admits only bytes below 0x80 and then reads them the same
+ * way. `utf16` decodes in the byte order a byte order mark or an Appendix F pattern chose, keeping
+ * the label as spelled even when it names the other order. The unmarked label `UTF-16` requires the
+ * mark (XML 1.0 section 4.3.3), so without one it is `bare-utf16`; `UTF-16LE` and `UTF-16BE` need
+ * none, but a document that begins with neither a mark nor a UTF-16 declaration has no order to
+ * decode in, and is refused as `decode`. A `decode-only` label goes to `TextDecoder` under its own
+ * name.
  */
 const classDecoders: Readonly<Record<EncoderClass, ClassDecoder>> = {
   ascii: (body, label) => {
