@@ -1,6 +1,6 @@
 /**
- * The evaluator: phase 1's engine subset (spec §4.12) run over an item's rule tree, as pure
- * functions of the item and the variables of one attempt.
+ * The evaluator: the engine subset (spec §4.12) run over an item's rule tree, as pure functions of
+ * the item and the variables of one attempt.
  *
  * {@link runRules} runs response rules in order, and {@link evaluateExpression} gives the value of
  * one expression. They take rules the item model ({@link Item}) built and variables that hold a
@@ -16,6 +16,8 @@
  */
 import { Array as Arr, Data, Option, Result } from "effect";
 import type {
+  AreaMapEntry,
+  AreaMapping,
   Expression,
   Item,
   MapEntry,
@@ -39,8 +41,9 @@ export interface Variables {
 
 /**
  * The failure of a rule tree that names an identifier the item or the variables do not hold in the
- * role the rule reads it in: a variable or a mapped response with no value, a `qti-correct` or a
- * `qti-map-response` of no declared response, or a `qti-set-outcome-value` of no declared outcome.
+ * role the rule reads it in: a variable or a mapped response with no value, a `qti-correct`, a
+ * `qti-map-response` or a `qti-map-response-point` of no declared response, or a
+ * `qti-set-outcome-value` of no declared outcome.
  *
  * In a valid item every identifier a rule names is declared, but the variables come from the record
  * the host hands back, which may lack a value, so the evaluator returns it. Its `holder` says which
@@ -112,24 +115,35 @@ export class OutcomeMismatchError extends Data.TaggedError("OutcomeMismatchError
 }
 
 /**
- * The failure of a `qti-map-response` whose response is declared without a `qti-mapping`.
+ * The failure of a `qti-map-response` whose response is declared without a `qti-mapping`, or of a
+ * `qti-map-response-point` whose response is declared without a `qti-area-mapping`.
  *
- * QTI maps a response "using the associated mapping, which must have been declared", and the
- * evaluator returns it.
+ * QTI maps a response "using the associated mapping, which must have been declared", and a point
+ * response through its "associated areaMapping"; the evaluator returns it.
  *
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#ExpMapResponse
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#ExpMapResponsePoint
  */
 export class UnmappedResponseError extends Data.TaggedError("UnmappedResponseError")<{
   /**
    * The response's identifier.
    */
   readonly identifier: string;
+
+  /**
+   * The mapping the expression reads and the declaration lacks: `qti-mapping` for
+   * `qti-map-response`, `qti-area-mapping` for `qti-map-response-point`.
+   */
+  readonly mapping: "qti-area-mapping" | "qti-mapping";
 }> {
   /**
-   * The response and the two ways to score it, in one line.
+   * The response, the mapping it lacks and the two ways to score it, in one line.
    */
   override get message(): string {
-    return `The rules map the response ${JSON.stringify(this.identifier)}, and its declaration has no qti-mapping: give the declaration a qti-mapping, or score it without qti-map-response.`;
+    const expression =
+      this.mapping === "qti-mapping" ? "qti-map-response" : "qti-map-response-point";
+
+    return `The rules map the response ${JSON.stringify(this.identifier)}, and its declaration has no ${this.mapping}: give the declaration a ${this.mapping}, or score it without ${expression}.`;
   }
 }
 
@@ -291,7 +305,7 @@ const mapResponse = (
     const declaration = yield* responseOf(item, identifier);
     const mapping = yield* Result.fromOption(
       declaration.mapping,
-      () => new UnmappedResponseError({ identifier }),
+      () => new UnmappedResponseError({ identifier, mapping: "qti-mapping" }),
     );
     const response = yield* Result.fromOption(
       own(variables.responses, identifier),
@@ -314,6 +328,228 @@ const mapResponse = (
   });
 
 /**
+ * Convert an exact integer to a float: the nearest double, ties to even. It is the one conversion
+ * from an integer to a float (integer plan `10f98260` part C).
+ *
+ * Beyond 2^53 a double cannot hold every integer, so `2^53 + 1` becomes `2^53`. That loss is the
+ * float QTI specifies wherever an integer is compared as one, so it is not reported.
+ *
+ * @param integer The integer.
+ * @returns The nearest double.
+ */
+// oxlint-disable-next-line unicorn/prefer-native-coercion-functions -- `toFloat` names the one integer-to-float conversion the integer plan fixes, so its precision loss is documented and found in one place.
+const toFloat = (integer: bigint): number => Number(integer);
+
+/**
+ * Report whether a point lies on the segment between two vertices, its ends included.
+ *
+ * @param x The point's x coordinate.
+ * @param y The point's y coordinate.
+ * @param from One end, as `[x, y]`.
+ * @param to The other end.
+ * @returns Whether the point is on the segment.
+ */
+const onSegment = (
+  x: number,
+  y: number,
+  from: readonly [number, number],
+  to: readonly [number, number],
+): boolean => {
+  const [x1, y1] = from;
+  const [x2, y2] = to;
+
+  return (
+    (x2 - x1) * (y - y1) === (y2 - y1) * (x - x1) &&
+    Math.min(x1, x2) <= x &&
+    x <= Math.max(x1, x2) &&
+    Math.min(y1, y2) <= y &&
+    y <= Math.max(y1, y2)
+  );
+};
+
+/**
+ * Report whether a polygon holds a point: on an edge, or inside by the even-odd rule, as HTML's
+ * polygon area is. The last vertex joins the first, so a polygon that is not closed is closed.
+ *
+ * @param vertices The polygon's vertices, in order.
+ * @param x The point's x coordinate.
+ * @param y The point's y coordinate.
+ * @returns Whether the polygon holds the point.
+ * @see https://html.spec.whatwg.org/multipage/image-maps.html#attr-area-shape-poly
+ */
+const polygonHolds = (
+  vertices: readonly (readonly [number, number])[],
+  x: number,
+  y: number,
+): boolean => {
+  let inside = false;
+  for (const [index, to] of vertices.entries()) {
+    const from = vertices.at(index - 1) ?? to;
+    if (onSegment(x, y, from, to)) {
+      return true;
+    }
+
+    const [x1, y1] = from;
+    const [x2, y2] = to;
+    if (y1 > y !== y2 > y && x < ((x2 - x1) * (y - y1)) / (y2 - y1) + x1) {
+      inside = !inside;
+    }
+  }
+
+  return inside;
+};
+
+/* oxlint-disable anti-slop/no-shape-in-symbol-names -- `shape` is the QTI attribute of `qti-area-map-entry` and names an area's geometry, not a structure. */
+/**
+ * Report whether an area of each shape holds a point, its boundary included (9.15's default, R-b),
+ * from the area's coordinates and the point's, as floats.
+ *
+ * The coordinates are QTI's, which are HTML's: `rect` is left-x, top-y, right-x, bottom-y;
+ * `circle` is center-x, center-y, radius; `ellipse` is center-x, center-y, h-radius, v-radius;
+ * `poly` is x1, y1, …, xN, yN; `default` holds every point. Where QTI says nothing, HTML's
+ * image-map rules decide: an area with fewer coordinates than its shape needs holds no point,
+ * coordinates beyond them are ignored (a `poly`'s odd last one too), a `rect`'s corners may come
+ * in either order, and a radius of zero or less holds no point.
+ *
+ * @see https://html.spec.whatwg.org/multipage/image-maps.html#image-map-processing-model
+ */
+const areaHolds: Readonly<
+  Record<AreaMapEntry["shape"], (coords: readonly number[], x: number, y: number) => boolean>
+> = {
+  circle: ([centerX, centerY, radius], x, y) =>
+    centerX !== undefined &&
+    centerY !== undefined &&
+    radius !== undefined &&
+    radius > 0 &&
+    (x - centerX) ** 2 + (y - centerY) ** 2 <= radius ** 2,
+  default: () => true,
+  ellipse: ([centerX, centerY, across, down], x, y) =>
+    centerX !== undefined &&
+    centerY !== undefined &&
+    across !== undefined &&
+    down !== undefined &&
+    across > 0 &&
+    down > 0 &&
+    ((x - centerX) / across) ** 2 + ((y - centerY) / down) ** 2 <= 1,
+  poly: (coords, x, y) => {
+    const vertices = Arr.chunksOf(coords, 2).flatMap(([vertexX, vertexY]) =>
+      vertexY === undefined ? [] : [[vertexX, vertexY] as const],
+    );
+
+    return vertices.length >= 3 && polygonHolds(vertices, x, y);
+  },
+  rect: ([left, top, right, bottom], x, y) =>
+    left !== undefined &&
+    top !== undefined &&
+    right !== undefined &&
+    bottom !== undefined &&
+    Math.min(left, right) <= x &&
+    x <= Math.max(left, right) &&
+    Math.min(top, bottom) <= y &&
+    y <= Math.max(top, bottom),
+};
+
+/**
+ * Find the first area, in document order, that holds a point.
+ *
+ * @param mapping The area mapping.
+ * @param x The point's x coordinate, as a float.
+ * @param y The point's y coordinate, as a float.
+ * @returns The area's index among the mapping's entries, or -1 when no area holds the point.
+ */
+const firstArea = (mapping: AreaMapping, x: number, y: number): number =>
+  mapping.entries.findIndex((entry) => areaHolds[entry.shape](entry.coords, x, y));
+/* oxlint-enable anti-slop/no-shape-in-symbol-names */
+
+/**
+ * Sum what an area mapping maps a response's points to, before the bounds.
+ *
+ * QTI tests the points "against each area in turn, with those listed first taking priority in the
+ * case where areas overlap", and "each area can be mapped once only". The rest is open (9.15), and
+ * these defaults (R-b) hold until a ruling changes this function and its tests:
+ *
+ * - A point on a shape's boundary is inside (`rect`, `circle`, `ellipse` and `poly`, edges included;
+ *   `default` holds every point), as {@link areaHolds} reads it.
+ * - Areas are tried in document order and the first that holds a point maps it; each area is mapped
+ *   at most once.
+ * - Each distinct point that falls in no area adds `default-value` once, as `map_response` treats an
+ *   unmapped value.
+ *
+ * A coordinate is compared after the one conversion, {@link toFloat}.
+ *
+ * @param mapping The response's area mapping.
+ * @param points The response's values, a point each.
+ * @returns The sum.
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#ExpMapResponsePoint
+ */
+const areaSum = (mapping: AreaMapping, points: readonly Single[]): number => {
+  const mapped = new Set<number>();
+  let sum = 0;
+  for (const single of Arr.dedupeWith(points, equal)) {
+    const area =
+      single.baseType === "point"
+        ? firstArea(mapping, toFloat(single.value[0]), toFloat(single.value[1]))
+        : -1;
+    const entry = mapping.entries[area];
+    if (entry === undefined) {
+      sum += mapping.defaultValue;
+    } else if (!mapped.has(area)) {
+      mapped.add(area);
+      sum += entry.mappedValue;
+    }
+  }
+
+  return sum;
+};
+
+/**
+ * Give the value of a `qti-map-response-point`: a single float.
+ *
+ * The value is {@link areaSum} of the response's points, so a NULL response maps to 0. The sum is
+ * clamped to the area mapping's `lower-bound` and `upper-bound`, a NULL's 0 included (9.13's rule,
+ * as `qti-map-response` applies it).
+ *
+ * @param item The item, whose declaration gives the area mapping.
+ * @param variables The variables of the attempt.
+ * @param identifier The response's identifier.
+ * @returns The mapped value; or an {@link UnknownIdentifierError} when the item declares no
+ *   modelled response by that name, an {@link UnmappedResponseError} when its declaration has no
+ *   area mapping, or an {@link UnknownIdentifierError} when the variables hold no value of it,
+ *   checked in that order.
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#ExpMapResponsePoint
+ */
+const mapResponsePoint = (
+  item: Item,
+  variables: Variables,
+  identifier: string,
+): Result.Result<Value, UnknownIdentifierError | UnmappedResponseError> =>
+  Result.gen(function* mapOnePointResponse() {
+    const declaration = yield* responseOf(item, identifier);
+    const mapping = yield* Result.fromOption(
+      declaration.areaMapping,
+      () => new UnmappedResponseError({ identifier, mapping: "qti-area-mapping" }),
+    );
+    const response = yield* Result.fromOption(
+      own(variables.responses, identifier),
+      () => new UnknownIdentifierError({ holder: "record", identifier, role: "response" }),
+    );
+    const lower = Option.getOrElse(mapping.lowerBound, () => Number.NEGATIVE_INFINITY);
+    const upper = Option.getOrElse(mapping.upperBound, () => Number.POSITIVE_INFINITY);
+    const mapped: Value = {
+      baseType: "float",
+      cardinality: "single",
+      values: [
+        {
+          baseType: "float",
+          value: Math.min(upper, Math.max(lower, areaSum(mapping, response.values))),
+        },
+      ],
+    };
+
+    return mapped;
+  });
+
+/**
  * Report whether a condition's value is true.
  *
  * A response condition runs a branch only on a single boolean `true`: false or NULL counts as not
@@ -330,7 +566,7 @@ const isTrue = (value: Value): boolean => {
 };
 
 /**
- * Give the value of an expression of phase 1's engine subset.
+ * Give the value of an expression of the engine subset.
  *
  * - `variable`: the response's or the outcome's current value.
  * - `correct`: the response's correct response, else NULL of its declared type.
@@ -339,18 +575,22 @@ const isTrue = (value: Value): boolean => {
  * - `match`: a single boolean, whether the operands match by `match` of the value model; NULL when
  *   either is NULL.
  * - `map-response`: a single float, the response's value through its declaration's mapping.
+ * - `map-response-point`: a single float, the response's points through its declaration's area
+ *   mapping.
  *
  * Operands are evaluated left to right, and the first failure is the result.
  *
  * @param expression The expression.
- * @param item The item, whose declarations give the correct responses and the mappings.
+ * @param item The item, whose declarations give the correct responses, the mappings and the area
+ *   mappings.
  * @param variables The variables of the attempt.
  * @returns The expression's value; or an {@link UnknownIdentifierError} when it names a variable
  *   or response that is not held, or an {@link UnmappedResponseError} when a `map-response` names a
- *   response with no mapping.
+ *   response with no mapping or a `map-response-point` one with no area mapping.
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpMatch
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpIsNull
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#ExpMapResponse
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#ExpMapResponsePoint
  */
 export const evaluateExpression = (
   expression: Expression,
@@ -390,6 +630,9 @@ export const evaluateExpression = (
     }
     case "map-response": {
       return mapResponse(item, variables, expression.identifier);
+    }
+    case "map-response-point": {
+      return mapResponsePoint(item, variables, expression.identifier);
     }
     default: {
       return expression satisfies never;
