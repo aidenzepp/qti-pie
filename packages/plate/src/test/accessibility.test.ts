@@ -239,6 +239,21 @@ describe("textOf", () => {
     assert.strictEqual(textOf(label), "French flag");
     assert.strictEqual(textOf(flag), "French flag");
   });
+
+  it("counts an element's aria-label in place of its subtree, unless it is blank or hidden", () => {
+    const swatch = h("span", { "aria-label": "Green swatch", role: "img" }, [text("Ignored")]);
+    const flag = h("img", { alt: "Ignored", "aria-label": "French flag", src: "images/fr.png" });
+    const label = h("label", {}, [
+      text("Pick "),
+      swatch,
+      text(" or "),
+      h("span", { "aria-label": " \n " }, [text("this")]),
+      h("span", { "aria-hidden": "true", "aria-label": "Hidden" }, []),
+    ]);
+    assert.strictEqual(textOf(label), "Pick Green swatch or this");
+    assert.strictEqual(textOf(swatch), "Green swatch");
+    assert.strictEqual(textOf(flag), "French flag");
+  });
 });
 
 describe("nameOf", () => {
@@ -433,6 +448,36 @@ describe("checkTree", () => {
         path: ["qti-assessment-item", "form", "fieldset", "ul", "li", "input"],
       },
     ]);
+  });
+
+  it("label-name: skips a row whose Label gives no text; control-name still asks the Control for a name", () => {
+    const decorative = [h("img", { alt: "", src: "images/green.png" })];
+    const unlabelled = (key: string, control: Attributes): Element => {
+      const [, label] = contentRow("RESPONSE", key, decorative).children;
+
+      return h("li", { "data-slot": slot("choice-interaction", "choice") }, [
+        h("input", {
+          "data-slot": slot("choice-interaction", "control"),
+          id: `q1-RESPONSE-${key}`,
+          name: "q1-RESPONSE",
+          type: "radio",
+          value: key,
+          ...control,
+        }),
+        ...(label === undefined ? [] : [label]),
+      ]);
+    };
+    const named = choice("Which swatch is green?", [
+      unlabelled("A", { "aria-label": "Choice 1 of 2" }),
+      choiceRow("RESPONSE", "B", "Blue"),
+    ]);
+    const nameless = choice("Which swatch is green?", [
+      contentRow("RESPONSE", "A", decorative),
+      choiceRow("RESPONSE", "B", "Blue"),
+    ]);
+
+    assert.deepStrictEqual(checksOf(item([status, named, submit])), []);
+    assert.deepStrictEqual(checksOf(item([status, nameless, submit])), ["control-name"]);
   });
 
   it("nested-label: a label inside a label, reported once for the inner label", () => {

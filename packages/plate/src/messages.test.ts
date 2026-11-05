@@ -23,6 +23,7 @@ const english = {
   answering: "Answering",
   atLeast: "Select at least 1.",
   atMost: "Select at most 1.",
+  choiceOf: "Choice 1 of 2",
   malformedFile: "Enter text, not a file.",
   malformedNumber: "Enter a number.",
   malformedSingleMany: "Enter one answer.",
@@ -64,6 +65,10 @@ describe("message", () => {
 
   it("writes answerOf with its n and count", () => {
     assert.strictEqual(message("en", "answerOf", { count: "2", n: "1" }), "Answer 1 of 2");
+  });
+
+  it("writes choiceOf with its n and count", () => {
+    assert.strictEqual(message("en", "choiceOf", { count: "4", n: "2" }), "Choice 2 of 4");
   });
 
   it("writes a key with no placeholder without params", () => {

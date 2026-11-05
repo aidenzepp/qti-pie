@@ -25,8 +25,9 @@ import type { PartOf, PartRow, PromptMarkup, RowContext } from "#plate/emit/part
 import { applyPart } from "#plate/emit/swap.ts";
 import type { PartSwapRefused } from "#plate/emit/swap.ts";
 import { Malformed } from "#plate/form/encoding.ts";
-import { authorsName } from "#plate/interactions/name.ts";
+import { authorsName, choiceControlName } from "#plate/interactions/name.ts";
 import { message } from "#plate/messages.ts";
+import type { Locale } from "#plate/messages.ts";
 import type { ChoiceInteraction } from "#plate/model/item.ts";
 import { format } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
@@ -115,9 +116,10 @@ const rowsFor = (markup: Option.Option<PromptMarkup>): Rows => {
  *   and needs none.
  * - Control: a radio when one choice can be posted (`max-choices` 1, or a single response), else a
  *   checkbox; its id, the payload's `formName` and its value; `checked` from the restore;
- *   `disabled` when finished; `aria-labelledby` → its Label; `aria-invalid` and `aria-describedby`
- *   → the message ids when the response is invalid; and `autofocus` on the first Control when the
- *   payload says.
+ *   `disabled` when finished; its name ({@link choiceControlName}): `aria-labelledby` → its Label,
+ *   or, when the choice's content gives no text, the renderer's `aria-label` "Choice n of count",
+ *   `n` its position as emitted; `aria-invalid` and `aria-describedby` → the message ids when the
+ *   response is invalid; and `autofocus` on the first Control when the payload says.
  * - Indicator: `aria-hidden="true"`. Label: its id, and `for` → its Control.
  *
  * Every id is `scopedId(instance, response, part, index)`.
@@ -126,6 +128,7 @@ const rowsFor = (markup: Option.Option<PromptMarkup>): Rows => {
  * @param payload The payload, which gives the instance, the mode and `finished`.
  * @param rows The rows of the Choice's parts as placed.
  * @param markup The Prompt's markup, none when there is no Prompt.
+ * @param locale The locale of the renderer's own text.
  * @returns The attributes of every part.
  */
 const connect = (
@@ -133,6 +136,7 @@ const connect = (
   payload: Payload,
   rows: Rows,
   markup: Option.Option<PromptMarkup>,
+  locale: Locale,
 ): Connected => {
   const { instance } = payload;
   const promptId = scopedId(instance, interaction.response, "prompt");
@@ -150,7 +154,12 @@ const connect = (
         choice: { "data-slot": rows.choice.slot },
         content: choice.content,
         control: {
-          "aria-labelledby": labelId,
+          ...choiceControlName(
+            choice.content,
+            labelId,
+            { count: interaction.choices.length, n: index + 1 },
+            locale,
+          ),
           ...when(interaction.invalid, {
             "aria-describedby": interaction.messageIds.join(" "),
             "aria-invalid": "true",
@@ -255,7 +264,7 @@ export const renderChoice = (
     );
     const markup = promptContent.pipe(Option.map(promptMarkupFor));
     const rows = rowsFor(markup);
-    const props = connect(interaction, payload, rows, markup);
+    const props = connect(interaction, payload, rows, markup, state.locale);
 
     const choices = yield* pipe(
       props.items.map((item) =>

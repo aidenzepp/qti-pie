@@ -24,6 +24,7 @@ const en = {
   answering: "Answering",
   atLeast: "Select at least {n}.",
   atMost: "Select at most {n}.",
+  choiceOf: "Choice {n} of {count}",
   malformedFile: "Enter text, not a file.",
   malformedNumber: "Enter a number.",
   malformedSingleMany: "Enter one answer.",

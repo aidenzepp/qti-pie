@@ -8,8 +8,10 @@ import type { InteractionKey, PartName, PartOf } from "#plate/emit/parts.ts";
  *
  * Each is a static rule over the emitter's node tree: the goal's two name checks, the structural
  * rules an emitted page must keep, and spec §4.8's focus rules. They read explicit references only,
- * with no accname implementation and no browser (ruling `fb4fe744` S2). `nested-label` refuses a
- * `label` with a `label` among its ancestors, which HTML's content model forbids.
+ * with no accname implementation and no browser (ruling `fb4fe744` S2). `label-name` asks a Choice
+ * Control's name to equal its Label's text only where the Label gives text: where it gives none,
+ * the renderer names the Control (Q10), and `control-name` still asks for a name. `nested-label`
+ * refuses a `label` with a `label` among its ancestors, which HTML's content model forbids.
  *
  * @see https://html.spec.whatwg.org/multipage/forms.html#the-label-element
  */
@@ -402,12 +404,19 @@ const violation = (check: Check, visit: Visit): Violation => ({
 
 /**
  * Concatenate the text below an element as written, skipping `aria-hidden="true"` subtrees; an
- * `img` gives its `alt`.
+ * element with an `aria-label` that is not blank gives it in place of its subtree (accname 1.2
+ * step 2C), and an `img` with none gives its `alt`.
  *
  * @param node The element whose descendant text is wanted.
  * @returns The raw text, whitespace kept.
+ * @see https://www.w3.org/TR/accname-1.2/#comp_label
  */
 const textBelow = (node: Element): string => {
+  const label = attribute(node, "aria-label") ?? "";
+  if (collapse(label) !== "") {
+    return label;
+  }
+
   if (node.tag === "img") {
     return attribute(node, "alt") ?? "";
   }
@@ -427,13 +436,15 @@ const textBelow = (node: Element): string => {
  * Collect an element's descendant text, skipping `aria-hidden="true"` subtrees, with ASCII
  * whitespace collapsed and trimmed.
  *
- * Text is concatenated as written, with no space added at element boundaries. An `img`, the element
- * itself or one below it, gives its `alt`, as HTML-AAM names an `img` with no ARIA name. The
- * element's own `aria-hidden` is not read: a node `aria-labelledby` references contributes its text
- * even when it is hidden.
+ * Text is concatenated as written, with no space added at element boundaries. An element, itself
+ * or one below it, whose `aria-label` is not blank gives that label in place of its subtree, as
+ * accname 1.2 step 2C does when a name is computed from content. An `img` with none gives its
+ * `alt`, as HTML-AAM names an `img` with no ARIA name. The element's own `aria-hidden` is not read:
+ * a node `aria-labelledby` references contributes its text even when it is hidden.
  *
  * @param element The element whose text is wanted.
  * @returns The text a reader of the element hears.
+ * @see https://www.w3.org/TR/accname-1.2/#comp_label
  * @see https://www.w3.org/TR/html-aam-1.0/#img-element-accessible-name-computation
  */
 export const textOf = (element: Element): string => collapse(textBelow(element));
@@ -630,6 +641,9 @@ const rules = {
         }
 
         const expected = textOf(label.element);
+        if (expected === "") {
+          return [];
+        }
 
         return inside.filter(
           (visit) =>
