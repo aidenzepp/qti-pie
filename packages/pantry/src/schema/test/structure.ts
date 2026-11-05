@@ -3,16 +3,27 @@
  * and the relations that scope their identifiers.
  *
  * `AssessmentTest` stays thin: its `identifier` and `title` are the root's `DocumentIdentifier`
- * and `DocumentTitle` rows. The arms' containments into `Node` are not written here: one `mirrors`
- * per handle in the composed schema (`#pantry/schema/qti.ts`) binds them, and the statements over
- * these rows, other than the two candidate keys later containments target, arrive with the laws
- * heading.
+ * and `DocumentTitle` rows. The arms' containments into `Node` on `(id, tree)` are written here;
+ * the arms' `mirrors` in the composed schema (`#pantry/schema/qti.ts`) bind the rest. The
+ * statements over these rows are `rules`, below.
  *
  * A required attribute is a column of its arm; an optional one is a relation of its own keyed
  * `node`; a defaulted one is a typed column plus a `Declared*` marker of one `node` column that
  * says the source wrote it (the placement rules of `#pantry/schema/attribute-homes.ts`).
  */
-import { closedId, key, relation, str, uuid } from "@bjornpagen/grizzle";
+import {
+  capacity,
+  check,
+  closedId,
+  contained,
+  key,
+  on,
+  relation,
+  select,
+  str,
+  uuid,
+  within,
+} from "@bjornpagen/grizzle";
 import {
   NavigationMode,
   StructureHolder,
@@ -25,7 +36,8 @@ import {
   SectionRefHref,
   TestStructureIdentifier,
 } from "#pantry/schema/contracts.ts";
-import { NodeKind } from "#pantry/schema/node.ts";
+import { Document } from "#pantry/schema/document.ts";
+import { Edge, Node, NodeKind } from "#pantry/schema/node.ts";
 import * as patterns from "#pantry/schema/patterns.ts";
 
 /**
@@ -243,11 +255,117 @@ export const relations = {
 } as const;
 
 /**
- * The statements this module declares: the two candidate keys that later containments target. A
- * structure identifier is unique within its scope document (`TestIdentifier`), and within the test
- * across the documents it reaches (`TestReach`).
+ * The holders of `TestIdentifier`, each handle with the arm its rows belong to.
+ */
+const holders = [
+  ["part", TestPart],
+  ["section", AssessmentSection],
+  ["sectionRef", SectionRef],
+  ["itemRef", ItemRef],
+] as const;
+
+/**
+ * The (parent kind, child kind) pairs a structure child is complete by. An `xi:include` counts as
+ * one child (S-O3).
+ */
+const childPairs = [
+  ["qti-assessment-section", "qti-assessment-item-ref"],
+  ["qti-assessment-section", "qti-assessment-section"],
+  ["qti-assessment-section", "qti-assessment-section-ref"],
+  ["qti-assessment-section", "xi:include"],
+  ["qti-test-part", "qti-assessment-section"],
+  ["qti-test-part", "qti-assessment-section-ref"],
+] as const;
+
+/**
+ * The children an element holds at most once, by parent kind and its arm: the `?` multiplicities of
+ * the test's XSD (rule 3).
+ */
+const atMostOne = [
+  ["qti-assessment-test", AssessmentTest, ["qti-time-limits", "qti-outcome-processing"]],
+  ["qti-test-part", TestPart, ["qti-item-session-control", "qti-time-limits"]],
+  ["qti-assessment-item-ref", ItemRef, ["qti-item-session-control", "qti-time-limits"]],
+  [
+    "qti-assessment-section",
+    AssessmentSection,
+    [
+      "qti-item-session-control",
+      "qti-time-limits",
+      "qti-selection",
+      "qti-ordering",
+      "qti-adaptive-selection",
+    ],
+  ],
+] as const;
+
+/**
+ * The statements this module declares (4.4, 4.7; rules 1 to 3, 10 and 11).
+ *
+ * Identifiers: a structure identifier is unique within its scope document (`TestIdentifier`), and
+ * within the test across the documents it reaches (`TestReach`). Each arm's identifier is a
+ * `TestIdentifier` row of its handle and each handle's rows belong to the arm; a selection is on
+ * one side only, which grizzle's law compiler admits. `TestDocument` holds test documents and
+ * documents.
+ *
+ * Children: a `StructureChild` is a real `Edge` and every such edge is one, by one containment per
+ * (parent kind, child kind) pair, selected on both kinds. A `RequiredChild` is the structure child
+ * whose `required` is true; a closed roster's spellings are not its meaning, so completeness
+ * selects each spelling of true on its arm.
+ *
+ * Counts: a test has a part, and a part and a section each have a child (S-R1, S-R2); the optional
+ * children occur at most once, over `Edge` selected on both kinds.
  */
 export const rules = [
   key(TestIdentifier, ["scope", "identifier"]),
   key(TestReach, ["test", "identifier"]),
-] as const;
+  ...holders.flatMap(([holderKind, arm]) => [
+    contained(
+      on(arm, "id", "document", "identifier"),
+      on(select(TestIdentifier, { holderKind }), "holder", "scope", "identifier"),
+    ),
+    contained(on(select(TestIdentifier, { holderKind }), "holder"), on(arm, "id")),
+    contained(on(arm, "id", "document"), on(Node, "id", "tree")),
+  ]),
+  contained(
+    on(TestReach, "holder", "identifier", "holderKind"),
+    on(TestIdentifier, "holder", "identifier", "holderKind"),
+  ),
+  contained(on(TestDocument, "test"), on(select(Document, { root: "test" }), "id")),
+  contained(on(TestDocument, "document"), on(Document, "id")),
+  contained(on(TestPartTitle, "node"), on(TestPart, "id")),
+  contained(on(ItemRefCategory, "node"), on(ItemRef, "id")),
+  contained(on(StructureChild, "child", "parent"), on(Edge, "child", "parent")),
+  ...childPairs.map(([parentKind, childKind]) =>
+    contained(
+      on(select(Edge, { childKind, parentKind }), "child", "parent"),
+      on(StructureChild, "child", "parent"),
+    ),
+  ),
+  contained(on(RequiredChild, "child", "parent"), on(StructureChild, "child", "parent")),
+  check("RequiredChildRequired", RequiredChild, (r) => r.in(r.required, ["true", "1"])),
+  ...([ItemRef, AssessmentSection] as const).flatMap((arm) =>
+    (["true", "1"] as const).map((required) =>
+      contained(on(select(arm, { required }), "id"), on(RequiredChild, "child")),
+    ),
+  ),
+  capacity(on(TestPart, "id"), { from: on(StructureChild, "parent"), within: within(1n, "*") }),
+  capacity(on(AssessmentSection, "id"), {
+    from: on(StructureChild, "parent"),
+    within: within(1n, "*"),
+  }),
+  capacity(on(AssessmentTest, "id"), {
+    from: on(
+      select(Edge, { childKind: "qti-test-part", parentKind: "qti-assessment-test" }),
+      "parent",
+    ),
+    within: within(1n, "*"),
+  }),
+  ...atMostOne.flatMap(([parentKind, arm, children]) =>
+    children.map((childKind) =>
+      capacity(on(arm, "id"), {
+        from: on(select(Edge, { childKind, parentKind }), "parent"),
+        within: within(0n, 1n),
+      }),
+    ),
+  ),
+];
