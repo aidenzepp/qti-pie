@@ -550,6 +550,63 @@ const mapResponsePoint = (
   });
 
 /**
+ * A single integer or float.
+ */
+type NumberSingle = Extract<Single, { readonly baseType: "float" | "integer" }>;
+
+/**
+ * Give the one number a single integer or float value holds.
+ *
+ * @param value The value, not NULL.
+ * @returns The single integer or float, or none when the value is not a single of a numeric base
+ *   type.
+ */
+const numberOf = (value: Value): Option.Option<NumberSingle> => {
+  const [single, ...rest] = value.values;
+  if (value.cardinality !== "single" || single === undefined || rest.length > 0) {
+    return Option.none();
+  }
+
+  return single.baseType === "integer" || single.baseType === "float"
+    ? Option.some(single)
+    : Option.none();
+};
+
+/**
+ * Report whether an integer and a float are the same number, exactly: the float is integral and
+ * converts to that integer. A float that is integral and finite converts to a `bigint` exactly, so
+ * the comparison loses nothing, as `bigint == number` would not (integer plan `10f98260` part C);
+ * no integer is converted to a float.
+ *
+ * @param integer The integer.
+ * @param float The float.
+ * @returns Whether they are equal.
+ */
+const integerIsFloat = (integer: bigint, float: number): boolean =>
+  Number.isInteger(float) && BigInt(float) === integer;
+
+/**
+ * Report whether two numbers are equal exactly: two integers or two floats by value, and an integer
+ * and a float as {@link integerIsFloat} compares them, so `1` and `1.0` are equal and `1` and
+ * `1.0000000000000002` are not.
+ *
+ * @param left One number.
+ * @param right The other.
+ * @returns Whether they are equal.
+ */
+const sameNumber = (left: NumberSingle, right: NumberSingle): boolean => {
+  if (left.baseType === "integer") {
+    return right.baseType === "integer"
+      ? left.value === right.value
+      : integerIsFloat(left.value, right.value);
+  }
+
+  return right.baseType === "integer"
+    ? integerIsFloat(right.value, left.value)
+    : left.value === right.value;
+};
+
+/**
  * Report whether a condition's value is true.
  *
  * A response condition runs a branch only on a single boolean `true`: false or NULL counts as not
@@ -574,6 +631,10 @@ const isTrue = (value: Value): boolean => {
  * - `is-null`: a single boolean, whether the operand is NULL.
  * - `match`: a single boolean, whether the operands match by `match` of the value model; NULL when
  *   either is NULL.
+ * - `equal`: a single boolean, whether the operands are the same number in `exact` mode
+ *   ({@link sameNumber}); NULL when either is NULL. QTI types both operands as single numbers; an
+ *   operand that is not one is not numerically equal to anything, so the value is false, as `match`
+ *   gives false for values of different types.
  * - `map-response`: a single float, the response's value through its declaration's mapping.
  * - `map-response-point`: a single float, the response's points through its declaration's area
  *   mapping.
@@ -588,6 +649,7 @@ const isTrue = (value: Value): boolean => {
  *   or response that is not held, or an {@link UnmappedResponseError} when a `map-response` names a
  *   response with no mapping or a `map-response-point` one with no area mapping.
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpMatch
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpEqual
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpIsNull
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#ExpMapResponse
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#ExpMapResponsePoint
@@ -626,6 +688,23 @@ export const evaluateExpression = (
         return isNull(leftValue) || isNull(rightValue)
           ? nullOf("boolean", "single")
           : booleanOf(match(leftValue, rightValue));
+      });
+    }
+    case "equal": {
+      const [left, right] = expression.operands;
+
+      return Result.gen(function* equalOperands() {
+        const leftValue = yield* evaluateExpression(left, item, variables);
+        const rightValue = yield* evaluateExpression(right, item, variables);
+        if (isNull(leftValue) || isNull(rightValue)) {
+          return nullOf("boolean", "single");
+        }
+
+        return booleanOf(
+          Option.exists(Option.all([numberOf(leftValue), numberOf(rightValue)]), ([one, other]) =>
+            sameNumber(one, other),
+          ),
+        );
       });
     }
     case "map-response": {

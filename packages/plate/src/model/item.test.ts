@@ -27,7 +27,8 @@ import type {
 } from "#plate/model/item.ts";
 import { fresh } from "#plate/model/record.ts";
 import type { Value } from "#plate/model/values.ts";
-import { float } from "#plate/test/fixtures.ts";
+import { float, integer } from "#plate/test/fixtures.ts";
+import { checkRules } from "#plate/validate/rules.ts";
 import { growthFactor, growthLimit, growthRatio } from "#plate/test/growth.ts";
 
 /**
@@ -342,6 +343,179 @@ const mapResponsePoint: readonly Rule[] = [
     ]),
   },
 ];
+
+/**
+ * Construct a `qti-variable`.
+ *
+ * @param identifier The variable's identifier.
+ * @returns The expression.
+ */
+const variableOf = (identifier: string): Expression => ({ identifier, kind: "variable" });
+
+/**
+ * Construct a single identifier value.
+ *
+ * @param value The identifier.
+ * @returns The value.
+ */
+const identifierValue = (value: string): Value => ({
+  baseType: "identifier",
+  cardinality: "single",
+  values: [{ baseType: "identifier", value }],
+});
+
+/**
+ * Construct a single string value.
+ *
+ * @param value The text.
+ * @returns The value.
+ */
+const stringValue = (value: string): Value => ({
+  baseType: "string",
+  cardinality: "single",
+  values: [{ baseType: "string", value }],
+});
+
+/**
+ * Set an outcome to an expression's value.
+ *
+ * @param identifier The outcome.
+ * @param expression Its new value.
+ * @returns The rule.
+ */
+const setRule = (identifier: string, expression: Expression): Rule => ({
+  expression,
+  identifier,
+  kind: "set-outcome",
+});
+
+/**
+ * `CC2_match_basic` as a rule tree: on a match `SCORE` takes `MAXSCORE` and `FEEDBACKBASIC` is
+ * `correct`, else `FEEDBACKBASIC` is `incorrect`.
+ */
+const cc2MatchBasic: readonly Rule[] = [
+  {
+    branches: [
+      branch(
+        {
+          kind: "match",
+          operands: [variableOf("RESPONSE"), { identifier: "RESPONSE", kind: "correct" }],
+        },
+        [
+          setRule("SCORE", variableOf("MAXSCORE")),
+          setRule("FEEDBACKBASIC", { kind: "base-value", value: identifierValue("correct") }),
+        ],
+      ),
+    ],
+    kind: "condition",
+    otherwise: Option.some([
+      setRule("FEEDBACKBASIC", { kind: "base-value", value: identifierValue("incorrect") }),
+    ]),
+  },
+];
+
+/**
+ * `CC2_map_response` as a rule tree: `SCORE` is 0 when `RESPONSE` is NULL, else its mapped value;
+ * then `FEEDBACK` is `correct` when `MAXSCORE` equals `SCORE` exactly, else `incorrect`.
+ */
+const cc2MapResponse: readonly Rule[] = [
+  {
+    branches: [branch({ kind: "is-null", operand: variableOf("RESPONSE") }, [scoreRule(0)])],
+    kind: "condition",
+    otherwise: Option.some([setRule("SCORE", { identifier: "RESPONSE", kind: "map-response" })]),
+  },
+  {
+    branches: [
+      branch({ kind: "equal", operands: [variableOf("MAXSCORE"), variableOf("SCORE")] }, [
+        setRule("FEEDBACK", { kind: "base-value", value: identifierValue("correct") }),
+      ]),
+    ],
+    kind: "condition",
+    otherwise: Option.some([
+      setRule("FEEDBACK", { kind: "base-value", value: identifierValue("incorrect") }),
+    ]),
+  },
+];
+
+/**
+ * An item a `CC2_*` template scores: a single string `RESPONSE` whose correct response is `York`
+ * and whose mapping maps `York` to 1 (case-sensitive) and `york` to 0.5, a float `SCORE` with
+ * default 0, the identifier outcomes `FEEDBACK` and `FEEDBACKBASIC`, and a `MAXSCORE` with default
+ * 1 of the base type given.
+ *
+ * @param processing The item's response processing.
+ * @param maxScore `MAXSCORE`'s base type, or none to declare no `MAXSCORE`.
+ * @returns The document at `items/test.xml`.
+ */
+const cc2Item = (
+  processing: SourceElement,
+  maxScore: Option.Option<"float" | "integer"> = Option.some("float"),
+): SourceDocument =>
+  item({
+    after: [processing],
+    body: [],
+    declarations: [
+      declaration("qti-response-declaration", "RESPONSE", "string", "single", [
+        values("qti-correct-response", "York"),
+        el(
+          "qti-mapping",
+          [attr("default-value", "0")],
+          [
+            el("qti-map-entry", [
+              attr("case-sensitive", "true"),
+              attr("map-key", "York"),
+              attr("mapped-value", "1"),
+            ]),
+            el("qti-map-entry", [attr("map-key", "york"), attr("mapped-value", "0.5")]),
+          ],
+        ),
+      ]),
+      declaration("qti-outcome-declaration", "SCORE", "float", "single", [
+        values("qti-default-value", "0"),
+      ]),
+      declaration("qti-outcome-declaration", "FEEDBACK", "identifier", "single"),
+      declaration("qti-outcome-declaration", "FEEDBACKBASIC", "identifier", "single"),
+      ...Option.match(maxScore, {
+        onNone: () => [],
+        onSome: (baseType) => [
+          declaration("qti-outcome-declaration", "MAXSCORE", baseType, "single", [
+            values("qti-default-value", "1"),
+          ]),
+        ],
+      }),
+    ],
+  });
+
+/**
+ * Construct an inline `qti-response-processing` that sets the boolean outcome `SAME` to a
+ * `qti-equal` of two float base values.
+ *
+ * @param attributes The `qti-equal`'s attributes.
+ * @param left The first operand's text.
+ * @param right The second operand's text.
+ * @returns The processing element.
+ */
+const equalBlock = (
+  attributes: readonly SourceAttribute[],
+  left: string,
+  right: string,
+): SourceElement =>
+  el(
+    "qti-response-processing",
+    [],
+    [
+      el(
+        "qti-set-outcome-value",
+        [attr("identifier", "SAME")],
+        [
+          el("qti-equal", attributes, [
+            el("qti-base-value", [attr("base-type", "integer")], [text(left)]),
+            el("qti-base-value", [attr("base-type", "float")], [text(right)]),
+          ]),
+        ],
+      ),
+    ],
+  );
 
 /**
  * An item whose single point `RESPONSE` has the area mapping {@link areaMapping} gives, and whose
@@ -858,6 +1032,198 @@ describe("buildItem", () => {
               shown: "mark",
             },
           ]);
+        }
+      }),
+  );
+
+  it.effect(
+    "[I-9b] resolves CC2_match_basic and CC2_map_response to the rules of their files, and CC2_match to match_correct's",
+    () =>
+      Effect.gen(function* resolvesCc2Templates() {
+        const cases = [
+          { expected: cc2MatchBasic, name: "CC2_match_basic" },
+          { expected: cc2MapResponse, name: "CC2_map_response" },
+          { expected: matchCorrect, name: "CC2_match" },
+        ] as const;
+
+        for (const { expected, name } of cases) {
+          const rules = yield* templateRules(name);
+          const inline = yield* buildItem(cc2Item(el("qti-response-processing", [], rules)));
+          const built = yield* buildItem(cc2Item(template(name)));
+
+          assert.deepStrictEqual(built.processing, Option.some(expected), name);
+          assert.deepStrictEqual(inline.processing, built.processing, name);
+          assert.deepStrictEqual(built.unsupported, [], name);
+          assert.deepStrictEqual(inline.unsupported, [], name);
+        }
+
+        const matchRules = yield* templateRules("match_correct");
+        const cc2MatchRules = yield* templateRules("CC2_match");
+        const matchInline = yield* buildItem(
+          cc2Item(el("qti-response-processing", [], matchRules)),
+        );
+        const cc2MatchInline = yield* buildItem(
+          cc2Item(el("qti-response-processing", [], cc2MatchRules)),
+        );
+
+        assert.deepStrictEqual(cc2MatchInline.processing, matchInline.processing);
+      }),
+  );
+
+  it.effect("[I-9b] CC2_match scores as match_correct", () =>
+    Effect.gen(function* scoresCc2Match() {
+      const built = yield* buildItem(bg007(template("CC2_match.xml")));
+      const scoreOf = (answer: string) =>
+        Effect.map(
+          Effect.fromResult(
+            runAttempt(built, fresh(built, "i"), { RESPONSE: identifierValue(answer) }),
+          ),
+          (after) => after.outcomes["SCORE"],
+        );
+
+      assert.deepStrictEqual(built.processing, Option.some(matchCorrect));
+      assert.deepStrictEqual(yield* scoreOf("true"), float(1));
+      assert.deepStrictEqual(yield* scoreOf("false"), float(0));
+    }),
+  );
+
+  it.effect(
+    "[I-9b] CC2_map_response sets FEEDBACK to correct exactly when SCORE equals MAXSCORE, a float or an integer",
+    () =>
+      Effect.gen(function* scoresCc2MapResponse() {
+        for (const baseType of ["float", "integer"] as const) {
+          const built = yield* buildItem(
+            cc2Item(template("CC2_map_response"), Option.some(baseType)),
+          );
+          const outcomesOf = (answer: Value) =>
+            Effect.map(
+              Effect.fromResult(runAttempt(built, fresh(built, "i"), { RESPONSE: answer })),
+              (after) => [after.outcomes["SCORE"], after.outcomes["FEEDBACK"]],
+            );
+
+          assert.deepStrictEqual(built.processing, Option.some(cc2MapResponse), baseType);
+          assert.deepStrictEqual(
+            yield* outcomesOf(stringValue("York")),
+            [float(1), identifierValue("correct")],
+            baseType,
+          );
+          assert.deepStrictEqual(
+            yield* outcomesOf(stringValue("york")),
+            [float(0.5), identifierValue("incorrect")],
+            baseType,
+          );
+          assert.deepStrictEqual(
+            yield* outcomesOf({ baseType: "string", cardinality: "single", values: [] }),
+            [float(0), identifierValue("incorrect")],
+            baseType,
+          );
+        }
+      }),
+  );
+
+  it.effect(
+    "[I-9b] CC2_match_basic sets SCORE to MAXSCORE and FEEDBACKBASIC to correct on a match",
+    () =>
+      Effect.gen(function* scoresCc2MatchBasic() {
+        const built = yield* buildItem(cc2Item(template("CC2_match_basic")));
+        const outcomesOf = (answer: string) =>
+          Effect.map(
+            Effect.fromResult(
+              runAttempt(built, fresh(built, "i"), { RESPONSE: stringValue(answer) }),
+            ),
+            (after) => [after.outcomes["SCORE"], after.outcomes["FEEDBACKBASIC"]],
+          );
+
+        assert.deepStrictEqual(built.processing, Option.some(cc2MatchBasic));
+        assert.deepStrictEqual(yield* outcomesOf("York"), [float(1), identifierValue("correct")]);
+        assert.deepStrictEqual(yield* outcomesOf("Paris"), [
+          float(0),
+          identifierValue("incorrect"),
+        ]);
+      }),
+  );
+
+  it.effect(
+    "[I-9b] marks CC2_map_response and CC2_match_basic on an item with no MAXSCORE variable:MAXSCORE, and refuses neither",
+    () =>
+      Effect.gen(function* marksMissingMaxScore() {
+        for (const name of ["CC2_map_response", "CC2_match_basic"]) {
+          const source = cc2Item(template(name), Option.none());
+          const built = yield* buildItem(source);
+
+          assert.deepStrictEqual(checkRules(source), [], name);
+          assert.deepStrictEqual(built.processing, Option.none(), name);
+          assert.deepStrictEqual(
+            built.unsupported,
+            [
+              {
+                feature: "variable:MAXSCORE",
+                path: `${root}/qti-response-processing`,
+                shown: "mark",
+              },
+            ],
+            name,
+          );
+        }
+      }),
+  );
+
+  it.effect(
+    "reads an inline qti-equal in exact mode, written or by default, into the rule tree",
+    () =>
+      Effect.gen(function* readsEqual() {
+        const expected: readonly Rule[] = [
+          setRule("SAME", {
+            kind: "equal",
+            operands: [
+              { kind: "base-value", value: integer(1n) },
+              { kind: "base-value", value: float(1) },
+            ],
+          }),
+        ];
+
+        for (const attributes of [[], [attr("tolerance-mode", "exact")]]) {
+          const built = yield* buildItem(
+            item({
+              after: [equalBlock(attributes, "1", "1.0")],
+              body: [],
+              declarations: [declaration("qti-outcome-declaration", "SAME", "boolean", "single")],
+            }),
+          );
+
+          assert.deepStrictEqual(built.processing, Option.some(expected));
+          assert.deepStrictEqual(built.unsupported, []);
+        }
+      }),
+  );
+
+  it.effect(
+    'marks an inline qti-equal with tolerance-mode="relative" or "absolute" at its path and runs none',
+    () =>
+      Effect.gen(function* marksToleranceMode() {
+        for (const mode of ["relative", "absolute"]) {
+          const built = yield* buildItem(
+            item({
+              after: [
+                equalBlock([attr("tolerance-mode", mode), attr("tolerance", "0.1")], "1", "1.0"),
+              ],
+              body: [],
+              declarations: [declaration("qti-outcome-declaration", "SAME", "boolean", "single")],
+            }),
+          );
+
+          assert.deepStrictEqual(built.processing, Option.none(), mode);
+          assert.deepStrictEqual(
+            built.unsupported,
+            [
+              {
+                feature: `tolerance-mode="${mode}"`,
+                path: `${root}/qti-response-processing/qti-set-outcome-value/qti-equal`,
+                shown: "mark",
+              },
+            ],
+            mode,
+          );
         }
       }),
   );

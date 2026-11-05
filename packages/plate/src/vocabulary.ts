@@ -87,8 +87,10 @@ const textInteractions = ["qti-text-entry-interaction", "qti-extended-text-inter
 const declarations = ["qti-response-declaration", "qti-outcome-declaration"] as const;
 
 /**
- * The response-processing elements of the engine (spec §4.12): the nine elements it evaluates and
- * the three branches of `qti-response-condition`.
+ * The response-processing elements of the engine (spec §4.12): the ten elements it evaluates and
+ * the three branches of `qti-response-condition`. `qti-equal` runs in its default `exact`
+ * tolerance mode only; one in `absolute` or `relative` mode is a mark keyed
+ * `tolerance-mode="<mode>"`.
  *
  * An inline `qti-response-processing` that uses only these becomes a rule tree; one that uses any
  * other element is a mark keyed by that element's name.
@@ -106,6 +108,7 @@ const engine = [
   "qti-is-null",
   "qti-map-response",
   "qti-map-response-point",
+  "qti-equal",
 ] as const;
 
 /**
@@ -187,8 +190,9 @@ export interface Renders {
    * carries one: its base type (`duration`, `file`, or `base-type=""` when it has none) or
    * `cardinality="record"`. Beyond these, a `qti-*` element outside the item body and outside
    * `elements` is a mark keyed by its own name, response processing by a template URI outside the
-   * built-ins is a mark keyed `template="<uri>"`, and inline response processing with an element
-   * outside `engine` is a mark keyed by that element's name.
+   * built-ins is a mark keyed `template="<uri>"`, inline response processing with an element
+   * outside `engine` is a mark keyed by that element's name, and a `qti-equal` outside its `exact`
+   * tolerance mode is a mark keyed `tolerance-mode="<mode>"`.
    */
   readonly marks: readonly Feature[];
   /**
@@ -340,13 +344,24 @@ export const templatePrefixes = [
 ] as const;
 
 /**
- * The response-processing templates the renderer recognises by name, each of which runs as the
- * rule tree its file gives: `match_correct`, `map_response` and `map_response_point`.
+ * The response-processing templates the renderer recognises by name (reading 9.23 at head-cto's
+ * pick B, R-a), each of which runs as the rule tree its file gives: the three canonical templates
+ * `match_correct`, `map_response` and `map_response_point`, and the Common Cartridge templates
+ * `CC2_match` (the rules of `match_correct`), `CC2_match_basic` and `CC2_map_response`. A name is
+ * the URI's final path segment, with or without `.xml`, under either of {@link templatePrefixes},
+ * as {@link templateName} resolves it.
  */
-export const templateNames = ["match_correct", "map_response", "map_response_point"] as const;
+export const templateNames = [
+  "match_correct",
+  "map_response",
+  "map_response_point",
+  "CC2_match",
+  "CC2_match_basic",
+  "CC2_map_response",
+] as const;
 
 /**
- * A response-processing template phase 1 recognises.
+ * A response-processing template the renderer recognises.
  */
 export type TemplateName = (typeof templateNames)[number];
 
@@ -365,7 +380,7 @@ const xmlWhitespaceRun = /[\t\n\r ]+/gu;
  *
  * @param uri The `template` attribute's value, as written.
  * @returns The built-in's name when the collapsed `uri` is one of {@link templatePrefixes} followed
- *   by it, with or without `.xml`; none for any other URI, the `CC2_*` templates included.
+ *   by it, with or without `.xml`; none for any other URI.
  */
 export const templateName = (uri: string): Option.Option<TemplateName> => {
   const collapsed = trimXmlSpace(uri).replaceAll(xmlWhitespaceRun, " ");

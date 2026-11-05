@@ -49,6 +49,18 @@ const floatValue = (value: number): Value => ({
 });
 
 /**
+ * Construct a single integer value.
+ *
+ * @param value The integer.
+ * @returns The value.
+ */
+const integerValue = (value: bigint): Value => ({
+  baseType: "integer",
+  cardinality: "single",
+  values: [{ baseType: "integer", value }],
+});
+
+/**
  * Construct a single boolean value.
  *
  * @param value The boolean.
@@ -768,6 +780,80 @@ describe("evaluateExpression", () => {
     );
     assert.include(failure.message, JSON.stringify("MISSING"));
     assert.include(failure.message, "session record");
+  });
+});
+
+/**
+ * Give the value of a `qti-equal` of two values, in exact mode.
+ *
+ * @param left The first operand's value.
+ * @param right The second operand's value.
+ * @returns The equal's value.
+ */
+const equalOf = (left: Value, right: Value): Value =>
+  Result.getOrThrow(
+    evaluateExpression(
+      { kind: "equal", operands: [base(left), base(right)] },
+      item,
+      variablesOf(identifierValue("A")),
+    ),
+  );
+
+describe("equal", () => {
+  it("compares an integer and a float exactly: 1 and 1.0 are equal, 1 and 1.0000000000000002 are not", () => {
+    assert.deepStrictEqual(equalOf(integerValue(1n), floatValue(1)), booleanValue(true));
+    assert.deepStrictEqual(equalOf(floatValue(1), integerValue(1n)), booleanValue(true));
+    assert.deepStrictEqual(
+      equalOf(integerValue(1n), floatValue(1.0000000000000002)),
+      booleanValue(false),
+    );
+  });
+
+  it("compares two integers beyond 2^53, and an integer with the double nearest it, exactly", () => {
+    const above = 2n ** 53n + 1n;
+
+    assert.deepStrictEqual(equalOf(integerValue(above), integerValue(above)), booleanValue(true));
+    assert.deepStrictEqual(
+      equalOf(integerValue(above), integerValue(2n ** 53n)),
+      booleanValue(false),
+    );
+    assert.deepStrictEqual(equalOf(integerValue(above), floatValue(2 ** 53)), booleanValue(false));
+    assert.deepStrictEqual(
+      equalOf(integerValue(2n ** 53n), floatValue(2 ** 53)),
+      booleanValue(true),
+    );
+  });
+
+  it("compares two floats by value", () => {
+    assert.deepStrictEqual(equalOf(floatValue(0.5), floatValue(0.5)), booleanValue(true));
+    assert.deepStrictEqual(equalOf(floatValue(0.5), floatValue(0.25)), booleanValue(false));
+    assert.deepStrictEqual(equalOf(floatValue(-0), floatValue(0)), booleanValue(true));
+  });
+
+  it("is NULL when either side is NULL", () => {
+    assert.deepStrictEqual(
+      equalOf(nullOf("integer", "single"), floatValue(1)),
+      nullOf("boolean", "single"),
+    );
+    assert.deepStrictEqual(
+      equalOf(floatValue(1), nullOf("float", "single")),
+      nullOf("boolean", "single"),
+    );
+  });
+
+  it("is false when a side is not a single number", () => {
+    assert.deepStrictEqual(equalOf(identifierValue("A"), floatValue(1)), booleanValue(false));
+    assert.deepStrictEqual(
+      equalOf(
+        {
+          baseType: "float",
+          cardinality: "multiple",
+          values: [{ baseType: "float", value: 1 }],
+        },
+        floatValue(1),
+      ),
+      booleanValue(false),
+    );
   });
 });
 

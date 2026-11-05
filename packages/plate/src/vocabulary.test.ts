@@ -44,10 +44,19 @@ describe("templateName", () => {
     }
   });
 
-  it("[I-9b] resolves a CC2 template and an unknown URI to none", () => {
+  it("[I-9b] resolves the three CC2 templates to their names under either prefix", () => {
     for (const prefix of templatePrefixes) {
-      assert.isTrue(Option.isNone(templateName(`${prefix}CC2_match.xml`)));
-      assert.isTrue(Option.isNone(templateName(`${prefix}CC2_match_basic.xml`)));
+      for (const name of ["CC2_match", "CC2_match_basic", "CC2_map_response"] as const) {
+        assert.deepStrictEqual(templateName(`${prefix}${name}.xml`), Option.some(name));
+        assert.deepStrictEqual(templateName(`${prefix}${name}`), Option.some(name));
+      }
+    }
+  });
+
+  it("[I-9b] resolves an unknown URI to none", () => {
+    for (const prefix of templatePrefixes) {
+      assert.isTrue(Option.isNone(templateName(`${prefix}CC2_other.xml`)));
+      assert.isTrue(Option.isNone(templateName(`${prefix}cc2_match.xml`)));
       assert.isTrue(Option.isNone(templateName(`${prefix}match_correct.json`)));
     }
     assert.isTrue(Option.isNone(templateName("https://example.com/rptemplates/match_correct.xml")));
@@ -151,6 +160,7 @@ describe("the closed value sets", () => {
           "qti-is-null",
           "qti-map-response",
           "qti-map-response-point",
+          "qti-equal",
         ],
       ],
       [
@@ -219,7 +229,18 @@ describe("the closed value sets", () => {
           "https://www.imsglobal.org/question/qti_v3p0/rptemplates/",
         ],
       ],
-      ["templateNames", templateNames, ["match_correct", "map_response", "map_response_point"]],
+      [
+        "templateNames",
+        templateNames,
+        [
+          "match_correct",
+          "map_response",
+          "map_response_point",
+          "CC2_match",
+          "CC2_match_basic",
+          "CC2_map_response",
+        ],
+      ],
     ];
     for (const [name, actual, expected] of lists) {
       assertDistinct(actual);

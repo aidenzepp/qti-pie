@@ -303,11 +303,13 @@ export type BodyNode =
 
 /**
  * An expression of the engine subset (spec §4.12), tagged by `kind`: `qti-match`, `qti-variable`,
- * `qti-correct`, `qti-base-value`, `qti-is-null`, `qti-map-response` and
- * `qti-map-response-point`.
+ * `qti-correct`, `qti-base-value`, `qti-is-null`, `qti-map-response`, `qti-map-response-point`
+ * and `qti-equal`. An `equal` is a `qti-equal` in its default `exact` tolerance mode, the one mode
+ * the engine runs; one in `absolute` or `relative` mode is never built.
  */
 export type Expression =
   | { readonly kind: "match"; readonly operands: readonly [Expression, Expression] }
+  | { readonly kind: "equal"; readonly operands: readonly [Expression, Expression] }
   | { readonly identifier: string; readonly kind: "variable" }
   | { readonly identifier: string; readonly kind: "correct" }
   | { readonly kind: "base-value"; readonly value: Value }
@@ -397,6 +399,12 @@ const readElements: ReadonlySet<string> = new Set(renders.elements);
  * The response-processing elements the engine runs.
  */
 const engineElements: ReadonlySet<string> = new Set(renders.engine);
+
+/**
+ * The values of a `qti-equal`'s `tolerance-mode`, whose XSD type restricts `xs:string`, so a value
+ * is compared as written. The default is `exact`, the one mode the engine runs.
+ */
+const toleranceModes = ["absolute", "exact", "relative"] as const;
 
 /**
  * The features marked on the verdict.
@@ -1653,14 +1661,61 @@ const unread = (
   });
 
 /**
+ * Read a `qti-equal`: its two operands, in its default `exact` tolerance mode.
+ *
+ * A `qti-equal` in its `absolute` or `relative` mode is the mark `tolerance-mode="<mode>"` at its
+ * path, and its operands are read after it, so every element in them the engine does not run is
+ * marked too. Its `tolerance`, `include-lower-bound` and `include-upper-bound` mean nothing in
+ * `exact` mode, so they are not read.
+ *
+ * @param build The build.
+ * @param element The `qti-equal` element.
+ * @returns The `equal` expression; none when it is in another tolerance mode or holds an element
+ *   the engine does not run; or the refusal an operand gives, or `attribute-type` for a
+ *   `tolerance-mode` outside its three values, which the validator refuses first.
+ */
+const equalExpression = (
+  build: Build,
+  element: SourceElement,
+): Effect.Effect<Option.Option<Expression>, Refusal> =>
+  Effect.gen(function* readEqual() {
+    const [left, right, ...extra] = elementsOf(element);
+    if (left === undefined || right === undefined || extra.length > 0) {
+      return yield* unread(build, element);
+    }
+
+    const mode = Option.getOrElse(
+      yield* enumerated(build, element, "tolerance-mode", toleranceModes),
+      () => "exact" as const,
+    );
+    if (mode !== "exact") {
+      yield* unread(build, element, `tolerance-mode="${mode}"`);
+    }
+
+    const read = Option.all([
+      // oxlint-disable-next-line eslint/no-use-before-define -- `equalExpression` and `expression` are mutually recursive, as operands nest; the call runs only after both are defined.
+      yield* expression(build, left),
+      // oxlint-disable-next-line eslint/no-use-before-define -- as above.
+      yield* expression(build, right),
+    ]);
+    const equal = read.pipe(Option.map((pair): Expression => ({ kind: "equal", operands: pair })));
+
+    return mode === "exact" ? equal : Option.none();
+  });
+
+/**
  * Read an expression of the engine subset.
  *
- * Every operand is read, so every element the engine does not run is marked, not only the first.
+ * Every operand is read, so every element the engine does not run is marked, not only the first. A
+ * `qti-equal` in its `absolute` or `relative` tolerance mode is the mark `tolerance-mode="<mode>"`
+ * at its path, its operands read after it; only the default `exact` mode runs.
  *
  * @param build The build.
  * @param element The expression element.
- * @returns The expression, none when it holds an element the engine does not run, or the refusal
- *   `value-type` for a `qti-base-value` outside its lexical space.
+ * @returns The expression, none when it holds an element or a tolerance mode the engine does not
+ *   run, or the refusal `value-type` for a `qti-base-value` outside its lexical space. A document
+ *   the validator would refuse can also fail with `attribute-type` for a `tolerance-mode` outside
+ *   its three values.
  */
 const expression = (
   build: Build,
@@ -1736,6 +1791,9 @@ const expression = (
         const read = Option.all([yield* expression(build, left), yield* expression(build, right)]);
 
         return read.pipe(Option.map((pair) => ({ kind: "match", operands: pair })));
+      }
+      case "qti-equal": {
+        return yield* equalExpression(build, element);
       }
       default: {
         return yield* unread(build, element);
@@ -1874,12 +1932,99 @@ const floatValue = (value: number): Expression => ({
 });
 
 /**
+ * Construct a `qti-variable`.
+ *
+ * @param identifier The variable's identifier.
+ * @returns The `variable` expression of `identifier`.
+ */
+const variableOf = (identifier: string): Expression => ({ identifier, kind: "variable" });
+
+/**
+ * Construct the rule that sets an outcome to a single identifier base value.
+ *
+ * @param outcome The outcome's identifier.
+ * @param value The identifier it is set to.
+ * @returns The rule.
+ */
+const setIdentifier = (outcome: string, value: string): Rule => ({
+  expression: {
+    kind: "base-value",
+    value: {
+      baseType: "identifier",
+      cardinality: "single",
+      values: [{ baseType: "identifier", value }],
+    },
+  },
+  identifier: outcome,
+  kind: "set-outcome",
+});
+
+/**
+ * `match_correct`'s rules: `SCORE` is 1 when `RESPONSE` matches its correct response, else 0.
+ * `CC2_match`'s file holds the same rules.
+ */
+const matchCorrect: readonly Rule[] = [
+  {
+    branches: [
+      branchOf(
+        {
+          kind: "match",
+          operands: [variableOf("RESPONSE"), { identifier: "RESPONSE", kind: "correct" }],
+        },
+        [setScore(floatValue(1))],
+      ),
+    ],
+    kind: "condition",
+    otherwise: Option.some([setScore(floatValue(0))]),
+  },
+];
+
+/**
  * The built-in templates, as the rule trees their text gives (`ea422814` §5.1): the files in QTI
  * 3's `rptemplates`, transcribed as data, because a browser module reads no file at run time.
  * `map_response_point` is `map_response` with `qti-map-response-point` in place of
- * `qti-map-response`.
+ * `qti-map-response`. Of the Common Cartridge templates, `CC2_match` is `match_correct`;
+ * `CC2_match_basic` sets `SCORE` to `MAXSCORE` and `FEEDBACKBASIC` to `correct` on a match, else
+ * `FEEDBACKBASIC` to `incorrect`; and `CC2_map_response` is `map_response`, then sets `FEEDBACK` to
+ * `correct` when `MAXSCORE` and `SCORE` are equal in `exact` mode, else to `incorrect`. A
+ * template's tree goes through the check inline rules do ({@link runnable}), so one that names a
+ * variable the item does not declare, such as `MAXSCORE`, is marked and never refused.
  */
 const templates = {
+  CC2_map_response: [
+    {
+      branches: [
+        branchOf({ kind: "is-null", operand: variableOf("RESPONSE") }, [setScore(floatValue(0))]),
+      ],
+      kind: "condition",
+      otherwise: Option.some([setScore({ identifier: "RESPONSE", kind: "map-response" })]),
+    },
+    {
+      branches: [
+        branchOf({ kind: "equal", operands: [variableOf("MAXSCORE"), variableOf("SCORE")] }, [
+          setIdentifier("FEEDBACK", "correct"),
+        ]),
+      ],
+      kind: "condition",
+      otherwise: Option.some([setIdentifier("FEEDBACK", "incorrect")]),
+    },
+  ],
+  CC2_match: matchCorrect,
+  CC2_match_basic: [
+    {
+      branches: [
+        branchOf(
+          {
+            kind: "match",
+            operands: [variableOf("RESPONSE"), { identifier: "RESPONSE", kind: "correct" }],
+          },
+          [setScore(variableOf("MAXSCORE")), setIdentifier("FEEDBACKBASIC", "correct")],
+        ),
+      ],
+      kind: "condition",
+      otherwise: Option.some([setIdentifier("FEEDBACKBASIC", "incorrect")]),
+    },
+  ],
   map_response: [
     {
       branches: [
@@ -1902,24 +2047,7 @@ const templates = {
       otherwise: Option.some([setScore({ identifier: "RESPONSE", kind: "map-response-point" })]),
     },
   ],
-  match_correct: [
-    {
-      branches: [
-        branchOf(
-          {
-            kind: "match",
-            operands: [
-              { identifier: "RESPONSE", kind: "variable" },
-              { identifier: "RESPONSE", kind: "correct" },
-            ],
-          },
-          [setScore(floatValue(1))],
-        ),
-      ],
-      kind: "condition",
-      otherwise: Option.some([setScore(floatValue(0))]),
-    },
-  ],
+  match_correct: matchCorrect,
 } satisfies Record<TemplateName, readonly Rule[]>;
 
 /**
@@ -1963,13 +2091,16 @@ const processingOf = (
  * `#plate/engine/evaluate.ts`) and returns `UnknownIdentifierError` for any other identifier a rule
  * names, so `buildItem` runs no tree this walk finds a name in, and that failure stays unreachable.
  * A `qti-variable` reads a response or an outcome, `qti-correct`, `qti-map-response` and
- * `qti-map-response-point` read a response, and `qti-set-outcome-value` sets an outcome. The names
- * it finds are valid content, never refused (reading 1): a response the model does not hold (base
- * type `point`, `duration` or `file`, cardinality `record`, or no base type), a template variable,
- * an outcome the model does not hold, and the built-in variables `numAttempts`, `duration` and
+ * `qti-map-response-point` read a response, `qti-match`, `qti-equal` and `qti-is-null` read what
+ * their operands read, and `qti-set-outcome-value` sets an outcome. The names it finds are valid
+ * content, never refused (reading 1): a response the model does not hold (base type `point`,
+ * `duration` or `file`, cardinality `record`, or no base type), a template variable, an outcome the
+ * model does not hold, and the built-in variables `numAttempts`, `duration` and
  * `completionStatus`, which phase 1 holds no value for. Reading 29 makes an item's `duration` a
  * single float, so it is a valid name in an item's rules. An identifier nothing declares is refused
- * before the model is built; the walk finds it too.
+ * before the model is built when inline rules name it; the walk finds it too. One a built-in
+ * template names, such as `MAXSCORE` or `FEEDBACK` in a `CC2_*` template, is not in the document,
+ * so nothing refuses it: the walk finds it, and the processing is marked.
  *
  * @param tree The rule tree.
  * @param responses The responses the model holds.
@@ -2010,7 +2141,8 @@ const unheldIdentifiers = (
         read(operand.operand);
         break;
       }
-      case "match": {
+      case "match":
+      case "equal": {
         for (const each of operand.operands) {
           read(each);
         }
@@ -2074,7 +2206,7 @@ const expressionsOf = (tree: readonly Rule[]): readonly Expression[] => {
     found.push(operand);
     if (operand.kind === "is-null") {
       add(operand.operand);
-    } else if (operand.kind === "match") {
+    } else if (operand.kind === "match" || operand.kind === "equal") {
       for (const each of operand.operands) {
         add(each);
       }
