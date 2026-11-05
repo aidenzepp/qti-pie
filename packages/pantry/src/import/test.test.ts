@@ -194,20 +194,6 @@ const fixtureBuilt = (
   });
 
 /**
- * `test-content`'s test with its root's `xml:lang` moved onto the first rubric block. The
- * `qti-assessment-test` registry row lists no `xml:lang` (`schema/kinds/test.ts:147`), so a test
- * root that writes one is refused as unmodeled vocabulary before any row; a rubric block is where
- * a test's `xml:lang` is modeled.
- */
-const contentWithLangOnRubric = (text: string): string =>
-  text
-    .replace(' xml:lang="en">', ">")
-    .replace(
-      '<qti-rubric-block view="candidate" use="instructions">',
-      '<qti-rubric-block view="candidate" use="instructions" xml:lang="en">',
-    );
-
-/**
  * The id of the item reference that wrote `identifier`.
  */
 const itemRefId = (rows: Rows, identifier: string): Uuid =>
@@ -881,12 +867,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/test.ts", (suit
 
   suite.effect("test-content's rubrics have their rows, each with its body once", () =>
     Effect.gen(function* rubrics() {
-      const { nodes, rows } = yield* fixtureBuilt(
-        "test-content",
-        "assessment.xml",
-        undefined,
-        contentWithLangOnRubric,
-      );
+      const { nodes, rows } = yield* fixtureBuilt("test-content", "assessment.xml");
       const blocks = Rows.of(rows, TestRubricBlock);
 
       assert.sameMembers(
@@ -922,12 +903,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/test.ts", (suit
 
   suite.effect("test-content's feedback has its rows and binds into the test's declarations", () =>
     Effect.gen(function* feedback() {
-      const { documentId, nodes, rows } = yield* fixtureBuilt(
-        "test-content",
-        "assessment.xml",
-        undefined,
-        contentWithLangOnRubric,
-      );
+      const { documentId, nodes, rows } = yield* fixtureBuilt("test-content", "assessment.xml");
       const feedbacks = Rows.of(rows, TestFeedback);
 
       assert.sameMembers(
@@ -1005,12 +981,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/test.ts", (suit
     "test-content's test-level rows: DocumentLang, tool, stylesheet and context declaration",
     () =>
       Effect.gen(function* testLevel() {
-        const { documentId, rows } = yield* fixtureBuilt(
-          "test-content",
-          "assessment.xml",
-          undefined,
-          contentWithLangOnRubric,
-        );
+        const { documentId, rows } = yield* fixtureBuilt("test-content", "assessment.xml");
 
         const [lang] = Rows.of(rows, DocumentLang);
         assert.strictEqual(Rows.of(rows, DocumentLang).length, 1);

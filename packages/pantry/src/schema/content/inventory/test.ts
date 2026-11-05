@@ -205,6 +205,7 @@ export const testInventory: InventoryLeaf = {
       attribute("identifier", "IdentifierDType", "required", "own", "collapse"),
       attribute("title", "xs:normalizedString", "required", "own", "replace"),
       attribute("class", "list", "optional", "base", "collapse"),
+      attribute("xml:lang", "xs:language", "optional", "base", "collapse"),
       attribute("tool-name", "xs:normalizedString", "optional", "own", "replace"),
       attribute("tool-version", "xs:normalizedString", "optional", "own", "replace"),
     ],

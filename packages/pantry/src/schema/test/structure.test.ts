@@ -152,7 +152,14 @@ describe("the test structure relations", () => {
         "keep-together",
       ],
       "qti-assessment-section-ref": ["identifier", "class", "href"],
-      "qti-assessment-test": ["identifier", "title", "class", "tool-name", "tool-version"],
+      "qti-assessment-test": [
+        "identifier",
+        "title",
+        "class",
+        "xml:lang",
+        "tool-name",
+        "tool-version",
+      ],
       "qti-test-part": ["identifier", "title", "class", "navigation-mode", "submission-mode"],
     } as const;
     for (const [handle, attributes] of Object.entries(wanted)) {
