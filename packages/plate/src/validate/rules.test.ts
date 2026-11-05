@@ -105,6 +105,24 @@ const mapping = (...keys: readonly string[]): SourceElement =>
   );
 
 /**
+ * Construct a `qti-area-mapping` of the circle `102,113,16`, mapped to 1.
+ *
+ * @returns The area mapping.
+ */
+const areaMapping = (): SourceElement =>
+  el(
+    "qti-area-mapping",
+    [attr("default-value", "0")],
+    [
+      el("qti-area-map-entry", [
+        attr("coords", "102,113,16"),
+        attr("mapped-value", "1"),
+        attr("shape", "circle"),
+      ]),
+    ],
+  );
+
+/**
  * Construct a `qti-response-processing`, from a built-in template's name or from inline rules.
  *
  * @param template The template's name after the purl prefix, none for inline processing.
@@ -227,6 +245,34 @@ const variable = (identifier: string, local = "qti-variable"): SourceElement =>
 const isNull = (identifier: string): SourceElement => el("qti-is-null", [], [variable(identifier)]);
 
 /**
+ * Construct a `qti-equal` of its operands, in its default exact mode.
+ *
+ * @param operands Its operands.
+ * @returns The expression.
+ */
+const equal = (...operands: readonly SourceElement[]): SourceElement =>
+  el("qti-equal", [], operands);
+
+/**
+ * Construct a `qti-map-response-point` of a response.
+ *
+ * @param identifier The response's identifier.
+ * @returns The expression.
+ */
+const mapPoint = (identifier: string): SourceElement =>
+  variable(identifier, "qti-map-response-point");
+
+/**
+ * Construct a point response declaration with an area mapping.
+ *
+ * @param identifier Its `identifier`.
+ * @param cardinality Its `cardinality`.
+ * @returns The declaration.
+ */
+const pointResponse = (identifier: string, cardinality = "single"): SourceElement =>
+  response(identifier, cardinality, "point", [areaMapping()]);
+
+/**
  * Construct an inline rule that sets an outcome to an expression.
  *
  * @param identifier The outcome's identifier.
@@ -252,11 +298,18 @@ const lookup = (identifier: string, operand: SourceElement): SourceElement =>
  *
  * @param table The table's local name, `qti-match-table` or `qti-interpolation-table`.
  * @param operand The lookup's operand.
+ * @param declarations The item's declarations before `SCORE`, such as the response the operand
+ *   reads.
  * @returns The item.
  */
-const lookupItem = (table: string, operand: SourceElement) =>
+const lookupItem = (
+  table: string,
+  operand: SourceElement,
+  declarations: readonly SourceElement[] = [],
+) =>
   item(
     [
+      ...declarations,
       outcome("SCORE", "float", [
         el(
           table,
@@ -314,6 +367,38 @@ const judged = (source: ReturnType<typeof item>) =>
  */
 const settingScore = (expression: SourceElement) =>
   judged(item([outcome("SCORE")], [], [processing(undefined, [setScore(expression)])]));
+
+/**
+ * Check an item whose inline processing sets its float `SCORE` from a `qti-map-response-point` of
+ * `RESPONSE`.
+ *
+ * @param declared The `RESPONSE` declaration.
+ * @returns The refusals, reduced.
+ */
+const mappingPoints = (declared: SourceElement) =>
+  judged(
+    item(
+      [declared, outcome("SCORE")],
+      [],
+      [processing(undefined, [setScore(mapPoint("RESPONSE"))])],
+    ),
+  );
+
+/**
+ * Check an item whose inline processing sets the boolean `PASSED` from a `qti-equal`, beside a
+ * multiple integer `RESPONSE` an operand may read.
+ *
+ * @param operands The `qti-equal`'s operands.
+ * @returns The refusals, reduced.
+ */
+const comparing = (...operands: readonly SourceElement[]) =>
+  judged(
+    item(
+      [response("RESPONSE", "multiple", "integer"), outcome("PASSED", "boolean")],
+      [],
+      [processing(undefined, [setOutcome("PASSED", equal(...operands))])],
+    ),
+  );
 
 describe("checkRules", () => {
   describe("undeclared-response", () => {
@@ -778,6 +863,41 @@ describe("checkRules", () => {
         [],
       );
     });
+
+    describe("an inline qti-map-response-point", () => {
+      /**
+       * The refusal of an inline `qti-map-response-point` of `RESPONSE`, which is not a point
+       * response holding a `qti-area-mapping`.
+       */
+      const pointRefused = {
+        detail: {
+          baseType: "point",
+          child: "qti-area-mapping",
+          declaration: "qti-response-declaration",
+          element: "qti-map-response-point",
+          identifier: "RESPONSE",
+        },
+        path: `${processingPath}/qti-set-outcome-value/qti-map-response-point`,
+        rule: "template-requirements" as const,
+      };
+
+      it("refuses one of a point response with no qti-area-mapping, at its path", () => {
+        assert.deepStrictEqual(mappingPoints(response("RESPONSE", "single", "point")), [
+          pointRefused,
+        ]);
+      });
+
+      it("refuses one of an identifier response, though it holds a qti-area-mapping", () => {
+        assert.deepStrictEqual(
+          mappingPoints(response("RESPONSE", "single", "identifier", [areaMapping()])),
+          [pointRefused],
+        );
+      });
+
+      it("accepts one of a multiple point response with a qti-area-mapping", () => {
+        assert.deepStrictEqual(mappingPoints(pointResponse("RESPONSE", "multiple")), []);
+      });
+    });
   });
 
   describe("value-type", () => {
@@ -835,7 +955,7 @@ describe("checkRules", () => {
       );
     });
 
-    it("[I-1] does not refuse a point qti-value, a base type phase 1 does not model", () => {
+    it("[I-1] accepts a point qti-value of '1 2', two integer coordinates", () => {
       assert.deepStrictEqual(
         judged(
           item(
@@ -844,6 +964,24 @@ describe("checkRules", () => {
           ),
         ),
         [],
+      );
+    });
+
+    it("[I-1] refuses a point qti-value of 102, one coordinate, at that qti-value's path", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [response("RESPONSE", "single", "point", [values("qti-correct-response", "102")])],
+            [],
+          ),
+        ),
+        [
+          {
+            detail: { baseType: "point", lexical: "102" },
+            path: `${declarationPath}/qti-correct-response/qti-value`,
+            rule: "value-type",
+          },
+        ],
       );
     });
 
@@ -1030,6 +1168,41 @@ describe("checkRules", () => {
         ],
       );
     });
+
+    /**
+     * The refusal of a `qti-map-response-point` that names no response.
+     *
+     * @param identifier The identifier it names.
+     * @returns The refusal, reduced.
+     */
+    const undeclaredPoint = (identifier: string) => ({
+      detail: { element: "qti-map-response-point", expected: "response", identifier },
+      path: `${rulePath}/qti-map-response-point`,
+      rule: "undeclared-variable" as const,
+    });
+
+    describe("a qti-map-response-point", () => {
+      it('refuses one of identifier="NOPE" at its path', () => {
+        assert.deepStrictEqual(settingScore(mapPoint("NOPE")), [undeclaredPoint("NOPE")]);
+      });
+
+      it("refuses one that names an outcome, not a response", () => {
+        assert.deepStrictEqual(settingScore(mapPoint("SCORE")), [undeclaredPoint("SCORE")]);
+      });
+
+      it("accepts one of a declared point response", () => {
+        assert.deepStrictEqual(
+          judged(
+            item(
+              [pointResponse("RESPONSE"), outcome("SCORE")],
+              [],
+              [processing(undefined, [setScore(mapPoint("RESPONSE"))])],
+            ),
+          ),
+          [],
+        );
+      });
+    });
   });
 
   describe("expression-type", () => {
@@ -1075,6 +1248,119 @@ describe("checkRules", () => {
         settingScore(el("qti-sum", [], [baseValue("integer", "1"), baseValue("integer", "2")])),
         [],
       );
+    });
+
+    describe("a qti-map-response-point, a single float", () => {
+      it("accepts setting the float SCORE from one", () => {
+        assert.deepStrictEqual(
+          judged(
+            item(
+              [pointResponse("RESPONSE"), outcome("SCORE")],
+              [],
+              [processing(undefined, [setScore(mapPoint("RESPONSE"))])],
+            ),
+          ),
+          [],
+        );
+      });
+
+      it("refuses setting an integer outcome from one", () => {
+        assert.deepStrictEqual(
+          judged(
+            item(
+              [pointResponse("RESPONSE"), outcome("HITS", "integer")],
+              [],
+              [processing(undefined, [setOutcome("HITS", mapPoint("RESPONSE"))])],
+            ),
+          ),
+          [
+            {
+              detail: {
+                element: "qti-set-outcome-value",
+                expressionBaseType: "float",
+                expressionCardinality: "single",
+                identifier: "HITS",
+                outcomeBaseType: "integer",
+                outcomeCardinality: "single",
+              },
+              path: rulePath,
+              rule: "expression-type",
+            },
+          ],
+        );
+      });
+    });
+
+    describe("a qti-equal, a single boolean", () => {
+      it("accepts setting a boolean outcome from one of an integer and a float", () => {
+        assert.deepStrictEqual(
+          judged(
+            item(
+              [outcome("PASSED", "boolean")],
+              [],
+              [
+                processing(undefined, [
+                  setOutcome("PASSED", equal(baseValue("integer", "1"), baseValue("float", "1.0"))),
+                ]),
+              ],
+            ),
+          ),
+          [],
+        );
+      });
+
+      it("refuses setting the float SCORE from one", () => {
+        assert.deepStrictEqual(
+          settingScore(equal(baseValue("integer", "1"), baseValue("float", "1.0"))),
+          [scoreRefused("boolean")],
+        );
+      });
+    });
+
+    describe("a qti-equal operand, a single integer or float", () => {
+      const equalPath = `${rulePath}/qti-equal`;
+
+      /**
+       * The refusal of a `qti-equal` operand of another type.
+       *
+       * @param operand The operand's position, from 1.
+       * @param baseType Its base type.
+       * @param cardinality Its cardinality.
+       * @returns The refusal, reduced.
+       */
+      const operandRefused = (operand: string, baseType: string, cardinality: string) => ({
+        detail: {
+          element: "qti-equal",
+          expressionBaseType: baseType,
+          expressionCardinality: cardinality,
+          operand,
+        },
+        path: equalPath,
+        rule: "expression-type" as const,
+      });
+
+      it("refuses a string operand, at the qti-equal", () => {
+        assert.deepStrictEqual(comparing(baseValue("integer", "1"), baseValue("string", "1")), [
+          operandRefused("2", "string", "single"),
+        ]);
+      });
+
+      it("refuses a multiple operand, at the qti-equal", () => {
+        assert.deepStrictEqual(comparing(variable("RESPONSE"), baseValue("integer", "1")), [
+          operandRefused("1", "integer", "multiple"),
+        ]);
+      });
+
+      it("accepts an integer and a float operand", () => {
+        assert.deepStrictEqual(comparing(baseValue("integer", "1"), baseValue("float", "1")), []);
+      });
+
+      it("accepts an operand that holds a qti-sum, untyped", () => {
+        assert.deepStrictEqual(
+          comparing(el("qti-sum", [], [baseValue("string", "1")]), baseValue("integer", "1")),
+          [],
+        );
+      });
     });
 
     it("[I-9b] compares a record outcome by cardinality alone", () => {
@@ -1137,6 +1423,62 @@ describe("checkRules", () => {
         assert.deepStrictEqual(
           judged(lookupItem("qti-interpolation-table", baseValue("float", "1.5"))),
           [],
+        );
+      });
+
+      it("refuses a qti-map-response-point operand, a float, under a match table", () => {
+        assert.deepStrictEqual(
+          judged(lookupItem("qti-match-table", mapPoint("RESPONSE"), [pointResponse("RESPONSE")])),
+          [
+            {
+              detail: {
+                element: "qti-lookup-outcome-value",
+                expressionBaseType: "float",
+                expressionCardinality: "single",
+                identifier: "SCORE",
+                reading: "28",
+                table: "qti-match-table",
+              },
+              path: "qti-assessment-item/qti-response-processing/qti-lookup-outcome-value",
+              rule: "expression-type",
+            },
+          ],
+        );
+      });
+
+      it("accepts a qti-map-response-point operand under an interpolation table", () => {
+        assert.deepStrictEqual(
+          judged(
+            lookupItem("qti-interpolation-table", mapPoint("RESPONSE"), [
+              pointResponse("RESPONSE"),
+            ]),
+          ),
+          [],
+        );
+      });
+
+      it("refuses a qti-equal operand, a boolean, under an interpolation table", () => {
+        assert.deepStrictEqual(
+          judged(
+            lookupItem(
+              "qti-interpolation-table",
+              equal(baseValue("integer", "1"), baseValue("integer", "1")),
+            ),
+          ),
+          [
+            {
+              detail: {
+                element: "qti-lookup-outcome-value",
+                expressionBaseType: "boolean",
+                expressionCardinality: "single",
+                identifier: "SCORE",
+                reading: "28",
+                table: "qti-interpolation-table",
+              },
+              path: "qti-assessment-item/qti-response-processing/qti-lookup-outcome-value",
+              rule: "expression-type",
+            },
+          ],
         );
       });
 
