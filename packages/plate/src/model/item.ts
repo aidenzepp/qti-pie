@@ -2054,9 +2054,9 @@ const matchCorrect: readonly Rule[] = [
  * `CC2_match_basic` sets `SCORE` to `MAXSCORE` and `FEEDBACKBASIC` to `correct` on a match, else
  * `FEEDBACKBASIC` to `incorrect`; and `CC2_map_response` is `map_response`, then sets `FEEDBACK` to
  * `correct` when `MAXSCORE` and `SCORE` are equal in `exact` mode, else to `incorrect`. A
- * template's tree goes through the check inline rules do ({@link runnable}), so one that names a
- * variable the item does not declare, such as `MAXSCORE`, is marked and never refused, and so is a
- * template that needs a declaration the item does not provide, such as a `CC2_*` template's
+ * template's tree goes through {@link runnable} as inline rules do, and is also checked for what it
+ * needs: one that names a variable the item does not declare, such as `MAXSCORE`, is marked and
+ * never refused, and so is one that needs a declaration the item does not provide, such as a
  * `qti-mapping` or a `SCORE` of a single float.
  */
 const templates = {
@@ -2097,9 +2097,7 @@ const templates = {
   map_response: [
     {
       branches: [
-        branchOf({ kind: "is-null", operand: { identifier: "RESPONSE", kind: "variable" } }, [
-          setScore(floatValue(0)),
-        ]),
+        branchOf({ kind: "is-null", operand: variableOf("RESPONSE") }, [setScore(floatValue(0))]),
       ],
       kind: "condition",
       otherwise: Option.some([setScore({ identifier: "RESPONSE", kind: "map-response" })]),
@@ -2108,9 +2106,7 @@ const templates = {
   map_response_point: [
     {
       branches: [
-        branchOf({ kind: "is-null", operand: { identifier: "RESPONSE", kind: "variable" } }, [
-          setScore(floatValue(0)),
-        ]),
+        branchOf({ kind: "is-null", operand: variableOf("RESPONSE") }, [setScore(floatValue(0))]),
       ],
       kind: "condition",
       otherwise: Option.some([setScore({ identifier: "RESPONSE", kind: "map-response-point" })]),
@@ -2139,7 +2135,7 @@ interface ProcessingTree {
  *
  * @param build The build.
  * @param processing The processing element.
- * @returns The rule tree with the template it is, none when phase 1 cannot run it, or a refusal.
+ * @returns The rule tree with the template it is, none when the engine cannot run it, or a refusal.
  */
 const processingOf = (
   build: Build,
@@ -2407,15 +2403,22 @@ const singleType = (baseType: ModelledBaseType): ValueType => ({ baseType, cardi
 
 /**
  * Give the type of every value an expression gives, as the evaluator gives it
- * (`evaluateExpression` in `#plate/engine/evaluate.ts`).
+ * (`evaluateExpression` in `#plate/engine/evaluate.ts`). Each case names the code it mirrors in
+ * that file, so a change to either is seen in the other:
  *
- * A `qti-variable` has the type of the response or the outcome it names, else of the built-in it
- * names: the one built-in the engine holds, `numAttempts` ({@link heldBuiltIns}), is a single
- * integer. A `qti-correct` has its response's type, a `qti-base-value` its own, `qti-match`,
- * `qti-equal` and `qti-is-null` are a single boolean, and `qti-map-response` and
- * `qti-map-response-point` a single float. A NULL keeps the type of the expression that gave it,
- * and the session record holds each variable at its declared type, so the type holds for every
- * value the expression gives.
+ * - `variable`: the type of the response or the outcome it names, whose value the record holds
+ *   (`evaluateExpression`'s `variable` case, through `variableValue`), else of the built-in it
+ *   names: the one built-in the engine holds, `numAttempts` ({@link heldBuiltIns}), is a single
+ *   integer (`builtInValue`).
+ * - `correct`: its response's declared type, of the correct response or of the NULL in its place
+ *   (`evaluateExpression`'s `correct` case).
+ * - `base-value`: its own (`evaluateExpression`'s `base-value` case).
+ * - `is-null`, `match` and `equal`: a single boolean (`evaluateExpression`'s `is-null`, `match` and
+ *   `equal` cases, through `booleanOf` and `nullOf`).
+ * - `map-response` and `map-response-point`: a single float (`mapResponse` and `mapResponsePoint`).
+ *
+ * A NULL keeps the type of the expression that gave it, and the session record holds each variable
+ * at its declared type, so the type holds for every value the expression gives.
  *
  * @param operand The expression.
  * @param responses The responses the model holds.
@@ -2663,11 +2666,10 @@ const declarationsOf = (document: SourceDocument): ReadonlyMap<string, SourceEle
  * coordinate; each identifier it does not hold is the mark `variable:<identifier>` at the
  * processing element's path, each such need unmet its mark there (`mapping:<identifier>`,
  * `area-mapping:<identifier>` or `outcome-type:<identifier>`), such a point mapping the mark
- * `area-coords-percent` there, and the processing is then none. An
- * item whose root has a `qti-template-processing` child keeps that element's mark and has no
- * processing, whatever the tree: template processing may set a template variable, a default value
- * or a correct response, and phase 1 runs none of it, so a score computed without it could be
- * wrong.
+ * `area-coords-percent` there, and the processing is then none. An item whose root has a
+ * `qti-template-processing` child keeps that element's mark and has no processing, whatever the
+ * tree: template processing may set a template variable, a default value or a correct response,
+ * and phase 1 runs none of it, so a score computed without it could be wrong.
  *
  * @param source A document the structural validator and the prose rules accepted.
  * @returns The item, or the refusal `value-type` at the first typed value outside its lexical

@@ -1159,7 +1159,7 @@ const write = (expression: Expression): string =>
     .join("|");
 
 /**
- * Compile a translation with the `v` flag.
+ * Compile a translation, with the `v` flag unless other flags are given.
  *
  * The translation is valid ECMAScript by construction; an engine that still refuses it (one
  * without the `v` flag, or with a limit on repetition counts) fails as a refusal at the start of
@@ -1167,6 +1167,8 @@ const write = (expression: Expression): string =>
  *
  * @param pattern The pattern, for the refusal.
  * @param source The translation.
+ * @param flags The flags: `v` for a whole translation, and `vy` for a character class
+ *   {@link matches} tests at one position through `lastIndex`.
  * @returns The expression, or the engine's refusal.
  */
 const expressionOf = (

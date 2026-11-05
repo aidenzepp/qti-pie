@@ -794,7 +794,7 @@ const bindQuadratically = (source: SourceDocument): readonly (SourceElement | un
 
 describe("buildItem", () => {
   it.effect(
-    "[I-0] [I-1] [I-2] [I-7] [Q-2] [I-9b] builds BG007's Choice, and its template's rule tree is the inline block's",
+    "[I-0] [I-1] [I-2] [I-7] [Q-2] builds BG007's Choice, and its template's rule tree is the inline block's",
     () =>
       Effect.gen(function* buildsBg007() {
         const built: Item = yield* buildItem(bg007(template("match_correct")));
@@ -835,7 +835,7 @@ describe("buildItem", () => {
       }),
   );
 
-  it.effect("[I-9b] resolves map_response to its rule tree and reads the mapping", () =>
+  it.effect("resolves map_response to its rule tree and reads the mapping", () =>
     Effect.gen(function* buildsMapResponse() {
       const built = yield* buildItem(
         item({
@@ -973,19 +973,17 @@ describe("buildItem", () => {
 
   /* oxlint-enable anti-slop/no-shape-in-symbol-names */
 
-  it.effect(
-    "[I-9b] resolves map_response_point to the rules of its file, read from the cache",
-    () =>
-      Effect.gen(function* resolvesMapResponsePoint() {
-        const rules = yield* templateRules("map_response_point");
-        const inline = yield* buildItem(pointItem(el("qti-response-processing", [], rules)));
-        const built = yield* buildItem(pointItem(template("map_response_point")));
+  it.effect("resolves map_response_point to the rules of its file, read from the cache", () =>
+    Effect.gen(function* resolvesMapResponsePoint() {
+      const rules = yield* templateRules("map_response_point");
+      const inline = yield* buildItem(pointItem(el("qti-response-processing", [], rules)));
+      const built = yield* buildItem(pointItem(template("map_response_point")));
 
-        assert.deepStrictEqual(built.processing, Option.some(mapResponsePoint));
-        assert.deepStrictEqual(inline.processing, built.processing);
-        assert.deepStrictEqual(built.unsupported, []);
-        assert.deepStrictEqual(inline.unsupported, []);
-      }),
+      assert.deepStrictEqual(built.processing, Option.some(mapResponsePoint));
+      assert.deepStrictEqual(inline.processing, built.processing);
+      assert.deepStrictEqual(built.unsupported, []);
+      assert.deepStrictEqual(inline.unsupported, []);
+    }),
   );
 
   it.effect("fails naming the path when a template file is missing under HOME", () =>
@@ -1056,7 +1054,7 @@ describe("buildItem", () => {
   );
 
   it.effect(
-    "[I-9b] resolves CC2_match_basic and CC2_map_response to the rules of their files, and CC2_match to match_correct's",
+    "resolves CC2_match_basic and CC2_map_response to the rules of their files, and CC2_match to match_correct's",
     () =>
       Effect.gen(function* resolvesCc2Templates() {
         const cases = [
@@ -2192,31 +2190,29 @@ describe("buildItem", () => {
     }),
   );
 
-  it.effect(
-    "[I-9b] runs a point RESPONSE's match_correct and marks only what it does not render",
-    () =>
-      Effect.gen(function* runsPointMatchCorrect() {
-        const built = yield* buildItem(
-          item({
-            after: [
-              template("match_correct"),
-              el("qti-modal-feedback", [attr("identifier", "fb")], [text("Well done")]),
-            ],
-            body: [],
-            declarations: [
-              declaration("qti-response-declaration", "RESPONSE", "point", "single", [
-                values("qti-correct-response", "10 10"),
-              ]),
-              declaration("qti-outcome-declaration", "SCORE", "float", "single"),
-            ],
-          }),
-        );
+  it.effect("runs a point RESPONSE's match_correct and marks only what it does not render", () =>
+    Effect.gen(function* runsPointMatchCorrect() {
+      const built = yield* buildItem(
+        item({
+          after: [
+            template("match_correct"),
+            el("qti-modal-feedback", [attr("identifier", "fb")], [text("Well done")]),
+          ],
+          body: [],
+          declarations: [
+            declaration("qti-response-declaration", "RESPONSE", "point", "single", [
+              values("qti-correct-response", "10 10"),
+            ]),
+            declaration("qti-outcome-declaration", "SCORE", "float", "single"),
+          ],
+        }),
+      );
 
-        assert.isTrue(Option.isSome(built.processing));
-        assert.deepStrictEqual(built.unsupported, [
-          { feature: "qti-modal-feedback", path: `${root}/qti-modal-feedback`, shown: "mark" },
-        ]);
-      }),
+      assert.isTrue(Option.isSome(built.processing));
+      assert.deepStrictEqual(built.unsupported, [
+        { feature: "qti-modal-feedback", path: `${root}/qti-modal-feedback`, shown: "mark" },
+      ]);
+    }),
   );
 
   it.effect("marks inline rules that read the built-in duration as variable:duration", () =>
@@ -2421,7 +2417,7 @@ describe("buildItem", () => {
     }),
   );
 
-  it.effect("[I-9b] keeps BG007's match_correct tree, every identifier held, with no mark", () =>
+  it.effect("keeps BG007's match_correct tree, every identifier held, with no mark", () =>
     Effect.gen(function* keepsHeldTree() {
       const built = yield* buildItem(bg007(template("match_correct")));
 

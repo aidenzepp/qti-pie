@@ -448,8 +448,9 @@ const responseHolding = (child: string, baseType: Option.Option<BaseType>): Need
  * the correct response, but not a mapping or an area mapping ({@link templateRequirements}).
  *
  * The `CC2_*` templates need nothing here: `template-requirements` judges the three canonical
- * templates only (Q6), so a `CC2_*` template is never refused by it. What a `CC2_*` template's
- * tree needs and the item does not provide, such as a variable, a `qti-mapping` or a `SCORE` of the
+ * templates only (Q6), so a `CC2_*` template is never refused by it. What any built-in template's
+ * tree needs beyond this table and the item does not provide, a canonical template's or a `CC2_*`
+ * one's, such as a variable, a `qti-mapping`, or a `SCORE` of the cardinality as well as the base
  * type a rule sets, the item model marks instead, and that processing does not run (`runnable` in
  * `#plate/model/item.ts`).
  */
@@ -512,11 +513,11 @@ const neededDetail = (element: string, needed: Needed) => ({
  * response for `match_correct`, a `qti-mapping` for `map_response`, and a `point` base type and a
  * `qti-area-mapping` for `map_response_point`, and a declared float `SCORE`. The template is
  * resolved by the vocabulary's `templateName` from its `template` as written, as the item model
- * resolves it; a `CC2_*` template needs nothing (Q6), the item model marking what its tree lacks,
- * and any other template is not judged. "If
- * both embedded rules and a template reference are supplied then the internal rules take
- * precedence" (the information model), so a template beside inline rules never runs and is not
- * judged either; the inline rules are.
+ * resolves it; a `CC2_*` template needs nothing (Q6), and any other template is not judged. What a
+ * built-in template's tree needs beyond {@link templateNeeds}, the item model marks. "If both
+ * embedded rules and a template reference are supplied then the internal rules take precedence"
+ * (the information model), so a template beside inline rules never runs and is not judged either;
+ * the inline rules are.
  *
  * The correct response `match_correct` needs may also be set by template processing: "The response
  * variable to have its correct value set" is a template rule, `qti-set-correct-response` (the
