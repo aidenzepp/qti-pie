@@ -284,7 +284,7 @@ describe("package/open.ts", () => {
           const directory = corpusPackages.begGuide;
           const verdict = yield* openPackage(directory, yield* corpusPackage(directory));
           const accepted = acceptedOf(verdict);
-          const bgTest = testOf(accepted, "BGtest.xml");
+          const bgTest = testOf(accepted, fileLocation(directory, "BGtest.xml"));
 
           const refs = itemRefs(bgTest.test);
 
@@ -454,11 +454,15 @@ describe("package/open.ts", () => {
     it.effect("accepts a.b.SCORE when only item ref a.b resolves it (reading 48)", () =>
       Effect.gen(function* unambiguous() {
         const accepted = acceptedOf(yield* openPackage(location, dottedPackage("SCORE")));
-        const test = accepted.tests.get("test.xml");
 
         assert.deepStrictEqual(
-          [...(test?.items ?? new Map()).keys()],
-          ["a", "a.b"],
+          [...testOf(accepted, fileLocation(location, "test.xml")).items].map(
+            ([identifier, item]) => [identifier, item.document],
+          ),
+          [
+            ["a", fileLocation(location, "items/a.xml")],
+            ["a.b", fileLocation(location, "items/ab.xml")],
+          ],
           "each item ref is resolved",
         );
       }),
@@ -484,6 +488,46 @@ describe("package/open.ts", () => {
             readings(yield* openPackage(location, formsPackage("a.b.SCORE"))),
             [],
           );
+        }),
+    );
+
+    it.effect(
+      "resolves an item ref as startTest does: against the test's path, escapes decoded before dot segments are removed, query and fragment set aside",
+      () =>
+        Effect.gen(function* escaped() {
+          const accepted = acceptedOf(
+            yield* openPackage(
+              location,
+              packageOf({
+                [manifestFile]: manifestXml(
+                  resourceXml("T", "imsqti_test_xmlv3p0", "tests/test.xml"),
+                  resourceXml("A", "imsqti_item_xmlv3p0", "items/a%20b.xml"),
+                ),
+                "items/a b.xml": itemXml("a", "SCORE"),
+                "tests/test.xml": testXml(
+                  "a.SCORE",
+                  ["a", "../items/a%20b.xml"],
+                  ["b", "./../items/./a b.xml?x=1#y"],
+                  ["c", "%2E%2E/items/a%20b.xml"],
+                ),
+              }),
+            ),
+          );
+          const { items } = testOf(accepted, fileLocation(location, "tests/test.xml"));
+
+          assert.deepStrictEqual([...items.keys()], ["a", "b", "c"]);
+          assert.deepStrictEqual(
+            [...items.values()].map((item) => item.document),
+            [
+              fileLocation(location, "items/a b.xml"),
+              fileLocation(location, "items/a b.xml"),
+              fileLocation(location, "items/a b.xml"),
+            ],
+          );
+          assert.deepStrictEqual([...accepted.files].toSorted(), [
+            "items/a b.xml",
+            "tests/test.xml",
+          ]);
         }),
     );
 

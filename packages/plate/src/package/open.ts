@@ -63,8 +63,12 @@ export interface ItemRefEntry {
  */
 export interface PackageTest {
   /**
-   * Each item ref's item, keyed by the item ref's identifier, in document order: what `startTest`
-   * takes as its items.
+   * The item of each of its item refs, keyed by the item ref's identifier, in document order: what
+   * `startTest` takes as its items. Each item's `document` is its location in the package,
+   * `<package location>/<path>`, which is the location `startTest` resolves the ref's `href` to,
+   * by one rule on both sides: against the test's location (RFC 3986, section 5.2), each path
+   * segment's percent escapes decoded, a malformed escape left as written, then its dot segments
+   * removed, and its query and fragment set aside.
    */
   readonly items: ReadonlyMap<string, Accepted>;
   readonly test: AcceptedTest;
@@ -72,12 +76,16 @@ export interface PackageTest {
 
 /**
  * What an accepted package holds, which only {@link openPackage} and {@link acceptPackageForTest}
- * brand. Every document is keyed by its path from the package's root.
+ * brand.
+ *
+ * Every document is keyed by its location, the package's location, a `/` and the document's path
+ * from the package's root, which is also the location its verdict and its accepted form carry as
+ * `document`. A path is a file's real name, its percent escapes decoded.
  */
 export interface PackageContents {
   /**
-   * Every file the manifest lists by a path inside the package, the files a host may serve from
-   * it. The manifest itself is not one.
+   * Every file the manifest lists by a path inside the package, by that path from the package's
+   * root: the files a host may serve from it. The manifest itself is not one.
    */
   readonly files: ReadonlySet<string>;
   /**
@@ -345,9 +353,10 @@ const decodeSegment = (segment: string): string =>
 
 /**
  * Resolve a reference a document makes against the document's own path, as the manifest resolves
- * an `href` against the package's root: a relative path merged with the document's directory, its
- * dot segments removed, each segment's percent escapes decoded and its query and fragment set
- * aside (RFC 3986, section 5.2).
+ * an `href` against the package's root and `startTest` an item ref's: its query and fragment set
+ * aside, a relative path merged with the document's directory, each segment's percent escapes
+ * decoded, a malformed escape left as written, and then its dot segments removed, so `%2E%2E`
+ * climbs a directory (RFC 3986, section 5.2).
  *
  * @param base The referring document's path from the package's root.
  * @param reference The reference as written.
@@ -724,21 +733,28 @@ const acceptedStimulus = (verdict: Verdict): Option.Option<AcceptedStimulus> =>
     : Option.none();
 
 /**
- * Key what each of some keys finds by that key, passing over a key that finds nothing.
+ * Key what each of some paths finds by its document's location, passing over a path that finds
+ * nothing, and keeping the first of two that find one document.
  *
- * @param keys The keys, in order.
- * @param find What a key finds.
- * @returns Each key with what it found, in the keys' order.
+ * @param paths The paths, in order.
+ * @param find What a path finds.
+ * @param documentOf The location of what was found.
+ * @returns What each path found, keyed by its location, in the paths' order.
  */
-const keyed = <A>(
-  keys: readonly string[],
-  find: (key: string) => Option.Option<A>,
-): ReadonlyMap<string, A> =>
-  new Map(
-    keys.flatMap((key) =>
-      Option.toArray(find(key).pipe(Option.map((found) => [key, found] as const))),
-    ),
-  );
+const byDocument = <A>(
+  paths: readonly string[],
+  find: (path: string) => Option.Option<A>,
+  documentOf: (found: A) => string,
+): ReadonlyMap<string, A> => {
+  const found = new Map<string, A>();
+  for (const value of paths.flatMap((path) => Option.toArray(find(path)))) {
+    if (!found.has(documentOf(value))) {
+      found.set(documentOf(value), value);
+    }
+  }
+
+  return found;
+};
 
 /**
  * Build the contents of an accepted package from its judged documents.
@@ -764,25 +780,35 @@ const contentsOf = (
         resource.files.flatMap((file) => Option.toArray(file.path)),
       ),
     ),
-    items: keyed(pathsOfType(manifest, "imsqti_item_xmlv3p0"), itemAt),
-    location,
-    stimuli: keyed(pathsOfType(manifest, "imsqti_stimulus_xmlv3p0"), (path) =>
-      verdictAt(documents, path).pipe(Option.flatMap(acceptedStimulus)),
+    items: byDocument(
+      pathsOfType(manifest, "imsqti_item_xmlv3p0"),
+      itemAt,
+      (item) => item.document,
     ),
-    tests: keyed(pathsOfType(manifest, "imsqti_test_xmlv3p0"), (path) =>
-      verdictAt(documents, path).pipe(
-        Option.flatMap(acceptedTest),
-        Option.map((test): PackageTest => ({
-          items: new Map(
-            [...(tests.get(path) ?? [])].flatMap(([identifier, itemPath]) =>
-              Option.toArray(
-                itemAt(itemPath).pipe(Option.map((item) => [identifier, item] as const)),
+    location,
+    stimuli: byDocument(
+      pathsOfType(manifest, "imsqti_stimulus_xmlv3p0"),
+      (path) => verdictAt(documents, path).pipe(Option.flatMap(acceptedStimulus)),
+      (stimulus) => stimulus.document,
+    ),
+    tests: byDocument(
+      pathsOfType(manifest, "imsqti_test_xmlv3p0"),
+      (path) =>
+        verdictAt(documents, path).pipe(
+          Option.flatMap(acceptedTest),
+          Option.map((test): PackageTest => ({
+            items: new Map(
+              [...(tests.get(path) ?? new Map<string, string>())].flatMap(
+                ([identifier, itemPath]) =>
+                  Option.toArray(
+                    itemAt(itemPath).pipe(Option.map((item) => [identifier, item] as const)),
+                  ),
               ),
             ),
-          ),
-          test,
-        })),
-      ),
+            test,
+          })),
+        ),
+      (entry) => entry.test.document,
     ),
     version: manifest.version,
   };
