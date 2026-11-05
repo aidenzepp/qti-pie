@@ -105,6 +105,7 @@ export class HandedNodeDefect extends Data.TaggedError("HandedNodeDefect")<{
  */
 const mayBecome = {
   any: "any element",
+  button: 'a <button>, whose "type" the replacement may set',
   "choice-item": "an <li>, or a flow container such as <div> under a Choices that is not a list",
   "choice-list": "a <ul>, an <ol> or a flow container such as <div>",
   fieldset: "a <fieldset>, which groups the choices natively",

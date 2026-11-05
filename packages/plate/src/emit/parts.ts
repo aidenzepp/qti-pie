@@ -2,8 +2,8 @@ import { Data, Option, Result } from "effect";
 import type { Attributes, Element, Node, PartFunction } from "#plate/emit/node.ts";
 
 /**
- * The part keys of each interaction and of the item chrome, a part's name with a lower-case first
- * letter.
+ * The part keys of each interaction, of the item chrome and of the test chrome, a part's name with
+ * a lower-case first letter.
  */
 interface PartsOf {
   "choice-interaction":
@@ -16,11 +16,21 @@ interface PartsOf {
     | "root";
   "extended-text-interaction": "control" | "prompt" | "root";
   item: "message" | "messages" | "notice" | "root" | "status" | "statusHeading";
+  "test-navigation":
+    | "end"
+    | "item"
+    | "itemButton"
+    | "items"
+    | "next"
+    | "previous"
+    | "root"
+    | "submit";
   "text-entry-interaction": "control" | "root";
 }
 
 /**
- * The owner of a group of parts: the item chrome, or one of the interactions phase 1 renders.
+ * The owner of a group of parts: the item chrome, one of the interactions phase 1 renders, or the
+ * test chrome's navigation, `test-navigation`.
  *
  * It is also the first key of {@link PartOverrides}.
  */
@@ -48,7 +58,7 @@ export type Position = "flow" | "phrasing";
  *
  * - `flow-container`, `phrasing-container`: any element of that container class.
  * - `prompt`: a flow or phrasing container, or `p`, so the prompt is valid in any parent.
- * - `li`, `textarea`, `fieldset`, `legend`: that element only.
+ * - `li`, `textarea`, `fieldset`, `legend`, `button`: that element only.
  * - `heading`: `h1` to `h6`. `list`: `ul`, `ol` or `menu`.
  * - `choice-list`: `ul`, `ol` or a flow container; a swap to a flow container adds the list roles.
  * - `choice-item`: `li`, or a flow container under a Choices that is not a list.
@@ -59,6 +69,7 @@ export type Position = "flow" | "phrasing";
  */
 export type TagClass =
   | "any"
+  | "button"
   | "choice-item"
   | "choice-list"
   | "fieldset"
@@ -359,6 +370,7 @@ const isTextType = (type: string | true | undefined): boolean =>
  */
 const admits = {
   any: () => true,
+  button: ({ tag }) => tag === "button",
   "choice-item": ({ tag }) => tag === "li" || isFlowContainer(tag),
   "choice-list": ({ tag }) => tag === "ol" || tag === "ul" || isFlowContainer(tag),
   fieldset: ({ tag }) => tag === "fieldset",
@@ -375,8 +387,12 @@ const admits = {
 } satisfies { readonly [C in TagClass]: (element: Element) => boolean };
 
 /**
- * The rows of spec §4.3's part table, in the spec's order, before {@link partTable} derives each
- * marker.
+ * The rows of spec §4.3's part table, in the spec's order, then the navigation rows of the test
+ * chrome (M2), before {@link partTable} derives each marker.
+ *
+ * The five navigation buttons are plain buttons (rule `9af3809b`): each defaults `type` to
+ * `button`, and no navigation row merges `type`, `name`, `value` or a `form*` attribute, so a
+ * host's replacement may give a button its own submit semantics and nothing plate computes yields.
  */
 const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
   {
@@ -530,6 +546,7 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
       "inputmode",
       "size",
       "placeholder",
+      "autocomplete",
       "aria-label",
       "aria-labelledby",
       "aria-invalid",
@@ -567,6 +584,7 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
       "name",
       "rows",
       "placeholder",
+      "autocomplete",
       "disabled",
       "aria-label",
       "aria-labelledby",
@@ -577,6 +595,78 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
     ],
     part: "control",
     tagClass: "textarea",
+  },
+  {
+    defaults: {},
+    element: "nav",
+    interaction: "test-navigation",
+    listOwner: false,
+    merged: ["aria-label", "data-navigation", "data-submission"],
+    part: "root",
+    tagClass: "flow-container",
+  },
+  {
+    defaults: { type: "button" },
+    element: "button",
+    interaction: "test-navigation",
+    listOwner: false,
+    merged: ["disabled", "data-intent"],
+    part: "previous",
+    tagClass: "button",
+  },
+  {
+    defaults: { type: "button" },
+    element: "button",
+    interaction: "test-navigation",
+    listOwner: false,
+    merged: ["disabled", "data-intent"],
+    part: "next",
+    tagClass: "button",
+  },
+  {
+    defaults: {},
+    element: "ol",
+    interaction: "test-navigation",
+    listOwner: false,
+    merged: [],
+    part: "items",
+    tagClass: "list",
+  },
+  {
+    defaults: {},
+    element: "li",
+    interaction: "test-navigation",
+    listOwner: false,
+    merged: [],
+    part: "item",
+    tagClass: "li",
+  },
+  {
+    defaults: { type: "button" },
+    element: "button",
+    interaction: "test-navigation",
+    listOwner: false,
+    merged: ["disabled", "data-intent", "aria-current"],
+    part: "itemButton",
+    tagClass: "button",
+  },
+  {
+    defaults: { type: "button" },
+    element: "button",
+    interaction: "test-navigation",
+    listOwner: false,
+    merged: ["disabled", "data-intent"],
+    part: "submit",
+    tagClass: "button",
+  },
+  {
+    defaults: { type: "button" },
+    element: "button",
+    interaction: "test-navigation",
+    listOwner: false,
+    merged: ["disabled", "data-intent"],
+    part: "end",
+    tagClass: "button",
   },
 ];
 
@@ -624,9 +714,11 @@ export class HeadingLevelDefect extends Data.TaggedError("HeadingLevelDefect")<{
  * Every marker the emitter writes and every check reads comes from here through the part table, so
  * no code spells one by hand.
  *
- * @param interaction The component: an interaction, or `item` for the host chrome.
+ * @param interaction The component: an interaction, `item` for the host chrome, or
+ *   `test-navigation` for the test chrome.
  * @param part The part.
- * @returns The marker: `choice-interaction`, `choice-interaction-indicator`, `item-status-heading`.
+ * @returns The marker: `choice-interaction`, `choice-interaction-indicator`, `item-status-heading`,
+ *   `test-navigation-item-button`.
  */
 const slotFor = (interaction: InteractionKey, part: PartKey): string =>
   part === "root"
@@ -634,7 +726,8 @@ const slotFor = (interaction: InteractionKey, part: PartKey): string =>
     : `${interaction}-${part.replaceAll(/[A-Z]/gu, (letter) => `-${letter.toLowerCase()}`)}`;
 
 /**
- * The part table of spec §4.3, one row per part, in the spec's order, each with its derived marker.
+ * The part table of spec §4.3 and the test chrome's navigation rows, one row per part, in the
+ * spec's order, each with its derived marker.
  *
  * The Notice, the StatusHeading and the Choice Root and Prompt hold their context-free defaults: a
  * phrasing `span`, `h1`, and the `labelledby` markup with no legend. {@link rowFor} gives the row
