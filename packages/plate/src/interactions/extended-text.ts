@@ -14,7 +14,7 @@
  * scoping, heading shift, URLs and Notices.
  *
  * An `xhtml` Extended Text is presented the same way, its Control marked `data-format="xhtml"`: a
- * plain textarea whose response is the text typed, a `string`. Plate never renders that text as
+ * plain textarea whose response is the text typed, a `string`, which plate never renders as
  * markup; a restored value is the textarea's text, which the serialiser escapes (Q21: rich-text
  * editing needs script).
  *
@@ -29,6 +29,7 @@
  */
 import { Option, Result } from "effect";
 import type { Configuration } from "#plate/configuration.ts";
+import { exceedsControlCap } from "#plate/control-cap.ts";
 import { emitNodes, nestedInteraction } from "#plate/emit/body.ts";
 import { text, when } from "#plate/emit/node.ts";
 import type { Attributes, Element } from "#plate/emit/node.ts";
@@ -39,7 +40,7 @@ import type { PartSwapRefused } from "#plate/emit/swap.ts";
 import { Malformed } from "#plate/form/encoding.ts";
 import { authorsName, textControlName } from "#plate/interactions/name.ts";
 import { malformedMessage, patternMessage } from "#plate/interactions/pattern.ts";
-import { message } from "#plate/messages.ts";
+import { message, numeral } from "#plate/messages.ts";
 import type { Locale } from "#plate/messages.ts";
 import type { ExtendedTextInteraction } from "#plate/model/item.ts";
 import type { Value } from "#plate/model/values.ts";
@@ -50,7 +51,6 @@ import type {
   PayloadNode,
   ValidationMessage,
 } from "#plate/payload.ts";
-import { controlCap } from "#plate/vocabulary.ts";
 
 /**
  * The owner of every Extended Text part in the part table.
@@ -92,16 +92,6 @@ const rows: Rows = {
  * A line break the HTML parser turns into a line feed: CRLF, or a lone CR.
  */
 const lineBreak = /\r\n?/gu;
-
-/**
- * Write a count or a position as the locale writes numbers.
- *
- * @param locale The locale of the renderer's own text.
- * @param n The number.
- * @returns The number, formatted.
- */
-const numeral = (locale: Locale, n: bigint | number): string =>
-  new Intl.NumberFormat(locale).format(n);
 
 /**
  * Compute how one Control of an Extended Text is named (§4.8, Q10).
@@ -329,9 +319,7 @@ const countMessages = (
   const tooFew = Option.some(interaction.minStrings).pipe(
     Option.filter(
       (minStrings) =>
-        configuration.validateResponses &&
-        minStrings <= controlCap.when.limit &&
-        entries < minStrings,
+        configuration.validateResponses && !exceedsControlCap(minStrings) && entries < minStrings,
     ),
     Option.map((minStrings) =>
       minStrings === 1n

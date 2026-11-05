@@ -40,8 +40,8 @@ const remedies = {
 } satisfies { readonly [C in SwapCause]: string };
 
 /**
- * What a Control's refusal at I3 asks instead of the generic remedy: a Control stays the native
- * control the interaction computed, so the ruling names the supported ways around it.
+ * Give what a Control's refusal at I3 asks instead of the generic remedy: a Control stays the
+ * native control the interaction computed, so the ruling names the supported ways around it.
  *
  * Only the Choice interaction has an Indicator part, so only its Controls are told to swap it.
  *

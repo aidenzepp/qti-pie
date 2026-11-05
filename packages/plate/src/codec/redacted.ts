@@ -334,9 +334,9 @@ export const encodeRedacted = (item: Redacted): Result.Result<RedactedJson, Inva
 const maximumDepth = 1024;
 
 /**
- * Whether a value nests arrays and objects more than {@link maximumDepth} levels deep, measured
- * with a list of pending values rather than by recursion, so the measure cannot overflow the stack
- * it guards, and stopping at the first value past the bound, so a cycle ends it too.
+ * Tell whether a value nests arrays and objects more than {@link maximumDepth} levels deep,
+ * measured with a list of pending values rather than by recursion, so the measure cannot overflow
+ * the stack it guards, and stopping at the first value past the bound, so a cycle ends it too.
  *
  * It follows own enumerable properties, the only ones plain JSON data has. The Schema reads
  * inherited and non-enumerable ones too, so a live object can hide a deep field from this measure;
@@ -376,7 +376,7 @@ interface PendingNode {
 }
 
 /**
- * The first interaction, in document order, that the body holds inside a Choice's Prompt or a
+ * Find the first interaction, in document order, that the body holds inside a Choice's Prompt or a
  * choice's content, or inside an Extended Text's Prompt: content where QTI's schema admits no
  * interaction, and where `render` throws `NestedInteractionDefect` on one.
  *

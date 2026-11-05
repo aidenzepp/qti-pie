@@ -88,6 +88,20 @@ const catalogs: Readonly<Record<Locale, Readonly<Record<MessageKey, string>>>> =
 const placeholder = /\{(?<name>[A-Za-z]+)\}/gu;
 
 /**
+ * Write a count or a position as a locale writes numbers: the form a number takes in
+ * {@link MessageParams}, already formatted for the locale.
+ *
+ * @example
+ *   numeral("en", 12_000n); // "12,000"
+ *
+ * @param locale The locale of the renderer's own text.
+ * @param n The number; a `bigint` is written exactly, at any size.
+ * @returns The number, formatted for `locale`.
+ */
+export const numeral = (locale: Locale, n: bigint | number): string =>
+  new Intl.NumberFormat(locale).format(n);
+
+/**
  * Write the renderer's text for a key in a locale.
  *
  * A placeholder without a value, which only a call around the parameter types can leave, stays as

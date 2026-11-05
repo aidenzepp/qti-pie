@@ -620,8 +620,8 @@ export const partTable: readonly PartRow[] = rows.map((row) => ({
 }));
 
 /**
- * The key of a part in the lookups: the interaction and the part, which neither key's spelling can
- * make ambiguous because neither holds a space.
+ * Give the key of a part in the lookups: the interaction and the part, which neither key's spelling
+ * can make ambiguous because neither holds a space.
  *
  * @param interaction The interaction key.
  * @param part The part key.

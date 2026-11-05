@@ -26,7 +26,7 @@ import { applyPart } from "#plate/emit/swap.ts";
 import type { PartSwapRefused } from "#plate/emit/swap.ts";
 import { Malformed } from "#plate/form/encoding.ts";
 import { authorsName, choiceControlName } from "#plate/interactions/name.ts";
-import { message } from "#plate/messages.ts";
+import { message, numeral } from "#plate/messages.ts";
 import type { Locale } from "#plate/messages.ts";
 import type { ChoiceInteraction } from "#plate/model/item.ts";
 import { format } from "#plate/model/values.ts";
@@ -344,14 +344,17 @@ export const validateChoice = (
     response: interaction.response,
     text: words,
   });
-  const count = (n: bigint): string => new Intl.NumberFormat(locale).format(n);
   const tooMany = (n: bigint) =>
     say(
-      Option.getOrElse(interaction.messages.max, () => message(locale, "atMost", { n: count(n) })),
+      Option.getOrElse(interaction.messages.max, () =>
+        message(locale, "atMost", { n: numeral(locale, n) }),
+      ),
     );
   const tooFew = (n: bigint) =>
     say(
-      Option.getOrElse(interaction.messages.min, () => message(locale, "atLeast", { n: count(n) })),
+      Option.getOrElse(interaction.messages.min, () =>
+        message(locale, "atLeast", { n: numeral(locale, n) }),
+      ),
     );
   const unknown = say(message(locale, "unknownChoice"));
 

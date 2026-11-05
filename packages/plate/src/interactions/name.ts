@@ -19,18 +19,9 @@
 import { Option } from "effect";
 import type { Attributes } from "#plate/emit/node.ts";
 import { authoredIdrefs } from "#plate/emit/parts.ts";
-import { message } from "#plate/messages.ts";
+import { message, numeral } from "#plate/messages.ts";
 import type { Locale } from "#plate/messages.ts";
 import type { AttributePayload, PayloadNode, TextName } from "#plate/payload.ts";
-
-/**
- * Write a count or a position as the locale writes numbers.
- *
- * @param locale The locale of the renderer's own text.
- * @param n The number.
- * @returns The number, formatted.
- */
-const numeral = (locale: Locale, n: number): string => new Intl.NumberFormat(locale).format(n);
 
 /**
  * Decide whether a text holds anything but ASCII whitespace, the whitespace a name collapses.
