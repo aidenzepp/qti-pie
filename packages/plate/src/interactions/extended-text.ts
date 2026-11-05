@@ -10,6 +10,9 @@
  * computes every attribute of every part once, and `applyPart` places each one, through the
  * embedder's replacement when there is one (ruling `fb4fe744` S1, S2). The browser's own textarea
  * keys apply (§4.8): Enter adds a line and Tab leaves, so each Control is one tab stop, in order.
+ * In review and solution every Control is `readonly`, so it shows its text, stays a tab stop and
+ * posts that text with the form, but takes no input; it is `disabled` only when the author
+ * finished the item.
  * The Prompt's content goes through the body's {@link emitNodes}, so it gets the body's id
  * scoping, heading shift, URLs and Notices.
  *
@@ -161,18 +164,21 @@ const groupName = (
  *   With more than one Control it is a group: `role="group"`, named by {@link groupName}.
  * - Prompt: the marker and its id, which the Control's `aria-labelledby`, or the group's, names.
  * - Each Control: its id, the payload's `formName`, `rows` from `expected-lines` above 0, the
- *   author's `placeholder-text`, `disabled` when finished, its name, `aria-invalid` and
- *   `aria-describedby` → the message ids when the response is invalid, `autofocus` on the first
- *   Control when the payload says, and `data-format="xhtml"` for the `xhtml` format. Each is named
- *   by {@link controlName}.
+ *   author's `placeholder-text`, `disabled` when finished, `readonly` when the interaction is not
+ *   `editable` (review and solution), `autocomplete="off"` in every mode, so the browser offers no
+ *   remembered answer, its name, `aria-invalid` and `aria-describedby` → the message ids when the
+ *   response is invalid, `autofocus` on the first Control when the payload says, and
+ *   `data-format="xhtml"` for the `xhtml` format. Each is named by {@link controlName}.
  *
  * Every id is `scopedId(instance, response, part)`, a Control's with its index from 0 when there
  * are several.
  *
- * @param interaction The Extended Text.
+ * @param interaction The Extended Text, which gives `editable`.
  * @param payload The payload, which gives the instance, the mode and `finished`.
  * @param locale The locale of the renderer's own text.
  * @returns The attributes of every part.
+ * @see https://html.spec.whatwg.org/multipage/form-elements.html#attr-textarea-readonly
+ * @see https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#attr-fe-autocomplete
  */
 const connect = (interaction: ExtendedTextPayload, payload: Payload, locale: Locale): Connected => {
   const { instance } = payload;
@@ -199,6 +205,7 @@ const connect = (interaction: ExtendedTextPayload, payload: Payload, locale: Loc
         "aria-invalid": "true",
       }),
       ...when(interaction.autofocus && index === 0, { autofocus: true }),
+      autocomplete: "off",
       ...when(interaction.format === "xhtml", { "data-format": "xhtml" }),
       "data-slot": rows.control.slot,
       ...when(payload.finished, { disabled: true }),
@@ -206,6 +213,7 @@ const connect = (interaction: ExtendedTextPayload, payload: Payload, locale: Loc
         ? scopedId(instance, interaction.response, "control", index)
         : scopedId(instance, interaction.response, "control"),
       name: interaction.formName,
+      ...when(!interaction.editable, { readonly: true }),
       ...placeholder,
       ...lines,
     })),
@@ -338,10 +346,11 @@ const countMessages = (
  * Controls and the Extended Text's binding (a value of its base type and cardinality, an integer
  * read in its `base`), and passes the value, or the {@link Malformed} `decode` gave.
  *
- * - A {@link Malformed} input of an `integer` or `float` binding: `malformedNumber`, or the author's
- *   `data-patternmask-message` when set.
- * - A {@link Malformed} input of a `string` binding, which a native form never posts: the message of
- *   its reason, `malformedFile` for a file and `malformedSingleMany` for a second entry.
+ * - A {@link Malformed} input of any binding, by its reason ({@link malformedMessage}):
+ *   `malformedFile` for a file and `malformedSingleMany` for a second entry, which a native form
+ *   never posts; for a text that is not a number of an `integer` or `float` binding, the author's
+ *   `data-patternmask-message` when set, else `malformedNumber`; `notAccepted` for any other
+ *   reason.
  * - A decoded value with more entries than a nonzero `max-strings` gives `atMostStrings`, whatever
  *   `validateResponses` says. Under `validateResponses`, one with fewer than `min-strings` gives
  *   `atLeastStrings`, and each member is checked against the `pattern-mask`
