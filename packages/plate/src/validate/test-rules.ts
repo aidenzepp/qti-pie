@@ -1,0 +1,447 @@
+/**
+ * The test prose rules: what QTI's information model and the project's readings require of a test
+ * or section document beyond what its XSD can say.
+ *
+ * {@link checkTestRules} is to a test or section document what `checkRules` is to an item, and the
+ * two never overlap: `checkRules` gives nothing for a root that is not an item, and this module
+ * gives nothing for one that is not a test or a section. It returns every refusal it finds, in
+ * document order, and never stops at the first. The list of rules is closed, and each rule's
+ * function names the sentence of the information model, or the reading, that settles it.
+ *
+ * Two things a test may hold are valid here and are never refused. A dotted reference
+ * (`ITEMREF.VAR`, `ITEMREF.N.VAR`, a part's or a section's `duration`) is valid in pre-conditions,
+ * branch rules and outcome processing (readings 4, 5 and 37); reading 48 refuses one only when two
+ * readings of it each name a real item ref, part or section and a variable it has, which needs the
+ * items' declared variables, so only a package can judge it. A `min-time` above a `max-time` is
+ * valid, each limit enforced on its own (T-O8).
+ *
+ * @module
+ */
+import { Option } from "effect";
+import { attributePath, qtiNamespace, walk, xincludeNamespace } from "#plate/document/source.ts";
+import type {
+  SourceAttribute,
+  SourceDocument,
+  SourceElement,
+  Visit,
+} from "#plate/document/source.ts";
+import { trimXmlSpace } from "#plate/model/values.ts";
+import { Refusal } from "#plate/validate/refusal.ts";
+import type { RefusalRule } from "#plate/validate/refusal.ts";
+import { governingTables } from "#plate/validate/structure.ts";
+import type { Tables } from "#plate/validate/xsd.ts";
+
+/**
+ * The roots these rules judge, by local name in QTI's namespace: a test and a section document.
+ */
+const testRoots: ReadonlySet<string> = new Set(["qti-assessment-section", "qti-assessment-test"]);
+
+/**
+ * The elements whose identifiers share one scope, the test: "The identifier of the test part must
+ * be unique within the test and must not be the identifier of any qti-assessment-section or
+ * qti-assessment-item-ref" (info.txt:47082), and "the identifier of the section or item reference
+ * must be unique within the test" (info.txt:10759).
+ */
+const identifiedParts: ReadonlySet<string> = new Set([
+  "qti-assessment-item-ref",
+  "qti-assessment-section",
+  "qti-test-part",
+]);
+
+/**
+ * The children that make a section non-empty: "A Section must contain at least one other Section
+ * or Item" (info.txt:9130, reading 26), a section ref standing for the section it names.
+ */
+const sectionMembers = [
+  "qti-assessment-item-ref",
+  "qti-assessment-section",
+  "qti-assessment-section-ref",
+] as const;
+
+/**
+ * The test content that holds no interaction and no template element (reading 25): a test's
+ * rubric blocks and its test feedback.
+ */
+const testContent: ReadonlySet<string> = new Set(["qti-rubric-block", "qti-test-feedback"]);
+
+/**
+ * The template elements reading 25 keeps out of test content.
+ */
+const templateElements: ReadonlySet<string> = new Set([
+  "qti-template-block",
+  "qti-template-inline",
+]);
+
+/**
+ * The eight expressions the information model allows only in outcome processing: each "can only be
+ * used in outcomes processing" (info.txt:9332-9360, reading 23).
+ */
+const outcomeOnly: ReadonlySet<string> = new Set([
+  "qti-number-correct",
+  "qti-number-incorrect",
+  "qti-number-presented",
+  "qti-number-responded",
+  "qti-number-selected",
+  "qti-outcome-maximum",
+  "qti-outcome-minimum",
+  "qti-test-variables",
+]);
+
+/**
+ * The elements outside outcome processing that hold a test's expressions, one of which a
+ * misplaced expression's refusal names as its `context`.
+ */
+const expressionContexts: ReadonlySet<string> = new Set([
+  "qti-branch-rule",
+  "qti-pre-condition",
+  "qti-template-default",
+]);
+
+/**
+ * The elements the rules judge, with each element's parent.
+ *
+ * `parents` covers every element of the document, so an ancestor the structural walk passes over
+ * is still reached when a rule climbs from a judged element.
+ */
+interface Judged {
+  readonly parents: ReadonlyMap<SourceElement, SourceElement>;
+  readonly visits: readonly Visit[];
+}
+
+/**
+ * Report whether an element is a QTI element whose local name passes a test.
+ *
+ * @param element The element.
+ * @param test The test of its local name.
+ * @returns Whether `element` is in the QTI namespace and its local name passes `test`.
+ */
+const isQti = (element: SourceElement, test: (local: string) => boolean): boolean =>
+  element.namespace === qtiNamespace && test(element.local);
+
+/**
+ * Find an element's attribute in no namespace by its local name.
+ *
+ * @param element The element.
+ * @param local The attribute's local name.
+ * @returns The attribute, or none when the element does not carry it.
+ */
+const attributeOf = (element: SourceElement, local: string): Option.Option<SourceAttribute> =>
+  Option.fromUndefinedOr(
+    element.attributes.find((attribute) => attribute.namespace === "" && attribute.local === local),
+  );
+
+/**
+ * Find the nearest ancestor of an element that is a QTI element whose local name passes a test.
+ *
+ * @param parents Each element's parent.
+ * @param element The element to climb from.
+ * @param test The test of an ancestor's local name.
+ * @returns The nearest such ancestor, or none when no ancestor passes.
+ */
+const ancestor = (
+  parents: ReadonlyMap<SourceElement, SourceElement>,
+  element: SourceElement,
+  test: (local: string) => boolean,
+): Option.Option<SourceElement> => {
+  for (let above = parents.get(element); above !== undefined; above = parents.get(above)) {
+    if (isQti(above, test)) {
+      return Option.some(above);
+    }
+  }
+
+  return Option.none();
+};
+
+/**
+ * Construct a refusal of this document at a path.
+ *
+ * @param source The document refused.
+ * @param rule The rule it breaks.
+ * @param path The element or attribute path the refusal points at.
+ * @param detail The facts the verdict's wording needs.
+ * @returns The refusal, with no suggestion and no reader rule.
+ */
+const refusal = (
+  source: SourceDocument,
+  rule: RefusalRule,
+  path: string,
+  detail: Readonly<Record<string, string>>,
+): Refusal =>
+  new Refusal({
+    detail,
+    document: source.location,
+    location: { kind: "path", path },
+    readerRule: Option.none(),
+    rule,
+    suggestion: Option.none(),
+  });
+
+/**
+ * List the elements the rules judge, in document order: exactly those the structural walk checks,
+ * the keys of `governingTables` (reading 57).
+ *
+ * One admission decides for both stages, so the rules never refuse what the walk does not check,
+ * nor skip what it does. In lax wildcard content, such as a `qti-selection`'s or a
+ * `qti-ordering`'s, the rules judge what the walk checks there and not what it passes over: a
+ * nested `qti-assessment-section` stays foreign content (reading 6), so neither its identifier nor
+ * its children are judged.
+ *
+ * @param source The document.
+ * @param tables The tables generated from the QTI XSD, the ones the structural walk checks it by.
+ * @returns The judged visits, and the parent of every element of the document.
+ */
+const judgedVisits = (source: SourceDocument, tables: Tables): Judged => {
+  const governing = governingTables(source, tables);
+  const parents = new Map<SourceElement, SourceElement>();
+  const visits: Visit[] = [];
+  for (const visit of walk(source)) {
+    if (Option.isSome(visit.parent)) {
+      parents.set(visit.element, visit.parent.value);
+    }
+
+    if (governing.has(visit.element)) {
+      visits.push(visit);
+    }
+  }
+
+  return { parents, visits };
+};
+
+/**
+ * Report whether a judged element holds an unexpanded entity reference where a rule may read it:
+ * in an attribute's value or among its children.
+ *
+ * @param element The element.
+ * @returns Whether its attributes or its children hold a reference whose value is unknown.
+ */
+const holdsUnexpanded = (element: SourceElement): boolean =>
+  element.attributes.some((attribute) => attribute.references.length > 0) ||
+  element.children.some((child) => child.kind === "entity");
+
+/**
+ * Apply `duplicate-identifier` to one element: a part's, a section's or an item ref's
+ * `identifier` is not one an earlier part, section or item ref of the document already gave.
+ *
+ * Identifiers are compared as their `xs:NCName` type reads them, with the outer whitespace
+ * collapsed, as the item rules compare theirs. A section document's identifiers are compared
+ * within it, its root's included: any test that includes it holds them all.
+ *
+ * @param source The document.
+ * @param visit The element's visit.
+ * @param seen The identifiers given so far, which this adds the element's to.
+ * @returns The refusal at the repeated `identifier` attribute's path, or none for the first
+ *   occurrence and for any other element.
+ */
+const duplicateIdentifier = (
+  source: SourceDocument,
+  visit: Visit,
+  seen: Set<string>,
+): readonly Refusal[] => {
+  const attribute = attributeOf(visit.element, "identifier");
+  if (!isQti(visit.element, (local) => identifiedParts.has(local)) || Option.isNone(attribute)) {
+    return [];
+  }
+
+  const identifier = trimXmlSpace(attribute.value.value);
+  if (!seen.has(identifier)) {
+    seen.add(identifier);
+
+    return [];
+  }
+
+  return [
+    refusal(source, "duplicate-identifier", attributePath(visit.path, attribute.value), {
+      identifier,
+    }),
+  ];
+};
+
+/**
+ * Apply reading 26's `child-count` to a section: it holds at least one item ref, section or
+ * section ref.
+ *
+ * A section with an XInclude child is not counted: the inclusion is not performed, and what it
+ * would supply may be the member the count needs, so refusing it could refuse a valid section
+ * (reading 1). The verdict leaves such a document unchecked.
+ *
+ * @param source The document.
+ * @param visit The element's visit.
+ * @returns The refusal at the section's path, or none when it holds a member or is not a section.
+ */
+const sectionChildCount = (source: SourceDocument, visit: Visit): readonly Refusal[] => {
+  const { element } = visit;
+  if (!isQti(element, (local) => local === "qti-assessment-section")) {
+    return [];
+  }
+
+  const children = element.children.filter((child) => child.kind === "element");
+  const counted = children.some(
+    (child) =>
+      child.namespace === xincludeNamespace ||
+      isQti(child, (local) => sectionMembers.some((member) => member === local)),
+  );
+  if (counted) {
+    return [];
+  }
+
+  return [
+    refusal(source, "child-count", visit.path, {
+      child: sectionMembers.join(" or "),
+      element: element.local,
+      required: "at least one",
+      source: "reading 26",
+    }),
+  ];
+};
+
+/**
+ * Apply readings 24 and 25's `misplaced-element` to an interaction or a template element: it does
+ * not sit in a test's rubric block or test feedback.
+ *
+ * The full ASI XSD admits interactions and template content there; the information model's prose
+ * and the test profile XSD forbid them, and reading 25 follows the prose. Printed variables and
+ * inline or block feedback stay allowed, so they are not refused. Every interaction and template
+ * element inside is refused, nested ones included.
+ *
+ * @param source The document.
+ * @param visit The element's visit.
+ * @param parents Each element's parent.
+ * @returns The refusal at the element's path, naming the test content it sits in, or none.
+ */
+const misplacedInTestContent = (
+  source: SourceDocument,
+  visit: Visit,
+  parents: ReadonlyMap<SourceElement, SourceElement>,
+): readonly Refusal[] => {
+  const { element } = visit;
+  const excluded = isQti(
+    element,
+    (local) =>
+      templateElements.has(local) || (local.startsWith("qti-") && local.endsWith("-interaction")),
+  );
+  if (!excluded) {
+    return [];
+  }
+
+  return Option.match(
+    ancestor(parents, element, (local) => testContent.has(local)),
+    {
+      onNone: () => [],
+      onSome: (container) => [
+        refusal(source, "misplaced-element", visit.path, {
+          element: element.local,
+          reading: "25",
+          requires: `outside a test's ${container.local}`,
+        }),
+      ],
+    },
+  );
+};
+
+/**
+ * Apply reading 23's `expression-placement` to an expression: an outcome-only expression, or a
+ * `qti-variable` carrying `weight-identifier`, sits inside `qti-outcome-processing`.
+ *
+ * Weights are "defined only in the test context (and hence only in outcomes processing)", so a
+ * weighted variable follows the eight expressions (T-O10, pick A) and cites the same reading. The
+ * refusal names the pre-condition, branch rule or template default the expression sits in as its
+ * `context`. A prefixed reference is never refused here.
+ *
+ * @param source The document.
+ * @param visit The element's visit.
+ * @param parents Each element's parent.
+ * @returns The refusal at the expression's path, or at its `weight-identifier`'s, or none.
+ */
+const expressionPlacement = (
+  source: SourceDocument,
+  visit: Visit,
+  parents: ReadonlyMap<SourceElement, SourceElement>,
+): readonly Refusal[] => {
+  const { element } = visit;
+  const weight = isQti(element, (local) => local === "qti-variable")
+    ? attributeOf(element, "weight-identifier")
+    : Option.none();
+  const restricted = isQti(element, (local) => outcomeOnly.has(local)) || Option.isSome(weight);
+  if (
+    !restricted ||
+    Option.isSome(ancestor(parents, element, (local) => local === "qti-outcome-processing"))
+  ) {
+    return [];
+  }
+
+  const context = Option.match(
+    ancestor(parents, element, (local) => expressionContexts.has(local)),
+    {
+      onNone: () => ({}),
+      onSome: (container) => ({ context: container.local }),
+    },
+  );
+
+  return Option.match(weight, {
+    onNone: () => [
+      refusal(source, "expression-placement", visit.path, {
+        ...context,
+        element: element.local,
+        reading: "23",
+      }),
+    ],
+    onSome: (attribute) => [
+      refusal(source, "expression-placement", attributePath(visit.path, attribute), {
+        attribute: attribute.local,
+        ...context,
+        element: element.local,
+        reading: "23",
+      }),
+    ],
+  });
+};
+
+/**
+ * Check a test or section document against the test prose rules: `duplicate-identifier` over its
+ * parts, sections and item refs, reading 26's `child-count` on each section, readings 24 and 25's
+ * `misplaced-element` for an interaction or a template element in a rubric block or test feedback,
+ * and reading 23's `expression-placement` for an outcome-only expression, or a weighted
+ * `qti-variable`, outside outcome processing.
+ *
+ * The rules judge exactly what the structural walk checks, and only a document they can read
+ * whole:
+ *
+ * - A root other than a QTI `qti-assessment-test` or `qti-assessment-section` gives no refusal; an
+ *   item's rules are `checkRules`'.
+ * - A document whose judged elements hold an unexpanded entity reference anywhere gives no refusal,
+ *   as `checkRules` gives none for such an item: `identifier="&id;"` on one item ref could equal
+ *   any other's, and an entity among a section's children may be its only member. The verdict
+ *   leaves such a document unchecked unless the structural walk refuses it.
+ * - Only the elements the structural walk checks are visited, the keys of `governingTables` for the
+ *   same tables (reading 57).
+ *
+ * Every refusal is located at an element or attribute path. An empty list means no rule this module
+ * implements refuses the document, not that it is valid: the structural validator judges the XSD's
+ * rules, and a package judges what needs the items it holds.
+ *
+ * @param source The test or section document to check.
+ * @param tables The tables generated from the QTI XSD, the ones `checkStructure` checks the
+ *   document by.
+ * @returns The refusals in document order, empty when every rule holds or the document is one the
+ *   rules do not judge.
+ * @see {@link Refusal} for what each refusal carries.
+ */
+export const checkTestRules = (source: SourceDocument, tables: Tables): readonly Refusal[] => {
+  if (!isQti(source.root, (local) => testRoots.has(local))) {
+    return [];
+  }
+
+  const { parents, visits } = judgedVisits(source, tables);
+  if (visits.some((visit) => holdsUnexpanded(visit.element))) {
+    return [];
+  }
+
+  const seen = new Set<string>();
+
+  return visits.flatMap((visit) => [
+    ...duplicateIdentifier(source, visit, seen),
+    ...sectionChildCount(source, visit),
+    ...misplacedInTestContent(source, visit, parents),
+    ...expressionPlacement(source, visit, parents),
+  ]);
+};
