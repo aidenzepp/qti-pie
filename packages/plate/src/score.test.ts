@@ -393,7 +393,7 @@ describe("score", () => {
               failure.problem,
               Option.isNone(failure.expected),
               failure.message.includes('"EXTRA"'),
-              failure.message.includes("point"),
+              failure.message.includes("duration"),
             ]
           : [failure._tag],
       ),

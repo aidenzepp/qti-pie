@@ -1656,7 +1656,7 @@ describe("checkStructure", () => {
       );
     });
 
-    it("[I-9b] refuses a qti-number-correct in an item's response processing as misplaced-element (reading 23)", () => {
+    it("refuses a qti-number-correct in an item's response processing as misplaced-element (reading 23)", () => {
       const source = processed(el("qti-number-correct"));
 
       assert.deepStrictEqual(found(source), [
