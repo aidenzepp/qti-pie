@@ -3,7 +3,7 @@ import { Effect, Option, Result } from "effect";
 import { configure } from "#plate/configuration.ts";
 import type { Configuration } from "#plate/configuration.ts";
 import type { StatusInput } from "#plate/emit/item.ts";
-import { h } from "#plate/emit/node.ts";
+import { h, text } from "#plate/emit/node.ts";
 import type { Element, Node } from "#plate/emit/node.ts";
 import { rowFor, scopedId } from "#plate/emit/parts.ts";
 import { checkInstance, entryName, partition } from "#plate/form/encoding.ts";
@@ -13,6 +13,8 @@ import type { Value } from "#plate/model/values.ts";
 import type { Redacted } from "#plate/payload.ts";
 import { InvalidInstance, redact, render, renderStatus } from "#plate/render.ts";
 import type { Options, Rendered } from "#plate/render.ts";
+import { checkTree } from "#plate/test/accessibility.ts";
+import { keyboardWalk } from "#plate/test/keyboard.ts";
 import { parseHtml } from "#plate/test/round-trip.ts";
 import { acceptForTest } from "#plate/validate/verdict.ts";
 
@@ -63,9 +65,9 @@ const choice: ChoiceInteraction = {
   ariaLabelledby: Option.none(),
   cardinality: "single",
   choices: [
-    { content: [words("Paris")], identifier: "A" },
-    { content: [words("Lyon")], identifier: "B" },
-    { content: [words("Nice")], identifier: "C" },
+    { content: [words("Paris")], fixed: false, identifier: "A" },
+    { content: [words("Lyon")], fixed: false, identifier: "B" },
+    { content: [words("Nice")], fixed: false, identifier: "C" },
   ],
   class: "",
   kind: "choice",
@@ -91,6 +93,7 @@ const city: TextEntryInteraction = {
   expectedLength: Option.none(),
   kind: "text-entry",
   path: "qti-assessment-item/qti-item-body/p[2]/qti-text-entry-interaction",
+  patternMask: Option.none(),
   patternMaskMessage: Option.none(),
   placeholder: Option.none(),
   response: "CITY",
@@ -165,6 +168,7 @@ const item: Item = {
     [
       "RESPONSE",
       {
+        areaMapping: Option.none(),
         baseType: "identifier",
         cardinality: "single",
         correct: Option.some(one({ baseType: "identifier", value: "MarkerCorrectChoice" })),
@@ -187,6 +191,7 @@ const item: Item = {
     [
       "CITY",
       {
+        areaMapping: Option.none(),
         baseType: "string",
         cardinality: "single",
         correct: Option.some(one({ baseType: "string", value: "MarkerCorrectText" })),
@@ -232,6 +237,46 @@ const unsafe: Item = {
 const redacted = redact(acceptForTest(item));
 
 /**
+ * A shuffled single Choice of five planets, bound to `PLANET`, none of them fixed.
+ */
+const planets: ChoiceInteraction = {
+  ...choice,
+  choices: ["Mercury", "Venus", "Earth", "Mars", "Jupiter"].map((planet, index) => ({
+    content: [words(planet)],
+    fixed: false,
+    identifier: `P${String(index)}`,
+  })),
+  prompt: Option.some([words("Which planet is the largest?")]),
+  response: "PLANET",
+  shuffle: true,
+};
+
+/**
+ * An item whose body is the shuffled {@link planets}, redacted, with no response processing.
+ */
+const shuffled = redact(
+  acceptForTest({
+    ...item,
+    body: [planets],
+    processing: Option.none(),
+    responses: new Map([
+      [
+        "PLANET",
+        {
+          areaMapping: Option.none(),
+          baseType: "identifier",
+          cardinality: "single",
+          correct: Option.none(),
+          defaultValue: Option.none(),
+          identifier: "PLANET",
+          mapping: Option.none(),
+        },
+      ],
+    ]),
+  }),
+);
+
+/**
  * The default configuration.
  */
 const defaults: Effect.Effect<Configuration, unknown> = configure({});
@@ -267,6 +312,20 @@ const controlsOf = (
   response: string,
 ): readonly Element[] =>
   elements.filter((element) => element.attrs["name"] === entryName(token, response));
+
+/**
+ * Give the choices a render of {@link shuffled} presents: its `PLANET` Controls' values, in the
+ * order the HTML emits them.
+ *
+ * @param rendered The render.
+ * @returns Each Control's `value`, in emitted order.
+ */
+const presentedIn = (rendered: Rendered): readonly string[] =>
+  controlsOf(elementsIn(rendered), rendered.instance, "PLANET").map((control) => {
+    const { value } = control.attrs;
+
+    return value === undefined || value === true ? assert.fail("A Control has no value.") : value;
+  });
 
 /**
  * Give a result's failure, after checking it is a `Result`.
@@ -529,6 +588,65 @@ describe("render", () => {
           named.filter((element) => element.tag === "img").map((image) => image.attrs["src"]),
           ["https://option.example/assets/images/france.png"],
         );
+      }),
+  );
+});
+
+describe("render, a shuffled Choice", () => {
+  it.effect("[Q-2] gives byte-equal HTML for two renders with the same instance and seed", () =>
+    Effect.gen(function* seededTwice() {
+      const configuration = yield* configure({ seed: 7 });
+      const first = yield* Effect.fromResult(render(shuffled, configuration, { instance }));
+      const second = yield* Effect.fromResult(render(shuffled, configuration, { instance }));
+
+      assert.isAbove(first.html.length, 0);
+      assert.strictEqual(first.html, second.html);
+    }),
+  );
+
+  it.effect(
+    "[Q-2] keys the order by the instance alone when no seed is set, and seed 7 presents another",
+    () =>
+      Effect.gen(function* unseededOrder() {
+        const unseeded = yield* configure({});
+        assert.isFalse(Object.hasOwn(unseeded, "seed"));
+
+        const first = yield* Effect.fromResult(render(shuffled, unseeded, { instance }));
+        const second = yield* Effect.fromResult(render(shuffled, unseeded, { instance }));
+        assert.strictEqual(first.html, second.html);
+
+        const seeded = yield* Effect.fromResult(
+          render(shuffled, yield* configure({ seed: 7 }), { instance }),
+        );
+        assert.deepStrictEqual(presentedIn(first), ["P3", "P1", "P0", "P4", "P2"]);
+        assert.deepStrictEqual(presentedIn(seeded), ["P2", "P4", "P3", "P1", "P0"]);
+        assert.notDeepEqual(presentedIn(first), presentedIn(seeded));
+      }),
+  );
+
+  it.effect(
+    "[Q-2] [keyboard] a radio walk (Tab, ArrowDown, Tab, Enter) posts the presented second choice",
+    () =>
+      Effect.gen(function* shuffledWalk() {
+        const rendered = yield* Effect.fromResult(
+          render(shuffled, yield* configure({ seed: 7 }), { instance }),
+        );
+        const [root] = parseHtml(rendered.html);
+        const page = h("div", { lang: "en" }, [
+          h("form", { action: "/submit", method: "post", novalidate: true }, [
+            root ?? assert.fail("The render is empty."),
+            h("button", { type: "submit" }, [text("Submit")]),
+          ]),
+        ]);
+        const presentedSecond =
+          presentedIn(rendered)[1] ?? assert.fail("The Choice presents fewer than two choices.");
+
+        assert.notStrictEqual(presentedSecond, planets.choices[1]?.identifier);
+        assert.deepStrictEqual(
+          keyboardWalk(page, ["Tab", "ArrowDown", "Tab", "Enter"]),
+          Option.some([[entryName(instance, "PLANET"), presentedSecond]]),
+        );
+        assert.deepStrictEqual(checkTree(page, { baseLevel: 2 }), []);
       }),
   );
 });

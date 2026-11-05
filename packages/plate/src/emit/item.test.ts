@@ -237,6 +237,7 @@ const textEntry = (response: string): TextEntryInteraction => ({
   expectedLength: Option.none(),
   kind: "text-entry",
   path: `qti-assessment-item/qti-item-body/p/qti-text-entry-interaction[${response}]`,
+  patternMask: Option.none(),
   patternMaskMessage: Option.none(),
   placeholder: Option.none(),
   response,
@@ -264,6 +265,7 @@ const rivers: Item = {
     ["CITY", "RIVER"].map((identifier) => [
       identifier,
       {
+        areaMapping: Option.none(),
         baseType: "string",
         cardinality: "single",
         correct: Option.none(),

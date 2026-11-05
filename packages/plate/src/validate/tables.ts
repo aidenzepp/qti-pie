@@ -2,9 +2,9 @@
  * The tables of the QTI 3.0 ASI XSD, committed as `tables.generated.json` so that validation never
  * reads or parses the XSD at run time.
  *
- * `scripts/tables.ts` reads the cached XSD at {@link xsdPath}, generates the tables with
- * `generateTables` and writes the JSON, which {@link tables} loads. The test proves the committed
- * file is what the generator builds from that XSD today, and that the XSD is the one
+ * `scripts/tables.ts` reads the cached XSD at `xsdPath` (`src/validate/xsd.ts`), generates the
+ * tables with `generateTables` and writes the JSON, which {@link tables} loads. The test proves the
+ * committed file is what the generator builds from that XSD today, and that the XSD is the one
  * {@link xsdSha256} names. To regenerate, from the repository root:
  *
  * ```sh
@@ -13,7 +13,7 @@
  *
  * @module
  */
-import { Config, Schema } from "effect";
+import { Schema } from "effect";
 import committed from "#plate/validate/tables.generated.json" with { type: "json" };
 import { Tables } from "#plate/validate/xsd.ts";
 
@@ -22,14 +22,6 @@ import { Tables } from "#plate/validate/xsd.ts";
  * `imsqti_asiv3p0p1_v1p0.xsd`, which D4 rules the only source of the tables.
  */
 export const xsdSha256 = "bd82f6df3c7acec951fffc78548325a01e9e9bc91d5768d7415bdcbdc018341d";
-
-/**
- * Where the XSD is cached: `.cache/gr8des/qti3/xsd/imsqti_asiv3p0p1_v1p0.xsd` under `HOME`. Only
- * the script that regenerates the tables and their test read it.
- */
-export const xsdPath = Config.String("HOME").pipe(
-  Config.map((home) => `${home}/.cache/gr8des/qti3/xsd/imsqti_asiv3p0p1_v1p0.xsd`),
-);
 
 /**
  * Decode a tables file, throwing on one that is not {@link Tables}.

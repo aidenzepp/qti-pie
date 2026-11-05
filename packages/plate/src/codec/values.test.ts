@@ -97,6 +97,40 @@ describe("ValueSchema", () => {
   );
 
   it.effect(
+    "encodes a point as two runs of decimal digits and decodes them to the same point",
+    () =>
+      Effect.gen(function* pointAsDigits() {
+        const original = value("point", "single", [
+          { baseType: "point", value: [102n, -(2n ** 53n + 1n)] },
+        ]);
+        const encoded = yield* Schema.encodeEffect(ValueSchema)(original);
+
+        assert.deepStrictEqual(encoded, {
+          baseType: "point",
+          cardinality: "single",
+          values: [{ baseType: "point", value: ["102", "-9007199254740993"] }],
+        });
+
+        // oxlint-disable-next-line unicorn/prefer-structured-clone -- The test proves the point survives JSON text, the form a host stores.
+        const handedBack: unknown = JSON.parse(JSON.stringify(encoded));
+        assert.deepStrictEqual(
+          yield* Schema.decodeUnknownEffect(ValueSchema)(handedBack),
+          original,
+        );
+      }),
+  );
+
+  it("refuses a point with three coordinates, one or a coordinate that is not an integer", () => {
+    for (const coordinates of [["1", "2", "3"], ["1"], ["1.5", "2"], ["a", "2"]]) {
+      const decoded = Schema.decodeUnknownResult(ValueSchema)(
+        singleInput("point", [{ baseType: "point", value: coordinates }]),
+      );
+
+      assert.isTrue(Result.isFailure(decoded), JSON.stringify(coordinates));
+    }
+  });
+
+  it.effect(
     "carries a float that is infinite, not a number or negative zero through JSON text unchanged",
     () =>
       Effect.gen(function* nonFiniteFloatsThroughJson() {
@@ -166,7 +200,10 @@ describe("ValueSchema", () => {
     assert.isFalse(valid(singleInput("pair", [{ baseType: "pair", value: ["A", "1"] }])));
     assert.isFalse(valid(singleInput("string", [{ baseType: "string", value: "" }])));
     assert.isFalse(valid(singleInput("identifier", identifiers("A", "B"))));
-    assert.isFalse(valid(singleInput("point", [])));
+    assert.isTrue(valid(singleInput("point", [{ baseType: "point", value: [102n, 113n] }])));
+    assert.isFalse(valid(singleInput("point", [{ baseType: "point", value: [1n, 2n, 3n] }])));
+    assert.isFalse(valid(singleInput("point", [{ baseType: "point", value: [102, 113] }])));
+    assert.isFalse(valid(singleInput("duration", [])));
     assert.isFalse(valid({ baseType: "identifier", cardinality: "record", values: [] }));
   });
 });

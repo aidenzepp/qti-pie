@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { assert, describe, it } from "@effect/vitest";
 import { Option } from "effect";
 import {
@@ -8,13 +9,20 @@ import {
   mathmlNamespace,
   qtiNamespace,
   text,
+  walk as walkDocument,
   xmlNamespace,
   xmlnsNamespace,
+  xsdNamespace,
   xsiNamespace,
 } from "#plate/document/source.ts";
-import type { SourceAttribute, SourceChild, SourceDocument } from "#plate/document/source.ts";
+import type {
+  SourceAttribute,
+  SourceChild,
+  SourceDocument,
+  SourceElement,
+} from "#plate/document/source.ts";
 import type { Location, RefusalRule } from "#plate/validate/refusal.ts";
-import { checkStructure } from "#plate/validate/structure.ts";
+import { checkStructure, governingTables } from "#plate/validate/structure.ts";
 import { tables as generatedTables } from "#plate/validate/tables.ts";
 import type {
   AttributeTable,
@@ -23,6 +31,7 @@ import type {
   ChildName,
   ElementTable,
   Tables,
+  TypeEntry,
   Wildcard,
 } from "#plate/validate/xsd.ts";
 
@@ -96,7 +105,9 @@ const required = (local: string, type: AttributeType): AttributeTable => ({
 const element = (fields: Partial<ElementTable> = {}): ElementTable => ({
   attributes: [],
   children: [],
+  global: false,
   text: false,
+  types: [],
   ...fields,
 });
 
@@ -334,6 +345,7 @@ const tables: Tables = {
     }),
     "qti-value": element({ text: true }),
   },
+  types: {},
 };
 
 /**
@@ -426,6 +438,7 @@ const refusedValues = (type: AttributeType, values: readonly string[]): readonly
     (value) =>
       checkStructure(doc(location, el("probe", [attr("value", value)])), {
         elements: { probe: element({ attributes: [optional("value", type)] }) },
+        types: {},
       }).length > 0,
   );
 
@@ -570,6 +583,15 @@ const rounded = (figures: string): SourceDocument =>
   processed(el("qti-round-to", [attr("figures", figures)]));
 
 /**
+ * Construct a document whose root is a `qti-time-limits` with the given `max-time`.
+ *
+ * @param maxTime The `max-time` as written.
+ * @returns The document.
+ */
+const limits = (maxTime: string): SourceDocument =>
+  doc(location, el("qti-time-limits", [attr("max-time", maxTime)]));
+
+/**
  * The detail reading 46 gives a `count-range` refusal.
  *
  * @param attribute The attribute's name.
@@ -583,6 +605,304 @@ const rangeDetail = (attribute: string, lexical: string) => ({
   lexical,
   reading: "46",
 });
+
+/**
+ * Name a type in the QTI namespace.
+ *
+ * @param local The type's local name.
+ * @returns Its name.
+ */
+const qtiType = (local: string): ChildName => ({ local, namespace: qtiNamespace });
+
+/**
+ * Name an XML Schema built-in type.
+ *
+ * @param local The type's local name.
+ * @returns Its name.
+ */
+const xsdType = (local: string): ChildName => ({ local, namespace: xsdNamespace });
+
+/**
+ * The namespace declarations the `xsi:type` tests write: `q` for QTI's namespace and `xs` for XML
+ * Schema's.
+ */
+const declarations: readonly SourceAttribute[] = [
+  attr("q", qtiNamespace, xmlnsNamespace),
+  attr("xs", xsdNamespace, xmlnsNamespace),
+];
+
+/**
+ * Construct a document whose root carries {@link declarations} and an `xsi:type`.
+ *
+ * @param name The root's local name.
+ * @param written The `xsi:type` as written.
+ * @param children The root's children, none by default.
+ * @param attributes The root's other attributes, none by default.
+ * @returns The document.
+ */
+const typed = (
+  name: string,
+  written: string,
+  children: readonly SourceChild[] = [],
+  attributes: readonly SourceAttribute[] = [],
+): SourceDocument =>
+  doc(
+    location,
+    el(name, [...declarations, attr("type", written, xsiNamespace), ...attributes], children),
+  );
+
+/**
+ * The attributes `WeightDType` requires, which a `qti-null` typed `WeightDType` carries, because
+ * that type's table governs it (AD-9).
+ */
+const weightAttributes: readonly SourceAttribute[] = [attr("identifier", "W"), attr("value", "1")];
+
+/**
+ * Construct a response processing whose root carries the given namespace declarations and holds a
+ * `qti-null`, two levels down, with an `xsi:type`.
+ *
+ * @param scope The root's namespace declarations.
+ * @param written The `xsi:type` as written.
+ * @param attributes The `qti-null`'s other attributes, none by default.
+ * @returns The document.
+ */
+const nestedNull = (
+  scope: readonly SourceAttribute[],
+  written: string,
+  attributes: readonly SourceAttribute[] = [],
+): SourceDocument =>
+  doc(
+    location,
+    el("qti-response-processing", scope, [
+      el(
+        "qti-set-outcome-value",
+        [attr("identifier", "SCORE")],
+        [el("qti-null", [attr("type", written, xsiNamespace), ...attributes])],
+      ),
+    ]),
+  );
+
+/**
+ * The path of the `xsi:type` of a root element.
+ *
+ * @param name The root's local name.
+ * @returns The attribute's path.
+ */
+const typePath = (name: string): string => `${name}/@{${xsiNamespace}}type`;
+
+/**
+ * Follow a QTI type's bases through the committed tables.
+ *
+ * @param local The type's local name.
+ * @returns The local names of the type and each QTI type it derives from, nearest first.
+ */
+const ancestry = (local: string): readonly string[] => {
+  const names: string[] = [];
+  let current: string | undefined = local;
+  while (current !== undefined && !names.includes(current)) {
+    names.push(current);
+
+    const entry: TypeEntry | undefined = generatedTables.types[current];
+    current =
+      entry !== undefined && "base" in entry && entry.base.namespace === qtiNamespace
+        ? entry.base.local
+        : undefined;
+  }
+
+  return names;
+};
+
+/**
+ * What a type's entry derives from and how, without its own table, as `tables.test.ts` compares
+ * an entry's derivation.
+ *
+ * @param entry The type's entry.
+ * @returns Its base and derivation, or its derivation and members for a union.
+ */
+const derivationOf = (entry: TypeEntry) =>
+  entry.derivation === "union"
+    ? { derivation: entry.derivation, members: entry.members }
+    : { base: entry.base, derivation: entry.derivation };
+
+/**
+ * The table fields of a hand-built type entry that admits nothing: no attributes, no children and
+ * no text.
+ */
+const noContent = { attributes: [], children: [], text: false } as const;
+
+/**
+ * The path of the `qti-null` {@link governedNull} types.
+ */
+const governedPath = "qti-assessment-item/qti-response-processing/qti-set-outcome-value/qti-null";
+
+/**
+ * Construct an item whose response processing sets `SCORE` from a `qti-null` carrying an
+ * `xsi:type`, with `qti` bound to QTI's namespace on the item.
+ *
+ * @param written The `xsi:type` as written.
+ * @param attributes The `qti-null`'s other attributes.
+ * @returns The item as a source document.
+ */
+const governedNull = (written: string, attributes: readonly SourceAttribute[]): SourceDocument =>
+  doc(
+    location,
+    el(
+      "qti-assessment-item",
+      [
+        attr("qti", qtiNamespace, xmlnsNamespace),
+        attr("identifier", "item"),
+        attr("time-dependent", "false"),
+        attr("title", "Governed"),
+      ],
+      [
+        el(
+          "qti-response-processing",
+          [],
+          [
+            el(
+              "qti-set-outcome-value",
+              [attr("identifier", "SCORE")],
+              [el("qti-null", [attr("type", written, xsiNamespace), ...attributes])],
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
+
+/**
+ * Find the element of a document at a path.
+ *
+ * @param source The document.
+ * @param path The element's path.
+ * @returns The element; the test fails when no element has that path.
+ */
+const elementAt = (source: SourceDocument, path: string): SourceElement =>
+  [...walkDocument(source)].find((visit) => visit.path === path)?.element ??
+  assert.fail(`No element at ${path}.`);
+
+/**
+ * Construct an item, valid by the committed tables, whose body holds one child.
+ *
+ * @param child The body's child.
+ * @returns The item as a source document.
+ */
+const committedBody = (child: SourceChild): SourceDocument =>
+  doc(
+    location,
+    el(
+      "qti-assessment-item",
+      [attr("identifier", "item"), attr("time-dependent", "false"), attr("title", "Lax")],
+      [el("qti-item-body", [], [child])],
+    ),
+  );
+
+/**
+ * Construct an item whose body holds one custom interaction, whose `##any` `lax` element wildcard
+ * admits the given children.
+ *
+ * @param children The custom interaction's children.
+ * @returns The item as a source document.
+ */
+const customized = (...children: readonly SourceChild[]): SourceDocument =>
+  committedBody(el("qti-custom-interaction", [attr("response-identifier", "RESPONSE")], children));
+
+/**
+ * The path of the custom interaction {@link customized} builds.
+ */
+const custom = "qti-assessment-item/qti-item-body/qti-custom-interaction";
+
+/**
+ * Construct an item whose body holds one PCI whose markup holds a `template`, whose `##any` `lax`
+ * element wildcard admits the given children.
+ *
+ * @param children The template's children.
+ * @returns The item as a source document.
+ */
+const templated = (...children: readonly SourceChild[]): SourceDocument =>
+  committedBody(
+    el(
+      "qti-portable-custom-interaction",
+      [
+        attr("custom-interaction-type-identifier", "urn:example:pci"),
+        attr("response-identifier", "RESPONSE"),
+      ],
+      [el("qti-interaction-markup", [], [el("template", [], children)])],
+    ),
+  );
+
+/**
+ * The path of the template {@link templated} builds.
+ */
+const markupTemplate =
+  "qti-assessment-item/qti-item-body/qti-portable-custom-interaction/qti-interaction-markup/template";
+
+/**
+ * Construct a test whose one section's `qti-ordering`, with its `##other` `lax` element wildcard,
+ * holds the given children.
+ *
+ * @param children The ordering's children.
+ * @returns The test as a source document.
+ */
+const ordered = (...children: readonly SourceChild[]): SourceDocument =>
+  doc(
+    location,
+    el(
+      "qti-assessment-test",
+      [attr("identifier", "test"), attr("title", "Lax")],
+      [
+        el(
+          "qti-test-part",
+          [
+            attr("identifier", "part"),
+            attr("navigation-mode", "linear"),
+            attr("submission-mode", "individual"),
+          ],
+          [
+            el(
+              "qti-assessment-section",
+              [attr("identifier", "section"), attr("title", "Section"), attr("visible", "true")],
+              [el("qti-ordering", [], children)],
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
+
+/**
+ * The path of the ordering {@link ordered} builds.
+ */
+const ordering = "qti-assessment-test/qti-test-part/qti-assessment-section/qti-ordering";
+
+/**
+ * An `id` that is no `NCName`, which every table under test declares as one.
+ */
+const badId = attr("id", "1x");
+
+/**
+ * A `div` whose `id` is no `NCName`.
+ */
+const badDiv = el("div", [badId]);
+
+/**
+ * A simple choice, which `div`'s table neither names nor admits by a wildcard.
+ */
+const looseChoice = el("qti-simple-choice", [attr("identifier", "A")], [text("A")]);
+
+/**
+ * Report whether a committed element table declares `id` as an `NCName`.
+ *
+ * @param local The element's local name.
+ * @returns Whether its table declares `id` with that type.
+ */
+const declaresNcNameId = (local: string): boolean =>
+  generatedTables.elements[local]?.attributes.some(
+    (attribute) =>
+      attribute.local === "id" &&
+      attribute.type.kind === "builtin" &&
+      attribute.type.name === "NCName",
+  ) ?? false;
 
 describe("checkStructure", () => {
   describe("the six rules", () => {
@@ -966,6 +1286,7 @@ describe("checkStructure", () => {
             anyElement: { namespace: [otherNamespace], process: "lax" },
           }),
         },
+        types: {},
       };
       const source = item([
         el(
@@ -988,6 +1309,7 @@ describe("checkStructure", () => {
     it("[I-8] admits an element of no namespace under an ##any element wildcard, and does not walk it", () => {
       const open: Tables = {
         elements: { ...tables.elements, "qti-item-body": element({ anyElement: anyLax }) },
+        types: {},
       };
       const source = body(el("div", [attr("any", "thing")], [el("qti-undefined")], ""));
 
@@ -1040,6 +1362,7 @@ describe("checkStructure", () => {
             ],
           }),
         },
+        types: {},
       };
       const source = body(
         el("qti-choice-interaction", [
@@ -1265,6 +1588,7 @@ describe("checkStructure", () => {
             ],
           }),
         },
+        types: {},
       };
 
       assert.deepStrictEqual(found(item([matched("float", "0.5")]), enumerated), []);
@@ -1332,7 +1656,7 @@ describe("checkStructure", () => {
       );
     });
 
-    it("[I-9b] refuses a qti-number-correct in an item's response processing as misplaced-element (reading 23)", () => {
+    it("refuses a qti-number-correct in an item's response processing as misplaced-element (reading 23)", () => {
       const source = processed(el("qti-number-correct"));
 
       assert.deepStrictEqual(found(source), [
@@ -1613,6 +1937,546 @@ describe("checkStructure", () => {
       );
 
       assert.deepStrictEqual(found(source), []);
+    });
+  });
+
+  describe("reading 47: xsi:type and xsi:nil, judged as XML Schema judges them", () => {
+    it("[I-0] admits xsi:type naming the declared type or a type derived from it, with an attribute wildcard and without", () => {
+      const { elements, types } = generatedTables;
+
+      assert.isDefined(elements["p"]?.anyAttribute);
+      assert.isUndefined(elements["qti-null"]?.anyAttribute);
+      assert.deepStrictEqual(elements["p"]?.types, [qtiType("HTMLTextDType")]);
+      assert.deepStrictEqual(elements["qti-null"]?.types, [qtiType("EmptyPrimitiveTypeDType")]);
+
+      const weight = types["WeightDType"];
+      assert.isDefined(weight);
+      assert.deepStrictEqual(derivationOf(weight), {
+        base: qtiType("EmptyPrimitiveTypeDType"),
+        derivation: "extension",
+      });
+      for (const [name, written, attributes] of [
+        ["p", "q:HTMLTextDType", []],
+        ["qti-null", "q:EmptyPrimitiveTypeDType", []],
+        ["qti-null", "q:WeightDType", weightAttributes],
+        ["qti-null", " q:WeightDType\n", weightAttributes],
+      ] as const) {
+        assert.deepStrictEqual(
+          found(typed(name, written, [], attributes), generatedTables),
+          [],
+          `${name} ${written}`,
+        );
+      }
+    });
+
+    it("[I-0] admits a type derived through a chain of extensions and restrictions on an element with an attribute wildcard", () => {
+      // No type in the committed tables derives from the type of an element with an attribute
+      // wildcard, so this chain is hand-built.
+      const chained: Tables = {
+        elements: { probe: element({ anyAttribute: anyLax, types: qti("ProbeDType") }) },
+        types: {
+          DeepProbeDType: {
+            ...noContent,
+            base: qtiType("WideProbeDType"),
+            derivation: "restriction",
+          },
+          ProbeDType: { ...noContent, base: xsdType("anyType"), derivation: "restriction" },
+          WideProbeDType: { ...noContent, base: qtiType("ProbeDType"), derivation: "extension" },
+        },
+      };
+
+      for (const written of ["q:ProbeDType", "q:WideProbeDType", "q:DeepProbeDType"]) {
+        assert.deepStrictEqual(found(typed("probe", written), chained), [], written);
+      }
+      assert.deepStrictEqual(found(typed("probe", "q:OtherDType"), chained), [
+        ["attribute-type", at(typePath("probe"))],
+      ]);
+    });
+
+    it("[I-0] resolves the type's prefix through the declarations in scope, the default namespace included", () => {
+      const path = `qti-response-processing/qti-set-outcome-value/${typePath("qti-null")}`;
+
+      assert.deepStrictEqual(
+        found(
+          nestedNull([attr("q", qtiNamespace, xmlnsNamespace)], "q:WeightDType", weightAttributes),
+          generatedTables,
+        ),
+        [],
+      );
+      assert.deepStrictEqual(
+        found(
+          nestedNull(
+            [attr("xmlns", qtiNamespace, xmlnsNamespace)],
+            "WeightDType",
+            weightAttributes,
+          ),
+          generatedTables,
+        ),
+        [],
+      );
+      // With no default namespace in scope an unprefixed name is in no namespace, so it names no
+      // QTI type.
+      assert.deepStrictEqual(found(nestedNull([], "WeightDType"), generatedTables), [
+        ["attribute-type", at(path)],
+      ]);
+    });
+
+    it("[I-0] refuses xsi:type naming an unrelated QTI type, an unbound prefix or xs:string as attribute-type, with an attribute wildcard and without", () => {
+      const unrelated = "ChoiceInteractionDType";
+
+      for (const [name, declared] of [
+        ["p", "HTMLTextDType"],
+        ["qti-null", "EmptyPrimitiveTypeDType"],
+      ] as const) {
+        assert.notInclude(ancestry(unrelated), declared);
+        for (const written of [`q:${unrelated}`, `z:${declared}`, "xs:string", `q:${declared}:x`]) {
+          const refusals = checkStructure(typed(name, written), generatedTables);
+
+          assert.deepStrictEqual(
+            refusals.map((refusal) => [refusal.rule, refusal.location]),
+            [["attribute-type", at(typePath(name))]],
+            `${name} ${written}`,
+          );
+          assert.strictEqual(refusals[0]?.detail["reading"], "47");
+          assert.include(refusals[0]?.detail["expected"], declared);
+        }
+      }
+    });
+
+    it("[I-0] refuses xsi:nil as unknown-attribute whatever its value, with an attribute wildcard and without", () => {
+      for (const name of ["p", "qti-null"]) {
+        for (const nil of ["true", "false"]) {
+          const refusals = checkStructure(
+            doc(location, el(name, [attr("nil", nil, xsiNamespace)])),
+            generatedTables,
+          );
+
+          assert.deepStrictEqual(
+            refusals.map((refusal) => [refusal.rule, refusal.location]),
+            [["unknown-attribute", at(`${name}/@{${xsiNamespace}}nil`)]],
+            `${name} ${nil}`,
+          );
+          assert.strictEqual(refusals[0]?.detail["reading"], "47");
+        }
+      }
+    });
+
+    it("[I-0] still admits the two location attributes, and judges nothing on an element the walk does not check", () => {
+      for (const name of ["p", "qti-null"]) {
+        const located = doc(
+          location,
+          el(name, [
+            attr("schemaLocation", `${qtiNamespace} qti.xsd`, xsiNamespace),
+            attr("noNamespaceSchemaLocation", "qti.xsd", xsiNamespace),
+            attr("type", "&t;", xsiNamespace, ["t"]),
+          ]),
+        );
+
+        assert.deepStrictEqual(found(located, generatedTables), [], name);
+      }
+
+      assert.isDefined(generatedTables.elements["qti-custom-operator"]?.anyElement);
+
+      const unwalked = doc(
+        location,
+        el("qti-custom-operator", declarations, [
+          el(
+            "widget",
+            [
+              attr("type", "q:ChoiceInteractionDType", xsiNamespace),
+              attr("nil", "true", xsiNamespace),
+            ],
+            [],
+            otherNamespace,
+          ),
+        ]),
+      );
+
+      assert.deepStrictEqual(found(unwalked, generatedTables), []);
+    });
+
+    it("[I-0] admits xsi:type xs:ENTITY unverified where the declared type is one it derives from (reading 50)", () => {
+      // xs:ENTITY restricts xs:NCName, which restricts xs:Name, xs:token and xs:normalizedString in
+      // turn (XML Schema Part 2, section 3.3).
+      assert.deepStrictEqual(generatedTables.elements["qti-description"]?.types, [
+        xsdType("normalizedString"),
+      ]);
+      for (const written of ["xs:ENTITY", "xs:token", "xs:normalizedString"]) {
+        const described = typed("qti-description", written, [text("calculator")]);
+
+        assert.deepStrictEqual(found(described, generatedTables), [], written);
+      }
+
+      // xs:integer is no base of xs:ENTITY: the refusal names the declared type, never an entity.
+      assert.deepStrictEqual(generatedTables.elements["qti-minimum-length"]?.types, [
+        xsdType("integer"),
+      ]);
+
+      const refusals = checkStructure(
+        typed("qti-minimum-length", "xs:ENTITY", [text("4")]),
+        generatedTables,
+      );
+
+      assert.deepStrictEqual(
+        refusals.map((refusal) => [refusal.rule, refusal.location]),
+        [["attribute-type", at(typePath("qti-minimum-length"))]],
+      );
+      assert.include(refusals[0]?.detail["expected"], "integer");
+      assert.notInclude(refusals[0]?.detail["expected"]?.toLowerCase(), "entity");
+    });
+  });
+
+  describe("AD-9: the named type governs after a valid xsi:type", () => {
+    it("[I-0] checks a qti-null typed qti:WeightDType by WeightDType's table, not by its name's", () => {
+      assert.deepStrictEqual(
+        found(governedNull("qti:WeightDType", weightAttributes), generatedTables),
+        [],
+      );
+      assert.deepStrictEqual(
+        found(governedNull("qti:WeightDType", [attr("identifier", "W")]), generatedTables),
+        [["missing-attribute", at(governedPath)]],
+      );
+      assert.deepStrictEqual(
+        found(
+          governedNull("qti:EmptyPrimitiveTypeDType", [attr("identifier", "W")]),
+          generatedTables,
+        ),
+        [["unknown-attribute", at(`${governedPath}/@identifier`)]],
+      );
+    });
+
+    it("governingTables gives a typed element its type's table and an untyped one its name's", () => {
+      const source = governedNull("qti:WeightDType", weightAttributes);
+      const governing = governingTables(source, generatedTables);
+      const setter = "qti-assessment-item/qti-response-processing/qti-set-outcome-value";
+
+      assert.strictEqual(
+        governing.get(elementAt(source, governedPath)),
+        generatedTables.types["WeightDType"],
+      );
+      assert.strictEqual(
+        governing.get(elementAt(source, setter)),
+        generatedTables.elements["qti-set-outcome-value"],
+      );
+    });
+
+    it("governingTables gives a name declared with several types the named type's own table, not the union", () => {
+      assert.deepStrictEqual(generatedTables.elements["qti-feedback-block"]?.types, [
+        qtiType("FeedbackBlockDType"),
+        qtiType("TemplateBlockFeedbackBlockDType"),
+      ]);
+
+      const source = typed("qti-feedback-block", "q:TemplateBlockFeedbackBlockDType");
+
+      assert.strictEqual(
+        governingTables(source, generatedTables).get(source.root),
+        generatedTables.types["TemplateBlockFeedbackBlockDType"],
+      );
+    });
+
+    it("governingTables keeps the name's table for a qti-description typed xs:token, a type of XML Schema's", () => {
+      const source = typed("qti-description", "xs:token", [text("calculator")]);
+
+      assert.deepStrictEqual(found(source, generatedTables), []);
+      assert.strictEqual(
+        governingTables(source, generatedTables).get(source.root),
+        generatedTables.elements["qti-description"],
+      );
+    });
+
+    it("admits a typed element's children and text by the named type's table, and by its name's when the type is invalid", () => {
+      // No type in the committed tables widens its base's children, so this pair is hand-built.
+      const widened: Tables = {
+        elements: {
+          leaf: element({ types: qti("LeafDType") }),
+          probe: element({ types: qti("ProbeDType") }),
+        },
+        types: {
+          LeafDType: { ...noContent, base: xsdType("anyType"), derivation: "restriction" },
+          ProbeDType: { ...noContent, base: xsdType("anyType"), derivation: "restriction" },
+          WideProbeDType: {
+            ...noContent,
+            base: qtiType("ProbeDType"),
+            children: qti("leaf"),
+            derivation: "extension",
+            text: true,
+          },
+        },
+      };
+      const content = [el("leaf", []), text("words")];
+
+      assert.deepStrictEqual(found(typed("probe", "q:WideProbeDType", content), widened), []);
+      assert.deepStrictEqual(found(typed("probe", "q:OtherDType", content), widened), [
+        ["attribute-type", at(typePath("probe"))],
+        ["text-not-allowed", at("probe")],
+        ["unknown-element", at("probe/leaf")],
+      ]);
+    });
+  });
+
+  describe("lax wildcard content, walked as XML Schema assesses it (rule 5b8ee08b, reading 6)", () => {
+    it("relies on the committed tables: lax wildcards, global names and the faults' declarations", () => {
+      const lax: Wildcard = { namespace: "##any", process: "lax" };
+
+      assert.deepStrictEqual(generatedTables.elements["qti-custom-interaction"]?.anyElement, lax);
+      assert.deepStrictEqual(generatedTables.elements["template"]?.anyElement, lax);
+      assert.deepStrictEqual(generatedTables.elements["qti-ordering"]?.anyElement, {
+        namespace: "##other",
+        process: "lax",
+      });
+      for (const local of ["div", "p", "qti-assessment-item"]) {
+        assert.isTrue(generatedTables.elements[local]?.global, local);
+      }
+      for (const local of ["qti-choice-interaction", "qti-simple-choice"]) {
+        assert.isFalse(generatedTables.elements[local]?.global, local);
+      }
+      for (const local of ["div", "p", "qti-choice-interaction"]) {
+        assert.isTrue(declaresNcNameId(local), local);
+      }
+      assert.isUndefined(generatedTables.elements["div"]?.anyElement);
+      assert.isFalse(
+        generatedTables.elements["div"]?.children.some(
+          (child) => child.local === "qti-simple-choice",
+        ) ?? true,
+      );
+    });
+
+    it("[I-8] checks a global QTI element a lax wildcard admits by its table, in a custom interaction and in a template", () => {
+      assert.deepStrictEqual(found(customized(badDiv), generatedTables), [
+        ["attribute-type", at(`${custom}/div/@id`)],
+      ]);
+      assert.deepStrictEqual(found(customized(el("div", [], [looseChoice])), generatedTables), [
+        ["unknown-element", at(`${custom}/div/qti-simple-choice`)],
+      ]);
+      assert.deepStrictEqual(found(templated(badDiv), generatedTables), [
+        ["attribute-type", at(`${markupTemplate}/div/@id`)],
+      ]);
+      assert.deepStrictEqual(found(templated(el("div", [], [looseChoice])), generatedTables), [
+        ["unknown-element", at(`${markupTemplate}/div/qti-simple-choice`)],
+      ]);
+    });
+
+    it("[I-8] passes over a QTI element declared only locally, and admits its children laxly", () => {
+      const choice = (...children: readonly SourceChild[]) =>
+        customized(
+          el("qti-choice-interaction", [attr("response-identifier", "RESPONSE"), badId], children),
+        );
+
+      assert.deepStrictEqual(found(choice(), generatedTables), []);
+      assert.deepStrictEqual(found(choice(el("p")), generatedTables), []);
+      assert.deepStrictEqual(found(choice(el("p", [badId])), generatedTables), [
+        ["attribute-type", at(`${custom}/qti-choice-interaction/p/@id`)],
+      ]);
+    });
+
+    it("[I-8] passes over a QTI root nested in lax content with everything below it (reading 6)", () => {
+      const nested = el(
+        "qti-assessment-item",
+        [attr("identifier", "1x"), attr("time-dependent", "false"), attr("title", "Nested")],
+        [badDiv],
+      );
+
+      assert.deepStrictEqual(found(customized(nested), generatedTables), []);
+    });
+
+    it("[I-8] admits laxly the children of an element in another namespace, under ##any and under ##other", () => {
+      const widget = el("widget", [], [badDiv], otherNamespace);
+
+      assert.deepStrictEqual(found(customized(widget), generatedTables), [
+        ["attribute-type", at(`${custom}/{${otherNamespace}}widget/div/@id`)],
+      ]);
+      assert.deepStrictEqual(found(ordered(widget), generatedTables), [
+        ["attribute-type", at(`${ordering}/{${otherNamespace}}widget/div/@id`)],
+      ]);
+    });
+
+    it("[I-8] accepts foreign content whose xsi:type names a resolved complex type without checking it (reading 50)", () => {
+      const widget = (written: string) =>
+        el(
+          "widget",
+          [...declarations, attr("type", written, xsiNamespace)],
+          [badDiv],
+          otherNamespace,
+        );
+      const fault = ["attribute-type", at(`${custom}/{${otherNamespace}}widget/div/@id`)] as const;
+
+      // WeightDType requires `identifier` and `value` and admits no child, so it would refuse this.
+      assert.deepStrictEqual(found(customized(widget("q:WeightDType")), generatedTables), []);
+      assert.deepStrictEqual(found(customized(widget("xs:anyType")), generatedTables), [fault]);
+      assert.deepStrictEqual(found(customized(widget("z:WeightDType")), generatedTables), [fault]);
+    });
+
+    it("relies on the committed tables: the simple and complex types the reading 60 cases name", () => {
+      assert.deepStrictEqual(
+        [
+          generatedTables.types["MimeTypeListDType"],
+          generatedTables.types["MimeTypeDType"],
+          generatedTables.types["BaseValueDType"],
+        ].map((entry) => (entry !== undefined && "base" in entry ? entry.base : undefined)),
+        [qtiType("MimeTypeDType"), xsdType("normalizedString"), xsdType("string")],
+      );
+      assert.deepStrictEqual(
+        ["MimeTypeListDType", "MimeTypeDType", "BaseValueDType", "ToleranceListDType"].map(
+          (local) => generatedTables.types[local]?.derivation,
+        ),
+        ["restriction", "restriction", "extension", "union"],
+      );
+    });
+
+    it("[I-8] refuses an attribute and a child element on foreign content typed by a simple type, and leaves its text unchecked (reading 60)", () => {
+      const widgetPath = `${custom}/{${otherNamespace}}widget`;
+      const widget = (
+        written: string,
+        attributes: readonly SourceAttribute[],
+        ...children: readonly SourceChild[]
+      ) =>
+        customized(
+          el(
+            "widget",
+            [...declarations, attr("type", written, xsiNamespace), ...attributes],
+            children,
+            otherNamespace,
+          ),
+        );
+      const foreign = attr("foreign", "1", otherNamespace);
+      const lang = attr("lang", "en", xmlNamespace);
+      const schemaLocation = attr("schemaLocation", `${otherNamespace} other.xsd`, xsiNamespace);
+
+      for (const written of [
+        "xs:string",
+        "xs:integer",
+        "q:MimeTypeListDType",
+        "q:ToleranceListDType",
+      ]) {
+        assert.deepStrictEqual(
+          found(widget(written, [], badDiv), generatedTables),
+          [["unknown-element", at(`${widgetPath}/div`)]],
+          written,
+        );
+        assert.deepStrictEqual(
+          found(widget(written, [], el("part", [], [], otherNamespace)), generatedTables),
+          [["unknown-element", at(`${widgetPath}/{${otherNamespace}}part`)]],
+          written,
+        );
+        assert.deepStrictEqual(
+          found(widget(written, [foreign, attr("size", "3"), lang]), generatedTables),
+          [
+            ["unknown-attribute", at(`${widgetPath}/@{${otherNamespace}}foreign`)],
+            ["unknown-attribute", at(`${widgetPath}/@size`)],
+            ["unknown-attribute", at(`${widgetPath}/@xml:lang`)],
+          ],
+          written,
+        );
+        assert.deepStrictEqual(
+          found(
+            widget(written, [schemaLocation], text("not a number, nor a MIME type")),
+            generatedTables,
+          ),
+          [],
+          written,
+        );
+      }
+    });
+
+    it("[I-8] cites reading 60 on the refusals of foreign content typed by a simple type", () => {
+      const source = customized(
+        el(
+          "widget",
+          [...declarations, attr("type", "xs:string", xsiNamespace), attr("size", "3")],
+          [badDiv],
+          otherNamespace,
+        ),
+      );
+      const widget = `{${otherNamespace}}widget`;
+
+      assert.deepStrictEqual(
+        checkStructure(source, generatedTables).map((refusal) => refusal.detail),
+        [
+          { attribute: "size", element: widget, reading: "60" },
+          { element: "div", parent: widget, reading: "60" },
+        ],
+      );
+    });
+
+    it("[I-8] keeps foreign content typed by a complex type unchecked whatever it holds, simple content included (reading 50)", () => {
+      for (const written of ["q:WeightDType", "q:BaseValueDType"]) {
+        const source = customized(
+          el(
+            "widget",
+            [
+              ...declarations,
+              attr("type", written, xsiNamespace),
+              attr("foreign", "1", otherNamespace),
+            ],
+            [badDiv, el("part", [], [], otherNamespace), text("text")],
+            otherNamespace,
+          ),
+        );
+
+        assert.deepStrictEqual(found(source, generatedTables), [], written);
+      }
+    });
+
+    it("governingTables gives the lax-checked elements, and not the ones passed over", () => {
+      const checkedDiv = customized(badDiv);
+      const choice = customized(
+        el("qti-choice-interaction", [attr("response-identifier", "RESPONSE")], [el("p")]),
+      );
+      const nested = customized(
+        el(
+          "qti-assessment-item",
+          [attr("identifier", "item"), attr("time-dependent", "false"), attr("title", "Nested")],
+          [badDiv],
+        ),
+      );
+      const choicePath = `${custom}/qti-choice-interaction`;
+
+      assert.strictEqual(
+        governingTables(checkedDiv, generatedTables).get(elementAt(checkedDiv, `${custom}/div`)),
+        generatedTables.elements["div"],
+      );
+      assert.strictEqual(
+        governingTables(choice, generatedTables).get(elementAt(choice, `${choicePath}/p`)),
+        generatedTables.elements["p"],
+      );
+      assert.isFalse(governingTables(choice, generatedTables).has(elementAt(choice, choicePath)));
+      assert.isFalse(
+        governingTables(nested, generatedTables).has(
+          elementAt(nested, `${custom}/qti-assessment-item`),
+        ),
+      );
+    });
+  });
+
+  describe("reading 56: one reader of xs:double", () => {
+    it("[I-2] admits normal-maximum 1e400 and INF, and refuses -1e400, 0e0, -0 and NaN (reading 16)", () => {
+      const path = "qti-assessment-item/qti-outcome-declaration/@normal-maximum";
+
+      for (const admitted of ["1e400", "INF"]) {
+        assert.deepStrictEqual(found(item([outcome(attr("normal-maximum", admitted))])), []);
+      }
+      for (const refused of ["-1e400", "0e0", "-0", "NaN"]) {
+        const source = item([outcome(attr("normal-maximum", refused))]);
+
+        assert.deepStrictEqual(found(source), [["attribute-type", at(path)]]);
+      }
+    });
+
+    it("admits a qti-time-limits max-time of 1e400 and refuses -1e400 (minInclusive 0.0)", () => {
+      assert.deepStrictEqual(found(limits("1e400"), generatedTables), []);
+      assert.deepStrictEqual(found(limits("-1e400"), generatedTables), [
+        ["attribute-type", at("qti-time-limits/@max-time")],
+      ]);
+    });
+
+    it("reads a double only through the value model, with no reader of its own", () => {
+      const walk = readFileSync(
+        new URL(import.meta.resolve("#plate/validate/structure.ts")),
+        "utf-8",
+      );
+
+      assert.notInclude(walk, "readDouble");
+      assert.notInclude(walk, "Number(");
     });
   });
 });

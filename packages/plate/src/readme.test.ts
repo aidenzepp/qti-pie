@@ -16,9 +16,35 @@ const opening = [
   "",
 ].join("\n");
 
+/**
+ * The command that writes the conformance ledger, which the README gives on a line of its own.
+ */
+const ledgerCommand = "pnpm --filter @qti-pie/plate ledger";
+
+/**
+ * The headings of the sections that say what the interactions, the scoring and the conformance
+ * ledger give a host.
+ */
+const headings = ["## Interactions", "## Scoring", "## Conformance ledger"] as const;
+
+/**
+ * Read the README.
+ *
+ * @returns Its text.
+ */
+const readme = (): string => readFileSync(new URL("../README.md", import.meta.url), "utf-8");
+
 describe("README.md", () => {
   it("opens with the rule's block, verbatim", () => {
-    const readme = readFileSync(new URL("../README.md", import.meta.url), "utf-8");
-    assert.strictEqual(readme.slice(0, opening.length), opening);
+    assert.strictEqual(readme().slice(0, opening.length), opening);
+  });
+
+  it("gives the ledger command on a line of its own and holds each section's heading", () => {
+    const lines = readme().split("\n");
+
+    assert.include(lines, ledgerCommand);
+    for (const heading of headings) {
+      assert.include(lines, heading);
+    }
   });
 });
