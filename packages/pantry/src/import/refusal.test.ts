@@ -253,6 +253,17 @@ const writtenRules = {
     "MappingScore",
     "MatchGroupList",
     "MatchSourceValue",
+    "MathmlBaseValue",
+    "MathmlCbytesValue",
+    "MathmlCdValue",
+    "MathmlIndexValue",
+    "MathmlNameValue",
+    "MathmlNargsValue",
+    "MathmlPositionValue",
+    "MathmlScriptlevelValue",
+    "MathmlSelectionValue",
+    "MathmlShiftValue",
+    "MathmlSpanValue",
     "MediaRectCoords",
     "PrintedVariableIntegerOrVariable",
     "RectCoords",
@@ -276,6 +287,9 @@ const writtenRules = {
     "HyperlinkUri",
     "LongDescriptionUri",
     "LongInterpretationUri",
+    "MathmlCdgroupValue",
+    "MathmlDefinitionUrlValue",
+    "MathmlSrcValue",
     "NamespaceUri",
     "StatisticContextUri",
     "StylesheetUri",
@@ -382,12 +396,38 @@ const makeEveryContract = (): readonly string[] => {
 const everyContract: readonly string[] = makeEveryContract();
 
 describe("the rules of a contract", () => {
-  it("names 136 contracts, each in the expected table once", () => {
+  it("names 150 contracts, each in the expected table once", () => {
     const names = everyContract;
 
-    assert.strictEqual(names.length, 136);
-    assert.strictEqual(expectedRules.size, 136);
+    assert.strictEqual(names.length, 150);
+    assert.strictEqual(expectedRules.size, 150);
     assert.deepStrictEqual([...expectedRules.keys()].toSorted(), names.toSorted());
+  });
+
+  it("maps the 14 MathML contracts: three under uri-syntax, eleven under attribute-lexical", () => {
+    const uri = ["MathmlCdgroupValue", "MathmlDefinitionUrlValue", "MathmlSrcValue"];
+    const lexical = [
+      "MathmlBaseValue",
+      "MathmlCbytesValue",
+      "MathmlCdValue",
+      "MathmlIndexValue",
+      "MathmlNameValue",
+      "MathmlNargsValue",
+      "MathmlPositionValue",
+      "MathmlScriptlevelValue",
+      "MathmlSelectionValue",
+      "MathmlShiftValue",
+      "MathmlSpanValue",
+    ];
+
+    for (const name of uri) {
+      assert.isTrue(isMappedLaw(contractLaw(name)), name);
+      assert.strictEqual(ruleOfLaw(contractLaw(name)), "uri-syntax", name);
+    }
+    for (const name of lexical) {
+      assert.isTrue(isMappedLaw(contractLaw(name)), name);
+      assert.strictEqual(ruleOfLaw(contractLaw(name)), "attribute-lexical", name);
+    }
   });
 
   it("maps every contract of the schema to its rule, mapped", () => {

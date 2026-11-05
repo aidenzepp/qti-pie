@@ -104,6 +104,20 @@ const derived = [
   "MatchTargetPairValue",
   "MatchTargetPointValue",
   "MatchTargetUriValue",
+  "MathmlBaseValue",
+  "MathmlCbytesValue",
+  "MathmlCdValue",
+  "MathmlCdgroupValue",
+  "MathmlDefinitionUrlValue",
+  "MathmlIndexValue",
+  "MathmlNameValue",
+  "MathmlNargsValue",
+  "MathmlPositionValue",
+  "MathmlScriptlevelValue",
+  "MathmlSelectionValue",
+  "MathmlShiftValue",
+  "MathmlSpanValue",
+  "MathmlSrcValue",
   "MediaRectCoords",
   "NamespacePrefix",
   "NamespaceUri",
@@ -194,10 +208,10 @@ describe("schema/contracts", () => {
     );
   });
 
-  it("makes exactly the 136 contracts the dry run derived", () => {
+  it("makes exactly the 150 contracts the dry run and phase 6 derived", () => {
     const { arms, written } = everyName();
 
-    assert.strictEqual(written.length, 72);
+    assert.strictEqual(written.length, 86);
     assert.strictEqual(arms.length, 64);
     assert.deepStrictEqual([...written, ...arms].toSorted(), derived);
   });
@@ -231,5 +245,34 @@ describe("schema/contracts", () => {
     assert.strictEqual(contracts.LomToken.base.pattern.flags, "su");
     assert.strictEqual(contracts.ToolName.base.pattern.flags, "su");
     assert.strictEqual(contracts.ClassList.base.pattern.flags, "u");
+  });
+
+  it("builds each of the 14 MathML contracts over its base pattern once", () => {
+    const bases = [
+      [contracts.MathmlBaseValue, str.regex(patterns.mathmlPositiveInteger)],
+      [contracts.MathmlCbytesValue, str.regex(patterns.base64)],
+      [contracts.MathmlCdgroupValue, str.regex(patterns.anyUri)],
+      [contracts.MathmlCdValue, str.regex(patterns.ncName)],
+      [contracts.MathmlDefinitionUrlValue, str.regex(patterns.anyUri)],
+      [contracts.MathmlIndexValue, str.regex(patterns.mathmlInteger)],
+      [contracts.MathmlNameValue, str.regex(patterns.ncName)],
+      [contracts.MathmlNargsValue, str.regex(patterns.xsNonNegativeInteger)],
+      [contracts.MathmlPositionValue, str.regex(patterns.mathmlInteger)],
+      [contracts.MathmlScriptlevelValue, str.regex(patterns.xsInteger)],
+      [contracts.MathmlSelectionValue, str.regex(patterns.mathmlPositiveInteger)],
+      [contracts.MathmlShiftValue, str.regex(patterns.mathmlInteger)],
+      [contracts.MathmlSpanValue, str.regex(patterns.mathmlPositiveInteger)],
+      [contracts.MathmlSrcValue, str.regex(patterns.anyUri)],
+    ] as const;
+
+    assert.strictEqual(bases.length, 14);
+    for (const [made, base] of bases) {
+      assert.strictEqual(made.base.pattern.source, base.pattern.source, made.name);
+    }
+    assert.strictEqual(
+      contracts.MathmlCbytesValue.base.pattern.source,
+      str.regex(patterns.base64).pattern.source,
+    );
+    assert.notStrictEqual(contracts.MathmlSpanValue.name, contracts.TableSpan.name);
   });
 });
