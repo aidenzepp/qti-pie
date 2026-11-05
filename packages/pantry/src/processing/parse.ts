@@ -473,7 +473,7 @@ const wildcardIncludes = (
  * Includes are never resolved: the node stands for the element as written, whether or not its
  * `href` names a file.
  */
-const parseInclude = (
+export const parseInclude = (
   element: Element,
   position: Position,
 ): Effect.Effect<IncludeNode, UnmodeledVocabulary> =>
