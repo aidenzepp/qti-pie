@@ -2,6 +2,8 @@
 import { schema } from "@bjornpagen/grizzle";
 import type { Statement } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
+import { Predicate } from "effect";
+import { inspect } from "node:util";
 import * as contracts from "#pantry/schema/contracts.ts";
 import * as rosters from "#pantry/schema/content/rosters.ts";
 import * as declaration from "#pantry/schema/declaration.ts";
@@ -359,10 +361,81 @@ describe("rule", () => {
     );
   });
 
+  it("holds exactly the XInclude xpointer capacity: every XInclude has zero XIncludeXpointer rows", () => {
+    const capacities = ofKind("capacity");
+    assert.strictEqual(capacities.length, 1);
+
+    const [capacity] = capacities;
+    assert.strictEqual(capacity?.target.source, rule.relations.XInclude);
+    assert.deepStrictEqual([...(capacity?.target.fields ?? [])], ["id"]);
+    assert.strictEqual(capacity?.from.source, rule.relations.XIncludeXpointer);
+    assert.deepStrictEqual([...(capacity?.from.fields ?? [])], ["node"]);
+
+    const described: unknown = capacity;
+    const bounds = inspect(
+      Predicate.hasProperty(described, "desc") && Predicate.hasProperty(described.desc, "within")
+        ? described.desc.within
+        : undefined,
+      { depth: null },
+    );
+    assert.strictEqual(bounds.match(/0n/gu)?.length, 2, bounds);
+  });
+
+  it("holds XIncludeParse to the value xml, as a check on that relation", () => {
+    const checks = ofKind("check").filter((statement) => statement.name === "XIncludeParseXml");
+    assert.strictEqual(checks.length, 1);
+    assert.strictEqual(checks[0]?.relation, rule.relations.XIncludeParse);
+
+    const described: unknown = checks[0];
+    const text = inspect(Predicate.hasProperty(described, "desc") ? described.desc : undefined, {
+      depth: null,
+      maxStringLength: 100_000,
+    });
+    assert.include(text, "value");
+    assert.include(text, "xml");
+    assert.notInclude(text, "text");
+  });
+
+  it("widens RuleOperandKind to the twelve holders and the three single-expression owners", () => {
+    const checks = ofKind("check").filter((statement) => statement.name === "RuleOperandKind");
+    assert.strictEqual(checks.length, 1);
+    assert.strictEqual(checks[0]?.relation, rule.relations.RuleOperand);
+
+    const described: unknown = checks[0];
+    const text = inspect(Predicate.hasProperty(described, "desc") ? described.desc : undefined, {
+      depth: null,
+      maxStringLength: 100_000,
+    });
+    const handles = [
+      "qti-set-outcome-value",
+      "qti-lookup-outcome-value",
+      "qti-set-template-value",
+      "qti-set-default-value",
+      "qti-set-correct-response",
+      "qti-template-constraint",
+      "qti-response-if",
+      "qti-response-else-if",
+      "qti-outcome-if",
+      "qti-outcome-else-if",
+      "qti-template-if",
+      "qti-template-else-if",
+      "qti-pre-condition",
+      "qti-branch-rule",
+      "qti-template-default",
+    ];
+    for (const handle of handles) {
+      assert.include(text, `'${handle}'`, handle);
+    }
+    for (const handle of ["qti-pre-condition", "qti-branch-rule", "qti-template-default"]) {
+      assert.include(node.relations.NodeKind.handles, handle);
+    }
+    assert.strictEqual(text.match(/'qti-[a-z-]+'/gu)?.length, handles.length, text);
+  });
+
   it("holds only keys, containments, mirrors and checks, each check on this module's relations", () => {
     const statements: readonly Statement[] = rule.rules;
     for (const kind of new Set(statements.map((statement) => statement.kind))) {
-      assert.include(["check", "contained", "key", "mirrors"], kind);
+      assert.include(["capacity", "check", "contained", "key", "mirrors"], kind);
     }
     for (const statement of statements.filter((candidate) => candidate.kind === "check")) {
       assert.isTrue(
