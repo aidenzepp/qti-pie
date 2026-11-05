@@ -13,12 +13,17 @@ export type Locale = (typeof locales)[number];
 /**
  * The English catalog: every string the renderer writes into an item, keyed by the role it plays.
  *
- * A `{name}` in a text is a placeholder that {@link message} fills. The status headings reuse the
- * three after-submit states (`notAccepted`, `scored`, `responseRecorded`), so a heading names a
- * state as the title does. `atLeastStrings` and `atMostStrings` read in the plural, so at a count
- * of 1 an Extended Text writes `atLeastOneString` or `atMostOneString`, their singular. This
- * catalog is the source of the keys and of each key's placeholders; any other locale's catalog has
- * the same keys and placeholders.
+ * A `{name}` in a text is a placeholder that {@link message} fills. A Status heading's key is the
+ * `heading` it names (`notAccepted`, `scored`, `responseRecorded`, `review`, `solution`,
+ * `partSubmitted`, `testFinished`), and a page's title is `title` with a state's text as its
+ * `state` (`answering`, `notAccepted`, `partSubmitted`, `review`, `solution`, `finished`), so the
+ * closed test's summary is titled "Finished: {test}" through `title` and `finished`. An item's
+ * state in words (`itemAnswered`, `itemNotAnswered`, `itemSubmitted`, `itemClosed`) follows its
+ * name (`itemOf` on a navigation button, `item` on the confirm page's list) through `itemState`,
+ * so the punctuation between them is the locale's. `atLeastStrings` and `atMostStrings` read in
+ * the plural, so at a count of 1 an Extended Text writes `atLeastOneString` or `atMostOneString`,
+ * their singular. This catalog is the source of the keys and of each key's placeholders; any other
+ * locale's catalog has the same keys and placeholders.
  */
 const en = {
   answer: "Answer",
@@ -31,16 +36,46 @@ const en = {
   atMostOneString: "Enter at most 1 answer.",
   atMostStrings: "Enter at most {n} answers.",
   choiceOf: "Choice {n} of {count}",
+  confirm: "Confirm",
+  confirmList: "Unanswered or unsubmitted items",
+  confirmTitle: "Confirm: {intent}, {test}",
+  downloadResults: "Download results (XML)",
+  endOfPart: "This is the last item in this part. End the part to go on.",
+  endPart: "End part",
+  finished: "Finished",
+  item: "Item {n}",
+  itemAnswered: "answered",
+  itemClosed: "closed",
+  itemNotAnswered: "not answered",
+  itemOf: "Item {n} of {count}",
+  itemState: "{item}, {state}",
+  itemSubmitted: "submitted",
   malformedFile: "Enter text, not a file.",
   malformedNumber: "Enter a number.",
   malformedSingleMany: "Enter one answer.",
+  nextItem: "Next item",
   notAccepted: "Not accepted",
   notice: "Not supported here: {feature}",
+  partSubmitted: "Part submitted",
   patternMismatch: "Enter an answer in the form this question asks for.",
+  previousItem: "Previous item",
   responseRecorded: "Response recorded",
+  resume: "Resume: {test}, Item {n} of {count}",
+  return: "Return",
+  review: "Review",
+  reviewItem: "Review: Item {n}",
+  reviewNotAllowed: "review not allowed",
   score: "Score: {score}",
   scored: "Scored",
+  skippingNotAllowed: "Answer this item before you submit it.",
+  solution: "Solution",
+  solutionItem: "Solution: Item {n}",
+  solutionNotAllowed: "solution not allowed",
   submit: "Submit",
+  submitAnswer: "Submit answer",
+  submitPart: "Submit part",
+  testFinished: "Test finished",
+  testNavigation: "Test navigation",
   title: "{state}: {title}",
   unknownChoice: "Choose one of the listed options.",
 } as const;
@@ -62,8 +97,9 @@ type Placeholders<Text extends string> = Text extends `${string}{${infer Name}}$
  * The values {@link message} fills a key's placeholders with, one per placeholder.
  *
  * Each value is text as the candidate reads it: a number arrives already formatted for the locale,
- * and `notice`'s `feature` is the feature key in QTI's own spelling (an element name,
- * `pattern-mask`, `cardinality="record"`).
+ * `notice`'s `feature` is the feature key in QTI's own spelling (an element name,
+ * `pattern-mask`, `cardinality="record"`), a `test` is the test's title, and `confirmTitle`'s
+ * `intent` is the navigation label of the intent it confirms (`submitPart`'s or `endPart`'s text).
  */
 export type MessageParams<Key extends MessageKey> = Readonly<
   Record<Placeholders<(typeof en)[Key]>, string>
