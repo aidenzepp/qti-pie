@@ -4,6 +4,10 @@ grizzle is not on npm yet (`npm view @bjornpagen/grizzle` returns 404). These ta
 from a local clone of [bjornpagen/grizzle](https://github.com/bjornpagen/grizzle), so the package installs as the npm
 release will: built `dist/`, real dependency versions, the `grizzle` binary and the agent skill.
 
+grizzle is Bjorn Pagen's, under the 0BSD licence in its repository (`LICENSE`: "Permission to use, copy, modify,
+and/or distribute this software for any purpose with or without fee is hereby granted"); the tarballs are
+redistributed here under it, with the author's agreement. The rest of this repository is MIT (`LICENSE` at the root).
+
 | Tarball                                      | Package                      | Source                                                           |
 | -------------------------------------------- | ---------------------------- | ---------------------------------------------------------------- |
 | `bjornpagen-grizzle-1.0.0-beta.0.tgz`        | `@bjornpagen/grizzle`        | `packages/grizzle` at `a1d5af193cee117ab481f5897edd41101ff5d679` |

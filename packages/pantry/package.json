@@ -1,6 +1,7 @@
 {
   "name": "@qti-pie/pantry",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "imports": {
     "#pantry/*": "./src/*",

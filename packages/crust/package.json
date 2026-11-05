@@ -1,6 +1,7 @@
 {
   "name": "@qti-pie/crust",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "imports": {
     "#crust/*": "./src/*"
