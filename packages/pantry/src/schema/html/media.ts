@@ -490,7 +490,7 @@ export const rules = [
   contained(on(select(Source, { parentKind: "picture" }), "id"), on(SourceSrcset, "node")),
   contained(on(select(Track, { kind: "subtitles" }), "id"), on(TrackSrclang, "node")),
   capacity(on(Picture, "id"), {
-    from: on(select(node.Edge, { childKind: "img" }), "parent"),
+    from: on(select(node.Edge, { childKind: "img", parentKind: "picture" }), "parent"),
     within: within(1n, 1n),
   }),
   capacity(on(Picture, "id"), {

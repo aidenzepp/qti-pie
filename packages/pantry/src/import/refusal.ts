@@ -558,7 +558,8 @@ const capacityRules = new Map<string, Rule>([
 
 /**
  * The rule of a capacity. A capacity is named by the relation it bounds and the one that fills it;
- * the two `Picture` capacities fill from the same `Edge` and differ by the child kind they select.
+ * the two `Picture` capacities fill from the same `Edge` and differ by the child kind they select,
+ * whether or not they also select the parent kind `picture`.
  */
 const capacityRule = (target: LawSide, from: LawSide): Rule | undefined => {
   if (target.relation === "StimulusBody") {
@@ -640,6 +641,7 @@ const testContainedEntries: readonly (readonly [Rule, readonly string[]])[] = [
   [
     "section-identifier-target",
     [
+      "SectionIdentifierTarget>ExpressionSectionIdentifier",
       "SectionIdentifierTarget>Node",
       "SectionIdentifierTarget>TestDocument",
       "SectionIdentifierTarget>TestReach",
@@ -1172,12 +1174,17 @@ const phaseKeyRule = (relation: string, fields: readonly string[]): Rule | undef
 /**
  * The rule of a capacity by the relation that fills it, for the relations this phase added: the
  * `Edge` rows of a LOM category selected on `parentKind` and `childKind` (R30), a CSM or usage
- * relation, a variant's metadata. An `Edge` capacity selected on `childKind` alone is a content
- * capacity (`capacityRule`).
+ * relation, a variant's metadata. An `Edge` capacity on a `Picture` is a content capacity
+ * (`capacityRule`) even when it selects `parentKind` too, as does one selected on `childKind`
+ * alone.
  */
-const phaseCapacityRule = (from: LawSide): Rule | undefined => {
+const phaseCapacityRule = (target: LawSide, from: LawSide): Rule | undefined => {
   if (from.relation === "Edge") {
-    return selects(from, "childKind") && selects(from, "parentKind") ? "lom-capacity" : undefined;
+    return target.relation !== "Picture" &&
+      selects(from, "childKind") &&
+      selects(from, "parentKind")
+      ? "lom-capacity"
+      : undefined;
   }
 
   if (from.relation.startsWith("Csm")) {
@@ -1359,7 +1366,7 @@ const phaseRule = (law: ImportLaw): Rule | undefined => {
   }
 
   if (law.kind === "capacity") {
-    return structureCapacityRule(law.target, law.from) ?? phaseCapacityRule(law.from);
+    return structureCapacityRule(law.target, law.from) ?? phaseCapacityRule(law.target, law.from);
   }
 
   if (law.kind === "contained" || law.kind === "mirrors") {
@@ -1496,7 +1503,6 @@ const writtenContractRules: readonly (readonly [Rule, readonly string[]])[] = [
       "OutcomeScaleValue",
       "PiTarget",
       "RecordFieldIdentifier",
-      "SectionReference",
       "StimulusRefIdentifier",
       "TemplateParameterName",
       "TestStructureIdentifier",

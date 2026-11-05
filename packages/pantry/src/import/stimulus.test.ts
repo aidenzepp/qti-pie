@@ -19,7 +19,8 @@ import {
   SimpleChoice,
   TypedBinding,
 } from "#pantry/schema/interaction.ts";
-import { Node } from "#pantry/schema/node.ts";
+import { Edge, Node } from "#pantry/schema/node.ts";
+import { admission } from "#pantry/schema/seed/admission.ts";
 import { nodeArms } from "#pantry/schema/qti.ts";
 import { XInclude, XIncludeHref, XIncludeParse } from "#pantry/schema/rule.ts";
 import {
@@ -229,6 +230,40 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/stimulus.ts", (
       );
     }),
   );
+
+  for (const [name, version] of [
+    ["stimulus-300-include", "3.0.0"],
+    ["stimulus-301", "3.0.1"],
+  ] as const) {
+    suite.effect(
+      `${name}'s include is a child of the stimulus body, where only 3.0.1 admits it`,
+      () =>
+        Effect.gen(function* placed() {
+          const { rows } = yield* readRows(yield* materialize(name));
+          const edges = Rows.of(rows, Edge);
+          const includes = edges.filter((edge) => edge.childKind === "xi:include");
+
+          assert.strictEqual(includes.length, 1);
+          assert.strictEqual(includes[0]?.parentKind, "qti-stimulus-body");
+          assert.strictEqual(includes[0]?.version, version);
+
+          const unadmitted = edges.filter(
+            (edge) =>
+              !admission.some(
+                (row) =>
+                  row.version === edge.version &&
+                  row.parent === edge.parentKind &&
+                  row.child === edge.childKind,
+              ),
+          );
+
+          assert.deepStrictEqual(
+            unadmitted.map((edge) => edge.childKind),
+            version === "3.0.1" ? [] : ["xi:include"],
+          );
+        }),
+    );
+  }
 
   suite.effect("a root that is not a stimulus is refused as unmodeled vocabulary", () =>
     Effect.gen(function* notAStimulus() {

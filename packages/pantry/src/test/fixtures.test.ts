@@ -18,6 +18,10 @@ import {
   transformHash,
 } from "#pantry/test/fixtures.ts";
 import type { Edit, FixtureName, FixtureSpec } from "#pantry/test/fixtures.ts";
+import { readRows } from "#pantry/import/package.ts";
+import { Rows } from "#pantry/import/tree.ts";
+import { AttributeFileReference } from "#pantry/schema/reference.ts";
+import { PackageEntry } from "#pantry/schema/package.ts";
 import { settings as hostSettings } from "#pantry/test/settings.ts";
 
 /**
@@ -673,6 +677,88 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts", (it
     ),
   );
 
+  it.effect("the variants' Spanish image resolves to a file the package holds", () =>
+    inFreshRoot(() =>
+      Effect.gen(function* variantImages() {
+        for (const name of [
+          "variant",
+          "variant-padded",
+          "variant-no-resource",
+          "variant-no-metadata",
+        ] as const) {
+          const { rows } = yield* readRows(yield* materialize(name));
+          const references = Rows.of(rows, AttributeFileReference);
+          const entries = Rows.of(rows, PackageEntry);
+
+          assert.isAtLeast(references.length, 1, `${name}: file references`);
+
+          for (const reference of references) {
+            assert.isTrue(
+              entries.some(
+                (entry) => entry.package === reference.package && entry.path === reference.path,
+              ),
+              `${name}: ${reference.path} is a package entry`,
+            );
+          }
+        }
+      }),
+    ),
+  );
+
+  it.effect("the media fixtures' referenced files are entries of their package", () =>
+    inFreshRoot(() =>
+      Effect.gen(function* mediaFiles() {
+        for (const name of ["html-audio", "html-param", "controls-3-0-0"] as const) {
+          const { rows } = yield* readRows(yield* materialize(name));
+          const references = Rows.of(rows, AttributeFileReference);
+          const entries = Rows.of(rows, PackageEntry);
+
+          assert.isAtLeast(references.length, 1, `${name}: file references`);
+
+          for (const reference of references) {
+            assert.isTrue(
+              entries.some(
+                (entry) => entry.package === reference.package && entry.path === reference.path,
+              ),
+              `${name}: ${reference.path} is a package entry`,
+            );
+          }
+        }
+      }),
+    ),
+  );
+
+  it.effect("cut-drawing keeps the file its srcset names, and its references resolve", () =>
+    inFreshRoot(() =>
+      Effect.gen(function* cutDrawing() {
+        const fs = yield* FileSystem.FileSystem;
+        const dir = yield* materialize("cut-drawing");
+
+        assert.isTrue(yield* fs.exists(`${dir}/items/images/anglePQR.svg`), "anglePQR.svg kept");
+        assert.include(
+          yield* fs.readFileString(`${dir}/imsmanifest.xml`),
+          "items/images/anglePQR.svg",
+          "manifest lists anglePQR.svg",
+        );
+
+        const { rows } = yield* readRows(dir);
+        const references = Rows.of(rows, AttributeFileReference);
+        const entries = Rows.of(rows, PackageEntry);
+
+        assert.isAtLeast(references.length, 1, "file references");
+
+        for (const reference of references) {
+          assert.isTrue(
+            entries.some(
+              (entry) => entry.package === reference.package && entry.path === reference.path,
+            ),
+            `${reference.path} is a package entry`,
+          );
+        }
+      }),
+    ),
+  );
+
   it.effect("doctype declares a general entity and an ATTLIST default and uses the entity", () =>
     inFreshRoot(() =>
       Effect.gen(function* doctypeVariant() {
@@ -1159,5 +1245,17 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts", (it
         }),
       ),
     60_000,
+  );
+
+  it.effect("extmeta's record keeps the two xml:lang attributes the published file carries", () =>
+    inFreshRoot(() =>
+      Effect.gen(function* externalRecordLang() {
+        const fs = yield* FileSystem.FileSystem;
+        const record = yield* fs.readFileString(`${yield* materialize("extmeta")}/meta/choice.xml`);
+
+        assert.include(record, '<string xml:lang="en">jacs</string>');
+        assert.include(record, '<string xml:lang="en">Mathematics</string>');
+      }),
+    ),
   );
 });

@@ -9,11 +9,7 @@
  */
 import { check, closedId, contained, on, relation, uuid } from "@bjornpagen/grizzle";
 import { StructureHolder } from "#pantry/schema/content/rosters.ts";
-import {
-  CategoryList,
-  SectionReference,
-  TestStructureIdentifier,
-} from "#pantry/schema/contracts.ts";
+import { CategoryList, TestStructureIdentifier } from "#pantry/schema/contracts.ts";
 import { Node } from "#pantry/schema/node.ts";
 import * as processing from "#pantry/schema/processing.ts";
 import { TestDocument, TestReach } from "#pantry/schema/test/structure.ts";
@@ -256,7 +252,7 @@ export const ExpressionIncludeCategory = relation(
  */
 export const ExpressionSectionIdentifier = relation(
   "ExpressionSectionIdentifier",
-  { node: uuid, value: SectionReference },
+  { node: uuid, value: TestStructureIdentifier },
   ["node"],
 );
 
@@ -383,11 +379,8 @@ export const relations = {
  * The statements over this module's relations: every arm row is an expression, an outcome-only
  * counter's filter belongs to an expression, a reference leaf has its `VariableRef` row, and a
  * section identifier target names a node of its document, a document its test reaches and an
- * identifier its test reaches held by a section or a section reference.
- *
- * The containment of `ExpressionSectionIdentifier` into the target is not written here: grizzle
- * refuses a containment between two contracts while `value` is `SectionReference`, so it comes
- * with the retype of that column.
+ * identifier its test reaches held by a section or a section reference, and the identifier it
+ * names is the one its expression wrote.
  */
 export const rules = [
   contained(on(And, "id"), on(processing.Expression, "id")),
@@ -444,6 +437,10 @@ export const rules = [
   contained(
     on(SectionIdentifierTarget, "test", "identifier", "holderKind"),
     on(TestReach, "test", "identifier", "holderKind"),
+  ),
+  contained(
+    on(SectionIdentifierTarget, "node", "identifier"),
+    on(ExpressionSectionIdentifier, "node", "value"),
   ),
   check("SectionIdentifierTargetHolderKind", SectionIdentifierTarget, (row) =>
     row.or(row.eq(row.holderKind, "section"), row.eq(row.holderKind, "sectionRef")),
