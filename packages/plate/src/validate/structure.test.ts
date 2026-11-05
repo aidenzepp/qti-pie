@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { assert, describe, it } from "@effect/vitest";
 import { Option } from "effect";
 import {
@@ -572,6 +573,15 @@ const choosing = (count: string): SourceDocument =>
  */
 const rounded = (figures: string): SourceDocument =>
   processed(el("qti-round-to", [attr("figures", figures)]));
+
+/**
+ * Construct a document whose root is a `qti-time-limits` with the given `max-time`.
+ *
+ * @param maxTime The `max-time` as written.
+ * @returns The document.
+ */
+const limits = (maxTime: string): SourceDocument =>
+  doc(location, el("qti-time-limits", [attr("max-time", maxTime)]));
 
 /**
  * The detail reading 46 gives a `count-range` refusal.
@@ -1621,6 +1631,38 @@ describe("checkStructure", () => {
       );
 
       assert.deepStrictEqual(found(source), []);
+    });
+  });
+
+  describe("R-g: one reader of xs:double", () => {
+    it("[I-2] admits normal-maximum 1e400 and INF, and refuses -1e400, 0e0, -0 and NaN (reading 16)", () => {
+      const path = "qti-assessment-item/qti-outcome-declaration/@normal-maximum";
+
+      for (const admitted of ["1e400", "INF"]) {
+        assert.deepStrictEqual(found(item([outcome(attr("normal-maximum", admitted))])), []);
+      }
+      for (const refused of ["-1e400", "0e0", "-0", "NaN"]) {
+        const source = item([outcome(attr("normal-maximum", refused))]);
+
+        assert.deepStrictEqual(found(source), [["attribute-type", at(path)]]);
+      }
+    });
+
+    it("admits a qti-time-limits max-time of 1e400 and refuses -1e400 (minInclusive 0.0)", () => {
+      assert.deepStrictEqual(found(limits("1e400"), generatedTables), []);
+      assert.deepStrictEqual(found(limits("-1e400"), generatedTables), [
+        ["attribute-type", at("qti-time-limits/@max-time")],
+      ]);
+    });
+
+    it("reads a double only through the value model, with no reader of its own", () => {
+      const walk = readFileSync(
+        new URL(import.meta.resolve("#plate/validate/structure.ts")),
+        "utf-8",
+      );
+
+      assert.notInclude(walk, "readDouble");
+      assert.notInclude(walk, "Number(");
     });
   });
 });
