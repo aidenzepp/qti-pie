@@ -130,6 +130,20 @@ describe("partTable", () => {
     assert.isTrue(rowFor("choice-interaction", "choices").listOwner);
   });
 
+  it("keeps every row's defaults apart from its merged attributes, as placed", () => {
+    const rows = [
+      ...partTable,
+      rowFor("item", "notice", { position: "flow" }),
+      rowFor("item", "statusHeading", { headingLevel: 6 }),
+      rowFor("choice-interaction", "prompt", { promptMarkup: "legend" }),
+      rowFor("choice-interaction", "root", { promptMarkup: "legend" }),
+    ];
+    for (const row of rows) {
+      const met = Object.keys(row.defaults).filter((name) => row.merged.includes(name));
+      assert.deepStrictEqual(met, [], `${row.interaction} ${row.part}`);
+    }
+  });
+
   it("records the attributes I1 merges onto the Choice Control", () => {
     assert.deepStrictEqual(rowFor("choice-interaction", "control").merged, [
       "id",

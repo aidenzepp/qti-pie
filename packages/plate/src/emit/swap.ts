@@ -297,19 +297,37 @@ const classTokens = (value: string | true | undefined): readonly string[] =>
   value === undefined || value === true ? [] : splitTokens(value);
 
 /**
+ * Write a row's defaults under the attributes set over them, those attributes winning a conflict.
+ *
+ * @param defaults The row's defaulted attributes.
+ * @param attrs The attributes written over the defaults.
+ * @returns `attrs` itself when the row has no defaults, so the fast path keeps the props by
+ *   identity; otherwise a copy holding the defaults and then `attrs`.
+ */
+const overDefaults = (defaults: PartRow["defaults"], attrs: Attributes): Attributes =>
+  Object.keys(defaults).length === 0 ? attrs : { ...defaults, ...attrs };
+
+/**
  * Apply I1: write every attribute of `props` onto the replacement's root, `props` winning a
- * conflict, and join `class`.
+ * conflict, and join `class`; under both, write the row's defaults the root leaves out.
  *
  * Every attribute the connect function computes is in `props`, so "required" means everything in
- * `props`; whatever else the root carries (`data-*`, `title`, further classes) stands.
+ * `props`; whatever else the root carries (`data-*`, `title`, further classes, a `type` over a
+ * defaulted one) stands.
  *
  * @param root The replacement's root.
  * @param props The attributes the part carries.
- * @returns A copy of `root` with the merged attributes and the same children: `class` holds the
- *   props' tokens and then the root's, each once, and is absent when neither side has one.
+ * @param defaults The row's defaulted attributes, which the root's own attributes override.
+ * @returns A copy of `root` with the defaults, then its own attributes, then the props, and the
+ *   same children: `class` holds the props' tokens and then the root's, each once, and is absent
+ *   when neither side has one.
  */
-const mergeRequired = (root: Element, props: Attributes): Element => {
-  const merged = { ...root.attrs, ...props };
+const mergeRequired = (
+  root: Element,
+  props: Attributes,
+  defaults: PartRow["defaults"],
+): Element => {
+  const merged = overDefaults(defaults, { ...root.attrs, ...props });
   if (props["class"] === undefined && root.attrs["class"] === undefined) {
     return h(root.tag, merged, root.children);
   }
@@ -389,7 +407,7 @@ const refuse = (row: PartRow, breach: Breach): PartSwapRefused =>
 
 /**
  * Construct a swapped part's root: the replacement's, checked against I3, I2 and, for a legend
- * owner, the legend joint rule, with I1 applied.
+ * owner, the legend joint rule, with I1 applied over the row's defaults.
  *
  * @param row The part's row.
  * @param props The attributes the part's connect function computed.
@@ -411,7 +429,7 @@ const swapIn = (
     (row.legendOwner ? checkLegendFirst(root, children) : undefined);
 
   return breach === undefined
-    ? Result.succeed(mergeRequired(root, props))
+    ? Result.succeed(mergeRequired(root, props, row.defaults))
     : Result.fail(refuse(row, breach));
 };
 
@@ -419,12 +437,13 @@ const swapIn = (
  * Construct a part's root, through its replacement when the embedder swapped it, holding the swap
  * invariant I1 to I4.
  *
- * Without a replacement the part takes the fast path: its default element, holding `props` and
- * `children` by identity, with no walk. With one, the replacement's root must be an element of the
- * row's tag class (I3) and hold every handed child once, in order (I2); `props` are then written
- * over its attributes (I1). A legend owner (the Choice Root under the `legend` markup) must keep
- * the legend Prompt its first element child; the fast path holds it as handed. A list owner
- * (Choices) also applies the list joint rule on either path. Every breach is a
+ * Without a replacement the part takes the fast path: its default element, holding the row's
+ * defaults and then `props`, and `children` by identity, with no walk. With one, the replacement's
+ * root must be an element of the row's tag class (I3) and hold every handed child once, in order
+ * (I2); the row's defaults go under its attributes and `props` over them (I1), so a replacement may
+ * override a default but never a prop. A legend owner (the Choice Root under the `legend` markup)
+ * must keep the legend Prompt its first element child; the fast path holds it as handed. A list
+ * owner (Choices) also applies the list joint rule on either path. Every breach is a
  * {@link PartSwapRefused} (I4), returned as the `Result`'s failure.
  *
  * @example
@@ -447,7 +466,7 @@ export const applyPart = (
 ): Result.Result<Element, PartSwapRefused> => {
   const placed =
     replacement === undefined
-      ? Result.succeed(h(row.element, props, children))
+      ? Result.succeed(h(row.element, overDefaults(row.defaults, props), children))
       : swapIn(row, props, children, replacement);
   if (Result.isFailure(placed) || !row.listOwner) {
     return placed;
