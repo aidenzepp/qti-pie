@@ -9,9 +9,10 @@
  * Control is a native text input, so the browser's own keyboard map applies (§4.8), and Enter
  * submits the author's form by implicit submission.
  *
- * {@link validateTextEntry} checks a value the caller decoded. Only tier (a) applies: a posted text
- * that is not a number of the bound base type, or a file or a second entry, which a native text
- * input never posts.
+ * {@link validateTextEntry} checks a value the caller decoded. Tier (a) always applies: a posted
+ * text that is not a number of the bound base type, or a file or a second entry, which a native
+ * text input never posts. Tier (b), under `validateResponses`, adds the `pattern-mask` check
+ * ({@link patternMessage}).
  *
  * @module
  */
@@ -25,6 +26,7 @@ import { applyPart } from "#plate/emit/swap.ts";
 import type { PartSwapRefused } from "#plate/emit/swap.ts";
 import { Malformed } from "#plate/form/encoding.ts";
 import { textControlName } from "#plate/interactions/name.ts";
+import { patternMessage } from "#plate/interactions/pattern.ts";
 import { message } from "#plate/messages.ts";
 import type { Locale, MessageKey } from "#plate/messages.ts";
 import type { TextEntryInteraction } from "#plate/model/item.ts";
@@ -187,12 +189,14 @@ const stringRefusals = {
  *   `data-patternmask-message` when set.
  * - A {@link Malformed} input of a `string` binding: the message of its reason, `malformedFile` for a
  *   file and `malformedSingleMany` for a second entry.
- * - A decoded value: nothing more to check. `pattern-mask` never reaches here, as the item marks it
- *   unsupported.
+ * - A decoded value, under `validateResponses`: one message when it mismatches the Text Entry's
+ *   `pattern-mask` ({@link patternMessage}), the author's `data-patternmask-message` or else
+ *   `patternMismatch`. NULL, a Text Entry without a `pattern-mask`, and every value without
+ *   `validateResponses` give none.
  *
  * @param interaction The Text Entry.
  * @param input The decoded value, or why the entry did not decode.
- * @param configuration The configuration, which gives the locale.
+ * @param configuration The configuration, which gives `validateResponses` and the locale.
  * @returns One message per problem, none when the response is accepted.
  */
 export const validateTextEntry = (
@@ -201,7 +205,12 @@ export const validateTextEntry = (
   configuration: Configuration,
 ): readonly ValidationMessage[] => {
   if (!(input instanceof Malformed)) {
-    return [];
+    return Option.toArray(
+      Option.map(patternMessage(interaction, input, configuration), (text) => ({
+        response: interaction.response,
+        text,
+      })),
+    );
   }
 
   const { locale } = configuration;
