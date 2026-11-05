@@ -1,5 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option } from "effect";
+import { manifestNamespace } from "#plate/package/manifest.ts";
+import { packageTables } from "#plate/package/tables.ts";
 import { growthFactor, growthLimit, growthRatio } from "#plate/test/growth.ts";
 import {
   answeredStatuses,
@@ -454,6 +456,10 @@ describe("M2's closed sets", () => {
         "resourcemetadata/xml",
         "resourceextmetadata/xml",
         "qtiusagedata/xml",
+        "pls",
+        "css2",
+        "css3",
+        "extension",
       ],
     );
     assert.sameMembers(
@@ -468,10 +474,28 @@ describe("M2's closed sets", () => {
         "resourcemetadata/xml",
         "resourceextmetadata/xml",
         "qtiusagedata/xml",
+        "pls",
+        "css2",
+        "css3",
+        "extension",
       ],
     );
     for (const version of cpVersions) {
       assertDistinct(resourceTypes[version]);
+    }
+  });
+
+  it("lists each profile's resource types as the committed package tables' type enumeration does, in order", () => {
+    for (const version of cpVersions) {
+      const resource = packageTables.get(version)?.get(manifestNamespace)?.elements["resource"];
+      const type = resource?.attributes.find((attribute) => attribute.local === "type")?.type;
+      assert.strictEqual(type?.kind, "enumeration", version);
+
+      assert.deepStrictEqual(
+        [...resourceTypes[version]],
+        type?.kind === "enumeration" ? [...type.values] : [],
+        version,
+      );
     }
   });
 
