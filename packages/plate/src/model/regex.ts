@@ -1,6 +1,8 @@
 /**
- * The XSD-regex translator: an XML Schema 1.0 regular expression, the language of `pattern-mask`,
- * read by Appendix F's grammar and written as a JavaScript expression with the `v` flag.
+ * The XSD-regex reader: an XML Schema 1.0 regular expression, the language of `pattern-mask`, read
+ * by Appendix F's grammar, then written as a JavaScript expression with the `v` flag
+ * ({@link translate}) or compiled into an automaton matched in linear time ({@link compile},
+ * {@link matches}).
  *
  * XML Schema anchors every expression at both ends and treats `^` and `$` as ordinary characters,
  * so the translation is `^(?:…)$` with any `^` or `$` of the pattern escaped. Its escapes keep
@@ -28,21 +30,39 @@
  * encourages, and `\i` and `\c` take XML 1.0 (Fifth Edition)'s name characters, from
  * {@link nameStartClass} and {@link nameClass}, with the colon added.
  *
+ * A `pattern-mask` is author content and the value it checks is the candidate's, so the check must
+ * not let either stall its host. A backtracking engine, JavaScript's `RegExp` among them, takes
+ * time exponential in the value's length on nested or ambiguous quantifiers (`(a+)+b`, `(a|ab)*c`).
+ * XML Schema regular expressions have no back-references or look-around, so each is a true regular
+ * expression: {@link compile} builds a Thompson automaton from the same reading, and
+ * {@link matches} runs it over the value once, visiting each state at most once per character.
+ * The automaton holds at most {@link maximumStates}, 128 states, as a repetition count copies what
+ * it repeats; {@link translate} and {@link compile} both refuse a larger pattern at the quantifier
+ * or `|` that passes the limit, so its host shows the notice instead of checking it. A posted value
+ * is as long as the host lets a request body be: plate sets no bound, and the dev playground's
+ * server reads at most 1,048,576 bytes (`scripts/serve.ts`), so a value there holds at most about a
+ * million characters. The worst case is 128 × 1,048,576, about 1.3 × 10^8 state visits: 0.7 to 3
+ * seconds in Node 26 on the Apple-silicon laptop it was measured on, at 5 to 25 nanoseconds a visit
+ * (the higher figure when every visit tests a different class), well inside a request. Each
+ * optional copy of a repeated class takes two states, so the limit admits the corpus's
+ * `pattern-mask` values (at most 21 states) and `[0-9]{0,63}` (127), and refuses `[0-9]{0,64}`.
+ *
  * The module is pure and synchronous, a browser module.
  *
  * @module
  * @see https://www.w3.org/TR/2004/REC-xmlschema-2-20041028/#regexs
  * @see https://www.w3.org/TR/xmlschema11-2/#regexs
  */
-import { Data, Result } from "effect";
+import { Data, Option, Result } from "effect";
 import { blocks } from "#plate/model/blocks.ts";
 import { nameClass, nameStartClass } from "#plate/model/values.ts";
 
 /**
- * The failure of reading a pattern as an XML Schema regular expression: the pattern, the index of
- * the character the grammar refuses (in UTF-16 code units, so `pattern.slice(position)` starts at
- * it; the opening bracket or parenthesis for one never closed), and the reason, which names what to
- * change.
+ * The failure of reading a pattern as an XML Schema regular expression, or of one whose automaton
+ * would pass {@link maximumStates}: the pattern, the index of the character the grammar refuses or
+ * of the quantifier or `|` that passes the limit (in UTF-16 code units, so
+ * `pattern.slice(position)` starts at it; the opening bracket or parenthesis for one never
+ * closed), and the reason, which names what to change.
  */
 export class RegexRefused extends Data.TaggedError("RegexRefused")<{
   readonly pattern: string;
@@ -53,7 +73,7 @@ export class RegexRefused extends Data.TaggedError("RegexRefused")<{
    * The pattern, the position and the reason, in one line.
    */
   override get message(): string {
-    return `The pattern ${JSON.stringify(this.pattern)} is not an XML Schema regular expression at position ${this.position}: ${this.reason}.`;
+    return `The pattern ${JSON.stringify(this.pattern)} is refused at position ${this.position}: ${this.reason}.`;
   }
 }
 
@@ -86,6 +106,57 @@ interface Reader {
 type Escape =
   | { readonly codePoint: number; readonly kind: "character" }
   | { readonly kind: "class"; readonly source: string };
+
+/**
+ * One atom of a read pattern: a character, a class of single characters, or a group.
+ *
+ * A class carries its translation, a `v`-flag class source that matches exactly one code point:
+ * a class expression, a class escape, a category or block escape, or the wildcard.
+ */
+type Atom =
+  | { readonly codePoint: number; readonly kind: "character" }
+  | { readonly kind: "class"; readonly source: string }
+  | { readonly expression: Expression; readonly kind: "group" };
+
+/**
+ * How often a piece's atom repeats: `least` to `most` times, `most` none when unbounded. A piece
+ * written without a quantifier repeats once.
+ */
+interface Count {
+  readonly least: bigint;
+  readonly most: Option.Option<bigint>;
+  /**
+   * The UTF-16 index of the quantifier, or of the atom when none is written: where a refusal of the
+   * piece's size points.
+   */
+  readonly position: number;
+  /**
+   * The quantifier as the translation writes it, empty when none is written.
+   */
+  readonly source: string;
+}
+
+/**
+ * A piece: an atom and how often it repeats.
+ */
+interface Piece {
+  readonly atom: Atom;
+  readonly count: Count;
+}
+
+/**
+ * A branch: its pieces, in order, and the UTF-16 index of the `|` before it (of the expression's
+ * start for the first branch).
+ */
+interface Branch {
+  readonly pieces: readonly Piece[];
+  readonly position: number;
+}
+
+/**
+ * A read regular expression: its branches, of which a value matches any one.
+ */
+type Expression = readonly Branch[];
 
 /**
  * An inclusive range of code points.
@@ -653,9 +724,9 @@ const classExpression = (reader: Reader): Result.Result<string, RegexRefused> =>
  * Read a parenthesised group, `(…)`, whose `(` is the next character.
  *
  * @param reader The pattern being read.
- * @returns The group as a non-capturing group; XML Schema's groups capture nothing a match reads.
+ * @returns The group; XML Schema's groups capture nothing a match reads.
  */
-const group = (reader: Reader): Result.Result<string, RegexRefused> =>
+const group = (reader: Reader): Result.Result<Atom, RegexRefused> =>
   Result.gen(function* readGroup() {
     const open = reader.at;
 
@@ -671,7 +742,7 @@ const group = (reader: Reader): Result.Result<string, RegexRefused> =>
     }
 
     // oxlint-disable-next-line eslint/no-use-before-define -- `group` and `regularExpression` are mutually recursive, as groups nest; the call runs only after both are defined.
-    const inner = yield* regularExpression(reader);
+    const expression = yield* regularExpression(reader);
 
     if (reader.chars[reader.at] !== ")") {
       return yield* refuse(
@@ -684,16 +755,16 @@ const group = (reader: Reader): Result.Result<string, RegexRefused> =>
     reader.at += 1;
     reader.depth -= 1;
 
-    return `(?:${inner})`;
+    return { expression, kind: "group" } as const;
   });
 
 /**
  * Read an atom: a normal character, a class, an escape, the wildcard or a group.
  *
  * @param reader The pattern being read, at a character that is not `|` or `)`.
- * @returns The atom's translation.
+ * @returns The atom.
  */
-const atom = (reader: Reader): Result.Result<string, RegexRefused> => {
+const atom = (reader: Reader): Result.Result<Atom, RegexRefused> => {
   const { at } = reader;
   const character = reader.chars[at] ?? "";
 
@@ -702,17 +773,17 @@ const atom = (reader: Reader): Result.Result<string, RegexRefused> => {
       return group(reader);
     }
     case "[": {
-      return classExpression(reader);
+      return Result.map(classExpression(reader), (source) => ({ kind: "class", source }) as const);
     }
     case "\\": {
-      return Result.map(escape(reader), (named) =>
-        named.kind === "character" ? literal(named.codePoint) : named.source,
+      return Result.map(escape(reader), (named): Atom =>
+        named.kind === "character" ? named : { kind: "class", source: named.source },
       );
     }
     case ".": {
       reader.at += 1;
 
-      return Result.succeed(wildcard);
+      return Result.succeed({ kind: "class", source: wildcard });
     }
     case "?":
     case "*":
@@ -735,7 +806,7 @@ const atom = (reader: Reader): Result.Result<string, RegexRefused> => {
     default: {
       reader.at += 1;
 
-      return Result.succeed(literal(character.codePointAt(0) ?? 0));
+      return Result.succeed({ codePoint: character.codePointAt(0) ?? 0, kind: "character" });
     }
   }
 };
@@ -747,20 +818,27 @@ const atom = (reader: Reader): Result.Result<string, RegexRefused> => {
  * compared exactly: `{n,m}` needs n at most m.
  *
  * @param reader The pattern being read, after an atom.
- * @returns The quantifier's translation, empty when none follows.
+ * @param start The UTF-16 index of the atom, where a piece without a quantifier points.
+ * @returns The count, once when no quantifier follows.
  */
-const quantifier = (reader: Reader): Result.Result<string, RegexRefused> => {
+const quantifier = (reader: Reader, start: number): Result.Result<Count, RegexRefused> => {
   const { at } = reader;
+  const position = reader.offsets[at] ?? reader.pattern.length;
   const character = reader.chars[at];
 
   if (character === "?" || character === "*" || character === "+") {
     reader.at += 1;
 
-    return Result.succeed(character);
+    return Result.succeed({
+      least: character === "+" ? 1n : 0n,
+      most: character === "?" ? Option.some(1n) : Option.none(),
+      position,
+      source: character,
+    });
   }
 
   if (character !== "{") {
-    return Result.succeed("");
+    return Result.succeed({ least: 1n, most: Option.some(1n), position: start, source: "" });
   }
 
   const least = digitsFrom(reader, at + 1);
@@ -787,30 +865,33 @@ const quantifier = (reader: Reader): Result.Result<string, RegexRefused> => {
 
   reader.at = close + 1;
 
-  if (bounded) {
-    return Result.succeed(`{${BigInt(least)}}`);
-  }
+  const fewest = BigInt(least);
+  const upTo = most === "" ? Option.none() : Option.some(BigInt(most));
 
-  return Result.succeed(most === "" ? `{${BigInt(least)},}` : `{${BigInt(least)},${BigInt(most)}}`);
+  return Result.succeed({
+    least: fewest,
+    most: upTo,
+    position,
+    source: bounded
+      ? `{${fewest}}`
+      : Option.match(upTo, { onNone: () => `{${fewest},}`, onSome: (top) => `{${fewest},${top}}` }),
+  });
 };
 
 /**
  * Read a piece: an atom and its optional quantifier, which no second quantifier may follow.
  *
  * @param reader The pattern being read, at a character that is not `|` or `)`.
- * @returns The piece's translation.
+ * @returns The piece.
  */
-const piece = (reader: Reader): Result.Result<string, RegexRefused> =>
+const piece = (reader: Reader): Result.Result<Piece, RegexRefused> =>
   Result.gen(function* readPiece() {
-    const source = yield* atom(reader);
-    const count = yield* quantifier(reader);
+    const start = reader.offsets[reader.at] ?? reader.pattern.length;
+    const read = yield* atom(reader);
+    const count = yield* quantifier(reader, start);
     const next = reader.chars[reader.at];
 
-    if (count === "" || next === undefined) {
-      return source + count;
-    }
-
-    if (next === "?" || next === "+") {
+    if (count.source !== "" && (next === "?" || next === "+")) {
       return yield* refuse(
         reader,
         reader.at,
@@ -818,7 +899,7 @@ const piece = (reader: Reader): Result.Result<string, RegexRefused> =>
       );
     }
 
-    if (next === "*" || next === "{") {
+    if (count.source !== "" && (next === "*" || next === "{")) {
       return yield* refuse(
         reader,
         reader.at,
@@ -826,23 +907,25 @@ const piece = (reader: Reader): Result.Result<string, RegexRefused> =>
       );
     }
 
-    return source + count;
+    return { atom: read, count };
   });
 
 /**
  * Read a regular expression: branches separated by `|`, each a run of pieces.
  *
  * @param reader The pattern being read.
- * @returns The translation; the reader stops at a `)` or at the end of the pattern.
+ * @returns The expression; the reader stops at a `)` or at the end of the pattern.
  */
-const regularExpression = (reader: Reader): Result.Result<string, RegexRefused> =>
+const regularExpression = (reader: Reader): Result.Result<Expression, RegexRefused> =>
   Result.gen(function* readRegularExpression() {
-    const branches: string[] = [];
-    let pieces: string[] = [];
+    const branches: Branch[] = [];
+    let position = reader.offsets[reader.at] ?? reader.pattern.length;
+    let pieces: Piece[] = [];
 
     while (reader.at < reader.chars.length && reader.chars[reader.at] !== ")") {
       if (reader.chars[reader.at] === "|") {
-        branches.push(pieces.join(""));
+        branches.push({ pieces, position });
+        position = reader.offsets[reader.at] ?? reader.pattern.length;
         pieces = [];
         reader.at += 1;
       } else {
@@ -850,45 +933,125 @@ const regularExpression = (reader: Reader): Result.Result<string, RegexRefused> 
       }
     }
 
-    branches.push(pieces.join(""));
+    branches.push({ pieces, position });
 
-    return branches.join("|");
+    return branches;
   });
 
 /**
- * Compile a translation with the `v` flag.
+ * The most states a pattern's automaton holds, its accepting state included: 128.
  *
- * The translation is valid ECMAScript by construction; an engine that still refuses it (one
- * without the `v` flag, or with a limit on repetition counts) fails as a refusal at the start of
- * the pattern, carrying the engine's message, so no exception leaves the translator.
- *
- * @param pattern The pattern, for the refusal.
- * @param source The translation.
- * @returns The expression, or the engine's refusal.
+ * {@link matches} visits each state at most once per character, so a match costs at most 128 state
+ * visits per character of the value whatever the pattern; the module doc gives the reckoning
+ * against the longest value a host posts.
  */
-const compile = (pattern: string, source: string): Result.Result<RegExp, RegexRefused> =>
-  Result.try({
-    catch: (error) =>
-      new RegexRefused({
-        pattern,
-        position: 0,
-        reason: `this engine cannot compile its translation (${String(error)}); use an engine with the v flag, or lower the pattern's repetition counts`,
-      }),
-    try: () => new RegExp(source, "v"),
+export const maximumStates = 128;
+
+/**
+ * The most states a pattern's own pieces may take: {@link maximumStates} less the accepting state.
+ */
+const pieceBudget = BigInt(maximumStates - 1);
+
+/**
+ * Refuse a pattern whose automaton would pass {@link maximumStates}.
+ *
+ * @param pattern The pattern.
+ * @param position The UTF-16 index of the quantifier or `|` that takes it past the limit.
+ * @returns The refusal.
+ */
+const tooManyStates = (pattern: string, position: number): Result.Result<never, RegexRefused> =>
+  Result.fail(
+    new RegexRefused({
+      pattern,
+      position,
+      reason: `here the pattern needs more than the ${maximumStates} states a matcher holds, as a repetition count copies what it repeats once per repetition; lower the count, repeat a shorter piece, or check the length another way`,
+    }),
+  );
+
+/**
+ * Count the states an atom's automaton takes.
+ *
+ * @param pattern The pattern, for a refusal.
+ * @param read The atom.
+ * @returns One for a character or a class, a group's own count, or the refusal of a group past
+ *   the limit.
+ */
+const atomStates = (pattern: string, read: Atom): Result.Result<bigint, RegexRefused> =>
+  // oxlint-disable-next-line eslint/no-use-before-define -- `atomStates` and `expressionStates` are mutually recursive, as groups nest; the call runs only after both are defined.
+  read.kind === "group" ? expressionStates(pattern, read.expression) : Result.succeed(1n);
+
+/**
+ * Count the states a piece's automaton takes, its atom copied once per repetition.
+ *
+ * An atom of `a` states repeated `{n,m}` takes `n·a` for its required copies and `a + 1` for each
+ * optional one, the extra state choosing between the copy and what follows; repeated `{n,}` it
+ * takes `n·a + 1` (`a + 1` when n is 0), its last copy looping back through one choice. These are
+ * the states {@link buildPiece} makes.
+ *
+ * @param pattern The pattern, for a refusal.
+ * @param read The piece.
+ * @returns The count, or the refusal at the quantifier when it passes the limit.
+ */
+const pieceStates = (pattern: string, read: Piece): Result.Result<bigint, RegexRefused> =>
+  Result.flatMap(atomStates(pattern, read.atom), (one) => {
+    const { least, most, position } = read.count;
+    const states = Option.match(most, {
+      onNone: () => (least > 0n ? least : 1n) * one + 1n,
+      onSome: (top) => least * one + (top - least) * (one + 1n),
+    });
+
+    return states > pieceBudget ? tooManyStates(pattern, position) : Result.succeed(states);
   });
 
 /**
- * Translate an XML Schema regular expression into a JavaScript expression that matches the same
- * strings: the whole pattern, anchored at both ends, with the `v` flag.
+ * Count the states an expression's automaton takes: its pieces' and one choice for each branch
+ * after the first.
  *
- * @example
- *   translate("[0-9.]{0,6}"); // an expression that takes "12.5" and refuses "1234567"
- *
- * @param pattern The pattern as the attribute holds it, such as a `pattern-mask` value.
- * @returns The expression, or {@link RegexRefused} at the first character Appendix F's grammar
- *   refuses.
+ * @param pattern The pattern, for a refusal.
+ * @param expression The expression.
+ * @returns The count, or the refusal at the first piece or `|` that takes the running count past
+ *   the limit.
  */
-export const translate = (pattern: string): Result.Result<RegExp, RegexRefused> => {
+const expressionStates = (
+  pattern: string,
+  expression: Expression,
+): Result.Result<bigint, RegexRefused> =>
+  Result.gen(function* countExpression() {
+    let total = 0n;
+
+    for (const [index, branch] of expression.entries()) {
+      total += index === 0 ? 0n : 1n;
+
+      if (total > pieceBudget) {
+        return yield* tooManyStates(pattern, branch.position);
+      }
+
+      for (const read of branch.pieces) {
+        total += yield* pieceStates(pattern, read);
+
+        if (total > pieceBudget) {
+          return yield* tooManyStates(pattern, read.count.position);
+        }
+      }
+    }
+
+    return total;
+  });
+
+/**
+ * Read a pattern by Appendix F's grammar, and refuse one whose automaton would pass
+ * {@link maximumStates}.
+ *
+ * {@link translate} and {@link compile} both read through it, so they accept and refuse the same
+ * patterns, at the same positions.
+ *
+ * @param pattern The pattern as the attribute holds it.
+ * @returns The expression and its automaton's state count, the accepting state included, or the
+ *   refusal.
+ */
+const parse = (
+  pattern: string,
+): Result.Result<{ readonly expression: Expression; readonly states: number }, RegexRefused> => {
   const chars: string[] = [];
   const offsets: number[] = [];
   let offset = 0;
@@ -904,13 +1067,449 @@ export const translate = (pattern: string): Result.Result<RegExp, RegexRefused> 
 
   const reader: Reader = { at: 0, chars, depth: 0, offsets, pattern };
 
-  return Result.flatMap(regularExpression(reader), (body) =>
+  return Result.flatMap(regularExpression(reader), (expression) =>
     reader.at < chars.length
       ? refuse(
           reader,
           reader.at,
           String.raw`this ) closes no group; remove it, or write \) to match a parenthesis`,
         )
-      : compile(pattern, `^(?:${body})$`),
+      : Result.map(expressionStates(pattern, expression), (states) => ({
+          expression,
+          states: Number(states) + 1,
+        })),
   );
+};
+
+/**
+ * Write an expression as the body of a `v`-flag JavaScript expression.
+ *
+ * @param expression The expression.
+ * @returns Its translation, branches joined by `|`, each group non-capturing.
+ */
+const write = (expression: Expression): string =>
+  expression
+    .map(({ pieces }) =>
+      pieces
+        .map(({ atom: read, count }) => {
+          switch (read.kind) {
+            case "character": {
+              return literal(read.codePoint) + count.source;
+            }
+            case "class": {
+              return read.source + count.source;
+            }
+            case "group": {
+              return `(?:${write(read.expression)})${count.source}`;
+            }
+            default: {
+              return read satisfies never;
+            }
+          }
+        })
+        .join(""),
+    )
+    .join("|");
+
+/**
+ * Compile a translation with the `v` flag.
+ *
+ * The translation is valid ECMAScript by construction; an engine that still refuses it (one
+ * without the `v` flag, or with a limit on repetition counts) fails as a refusal at the start of
+ * the pattern, carrying the engine's message, so no exception leaves the translator.
+ *
+ * @param pattern The pattern, for the refusal.
+ * @param source The translation.
+ * @returns The expression, or the engine's refusal.
+ */
+const expressionOf = (
+  pattern: string,
+  source: string,
+  flags = "v",
+): Result.Result<RegExp, RegexRefused> =>
+  Result.try({
+    catch: (error) =>
+      new RegexRefused({
+        pattern,
+        position: 0,
+        reason: `this engine cannot compile its translation (${String(error)}); use an engine with the v flag, or lower the pattern's repetition counts`,
+      }),
+    try: () => new RegExp(source, flags),
+  });
+
+/**
+ * Translate an XML Schema regular expression into a JavaScript expression that matches the same
+ * strings: the whole pattern, anchored at both ends, with the `v` flag.
+ *
+ * It refuses every pattern {@link compile} refuses, those past {@link maximumStates} included, so a
+ * pattern it accepts is one {@link matches} can check.
+ *
+ * @example
+ *   translate("[0-9.]{0,6}"); // an expression that takes "12.5" and refuses "1234567"
+ *
+ * @param pattern The pattern as the attribute holds it, such as a `pattern-mask` value.
+ * @returns The expression, or {@link RegexRefused} at the first character Appendix F's grammar
+ *   refuses, or at the quantifier or `|` that takes its automaton past {@link maximumStates}.
+ */
+export const translate = (pattern: string): Result.Result<RegExp, RegexRefused> =>
+  Result.flatMap(parse(pattern), ({ expression }) =>
+    expressionOf(pattern, `^(?:${write(expression)})$`),
+  );
+
+/**
+ * What a state of a {@link Matcher} does, by the number {@link Matcher.kinds} holds for it: take
+ * one character equal to its code point, take one character in its class, choose between two
+ * states, or accept.
+ */
+const kind = { accept: 3, character: 0, choice: 2, class: 1 } as const;
+
+/**
+ * The number of one of {@link kind}'s kinds of state.
+ */
+type Kind = (typeof kind)[keyof typeof kind];
+
+/**
+ * A compiled pattern: a Thompson automaton over code points, which {@link matches} simulates.
+ *
+ * State `i` is of kind `kinds[i]`. A character or class state goes to `next[i]` when it takes the
+ * character: a character state when the character's code point is `operands[i]`, a class state
+ * when `classes[operands[i]]` matches it. A choice state goes to both `next[i]` and
+ * `alternatives[i]` without taking a character. The accepting state, `accepting`, goes nowhere;
+ * the automaton starts at `start`. Only {@link matches} reads the fields.
+ */
+export interface Matcher {
+  readonly accepting: number;
+  readonly alternatives: Int32Array;
+  /**
+   * Each distinct class of the pattern, as a sticky expression that matches one code point at its
+   * `lastIndex`; the copies a repetition count makes share one. {@link matches} sets `lastIndex`
+   * before each test.
+   */
+  readonly classes: readonly RegExp[];
+  readonly kinds: Uint8Array;
+  readonly next: Int32Array;
+  readonly operands: Int32Array;
+  readonly pattern: string;
+  readonly start: number;
+  /**
+   * How many states the automaton holds, the accepting state included: at most
+   * {@link maximumStates}.
+   */
+  readonly states: number;
+}
+
+/**
+ * An automaton being built: its states so far, and each class's index.
+ */
+interface Builder {
+  readonly alternatives: number[];
+  readonly classes: Map<string, number>;
+  readonly kinds: Kind[];
+  readonly next: number[];
+  readonly operands: number[];
+}
+
+/**
+ * Add a state.
+ *
+ * @param builder The automaton being built.
+ * @param of What the state does.
+ * @param operand Its code point or class index, 0 for a choice or the accepting state.
+ * @param next The state it goes to, -1 for the accepting state or a choice whose first target is
+ *   set later.
+ * @param alternative A choice's second state, -1 otherwise.
+ * @returns The new state's index.
+ */
+const add = (
+  builder: Builder,
+  of: Kind,
+  operand: number,
+  next: number,
+  alternative: number,
+): number => {
+  builder.kinds.push(of);
+  builder.operands.push(operand);
+  builder.next.push(next);
+  builder.alternatives.push(alternative);
+
+  return builder.kinds.length - 1;
+};
+
+/**
+ * Build an atom's states, ending at a state already built.
+ *
+ * @param builder The automaton being built.
+ * @param read The atom.
+ * @param next The state the atom goes to once it matches.
+ * @returns The atom's first state.
+ */
+const buildAtom = (builder: Builder, read: Atom, next: number): number => {
+  switch (read.kind) {
+    case "character": {
+      return add(builder, kind.character, read.codePoint, next, -1);
+    }
+    case "class": {
+      const index = builder.classes.get(read.source) ?? builder.classes.size;
+
+      builder.classes.set(read.source, index);
+
+      return add(builder, kind.class, index, next, -1);
+    }
+    case "group": {
+      // oxlint-disable-next-line eslint/no-use-before-define -- `buildAtom` and `buildExpression` are mutually recursive, as groups nest; the call runs only after both are defined.
+      return buildExpression(builder, read.expression, next);
+    }
+    default: {
+      return read satisfies never;
+    }
+  }
+};
+
+/**
+ * Build a piece's states, one copy of its atom per repetition, ending at a state already built.
+ *
+ * `{n,m}` is n required copies then m − n optional ones, each optional copy behind a choice that
+ * skips to `next`; `{n,}` loops its last copy back through a choice. {@link pieceStates} counts
+ * the states this makes.
+ *
+ * @param builder The automaton being built.
+ * @param read The piece.
+ * @param next The state the piece goes to once it matches.
+ * @returns The piece's first state.
+ */
+const buildPiece = (builder: Builder, read: Piece, next: number): number => {
+  const least = Number(read.count.least);
+  let first = next;
+  let required = least;
+
+  if (Option.isNone(read.count.most)) {
+    const loop = add(builder, kind.choice, 0, -1, next);
+    const body = buildAtom(builder, read.atom, loop);
+
+    builder.next[loop] = body;
+    first = least === 0 ? loop : body;
+    required = Math.max(least - 1, 0);
+  } else {
+    for (let optional = Number(read.count.most.value) - least; optional > 0; optional -= 1) {
+      first = add(builder, kind.choice, 0, buildAtom(builder, read.atom, first), next);
+    }
+  }
+
+  for (; required > 0; required -= 1) {
+    first = buildAtom(builder, read.atom, first);
+  }
+
+  return first;
+};
+
+/**
+ * Build an expression's states, ending at a state already built.
+ *
+ * @param builder The automaton being built.
+ * @param expression The expression.
+ * @param next The state the expression goes to once it matches.
+ * @returns The expression's first state: its one branch's, or a choice among its branches'.
+ */
+const buildExpression = (builder: Builder, expression: Expression, next: number): number => {
+  const firsts = expression.map(({ pieces }) => {
+    let after = next;
+
+    for (let index = pieces.length - 1; index >= 0; index -= 1) {
+      const read = pieces[index];
+
+      after = read === undefined ? after : buildPiece(builder, read, after);
+    }
+
+    return after;
+  });
+  let first = firsts.at(-1) ?? next;
+
+  for (let index = firsts.length - 2; index >= 0; index -= 1) {
+    first = add(builder, kind.choice, 0, firsts[index] ?? next, first);
+  }
+
+  return first;
+};
+
+/**
+ * Compile an XML Schema regular expression into a {@link Matcher}, which {@link matches} runs in
+ * time linear in the value's length.
+ *
+ * It reads the pattern as {@link translate} does and refuses the same patterns, those whose
+ * automaton would pass {@link maximumStates} included.
+ *
+ * @example
+ *   Result.map(compile("(a+)+b"), (matcher) => matches(matcher, "a".repeat(100_000))); // succeed(false), at once
+ *
+ * @param pattern The pattern as the attribute holds it, such as a `pattern-mask` value.
+ * @returns The matcher, or {@link RegexRefused} at the first character Appendix F's grammar
+ *   refuses, or at the quantifier or `|` that takes its automaton past {@link maximumStates}.
+ */
+export const compile = (pattern: string): Result.Result<Matcher, RegexRefused> =>
+  Result.gen(function* compilePattern() {
+    const { expression } = yield* parse(pattern);
+    const builder: Builder = {
+      alternatives: [],
+      classes: new Map(),
+      kinds: [],
+      next: [],
+      operands: [],
+    };
+    const accepting = add(builder, kind.accept, 0, -1, -1);
+    const start = buildExpression(builder, expression, accepting);
+    const classes = yield* Result.all(
+      Array.from(builder.classes.keys(), (source) => expressionOf(pattern, source, "vy")),
+    );
+
+    return {
+      accepting,
+      alternatives: Int32Array.from(builder.alternatives),
+      classes,
+      kinds: Uint8Array.from(builder.kinds),
+      next: Int32Array.from(builder.next),
+      operands: Int32Array.from(builder.operands),
+      pattern,
+      start,
+      states: builder.kinds.length,
+    };
+  });
+
+/**
+ * Add a state and every state its choices reach without taking a character to a list, skipping
+ * those already marked in this generation.
+ *
+ * @param matcher The automaton.
+ * @param scratch The marks and the stack: `marks` holds each state's generation when last added,
+ *   and `pending` the states still to follow, one slot per state.
+ * @param scratch.marks Each state's generation when last added.
+ * @param scratch.pending The states still to follow, one slot per state.
+ * @param list The list, whose first `length` entries are taken.
+ * @param length How many entries of `list` are taken.
+ * @param from The state to add.
+ * @param generation The current generation.
+ * @returns How many entries of `list` are taken after the character and class states reached.
+ */
+const close = (
+  matcher: Matcher,
+  { marks, pending }: { readonly marks: Uint32Array; readonly pending: Int32Array },
+  list: Int32Array,
+  length: number,
+  from: number,
+  generation: number,
+): number => {
+  const { alternatives, kinds, next } = matcher;
+  let taken = length;
+  let top = 0;
+
+  if (marks[from] !== generation) {
+    marks[from] = generation;
+    pending[top] = from;
+    top += 1;
+  }
+
+  while (top > 0) {
+    top -= 1;
+
+    const state = pending[top] ?? 0;
+    const of = kinds[state];
+
+    if (of === kind.choice) {
+      const first = next[state] ?? 0;
+      const second = alternatives[state] ?? 0;
+
+      if (marks[first] !== generation) {
+        marks[first] = generation;
+        pending[top] = first;
+        top += 1;
+      }
+
+      if (marks[second] !== generation) {
+        marks[second] = generation;
+        pending[top] = second;
+        top += 1;
+      }
+    } else if (of !== kind.accept) {
+      list[taken] = state;
+      taken += 1;
+    }
+  }
+
+  return taken;
+};
+
+/**
+ * Report whether a value matches a compiled pattern as a whole, the pattern anchored at both ends.
+ *
+ * The value is read once, by code point, keeping the set of states the characters so far reach, so
+ * it takes at most {@link Matcher.states} steps per character and never backtracks: `(a+)+b`
+ * against 100,000 `a`s answers at once. A class is tested at most once per character however many
+ * states share it.
+ *
+ * @example
+ *   Result.map(compile("[0-9.]{0,6}"), (matcher) => matches(matcher, "12.5")); // succeed(true)
+ *
+ * @param matcher The compiled pattern.
+ * @param value The text to match.
+ * @returns Whether the whole value matches.
+ */
+export const matches = (matcher: Matcher, value: string): boolean => {
+  const { classes, kinds, next, operands } = matcher;
+  const scratch = {
+    marks: new Uint32Array(matcher.states),
+    pending: new Int32Array(matcher.states),
+  };
+  const { marks } = scratch;
+  const tested = new Uint32Array(classes.length);
+  const taken = new Uint8Array(classes.length);
+  let current = new Int32Array(matcher.states);
+  let following = new Int32Array(matcher.states);
+  let generation = 1;
+  let length = close(matcher, scratch, current, 0, matcher.start, generation);
+
+  for (let at = 0; at < value.length; at += 1) {
+    if (length === 0) {
+      return false;
+    }
+
+    generation += 1;
+
+    const codePoint = value.codePointAt(at) ?? 0;
+    let reached = 0;
+
+    for (let index = 0; index < length; index += 1) {
+      const state = current[index] ?? 0;
+      const operand = operands[state] ?? 0;
+      const target = next[state] ?? 0;
+
+      if (kinds[state] !== kind.character && tested[operand] !== generation) {
+        const expression = classes[operand];
+
+        tested[operand] = generation;
+
+        if (expression !== undefined) {
+          expression.lastIndex = at;
+          taken[operand] = expression.test(value) ? 1 : 0;
+        }
+      }
+
+      if (
+        marks[target] !== generation &&
+        (kinds[state] === kind.character ? operand === codePoint : taken[operand] === 1)
+      ) {
+        if (kinds[target] === kind.character || kinds[target] === kind.class) {
+          marks[target] = generation;
+          following[reached] = target;
+          reached += 1;
+        } else {
+          reached = close(matcher, scratch, following, reached, target, generation);
+        }
+      }
+    }
+
+    [current, following] = [following, current];
+    length = reached;
+    at += codePoint > 0xff_ff ? 1 : 0;
+  }
+
+  return marks[matcher.accepting] === generation;
 };

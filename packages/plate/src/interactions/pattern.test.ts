@@ -4,6 +4,7 @@ import { configure } from "#plate/configuration.ts";
 import { patternMessage } from "#plate/interactions/pattern.ts";
 import { message } from "#plate/messages.ts";
 import type { TextEntryInteraction } from "#plate/model/item.ts";
+import { maximumStates } from "#plate/model/regex.ts";
 import type { Single, Value } from "#plate/model/values.ts";
 import { checkAllowlist, sourceModules } from "#plate/test/imports.ts";
 
@@ -179,6 +180,61 @@ describe("patternMessage", () => {
           mismatch,
           strict,
         ),
+        Option.none(),
+      );
+    }),
+  );
+
+  it.effect(
+    "answers a hostile pattern-mask against 100,000 characters in time linear in the value",
+    () =>
+      Effect.gen(function* hostile() {
+        const configuration = yield* configure({ validateResponses: true });
+        const mismatch = Option.some(message("en", "patternMismatch"));
+        const as = "a".repeat(100_000);
+
+        // Each pattern needs a last character the run of a's lacks, so a backtracking engine tries
+        // every way of splitting the run before it gives up.
+        for (const pattern of ["(a+)+b", "(a|a)*b", "(a|ab)*c"]) {
+          assert.deepStrictEqual(
+            patternMessage(masked(pattern), one({ baseType: "string", value: as }), configuration),
+            mismatch,
+            pattern,
+          );
+        }
+
+        assert.deepStrictEqual(
+          patternMessage(
+            masked("(a+)+b"),
+            one({ baseType: "string", value: `${as}b` }),
+            configuration,
+          ),
+          Option.none(),
+        );
+        assert.deepStrictEqual(
+          patternMessage(
+            masked("(a|ab)*c"),
+            one({ baseType: "string", value: `${"ab".repeat(50_000)}c` }),
+            configuration,
+          ),
+          Option.none(),
+        );
+      }),
+  );
+
+  it.effect("checks nothing against a pattern-mask whose automaton passes the state limit", () =>
+    Effect.gen(function* overLimit() {
+      const configuration = yield* configure({ validateResponses: true });
+      const mismatch = one({ baseType: "string", value: "12a" });
+
+      // Each optional copy of a class takes two states, so 64 of them pass the limit of 128.
+      assert.strictEqual(maximumStates, 128);
+      assert.deepStrictEqual(
+        patternMessage(masked("[0-9]{0,63}"), mismatch, configuration),
+        Option.some(message("en", "patternMismatch")),
+      );
+      assert.deepStrictEqual(
+        patternMessage(masked("[0-9]{0,64}"), mismatch, configuration),
         Option.none(),
       );
     }),
