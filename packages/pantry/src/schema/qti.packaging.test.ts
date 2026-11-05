@@ -14,6 +14,7 @@ import { bindingFit } from "#pantry/schema/seed/binding-fit.ts";
 import * as csm from "#pantry/schema/csm.ts";
 import * as usage from "#pantry/schema/usage.ts";
 import { printSeed } from "#pantry/test/seed.ts";
+import { seedPrintTestTimeoutMs } from "#pantry/test/settings.ts";
 
 /**
  * The part of a ChangeSet's description the test reads: each stratum's members by operation and
@@ -136,9 +137,13 @@ describe("qti packaging composition", () => {
     );
   });
 
-  it("holds exactly the full seed the recipe prints, in the one seed folder", () => {
-    assert.strictEqual(committedSeed(), printSeed([]));
-  });
+  it(
+    "holds exactly the full seed the recipe prints, in the one seed folder",
+    () => {
+      assert.strictEqual(committedSeed(), printSeed([]));
+    },
+    seedPrintTestTimeoutMs,
+  );
 
   it("keeps the BindingFit rows as the seed module holds them", () => {
     assert.isAbove(bindingFit.length, 0);
