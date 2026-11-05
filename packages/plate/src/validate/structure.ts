@@ -17,7 +17,7 @@
  *
  * @module
  */
-import { Option } from "effect";
+import { Option, Result } from "effect";
 import {
   attributePath,
   qtiNamespace,
@@ -27,7 +27,13 @@ import {
   xsiNamespace,
 } from "#plate/document/source.ts";
 import type { SourceAttribute, SourceDocument, SourceElement } from "#plate/document/source.ts";
-import { decimalLexical, doubleLexical, integerLexical, isNcName } from "#plate/model/values.ts";
+import {
+  decimalLexical,
+  doubleLexical,
+  integerLexical,
+  isNcName,
+  parseLexical,
+} from "#plate/model/values.ts";
 import { Refusal } from "#plate/validate/refusal.ts";
 import type { RefusalRule } from "#plate/validate/refusal.ts";
 import { patternEquivalents } from "#plate/validate/xsd.ts";
@@ -203,18 +209,19 @@ const lexicalChecks = {
 } satisfies Record<BuiltinName, (value: string) => boolean>;
 
 /**
- * Read an `xs:double` lexical form as a number, the infinities and NaN by name.
+ * The number an `xs:double` lexical form names, read by the value model's {@link parseLexical}, so
+ * the walk and the value model cannot read one form two ways.
  *
- * @param lexical A value {@link doubleLexical} admits.
- * @returns The number it names.
+ * A form beyond the largest finite double names the largest finite double of its sign, the closest
+ * value of the value space (XML Schema Part 2 §3.2.5); only `INF` and `-INF` name the infinities.
+ *
+ * @param lexical The lexical form.
+ * @returns The number it names, or none when the text is outside the lexical space.
  */
-const readDouble = (lexical: string): number => {
-  if (lexical === "INF") {
-    return Number.POSITIVE_INFINITY;
-  }
-
-  return lexical === "-INF" ? Number.NEGATIVE_INFINITY : Number(lexical);
-};
+const doubleValue = (lexical: string): Option.Option<number> =>
+  Option.flatMap(Result.getSuccess(parseLexical("float", lexical)), (single) =>
+    single.baseType === "float" ? Option.some(single.value) : Option.none(),
+  );
 
 /**
  * Count the digits after a decimal lexical form's point.
@@ -241,9 +248,9 @@ const scaledDecimal = (lexical: string, places: number): bigint => {
 /**
  * Report whether a value meets a `minInclusive` bound.
  *
- * A decimal or an integer kind compares exactly, digit for digit; a double compares as a number,
- * so `NaN` meets no bound. A bound outside the built-in's lexical space, or a bound on a built-in
- * that is not a number, is met by nothing.
+ * A decimal or an integer kind compares exactly, digit for digit; a double compares the numbers
+ * {@link doubleValue} reads, so `NaN` meets no bound. A bound outside the built-in's lexical space,
+ * or a bound on a built-in that is not a number, is met by nothing.
  *
  * @param name The built-in the value is read as.
  * @param value The value, already in the built-in's lexical space.
@@ -252,7 +259,10 @@ const scaledDecimal = (lexical: string, places: number): bigint => {
  */
 const meetsBound = (name: BuiltinName, value: string, bound: string): boolean => {
   if (name === "double") {
-    return doubleLexical.test(bound) && readDouble(value) >= readDouble(bound);
+    const read = doubleValue(value);
+    const least = doubleValue(bound);
+
+    return Option.isSome(read) && Option.isSome(least) && read.value >= least.value;
   }
 
   if (name === "decimal" || name === "int" || name === "integer" || name === "nonNegativeInteger") {
@@ -422,7 +432,7 @@ const readingRows: readonly ReadingRow[] = [
     attribute: "normal-maximum",
     elements: ["qti-outcome-declaration"],
     expected: "a double greater than 0",
-    holds: (lexical) => doubleLexical.test(lexical) && readDouble(lexical) > 0,
+    holds: (lexical) => Option.exists(doubleValue(lexical), (read) => read > 0),
     kind: "narrowed-attribute",
     reading: "16",
   },
