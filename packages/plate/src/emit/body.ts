@@ -75,9 +75,9 @@ const nestedPlaces: Readonly<Record<NestedWithin, string>> = {
  * cause.
  *
  * It cannot occur through the library: QTI's schema admits no interaction inside a Prompt or a
- * choice's content, `check` refuses one, and `redact` copies only what `check` accepted. Only a
- * payload built by hand, or a `Redacted` decoded from JSON that never came from `redact`, can hold
- * one. It is thrown, never returned.
+ * choice's content, `check` refuses one, `redact` copies only what `check` accepted, and
+ * `decodeRedacted` refuses JSON that holds one. Only a payload built by hand can hold one. It is
+ * thrown, never returned.
  */
 export class NestedInteractionDefect extends Data.TaggedError("NestedInteractionDefect")<{
   readonly kind: InteractionPayload["kind"];
@@ -94,8 +94,7 @@ export class NestedInteractionDefect extends Data.TaggedError("NestedInteraction
 
 /**
  * Give the render function for content where QTI's schema admits no interaction, a Prompt's or a
- * choice's: meeting one is a defect, since only a payload that never came from `redact` can hold
- * one.
+ * choice's: meeting one is a defect, since only a payload built by hand can hold one.
  *
  * @param within Where the content sits.
  * @returns A render function that throws {@link NestedInteractionDefect}, naming the interaction
