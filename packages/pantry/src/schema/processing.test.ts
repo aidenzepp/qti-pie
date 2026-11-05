@@ -4,7 +4,6 @@ import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Predicate } from "effect";
 import * as rosters from "#pantry/schema/content/rosters.ts";
-import * as attributes from "#pantry/schema/attributes.ts";
 import * as contracts from "#pantry/schema/contracts.ts";
 import * as declaration from "#pantry/schema/declaration.ts";
 import * as document from "#pantry/schema/document.ts";
@@ -14,40 +13,32 @@ import * as node from "#pantry/schema/node.ts";
 import * as pkg from "#pantry/schema/package.ts";
 import * as patterns from "#pantry/schema/patterns.ts";
 import * as processing from "#pantry/schema/processing.ts";
-import * as reference from "#pantry/schema/reference.ts";
 import * as ruleSchema from "#pantry/schema/rule.ts";
 import {
   operatorArity,
   operatorArityMax,
   operatorArityUnbounded,
 } from "#pantry/schema/seed/operator-arity.ts";
-import * as stimulus from "#pantry/schema/stimulus.ts";
 import * as value from "#pantry/schema/value.ts";
-import * as testRules from "#pantry/schema/test/rules.ts";
-import * as testStructure from "#pantry/schema/test/structure.ts";
 import { printSeed } from "#pantry/test/seed.ts";
 import { seedPrintTestTimeoutMs } from "#pantry/test/settings.ts";
 
 /**
- * The probe schema: the node, item, reference and test modules' relations and rules with this
- * module's.
+ * The probe schema: the modules whose relations this module's rules name, with this module's. The
+ * statements that name the document, reference and test modules' relations are
+ * `#pantry/schema/test/processing.ts`'s, and its test composes them.
  */
 const probe = () =>
   schema(
     "QtiProcessingProbe",
     {
       ...node.relations,
-      ...attributes.relations,
       ...pkg.relations,
       ...document.relations,
       ...declaration.relations,
       ...value.relations,
       ...item.relations,
       ...rosters.relations,
-      ...reference.relations,
-      ...stimulus.relations,
-      ...testRules.relations,
-      ...testStructure.relations,
       ...processing.relations,
     },
     [
@@ -57,9 +48,6 @@ const probe = () =>
       ...declaration.rules,
       ...value.rules,
       ...item.rules,
-      ...reference.rules,
-      ...testRules.rules,
-      ...testStructure.rules,
       ...processing.rules,
     ],
   );
@@ -226,9 +214,6 @@ describe("processing", () => {
         declaration.rules.length +
         value.rules.length +
         item.rules.length +
-        reference.rules.length +
-        testRules.rules.length +
-        testStructure.rules.length +
         processing.rules.length,
     );
   });
@@ -893,10 +878,9 @@ describe("processing headings: the prefixed arms and the per-test relations", ()
     );
   });
 
-  it("binds each prefixed arm to VariableRef, to a test document and to its own test's row", () => {
+  it("binds each prefixed arm to VariableRef and to its own test's row", () => {
     const { ItemInstanceVariableRef, ItemVariableRef, SectionDurationRef, VariableRef } =
       processing.relations;
-    const { Document } = document.relations;
     const { PrefixedVariableSource, SectionDurationTarget } = processing.relations;
     const resolved = { root: "test" };
     for (const [arm, target] of [
@@ -908,7 +892,6 @@ describe("processing headings: the prefixed arms and the per-test relations", ()
         lawsFrom(arm),
         [
           [undefined, ["id", "document"], VariableRef, undefined, ["id", "document"]],
-          [undefined, ["document", "root"], Document, undefined, ["id", "root"]],
           [resolved, ["id", "document"], target, undefined, ["ref", "test"]],
         ],
         arm.name,
@@ -935,11 +918,9 @@ describe("processing headings: the prefixed arms and the per-test relations", ()
     );
   });
 
-  it("ties the hub PrefixedVariableSource to its reference, test, item reference and item document", () => {
+  it("ties the hub PrefixedVariableSource to its reference and the arms", () => {
     const { ItemInstanceVariableRef, ItemVariableRef, PrefixedVariableSource, VariableRef } =
       processing.relations;
-    const { ItemRefDocument } = reference.relations;
-    const { TestDocument, TestReach } = testStructure.relations;
     assert.deepStrictEqual(lawsFrom(PrefixedVariableSource), [
       [
         undefined,
@@ -948,7 +929,6 @@ describe("processing headings: the prefixed arms and the per-test relations", ()
         undefined,
         ["id", "document", "kind"],
       ],
-      [undefined, ["test", "document"], TestDocument, undefined, ["test", "document"]],
       [
         { refKind: "itemVariable" },
         ["ref", "prefix"],
@@ -963,14 +943,6 @@ describe("processing headings: the prefixed arms and the per-test relations", ()
         undefined,
         ["id", "prefix"],
       ],
-      [
-        undefined,
-        ["test", "prefix", "itemRef"],
-        TestReach,
-        { holderKind: "itemRef" },
-        ["test", "identifier", "holder"],
-      ],
-      [undefined, ["itemRef", "itemDocument"], ItemRefDocument, undefined, ["itemRef", "document"]],
     ]);
 
     const checks = predicateText(processing.rules, PrefixedVariableSource);
@@ -1022,13 +994,6 @@ describe("processing headings: the prefixed arms and the per-test relations", ()
         undefined,
         ["ref", "test", "itemRef"],
       ],
-      [
-        undefined,
-        ["itemRef", "variable"],
-        testRules.relations.VariableMapping,
-        undefined,
-        ["itemRef", "target"],
-      ],
     ]);
     assert.deepStrictEqual(lawsFrom(PrefixedBuiltIn), [
       [undefined, ["ref", "test"], PrefixedVariableSource, undefined, ["ref", "test"]],
@@ -1045,9 +1010,8 @@ describe("processing headings: the prefixed arms and the per-test relations", ()
     );
   });
 
-  it("binds SectionDurationTarget to its reference, its test and the part or section it names", () => {
+  it("binds SectionDurationTarget to its reference and the part or section it names", () => {
     const { SectionDurationRef, SectionDurationTarget, VariableRef } = processing.relations;
-    const { TestDocument, TestReach } = testStructure.relations;
     assert.deepStrictEqual(lawsFrom(SectionDurationTarget), [
       [
         undefined,
@@ -1062,14 +1026,6 @@ describe("processing headings: the prefixed arms and the per-test relations", ()
         SectionDurationRef,
         undefined,
         ["id", "document", "prefix"],
-      ],
-      [undefined, ["test", "document"], TestDocument, undefined, ["test", "document"]],
-      [
-        undefined,
-        ["test", "prefix", "holder", "holderKind"],
-        TestReach,
-        undefined,
-        ["test", "identifier", "holder", "holderKind"],
       ],
     ]);
 

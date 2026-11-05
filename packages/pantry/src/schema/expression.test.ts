@@ -10,10 +10,6 @@ import * as item from "#pantry/schema/item.ts";
 import * as node from "#pantry/schema/node.ts";
 import * as pkg from "#pantry/schema/package.ts";
 import * as processing from "#pantry/schema/processing.ts";
-import * as referenceSchema from "#pantry/schema/reference.ts";
-import * as stimulus from "#pantry/schema/stimulus.ts";
-import * as attributes from "#pantry/schema/attributes.ts";
-import * as testRules from "#pantry/schema/test/rules.ts";
 import * as testStructure from "#pantry/schema/test/structure.ts";
 import * as value from "#pantry/schema/value.ts";
 
@@ -100,7 +96,6 @@ const probe = () =>
     "QtiExpressionProbe",
     {
       ...node.relations,
-      ...attributes.relations,
       ...pkg.relations,
       ...document.relations,
       ...declaration.relations,
@@ -108,9 +103,6 @@ const probe = () =>
       ...item.relations,
       ...rosters.relations,
       ...processing.relations,
-      ...referenceSchema.relations,
-      ...stimulus.relations,
-      ...testRules.relations,
       ...testStructure.relations,
       ...expression.relations,
     },

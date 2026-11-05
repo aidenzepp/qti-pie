@@ -31,7 +31,6 @@ import {
   within,
 } from "@bjornpagen/grizzle";
 import * as declaration from "#pantry/schema/declaration.ts";
-import * as document from "#pantry/schema/document.ts";
 import * as item from "#pantry/schema/item.ts";
 import * as node from "#pantry/schema/node.ts";
 import {
@@ -47,9 +46,6 @@ import {
   TestStructureIdentifier,
 } from "#pantry/schema/contracts.ts";
 import * as patterns from "#pantry/schema/patterns.ts";
-import * as reference from "#pantry/schema/reference.ts";
-import * as testRules from "#pantry/schema/test/rules.ts";
-import * as testStructure from "#pantry/schema/test/structure.ts";
 import * as value from "#pantry/schema/value.ts";
 
 const ncName = str.regex(patterns.ncName);
@@ -523,6 +519,10 @@ const prefixedArms = [
  * The declared and built-in checks list the allowed pairs and refuse every other referring kind, so
  * they are also the check that the kind is one of the ten that refer; the template-parameter arm
  * has a check of its own for that.
+ *
+ * The prefixed arms, the hub and `SectionDurationTarget` are also bound to a test document, to its
+ * structure, to its item references and to its variable mappings. Those statements name relations
+ * of modules that import this one, so they are `rules` of `#pantry/schema/test/processing.ts`.
  */
 export const rules = [
   contained(on(ResponseProcessing, "id", "rootKind"), on(node.Node, "id", "rootKind")),
@@ -637,7 +637,6 @@ export const rules = [
   ),
   ...prefixedArms.flatMap(([arm, target]) => [
     contained(on(arm, "id", "document"), on(VariableRef, "id", "document")),
-    contained(on(arm, "document", "root"), on(document.Document, "id", "root")),
     contained(on(select(arm, { root: "test" }), "id", "document"), on(target, "ref", "test")),
   ]),
   check("ItemVariableRoot", ItemVariableRef, (r) => r.eq(r.root, "test")),
@@ -653,24 +652,12 @@ export const rules = [
     r.in(r.refKind, ["itemVariable", "itemInstanceVariable", "sectionVariable"]),
   ),
   contained(
-    on(PrefixedVariableSource, "test", "document"),
-    on(testStructure.TestDocument, "test", "document"),
-  ),
-  contained(
     on(select(PrefixedVariableSource, { refKind: "itemVariable" }), "ref", "prefix"),
     on(ItemVariableRef, "id", "prefix"),
   ),
   contained(
     on(select(PrefixedVariableSource, { refKind: "itemInstanceVariable" }), "ref", "prefix"),
     on(ItemInstanceVariableRef, "id", "prefix"),
-  ),
-  contained(
-    on(PrefixedVariableSource, "test", "prefix", "itemRef"),
-    on(select(testStructure.TestReach, { holderKind: "itemRef" }), "test", "identifier", "holder"),
-  ),
-  contained(
-    on(PrefixedVariableSource, "itemRef", "itemDocument"),
-    on(reference.ItemRefDocument, "itemRef", "document"),
   ),
   alternatives(PrefixedVariableSource, "source", PrefixedSource, {
     builtIn: PrefixedBuiltIn,
@@ -689,10 +676,6 @@ export const rules = [
     on(PrefixedMapped, "ref", "test", "itemRef"),
     on(PrefixedVariableSource, "ref", "test", "itemRef"),
   ),
-  contained(
-    on(PrefixedMapped, "itemRef", "variable"),
-    on(testRules.VariableMapping, "itemRef", "target"),
-  ),
   contained(on(PrefixedBuiltIn, "ref", "test"), on(PrefixedVariableSource, "ref", "test")),
   check("PrefixedBuiltInName", PrefixedBuiltIn, (r) =>
     r.in(r.builtIn, ["duration", "numAttempts", "completionStatus"]),
@@ -707,14 +690,6 @@ export const rules = [
   contained(
     on(select(SectionDurationTarget, { refKind: "sectionDuration" }), "ref", "document", "prefix"),
     on(SectionDurationRef, "id", "document", "prefix"),
-  ),
-  contained(
-    on(SectionDurationTarget, "test", "document"),
-    on(testStructure.TestDocument, "test", "document"),
-  ),
-  contained(
-    on(SectionDurationTarget, "test", "prefix", "holder", "holderKind"),
-    on(testStructure.TestReach, "test", "identifier", "holder", "holderKind"),
   ),
   check("SectionDurationTargetHolder", SectionDurationTarget, (r) =>
     r.in(r.holderKind, ["part", "section"]),
