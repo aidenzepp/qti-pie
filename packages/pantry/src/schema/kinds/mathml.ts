@@ -29,12 +29,24 @@
  * };
  * ```
  *
- * The admission rows and the `annotation-xml` set are derived by the next slice; `admission` is
- * empty here.
+ * The admission rows are derived at module load, as `asi.ts` derives its M1 rows: the host rows
+ * `(host, m:math)` for every entry of the composed inventory whose children name `m3:math`, then
+ * each MathML kind's element children (already handles in the leaf) and its content-type rows, the
+ * same for both versions and deduplicated on `(version, parent, child)`. `m:annotation-xml` has no
+ * element child here; its children are the derived rows of a later phase, read from
+ * `annotationXmlAdmits`, the leaf's `mathExpression` kept as data.
  */
 import { Option } from "effect";
 
-import type { AdmissionRow, RegistryRow } from "#pantry/schema/kinds/generic.ts";
+import { mathExpression, mathmlInventory } from "#pantry/schema/content/inventory/mathml.ts";
+import { inventory } from "#pantry/schema/content/xsd-inventory.ts";
+import type { InventoryEntry } from "#pantry/schema/content/xsd-inventory.ts";
+import type {
+  AdmissionRow,
+  RegistryRow,
+  SchemaVersionHandle,
+} from "#pantry/schema/kinds/generic.ts";
+import { dedupe } from "#pantry/schema/kinds/asi.ts";
 
 const namespace = "http://www.w3.org/1998/Math/MathML";
 
@@ -2345,7 +2357,51 @@ const mathmlKinds: ReadonlySet<string> = new Set(kinds);
  */
 export const isMathmlKind = (kind: string): kind is MathmlKind => mathmlKinds.has(kind);
 
+const versions = ["3.0.0", "3.0.1"] as const satisfies readonly SchemaVersionHandle[];
+
 /**
- * The MathML admission rows: none until the next slice derives them.
+ * The handles of the MathML expression group: the children the `m:annotation-xml` wildcard stands
+ * for, kept as data for the later derivation of its rows. No row is written from it here.
  */
-export const admission: readonly AdmissionRow[] = [];
+export const annotationXmlAdmits: readonly string[] = mathExpression;
+
+/**
+ * The children one MathML kind admits: its element children, then the rows of its content type.
+ * Mixed kinds add character data, entity references, whitespace, comments and processing
+ * instructions; element-only kinds (`m:annotation-xml` among them) whitespace, comments and
+ * processing instructions; empty kinds comments and processing instructions only; `m:cbytes`, of
+ * simple content, the five rows of a mixed kind.
+ */
+const childrenOfKind = (entry: InventoryEntry): readonly string[] => {
+  const elements = entry.children.map((child) => child.name);
+  if (entry.mixed || entry.handle === "m:cbytes") {
+    return [...elements, "text", "ws", "entityRef", "comment", "pi"];
+  }
+
+  if (elements.length === 0 && entry.handle !== "m:annotation-xml") {
+    return ["comment", "pi"];
+  }
+
+  return [...elements, "ws", "comment", "pi"];
+};
+
+/**
+ * The host rows: `(host, m:math)` for every composed-inventory entry whose children name `m3:math`.
+ */
+const hostRows: readonly AdmissionRow[] = Object.values(inventory)
+  .filter((entry) => entry.children.some((child) => child.name === "m3:math"))
+  .flatMap((entry) =>
+    versions.map((version) => ({ child: "m:math", parent: entry.handle, version })),
+  );
+
+const insideRows: readonly AdmissionRow[] = Object.values(mathmlInventory).flatMap((entry) =>
+  versions.flatMap((version) =>
+    childrenOfKind(entry).map((child) => ({ child, parent: entry.handle, version })),
+  ),
+);
+
+/**
+ * The MathML admission rows, the same for both versions: the host rows, then the rows inside
+ * MathML.
+ */
+export const admission: readonly AdmissionRow[] = dedupe([...hostRows, ...insideRows]);
