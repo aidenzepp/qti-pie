@@ -1351,14 +1351,12 @@ const extmetaManifestEdits: readonly Edit[] = [
 ];
 
 /**
- * The edits of `extmeta` that put the record in `meta/choice.xml`: the published file, with the
- * two `xml:lang="en"` attributes it carries (on `jacs` and `Mathematics`) taken out, because `xml:`
- * attributes are the one family the importer does not model.
+ * The edits of `extmeta` that put the record in `meta/choice.xml`: the published file, unchanged,
+ * including the two `xml:lang="en"` attributes it carries (on the `lom:string`s `jacs` and
+ * `Mathematics`).
  */
 const extmetaRecordEdits: readonly Edit[] = [
   { _tag: "addFile", path: "meta/choice.xml", source: externalRecord },
-  replaceIn("meta/choice.xml", '<string xml:lang="en">jacs<', "<string>jacs<"),
-  replaceIn("meta/choice.xml", '<string xml:lang="en">Mathematics<', "<string>Mathematics<"),
 ];
 
 /**
