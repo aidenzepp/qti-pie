@@ -2,8 +2,9 @@
  * The QTI XSD as tables: for every element the XSD declares, the attributes it admits with their
  * types and its attribute wildcard, the children it admits, its element wildcard, whether it holds
  * text, whether it is declared globally and the types it is declared with; and for every named
- * type, what it derives from and how. {@link generateTables} builds them from the XSD's source
- * view; structural validation reads them and never the XSD itself.
+ * type, what it derives from and how, and its own table of the same attributes, children,
+ * wildcards and text. {@link generateTables} builds them from the XSD's source view; structural
+ * validation reads them and never the XSD itself.
  *
  * @module
  */
@@ -142,10 +143,30 @@ export const AttributeTable = Schema.Struct({
 export type AttributeTable = typeof AttributeTable.Type;
 
 /**
- * The Schema of one element's table: the attributes it admits by name, sorted by namespace then
- * local name, and its attribute wildcard; the children it admits, its element wildcard and whether
- * it holds text; whether some declaration of its name is global; and the types its name is
- * declared with.
+ * The Schema of what a table admits, the fields an element's table and a named type's entry
+ * share: the attributes it admits by name, sorted by namespace then local name, and its attribute
+ * wildcard; the children it admits, sorted the same way, its element wildcard, and whether it holds
+ * text.
+ *
+ * A missing wildcard is an absent key, never `null`, so a table writes to JSON as plain data.
+ */
+// oxlint-disable-next-line eslint/no-redeclare -- `ContentTable` is the Schema and the type of what a table admits under one name, as section 0.5 of the phase-3 slice list names it.
+export const ContentTable = Schema.Struct({
+  anyAttribute: Schema.optionalKey(Wildcard),
+  anyElement: Schema.optionalKey(Wildcard),
+  attributes: Schema.Array(AttributeTable),
+  children: Schema.Array(ChildName),
+  text: Schema.Boolean,
+});
+
+/**
+ * What a table admits, as {@link ContentTable} decodes it.
+ */
+export type ContentTable = typeof ContentTable.Type;
+
+/**
+ * The Schema of one element's table: what it admits, the fields of a {@link ContentTable}; whether
+ * some declaration of its name is global; and the types its name is declared with.
  *
  * `types` holds each distinct named type a declaration of the name gives, sorted by namespace then
  * local name: its `type`, or `xs:anyType` for a declaration with no type. `anonymousType` is
@@ -158,12 +179,12 @@ export type AttributeTable = typeof AttributeTable.Type;
 // oxlint-disable-next-line eslint/no-redeclare -- `ElementTable` is the Schema and the type of an element's table under one name, as section 0.5 of the phase-1 slice list names it.
 export const ElementTable = Schema.Struct({
   anonymousType: Schema.optionalKey(Schema.Literal(true)),
-  anyAttribute: Schema.optionalKey(Wildcard),
-  anyElement: Schema.optionalKey(Wildcard),
-  attributes: Schema.Array(AttributeTable),
-  children: Schema.Array(ChildName),
+  anyAttribute: ContentTable.fields.anyAttribute,
+  anyElement: ContentTable.fields.anyElement,
+  attributes: ContentTable.fields.attributes,
+  children: ContentTable.fields.children,
   global: Schema.Boolean,
-  text: Schema.Boolean,
+  text: ContentTable.fields.text,
   types: Schema.Array(ChildName),
 });
 
@@ -173,17 +194,38 @@ export const ElementTable = Schema.Struct({
 export type ElementTable = typeof ElementTable.Type;
 
 /**
- * The Schema of a named type's entry: what it derives from and how.
+ * The Schema of a named type's entry: what it derives from and how, and its own table, the fields
+ * of a {@link ContentTable}.
  *
  * An `extension` or a `restriction` names its `base`, a type in the target namespace or in XML
  * Schema's. A complex type that neither extends nor restricts restricts `xs:anyType`, as XML Schema
  * defines it. A `union` has no base; `members` names its member types in order, those in
  * `memberTypes` and then each inline member by the type its restriction is based on.
+ *
+ * The table is the one an element declared with the type alone gets, so an extension's holds its
+ * base's attributes and children and its own. A simple type's holds text and no attributes,
+ * children or wildcards.
  */
 // oxlint-disable-next-line eslint/no-redeclare -- `TypeEntry` is the Schema and the type of a named type's entry under one name, as section 0.5 of the phase-3 slice list names its field.
 export const TypeEntry = Schema.Union([
-  Schema.Struct({ base: ChildName, derivation: Schema.Literals(["extension", "restriction"]) }),
-  Schema.Struct({ derivation: Schema.Literal("union"), members: Schema.Array(ChildName) }),
+  Schema.Struct({
+    anyAttribute: ContentTable.fields.anyAttribute,
+    anyElement: ContentTable.fields.anyElement,
+    attributes: ContentTable.fields.attributes,
+    base: ChildName,
+    children: ContentTable.fields.children,
+    derivation: Schema.Literals(["extension", "restriction"]),
+    text: ContentTable.fields.text,
+  }),
+  Schema.Struct({
+    anyAttribute: ContentTable.fields.anyAttribute,
+    anyElement: ContentTable.fields.anyElement,
+    attributes: ContentTable.fields.attributes,
+    children: ContentTable.fields.children,
+    derivation: Schema.Literal("union"),
+    members: Schema.Array(ChildName),
+    text: ContentTable.fields.text,
+  }),
 ]);
 
 /**
@@ -387,6 +429,13 @@ interface Particles {
   readonly children: readonly ChildName[];
   readonly wildcards: readonly Wildcard[];
 }
+
+/**
+ * What a named type derives from and how, the part of its {@link TypeEntry} beside its table.
+ */
+type Derivation =
+  | { readonly base: ChildName; readonly derivation: "extension" | "restriction" }
+  | { readonly derivation: "union"; readonly members: readonly ChildName[] };
 
 /**
  * What one table generation reads and remembers: the schema's target namespace and its attribute
@@ -1675,17 +1724,17 @@ const restrictionBase = Effect.fnUntraced(function* restrictionBase(
 });
 
 /**
- * Report a named complex type's entry: the base and derivation of its `complexContent` or
+ * Report a named complex type's derivation: the base and derivation of its `complexContent` or
  * `simpleContent`, or, with neither, a restriction of `xs:anyType`, as XML Schema defines it.
  *
  * @param context The generation's context.
  * @param type The `xs:complexType` element.
- * @returns Its entry, or {@link TableGenerationError} naming what could not be mapped.
+ * @returns Its derivation, or {@link TableGenerationError} naming what could not be mapped.
  */
-const complexEntry = Effect.fnUntraced(function* complexEntry(
+const complexDerivation = Effect.fnUntraced(function* complexDerivation(
   context: Context,
   type: SourceElement,
-): Effect.fn.Return<TypeEntry, TableGenerationError> {
+): Effect.fn.Return<Derivation, TableGenerationError> {
   const content = childNamed(type, "complexContent") ?? childNamed(type, "simpleContent");
   if (content === undefined) {
     return { base: anyTypeName, derivation: "restriction" };
@@ -1708,20 +1757,20 @@ const complexEntry = Effect.fnUntraced(function* complexEntry(
 });
 
 /**
- * Report a named simple type's entry: a restriction's base, or a union's members, those in
+ * Report a named simple type's derivation: a restriction's base, or a union's members, those in
  * `memberTypes` and then each inline member by the base its restriction names.
  *
  * @param context The generation's context.
  * @param name The type's local name.
  * @param definition The `xs:simpleType` element.
- * @returns Its entry, or {@link TableGenerationError} for a list, which a type entry has no form
- *   for, or for what else could not be mapped.
+ * @returns Its derivation, or {@link TableGenerationError} for a list, which a type entry has no
+ *   form for, or for what else could not be mapped.
  */
-const simpleEntry = Effect.fnUntraced(function* simpleEntry(
+const simpleDerivation = Effect.fnUntraced(function* simpleDerivation(
   context: Context,
   name: string,
   definition: SourceElement,
-): Effect.fn.Return<TypeEntry, TableGenerationError> {
+): Effect.fn.Return<Derivation, TableGenerationError> {
   const derivation = xsdChildren(definition).find((child) => child.local !== "annotation");
   if (derivation === undefined) {
     return yield* failure("xs:simpleType", "it holds no restriction, list or union");
@@ -1768,34 +1817,6 @@ const simpleEntry = Effect.fnUntraced(function* simpleEntry(
 });
 
 /**
- * Report the entry of every named simple and complex type the schema defines, keyed by local name
- * in sorted order.
- *
- * @param context The generation's context.
- * @returns The entries, or {@link TableGenerationError} naming what could not be mapped.
- */
-const typeEntries = Effect.fnUntraced(function* typeEntries(
-  context: Context,
-): Effect.fn.Return<Readonly<Record<string, TypeEntry>>, TableGenerationError> {
-  const entries = new Map<string, TypeEntry>();
-  for (const [name, type] of context.complexTypes) {
-    entries.set(name, yield* complexEntry(context, type));
-  }
-  for (const [name, definition] of context.simpleTypes) {
-    if (entries.has(name)) {
-      return yield* failure(
-        "xs:simpleType",
-        `${name} also names a complex type, and simple and complex types share one symbol space`,
-      );
-    }
-
-    entries.set(name, yield* simpleEntry(context, name, definition));
-  }
-
-  return Object.fromEntries([...entries].toSorted(([left], [right]) => compareText(left, right)));
-});
-
-/**
  * Sort attribute tables by namespace, then local name.
  *
  * @param attributes The tables.
@@ -1814,7 +1835,8 @@ const sortChildren = (children: Iterable<ChildName>): readonly ChildName[] =>
   [...children].toSorted(compareNames);
 
 /**
- * Add the wildcards an element table has to it, each as a key only when present.
+ * Add the wildcards a table has to it, an element's table or a type's entry, each as a key only
+ * when present.
  *
  * The keys go in front, so every table is built in the sorted key order its Schema encodes, and
  * writing the tables as JSON gives the same bytes either way.
@@ -1824,11 +1846,11 @@ const sortChildren = (children: Iterable<ChildName>): readonly ChildName[] =>
  * @param anyElement The element wildcard, if any.
  * @returns The table with `anyAttribute` and `anyElement` set where given.
  */
-const withWildcards = (
-  table: ElementTable,
+const withWildcards = <Table extends ContentTable>(
+  table: Table,
   anyAttribute: Option.Option<Wildcard>,
   anyElement: Option.Option<Wildcard>,
-): ElementTable => {
+): Table => {
   const withElements = Option.match(anyElement, {
     onNone: () => table,
     onSome: (wildcard) => ({ anyElement: wildcard, ...table }),
@@ -1885,6 +1907,69 @@ const elementTable = (type: TypeTable, declaration: Declaration): ElementTable =
     ),
     declaration.anonymous,
   );
+
+/**
+ * Build a named type's entry: its derivation and its table, in the form {@link elementTable} gives
+ * an element declared with the type alone.
+ *
+ * @param type The type's table.
+ * @param derivation What the type derives from and how.
+ * @returns The entry, attributes and children sorted.
+ */
+const typeEntry = (type: TypeTable, derivation: Derivation): TypeEntry =>
+  withWildcards(
+    derivation.derivation === "union"
+      ? {
+          attributes: sortAttributes(type.attributes.values()),
+          children: sortChildren(type.children.values()),
+          derivation: derivation.derivation,
+          members: derivation.members,
+          text: type.text,
+        }
+      : {
+          attributes: sortAttributes(type.attributes.values()),
+          base: derivation.base,
+          children: sortChildren(type.children.values()),
+          derivation: derivation.derivation,
+          text: type.text,
+        },
+    type.anyAttribute,
+    type.anyElement,
+  );
+
+/**
+ * Report the entry of every named simple and complex type the schema defines, keyed by local name
+ * in sorted order: its derivation, and the table {@link typeTable} gives an element declared with
+ * it.
+ *
+ * @param context The generation's context.
+ * @returns The entries, or {@link TableGenerationError} naming what could not be mapped.
+ */
+const typeEntries = Effect.fnUntraced(function* typeEntries(
+  context: Context,
+): Effect.fn.Return<Readonly<Record<string, TypeEntry>>, TableGenerationError> {
+  const entries = new Map<string, TypeEntry>();
+  for (const [name, type] of context.complexTypes) {
+    const derivation = yield* complexDerivation(context, type);
+    const table = yield* typeTable(context, { local: name, namespace: context.target });
+    entries.set(name, typeEntry(table, derivation));
+  }
+  for (const [name, definition] of context.simpleTypes) {
+    if (entries.has(name)) {
+      return yield* failure(
+        "xs:simpleType",
+        `${name} also names a complex type, and simple and complex types share one symbol space`,
+      );
+    }
+
+    entries.set(
+      name,
+      typeEntry(simpleTypeTable, yield* simpleDerivation(context, name, definition)),
+    );
+  }
+
+  return Object.fromEntries([...entries].toSorted(([left], [right]) => compareText(left, right)));
+});
 
 /**
  * Write an attribute type as a string equal only for equal types.
@@ -2023,9 +2108,10 @@ const unionTables = Effect.fnUntraced(function* unionTables(
  * it is global and the types they give. Attribute group references expand, extensions and
  * restrictions inherit, and every simple type maps to an {@link AttributeType}. Content models
  * flatten into the children an element admits, through group references, with no order or counts.
- * Every named type gets its {@link TypeEntry}. The XSD is recorded as written; readings that set
- * part of it aside are applied over the tables by structural validation. Imported schemas are
- * never read: an element referenced from one is a child by name only.
+ * Every named type gets its {@link TypeEntry}: its derivation, and the table an element declared
+ * with it alone gets. The XSD is recorded as written; readings that set part of it aside are
+ * applied over the tables by structural validation. Imported schemas are never read: an element
+ * referenced from one is a child by name only.
  *
  * An XSD that sets `nillable` or `abstract` true, or any `block`, `final`, `blockDefault`,
  * `finalDefault` or `substitutionGroup`, is refused, since the tables do not record them.
