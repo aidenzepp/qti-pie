@@ -14,11 +14,15 @@ import { typedValues } from "#pantry/schema/attribute-homes.ts";
 import { resolvePackageReference } from "#pantry/import/package-reference.ts";
 import { reachOf } from "#pantry/import/reach.ts";
 import type { StructureDocument } from "#pantry/import/reach.ts";
+import { processingRows } from "#pantry/import/processing.ts";
+import type { ProcessingRefused, StructureEntry } from "#pantry/import/processing.ts";
 import { ImportRefused } from "#pantry/import/refusal.ts";
 import { attributeReader } from "#pantry/import/interactions.ts";
 import { requiredAttribute } from "#pantry/import/required.ts";
 import { ItemRefusal, Rows, withParents } from "#pantry/import/tree.ts";
-import type { NodeIndex } from "#pantry/import/tree.ts";
+import type { NodeIndex, UnmodeledVocabulary } from "#pantry/import/tree.ts";
+import { environmentOf, withReach } from "#pantry/processing/env.ts";
+import type { Environment, ItemRefScope, ReachEntry } from "#pantry/processing/env.ts";
 import {
   MappedVariableName,
   PackagePath,
@@ -679,6 +683,150 @@ const ruleArmRows = Effect.fn("import.ruleArmRows")(function* ruleArmRows(
 });
 
 /**
+ * The processing roots of a test document, each with the language it is read in: the outcome
+ * processing, and the one-expression holders of a pre-condition, a branch rule and a template
+ * default.
+ */
+const testRoots: ReadonlyMap<NodeKindHandle, "expression" | "outcome"> = new Map([
+  ["qti-branch-rule", "expression"],
+  ["qti-outcome-processing", "outcome"],
+  ["qti-pre-condition", "expression"],
+  ["qti-template-default", "expression"],
+]);
+
+/**
+ * What the stage knows of one test document: its id and the identifiers its reach holds.
+ */
+interface TestSite {
+  readonly environment: Environment;
+  readonly id: Uuid;
+  readonly structure: ReadonlyMap<string, StructureEntry>;
+}
+
+/**
+ * The processing rows of each test document: its outcome processing, and each pre-condition,
+ * branch rule and template default under it, checked in the test's own environment.
+ *
+ * The environment is built from the documents, not from rows: the test's declarations, then its
+ * reach, where an item reference is the declarations of the item it resolved to, the targets of
+ * its variable mappings typed as the outcomes they map from, and whether the item is time
+ * dependent (spec 4.9). An item reference that resolved to no item document names nothing, so a
+ * prefixed name that begins with it is refused. The rows come from `processingRows`, which writes
+ * a prefixed name's per-test rows against the test's own reach.
+ */
+const testProcessingRows = Effect.fn("import.testProcessingRows")(function* testProcessingRows(
+  context: Context,
+  documents: readonly StagedDocument[],
+  rows: Rows,
+): Effect.fn.Return<Rows, ImportRefused | ProcessingRefused | UnmodeledVocabulary> {
+  const roots = new Map(
+    Rows.of(rows, Node)
+      .filter(
+        (found) => found.kind === "qti-assessment-item" || found.kind === "qti-assessment-test",
+      )
+      .map((found): [Uuid, Uuid] => [found.id, found.tree]),
+  );
+  const staged = new Map(
+    documents.flatMap((found): [Uuid, StagedDocument][] => {
+      const root = found.nodes.get(found.doc.root);
+      const tree = root === undefined ? undefined : roots.get(root.id);
+
+      return tree === undefined ? [] : [[tree, found]];
+    }),
+  );
+  const itemDocuments = new Map(
+    Rows.of(rows, ItemRefDocument).map((row) => [row.itemRef, row.document]),
+  );
+  const mappings = Map.groupBy(Rows.of(rows, VariableMapping), (row) => row.itemRef);
+  const scopes = new Map<Uuid, ItemRefScope | undefined>();
+  const scopeOf = (itemRef: Uuid): ItemRefScope | undefined => {
+    if (!scopes.has(itemRef)) {
+      const resolved = itemDocuments.get(itemRef);
+      const item = resolved === undefined ? undefined : staged.get(resolved);
+      const own = item === undefined ? undefined : environmentOf(item.doc, "item");
+      scopes.set(
+        itemRef,
+        own === undefined
+          ? undefined
+          : {
+              declarations: own.declarations,
+              mappings: new Map(
+                (mappings.get(itemRef) ?? []).flatMap((row) => {
+                  const source = own.declarations.get(row.source);
+
+                  return source === undefined ? [] : [[row.target, source.type]];
+                }),
+              ),
+              timeDependent: own.timeDependent,
+            },
+      );
+    }
+
+    return scopes.get(itemRef);
+  };
+  const reaches = Map.groupBy(Rows.of(rows, TestReach), (row) => row.test);
+  let built = rows;
+  for (const [id, found] of staged) {
+    const document = context.documents.get(id);
+    if (document?.root !== "test") {
+      continue;
+    }
+
+    const reach = new Map<string, ReachEntry>();
+    const structure = new Map<string, StructureEntry>();
+    for (const held of reaches.get(id) ?? []) {
+      structure.set(held.identifier, {
+        holder: held.holder,
+        holderKind: held.holderKind,
+        itemDocument: Option.fromNullishOr(itemDocuments.get(held.holder)),
+      });
+
+      const scope = held.holderKind === "itemRef" ? scopeOf(held.holder) : undefined;
+      if (scope !== undefined) {
+        reach.set(held.identifier, { kind: "item-ref", scope });
+      } else if (held.holderKind === "part" || held.holderKind === "section") {
+        reach.set(held.identifier, { kind: held.holderKind });
+      }
+    }
+
+    const site: TestSite = { environment: environmentOf(found.doc, "test"), id, structure };
+    for (const [element, parent] of withParents(found.doc.root, Option.none())) {
+      const node = found.nodes.get(element);
+      const language = node === undefined ? undefined : testRoots.get(node.kind);
+      if (node === undefined || language === undefined) {
+        continue;
+      }
+
+      const holder = Option.flatMapNullishOr(parent, (above) => found.nodes.get(above)).pipe(
+        Option.filter((above) => above.kind === "qti-assessment-item-ref"),
+        Option.flatMapNullishOr((above) => scopeOf(above.id)),
+      );
+      built = yield* processingRows(
+        {
+          document: site.id,
+          env: withReach(
+            site.environment,
+            reach,
+            node.kind === "qti-template-default" ? Option.getOrUndefined(holder) : undefined,
+          ),
+          language,
+          mode: "test",
+          nodes: found.nodes,
+          root: element,
+          rootKind: "test",
+          test: { structure: site.structure, test: site.id },
+          tree: site.id,
+          version: document.version,
+        },
+        built,
+      );
+    }
+  }
+
+  return built;
+});
+
+/**
  * Run the package-level stage over the rows of every document of one package.
  *
  * Writes `ItemRefResolution` with its `ItemRefDocument` or `ItemRefLti` arm, `SectionRefResolution`
@@ -686,8 +834,10 @@ const ruleArmRows = Effect.fn("import.ruleArmRows")(function* ruleArmRows(
  * of the package; `AttributeFileReference` for each in-package value of a census attribute;
  * `TestReach` and `TestDocument` for each test; for each section document's rubric, the
  * `SectionPrintedVariableRef`, `SectionPrintedVariableVarRef` and `SectionFeedbackOutcomeRef` rows
- * of each test that reaches it; and, for the `documents` given, the `VariableMapping` and
- * `TemplateDefault` arms of the mappings and template defaults they hold.
+ * of each test that reaches it; for the `documents` given, the `VariableMapping` and
+ * `TemplateDefault` arms of the mappings and template defaults they hold; and, last, each test
+ * document's processing rows: its outcome processing, pre-conditions, branch rules and template
+ * defaults, with the per-test rows of every prefixed name and `section-identifier` in them.
  * A reference that names nothing of the package has no row.
  *
  * @param rows - The rows of the whole package.
@@ -696,12 +846,16 @@ const ruleArmRows = Effect.fn("import.ruleArmRows")(function* ruleArmRows(
  * @returns The rows with the stage's added; `ImportRefused` (`section-ref-cycle`) when section
  *   documents refer to each other in a cycle, and `ItemRefusal` (`required-attribute`) for a
  *   mapping or template default that omits a required attribute, and (`binding-declared`) for a
- *   section rubric's feedback or printed variable that a reaching test does not declare.
+ *   section rubric's feedback or printed variable that a reaching test does not declare;
+ *   `ProcessingRefused` for a test document's expression the checker refuses in the test's
+ *   environment (a prefixed name that names nothing is `prefixed-ref`), `ImportRefused` as the
+ *   processing builder raises it, and `UnmodeledVocabulary` for a processing element it does not
+ *   model.
  */
 export const packageStage = Effect.fn("import.packageStage")(function* packageStage(
   rows: Rows,
   documents: readonly StagedDocument[] = [],
-): Effect.fn.Return<Rows, ImportRefused | ItemRefusal> {
+): Effect.fn.Return<Rows, ImportRefused | ItemRefusal | ProcessingRefused | UnmodeledVocabulary> {
   const context: Context = {
     chain: baseChains(rows),
     documents: new Map(Rows.of(rows, Document).map((found) => [found.id, found])),
@@ -712,5 +866,7 @@ export const packageStage = Effect.fn("import.packageStage")(function* packageSt
   const reached = yield* reachRows(context, referenced);
   const bound = yield* sectionBindingRows(context, reached);
 
-  return yield* ruleArmRows(documents, bound);
+  const armed = yield* ruleArmRows(documents, bound);
+
+  return yield* testProcessingRows(context, documents, armed);
 });

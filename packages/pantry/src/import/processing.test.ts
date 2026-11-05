@@ -7,8 +7,11 @@ import type { AnyRelation, Fact, Uuid } from "@bjornpagen/grizzle";
 import { ProcessingGuardRefusal, processingGuards } from "#pantry/import/guards/processing.ts";
 import { itemRows } from "#pantry/import/item.ts";
 import { documentRows, readRows } from "#pantry/import/package.ts";
+import { manifestRows } from "#pantry/import/manifest.ts";
 import { ProcessingRefused, processingRows } from "#pantry/import/processing.ts";
 import type { ProcessingInput } from "#pantry/import/processing.ts";
+import { packageStage } from "#pantry/import/reference.ts";
+import type { StagedDocument } from "#pantry/import/reference.ts";
 import { ImportRefused, ruleOfError } from "#pantry/import/refusal.ts";
 import { rptemplateRows } from "#pantry/import/rptemplate.ts";
 import { Rows, treeRows } from "#pantry/import/tree.ts";
@@ -29,6 +32,10 @@ import {
   XIncludeUri,
 } from "#pantry/schema/contracts.ts";
 import { Document, DocumentIdentifier, DocumentTitle } from "#pantry/schema/document.ts";
+import { listPackage, readEntry } from "#pantry/package/read.ts";
+import { ResourceLomGeneral } from "#pantry/schema/lang.ts";
+import { ItemRefDocument } from "#pantry/schema/reference.ts";
+import { ItemRef, TestIdentifier } from "#pantry/schema/test/structure.ts";
 import * as expression from "#pantry/schema/expression.ts";
 import * as attributed from "#pantry/schema/expression-attributes.ts";
 import { expressionKinds } from "#pantry/schema/kinds/asi.ts";
@@ -37,6 +44,8 @@ import type { NodeKindHandle, RootKindHandle } from "#pantry/schema/node.ts";
 import * as processing from "#pantry/schema/processing.ts";
 import * as ruleSchema from "#pantry/schema/rule.ts";
 import { operatorArity, operatorArityMax } from "#pantry/schema/seed/operator-arity.ts";
+import { materialize, materializeSpec, specOf, zipMembers } from "#pantry/test/fixtures.ts";
+import type { FixtureName } from "#pantry/test/fixtures.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { Element, XmlDocument } from "@qti-pie/crust/tree.ts";
 
@@ -1860,3 +1869,368 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/package.ts read
     }),
   );
 });
+
+/**
+ * The package at `name`, read to rows.
+ */
+const rowsOfFixture = (name: FixtureName) =>
+  Effect.flatMap(materialize(name), (dir) => readRows(dir));
+
+/**
+ * The package at `dir` after the package stage, without the guards: every document read and its
+ * rows built, then the stage run over them, as `readRows` does before it judges the rows. The
+ * package's own refusals past the stage (a LOM title that disagrees with the test's) are not
+ * reached.
+ */
+const stagedRows = (dir: string) =>
+  Effect.gen(function* packageStaged() {
+    const entries = yield* listPackage(dir);
+    const manifest = yield* readXml(yield* readEntry(dir, "imsmanifest.xml"));
+    const manifested = yield* manifestRows(dir, entries, manifest, Rows.empty());
+    let { rows } = manifested;
+    const documents: StagedDocument[] = [];
+    for (const document of manifested.documents) {
+      const doc = yield* readXml(yield* readEntry(dir, document.path));
+      const built = yield* documentRows(
+        {
+          doc,
+          packageId: manifested.packageId,
+          path: document.path,
+          resource: document.resource,
+          resourceLomHasGeneral: Rows.of(manifested.rows, ResourceLomGeneral).some(
+            (general) => general.resource === document.resource,
+          ),
+          resourceType: document.type,
+          version: manifested.version,
+        },
+        rows,
+      );
+      ({ rows } = built);
+      if ("nodes" in built) {
+        documents.push({ doc, nodes: built.nodes });
+      }
+    }
+
+    return yield* packageStage(rows, documents);
+  });
+
+/**
+ * The document of `rows` at `path`.
+ */
+const documentAt = (rows: Rows, at: string) =>
+  Rows.of(rows, Document).find((found) => found.path === at) ?? assert.fail(`no document at ${at}`);
+
+/**
+ * The item reference of `rows` with `identifier` in `document`.
+ */
+const itemRefOf = (rows: Rows, document: Uuid, identifier: string) =>
+  Rows.of(rows, ItemRef).find(
+    (ref) => ref.document === document && ref.identifier === identifier,
+  ) ?? assert.fail(`no item reference ${identifier}`);
+
+/**
+ * The refs of the rows of a per-test relation, sorted.
+ */
+const idsOfRefs = (rows: readonly { readonly ref: Uuid }[]) =>
+  rows.map((row) => row.ref).toSorted();
+
+/**
+ * The structure identifier of `rows` spelled `identifier`.
+ */
+const holderOf = (rows: Rows, identifier: string) =>
+  Rows.of(rows, TestIdentifier).find((found) => found.identifier === identifier) ??
+  assert.fail(`no structure identifier ${identifier}`);
+
+/**
+ * The one row of `found`.
+ */
+const onlyRow = <Row>(found: readonly Row[]): Row => {
+  assert.strictEqual(found.length, 1);
+
+  return found[0] ?? assert.fail("no row");
+};
+
+/**
+ * The edit that spells the built-in `completionStatus` where `adaptive.xml` of
+ * `test_package_minfiles` writes `completion_status` before the base value `value`, which sits
+ * under the indent `tabs` in the file's CRLF text.
+ */
+const spell = (value: string, tabs: string) =>
+  ({
+    _tag: "ReplaceText",
+    file: "example/adaptive.xml",
+    replacement: `identifier="completionStatus">\r\n${tabs}<qti-base-value base-type="identifier">${value}<`,
+    search: `identifier="completion_status">\r\n${tabs}<qti-base-value base-type="identifier">${value}<`,
+  }) as const;
+
+layer(NodeServices.layer, { excludeTestServices: true })(
+  "import/processing.ts a test document's rows",
+  (suite) => {
+    suite.effect("writes four declared item variable references over test_package_minfiles", () =>
+      Effect.gen(function* minfiles() {
+        // `adaptive.xml` sets `completion_status`, which no item declares and the built-in
+        // `completionStatus` is not, so the package's own item is refused P8 before the stage; the
+        // edits spell the built-in and leave everything the test reads as the corpus has it.
+        const dir = yield* materializeSpec({
+          edits: [spell("incomplete", "\t\t\t"), spell("completed", "\t\t\t\t\t")],
+          member: zipMembers.test_package_minfiles,
+          name: "test_package_minfiles",
+        });
+        const rows = yield* stagedRows(dir);
+        const test = documentAt(rows, "example/rtest.xml");
+        const refs = of(rows, processing.ItemVariableRef);
+
+        assert.deepStrictEqual(
+          refs.map((ref) => [ref.prefix, ref.variable, ref.root, ref.document]).toSorted(byText),
+          ["item034", "item063", "item065", "item160"].map((prefix) => [
+            prefix,
+            "SCORE",
+            "test",
+            test.id,
+          ]),
+        );
+        assert.deepStrictEqual(
+          of(rows, processing.VariableRef)
+            .filter((ref) => ref.kind === "itemVariable")
+            .map((ref) => ref.id)
+            .toSorted(),
+          refs.map((ref) => ref.id).toSorted(),
+        );
+
+        const hubs = of(rows, processing.PrefixedVariableSource);
+        assert.deepStrictEqual(idsOfRefs(hubs), refs.map((ref) => ref.id).toSorted());
+        for (const hub of hubs) {
+          const ref = refs.find((one) => one.id === hub.ref) ?? assert.fail("no arm");
+          const itemRef = itemRefOf(rows, test.id, ref.prefix);
+          const resolved = onlyRow(
+            of(rows, ItemRefDocument).filter((row) => row.itemRef === itemRef.id),
+          );
+
+          assert.strictEqual(hub.test, test.id);
+          assert.strictEqual(hub.document, test.id);
+          assert.strictEqual(hub.refKind, "itemVariable");
+          assert.strictEqual(hub.source, "declared");
+          assert.strictEqual(hub.prefix, ref.prefix);
+          assert.strictEqual(hub.itemRef, itemRef.id);
+          assert.strictEqual(hub.itemDocument, resolved.document);
+          assert.deepStrictEqual(
+            of(rows, processing.PrefixedDeclared).filter((row) => row.ref === hub.ref),
+            [{ itemDocument: resolved.document, ref: hub.ref, test: test.id, variable: "SCORE" }],
+          );
+        }
+
+        assert.deepStrictEqual(of(rows, processing.ItemInstanceVariableRef), []);
+        assert.deepStrictEqual(of(rows, processing.SectionDurationRef), []);
+        assert.deepStrictEqual(of(rows, processing.PrefixedMapped), []);
+        assert.deepStrictEqual(of(rows, processing.PrefixedBuiltIn), []);
+      }),
+    );
+
+    suite.effect("writes test-linear's pre-condition and branch rules, each with its operand", () =>
+      Effect.gen(function* linear() {
+        const { rows } = yield* rowsOfFixture("test-linear");
+        const operands = of(rows, ruleSchema.RuleOperand);
+
+        assert.deepStrictEqual(operands.map((operand) => operand.ruleKind).toSorted(), [
+          "qti-branch-rule",
+          "qti-branch-rule",
+          "qti-branch-rule",
+          "qti-branch-rule",
+          "qti-pre-condition",
+          "qti-pre-condition",
+          "qti-pre-condition",
+        ]);
+
+        const expressions = new Set(of(rows, processing.Expression).map((row) => row.id));
+        for (const operand of operands) {
+          assert.isTrue(expressions.has(operand.child));
+        }
+
+        assert.deepStrictEqual(
+          of(rows, processing.ItemVariableRef)
+            .map((ref) => `${ref.prefix}.${ref.variable}`)
+            .toSorted(),
+          [
+            "item034.RESPONSE",
+            "item034.RESPONSE",
+            "item034.SCORE",
+            "item347.RESPONSE",
+            "item347.RESPONSE",
+            "item653.SCORE",
+            "switch.RESPONSE",
+          ],
+        );
+        assert.deepStrictEqual(
+          of(rows, processing.PrefixedVariableSource).map((hub) => hub.source),
+          Array.from({ length: 7 }, () => "declared"),
+        );
+        assert.strictEqual(of(rows, processing.PrefixedDeclared).length, 7);
+      }),
+    );
+
+    suite.effect("writes test-mapping's declared, built-in and instance sources", () =>
+      Effect.gen(function* mapping() {
+        const { rows } = yield* rowsOfFixture("test-mapping");
+        const test = documentAt(rows, "rtest26.xml");
+        const items = of(rows, processing.ItemVariableRef);
+        const instances = of(rows, processing.ItemInstanceVariableRef);
+        const hubOf = (ref: Uuid) =>
+          onlyRow(of(rows, processing.PrefixedVariableSource).filter((hub) => hub.ref === ref));
+        const named = (prefix: string, variable: string) =>
+          items.find((ref) => ref.prefix === prefix && ref.variable === variable) ??
+          assert.fail(`no ${prefix}.${variable}`);
+
+        assert.deepStrictEqual(items.map((ref) => `${ref.prefix}|${ref.variable}`).toSorted(), [
+          "I|A.B",
+          "I|duration",
+          "J.K|SCORE",
+          "item160|SCORE",
+        ]);
+        assert.strictEqual(hubOf(named("item160", "SCORE").id).source, "declared");
+        assert.strictEqual(hubOf(named("J.K", "SCORE").id).source, "declared");
+
+        const nested = hubOf(named("I", "A.B").id);
+        assert.strictEqual(nested.source, "declared");
+        assert.deepStrictEqual(
+          of(rows, processing.PrefixedDeclared)
+            .filter((row) => row.ref === nested.ref)
+            .map((row) => row.variable),
+          ["A.B"],
+        );
+
+        const timed = hubOf(named("I", "duration").id);
+        assert.strictEqual(timed.source, "builtIn");
+        assert.deepStrictEqual(
+          of(rows, processing.PrefixedBuiltIn)
+            .filter((row) => row.ref === timed.ref)
+            .map((row) => row.builtIn),
+          ["duration"],
+        );
+
+        assert.deepStrictEqual(
+          instances.map((ref) => [ref.prefix, String(ref.instance), ref.variable]).toSorted(byText),
+          [
+            ["I", "2", "SCORE"],
+            ["I", "2", "SCORE"],
+          ],
+        );
+        assert.deepStrictEqual(
+          of(rows, processing.VariableRef)
+            .filter((ref) => ref.kind === "itemInstanceVariable")
+            .map((ref) => ref.id)
+            .toSorted(),
+          instances.map((ref) => ref.id).toSorted(),
+        );
+
+        const spelled = onlyRow(of(rows, processing.ItemInstanceSpelling));
+        assert.strictEqual(spelled.value, "02");
+        assert.isTrue(instances.some((ref) => ref.id === spelled.ref));
+        for (const ref of instances) {
+          assert.strictEqual(hubOf(ref.id).refKind, "itemInstanceVariable");
+          assert.strictEqual(hubOf(ref.id).source, "declared");
+        }
+
+        const duration = onlyRow(of(rows, processing.SectionDurationRef));
+        const part = holderOf(rows, "RTEST-26-A");
+        assert.strictEqual(duration.prefix, "RTEST-26-A");
+        assert.strictEqual(duration.document, test.id);
+        assert.strictEqual(part.holderKind, "part");
+
+        const target = onlyRow(of(rows, processing.SectionDurationTarget));
+        assert.strictEqual(target.document, test.id);
+        assert.strictEqual(target.holder, part.holder);
+        assert.strictEqual(target.holderKind, "part");
+        assert.strictEqual(target.prefix, "RTEST-26-A");
+        assert.strictEqual(target.ref, duration.id);
+        assert.strictEqual(target.refKind, "sectionDuration");
+        assert.strictEqual(target.test, test.id);
+        assert.deepStrictEqual(
+          of(rows, processing.VariableRef)
+            .filter((ref) => ref.kind === "sectionDuration")
+            .map((ref) => ref.id),
+          [duration.id],
+        );
+      }),
+    );
+
+    suite.effect("writes the section identifier target of a qti-test-variables", () =>
+      Effect.gen(function* sectionIdentifier() {
+        const { rows } = yield* rowsOfFixture("test-mapping");
+        const test = documentAt(rows, "rtest26.xml");
+        const written = onlyRow(of(rows, expression.ExpressionSectionIdentifier));
+        const section = holderOf(rows, "sectionA");
+
+        const target = onlyRow(of(rows, expression.SectionIdentifierTarget));
+        assert.strictEqual(target.document, test.id);
+        assert.strictEqual(target.holderKind, "section");
+        assert.strictEqual(target.identifier, "sectionA");
+        assert.strictEqual(target.node, written.node);
+        assert.strictEqual(target.test, test.id);
+        assert.strictEqual(section.holderKind, "section");
+      }),
+    );
+
+    suite.effect("writes a mapped source when the item reference maps the name", () =>
+      Effect.gen(function* mapped() {
+        const base = specOf("test-mapping");
+        const dir = yield* materializeSpec({
+          ...base,
+          edits: [
+            ...base.edits,
+            {
+              _tag: "ReplaceText",
+              file: "rtest26.xml",
+              replacement:
+                '<qti-set-outcome-value identifier="DECLARED"><qti-variable identifier="item034.SCORE"/></qti-set-outcome-value>\n    </qti-outcome-processing>',
+              search: "    </qti-outcome-processing>",
+            },
+          ],
+          name: "p5-45-mapped",
+        });
+        const { rows } = yield* readRows(dir);
+        const test = documentAt(rows, "rtest26.xml");
+        const ref = of(rows, processing.ItemVariableRef).find((row) => row.prefix === "item034");
+        const itemRef = itemRefOf(rows, test.id, "item034");
+
+        assert.strictEqual(ref?.variable, "SCORE");
+        assert.deepStrictEqual(
+          of(rows, processing.PrefixedVariableSource)
+            .filter((hub) => hub.ref === ref?.id)
+            .map((hub) => [hub.source, hub.itemRef]),
+          [["mapped", itemRef.id]],
+        );
+        assert.deepStrictEqual(
+          of(rows, processing.PrefixedMapped).filter((row) => row.ref === ref?.id),
+          [{ itemRef: itemRef.id, ref: ref?.id, test: test.id, variable: "SCORE" }],
+        );
+        assert.deepStrictEqual(
+          of(rows, processing.PrefixedDeclared).filter((row) => row.ref === ref?.id),
+          [],
+        );
+      }),
+    );
+
+    suite.effect("refuses each negative with its rule", () =>
+      Effect.gen(function* negatives() {
+        const refused = [
+          ["prefixed-unknown-ref", "prefixed-ref"],
+          ["prefixed-undeclared-variable", "prefixed-ref"],
+          ["precondition-number-correct", "P25"],
+          ["test-undeclared-variable", "P8"],
+          ["item-duration-not-timed", "item-duration"],
+          ["template-default-type", "P20"],
+        ] as const;
+        for (const [name, rule] of refused) {
+          const dir = yield* materialize(name);
+          const failure = yield* Effect.flip(readRows(dir));
+
+          assert.strictEqual(
+            failure._tag === "PlatformError" ? "PlatformError" : ruleOfError(failure).rule,
+            rule,
+            name,
+          );
+        }
+      }),
+    );
+  },
+);
