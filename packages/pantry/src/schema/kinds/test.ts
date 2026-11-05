@@ -144,7 +144,7 @@ export const registry: Readonly<Record<(typeof kinds)[number], RegistryRow>> = {
     parent: Option.none(),
   },
   "qti-assessment-test": {
-    attributes: ["identifier", "title", "class", "tool-name", "tool-version"],
+    attributes: ["identifier", "title", "class", "xml:lang", "tool-name", "tool-version"],
     local: "qti-assessment-test",
     namespace,
     parent: Option.none(),
