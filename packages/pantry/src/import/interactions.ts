@@ -106,6 +106,10 @@ export interface InteractionContext {
    * The item's root element.
    */
   readonly root: Element;
+  /**
+   * The root kind of the document the interactions are in, copied into every arm's `rootKind`.
+   */
+  readonly rootKind: "item" | "stimulus";
   readonly shared: Shared;
 }
 
@@ -551,7 +555,15 @@ export const interactionRows = Effect.fn("import.interactionRows")(function* int
   item: ItemFacts,
   rows: Rows,
 ): Effect.fn.Return<Rows, ImportRefused | ItemRefusal | UnmodeledVocabulary> {
-  const ctx: InteractionContext = { declarations, documentId, item, nodes, root, shared };
+  const ctx: InteractionContext = {
+    declarations,
+    documentId,
+    item,
+    nodes,
+    root,
+    rootKind: "item",
+    shared,
+  };
   let built = rows;
   built = yield* orderRows(ctx, built);
   built = yield* associateRows(ctx, built);
@@ -562,3 +574,70 @@ export const interactionRows = Effect.fn("import.interactionRows")(function* int
 
   return built;
 });
+
+/**
+ * The shared writers of a stimulus: {@link shared} with the three binding writers returning the
+ * rows unchanged, since a stimulus has no declarations to bind to.
+ */
+const unboundShared: Shared = {
+  ...shared,
+  bindingRows: Effect.fn("import.unboundBindingRows")(function* unboundBindingRows(rows: Rows) {
+    return yield* Effect.succeed(rows);
+  }),
+  gapMatchBindingRow: (rows) => rows,
+  templateRef: Effect.fn("import.unboundTemplateRef")(function* unboundTemplateRef(rows: Rows) {
+    return yield* Effect.succeed(rows);
+  }),
+};
+
+/**
+ * The rows of every interaction of a stimulus, written by the six family builders in turn with no
+ * binding.
+ *
+ * GOAL 5.15: "Admit: the stimulus body's `Admission` rows include the interaction kinds, and
+ * `InteractionBinding` is written only for interactions in item documents (part C), so a stimulus
+ * interaction's `response-identifier` is stored as a bare identifier". The binding rows are left
+ * out as the feedback and template references are (spec 4.11): `FeedbackOutcomeRef`,
+ * `TemplateContentRef` and `PrintedVariableRef` have no declaration to name in a stimulus, and
+ * `ChoiceTemplateRef` and `GapMatchBinding` take the same reading. The arms' binding containments
+ * are selected on `rootKind: "item"` (`schema/interaction.ts:339-342` and each family's), so a
+ * stimulus arm needs none.
+ *
+ * The context's `item` is `{ adaptive: "false" }`; only `bindingRows` reads it, and the unbound
+ * writer does not.
+ *
+ * @param root - The stimulus's root element.
+ * @param nodes - The node index of the stimulus's tree.
+ * @param documentId - The id of the stimulus's document.
+ * @param rows - The rows so far.
+ * @returns The rows with every interaction's arm, owner copy and attribute rows;
+ *   `UnmodeledVocabulary` and `ItemRefusal` as the builders raise them, and `ImportRefused` as the
+ *   family builders raise it.
+ */
+export const unboundInteractionRows = Effect.fn("import.unboundInteractionRows")(
+  function* unboundInteractionRows(
+    root: Element,
+    nodes: NodeIndex,
+    documentId: Uuid,
+    rows: Rows,
+  ): Effect.fn.Return<Rows, ImportRefused | ItemRefusal | UnmodeledVocabulary> {
+    const ctx: InteractionContext = {
+      declarations: new Map(),
+      documentId,
+      item: { adaptive: "false" },
+      nodes,
+      root,
+      rootKind: "stimulus",
+      shared: unboundShared,
+    };
+    let built = rows;
+    built = yield* orderRows(ctx, built);
+    built = yield* associateRows(ctx, built);
+    built = yield* gapRows(ctx, built);
+    built = yield* hotRows(ctx, built);
+    built = yield* textRows(ctx, built);
+    built = yield* otherRows(ctx, built);
+
+    return built;
+  },
+);

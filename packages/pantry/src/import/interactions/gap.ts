@@ -217,7 +217,7 @@ const gapMatch = Effect.fn("import.gapMatch")(function* gapMatch(
       maxAssociationsN: associations.maxN,
       minAssociationsN: associations.minN,
       responseIdentifier: associations.responseIdentifier,
-      rootKind: "item",
+      rootKind: ctx.rootKind,
       shuffle: shuffleHandle,
     },
   ]);
@@ -272,7 +272,7 @@ const graphicGapMatch = Effect.fn("import.graphicGapMatch")(function* graphicGap
       maxAssociationsN: associations.maxN,
       minAssociationsN: associations.minN,
       responseIdentifier: associations.responseIdentifier,
-      rootKind: "item",
+      rootKind: ctx.rootKind,
     },
   ]);
   built = Rows.add(

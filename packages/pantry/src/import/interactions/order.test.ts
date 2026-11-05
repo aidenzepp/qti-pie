@@ -128,6 +128,7 @@ const contextOf = (
     item: { adaptive: "false" },
     nodes: indexTree(root),
     root,
+    rootKind: "item",
     shared,
   };
 };
