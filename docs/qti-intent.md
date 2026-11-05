@@ -74,7 +74,7 @@ From grizzle's README (Limits) and its agent guide, `.agents/skills/grizzle/SKIL
 - Tables are immutable unless declared `mutable(...)`.
 - No outer joins, window functions or raw SQL at run time; queries are grizzle's query language, with recursive
   queries for trees and closed types that carry per-variant data.
-- One SERIALIZABLE transaction per call, at most 100,000 rows per ChangeSet input.
+- One SERIALIZABLE transaction per call.
 - Roles compile to PostgreSQL roles, views and row-level security; a login is the trust boundary.
 
 ## Starting point
