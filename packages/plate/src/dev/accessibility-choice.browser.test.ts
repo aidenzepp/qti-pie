@@ -32,12 +32,6 @@ const items = [
 const [bg007, , bg008] = items;
 
 /**
- * How long, in milliseconds, a test lets focus settle after a page loads before it reads where
- * focus is: a bound on a wait that ends as soon as focus arrives, not a timing the test asserts.
- */
-const focusWait = 5000;
-
-/**
  * The Choice's Root, Control and Label markers, read through the part table.
  */
 const slots = {
@@ -410,11 +404,12 @@ const focusedElement = Effect.fn("focusedElement")(function* focusedElement(page
 
 /**
  * Open BG008, tick four of its five choices by their Labels against `max-choices="3"`, submit, and
- * read the first refused Control of the page the refused post answered.
+ * read the page the refused post answered.
  *
  * @param page The page.
- * @returns The first Control, in document order, that the answered HTML marks invalid; the test
- *   fails when it marks none.
+ * @returns The answered page's tree, its Choice as that page presents it, and its first refused
+ *   Control: the first, in document order, that the answered HTML marks invalid; the test fails
+ *   when it marks none.
  */
 const overTick = Effect.fn("overTick")(function* overTick(page: Page) {
   const presented = yield* openItem(page, bg008.path);
@@ -424,10 +419,87 @@ const overTick = Effect.fn("overTick")(function* overTick(page: Page) {
 
   yield* Effect.forEach(ticked, (control) => clickLabel(page, control), { discard: true });
 
-  const refused = presentedIn(yield* submit(page)).controls.find((control) => control.invalid);
+  const answered = yield* submit(page);
+  const choice = presentedIn(answered);
+  const refused = choice.controls.find((control) => control.invalid);
   assert.isDefined(refused, "the answered page holds a refused Control");
 
-  return refused;
+  return { answered, choice, refused };
+});
+
+/**
+ * Give the key that moves focus to the next control of any kind in an engine on this platform.
+ *
+ * WebKit on macOS keeps Safari's split by default: Tab highlights only fields and pop-up menus,
+ * and Option+Tab (Alt+Tab) highlights clickable items too, checkboxes and radios among them.
+ * Elsewhere Tab reaches every control.
+ *
+ * @param name The engine.
+ * @returns `Alt+Tab` for WebKit on macOS, else `Tab`.
+ * @see https://support.apple.com/guide/safari/cpsh003/mac (Safari's keyboard shortcuts: Tab and Option-Tab, and the setting that swaps them)
+ */
+const nextControlKey = (name: EngineName): string =>
+  name === "webkit" && process.platform === "darwin" ? "Alt+Tab" : "Tab";
+
+/**
+ * Assert that the page a submit answered opened at its result: the URL's fragment names the
+ * Status region, and that region, of role `status` and named by its heading, is the focused
+ * element and holds each of the texts, in Playwright's computed tree and, in Chromium, in
+ * Chromium's own tree too.
+ *
+ * @param page The page, after the submit.
+ * @param name The engine.
+ * @param answered The answered page's tree, which gives the region's id and name.
+ * @param texts The texts the region holds.
+ * @returns Once every assertion has held.
+ */
+const assertResultFirst = Effect.fn("assertResultFirst")(function* assertResultFirst(
+  page: Page,
+  name: EngineName,
+  answered: Element,
+  texts: readonly string[],
+) {
+  const regions = elementsOf([answered]).filter(
+    (element) => attribute(element, "role") === "status",
+  );
+
+  assert.strictEqual(regions.length, 1, "the answered page holds one Status region");
+
+  const [region] = regions;
+  assert.isDefined(region);
+
+  const regionId = attribute(region, "id") ?? "";
+  const regionName = nameOf(region, answered);
+
+  assert.strictEqual(new URL(page.url()).hash, `#${regionId}`);
+
+  const status = page.getByRole("status", { exact: true, name: regionName });
+
+  assert.strictEqual(yield* Effect.promise(() => status.and(byId(page, regionId)).count()), 1);
+  assert.strictEqual(
+    yield* Effect.promise(() => status.and(page.locator(":focus")).count()),
+    1,
+    yield* focusedElement(page),
+  );
+
+  const held = snapshotTexts(yield* snapshotOf(status));
+  for (const text of texts) {
+    assert.include(held, text);
+  }
+
+  if (name === "chromium") {
+    const nodes = yield* chromiumTree(page, name);
+    const own = exposed(nodes, "status", regionName);
+    const below = descendantsOf(own, indexOf(nodes)).map((node) => node.name);
+
+    assert.deepStrictEqual(
+      focusedIn(nodes).map((node) => node.nodeId),
+      [own.nodeId],
+    );
+    for (const text of texts) {
+      assert.include(below, text);
+    }
+  }
 });
 
 /**
@@ -598,49 +670,9 @@ eachEngine((it, name) => {
             assert.isDefined(chosen, "the correct choice is presented");
 
             yield* clickLabel(page, chosen);
-
-            const answered = yield* submit(page);
-            const regions = elementsOf([answered]).filter(
-              (element) => attribute(element, "role") === "status",
-            );
-
-            assert.strictEqual(regions.length, 1, "the answered page holds one Status region");
-
-            const [region] = regions;
-            assert.isDefined(region);
-
-            const regionId = attribute(region, "id") ?? "";
-            const regionName = nameOf(region, answered);
-            const score = message("en", "score", { score: "1" });
-
-            assert.strictEqual(new URL(page.url()).hash, `#${regionId}`);
-
-            const status = page.getByRole("status", { exact: true, name: regionName });
-
-            assert.strictEqual(
-              yield* Effect.promise(() => status.and(byId(page, regionId)).count()),
-              1,
-            );
-            assert.strictEqual(
-              yield* Effect.promise(() => status.and(page.locator(":focus")).count()),
-              1,
-              yield* focusedElement(page),
-            );
-            assert.include(snapshotTexts(yield* snapshotOf(status)), score);
-
-            if (name === "chromium") {
-              const nodes = yield* chromiumTree(page, name);
-              const own = exposed(nodes, "status", regionName);
-
-              assert.deepStrictEqual(
-                focusedIn(nodes).map((node) => node.nodeId),
-                [own.nodeId],
-              );
-              assert.include(
-                descendantsOf(own, indexOf(nodes)).map((node) => node.name),
-                score,
-              );
-            }
+            yield* assertResultFirst(page, name, yield* submit(page), [
+              message("en", "score", { score: "1" }),
+            ]);
           }),
         ),
     );
@@ -650,7 +682,7 @@ eachEngine((it, name) => {
       () =>
         withPage({ javaScriptEnabled: false }, (page) =>
           Effect.gen(function* refusalMessage() {
-            const refused = yield* overTick(page);
+            const { refused } = yield* overTick(page);
             const atMost = message("en", "atMost", { n: "3" });
             const control = byId(page, refused.id);
             const node = yield* snapshotOf(control);
@@ -679,29 +711,41 @@ eachEngine((it, name) => {
     );
 
     tree.effect(
-      `[Q-2] The refusal message: BG008 with four ticked, then Submit: the first refused Control is focused, in ${treesRead(name)}`,
+      `[Q-2] The refusal message: BG008 with four ticked, then Submit: the Status region is focused and holds Not accepted and the atMost message, and the next control key from it reaches a control of the item before any other part of the page, in ${treesRead(name)}`,
       () =>
         withPage({ javaScriptEnabled: false }, (page) =>
           Effect.gen(function* refusalFocus() {
-            const refused = yield* overTick(page);
-            const focused = byId(page, refused.id).and(page.locator(":focus"));
+            const { answered, choice } = yield* overTick(page);
 
-            // A browser processes `autofocus` at a rendering update after the page has loaded, so
-            // focus is given a bounded time to reach the Control before it is read.
-            yield* Effect.ignore(Effect.tryPromise(() => focused.waitFor({ timeout: focusWait })));
+            yield* assertResultFirst(page, name, answered, [
+              message("en", "notAccepted"),
+              message("en", "atMost", { n: "3" }),
+            ]);
+            yield* Effect.promise(() => page.keyboard.press(nextControlKey(name)));
+
+            const itemControls = page.locator(
+              choice.controls.map((control) => `[id="${control.id}"]`).join(", "),
+            );
 
             assert.strictEqual(
-              yield* Effect.promise(() => focused.count()),
+              yield* Effect.promise(() => itemControls.and(page.locator(":focus")).count()),
               1,
               yield* focusedElement(page),
             );
 
             if (name === "chromium") {
-              const nodes = yield* chromiumTree(page, name);
+              const focused = focusedIn(yield* chromiumTree(page, name));
 
               assert.deepStrictEqual(
-                focusedIn(nodes).map((node) => node.nodeId),
-                [exposed(nodes, refused.role, refused.name).nodeId],
+                focused.map((node) => node.role),
+                [choice.role],
+              );
+
+              const [reached] = focused;
+              assert.isDefined(reached);
+              assert.include(
+                choice.controls.map((control) => control.name),
+                reached.name,
               );
             }
           }),
