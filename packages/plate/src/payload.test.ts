@@ -1,5 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Option, Predicate } from "effect";
+import { shuffleOrder } from "#plate/engine/random.ts";
 import { entryName } from "#plate/form/encoding.ts";
 import type {
   BodyNode,
@@ -102,6 +103,21 @@ const choice: ChoiceInteraction = {
   prompt: Option.some([text("Which city is the capital of France?")]),
   response: "CAPITAL",
   shuffle: false,
+};
+
+/**
+ * A shuffled single Choice of five planets, bound to `PLANET`, whose third choice, `P2`, is fixed.
+ */
+const planets: ChoiceInteraction = {
+  ...choice,
+  choices: ["Mercury", "Venus", "Earth", "Mars", "Jupiter"].map((planet, index) => ({
+    content: [text(planet)],
+    fixed: index === 2,
+    identifier: `P${String(index)}`,
+  })),
+  prompt: Option.some([text("Which planet is the largest?")]),
+  response: "PLANET",
+  shuffle: true,
 };
 
 /**
@@ -420,6 +436,19 @@ const textFor = (built: Payload, response: string): ExtendedTextPayload | TextEn
 };
 
 /**
+ * Give the identifiers of a Choice's choices in the order its payload presents them.
+ *
+ * @param interaction The Choice, the item's whole body.
+ * @param view The view of the render.
+ * @returns The identifiers, in presented order.
+ */
+const presentedOf = (interaction: ChoiceInteraction, view: View): readonly string[] =>
+  choiceFor(
+    payload(redactItem({ ...item, body: [interaction] }), view),
+    interaction.response,
+  ).choices.map((entry) => entry.identifier);
+
+/**
  * Find the Extended Text payload bound to a response.
  *
  * @param built The payload.
@@ -620,6 +649,50 @@ describe("payload", () => {
     assert.strictEqual(capital.maxChoices, 1n);
     assert.strictEqual(capital.class, "stacked");
     assert.deepStrictEqual(capital.restore, []);
+  });
+
+  it("[Q-2] presents a shuffled Choice in shuffleOrder's order, keyed by the seed, the instance and the response", () => {
+    const identifiers = planets.choices.map((entry) => entry.identifier);
+    const fixed = planets.choices.map((entry) => entry.fixed);
+    const ordered = (key: string): readonly string[] =>
+      shuffleOrder(key, fixed).map((index) => identifiers[index] ?? "");
+
+    assert.deepStrictEqual(
+      presentedOf(planets, { ...answering, seed: 7 }),
+      ordered(`7\u001F${instance}\u001FPLANET`),
+    );
+    assert.deepStrictEqual(
+      presentedOf(planets, answering),
+      ordered(`\u001F${instance}\u001FPLANET`),
+    );
+    assert.deepStrictEqual(presentedOf(planets, { ...answering, seed: 7 }), [
+      "P1",
+      "P0",
+      "P2",
+      "P4",
+      "P3",
+    ]);
+    assert.deepStrictEqual(presentedOf(planets, answering), ["P4", "P3", "P2", "P1", "P0"]);
+  });
+
+  it("[Q-2] keeps a fixed choice at its index, and two instances present a shuffled Choice in different orders", () => {
+    const first = presentedOf(planets, answering);
+    const second = presentedOf(planets, { ...answering, instance: "q1" });
+
+    assert.strictEqual(first[2], "P2");
+    assert.strictEqual(second[2], "P2");
+    assert.notDeepEqual(first, second);
+    for (const order of [first, second]) {
+      assert.sameMembers([...order], ["P0", "P1", "P2", "P3", "P4"]);
+    }
+  });
+
+  it("[Q-2] keeps document order when shuffle is false, whatever the seed", () => {
+    const ordered = { ...planets, shuffle: false };
+
+    for (const view of [answering, { ...answering, seed: 7 }]) {
+      assert.deepStrictEqual(presentedOf(ordered, view), ["P0", "P1", "P2", "P3", "P4"]);
+    }
   });
 
   it("[Q-2] carries the Choice's aria-label and aria-labelledby as the model holds them", () => {

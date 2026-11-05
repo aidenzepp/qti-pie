@@ -5,9 +5,10 @@
  * item the page may know into a {@link Redacted}, and {@link payload} copies a `Redacted` and the
  * author's {@link View} into the {@link Payload}, the only input the emitter receives. Each copies
  * every field it names one by one and never spreads a model object, so a field the model gains
- * reaches the page only when this file names it. Nothing here holds a correct response, a mapping,
- * a response or outcome default, a processing rule, the seed, a template value or feedback
- * content: what the page cannot be given, it cannot leak.
+ * reaches the page only when this file names it. Neither copy holds a correct response, a mapping,
+ * a response or outcome default, a processing rule, a template value or feedback content, and the
+ * payload holds no seed: the view's seed only orders a shuffled Choice's choices. What the page
+ * cannot be given, it cannot leak.
  *
  * @module
  * @see {@link Item} for the model it reads.
@@ -16,6 +17,7 @@ import { Array as Arr, Option } from "effect";
 import type { Brand } from "effect";
 import { scopedId, splitIdrefs } from "#plate/emit/parts.ts";
 import type { Resolved } from "#plate/emit/parts.ts";
+import { shuffleOrder } from "#plate/engine/random.ts";
 import { entryName } from "#plate/form/encoding.ts";
 import type { Locale } from "#plate/messages.ts";
 import type {
@@ -23,6 +25,7 @@ import type {
   ChoiceInteraction,
   ExtendedTextInteraction,
   Item,
+  SimpleChoice,
   TextEntryInteraction,
 } from "#plate/model/item.ts";
 import { format } from "#plate/model/values.ts";
@@ -41,8 +44,8 @@ export interface ValidationMessage {
 }
 
 /**
- * The author's inputs to one render: the instance, the values to show, the entry names, and the
- * messages of a post the author refused.
+ * The author's inputs to one render: the instance, the seed, the values to show, the entry names,
+ * and the messages of a post the author refused.
  *
  * The library decides no flow, so every field is the author's: each map is keyed by response
  * identifier, and a response it omits takes the default the field names. `messages` decides how
@@ -67,6 +70,11 @@ export interface View {
    */
   readonly names: ReadonlyMap<string, string>;
   readonly posted: Option.Option<ReadonlyMap<string, readonly string[]>>;
+  /**
+   * The configuration's `seed`, which keys a shuffled Choice's order with the instance and the
+   * response; keyed as the empty string when absent.
+   */
+  readonly seed?: number;
   /**
    * The value each response's controls show, such as its `defaultValue` or a value the author's
    * flow recorded; NULL when absent.
@@ -149,7 +157,7 @@ export interface ValidationPayload {
 
 /**
  * A Choice as the page may know it (Q-2): its binding, its constraints, its Prompt, its choices in
- * document order, and the identifiers to show as checked.
+ * the order they are presented, and the identifiers to show as checked.
  */
 export interface ChoicePayload extends ValidationPayload {
   /**
@@ -162,6 +170,11 @@ export interface ChoicePayload extends ValidationPayload {
    */
   readonly ariaLabelledby: Option.Option<string>;
   readonly cardinality: "multiple" | "single";
+  /**
+   * The choices in presented order: for a Choice with `shuffle` true, the order the view's seed,
+   * the instance and the response key, each fixed choice at its document position; else document
+   * order.
+   */
   readonly choices: readonly {
     readonly content: readonly PayloadNode[];
     readonly identifier: string;
@@ -387,6 +400,10 @@ interface Build {
    */
   readonly posted: Option.Option<ReadonlyMap<string, readonly string[]>>;
   /**
+   * The view's seed written with `String`, the empty string when the view has none.
+   */
+  readonly seed: string;
+  /**
    * The text controls with no authored name and no Prompt, in document order.
    */
   readonly unnamed: readonly Interaction[];
@@ -531,6 +548,33 @@ const copyNodes = (nodes: readonly BodyNode[], build: Build): readonly PayloadNo
   nodes.map((node) => copyNode(node, build));
 
 /**
+ * The separator of a shuffle key's three fields, U+001F INFORMATION SEPARATOR ONE, which no number
+ * written with `String`, checked instance token or identifier holds.
+ */
+const keySeparator = "\u001F";
+
+/**
+ * Give a Choice's choices in the order they are presented.
+ *
+ * A Choice with `shuffle` true is presented in {@link shuffleOrder}'s order under the key
+ * `<seed>\u001F<instance>\u001F<response>`: its non-fixed choices are permuted among the non-fixed
+ * positions, and each fixed choice keeps its document position. Any other Choice keeps document
+ * order. The order is presentation only: scores, records and validation read identifiers, never
+ * positions.
+ *
+ * @param interaction The Choice.
+ * @param build The build, which gives the seed and the instance.
+ * @returns The choices, in presented order.
+ */
+const presentedChoices = (interaction: ChoiceInteraction, build: Build): readonly SimpleChoice[] =>
+  interaction.shuffle
+    ? shuffleOrder(
+        [build.seed, build.instance, interaction.response].join(keySeparator),
+        interaction.choices.map((choice) => choice.fixed),
+      ).flatMap((index) => interaction.choices[index] ?? [])
+    : interaction.choices;
+
+/**
  * Copy a Choice into its payload.
  *
  * @param interaction The Choice.
@@ -543,7 +587,7 @@ const choicePayload = (interaction: ChoiceInteraction, build: Build): ChoicePayl
   ariaLabel: interaction.ariaLabel,
   ariaLabelledby: interaction.ariaLabelledby,
   cardinality: interaction.cardinality,
-  choices: interaction.choices.map((choice) => ({
+  choices: presentedChoices(interaction, build).map((choice) => ({
     content: copyNodes(choice.content, build),
     identifier: choice.identifier,
   })),
@@ -777,9 +821,11 @@ export const redactItem = (item: Item): Redacted =>
  * item and the author's inputs.
  *
  * @param redacted The item, through {@link redactItem}.
- * @param view The author's inputs: the instance, values, names, messages and posted strings.
+ * @param view The author's inputs: the instance, the seed, values, names, messages and posted
+ *   strings.
  * @returns The payload. It holds no correct response, mapping, default, processing rule, seed,
- *   template value or feedback content, whatever the view.
+ *   template value or feedback content, whatever the view; the seed only orders a shuffled
+ *   Choice's choices.
  */
 export const payload = (redacted: Redacted, view: View): Payload => {
   const messages = identifyMessages(view.instance, view.messages);
@@ -792,6 +838,7 @@ export const payload = (redacted: Redacted, view: View): Payload => {
     messages,
     names: view.names,
     posted: messages.length > 0 ? view.posted : Option.none(),
+    seed: view.seed === undefined ? "" : String(view.seed),
     unnamed: interactions.filter(isUnnamed),
     values: view.values,
   };

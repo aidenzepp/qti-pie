@@ -154,19 +154,23 @@ const mapOf = <A>(record: Readonly<Record<string, A>> = {}): ReadonlyMap<string,
  * Build the view of one render from the author's options.
  *
  * @param instance The checked or drawn instance token.
- * @param configuration The configuration, which gives the locale.
+ * @param configuration The configuration, which gives the locale and the seed.
  * @param options The author's options.
- * @returns The view `payload` reads.
+ * @returns The view `payload` reads, holding the configuration's `seed` when it has one.
  */
-const viewOf = (instance: string, configuration: Configuration, options: Options): View => ({
-  finished: options.disabled ?? false,
-  instance,
-  locale: configuration.locale,
-  messages: options.messages ?? [],
-  names: mapOf(options.names),
-  posted: Option.map(Option.fromUndefinedOr(options.posted), mapOf),
-  values: mapOf(options.values),
-});
+const viewOf = (instance: string, configuration: Configuration, options: Options): View => {
+  const view: View = {
+    finished: options.disabled ?? false,
+    instance,
+    locale: configuration.locale,
+    messages: options.messages ?? [],
+    names: mapOf(options.names),
+    posted: Option.map(Option.fromUndefinedOr(options.posted), mapOf),
+    values: mapOf(options.values),
+  };
+
+  return configuration.seed === undefined ? view : { ...view, seed: configuration.seed };
+};
 
 /**
  * Build the emit state of one render.
@@ -215,17 +219,18 @@ const interactionRenderer =
  *
  * It resolves the overrides once, takes the instance from `options.instance` or draws a lowercase
  * UUID (`crypto.randomUUID()`, never derived from the seed), builds the payload from the redacted
- * item and the options, and emits the body and the Root. It writes no form, submit control, title
- * or record. Given the same instance and inputs, it gives the same HTML, and it returns the
- * instance it used.
+ * item and the options, and emits the body and the Root. A shuffled Choice is presented in the
+ * order the configuration's `seed`, the instance and its response key. It writes no form, submit
+ * control, title or record. Given the same instance, configuration and inputs, it gives the same
+ * HTML, and it returns the instance it used.
  *
  * @example
  *   const rendered = render(redact(accepted), configuration, { instance: "q1" });
  *   // Result.succeed({ html: '<qti-assessment-item id="q1-item" …>…</qti-assessment-item>', instance: "q1" })
  *
  * @param item The item `redact` gave.
- * @param configuration The configuration, which gives the locale, the heading level and the asset
- *   base.
+ * @param configuration The configuration, which gives the locale, the heading level, the asset
+ *   base and the seed.
  * @param options The author's inputs, none by default.
  * @returns The Root's HTML and the instance token it used, or {@link UnknownPart} for an override
  *   the part table lacks, {@link InvalidInstance} for an instance token that breaks a requirement,

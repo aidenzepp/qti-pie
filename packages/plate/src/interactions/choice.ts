@@ -232,7 +232,7 @@ const labelAsSpan = (node: Node): Node => {
  *
  * The Prompt's markup is picked from its emitted content (rule `efed9867`): a Prompt of phrasing
  * content is the Root's first child, a `legend`; any other is a `qti-prompt` the Root names through
- * `aria-labelledby`. Choices render in document order, whatever `shuffle` says. Each part goes
+ * `aria-labelledby`. Choices render in the payload's order, seeded when shuffled. Each part goes
  * through `applyPart` with its replacement from `state.parts`, so every swap holds I1 to I4. The
  * Prompt's and each choice's content go through {@link emitNodes}, as the body's do; then every
  * `label` in a choice's content is written as a `span` ({@link labelAsSpan}) before the Label part
