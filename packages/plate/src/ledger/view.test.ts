@@ -607,7 +607,7 @@ describe("ledger/view.ts", () => {
     );
   });
 
-  it("shows the records, each with its JavaScript state, each OD-14 (e) entry with its control, NVDA and JAWS unavailable", () => {
+  it("shows the records, each observed one with its JavaScript state, each OD-14 (e) entry with its control, NVDA and JAWS unavailable", () => {
     const tree = ledgerHtml(fixture);
     const text = ledgerText(fixture);
     const rows = rowsOf(tableCaptioned(tree, "Session records"));
@@ -615,7 +615,7 @@ describe("ledger/view.ts", () => {
     assert.lengthOf(rows, records.length);
     assert.deepStrictEqual(
       rows.map((row) => textOf(row.get("JavaScript") ?? h("td", {}))),
-      records.map((record) => record.javascript),
+      ["off", "on", "on", "", "on", "on"],
     );
     assert.deepStrictEqual(
       rows.map((row) => textOf(row.get("Control") ?? h("td", {}))),
@@ -636,6 +636,22 @@ describe("ledger/view.ts", () => {
     assert.include(text, "Control: did-not-run");
     assert.include(text, "Reader: NVDA; Entry: unavailable reader");
     assert.match(text, /; JavaScript: off;/u);
+  });
+
+  it("states no environment for an entry that was not observed: no JavaScript state, browser, macOS or reader version", () => {
+    const rows = rowsOf(tableCaptioned(ledgerHtml(fixture), "Session records"));
+    const open = records.findIndex((record) => record.result === "not-observed");
+    const cells = (index: number) =>
+      ["Reader", "JavaScript", "Browser", "macOS"].map((column) =>
+        textOf(rows[index]?.get(column) ?? h("td", {})),
+      );
+
+    assert.deepStrictEqual(cells(open), ["VoiceOver", "", "", ""]);
+    assert.deepStrictEqual(cells(open - 1), ["VoiceOver 27.2", "on", "Safari 26.1", "27.2"]);
+    assert.include(
+      ledgerText(fixture).split("\n"),
+      `Reader: VoiceOver; Entry: manual check; Check: OD-14 (e); Item: ${bg007}; Control: did-not-run; Result: not-observed; Date: 2026-11-06; Owner: operator`,
+    );
   });
 
   it("says no session is recorded while there are no records", () => {

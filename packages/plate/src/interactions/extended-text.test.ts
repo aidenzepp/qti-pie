@@ -26,9 +26,12 @@ import type {
 import type { Value } from "#plate/model/values.ts";
 import { payload, redactItem } from "#plate/payload.ts";
 import type { EmitState, ExtendedTextPayload, Payload, View } from "#plate/payload.ts";
+import { checkResponses } from "#plate/responses.ts";
 import { checkTree, nameOf, textOf } from "#plate/test/accessibility.ts";
 import { keyboardWalk } from "#plate/test/keyboard.ts";
 import { roundTrips } from "#plate/test/round-trip.ts";
+import { tables } from "#plate/validate/tables.ts";
+import { check } from "#plate/validate/verdict.ts";
 
 /**
  * The item instance every payload here is built for.
@@ -1269,6 +1272,107 @@ describe("an Extended Text the renderer does not support", () => {
           Option.some([[entryName(instance, "RESPONSE"), "B"]]),
         );
         assert.deepStrictEqual(checkTree(tree, { baseLevel: 2 }), []);
+      }),
+  );
+
+  it.effect(
+    '[Q-5] judges no min-strings count for an Extended Text whose min-strings="101" renders the notice in place of its Controls, so its item can be submitted, and still checks its posted value against max-strings and the pattern-mask',
+    () =>
+      Effect.gen(function* overCapCounts() {
+        const path = "qti-assessment-item/qti-item-body/qti-extended-text-interaction";
+        const verdict = check(
+          doc(
+            "items/over-cap.xml",
+            el(
+              "qti-assessment-item",
+              [
+                attr("identifier", "over-cap"),
+                attr("time-dependent", "false"),
+                attr("title", "Over the cap"),
+              ],
+              [
+                declaration("RESPONSE", "identifier"),
+                el("qti-response-declaration", [
+                  attr("base-type", "string"),
+                  attr("cardinality", "multiple"),
+                  attr("identifier", response),
+                ]),
+                el(
+                  "qti-item-body",
+                  [],
+                  [
+                    el(
+                      "qti-choice-interaction",
+                      [attr("max-choices", "1"), attr("response-identifier", "RESPONSE")],
+                      [simpleChoice("A", "Red"), simpleChoice("B", "Green")],
+                    ),
+                    el("qti-extended-text-interaction", [
+                      attr("max-strings", "0"),
+                      attr("min-strings", "101"),
+                      attr("response-identifier", response),
+                    ]),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          tables,
+        );
+        const accepted =
+          verdict.verdict === "accepted-with-unsupported"
+            ? verdict.accepted
+            : assert.fail(`The item is ${verdict.verdict}, not accepted-with-unsupported.`);
+        const lenient = yield* configure({});
+        const strict = yield* configure({ validateResponses: true });
+
+        assert.deepStrictEqual(accepted.unsupported, [
+          { feature: "min-strings>100", path, shown: "notice" },
+        ]);
+        assert.deepStrictEqual(
+          checkResponses(
+            accepted,
+            {
+              RESPONSE: {
+                baseType: "identifier",
+                cardinality: "single",
+                values: [{ baseType: "identifier", value: "B" }],
+              },
+            },
+            strict,
+          ),
+          [],
+        );
+
+        const over: ExtendedTextInteraction = {
+          ...rivers,
+          maxStrings: Option.some(2n),
+          minStrings: 101n,
+        };
+        assert.deepStrictEqual(
+          validateExtendedText(over, yield* decoded(over, entriesOf("a", "b")), strict),
+          [],
+        );
+
+        const three = yield* decoded(over, entriesOf("a", "b", "c"));
+        for (const configuration of [lenient, strict]) {
+          assert.deepStrictEqual(validateExtendedText(over, three, configuration), [
+            { response, text: message("en", "atMostStrings", { n: "2" }) },
+          ]);
+        }
+
+        const overMasked: ExtendedTextInteraction = {
+          ...over,
+          patternMask: Option.some("[a-z ]+"),
+          patternMaskMessage: Option.some("Write in lower-case words."),
+        };
+        assert.deepStrictEqual(
+          validateExtendedText(
+            overMasked,
+            yield* decoded(overMasked, entriesOf("nile", "Amazon")),
+            strict,
+          ),
+          [{ response, text: "Write in lower-case words." }],
+        );
       }),
   );
 });

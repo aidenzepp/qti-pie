@@ -74,7 +74,9 @@ const validate = (
  * Each interaction of the item, in document order, validates its response: a host that posts a
  * native form passes what `decode` gave for each response, a {@link Malformed} included, and a
  * form-library host passes values. A response left out is NULL. Tier (a) limits apply always and
- * tier (b) ones only under `configuration.validateResponses`.
+ * tier (b) ones only under `configuration.validateResponses`. An Extended Text that renders the
+ * cap's notice in place of its Controls (Q23) is not judged against its `min-strings`, so a post
+ * with no entry for it never holds its item back.
  *
  * @example
  *   checkResponses(accepted, { RESPONSE: decoded }, configuration);
