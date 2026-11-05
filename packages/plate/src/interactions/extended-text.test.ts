@@ -198,6 +198,38 @@ const payloadOf = (
 ): Payload => payload(redactItem(itemOf(...interactions)), view);
 
 /**
+ * Construct a paragraph that carries an authored id, which an `aria-labelledby` can name.
+ *
+ * @param id The id.
+ * @param value The paragraph's text.
+ * @returns The paragraph.
+ */
+const idParagraph = (id: string, value: string): BodyNode => ({
+  attributes: [{ name: "id", value: id }],
+  children: [words(value)],
+  kind: "element",
+  path: `qti-assessment-item/qti-item-body/p[@id="${id}"]`,
+  tag: "p",
+});
+
+/**
+ * Compute the payload of an item holding the given Extended Texts, then paragraphs after them,
+ * so the Extended Texts keep their places at the start of the body.
+ *
+ * @param labels The paragraphs, such as {@link idParagraph} ones.
+ * @param interactions The Extended Texts, in body order.
+ * @returns The payload of the redacted item, for a first render.
+ */
+const payloadBeside = (
+  labels: readonly BodyNode[],
+  interactions: readonly ExtendedTextInteraction[],
+): Payload =>
+  payload(
+    redactItem({ ...itemOf(...interactions), body: [...interactions, ...labels] }),
+    answering,
+  );
+
+/**
  * Give the Extended Text payload at a position of a payload's body.
  *
  * @param built The payload.
@@ -387,7 +419,10 @@ describe("renderExtendedText", () => {
         assert.strictEqual(labelledControl.attrs["aria-label"], "Your essay");
         assert.isUndefined(labelledControl.attrs["aria-labelledby"]);
 
-        const referenced = payloadOf([{ ...bare, ariaLabelledby: Option.some("intro hint") }]);
+        const referenced = payloadBeside(
+          [idParagraph("intro", "Your day"), idParagraph("hint", "in five lines")],
+          [{ ...bare, ariaLabelledby: Option.some("intro hint") }],
+        );
         const referencedControl = onePart(yield* render(referenced), "control");
 
         assert.strictEqual(
@@ -952,7 +987,10 @@ describe("an Extended Text bound to a container", () => {
         );
 
         const referenced = yield* render(
-          payloadOf([{ ...unprompted, ariaLabelledby: Option.some("intro") }]),
+          payloadBeside(
+            [idParagraph("intro", "Rivers")],
+            [{ ...unprompted, ariaLabelledby: Option.some("intro") }],
+          ),
         );
         assert.strictEqual(referenced.attrs["aria-labelledby"], authoredId(instance, "intro"));
         assert.isUndefined(referenced.attrs["aria-label"]);
@@ -1215,6 +1253,108 @@ describe("an Extended Text bound to a container", () => {
           ),
           [],
         );
+      }),
+  );
+});
+
+describe("an Extended Text whose aria-labelledby names an id no element of the item carries", () => {
+  it.effect(
+    "[Q-5] with no Prompt, writes no aria-labelledby whose ids name no element of the item, and names each Control the renderer's way",
+    () =>
+      Effect.gen(function* danglingAriaLabelledby() {
+        for (const ids of ["nope", "nope missing"]) {
+          const tree = yield* pageOf(
+            payloadOf([
+              { ...bare, ariaLabelledby: Option.some(ids) },
+              { ...bare, response: "NOTES" },
+            ]),
+          );
+          const controls = partsIn(tree, "control");
+
+          assert.deepStrictEqual(
+            controls.map((control) => control.attrs["aria-labelledby"]),
+            [undefined, undefined],
+            ids,
+          );
+          assert.deepStrictEqual(
+            controls.map((control) => control.attrs["aria-label"]),
+            [...answersOf(2)],
+            ids,
+          );
+          assert.deepStrictEqual(
+            controls.map((control) => nameOf(control, tree)),
+            answersOf(2),
+            ids,
+          );
+          assert.deepStrictEqual(checkTree(tree, { baseLevel: 2 }), [], ids);
+        }
+      }),
+  );
+
+  it.effect(
+    "[Q-5] with no Prompt, keeps the ids of the author's aria-labelledby that name an element of the item, and drops the others",
+    () =>
+      Effect.gen(function* partlyDangling() {
+        const tree = yield* pageOf(
+          payloadBeside(
+            [idParagraph("intro", "Your day")],
+            [{ ...bare, ariaLabelledby: Option.some("intro nope") }],
+          ),
+        );
+        const control = onePart(tree, "control");
+
+        assert.strictEqual(control.attrs["aria-labelledby"], authoredId(instance, "intro"));
+        assert.isUndefined(control.attrs["aria-label"]);
+        assert.strictEqual(nameOf(control, tree), "Your day");
+        assert.deepStrictEqual(checkTree(tree, { baseLevel: 2 }), []);
+      }),
+  );
+
+  it.effect(
+    "[Q-20] [Q-5] numbers a group whose aria-labelledby names no element of the item as an unnamed one, and writes no aria-labelledby on its Root",
+    () =>
+      Effect.gen(function* danglingGroup() {
+        const tree = yield* pageOf(
+          payload(
+            redactItem(
+              besideCity({ ...rivers, ariaLabelledby: Option.some("nope"), prompt: Option.none() }),
+            ),
+            answering,
+          ),
+        );
+        const inputs = elementsIn(tree).filter((element) => element.tag === "input");
+        const root = onePart(tree, "root");
+
+        assert.strictEqual(root.attrs["role"], "group");
+        assert.isUndefined(root.attrs["aria-labelledby"]);
+        assert.isUndefined(root.attrs["aria-label"]);
+        assert.deepStrictEqual(
+          [...inputs, ...partsIn(tree, "control")].map((control) => nameOf(control, tree)),
+          answersOf(4),
+        );
+        assert.deepStrictEqual(checkTree(tree, { baseLevel: 2 }), []);
+        assert.isTrue(roundTrips(tree));
+      }),
+  );
+
+  it.effect(
+    "[Q-5] with no Prompt, names a group by the ids of its aria-labelledby that name an element of the item, and drops the others",
+    () =>
+      Effect.gen(function* partlyDanglingGroup() {
+        const tree = yield* pageOf(
+          payloadBeside(
+            [idParagraph("intro", "Rivers")],
+            [{ ...rivers, ariaLabelledby: Option.some("nope intro"), prompt: Option.none() }],
+          ),
+        );
+        const root = onePart(tree, "root");
+
+        assert.strictEqual(root.attrs["role"], "group");
+        assert.strictEqual(root.attrs["aria-labelledby"], authoredId(instance, "intro"));
+        assert.strictEqual(nameOf(root, tree), "Rivers");
+        assert.deepStrictEqual(controlNames(root, tree), answersOf(3));
+        assert.deepStrictEqual(checkTree(tree, { baseLevel: 2 }), []);
+        assert.isTrue(roundTrips(tree));
       }),
   );
 });

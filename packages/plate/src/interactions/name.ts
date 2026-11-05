@@ -5,21 +5,25 @@
  * A Choice, a Text Entry and an Extended Text each read the author's `aria-label` and
  * `aria-labelledby` here, so every interaction scopes the author's ids the same way.
  *
+ * An id of the author's `aria-labelledby` counts only when an element of the item carries it
+ * ({@link resolvedLabelledby}); the payload keeps those ids alone, so no reference the renderer
+ * writes names nothing.
+ *
  * The renderer names a control only when the author gave it no name, by Q10's rule: each Control
- * of a text control with no Prompt and no `aria-label` or `aria-labelledby` (a blank `aria-label`
- * and an `aria-labelledby` that names no id each counting as none) is "Answer", or
- * "Answer n of count", `n` its position among every Control the renderer names in the item and
- * `count` their number ({@link textControlName}); a Choice whose content gives no text is "Choice n
- * of count", `n` its position among the Choices as emitted and `count` their number
- * ({@link choiceControlName}). A Choice's content gives text when its text nodes, an `img`'s
- * `alt`, an element's `aria-label` or a notice hold anything but whitespace, `aria-hidden="true"`
- * content left out ({@link givesText}).
+ * of a text control with no Prompt and no `aria-label` or `aria-labelledby` (a blank `aria-label`,
+ * and an `aria-labelledby` none of whose ids an element of the item carries, each counting as
+ * none) is "Answer", or "Answer n of count", `n` its position among every Control the renderer
+ * names in the item and `count` their number ({@link textControlName}); a Choice whose content
+ * gives no text is "Choice n of count", `n` its position among the Choices as emitted and `count`
+ * their number ({@link choiceControlName}). A Choice's content gives text when its text nodes, an
+ * `img`'s `alt`, an element's `aria-label` or a notice hold anything but whitespace,
+ * `aria-hidden="true"` content left out ({@link givesText}).
  *
  * @module
  */
 import { Option } from "effect";
 import type { Attributes } from "#plate/emit/node.ts";
-import { authoredIdrefs } from "#plate/emit/parts.ts";
+import { authoredIdrefs, splitTokens } from "#plate/emit/parts.ts";
 import { message, numeral } from "#plate/messages.ts";
 import type { Locale } from "#plate/messages.ts";
 import { trimXmlSpace } from "#plate/model/values.ts";
@@ -101,8 +105,31 @@ export const authorsLabel = (names: Pick<TextName, "ariaLabel">): Option.Option<
   names.ariaLabel.pipe(Option.filter((label) => trimXmlSpace(label) !== ""));
 
 /**
+ * Keep the ids of the author's `aria-labelledby` that an element of the item carries, in the
+ * author's order, joined by one space; none when the author wrote none, or wrote one none of whose
+ * ids an element carries. The accessible-name computation follows only an id that names an
+ * element (accname 1.2, step 2B), so a Control whose every id names nothing would have no name at
+ * all: such an `aria-labelledby` is no name, and is not written.
+ *
+ * @param names The author's names, the ids unscoped.
+ * @param ids The ids the author gave the item's elements, unscoped.
+ * @returns The ids that name an element, unscoped, or none.
+ * @see https://www.w3.org/TR/accname-1.2/#comp_labelledby
+ */
+export const resolvedLabelledby = (
+  names: Pick<TextName, "ariaLabelledby">,
+  ids: ReadonlySet<string>,
+): Option.Option<string> =>
+  names.ariaLabelledby.pipe(
+    Option.map((value) => splitTokens(value).filter((id) => ids.has(id))),
+    Option.filter((kept) => kept.length > 0),
+    Option.map((kept) => kept.join(" ")),
+  );
+
+/**
  * Give the author's `aria-labelledby` with each id scoped by the instance through
- * `authoredIdrefs`, none when the author wrote none or wrote one that names no id.
+ * `authoredIdrefs`, none when the author wrote none or wrote one that names no id. The payload
+ * holds only the ids an element of the item carries ({@link resolvedLabelledby}).
  *
  * @param names The author's names, the ids unscoped.
  * @param instance The item instance key, which scopes the author's ids.
@@ -117,8 +144,8 @@ const authorsLabelledby = (
 /**
  * Give the names the author wrote: `aria-label` as written, and `aria-labelledby` with each id
  * scoped by the instance through `authoredIdrefs`, joined by one space. A blank `aria-label`
- * ({@link authorsLabel}) and an `aria-labelledby` that names no id are no names, and are not
- * written.
+ * ({@link authorsLabel}) and an `aria-labelledby` that names no id an element of the item carries
+ * ({@link resolvedLabelledby}) are no names, and are not written.
  *
  * @param names The author's `aria-label` and `aria-labelledby`, the ids unscoped.
  * @param instance The item instance key, which scopes the author's ids.
@@ -142,9 +169,10 @@ export const authorsName = (
  * Name a Control of a text control that no Prompt names (§4.8, Q10).
  *
  * The author's `aria-label` and `aria-labelledby` win ({@link authorsName}). A control with
- * neither, a blank `aria-label` and an `aria-labelledby` that names no id each counting as none, is
- * named by the renderer: "Answer", or "Answer n of count" when the item holds more than one Control
- * the renderer names, `n` the Control's position among them ({@link TextName}).
+ * neither, a blank `aria-label` and an `aria-labelledby` that names no id an element of the item
+ * carries each counting as none, is named by the renderer: "Answer", or "Answer n of count" when
+ * the item holds more than one Control the renderer names, `n` the Control's position among them
+ * ({@link TextName}).
  *
  * @param name How the control is named, from the payload.
  * @param instance The item instance key, which scopes the author's ids.
