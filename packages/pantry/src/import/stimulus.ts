@@ -9,6 +9,7 @@
  * bare (goal 5.15, E4): no `InteractionBinding` and no reference row is written, and none is
  * refused as `binding-declared`.
  */
+import type { Uuid } from "@bjornpagen/grizzle";
 import { Effect, Option } from "effect";
 import { attributeRows } from "#pantry/import/attributes.ts";
 import { contentRows } from "#pantry/import/content.ts";
@@ -54,7 +55,7 @@ const written = <Value, Made>(value: Option.Option<Value>, make: (own: Value) =>
  */
 const toolRows = (
   rows: Rows,
-  tree: string,
+  tree: Uuid,
   name: Option.Option<string>,
   version: Option.Option<string>,
 ): Rows => {
@@ -105,7 +106,7 @@ export const stimulusRows = Effect.fn("import.stimulusRows")(function* stimulusR
   input: ItemInput,
   rows: Rows,
 ): Effect.fn.Return<
-  { rows: Rows; nodes: NodeIndex; documentId: string },
+  { rows: Rows; nodes: NodeIndex; documentId: Uuid },
   ImportRefused | UnmodeledVocabulary | ItemRefusal
 > {
   const { doc, packageId, version } = input;

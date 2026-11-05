@@ -1,5 +1,6 @@
 /* oxlint-disable anti-slop/no-shape-in-symbol-names -- `shape` is the tool column the rows under test carry; the shape here is which of the two tool attributes the root wrote, not a structure. */
 import path from "node:path";
+import type { Uuid } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect, FileSystem, Option } from "effect";
@@ -50,7 +51,7 @@ import {
 import { materializeSpec } from "#pantry/test/fixtures.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 
-const packageId = "33333333-3333-4333-8333-333333333333";
+const packageId: Uuid = "33333333-3333-4333-8333-333333333333";
 
 const asi = "http://www.imsglobal.org/xsd/imsqtiasi_v3p0";
 

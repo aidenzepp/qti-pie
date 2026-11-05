@@ -10,6 +10,7 @@
  * The rules, the content, the test's processing and every row that spans documents are not written
  * here.
  */
+import type { Uuid } from "@bjornpagen/grizzle";
 import { Effect, Option } from "effect";
 import type { ImportRefused } from "#pantry/import/refusal.ts";
 import { attributeReader, markers } from "#pantry/import/interactions.ts";
@@ -98,7 +99,7 @@ type HolderHandle = (typeof StructureHolder.handles)[number];
  * sits under and the document.
  */
 interface Site {
-  readonly documentId: string;
+  readonly documentId: Uuid;
   readonly element: Element;
   readonly node: IndexedNode;
   readonly parent: Option.Option<IndexedNode>;
@@ -194,12 +195,7 @@ const childRows = (
  * The `TestIdentifier` row of a part, section, section ref or item ref: its identifier within the
  * document that declares it.
  */
-const identifierRow = (
-  rows: Rows,
-  node: IndexedNode,
-  identifier: string,
-  documentId: string,
-): Rows =>
+const identifierRow = (rows: Rows, node: IndexedNode, identifier: string, documentId: Uuid): Rows =>
   Rows.add(
     rows,
     TestIdentifier,
@@ -618,7 +614,7 @@ const timeLimitsRows = Effect.fn("import.test.timeLimitsRows")(function* timeLim
  */
 const toolRows = (
   rows: Rows,
-  tree: string,
+  tree: Uuid,
   name: Option.Option<string>,
   version: Option.Option<string>,
 ): Rows => {
@@ -683,7 +679,7 @@ const elementRows = Effect.fn("import.test.elementRows")(function* elementRows(
   rows: Rows,
   root: Element,
   nodes: NodeIndex,
-  documentId: string,
+  documentId: Uuid,
 ): Effect.fn.Return<Rows, ImportRefused | ItemRefusal> {
   let built = rows;
   for (const [element, parent] of withParents(root, Option.none())) {
@@ -732,7 +728,7 @@ export const testRows = Effect.fn("import.testRows")(function* testRows(
   input: ItemInput,
   rows: Rows,
 ): Effect.fn.Return<
-  { rows: Rows; nodes: NodeIndex; documentId: string },
+  { rows: Rows; nodes: NodeIndex; documentId: Uuid },
   ImportRefused | UnmodeledVocabulary | ItemRefusal
 > {
   const { doc, packageId, version } = input;
