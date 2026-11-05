@@ -8,7 +8,8 @@ Store QTI 3.0 packages in a strict PostgreSQL model, and export them unchanged.
 
 pantry imports a QTI 3.0 package, a directory or a `.zip` file, into a local PostgreSQL database, and exports it back
 to files. It exists first to put [grizzle](../../vendor/README.md) through a large, real data model, so delivery is
-out of scope. It is pre-release, exports nothing as a library, and reads XML through [crust](../crust/README.md).
+out of scope. It is pre-release, it is not a library (its `package.json` exports nothing), and it reads XML through
+[crust](../crust/README.md).
 
 ## Install
 
@@ -18,8 +19,7 @@ From the repository root, after the setup in [qti-pie's README](../../README.md#
 pnpm install --frozen-lockfile
 ```
 
-The database is grizzle's patched PostgreSQL 19rc1 on `localhost:5433`, with verify-full TLS only. Building it and
-choosing a server are described in [`AGENTS.md`](../../AGENTS.md#local-database).
+The database is grizzle's patched PostgreSQL 19rc1 on `localhost:5433`, with verify-full TLS only. [`AGENTS.md`](../../AGENTS.md#local-database) describes how to build it and how to choose a server.
 
 ## Start
 
@@ -45,8 +45,7 @@ $ node src/cli.ts roundtrip ./my-package
 | `completions` | no                    | Prints a shell completion script                        |
 
 Every input is a path. Nothing is read from standard input. `--dry-run` reads and checks without writing. `export`
-needs `--yes` to replace a directory that already has content. `--output json` prints one JSON value, and exit codes
-are listed in `--help`, which is the reference for the flags.
+needs `--yes` to replace a directory that already has content. `--output json` prints one JSON value. `--help` is the reference for the flags and the exit codes.
 
 `scripts/db.sh reset` drops the database and this package's roles, then creates and migrates again.
 
