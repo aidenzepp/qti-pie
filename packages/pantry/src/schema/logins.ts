@@ -2,10 +2,10 @@
  * The logins that open a connection: the author application, with the export queries in its
  * workload.
  *
- * The import is not a program of the workload. One `ChangeSet` over `Author` with a relation
- * parameter for each of the relations the author role writes compiles to a statement larger than a
- * program may hold: 1,608,527 bytes against the 1,048,576 `Db.open` allows, which `grizzle
- * generate` does not check. `importPackage` applies an ad hoc `ChangeSet` instead.
+ * The import is not a program of the workload. No cap refuses a `ChangeSet` over `Author` with a
+ * relation parameter for each of the relations the author role writes, but building it (847
+ * inserts) costs about a minute of CPU at module load. `importPackage` applies an ad hoc
+ * `ChangeSet` instead.
  */
 import { login, workload } from "@bjornpagen/grizzle";
 import { documentIdsOf, nodeQueries, treeOf } from "#pantry/export/queries.ts";
