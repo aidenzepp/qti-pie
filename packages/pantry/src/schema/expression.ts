@@ -7,14 +7,16 @@
  * `qti-base-value` is not a relation of this module: its arm is `Literal` of the processing
  * module.
  */
-import { closedId, contained, on, relation, uuid } from "@bjornpagen/grizzle";
+import { check, closedId, contained, on, relation, uuid } from "@bjornpagen/grizzle";
 import { StructureHolder } from "#pantry/schema/content/rosters.ts";
 import {
   CategoryList,
   SectionReference,
   TestStructureIdentifier,
 } from "#pantry/schema/contracts.ts";
+import { Node } from "#pantry/schema/node.ts";
 import * as processing from "#pantry/schema/processing.ts";
+import { TestDocument, TestReach } from "#pantry/schema/test/structure.ts";
 
 /**
  * The `qti-and` operator; its operands are `Operand` rows.
@@ -379,7 +381,13 @@ export const relations = {
 
 /**
  * The statements over this module's relations: every arm row is an expression, an outcome-only
- * counter's filter belongs to an expression, and a reference leaf has its `VariableRef` row.
+ * counter's filter belongs to an expression, a reference leaf has its `VariableRef` row, and a
+ * section identifier target names a node of its document, a document its test reaches and an
+ * identifier its test reaches held by a section or a section reference.
+ *
+ * The containment of `ExpressionSectionIdentifier` into the target is not written here: grizzle
+ * refuses a containment between two contracts while `value` is `SectionReference`, so it comes
+ * with the retype of that column.
  */
 export const rules = [
   contained(on(And, "id"), on(processing.Expression, "id")),
@@ -431,4 +439,13 @@ export const rules = [
   contained(on(Correct, "id"), on(processing.VariableRef, "id")),
   contained(on(MapResponse, "id"), on(processing.VariableRef, "id")),
   contained(on(MapResponsePoint, "id"), on(processing.VariableRef, "id")),
+  contained(on(SectionIdentifierTarget, "node", "document"), on(Node, "id", "tree")),
+  contained(on(SectionIdentifierTarget, "test", "document"), on(TestDocument, "test", "document")),
+  contained(
+    on(SectionIdentifierTarget, "test", "identifier", "holderKind"),
+    on(TestReach, "test", "identifier", "holderKind"),
+  ),
+  check("SectionIdentifierTargetHolderKind", SectionIdentifierTarget, (row) =>
+    row.or(row.eq(row.holderKind, "section"), row.eq(row.holderKind, "sectionRef")),
+  ),
 ] as const;
