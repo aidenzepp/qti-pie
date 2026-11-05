@@ -4,13 +4,13 @@
  *
  * {@link runRules} runs response rules in order, and {@link evaluateExpression} gives the value of
  * one expression. They take rules the item model ({@link Item}) built and variables that hold a
- * value for every modelled declaration, as the session record does. A rule that names an identifier
- * outside them, sets an outcome to a value of another type, or maps a response that has no mapping
- * is a failure of what the caller passed, and the caller can cause each one: the variables come
- * from a record the host hands back. An identifier the variables hold no value of is the record's
- * gap, and one the item declares nothing of is the item's; the failure says which. So the
- * functions stay plain and synchronous and return each failure, an {@link EngineFailure}, in a
- * `Result`; the first failure ends the run.
+ * value for every modelled declaration, as the session record does, and the attempt count the
+ * built-in `numAttempts` reads. A rule that names an identifier outside them, sets an outcome to a
+ * value of another type, or maps a response that has no mapping is a failure of what the caller
+ * passed, and the caller can cause each one: the variables come from a record the host hands back.
+ * An identifier the variables hold no value of is the record's gap, and one the item declares
+ * nothing of is the item's; the failure says which. So the functions stay plain and synchronous and
+ * return each failure, an {@link EngineFailure}, in a `Result`; the first failure ends the run.
  *
  * @module
  */
@@ -29,12 +29,23 @@ import { isNull, match, nullOf } from "#plate/model/values.ts";
 import type { Single, Value } from "#plate/model/values.ts";
 
 /**
- * The variables of one attempt: each response and each outcome by identifier.
+ * The variables of one attempt: each response and each outcome by identifier, and the attempt
+ * count.
  *
  * Responses and outcomes share one identifier space, because declaration identifiers are unique
  * together, so a `qti-variable` names at most one of them.
  */
 export interface Variables {
+  /**
+   * The value of the built-in response variable `numAttempts`: the number of attempts at the
+   * item, the one being processed included, because the count "increases by '1' at the start of
+   * each attempt". `runAttempt` in `#plate/engine/attempt.ts` always gives it. Without it, a
+   * `qti-variable` of `numAttempts` is the record's gap, as any other variable the record holds
+   * no value of.
+   *
+   * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#IV_Response
+   */
+  readonly numAttempts?: bigint;
   readonly outcomes: Readonly<Record<string, Value>>;
   readonly responses: Readonly<Record<string, Value>>;
 }
@@ -168,19 +179,42 @@ const own = (values: Readonly<Record<string, Value>>, identifier: string): Optio
   Object.hasOwn(values, identifier) ? Option.fromUndefinedOr(values[identifier]) : Option.none();
 
 /**
- * Give the value of a `qti-variable`: the response or the outcome of that identifier.
+ * Give the value of the built-in variable an identifier names, when the variables carry it: for
+ * `numAttempts`, the attempt count as a single integer.
  *
  * @param variables The variables of the attempt.
  * @param identifier The variable's identifier.
- * @returns Its current value, or an {@link UnknownIdentifierError} when neither the responses nor
- *   the outcomes hold it.
+ * @returns The value, or none for any other identifier and when the variables carry no count.
+ */
+const builtInValue = (variables: Variables, identifier: string): Option.Option<Value> =>
+  identifier === "numAttempts"
+    ? Option.map(Option.fromUndefinedOr(variables.numAttempts), (count): Value => ({
+        baseType: "integer",
+        cardinality: "single",
+        values: [{ baseType: "integer", value: count }],
+      }))
+    : Option.none();
+
+/**
+ * Give the value of a `qti-variable`: the response or the outcome of that identifier, else the
+ * built-in variable of that name.
+ *
+ * A declared variable wins over a built-in of the same name, as the prose rules read a reference
+ * (`variableType` in `#plate/validate/rules.ts`).
+ *
+ * @param variables The variables of the attempt.
+ * @param identifier The variable's identifier.
+ * @returns Its current value, or an {@link UnknownIdentifierError} when neither the responses, the
+ *   outcomes nor the built-in variables hold it.
  */
 const variableValue = (
   variables: Variables,
   identifier: string,
 ): Result.Result<Value, UnknownIdentifierError> =>
   Result.fromOption(
-    Option.orElse(own(variables.responses, identifier), () => own(variables.outcomes, identifier)),
+    Option.orElse(own(variables.responses, identifier), () =>
+      Option.orElse(own(variables.outcomes, identifier), () => builtInValue(variables, identifier)),
+    ),
     () => new UnknownIdentifierError({ holder: "record", identifier, role: "variable" }),
   );
 

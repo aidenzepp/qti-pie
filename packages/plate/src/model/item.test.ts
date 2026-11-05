@@ -1970,6 +1970,138 @@ describe("buildItem", () => {
     }),
   );
 
+  it.effect("keeps inline rules that read the built-in numAttempts, with no mark", () =>
+    Effect.gen(function* keepsNumAttempts() {
+      const built = yield* buildItem(
+        item({
+          after: [
+            el(
+              "qti-response-processing",
+              [],
+              [
+                el(
+                  "qti-set-outcome-value",
+                  [attr("identifier", "ATTEMPTS")],
+                  [el("qti-variable", [attr("identifier", "numAttempts")])],
+                ),
+              ],
+            ),
+          ],
+          body: [],
+          declarations: [declaration("qti-outcome-declaration", "ATTEMPTS", "integer", "single")],
+        }),
+      );
+
+      assert.deepStrictEqual(
+        built.processing,
+        Option.some([
+          {
+            expression: { identifier: "numAttempts", kind: "variable" },
+            identifier: "ATTEMPTS",
+            kind: "set-outcome",
+          },
+        ]),
+      );
+      assert.deepStrictEqual(built.unsupported, []);
+    }),
+  );
+
+  it.effect(
+    "marks inline rules that read or set the built-in duration or completionStatus, which stay unheld",
+    () =>
+      Effect.gen(function* marksUnheldBuiltIns() {
+        const cases = [
+          { identifier: "completionStatus", rule: "read" },
+          { identifier: "completionStatus", rule: "set" },
+          { identifier: "duration", rule: "set" },
+        ] as const;
+
+        for (const { identifier, rule } of cases) {
+          const ruleElement =
+            rule === "read"
+              ? el(
+                  "qti-set-outcome-value",
+                  [attr("identifier", "STATUS")],
+                  [el("qti-variable", [attr("identifier", identifier)])],
+                )
+              : el(
+                  "qti-set-outcome-value",
+                  [attr("identifier", identifier)],
+                  [el("qti-base-value", [attr("base-type", "identifier")], [text("completed")])],
+                );
+          const built = yield* buildItem(
+            item({
+              after: [el("qti-response-processing", [], [ruleElement])],
+              body: [],
+              declarations: [
+                declaration("qti-outcome-declaration", "STATUS", "identifier", "single"),
+              ],
+            }),
+          );
+
+          assert.deepStrictEqual(built.processing, Option.none(), `${rule} ${identifier}`);
+          assert.deepStrictEqual(
+            built.unsupported,
+            [
+              {
+                feature: `variable:${identifier}`,
+                path: `${root}/qti-response-processing`,
+                shown: "mark",
+              },
+            ],
+            `${rule} ${identifier}`,
+          );
+        }
+      }),
+  );
+
+  it.effect(
+    "marks inline rules that read numAttempts where the item declares a variable by that name the model does not hold",
+    () =>
+      Effect.gen(function* marksDeclaredNumAttempts() {
+        const built = yield* buildItem(
+          item({
+            after: [
+              el(
+                "qti-response-processing",
+                [],
+                [
+                  el(
+                    "qti-set-outcome-value",
+                    [attr("identifier", "ATTEMPTS")],
+                    [el("qti-variable", [attr("identifier", "numAttempts")])],
+                  ),
+                ],
+              ),
+            ],
+            body: [],
+            declarations: [
+              declaration("qti-outcome-declaration", "ATTEMPTS", "integer", "single"),
+              el("qti-template-declaration", [
+                attr("base-type", "integer"),
+                attr("cardinality", "single"),
+                attr("identifier", "numAttempts"),
+              ]),
+            ],
+          }),
+        );
+
+        assert.deepStrictEqual(built.processing, Option.none());
+        assert.deepStrictEqual(built.unsupported, [
+          {
+            feature: "qti-template-declaration",
+            path: `${root}/qti-template-declaration`,
+            shown: "mark",
+          },
+          {
+            feature: "variable:numAttempts",
+            path: `${root}/qti-response-processing`,
+            shown: "mark",
+          },
+        ]);
+      }),
+  );
+
   it.effect("[I-9b] marks inline rules that read a template variable as variable:T", () =>
     Effect.gen(function* marksTemplateVariable() {
       const built = yield* buildItem(
