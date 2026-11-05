@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Effect, Option, Result } from "effect";
+import { Array as Arr, Effect, Option, Result } from "effect";
 import { attr, doc, el, text } from "#plate/document/source.ts";
 import {
   OutcomeMismatchError,
@@ -21,8 +21,8 @@ import type {
   Rule,
 } from "#plate/model/item.ts";
 import { buildItem } from "#plate/model/item.ts";
-import { nullOf } from "#plate/model/values.ts";
-import type { Single, Value } from "#plate/model/values.ts";
+import { match, nullOf, parseLexical } from "#plate/model/values.ts";
+import type { ModelledBaseType, Single, Value } from "#plate/model/values.ts";
 
 /**
  * Construct a single identifier value.
@@ -187,6 +187,76 @@ const paired: ResponseDeclaration = {
   }),
 };
 
+/**
+ * Construct a multiple response with a mapping.
+ *
+ * @param identifier The response's identifier.
+ * @param baseType Its base type.
+ * @param mapping Its mapping.
+ * @returns The declaration.
+ */
+const mappedMultiple = (
+  identifier: string,
+  baseType: ModelledBaseType,
+  mapping: Mapping,
+): ResponseDeclaration => ({
+  areaMapping: Option.none(),
+  baseType,
+  cardinality: "multiple",
+  correct: Option.none(),
+  defaultValue: Option.none(),
+  identifier,
+  mapping: Option.some(mapping),
+});
+
+/**
+ * A multiple string response with BG010's mapping.
+ */
+const strings = mappedMultiple("STRINGS", "string", yorkMapping);
+
+/**
+ * A multiple integer response mapping 5 to 1; every other integer maps to 0.25.
+ */
+const integers = mappedMultiple("INTEGERS", "integer", {
+  defaultValue: 0.25,
+  entries: [{ caseSensitive: false, key: { baseType: "integer", value: 5n }, value: 1 }],
+  lowerBound: Option.none(),
+  upperBound: Option.none(),
+});
+
+/**
+ * A multiple float response mapping 1 to 1; every other float maps to 0.125.
+ */
+const floats = mappedMultiple("FLOATS", "float", {
+  defaultValue: 0.125,
+  entries: [{ caseSensitive: false, key: { baseType: "float", value: 1 }, value: 1 }],
+  lowerBound: Option.none(),
+  upperBound: Option.none(),
+});
+
+/**
+ * A multiple pair response mapping the pair `A B` to 1; every other pair maps to 0.5.
+ */
+const pairs = mappedMultiple("PAIRS", "pair", {
+  defaultValue: 0.5,
+  entries: [{ caseSensitive: false, key: { baseType: "pair", value: ["A", "B"] }, value: 1 }],
+  lowerBound: Option.none(),
+  upperBound: Option.none(),
+});
+
+/**
+ * A multiple directed pair response mapping `A B` to 1; every other directed pair, `B A` among
+ * them, maps to 0.5.
+ */
+const directed = mappedMultiple("DIRECTED", "directedPair", {
+  defaultValue: 0.5,
+  entries: [
+    { caseSensitive: false, key: { baseType: "directedPair", value: ["A", "B"] }, value: 1 },
+  ],
+  lowerBound: Option.none(),
+  upperBound: Option.none(),
+});
+
 /* oxlint-disable anti-slop/no-shape-in-symbol-names -- `shape` is the QTI attribute of `qti-area-map-entry` and names an area's geometry, not a structure. */
 /**
  * The area mapping of the point cases: the circle `102,113,16` mapped to 1, then the rect
@@ -293,6 +363,11 @@ const item: Item = {
     ["BOUNDED", bounded],
     ["CHOICES", choices],
     ["PAIRED", paired],
+    ["STRINGS", strings],
+    ["INTEGERS", integers],
+    ["FLOATS", floats],
+    ["PAIRS", pairs],
+    ["DIRECTED", directed],
     ["TARGET", target],
     ["CLAMPED", clamped],
     ["OVERLAPPING", overlapping],
@@ -357,6 +432,32 @@ const mapped = (identifier: string, values: readonly Single[]): Value =>
       ...variablesOf(identifierValue("A")),
       responses: { [identifier]: answerOf(identifier, values) },
     }),
+  );
+
+/**
+ * Read each lexical form as a value of a base type, as a post's members are read.
+ *
+ * @param baseType The base type.
+ * @param lexicals The lexical forms, as written.
+ * @returns The values, in order.
+ */
+const written = (baseType: ModelledBaseType, lexicals: readonly string[]): readonly Single[] =>
+  lexicals.map((lexical) => Result.getOrThrow(parseLexical(baseType, lexical)));
+
+/**
+ * Drop repeated values as the evaluator did before it keyed them: each value against every value
+ * kept before it, as `match` compares two single values. It is the reference the keyed dedupe must
+ * agree with.
+ *
+ * @param values The values.
+ * @returns The values no earlier value matches, in order.
+ */
+const pairwiseDistinct = (values: readonly Single[]): readonly Single[] =>
+  Arr.dedupeWith(values, (left, right) =>
+    match(
+      { baseType: left.baseType, cardinality: "single", values: [left] },
+      { baseType: right.baseType, cardinality: "single", values: [right] },
+    ),
   );
 
 /**
@@ -926,6 +1027,36 @@ describe("map-response", () => {
     );
   });
 
+  it("[I-9b] a multiple response counts a value once however it is written, as the pairwise comparison does", () => {
+    // Each NaN counts: `match` compares floats with `===`, so a NaN equals no value, itself included.
+    const cases = [
+      ["CHOICES", "identifier", ["A", "A", "C"], 1.5],
+      ["INTEGERS", "integer", ["5", "+5", "05", "-0", "0", "+0", "7"], 1.5],
+      ["FLOATS", "float", ["1", "1.0", "1e0", "+1.00", "10E-1", "0", "-0", "0.0"], 1.125],
+      ["FLOATS", "float", ["NaN", "NaN", "INF", "1e400", "-INF"], 0.625],
+      ["STRINGS", "string", ["York", "York", "york", "YORK", " York"], 2],
+      ["PAIRS", "pair", ["A B", "B A", "A\tB", "B  A", "A C", "C A"], 1.5],
+      ["DIRECTED", "directedPair", ["A B", "B A", "A  B", "B\nA"], 1.5],
+    ] as const;
+
+    for (const [identifier, baseType, lexicals, expected] of cases) {
+      const values = written(baseType, lexicals);
+
+      assert.deepStrictEqual(mapped(identifier, values), floatValue(expected), lexicals.join(","));
+      assert.deepStrictEqual(
+        mapped(identifier, values),
+        mapped(identifier, pairwiseDistinct(values)),
+        lexicals.join(","),
+      );
+    }
+  });
+
+  it("maps 50,000 distinct posted strings in time linear in their number", () => {
+    const posted = Array.from({ length: 50_000 }, (_, index) => stringOf(`v${index.toString(36)}`));
+
+    assert.deepStrictEqual(mapped("STRINGS", [...posted, stringOf("York")]), floatValue(1));
+  });
+
   it("refuses to map a response with no mapping", () => {
     const failure = failureOf(
       evaluateExpression(
@@ -964,6 +1095,32 @@ describe("map-response-point", () => {
       pointMapped("TARGET", [pointOf(200n, 200n), pointOf(300n, 300n), pointOf(200n, 200n)]),
       floatValue(0.5),
     );
+  });
+
+  it("[I-9b] counts a point once however it is written, as the pairwise comparison does", () => {
+    const points = written("point", [
+      "200 300",
+      "+200 0300",
+      "200\t300",
+      "300 200",
+      "0 -500",
+      "-0 -500",
+      "+0 -0500",
+      "102 113",
+      "102  +113",
+    ]);
+
+    assert.deepStrictEqual(pointMapped("TARGET", points), floatValue(1.75));
+    assert.deepStrictEqual(
+      pointMapped("TARGET", points),
+      pointMapped("TARGET", pairwiseDistinct(points)),
+    );
+  });
+
+  it("maps 50,000 distinct points in time linear in their number", () => {
+    const points = Array.from({ length: 50_000 }, (_, index) => pointOf(BigInt(index), 1000n));
+
+    assert.deepStrictEqual(pointMapped("TARGET", points), floatValue(12_500));
   });
 
   it("[I-9b] a NULL response maps to 0 before the bounds, and the bounds clamp the sum", () => {
