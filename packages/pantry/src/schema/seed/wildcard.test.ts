@@ -1391,11 +1391,15 @@ describe.skipIf(!existsSync(cacheDirectory))(
       sameRows("opaqueGlobals", seed.opaqueGlobals.map(globalKey), [...roots, ...wholeSets]);
     });
 
-    it("globalAttribute is each set's declared attributes", () => {
+    it("globalAttribute is each set's declared attributes plus XML Schema's four xsi attributes", () => {
+      const xsi = ["type", "nil", "schemaLocation", "noNamespaceSchemaLocation"].map(
+        (local) => `${seed.namespaces.xsi}|${local}`,
+      );
+
       sameRows(
         "globalAttribute",
         seed.globalAttribute.map(globalKey),
-        sets.flatMap((set) => declaredAttributes(set).map((name) => `${set}|${name}`)),
+        sets.flatMap((set) => [...declaredAttributes(set), ...xsi].map((name) => `${set}|${name}`)),
       );
     });
 

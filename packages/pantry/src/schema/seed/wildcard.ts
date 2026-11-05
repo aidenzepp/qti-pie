@@ -74,8 +74,8 @@ export interface WildcardAttributeAdmissionRow {
 
 /**
  * The namespaces the tables name, by the prefix this repository gives each: the target namespaces
- * of the schema documents, `xml` for `w3/xml.xsd`'s, `xlink` for `w3/xlink.xsd`'s, and the
- * `xmlns` namespace declarations live in.
+ * of the schema documents, `xml` for `w3/xml.xsd`'s, `xlink` for `w3/xlink.xsd`'s, the
+ * `xmlns` namespace declarations live in, and `xsi` for XML Schema's instance namespace.
  */
 export const namespaces = {
   asi: "http://www.imsglobal.org/xsd/imsqtiasi_v3p0",
@@ -92,6 +92,7 @@ export const namespaces = {
   xlink: "http://www.w3.org/1999/xlink",
   xml: "http://www.w3.org/XML/1998/namespace",
   xmlns: "http://www.w3.org/2000/xmlns/",
+  xsi: "http://www.w3.org/2001/XMLSchema-instance",
 } as const;
 
 /**
@@ -925,7 +926,10 @@ export const globalElement: readonly GlobalRow[] = [
 
 /**
  * The global attributes each schema set declares: the four of `w3/xml.xsd` in the ASI and manifest
- * sets, and the ten of `w3/xlink.xsd` in the manifest set.
+ * sets, and the ten of `w3/xlink.xsd` in the manifest set; then, in every set, the four of XML
+ * Schema's instance namespace (`xsi:type`, `xsi:nil`, `xsi:schemaLocation` and
+ * `xsi:noNamespaceSchemaLocation`), which are XML Schema's own, declared in every schema (XML
+ * Schema Part 1, 3.2.7), not by any cached XSD.
  */
 export const globalAttribute: readonly GlobalRow[] = [
   { local: "lang", namespace: namespaces.xml, set: "asi" },
@@ -946,6 +950,22 @@ export const globalAttribute: readonly GlobalRow[] = [
   { local: "space", namespace: namespaces.xml, set: "manifest" },
   { local: "base", namespace: namespaces.xml, set: "manifest" },
   { local: "id", namespace: namespaces.xml, set: "manifest" },
+  { local: "type", namespace: namespaces.xsi, set: "asi" },
+  { local: "nil", namespace: namespaces.xsi, set: "asi" },
+  { local: "schemaLocation", namespace: namespaces.xsi, set: "asi" },
+  { local: "noNamespaceSchemaLocation", namespace: namespaces.xsi, set: "asi" },
+  { local: "type", namespace: namespaces.xsi, set: "manifest" },
+  { local: "nil", namespace: namespaces.xsi, set: "manifest" },
+  { local: "schemaLocation", namespace: namespaces.xsi, set: "manifest" },
+  { local: "noNamespaceSchemaLocation", namespace: namespaces.xsi, set: "manifest" },
+  { local: "type", namespace: namespaces.xsi, set: "lom" },
+  { local: "nil", namespace: namespaces.xsi, set: "lom" },
+  { local: "schemaLocation", namespace: namespaces.xsi, set: "lom" },
+  { local: "noNamespaceSchemaLocation", namespace: namespaces.xsi, set: "lom" },
+  { local: "type", namespace: namespaces.xsi, set: "usagedata" },
+  { local: "nil", namespace: namespaces.xsi, set: "usagedata" },
+  { local: "schemaLocation", namespace: namespaces.xsi, set: "usagedata" },
+  { local: "noNamespaceSchemaLocation", namespace: namespaces.xsi, set: "usagedata" },
 ];
 
 /**
