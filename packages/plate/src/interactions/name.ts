@@ -94,7 +94,7 @@ export const givesText = (nodes: readonly (BodyNode | PayloadNode)[]): boolean =
         return false;
       }
       default: {
-        // Only a payload that lost its type on the way here holds another kind.
+        // Only nodes that lost their type on the way here hold another kind.
         node satisfies never;
 
         return false;
