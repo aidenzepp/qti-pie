@@ -1205,8 +1205,8 @@ constant now always one hex literal. Then it moved to `fce1088` (`fce10882b08165
 `8439df91`), where a key's text budget counts the null bitmap: every B-tree entry is sized from the data offset after
 one (the engine's `src/schema/representability.ts:793`). Two exports packed identical tarballs, and the testing tarball
 and the skill are unchanged. The `Qti` schema does not yet compile at this pin, for a containment's reverse index that
-refuses an unbounded source column, which grizzle's lane K is fixing ("A containment's reverse index refuses a source
-column of no byte bound", below).
+refuses an unbounded source column, which grizzle's lane K fixed in `4b155e8` ("A containment's reverse index refuses a
+source column of no byte bound", below).
 
 ### What the pin resolves for qti-pie
 
@@ -1376,7 +1376,7 @@ column of no byte bound", below).
   becomes one of grizzle's kept cases. Nothing to file. Until it lands, `keyText` stays the 646-code-point pattern held
   to `keyTextBytes` (`e0fcddbf`).
 
-### A containment's reverse index refuses a source column of no byte bound (defect, fix in progress in grizzle's lane K)
+### A containment's reverse index refuses a source column of no byte bound (defect, fixed in `4b155e8`)
 
 At grizzle `f66c05b` and every pin after it, `a2ff5eb` and `fce1088` among them, the Qti schema does not compile. The
 first refusal comes from the reverse B-tree index that grizzle plans over a containment's source columns:
@@ -1427,8 +1427,18 @@ target's UNIQUE are both representable, and only the source's index is refused.
   - with no such run, the index is a hash index on one column;
   - PERIOD coverage gets the same rule, and the GiST bound is fixed;
   - only the target's UNIQUE can refuse.
-- **Status:** grizzle's lane K is fixing it before beta.1, so nothing is filed. The fixing hash is pending; N2's
-  repin B records it.
+- **Status:** fixed in `4b155e8` (`4b155e8a88860a5cac544f38fe664f33d43a0a98`), grizzle's lane K, pushed to grizzle
+  `main` with its gate green before beta.1, so nothing is filed. `git ls-remote` showed it as grizzle `origin/main` on
+  2026-11-06. By grizzle-c5's report of the fix:
+  - the reverse B-tree goes over the longest leading run of referencing columns whose entry fits, else it is a hash
+    index on one column;
+  - PERIOD coverage follows the same rule, with the GiST page as its bound;
+  - only the referenced UNIQUE must be bounded.
+
+  The commit's message is a copy of `fce1088`'s and does not describe this change, so it is not quoted here; grizzle
+  was asked to correct the record going forward. The reproduction's result at `4b155e8` (lane R87) and qti-pie's
+  repin to it (lane N2) are recorded here when they land.
+
 - **qti-pie:** no workaround. `Attribute.lexical` stays unbounded, as an attribute's lexical form is. Until the fix is
   pinned:
   - no snapshot can be generated at HEAD and no layer builds;
