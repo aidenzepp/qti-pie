@@ -370,7 +370,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     83,
     {
       owner:
-        "shred's `type-unresolved` over `xsi:type` values (B2); element and attribute name prefixes held by crust's reader (`WellFormednessError`, Namespaces in XML 1.0 §5 Prefix Declared), with no law over the stored rows; an SSML `role` item's and an `xs:QName` text's binding in scope, which no law reads, is its recorded limit (C48)",
+        "shred's `type-unresolved` over `xsi:type` values (B2); element and attribute name prefixes held by crust's reader (`WellFormednessError`, Namespaces in XML 1.0 §5 Prefix Declared), with no law over the stored rows; shred's `role-unresolved` over SSML `role` items; an `xs:QName` text's binding in scope, which no law reads, is its recorded limit (C48)",
       status: "P",
     },
   ],
