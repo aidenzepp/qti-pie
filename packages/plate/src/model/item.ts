@@ -41,18 +41,17 @@ import {
   xsInt,
 } from "#plate/model/attributes.ts";
 import type { AttributeRefusal, ModelWalk } from "#plate/model/attributes.ts";
-import { floatOrRefOf, toleranceModes } from "#plate/model/expression.ts";
 import type {
   Branch,
   DeclarationFacet,
   Expression,
   ExpressionType,
-  FloatOrRef,
   KindRule,
   ResultAttributes,
   Rule,
 } from "#plate/model/expression.ts";
-import { kindRules } from "#plate/model/expressions/read.ts";
+import { kindRules, landedKinds, readExpression } from "#plate/model/expressions/read.ts";
+import type { ExpressionReading } from "#plate/model/expressions/read.ts";
 import { translate } from "#plate/model/regex.ts";
 import { isModelled, parseElementText, parseLexical, trimXmlSpace } from "#plate/model/values.ts";
 import type { ModelledBaseType, Single, Value } from "#plate/model/values.ts";
@@ -523,6 +522,12 @@ interface Build extends ModelWalk {
    */
   readonly declarations: ReadonlyMap<string, SourceElement>;
   /**
+   * The names of the variables the item holds: every declaration's identifier and the built-in
+   * variables ({@link declaredNames}). A reader splits a string attribute's literal from a
+   * reference against them, and the walks judge an unchecked reference by them.
+   */
+  readonly names: ReadonlySet<string>;
+  /**
    * The paths each feature in `unsupported` was recorded at, keyed by the feature, so
    * {@link record} finds a repeat without scanning the features recorded so far.
    */
@@ -531,14 +536,13 @@ interface Build extends ModelWalk {
 }
 
 /**
- * The `qti-*` elements the model reads or renders.
+ * The `qti-*` elements the model reads or renders: those `renders` lists, the engine's response
+ * rules among them, and the element of each expression kind the registry has landed.
  */
-const readElements: ReadonlySet<string> = new Set(renders.elements);
-
-/**
- * The response-processing elements the engine runs.
- */
-const engineElements: ReadonlySet<string> = new Set(renders.engine);
+const readElements: ReadonlySet<string> = new Set([
+  ...renders.elements,
+  ...landedKinds.map((kind) => `qti-${kind}`),
+]);
 
 /**
  * The features marked on the verdict.
@@ -1451,78 +1455,31 @@ const unread = (
   });
 
 /**
- * Read a `qti-equal`: its two operands and its attributes, in its default `exact` tolerance mode.
- *
- * Its `tolerance-mode`, `tolerance`, `include-lower-bound` and `include-upper-bound` are read in
- * every mode, with the XSD's defaults: `exact`, no tolerance, and both bounds included. Each token
- * of `tolerance`, an XSD list whose tokens are a number or a variable's name, is classified by
- * {@link floatOrRefOf}.
- * A `qti-equal` in its `absolute` or `relative` mode is the mark `tolerance-mode="<mode>"` at its
- * path, and its operands are read after it, so every element in them the engine does not run is
- * marked too.
+ * Give the generic expression reader its context for a build: the walk, the names the item holds,
+ * and the build's two ways to record a mark, so `record` and the build stay here.
  *
  * @param build The build.
- * @param element The `qti-equal` element.
- * @returns The `equal` expression; none when it is in another tolerance mode or holds an element
- *   the engine does not run; or the refusal an operand gives, `attribute-type` for a
- *   `tolerance-mode` outside its three values, or `value-type` for a bound outside `xs:boolean`,
- *   which the validator refuses first.
+ * @returns The reading context.
  */
-const equalExpression = (
-  build: Build,
-  element: SourceElement,
-): Effect.Effect<Option.Option<Expression>, Refusal> =>
-  Effect.gen(function* readEqual() {
-    const [left, right, ...extra] = elementsOf(element);
-    if (left === undefined || right === undefined || extra.length > 0) {
-      return yield* unread(build, element);
-    }
-
-    const mode = Option.getOrElse(
-      yield* enumerated(build, element, "tolerance-mode", toleranceModes),
-      () => "exact" as const,
-    );
-    const includeLowerBound = yield* xsBoolean(build, element, "include-lower-bound", true);
-    const includeUpperBound = yield* xsBoolean(build, element, "include-upper-bound", true);
-    const tolerance = Option.match(valueOf(element, "tolerance"), {
-      onNone: (): readonly FloatOrRef[] => [],
-      onSome: (written) =>
-        written
-          .split(xmlWhitespaceRun)
-          .filter((token) => token !== "")
-          .map((token) => floatOrRefOf(token)),
-    });
-    if (mode !== "exact") {
-      yield* unread(build, element, `tolerance-mode="${mode}"`);
-    }
-
-    const read = Option.all([
-      // oxlint-disable-next-line eslint/no-use-before-define -- `equalExpression` and `expression` are mutually recursive, as operands nest; the call runs only after both are defined.
-      yield* expression(build, left),
-      // oxlint-disable-next-line eslint/no-use-before-define -- as above.
-      yield* expression(build, right),
-    ]);
-    const equal = read.pipe(
-      Option.map((pair): Expression => ({
-        includeLowerBound,
-        includeUpperBound,
-        kind: "equal",
-        operands: pair,
-        tolerance,
-        toleranceMode: mode,
-      })),
-    );
-
-    return mode === "exact" ? equal : Option.none();
-  });
+const readingOf = (build: Build): ExpressionReading => ({
+  declared: build.names,
+  mark: (element, feature) =>
+    Effect.sync(() => {
+      record(build, { feature, path: pathOf(build, element), shown: "mark" });
+    }),
+  unread: (element, feature) => unread(build, element, feature),
+  walk: build,
+});
 
 /**
- * Read an expression of the engine subset.
+ * Read an expression through the registry's generic reader (`readExpression` in
+ * `#plate/model/expressions/read.ts`), each kind by its family's reader spec.
  *
  * Every operand is read, so every element the engine does not run is marked, not only the first. A
- * `qti-equal` in its `absolute` or `relative` tolerance mode is the mark `tolerance-mode="<mode>"`
- * at its path, its operands read after it; only the default `exact` mode runs. A `qti-variable`'s
- * optional `weight-identifier` is read and held; an item's processing never evaluates it.
+ * kind whose family has not landed is marked `qti-<kind>` at its path. A `qti-equal` in its
+ * `absolute` or `relative` tolerance mode is the mark `tolerance-mode="<mode>"` at its path, its
+ * operands read after it; only the default `exact` mode runs. A `qti-variable`'s optional
+ * `weight-identifier` is read and held; an item's processing never evaluates it.
  *
  * @param build The build.
  * @param element The expression element.
@@ -1534,91 +1491,7 @@ const equalExpression = (
 const expression = (
   build: Build,
   element: SourceElement,
-): Effect.Effect<Option.Option<Expression>, Refusal> =>
-  Effect.gen(function* readExpression() {
-    const operands = elementsOf(element);
-    if (!isQti(element) || !engineElements.has(element.local)) {
-      return yield* unread(build, element);
-    }
-
-    switch (element.local) {
-      case "qti-variable": {
-        const identifier = yield* identifierAttribute(build, element, "identifier");
-        const weightIdentifier = Option.map(valueOf(element, "weight-identifier"), identifierOf);
-
-        return Option.some({ identifier, kind: "variable", operands: [], weightIdentifier });
-      }
-      case "qti-correct":
-      case "qti-map-response":
-      case "qti-map-response-point": {
-        const identifier = yield* identifierAttribute(build, element, "identifier");
-        const kinds = {
-          "qti-correct": "correct",
-          "qti-map-response": "map-response",
-          "qti-map-response-point": "map-response-point",
-        } as const;
-
-        return Option.some({ identifier, kind: kinds[element.local], operands: [] });
-      }
-      case "qti-base-value": {
-        const baseType = yield* enumerated(build, element, "base-type", baseTypes);
-        if (Option.isNone(baseType)) {
-          return yield* Effect.fail(
-            refusal(build, "missing-attribute", pathOf(build, element), {
-              attribute: "base-type",
-              element: element.local,
-            }),
-          );
-        }
-
-        if (!isModelled(baseType.value)) {
-          return yield* unread(build, element, `base-type="${baseType.value}"`);
-        }
-
-        const single = yield* typed(
-          build,
-          pathOf(build, element),
-          parseElementText(baseType.value, textOf(element)),
-        );
-
-        return Option.some({
-          kind: "base-value",
-          operands: [],
-          value: {
-            baseType: baseType.value,
-            cardinality: "single",
-            values: Option.toArray(single),
-          },
-        });
-      }
-      case "qti-is-null": {
-        const [operand, ...extra] = operands;
-        if (operand === undefined || extra.length > 0) {
-          return yield* unread(build, element);
-        }
-
-        const read = yield* expression(build, operand);
-
-        return read.pipe(Option.map((test) => ({ kind: "is-null", operands: [test] })));
-      }
-      case "qti-match": {
-        const [left, right, ...extra] = operands;
-        if (left === undefined || right === undefined || extra.length > 0) {
-          return yield* unread(build, element);
-        }
-
-        const read = Option.all([yield* expression(build, left), yield* expression(build, right)]);
-
-        return read.pipe(Option.map((pair) => ({ kind: "match", operands: pair })));
-      }
-      case "qti-equal": {
-        return yield* equalExpression(build, element);
-      }
-      default: {
-        return yield* unread(build, element);
-      }
-    }
-  });
+): Effect.Effect<Option.Option<Expression>, Refusal> => readExpression(readingOf(build), element);
 
 /**
  * Construct a branch.
@@ -1960,6 +1833,25 @@ const declarationElements: readonly string[] = [
 ];
 
 /**
+ * Give the identifier of each variable an item's declarations declare: its response, outcome,
+ * template and context declarations.
+ *
+ * @param root The item's root.
+ * @returns The declared identifiers.
+ */
+const declaredIdentifiers = (root: SourceElement): ReadonlySet<string> =>
+  new Set(
+    elementsOf(root)
+      .filter((child) => declarationElements.some((local) => isQti(child, local)))
+      .flatMap((declaration) =>
+        Option.match(valueOf(declaration, "identifier"), {
+          onNone: () => [],
+          onSome: (identifier) => [identifierOf(identifier)],
+        }),
+      ),
+  );
+
+/**
  * Give the built-in variables the engine holds a value of for an item: `numAttempts`, the attempt
  * count `runAttempt` in `#plate/engine/attempt.ts` passes, unless a declaration of the item names
  * a variable `numAttempts`. A declared variable wins over a built-in of the same name, as the prose
@@ -1971,18 +1863,84 @@ const declarationElements: readonly string[] = [
  * @returns The built-in variables' identifiers the engine holds.
  */
 const heldBuiltIns = (root: SourceElement): ReadonlySet<string> => {
-  const named = new Set(
-    elementsOf(root)
-      .filter((child) => declarationElements.some((local) => isQti(child, local)))
-      .flatMap((declaration) =>
-        Option.match(valueOf(declaration, "identifier"), {
-          onNone: () => [],
-          onSome: (identifier) => [identifierOf(identifier)],
-        }),
-      ),
-  );
+  const named = declaredIdentifiers(root);
 
   return new Set(["numAttempts"].filter((identifier) => !named.has(identifier)));
+};
+
+/**
+ * The built-in variables an item's rules may name, whatever the engine holds of them:
+ * `numAttempts`, `duration`, `completionStatus` and the context variable `QTI_CONTEXT`.
+ */
+const builtInVariables: readonly string[] = [
+  "completionStatus",
+  "duration",
+  "numAttempts",
+  "QTI_CONTEXT",
+];
+
+/**
+ * Give the names of the variables an item holds: every identifier its declarations declare and
+ * every built-in variable. `qti-pattern-match`'s `pattern` is a reference only when it braces one
+ * of them (ruling R1), and an unchecked reference, such as a `qti-equal`'s `tolerance` token, is
+ * judged only when it names one of them (9.11).
+ *
+ * @param root The item's root.
+ * @returns The names.
+ */
+const declaredNames = (root: SourceElement): ReadonlySet<string> =>
+  new Set([...declaredIdentifiers(root), ...builtInVariables]);
+
+/**
+ * A variable one of an expression's attributes names, by its kind's reference facet: its identifier
+ * and whether a reference there is checked.
+ */
+interface NamedReference {
+  readonly checked: boolean;
+  readonly identifier: string;
+}
+
+/**
+ * Report whether a value a variant's field holds is a reference to a variable, the `ref` member of
+ * `LiteralOrRef` in `#plate/model/expression.ts`.
+ *
+ * @param held The field's value, or one value of a list field.
+ * @returns Whether it is a reference.
+ */
+const isReference = (
+  held: unknown,
+): held is { readonly _tag: "ref"; readonly identifier: string } =>
+  typeof held === "object" &&
+  held !== null &&
+  "_tag" in held &&
+  held._tag === "ref" &&
+  "identifier" in held &&
+  typeof held.identifier === "string";
+
+/**
+ * Give each variable an expression's attributes name, through its kind's reference facet: in the
+ * facet's order and, within a list attribute such as `tolerance`, in written order. A literal names
+ * nothing.
+ *
+ * The facet names each attribute's field in the variant, so the walk looks the field up by that
+ * name among the variant's fields and finds the references generically, in place of a case per
+ * kind.
+ *
+ * @param operand The expression.
+ * @param kindRule Its kind's rule.
+ * @returns The variables its attributes name.
+ */
+const referencesOf = (operand: Expression, kindRule: KindRule): readonly NamedReference[] => {
+  const fields = new Map<string, unknown>(Object.entries(operand));
+
+  return kindRule.references.flatMap((entry) => {
+    const held = fields.get(entry.field);
+    const values: readonly unknown[] = entry.list && Array.isArray(held) ? held : [held];
+
+    return values
+      .filter((value) => isReference(value))
+      .map((reference) => ({ checked: entry.checked, identifier: reference.identifier }));
+  });
 };
 
 /**
@@ -1992,9 +1950,20 @@ const heldBuiltIns = (root: SourceElement): ReadonlySet<string> => {
  * The evaluator holds only the item's modelled responses and outcomes and the built-in
  * `numAttempts` (`Variables` in `#plate/engine/evaluate.ts`) and returns `UnknownIdentifierError`
  * for any other identifier a rule names, so `buildItem` runs no tree this walk finds a name in, and
- * that failure stays unreachable. A `qti-variable` reads a response, an outcome or a built-in
- * variable, `qti-correct`, `qti-map-response` and `qti-map-response-point` read a response,
- * `qti-match`, `qti-equal` and `qti-is-null` read what their operands read, and
+ * that failure stays unreachable. The walk reads each expression through its kind's rule in the
+ * registry (`kindRules` in `#plate/model/expressions/read.ts`), in place of a case per kind:
+ *
+ * - The declaration facet: the `identifier` of a kind that expects a response, such as `qti-correct`,
+ *   `qti-map-response` and `qti-map-response-point`, names one the engine holds only among the
+ *   responses; that of a kind that expects any variable, such as `qti-variable`, among the
+ *   responses, the outcomes and the built-in variables.
+ * - The reference facet: each variable an attribute names (`referencesOf`), before the operands, in
+ *   the facet's order. A checked reference names one the engine holds as `qti-variable` does. An
+ *   unchecked one, a `qti-equal`'s `tolerance` token, is judged only when a declaration or a
+ *   built-in names it: one that names nothing is never marked, and gives NULL at run time (9.11).
+ * - The operands, which every kind holds in `operands`, so the walk recurses without a case per
+ *   operator.
+ *
  * `qti-set-outcome-value` sets an outcome. The names it finds are valid content, never refused
  * (reading 1): a response the model does not hold (base type `duration` or `file`, cardinality
  * `record`, or no base type), a template variable, an outcome the model does not hold, and the
@@ -2009,6 +1978,7 @@ const heldBuiltIns = (root: SourceElement): ReadonlySet<string> => {
  * @param responses The responses the model holds.
  * @param outcomes The outcomes the model holds.
  * @param builtIns The built-in variables the engine holds for this item ({@link heldBuiltIns}).
+ * @param names The names of the variables the item holds ({@link declaredNames}).
  * @returns The identifiers the engine does not hold, empty when it can run the tree.
  */
 const unheldIdentifiers = (
@@ -2016,31 +1986,42 @@ const unheldIdentifiers = (
   responses: ReadonlyMap<string, ResponseDeclaration>,
   outcomes: ReadonlyMap<string, OutcomeDeclaration>,
   builtIns: ReadonlySet<string>,
+  names: ReadonlySet<string>,
 ): readonly string[] => {
   const unheld = new Set<string>();
 
   /**
-   * Add each identifier an expression and its operands read that the engine does not hold. Every
-   * kind holds its operands in `operands`, so the walk recurses without a case per operator.
+   * Report whether the engine holds a variable of a name, as `qti-variable` reads it.
+   *
+   * @param identifier The name.
+   * @returns Whether a response, an outcome or a built-in variable the engine holds has it.
+   */
+  const isHeld = (identifier: string): boolean =>
+    responses.has(identifier) || outcomes.has(identifier) || builtIns.has(identifier);
+
+  /**
+   * Add each identifier an expression and its operands read that the engine does not hold: the
+   * declaration its kind's declaration facet names, then each variable its attributes name, then
+   * those of its operands.
    *
    * @param operand The expression.
    */
   const read = (operand: Expression): void => {
-    if (operand.kind === "variable") {
-      if (
-        !responses.has(operand.identifier) &&
-        !outcomes.has(operand.identifier) &&
-        !builtIns.has(operand.identifier)
-      ) {
+    const kindRule: KindRule = kindRules[operand.kind];
+    if (kindRule.declaration !== undefined && "identifier" in operand) {
+      const held =
+        kindRule.declaration.expected === "response"
+          ? responses.has(operand.identifier)
+          : isHeld(operand.identifier);
+      if (!held) {
         unheld.add(operand.identifier);
       }
-    } else if (
-      (operand.kind === "correct" ||
-        operand.kind === "map-response" ||
-        operand.kind === "map-response-point") &&
-      !responses.has(operand.identifier)
-    ) {
-      unheld.add(operand.identifier);
+    }
+
+    for (const { checked, identifier } of referencesOf(operand, kindRule)) {
+      if ((checked || names.has(identifier)) && !isHeld(identifier)) {
+        unheld.add(identifier);
+      }
     }
 
     for (const each of operand.operands) {
@@ -2426,7 +2407,7 @@ const runnable = (
 ): Option.Option<readonly Rule[]> => {
   const builtIns = heldBuiltIns(build.document.root);
   const features = [
-    ...unheldIdentifiers(read.tree, responses, outcomes, builtIns).map(
+    ...unheldIdentifiers(read.tree, responses, outcomes, builtIns, build.names).map(
       (identifier) => `variable:${identifier}`,
     ),
     ...(Option.isSome(read.template) ? unmetNeeds(read.tree, responses, outcomes, builtIns) : []),
@@ -2503,6 +2484,7 @@ export const buildItem = (source: SourceDocument): Effect.Effect<Item, Refusal> 
       builder: "buildItem",
       declarations: declarationsOf(source),
       document: source,
+      names: declaredNames(source.root),
       paths: pathsOf(source),
       recorded: new Map(),
       unsupported: [],

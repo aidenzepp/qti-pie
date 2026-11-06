@@ -1448,37 +1448,6 @@ describe("buildItem", () => {
   );
 
   it.effect(
-    'marks an inline qti-equal with tolerance-mode="relative" or "absolute" at its path and runs none',
-    () =>
-      Effect.gen(function* marksToleranceMode() {
-        for (const mode of ["relative", "absolute"]) {
-          const built = yield* buildItem(
-            item({
-              after: [
-                equalBlock([attr("tolerance-mode", mode), attr("tolerance", "0.1")], "1", "1.0"),
-              ],
-              body: [],
-              declarations: [declaration("qti-outcome-declaration", "SAME", "boolean", "single")],
-            }),
-          );
-
-          assert.deepStrictEqual(built.processing, Option.none(), mode);
-          assert.deepStrictEqual(
-            built.unsupported,
-            [
-              {
-                feature: `tolerance-mode="${mode}"`,
-                path: `${root}/qti-response-processing/qti-set-outcome-value/qti-equal`,
-                shown: "mark",
-              },
-            ],
-            mode,
-          );
-        }
-      }),
-  );
-
-  it.effect(
     "[I-1] refuses an area map entry's shape or coords outside its type as attribute-type",
     () =>
       Effect.gen(function* refusesAreaEntry() {
@@ -2355,12 +2324,18 @@ describe("buildItem", () => {
                 el(
                   "qti-set-outcome-value",
                   [attr("identifier", "SCORE")],
-                  [el("qti-sum", [], [el("qti-variable", [attr("identifier", "RESPONSE")])])],
+                  [
+                    el(
+                      "qti-field-value",
+                      [attr("field-identifier", "field")],
+                      [el("qti-variable", [attr("identifier", "RESPONSE")])],
+                    ),
+                  ],
                 ),
               ],
             ),
-            feature: "qti-sum",
-            path: `${processing}/qti-set-outcome-value/qti-sum`,
+            feature: "qti-field-value",
+            path: `${processing}/qti-set-outcome-value/qti-field-value`,
           },
         ];
 
