@@ -1,6 +1,6 @@
 /**
  * The MathML `m:share` guard: its `src` names an element of the same document, and no element
- * dominates itself through child edges and `share` targets (spec 4.8a, MA18: C16 and C17).
+ * dominates itself through child edges and `share` targets.
  *
  * Neither check is a match over one node's children. `m:share/@src` "is a URI specifying the id
  * attribute of the root node of the expression tree" (`c4#contm.share`), and "An element may not
@@ -8,6 +8,7 @@
  * with the `share` edges added to it.
  */
 import type { Uuid } from "@bjornpagen/grizzle";
+import { edgesByParent } from "#pantry/import/guards/mathml-edges.ts";
 import { ImportRefused } from "#pantry/import/refusal.ts";
 import { Rows } from "#pantry/import/tree.ts";
 import { HtmlId } from "#pantry/schema/document.ts";
@@ -55,7 +56,7 @@ interface Frame {
 }
 
 /**
- * Refuse the first cycle over child edges and `share` targets (C17), walking from each root in
+ * Refuse the first cycle over child edges and `share` targets, walking from each root in
  * document order.
  *
  * @param roots - The nodes no edge leads to, in document order.
@@ -127,8 +128,7 @@ const cycleFinding = (
 
 /**
  * Refuse the first `m:share`, in document order, whose `src` is not a same-document fragment that
- * names an `id` of its document (C16), then the first cycle over child edges and `share` targets
- * (C17).
+ * names an `id` of its document, then the first cycle over child edges and `share` targets.
  *
  * Both refuse as `document-key`: the `src` is a reference into the document's `id` space, which is
  * keyed by `(document, id)`. A `share` with no `src` row has nothing to resolve and is left to the
@@ -142,10 +142,7 @@ const cycleFinding = (
 export const shareFinding = (rows: Rows): ImportRefused | undefined => {
   const nodes = Rows.of(rows, Node);
   const byId = new Map(nodes.map((node) => [node.id, node]));
-  const edges = Map.groupBy(
-    Rows.of(rows, Edge).toSorted((a, b) => Number(a.position - b.position)),
-    (edge) => edge.parent,
-  );
+  const edges = edgesByParent(rows);
   const ids = new Map(Rows.of(rows, HtmlId).map((row) => [row.node, row.id]));
   const owners = new Map(
     Rows.of(rows, HtmlId).map((row) => [`${row.document} ${row.id}`, row.node]),

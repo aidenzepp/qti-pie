@@ -1,6 +1,6 @@
 /**
  * The XSD's content model of every MathML kind: the data behind the content-model guard
- * (`import/guards/mathml.ts`, spec 4.8).
+ * (`import/guards/mathml.ts`).
  *
  * A model is a sequence of particles, each a set of child handles with `min` and `max` (`undefined`
  * is unbounded), nested where the XSD nests: `m:mmultiscripts`' pairs of scripts and its optional
@@ -13,7 +13,7 @@
  * Every set of more than six handles is one of the eleven named classes below, each derived from
  * the XSD group or substitution group it stands for: the 168 handles of `m:MathExpression`, the
  * 138 of `m:ContExp`, the 29 of `m:PresentationExpression` and the groups built on them. A choice
- * of elements is a set; a model reaches 32 shapes over the 194 handles (spec 3.3).
+ * of elements is a set; a model reaches 32 shapes over the 194 handles.
  *
  * The declarations after the particle types are the output of this script, run as `python3 -I
  * derive_models.py` with the XSDs cached at `~/.cache/gr8des/qti3/xsd/mathml/` and the script saved
@@ -1016,19 +1016,19 @@ const bvarVariable: Particle = {
 };
 
 /**
- * The content models of the kinds where the Recommendation is narrower than the XSD (spec 4.8;
- * decision 109: the Recommendation is the validity, so its rules win where the XSD is looser).
+ * The content models of the kinds where the Recommendation is narrower than the XSD (the
+ * Recommendation is the validity, so its rules win where the XSD is looser).
  *
- * - `m:bvar` holds one `m:ci` or `m:semantics.ci` and at most one `m:degree`, in either order (E C8
- *   and C9; RelaxNG `bvar = ((ci | semantics-ci) & degree?)`, REC 4.2.1.7 `contm.bvar`,
+ * - `m:bvar` holds one `m:ci` or `m:semantics.ci` and at most one `m:degree`, in either order
+ *   (RelaxNG `bvar = ((ci | semantics-ci) & degree?)`, REC 4.2.1.7 `contm.bvar`,
  *   `appendixa.html#parsing_bvar`). The XSD's `m:bvar` holds any number of `m:ci`, `m:semantics.ci`
  *   and `m:degree` in any order.
- * - `m:bind` holds a non-empty list of `m:bvar` after its head (E C12, REC 4.2.6 `contm.bind`, "a
- *   non-empty list of bvar elements"; D3). The XSD's `bvar*` admits none. This is the model of a
- *   head the head-dependent models below do not reach; they hold the same minimum.
- * - `m:piecewise` holds any number of `m:piece` and at most one `m:otherwise`, in any order (E C10;
- *   RelaxNG `piecewise = (piece* & otherwise?)`, REC 4.4.1.9 `contm.piecewise`). The XSD admits any
- *   number of `m:otherwise`. The sequence `piece*, otherwise?, piece*` is that interleave.
+ * - `m:bind` holds a non-empty list of `m:bvar` after its head (REC 4.2.6 `contm.bind`, "a non-empty
+ *   list of bvar elements"). The XSD's `bvar*` admits none. This is the model of a head the
+ *   head-dependent models below do not reach; they hold the same minimum.
+ * - `m:piecewise` holds any number of `m:piece` and at most one `m:otherwise`, in any order (RelaxNG
+ *   `piecewise = (piece* & otherwise?)`, REC 4.4.1.9 `contm.piecewise`). The XSD admits any number
+ *   of `m:otherwise`. The sequence `piece*, otherwise?, piece*` is that interleave.
  */
 const recModels = {
   "m:bind": [
@@ -1062,7 +1062,7 @@ export const models = { ...xsdModels, ...recModels } satisfies Models;
 
 /**
  * The kinds that may not end with a given child, as the Recommendation states and neither schema
- * does (E P10, REC 3.6.5 on elementary math: "It is an error for mscarries to be the last element
+ * does (REC 3.6.5 on elementary math: "It is an error for mscarries to be the last element
  * of an mstack or mlongdiv", since its children apply to the following row). A finding of this
  * rule is `ordering`: the child is the right one, in the wrong place.
  */
@@ -1090,12 +1090,12 @@ const contentKinds: ReadonlySet<string> = new Set(content);
 /**
  * The qualifiers an `m:apply` or `m:bind` holds after this head, in qualifier order.
  *
- * A head admits what `qualifiersOf` lists for it (REC syntax tables, E C7), less `m:interval`. A
+ * A head admits what `qualifiersOf` lists for it (REC syntax tables), less `m:interval`. A
  * content head the table lacks (`m:bind`, `m:declare`, `m:fn`, `m:reln` and `m:share`) is modeled
  * like `m:ci`: every qualifier, no operand count. The REC's tables say nothing about them (`fn`,
  * `reln` and `declare` are deprecated MathML 2 forms the schema keeps), so nothing bans a
- * qualifier after them; this is decision 245's accept-by-default, recorded as a limit. An
- * `m:bind` always admits `m:bvar`, which it must hold (E C12).
+ * qualifier after them; this is accept-by-default, recorded as a limit. An
+ * `m:bind` always admits `m:bvar`, which it must hold.
  *
  * @param kind - `m:apply` or `m:bind`.
  * @param head - The head's handle.
@@ -1110,7 +1110,7 @@ export const headQualifiers = (kind: "m:apply" | "m:bind", head: string): readon
   );
 
 /**
- * The particles of the qualifiers a head admits, in the REC's order (E C5). Each repeats as the XSD
+ * The particles of the qualifiers a head admits, in the REC's order. Each repeats as the XSD
  * lets it; a `m:lowlimit` takes its optional `m:uplimit` straight after, as the XSD pairs them (no
  * head admits an `m:uplimit` without an `m:lowlimit`; a test pins that).
  *
@@ -1141,7 +1141,7 @@ const qualifierParticles = (admitted: readonly string[]): readonly Particle[] =>
 
 /**
  * The count of operands a head takes: its own, else unconstrained. `m:partialdiff` with an `m:bvar`
- * differentiates in its bound variables, and without one takes two (E C4).
+ * differentiates in its bound variables, and without one takes two.
  *
  * @param head - The head's handle.
  * @param bound - Whether an `m:bvar` follows the head.
@@ -1161,7 +1161,7 @@ const operandCount = (head: string, bound: boolean): ArgumentCount => {
  *
  * It replaces the XSD's `(C, bvar*, Qualifier*, C*)` where the head is a content expression: the
  * qualifiers are those the head's syntax table admits, in the REC's order, and the operands number
- * what its class states (spec 4.8; E C1 to C5, C7, C12). The model does not hold the head; the
+ * what its class states. The model does not hold the head; the
  * guard reads it as the first child. An `m:bind` holds at least one `m:bvar`.
  *
  * @param kind - `m:apply` or `m:bind`.

@@ -29,7 +29,7 @@ import { wildcardAdmissionRows } from "#pantry/schema/seed/wildcard-admission.ts
 
 /**
  * The registry of every kinds file, in composition order. A later phase's kinds file joins this
- * list in its regenerate-and-seed slice, as it joins `node.ts`'s spreads.
+ * list, as it joins `node.ts`'s spreads.
  */
 export const registries = [
   generic.registry,
@@ -123,9 +123,9 @@ const composeAdmission = (rows: readonly AdmissionRow[]): readonly AdmissionRow[
   );
 
 /**
- * The admission rows of every kinds file alone, the host's explicit particles (spec 4.1 step 1),
- * composed as `admission` is. The derived wildcard rows are left out: they are the database's
- * representation of what a wildcard admits, not particles a host declares.
+ * The admission rows of every kinds file alone, the host's explicit particles, composed as
+ * `admission` is. The derived wildcard rows are left out: they are the database's representation of
+ * what a wildcard admits, not particles a host declares.
  */
 export const explicitAdmission: readonly AdmissionRow[] = composeAdmission(kindsRows);
 

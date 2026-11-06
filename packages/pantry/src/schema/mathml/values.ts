@@ -1,12 +1,11 @@
 /**
  * The 67 MathML attribute families, derived: which `(kind, attribute)` pairs share one value type,
- * what each family is called, and which class of value type (spec 4.6) types its column. This is
- * data only. It declares no relation, roster, pattern or contract and imports nothing, so the
- * later slices that do (p6-11 to p6-16) read their names and members from here and never restate
- * them.
+ * what each family is called, and which class of value type types its column. This is data only. It
+ * declares no relation, roster, pattern or contract and imports nothing, so the modules
+ * that do read their names and members from here and never restate them.
  *
  * Every MathML attribute value is a row of one family relation, and the family a pair belongs to
- * is fixed by its XSD type (spec 4.5), never by its element: `width` is a `length` on `m:mspace`,
+ * is fixed by its XSD type, never by its element: `width` is a `length` on `m:mspace`,
  * an `mpadded-length` on `m:mpadded` and a `table-width` on `m:mtable`.
  *
  * ## The partition
@@ -51,7 +50,7 @@
  *
  * `relation` is `Mathml` plus the PascalCase handle. `valueType` is what types the column: the
  * roster `Mathml<Pascal>Value` for the 25 enumerations; the pattern export `mathml<Pascal>` for
- * the 26 open types (patterns are module exports, not declared names, spec 4.5); a contract for
+ * the 26 open types (patterns are module exports, not declared names); a contract for
  * the 15 whose values a base type cannot state alone, either new, `Mathml<Pascal>Value` (13), or
  * reused, `HyperlinkUri` (`href`) and `EmbedSourceUri` (`embed-source`); and `xsString` for the
  * `string` tautology, which has no domain and is never refused. The fourteenth new contract,
@@ -88,7 +87,7 @@
  */
 
 /**
- * The class of value type that types a family's column (spec 4.6): `roster` a closed enumeration,
+ * The class of value type that types a family's column: `roster` a closed enumeration,
  * `pattern` an anchored lexical pattern, `contract` a named contract over a base type, and
  * `tautology` the string that admits everything.
  */
@@ -115,9 +114,8 @@ export interface Family {
 /**
  * The 67 families, by handle, each pair in exactly one of them.
  *
- * The seed `MathmlAttributeType` (p6-17 and later) and every family relation's containment read
- * `pairs`; the rosters, patterns and contracts of p6-11 to p6-16 take their names from
- * `valueType`.
+ * The seed `MathmlAttributeType` and every family relation's containment read `pairs`; the
+ * rosters, patterns and contracts take their names from `valueType`.
  */
 export const families: readonly Family[] = [
   {

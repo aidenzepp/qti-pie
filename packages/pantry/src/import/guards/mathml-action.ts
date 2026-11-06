@@ -1,32 +1,19 @@
 /**
- * Three of MathML's checks that read one node and its siblings, not its content model (spec MA18,
- * E P13, P14 and C6): the range of `m:maction/@selection`, the two attributes `m:mglyph` requires,
- * and the `m:bvar` an `m:condition` qualifier follows.
+ * Three of MathML's checks that read one node and its siblings, not its content model: the range
+ * of `m:maction/@selection`, the two attributes `m:mglyph` requires, and the `m:bvar` an
+ * `m:condition` qualifier follows.
  *
  * Each is pure over the rows of one tree. {@link actionFinding} refuses the first node, in document
- * order, that fails one, as {@link ImportRefused} under the rule the spec names for it.
+ * order, that fails one, as {@link ImportRefused} under the rule that names the failure.
  */
 import type { AnyRelation } from "@bjornpagen/grizzle";
 
+import { edgesByParent, notElements } from "#pantry/import/guards/mathml-edges.ts";
 import { ImportRefused } from "#pantry/import/refusal.ts";
 import { Rows } from "#pantry/import/tree.ts";
-import { kinds as genericKinds } from "#pantry/schema/kinds/generic.ts";
 import { familyRelation } from "#pantry/schema/mathml/attributes.ts";
 import { Edge, Node } from "#pantry/schema/node.ts";
-import { mathmlAttributeType } from "#pantry/schema/seed/mathml-attribute-type.ts";
-
-/**
- * The kinds of the children that are not elements: text, whitespace, entity references, comments
- * and processing instructions. Only element children are counted.
- */
-const notElements: ReadonlySet<string> = new Set(genericKinds);
-
-/**
- * The family handle that holds each `(kind, attribute)` pair's values, from the matrix.
- */
-const typeOf: ReadonlyMap<string, string> = new Map(
-  mathmlAttributeType.map((row) => [`${row.kind} ${row.attribute}`, row.type]),
-);
+import { attributeTypeOf } from "#pantry/schema/seed/mathml-attribute-type.ts";
 
 /**
  * The family relation that holds one MathML attribute.
@@ -38,7 +25,7 @@ const typeOf: ReadonlyMap<string, string> = new Map(
  *   finding about the tree.
  */
 const relationOf = (kind: string, attribute: string): AnyRelation => {
-  const relation = familyRelation.get(typeOf.get(`${kind} ${attribute}`) ?? "");
+  const relation = familyRelation.get(attributeTypeOf.get(`${kind} ${attribute}`) ?? "");
   if (relation === undefined) {
     throw new Error(
       `The MathML attribute ${kind} ${attribute} has no family in the matrix; add it to schema/mathml/values.ts.`,
@@ -78,7 +65,7 @@ const refuse = (rule: "required-attribute" | "union-count", detail: string): Imp
   new ImportRefused({ detail, rule });
 
 /**
- * Check an `m:maction`'s `selection` against its element-child count (P13).
+ * Check an `m:maction`'s `selection` against its element-child count.
  *
  * `c3#id.3.7.1.1`: "If the value specified is out of range, it is an error." The value is a
  * MathML integer, unbounded, so it is read as a `bigint`.
@@ -111,7 +98,7 @@ const selectionFinding = (
 };
 
 /**
- * Check that an `m:mglyph` carries `src` and `alt` (P14).
+ * Check that an `m:mglyph` carries `src` and `alt`.
  *
  * @param node - The node: its id and version.
  * @param node.id - The node's id.
@@ -140,7 +127,7 @@ interface Placed {
 }
 
 /**
- * Check that an `m:condition` follows an `m:bvar` among its siblings (C6).
+ * Check that an `m:condition` follows an `m:bvar` among its siblings.
  *
  * `c4#contm.domainofapplication.qualifier`: condition qualifiers require a preceding `m:bvar`. Only
  * a condition whose parent is an `m:apply` or `m:bind` is judged here.
@@ -213,10 +200,7 @@ const nodeFinding = (
 export const actionFinding = (rows: Rows): ImportRefused | undefined => {
   const nodes = Rows.of(rows, Node);
   const allEdges = Rows.of(rows, Edge);
-  const edges = Map.groupBy(
-    allEdges.toSorted((a, b) => Number(a.position - b.position)),
-    (edge) => edge.parent,
-  );
+  const edges = edgesByParent(rows);
   const children = new Set(allEdges.map((edge) => edge.child));
   const byId = new Map(nodes.map((node) => [node.id, node]));
   const selections = valuesOf(rows, "m:maction", "selection");

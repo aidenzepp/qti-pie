@@ -1,6 +1,6 @@
 /**
  * The operator classes and the REC's qualifier tables: the data behind the head-dependent models of
- * `m:apply` and `m:bind` (spec 4.8; E C1 to C5, C7).
+ * `m:apply` and `m:bind`.
  *
  * The two generated declarations, `operatorClass` and `tableQualifiers`, come from the script
  * below, run as `python3 -I derive_operators.py` with the XSDs cached at
@@ -676,7 +676,7 @@ const binary: ArgumentCount = { max: 2, min: 2 };
 /**
  * Exactly one argument: the unary classes (`c4#contm.unary`, "Unary operators take a single
  * argument"), and `unary-logical`, whose one member `not` "takes one Boolean argument"
- * (`c4#contm.not`; E C2).
+ * (`c4#contm.not`).
  */
 const unary: ArgumentCount = { max: 1, min: 1 };
 
@@ -741,9 +741,9 @@ export const unstatedClasses: readonly string[] = [
 /**
  * The members whose count differs from their class: `minus` and `root` take one or two arguments
  * (`c4#contm.minus`, "If it is used with one argument, minus corresponds to the unary_minus
- * symbol"; `c4#contm.root`, "If no degree is present, a default value of 2 is used"; E C1), and
+ * symbol"; `c4#contm.root`, "If no degree is present, a default value of 2 is used"), and
  * `selector`, the one `nary-linalg` member, takes at least one (`c4#contm.selector`, "It accepts
- * one or more arguments"; E C3).
+ * one or more arguments").
  */
 const argumentOverrides: ArgumentCountTable = {
   "m:minus": { max: 2, min: 1 },
@@ -765,13 +765,13 @@ export const operatorArguments: ArgumentCountTable = Object.fromEntries(
 
 /**
  * The argument count of `m:partialdiff` when it has no `m:bvar`: two, a list of indices and the
- * function (`c4#contm.partialdiff`, "the containing partialdiff takes two arguments"; E C4).
+ * function (`c4#contm.partialdiff`, "the containing partialdiff takes two arguments").
  */
 export const partialdiffFunctionArguments: ArgumentCount = { max: 2, min: 2 };
 
 /**
  * The qualifier kinds in the order the REC fixes, whenever more than one is present
- * (`c4#contm.qualifiers`; E C5).
+ * (`c4#contm.qualifiers`).
  */
 export const qualifierOrder: readonly string[] = [
   "m:bvar",
@@ -788,9 +788,9 @@ export const qualifierOrder: readonly string[] = [
 /**
  * The qualifiers a head admits that its syntax table leaves out. The REC's own examples bind with
  * `diff`, `partialdiff` and `limit` (`c4#contm.diff`: `<apply><diff/><bvar>`; `c4#contm.limit`: "by
- * specifying a lowlimit and a bvar") though their tables have no `bvar`, and spec 4.8 admits
- * `degree` with `diff` and `partialdiff` beside `root` and `moment`, which their tables list (E
- * C7).
+ * specifying a lowlimit and a bvar") though their tables have no `bvar`, and the content model
+ * admits `degree` with `diff` and `partialdiff` beside `root` and `moment`, which their tables
+ * list.
  */
 export const qualifierGaps: QualifierTable = {
   "m:diff": ["m:bvar", "m:degree"],

@@ -1,22 +1,22 @@
 /**
  * The MathML content-model guard: the element children of every MathML node, matched against the
- * content model the XSD states for its kind (spec 4.8, bin 2).
+ * content model the XSD states for its kind.
  *
  * Grizzle cannot state an order or a count over a union of kinds, and MathML's models are mostly
  * unions (`m:mfrac` holds exactly two element children of about 170 kinds), so the guard reads
  * them from `schema/mathml/models.ts`. {@link modelFinding} is the pure core over plain handle
  * strings; {@link mathmlGuards} reads the rows an import built and refuses before any is written.
  * The table holds the XSD's models with the Recommendation's narrower ones for `m:bvar` and
- * `m:piecewise`, and one last-child rule, `m:mscarries` (spec MA04, part 2). An `m:apply` or
- * `m:bind` whose head is a content expression is judged by its head instead (part 4): the
- * qualifiers the head admits, in the REC's order, and the operands its class allows.
+ * `m:piecewise`, and one last-child rule, `m:mscarries`. An `m:apply` or `m:bind` whose
+ * head is a content expression is judged by its head instead: the qualifiers the head admits, in
+ * the REC's order, and the operands its class allows.
  */
 import type { Uuid } from "@bjornpagen/grizzle";
 import { Effect } from "effect";
+import { edgesByParent, notElements } from "#pantry/import/guards/mathml-edges.ts";
 import { ImportRefused } from "#pantry/import/refusal.ts";
 import { Rows } from "#pantry/import/tree.ts";
-import { mathmlInventory } from "#pantry/schema/content/inventory/mathml.ts";
-import { kinds as genericKinds } from "#pantry/schema/kinds/generic.ts";
+import { isMathmlKind } from "#pantry/schema/kinds/mathml.ts";
 import {
   headModel,
   headQualifiers,
@@ -28,17 +28,6 @@ import type { Model, Particle } from "#pantry/schema/mathml/models.ts";
 import { qualifierOrder } from "#pantry/schema/mathml/operators.ts";
 import { MathmlCbytes } from "#pantry/schema/mathml/attributes.ts";
 import { Edge, Node, TextNode, Ws } from "#pantry/schema/node.ts";
-
-/**
- * The handles of the MathML kinds: the keys of the XSD inventory leaf, `m:semantics.ci` included.
- */
-const mathmlKinds: ReadonlySet<string> = new Set(Object.keys(mathmlInventory));
-
-/**
- * The kinds of the children that are not elements: text, whitespace, entity references, comments
- * and processing instructions. A model constrains element children alone.
- */
-const notElements: ReadonlySet<string> = new Set(genericKinds);
 
 /**
  * The pattern text of a handle's literal spelling, safe inside a regular expression.
@@ -242,7 +231,7 @@ const matches = (entry: Compiled, children: readonly string[]): boolean =>
 const barredLast: ReadonlyMap<string, readonly string[]> = new Map(Object.entries(notLast));
 
 /**
- * Whether a child list ends with a child its kind may not end with (E P10).
+ * Whether a child list ends with a child its kind may not end with.
  *
  * @param kind - The node's kind handle.
  * @param children - The element children's handles, in document order.
@@ -473,7 +462,7 @@ const refusal = (
 
 /**
  * Refuse the first `MathmlCbytes` row whose value is not its `m:cbytes` node's text with the
- * whitespace removed (spec MA11, `text-copy`, spec 4.7).
+ * whitespace removed (`text-copy`).
  *
  * No law states a copy of text, so the guard reads the node's `text` and `ws` children in
  * `position` order, joins their values and removes every space, tab, newline and carriage return.
@@ -518,10 +507,7 @@ export const mathmlGuards = Effect.fn("mathmlGuards")(function* mathmlGuards(
   rows: Rows,
 ): Effect.fn.Return<void, ImportRefused> {
   const nodes = Rows.of(rows, Node);
-  const edges = Map.groupBy(
-    Rows.of(rows, Edge).toSorted((a, b) => Number(a.position - b.position)),
-    (edge) => edge.parent,
-  );
+  const edges = edgesByParent(rows);
   const children = new Set(Rows.of(rows, Edge).map((edge) => edge.child));
   const byId = new Map(nodes.map((node) => [node.id, node]));
   const pending = nodes.filter((node) => !children.has(node.id)).toReversed();
@@ -532,7 +518,7 @@ export const mathmlGuards = Effect.fn("mathmlGuards")(function* mathmlGuards(
     }
 
     const own = edges.get(node.id) ?? [];
-    if (mathmlKinds.has(node.kind)) {
+    if (isMathmlKind(node.kind)) {
       const handles = own.map((edge) => edge.childKind).filter((kind) => !notElements.has(kind));
       const rule = modelFinding(node.kind, handles);
       if (rule !== undefined) {

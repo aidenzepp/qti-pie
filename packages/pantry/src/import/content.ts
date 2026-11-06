@@ -1096,7 +1096,7 @@ export const contentRows = Effect.fn("import.contentRows")(function* contentRows
     if (builder !== undefined) {
       built = yield* builder(built, element, node, context);
     } else if (isMathmlKind(node.kind)) {
-      built = yield* mathmlRows(built, element, node);
+      built = yield* mathmlRows(built, element, node, context.documentId);
     } else {
       built = thinRows(built, node);
     }

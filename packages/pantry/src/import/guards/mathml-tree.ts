@@ -1,6 +1,6 @@
 /**
  * The MathML checks that read a whole tree, run as one: alignment groups, actions, `cn` content
- * and `share` targets (spec MA18, in the order of spec 4.8a's table).
+ * and `share` targets, in that order.
  *
  * @module
  */

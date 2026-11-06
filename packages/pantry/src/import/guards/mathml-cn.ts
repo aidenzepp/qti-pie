@@ -1,6 +1,6 @@
 /**
  * The MathML `m:cn` content guard: the text of a number element read against the lexical form its
- * `type` gives, and against its `base` (spec MA18, C13).
+ * `type` gives, and against its `base`.
  *
  * The Recommendation says of every number type that it "implies that the content be of a certain
  * form" (MathML 3, `c4#contm.cn`), and no statement over stored rows can say so: the form depends
