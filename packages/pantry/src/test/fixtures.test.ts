@@ -7,6 +7,7 @@ import { inject } from "vitest";
 import {
   FIXTURES_VERSION,
   assemblyNames,
+  catalogNames,
   editBytes,
   fixtureNames,
   hash12,
@@ -426,6 +427,75 @@ const restoredAndAssemblyPresent: readonly (readonly [FixtureName, string, strin
     "sections/shared.xml",
     '<qti-branch-rule target="shared-item">',
   ],
+];
+
+/**
+ * The `schemaversion` each catalog positive's manifest declares: 3.0.1 for the cuts of
+ * `BPIG_22April` (and the hand edits of those), 3.0.0 for `catalog-300` and for the four edits of
+ * `simple`.
+ */
+const catalogVersions: readonly (readonly [(typeof catalogNames)[number], "3.0.0" | "3.0.1"])[] = [
+  ["cut-catalog-supports", "3.0.1"],
+  ["cut-catalog-multiple", "3.0.1"],
+  ["cut-catalog-nodes", "3.0.1"],
+  ["cut-catalog-reference", "3.0.1"],
+  ["cut-catalog-rubric", "3.0.1"],
+  ["catalog-300", "3.0.0"],
+  ["catalog-hosts", "3.0.1"],
+  ["card-files", "3.0.0"],
+  ["catalog-padded", "3.0.0"],
+  ["catalog-lang", "3.0.0"],
+  ["card-qti-content", "3.0.1"],
+  ["card-gap-inside", "3.0.1"],
+  ["card-empty", "3.0.1"],
+  ["entry-empty", "3.0.1"],
+];
+
+/**
+ * For each of the catalog positives, a file of its package and the text its edit put there (or, for
+ * a cut, the text the corpus item holds).
+ */
+const catalogPresent: readonly (readonly [(typeof catalogNames)[number], string, string])[] = [
+  ["cut-catalog-supports", "items/CatalogWithMultipleSupports.xml", '<qti-catalog id="catalog1">'],
+  ["cut-catalog-multiple", "items/MultipleCatalogs.xml", '<qti-catalog id="cat123_2">'],
+  ["cut-catalog-nodes", "items/CatalogsAcrossContentNodes.xml", '<qti-catalog id="i123_rb1_cat1">'],
+  ["cut-catalog-reference", "items/ReferencingCatalogContent.xml", 'data-catalog-idref="catalog1"'],
+  ["cut-catalog-rubric", "items/rubric_block.xml", '<qti-catalog id="catchoicedirs">'],
+  ["catalog-300", "items/CatalogWithMultipleSupports.xml", "imsqti_asiv3p0_v1p0.xsd"],
+  ["catalog-hosts", "items/BG007.xml", '<qti-modal-feedback outcome-identifier="FEEDBACK"'],
+  [
+    "catalog-hosts",
+    "items/BG007.xml",
+    '<qti-template-block template-identifier="T" identifier="tb">',
+  ],
+  ["catalog-hosts", "items/BG007.xml", '<qti-rubric-block use="instructions" view="candidate">'],
+  ["card-files", "choice.xml", '<qti-card support="ext:org.example-sign_1">'],
+  ["card-files", "choice.xml", '<qti-card-entry default="1">'],
+  ["card-files", "choice.xml", '<p data-catalog-idref="files1">The sign.</p>'],
+  ["card-files", "imsmanifest.xml", '<file href="video/clip.mp4"/>'],
+  ["catalog-padded", "choice.xml", '<qti-catalog id=" catalog1 ">'],
+  ["catalog-padded", "choice.xml", '<qti-card-entry default=" true ">'],
+  [
+    "catalog-padded",
+    "choice.xml",
+    '<qti-file-href mime-type="image/&#9;png"> images/sign.png </qti-file-href>',
+  ],
+  ["catalog-lang", "choice.xml", '<qti-card support="linguistic-guidance" xml:lang="es">'],
+  ["catalog-lang", "choice.xml", '<span xml:lang="fr">exact</span>'],
+  ["catalog-lang", "imsmanifest.xml", "<imsmd:language>en</imsmd:language>"],
+  [
+    "card-qti-content",
+    "items/CatalogWithMultipleSupports.xml",
+    '<qti-printed-variable identifier="SHOWN"/>',
+  ],
+  [
+    "card-qti-content",
+    "items/CatalogWithMultipleSupports.xml",
+    '<qti-choice-interaction response-identifier="RESPONSE2"',
+  ],
+  ["card-gap-inside", "items/gap-match-example-1.xml", '<qti-gap identifier="G3"/>'],
+  ["card-empty", "items/CatalogWithMultipleSupports.xml", '<qti-card support="spoken"/>'],
+  ["entry-empty", "items/CatalogWithMultipleSupports.xml", '<qti-card-entry xml:lang="en"/>'],
 ];
 
 /**
@@ -1371,5 +1441,173 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts", (it
         );
       }),
     ),
+  );
+
+  it.effect(
+    "the catalog names are the brief's list, each in the fixture table and no negative",
+    () =>
+      Effect.sync(() => {
+        assert.deepStrictEqual(
+          [...catalogNames],
+          [
+            "cut-catalog-supports",
+            "cut-catalog-multiple",
+            "cut-catalog-nodes",
+            "cut-catalog-reference",
+            "cut-catalog-rubric",
+            "catalog-300",
+            "catalog-hosts",
+            "card-files",
+            "catalog-padded",
+            "catalog-lang",
+            "card-qti-content",
+            "card-gap-inside",
+            "card-empty",
+            "entry-empty",
+          ],
+        );
+        assert.strictEqual(new Set(catalogNames).size, 14);
+        assert.deepStrictEqual(
+          catalogVersions.map(([name]) => name),
+          [...catalogNames],
+        );
+        assert.includeMembers([...fixtureNames], [...catalogNames]);
+
+        for (const name of catalogNames) {
+          assert.notInclude([...negativeNames, ...restoredNames, ...assemblyNames], name);
+        }
+      }),
+  );
+
+  it.effect(
+    "each catalog positive materializes under 2 MB, lists every packaged file, holds QTI documents that parse and carries its edit",
+    () =>
+      inFreshRoot(() =>
+        Effect.gen(function* catalogFixtures() {
+          const fs = yield* FileSystem.FileSystem;
+
+          for (const [name, version] of catalogVersions) {
+            const dir = yield* materialize(name);
+            const entries = yield* fs.readDirectory(dir, { recursive: true });
+            const files: string[] = [];
+            let size = 0;
+
+            for (const entry of entries) {
+              const info = yield* fs.stat(`${dir}/${entry}`);
+
+              if (info.type === "File") {
+                files.push(entry);
+                size += Number(info.size);
+              }
+            }
+
+            const manifest = yield* fs.readFileString(`${dir}/imsmanifest.xml`);
+
+            assert.include(manifest, `<schemaversion>${version}</schemaversion>`, name);
+            assert.deepStrictEqual(
+              files.filter((file) => file !== "imsmanifest.xml").toSorted(),
+              listedFilesOf(manifest),
+              name,
+            );
+            assert.isBelow(size, 2 * 1024 * 1024, name);
+
+            for (const file of files) {
+              if (file.endsWith(".xml") && file !== "imsmanifest.xml") {
+                const document = yield* readXml(yield* fs.readFile(`${dir}/${file}`));
+
+                assert.strictEqual(document.root.namespace, qtiNamespace, `${name}/${file}`);
+              }
+            }
+          }
+
+          for (const [name, file, needle] of catalogPresent) {
+            const dir = yield* materialize(name);
+
+            assert.include(yield* fs.readFileString(`${dir}/${file}`), needle, `${name}: ${file}`);
+          }
+        }),
+      ),
+    180_000,
+  );
+
+  it.effect("the empty card and the empty entry are cut-catalog-supports with one card more", () =>
+    inFreshRoot(() =>
+      Effect.gen(function* emptyCards() {
+        const fs = yield* FileSystem.FileSystem;
+        const item = "items/CatalogWithMultipleSupports.xml";
+        const base = yield* fs.readFileString(
+          `${yield* materialize("cut-catalog-supports")}/${item}`,
+        );
+        const card = yield* fs.readFileString(`${yield* materialize("card-empty")}/${item}`);
+        const entry = yield* fs.readFileString(`${yield* materialize("entry-empty")}/${item}`);
+
+        assert.strictEqual(base.split("<qti-card ").length - 1, 2);
+        assert.strictEqual(
+          card,
+          base.replace("</qti-catalog>", '<qti-card support="spoken"/></qti-catalog>'),
+        );
+        assert.strictEqual(
+          entry,
+          base.replace(
+            "</qti-catalog>",
+            '<qti-card support="spoken"><qti-card-entry xml:lang="en"/></qti-card></qti-catalog>',
+          ),
+        );
+      }),
+    ),
+  );
+
+  it.effect("the catalog positives put their catalogs in every host and name each one", () =>
+    inFreshRoot(() =>
+      Effect.gen(function* catalogHosts() {
+        const fs = yield* FileSystem.FileSystem;
+        const hosts = yield* fs.readFileString(
+          `${yield* materialize("catalog-hosts")}/items/BG007.xml`,
+        );
+        const rubric = yield* fs.readFileString(
+          `${yield* materialize("cut-catalog-rubric")}/items/rubric_block.xml`,
+        );
+        const files = yield* fs.readFileString(`${yield* materialize("card-files")}/choice.xml`);
+
+        for (const id of [
+          "cat-feedback",
+          "cat-template",
+          "cat-template-feedback",
+          "cat-rubric-template",
+          "cat-modal",
+        ]) {
+          assert.strictEqual(hosts.split(`<qti-catalog id="${id}">`).length, 2, id);
+          assert.strictEqual(hosts.split(`data-catalog-idref="${id}"`).length, 2, id);
+        }
+
+        assert.strictEqual(hosts.split("<qti-catalog-info>").length - 1, 5);
+        assert.include(rubric, "asl/ss_choice_directions.m4v");
+        assert.strictEqual(files.split("<qti-file-href ").length - 1, 4);
+      }),
+    ),
+  );
+
+  it.effect(
+    "card-files names only files its package holds, and catalog-padded the one it has",
+    () =>
+      inFreshRoot(() =>
+        Effect.gen(function* cardFiles() {
+          const fs = yield* FileSystem.FileSystem;
+
+          for (const name of ["card-files", "catalog-padded"] as const) {
+            const dir = yield* materialize(name);
+            const text = yield* fs.readFileString(`${dir}/choice.xml`);
+
+            for (const match of text.matchAll(
+              /<qti-file-href [^>]*>(?<href>[^<]*)<\/qti-file-href>/gu,
+            )) {
+              assert.isTrue(
+                yield* fs.exists(`${dir}/${(match.groups?.["href"] ?? "").trim()}`),
+                name,
+              );
+            }
+          }
+        }),
+      ),
   );
 });

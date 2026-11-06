@@ -443,6 +443,36 @@ export const assemblyNames = [
 ] as const;
 
 /**
+ * The names of phase 9's catalog positives: the five catalog items of `BPIG_22April` cut as they
+ * are (`cut-catalog-supports`, `cut-catalog-multiple`, `cut-catalog-nodes`,
+ * `cut-catalog-reference` and `cut-catalog-rubric`), `catalog-300` (the first at 3.0.0) and eight
+ * hand-edited packages, one for each shape the corpus lacks: `catalog-hosts` (a catalog in a
+ * feedback block, a modal feedback, a template block, a feedback block in a template block and a
+ * template block in a rubric block), `card-files` (cards that hold files), `catalog-padded` (outer
+ * whitespace and a tab in the values that collapse or normalize), `catalog-lang` (decision 85:
+ * languages in catalog content that the item's metadata does not list), `card-qti-content`
+ * (decision 216: a printed variable and an interaction in a card), `card-gap-inside` (decision
+ * 309's case B: a gap in a card inside a gap match), `card-empty` (a card with no content) and
+ * `entry-empty` (a card whose one entry has none), the last two accepted by decision 324.
+ */
+export const catalogNames = [
+  "cut-catalog-supports",
+  "cut-catalog-multiple",
+  "cut-catalog-nodes",
+  "cut-catalog-reference",
+  "cut-catalog-rubric",
+  "catalog-300",
+  "catalog-hosts",
+  "card-files",
+  "catalog-padded",
+  "catalog-lang",
+  "card-qti-content",
+  "card-gap-inside",
+  "card-empty",
+  "entry-empty",
+] as const;
+
+/**
  * The names of the ten wildcard fixtures of phase 11 (spec W12): foreign content under the lax
  * hosts of `qti-custom-operator`, `xi:include`, `xi:fallback` and LOM, the four refusals, and
  * `test-selection-foreign`, a test with an extension element and an `xml:lang` on the strict
@@ -470,8 +500,8 @@ const wildcardNames = [
  * packaging phase's metadata and content cuts with their negatives, the 11 positive fixtures of
  * phase 5's tests, sections and stimuli ({@link testNames}) and its 63 negatives
  * ({@link negativeNames}), the five restored-check fixtures of {@link restoredNames}, the six
- * assembly fixtures of {@link assemblyNames}, the ten wildcard fixtures of {@link wildcardNames},
- * and `rtest01`, the
+ * assembly fixtures of {@link assemblyNames}, the 14 catalog positives of {@link catalogNames}, the
+ * ten wildcard fixtures of {@link wildcardNames}, and `rtest01`, the
  * examples' included fragment in place (spec reading 117), with one negative per include law.
  */
 export const fixtureNames = [
@@ -504,6 +534,7 @@ export const fixtureNames = [
   ...negativeNames,
   ...restoredNames,
   ...assemblyNames,
+  ...catalogNames,
   "lomrest",
   "lomrest-two-titles",
   "lomrest-two-purposes",
@@ -4446,6 +4477,224 @@ const assemblySpecs: Record<(typeof assemblyNames)[number], FixtureSpec> = {
 };
 
 /**
+ * The `BPIG_22April` item that `cut-catalog-supports` is cut from: one catalog of two cards, the
+ * first with two entries, referenced from a `span` in the interaction's prompt.
+ */
+const catalogSupportsItem = "items/CatalogWithMultipleSupports.xml";
+
+/**
+ * The edit that adds a card at the end of {@link catalogSupportsItem}'s one catalog.
+ *
+ * @param card - The card's text.
+ * @returns The edit as plain data.
+ */
+const addCatalogCard = (card: string): TextEdit =>
+  replaceIn(catalogSupportsItem, "</qti-catalog>", `${card}</qti-catalog>`);
+
+/**
+ * A `qti-catalog-info` of one catalog of one card, a linguistic guidance with html content.
+ *
+ * @param id - The catalog's `id`.
+ * @param text - The card's text.
+ * @returns The element's text.
+ */
+const guidanceCatalog = (id: string, text: string): string =>
+  `<qti-catalog-info><qti-catalog id="${id}"><qti-card support="linguistic-guidance"><qti-html-content>${text}</qti-html-content></qti-card></qti-catalog></qti-catalog-info>`;
+
+/**
+ * The feedback block that `catalog-hosts` adds to {@link bgChoiceItem}, with a catalog that a
+ * `data-catalog-idref` in its own content names.
+ */
+const catalogHostFeedback = `<qti-feedback-block outcome-identifier="FEEDBACK" identifier="fb" show-hide="show"><qti-content-body><p data-catalog-idref="cat-feedback">Wrong</p></qti-content-body>${guidanceCatalog("cat-feedback", "Wrong means not right.")}</qti-feedback-block>`;
+
+/**
+ * The template block of `catalog-hosts`, with a catalog of its own and a feedback block that has
+ * one too.
+ */
+const catalogHostTemplate = `<qti-template-block template-identifier="T" identifier="tb"><qti-content-body><p data-catalog-idref="cat-template">Hint</p><qti-feedback-block outcome-identifier="FEEDBACK" identifier="tfb" show-hide="hide"><qti-content-body><p data-catalog-idref="cat-template-feedback">More</p></qti-content-body>${guidanceCatalog("cat-template-feedback", "More means extra.")}</qti-feedback-block></qti-content-body>${guidanceCatalog("cat-template", "A hint helps.")}</qti-template-block>`;
+
+/**
+ * The rubric block of `catalog-hosts`, whose template block holds a catalog.
+ */
+const catalogHostRubric = `<qti-rubric-block use="instructions" view="candidate"><qti-content-body><qti-template-block template-identifier="T" identifier="rtb" show-hide="hide"><qti-content-body><p data-catalog-idref="cat-rubric-template">Read</p></qti-content-body>${guidanceCatalog("cat-rubric-template", "To read is to look.")}</qti-template-block></qti-content-body></qti-rubric-block>`;
+
+/**
+ * The modal feedback of `catalog-hosts`, which follows the item's response processing.
+ */
+const catalogHostModal = `<qti-modal-feedback outcome-identifier="FEEDBACK" show-hide="show" identifier="mf"><qti-content-body><p data-catalog-idref="cat-modal">Done</p></qti-content-body>${guidanceCatalog("cat-modal", "Done means finished.")}</qti-modal-feedback>`;
+
+/**
+ * The files the cards of `card-files` name by `qti-file-href`, beside `simple`'s own
+ * `images/sign.png`: a copy of it and a short video, each listed in the manifest.
+ */
+const cardFileEdits: readonly Edit[] = [
+  { _tag: "copyFile", from: "images/sign.png", to: "images/sign-large.png" },
+  {
+    _tag: "addFile",
+    path: "video/clip.mp4",
+    source: { member: "QTI3_BPIG_Examples/items/images/bubble.mp4" },
+  },
+  replaceIn(
+    "imsmanifest.xml",
+    '<file href="images/sign.png"/>',
+    [
+      '<file href="images/sign.png"/>',
+      '            <file href="images/sign-large.png"/>',
+      '            <file href="video/clip.mp4"/>',
+    ].join(CRLF),
+  ),
+];
+
+/**
+ * The edits that give `simple`'s item a catalog after its body, named by a `data-catalog-idref` on
+ * its first paragraph.
+ *
+ * @param reference - The `data-catalog-idref` value.
+ * @param catalog - The `qti-catalog-info` element's text.
+ * @returns The edits, each of which must match exactly once.
+ */
+const simpleWithCatalog = (reference: string, catalog: string): readonly TextEdit[] => [
+  replaceIn(
+    "choice.xml",
+    "<p>Look at the text in the picture.</p>",
+    `<p data-catalog-idref="${reference}">Look at the text in the picture.</p>`,
+  ),
+  replaceIn("choice.xml", "</qti-item-body>", `</qti-item-body>${CRLF}    ${catalog}`),
+];
+
+/**
+ * The specs of {@link catalogNames}.
+ */
+const catalogSpecs: Record<(typeof catalogNames)[number], FixtureSpec> = {
+  "card-empty": {
+    edits: [
+      addCatalogCard('<qti-card support="spoken"/>'),
+      { _tag: "cut", item: catalogSupportsItem, schemaversion: "3.0.1" },
+    ],
+    member: corpusMembers.BPIG_22April,
+    name: "card-empty",
+  },
+  "card-files": overSimple("card-files", [
+    ...cardFileEdits,
+    ...simpleWithCatalog(
+      "files1",
+      [
+        '<qti-catalog-info><qti-catalog id="files1">',
+        '<qti-card support="sign-language"><qti-file-href mime-type="video/mp4">video/clip.mp4</qti-file-href><qti-file-href mime-type="image/png">images/sign.png</qti-file-href></qti-card>',
+        '<qti-card support="long-description"><qti-html-content><p data-catalog-idref="files1">The sign.</p></qti-html-content><qti-file-href mime-type="image/png">images/sign-large.png</qti-file-href></qti-card>',
+        '<qti-card support="ext:org.example-sign_1"><qti-card-entry default="1"><qti-file-href mime-type="video/mp4">video/clip.mp4</qti-file-href></qti-card-entry></qti-card>',
+        "</qti-catalog></qti-catalog-info>",
+      ].join(""),
+    ),
+  ]),
+  "card-gap-inside": {
+    edits: [
+      replaceIn(
+        "items/gap-match-example-1.xml",
+        '<qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/>',
+        '<qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/><qti-outcome-declaration identifier="FEEDBACK" cardinality="single" base-type="identifier"/>',
+      ),
+      replaceIn(
+        "items/gap-match-example-1.xml",
+        "</blockquote>",
+        `</blockquote><div><qti-feedback-block outcome-identifier="FEEDBACK" identifier="hint" show-hide="show"><qti-content-body><p data-catalog-idref="cat-gap">Hint</p></qti-content-body><qti-catalog-info><qti-catalog id="cat-gap"><qti-card support="linguistic-guidance"><qti-html-content><p>The season is <qti-gap identifier="G3"/>.</p></qti-html-content></qti-card></qti-catalog></qti-catalog-info></qti-feedback-block></div>`,
+      ),
+      { _tag: "cut", item: "items/gap-match-example-1.xml", schemaversion: "3.0.1" },
+    ],
+    member: corpusMembers.BPIG_22April,
+    name: "card-gap-inside",
+  },
+  "card-qti-content": {
+    edits: [
+      replaceIn(
+        catalogSupportsItem,
+        '<qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/>',
+        '<qti-response-declaration identifier="RESPONSE2" cardinality="single" base-type="identifier"/><qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/><qti-outcome-declaration identifier="SHOWN" cardinality="single" base-type="string"/>',
+      ),
+      addCatalogCard(
+        '<qti-card support="additional-directions"><qti-html-content><p>Shown: <qti-printed-variable identifier="SHOWN"/></p><div><qti-choice-interaction response-identifier="RESPONSE2" max-choices="1"><qti-simple-choice identifier="yes">Yes</qti-simple-choice><qti-simple-choice identifier="no">No</qti-simple-choice></qti-choice-interaction></div></qti-html-content></qti-card>',
+      ),
+      { _tag: "cut", item: catalogSupportsItem, schemaversion: "3.0.1" },
+    ],
+    member: corpusMembers.BPIG_22April,
+    name: "card-qti-content",
+  },
+  "catalog-300": {
+    edits: [
+      replaceIn(catalogSupportsItem, "imsqti_asiv3p0p1_v1p0.xsd", "imsqti_asiv3p0_v1p0.xsd"),
+      { _tag: "cut", item: catalogSupportsItem, schemaversion: "3.0.0" },
+    ],
+    member: corpusMembers.BPIG_22April,
+    name: "catalog-300",
+  },
+  "catalog-hosts": bgCopy("catalog-hosts", [
+    replaceIn(
+      bgChoiceItem,
+      "</qti-outcome-declaration>",
+      `</qti-outcome-declaration><qti-outcome-declaration base-type="identifier" cardinality="single" identifier="FEEDBACK"/>${templateDeclaration}`,
+    ),
+    replaceIn(
+      bgChoiceItem,
+      "</qti-choice-interaction>",
+      `</qti-choice-interaction>${catalogHostFeedback}${catalogHostTemplate}${catalogHostRubric}`,
+    ),
+    replaceIn(bgChoiceItem, "</qti-assessment-item>", `${catalogHostModal}</qti-assessment-item>`),
+  ]),
+  "catalog-lang": overSimple("catalog-lang", [
+    ...copySpecs["item-lang-en"].edits,
+    ...simpleWithCatalog(
+      "catalog1",
+      '<qti-catalog-info><qti-catalog id="catalog1"><qti-card support="keyword-translation"><qti-card-entry xml:lang="es"><qti-html-content>preciso</qti-html-content></qti-card-entry><qti-card-entry xml:lang="de"><qti-html-content>genau</qti-html-content></qti-card-entry></qti-card><qti-card support="linguistic-guidance" xml:lang="es"><qti-html-content xml:lang="es">Preciso significa <span xml:lang="fr">exact</span>.</qti-html-content></qti-card></qti-catalog></qti-catalog-info>',
+    ),
+  ]),
+  "catalog-padded": overSimple(
+    "catalog-padded",
+    simpleWithCatalog(
+      "catalog1",
+      '<qti-catalog-info><qti-catalog id=" catalog1 "><qti-card support="sign-language"><qti-card-entry default=" true "><qti-file-href mime-type="image/&#9;png"> images/sign.png </qti-file-href></qti-card-entry></qti-card></qti-catalog></qti-catalog-info>',
+    ),
+  ),
+  "cut-catalog-multiple": cutItem(
+    "cut-catalog-multiple",
+    "BPIG_22April",
+    "items/MultipleCatalogs.xml",
+    "3.0.1",
+  ),
+  "cut-catalog-nodes": cutItem(
+    "cut-catalog-nodes",
+    "BPIG_22April",
+    "items/CatalogsAcrossContentNodes.xml",
+    "3.0.1",
+  ),
+  "cut-catalog-reference": cutItem(
+    "cut-catalog-reference",
+    "BPIG_22April",
+    "items/ReferencingCatalogContent.xml",
+    "3.0.1",
+  ),
+  "cut-catalog-rubric": cutItem(
+    "cut-catalog-rubric",
+    "BPIG_22April",
+    "items/rubric_block.xml",
+    "3.0.1",
+  ),
+  "cut-catalog-supports": cutItem(
+    "cut-catalog-supports",
+    "BPIG_22April",
+    catalogSupportsItem,
+    "3.0.1",
+  ),
+  "entry-empty": {
+    edits: [
+      addCatalogCard('<qti-card support="spoken"><qti-card-entry xml:lang="en"/></qti-card>'),
+      { _tag: "cut", item: catalogSupportsItem, schemaversion: "3.0.1" },
+    ],
+    member: corpusMembers.BPIG_22April,
+    name: "entry-empty",
+  },
+};
+
+/**
  * The edits of `test-selection-foreign`, over `test-selection`'s text edits: an `xml:lang` and one
  * `ma:ext` child, with its namespace declaration, on the first section's `qti-selection` and on
  * section C's `qti-ordering`. Both are strict attribute hosts (3.3 strict/a and strict/d): the
@@ -4571,6 +4820,7 @@ const specs: Record<FixtureName, FixtureSpec> = {
   ...negativeSpecs,
   ...restoredSpecs,
   ...assemblySpecs,
+  ...catalogSpecs,
   ...wildcardSpecs,
   "bad-identifier-value": {
     edits: [
