@@ -728,9 +728,22 @@ const onePerFamily = <R extends { readonly parent: string; readonly version: str
 };
 
 /**
- * Today's `Counted` rows, one per family: {@link onePerFamily}.
+ * Whether a `Counted` row bounds its position to at most one child: a reading's cap (spec reading
+ * 130), which {@link Capped} states, where every other row is a count {@link CountedOf} states.
+ *
+ * @param row - The row.
+ * @returns Whether its bounds are 0 and 1.
  */
-const countedByFamily = onePerFamily("CountedOf", grammar.content.counted.rows);
+const atMostOnce = (row: { readonly max: number; readonly min: number }): boolean =>
+  row.min === 0 && row.max === 1;
+
+/**
+ * Today's `Counted` rows but the caps, one per family: {@link onePerFamily}.
+ */
+const countedByFamily = onePerFamily(
+  "CountedOf",
+  grammar.content.counted.rows.filter((row) => !atMostOnce(row)),
+);
 
 /**
  * Today's `ChildBarredBy` rows, one per family: {@link onePerFamily}.
@@ -774,6 +787,30 @@ export const CountedOf = closed.relation(
       };
     }),
   ),
+);
+
+/**
+ * `Capped`: the set of (version, parent, position) where at most one child of a family stands, the
+ * `Counted` rows whose bounds are 0 and 1 (spec reading 130: the loose LOM binding's Schematron
+ * caps). A family may hold several, so they are no total function of the family as {@link CountedOf}
+ * is: `node.ts` holds them by a key over each family's children at a capped position, `(parent,
+ * state)`, which no count fold needs. It is keyed by the family, not by its {@link ContentModel} as
+ * {@link Last} is: a model is an automaton, whose positions name no kind, so families of other kinds
+ * share a LOM category's model, and a cap keyed by model would cap them too.
+ */
+export const Capped = closed.relation(
+  "Capped",
+  {
+    parent: closedId(NodeKind),
+    position: closedId(Position),
+    version: closedId(SchemaVersion),
+  },
+  ["version", "parent", "position"],
+  grammar.content.counted.rows.filter(atMostOnce).map(({ parent, position, version }) => ({
+    parent: memberOf(grammar.kinds.nodeKind, parent),
+    position,
+    version,
+  })),
 );
 
 /**

@@ -11,7 +11,10 @@
  * predecessor's position (0 for the first child), and the last child reads `Last(version, parent,
  * state)`. Under Unique Particle Attribution the automaton enforces order, required particles,
  * at-most-once and exclusive choice; a bound of 2…n, which a position automaton relaxes, is a count
- * law, `Counted(version, parent, position) → (min, max)`.
+ * law, `Counted(version, parent, position) → (min, max)`. So is a reading's cap, a particle of at
+ * most one that an enclosing group repeats, which the automaton reads per repeat and the reading
+ * reads as the family's total: `Counted` holds it as `(0, 1)` (spec reading 130, the loose LOM
+ * binding's Schematron).
  *
  * A group's bound of 2…n the automaton relaxes too, to `1..n` (`automatonOf` links a repeatable
  * group's last positions to its first, whatever its bounds), and no position carries it, so
@@ -68,11 +71,19 @@ import type { Automaton } from "#pantry/vocab/sequencing.ts";
  * required; a kind admitted beside another in every particle that names it; kinds that come
  * before every other element of the model and before its text that is not whitespace; the model
  * restated whole, where the language the reading follows is not the XSD's and no edit of a particle
- * states it, narrower or wider (spec reading 2, MathML's RelaxNG); or the kinds a family's last
+ * states it, narrower or wider (spec reading 2, MathML's RelaxNG); the kinds a family's last
  * child is one of, which narrows the model's `Last` where its language is no deterministic
- * expression's (spec reading 2, MathML's `lambda`).
+ * expression's (spec reading 2, MathML's `lambda`); or a kind that stands at most once among a
+ * family's children wherever the model repeats it, a count `Counted` states beside the automaton
+ * (spec reading 130, the loose LOM binding's Schematron).
  */
 export type ModelEdit =
+  | {
+      readonly _tag: "cap";
+      readonly kind: string;
+      readonly parent: string;
+      readonly source: string;
+    }
   | {
       readonly _tag: "require";
       readonly kind: string;
@@ -142,7 +153,7 @@ type PositionKey = readonly [
 export interface ContentGrammar {
   /**
    * `Counted`: the positions whose count is a law beside the automaton, with their bounds, each
-   * sourced to the particle whose bound it is.
+   * sourced to the particle whose bound it is, or to the reading that caps it at one.
    */
   readonly counted: Sourced<
     PositionKey,
@@ -276,9 +287,31 @@ export class MixedEnding extends Schema.TaggedError<MixedEnding>()("MixedEnding"
 }
 
 /**
+ * A spec reading caps a kind that its model names at several positions, or beside other kinds at
+ * one, so no one position's count is the kind's count.
+ */
+export class UncountedCap extends Schema.TaggedError<UncountedCap>()("UncountedCap", {
+  kind: Schema.String,
+  parent: Schema.String,
+  source: Schema.String,
+}) {
+  /**
+   * The reading, the kind and parent, and the repair.
+   */
+  override get message(): string {
+    return `The spec reading ${this.source} caps ${this.kind} under ${this.parent}, which ${this.parent}'s model does not name at exactly one position of its own, so no position's count is the kind's. Restate the model so one particle names ${this.kind} alone, or state the count as a law of its own.`;
+  }
+}
+
+/**
  * The ways the content models have no content grammar.
  */
-export type ContentError = AmbiguousModel | ClosedRelationError | MixedEnding | UnreadEdit;
+export type ContentError =
+  | AmbiguousModel
+  | ClosedRelationError
+  | MixedEnding
+  | UncountedCap
+  | UnreadEdit;
 
 /**
  * The kinds of character data, comments, instructions and entity references: the XDM's nodes
@@ -442,14 +475,15 @@ const edited = (particle: Particle, edit: ModelEdit): Edited => {
     return { found: true, particle: edit.particle };
   }
 
-  if (edit._tag === "ends") {
-    // An ending narrows the automaton, not the particle (`contentOf`); here it is found when the
-    // model names one of its kinds.
+  if (edit._tag === "ends" || edit._tag === "cap") {
+    // An ending narrows the automaton and a cap counts beside it, neither the particle
+    // (`contentOf`); each is found when the model names one of its kinds.
     const named = new Set(
       leavesOf(particle).flatMap((leaf) => (leaf._tag === "element" ? leaf.kinds : [])),
     );
+    const kinds = edit._tag === "cap" ? [edit.kind] : edit.kinds;
 
-    return { found: edit.kinds.some((kind) => named.has(kind)), particle };
+    return { found: kinds.some((kind) => named.has(kind)), particle };
   }
 
   let found = false;
@@ -604,6 +638,53 @@ const endedBy = (
 };
 
 /**
+ * One position a reading caps: at most one child of a family stands there.
+ */
+interface Cap {
+  readonly position: number;
+  readonly source: string;
+}
+
+/**
+ * Find the positions the readings' caps of a kind's model count: for each cap, the one position
+ * that names its kind and no other kind, so the count of the family's children there is the count
+ * of the kind. A kind a model names at several positions, or beside another kind at one, has no
+ * such position, and its cap is refused as {@link UncountedCap}. A kind no particle of the model
+ * names leaves the cap unread, which {@link contentOf} refuses as {@link UnreadEdit}, and one whose
+ * particles never occur has no child to count.
+ *
+ * @param automaton - The model's automaton.
+ * @param edits - Every reading's edits.
+ * @param kind - The model's kind.
+ * @returns The capped positions, or the first cap no one position counts.
+ */
+const cappedBy = (
+  automaton: Automaton,
+  edits: readonly ModelEdit[],
+  kind: string,
+): Result.Result<readonly Cap[], UncountedCap> => {
+  const caps: Cap[] = [];
+  for (const edit of edits) {
+    if (edit._tag === "cap" && edit.parent === kind) {
+      const [only, ...rest] = automaton.positions.filter(
+        ({ symbol }) => symbol._tag === "kinds" && symbol.kinds.includes(edit.kind),
+      );
+      if (only !== undefined) {
+        if (rest.length > 0 || only.symbol._tag !== "kinds" || only.symbol.kinds.length > 1) {
+          return Result.fail(
+            new UncountedCap({ kind: edit.kind, parent: kind, source: edit.source }),
+          );
+        }
+
+        caps.push({ position: only.number, source: edit.source });
+      }
+    }
+  }
+
+  return Result.succeed(caps);
+};
+
+/**
  * The automaton of a content type that holds no particle: no position, and the empty family.
  */
 const noAutomaton: Automaton = {
@@ -642,6 +723,10 @@ const undecidedKindOf = (
  */
 interface Installed {
   readonly automaton: Automaton;
+  /**
+   * The positions the readings cap at one child.
+   */
+  readonly caps: readonly Cap[];
   readonly data: readonly string[];
   readonly parent: string;
   /**
@@ -720,6 +805,8 @@ export const contentOf = (input: {
         );
       }
 
+      const caps = yield* cappedBy(automaton, edits, model.kind);
+
       for (const version of model.versions) {
         const named = new Set(
           automaton.positions.flatMap(({ symbol }) =>
@@ -782,6 +869,7 @@ export const contentOf = (input: {
         const inVersion = (sources: Sources): Source => sources[at] ?? sources[0];
         installed.push({
           automaton,
+          caps,
           data,
           parent: model.kind,
           sources: [
@@ -817,6 +905,7 @@ export const contentOf = (input: {
                 ].join(", ");
               }
               case "beside":
+              case "cap":
               case "require": {
                 return unused.kind;
               }
@@ -873,14 +962,31 @@ export const contentOf = (input: {
         .filter((child) => !symbols.has(child))
         .map((child) => ({ child, parent: held, position: 0, version: in_ })),
     ]);
-    const countedRows = installed.flatMap(({ automaton, parent: held, version: in_ }) =>
-      automaton.positions.flatMap(({ number, occurs }) => {
+    // A bound of 2…n the automaton relaxes is the particle's; a cap is its reading's, at most one
+    // child where the model's enclosing group repeats the particle.
+    const countedRows = installed.flatMap(({ automaton, caps, parent: held, version: in_ }) => [
+      ...automaton.positions.flatMap(({ number, occurs }) => {
         const max = Option.getOrElse(occurs.max, () => Number.POSITIVE_INFINITY);
 
         return occurs.min >= 2 || (max >= 2 && Number.isFinite(max))
           ? [{ max, min: occurs.min, parent: held, position: String(number), version: in_ }]
           : [];
       }),
+      ...caps.map(({ position: at }) => ({
+        max: 1,
+        min: 0,
+        parent: held,
+        position: String(at),
+        version: in_,
+      })),
+    ]);
+    const capSources = new Map(
+      installed.flatMap(({ caps, parent: held, version: in_ }) =>
+        caps.map(
+          ({ position: at, source }) =>
+            [`${in_} ${held} ${String(at)}`, { _tag: "spec", cite: source } as const] as const,
+        ),
+      ),
     );
     const sourcesOf = new Map(
       installed.map(({ parent: held, sources, version: in_ }) => [`${in_} ${held}`, sources]),
@@ -942,7 +1048,7 @@ export const contentOf = (input: {
             ],
             rows: countedRows,
           }),
-          sourceAt,
+          (row) => capSources.get(`${row.version} ${row.parent} ${row.position}`) ?? sourceAt(row),
         ),
         follow: sourced(
           yield* closed({

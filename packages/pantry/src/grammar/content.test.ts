@@ -8,7 +8,7 @@ import { floorSeed, rotatingSeed } from "@grizzle/testing/random";
 import { sample } from "@grizzle/testing/source";
 import { searched } from "@grizzle/testing/vitest";
 import { runOfProcess } from "@grizzle/testing/vitest/run";
-import { Array as Arr, Duration, Effect, FileSystem, Formatter, Option } from "effect";
+import { Array as Arr, Duration, Effect, FileSystem, Formatter, Option, Result } from "effect";
 import { int8Max } from "#pantry/grammar/closed.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
@@ -17,8 +17,12 @@ import { fragmentRoots } from "#pantry/grammar/facets.ts";
 import { foreignKinds, isForeignKind, schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import { checkCache, sourcePaths, xsdDirectory } from "#pantry/vocab/derive/sources.ts";
-import type { Source } from "#pantry/vocab/inventory/types.ts";
-import { asiNamespace } from "#pantry/vocab/namespaces.ts";
+import type {
+  ContentModel,
+  Particle as ModelParticle,
+  Source,
+} from "#pantry/vocab/inventory/types.ts";
+import { asiNamespace, vocabularyNamespaces } from "#pantry/vocab/namespaces.ts";
 import type { NamespaceClass } from "#pantry/vocab/namespaces.ts";
 import type { SourcePath } from "#pantry/vocab/derive/sources.ts";
 import {
@@ -27,6 +31,10 @@ import {
   elementsOf,
   loadXsd,
   nameKey,
+  toyFacets,
+  toyGrammar,
+  toySources,
+  toyVocabulary,
   validateContents,
   wildcardsOf,
   XsdOracleLayer,
@@ -60,7 +68,7 @@ const grammar = Effect.fromResult(composed());
  * @returns Whether the family's content is the model's.
  */
 const accepts = (
-  composedGrammar: ComposedGrammar,
+  composedGrammar: Pick<ComposedGrammar, "admission" | "content">,
   version: SchemaVersion,
   parent: string,
   children: readonly string[],
@@ -98,7 +106,7 @@ const accepts = (
  * @returns Whether every counted position's count lies in its bounds.
  */
 const countsHold = (
-  composedGrammar: ComposedGrammar,
+  composedGrammar: Pick<ComposedGrammar, "admission" | "content">,
   version: SchemaVersion,
   parent: string,
   children: readonly string[],
@@ -134,6 +142,75 @@ const arityHolds = (
   Option.match(composedGrammar.operatorArity.lookup({ kind: parent }), {
     onNone: () => true,
     onSome: ({ max, min }) => BigInt(children.length) >= min && BigInt(children.length) <= max,
+  });
+
+/**
+ * One at-most-one assert of the loose LOM binding's embedded Schematron: the kind of its rule's
+ * context, the kind it caps there, and its line in `lom/imsmd_loose_v1p3p2.xsd`.
+ */
+interface SchematronCap {
+  readonly child: string;
+  readonly line: number;
+  readonly parent: string;
+}
+
+/**
+ * Read the loose LOM binding's Schematron from the binding's own text, apart from every reader and
+ * from the facets (spec reading 130): each rule's context, an absolute path from `lom:lom`,
+ * resolved step by step to the kind of its last step, and each assert `count(lom:X) = 0 or
+ * count(lom:X) = 1` as the kind `X` names there. A rule whose path resolves to no kind, an assert
+ * of another form and an assert whose element resolves to no kind are each reported as unread.
+ *
+ * @param composedGrammar - The grammar whose kinds the names resolve to.
+ * @returns The caps, and each line read as neither.
+ */
+const schematronCaps = (composedGrammar: ComposedGrammar) =>
+  Effect.gen(function* readSchematron() {
+    const fs = yield* FileSystem.FileSystem;
+    const directory = yield* xsdDirectory;
+    const text = yield* fs.readFileString(`${directory}/lom/imsmd_loose_v1p3p2.xsd`);
+    const resolve = resolverOf(composedGrammar.kinds);
+    const lom = vocabularyNamespaces.lom.namespace;
+    const caps: SchematronCap[] = [];
+    const unread: string[] = [];
+    let context: Option.Option<string> = Option.none();
+    for (const [index, line] of text.split("\n").entries()) {
+      const rule = /<sch:rule\b[^>]*\bcontext="(?<path>[^"]*)"/u.exec(line)?.groups?.["path"];
+      const test = /<sch:assert\b[^>]*\btest="(?<test>[^"]*)"/u.exec(line)?.groups?.["test"];
+      if (rule !== undefined) {
+        context = Option.some("document");
+        for (const step of rule.split("/")) {
+          context = context.pipe(
+            Option.flatMap((held) =>
+              step.startsWith("lom:") ? resolve(lom, step.slice(4), held) : Option.none(),
+            ),
+          );
+        }
+
+        if (Option.isNone(context)) {
+          unread.push(`line ${String(index + 1)}: ${rule}`);
+        }
+      } else if (test !== undefined) {
+        const name = /^count\(lom:(?<name>[A-Za-z]+)\) = 0 or count\(lom:\k<name>\) = 1$/u.exec(
+          test,
+        )?.groups?.["name"];
+        const capped = Option.all({ name: Option.fromNullishOr(name), parent: context }).pipe(
+          Option.flatMap((held) =>
+            Option.map(resolve(lom, held.name, held.parent), (child) => ({
+              child,
+              parent: held.parent,
+            })),
+          ),
+        );
+        if (Option.isSome(capped)) {
+          caps.push({ ...capped.value, line: index + 1 });
+        } else {
+          unread.push(`line ${String(index + 1)}: ${test}`);
+        }
+      }
+    }
+
+    return { caps, unread };
   });
 
 /**
@@ -789,8 +866,9 @@ const xmllintRuling = (input: {
 /**
  * Whether a spec reading narrows the XSD to refuse a family it accepts. Reading 26: a section holds
  * at least one part, where its XSD admits none, so a section's family that holds no part. Reading
- * 118: an include holds at most one fallback (XInclude 1.0 §3.1), where its XSD admits any number,
- * so an include's family that holds two.
+ * 44: an SSML `token` or `w` holds no `voice` (SSML 1.1 §3.1.8.2), where `tokenType` admits one.
+ * Reading 118: an include holds at most one fallback (XInclude 1.0 §3.1), where its XSD admits any
+ * number, so an include's family that holds two.
  *
  * @param parent - The family's parent.
  * @param children - The family.
@@ -798,6 +876,7 @@ const xmllintRuling = (input: {
  */
 const narrowedByReading = (parent: string, children: readonly string[]): boolean =>
   (parent === "qti-assessment-section" && !children.some((child) => sectionParts.has(child))) ||
+  ((parent === "ssml:token" || parent === "ssml:w") && children.includes("ssml:voice")) ||
   (parent === "xi:include" && children.filter((child) => child === "xi:fallback").length > 1);
 
 describe.skipIf(!cached)("the content automata against the XSD", () => {
@@ -805,7 +884,7 @@ describe.skipIf(!cached)("the content automata against the XSD", () => {
     "accept exactly the child sequences the independent reading's automaton accepts, every model with one content: every sequence of at most 3 children (4 over an alphabet of at most 4) over at most 4 kinds it names, one only its wildcard admits and one it refuses, drawn from the run seed",
     (ctx) =>
       // Oracle: a second implementation, the tests' own automaton of each XSD particle
-      // (`acceptorOf`), with spec readings 2 and 26 ruled where they narrow the XSD.
+      // (`acceptorOf`), with spec readings 2, 26, 44 and 118 ruled where they narrow the XSD.
       // Bound: namedBound of the kinds a model names (every one where it names at most that many),
       // one kind only its wildcard admits and one element kind it does not admit, each a fresh draw
       // each run (TEST_SEED replays it); every sequence of at most 3 children over that alphabet, 4
@@ -902,7 +981,7 @@ describe.skipIf(!cached)("the content automata against the XSD", () => {
 
         yield* Effect.promise(() =>
           ctx.annotate(
-            `${models} models (${drawnFrom} naming more than ${namedBound} kinds, whose ${namedBound} the run seed drew), ${compared} sequences, ${ruled} ruled by readings 2, 26 and 118; ${skipped} kinds skipped for holding more than one content`,
+            `${models} models (${drawnFrom} naming more than ${namedBound} kinds, whose ${namedBound} the run seed drew), ${compared} sequences, ${ruled} ruled by readings 2, 26, 44 and 118; ${skipped} kinds skipped for holding more than one content`,
             "bound",
           ),
         );
@@ -1225,14 +1304,16 @@ const arityStates = (
 
 describe.skipIf(!cached)("the occurrence bounds the automata relax", () => {
   it.effect(
-    "are laws beside them: an element particle's in Counted, a group's in OperatorArity at exactly its bound, and Counted holds those, nothing else",
+    "are laws beside them: an element particle's in Counted, a group's in OperatorArity at exactly its bound, and Counted holds those and the LOM binding's Schematron caps, nothing else",
     () =>
-      // Oracle: the tests' own reading of the XSDs. A position automaton holds a particle's bound
-      // exactly when its least is 0 or 1 and its greatest 1 or unbounded (Brüggemann-Klein and
-      // Wood); every other bound is a count, which Counted states for one particle's children
-      // and OperatorArity for a whole content's, and which only holds as a total where no
-      // enclosing group may repeat or be absent. A group's bound is OperatorArity's (min, max)
-      // exactly, and each of its repeats one element child.
+      // Oracle: the tests' own reading of the XSDs, and of the LOM binding's embedded Schematron
+      // from its text. A position automaton holds a particle's bound exactly when its least is 0
+      // or 1 and its greatest 1 or unbounded (Brüggemann-Klein and Wood); every other bound is a
+      // count, which Counted states for one particle's children and OperatorArity for a whole
+      // content's, and which only holds as a total where no enclosing group may repeat or be
+      // absent. A group's bound is OperatorArity's (min, max) exactly, and each of its repeats one
+      // element child. Each Schematron assert caps its element at one in its context's family
+      // (spec reading 130), Counted's 0 to 1 at the element's position, in both versions.
       Effect.gen(function* relaxed() {
         const composedGrammar = yield* grammar;
         const { admission, content, kinds, operatorArity } = composedGrammar;
@@ -1291,6 +1372,15 @@ describe.skipIf(!cached)("the occurrence bounds the automata relax", () => {
           }
         }
 
+        const schematron = yield* schematronCaps(composedGrammar);
+        for (const { child, parent } of schematron.caps) {
+          for (const version of schemaVersions) {
+            counted(version, parent, child, 0, 1);
+          }
+        }
+
+        assert.deepStrictEqual(schematron.unread, []);
+        assert.strictEqual(schematron.caps.length, 94);
         assert.deepStrictEqual(unstatable, []);
         assert.deepStrictEqual(
           new Set(
@@ -1462,20 +1552,72 @@ describe.skipIf(!cached)("the content grammar's sources", () => {
   );
 });
 
-describe.skipIf(!cached)("the LOM binding's repeats", () => {
+describe.skipIf(!cached)("spec reading 130 in the LOM binding", () => {
   it.effect(
-    "are admitted past any count, as its unbounded choices state: every LOM model, every kind it names, twice and three times",
+    "caps exactly what the binding bounds to one inside an unbounded choice: its Schematron's 94 asserts are those 82 (parent, kind) pairs",
     () =>
-      // Oracle: the tests' own reading of the LOM binding. It writes each category as an
+      // Oracle: the tests' own reading of the binding's XSD, against its Schematron read from its
+      // text. The binding's header says "The strict multiplicity of elements has been imposed"
+      // (`imsmd_loose_v1p3p2.xsd` lines 18-21): each element of a category keeps its LOM
+      // multiplicity as its particle's bound inside the category's unbounded choice, which the
+      // Schematron enforces as a total (lines 85-92). So the asserts are exactly those particles.
+      Effect.gen(function* capsAreBounds() {
+        const composedGrammar = yield* grammar;
+        const resolve = resolverOf(composedGrammar.kinds);
+        const { set } = yield* loadXsd("lom/imsmd_loose_v1p3p2.xsd");
+        const { contents } = xsdContents(set, resolve);
+        const bounded = new Set<string>();
+        for (const [parent, readings] of contents) {
+          const walk = (particle: Particle, repeated: boolean): void => {
+            if (particle._tag === "element") {
+              if (repeated && particle.occurs.max === 1) {
+                for (const { name } of particle.members) {
+                  for (const kind of Option.toArray(resolve(name.namespace, name.local, parent))) {
+                    bounded.add(`${parent} ${kind}`);
+                  }
+                }
+              }
+            } else if (particle._tag !== "any") {
+              for (const child of particle.particles) {
+                walk(child, repeated || particle.occurs.max > 1);
+              }
+            }
+          };
+          for (const particle of readings.flatMap((reading) => Option.toArray(reading.particle))) {
+            walk(particle, false);
+          }
+        }
+
+        const schematron = yield* schematronCaps(composedGrammar);
+
+        assert.deepStrictEqual(schematron.unread, []);
+        assert.strictEqual(schematron.caps.length, 94);
+        assert.deepStrictEqual(
+          new Set(schematron.caps.map(({ child, parent }) => `${parent} ${child}`)),
+          bounded,
+        );
+        assert.strictEqual(bounded.size, 82);
+      }).pipe(Effect.provide(XsdOracleLayer)),
+    xsdTimeout,
+  );
+
+  it.effect(
+    "follows the binding's unbounded choices and its Schematron's caps: every LOM model, every kind it names, once, twice and three times, in both versions",
+    () =>
+      // Oracle: the tests' own reading of the LOM binding, which writes each category as an
       // unbounded choice of its elements (`imsmd_loose_v1p3p2.xsd:984`, `AggregationLevel.Type`,
-      // and its siblings), and no source caps the repeats (1EdTech's Best Practice Guide v1.3
-      // §2.3.7 states no count), so a family the binding's acceptor accepts is the grammar's too.
+      // and its siblings), and its Schematron read from its text: a family the binding's acceptor
+      // accepts is the grammar's too, but for a capped kind repeated, which spec reading 130
+      // refuses. Each capped pair is met once alone, accepted, and repeated, refused.
       Effect.gen(function* lomRepeats() {
         const composedGrammar = yield* grammar;
         const { kinds } = composedGrammar;
         const { set } = yield* loadXsd("lom/imsmd_loose_v1p3p2.xsd");
         const resolve = resolverOf(kinds);
         const { contents } = xsdContents(set, resolve);
+        const schematron = yield* schematronCaps(composedGrammar);
+        const capped = new Set(schematron.caps.map(({ child, parent }) => `${parent} ${child}`));
+        const met = new Set<string>();
         const disagreements: string[] = [];
         let compared = 0;
         for (const [parent, readings] of contents) {
@@ -1498,19 +1640,23 @@ describe.skipIf(!cached)("the LOM binding's repeats", () => {
               [],
             );
             for (const kind of named) {
-              for (const children of [
-                [kind, kind],
-                [kind, kind, kind],
-              ]) {
-                compared += 1;
-                const expected = acceptor(children);
-                const verdict =
-                  accepts(composedGrammar, "3.0.1", parent, children) &&
-                  countsHold(composedGrammar, "3.0.1", parent, children);
-                if (verdict !== expected) {
-                  disagreements.push(
-                    `${parent} [${children.join(", ")}]: the grammar ${verdict ? "accepts" : "refuses"}, the binding ${expected ? "accepts" : "refuses"}`,
-                  );
+              for (const children of [[kind], [kind, kind], [kind, kind, kind]]) {
+                for (const version of schemaVersions) {
+                  compared += 1;
+                  const cap = capped.has(`${parent} ${kind}`);
+                  if (cap) {
+                    met.add(`${parent} ${kind}`);
+                  }
+
+                  const expected = acceptor(children) && (children.length === 1 || !cap);
+                  const verdict =
+                    accepts(composedGrammar, version, parent, children) &&
+                    countsHold(composedGrammar, version, parent, children);
+                  if (verdict !== expected) {
+                    disagreements.push(
+                      `${version} ${parent} [${children.join(", ")}]: the grammar ${verdict ? "accepts" : "refuses"}, the binding ${expected ? "accepts" : "refuses"}`,
+                    );
+                  }
                 }
               }
             }
@@ -1519,9 +1665,170 @@ describe.skipIf(!cached)("the LOM binding's repeats", () => {
 
         assert.isAbove(compared, 0);
         assert.deepStrictEqual(disagreements.slice(0, 20), []);
+        assert.deepStrictEqual(met, capped, "every capped pair is probed");
       }).pipe(Effect.provide(XsdOracleLayer)),
     xsdTimeout,
   );
+});
+
+/**
+ * A toy element particle of the kinds it names, once.
+ *
+ * @param kinds - The kinds.
+ * @returns The particle.
+ */
+const toyElement = (...kinds: readonly [string, ...string[]]): ModelParticle => ({
+  _tag: "element",
+  kinds,
+  occurs: { max: Option.some(1), min: 1 },
+  sources: toySources(schemaVersions),
+});
+
+/**
+ * A toy group of particles.
+ *
+ * @param compositor - Its compositor.
+ * @param repeated - Whether it occurs any number of times, or exactly once.
+ * @param particles - Its particles.
+ * @returns The group.
+ */
+const toyGroup = (
+  compositor: "choice" | "sequence",
+  repeated: boolean,
+  ...particles: readonly ModelParticle[]
+): ModelParticle => ({
+  _tag: "group",
+  compositor,
+  occurs: repeated ? { max: Option.none(), min: 0 } : { max: Option.some(1), min: 1 },
+  particles,
+  sources: toySources(schemaVersions),
+});
+
+/**
+ * The toy kind `p`'s model, element-only, in every version.
+ *
+ * @param particle - Its particle.
+ * @returns The model.
+ */
+const toyModel = (particle: ModelParticle): ContentModel => ({
+  content: { _tag: "element-only", particle },
+  kind: "p",
+  sources: toySources(schemaVersions),
+  type: Option.none(),
+  versions: schemaVersions,
+});
+
+/**
+ * Compose a toy vocabulary of `p` over `a`, `b` and `c`, its model capped at some kinds.
+ *
+ * @param model - The model of `p`.
+ * @param capped - The kinds it caps at one.
+ * @returns The grammar, or the composition's refusal.
+ */
+const cappedToy = (model: ContentModel, capped: readonly string[]) =>
+  toyGrammar([
+    {
+      ...toyVocabulary({
+        admission: [],
+        attributes: [],
+        data: ["ws", "comment", "pi"],
+        facets: toyFacets({
+          content: {
+            edits: capped.map((kind) => ({
+              _tag: "cap" as const,
+              kind,
+              parent: "p",
+              source: "a toy cap",
+            })),
+            models: [],
+            roots: [],
+          },
+        }),
+        kinds: ["p", "a", "b", "c"],
+      }),
+      models: [model],
+    },
+  ]);
+
+/**
+ * Compose the toy with one cap, and name the composition's refusal, `composed` where there is none.
+ *
+ * @param model - The model of `p`.
+ * @param capped - The kind it caps.
+ * @returns The refusal's tag.
+ */
+const refusal = (model: ContentModel, capped: string): string =>
+  Result.match(cappedToy(model, [capped]), {
+    onFailure: (error) => error._tag,
+    onSuccess: () => "composed",
+  });
+
+describe("the cap edit, which spec reading 130's LOM caps read (content.ts, cappedBy)", () => {
+  it.effect(
+    "holds a capped kind to one child of its family, beside the automaton, every family of at most 4 over 3 kinds, each cap of 1 or 2 kinds",
+    () =>
+      // Oracle: the edit's contract, a family holds at most one child of each capped kind and
+      // any number of the others. Bound: `(a | b | c)*`, every family of at most 4 children,
+      // capped at each nonempty set of at most two of the three kinds.
+      Effect.gen(function* everyFamily() {
+        const wrong: string[] = [];
+        const model = toyModel(
+          toyGroup(
+            "sequence",
+            false,
+            toyGroup("choice", true, toyElement("a"), toyElement("b"), toyElement("c")),
+          ),
+        );
+        for (const capped of [["a"], ["b"], ["c"], ["a", "b"], ["a", "c"], ["b", "c"]]) {
+          const toy = yield* Effect.fromResult(cappedToy(model, capped));
+          for (const children of sequencesOf(["a", "b", "c"], 4)) {
+            const expected = capped.every(
+              (kind) => children.filter((child) => child === kind).length <= 1,
+            );
+            for (const version of schemaVersions) {
+              const verdict =
+                accepts(toy, version, "p", children) && countsHold(toy, version, "p", children);
+              if (verdict !== expected) {
+                wrong.push(
+                  `[${capped.join(" ")}] ${version} [${children.join(" ")}]: ${String(verdict)}`,
+                );
+              }
+            }
+          }
+
+          assert.strictEqual(
+            toy.content.counted.rows.length,
+            capped.length * schemaVersions.length,
+          );
+        }
+
+        assert.deepStrictEqual(wrong, []);
+      }),
+  );
+
+  it("refuses a cap of a kind its model names at two positions or beside another kind, and one of a kind it names nowhere", () => {
+    // Oracle: the edit's contract, a cap counts one position, which names the kind alone.
+    const shared = toyModel(
+      toyGroup("sequence", false, toyGroup("choice", true, toyElement("a", "b"), toyElement("c"))),
+    );
+    const twice = toyModel(
+      toyGroup(
+        "sequence",
+        false,
+        toyElement("a"),
+        toyGroup("choice", true, toyElement("b"), toyElement("a")),
+      ),
+    );
+    const without = toyModel(
+      toyGroup("sequence", false, toyGroup("choice", true, toyElement("a"), toyElement("b"))),
+    );
+
+    assert.strictEqual(refusal(shared, "a"), "UncountedCap");
+    assert.strictEqual(refusal(twice, "a"), "UncountedCap");
+    assert.strictEqual(refusal(without, "c"), "UnreadEdit");
+    assert.strictEqual(refusal(shared, "c"), "composed");
+    assert.strictEqual(refusal(twice, "b"), "composed");
+  });
 });
 
 describe("the installed automata", () => {
@@ -1676,6 +1983,70 @@ describe.skipIf(!cached)("spec reading 40 in ssml:speak", () => {
               }),
           ),
         );
+      }).pipe(Effect.provide(XsdOracleLayer)),
+    xsdTimeout,
+  );
+});
+
+describe.skipIf(!cached)("spec reading 44 in ssml:token and ssml:w", () => {
+  it.effect(
+    "accepts exactly what the XSD's tokenType accepts with no voice, its ##other wildcard kept: every family of at most 3 children over voice, prosody, audio, a foreign element and text, in both versions",
+    () =>
+      // Oracle: the XSD's own `tokenType` over the elements, by the tests' reader, and spec
+      // reading 44 turned into a checker: SSML 1.1 §3.1.8.2 lists `token`'s elements without
+      // `voice`, and §2.2.3 admits an element of another namespace, which the wildcard keeps.
+      Effect.gen(function* readingFortyFour() {
+        const composedGrammar = yield* grammar;
+        const { kinds } = composedGrammar;
+        const { set } = yield* loadXsd("imsqti_asiv3p0p1_v1p0.xsd");
+        const { contents } = xsdContents(set, resolverOf(kinds));
+        const disagreements: string[] = [];
+        let compared = 0;
+        for (const parent of ["ssml:token", "ssml:w"]) {
+          const [model] = (contents.get(parent) ?? []).flatMap(({ particle }) =>
+            Option.toArray(particle),
+          );
+          // `tokenType` names SSML's global elements by reference, and the composition resolves a
+          // name by the parents that admit it, so each is resolved under `ssml:speak`, which
+          // admits every one of them, `voice` included, where the reading's `token` does not.
+          const resolve = (
+            members: readonly {
+              readonly name: { readonly local: string; readonly namespace: string };
+            }[],
+          ) =>
+            members.flatMap((member) =>
+              Option.toArray(
+                resolverOf(kinds)(member.name.namespace, member.name.local, "ssml:speak"),
+              ),
+            );
+          const tokenType = Option.match(Option.fromNullishOr(model), {
+            onNone: () => () => false,
+            onSome: (particle) => acceptorOf(particle, resolve, [foreignKinds.other]),
+          });
+          for (const children of sequencesOf(
+            ["ssml:voice", "ssml:prosody", "ssml:audio", foreignKinds.other, "text"],
+            3,
+          )) {
+            const elements = children.filter((child) => child !== "text");
+            const expected = tokenType(elements) && !elements.includes("ssml:voice");
+            for (const version of schemaVersions) {
+              compared += 1;
+              const verdict =
+                accepts(composedGrammar, version, parent, children) &&
+                countsHold(composedGrammar, version, parent, children);
+              if (verdict !== expected) {
+                disagreements.push(
+                  `${version} ${parent} [${children.join(", ")}]: the grammar ${verdict ? "accepts" : "refuses"}, the reading ${expected ? "accepts" : "refuses"}`,
+                );
+              }
+            }
+          }
+
+          assert.isTrue(tokenType(["ssml:voice"]), `the XSD's ${parent} admits voice`);
+        }
+
+        assert.strictEqual(compared, 2 * 2 * (1 + 5 + 25 + 125));
+        assert.deepStrictEqual(disagreements.slice(0, 20), []);
       }).pipe(Effect.provide(XsdOracleLayer)),
     xsdTimeout,
   );

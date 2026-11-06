@@ -39,6 +39,7 @@ import {
   drawn,
   fin,
   fold,
+  key,
   Monoid,
   natural,
   on,
@@ -55,6 +56,7 @@ import {
   AttributeSlot,
   Banned,
   BarredOf,
+  Capped,
   ChildGrammar,
   ContentModelOf,
   CountedOf,
@@ -452,6 +454,20 @@ const countedFold = fold(
 );
 
 /**
+ * The element children at the positions `Capped` holds (N7, spec reading 130): a family's children
+ * at a position its parent's model caps at one, which the key over `(parent, state)` holds to one
+ * child each. A position names one kind alone where a reading caps it (`content.ts`, `cappedBy`),
+ * so the key holds the kind to one child of the family.
+ */
+const cappedChildren = select(Node, (n) =>
+  n.and(
+    member(n),
+    element(n),
+    n.eq(Compute.subset(PositionSelf.row(n.state), Capped.row(n.version, n.parentKind)), true),
+  ),
+);
+
+/**
  * The barred position's fold (N7, C15): the element children at the position `BarredOf` bars when
  * its parent carries the barring attribute.
  */
@@ -646,6 +662,7 @@ export const nodeLaws = [
       ),
     ),
   ),
+  key(on(cappedChildren, "parent", "state")),
   check("N7_barred_by", Node, (n) =>
     n.or(
       n.not(modeled(n)),

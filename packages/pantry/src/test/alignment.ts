@@ -16,6 +16,8 @@
  *   the Glushkov automaton (`Follow` and `Last`);
  * - `content:count`, per particle whose bound lies in 2…n: the count law `Counted`, which the
  *   automaton relaxes;
+ * - `content:count-beyond`, per `Counted` row the XSD's particle does not state as a total: a
+ *   reading's count ({@link readingCounts}), or a contradiction;
  * - `attribute:admission`, `attribute:type` and `attribute:required`, per declared (version, kind,
  *   name): `AttributeAdmission`'s row, its domain's enumeration against the XSD type's, and its
  *   use;
@@ -60,7 +62,7 @@ import type {
   Particle,
 } from "#pantry/vocab/inventory/types.ts";
 import { globalKinds } from "#pantry/vocab/inventory/vocabularies.ts";
-import { namespaceClassesUnder } from "#pantry/vocab/namespaces.ts";
+import { namespaceClassesUnder, vocabularyNamespaces } from "#pantry/vocab/namespaces.ts";
 import { foreignRoots } from "#pantry/vocab/open.ts";
 
 /**
@@ -213,7 +215,14 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
   [41, { owner: "AL5 attribute count (`attributeCounts`)", status: "G" }],
   [42, { owner: "AL1 (`languages.datatype`, reading 42)", status: "G" }],
   [43, { owner: "AL5 attribute count (`attributeCounts`)", status: "G" }],
-  [44, { owner: "N5", status: "G" }],
+  [
+    44,
+    {
+      owner:
+        "the restated `tokenType` of `ssml:token` and `ssml:w` (`facets.ts` `tokenEdits`); a `voice` there names no kind its parent admits, which the codec refuses (`unmodeled-vocabulary`)",
+      status: "G",
+    },
+  ],
   [45, { owner: "G5, Q5.08", status: "P" }],
   [46, { owner: "G5's derived `int8`", status: "P" }],
   [
@@ -649,6 +658,14 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
       status: "G",
     },
   ],
+  [
+    130,
+    {
+      owner:
+        "N7 Counted: the loose LOM binding's 82 capped pairs as `Counted` rows of 0 to 1 (`facets.ts` `lomCaps`, `content.ts` `cappedBy`), installed as `Capped` (`install.ts`) and held by the key over `Node`'s `(parent, state)` at a capped position (`node.ts` `cappedChildren`)",
+      status: "G",
+    },
+  ],
   [132, { owner: "AL1 (`printfFormat` on `qti-printed-variable`'s `format`)", status: "G" }],
 ]);
 
@@ -801,23 +818,27 @@ const childrenOf = (particle: Particle): Children => {
 
 /**
  * The particles of a model numbered as the content grammar numbers positions: its element and
- * wildcard particles from 1, in tree order.
+ * wildcard particles from 1, in tree order, each with whether a group that encloses it may repeat,
+ * so that its own bound is per repeat and no total of the family's children.
  *
  * @param particle - The model's particle.
- * @returns Each element and wildcard particle with its position.
+ * @returns Each element and wildcard particle with its position and whether it is repeated.
  */
-const positionsOf = (particle: Particle): readonly (readonly [Particle, number])[] => {
-  const out: (readonly [Particle, number])[] = [];
-  const visit = (at: Particle): void => {
+const positionsOf = (particle: Particle): readonly (readonly [Particle, number, boolean])[] => {
+  const out: (readonly [Particle, number, boolean])[] = [];
+  const visit = (at: Particle, repeated: boolean): void => {
     if (at._tag === "group") {
       for (const inner of at.particles) {
-        visit(inner);
+        visit(
+          inner,
+          repeated || Option.getOrElse(at.occurs.max, () => Number.POSITIVE_INFINITY) > 1,
+        );
       }
     } else {
-      out.push([at, out.length + 1]);
+      out.push([at, out.length + 1, repeated]);
     }
   };
-  visit(particle);
+  visit(particle, false);
 
   return out;
 };
@@ -1102,13 +1123,38 @@ const modelRules = (index: Index, model: ContentModel, version: SchemaVersion): 
 };
 
 /**
- * The `Counted` rows the XSD does not state: a count whose particle the XSD bounds otherwise.
+ * The spec reading that states the count of a kind in a family beyond the XSD's particles: spec
+ * reading 130 for every LOM element under a LOM element, whose loose binding's Schematron caps
+ * them, and none for any other.
+ *
+ * @param namespaces - Each element kind's namespace.
+ * @param parent - The family's parent.
+ * @param kinds - The kinds the counted particle names.
+ * @returns The reading, or none.
+ */
+const readingCounts = (
+  namespaces: ReadonlyMap<string, string>,
+  parent: string,
+  kinds: readonly string[],
+): Option.Option<number> =>
+  Option.liftPredicate(130, () =>
+    [parent, ...kinds].every((kind) => namespaces.get(kind) === vocabularyNamespaces.lom.namespace),
+  );
+
+/**
+ * The `Counted` rows the XSD does not state: a count whose particle the XSD bounds otherwise, or
+ * bounds per repeat of a group that encloses it, so its bound is no total. A count a spec reading
+ * states is the reading's ({@link readingCounts}); any other is contradicted.
  *
  * @param grammar - The grammar.
- * @returns One contradicted rule per such row.
+ * @returns One rule per such row.
  */
-const countsBeyond = (grammar: ComposedGrammar): readonly Rule[] =>
-  grammar.content.counted.rows.flatMap((row): readonly Rule[] => {
+const countsBeyond = (grammar: ComposedGrammar): readonly Rule[] => {
+  const namespaces = new Map(
+    grammar.kinds.elementName.rows.map((row) => [row.kind, row.namespace]),
+  );
+
+  return grammar.content.counted.rows.flatMap((row): readonly Rule[] => {
     const model = contentModels.find(
       ({ kind, versions }) => kind === row.parent && versions.includes(row.version),
     );
@@ -1118,11 +1164,12 @@ const countsBeyond = (grammar: ComposedGrammar): readonly Rule[] =>
           positionsOf(particle).find(([, position]) => String(position) === row.position),
         ),
       ),
-      Option.map(([particle]) => particle),
+      Option.map(([particle, , repeated]) => ({ particle, repeated })),
     );
     const same = Option.exists(
       found,
-      ({ occurs }) =>
+      ({ particle: { occurs }, repeated }) =>
+        !repeated &&
         occurs.min === row.min &&
         Option.getOrElse(occurs.max, () => Number.POSITIVE_INFINITY) === row.max,
     );
@@ -1130,21 +1177,31 @@ const countsBeyond = (grammar: ComposedGrammar): readonly Rule[] =>
       return [];
     }
 
+    const reading = found.pipe(
+      Option.flatMap(({ particle }) =>
+        particle._tag === "element"
+          ? readingCounts(namespaces, row.parent, particle.kinds)
+          : Option.none(),
+      ),
+    );
+
     return [
       {
-        detail: `Counted ${String(row.min)}..${String(row.max)} at position ${row.position}; XSD ${Option.match(found, { onNone: () => "no particle", onSome: ({ occurs }) => boundsText(occurs.min, occurs.max) })}`,
+        detail: `Counted ${String(row.min)}..${String(row.max)} at position ${row.position}; XSD ${Option.match(found, { onNone: () => "no particle", onSome: ({ particle: { occurs }, repeated }) => `${boundsText(occurs.min, occurs.max)}${repeated ? " in a repeated group" : ""}` })}${Option.match(reading, { onNone: () => "", onSome: (held) => `; by reading ${String(held)}` })}`,
         family: "content:count-beyond",
         owner: "Counted",
         parent: row.parent,
-        status: "X",
+        status: Option.isSome(reading) ? "reading" : "X",
         subject: Option.match(found, {
           onNone: () => row.position,
-          onSome: (particle) => (particle._tag === "element" ? particle.kinds.join(" ") : "##any"),
+          onSome: ({ particle }) =>
+            particle._tag === "element" ? particle.kinds.join(" ") : "##any",
         }),
         version: row.version,
       },
     ];
   });
+};
 
 /**
  * The status of a declared attribute's use against the grammar's.

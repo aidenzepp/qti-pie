@@ -326,10 +326,18 @@ against it. A reading that is not an information-model-over-XSD case says which 
     attribute optional. This follows the SSML Recommendation, which defines the language, and sets aside the XSD, which
     is looser than it. The attribute counted is one the Recommendation's fragment removal keeps: an SSML attribute,
     `xml:lang` or `xml:base`. (2026-11-04.)
-44. **An SSML `token` or `w` holds no `voice`.** The SSML 1.1 Recommendation says they can contain only text to be
-    rendered and `audio`, `break`, `emphasis`, `mark`, `phoneme`, `prosody`, `say-as` and `sub`. The XSD's `tokenType`
-    also admits `voice`. This follows the SSML Recommendation, which defines the language, and sets aside the XSD, which
-    is looser than it. (2026-11-04.)
+44. **An SSML `token` or `w` holds no `voice`.** The SSML 1.1 Recommendation says "The token element can only contain
+    text to be rendered and the following elements: audio, break, emphasis, mark, phoneme, prosody, say-as, sub", and
+    "The w element is an alias for the token element" (section 3.1.8.2). The XSD's `tokenType`, which both elements
+    take, also admits `voice` (`ssml/synthesis-nonamespace.xsd` lines 541-552). This follows the SSML Recommendation,
+    which defines the language, and sets aside the XSD, which is looser than it. So `token` and `w` read one restated
+    model, `tokenType` less `voice`. Its `##other` lax wildcard stays, because the Recommendation admits other
+    namespaces: "Language-specific (i.e. non-SSML) elements and attributes may be inserted into SSML using an
+    appropriate namespace" (section 2.2.3), and its fragment conformance removes them before judging (section 2.2.1). A
+    `voice` inside a `token` or a `w` names no kind its parent admits, so the codec refuses it as
+    `unmodeled-vocabulary`, as it refuses every element its parent's model does not name; a `token` inside a `voice`
+    stays valid. (2026-11-04. Its law was stated 2026-11-06 by RV seat K, on the review of PR #46, which found that no
+    law read it.)
 45. **An integer has no largest or smallest value.** QTI's integer base type is "the same as the set of values
     defined by the integer primitiveType", and the information model's data types define Integer as "derived from
     the 'decimal' data-type i.e. no decimal places", beside Int, "with a numeric value from -2147483648 to
@@ -1851,7 +1859,35 @@ against it. A reading that is not an information-model-over-XSD case says which 
      a law can look each subtag up and key a tag's variants and singletons. (Decided 2026-11-06 by RV seat G, on the
      review of PR #46, under the operator's standing ruling of 2026-11-05 that the spec wins.)
 
-<!-- Readings 130 and 131 are reserved. -->
+130. **A LOM element repeats no more than the loose binding's Schematron allows.** QTI 3.0 packages bind LOM with IMS
+     Metadata v1.3.2, "a 'loose' binding of the IEEE LOM information model i.e. it permits extensions and does not
+     enforce any of the default enumerated vocabularies" (QTI 3.0 Metadata binding, section 3.6), the binding
+     `lom/imsmd_loose_v1p3p2.xsd`. The binding's own header says "This is a Loose binding of LOMv1.0. The strict
+     multiplicity of elements has been imposed, there is no vocabulary validation and extensions are permitted as
+     elements and attributes" (lines 18-21). Its XSD writes each category as an unbounded choice of its elements (line
+     984, `AggregationLevel.Type`, and its siblings), so the XSD alone admits any number of each, and each element's own
+     particle states its multiplicity, `maxOccurs="1"` or `unbounded`. Its embedded Schematron is "the set of
+     Schematron rules that have been created to enforce the use of the "Unordered" stereotype. These rules ensure that
+     the number of entries in an unordered complexType of an element obey the multiplicity constraints" (lines 85-92):
+     43 rules and 94 asserts, each `count(lom:X) = 0 or count(lom:X) = 1` (lines 93-911), and they cap exactly the
+     elements the XSD bounds to one inside an unbounded choice. They are 82 pairs of a parent and an element, since
+     `contribute` and `role` stand in two contexts and `date` and `identifier` in three, and every context asserts the
+     same caps of each. So a `lom` holds at most one `general`, `lifeCycle`, `metaMetadata`, `technical` and `rights`
+     (lines 567-583), a `general` at most one `title`, `structure` and `aggregationLevel` (lines 387-395), and a
+     `classification` at most one `purpose` and `description` (lines 145-149), through all 94; `keyword`, `language`,
+     `educational`, `classification`, `contribute`, `identifier` and every element the XSD leaves unbounded repeat
+     freely. A `duration` in `technical` is the binding's `Duration.Type` (line 1583), capped at one there (line 883),
+     and the `duration` inside it is its character string, capped at one there (line 333). The Schematron is the
+     binding's own statement of LOM's multiplicities, and it binds, read by its intent as reading 9 reads QTI's: each
+     assert counts the children of one element at its context's place. The Metadata binding's section 3.5, "There are
+     no schematron rules used in this XSD binding of the specification", is about its own QTI metadata XSD, not the LOM
+     binding of its section 3.6. This is not a case of documents in conflict: the binding's XSD and its Schematron are
+     one binding, and where they differ the stricter part is the rule (readings 16 and 17). The law is N7 Counted, rule
+     `child-set`: `Counted` holds each cap as at most one child at the capped element's position, and in the database a
+     key over each family's children at a capped position holds it. (Decided 2026-11-06 by RV seat K, on the review of
+     PR #46, under the operator's standing ruling of 2026-11-05 that the spec wins.)
+
+<!-- Reading 131 is reserved. -->
 
 132. **A printed variable's `format` is a printf format string of at most one conversion, over the information
      model's conversion codes.** The information model says "The syntax of the format attribute is based on the format

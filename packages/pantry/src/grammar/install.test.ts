@@ -626,7 +626,7 @@ describe("the installed relations", () => {
     searchTimeout,
   );
 
-  it("make CountedOf and BarredOf total, their nonzero rows exactly today's Counted and ChildBarredBy", () => {
+  it("make CountedOf and BarredOf total, their nonzero rows exactly today's Counted but its caps and ChildBarredBy, and Capped exactly Counted's caps", () => {
     const keys = new Set(families.map(({ parent, version }) => `${version} ${parent}`));
     for (const name of ["CountedOf", "BarredOf", "ContentModelOf", "SharedModelOf"]) {
       const relation = relationNamed(name);
@@ -637,9 +637,13 @@ describe("the installed relations", () => {
       );
     }
 
-    // The generators state one counted and one barred position per family, which a function of
-    // (version, parent) needs.
-    assert.isTrue(oncePerFamily(grammar.content.counted.rows));
+    // Oracle: Counted's own rows, split by their bounds. A cap (0 to 1, spec reading 130) is a
+    // set row of Capped, which a family may hold several of; every other count is CountedOf's,
+    // and the generators state one such counted and one barred position per family, which a
+    // function of (version, parent) needs.
+    const capped = grammar.content.counted.rows.filter(({ max, min }) => min === 0 && max === 1);
+    const counted = grammar.content.counted.rows.filter(({ max, min }) => min !== 0 || max !== 1);
+    assert.isTrue(oncePerFamily(counted));
     assert.isTrue(oncePerFamily(grammar.barredBy.rows));
 
     assert.deepStrictEqual(
@@ -651,7 +655,7 @@ describe("the installed relations", () => {
           ),
       ),
       new Set(
-        grammar.content.counted.rows.map(({ max, min, parent, position, version }) =>
+        counted.map(({ max, min, parent, position, version }) =>
           tupleText([
             version,
             parent,
@@ -662,7 +666,19 @@ describe("the installed relations", () => {
         ),
       ),
     );
-    assert.strictEqual(grammar.content.counted.rows.length, 2);
+    assert.strictEqual(counted.length, 2);
+    assert.deepStrictEqual(
+      new Set(
+        relationNamed("Capped").rows.map(({ parent, position, version }) =>
+          tupleText([version, parent, position]),
+        ),
+      ),
+      new Set(
+        capped.map(({ parent, position, version }) => tupleText([version, parent, position])),
+      ),
+    );
+    // The loose LOM binding's 82 capped (parent, kind) pairs, in both versions.
+    assert.strictEqual(capped.length, 164);
     assert.deepStrictEqual(
       new Set(
         relationNamed("BarredOf")

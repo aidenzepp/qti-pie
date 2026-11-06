@@ -452,12 +452,305 @@ export const cp: Facets = {
 };
 
 /**
- * The LOM vocabulary's facets: its package root. The LOM binding's XSD repeats each element of a
- * category in an unbounded choice (`imsmd_loose_v1p3p2.xsd:984`, `AggregationLevel.Type`, and its
- * siblings), and no source caps those repeats, so the automaton holds the binding's model as it is.
+ * Cite the loose LOM binding's Schematron for one capped kind (spec reading 130): the lines of the
+ * at-most-one asserts that cap it, one for each Schematron context it stands in.
+ *
+ * @param lines - The asserts' lines in `imsmd_loose_v1p3p2.xsd`.
+ * @returns The citation.
+ */
+const lomCapSource = (lines: readonly [number, ...number[]]): string =>
+  `spec reading 130: the loose LOM binding's Schematron, imsmd_loose_v1p3p2.xsd ${lines.length === 1 ? "line" : "lines"} ${lines.map(String).join(", ")}, count = 0 or 1`;
+
+/**
+ * The loose LOM binding's 94 at-most-one asserts (spec reading 130), by the kind of each
+ * Schematron rule's context: each asserted element as its kind there, with the lines of the asserts
+ * that cap it. They are 82 (parent, kind) pairs: `lom:contribute` and `lom:role` stand in two
+ * contexts, and `lom:date` and `lom:identifier` in three, and each context asserts the same caps of
+ * the kind, so a cap holds wherever the kind stands.
+ *
+ * Each assert is `count(lom:X) = 0 or count(lom:X) = 1` over a rule whose context is an absolute
+ * path from `lom:lom` (lines 93 to 911), and each caps exactly an element the binding's XSD
+ * declares `maxOccurs="1"` inside its type's unbounded choice. The three local names the binding
+ * declares with two types are named by the type they hold in the context: `duration` is
+ * `lom:duration` (`Duration.Type`, line 1583) in `lom:technical`, and `lom:duration.string` in a
+ * duration; `entry` is `lom:entry.langString` in `lom:taxon`; `source` is `lom:source.langString`
+ * in `lom:taxonPath` (`src/vocab/derive/naming.ts`).
+ */
+const lomCaps: readonly (readonly [string, readonly (readonly [string, number, ...number[]])[]])[] =
+  [
+    [
+      "lom:aggregationLevel",
+      [
+        ["lom:source", 103],
+        ["lom:value", 107],
+      ],
+    ],
+    [
+      "lom:annotation",
+      [
+        ["lom:entity", 122],
+        ["lom:date", 126],
+        ["lom:description", 130],
+      ],
+    ],
+    [
+      "lom:classification",
+      [
+        ["lom:purpose", 145],
+        ["lom:description", 149],
+      ],
+    ],
+    [
+      "lom:context",
+      [
+        ["lom:source", 164],
+        ["lom:value", 168],
+      ],
+    ],
+    [
+      "lom:contribute",
+      [
+        ["lom:role", 183, 202],
+        ["lom:date", 187, 206],
+      ],
+    ],
+    [
+      "lom:copyrightAndOtherRestrictions",
+      [
+        ["lom:source", 221],
+        ["lom:value", 225],
+      ],
+    ],
+    [
+      "lom:cost",
+      [
+        ["lom:source", 240],
+        ["lom:value", 244],
+      ],
+    ],
+    [
+      "lom:date",
+      [
+        ["lom:dateTime", 259, 271, 283],
+        ["lom:description", 263, 275, 287],
+      ],
+    ],
+    [
+      "lom:difficulty",
+      [
+        ["lom:source", 302],
+        ["lom:value", 306],
+      ],
+    ],
+    [
+      "lom:duration",
+      [
+        ["lom:duration.string", 333],
+        ["lom:description", 337],
+      ],
+    ],
+    [
+      "lom:educational",
+      [
+        ["lom:interactivityType", 352],
+        ["lom:interactivityLevel", 356],
+        ["lom:semanticDensity", 360],
+        ["lom:difficulty", 364],
+        ["lom:typicalLearningTime", 368],
+        ["lom:description", 372],
+      ],
+    ],
+    [
+      "lom:general",
+      [
+        ["lom:title", 387],
+        ["lom:structure", 391],
+        ["lom:aggregationLevel", 395],
+      ],
+    ],
+    [
+      "lom:identifier",
+      [
+        ["lom:catalog", 410, 422, 434],
+        ["lom:entry", 414, 426, 438],
+      ],
+    ],
+    [
+      "lom:intendedEndUserRole",
+      [
+        ["lom:source", 453],
+        ["lom:value", 457],
+      ],
+    ],
+    [
+      "lom:interactivityLevel",
+      [
+        ["lom:source", 472],
+        ["lom:value", 476],
+      ],
+    ],
+    [
+      "lom:interactivityType",
+      [
+        ["lom:source", 491],
+        ["lom:value", 495],
+      ],
+    ],
+    [
+      "lom:kind",
+      [
+        ["lom:source", 510],
+        ["lom:value", 514],
+      ],
+    ],
+    [
+      "lom:learningResourceType",
+      [
+        ["lom:source", 529],
+        ["lom:value", 533],
+      ],
+    ],
+    [
+      "lom:lifeCycle",
+      [
+        ["lom:version", 548],
+        ["lom:status", 552],
+      ],
+    ],
+    [
+      "lom:lom",
+      [
+        ["lom:general", 567],
+        ["lom:lifeCycle", 571],
+        ["lom:metaMetadata", 575],
+        ["lom:technical", 579],
+        ["lom:rights", 583],
+      ],
+    ],
+    ["lom:metaMetadata", [["lom:language", 598]]],
+    [
+      "lom:name",
+      [
+        ["lom:source", 613],
+        ["lom:value", 617],
+      ],
+    ],
+    [
+      "lom:orComposite",
+      [
+        ["lom:type", 632],
+        ["lom:name", 636],
+        ["lom:minimumVersion", 640],
+        ["lom:maximumVersion", 644],
+      ],
+    ],
+    [
+      "lom:purpose",
+      [
+        ["lom:source", 659],
+        ["lom:value", 663],
+      ],
+    ],
+    [
+      "lom:relation",
+      [
+        ["lom:kind", 678],
+        ["lom:resource", 682],
+      ],
+    ],
+    [
+      "lom:rights",
+      [
+        ["lom:cost", 719],
+        ["lom:copyrightAndOtherRestrictions", 723],
+        ["lom:description", 727],
+      ],
+    ],
+    [
+      "lom:role",
+      [
+        ["lom:source", 742, 761],
+        ["lom:value", 746, 765],
+      ],
+    ],
+    [
+      "lom:semanticDensity",
+      [
+        ["lom:source", 780],
+        ["lom:value", 784],
+      ],
+    ],
+    [
+      "lom:status",
+      [
+        ["lom:source", 799],
+        ["lom:value", 803],
+      ],
+    ],
+    [
+      "lom:structure",
+      [
+        ["lom:source", 818],
+        ["lom:value", 822],
+      ],
+    ],
+    [
+      "lom:taxon",
+      [
+        ["lom:id", 837],
+        ["lom:entry.langString", 841],
+      ],
+    ],
+    ["lom:taxonPath", [["lom:source.langString", 856]]],
+    [
+      "lom:technical",
+      [
+        ["lom:size", 871],
+        ["lom:installationRemarks", 875],
+        ["lom:otherPlatformRequirements", 879],
+        ["lom:duration", 883],
+      ],
+    ],
+    [
+      "lom:type",
+      [
+        ["lom:source", 898],
+        ["lom:value", 902],
+      ],
+    ],
+    [
+      "lom:typicalLearningTime",
+      [
+        ["lom:duration.string", 321],
+        ["lom:description", 325],
+      ],
+    ],
+  ];
+
+/**
+ * The LOM vocabulary's facets: its package root, and spec reading 130's caps ({@link lomCaps}). The
+ * binding's XSD repeats each element of a category in an unbounded choice
+ * (`imsmd_loose_v1p3p2.xsd:984`, `AggregationLevel.Type`, and its siblings), so the automaton holds
+ * its model as it is, and admits any number of each element. The binding's header says "The strict
+ * multiplicity of elements has been imposed" (lines 18-21), and its embedded Schematron "ensure[s]
+ * that the number of entries in an unordered complexType of an element obey the multiplicity
+ * constraints" (lines 85-92), so each element it caps stands at most once, a count `Counted` holds
+ * beside the automaton.
  */
 export const lom: Facets = {
   ...noFacets,
+  content: {
+    edits: lomCaps.flatMap(([parent, caps]) =>
+      caps.map(([kind, ...lines]): ModelEdit => ({
+        _tag: "cap",
+        kind,
+        parent,
+        source: lomCapSource(lines),
+      })),
+    ),
+    models: [],
+    roots: [],
+  },
   package: { resourceTypes: [], roots: [{ root: "lom:lom", type: "resourcemetadata/xml" }] },
 };
 
@@ -470,10 +763,63 @@ export const ud: Facets = {
 };
 
 /**
+ * Where spec reading 44 restates `tokenType` from: the SSML 1.1 Recommendation, which defines the
+ * language, and whose list of `token`'s elements the XSD widens with `voice`.
+ */
+const tokenSource =
+  "spec reading 44: SSML 1.1 §3.1.8.2, 'The token element can only contain text to be rendered and the following elements: audio, break, emphasis, mark, phoneme, prosody, say-as, sub', and 'The w element is an alias for the token element'";
+
+/**
+ * Restate a model as its XSD states it, less every element particle that names one kind alone: a
+ * group that held such a particle takes the reading as its source, and every other particle keeps
+ * the XSD's.
+ *
+ * @param model - The XSD's model.
+ * @param kind - The kind the reading removes.
+ * @param sources - The reading's source, once per version.
+ * @returns The restated model.
+ */
+const withoutKind = (model: Particle, kind: string, sources: Sources): Particle => {
+  if (model._tag !== "group") {
+    return model;
+  }
+
+  const kept = model.particles.filter(
+    (held) => !(held._tag === "element" && held.kinds.length === 1 && held.kinds[0] === kind),
+  );
+
+  return {
+    ...model,
+    particles: kept.map((held) => withoutKind(held, kind, sources)),
+    sources: kept.length < model.particles.length ? sources : model.sources,
+  };
+};
+
+/**
+ * Spec reading 44's restatements of `ssml:token` and its alias `ssml:w`: the XSD's `tokenType`
+ * less its `voice` (`ssml/synthesis-nonamespace.xsd` lines 541-552). The choice keeps its `##other`
+ * lax wildcard, since SSML 1.1 §2.2.3 admits other namespaces: "Language-specific (i.e. non-SSML)
+ * elements and attributes may be inserted into SSML using an appropriate namespace".
+ */
+const tokenEdits: readonly ModelEdit[] = contentModels.flatMap((model): readonly ModelEdit[] =>
+  (model.kind === "ssml:token" || model.kind === "ssml:w") && model.content._tag === "mixed"
+    ? [
+        {
+          _tag: "restate",
+          parent: model.kind,
+          particle: withoutKind(model.content.particle, "ssml:voice", cited(tokenSource)),
+          source: tokenSource,
+        },
+      ]
+    : [],
+);
+
+/**
  * SSML's facets: spec reading 40, `meta`, `metadata` and `lexicon` before every other SSML element
- * of `speak` and before its text that is not whitespace. The XSD's sequence orders the elements;
- * the restated model orders the text too, at one text position Unique Particle Attribution keeps
- * unique (`content.ts`, the `first` edit). Its file references are spec reading 103's.
+ * of `speak` and before its text that is not whitespace, and spec reading 44, no `voice` in a
+ * `token` or a `w` ({@link tokenEdits}). The XSD's sequence orders the elements; the restated model
+ * orders the text too, at one text position Unique Particle Attribution keeps unique (`content.ts`,
+ * the `first` edit). Its file references are spec reading 103's.
  */
 export const ssml: Facets = {
   ...noFacets,
@@ -485,6 +831,7 @@ export const ssml: Facets = {
         parent: "ssml:speak",
         source: "spec reading 40",
       },
+      ...tokenEdits,
     ],
     models: [],
     roots: [],

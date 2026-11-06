@@ -589,7 +589,7 @@ export const lawSources = {
   "N6 ancestry":
     "fin.md §13 P3 and §16: the information model's nesting rules as Banned and Needs (ancestry.ts, facets.ts); readings 25 and 38",
   "N7 Counted":
-    "XML Schema Part 1 §3.9 occurrence bounds of 2 to n, which a position automaton relaxes, and spec counts (content.ts Counted: reading 26). The loose LOM binding caps no vocabulary's source or value (lom/imsmd_loose_v1p3p2.xsd:984: they repeat in an unbounded choice), so Counted states none",
+    "XML Schema Part 1 §3.9 occurrence bounds of 2 to n, which a position automaton relaxes (content.ts Counted), and the loose LOM binding's Schematron caps: each element the binding bounds to one inside an unbounded choice stands at most once in its family (lom/imsmd_loose_v1p3p2.xsd:18-21 and 85-92, its 94 asserts at 93-911; reading 130)",
   "N7 Last":
     "XML Schema Part 1 §3.8, each content model as its Glushkov automaton (content.ts Last)",
   "N7 barred by":

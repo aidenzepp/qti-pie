@@ -257,11 +257,13 @@ const installedBytes = (relation: Installed): readonly [number, number] => {
  * Measured on 2026-11-06 at grizzle `4016b69` from the packs `grizzle generate` drafts for the
  * composed `Qti` (a scratch configuration, no database): each constant's `generate_series` cell
  * count and `bit(w)` cell width, its bytes ⌈cells · w / 8⌉ + 8, the widest pack where a relation
- * installs a payload string beside its membership set. The products of the three slotted
- * relations are the rosters' arithmetic, 115 content models, 306 positions, 644 kinds and 25
- * shared models: Follow 115 · 306², Last 115 · 306 and Symbol 25 · 644 · 306 one-bit cells.
- * `ValueDomainOf` and `ValueIdentity` are keyed by the 242 domains the attribute readings 2, 120,
- * 123, 124, 125, 129 and 132 leave, taken by the same formula on 2026-11-06.
+ * installs a payload string beside its membership set. The products of the three slotted relations
+ * are the rosters' arithmetic, 115 content models, 306 positions, 644 kinds and 25 shared models:
+ * Follow 115 · 306², Last 115 · 306 and Symbol 25 · 644 · 306 one-bit cells. `Capped`, spec reading
+ * 130's caps, is a set over (version, parent, position) with no slot, 2 · 644 · 306 one-bit cells,
+ * taken by the same formula on 2026-11-06. `ValueDomainOf` and `ValueIdentity` are keyed by the
+ * 242 domains the attribute readings 2, 120, 123, 124, 125, 129 and 132 leave, taken by the same
+ * formula on 2026-11-06.
  */
 const measuredBytes = {
   AttributeGrammar: [2_178_996, 2_178_996],
@@ -272,6 +274,7 @@ const measuredBytes = {
   BaseTypeSelf: [26, 26],
   BindingFit: [3872, 3872],
   BuiltInVariable: [2584, 2584],
+  Capped: [49_274, 49_274],
   CardinalityLexical: [10, 10],
   CardinalitySelf: [10, 10],
   ChildGrammar: [933_164, 933_164],
@@ -346,7 +349,8 @@ describe("the installed constants", () => {
         // generator lays it out; as installed, by model, with slots; and as the product of
         // (version, parent) and closedId(Position) for each position, C4's shape before G-fin.
         // Measured on 2026-11-06: §17's cells are the sums over the 1,288 families of install.ts's
-        // ModelPositions by ContentModelOf (Σn² 2,057,136 for Follow, Σn 27,444 for Last) and of
+        // ModelPositions by ContentModelOf (Σn² 2,057,052 for Follow, Σn 27,440 for Last, after
+        // spec reading 44 takes `voice` out of `ssml:token` and `ssml:w`) and of
         // its SharedPositions by SharedModelOf (644 · Σs, 644 · 3,978 for Symbol); the products
         // are 1,288 · 306², 1,288 · 306 and 1,288 · 644 · 306 one-bit cells.
         const families =
@@ -374,8 +378,8 @@ describe("the installed constants", () => {
             ],
           },
           {
-            Follow: [257_150, 45_579, 15_075_404],
-            Last: [3439, 495, 49_274],
+            Follow: [257_140, 45_579, 15_075_404],
+            Last: [3438, 495, 49_274],
             Symbol: [320_237, 160_123, 31_727_312],
           },
         );

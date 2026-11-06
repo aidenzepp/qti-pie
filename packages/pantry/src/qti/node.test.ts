@@ -89,6 +89,7 @@ const scratchSchema = () =>
       AttributeSlot: install.AttributeSlot,
       Banned: install.Banned,
       BarredOf: install.BarredOf,
+      Capped: install.Capped,
       ChildGrammar: install.ChildGrammar,
       ContentModel: install.ContentModel,
       ContentModelOf: install.ContentModelOf,

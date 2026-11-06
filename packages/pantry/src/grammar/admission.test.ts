@@ -12,6 +12,7 @@ import { composed } from "#pantry/grammar/compose.ts";
 import { documentRoots } from "#pantry/grammar/facets.ts";
 import { foreignKinds, isForeignKind, schemaVersions } from "#pantry/grammar/kinds.ts";
 import { checkCache } from "#pantry/vocab/derive/sources.ts";
+import { ssmlNamespace } from "#pantry/vocab/namespaces.ts";
 import * as open from "#pantry/vocab/open.ts";
 import type { SourcePath } from "#pantry/vocab/derive/sources.ts";
 import type { ContentModel, Occurs, Particle } from "#pantry/vocab/inventory/types.ts";
@@ -52,6 +53,16 @@ const readWildcards = (
   parent === "qti-ordering"
     ? wildcards.map((wildcard) => ({ ...wildcard, namespace: "##any" }))
     : wildcards;
+
+/**
+ * The names a spec reading takes out of a parent's model where the XSD declares them, each as
+ * `parent {namespace}local`: spec reading 44, after SSML 1.1 §3.1.8.2, lists `token`'s elements
+ * without `voice` and makes `w` its alias, where the XSD's `tokenType` admits a `voice`
+ * (`facets.ts`, `tokenEdits`).
+ */
+const takenOut: ReadonlySet<string> = new Set(
+  ["ssml:token", "ssml:w"].map((parent) => `${parent} {${ssmlNamespace}}voice`),
+);
 
 /**
  * The composed grammar of production, failing the test that reads it when a generator refuses.
@@ -212,8 +223,9 @@ describe.skipIf(!cached)("Admission against the XSD", () => {
       // foreign; any other name is undeclared there. A parent read from several roots finds a
       // declaration any of their sets holds, as reading 81's limit says. The document node
       // declares the roots its model (R5) names, and `qti-ordering`'s slot is spec reading 61's
-      // `##any` (`readWildcards`). The box is every parent the walks reach, in either version, by
-      // every element name.
+      // `##any` (`readWildcards`), and spec reading 44 takes `voice` out of `ssml:token` and
+      // `ssml:w` (`takenOut`). The box is every parent the walks reach, in either version, by every
+      // element name.
       Effect.gen(function* locality() {
         const { kinds } = yield* grammar;
         const names = kinds.elementName.rows.map(({ local, namespace }) => ({ local, namespace }));
@@ -291,6 +303,7 @@ describe.skipIf(!cached)("Admission against the XSD", () => {
           }
         }
 
+        const stated = declared.difference(takenOut);
         const differences: string[] = [];
         for (const parent of parents) {
           for (const name of names) {
@@ -302,9 +315,9 @@ describe.skipIf(!cached)("Admission against the XSD", () => {
                 (held) => held.local === name.local && held.namespace === name.namespace,
               ),
             );
-            if (declared.has(`${parent} ${key}`) !== named) {
+            if (stated.has(`${parent} ${key}`) !== named) {
               differences.push(
-                `${key} under ${parent}: the XSD ${declared.has(`${parent} ${key}`) ? "declares" : "does not declare"} it, the grammar resolves it to ${Option.getOrElse(resolved, () => "nothing")}`,
+                `${key} under ${parent}: the XSD ${stated.has(`${parent} ${key}`) ? "declares" : "does not declare"} it, the grammar resolves it to ${Option.getOrElse(resolved, () => "nothing")}`,
               );
             }
           }

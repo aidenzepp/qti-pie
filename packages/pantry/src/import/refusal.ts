@@ -792,7 +792,7 @@ export const lawTable = {
   "N7 Counted": {
     rule: "child-set",
     source:
-      "XML Schema Part 1 §3.9 occurrence bounds of 2 to n, which a position automaton relaxes, and spec counts (content.ts Counted: reading 26). The loose LOM binding caps no vocabulary's source or value (lom/imsmd_loose_v1p3p2.xsd:984: they repeat in an unbounded choice), so Counted states none",
+      "XML Schema Part 1 §3.9 occurrence bounds of 2 to n, which a position automaton relaxes (content.ts Counted), and the loose LOM binding's Schematron caps: each element the binding bounds to one inside an unbounded choice stands at most once in its family (lom/imsmd_loose_v1p3p2.xsd:18-21 and 85-92, its 94 asserts at 93-911; reading 130)",
   },
   "N7 Last": {
     rule: "child-set",
@@ -1381,7 +1381,7 @@ const testKeyNames: ReadonlyMap<string, LawName> = new Map<string, LawName>([
  * - **Node** (`node.ts`): the tree; the parent copy on its owner axis, which the oracle checks as
  *   T3's merged copy; the predecessor copy and the last slot (N5, N7); `Follow` and `Last`; the
  *   four folds, the element count read by the default hotspot, the counted and barred positions'
- *   counts and the string value (E1); `XsiType`.
+ *   counts and the string value (E1); the capped positions' key (N7, reading 130); `XsiType`.
  * - **Character data** (`chardata.ts`): each arm and `Document` both ways, the root element's kind,
  *   the namespace family and its key, and the foreign names.
  * - **Attributes** (`attributes.ts`): the four families, their owner copies (AL1), AL2's fold, the
@@ -1506,6 +1506,7 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
     foldOf(children, "count", sideOf("Node", "parent"), sideOf("Node", "id", "countedChildren")),
     "N7 Counted",
   ],
+  [keyOver(sideOf("Node", "parent", "state")), "N7 Counted"],
   [
     foldOf(children, "count", sideOf("Node", "parent"), sideOf("Node", "id", "barredChildren")),
     "N7 barred by",
