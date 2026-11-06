@@ -71,7 +71,8 @@ export type FileEdit =
  * The edit that turns an extracted package into a minimal package of one item.
  *
  * It keeps the item file `item` and the files that item references by a relative `src`, `data`,
- * `href`, `poster`, `srcset`, `cite` or `longdesc`, deletes every other entry and
+ * `href`, `poster`, `srcset`, `cite` or `longdesc`, or by the text of a `qti-file-href` or a
+ * `qti-resource-icon`, deletes every other entry and
  * writes a manifest of one `imsqti_item_xmlv3p0` resource declaring `schemaversion`. It applies
  * after the {@link FileEdit}s and {@link TextEdit}s of its spec, once the package is extracted.
  */
@@ -217,6 +218,7 @@ const cutNames = [
 const corpusMembers = {
   BBQsTest: "qtiv3-examples/packaging/BBQsTest/BBQsTest.zip",
   BPIG_22April: "QTI3_BPIG_Examples/BPIG_22April.zip",
+  testWithLti: "qtiv3-examples/packaging/testWithLti/testWithLti.zip",
 } as const;
 
 /**
@@ -473,6 +475,21 @@ export const catalogNames = [
 ] as const;
 
 /**
+ * The names of phase 9's companion-materials positives, cut or edited from `testWithLti`'s
+ * `elements.xml`, the one corpus item with a `qti-companion-materials-info`: `cut-companion` (a
+ * digital material with a label, a media type, a file and an icon, at 3.0.0), `companion-301` (the
+ * same at 3.0.1), `companion-full` (every kind of material, every calculator type and every unit
+ * value) and `companion-padded` (outer whitespace and a tab in the values that collapse or
+ * normalize).
+ */
+export const companionNames = [
+  "cut-companion",
+  "companion-301",
+  "companion-full",
+  "companion-padded",
+] as const;
+
+/**
  * The names of the ten wildcard fixtures of phase 11 (spec W12): foreign content under the lax
  * hosts of `qti-custom-operator`, `xi:include`, `xi:fallback` and LOM, the four refusals, and
  * `test-selection-foreign`, a test with an extension element and an `xml:lang` on the strict
@@ -501,6 +518,7 @@ const wildcardNames = [
  * phase 5's tests, sections and stimuli ({@link testNames}) and its 63 negatives
  * ({@link negativeNames}), the five restored-check fixtures of {@link restoredNames}, the six
  * assembly fixtures of {@link assemblyNames}, the 14 catalog positives of {@link catalogNames}, the
+ * four companion-materials positives of {@link companionNames}, the
  * ten wildcard fixtures of {@link wildcardNames}, and `rtest01`, the
  * examples' included fragment in place (spec reading 117), with one negative per include law.
  */
@@ -535,6 +553,7 @@ export const fixtureNames = [
   ...restoredNames,
   ...assemblyNames,
   ...catalogNames,
+  ...companionNames,
   "lomrest",
   "lomrest-two-titles",
   "lomrest-two-purposes",
@@ -4695,6 +4714,191 @@ const catalogSpecs: Record<(typeof catalogNames)[number], FixtureSpec> = {
 };
 
 /**
+ * The item `testWithLti` carries its companion materials in, the one corpus item that has any.
+ */
+const companionItem = "elements.xml";
+
+/**
+ * The file and icon of {@link companionItem}'s digital material, which a cut keeps because the
+ * item's `qti-file-href` and `qti-resource-icon` name them.
+ */
+const companionFileInfo =
+  "<qti-file-href>links/periodicTable.xml</qti-file-href><qti-resource-icon>links/table.svg</qti-resource-icon>";
+
+/**
+ * The edit that adds `materials` to {@link companionItem}'s `qti-companion-materials-info`, ahead
+ * of its one digital material (the schema orders calculators, rules, protractors, digital
+ * materials and physical materials).
+ *
+ * @param materials - The elements to add, calculators, rules and protractors in that order.
+ * @returns The edit as plain data.
+ */
+const companionBefore = (materials: string): TextEdit =>
+  replaceIn(
+    companionItem,
+    "<qti-companion-materials-info>",
+    `<qti-companion-materials-info>${materials}`,
+  );
+
+/**
+ * The edit that adds `materials` at the end of {@link companionItem}'s
+ * `qti-companion-materials-info`, after its one digital material.
+ *
+ * @param materials - The elements to add, digital materials then physical materials.
+ * @returns The edit as plain data.
+ */
+const companionAfter = (materials: string): TextEdit =>
+  replaceIn(
+    companionItem,
+    "</qti-companion-materials-info>",
+    `${materials}</qti-companion-materials-info>`,
+  );
+
+/**
+ * A `qti-calculator`.
+ *
+ * @param type - The `qti-calculator-type` text.
+ * @param info - The `qti-calculator-info` element's text, or empty for none.
+ * @returns The element's text.
+ */
+const companionCalculator = (type: string, info: string): string =>
+  `<qti-calculator><qti-calculator-type>${type}</qti-calculator-type><qti-description>A ${type} calculator</qti-description>${info}</qti-calculator>`;
+
+/**
+ * A `qti-rule` of one rule system.
+ *
+ * @param system - `si` or `us`.
+ * @param minimum - The `qti-minimum-length` text.
+ * @param minor - The `qti-minor-increment` element's text, or empty for none.
+ * @param major - The `qti-major-increment` element's text.
+ * @returns The element's text.
+ */
+const companionRule = (
+  system: "si" | "us",
+  minimum: string,
+  minor: string,
+  major: string,
+): string =>
+  `<qti-rule><qti-description>A ${system} rule</qti-description><qti-rule-system-${system}><qti-minimum-length>${minimum}</qti-minimum-length>${minor}${major}</qti-rule-system-${system}></qti-rule>`;
+
+/**
+ * A `qti-protractor` of one increment system.
+ *
+ * @param system - `si` or `us`.
+ * @param minor - The `qti-minor-increment` element's text, or empty for none.
+ * @param major - The `qti-major-increment` element's text.
+ * @returns The element's text.
+ */
+const companionProtractor = (system: "si" | "us", minor: string, major: string): string =>
+  `<qti-protractor><qti-description>A ${system} protractor</qti-description><qti-increment-${system}>${minor}${major}</qti-increment-${system}></qti-protractor>`;
+
+/**
+ * A `qti-minor-increment` or `qti-major-increment`.
+ *
+ * @param kind - `minor` or `major`.
+ * @param unit - The `unit` value.
+ * @param value - The decimal text.
+ * @returns The element's text.
+ */
+const companionIncrement = (kind: "major" | "minor", unit: string, value: string): string =>
+  `<qti-${kind}-increment unit="${unit}">${value}</qti-${kind}-increment>`;
+
+/**
+ * The materials `companion-full` adds ahead of the digital material: one calculator of each type,
+ * the last with a calculator info and its icon; SI and US rules, with and without a minor
+ * increment, that name all eight linear units; SI and US protractors, likewise, that name all four
+ * radial units.
+ */
+const companionFullFirst = [
+  companionCalculator("basic", ""),
+  companionCalculator("standard", ""),
+  companionCalculator("scientific", ""),
+  companionCalculator(
+    "graphing",
+    `<qti-calculator-info>${companionFileInfo}</qti-calculator-info>`,
+  ),
+  companionRule(
+    "si",
+    "30",
+    companionIncrement("minor", "Millimeter", "1"),
+    companionIncrement("major", "Centimeter", "10"),
+  ),
+  companionRule("si", "100", "", companionIncrement("major", "Meter", "0.5")),
+  companionRule(
+    "si",
+    "1000",
+    companionIncrement("minor", "Meter", "100"),
+    companionIncrement("major", "Kilometer", "1"),
+  ),
+  companionRule(
+    "us",
+    "12",
+    companionIncrement("minor", "Inch", "0.25"),
+    companionIncrement("major", "Foot", "1"),
+  ),
+  companionRule("us", "36", "", companionIncrement("major", "Yard", "1")),
+  companionRule(
+    "us",
+    "120",
+    companionIncrement("minor", "Yard", "10"),
+    companionIncrement("major", "Mile", "1"),
+  ),
+  companionProtractor(
+    "si",
+    companionIncrement("minor", "Radian", "0.1"),
+    companionIncrement("major", "Radian", "1"),
+  ),
+  companionProtractor("si", "", companionIncrement("major", "Radian", "0.5")),
+  companionProtractor(
+    "us",
+    companionIncrement("minor", "Second", "30"),
+    companionIncrement("major", "Minute", "1"),
+  ),
+  companionProtractor("us", "", companionIncrement("major", "Degree", "5")),
+].join("");
+
+/**
+ * The materials `companion-full` adds after the digital material: a second digital material with
+ * only a file, and two physical materials.
+ */
+const companionFullLast =
+  "<qti-digital-material><qti-file-href>links/periodicTable.xml</qti-file-href></qti-digital-material><qti-physical-material>Scratch paper</qti-physical-material><qti-physical-material>Coloured pencils</qti-physical-material>";
+
+/**
+ * The specs of {@link companionNames}.
+ */
+const companionSpecs: Record<(typeof companionNames)[number], FixtureSpec> = {
+  "companion-301": {
+    edits: [
+      replaceIn(companionItem, "imsqti_asiv3p0_v1p0.xsd", "imsqti_asiv3p0p1_v1p0.xsd"),
+      { _tag: "cut", item: companionItem, schemaversion: "3.0.1" },
+    ],
+    member: corpusMembers.testWithLti,
+    name: "companion-301",
+  },
+  "companion-full": {
+    edits: [
+      companionBefore(companionFullFirst),
+      companionAfter(companionFullLast),
+      { _tag: "cut", item: companionItem, schemaversion: "3.0.0" },
+    ],
+    member: corpusMembers.testWithLti,
+    name: "companion-full",
+  },
+  "companion-padded": {
+    edits: [
+      companionBefore(
+        `<qti-rule><qti-description>A ruler&#9;of one metre</qti-description><qti-rule-system-si><qti-minimum-length> 30 </qti-minimum-length><qti-major-increment unit="Meter"> 1.5 </qti-major-increment></qti-rule-system-si></qti-rule>`,
+      ),
+      { _tag: "cut", item: companionItem, schemaversion: "3.0.0" },
+    ],
+    member: corpusMembers.testWithLti,
+    name: "companion-padded",
+  },
+  "cut-companion": cutItem("cut-companion", "testWithLti", companionItem, "3.0.0"),
+};
+
+/**
  * The edits of `test-selection-foreign`, over `test-selection`'s text edits: an `xml:lang` and one
  * `ma:ext` child, with its namespace declaration, on the first section's `qti-selection` and on
  * section C's `qti-ordering`. Both are strict attribute hosts (3.3 strict/a and strict/d): the
@@ -4821,6 +5025,7 @@ const specs: Record<FixtureName, FixtureSpec> = {
   ...restoredSpecs,
   ...assemblySpecs,
   ...catalogSpecs,
+  ...companionSpecs,
   ...wildcardSpecs,
   "bad-identifier-value": {
     edits: [
@@ -5868,6 +6073,13 @@ const attributePattern =
   /(?<name>[A-Za-z_][\w:.-]*)\s*=\s*(?:"(?<double>[^"]*)"|'(?<single>[^']*)')/gu;
 
 /**
+ * One `qti-file-href` or `qti-resource-icon` element, whose text may name a file of the package
+ * (the companion materials of an item name theirs so).
+ */
+const fileElementPattern =
+  /<(?:qti-file-href|qti-resource-icon)(?:\s[^>]*)?>(?<text>[^<]*)<\/(?:qti-file-href|qti-resource-icon)>/gu;
+
+/**
  * The attributes whose values may name a file of the package: `src`, `data`, `href`, `poster`,
  * `srcset` and `cite`.
  */
@@ -5923,18 +6135,28 @@ const refsOf = (text: string) =>
 /**
  * The relative file paths a document references, resolved against the document's folder.
  *
- * Item, section and stimulus refs name documents, not files, so their start tags are left out.
+ * Item, section and stimulus refs name documents, not files, so their start tags are left out. The
+ * text of a `qti-file-href` or a `qti-resource-icon` is a reference too.
  * A `srcset` value is a comma separated list of a URL and an optional descriptor each. Fragments
  * and queries are cut off, and a reference with a scheme, a leading `/` or only a fragment is not
  * a path inside the package.
  *
  * @param text - A QTI document, decoded as UTF-8.
  * @param documentPath - The document's path in the package.
- * @returns The resolved paths, each once, in document order. They are not checked for existence.
+ * @returns The resolved paths, each once: the element texts first, then the attribute values, each
+ *   in document order. They are not checked for existence.
  */
 const fileReferencesOf = (text: string, documentPath: string): string[] => {
   const folder = path.posix.dirname(documentPath);
   const paths = new Set<string>();
+
+  for (const match of text.matchAll(fileElementPattern)) {
+    const reference = (match.groups?.["text"] ?? "").trim().replace(/[?#].*$/u, "");
+
+    if (reference !== "" && !externalReference.test(reference)) {
+      paths.add(path.posix.join(folder, reference));
+    }
+  }
 
   for (const match of text.replaceAll(documentRefPattern, "").matchAll(fileAttributePattern)) {
     const value = unescapeAttribute(match.groups?.["double"] ?? match.groups?.["single"] ?? "");

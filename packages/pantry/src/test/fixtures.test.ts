@@ -8,6 +8,7 @@ import {
   FIXTURES_VERSION,
   assemblyNames,
   catalogNames,
+  companionNames,
   editBytes,
   fixtureNames,
   hash12,
@@ -449,6 +450,29 @@ const catalogVersions: readonly (readonly [(typeof catalogNames)[number], "3.0.0
   ["card-gap-inside", "3.0.1"],
   ["card-empty", "3.0.1"],
   ["entry-empty", "3.0.1"],
+];
+
+/**
+ * How many times `needle` occurs in `text`.
+ *
+ * @param text - The text to search.
+ * @param needle - The text to count.
+ * @returns The number of non-overlapping occurrences.
+ */
+const occurrences = (text: string, needle: string): number => text.split(needle).length - 1;
+
+/**
+ * The `schemaversion` each companion positive's manifest declares: 3.0.1 for `companion-301` and
+ * 3.0.0 for the other three, cut from `testWithLti`'s 3.0.0 item.
+ */
+const companionVersions: readonly (readonly [
+  (typeof companionNames)[number],
+  "3.0.0" | "3.0.1",
+])[] = [
+  ["cut-companion", "3.0.0"],
+  ["companion-301", "3.0.1"],
+  ["companion-full", "3.0.0"],
+  ["companion-padded", "3.0.0"],
 ];
 
 /**
@@ -1525,6 +1549,145 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts", (it
 
             assert.include(yield* fs.readFileString(`${dir}/${file}`), needle, `${name}: ${file}`);
           }
+        }),
+      ),
+    180_000,
+  );
+
+  it.effect(
+    "the companion names are the brief's list, each in the fixture table and no negative",
+    () =>
+      Effect.sync(() => {
+        assert.deepStrictEqual(
+          [...companionNames],
+          ["cut-companion", "companion-301", "companion-full", "companion-padded"],
+        );
+        assert.deepStrictEqual(
+          companionVersions.map(([name]) => name),
+          [...companionNames],
+        );
+        assert.includeMembers([...fixtureNames], [...companionNames]);
+
+        for (const name of companionNames) {
+          assert.notInclude(
+            [...negativeNames, ...restoredNames, ...assemblyNames, ...catalogNames],
+            name,
+          );
+        }
+      }),
+  );
+
+  it.effect(
+    "each companion positive materializes under 2 MB, keeps the digital material's file and icon, lists every packaged file and carries its edit",
+    () =>
+      inFreshRoot(() =>
+        Effect.gen(function* companionFixtures() {
+          const fs = yield* FileSystem.FileSystem;
+
+          for (const [name, version] of companionVersions) {
+            const dir = yield* materialize(name);
+            const entries = yield* fs.readDirectory(dir, { recursive: true });
+            const files: string[] = [];
+            let size = 0;
+
+            for (const entry of entries) {
+              const info = yield* fs.stat(`${dir}/${entry}`);
+
+              if (info.type === "File") {
+                files.push(entry);
+                size += Number(info.size);
+              }
+            }
+
+            const manifest = yield* fs.readFileString(`${dir}/imsmanifest.xml`);
+            const item = yield* fs.readFileString(`${dir}/elements.xml`);
+
+            assert.include(manifest, `<schemaversion>${version}</schemaversion>`, name);
+            assert.deepStrictEqual(
+              files.filter((file) => file !== "imsmanifest.xml").toSorted(),
+              ["elements.xml", "links/periodicTable.xml", "links/table.svg"],
+              name,
+            );
+            assert.deepStrictEqual(listedFilesOf(manifest), [
+              "elements.xml",
+              "links/periodicTable.xml",
+              "links/table.svg",
+            ]);
+            assert.isBelow(size, 2 * 1024 * 1024, name);
+            assert.include(
+              item,
+              '<qti-digital-material label="The Periodic Table" mime-type="text/html">',
+              name,
+            );
+            assert.include(item, "<qti-file-href>links/periodicTable.xml</qti-file-href>", name);
+            assert.include(item, "<qti-resource-icon>links/table.svg</qti-resource-icon>", name);
+            assert.notInclude(item, "tool-name", name);
+            assert.include(
+              item,
+              version === "3.0.1" ? "imsqti_asiv3p0p1_v1p0.xsd" : "imsqti_asiv3p0_v1p0.xsd",
+              name,
+            );
+
+            const document = yield* readXml(yield* fs.readFile(`${dir}/elements.xml`));
+
+            assert.strictEqual(document.root.namespace, qtiNamespace, name);
+          }
+        }),
+      ),
+    180_000,
+  );
+
+  it.effect(
+    "companion-full holds every kind of material, every calculator type and every unit value, and companion-padded pads its values",
+    () =>
+      inFreshRoot(() =>
+        Effect.gen(function* companionContent() {
+          const fs = yield* FileSystem.FileSystem;
+          const read = (name: (typeof companionNames)[number]) =>
+            materialize(name).pipe(
+              Effect.flatMap((dir) => fs.readFileString(`${dir}/elements.xml`)),
+            );
+          const full = yield* read("companion-full");
+          const padded = yield* read("companion-padded");
+
+          for (const type of ["basic", "standard", "scientific", "graphing"]) {
+            assert.strictEqual(
+              occurrences(full, `<qti-calculator-type>${type}</qti-calculator-type>`),
+              1,
+            );
+          }
+
+          assert.strictEqual(occurrences(full, "<qti-calculator-info>"), 1);
+          assert.strictEqual(occurrences(full, "<qti-resource-icon>"), 2);
+          assert.strictEqual(occurrences(full, "<qti-rule-system-si>"), 3);
+          assert.strictEqual(occurrences(full, "<qti-rule-system-us>"), 3);
+          assert.strictEqual(occurrences(full, "<qti-increment-si>"), 2);
+          assert.strictEqual(occurrences(full, "<qti-increment-us>"), 2);
+          assert.strictEqual(occurrences(full, "<qti-physical-material>"), 2);
+          assert.strictEqual(occurrences(full, "<qti-digital-material"), 2);
+          assert.strictEqual(occurrences(full, "<qti-digital-material>"), 1);
+
+          for (const unit of [
+            "Millimeter",
+            "Centimeter",
+            "Meter",
+            "Kilometer",
+            "Inch",
+            "Foot",
+            "Yard",
+            "Mile",
+            "Radian",
+            "Degree",
+            "Minute",
+            "Second",
+          ]) {
+            assert.include(full, `unit="${unit}"`, unit);
+          }
+
+          assert.strictEqual(occurrences(full, "<qti-minor-increment"), 6);
+          assert.include(padded, '<qti-major-increment unit="Meter"> 1.5 </qti-major-increment>');
+          assert.include(padded, "<qti-minimum-length> 30 </qti-minimum-length>");
+          assert.include(padded, "A ruler&#9;of one metre");
         }),
       ),
     180_000,
