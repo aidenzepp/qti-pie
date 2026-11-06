@@ -497,6 +497,15 @@ against it. A reading that is not an information-model-over-XSD case says which 
     same file differently; plate is the only implementation so far. This is not a case of documents in conflict: XML
     Schema decides how its own literal maps to a value. (The renderer's phase-3 default, delivery spec section 5.1,
     applied in plate; 2026-11-04.)
+
+    One limit remains in pantry, stated here as a known limit. Two map keys of a float mapping are compared as the
+    doubles they name only where grizzle's lexical form of `double precision` holds the key (`src/qti/mapping.ts`
+    `floatKeyPattern`): at most 15 significant digits on each side of the point, an exponent of at most 293, and each
+    run of padding zeros at most 255. A key outside it, such as `1e400` or `1.7976931348623157e308`, is distinct from
+    every other key by its lexical form alone. So a mapping keyed `1e400` and `2e400`, which name one double, is
+    accepted where comparing the values would refuse it. The corpus holds no float mapping. (Recorded 2026-11-06, from
+    W5 Q5.11.)
+
 57. **In lax wildcard content, every prose rule judges the QTI elements the structural walk checks there, as it judges
     them anywhere else.** Under a `lax` element wildcard, such as the content of `qti-custom-interaction`, XML Schema
     assesses an element against its declaration when one is found, and only then (XML Schema Part 1, section 3.10.1,
@@ -569,25 +578,38 @@ against it. A reading that is not an information-model-over-XSD case says which 
     A prefix that no declaration in scope binds makes the `xsi:type` attribute itself invalid (reading 74).
 
     Two limits remain in pantry, each an exception to reading 1, stated here as a known limit:
-    - `xs:NOTATION`'s value space is "the set of QNames of notations declared in the current schema" (XML Schema Part
-      2, section 3.2.19), and no pinned XSD declares a notation, so the type holds no value and no text of an element
-      it governs is valid. The domain compiler states no empty domain, so a foreign element whose `xsi:type` names
-      `xs:NOTATION` is left ungoverned and its text unchecked, where XML Schema refuses it. It is closed when the
-      compiler states the empty domain.
     - An element of a kind reads its `xsi:type` against every type the pinned schemas of its version define, not only
       those of its document's schema set, because `XsiType` is keyed by version. So
       `<qti-description xsi:type="ud:ValueDType">` in an item is accepted and governed by the usage-data type, though
       the item's set does not import usage data and its `xsi:type` names no type there (section 3.3.4, Element Locally
       Valid (Element), clause 4.2). This is reading 72's limit, the grammar keyed by version and not by schema set,
       extended to the types an `xsi:type` names, and it closes with that limit.
+    - A simple-content string value is folded into `Node.stringValue` only where its governor's `TextDomain`
+      checks something or an overlay copies the text. A domain whose pattern admits every string of XML characters
+      and that states no facet (`xs:anySimpleType` and `xs:normalizedString`) can fail no text, so its elements' text
+      is not folded unless their kind is one of `copiedTextKinds` (`src/qti/node.ts`: `lom:entry`, `lom:language`,
+      `qti-value` and `qti-base-value`, whose text an overlay compares or checks against another row). The fold's
+      step is selected by a closed read over the copies the child carries, `TextDomain(version, GoverningOf(version,
+      parentKind, parentGoverns))` outside those domains, or `parentKind` among the copied kinds; a copied kind gets
+      no TextDomain law from it. The fold's running text rides the tree's predecessor and last axes, so it is a
+      column of their keys, and grizzle refuses at compile a key whose B-tree entry can pass PostgreSQL's
+      `BTMaxItemSize` (`UnrepresentableKey`). So the running text and `stringValue` are `keyText`
+      (`src/qti/limits.ts`), bounded to `keyTextCodePoints`, the code points one entry holds beside the widest key's
+      other columns, and a folded value past the bound is refused by `keyText`'s pattern on the fold's text, by
+      name: a stated limit of the representation, not this reading's law. The corpus (28 packages, 353 documents)
+      holds 3,095 simple-content elements; the 227 under a checked domain are at most 92 code points; of the copied
+      kinds, `qti-base-value` is at most 102 (1,208 elements), `lom:entry` 86 (59), `qti-value` 45 (898) and
+      `lom:language` 2 (44); and the two over the bound (`lom:string`, 967 and 723 code points) are
+      `xs:normalizedString` and not copied, so not folded. (Recorded 2026-11-06, from W5 Q5.03.)
 
-    This binds pantry and plate alike. pantry checks all of it but those two limits. plate does not yet check the text:
-    it refuses element children and attributes other than the four `xsi:` ones, and accepts the text unchecked; that is
-    plate's open limit against this reading, for plate's own goal to close, not a second reading. This is not a case of
-    documents in conflict: XML Schema decides what is valid. (The renderer's phase-3 default, delivery spec section 5.1,
-    applied in plate, narrowed to the text by XML Schema Part 1, section 3.3.4; 2026-11-05. Restated 2026-11-05 under
-    "the spec wins": the text is checked, which closes the limit the reading first recorded, and the `strict` wildcard
-    and an `xsi:type` naming no type are decided. The two limits are recorded 2026-11-05, from seat QS's findings.)
+    This binds pantry and plate alike. pantry checks all of it but those three limits. plate does not yet check the
+    text: it refuses element children and attributes other than the four `xsi:` ones, and accepts the text unchecked;
+    that is plate's open limit against this reading, for plate's own goal to close, not a second reading. This is not a
+    case of documents in conflict: XML Schema decides what is valid. (The renderer's phase-3 default, delivery spec
+    section 5.1, applied in plate, narrowed to the text by XML Schema Part 1, section 3.3.4; 2026-11-05. Restated
+    2026-11-05 under "the spec wins": the text is checked, which closes the limit the reading first recorded, and the
+    `strict` wildcard and an `xsi:type` naming no type are decided. The two limits are recorded 2026-11-05, from seat
+    QS's findings.)
 
 61. **An element in QTI's own namespace inside `qti-ordering`'s extension slot is valid.** The information model says
     the slot's child tags "may be new tags and reused QTI ASI tags" (section 5.98.3, the `extensions` attribute of the
@@ -935,10 +957,24 @@ against it. A reading that is not an information-model-over-XSD case says which 
     as LOM, where XML Schema would assess it against nothing, and beneath a LOM element in an external LOM file, a
     `drd:hazard` is judged as DRD's. Such an element is refused when it breaks its declaration. That is an exception
     to reading 1, stated here as a known limit. It is closed when the grammar keys its admissions by schema set as it
-    keys them by version. This binds pantry and plate alike. This is not a case of documents in conflict: XML Schema
-    decides how a wildcard finds a declaration or a type, and QTI's XSDs and reading 24 fix the schema each document
-    is assessed against. (The DRD finding of seat QF, with QD's correction for `xsi:type` under `strict`; "the spec
-    wins", 2026-11-05.)
+    keys them by version. The same limit holds for attributes. An attribute wildcard reads an attribute against a global
+    declaration only where the schema set of the element's document holds one: `xml.xsd`'s four in the ASI and
+    content-packaging sets, whose root XSDs import it, and XLink's ten in the content-packaging set alone, through the
+    content-packaging extension (`cpext/imsqtiv3p0p1_cpextv1p2_v1p0.xsd` line 10); the loose LOM binding and the
+    usage-data XSD import neither. An attribute is assessed only against "a declaration resolved to by its [local name]
+    and [namespace name]", and under `lax` one with none is not assessed (sections 3.10.4 and 3.4.4, clause 3.2). One
+    grammar serves all of a kind's documents, so a kind's `xml:` and XLink names are typed by the union of the sets its
+    documents may be assessed against (`holdsGlobals` and `attributeSchemaSets` in `src/vocab/open.ts`): a LOM kind
+    stands both in a manifest and in an external LOM file, and a foreign element in documents of every set. So in an
+    external LOM file a repeated `xml:id` is refused under "DocumentId key" and `xml:space="bogus"` under "value
+    domain", which XML Schema accepts there, an exception to reading 1 of the same kind. The document's root kind names
+    its set (`cp:manifest`, `lom:lom`, `ud:usageData`, the ASI roots), but no attribute row reads it: `AttributeGrammar`
+    is keyed by (version, governor, name), and the governor, `GoverningOf` on Node, holds no schema set. It is closed by
+    a schema-set digit on `GoverningOf`, from the root kind, and governors per set for the 62 LOM kinds that hold an
+    attribute wildcard and for the three foreign kinds (UP audit C32). This binds pantry and plate alike. This is not a
+    case of documents in conflict: XML Schema decides how a wildcard finds a declaration or a type, and QTI's XSDs and
+    reading 24 fix the schema each document is assessed against. (The DRD finding of seat QF, with QD's correction for
+    `xsi:type` under `strict`; "the spec wins", 2026-11-05.)
 
 73. **A response-processing resource's type is `imsqti_resprocessing_xmlv3p0`, as the content-packaging XSD
     enumerates it, and the implementation guide's `imsqti_responseprocessing_xmlv3p0` is refused.** The
@@ -975,8 +1011,22 @@ against it. A reading that is not an information-model-over-XSD case says which 
     attribute name resolves its prefix the same way, to the namespace that is the name's. pantry states each of these
     as a law over its stored rows, the names and the QName values alike, and does not leave the names to its reader:
     a row whose prefix resolves to no binding, or to another namespace than its name's, describes no document, and
-    the model stores nothing that no valid document is (`docs/qti-intent.md`, "Extremely tight data model"). This
-    binds pantry and plate alike in what they refuse; how each enforces it is its own. This is not a case of
+    the model stores nothing that no valid document is (`docs/qti-intent.md`, "Extremely tight data model").
+
+    One limit remains in pantry, an exception to reading 1, stated here as a known limit: no law over the stored rows
+    holds a QName value's prefix to a binding in scope. A binding is a fact of the element's ancestors, and the rows
+    hold each element's own declarations alone (`Namespace`, keyed by element and prefix), with no relation of the
+    bindings in scope at an element. So the importer refuses an `xsi:type` whose prefix nothing binds (shred's
+    `type-unresolved`, an `unmodeled-vocabulary` refusal), and nothing refuses an unbound prefix in an SSML `role`
+    item or in the text of an element an `xsi:type` of `xs:QName` governs, which is judged by QName's lexical form
+    alone. An element's or an attribute's name has no such law either: its prefix is held by the reader's namespace
+    well-formedness (Namespaces in XML 1.0, section 5, "Namespace constraint: Prefix Declared"), since crust's
+    reader refuses a prefix no declaration in scope binds as a `WellFormednessError` (`packages/crust/src/read.ts`,
+    `saxes` reading with namespaces on), so no stored row holds one. The corpus holds no `xsi:type` and no `role`,
+    so no verdict moves. It is closed when the rows carry each element's bindings in scope. (Recorded 2026-11-06,
+    from W5 seat PN; upstream records the same gap, C48 of `docs/research/up.md`.)
+
+    This binds pantry and plate alike in what they refuse; how each enforces it is its own. This is not a case of
     documents in conflict: Namespaces in XML and XML Schema agree. (Operator ruling "the spec wins", 2026-11-05.)
 75. **An element is judged under its governing type for everything XML Schema decides, and under its name for every
     rule QTI adds.** An element whose valid `xsi:type` names a type derived from its declared one is validated against
@@ -1161,3 +1211,532 @@ against it. A reading that is not an information-model-over-XSD case says which 
     match in reading 71, the order interactions' counts against their choices in reading 18, and the XInclude rules in
     reading 76. This binds pantry and plate alike. This is not a case of documents in conflict. (Operator ruling "the
     spec wins", 2026-11-05.)
+
+84. **A resource names a document only through its `href`, and a resource with no `href` names none: its files are
+    files.** IMS Content Packaging 1.2 makes a resource's `href` the locator of its content, and its files mere
+    locators: "A value declared for Manifest.Resources.Resource{Href} represents a URL that can be used to locate and
+    access the content described by the resource", and "A value declared for Manifest.Resources.Resource.File{Href}
+    shall be a locator for a single digital resource, with no other implication as to the use of the resource so
+    identified" (Information Model, Version 1.2 Public Draft v2.0, section 6.11.3, the Href class; line 3303 of the
+    published `imscp_infov1p2pd2.html`); "A value declared by a Resource{ Href } object is a launchable URI" (section
+    6.6.2, the Resource class; line 2383). So a resource of a type `RootOfType` maps names the document at its `href`,
+    which is read as a document of that type, and the `href` is one of its own files (the same section 6.6.2: "A file
+    reference declared in a Resource{ Href } shall have an associated declaration in a File object in the same
+    Resource"). A resource with no `href` names no document, whatever its type and however many files it lists, and
+    each of its files is an entry like any other, which a `cp:file` must still list (reading 33). This sets aside the
+    sole-file convention no source states: the old importer read an hrefless outcome, response-processing or metadata
+    resource through its one file and refused one listing several as `record-unnamed`, and the oracle's
+    `documentsOf` read every hrefless document-typed resource through its one file. The corpus moves no verdict: one
+    package, `qtiv3-examples/packaging/maxfiles/maxfiles.zip`, has hrefless document-typed resources (two
+    `imsqti_rptemplate_xmlv3p0` resources of one file each), and the oracle judges it refused under `P8` with those two
+    files read as documents and without them. This binds pantry and plate alike. This is not a case of documents in
+    conflict. (Operator ruling "the spec wins", 2026-11-06, from W5 Q5.06.)
+
+85. **An `xs:NCName` takes its name characters from XML 1.0 Second Edition, as XML Schema 1.0 reads them, and has no
+    length bound.** XML Schema Part 2 (W3C Recommendation, 28 October 2004) gives `NCName` the lexical space of the
+    `NCName` production of Namespaces in XML (section 3.3.7), whose 1999 Recommendation writes it as `(Letter | '_')
+    (NCNameChar)*` over XML 1.0's `Letter`, `Digit`, `CombiningChar` and `Extender` (productions [4] and [5]). Part 2's
+    schema for schemas states the same type as the pattern `[\i-[:]][\c-[:]]*`, and its Appendix F defines `\i` as the
+    characters `Letter | '_' | ':'` match and `\c` as those `NameChar` matches (section F.1.1), citing XML 1.0 Second
+    Edition, whose `Letter` is `BaseChar | Ideographic` (Appendix B). XML 1.0 Fifth Edition's `NameStartChar` and
+    `NameChar` (productions [4] and [4a]) hold every one of those characters and more, so the two readings differ in
+    two cases, and both are refused here:
+    - a character no Second Edition table holds, anywhere in the name: a letter Unicode assigned after version 2.0,
+      such as `㐀` (U+3400), a character of the supplementary planes, such as `𐀀` (U+10000), or one the Second
+      Edition leaves out on purpose, such as `Ĳ` (U+0132);
+    - a character the Second Edition admits only after the first, written first: an `Extender` such as `ː`
+      (U+02D0), so `ːa` is refused and `aː` is accepted.
+
+    libxml2 2.9.13's `xmllint` gives the same verdict on each of these. The production states no length, so a name of
+    any length is valid. Every type derived from `xs:NCName` reads it so: `xs:ID`, `xs:IDREF`, `xs:ENTITY` and QTI's
+    identifier types, and the bare variable reference that names a declaration. Reading 55 is not changed by this: a
+    `pattern-mask` is a response pattern plate checks, and its `\i` and `\c` follow the later edition by that
+    reading's own decision. This binds pantry and plate alike. This is not a case of documents in conflict: QTI's XSDs
+    are XML Schema 1.0 (reading 61), and XML Schema 1.0 decides the lexical space of its own types. (Operator ruling
+    "the spec wins", 2026-11-06.)
+
+86. **An entity reference's name is an `NCName`: no entity name holds a colon.** Namespaces in XML 1.0 (Third
+    Edition), section 7, Conformance of Documents: in a namespace-well-formed document, "No entity names, processing
+    instruction targets, or notation names contain any colons." XML 1.0's `EntityRef` production takes any `Name`, a
+    colon included, and crust's reader reads `&a:b;` where an external subset could declare it, so the document layer
+    refuses it: a node of kind `entityRef` holds `&` and an `NCName` and `;` (the `entityRef_arm` check of
+    `src/qti/chardata.ts`). The rule binds every entity name, an unexpanded reference inside an attribute value too.
+    The corpus moves no verdict: its 28 packages' 395 XML files hold 70 entity references, none whose name has a
+    colon, counted by a byte scan of every `.xml`, `.xhtml`, `.html`, `.svg` and `.xsd` file of each package's
+    directory form for `&name;` with a colon in `name`. This binds pantry and plate alike. This is not a case of
+    documents in conflict: Namespaces in XML decides the names a namespace-well-formed document holds, and every QTI
+    document is read under it. (Operator ruling "the spec wins", 2026-11-06, from W5 Q5.04.)
+
+88. **A repeated wildcard keeps its sequence's order: after a child the wildcard holds, no element of an earlier
+    particle follows.** XML Schema 1.0 Part 1 (W3C Recommendation, 28 October 2004), section 3.8.4, Validation Rule:
+    Element Sequence Valid, accepts a sequence's children only where "there is a partition of the sequence into n
+    sub-sequences such that n is equal to the cardinality of {particles}", each sub-sequence valid, in order, against
+    the corresponding particle. So once a child falls to a later particle, no child after it falls to an earlier
+    one. `CompanionMaterialsInfoDType` is the sequence `qti-calculator*`, `qti-rule*`, `qti-protractor*`,
+    `qti-digital-material*`, `qti-physical-material*`, then `grpStrict.any`'s `##other` `strict` wildcard, repeated
+    (`imsqti_asiv3p0_v1p0.xsd` lines 26123 to 26129 and 23932, `imsqti_asiv3p0p1_v1p0.xsd` lines 26269 to 26275 and
+    24018). A `##other` wildcard matches no element of the ASI namespace (section 3.10.4, Wildcard allows Namespace
+    Name), so `qti-companion-materials-info` refuses a `qti-physical-material` after an `ssml:speak`, an
+    `ssml:audio` or an `m:math`. The DRD's `Access_For_All_Resource.Type` ends the same way, with
+    `drd:isPartialAdaptationOf*` and then `grpStrict.any` (both DRD XSDs, lines 408 and 409, the wildcard at line
+    107). So `drd:accessForAllResource` refuses a `drd:isPartialAdaptationOf` after a child its wildcard holds.
+
+    libxml2 2.9.13's `xmllint`, the validity oracle, accepts both. Its automaton for a wildcard that may repeat
+    returns to the state the wildcard starts in (`xmlschemas.c` lines 12852 and 12924), which is the state its
+    preceding particle ends in. An element particle that repeats without bound from at most one occurrence ends in a
+    state that repeats it (line 12791). So the element just before the wildcard is admitted again after any child
+    the wildcard holds. An element of an earlier particle, such as `qti-digital-material` or
+    `drd:isFullAdaptationOf`, stays refused. Every content model of the pinned XSDs was walked through that
+    construction, and these two are the only ones it widens. Its verdict is recorded against this reading rather
+    than counted as a defect of the grammar, which keeps the XSD's order. The corpus moves no verdict: its one
+    `qti-companion-materials-info` (`testWithLti.zip`'s `elements.xml`) holds a lone `qti-digital-material`, and no
+    corpus document holds an `accessForAllResource`. This binds pantry and plate alike. This is not a case of
+    documents in conflict: XML Schema decides how a sequence partitions its children. (Operator ruling "the spec
+    wins", 2026-11-06, from W5 seat GX.)
+
+89. **A variable mapping's target names no other variable its item ref's item holds.** The information model says
+    "Variable mappings allow outcome variables declared with the name source-identifier in the corresponding item to
+    be treated as if they were declared with the name target-identifier during outcome processing" (section 7.48,
+    VariableMapping, https://www.imsglobal.org/spec/qti/v3p0/info#Data_VariableMapping), and of every declaration's
+    identifier "The identifiers of the built-in session variables are reserved. They are completionStatus, numAttempts
+    and duration. All item variables declared in an item share the same namespace" (section 4.5.1, and sections
+    5.115.1 and 5.151.1). Reading 65 gives one variable per identifier. A mapping's target is a name of the item's
+    variables in the test's view of them, so a target that another variable of the item already holds would make two
+    variables of one name there: one the item declares, other than the mapping's own source; one another mapping of
+    the same item ref names; or a built-in session variable. Each is refused, the identifiers compared collapsed. A
+    mapping whose target is its own source maps nothing away and is valid. This binds pantry and plate alike. This is
+    not a case of documents in conflict. (Operator ruling "the spec wins", 2026-11-06, from W5 seats UP and Q5.13.)
+
+90. **A mapping's map keys are distinct, compared as values of its base type.** The information model says "The map
+    is defined by a set of mapEntries, each of which maps a single value from the source set onto a single float"
+    (section 5.88.4, https://www.imsglobal.org/spec/qti/v3p0/info#Data_Mapping, and section 7.21), so a mapping is a
+    function of its source value, and two entries of one key would map one value twice. The keys are compared as the
+    values section 8.13 gives each base type: an integer by its value (reading 45, at any length); a float as the
+    double it names (reading 56, within that reading's stated limit); a point as its integer tuple; a pair as an
+    unordered pair of identifiers ("The association is undirected so (A,B) and (B,A) are equivalent"); a directed pair
+    as an ordered one; a boolean as written (reading 34); and a string, an identifier and a URI as written, a string by
+    its code points whatever its entry's `case-sensitive` says, since `case-sensitive` governs how a response is matched
+    (section 7.21.3), not the key's value. So `1` and `01` repeat in an integer mapping, `A B` and `B A` in a pair
+    mapping, and `York` and `york` are two keys of a string mapping. The corpus holds no repeated key. This binds pantry
+    and plate alike. This is not a case of documents in conflict. (Operator ruling "the spec wins", 2026-11-06, from W5
+    seat Q5.11.)
+91. **An area mapping maps points.** The information model says of AreaMapping "A special class used to create a
+    mapping from a source set of point values to a target set of float values" (section 5.5,
+    https://www.imsglobal.org/spec/qti/v3p0/info#Data_AreaMapping), so a `qti-area-mapping`'s response declaration is
+    of base type point, and one under a declaration of any other base type is refused. The XSD admits the element
+    under any response declaration and does not decide this. This binds pantry and plate alike. This is not a case of
+    documents in conflict. (Operator ruling "the spec wins", 2026-11-06, from W5 seat Q5.11.)
+92. **A lookup table sets a single outcome.** The information model says a lookup table maps "a numeric source value
+    to a single outcome value in the declared value set" (section 4.5.13,
+    https://www.imsglobal.org/spec/qti/v3p0/info#DataAttribute_OutcomeDeclaration_lookupTable), so a
+    `qti-match-table` or `qti-interpolation-table` belongs to an outcome declaration of single cardinality, and one
+    under a multiple, ordered or record outcome is refused. Its entries' `target-value` and its own `default-value`
+    are values of that outcome's base type (reading 8), written exactly (reading 7). The XSD does not decide this. This
+    binds pantry and plate alike. This is not a case of documents in conflict. (Operator ruling "the spec wins",
+    2026-11-06, from W5 seat Q5.11.)
+93. **An ID that an element's text carries is bound to that element's parent.** XML Schema 1.0 Part 1 (§3.15.5,
+    Schema Information Set Contribution: ID/IDREF Table) enters in the table "every attribute or element information
+    item" validated by a type that "is the built-in ID, IDREF or IDREFS simple type definition or a type derived from
+    one of them", and gives each id a `[binding]`: "A set consisting of every element information item for which …
+    it has an attribute information item in its [attributes] or an element information item in its [children] which
+    was ·validated· by the built-in ID simple type definition or a type derived from it whose [schema normalized
+    value] is the [id] of this ID/IDREF binding". Validation Root Valid (ID/IDREF) (§3.3.4, cvc-id clause 2) refuses
+    a binding "whose [binding] has more than one member". So an ID that an element's own text carries, where the
+    element's governing type reads its text as an `xs:ID` (in the pinned grammar only an `xsi:type` gives one, on
+    `qti-description`, `qti-physical-material`, `csmd:GUID`, `csmd:label`, the DRD and QTI metadata kinds of string
+    content, and the three foreign element classes), is bound to the element's parent. Two ID-typed children of one
+    element with one value are one binding of one member, and valid; so are an element's ID attribute and its
+    ID-typed child of one value; two such children under different parents are refused, as two elements with one ID
+    attribute value are. XML Schema 1.1 (§3.17.5.2) keeps the same `[binding]`, "an attribute information item in
+    its [attributes] or an element information item in its [children] whose ·actual value· is or contains the [id]",
+    and differs only in reading the `[schema actual value]`, so a default or fixed value takes part, and an id inside
+    a list. A text of an `xs:IDREF` or `xs:IDREFS` type names ids of its document as an attribute's does. libxml2
+    2.9.13's `xmllint`, the validity oracle, enters no element-typed ID or IDREF in its table: on a schema whose
+    `parent` holds `id` children of type `xs:ID` and `ref` children of type `xs:IDREF` beside an `xs:ID` attribute,
+    it accepts two parents each holding the id `a`, and a `ref` that names no id, while it refuses two attributes
+    of the one value `a`. Its verdict is recorded against this reading. No corpus document writes an `xsi:type`, so
+    no verdict moves. This binds pantry and plate alike. This is not a case of documents in conflict: XML Schema
+    decides its own ID table. (Operator ruling "the spec wins", 2026-11-06, from W5 seat PI.)
+
+94. **An href is read as its path and its params: a resource's `href` may carry launch parameters its file's `href`
+    does not, a reference's query or fragment names no other file, and only the path names a file.** IMS Content
+    Packaging 1.2 (Information Model, Version 1.2 Public Draft v2.0, section 6.6.2, the Resource class; line 770 of
+    `imscp_infov1p2pd2.txt`, line 2384 of the published `.html`): "A file reference declared in a Resource{ Href } shall
+    have an associated declaration in a File object in the same Resource. The Href of the associated File object shall
+    reference the same file as the Resource{ Href }. The Resource{ Href } and associated File{ Href } URIs may differ in
+    that the Resource{ Href } may contain “launch” parameters in the URI." RFC 3986 (section 3.3, line 1204): "The path
+    is terminated by the first question mark ("?") or number sign ("#") character, or by the end of the URI." So every
+    href is read in two written pieces, `path ‖ params`: `path` up to its first `?` or `#`, and `params`, empty or the
+    query and fragment from there. A resource's href names the file at its path: `href-listed` compares the path with
+    its own files' hrefs, and a document-typed resource names the document at its path (reading 84). A reference in a
+    document (an `img`'s `src`, a `source`'s media fragment `#t=00:00:01`, an item ref's `href`) is read the same way,
+    and its params name no other file.
+
+    A path names a package entry only where this representation resolves it: a relative path of plain segments, the
+    `resolvedHref` form of `src/qti/limits.ts`, which names the entry at its document's directory followed by the path
+    (RFC 3986, sections 5.2.2 and 5.2.3; the manifest's directory is the package root). A path is external, admitted
+    and never resolved, when it starts with a scheme (an absolute URI, reading 35) or with `/`. The second is a
+    judgment: RFC 3986 (section 4.2, line 1440) calls a reference that begins with `//` a network-path reference and
+    one that begins with a single `/` an absolute-path reference, and both resolve against the authority and root of
+    the location a package is read from, not against the package's own root; Content Packaging binds only "a URI that
+    resolves to a location within the InterchangePackage" (InterchangePackage (b) and (d), lines 409 and 411), says
+    that "The files described by a resource may be local or remote" (line 276), and has the references from the root
+    manifest to files in a package interchange file be relative references, "relative to the root of the PIF" (PIF
+    (d), line 416). So neither kind names a package entry, and neither is refused. A document's reference may start
+    with dot segments: RFC 3986's dot-segment removal (section 5.2.4, line 1805) drops each leading `./`, and each
+    leading `../` removes the last segment of the document's directory, so `../passages/a.xml` from `items/i.xml` names
+    `passages/a.xml`. The removal is stated for up to eight leading `../` segments, each depth's segments read from a
+    closed table of patterns, so no loop is needed. Every other path is in the package but takes a resolution no
+    relation states, so it is refused under the stated limit "Href form" (`href-form`), never under a law of Content
+    Packaging or QTI: a dot segment after a plain one (`a/../b.xml`), a reference that climbs above the package root or
+    by more than eight segments, any dot segment in a `cp:file` or `cp:resource` href, a percent-encoding
+    (`a%20b.xml`), a backslash, whitespace in the path, a `:` in the first segment of a path with no scheme, and an
+    `xml:base` in a document that holds a resolved reference or on a `cp:manifest`, `cp:resources` or `cp:resource`. A
+    `cp:file`'s and
+    a `cp:resource`'s href are compared as written, so whitespace around them is in that list too; a document's
+    reference sets its surrounding whitespace aside, as `xs:anyURI` collapses it and an HTML URL may be "potentially
+    surrounded by spaces". A `srcset` is read as one image candidate, its URL alone, and one of several candidates or
+    with a descriptor is refused under the same limit.
+
+    The corpus moves no verdict, counted by a scan of every manifest and every XML document of its 28 packages: no
+    `cp:resource` href holds a query or a fragment; every `cp:file` href is a plain relative path; no element anywhere
+    holds an `xml:base`. Among the documents' references, `BPIG_22April` holds two media fragments
+    (`asl/item123.mp4#t=00:00:01,00:00:10.0` and `asl/item123.mp4#t=00:00:16.0`, whose path is an entry) and three
+    stimulus refs `../passages/unbelievableNight.xml` from `items/`, which name the entry
+    `passages/unbelievableNight.xml`; `maxfiles` holds three response-processing `template-location`s
+    `../rptemplates/match_correct.xml` and `../rptemplates/map_response.xml`, which name entries; no reference holds a
+    dot segment after a plain one or climbs above the root; `BBQsTest` holds thirteen absolute `http:` references in
+    `a@href` and `img@src`, external; the four `srcset` values are each one URL with no descriptor. This binds pantry and plate alike. This is not a case of documents in
+    conflict: Content Packaging states the launch parameters, and RFC 3986 decides where a path ends. (Operator ruling
+    "the spec wins", 2026-11-06, from W5 seat HP.)
+95. **A document's file references are the attributes its vocabularies define as the location of a file, and each one
+    that resolves within the package names a file the manifest describes.** IMS Content Packaging 1.2 (Information
+    Model, Version 1.2 Public Draft v2.0, section 6.3, the InterchangePackage class; lines 409 and 411 of
+    `imscp_infov1p2pd2.txt`) says "b) Any file described in the Manifest using a URI that resolves to a location within
+    the InterchangePackage shall be included in the InterchangePackage" and "d) Files contained in the
+    InterchangePackage may contain internal references to other files (e.g., a HTML content file may reference a JPEG
+    content file ...). When a file contained in an InterchangePackage references another file using a URI that resolves
+    to a location within the InterchangePackage, the referenced file shall be described in the InterchangePackage’s
+    Manifest." Content Packaging does not say which attributes of a file are its references to other files. Each
+    vocabulary's own specification does, so the census reads them there:
+    - QTI's HTML subset: `a@href`, a hyperlink; `blockquote@cite` and `q@cite`, the quotation's source; `img@src`,
+      `img@longdesc`, `object@data`, `audio@src`, `video@src`, `video@poster`, `source@src` and `track@src`, HTML's URL
+      attributes; and `source@srcset`, HTML's list of image candidate strings, each candidate's URL one reference.
+    - QTI's own attributes: the `href` of `qti-stylesheet`, `qti-assessment-item-ref`, `qti-assessment-section-ref`,
+      `qti-assessment-stimulus-ref`, `qti-adaptive-engine-ref`, `qti-adaptive-settings-ref`, `qti-metadata-ref` and
+      `qti-usagedata-ref`; `qti-interaction-modules@primary-configuration` and `@secondary-configuration`, module
+      configuration files (the implementation guide's `modules/maths_config.js`, line 8500 of `impl.txt`);
+      `qti-response-processing@template-location`, a template file (the guide's `../rptemplates/match_correct.xml`, line
+      13693); and `qti-outcome-declaration@long-interpretation`, which points to a fuller description of the outcome.
+    - XInclude 1.0's `xi:include@href` (section 3.1); MathML 3's `href` on every element (section 2.1.6), `math@altimg`
+      and `math@cdgroup` (section 2.2.1), `mglyph@src`, `share@src`, `annotation@src` and `annotation-xml@src`; and SSML
+      1.1's `audio@src` and `lexicon@uri`.
+
+    Left out, each because its value names no file as written: `cp:file@href` and `cp:resource@href`, the manifest's own
+    description of its files, which (b) binds; `xml:base`, a base and not a reference;
+    `qti-interaction-module@primary-path` and `@fallback-path`, a module location the AMD loader extends with `.js` (the
+    guide's `modules/lib/handlebarsV2.min`, line 8501); `qti-response-processing@template`, a template's identifier
+    (reading 51); and the URIs that identify rather than locate, `qti-custom-operator@definition`,
+    `qti-portable-custom-interaction@custom-interaction-type-identifier`, MathML's `definitionURL`, and the usage data's
+    `context` and `glossary`. A census attribute's value is read as reading 94 reads an href: only its path names a
+    file, and a path names a package entry only in the `resolvedHref` form. Upstream's census, from its own
+    specification's section 4.6, holds the HTML attributes, the `href` of `qti-stylesheet` and the four other
+    `qti-*-ref` files above, and `xi:include@href`; the rest are added here by the same rule, and the three refs' `href`
+    is the one path their targets are read through. This binds pantry and plate alike. This is not a case of documents
+    in conflict: Content Packaging states the rule, and each vocabulary says which of its attributes name files.
+    (Operator ruling "the spec wins", 2026-11-06, from W5 seat PG.)
+96. **A choice's identifier names it among its document's choices of its class, and names no item variable.** Each
+    choice class of the information model says of its identifier "This identifier must not be used by any other
+    choice or item variable" (section 5.132.1, SimpleChoice,
+    https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_SimpleChoice.Attr_identifier, and sections
+    5.131.1, 5.73.1 and 5.67.1 of SimpleAssociableChoice, InlineChoice and HotspotChoice), and the other classes say
+    it of their own noun: "any other gap" (section 5.55.1, Gap), "any other image" (5.56.1, GapImg), "any other text"
+    (5.58.1, GapText), "any other hotspot" (5.7.1, AssociableHotspot) and "any other hottext choice" (5.65.1,
+    HotText). The noun is each time the head of the class's own name, so "any other choice" of a simple choice is
+    another simple choice, and two choices of different classes may share an identifier, as a gap and a gap text of
+    one gap match interaction may. The sentence names no interaction, and its other term, "item variable", is the
+    item's; the information model reads an identifier as "a logical reference to another object in the item, such
+    as an itemVariable or choice" (section 7.16, Identifier). So the scope is the document: no two choices of one
+    class in one document share an identifier, whichever interactions hold them, and no two hottexts do, inside a
+    hottext interaction or not (reading 38). The item variables are an item's declared variables, of all four kinds,
+    and its built-in variables, which "are declared implicitly" (section 2.2.2): `completionStatus`, `numAttempts`
+    and `duration`, and `QTI_CONTEXT` (section 2.2.2.1). So in an item no choice and no hottext bears the identifier
+    of a declaration of its document or of a built-in variable. A document that is no item, such as a stimulus, has
+    no built-in variables, and its choices are judged against its declarations, of which it has none. Identifiers
+    are compared collapsed (reading 7). In the corpus, 16 items of `shared-vocabulary` repeat choice identifiers
+    across the interactions each one replicates (`Item_QTI3_Hotspot_01` holds two hotspot interactions whose choices
+    are both `A` to `D`), and that package is refused already; no item gives a choice the identifier of a declaration
+    or of a built-in variable, and no interaction repeats an identifier within a class. So no verdict moves. This
+    binds pantry and plate alike. This is not a case of documents in conflict: the XSD types a choice's identifier
+    `IdentifierDType` and decides nothing of its uniqueness. (Operator ruling "the spec wins", 2026-11-06, from W5
+    seat PM.)
+97. **A usage statistic's value is typed by the base type it names, and untyped where it names none.** The usage
+    data binding (QTI 3.0 Usage Data Information Model and XSD Binding 1.0, section 2.6.5, the Value class,
+    https://www.imsglobal.org/sites/default/files/spec/qti/v3/ud-bind/index.html; line 1392 of the text in
+    `~/.cache/gr8des/pm-ud/ud-bind.txt`) describes `ud:value` as "A class that can represent a single value of any
+    baseType", an `xs:normalizedString` with an optional `baseType` of BaseTypeEnum (section 2.7.1), whose terms
+    give each base type the values the information model gives it (section 8.13). Its `baseType` row adds "This
+    attribute is only used for specifying the base-type of a value that forms part of a record" (line 1426); read as
+    the attribute's purpose, not as a ban (reading 1), a `baseType` written on a statistic's value states that
+    value's base type. So a `ud:value` that writes `baseType` holds a lexical form of that base type, read as a
+    `qti-value`'s text is: outer whitespace is formatting but for string (reading 7), a boolean is `true` or `false`
+    (reading 34), an integer is unbounded (reading 45), a float or a duration is an `xs:double`, an identifier an
+    `IdentifierDType`, a uri an `xs:anyURI` (reading 61), a point two integers and a pair or a directed pair two
+    identifiers, each with one whitespace character between, and a string or a file any text. The Value class's
+    other sentence, "The base-type is defined by the baseType attribute of the declaration", has no declaration to
+    read in usage data, so a value that writes no `baseType` is its type's `xs:normalizedString` text and nothing
+    more, as the implementation guide's own usage-data file writes every value (section 6.5, `<value>0.87</value>`).
+    The corpus holds no QTI 3 usage data (its `usageData` package is in QTI 2.2's namespace, refused `not-qti3` by
+    reading 80), so no verdict moves; of the fixtures, `usage3-integer-float` (`<value baseType="integer">0.87</value>`)
+    is refused, and `usage3-typed` and `usage3-float-padded` are accepted. This binds pantry and plate alike. This is
+    not a case of documents in conflict: the XSD types the text `xs:normalizedString` and the binding types the value
+    by the base type it names. (Operator ruling "the spec wins", 2026-11-06, from W5 seat PM.)
+98. **A prefixed reference reaches every built-in variable its item ref's item holds, `QTI_CONTEXT` among them.** The
+    information model says "Item variables are declared by variable declarations: context, response, outcome or
+    template variables" (section 2.2.2), "QTI_CONTEXT is a built-in variable and so any references within an item or
+    an assessment to the QTI_CONTEXT variable, or to the three built-in fields, must succeed" (section 2.2.2.1), and
+    that during outcome processing "values taken from an individual item session can be looked up by prefixing the
+    name of the item variable with the identifier assigned to the item in the qti-assessment-item-ref" (section
+    2.11.1.2). So `Q01.numAttempts`, `Q01.duration`, `Q01.completionStatus` and `Q01.QTI_CONTEXT` each name a
+    variable of item ref `Q01`'s item, the built-ins the installed `BuiltInVariable` lists under an item's root with
+    the types reading 29 gives them, and each counts as a resolving reading under reading 48. The upstream rule set
+    this repository ported (the UP audit's A55) reached only the three session variables; `QTI_CONTEXT` is admitted
+    here because section 2.2.2.1 says a reference to it must succeed (reading 1). A `duration` read so stays bound by
+    section 2.2.2.2's sentence on items that are not time dependent (the oracle's Item duration), and an item ref
+    that names an LTI link has no item whose declarations a prefix reads, so through it only a built-in resolves. In
+    the corpus, the one test package that prefixes names, `test_package_minfiles`, reads `item034.SCORE`,
+    `item063.SCORE`, `item065.SCORE` and `item160.SCORE`, each declared and each resolving once, and every test
+    package is refused at the codec today, so no verdict moves. This binds pantry and plate alike. This is not a case
+    of documents in conflict. (Operator ruling "the spec wins", 2026-11-06, from W5 seat PE.)
+99. **A variable mapping adds a name for an item's outcome, and the outcome's own name still names it.** The
+    information model says "Variable mappings allow outcome variables declared with the name source-identifier in the
+    corresponding item to be treated as if they were declared with the name target-identifier during outcome
+    processing" (section 7.48), and of the source "The identifier of the outcome variable to identify the name of the
+    source identifier during outcome processing variable mapping" (section 7.48.1). It does not say the source name
+    stops naming the variable, and section 2.11.1.2's prefixed lookup names "the item variable" by its declared
+    identifier. So under an item ref `Q01` whose mapping maps `SCORE` to `S2`, both `Q01.SCORE` (declared) and
+    `Q01.S2` (mapped) resolve, each to the item's `SCORE`, with that declaration's type. A mapping's source names an
+    outcome declaration of the item its item ref names, and reading 89 keeps its target from naming any other
+    variable the item declares, so no name of an item ref reaches two variables. Refusing `Q01.SCORE` would refuse
+    what section 2.11.1.2 states (reading 1). The corpus holds no variable mapping, so no verdict moves. This binds
+    pantry and plate alike. This is not a case of documents in conflict. (Operator ruling "the spec wins",
+    2026-11-06, from W5 seat PE.)
+100. **A template default names a template variable of its item, and its expression is a value of that variable's
+    type.** The information model says of TemplateDefault "The default value of a template variable in an item can be
+    overridden based on the test context in which the template is instantiated. The value is obtained by evaluating
+    an expression defined within the reference to the item at test level and which may therefore depend on the
+    values of variables taken from other items in the test or from outcomes defined at test level itself" (section
+    5.152), and of `template-identifier` "The identifier of the template variable affected" (section 5.152.1). So the
+    identifier, compared collapsed (reading 7), names a template declaration of the item its item ref names, and the
+    expression's value becomes that variable's default value, a value of its declared base type and cardinality, as
+    a setter's expression "must have an effective value type which is compatible with the variable's base-type and
+    cardinality" (section 2.5.1.3; the old checker's P20), a type no declaration says passing (reading 4). Its
+    references resolve against the test, prefixed ones included, as reading 4 states once its text names template
+    defaults beside pre-conditions and branch rules (the UP audit's A38). An item ref that names an LTI link has no
+    template variable, so a template default under one is refused. The corpus holds no template default, so no
+    verdict moves. This binds pantry and plate alike. This is not a case of documents in conflict. (Operator ruling
+    "the spec wins", 2026-11-06, from W5 seat PE.)
+101. **An element whose type has an ID attribute use holds no wildcard `xml:id`.** XML Schema 1.0 Part 1 (section 3.4.4,
+    Element Locally Valid (Complex Type), clause 5) calls "wild IDs" the attributes an attribute wildcard admits whose
+    declaration's "{type definition} is or is derived from ID", and requires: "5.1 There must be no more than one item
+    in wild IDs" and "5.2 If wild IDs is non-empty, there must not be any attribute uses among the {attribute uses}
+    whose {attribute declaration}'s {type definition} is or is derived from ID". `xml:id`, which `xml.xsd` declares of
+    type `xs:ID`, is the only global attribute of an ID type the pinned XSDs hold, so it is the only wild ID and clause
+    5.1 always holds. Under a `lax` or `strict` attribute wildcard it is assessed against that declaration and is a wild
+    ID; under `skip` it is not assessed and is not one; an `xml:id` the type declares itself is an attribute use, not a
+    wild ID. So on an element whose type, its kind's declared type or the type an `xsi:type` makes govern it (reading
+    75), has an attribute use of an ID-derived type, such as `id` of `UniqueIdentifierDType`, a wildcard's `xml:id` is
+    refused under attribute admission, even with no `id` written: `<qti-null xsi:type="ImgDType" xml:id="b"/>` is
+    invalid, as is `<qti-null xsi:type="ImgDType" id="a" xml:id="b"/>`. In the pinned grammar the rule bars `xml:id`
+    under 52 governors in both versions, the empty-content `qti-null`, `qti-exit-response`, `qti-exit-template` and
+    `qti-exit-test` each under the thirteen `xsi:type`s that declare `id` (`ImgDType`, `BRDType`, `ColDType` and ten
+    more); no kind's own type is barred, since every kind whose wildcard validates `xml:id` declares no ID attribute,
+    and the HTML and QTI kinds that declare `id` admit no `xml:id` they do not declare (reading 81). libxml2 2.9.13's
+    `xmllint`, the validity oracle, does not implement clause 5.2 (`xmlschemas.c` lines 25642 to 25656, "URGENT VAL
+    TODO: implement"): it prints "Unimplemented block" and accepts such an element, and its verdict is recorded against
+    this reading. No corpus document writes an `xsi:type`, so no corpus verdict moves. This binds pantry and plate
+    alike. This is not a case of documents in conflict: XML Schema decides its own validity. (Operator ruling "the spec
+    wins", 2026-11-06, from W5 seats UP and PG.)
+102. **An element in QTI's own namespace, or in none, inside `qti-ordering`'s extension slot is valid.** The information
+    model says the slot's child tags "may be new tags and reused QTI ASI tags" (section 5.98.3, the `extensions`
+    characteristic of the Ordering class, line 36355 of `info.txt`), though the XSD admits only other namespaces there
+    (`any namespace="##other" processContents="lax"`, `imsqti_asiv3p0p1_v1p0.xsd` lines 29976 and 24031, the same in
+    3.0.0). Where the information model says child tags may reuse QTI ASI tags elsewhere, the XSD writes `##any`: the
+    custom interaction's (section 5.36.2, XSD line 26364) and the template's (section 5.144.1, line 32555); where it
+    says they "must be new tags" it writes `##other` (sections 5.33.6, 5.37.5 and 5.129.4). So the slot is read as
+    `##any`, laxly. An element in QTI's namespace that no global declaration names, such as `qti-variable` or `qti-foo`,
+    is kept as the slot's extension content, a foreign element, not read as QTI ordering; a QTI root stays foreign
+    (reading 6); an HTML, MathML, SSML or XInclude global is read as its declaration; and an element in no namespace is
+    admitted too, which "any set of child tags" allows. `qti-selection`'s slot is not covered: its information model
+    text says the child tags "must be new tags i.e. not reused QTI ASI tags" (section 5.129.4). libxml2 2.9.13's
+    `xmllint` follows the XSD's `##other` and refuses these families, and its verdicts are recorded against this
+    reading. This follows the information model and sets the XSD aside, because the information model outranks the XSD
+    and the XSD's own mapping of the same sentence elsewhere is `##any`. This is upstream's reading 61 of 2026-11-06,
+    with the no-namespace clause added; the readings seat numbers it 61 at integration. (2026-11-06, merged by W5 seat
+    PG from the UP audit's C65.)
+103. **A variable mapping and a template default name variables an item declares, so under an item ref that names an
+    LTI link both are refused.** The information model says "Variable mappings allow outcome variables declared with
+    the name source-identifier in the corresponding item to be treated as if they were declared with the name
+    target-identifier during outcome processing" (section 7.48), and "The default value of a template variable in an
+    item can be overridden based on the test context in which the template is instantiated" (section 5.152), its
+    `template-identifier` being "The identifier of the template variable affected" (section 5.152.1). Each names a
+    variable declared in the corresponding item. An item ref may name an LTI link instead of an item (the
+    implementation guide's section 6.2.9, informative; the UP audit's B3), and an LTI link is no QTI item and
+    declares no variable, so a mapping's source or a template default's template under such an item ref names no
+    declared variable. It is refused under `variable-mapping-source` or `template-default-target`, as a source or
+    a template its item does not declare is, and never as a derived field. A prefixed name through such an item ref
+    reaches only the item built-ins (reading 98). The corpus's LTI item refs (testWithLti) hold neither, so no
+    verdict moves. This binds pantry and plate alike. This is not a case of documents in conflict. (Operator ruling
+    "the spec wins", 2026-11-06, from W5 seat PE.)
+104. **A processing element's `identifier` names a variable of the kind the element reads or sets.** The information
+    model defines each: a correct value is of "the associated response variable" (section 7.10.1), a map response's
+    and a map response point's variable a response (sections 7.22.1, 6.9.46), a lookup's "the outcome variable to be
+    set" (section 5.87.1), a set outcome value's an outcome (sections 6.32.3, 6.39.4), a set template value's a
+    template (section 6.50.1), a set default value's "The response variable or outcome variable" (section 6.50.4),
+    a set correct response's a response (section 6.50.5), and a variable's and a default's any item variable,
+    context, response, outcome or template (sections 7.47.1, 7.12.1, 2.2.2). A built-in variable stands as the
+    declaration kind `BuiltInVariable` gives it under its document's root (reading 29), so setting `numAttempts`
+    by a set outcome value is refused and setting `completionStatus` is not. Through a test's prefix the variable
+    is the item's, typed by its own declaration (reading 48). In the corpus, 2,462 such references name a variable,
+    each of a kind its element admits, so no verdict moves. This binds pantry and plate alike. This is not a case
+    of documents in conflict. (Operator ruling "the spec wins", 2026-11-06, from W5 seat PE.)
+105. **A test's setter sets a variable of its own document, so a prefixed reading never resolves it.** The
+    information model names a setter's `identifier` "The identifier of the variable to be set" (section 5.130.1,
+    SetValue) and a lookup's "The identifier of the outcome variable to be set" (section 5.87.1), each rule setting
+    "the value of an outcome variable" or of "a template variable" (sections 6.32.3, 6.39.4, 6.50.1) or the default
+    or correct value of a response (sections 6.50.4, 6.50.5); and an item's variables reach a test only to be read:
+    "values taken from an individual item session can be looked up by prefixing the name of the item variable with
+    the identifier assigned to the item in the qti-assessment-item-ref" (section 2.11.1.2). So of a
+    `qti-set-outcome-value`, `qti-set-template-value`, `qti-set-correct-response`, `qti-set-default-value` or
+    `qti-lookup-outcome-value` only the unsplit reading resolves, a declaration of the setter's own document
+    (reading 104 types it), and its split and numbered readings count for nothing under reading 48: a test that
+    declares `a.SCORE` and sets it is not ambiguous beside an item ref `a` whose item declares `SCORE`, and a test
+    that sets `a.SCORE` without declaring it is refused (`variable-kind`), since it would set an item's variable. In
+    the corpus, the 27 setters of the 14 test and section documents name `SCORE`, `TEST_total`, `TEST_FEEDBACK`,
+    `SECTION_1_total` to `SECTION_4_total` and `s1FB` to `s4FB`, none prefixed, so no verdict moves. This binds
+    pantry and plate alike. This is not a case of documents in conflict. (Operator ruling "the spec wins",
+    2026-11-06, from W5 seat PE.)
+106. **A root that reading 6 keeps foreign stands under a `strict` wildcard that finds its declaration.** Reading 6
+    keeps a QTI root, a processing root or the manifest, nested inside wildcard content, as foreign content: it is not
+    refused and not read as QTI. A `strict` wildcard requires "a top-level declaration for the item available, or the
+    item must have an xsi:type" (XML Schema 1.0 Part 1, section 3.10.1). The wildcard finds that declaration in the
+    document's schema set (section 3.10.4, Item Valid (Wildcard), clause 2; section 3.3.4, clause 1.1.1.3.2; reading
+    72), and the root is then assessed against it. So a root that set declares is an element the wildcard holds by its
+    declaration, and it stands, kept foreign as it is under `lax`, rather than being refused as `strict-undeclared`
+    (`HeldRootsUnder`). One wildcard of the pinned XSDs is such today: the DRD's `accessForAllResource`, whose
+    `grpStrict.any` is `##other` `strict` (both DRD XSDs, line 409) and whose documents' set, the manifest's,
+    declares `cp:manifest`. A root that set does not declare, such as a `qti-assessment-item` there, has no
+    declaration, so with no `xsi:type` naming a type of the set it is refused as before. A root in the wildcard's own
+    namespace is no element `##other` admits. libxml2 agrees on every arm of the box: two roots under the three
+    `strict` wildcards in both versions. No corpus document holds a root under a `strict` wildcard, so no verdict
+    moves. This binds pantry and plate alike. This is not a case of documents in conflict. (The UP audit's C13, "the
+    spec wins", 2026-11-06, from W5 seat PX.)
+
+107. **An `xi:include` is the information model's Include only where its parent's model holds one, and there it stands
+    for its fragment's root, one of that include's alternatives.** The information model lists the classes that hold
+    Include (Table 9.4.1, Include's parent classes: `BlockGroup`, `FlowGroup`, `FlowStaticGroup`, `InlineGroup`,
+    `InlineStaticGroup`, `OutcomeRule`, `ResponseRuleGroup`, `SectionPart` and the rest), says that "the instance of
+    include is treated as if it was actually an instance of the root element of the fragment referred to by the 'href'
+    characteristic of the 'Include' class" and that "a fragment may appear anywhere in the model where one of the
+    following abstract classes may appear: flowStatic, inlineStatic, blockStatic, responseRule, sectionPart or
+    outcomeRule" (section 2.12, Items and Test Fragments). The pinned XSDs state each class as a `choice` group holding
+    an explicit `xi:include` particle beside the class's members, so an include under a parent whose model holds that
+    particle is Include, and the kinds it may stand for are the element kinds of that particle's choice group, nested
+    choices flattened (`IncludeRoot`: 8,300 (version, parent, kind) rows over 155 (version, parent) families and 112
+    kinds). Each of them takes a position of the parent's content automaton that follows and is followed by the same
+    positions as the include's own, so N5, stepping the include at its own position, judges the merged document; a
+    fragment whose root is no alternative there is refused under "Include root", though the XSD admits the include
+    (an interaction included into a simple choice, a response rule into an item body). An include a wildcard admits
+    (a custom interaction's markup, `qti-ordering`'s extension slot, HTML's `template`, `qti-companion-materials-info`,
+    a custom operator, `qti-selection`) is no Include, since no class of Table 9.4.1 is a wildcard: it is kept as
+    written, as reading 6 keeps a root nested in wildcard content, and is no site of reading 76's inclusion chains. A
+    fragment's document is listed by a resource of type `imsqti_fragment_xmlv3p0` (QTI 3.0 Best Practice and
+    Implementation Guide, section 6.2: "QTI 3 inclusion (XInclude)", its example `tests/rtest01-set01`), and its root
+    is any kind an include stands for, so `RootOfType` is a set of (type, root) pairs and the document node's model
+    admits those roots. The XSDs declare most of them locally, so `xmllint` cannot validate a fragment's document on
+    its own; it is judged where it is included (reading 110). No corpus zip holds an include or a fragment resource, so
+    no verdict moves; the examples' loose `tests/rtest01-set01.xml` to `rtest01-set03.xml`, packaged with
+    `rtest01-fragment.xml`, are accepted. This follows the information model. This binds pantry and plate alike. This
+    is not a case of documents in conflict. (Operator ruling "the spec wins", 2026-11-06, from W5 seat IN.)
+
+108. **An include names a document of its package, by an href with no fragment identifier.** The information model says
+    "Fragments are packaged as separate resources and can be transported independently" (section 2.12), and XInclude
+    says "If the href attribute is absent when parse="xml", the xpointer attribute must be present" and "Fragment
+    identifiers must not be used; their appearance is a fatal error" (XInclude 1.0 Second Edition, W3C Recommendation,
+    15 November 2006, section 3.1). Reading 76 refuses `xpointer`, so an include the information model reads (reading
+    107) whose href is absent or empty, is external, or names no document the manifest lists, is refused under
+    "Include target", and one whose href holds a `#` after its path, with or without a query before it, is refused
+    under "Include fragment identifier", wherever the include stands. A query is admitted and names no other file
+    (reading 94). `XInclude.xsd` types `href` an optional `xs:anyURI`, which admits all of these; XInclude itself makes
+    them fatal errors. This binds pantry and plate alike. This is not a case of documents in conflict. (Operator ruling
+    "the spec wins", 2026-11-06, from W5 seat IN.)
+
+109. **A fragment's root is read by its name at its document's root, so the three kinds the composition splits by
+    context never root a fragment: a stated limit.** The composition gives three element names two kinds each, by the
+    context the XSDs declare them in: `qti-template-block` and `qti-template-block.rubric`, `qti-template-inline` and
+    `qti-template-inline.rubric`, `qti-feedback-block` and `qti-feedback-block.template`, whose content models differ
+    (a rubric's template inline admits no hottext, gap, feedback inline or nested template inline, and each block's
+    content body is its own kind). A fragment's root stands at its own document's root, which reads an element by its
+    expanded name alone, so a fragment rooted at one of those names is read as the kind whose handle is the name, and
+    an include whose parent admits only the split kind there (a template inside a rubric block, a feedback block inside
+    a template block) is refused under "Include root". One written element is one row of one kind, so this is a limit
+    of the representation, not a law of the specification; no corpus document includes such a fragment. This binds
+    pantry. This is not a case of documents in conflict. (Recorded by W5 seat IN, 2026-11-06.)
+
+110. **An included fragment is judged in place, as its merged document holds it, under one nearest interaction: the
+    last a stated limit.** The information model says "When including externally defined fragments the content of the
+    fragment must satisfy the requirements of the specification in the context of the item in which it is being
+    included. For example, interactions included from fragments must be correctly bound to response variables declared
+    in the items" (section 2.12), and the include "is treated as if it was actually an instance of the root element of
+    the fragment". So a fragment's content is judged as XInclude's result infoset holds it:
+    - its nodes inherit the ancestry of the includes that place it, the union over its placements, which is exact for
+      every ban, a ban being a disjointness: an interaction a fragment brings into a simple choice is refused (N6), and
+      a gap a fragment brings into a gap match's text stands;
+    - its nodes' nearest interaction is the one its includes stand in (N8), so a fragment's hottexts and gaps are that
+      interaction's choices;
+    - under each item that places it, its interactions bind that item's response variables ("Binding declared",
+      "BindingFit", "Binding cardinality", "Adaptive feedback", and "Binding unique" over the item and every placement);
+    - its IDs and IDREFs are its assembly's: an item's IDREF may name an ID its fragment holds, a fragment's IDREF one
+      its item holds, and a fragment's IDs are distinct from its item's ("Idref target" and "DocumentId key" over the
+      assembly);
+    - its choices and hottexts are its item's: their identifiers are distinct from the item's and from every other
+      placed fragment's ("Choice identifier key" over the assembly), and name no variable of the item ("Choice not
+      variable" against the item's declarations and built-in variables);
+    - its feedback, template, printed-variable and context-variable references resolve in the declarations of each
+      item that places it ("Feedback reference", "Feedback outcome type", "Template reference", "Printed variable
+      reference" and "Context variable reference"), once per placement, as a section document's feedback and printed
+      variables resolve once per test that places it (reading 5);
+    - its `xml:lang` forms are its item's, so each is listed by every general category of the item's records ("Document
+      lang" over the assembly);
+    - a response or outcome rule fragment's variable references name its item's variables, a declaration or a built-in
+      ("Variable declared" over the assembly), of a declaration kind its element may name.
+
+    A fragment placed twice in one item is merged twice: its interactions bind their responses twice and its IDs
+    appear twice, so it is refused, as its merged document is. Reading 77's rule that a section document a test places
+    twice is written once is the information model's for section documents in a test's assembly (section 7.5.3, "A
+    test may refer to the same section multiple times"), a different construct, and includes in a section follow it.
+    A fragment's nodes are one written element each, one row each, so a fragment is judged under one nearest
+    interaction: two includes that place it inside different interactions, or one inside an interaction and one
+    outside every interaction, are refused under "Fragment context", a limit of the representation, not a law of the
+    specification; no corpus document places a fragment inside an interaction. Until each is stated in place, these
+    laws read a fragment's content in its own document alone, each a known under-refusal and never an over-refusal: the
+    content references and `xml:lang` forms of a fragment a section document or a test places, resolved in the test's
+    declarations and listed by its records; and a rule fragment's types and language, the type laws over its references
+    and expressions (P20 to P29) and the processing language its rules are written in (O4), which read its variables
+    untyped and its language as none. This binds pantry and plate alike. This is not a case of documents in conflict.
+    (Operator ruling "the spec wins", 2026-11-06, from W5 seat IN.)
+
+111. **An include holds at most one fallback, and its `accept` and `accept-language` hold header characters alone,
+    though `XInclude.xsd` admits more.** XInclude says "The children property of the xi:include element may include a
+    single xi:fallback element; the appearance of more than one xi:fallback element, an xi:include element, or any
+    other element from the XInclude namespace is a fatal error", and of `accept` and `accept-language`, "Values
+    containing characters outside the range #x20 through #x7E must be flagged as fatal errors" (XInclude 1.0 Second
+    Edition, section 3.1). `XInclude.xsd`'s `includeType` admits any number of `xi:fallback` children, and types the
+    two attributes `xs:string`. So `xi:include`'s content model is restated as the elements it ignores, of another
+    namespace or of none, with at most one `xi:fallback` among them, and the two attributes take the pattern
+    `[ -~]*`. XInclude also says "It is a fatal error for an xi:fallback element to appear in a document anywhere other
+    than as the direct child of the xi:include" (section 3.2). The pinned XSDs name `xi:fallback` only under
+    `xi:include`, but a wildcard reads XInclude's globals as their kinds, so a fallback in wildcard content is read as
+    XInclude's element and not refused: a known under-refusal, until a law holds a fallback to its parent. No corpus
+    document holds an include. This binds pantry and plate alike. This is not a case of documents in conflict.
+    (Operator ruling "the spec wins", 2026-11-06, from W5 seat IN.)
