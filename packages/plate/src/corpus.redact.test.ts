@@ -139,23 +139,16 @@ const occursIn = (markup: string, text: string): boolean =>
  * Collect the values an expression's `qti-base-value` expressions hold, the expression's own and
  * its sub-expressions' at any depth.
  *
- * Sub-expressions sit in `operand` or `operands`, as in every expression the engine runs, so an
- * expression kind the engine gains later is walked without a change here.
+ * Sub-expressions sit in `operands`, as in every expression the model holds, so an expression kind
+ * the engine gains later is walked without a change here.
  *
  * @param expression The expression.
  * @returns The base values' single values, in document order.
  */
-const expressionValuesOf = (expression: Expression): readonly Single[] => {
-  if (expression.kind === "base-value") {
-    return expression.value.values;
-  }
-
-  if ("operands" in expression) {
-    return expression.operands.flatMap(expressionValuesOf);
-  }
-
-  return "operand" in expression ? expressionValuesOf(expression.operand) : [];
-};
+const expressionValuesOf = (expression: Expression): readonly Single[] =>
+  expression.kind === "base-value"
+    ? expression.value.values
+    : expression.operands.flatMap((operand) => expressionValuesOf(operand));
 
 /**
  * Collect every value the `qti-base-value` expressions of a run of response rules hold, at any

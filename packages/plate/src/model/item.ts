@@ -41,6 +41,8 @@ import {
   xsInt,
 } from "#plate/model/attributes.ts";
 import type { AttributeRefusal, ModelWalk } from "#plate/model/attributes.ts";
+import { floatOrRefOf, toleranceModes } from "#plate/model/expression.ts";
+import type { Branch, Expression, FloatOrRef, Rule } from "#plate/model/expression.ts";
 import { translate } from "#plate/model/regex.ts";
 import { isModelled, parseElementText, parseLexical, trimXmlSpace } from "#plate/model/values.ts";
 import type { ModelledBaseType, Single, Value } from "#plate/model/values.ts";
@@ -64,6 +66,8 @@ import type {
   OutcomeView,
   TemplateName,
 } from "#plate/vocabulary.ts";
+
+export type { Branch, Expression, Rule } from "#plate/model/expression.ts";
 
 /**
  * A feature the item holds and plate does not render, where it is, and how it is shown: a
@@ -470,42 +474,6 @@ export type BodyNode =
   | Unsupported;
 
 /**
- * An expression of the engine subset, tagged by `kind`: `qti-match`, `qti-variable`, `qti-correct`,
- * `qti-base-value`, `qti-is-null`, `qti-map-response`, `qti-map-response-point` and `qti-equal`. An
- * `equal` is a `qti-equal` in its default `exact` tolerance mode, the one mode the engine runs; one
- * in `absolute` or `relative` mode is never built.
- */
-export type Expression =
-  | { readonly kind: "match"; readonly operands: readonly [Expression, Expression] }
-  | { readonly kind: "equal"; readonly operands: readonly [Expression, Expression] }
-  | { readonly identifier: string; readonly kind: "variable" }
-  | { readonly identifier: string; readonly kind: "correct" }
-  | { readonly kind: "base-value"; readonly value: Value }
-  | { readonly kind: "is-null"; readonly operand: Expression }
-  | { readonly identifier: string; readonly kind: "map-response" }
-  | { readonly identifier: string; readonly kind: "map-response-point" };
-
-/**
- * One `qti-response-if` or `qti-response-else-if`: its condition and the rules it runs.
- */
-export interface Branch {
-  readonly then: readonly Rule[];
-  readonly when: Expression;
-}
-
-/**
- * A response rule of phase 1's engine subset: a `qti-response-condition` with its branches in
- * order and its `qti-response-else`, or a `qti-set-outcome-value`.
- */
-export type Rule =
-  | {
-      readonly branches: readonly Branch[];
-      readonly kind: "condition";
-      readonly otherwise: Option.Option<readonly Rule[]>;
-    }
-  | { readonly expression: Expression; readonly identifier: string; readonly kind: "set-outcome" };
-
-/**
  * A valid `qti-assessment-item` as plate models it.
  *
  * `responses` and `outcomes` hold the declarations of modelled base types and cardinalities, in
@@ -561,12 +529,6 @@ const readElements: ReadonlySet<string> = new Set(renders.elements);
  * The response-processing elements the engine runs.
  */
 const engineElements: ReadonlySet<string> = new Set(renders.engine);
-
-/**
- * The values of a `qti-equal`'s `tolerance-mode`, whose XSD type restricts `xs:string`, so a value
- * is compared as written. The default is `exact`, the one mode the engine runs.
- */
-const toleranceModes = ["absolute", "exact", "relative"] as const;
 
 /**
  * The features marked on the verdict.
@@ -1479,18 +1441,22 @@ const unread = (
   });
 
 /**
- * Read a `qti-equal`: its two operands, in its default `exact` tolerance mode.
+ * Read a `qti-equal`: its two operands and its attributes, in its default `exact` tolerance mode.
  *
+ * Its `tolerance-mode`, `tolerance`, `include-lower-bound` and `include-upper-bound` are read in
+ * every mode, with the XSD's defaults: `exact`, no tolerance, and both bounds included. Each token
+ * of `tolerance`, an XSD list whose tokens are a number or a variable's name, is classified by
+ * {@link floatOrRefOf}.
  * A `qti-equal` in its `absolute` or `relative` mode is the mark `tolerance-mode="<mode>"` at its
  * path, and its operands are read after it, so every element in them the engine does not run is
- * marked too. Its `tolerance`, `include-lower-bound` and `include-upper-bound` mean nothing in
- * `exact` mode, so they are not read.
+ * marked too.
  *
  * @param build The build.
  * @param element The `qti-equal` element.
  * @returns The `equal` expression; none when it is in another tolerance mode or holds an element
- *   the engine does not run; or the refusal an operand gives, or `attribute-type` for a
- *   `tolerance-mode` outside its three values, which the validator refuses first.
+ *   the engine does not run; or the refusal an operand gives, `attribute-type` for a
+ *   `tolerance-mode` outside its three values, or `value-type` for a bound outside `xs:boolean`,
+ *   which the validator refuses first.
  */
 const equalExpression = (
   build: Build,
@@ -1506,6 +1472,16 @@ const equalExpression = (
       yield* enumerated(build, element, "tolerance-mode", toleranceModes),
       () => "exact" as const,
     );
+    const includeLowerBound = yield* xsBoolean(build, element, "include-lower-bound", true);
+    const includeUpperBound = yield* xsBoolean(build, element, "include-upper-bound", true);
+    const tolerance = Option.match(valueOf(element, "tolerance"), {
+      onNone: (): readonly FloatOrRef[] => [],
+      onSome: (written) =>
+        written
+          .split(xmlWhitespaceRun)
+          .filter((token) => token !== "")
+          .map((token) => floatOrRefOf(token)),
+    });
     if (mode !== "exact") {
       yield* unread(build, element, `tolerance-mode="${mode}"`);
     }
@@ -1516,7 +1492,16 @@ const equalExpression = (
       // oxlint-disable-next-line eslint/no-use-before-define -- as above.
       yield* expression(build, right),
     ]);
-    const equal = read.pipe(Option.map((pair): Expression => ({ kind: "equal", operands: pair })));
+    const equal = read.pipe(
+      Option.map((pair): Expression => ({
+        includeLowerBound,
+        includeUpperBound,
+        kind: "equal",
+        operands: pair,
+        tolerance,
+        toleranceMode: mode,
+      })),
+    );
 
     return mode === "exact" ? equal : Option.none();
   });
@@ -1526,7 +1511,8 @@ const equalExpression = (
  *
  * Every operand is read, so every element the engine does not run is marked, not only the first. A
  * `qti-equal` in its `absolute` or `relative` tolerance mode is the mark `tolerance-mode="<mode>"`
- * at its path, its operands read after it; only the default `exact` mode runs.
+ * at its path, its operands read after it; only the default `exact` mode runs. A `qti-variable`'s
+ * optional `weight-identifier` is read and held; an item's processing never evaluates it.
  *
  * @param build The build.
  * @param element The expression element.
@@ -1546,7 +1532,12 @@ const expression = (
     }
 
     switch (element.local) {
-      case "qti-variable":
+      case "qti-variable": {
+        const identifier = yield* identifierAttribute(build, element, "identifier");
+        const weightIdentifier = Option.map(valueOf(element, "weight-identifier"), identifierOf);
+
+        return Option.some({ identifier, kind: "variable", operands: [], weightIdentifier });
+      }
       case "qti-correct":
       case "qti-map-response":
       case "qti-map-response-point": {
@@ -1555,10 +1546,9 @@ const expression = (
           "qti-correct": "correct",
           "qti-map-response": "map-response",
           "qti-map-response-point": "map-response-point",
-          "qti-variable": "variable",
         } as const;
 
-        return Option.some({ identifier, kind: kinds[element.local] });
+        return Option.some({ identifier, kind: kinds[element.local], operands: [] });
       }
       case "qti-base-value": {
         const baseType = yield* enumerated(build, element, "base-type", baseTypes);
@@ -1583,6 +1573,7 @@ const expression = (
 
         return Option.some({
           kind: "base-value",
+          operands: [],
           value: {
             baseType: baseType.value,
             cardinality: "single",
@@ -1598,7 +1589,7 @@ const expression = (
 
         const read = yield* expression(build, operand);
 
-        return read.pipe(Option.map((test) => ({ kind: "is-null", operand: test })));
+        return read.pipe(Option.map((test) => ({ kind: "is-null", operands: [test] })));
       }
       case "qti-match": {
         const [left, right, ...extra] = operands;
@@ -1746,6 +1737,7 @@ const setScore = (operand: Expression): Rule => ({
  */
 const floatValue = (value: number): Expression => ({
   kind: "base-value",
+  operands: [],
   value: { baseType: "float", cardinality: "single", values: [{ baseType: "float", value }] },
 });
 
@@ -1755,7 +1747,12 @@ const floatValue = (value: number): Expression => ({
  * @param identifier The variable's identifier.
  * @returns The `variable` expression of `identifier`.
  */
-const variableOf = (identifier: string): Expression => ({ identifier, kind: "variable" });
+const variableOf = (identifier: string): Expression => ({
+  identifier,
+  kind: "variable",
+  operands: [],
+  weightIdentifier: Option.none(),
+});
 
 /**
  * Construct the rule that sets an outcome to a single identifier base value.
@@ -1767,6 +1764,7 @@ const variableOf = (identifier: string): Expression => ({ identifier, kind: "var
 const setIdentifier = (outcome: string, value: string): Rule => ({
   expression: {
     kind: "base-value",
+    operands: [],
     value: {
       baseType: "identifier",
       cardinality: "single",
@@ -1787,7 +1785,10 @@ const matchCorrect: readonly Rule[] = [
       branchOf(
         {
           kind: "match",
-          operands: [variableOf("RESPONSE"), { identifier: "RESPONSE", kind: "correct" }],
+          operands: [
+            variableOf("RESPONSE"),
+            { identifier: "RESPONSE", kind: "correct", operands: [] },
+          ],
         },
         [setScore(floatValue(1))],
       ),
@@ -1814,16 +1815,28 @@ const templates = {
   CC2_map_response: [
     {
       branches: [
-        branchOf({ kind: "is-null", operand: variableOf("RESPONSE") }, [setScore(floatValue(0))]),
+        branchOf({ kind: "is-null", operands: [variableOf("RESPONSE")] }, [
+          setScore(floatValue(0)),
+        ]),
       ],
       kind: "condition",
-      otherwise: Option.some([setScore({ identifier: "RESPONSE", kind: "map-response" })]),
+      otherwise: Option.some([
+        setScore({ identifier: "RESPONSE", kind: "map-response", operands: [] }),
+      ]),
     },
     {
       branches: [
-        branchOf({ kind: "equal", operands: [variableOf("MAXSCORE"), variableOf("SCORE")] }, [
-          setIdentifier("FEEDBACK", "correct"),
-        ]),
+        branchOf(
+          {
+            includeLowerBound: true,
+            includeUpperBound: true,
+            kind: "equal",
+            operands: [variableOf("MAXSCORE"), variableOf("SCORE")],
+            tolerance: [],
+            toleranceMode: "exact",
+          },
+          [setIdentifier("FEEDBACK", "correct")],
+        ),
       ],
       kind: "condition",
       otherwise: Option.some([setIdentifier("FEEDBACK", "incorrect")]),
@@ -1836,7 +1849,10 @@ const templates = {
         branchOf(
           {
             kind: "match",
-            operands: [variableOf("RESPONSE"), { identifier: "RESPONSE", kind: "correct" }],
+            operands: [
+              variableOf("RESPONSE"),
+              { identifier: "RESPONSE", kind: "correct", operands: [] },
+            ],
           },
           [setScore(variableOf("MAXSCORE")), setIdentifier("FEEDBACKBASIC", "correct")],
         ),
@@ -1848,19 +1864,27 @@ const templates = {
   map_response: [
     {
       branches: [
-        branchOf({ kind: "is-null", operand: variableOf("RESPONSE") }, [setScore(floatValue(0))]),
+        branchOf({ kind: "is-null", operands: [variableOf("RESPONSE")] }, [
+          setScore(floatValue(0)),
+        ]),
       ],
       kind: "condition",
-      otherwise: Option.some([setScore({ identifier: "RESPONSE", kind: "map-response" })]),
+      otherwise: Option.some([
+        setScore({ identifier: "RESPONSE", kind: "map-response", operands: [] }),
+      ]),
     },
   ],
   map_response_point: [
     {
       branches: [
-        branchOf({ kind: "is-null", operand: variableOf("RESPONSE") }, [setScore(floatValue(0))]),
+        branchOf({ kind: "is-null", operands: [variableOf("RESPONSE")] }, [
+          setScore(floatValue(0)),
+        ]),
       ],
       kind: "condition",
-      otherwise: Option.some([setScore({ identifier: "RESPONSE", kind: "map-response-point" })]),
+      otherwise: Option.some([
+        setScore({ identifier: "RESPONSE", kind: "map-response-point", operands: [] }),
+      ]),
     },
   ],
   match_correct: matchCorrect,
@@ -1986,49 +2010,31 @@ const unheldIdentifiers = (
   const unheld = new Set<string>();
 
   /**
-   * Add each identifier an expression and its operands read that the engine does not hold.
+   * Add each identifier an expression and its operands read that the engine does not hold. Every
+   * kind holds its operands in `operands`, so the walk recurses without a case per operator.
    *
    * @param operand The expression.
    */
   const read = (operand: Expression): void => {
-    switch (operand.kind) {
-      case "variable": {
-        if (
-          !responses.has(operand.identifier) &&
-          !outcomes.has(operand.identifier) &&
-          !builtIns.has(operand.identifier)
-        ) {
-          unheld.add(operand.identifier);
-        }
+    if (operand.kind === "variable") {
+      if (
+        !responses.has(operand.identifier) &&
+        !outcomes.has(operand.identifier) &&
+        !builtIns.has(operand.identifier)
+      ) {
+        unheld.add(operand.identifier);
+      }
+    } else if (
+      (operand.kind === "correct" ||
+        operand.kind === "map-response" ||
+        operand.kind === "map-response-point") &&
+      !responses.has(operand.identifier)
+    ) {
+      unheld.add(operand.identifier);
+    }
 
-        break;
-      }
-      case "correct":
-      case "map-response":
-      case "map-response-point": {
-        if (!responses.has(operand.identifier)) {
-          unheld.add(operand.identifier);
-        }
-
-        break;
-      }
-      case "is-null": {
-        read(operand.operand);
-        break;
-      }
-      case "match":
-      case "equal": {
-        for (const each of operand.operands) {
-          read(each);
-        }
-        break;
-      }
-      case "base-value": {
-        break;
-      }
-      default: {
-        operand satisfies never;
-      }
+    for (const each of operand.operands) {
+      read(each);
     }
   };
 
@@ -2079,12 +2085,8 @@ const expressionsOf = (tree: readonly Rule[]): readonly Expression[] => {
    */
   const add = (operand: Expression): void => {
     found.push(operand);
-    if (operand.kind === "is-null") {
-      add(operand.operand);
-    } else if (operand.kind === "match" || operand.kind === "equal") {
-      for (const each of operand.operands) {
-        add(each);
-      }
+    for (const each of operand.operands) {
+      add(each);
     }
   };
 
@@ -2266,12 +2268,10 @@ const unmetNeeds = (
       if (lacking) {
         unmet.add(`${point ? "area-mapping" : "mapping"}:${operand.identifier}`);
       }
-    } else if (operand.kind === "is-null") {
-      read(operand.operand);
-    } else if (operand.kind === "match" || operand.kind === "equal") {
-      for (const each of operand.operands) {
-        read(each);
-      }
+    }
+
+    for (const each of operand.operands) {
+      read(each);
     }
   };
 

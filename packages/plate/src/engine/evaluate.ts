@@ -427,7 +427,9 @@ export const evaluateExpression = (
       return Result.succeed(expression.value);
     }
     case "is-null": {
-      return Result.map(evaluateExpression(expression.operand, item, variables), (value) =>
+      const [operand] = expression.operands;
+
+      return Result.map(evaluateExpression(operand, item, variables), (value) =>
         booleanOf(isNull(value)),
       );
     }

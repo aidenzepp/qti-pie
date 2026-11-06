@@ -401,7 +401,12 @@ const variablesOf = (answer: Value, scored: Value = floatValue(0)): Variables =>
  * @param identifier The variable's identifier.
  * @returns The expression.
  */
-const variable = (identifier: string): Expression => ({ identifier, kind: "variable" });
+const variable = (identifier: string): Expression => ({
+  identifier,
+  kind: "variable",
+  operands: [],
+  weightIdentifier: Option.none(),
+});
 
 /**
  * Construct a `qti-base-value`.
@@ -409,7 +414,7 @@ const variable = (identifier: string): Expression => ({ identifier, kind: "varia
  * @param value The value.
  * @returns The expression.
  */
-const base = (value: Value): Expression => ({ kind: "base-value", value });
+const base = (value: Value): Expression => ({ kind: "base-value", operands: [], value });
 
 /**
  * Construct a response value of the base type and cardinality its declaration in {@link item} has.
@@ -434,7 +439,7 @@ const answerOf = (identifier: string, values: readonly Single[]): Value => {
  */
 const mapped = (identifier: string, values: readonly Single[]): Value =>
   Result.getOrThrow(
-    evaluateExpression({ identifier, kind: "map-response" }, item, {
+    evaluateExpression({ identifier, kind: "map-response", operands: [] }, item, {
       ...variablesOf(identifierValue("A")),
       responses: { [identifier]: answerOf(identifier, values) },
     }),
@@ -484,7 +489,7 @@ const pointOf = (x: bigint, y: bigint): Single => ({ baseType: "point", value: [
  */
 const pointMapped = (identifier: string, points: readonly Single[]): Value =>
   Result.getOrThrow(
-    evaluateExpression({ identifier, kind: "map-response-point" }, item, {
+    evaluateExpression({ identifier, kind: "map-response-point", operands: [] }, item, {
       ...variablesOf(identifierValue("A")),
       responses: { [identifier]: answerOf(identifier, points) },
     }),
@@ -512,7 +517,7 @@ const holds = (entry: Omit<AreaMapEntry, "mappedValue">, x: bigint, y: bigint): 
   );
   const value = Result.getOrThrow(
     evaluateExpression(
-      { identifier: "AREA", kind: "map-response-point" },
+      { identifier: "AREA", kind: "map-response-point", operands: [] },
       { ...item, responses: new Map([["AREA", area]]) },
       {
         outcomes: {},
@@ -588,7 +593,10 @@ const matchCorrect: readonly Rule[] = [
       branchOf(
         {
           kind: "match",
-          operands: [variable("RESPONSE"), { identifier: "RESPONSE", kind: "correct" }],
+          operands: [
+            variable("RESPONSE"),
+            { identifier: "RESPONSE", kind: "correct", operands: [] },
+          ],
         },
         [setOutcome("SCORE", base(floatValue(1)))],
       ),
@@ -658,7 +666,7 @@ describe("runRules", () => {
 
   it("a rule reads the outcome an earlier rule set", () => {
     const rules = [
-      setOutcome("EMPTY", { kind: "is-null", operand: variable("RESPONSE") }),
+      setOutcome("EMPTY", { kind: "is-null", operands: [variable("RESPONSE")] }),
       condition([branchOf(variable("EMPTY"), [setOutcome("SCORE", base(floatValue(0.5)))])]),
     ];
     const after = Result.getOrThrow(
@@ -758,7 +766,7 @@ describe("evaluateExpression", () => {
   it("is-null on NULL is true", () => {
     const value = Result.getOrThrow(
       evaluateExpression(
-        { kind: "is-null", operand: variable("RESPONSE") },
+        { kind: "is-null", operands: [variable("RESPONSE")] },
         item,
         variablesOf(nullOf("identifier", "single")),
       ),
@@ -807,7 +815,10 @@ describe("evaluateExpression", () => {
           evaluateExpression(
             {
               kind: "match",
-              operands: [variable("RESPONSE"), { identifier: "RESPONSE", kind: "correct" }],
+              operands: [
+                variable("RESPONSE"),
+                { identifier: "RESPONSE", kind: "correct", operands: [] },
+              ],
             },
             built,
             {
@@ -833,13 +844,17 @@ describe("evaluateExpression", () => {
 
     assert.deepStrictEqual(
       Result.getOrThrow(
-        evaluateExpression({ identifier: "RESPONSE", kind: "correct" }, item, variables),
+        evaluateExpression(
+          { identifier: "RESPONSE", kind: "correct", operands: [] },
+          item,
+          variables,
+        ),
       ),
       identifierValue("true"),
     );
     assert.deepStrictEqual(
       Result.getOrThrow(
-        evaluateExpression({ identifier: "OPEN", kind: "correct" }, item, variables),
+        evaluateExpression({ identifier: "OPEN", kind: "correct", operands: [] }, item, variables),
       ),
       nullOf("identifier", "single"),
     );
@@ -935,7 +950,14 @@ describe("evaluateExpression", () => {
 const equalOf = (left: Value, right: Value): Value =>
   Result.getOrThrow(
     evaluateExpression(
-      { kind: "equal", operands: [base(left), base(right)] },
+      {
+        includeLowerBound: true,
+        includeUpperBound: true,
+        kind: "equal",
+        operands: [base(left), base(right)],
+        tolerance: [],
+        toleranceMode: "exact",
+      },
       item,
       variablesOf(identifierValue("A")),
     ),
@@ -1066,7 +1088,7 @@ describe("map-response", () => {
   it("refuses to map a response with no mapping", () => {
     const failure = failureOf(
       evaluateExpression(
-        { identifier: "OPEN", kind: "map-response" },
+        { identifier: "OPEN", kind: "map-response", operands: [] },
         item,
         variablesOf(identifierValue("A")),
       ),
@@ -1191,7 +1213,7 @@ describe("map-response-point", () => {
   it("refuses to map a point response with no area mapping, naming qti-area-mapping", () => {
     const failure = failureOf(
       evaluateExpression(
-        { identifier: "UNMAPPED", kind: "map-response-point" },
+        { identifier: "UNMAPPED", kind: "map-response-point", operands: [] },
         item,
         variablesOf(identifierValue("A")),
       ),
