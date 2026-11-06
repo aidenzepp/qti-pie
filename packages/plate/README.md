@@ -478,9 +478,11 @@ pnpm --filter @qti-pie/plate ledger
 
 The command runs plate's tests, opens every document in 1EdTech's examples, and writes the ledger
 and the verdicts to `packages/plate/work/ledger/`, or to the folder `PLATE_LEDGER_DIR` names. It
-needs the QTI 3.0 conformance text at `~/.cache/gr8des/qti3-text/conf.txt`. The ledger says only
-that these tests pass over these fixtures, never that plate is conformant or certified. The command
-exits with 1 when a test fails or [`src/ledger/honesty.ts`](src/ledger/honesty.ts) finds a problem.
+needs every cache the tests read, among them the QTI 3.0 conformance text at
+`~/.cache/gr8des/qti3-text/conf.txt`. Because it runs the tests with `PLATE_REQUIRE_CACHES=1`, a
+missing cache makes it fail. The ledger says only that these tests pass over these fixtures, never
+that plate is conformant or certified. The command exits with 1 when a test fails or
+[`src/ledger/honesty.ts`](src/ledger/honesty.ts) finds a problem.
 
 ## Development
 
@@ -491,8 +493,12 @@ pnpm check
 pnpm --filter @qti-pie/plate test
 ```
 
-Tests sit beside the code they test. [`docs/spec-readings.md`](../../docs/spec-readings.md) records
-how the packages read the specifications. Agents start at [`AGENTS.md`](../../AGENTS.md).
+Tests sit beside the code they test. A test that reads a cache under `~/.cache/gr8des` carries a tag
+that names the cache, and `pnpm --filter @qti-pie/plate exec vp test --list-tags` lists each tag
+with its path. When a cache is missing, the run prints where it belongs and how to fetch it, then
+skips the tests that need it, or fails them when `PLATE_REQUIRE_CACHES=1` is set.
+[`docs/spec-readings.md`](../../docs/spec-readings.md) records how the packages read the
+specifications. Agents start at [`AGENTS.md`](../../AGENTS.md).
 
 ## License
 

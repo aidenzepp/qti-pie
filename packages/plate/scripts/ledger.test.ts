@@ -685,6 +685,7 @@ describe("scripts/ledger.ts", () => {
         HOME: "/home/someone",
         NODE_OPTIONS: "--max-old-space-size=4096 --disable-proto=delete --disable-sigusr1",
         PLATE_LEDGER_DIR: "/p/work/ledger",
+        PLATE_REQUIRE_CACHES: "1",
         PLAYWRIGHT_BROWSERS_PATH: "/home/someone/.cache/gr8des/ms-playwright",
         TMPDIR: "/p/work/.vp-tmp",
       },
@@ -713,6 +714,7 @@ describe("scripts/ledger.ts", () => {
       environment: {
         HOME: "/home/someone",
         NODE_OPTIONS: "--max-old-space-size=4096 --disable-proto=delete --disable-sigusr1",
+        PLATE_REQUIRE_CACHES: "1",
         TMPDIR: "/p/work/.vp-tmp",
       },
       file: "/r/node_modules/.bin/vp",
@@ -720,6 +722,22 @@ describe("scripts/ledger.ts", () => {
     assert.strictEqual(
       testCommand({ ...base, nodeOptions: "" }).environment["NODE_OPTIONS"],
       "--disable-proto=delete --disable-sigusr1",
+    );
+  });
+
+  it("requires every cache in both runs, whatever PLATE_REQUIRE_CACHES the command inherited", () => {
+    const input = {
+      environment: { HOME: "/home/someone", PLATE_REQUIRE_CACHES: "0" },
+      nodeOptions: "",
+      output: "/p/work/ledger",
+      packageDirectory: "/p",
+      vp: "/r/node_modules/.bin/vp",
+    };
+
+    assert.strictEqual(testCommand(input).environment["PLATE_REQUIRE_CACHES"], "1");
+    assert.strictEqual(
+      browserCommand({ ...input, home: "/home/someone" }).environment["PLATE_REQUIRE_CACHES"],
+      "1",
     );
   });
 

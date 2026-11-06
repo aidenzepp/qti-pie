@@ -18,10 +18,12 @@
  * `verdicts.txt`; derives the ledger from both runs' results and the browser-run record, and checks
  * its honesty over those results; writes `ledger.json` and `ledger.txt`; and prints the paths, the
  * headline counts, and each engine's version with its counts. The outputs go to `PLATE_LEDGER_DIR`,
- * `work/ledger` in the package when it is not set. It exits non-zero when either run failed, a test
- * failed or the honesty check found a problem, after writing what it could; and when a run's
- * report or the browser-run record is missing or unreadable, after writing the verdicts, with a
- * message that names the file.
+ * `work/ledger` in the package when it is not set. Both runs get `PLATE_REQUIRE_CACHES=1`, whatever
+ * the command inherited, so a test whose cache is missing fails instead of being skipped, and the
+ * command never passes without every cache the tests read. It exits non-zero when either run
+ * failed, a test failed or the honesty check found a problem, after writing what it could; and
+ * when a run's report or the browser-run record is missing or unreadable, after writing the
+ * verdicts, with a message that names the file.
  */
 /* oxlint-disable unicorn/throw-new-error -- `Schema.TaggedError<Self>()` is a class factory that is called once and extended, never thrown, so the rule's "call without new" reading does not apply. */
 import { spawn } from "node:child_process";
@@ -682,7 +684,8 @@ export interface TestCommand {
   readonly cwd: string;
   /**
    * The child's environment: the command's own, with the `test` script's `TMPDIR` and
-   * `NODE_OPTIONS`, and for the browser run the browsers' folder and the ledger's.
+   * `NODE_OPTIONS`, `PLATE_REQUIRE_CACHES` at `1`, and for the browser run the browsers' folder and
+   * the ledger's.
    */
   readonly environment: Readonly<Record<string, string | undefined>>;
   /**
@@ -721,7 +724,9 @@ interface CommandInput {
  * Construct a run's command: `vp test run` with the given leading arguments, the default and JSON
  * reporters and the JSON report at `report` in the output folder, in the package directory, with
  * the `test` script's environment: `TMPDIR` at `work/.vp-tmp` in the package and `NODE_OPTIONS`
- * with `--disable-proto=delete --disable-sigusr1` appended.
+ * with `--disable-proto=delete --disable-sigusr1` appended. It also sets `PLATE_REQUIRE_CACHES` to
+ * `1`, after the inherited environment so an inherited `0` cannot turn it off: a test whose cache
+ * is missing then fails, where under the `test` script it would be skipped.
  *
  * @param input What the command is built from.
  * @param leading The arguments after `test run`, before the reporters.
@@ -747,6 +752,7 @@ const runCommand = (
     NODE_OPTIONS: [input.nodeOptions.trim(), ...requiredNodeOptions]
       .filter((option) => option !== "")
       .join(" "),
+    PLATE_REQUIRE_CACHES: "1",
     TMPDIR: path.join(input.packageDirectory, "work", ".vp-tmp"),
   },
   file: input.vp,
@@ -756,7 +762,8 @@ const runCommand = (
  * Construct the unit run's command: `vp test run` with the default and JSON reporters, the JSON
  * report at `vitest.json` in the output folder, in the package directory, with the `test` script's
  * environment: `TMPDIR` at `work/.vp-tmp` in the package and `NODE_OPTIONS` with
- * `--disable-proto=delete --disable-sigusr1` appended.
+ * `--disable-proto=delete --disable-sigusr1` appended. `PLATE_REQUIRE_CACHES` is `1`, so a test
+ * whose cache is missing fails instead of being skipped.
  *
  * @param input What the command is built from.
  * @returns The command.
