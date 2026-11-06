@@ -62,3 +62,11 @@ export const mathmlAttributeType: readonly MathmlAttributeTypeRow[] = families
         (kindOrder.get(b.kind) ?? Number.POSITIVE_INFINITY) ||
       Number(a.attribute > b.attribute) - Number(a.attribute < b.attribute),
   );
+
+/**
+ * The `MathmlValueType` handle of each `(kind, attribute)` pair, keyed by the kind and the
+ * attribute joined with one space: {@link mathmlAttributeType} as a lookup.
+ */
+export const attributeTypeOf: ReadonlyMap<string, MathmlValueTypeHandle> = new Map(
+  mathmlAttributeType.map((row) => [`${row.kind} ${row.attribute}`, row.type]),
+);

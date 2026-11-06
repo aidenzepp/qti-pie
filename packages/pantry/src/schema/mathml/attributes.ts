@@ -1,6 +1,6 @@
 /**
- * The MathML type matrix and the 67 attribute families, with `MathmlCbytes` (spec 4.5, parts 1 and
- * 2). Inert until the composition (p6-21) merges it into `qti.ts`.
+ * The MathML type matrix and the 67 attribute families, with `MathmlCbytes`. `qti.ts` composes its
+ * relations, arms and rules.
  *
  * Every MathML attribute value is a row of one family relation, and the family a `(kind,
  * attribute)` pair belongs to is fixed by its XSD type, never by its element (`values.ts`). The
@@ -9,11 +9,12 @@
  * shape (`src/schema/attributes.ts`: node, kind, attribute and value) with `attribute` in the key,
  * and two statements bind it: its `(node, kind)` is contained in `Node`, and its `(kind,
  * attribute)` is contained in the matrix rows whose type is its own handle, so a row holds only
- * where the matrix says the pair has that type (the one-selector containment, probed at p6-1).
+ * where the matrix says the pair has that type (a containment whose target is one selector over
+ * the matrix).
  *
  * The 25 roster families come first, then the 26 pattern, 15 contract and 1 string family, each a
  * `value` typed by its pattern, its contract or the tautology string. The class and dir exclusions
- * and the capacities belong to p6-22.
+ * and the capacities are in `mathml/rules.ts`.
  */
 import type { AnyRelation } from "@bjornpagen/grizzle";
 import { closedId, contained, on, relation, select, str, uuid } from "@bjornpagen/grizzle";
@@ -1064,7 +1065,7 @@ export const MathmlUnsignedInteger = relation(
 );
 
 /**
- * The arm of `m:cbytes`: its text with every XML space removed, which is base64 (spec 4.7). The
+ * The arm of `m:cbytes`: its text with every XML space removed, which is base64. The
  * containment into `Node` is bound by the composition's one `mirrors` per kind.
  */
 export const MathmlCbytes = relation("MathmlCbytes", { id: uuid, value: MathmlCbytesValue }, [

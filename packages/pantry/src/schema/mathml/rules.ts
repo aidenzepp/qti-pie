@@ -5,9 +5,9 @@
  * `dir`, and the MathML kinds now are listed. MathML types the two attributes differently from
  * HTML (`class` is `xs:NMTOKENS`, `dir` is `ltr | rtl` without `auto`), and the MathML attribute
  * families hold them, so the two relations refuse every MathML kind that lists them. The form is
- * the membership check that probe `p6-1`'s verdict (c) found to build: one test over the kind
- * roster, not a comparison per handle. The three capacities are the MathML children MathML's
- * content model allows once, in the source-selected form of `html/structure.ts`.
+ * a membership check: one test over the kind roster, not a comparison per handle. The three
+ * capacities are the MathML children MathML's content model allows once, in the source-selected
+ * form of `html/structure.ts`.
  */
 import { capacity, check, on, select, within } from "@bjornpagen/grizzle";
 

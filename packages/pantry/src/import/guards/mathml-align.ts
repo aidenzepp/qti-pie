@@ -1,6 +1,6 @@
 /**
  * The alignment-group checks of a table cell: where an `m:maligngroup` may sit and what its cell
- * starts with (spec MA18, E P11 and P12).
+ * starts with.
  *
  * Both rules are the Recommendation's prose, not the schemas': `c3#id.3.5.5.2` lets an
  * `maligngroup` appear only inside the elements it lists, "which are themselves contained in the
@@ -10,17 +10,11 @@
  * A group belongs to the nearest `m:mtd` above it, so a cell of a nested table answers for its
  * own groups and an outer cell does not.
  */
+import { notElements } from "#pantry/import/guards/mathml-edges.ts";
 import { ImportRefused } from "#pantry/import/refusal.ts";
 import { Rows } from "#pantry/import/tree.ts";
-import { kinds as genericKinds } from "#pantry/schema/kinds/generic.ts";
 import { MathmlDir, MathmlSelection } from "#pantry/schema/mathml/attributes.ts";
 import { Edge, Node } from "#pantry/schema/node.ts";
-
-/**
- * The kinds of the children that are not elements: text, whitespace, entity references, comments
- * and processing instructions.
- */
-const notElements: ReadonlySet<string> = new Set(genericKinds);
 
 /**
  * The containers that let an alignment group through whatever they carry: `m:mphantom`,
@@ -220,8 +214,8 @@ const firstLeaf = (outline: Outline, root: Element): Element => {
 /**
  * Check where the alignment groups of one tree sit, and what their cells start with.
  *
- * Every `m:maligngroup` inside an `m:mtd` is judged first (P11, `admission`), in document order,
- * then every cell that holds a group (P12, `ordering`). No row is written.
+ * Every `m:maligngroup` inside an `m:mtd` is judged first (`admission`), in document order,
+ * then every cell that holds a group (`ordering`). No row is written.
  *
  * @param rows - The rows an import built for one tree.
  * @returns The refusal for the first group or cell that breaks a rule, or nothing.

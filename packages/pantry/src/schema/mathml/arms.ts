@@ -1,8 +1,7 @@
 /**
  * The MathML arms: one relation per MathML handle but `m:cbytes`, 193 in all (192 thin arms and
- * `MathmlMaction`). Decisions 51 and 77: every `NodeKind` handle has its own arm, and `Qti` mirrors
- * each `Node` row of kind `k` into `nodeArms[k]`. Inert until the composition merges it into
- * `qti.ts`. `MathmlCbytes` is declared with the attributes, not here.
+ * `MathmlMaction`). Every `NodeKind` handle has its own arm, and `Qti` mirrors each `Node` row of
+ * kind `k` into `nodeArms[k]`. `MathmlCbytes` is declared with the attributes, not here.
  *
  * A relation is `Mathml` and the PascalCase local name (`m:annotation-xml` is
  * `MathmlAnnotationXml`, `m:semantics.ci` is `MathmlSemanticsCi`). `MathmlMaction` also holds the

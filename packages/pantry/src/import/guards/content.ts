@@ -1082,7 +1082,7 @@ const idrefCopy = (rows: Rows): Finding => {
   );
   for (const [key, group] of groups) {
     const ordered = group.every((row, index) => row.position === BigInt(index));
-    const unexplained = group.every((row) => row.attribute === "headers") || expectations.has(key);
+    const explained = group.every((row) => row.attribute === "headers") || expectations.has(key);
     const reason = ordered
       ? "belong to no attribute row"
       : "do not count from position 0 without a gap";
@@ -1091,7 +1091,7 @@ const idrefCopy = (rows: Rows): Finding => {
       if (found !== undefined) {
         return found;
       }
-    } else if (!ordered || !unexplained) {
+    } else if (!ordered || !explained) {
       return refuse("idref-copy", `The identifier references of ${key} ${reason}.`);
     }
   }

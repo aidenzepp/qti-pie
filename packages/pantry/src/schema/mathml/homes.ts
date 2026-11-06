@@ -1,8 +1,8 @@
 /**
- * Where each MathML kind's attributes are stored, as data (spec MA10, the homes). The
- * attribute-home table (`src/schema/attribute-homes.ts`, decision 75) is the one the renderer
- * reads, but its source helpers are private and that module imports this one (p6-21), so a home
- * here is a plain value and p6-21 turns each into a source there.
+ * Where each MathML kind's attributes are stored, as data. The attribute-home table
+ * (`src/schema/attribute-homes.ts`) is the one the renderer reads, but its source helpers are
+ * private and that module imports this one, so a home here is a plain value and that module turns
+ * each into a source.
  *
  * A kind's attributes are those the XSD inventory lists for it, in the inventory's (leaf) order.
  * Each has one home:
@@ -13,7 +13,7 @@
  * - `{ idref: true }`: the `AttributeIdref` tokens of `xref`.
  * - `{ arm, field }`: a column of the kind's own arm (`MathmlMaction.actiontype`).
  *
- * `m:cbytes` renders its content from its text nodes (spec 4.7), so its content has no home.
+ * `m:cbytes` renders its content from its text nodes, so its content has no home.
  */
 import type { AnyRelation } from "@bjornpagen/grizzle";
 

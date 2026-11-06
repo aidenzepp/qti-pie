@@ -1,5 +1,5 @@
 /**
- * The arm rows and the attribute rows of the MathML nodes of a tree (spec MA09).
+ * The arm rows and the attribute rows of the MathML nodes of a tree.
  *
  * Every MathML node has an arm row of its own kind, which the composition's `mirrors` law from
  * `Node` demands: the thin `{ id }` row for most kinds, `MathmlMaction` with its `actiontype`, and
@@ -15,7 +15,7 @@
  * @module
  */
 import { Effect, Option } from "effect";
-import type { Relation, uuid } from "@bjornpagen/grizzle";
+import type { Relation, Uuid, uuid } from "@bjornpagen/grizzle";
 import { attributeReader } from "#pantry/import/interactions.ts";
 import type { NodeRef } from "#pantry/import/interactions.ts";
 import { judgedLater } from "#pantry/import/judged.ts";
@@ -72,8 +72,8 @@ import {
 import { DocumentId, HtmlId } from "#pantry/schema/document.ts";
 import { familyRelation, MathmlCbytes } from "#pantry/schema/mathml/attributes.ts";
 import { arms, MathmlMaction } from "#pantry/schema/mathml/arms.ts";
-import { AttributeName, Edge } from "#pantry/schema/node.ts";
-import { mathmlAttributeType } from "#pantry/schema/seed/mathml-attribute-type.ts";
+import { AttributeName } from "#pantry/schema/node.ts";
+import { attributeTypeOf } from "#pantry/schema/seed/mathml-attribute-type.ts";
 import type { Element } from "@qti-pie/crust/tree.ts";
 
 /**
@@ -90,8 +90,8 @@ const thinArms: ReadonlyMap<string, ThinRelation> = new Map<string, ThinRelation
 );
 
 /**
- * The text of an element's own text children, concatenated, with every XML space removed
- * (spec 4.7): the base64 an `m:cbytes` holds.
+ * The text of an element's own text children, concatenated, with every XML space removed: the
+ * base64 an `m:cbytes` holds.
  */
 const cbytesOf = (element: Element): string =>
   element.children
@@ -102,8 +102,8 @@ const cbytesOf = (element: Element): string =>
 /**
  * Write the arm row of a MathML node.
  *
- * `m:maction` reads its `actiontype` as written and is refused when it has none (spec 4.11,
- * `math-maction-bare`); `m:cbytes` holds its text with the XML spaces removed, while the text
+ * `m:maction` reads its `actiontype` as written and is refused when it has none
+ * (`math-maction-bare`); `m:cbytes` holds its text with the XML spaces removed, while the text
  * nodes themselves keep the spelling the walk wrote. An element under `m:annotation-xml` is
  * phase 11's, so this builder writes nothing for it and refuses nothing.
  *
@@ -217,14 +217,6 @@ const narrowings: ReadonlyMap<string, Narrow> = new Map<string, Narrow>([
 const judgedNarrow: Narrow = (value) => Effect.succeed(judgedLater<string>(value));
 
 /**
- * The `MathmlValueType` handle of each `(kind, attribute)` pair, keyed by kind and attribute: the
- * seeded matrix's rows.
- */
-const typeOf: ReadonlyMap<string, string> = new Map(
-  mathmlAttributeType.map((row) => [`${row.kind} ${row.attribute}`, row.type]),
-);
-
-/**
  * Write the rows of every no-namespace attribute of a MathML node.
  *
  * A node's `actiontype` is its arm's, written with the arm. Every other attribute's value is
@@ -235,6 +227,7 @@ const typeOf: ReadonlyMap<string, string> = new Map(
  * @param rows - The rows so far, with the node's arm row.
  * @param element - The MathML element.
  * @param node - The node the walk made of `element`.
+ * @param documentId - The id of the document, which is also its tree's.
  * @returns The rows with the node's attribute rows; `ImportRefused` (`attribute-lexical`) for a
  *   value outside a roster family's roster.
  */
@@ -242,14 +235,8 @@ const attributeFacts = Effect.fn("import.mathmlAttributes")(function* attributeF
   rows: Rows,
   element: Element,
   node: NodeRef,
+  documentId: Uuid,
 ): Effect.fn.Return<Rows, ImportRefused> {
-  const documentId = Rows.of(rows, Edge).find((edge) => edge.child === node.id)?.tree;
-  if (documentId === undefined) {
-    return yield* Effect.die(
-      new Error(`mathmlRows needs the tree walk's Edge row for ${node.kind}, and found none`),
-    );
-  }
-
   const reader = attributeReader(rows, element, node);
   const written: { name: (typeof AttributeName.handles)[number]; value: string }[] = [];
   for (const { local, namespace } of element.attributes) {
@@ -278,7 +265,7 @@ const attributeFacts = Effect.fn("import.mathmlAttributes")(function* attributeF
         { attribute: name, document: documentId, node: node.id, position: 0n, target: value },
       ]);
     } else {
-      const type = typeOf.get(`${node.kind} ${name}`);
+      const type = attributeTypeOf.get(`${node.kind} ${name}`);
       const relation = type === undefined ? undefined : familyRelation.get(type);
       if (type === undefined || relation === undefined) {
         return yield* Effect.die(
@@ -302,8 +289,8 @@ const attributeFacts = Effect.fn("import.mathmlAttributes")(function* attributeF
 /**
  * Write the arm row and the attribute rows of a MathML node.
  *
- * `m:maction` reads its `actiontype` as written and is refused when it has none (spec 4.11,
- * `math-maction-bare`); `m:cbytes` holds its text with the XML spaces removed, while the text
+ * `m:maction` reads its `actiontype` as written and is refused when it has none
+ * (`math-maction-bare`); `m:cbytes` holds its text with the XML spaces removed, while the text
  * nodes themselves keep the spelling the walk wrote. Every other no-namespace attribute is one row
  * of the family its pair's home in the matrix names (see {@link attributeFacts}). An element under
  * `m:annotation-xml` is phase 11's, so this builder writes nothing for it and refuses nothing.
@@ -311,6 +298,7 @@ const attributeFacts = Effect.fn("import.mathmlAttributes")(function* attributeF
  * @param rows - The rows so far.
  * @param element - The MathML element.
  * @param node - The node the walk made of `element`.
+ * @param documentId - The id of the document, which is also its tree's.
  * @returns The rows with the node's arm and attribute rows; `ItemRefusal` (`required-attribute`)
  *   for an `m:maction` with no `actiontype`; `ImportRefused` (`attribute-lexical`) for a value
  *   outside a roster family's roster.
@@ -319,8 +307,9 @@ export const mathmlRows = Effect.fn("import.mathmlRows")(function* mathmlRows(
   rows: Rows,
   element: Element,
   node: NodeRef,
+  documentId: Uuid,
 ): Effect.fn.Return<Rows, ItemRefusal | ImportRefused> {
   const armed = yield* armRows(rows, element, node);
 
-  return yield* attributeFacts(armed, element, node);
+  return yield* attributeFacts(armed, element, node, documentId);
 });
