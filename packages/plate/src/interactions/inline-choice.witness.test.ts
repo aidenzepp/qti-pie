@@ -411,7 +411,7 @@ describe("the Inline Choice witness: open, redact, render, keys, postings, decod
           assert.deepStrictEqual(valuesOf(record.outcomes, "SCORE"), [expected]);
         }
       }),
-    corpusTimeoutMs,
+    { tags: ["corpus"], timeout: corpusTimeoutMs },
   );
 
   it.effect(
@@ -500,7 +500,7 @@ describe("the Inline Choice witness: open, redact, render, keys, postings, decod
           "no processing runs, so the record holds the response and scores nothing",
         );
       }),
-    corpusTimeoutMs,
+    { tags: ["corpus"], timeout: corpusTimeoutMs },
   );
 
   it.effect(

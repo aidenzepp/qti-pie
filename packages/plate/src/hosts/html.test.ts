@@ -157,27 +157,31 @@ describe("the plain-HTML host", () => {
         );
         assert.lengthOf(slotted(elements, rowFor("item", "status").slot), 0);
       }),
+    { tags: ["corpus"] },
   );
 
-  it.effect("shows score 1 for a POST of BG007's correct answer, with no script", () =>
-    Effect.gen(function* postCorrect() {
-      const { locale } = yield* configure({});
-      const handler = yield* hostOf();
-      const page = yield* pageOf(yield* Effect.promise(() => handler(new Request(`${origin}/`))));
-      const response = yield* Effect.promise(() =>
-        handler(formPost([[controlName(page.elements, "true"), "true"]])),
-      );
-      const { elements, html } = yield* pageOf(response);
-      const [status, ...otherStatuses] = slotted(elements, rowFor("item", "status").slot);
+  it.effect(
+    "shows score 1 for a POST of BG007's correct answer, with no script",
+    () =>
+      Effect.gen(function* postCorrect() {
+        const { locale } = yield* configure({});
+        const handler = yield* hostOf();
+        const page = yield* pageOf(yield* Effect.promise(() => handler(new Request(`${origin}/`))));
+        const response = yield* Effect.promise(() =>
+          handler(formPost([[controlName(page.elements, "true"), "true"]])),
+        );
+        const { elements, html } = yield* pageOf(response);
+        const [status, ...otherStatuses] = slotted(elements, rowFor("item", "status").slot);
 
-      assert.strictEqual(response.status, 200);
-      assert.notInclude(html.toLowerCase(), "<script");
-      assert.lengthOf(otherStatuses, 0);
-      assert.include(
-        textOf(status ?? assert.fail("the page holds no Status part")),
-        message(locale, "score", { score: "1" }),
-      );
-    }),
+        assert.strictEqual(response.status, 200);
+        assert.notInclude(html.toLowerCase(), "<script");
+        assert.lengthOf(otherStatuses, 0);
+        assert.include(
+          textOf(status ?? assert.fail("the page holds no Status part")),
+          message(locale, "score", { score: "1" }),
+        );
+      }),
+    { tags: ["corpus"] },
   );
 
   it.effect(
@@ -210,6 +214,7 @@ describe("the plain-HTML host", () => {
           1,
         );
       }),
+    { tags: ["corpus"] },
   );
 
   it.effect("scores a Text Entry's integer in the base it declares: ff in base 16 scores 1", () =>
@@ -276,36 +281,43 @@ describe("the plain-HTML host", () => {
           ],
         );
       }),
+    { tags: ["corpus"] },
   );
 
-  it.effect("answers another path with 404 and another method with 405", () =>
-    Effect.gen(function* otherRequests() {
-      const handler = yield* hostOf();
-      const elsewhere = yield* Effect.promise(() => handler(new Request(`${origin}/other`)));
-      const put = yield* Effect.promise(() =>
-        handler(new Request(`${origin}/`, { body: "", method: "PUT" })),
-      );
+  it.effect(
+    "answers another path with 404 and another method with 405",
+    () =>
+      Effect.gen(function* otherRequests() {
+        const handler = yield* hostOf();
+        const elsewhere = yield* Effect.promise(() => handler(new Request(`${origin}/other`)));
+        const put = yield* Effect.promise(() =>
+          handler(new Request(`${origin}/`, { body: "", method: "PUT" })),
+        );
 
-      assert.strictEqual(elsewhere.status, 404);
-      assert.strictEqual(put.status, 405);
-      assert.strictEqual(put.headers.get("allow"), "GET, POST");
-    }),
+        assert.strictEqual(elsewhere.status, 404);
+        assert.strictEqual(put.status, 405);
+        assert.strictEqual(put.headers.get("allow"), "GET, POST");
+      }),
+    { tags: ["corpus"] },
   );
 
-  it.effect("answers with a 500 page and no form when the document is an accepted test", () =>
-    Effect.gen(function* testRoot() {
-      const testLocation = "QTI3_BeginnersGuide_Examples/BGtest.xml";
-      const handler = yield* htmlHost(testLocation, yield* readCorpusFile(testLocation));
-      const response = yield* Effect.promise(() => handler(new Request(`${origin}/`)));
-      const { elements } = yield* pageOf(response);
+  it.effect(
+    "answers with a 500 page and no form when the document is an accepted test",
+    () =>
+      Effect.gen(function* testRoot() {
+        const testLocation = "QTI3_BeginnersGuide_Examples/BGtest.xml";
+        const handler = yield* htmlHost(testLocation, yield* readCorpusFile(testLocation));
+        const response = yield* Effect.promise(() => handler(new Request(`${origin}/`)));
+        const { elements } = yield* pageOf(response);
 
-      assert.strictEqual(response.status, 500);
-      assert.strictEqual(response.headers.get("cache-control"), "no-store");
-      assert.deepStrictEqual(
-        elements.filter((element) => element.tag === "form"),
-        [],
-      );
-    }),
+        assert.strictEqual(response.status, 500);
+        assert.strictEqual(response.headers.get("cache-control"), "no-store");
+        assert.deepStrictEqual(
+          elements.filter((element) => element.tag === "form"),
+          [],
+        );
+      }),
+    { tags: ["corpus"] },
   );
 
   it("imports only #plate/index.ts and node: modules, type imports included", () => {

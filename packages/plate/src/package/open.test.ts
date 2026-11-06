@@ -435,6 +435,7 @@ describe("package/open.ts", () => {
           assert.deepStrictEqual(documentKind(resourceOf(verdict, "BGtest")), Option.some("test"));
           assert.isTrue(Option.isNone(resourceOf(verdict, "image_resource_1").verdict));
         }),
+      { tags: ["corpus"] },
     );
 
     it.effect(
@@ -470,6 +471,7 @@ describe("package/open.ts", () => {
             Option.some("unchecked"),
           );
         }),
+      { tags: ["corpus"] },
     );
 
     it.effect(
@@ -969,6 +971,7 @@ describe("package/open.ts", () => {
             },
           ]);
         }),
+      { tags: ["corpus"] },
     );
   });
 

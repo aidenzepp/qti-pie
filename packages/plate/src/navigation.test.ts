@@ -285,6 +285,7 @@ describe("navigationState", () => {
         assert.deepStrictEqual(state.allowed.map(encodeIntent), allowedNow(given.test, session));
         assert.isTrue(state.allowed.some((intent) => intent.kind === "previous"));
       }),
+    { tags: ["corpus"] },
   );
 
   it.effect(
@@ -317,6 +318,7 @@ describe("navigationState", () => {
         const twice = stateOf(given.test, sessionAfter(given, configuration, [submit, submit]));
         assert.deepStrictEqual(itemsOf(twice)[0], [1, "closed", true]);
       }),
+    { tags: ["corpus"] },
   );
 
   it.effect(
@@ -346,6 +348,7 @@ describe("navigationState", () => {
           [3, "closed", false],
         ]);
       }),
+    { tags: ["corpus"] },
   );
 
   it.effect(
@@ -377,38 +380,44 @@ describe("navigationState", () => {
       }),
   );
 
-  it.effect("fails with UnknownItemRef on a session of another test", () =>
-    Effect.gen(function* otherTest() {
-      const guideGiven = yield* corpusDelivery(guide, "BGtest.xml", guideRefs);
-      const caseGiven = yield* corpusDelivery(caseFolder, "-TX_G06SAMP_000.xml", caseRefs);
-      const configuration = yield* configure({});
-      const failure = Result.match(
-        navigationState(caseGiven.test, sessionAfter(guideGiven, configuration, [])),
-        {
-          onFailure: (error) => error,
-          onSuccess: () => assert.fail("navigationState read a session of another test"),
-        },
-      );
+  it.effect(
+    "fails with UnknownItemRef on a session of another test",
+    () =>
+      Effect.gen(function* otherTest() {
+        const guideGiven = yield* corpusDelivery(guide, "BGtest.xml", guideRefs);
+        const caseGiven = yield* corpusDelivery(caseFolder, "-TX_G06SAMP_000.xml", caseRefs);
+        const configuration = yield* configure({});
+        const failure = Result.match(
+          navigationState(caseGiven.test, sessionAfter(guideGiven, configuration, [])),
+          {
+            onFailure: (error) => error,
+            onSuccess: () => assert.fail("navigationState read a session of another test"),
+          },
+        );
 
-      assert.strictEqual(failure._tag, "UnknownItemRef");
-    }),
+        assert.strictEqual(failure._tag, "UnknownItemRef");
+      }),
+    { tags: ["corpus"] },
   );
 
-  it.effect("throws PartlessTestDefect on a closed session of a test with no part", () =>
-    Effect.gen(function* partless() {
-      const given = yield* corpusDelivery(caseFolder, "-TX_G06SAMP_000.xml", caseRefs);
-      const configuration = yield* configure({});
-      const test = acceptTestForTest({ ...given.test.test, parts: [] });
-      const session = Result.getOrElse(
-        startTest(test, new Map(), configuration, { instance: "sitting", now: startedAt }),
-        (failure) => assert.fail(`startTest refused: ${failure.message}`),
-      );
-      assert.strictEqual(session.status, "closed");
+  it.effect(
+    "throws PartlessTestDefect on a closed session of a test with no part",
+    () =>
+      Effect.gen(function* partless() {
+        const given = yield* corpusDelivery(caseFolder, "-TX_G06SAMP_000.xml", caseRefs);
+        const configuration = yield* configure({});
+        const test = acceptTestForTest({ ...given.test.test, parts: [] });
+        const session = Result.getOrElse(
+          startTest(test, new Map(), configuration, { instance: "sitting", now: startedAt }),
+          (failure) => assert.fail(`startTest refused: ${failure.message}`),
+        );
+        assert.strictEqual(session.status, "closed");
 
-      assert.throws(() => {
-        navigationState(test, session);
-      }, PartlessTestDefect);
-    }),
+        assert.throws(() => {
+          navigationState(test, session);
+        }, PartlessTestDefect);
+      }),
+    { tags: ["corpus"] },
   );
 });
 
@@ -524,7 +533,7 @@ const withoutSubmitAttributes = (node: Node): Node =>
         node.children.map(withoutSubmitAttributes),
       );
 
-describe("renderNavigation", () => {
+describe("renderNavigation", { tags: ["corpus"] }, () => {
   it.effect(
     "[T-4] renders BGtest.xml's navigationState: the part's modes, each item's state in words, the current item marked, and each button disabled exactly when the data does not allow its intent",
     () =>

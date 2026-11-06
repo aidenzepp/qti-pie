@@ -1260,14 +1260,14 @@ const removedHiddenControls = (sheet: Sheet): readonly string[] =>
     .map((rule) => rule.selectors.join(", "));
 
 /**
- * The stylesheet as the tests read it: its text, its scan and the floor's data, each read once.
+ * The stylesheet as the tests read it: its text and its scan, each read once.
  */
 class Stylesheet extends Context.Service<
   Stylesheet,
-  { readonly data: WebFeatures; readonly sheet: Sheet; readonly text: string }
+  { readonly sheet: Sheet; readonly text: string }
 >()("@qti-pie/plate/styles.test/Stylesheet") {
   /**
-   * Read `src/styles.css` through the package's own import alias, scan it and read the data.
+   * Read `src/styles.css` through the package's own import alias and scan it.
    */
   static readonly layer = Layer.effect(
     Stylesheet,
@@ -1276,20 +1276,23 @@ class Stylesheet extends Context.Service<
         readFile(new URL(import.meta.resolve("#plate/styles.css")), "utf-8"),
       );
       const sheet = yield* scanSheet(text);
-      const data = yield* readWebFeatures;
 
-      return Stylesheet.of({ data, sheet, text });
+      return Stylesheet.of({ sheet, text });
     }),
   );
 }
 
 layer(Stylesheet.layer)("styles.css", (test) => {
-  test.effect("scans, and holds the browser floor with the browser-support note", () =>
-    Effect.gen(function* floor() {
-      const { data, sheet } = yield* Stylesheet;
+  test.effect(
+    "scans, and holds the browser floor with the browser-support note",
+    () =>
+      Effect.gen(function* floor() {
+        const { sheet } = yield* Stylesheet;
+        const data = yield* readWebFeatures;
 
-      assert.deepStrictEqual(floorViolations(sheet, data), []);
-    }),
+        assert.deepStrictEqual(floorViolations(sheet, data), []);
+      }),
+    { tags: ["web-features"] },
   );
 
   test.effect("opens the base section, then the theme section, each once", () =>

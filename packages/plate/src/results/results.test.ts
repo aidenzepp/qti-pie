@@ -704,23 +704,29 @@ describe("results", () => {
           [{ identifier: `s-${uuid}`, sourceID: "http://localhost:5190/" }],
         );
       }),
+    { tags: ["corpus", "qti-xsd"] },
   );
 
-  it.effect("writes no choiceSequence in an item result, even for a shuffled Choice", () =>
-    Effect.gen(function* itemShuffled() {
-      const accepted = yield* fixtureItem("p1-multiple-choice.xml");
-      const record = yield* Effect.fromResult(score(accepted, { RESPONSE: identifiers("A", "C") }));
-      const { xml } = yield* reported({
-        context: {},
-        datestamp: new Date(updated),
-        document: accepted,
-        kind: "item",
-        record,
-      });
+  it.effect(
+    "writes no choiceSequence in an item result, even for a shuffled Choice",
+    () =>
+      Effect.gen(function* itemShuffled() {
+        const accepted = yield* fixtureItem("p1-multiple-choice.xml");
+        const record = yield* Effect.fromResult(
+          score(accepted, { RESPONSE: identifiers("A", "C") }),
+        );
+        const { xml } = yield* reported({
+          context: {},
+          datestamp: new Date(updated),
+          document: accepted,
+          kind: "item",
+          record,
+        });
 
-      yield* assertValid(xml);
-      assert.notInclude(xml, "choiceSequence");
-    }),
+        yield* assertValid(xml);
+        assert.notInclude(xml, "choiceSequence");
+      }),
+    { tags: ["qti-xsd"] },
   );
 
   it.effect(
@@ -813,6 +819,7 @@ describe("results", () => {
           itemOf(report, "one").responses["RESPONSE"]?.attributes["choiceSequence"],
         );
       }),
+    { tags: ["qti-xsd"] },
   );
 
   it.effect(
@@ -844,30 +851,34 @@ describe("results", () => {
           order.join(" "),
         );
       }),
+    { tags: ["qti-xsd"] },
   );
 
-  it.effect("writes no test outcome for a test with outcome processing", () =>
-    Effect.gen(function* processedTest() {
-      const single = yield* fixtureItem("p1-single-choice.xml");
-      const test = yield* acceptTest("processed", [
-        totalDeclaration,
-        part("P1", individual, [ref("one", "p1-single-choice.xml")]),
-        totalProcessing,
-      ]);
-      const { report, xml } = yield* reported({
-        context,
-        items: new Map([["one", single]]),
-        kind: "test",
-        session: storedSession(test, [sessionItem(single, "one", 1)]),
-        test,
-      });
+  it.effect(
+    "writes no test outcome for a test with outcome processing",
+    () =>
+      Effect.gen(function* processedTest() {
+        const single = yield* fixtureItem("p1-single-choice.xml");
+        const test = yield* acceptTest("processed", [
+          totalDeclaration,
+          part("P1", individual, [ref("one", "p1-single-choice.xml")]),
+          totalProcessing,
+        ]);
+        const { report, xml } = yield* reported({
+          context,
+          items: new Map([["one", single]]),
+          kind: "test",
+          session: storedSession(test, [sessionItem(single, "one", 1)]),
+          test,
+        });
 
-      yield* assertValid(xml);
+        yield* assertValid(xml);
 
-      const written = Option.getOrElse(report.test, () => assert.fail("No testResult."));
-      assert.deepStrictEqual(Object.keys(written.outcomes), []);
-      assert.deepStrictEqual(Object.keys(written.responses), ["duration"]);
-    }),
+        const written = Option.getOrElse(report.test, () => assert.fail("No testResult."));
+        assert.deepStrictEqual(Object.keys(written.outcomes), []);
+        assert.deepStrictEqual(Object.keys(written.responses), ["duration"]);
+      }),
+    { tags: ["qti-xsd"] },
   );
 
   it.effect(
@@ -905,6 +916,7 @@ describe("results", () => {
           identifier: "MAXSCORE",
         });
       }),
+    { tags: ["qti-xsd"] },
   );
 
   it.effect(
@@ -937,6 +949,7 @@ describe("results", () => {
           values: ["0.5"],
         });
       }),
+    { tags: ["qti-xsd"] },
   );
 
   it.effect("counts the attempts started, and gives each sessionStatus and completionStatus", () =>
@@ -1108,53 +1121,60 @@ describe("results", () => {
       }),
   );
 
-  it.effect("gives each answeredStatus by Results Reporting's criteria", () =>
-    Effect.gen(function* answered() {
-      const multiple = yield* fixtureItem("p1-multiple-choice.xml");
-      const single = yield* fixtureItem("p2-choice.xml");
-      const defaulted = yield* acceptItem(
-        "items/defaulted.xml",
-        new TextEncoder().encode(defaultedXml),
-      );
-      const test = yield* acceptTest("answered", [
-        part("P1", individual, [
-          ref("unseen", "p2-choice.xml"),
-          ref("blank", "p2-choice.xml"),
-          ref("default", "defaulted.xml"),
-          ref("over", "p1-multiple-choice.xml"),
-          ref("done", "p1-multiple-choice.xml"),
-        ]),
-      ]);
-      const { report, xml } = yield* reported({
-        context,
-        items: new Map([
-          ["unseen", single],
-          ["blank", single],
-          ["default", defaulted],
-          ["over", multiple],
-          ["done", multiple],
-        ]),
-        kind: "test",
-        session: storedSession(test, [
-          sessionItem(single, "unseen", 1),
-          sessionItem(single, "blank", 2, { presented: true }),
-          sessionItem(defaulted, "default", 3, saving({ RESPONSE: identifiers("A") })),
-          sessionItem(multiple, "over", 4, saving({ RESPONSE: identifiers("A", "B", "C") })),
-          sessionItem(multiple, "done", 5, saving({ RESPONSE: identifiers("A", "C") })),
-        ]),
-        test,
-      });
+  it.effect(
+    "gives each answeredStatus by Results Reporting's criteria",
+    () =>
+      Effect.gen(function* answered() {
+        const multiple = yield* fixtureItem("p1-multiple-choice.xml");
+        const single = yield* fixtureItem("p2-choice.xml");
+        const defaulted = yield* acceptItem(
+          "items/defaulted.xml",
+          new TextEncoder().encode(defaultedXml),
+        );
+        const test = yield* acceptTest("answered", [
+          part("P1", individual, [
+            ref("unseen", "p2-choice.xml"),
+            ref("blank", "p2-choice.xml"),
+            ref("default", "defaulted.xml"),
+            ref("over", "p1-multiple-choice.xml"),
+            ref("done", "p1-multiple-choice.xml"),
+          ]),
+        ]);
+        const { report, xml } = yield* reported({
+          context,
+          items: new Map([
+            ["unseen", single],
+            ["blank", single],
+            ["default", defaulted],
+            ["over", multiple],
+            ["done", multiple],
+          ]),
+          kind: "test",
+          session: storedSession(test, [
+            sessionItem(single, "unseen", 1),
+            sessionItem(single, "blank", 2, { presented: true }),
+            sessionItem(defaulted, "default", 3, saving({ RESPONSE: identifiers("A") })),
+            sessionItem(multiple, "over", 4, saving({ RESPONSE: identifiers("A", "B", "C") })),
+            sessionItem(multiple, "done", 5, saving({ RESPONSE: identifiers("A", "C") })),
+          ]),
+          test,
+        });
 
-      yield* assertValid(xml);
-      assert.deepStrictEqual(
-        ["unseen", "blank", "default", "over", "done"].map(
-          (identifier) =>
-            itemOf(report, identifier).responses["RESPONSE"]?.attributes["answeredStatus"],
-        ),
-        ["notpresented", "presented", "presented", "attempted", "answered"],
-      );
-      assert.deepStrictEqual(itemOf(report, "over").responses["RESPONSE"]?.values, ["A", "B", "C"]);
-    }),
+        yield* assertValid(xml);
+        assert.deepStrictEqual(
+          ["unseen", "blank", "default", "over", "done"].map(
+            (identifier) =>
+              itemOf(report, identifier).responses["RESPONSE"]?.attributes["answeredStatus"],
+          ),
+          ["notpresented", "presented", "presented", "attempted", "answered"],
+        );
+        assert.deepStrictEqual(itemOf(report, "over").responses["RESPONSE"]?.values, [
+          "A",
+          "B",
+          "C",
+        ]);
+      }),
+    { tags: ["qti-xsd"] },
   );
 
   it.effect(

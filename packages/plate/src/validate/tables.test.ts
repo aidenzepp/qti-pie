@@ -130,15 +130,18 @@ describe("validate/tables.ts", () => {
 
         assert.deepStrictEqual(tables, generated);
       }),
-    regenerateTimeoutMs,
+    { tags: ["qti-xsd"], timeout: regenerateTimeoutMs },
   );
 
-  it.effect("the cached XSD is the one the tables were generated from", () =>
-    Effect.gen(function* xsdDigest() {
-      const bytes = yield* xsdBytes;
+  it.effect(
+    "the cached XSD is the one the tables were generated from",
+    () =>
+      Effect.gen(function* xsdDigest() {
+        const bytes = yield* xsdBytes;
 
-      assert.strictEqual(createHash("sha256").update(bytes).digest("hex"), xsdSha256);
-    }),
+        assert.strictEqual(createHash("sha256").update(bytes).digest("hex"), xsdSha256);
+      }),
+    { tags: ["qti-xsd"] },
   );
 
   it("qti-interaction-modules declares secondary-configuration and not fallback-configuration", () => {

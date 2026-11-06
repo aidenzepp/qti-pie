@@ -136,7 +136,7 @@ afterAll(() => {
   rmSync(scratch, { force: true, recursive: true });
 });
 
-describe("the walk corpus", () => {
+describe("the walk corpus", { tags: ["corpus"] }, () => {
   it.effect(
     "open accepts every probe item",
     () =>

@@ -251,7 +251,7 @@ describe("ledger/passes.ts", () => {
           `passes: ${String(documents.size)} documents and probes, ${String(Math.round(performance.now() - started))} ms`,
         );
       }),
-    walkTimeoutMs,
+    { tags: ["corpus"], timeout: walkTimeoutMs },
   );
 
   it.effect(
@@ -273,7 +273,7 @@ describe("ledger/passes.ts", () => {
           ...new Set(walk.derived.map((probe) => patternOf(probe.item))),
         ]);
       }),
-    walkTimeoutMs,
+    { tags: ["corpus"], timeout: walkTimeoutMs },
   );
 
   it("the first sitting's record stays as written: its last note still says the operator will do the rest later", () => {

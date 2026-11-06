@@ -78,39 +78,48 @@ const use = (kind: Use["kind"], name: string, property?: string): Use => ({
 });
 
 describe("test/baseline.ts", () => {
-  it.effect("the cached data is web-features 3.45.0, the digest the floor is pinned to", () =>
-    Effect.gen(function* dataDigest() {
-      const file = yield* webFeaturesPath;
-      const bytes = yield* Effect.tryPromise(() => readFile(file));
+  it.effect(
+    "the cached data is web-features 3.45.0, the digest the floor is pinned to",
+    () =>
+      Effect.gen(function* dataDigest() {
+        const file = yield* webFeaturesPath;
+        const bytes = yield* Effect.tryPromise(() => readFile(file));
 
-      assert.strictEqual(createHash("sha256").update(bytes).digest("hex"), webFeaturesSha256);
-    }),
+        assert.strictEqual(createHash("sha256").update(bytes).digest("hex"), webFeaturesSha256);
+      }),
+    { tags: ["web-features"] },
   );
 
-  it.effect("the data decodes, with each compatibility key's own baseline", () =>
-    Effect.gen(function* decodes() {
-      const data = yield* readWebFeatures;
-      const has = featureEntry(data, "has");
-      const accentColor = featureEntry(data, "accent-color");
+  it.effect(
+    "the data decodes, with each compatibility key's own baseline",
+    () =>
+      Effect.gen(function* decodes() {
+        const data = yield* readWebFeatures;
+        const has = featureEntry(data, "has");
+        const accentColor = featureEntry(data, "accent-color");
 
-      assert.isDefined(has);
-      assert.isDefined(accentColor);
-      assert.include(has?.compat_features ?? [], "css.selectors.has");
-      assert.strictEqual(has?.status.by_compat_key?.["css.selectors.has"]?.baseline, "high");
-      assert.strictEqual(
-        accentColor?.status.by_compat_key?.["css.properties.accent-color"]?.baseline,
-        false,
-      );
-    }),
+        assert.isDefined(has);
+        assert.isDefined(accentColor);
+        assert.include(has?.compat_features ?? [], "css.selectors.has");
+        assert.strictEqual(has?.status.by_compat_key?.["css.selectors.has"]?.baseline, "high");
+        assert.strictEqual(
+          accentColor?.status.by_compat_key?.["css.properties.accent-color"]?.baseline,
+          false,
+        );
+      }),
+    { tags: ["web-features"] },
   );
 
-  it.effect("the data decodes its moved and split ids", () =>
-    Effect.gen(function* redirects() {
-      const data = yield* readWebFeatures;
-      const kinds = new Set(Object.values(data.features).map((entry) => entry.kind));
+  it.effect(
+    "the data decodes its moved and split ids",
+    () =>
+      Effect.gen(function* redirects() {
+        const data = yield* readWebFeatures;
+        const kinds = new Set(Object.values(data.features).map((entry) => entry.kind));
 
-      assert.deepStrictEqual([...kinds].toSorted(), ["feature", "moved", "split"]);
-    }),
+        assert.deepStrictEqual([...kinds].toSorted(), ["feature", "moved", "split"]);
+      }),
+    { tags: ["web-features"] },
   );
 
   it.effect("a home with no cache fails with WebFeaturesUnreadable, naming the file", () =>
@@ -130,25 +139,28 @@ describe("test/baseline.ts", () => {
     }),
   );
 
-  it.effect("every browser-support row names a feature below the floor, by its own baseline", () =>
-    Effect.gen(function* notesBelowFloor() {
-      const data = yield* readWebFeatures;
+  it.effect(
+    "every browser-support row names a feature below the floor, by its own baseline",
+    () =>
+      Effect.gen(function* notesBelowFloor() {
+        const data = yield* readWebFeatures;
 
-      for (const row of browserSupport) {
-        const entry = featureEntry(data, row.feature);
+        for (const row of browserSupport) {
+          const entry = featureEntry(data, row.feature);
 
-        assert.isDefined(entry, `web-features 3.45.0 holds no feature ${row.feature}`);
+          assert.isDefined(entry, `web-features 3.45.0 holds no feature ${row.feature}`);
 
-        const baseline = entry?.status.baseline;
+          const baseline = entry?.status.baseline;
 
-        assert.notStrictEqual(baseline, "high", `${row.feature} is at the floor; drop its row`);
-        assert.strictEqual(
-          row.status,
-          baseline === false ? noteStatus.false : noteStatus.low,
-          row.feature,
-        );
-      }
-    }),
+          assert.notStrictEqual(baseline, "high", `${row.feature} is at the floor; drop its row`);
+          assert.strictEqual(
+            row.status,
+            baseline === false ? noteStatus.false : noteStatus.low,
+            row.feature,
+          );
+        }
+      }),
+    { tags: ["web-features"] },
   );
 
   it("bcdKeys maps each kind of use to its keys, px and an unmapped function to none", () => {
@@ -185,63 +197,83 @@ describe("test/baseline.ts", () => {
 
         assert.deepStrictEqual(violations, []);
       }),
+    { tags: ["web-features"] },
   );
 
-  it.effect("accent-color is below the floor without its note row, and holds it with one", () =>
-    Effect.gen(function* accentColor() {
-      const css = "a { accent-color: red }";
-      const expected: FloorViolation = {
-        feature: Option.some("accent-color"),
-        key: "css.properties.accent-color",
-        kind: "below-floor",
-      };
+  it.effect(
+    "accent-color is below the floor without its note row, and holds it with one",
+    () =>
+      Effect.gen(function* accentColor() {
+        const css = "a { accent-color: red }";
+        const expected: FloorViolation = {
+          feature: Option.some("accent-color"),
+          key: "css.properties.accent-color",
+          kind: "below-floor",
+        };
 
-      assert.deepStrictEqual(yield* floorOf(css, []), [expected]);
-      assert.deepStrictEqual(yield* floorOf(css, [accentColorNote]), []);
-    }),
+        assert.deepStrictEqual(yield* floorOf(css, []), [expected]);
+        assert.deepStrictEqual(yield* floorOf(css, [accentColorNote]), []);
+      }),
+    { tags: ["web-features"] },
   );
 
-  it.effect("::marker is below the floor", () =>
-    Effect.gen(function* marker() {
-      const expected: FloorViolation = {
-        feature: Option.some("marker"),
-        key: "css.selectors.marker",
-        kind: "below-floor",
-      };
+  it.effect(
+    "::marker is below the floor",
+    () =>
+      Effect.gen(function* marker() {
+        const expected: FloorViolation = {
+          feature: Option.some("marker"),
+          key: "css.selectors.marker",
+          kind: "below-floor",
+        };
 
-      assert.deepStrictEqual(yield* floorOf("a::marker { color: red }", []), [expected]);
-    }),
+        assert.deepStrictEqual(yield* floorOf("a::marker { color: red }", []), [expected]);
+      }),
+    { tags: ["web-features"] },
   );
 
-  it.effect("an invented property is an unknown key", () =>
-    Effect.gen(function* unknownKey() {
-      const expected: FloorViolation = {
-        feature: Option.none(),
-        key: "css.properties.made-up-property",
-        kind: "unknown-key",
-      };
+  it.effect(
+    "an invented property is an unknown key",
+    () =>
+      Effect.gen(function* unknownKey() {
+        const expected: FloorViolation = {
+          feature: Option.none(),
+          key: "css.properties.made-up-property",
+          kind: "unknown-key",
+        };
 
-      assert.deepStrictEqual(yield* floorOf("a { made-up-property: 1px }", []), [expected]);
-    }),
+        assert.deepStrictEqual(yield* floorOf("a { made-up-property: 1px }", []), [expected]);
+      }),
+    { tags: ["web-features"] },
   );
 
-  it.effect("an invented function is unmapped", () =>
-    Effect.gen(function* unmapped() {
-      const expected: FloorViolation = { feature: Option.none(), key: "made-up", kind: "unmapped" };
+  it.effect(
+    "an invented function is unmapped",
+    () =>
+      Effect.gen(function* unmapped() {
+        const expected: FloorViolation = {
+          feature: Option.none(),
+          key: "made-up",
+          kind: "unmapped",
+        };
 
-      assert.deepStrictEqual(yield* floorOf("a { width: made-up(1px) }", []), [expected]);
-    }),
+        assert.deepStrictEqual(yield* floorOf("a { width: made-up(1px) }", []), [expected]);
+      }),
+    { tags: ["web-features"] },
   );
 
-  it.effect("a note row no use reaches is stale", () =>
-    Effect.gen(function* staleNote() {
-      const expected: FloorViolation = {
-        feature: Option.some("accent-color"),
-        key: "",
-        kind: "stale-note",
-      };
+  it.effect(
+    "a note row no use reaches is stale",
+    () =>
+      Effect.gen(function* staleNote() {
+        const expected: FloorViolation = {
+          feature: Option.some("accent-color"),
+          key: "",
+          kind: "stale-note",
+        };
 
-      assert.deepStrictEqual(yield* floorOf("a { color: red }", [accentColorNote]), [expected]);
-    }),
+        assert.deepStrictEqual(yield* floorOf("a { color: red }", [accentColorNote]), [expected]);
+      }),
+    { tags: ["web-features"] },
   );
 });

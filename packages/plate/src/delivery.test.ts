@@ -1136,7 +1136,7 @@ const submitItem: Intent = { kind: "submit-item" };
 
 const submitPart: Intent = { kind: "submit-part" };
 
-describe("the M2 witness: the packages a test is delivered from", () => {
+describe("the M2 witness: the packages a test is delivered from", { tags: ["corpus"] }, () => {
   it.effect(
     "[P-1] [P-4] openPackage gives each package its verdict: the fixture and BegGuide_March2025 accepted, CASE accepted with unsupported features, and test_package_minfiles, lti, testWithLti, sample_pci and pci_item_examples refused by their rules",
     () =>
@@ -1266,7 +1266,7 @@ describe("the M2 witness: a full session per mode combination, walked by keys th
           firstexample: { response: ["A"], score: ["1"] },
         });
       }),
-    sessionTimeoutMs,
+    { tags: ["corpus", "qti-xsd"], timeout: sessionTimeoutMs },
   );
   it.effect(
     "[T-4] [T-7] [T-14] [S-0] [S-7] [keyboard] CASE, linear and individual with max-attempts 2: a wrong first attempt scores 0 and leaves the item open, the second scores 1, Next submits each later item, the last Next closes the test, and the scores are 1, 1 and 1",
@@ -1312,7 +1312,7 @@ describe("the M2 witness: a full session per mode combination, walked by keys th
           "res_-TX_G06SAMP_005": { response: ["A_3"], score: ["1"] },
         });
       }),
-    sessionTimeoutMs,
+    { tags: ["corpus", "qti-xsd"], timeout: sessionTimeoutMs },
   );
 
   it.effect(
@@ -1371,7 +1371,7 @@ describe("the M2 witness: a full session per mode combination, walked by keys th
           "the result names the order the candidate saw",
         );
       }),
-    sessionTimeoutMs,
+    { tags: ["qti-xsd"], timeout: sessionTimeoutMs },
   );
 });
 

@@ -398,7 +398,7 @@ describe("a canonical template whose tree needs what template-requirements does 
   );
 });
 
-describe("the built-in templates over named corpus items", () => {
+describe("the built-in templates over named corpus items", { tags: ["corpus"] }, () => {
   for (const location of cc2MatchItems) {
     it.effect(
       `[I-9b] ${location} (CC2_match) scores its correct response 1, a choice outside it 0 and no response 0`,

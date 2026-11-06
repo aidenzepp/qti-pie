@@ -773,7 +773,7 @@ const pageViolations = (html: string) =>
     { baseLevel: 1 },
   );
 
-describe("dev/page.ts", () => {
+describe("dev/page.ts", { tags: ["corpus"] }, () => {
   it.effect(
     "the listing names every member once, under its verdict's section and its top folder, and the counts sum to the set's size",
     () =>
@@ -1656,7 +1656,7 @@ const rowHeaders = (
       return [header?.attrs["scope"], textOf(header?.children ?? [])] as const;
     });
 
-describe("dev/page.ts: the verdicts page and the ledger page", () => {
+describe("dev/page.ts: the verdicts page and the ledger page", { tags: ["corpus"] }, () => {
   it.effect(
     "/verdicts is a table with a caption, the four column headers and one row per member, in the set's order, its path the row header",
     () =>
@@ -1945,7 +1945,7 @@ const sessionsRegion = (html: string): Element =>
         "Sessions in progress",
   );
 
-describe("dev/page.ts: M2's routes", () => {
+describe("dev/page.ts: M2's routes", { tags: ["corpus"] }, () => {
   it.effect(
     "[T-4] the index links /packages and lists a started session's Resume link, named for its test and its current item",
     () =>

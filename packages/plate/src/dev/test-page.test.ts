@@ -1085,7 +1085,7 @@ describe("routeSessions", () => {
         );
         assert.deepStrictEqual(bench.playground.sessions.get(id), before);
       }),
-    corpusTimeoutMs,
+    { tags: ["corpus"], timeout: corpusTimeoutMs },
   );
 
   it.effect(
@@ -1111,7 +1111,7 @@ describe("routeSessions", () => {
         assert.isTrue(controls.every((control) => control.attrs["aria-invalid"] === "true"));
         assert.deepStrictEqual(autofocused(page), controls.slice(0, 1));
       }),
-    corpusTimeoutMs,
+    { tags: ["corpus"], timeout: corpusTimeoutMs },
   );
 
   it.effect(
@@ -1143,6 +1143,6 @@ describe("routeSessions", () => {
         const { session } = yield* storedSession(bench, id);
         assert.strictEqual(session.status, "closed");
       }),
-    corpusTimeoutMs,
+    { tags: ["corpus"], timeout: corpusTimeoutMs },
   );
 });
