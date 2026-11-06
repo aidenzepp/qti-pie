@@ -415,14 +415,32 @@ const renders = (file: string): boolean =>
 const playgroundFile = "src/dev/page.test.ts";
 
 /**
- * Decide whether a test file is a browser file, `src/**\/*.browser.test.ts`, whose cases drive the
- * dev playground in a browser engine.
+ * Decide whether a test file is a Node-driven browser file, `src/**\/*.browser.test.ts`, whose
+ * cases drive the dev playground in a browser engine from Node.
  *
  * @param file A package-relative test file.
- * @returns Whether it runs in the browser engines.
+ * @returns Whether it drives the browser engines from Node.
  */
 const isBrowserFile = (file: string): boolean =>
   /^src\/(?:.+\/)?[^/]+\.browser\.test\.ts$/u.test(file);
+
+/**
+ * Decide whether a test file is an in-page file, `src/**\/*.dom.test.ts`, whose cases run inside a
+ * browser engine's page under Vitest's browser mode.
+ *
+ * @param file A package-relative test file.
+ * @returns Whether its cases run inside the browser engines' pages.
+ */
+const isInPageFile = (file: string): boolean => /^src\/(?:.+\/)?[^/]+\.dom\.test\.ts$/u.test(file);
+
+/**
+ * Decide whether a test file's cases run in the browser engines: a Node-driven browser file or an
+ * in-page file.
+ *
+ * @param file A package-relative test file.
+ * @returns Whether its results are browser results.
+ */
+const runsInEngines = (file: string): boolean => isBrowserFile(file) || isInPageFile(file);
 
 /**
  * Give how a keyboard proof is composed, by its test file.
@@ -613,10 +631,15 @@ const od14Of = (results: readonly TestResult[], engine: string): Od14Result => {
  * run's date and Playwright version, how many browser results ran in the engine and passed or
  * failed, and OD-14 (e)'s result in it.
  *
- * A browser file registers each case under a `describe` named for its engine (`eachEngine` in
- * `src/test/browsers.ts`), the outermost of the case's `describe` blocks, so a browser result ran
- * in an engine when its first ancestor title is the engine's name. A result in any other file is
- * not a browser result; a skipped or pending one counts as neither passed nor failed.
+ * A browser result is a result in a file whose cases {@link runsInEngines}: a Node-driven browser
+ * file or an in-page file. Both kinds register each case under a `describe` named for its engine,
+ * the outermost of the case's `describe` blocks: a Node-driven file through `eachEngine` in
+ * `src/test/browsers.ts`, an in-page file through `describe(server.browser, …)`. So a browser
+ * result ran in an engine when its first ancestor title is the engine's name. The in-page run
+ * drives the engines through the same `playwright-core` the run records: `playwright` 1.64.1
+ * depends on exactly `playwright-core` 1.64.1, and `src/boundary.test.ts` pins both. A result in
+ * any other file is not a browser result; a skipped or pending one counts as neither passed nor
+ * failed.
  *
  * @param runs The browser runs.
  * @param results The test results.
@@ -626,7 +649,7 @@ const browserRunRows = (
   runs: readonly BrowserRun[],
   results: readonly TestResult[],
 ): readonly BrowserRunRow[] => {
-  const browserResults = results.filter((result) => isBrowserFile(result.file));
+  const browserResults = results.filter((result) => runsInEngines(result.file));
 
   return runs.flatMap((run) =>
     run.engines.map((engine): BrowserRunRow => {

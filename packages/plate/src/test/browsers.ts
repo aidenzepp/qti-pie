@@ -11,6 +11,9 @@
  *
  * The harness names no DOM type: the program's `lib` is `esnext` alone, so a test reads a page
  * through Playwright's API.
+ *
+ * An in-page file (`src/**\/*.dom.test.ts`) runs inside the engine's page under the in-page project
+ * of `vite.browser.config.ts` instead, and does not use the harness.
  */
 /* oxlint-disable unicorn/throw-new-error -- `Schema.TaggedError<Self>()` is a class factory that is called once and extended, never thrown, so the rule's "call without new" reading does not apply. */
 import { randomUUID } from "node:crypto";

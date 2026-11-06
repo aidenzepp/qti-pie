@@ -357,6 +357,27 @@ const od14Result = (
 });
 
 /**
+ * The in-page test file, whose cases run inside each engine's page under Vitest's browser mode.
+ */
+const inPageFile = "src/test/page.dom.test.ts";
+
+/**
+ * Build one in-page result as the reporter reads it: under the `describe` named for the engine
+ * alone, as an in-page file registers its cases through `describe(server.browser, …)`.
+ *
+ * @param engine The engine.
+ * @param title The test's own title.
+ * @param state How it ended.
+ * @returns The result.
+ */
+const inPageResult = (engine: string, title: string, state: TestResult["state"]): TestResult => ({
+  ancestorTitles: [engine],
+  file: inPageFile,
+  fullName: `${engine} ${title}`,
+  state,
+});
+
+/**
  * Derive a ledger over the fixture browser run from browser results alone.
  *
  * @param results The browser results.
@@ -373,6 +394,15 @@ const runLedger = (results: readonly TestResult[]): Ledger =>
     results,
     sources,
   });
+
+/**
+ * List each engine of a ledger's browser runs with how many browser results it passed and failed.
+ *
+ * @param built The ledger.
+ * @returns Each engine's name, passed count and failed count, in the runs' order.
+ */
+const engineCounts = (built: Ledger) =>
+  built.browserRuns.map((run) => [run.engine, run.passed, run.failed] as const);
 
 /**
  * Find a row of the ledger by its ID.
@@ -655,6 +685,24 @@ describe("ledger/report.ts", () => {
           { ...common, engine: "webkit", standsInFor: "Safari", version: "27.2" },
         ]);
         assert.strictEqual(standsInForSafari, "WebKit stands in for Safari until safaridriver");
+      }),
+  );
+
+  it.effect(
+    "each engine of a browser run counts its in-page results beside its Node-driven browser results",
+    () =>
+      Effect.gen(function* inPageCounts() {
+        const browsers = yield* decodeReport(browserReportText, root);
+        const inPage = browserRun.engines.map(({ engine }) =>
+          inPageResult(engine, "has the DOM that Node lacks", "passed"),
+        );
+
+        assert.deepStrictEqual(
+          engineCounts(runLedger([...browsers, ...inPage])),
+          engineCounts(runLedger(browsers)).map(
+            ([engine, passed, failed]) => [engine, passed + 1, failed] as const,
+          ),
+        );
       }),
   );
 
