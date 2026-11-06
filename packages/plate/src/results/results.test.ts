@@ -13,6 +13,7 @@ import type { SourceElement } from "#plate/document/source.ts";
 import type { Element, Node } from "#plate/emit/node.ts";
 import { entryName } from "#plate/form/encoding.ts";
 import { interactionsIn } from "#plate/model/interactions.ts";
+import type { InlineChoiceInteraction } from "#plate/model/item.ts";
 import { fresh } from "#plate/model/record.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
 import type { Value } from "#plate/model/values.ts";
@@ -24,7 +25,7 @@ import type { Responses, SessionItem, SessionPart } from "#plate/session/session
 import { parseHtml } from "#plate/test/round-trip.ts";
 import { validateAgainst } from "#plate/test/xsd.ts";
 import { open } from "#plate/validate/open.ts";
-import { acceptedItem } from "#plate/validate/verdict.ts";
+import { acceptedItem, acceptForTest } from "#plate/validate/verdict.ts";
 import type { Accepted, AcceptedTest } from "#plate/validate/verdict.ts";
 
 /**
@@ -269,6 +270,67 @@ const reportedDeclaration = [
   "<qti-default-value><qti-value>0.5</qti-value></qti-default-value>",
   "</qti-outcome-declaration>",
 ].join("");
+
+/**
+ * A shuffled Inline Choice of five tones bound to the single identifier response `RESPONSE`, whose
+ * last choice is fixed, so it keeps the last place in every order.
+ */
+const tones: InlineChoiceInteraction = {
+  ariaLabel: Option.some("Tone"),
+  ariaLabelledby: Option.none(),
+  choices: ["A", "B", "C", "D", "E"].map((identifier) => ({
+    content: [{ kind: "text", text: `Tone ${identifier}` }],
+    fixed: identifier === "E",
+    identifier,
+  })),
+  class: "",
+  kind: "inline-choice",
+  label: Option.none(),
+  messages: { min: Option.none() },
+  minChoices: 0n,
+  path: "qti-assessment-item/qti-item-body/p/qti-inline-choice-interaction",
+  placeholder: Option.none(),
+  required: false,
+  response: "RESPONSE",
+  shuffle: true,
+};
+
+/**
+ * An item built for this test whose one paragraph holds {@link tones} in its sentence, as `check`
+ * would accept it, located at `items/tones.xml`.
+ */
+const tonesItem = acceptForTest({
+  body: [
+    {
+      attributes: [],
+      children: [{ kind: "text", text: "The tone is " }, tones, { kind: "text", text: "." }],
+      kind: "element",
+      path: "qti-assessment-item/qti-item-body/p",
+      tag: "p",
+    },
+  ],
+  document: "items/tones.xml",
+  identifier: "tones",
+  lang: Option.none(),
+  outcomes: new Map(),
+  processing: Option.none(),
+  responses: new Map([
+    [
+      "RESPONSE",
+      {
+        areaMapping: Option.none(),
+        baseType: "identifier",
+        cardinality: "single",
+        correct: Option.none(),
+        defaultValue: Option.none(),
+        identifier: "RESPONSE",
+        mapping: Option.none(),
+      },
+    ],
+  ]),
+  title: "Tones",
+  unsupported: [],
+});
 
 /**
  * Score one attempt over a record, as a session's submission does.
@@ -530,6 +592,39 @@ const renderedOrder = Effect.fnUntraced(function* renderedOrder(
 });
 
 /**
+ * The order `render` presents an Inline Choice's choices in, read off its `select`'s Options. An
+ * Option carries no `name`, so the one `select` named for the response is found instead, and its
+ * Placeholder, the first Option, with the value `""`, is dropped.
+ *
+ * @param accepted The item.
+ * @param response The Inline Choice's response.
+ * @param token The instance it is rendered under.
+ * @returns Each Option's value after the Placeholder, in emitted order.
+ */
+const renderedOptions = Effect.fnUntraced(function* renderedOptions(
+  accepted: Accepted,
+  response: string,
+  token: string,
+) {
+  const rendered = yield* Effect.fromResult(
+    render(redact(accepted), yield* configure({ seed }), { instance: token }),
+  );
+  const selects = elementsOf(parseHtml(rendered.html)).filter(
+    (element) => element.tag === "select" && element.attrs["name"] === entryName(token, response),
+  );
+  assert.lengthOf(selects, 1);
+
+  const [placeholder, ...options] = (selects[0]?.children ?? []).flatMap((child) =>
+    child.kind === "element" && child.tag === "option" ? [child.attrs["value"]] : [],
+  );
+  assert.strictEqual(placeholder, "");
+
+  return options.map((value) =>
+    value === undefined || value === true ? assert.fail("An Option has no value.") : value,
+  );
+});
+
+/**
  * The tag of a result's failure.
  *
  * @param input The result's input.
@@ -716,6 +811,37 @@ describe("results", () => {
         );
         assert.isUndefined(
           itemOf(report, "one").responses["RESPONSE"]?.attributes["choiceSequence"],
+        );
+      }),
+  );
+
+  it.effect(
+    "[Q-12] writes a shuffled Inline Choice's choiceSequence in the order render presents its Options, its fixed choice last",
+    () =>
+      Effect.gen(function* inlineChoiceSequence() {
+        const test = yield* acceptTest("tones", [
+          part("P1", individual, [ref("tones", "tones.xml")]),
+        ]);
+        const items: readonly SessionItem[] = [
+          sessionItem(tonesItem, "tones", 1, { duration: 2, presented: true }),
+        ];
+        const { report, xml } = yield* reported({
+          context,
+          items: new Map([["tones", tonesItem]]),
+          kind: "test",
+          session: storedSession(test, items),
+          test,
+        });
+
+        yield* assertValid(xml);
+
+        const order = yield* renderedOptions(tonesItem, "RESPONSE", `${instance}.1`);
+        assert.deepStrictEqual(order.toSorted(), ["A", "B", "C", "D", "E"]);
+        assert.notDeepEqual(order, ["A", "B", "C", "D", "E"], "The seed must shuffle the order.");
+        assert.strictEqual(order.at(-1), "E");
+        assert.strictEqual(
+          itemOf(report, "tones").responses["RESPONSE"]?.attributes["choiceSequence"],
+          order.join(" "),
         );
       }),
   );

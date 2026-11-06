@@ -21,7 +21,7 @@ import type {
   SourceDocument,
   SourceElement,
 } from "#plate/document/source.ts";
-import type { BodyElement, BodyNode, Item } from "#plate/model/item.ts";
+import type { BodyElement, BodyNode, InlineChoiceInteraction, Item } from "#plate/model/item.ts";
 import type { Test } from "#plate/model/test.ts";
 import type { Redacted } from "#plate/payload.ts";
 import { redact } from "#plate/render.ts";
@@ -307,6 +307,7 @@ const outline = (nodes: readonly BodyNode[]): readonly unknown[] =>
       }
       case "choice":
       case "extended-text":
+      case "inline-choice":
       case "text-entry": {
         return node.kind;
       }
@@ -314,6 +315,21 @@ const outline = (nodes: readonly BodyNode[]): readonly unknown[] =>
         return node satisfies never;
       }
     }
+  });
+
+/**
+ * Find every Inline Choice among body nodes, in the elements they nest in too.
+ *
+ * @param nodes The nodes to search.
+ * @returns The Inline Choices, in document order.
+ */
+const inlineChoicesIn = (nodes: readonly BodyNode[]): readonly InlineChoiceInteraction[] =>
+  nodes.flatMap((node) => {
+    if (node.kind === "element") {
+      return inlineChoicesIn(node.children);
+    }
+
+    return node.kind === "inline-choice" ? [node] : [];
   });
 
 describe("check", () => {
@@ -1206,6 +1222,63 @@ describe("check, every QTI 3 root", () => {
   });
 });
 
+/**
+ * Construct an item whose paragraph holds an Inline Choice bound to `RESPONSE`: a choice `A` of
+ * text, then a choice `B` of the given content.
+ *
+ * @param content Choice `B`'s children.
+ * @returns The item.
+ */
+const inlineItem = (content: readonly SourceChild[]): SourceDocument =>
+  item([
+    response("identifier", "single"),
+    body([
+      el(
+        "p",
+        [],
+        [
+          text("Pick "),
+          el(
+            "qti-inline-choice-interaction",
+            [attr("response-identifier", "RESPONSE")],
+            [
+              el("qti-inline-choice", [attr("identifier", "A")], [text("Ant")]),
+              el("qti-inline-choice", [attr("identifier", "B")], content),
+            ],
+          ),
+        ],
+      ),
+    ]),
+  ]);
+
+/**
+ * The path of the Inline Choice {@link inlineItem} builds.
+ */
+const inlinePath = `${bodyPath}/p/qti-inline-choice-interaction`;
+
+describe("check, an Inline Choice's choice content (I8)", () => {
+  it("[Q-12] keeps the notice qti-inline-choice-interaction for a choice that holds an img, and lists it", () => {
+    const accepted = acceptedOf(
+      verdictOf(inlineItem([el("img", [attr("alt", "a bee"), attr("src", "bee.png")])])),
+      "accepted-with-unsupported",
+    );
+
+    assert.deepStrictEqual(accepted.unsupported, [
+      { feature: "qti-inline-choice-interaction", path: inlinePath, shown: "notice" },
+    ]);
+    assert.deepStrictEqual(outline(accepted.item.body), [
+      { p: ["Pick ", `notice:qti-inline-choice-interaction@${inlinePath}`] },
+    ]);
+  });
+
+  it("[Q-12] builds an Inline Choice whose choice holds an em", () => {
+    const accepted = acceptedOf(verdictOf(inlineItem([el("em", [], [text("Bee")])])), "accepted");
+
+    assert.deepStrictEqual(accepted.unsupported, []);
+    assert.deepStrictEqual(outline(accepted.item.body), [{ p: ["Pick ", "inline-choice"] }]);
+  });
+});
+
 describe("acceptForTest", () => {
   it("wraps a hand-built item with its own unsupported features", () => {
     const built: Item = {
@@ -1293,6 +1366,21 @@ describe("acceptedItem", () => {
         accepted.pipe(Option.map(({ item: built }) => built.identifier)),
         Option.some("beginnersguide007"),
       );
+    }),
+  );
+
+  it.effect("[Q-12] accepts QTI3-inline-choice.xml with one Inline Choice of three choices", () =>
+    Effect.gen(function* inlineChoiceItem() {
+      const location = "QTI3_BPIG_Examples/items/QTI3-inline-choice.xml";
+      const source = yield* readCorpusFile(location).pipe(
+        Effect.flatMap((bytes) => readSource(location, bytes)),
+      );
+      const accepted = acceptedOf(verdictOf(source), "accepted");
+      const inlineChoices = inlineChoicesIn(accepted.item.body);
+
+      assert.deepStrictEqual(accepted.unsupported, []);
+      assert.strictEqual(inlineChoices.length, 1);
+      assert.strictEqual(inlineChoices[0]?.choices.length, 3);
     }),
   );
 

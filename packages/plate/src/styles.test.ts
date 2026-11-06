@@ -14,7 +14,8 @@ import type { ClassOwner } from "#plate/vocabulary.ts";
 
 /**
  * The markers the stylesheet's rules are read against, from the part table: the item Root, the
- * Choice parts, the text Controls, the results box, the Notice and the navigation's item button.
+ * Choice parts, the text Controls, the Inline Choice's Root and Control, the results box, the
+ * Notice and the navigation's item button.
  */
 const marker = {
   choice: rowFor("choice-interaction", "choice").slot,
@@ -22,6 +23,8 @@ const marker = {
   control: rowFor("choice-interaction", "control").slot,
   extendedTextControl: rowFor("extended-text-interaction", "control").slot,
   indicator: rowFor("choice-interaction", "indicator").slot,
+  inlineChoiceControl: rowFor("inline-choice-interaction", "control").slot,
+  inlineChoiceRoot: rowFor("inline-choice-interaction", "root").slot,
   item: rowFor("item", "root").slot,
   itemButton: rowFor("test-navigation", "itemButton").slot,
   message: rowFor("item", "message").slot,
@@ -789,18 +792,22 @@ const holdsUndisabledMode = (compound: Compound, mode: string): boolean =>
   );
 
 /**
- * Find the modes in which a Choice row whose Control is disabled stays dimmed: no rule after the
- * last that dims the row (one reaching it that declares an `opacity` other than `1`) reaches the
- * row under a Choice Root in that mode, the author not having disabled it, and declares `opacity:
- * 1`.
+ * Find the modes in which a part a disabled Control dims stays dimmed: no rule after the last that
+ * dims the part (one reaching it that declares an `opacity` other than `1`) reaches the part under
+ * its Root in that mode, the author not having disabled it, and declares `opacity: 1`.
  *
  * @param sheet The scanned sheet.
+ * @param parts The Root's marker, and the marker of the part it holds: a Choice row, or the Inline
+ *   Choice Control.
  * @returns Each such mode of {@link readingModes}.
  */
-const dimmedModes = (sheet: Sheet): readonly string[] => {
+const dimmedModes = (
+  sheet: Sheet,
+  parts: { readonly part: string; readonly root: string },
+): readonly string[] => {
   const lastDim = sheet.rules.findLastIndex(
     (rule) =>
-      reaches(rule, marker.choice) &&
+      reaches(rule, parts.part) &&
       Option.exists(declared(rule, "opacity"), (value) => value !== "1"),
   );
 
@@ -809,16 +816,58 @@ const dimmedModes = (sheet: Sheet): readonly string[] => {
       !sheet.rules.some(
         (rule, index) =>
           index > lastDim &&
-          reaches(rule, marker.choice) &&
+          reaches(rule, parts.part) &&
           declares(rule, "opacity", "1") &&
           holdsAnywhere(
             rule,
-            (compound) =>
-              holdsSlot(compound, marker.choiceRoot) && holdsUndisabledMode(compound, mode),
+            (compound) => holdsSlot(compound, parts.root) && holdsUndisabledMode(compound, mode),
           ),
       ),
   );
 };
+
+/**
+ * Find the Controls no rule gives the refused look: no rule whose subject compound holds the
+ * Control's marker and `[aria-invalid="true"]` takes its `border-color` from `--destructive`.
+ *
+ * @param sheet The scanned sheet.
+ * @param slots The Controls' markers.
+ * @returns Each marker left without a refused look.
+ */
+const unrefusedControls = (sheet: Sheet, slots: readonly string[]): readonly string[] =>
+  slots.filter(
+    (slot) =>
+      !sheet.rules.some(
+        (rule) =>
+          Option.contains(tokenName(rule, "border-color"), "--destructive") &&
+          rule.selectors.some((selector) =>
+            subjectCompounds(selector).some(
+              (compound) => holdsSlot(compound, slot) && holdsInvalid(compound),
+            ),
+          ),
+      ),
+  );
+
+/**
+ * Find the rules that take a part out of sight or out of the accessibility tree: `display: none`,
+ * `visibility: hidden`, a `clip-path` or `position: absolute`, the ways the Choice Control is
+ * hidden. A native Control no rule hides is drawn by the system under forced colours.
+ *
+ * @param sheet The scanned sheet.
+ * @param slot The part's marker.
+ * @returns Each offending rule's selectors, joined by commas.
+ */
+const hidingRules = (sheet: Sheet, slot: string): readonly string[] =>
+  sheet.rules
+    .filter(
+      (rule) =>
+        reaches(rule, slot) &&
+        (declares(rule, "display", "none") ||
+          declares(rule, "visibility", "hidden") ||
+          declares(rule, "clip-path") ||
+          declares(rule, "position", "absolute")),
+    )
+    .map((rule) => rule.selectors.join(", "));
 
 /**
  * Find the Controls no rule gives a readonly look: no rule whose subject compound holds the
@@ -900,6 +949,68 @@ const unstyledClasses = (sheet: Sheet, owner: ClassOwner): readonly string[] => 
 
   return styledClasses[owner].filter((name) => !named.has(name));
 };
+
+/**
+ * Tell whether a compound is keyed on a part: it holds the part's marker, or a `:where()` or
+ * `:is()` whose argument's compounds hold it.
+ *
+ * @param compound One compound.
+ * @param slot The part's marker.
+ * @returns Whether the compound matches only that part.
+ */
+const keyedOn = (compound: Compound, slot: string): boolean =>
+  holdsSlot(compound, slot) ||
+  compound.pseudoClasses
+    .filter((pseudoClass) => pseudoClass.name === "where" || pseudoClass.name === "is")
+    .flatMap((pseudoClass) => pseudoClass.selectors)
+    .some((argument) => compounds(argument).some((inner) => holdsSlot(inner, slot)));
+
+/**
+ * Read the rules that style a class on a Root: a compound of one of their selectors holds the
+ * class and is keyed on the Root's marker.
+ *
+ * @param sheet The scanned sheet.
+ * @param name The class's name.
+ * @param root The Root's marker.
+ * @returns Each such rule.
+ */
+const rootClassRules = (sheet: Sheet, name: string, root: string): readonly StyleRule[] =>
+  sheet.rules.filter((rule) =>
+    holdsAnywhere(rule, (compound) => compound.classes.includes(name) && keyedOn(compound, root)),
+  );
+
+/**
+ * Find an owner's styled vocabulary classes that no rule styles on the owner's Root: unlike
+ * {@link unstyledClasses}, a class another owner shares, such as `qti-input-width-10`, counts only
+ * where it sits on this Root.
+ *
+ * @param sheet The scanned sheet.
+ * @param owner The classes' owner in the inventory.
+ * @param root The owner's Root marker.
+ * @returns Each styled class of the owner left without a rule on its Root.
+ */
+const unkeyedClasses = (sheet: Sheet, owner: ClassOwner, root: string): readonly string[] =>
+  styledClasses[owner].filter((name) => rootClassRules(sheet, name, root).length === 0);
+
+/**
+ * Find the vertical-writing classes an owner's Root is not set in: for each
+ * `qti-writing-orientation-<mode>` the owner holds, no rule styling it on the Root declares
+ * `writing-mode: <mode>`.
+ *
+ * @param sheet The scanned sheet.
+ * @param owner The classes' owner in the inventory.
+ * @param root The owner's Root marker.
+ * @returns Each such class.
+ */
+const unwrittenClasses = (sheet: Sheet, owner: ClassOwner, root: string): readonly string[] =>
+  styledClasses[owner]
+    .filter((name) => name.startsWith("qti-writing-orientation-"))
+    .filter(
+      (name) =>
+        !rootClassRules(sheet, name, root).some((rule) =>
+          declares(rule, "writing-mode", name.slice("qti-writing-orientation-".length)),
+        ),
+    );
 
 /**
  * Find the behaviour classes the sheet names, at any depth: their meaning needs script, which M1
@@ -1447,7 +1558,10 @@ layer(Stylesheet.layer)("styles.css", (test) => {
       Effect.gen(function* readingChoice() {
         const { sheet } = yield* Stylesheet;
 
-        assert.deepStrictEqual(dimmedModes(sheet), []);
+        assert.deepStrictEqual(
+          dimmedModes(sheet, { part: marker.choice, root: marker.choiceRoot }),
+          [],
+        );
       }),
   );
 
@@ -1634,6 +1748,107 @@ layer(Stylesheet.layer)("styles.css", (test) => {
         );
       }),
   );
+
+  test.effect(
+    "[I-19] [Q-12] names every Inline Choice styled class on the Inline Choice Root, and holds no Inline Choice behaviour class",
+    () =>
+      Effect.gen(function* inlineChoiceVocabulary() {
+        const { sheet } = yield* Stylesheet;
+
+        assert.deepStrictEqual(
+          unkeyedClasses(sheet, "inline-choice-interaction", marker.inlineChoiceRoot),
+          [],
+        );
+        assert.deepStrictEqual([...behaviourClasses["inline-choice-interaction"]], []);
+      }),
+  );
+
+  test.effect(
+    "[I-19] [Q-12] sizes the Inline Choice Control's width in ch, the number from the class name",
+    () =>
+      Effect.gen(function* inlineChoiceWidths() {
+        const { sheet } = yield* Stylesheet;
+
+        assert.deepStrictEqual(
+          unsizedClasses(sheet, {
+            owner: "inline-choice-interaction",
+            prefix: "qti-input-width-",
+            property: "min-inline-size",
+            slot: marker.inlineChoiceControl,
+            unit: "ch",
+          }),
+          [],
+        );
+      }),
+  );
+
+  test.effect(
+    "[I-19] [Q-12] sets the Inline Choice Root in vertical lines under each writing class",
+    () =>
+      Effect.gen(function* inlineChoiceWriting() {
+        const { sheet } = yield* Stylesheet;
+
+        assert.deepStrictEqual(
+          unwrittenClasses(sheet, "inline-choice-interaction", marker.inlineChoiceRoot),
+          [],
+        );
+      }),
+  );
+
+  test.effect(
+    "[Q-12] gives the Inline Choice Control a surface and text colour from the tokens",
+    () =>
+      Effect.gen(function* inlineChoiceColours() {
+        const { sheet } = yield* Stylesheet;
+
+        assert.deepStrictEqual(uncolouredControls(sheet, [marker.inlineChoiceControl]), []);
+      }),
+  );
+
+  test.effect(
+    "[Q-12] shows focus on the Inline Choice Control by the sheet's ring, and sets its outline nowhere else",
+    () =>
+      Effect.gen(function* inlineChoiceFocus() {
+        const { sheet } = yield* Stylesheet;
+
+        assert.deepStrictEqual(unfocusedControls(sheet, [marker.inlineChoiceControl]), []);
+        assert.deepStrictEqual(strayOutlines(sheet, [marker.inlineChoiceControl]), []);
+      }),
+  );
+
+  test.effect(
+    "[Q-12] dims a disabled Inline Choice Control, and shows it at full strength in review and solution unless the author disabled the Root",
+    () =>
+      Effect.gen(function* inlineChoiceStrength() {
+        const { sheet } = yield* Stylesheet;
+
+        assert.deepStrictEqual(undimmedParts(sheet, [marker.inlineChoiceControl]), []);
+        assert.deepStrictEqual(
+          dimmedModes(sheet, { part: marker.inlineChoiceControl, root: marker.inlineChoiceRoot }),
+          [],
+        );
+      }),
+  );
+
+  test.effect(
+    "[Q-12] borders an Inline Choice Control holding a refused answer in --destructive",
+    () =>
+      Effect.gen(function* inlineChoiceRefused() {
+        const { sheet } = yield* Stylesheet;
+
+        assert.deepStrictEqual(unrefusedControls(sheet, [marker.inlineChoiceControl]), []);
+      }),
+  );
+
+  test.effect(
+    "[Q-12] never hides the native Inline Choice Control, so forced colours draw it as the system's own",
+    () =>
+      Effect.gen(function* inlineChoiceForced() {
+        const { sheet } = yield* Stylesheet;
+
+        assert.deepStrictEqual(hidingRules(sheet, marker.inlineChoiceControl), []);
+      }),
+  );
 });
 
 describe("styles.css predicates, on negative controls", () => {
@@ -1724,5 +1939,26 @@ describe("styles.css predicates, on negative controls", () => {
 
       assert.deepStrictEqual(strayRefusedLooks(sheet), [bare]);
     }),
+  );
+
+  it.effect(
+    "a width class on Text Entry's Root alone leaves it unkeyed on the Inline Choice Root, and on that Root it is keyed",
+    () =>
+      Effect.gen(function* sharedClass() {
+        const width = "qti-input-width-10";
+        const textEntry = `.${width}:where([data-slot="${rowFor("text-entry-interaction", "root").slot}"])`;
+        const inlineChoice = `.${width}:where([data-slot="${marker.inlineChoiceRoot}"])`;
+        const elsewhere = yield* scanSheet(`${textEntry} {\n  min-inline-size: 10ch;\n}\n`);
+        const keyed = yield* scanSheet(`${inlineChoice} {\n  min-inline-size: 10ch;\n}\n`);
+
+        assert.include(
+          unkeyedClasses(elsewhere, "inline-choice-interaction", marker.inlineChoiceRoot),
+          width,
+        );
+        assert.notInclude(
+          unkeyedClasses(keyed, "inline-choice-interaction", marker.inlineChoiceRoot),
+          width,
+        );
+      }),
   );
 });

@@ -23,7 +23,7 @@ import { xmlnsNamespace } from "#plate/document/source.ts";
 import { writeDocument } from "#plate/document/write.ts";
 import { isXmlText } from "#plate/form/encoding.ts";
 import { interactionsIn } from "#plate/model/interactions.ts";
-import type { Item, OutcomeDeclaration, OutcomeReporting } from "#plate/model/item.ts";
+import type { Interaction, Item, OutcomeDeclaration, OutcomeReporting } from "#plate/model/item.ts";
 import { startingValue } from "#plate/model/record.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
 import { isNcName, isNull, match, nullOf } from "#plate/model/values.ts";
@@ -195,7 +195,7 @@ interface ItemReport {
   readonly outcomes: ItemRecord["outcomes"];
   readonly presented: boolean;
   /**
-   * The order each shuffled Choice was presented in, by response identifier.
+   * The order each shuffled Choice and Inline Choice was presented in, by response identifier.
    */
   readonly sequences: ReadonlyMap<string, string>;
   readonly sequenceIndex: Option.Option<number>;
@@ -687,12 +687,45 @@ const secondsBetween = (from: string, to: string): number =>
   Math.max(Math.trunc((Date.parse(to) - Date.parse(from)) / 100) / 10, 0);
 
 /**
- * Give the order each shuffled Choice of an item was presented in, as `render` presents it.
+ * Give the order a shuffled Choice or a shuffled Inline Choice was presented in, as `render`
+ * presents it ({@link choiceOrder}), and none for any other interaction: a Choice or an Inline
+ * Choice not shuffled keeps document order, and a Text Entry or an Extended Text has no choices.
+ *
+ * @param interaction The interaction.
+ * @param seed The session's seed.
+ * @param instance The item instance it was rendered under.
+ * @returns The choice identifiers, space-separated, or none.
+ */
+const choiceSequence = (
+  interaction: Interaction,
+  seed: Option.Option<number>,
+  instance: string,
+): Option.Option<string> => {
+  switch (interaction.kind) {
+    case "choice":
+    case "inline-choice": {
+      return interaction.shuffle
+        ? Option.some(choiceOrder(interaction, seed, instance).join(" "))
+        : Option.none();
+    }
+    case "extended-text":
+    case "text-entry": {
+      return Option.none();
+    }
+    default: {
+      return interaction satisfies never;
+    }
+  }
+};
+
+/**
+ * Give the order each shuffled Choice and each shuffled Inline Choice of an item was presented
+ * in, as `render` presents it.
  *
  * @param item The item.
  * @param seed The session's seed.
  * @param instance The item instance it was rendered under.
- * @returns The choice identifiers, space-separated, by the Choice's response identifier.
+ * @returns The choice identifiers, space-separated, by the interaction's response identifier.
  */
 const choiceSequences = (
   item: Item,
@@ -701,9 +734,10 @@ const choiceSequences = (
 ): ReadonlyMap<string, string> =>
   new Map(
     interactionsIn(item.body).flatMap((interaction) =>
-      interaction.kind === "choice" && interaction.shuffle
-        ? [[interaction.response, choiceOrder(interaction, seed, instance).join(" ")] as const]
-        : [],
+      Option.match(choiceSequence(interaction, seed, instance), {
+        onNone: () => [],
+        onSome: (sequence) => [[interaction.response, sequence] as const],
+      }),
     ),
   );
 
@@ -765,8 +799,8 @@ const deliveredItem = (
  * outcomes are the first processed attempt's when its effective limit is 0, since a delivery
  * engine that does not limit attempts reports only the first outcomes of a non-adaptive item, and
  * the record's otherwise: the last processed, or the starting values before any. A presented
- * shuffled Choice carries the order it was presented in, under the session's seed and the item's
- * instance `<session instance>.<sequenceIndex>`.
+ * shuffled Choice or Inline Choice carries the order it was presented in, under the session's seed
+ * and the item's instance `<session instance>.<sequenceIndex>`.
  *
  * @param test The test.
  * @param controls The session control of each of the test's item refs, by identifier, as
@@ -889,8 +923,8 @@ const testResults = (
  * item result holds the item's `itemResult`. Each item result reports the built-ins
  * `numAttempts`, `duration` (in a test) and `completionStatus`, the session status, every
  * declared response with its answered status and every declared outcome, never a correct
- * response. In a test, a presented shuffled Choice's response carries the order it was presented
- * in as `choiceSequence`.
+ * response. In a test, a presented shuffled Choice's or Inline Choice's response carries the order
+ * it was presented in as `choiceSequence`.
  *
  * @example
  *   results({ context: { sourcedId: "candidate-1" }, datestamp: new Date(), document, kind: "item", record });

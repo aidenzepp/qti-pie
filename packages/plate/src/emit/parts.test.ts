@@ -26,7 +26,10 @@ import type {
   BodyNode,
   ChoiceInteraction,
   ExtendedTextInteraction,
+  InlineChoiceInteraction,
+  Interaction,
   Item,
+  ResponseDeclaration,
   TextEntryInteraction,
 } from "#plate/model/item.ts";
 import { redactItem } from "#plate/payload.ts";
@@ -55,6 +58,16 @@ const specRows = [
   ["choice-interaction", "label", "choice-interaction-label", "label"],
   ["text-entry-interaction", "root", "text-entry-interaction", "qti-text-entry-interaction"],
   ["text-entry-interaction", "control", "text-entry-interaction-control", "input"],
+  [
+    "inline-choice-interaction",
+    "root",
+    "inline-choice-interaction",
+    "qti-inline-choice-interaction",
+  ],
+  ["inline-choice-interaction", "label", "inline-choice-interaction-label", "label"],
+  ["inline-choice-interaction", "control", "inline-choice-interaction-control", "select"],
+  ["inline-choice-interaction", "placeholder", "inline-choice-interaction-placeholder", "option"],
+  ["inline-choice-interaction", "option", "inline-choice-interaction-option", "option"],
   [
     "extended-text-interaction",
     "root",
@@ -449,6 +462,42 @@ describe("allows", () => {
     }
   });
 
+  it("[Q-12] keeps the Inline Choice Control a select, refusing a div and an input", () => {
+    const row = rowFor("inline-choice-interaction", "control");
+    assert.isTrue(allows(row, h("select", {})));
+    assert.isFalse(allows(row, h("div", {})));
+    assert.isFalse(allows(row, h("input", {})));
+  });
+
+  it("[Q-12] merges onto the Inline Choice Placeholder and each Option their value, selected, disabled and hidden", () => {
+    for (const part of ["placeholder", "option"] as const) {
+      assert.deepStrictEqual(
+        rowFor("inline-choice-interaction", part).merged,
+        ["value", "selected", "disabled", "hidden"],
+        part,
+      );
+    }
+  });
+
+  it("[Q-12] keeps the Inline Choice Placeholder and each Option an option, refusing a span", () => {
+    for (const part of ["placeholder", "option"] as const) {
+      const row = rowFor("inline-choice-interaction", part);
+      assert.isTrue(allows(row, h("option", {})), part);
+      assert.isFalse(allows(row, h("span", {})), part);
+    }
+  });
+
+  it("[Q-12] lets the Inline Choice Label be a label, a span or a custom element, never a div or a p", () => {
+    const row = rowFor("inline-choice-interaction", "label");
+    for (const tag of ["label", "span", "my-label"]) {
+      assert.isTrue(allows(row, h(tag, {})), tag);
+    }
+
+    for (const tag of ["div", "p"]) {
+      assert.isFalse(allows(row, h(tag, {})), tag);
+    }
+  });
+
   it("keeps a legend Prompt a legend, and lets a labelledby Prompt become a p or a div", () => {
     const legend = rowFor("choice-interaction", "prompt", { promptMarkup: "legend" });
     const labelled = rowFor("choice-interaction", "prompt", { promptMarkup: "labelledby" });
@@ -565,6 +614,18 @@ const instance = "merged-0";
  * and the Root state (`data-mode`, `data-disabled`).
  */
 const markerAndState: ReadonlySet<string> = new Set(["data-disabled", "data-mode", "data-slot"]);
+
+/**
+ * The names a row's `merged` column holds that its connect function never computes, by marker:
+ * the Inline Choice Option's and Placeholder's `disabled` and `hidden`, which plate owns by their
+ * absence alone.
+ */
+const ownedAbsent: ReadonlyMap<string, readonly string[]> = new Map(
+  (["option", "placeholder"] as const).map((part) => [
+    rowFor("inline-choice-interaction", part).slot,
+    ["disabled", "hidden"],
+  ]),
+);
 
 /**
  * Every state an item is rendered in. Each writes attributes the others may not, such as the text
@@ -694,16 +755,122 @@ const groupedEssay: ExtendedTextInteraction = {
 const authorNamedGroup: ExtendedTextInteraction = { ...groupedEssay, prompt: Option.none() };
 
 /**
+ * An Inline Choice whose Label gives text, which names its Control, with the author's class; the
+ * merged column posts `B`, so a choice's Option is the one selected.
+ */
+const labelledInlineChoice: InlineChoiceInteraction = {
+  ariaLabel: Option.none(),
+  ariaLabelledby: Option.none(),
+  choices: [
+    { content: [words("red")], fixed: false, identifier: "R" },
+    { content: [words("blue")], fixed: false, identifier: "B" },
+  ],
+  class: "colour",
+  kind: "inline-choice",
+  label: Option.some([words("Colour")]),
+  messages: { min: Option.none() },
+  minChoices: 0n,
+  path: "qti-assessment-item/qti-item-body/p/qti-inline-choice-interaction",
+  placeholder: Option.none(),
+  required: false,
+  response: "RESPONSE",
+  shuffle: false,
+};
+
+/**
+ * The Inline Choice with no Label and no author's name, which the renderer names; the merged column
+ * posts `Z`, which no choice has, so its Placeholder is the option selected.
+ */
+const unnamedInlineChoice: InlineChoiceInteraction = {
+  ...labelledInlineChoice,
+  label: Option.none(),
+};
+
+/**
+ * Place an interaction in the body: a Text Entry stands in a sentence beside a Notice for an
+ * inline interaction plate does not render (an End Attempt), an Inline Choice in a sentence of its
+ * own, and a Choice or an Extended Text at the body's top level.
+ *
+ * @param interaction The interaction.
+ * @returns The body node that holds it.
+ */
+const placed = (interaction: Interaction): BodyNode => {
+  switch (interaction.kind) {
+    case "text-entry": {
+      return {
+        attributes: [],
+        children: [
+          words("The year was "),
+          interaction,
+          {
+            feature: "qti-end-attempt-interaction",
+            kind: "unsupported",
+            path: "qti-assessment-item/qti-item-body/p/qti-end-attempt-interaction",
+          },
+        ],
+        kind: "element",
+        path: "qti-assessment-item/qti-item-body/p",
+        tag: "p",
+      };
+    }
+    case "inline-choice": {
+      return {
+        attributes: [],
+        children: [words("The sky is "), interaction, words(".")],
+        kind: "element",
+        path: "qti-assessment-item/qti-item-body/p",
+        tag: "p",
+      };
+    }
+    case "choice":
+    case "extended-text": {
+      return interaction;
+    }
+    default: {
+      return interaction satisfies never;
+    }
+  }
+};
+
+/**
+ * Give the binding an interaction's response declares: a Choice's is an identifier of its own
+ * cardinality, an Inline Choice's a single identifier, a Text Entry's a single value of its base
+ * type, and an Extended Text's its own base type and cardinality.
+ *
+ * @param interaction The interaction.
+ * @returns The response's base type and cardinality.
+ */
+const bindingOf = (
+  interaction: Interaction,
+): Pick<ResponseDeclaration, "baseType" | "cardinality"> => {
+  switch (interaction.kind) {
+    case "choice": {
+      return { baseType: "identifier", cardinality: interaction.cardinality };
+    }
+    case "inline-choice": {
+      return { baseType: "identifier", cardinality: "single" };
+    }
+    case "text-entry": {
+      return { baseType: interaction.baseType, cardinality: "single" };
+    }
+    case "extended-text": {
+      return { baseType: interaction.baseType, cardinality: interaction.cardinality };
+    }
+    default: {
+      return interaction satisfies never;
+    }
+  }
+};
+
+/**
  * Construct an item whose body holds a paragraph carrying the id `intro`, which the fixtures'
- * `aria-labelledby` names, then one interaction, bound to a response of its base type and
- * cardinality (a Text Entry's is single), and a Notice for an unsupported part.
+ * `aria-labelledby` names, then one interaction ({@link placed}), bound to a response of its base
+ * type and cardinality ({@link bindingOf}), and a Notice for an unsupported part.
  *
  * @param interaction The interaction.
  * @returns The item.
  */
-const itemOf = (
-  interaction: ChoiceInteraction | ExtendedTextInteraction | TextEntryInteraction,
-): Item => ({
+const itemOf = (interaction: Interaction): Item => ({
   body: [
     {
       attributes: [{ name: "id", value: "intro" }],
@@ -712,23 +879,7 @@ const itemOf = (
       path: 'qti-assessment-item/qti-item-body/p[@id="intro"]',
       tag: "p",
     },
-    interaction.kind === "text-entry"
-      ? {
-          attributes: [],
-          children: [
-            words("The year was "),
-            interaction,
-            {
-              feature: "qti-inline-choice-interaction",
-              kind: "unsupported",
-              path: "qti-assessment-item/qti-item-body/p/qti-inline-choice-interaction",
-            },
-          ],
-          kind: "element",
-          path: "qti-assessment-item/qti-item-body/p",
-          tag: "p",
-        }
-      : interaction,
+    placed(interaction),
     {
       feature: "qti-hotspot-interaction",
       kind: "unsupported",
@@ -744,9 +895,8 @@ const itemOf = (
     [
       interaction.response,
       {
+        ...bindingOf(interaction),
         areaMapping: Option.none(),
-        baseType: interaction.kind === "choice" ? "identifier" : interaction.baseType,
-        cardinality: interaction.kind === "text-entry" ? "single" : interaction.cardinality,
         correct: Option.none(),
         defaultValue: Option.none(),
         identifier: interaction.response,
@@ -803,7 +953,7 @@ const rowKey = (row: PartRow): string =>
 
 describe("the merged column", () => {
   it.effect(
-    "records, for every row render emits in answering, review and solution, the attributes its connect function computes beyond the marker and the Root state",
+    "records, for every row render emits in answering, review and solution, the attributes its connect function computes beyond the marker and the Root state, and the states it owns only by their absence",
     () =>
       Effect.gen(function* mergedColumn() {
         const configuration = yield* configure({});
@@ -817,6 +967,8 @@ describe("the merged column", () => {
           { interaction: xhtmlEssay, posted: ["A <b>day</b>."] },
           { interaction: groupedEssay, posted: ["A day.", "Another."] },
           { interaction: authorNamedGroup, posted: ["A day."] },
+          { interaction: labelledInlineChoice, posted: ["B"] },
+          { interaction: unnamedInlineChoice, posted: ["Z"] },
         ];
         const rendered = [
           ...modes.flatMap((mode) =>
@@ -840,10 +992,12 @@ describe("the merged column", () => {
             configuration,
           ),
         ];
+        const htmls = (yield* Effect.all(rendered.map((result) => Effect.fromResult(result)))).map(
+          ({ html }) => html,
+        );
         const observed = new Map<string, Set<string>>();
 
-        for (const result of rendered) {
-          const { html } = yield* Effect.fromResult(result);
+        for (const html of htmls) {
           for (const element of elementsOf(parseHtml(html))) {
             const slot = element.attrs["data-slot"];
             if (slot !== undefined && slot !== true) {
@@ -870,7 +1024,11 @@ describe("the merged column", () => {
           const names = observed.get(rowKey(row));
 
           assert.isDefined(names, `${rowKey(row)} was never rendered`);
-          assert.deepStrictEqual([...(names ?? [])].toSorted(), row.merged.toSorted(), rowKey(row));
+
+          const computed = row.merged.filter(
+            (name) => !(ownedAbsent.get(row.slot) ?? []).includes(name),
+          );
+          assert.deepStrictEqual([...(names ?? [])].toSorted(), computed.toSorted(), rowKey(row));
         }
       }),
   );

@@ -1,13 +1,19 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
 import { decodeRedacted, encodeRedacted } from "#plate/codec/redacted.ts";
-import type { InvalidRedacted, RedactedJson, RedactedSchema } from "#plate/codec/redacted.ts";
+import type {
+  InvalidRedacted,
+  RedactedJson,
+  RedactedSchema,
+  SchemaBodyNode,
+} from "#plate/codec/redacted.ts";
 import { configure } from "#plate/configuration.ts";
 import type { Configuration } from "#plate/configuration.ts";
 import type {
   BodyNode,
   ChoiceInteraction,
   ExtendedTextInteraction,
+  InlineChoiceInteraction,
   Item,
   ResponseDeclaration,
   TextEntryInteraction,
@@ -30,13 +36,11 @@ type Equals<A, B> =
   (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 
 /**
- * A body node of {@link RedactedSchema}'s type.
- */
-type SchemaBodyNode = (typeof RedactedSchema.Type)["body"][number];
-
-/**
- * A body node of the Schema is a `BodyNode` of the item model, so each is assignable to the other;
- * `tsc` refuses this line when the model gains a field or a kind the Schema lacks, or the reverse.
+ * The members of the codec's body-node union, read from the union itself, are the kinds of
+ * `BodyNode` with the same fields; `tsc` refuses this line when the model gains a field or a kind
+ * the union lacks, or the reverse. `RedactedSchema`'s body cannot serve: it holds the union through
+ * a suspended reference whose annotation declares its type `BodyNode`, so it would compare
+ * `BodyNode` with itself.
  */
 const bodyPinned: Equals<SchemaBodyNode, BodyNode> = true;
 
@@ -202,6 +206,52 @@ const stages: ExtendedTextInteraction = {
 };
 
 /**
+ * An Inline Choice with every field: an author's name both ways, a class, a Label that holds an
+ * element, a placeholder, `required`, `min-choices` 1, an authored too-few message, a fixed choice
+ * whose content holds an element, and `shuffle`.
+ */
+const colour: InlineChoiceInteraction = {
+  ariaLabel: Option.some("Colour"),
+  ariaLabelledby: Option.some("colour-hint"),
+  choices: [
+    { content: [words("red")], fixed: false, identifier: "RED" },
+    {
+      content: [
+        {
+          attributes: [],
+          children: [words("green")],
+          kind: "element",
+          path: "qti-assessment-item/qti-item-body/p/qti-inline-choice-interaction/qti-inline-choice/em",
+          tag: "em",
+        },
+      ],
+      fixed: true,
+      identifier: "GREEN",
+    },
+    { content: [words("blue")], fixed: false, identifier: "BLUE" },
+  ],
+  class: "wide",
+  kind: "inline-choice",
+  label: Option.some([
+    words("The sky's "),
+    {
+      attributes: [],
+      children: [words("colour")],
+      kind: "element",
+      path: "qti-assessment-item/qti-item-body/p/qti-inline-choice-interaction/qti-label/strong",
+      tag: "strong",
+    },
+  ]),
+  messages: { min: Option.some("Choose a colour.") },
+  minChoices: 1n,
+  path: "qti-assessment-item/qti-item-body/p/qti-inline-choice-interaction",
+  placeholder: Option.some("Pick one"),
+  required: true,
+  response: "COLOUR",
+  shuffle: true,
+};
+
+/**
  * The Choice item, with `xml:lang`.
  */
 const choiceItem = itemOf(
@@ -247,6 +297,24 @@ const stagesItem = itemOf(
   Option.none(),
   [stages],
   [declaration("STAGES", "string", "ordered")],
+);
+
+/**
+ * The Inline Choice item, inside a paragraph, with no `xml:lang`.
+ */
+const colourItem = itemOf(
+  "sky",
+  Option.none(),
+  [
+    {
+      attributes: [],
+      children: [words("The sky is "), colour, words(".")],
+      kind: "element",
+      path: "qti-assessment-item/qti-item-body/p",
+      tag: "p",
+    },
+  ],
+  [declaration("COLOUR", "identifier", "single")],
 );
 
 /**
@@ -418,6 +486,35 @@ const withFirstChoice = (content: readonly BodyNodeJson[]): RedactedJson => {
 };
 
 /**
+ * An Inline Choice in the JSON form.
+ */
+type InlineChoiceJson = Extract<BodyNodeJson, { readonly kind: "inline-choice" }>;
+
+/**
+ * The JSON form of the Inline Choice item with its Inline Choice edited.
+ *
+ * @param edit What to make of the Inline Choice inside the item's paragraph.
+ * @returns The edited JSON form.
+ */
+const withInlineChoice = (edit: (node: InlineChoiceJson) => InlineChoiceJson): RedactedJson => {
+  const json = jsonOf(colourItem);
+
+  return {
+    ...json,
+    body: json.body.map((node) =>
+      node.kind === "element"
+        ? {
+            ...node,
+            children: node.children.map((child) =>
+              child.kind === "inline-choice" ? edit(child) : child,
+            ),
+          }
+        : node,
+    ),
+  };
+};
+
+/**
  * One chain of `span`s in the JSON form, each the only child of the one around it.
  *
  * @param spans How many `span`s the chain holds.
@@ -470,6 +567,27 @@ describe("encodeRedacted and decodeRedacted", () => {
         }),
     );
   }
+
+  it.effect(
+    "[Q-12] round-trip an item whose Inline Choice carries every field through JSON text: the decoded body equals the model's, and renders the same HTML",
+    () =>
+      Effect.gen(function* inlineChoiceRoundTrip() {
+        const redacted = redact(acceptForTest(colourItem));
+        // oxlint-disable-next-line unicorn/prefer-structured-clone -- The test proves the item survives JSON text, the form a host sends; `structuredClone` would keep the bigints and Options JSON drops.
+        const handedOver: unknown = JSON.parse(
+          JSON.stringify(Result.getOrThrow(encodeRedacted(redacted))),
+        );
+        const decoded = Result.getOrThrow(decodeRedacted(handedOver));
+        const configuration = yield* defaults;
+
+        assert.deepStrictEqual(decoded.body, colourItem.body);
+        assert.deepStrictEqual(decoded, redacted);
+        assert.strictEqual(
+          Result.getOrThrow(render(decoded, configuration, { instance })).html,
+          Result.getOrThrow(render(redacted, configuration, { instance })).html,
+        );
+      }),
+  );
 
   it("write a count as its decimal digits and leave out the key of an Option that is none", () => {
     const choiceText = wireText(choiceItem);
@@ -811,6 +929,59 @@ describe("decodeRedacted on an interaction render cannot emit", () => {
           assert.include(error.issue, "text-entry");
           assert.include(error.issue, '"YEAR"');
           assert.include(error.issue, JSON.stringify(owner));
+        }),
+    );
+  }
+
+  const inlineMisplaced: readonly (readonly [string, () => RedactedJson, string])[] = [
+    [
+      "a Choice in an Inline Choice's Label",
+      () =>
+        withInlineChoice((node) => ({
+          ...node,
+          label: [elementJson("span", jsonOf(choiceItem).body)],
+        })),
+      'choice interaction for the response "RESPONSE" sits inside the Label of the inline-choice interaction for the response "COLOUR"',
+    ],
+    [
+      "a Choice in an Inline Choice's choice content",
+      () =>
+        withInlineChoice((node) => ({
+          ...node,
+          choices: node.choices.map((inline) =>
+            inline.identifier === "GREEN"
+              ? { ...inline, content: [elementJson("em", jsonOf(choiceItem).body)] }
+              : inline,
+          ),
+        })),
+      'choice interaction for the response "RESPONSE" sits inside the content of the choice "GREEN" of the inline-choice interaction for the response "COLOUR"',
+    ],
+    [
+      "an Inline Choice in a Choice's choice content",
+      () =>
+        withFirstChoice(
+          jsonOf(colourItem).body.flatMap((node) =>
+            node.kind === "element"
+              ? node.children.filter((child) => child.kind === "inline-choice")
+              : [],
+          ),
+        ),
+      'inline-choice interaction for the response "COLOUR" sits inside the content of the choice "TWO" of the choice interaction for the response "RESPONSE"',
+    ],
+  ];
+
+  for (const [place, jsonFor, issue] of inlineMisplaced) {
+    it.effect(
+      `[Q-12] refuses ${place}: InvalidRedacted at stage decode naming it and its place, so render never meets it`,
+      () =>
+        Effect.gen(function* refusesInlineMisplaced() {
+          // oxlint-disable-next-line unicorn/prefer-structured-clone -- The test proves the refusal on JSON text, the form a host sends.
+          const handedOver: unknown = JSON.parse(JSON.stringify(jsonFor()));
+          const error = yield* failureOf(decodeRedacted(handedOver));
+
+          assert.strictEqual(error._tag, "InvalidRedacted");
+          assert.strictEqual(error.stage, "decode");
+          assert.include(error.issue, issue);
         }),
     );
   }

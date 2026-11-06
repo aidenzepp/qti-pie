@@ -333,9 +333,9 @@ interface Authored {
 
 /**
  * The items the witness renders: both Choice cardinalities, prompt shapes and orientations, a Text
- * Entry inside a `p`, an Extended Text with a prompt, and an interaction phase 1 does not render.
- * Each interaction carries every class the stylesheet styles for it, and a body element every
- * body class.
+ * Entry inside a `p`, an Extended Text with a prompt, an Inline Choice with a Label and one
+ * without, and an interaction plate does not render. Each interaction carries every class the
+ * stylesheet styles for it, and a body element every body class.
  */
 const authored: readonly Authored[] = [
   {
@@ -402,6 +402,31 @@ const authored: readonly Authored[] = [
     ),
     location: "witness/text.xml",
     posted: { ESSAY: ["It spins silk.", "It spins again."], RESPONSE: ["eight"] },
+    verdict: "accepted",
+  },
+  {
+    bytes: itemBytes(
+      "witness-inline-choice",
+      `<qti-response-declaration base-type="identifier" cardinality="single" identifier="RESPONSE">
+  <qti-correct-response>
+   <qti-value>eight</qti-value>
+  </qti-correct-response>
+ </qti-response-declaration>
+ <qti-response-declaration base-type="identifier" cardinality="single" identifier="COLOUR"/>`,
+      `<p>A spider has <qti-inline-choice-interaction
+   class="${classesOf("inline-choice-interaction")}" response-identifier="RESPONSE">
+   <qti-inline-choice identifier="six">six</qti-inline-choice>
+   <qti-inline-choice identifier="eight">eight</qti-inline-choice>
+  </qti-inline-choice-interaction> legs.</p>
+  <p>A garden spider is often <qti-inline-choice-interaction data-prompt="Pick a colour"
+   response-identifier="COLOUR">
+   <qti-label>Colour</qti-label>
+   <qti-inline-choice identifier="brown">brown</qti-inline-choice>
+   <qti-inline-choice identifier="green">green</qti-inline-choice>
+  </qti-inline-choice-interaction>.</p>`,
+    ),
+    location: "witness/inline-choice.xml",
+    posted: { RESPONSE: ["ten"] },
     verdict: "accepted",
   },
   {
@@ -622,8 +647,8 @@ interface PartState {
 }
 
 /**
- * The states the sheet styles: the current item's button, a Choice Root in review and in solution,
- * and a readonly text Control.
+ * The states the sheet styles: the current item's button, a Choice Root and an Inline Choice Root
+ * in review and in solution, and a readonly text Control.
  */
 const partStates: readonly PartState[] = [
   {
@@ -639,6 +664,16 @@ const partStates: readonly PartState[] = [
   {
     name: "data-mode",
     slot: rowFor("choice-interaction", "root").slot,
+    value: Option.some("solution"),
+  },
+  {
+    name: "data-mode",
+    slot: rowFor("inline-choice-interaction", "root").slot,
+    value: Option.some("review"),
+  },
+  {
+    name: "data-mode",
+    slot: rowFor("inline-choice-interaction", "root").slot,
     value: Option.some("solution"),
   },
   {
@@ -713,19 +748,21 @@ const buttonsOf = (trees: readonly Node[]): readonly Element[] =>
   elementsOf(trees).filter((element) => element.tag === "button");
 
 describe("styles.css over emitted markup", () => {
-  it.effect("every compound of every selector names something the emitted markup holds", () =>
-    Effect.gen(function* witness() {
-      const { messages, trees } = yield* markupOf(yield* configure({}));
-      const sheet = yield* readSheet;
+  it.effect(
+    "[Q-12] every compound of every selector names something the emitted markup holds",
+    () =>
+      Effect.gen(function* witness() {
+        const { messages, trees } = yield* markupOf(yield* configure({}));
+        const sheet = yield* readSheet;
 
-      assert.isNotEmpty(messages);
-      assert.isAbove(matchable(sheet).length, 0);
-      assert.deepStrictEqual(unmatched(sheet, trees), []);
-    }),
+        assert.isNotEmpty(messages);
+        assert.isAbove(matchable(sheet).length, 0);
+        assert.deepStrictEqual(unmatched(sheet, trees), []);
+      }),
   );
 
   it.effect(
-    "reaches each state M2's markup carries: the current item, a Choice in review and solution, a readonly text Control",
+    "[Q-12] reaches each state the markup carries: the current item, a Choice and an Inline Choice in review and solution, a readonly text Control",
     () =>
       Effect.gen(function* states() {
         const { trees } = yield* markupOf(yield* configure({}));

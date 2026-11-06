@@ -3,7 +3,7 @@ import { assert, describe, it } from "@effect/vitest";
 import { Config, ConfigProvider, Data, Duration, Effect, Option } from "effect";
 import { configure } from "#plate/configuration.ts";
 import { readSource } from "#plate/document/read.ts";
-import { attr, doc, el, text, xmlNamespace } from "#plate/document/source.ts";
+import { attr, doc, el, entity, text, xmlNamespace } from "#plate/document/source.ts";
 import type {
   SourceAttribute,
   SourceChild,
@@ -20,6 +20,7 @@ import type {
   Branch,
   ChoiceInteraction,
   Expression,
+  InlineChoiceInteraction,
   Item,
   Rule,
   TextEntryInteraction,
@@ -654,6 +655,34 @@ const extendedTextItem = (
   });
 
 /**
+ * Read an item written as XML text, at `items/test.xml`.
+ *
+ * @param xml The document's text.
+ * @returns The source document, or the reader's refusal.
+ */
+const fromXml = (xml: string) => readSource("items/test.xml", new TextEncoder().encode(xml));
+
+/**
+ * Write an item whose body is one paragraph around an Inline Choice bound to a single identifier
+ * `RESPONSE`, as XML text.
+ *
+ * @param interaction The `qti-inline-choice-interaction` element, as XML text.
+ * @returns The item's text.
+ */
+const inlineChoiceXml = (interaction: string): string =>
+  [
+    '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="item" title="Item">',
+    '<qti-response-declaration base-type="identifier" cardinality="single" identifier="RESPONSE"/>',
+    `<qti-item-body><p>The sky is ${interaction}.</p></qti-item-body>`,
+    "</qti-assessment-item>",
+  ].join("");
+
+/**
+ * The path of the Inline Choice {@link inlineChoiceXml} writes.
+ */
+const inlinePath = `${body}/p/qti-inline-choice-interaction`;
+
+/**
  * Find the one Choice model among body nodes.
  *
  * @param nodes The nodes to search.
@@ -677,6 +706,31 @@ const childrenOf = (node: BodyNode | undefined): readonly BodyNode[] => {
 
   return node?.kind === "element" ? node.children : [];
 };
+
+/**
+ * Build an item from {@link inlineChoiceXml} whose Inline Choice holds a choice `A` of text and
+ * then a choice `B` of the given content.
+ *
+ * @param content Choice `B`'s content, as XML text.
+ * @returns The body node in the Inline Choice's place, and the build's unsupported features.
+ */
+const inlineChoiceWith = (content: string) =>
+  Effect.map(
+    Effect.flatMap(
+      fromXml(
+        inlineChoiceXml(
+          [
+            '<qti-inline-choice-interaction response-identifier="RESPONSE">',
+            '<qti-inline-choice identifier="A">plain</qti-inline-choice>',
+            `<qti-inline-choice identifier="B">${content}</qti-inline-choice>`,
+            "</qti-inline-choice-interaction>",
+          ].join(""),
+        ),
+      ),
+      buildItem,
+    ),
+    (built) => [childrenOf(built.body[0])[1], built.unsupported] as const,
+  );
 
 /**
  * The declarations each growth check builds first, before it builds {@link growthFactor} times as
@@ -1553,6 +1607,184 @@ describe("buildItem", () => {
       assert.deepStrictEqual(unnamed.ariaLabel, Option.none());
       assert.deepStrictEqual(unnamed.ariaLabelledby, Option.none());
     }),
+  );
+
+  it.effect(
+    '[Q-12] builds an Inline Choice from XML with every field, reading required=" true " as true',
+    () =>
+      Effect.gen(function* buildsInlineChoice() {
+        const built = yield* buildItem(
+          yield* fromXml(
+            inlineChoiceXml(
+              [
+                '<qti-inline-choice-interaction aria-label="Colour" aria-labelledby="intro"',
+                ' class="qti-input-width-10" data-min-selections-message="Pick a colour"',
+                ' data-prompt="Choose" min-choices=" 1 " required=" true "',
+                ' response-identifier="RESPONSE" shuffle=" 1 ">',
+                "<qti-label>Sky <em>colour</em></qti-label>",
+                '<qti-inline-choice identifier=" R ">red</qti-inline-choice>',
+                '<qti-inline-choice fixed=" true " identifier="B">blue</qti-inline-choice>',
+                '<qti-inline-choice fixed="0" identifier="G"><em>green</em></qti-inline-choice>',
+                "</qti-inline-choice-interaction>",
+              ].join(""),
+            ),
+          ),
+        );
+        const expected: InlineChoiceInteraction = {
+          ariaLabel: Option.some("Colour"),
+          ariaLabelledby: Option.some("intro"),
+          choices: [
+            { content: [{ kind: "text", text: "red" }], fixed: false, identifier: "R" },
+            { content: [{ kind: "text", text: "blue" }], fixed: true, identifier: "B" },
+            {
+              content: [
+                {
+                  attributes: [],
+                  children: [{ kind: "text", text: "green" }],
+                  kind: "element",
+                  path: `${inlinePath}/qti-inline-choice[3]/em`,
+                  tag: "em",
+                },
+              ],
+              fixed: false,
+              identifier: "G",
+            },
+          ],
+          class: "qti-input-width-10",
+          kind: "inline-choice",
+          label: Option.some([
+            { kind: "text", text: "Sky " },
+            {
+              attributes: [],
+              children: [{ kind: "text", text: "colour" }],
+              kind: "element",
+              path: `${inlinePath}/qti-label/em`,
+              tag: "em",
+            },
+          ]),
+          messages: { min: Option.some("Pick a colour") },
+          minChoices: 1n,
+          path: inlinePath,
+          placeholder: Option.some("Choose"),
+          required: true,
+          response: "RESPONSE",
+          shuffle: true,
+        };
+
+        assert.deepStrictEqual(childrenOf(built.body[0]), [
+          { kind: "text", text: "The sky is " },
+          expected,
+          { kind: "text", text: "." },
+        ]);
+        assert.deepStrictEqual(built.unsupported, []);
+      }),
+  );
+
+  it.effect(
+    "[Q-12] builds an Inline Choice with only its required attributes at the defaults",
+    () =>
+      Effect.gen(function* inlineChoiceDefaults() {
+        const built = yield* buildItem(
+          yield* fromXml(
+            inlineChoiceXml(
+              [
+                '<qti-inline-choice-interaction response-identifier="RESPONSE">',
+                '<qti-inline-choice identifier="R">red</qti-inline-choice>',
+                "</qti-inline-choice-interaction>",
+              ].join(""),
+            ),
+          ),
+        );
+        const expected: InlineChoiceInteraction = {
+          ariaLabel: Option.none(),
+          ariaLabelledby: Option.none(),
+          choices: [{ content: [{ kind: "text", text: "red" }], fixed: false, identifier: "R" }],
+          class: "",
+          kind: "inline-choice",
+          label: Option.none(),
+          messages: { min: Option.none() },
+          minChoices: 0n,
+          path: inlinePath,
+          placeholder: Option.none(),
+          required: false,
+          response: "RESPONSE",
+          shuffle: false,
+        };
+
+        assert.deepStrictEqual(childrenOf(built.body[0])[1], expected);
+        assert.deepStrictEqual(built.unsupported, []);
+      }),
+  );
+
+  it.effect(
+    "[Q-12] shows an Inline Choice as its notice when a choice holds what a native option cannot show, and builds one of text-safe elements",
+    () =>
+      Effect.gen(function* textSafeChoices() {
+        const shown = [
+          '<img alt="a" src="a.png"/>',
+          "line<br/>break",
+          "H<sub>2</sub>O",
+          "<em>x<sup>2</sup></em>",
+          '<span><a href="a.html">link</a></span>',
+        ];
+        for (const content of shown) {
+          const [node, unsupported] = yield* inlineChoiceWith(content);
+
+          assert.deepStrictEqual(
+            node,
+            { feature: "qti-inline-choice-interaction", kind: "unsupported", path: inlinePath },
+            content,
+          );
+          assert.deepStrictEqual(
+            unsupported,
+            [{ feature: "qti-inline-choice-interaction", path: inlinePath, shown: "notice" }],
+            content,
+          );
+        }
+
+        const built = [
+          "<em>emphasis</em>",
+          "<span><strong>bold</strong> and <b>b</b></span>",
+          '<abbr title="water">H2O</abbr> <code>c</code> <kbd>k</kbd> <bdi>b</bdi>',
+        ];
+        for (const content of built) {
+          const [node, unsupported] = yield* inlineChoiceWith(content);
+
+          assert.strictEqual(node?.kind, "inline-choice", content);
+          assert.deepStrictEqual(unsupported, [], content);
+        }
+
+        const withEntity = yield* buildItem(
+          item({
+            body: [
+              el(
+                "p",
+                [],
+                [
+                  el(
+                    "qti-inline-choice-interaction",
+                    [attr("response-identifier", "RESPONSE")],
+                    [
+                      el(
+                        "qti-inline-choice",
+                        [attr("identifier", "A")],
+                        [text("a"), entity("nbsp"), text("b")],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+            declarations: [
+              declaration("qti-response-declaration", "RESPONSE", "identifier", "single"),
+            ],
+          }),
+        );
+
+        assert.deepStrictEqual(withEntity.unsupported, [
+          { feature: "qti-inline-choice-interaction", path: inlinePath, shown: "notice" },
+        ]);
+      }),
   );
 
   it.effect("[Q-20] builds a Text Entry with its attributes and base 10 by default", () =>

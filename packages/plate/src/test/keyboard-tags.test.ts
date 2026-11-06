@@ -35,6 +35,15 @@ const walks: ReadonlyMap<string, readonly string[]> = new Map([
     ],
   ],
   [
+    "src/dev/keyboard-inline-choice.browser.test.ts",
+    [
+      "[Q-12] [keyboard] Tab order: QTI3-inline-choice.xml's item form, from its first control to its Submit, is the Node walk's tabOrder",
+      "[Q-12] [keyboard] QTI3-inline-choice.xml answered by keys: Tab to the select, type Y, Tab to Submit and Enter choose York and score 1",
+      "[Q-12] [keyboard] Tab order: inline.xml's item form, from its first control to its Submit, is the Node walk's tabOrder",
+      '[Q-12] [keyboard] inline.xml answered by keys: Submit with nothing chosen shows "Pick a planet first." in the Status region and keeps the shuffled order, "None of these" last; then J typed and Submit record Jupiter, scoring 1, with RESPONSE2 left NULL',
+    ],
+  ],
+  [
     "src/dev/keyboard-text.browser.test.ts",
     [
       "${tag} [keyboard] Tab order: ${label}'s item form, from its first control to its Submit, is the Node walk's tabOrder",
@@ -84,6 +93,14 @@ const walks: ReadonlyMap<string, readonly string[]> = new Map([
       '[Q-5] [keyboard] presents format="xhtml" as a plain textarea marked data-format="xhtml", whose typed markup posts as text',
       "[Q-5] [keyboard] a walk that fills two of the three Controls posts an ordered value of two, which restores in order",
       '[Q-5] [keyboard] builds an Extended Text whose pattern-mask="[0-9" the translator refuses beside a Choice as a notice in its place, and a walk still posts the Choice',
+    ],
+  ],
+  [
+    "src/interactions/inline-choice.witness.test.ts",
+    [
+      "[Q-12] [I-9b] [keyboard] QTI3-inline-choice.xml by keyboard: Tab, type Y, Tab and Enter choose York and score 1, Lancaster 0, and no choice posts the Placeholder and scores 0",
+      "[Q-12] [keyboard] multi-input.xml's shuffled Inline Choice keeps choiceOrder's order, its fixed choice first, across a refused post with one instance and seed, and Marion typed on the refused page posts A2",
+      "[Q-12] [keyboard] a host Option replacement that selects C, with nothing restored, leaves the Placeholder selected: Tab then Enter posts its empty value, not C, and the record holds no response",
     ],
   ],
   [

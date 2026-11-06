@@ -198,18 +198,20 @@ const connect = (
 };
 
 /**
- * Write every `label` element in a node of a choice's emitted content, at any depth, as a `span`
- * with the same children and the same attributes, `for` dropped.
+ * Write every `label` element in a node of emitted content that sits inside a Label part, at any
+ * depth, as a `span` with the same children and the same attributes, `for` dropped.
  *
  * A `label` never nests a `label`. The XSD admits `label` in `qti-simple-choice`, and a
  * choice's content sits inside its Label part, a `label` by default, which already labels the
- * choice's Control; so an authored `label` there is written as a `span`, and loses `for`, which is
- * not an attribute of `span`. A subtree that holds no `label` is kept by identity.
+ * choice's Control; an Inline Choice's Label content sits inside its Label part, a `label` by
+ * default, the same way. So an authored `label` there is written as a `span`, and loses `for`,
+ * which is not an attribute of `span`. A subtree that holds no `label` is kept by identity.
  *
- * @param node A node of the choice's content as {@link emitNodes} gave it.
+ * @param node A node of a choice's content or of an Inline Choice's Label content, as
+ *   {@link emitNodes} gave it.
  * @returns The node with no `label` element at or below it.
  */
-const labelAsSpan = (node: Node): Node => {
+export const labelAsSpan = (node: Node): Node => {
   if (node.kind === "text") {
     return node;
   }

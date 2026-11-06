@@ -10,9 +10,11 @@ import type {
   BodyNode,
   ChoiceInteraction,
   ExtendedTextInteraction,
+  InlineChoiceInteraction,
   Mapping,
   MapEntry,
   ResponseDeclaration,
+  SimpleChoice,
   TextEntryInteraction,
 } from "#plate/model/item.ts";
 import { outcomeDefaults } from "#plate/model/record.ts";
@@ -70,7 +72,11 @@ type Numeric = Extract<Single, { readonly baseType: "float" | "integer" }>;
 /**
  * An interaction a response can be bound to that renders.
  */
-type Bound = ChoiceInteraction | ExtendedTextInteraction | TextEntryInteraction;
+type Bound =
+  | ChoiceInteraction
+  | ExtendedTextInteraction
+  | InlineChoiceInteraction
+  | TextEntryInteraction;
 
 /**
  * An item the sweep scores: an accepted item whose processing runs by a built-in template and
@@ -146,6 +152,7 @@ const interactionsOf = (nodes: readonly BodyNode[]): readonly Bound[] =>
       }
       case "choice":
       case "extended-text":
+      case "inline-choice":
       case "text-entry": {
         return [node];
       }
@@ -308,10 +315,20 @@ const clamped = (mapping: Mapping, sum: number): number =>
   );
 
 /**
+ * Give the value a mapping maps each of an interaction's choices to, in their order.
+ *
+ * @param mapping The response's mapping.
+ * @param choices The choices.
+ * @returns Each choice's mapped value.
+ */
+const choiceValues = (mapping: Mapping, choices: readonly SimpleChoice[]): readonly number[] =>
+  choices.map((choice) => mappedOf(mapping, { baseType: "identifier", value: choice.identifier }));
+
+/**
  * Give the largest score a mapping gives a response the interaction admits (Q17): for a single
- * Choice, its choices' largest mapped value; for a multiple Choice, the sum of its choices' largest
- * positive mapped values, as many as `max-choices` allows; for a single text response, the largest
- * mapped value or the default. The bounds then clamp it.
+ * Choice or an Inline Choice, its choices' largest mapped value; for a multiple Choice, the sum of
+ * its choices' largest positive mapped values, as many as `max-choices` allows; for a single text
+ * response, the largest mapped value or the default. The bounds then clamp it.
  *
  * @param mapping The response's mapping.
  * @param scored The item, with its response's declaration and interaction.
@@ -319,33 +336,43 @@ const clamped = (mapping: Mapping, sum: number): number =>
  */
 const mappingMaximum = (mapping: Mapping, scored: Scored): Result.Result<number, string> => {
   const { declaration, interaction } = scored;
-  if (interaction.kind !== "choice") {
-    return declaration.cardinality === "single"
-      ? Result.succeed(
-          clamped(
-            mapping,
-            Math.max(mapping.defaultValue, ...mapping.entries.map((entry) => entry.value)),
-          ),
-        )
-      : Result.fail(`the sweep gives no maximum for a ${declaration.cardinality} text response`);
-  }
+  switch (interaction.kind) {
+    case "choice": {
+      const values = choiceValues(mapping, interaction.choices);
+      if (interaction.cardinality === "single") {
+        return Result.succeed(clamped(mapping, Math.max(...values)));
+      }
 
-  const values = interaction.choices.map((choice) =>
-    mappedOf(mapping, { baseType: "identifier", value: choice.identifier }),
-  );
-  if (interaction.cardinality === "single") {
-    return Result.succeed(clamped(mapping, Math.max(...values)));
-  }
+      const positive = values.filter((value) => value > 0).toSorted((left, right) => right - left);
+      const taken =
+        interaction.maxChoices > 0n ? positive.slice(0, Number(interaction.maxChoices)) : positive;
+      let sum = 0;
+      for (const value of taken) {
+        sum += value;
+      }
 
-  const positive = values.filter((value) => value > 0).toSorted((left, right) => right - left);
-  const taken =
-    interaction.maxChoices > 0n ? positive.slice(0, Number(interaction.maxChoices)) : positive;
-  let sum = 0;
-  for (const value of taken) {
-    sum += value;
+      return Result.succeed(clamped(mapping, sum));
+    }
+    case "inline-choice": {
+      return Result.succeed(
+        clamped(mapping, Math.max(...choiceValues(mapping, interaction.choices))),
+      );
+    }
+    case "extended-text":
+    case "text-entry": {
+      return declaration.cardinality === "single"
+        ? Result.succeed(
+            clamped(
+              mapping,
+              Math.max(mapping.defaultValue, ...mapping.entries.map((entry) => entry.value)),
+            ),
+          )
+        : Result.fail(`the sweep gives no maximum for a ${declaration.cardinality} text response`);
+    }
+    default: {
+      return interaction satisfies never;
+    }
   }
-
-  return Result.succeed(clamped(mapping, sum));
 };
 
 /**
@@ -468,45 +495,49 @@ const textCandidate = (baseType: TextEntryInteraction["baseType"], index: number
 };
 
 /**
- * Construct a wrong response (Q17): a presented choice outside the correct response for a single
- * Choice; the correct set with its last choice swapped for one outside it for a multiple Choice;
- * for text, a value no key and no correct value equals. A choice brought in matches at most one
- * map key.
+ * Give a presented choice outside the correct response that matches at most one map key.
  *
- * @param scored The item.
+ * @param scored The item, with its correct response and declaration.
+ * @param choices The interaction's choices.
+ * @returns The choice's identifier, or why none qualifies.
+ */
+const outsideChoice = (
+  scored: Scored,
+  choices: readonly SimpleChoice[],
+): Result.Result<Single, string> => {
+  const { correct, declaration } = scored;
+  const outside = choices
+    .map((choice): Single => ({ baseType: "identifier", value: choice.identifier }))
+    .find(
+      (single) =>
+        !correct.values.some((value) => sameSingle(value, single)) &&
+        untied(declaration.mapping, single),
+    );
+
+  return outside === undefined
+    ? Result.fail("every presented choice is in the correct response or ties map keys")
+    : Result.succeed(outside);
+};
+
+/**
+ * Construct a wrong text response: a value no key and no correct value equals.
+ *
+ * @param scored The item, with its correct response and declaration.
+ * @param baseType The text response's base type.
  * @returns The wrong response, or why none can be constructed.
  */
-const wrongOf = (scored: Scored): Result.Result<Value, string> => {
-  const { correct, declaration, interaction } = scored;
-  if (interaction.kind === "choice") {
-    const outside = interaction.choices
-      .map((choice): Single => ({ baseType: "identifier", value: choice.identifier }))
-      .find(
-        (single) =>
-          !correct.values.some((value) => sameSingle(value, single)) &&
-          untied(declaration.mapping, single),
-      );
-    if (outside === undefined) {
-      return Result.fail("every presented choice is in the correct response or ties map keys");
-    }
-
-    return Result.succeed(
-      valueOf(
-        declaration,
-        interaction.cardinality === "single"
-          ? [outside]
-          : [...correct.values.slice(0, -1), outside],
-      ),
-    );
-  }
-
+const wrongText = (
+  scored: Scored,
+  baseType: TextEntryInteraction["baseType"],
+): Result.Result<Value, string> => {
+  const { correct, declaration } = scored;
   const keys = Option.match(declaration.mapping, {
     onNone: () => [],
     onSome: ({ entries }) => entries.map((entry) => entry.key),
   });
   const taken = [...keys, ...correct.values];
   for (let index = 0; index <= taken.length; index += 1) {
-    const candidate = textCandidate(interaction.baseType, index);
+    const candidate = textCandidate(baseType, index);
     if (
       !taken.some((value) =>
         value.baseType === "string" && candidate.baseType === "string"
@@ -519,6 +550,43 @@ const wrongOf = (scored: Scored): Result.Result<Value, string> => {
   }
 
   return Result.fail("every candidate text value equals a key or a correct value");
+};
+
+/**
+ * Construct a wrong response (Q17): a presented choice outside the correct response for a single
+ * Choice or an Inline Choice; the correct set with its last choice swapped for one outside it for
+ * a multiple Choice; for text, a value no key and no correct value equals. A choice brought in
+ * matches at most one map key.
+ *
+ * @param scored The item.
+ * @returns The wrong response, or why none can be constructed.
+ */
+const wrongOf = (scored: Scored): Result.Result<Value, string> => {
+  const { correct, declaration, interaction } = scored;
+  switch (interaction.kind) {
+    case "choice": {
+      return Result.map(outsideChoice(scored, interaction.choices), (outside) =>
+        valueOf(
+          declaration,
+          interaction.cardinality === "single"
+            ? [outside]
+            : [...correct.values.slice(0, -1), outside],
+        ),
+      );
+    }
+    case "inline-choice": {
+      return Result.map(outsideChoice(scored, interaction.choices), (outside) =>
+        valueOf(declaration, [outside]),
+      );
+    }
+    case "extended-text":
+    case "text-entry": {
+      return wrongText(scored, interaction.baseType);
+    }
+    default: {
+      return interaction satisfies never;
+    }
+  }
 };
 
 /**
@@ -668,6 +736,37 @@ describe("the scoring sweep over the corpus", () => {
           }),
         );
 
+        assert.deepStrictEqual(problems, []);
+      }),
+    sweepTimeoutMs,
+  );
+
+  it.effect(
+    "[Q-12] each item a built-in template scores through an Inline Choice scores its correct response at the maximum and a wrong one below it",
+    () =>
+      Effect.gen(function* inlineChoiceScores() {
+        const items = (yield* scoredItems).filter(
+          (scored) => scored.interaction.kind === "inline-choice",
+        );
+        const problems = sweepProblems(items, (scored) =>
+          Result.gen(function* inlineChoiceScore() {
+            const maximum = yield* maximumOf(scored);
+            const right = yield* scoreOf(scored, { [response]: scored.correct });
+            const wrong = yield* wrongOf(scored);
+            const below = yield* scoreOf(scored, { [response]: wrong });
+
+            return compare(right, maximum) === 0 && compare(below, maximum) === -1
+              ? Option.none()
+              : Option.some(
+                  `the correct response scores ${right.value} and the wrong one ${below.value}, the maximum is ${maximum.value}`,
+                );
+          }),
+        );
+
+        assert.isNotEmpty(
+          items,
+          "no corpus item a built-in template scores binds its response to an Inline Choice",
+        );
         assert.deepStrictEqual(problems, []);
       }),
     sweepTimeoutMs,

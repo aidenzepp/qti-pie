@@ -42,12 +42,12 @@ interface Requirement {
 }
 
 /**
- * The binding each phase-1 interaction's information-model class requires, quoted from QTI 3.0's
- * information model.
+ * The binding each interaction plate renders requires, by its information-model class, quoted from
+ * QTI 3.0's information model.
  *
- * This is what QTI allows, not what phase 1 renders: a Text Entry bound to `record` or an Extended
+ * This is what QTI allows, not what plate renders: a Text Entry bound to `record` or an Extended
  * Text bound to `multiple` is valid and becomes a notice (`renders` in the vocabulary), so it is
- * not refused here. Other interactions' bindings are not checked in phase 1.
+ * not refused here. Other interactions' bindings are not checked.
  */
 const requirements = {
   // "The qti-choice-interaction must be bound to a response variable with a base-type of identifier
@@ -62,6 +62,12 @@ const requirements = {
   "qti-extended-text-interaction": {
     baseTypes: ["string", "integer", "float"],
     cardinalities: ["single", "multiple", "ordered", "record"],
+  },
+  // "The qti-inline-choice-interaction must be bound to a response variable with a base-type of
+  // identifier and single cardinality only." (info.txt:8818)
+  "qti-inline-choice-interaction": {
+    baseTypes: ["identifier"],
+    cardinalities: ["single"],
   },
   // "The qti-text-entry-interaction must be bound to a response variable with either single or
   // record cardinality only. For single cardinality the base-type must be one of string, integer or
@@ -132,12 +138,13 @@ const isInteraction = (element: SourceElement): boolean =>
   isQti(element, (local) => local.startsWith("qti-") && local.endsWith("-interaction"));
 
 /**
- * Find which phase-1 interaction an element is, the three whose binding these rules check.
+ * Find which of the interactions plate renders an element is, the ones whose binding these rules
+ * check (`interactionNames` in the vocabulary).
  *
  * @param element The element.
  * @returns Its QTI name, or none for any other element.
  */
-const phaseOneInteraction = (element: SourceElement): Option.Option<InteractionName> =>
+const renderedInteraction = (element: SourceElement): Option.Option<InteractionName> =>
   element.namespace === qtiNamespace
     ? Arr.findFirst(interactionNames, (name) => name === element.local)
     : Option.none();
@@ -210,13 +217,26 @@ const refusal = (
   });
 
 /**
+ * The choice elements whose `identifier` is unique within their interaction: each choice's local
+ * name, with the local name of the interaction that scopes it.
+ *
+ * A `qti-simple-choice` is scoped only inside a Choice. In any other interaction that holds one,
+ * such as an Order, these rules do not judge its identifier.
+ */
+const choiceScopes: ReadonlyMap<string, string> = new Map([
+  ["qti-inline-choice", "qti-inline-choice-interaction"],
+  ["qti-simple-choice", "qti-choice-interaction"],
+]);
+
+/**
  * Find the scope in which an element's `identifier` must be unique, if it has one.
  *
  * The item's declarations share one scope, the root: "All item variables declared in an item share
  * the same namespace" (info.txt:12006). A Choice's simple choices share another, the interaction:
- * the identifier of a simple choice "must not be used by any other choice" (info.txt:42411). The
- * same sentence goes on to forbid a choice identifier equal to an item variable's, which this
- * phase does not refuse.
+ * the identifier of a simple choice "must not be used by any other choice" (info.txt:42411). An
+ * Inline Choice's inline choices share theirs the same way: "This identifier must not be used by
+ * any other choice or item variable." (info.txt:31918, InlineChoice 5.73.1). Both sentences also
+ * forbid a choice identifier equal to an item variable's, which these rules do not refuse.
  *
  * @param source The document.
  * @param visit The element's visit.
@@ -227,8 +247,8 @@ const uniquenessScope = (source: SourceDocument, visit: Visit): Option.Option<So
     Option.filter(
       (parent) =>
         (parent === source.root && isDeclaration(visit.element)) ||
-        (isQti(parent, (local) => local === "qti-choice-interaction") &&
-          isQti(visit.element, (local) => local === "qti-simple-choice")),
+        (isQti(visit.element, (local) => choiceScopes.has(local)) &&
+          isQti(parent, (local) => local === choiceScopes.get(visit.element.local))),
     ),
   );
 
@@ -270,7 +290,7 @@ const duplicateIdentifier = (
 };
 
 /**
- * Apply `binding` and reading 19 to a phase-1 interaction and the declaration it names.
+ * Apply `binding` and reading 19 to an interaction plate renders and the declaration it names.
  *
  * `binding` reads the declaration the interaction's `response-identifier` names, never any other
  * declaration in the document: QTI's Schematron runs some base-type tests against every
@@ -285,7 +305,7 @@ const duplicateIdentifier = (
  *
  * @param source The document.
  * @param visit The interaction's visit.
- * @param name Which phase-1 interaction it is.
+ * @param name Which of the interactions plate renders it is.
  * @param response The response identifier it names.
  * @param declaration The declaration of that identifier.
  * @returns The refusals `binding` and reading 19 give, empty when the binding holds.
@@ -375,7 +395,7 @@ const responseRules = (
     ];
   }
 
-  return Option.match(phaseOneInteraction(visit.element), {
+  return Option.match(renderedInteraction(visit.element), {
     onNone: () => [],
     onSome: (name) => bindingRules(source, visit, name, response, declaration),
   });

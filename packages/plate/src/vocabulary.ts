@@ -1,9 +1,9 @@
 /**
- * The closed value sets: the QTI vocabulary phase 1 models, renders and reads, and the test,
+ * The closed value sets: the QTI vocabulary plate models, renders and reads, and the test,
  * package and session vocabulary M2's validators and engine read, as data.
  *
  * Every set is closed: a value outside it is unsupported or invalid, never guessed at. The model
- * builder, the verdict and the emitter read these lists, so what phase 1 renders is decided once.
+ * builder, the verdict and the emitter read these lists, so what plate renders is decided once.
  *
  * The emitter consults no vocabulary class: what an element does comes from its QTI name,
  * attributes and binding alone. {@link styledClasses} lists the classes `styles.css` presents, and
@@ -63,17 +63,18 @@ export const areaShapes = ["circle", "default", "ellipse", "poly", "rect"] as co
 export type AreaShape = (typeof areaShapes)[number];
 
 /**
- * The QTI names of the three interactions M1 renders: Choice (Q-2), Text Entry (Q-20) and Extended
- * Text (Q-5).
+ * The QTI names of the four interactions plate renders: Choice (Q-2), Text Entry (Q-20), Extended
+ * Text (Q-5) and Inline Choice (Q-12).
  */
 export const interactionNames = [
   "qti-choice-interaction",
   "qti-text-entry-interaction",
   "qti-extended-text-interaction",
+  "qti-inline-choice-interaction",
 ] as const;
 
 /**
- * An interaction M1 renders, by its QTI name.
+ * An interaction plate renders, by its QTI name.
  */
 export type InteractionName = (typeof interactionNames)[number];
 
@@ -82,6 +83,32 @@ export type InteractionName = (typeof interactionNames)[number];
  * their unsupported features.
  */
 const textInteractions = ["qti-text-entry-interaction", "qti-extended-text-interaction"] as const;
+
+/**
+ * The elements a native `option` can stand for by their text alone (spec §4.6): an Inline Choice
+ * whose choices hold only text and these, in the QTI namespace, renders as a `select`. Any other
+ * element, such as an `img`, a `br`, a `sub` or MathML, or an entity reference, is content an
+ * `option`, which holds only text, cannot show.
+ */
+const textSafeElements = [
+  "span",
+  "em",
+  "strong",
+  "b",
+  "i",
+  "code",
+  "kbd",
+  "samp",
+  "var",
+  "small",
+  "big",
+  "tt",
+  "cite",
+  "dfn",
+  "abbr",
+  "acronym",
+  "bdi",
+] as const;
 
 /**
  * The declarations whose `base-type` and `cardinality` the model reads.
@@ -142,6 +169,9 @@ export interface FormattedBindingRule extends BindingRule {
  * - `cardinality`: the response declaration the interaction binds has this cardinality.
  * - `integer-above`: the element's attribute `name`, its outer whitespace gone, reads as an integer
  *   greater than `limit`. A value that is not an integer never is.
+ * - `not-text-safe`: some descendant of one of the element's `qti-inline-choice` children is neither
+ *   text nor a QTI-namespace element named in `elements`; an entity reference is neither. A native
+ *   `option` holds only text, so it cannot show that choice.
  * - `refused-pattern`: the element carries the attribute `name`, and the translator refuses its value
  *   as an XML Schema regular expression (`translate` in `#plate/model/regex.ts`), so the pattern
  *   cannot be checked.
@@ -156,12 +186,13 @@ export type Condition =
   | { readonly kind: "attribute-true"; readonly name: string }
   | { readonly cardinality: Cardinality; readonly kind: "cardinality" }
   | { readonly kind: "integer-above"; readonly limit: bigint; readonly name: string }
+  | { readonly elements: readonly string[]; readonly kind: "not-text-safe" }
   | { readonly kind: "refused-pattern"; readonly name: string }
   | { readonly kind: "template"; readonly name: TemplateName }
   | { readonly kind: "untyped" };
 
 /**
- * The rule that finds a feature phase 1 does not render: the key the verdict and its notice name
+ * The rule that finds a feature plate does not render: the key the verdict and its notice name
  * the feature by, the elements that can carry it, and the condition under which one does.
  *
  * `on` names the elements that can carry it by their QTI local name, or is `body` for every element
@@ -174,15 +205,16 @@ export interface FeatureRule {
 }
 
 /**
- * The phase-1 "renders" set, which the model builder, the verdict and the emitter read.
+ * The "renders" set, which the model builder, the verdict and the emitter read.
  */
 export interface Renders {
   /**
-   * The interactions phase 1 renders, each with the binding it renders with.
+   * The interactions plate renders, each with the binding it renders with.
    */
   readonly bindings: {
     readonly "qti-choice-interaction": BindingRule;
     readonly "qti-extended-text-interaction": FormattedBindingRule;
+    readonly "qti-inline-choice-interaction": BindingRule;
     readonly "qti-text-entry-interaction": BindingRule;
   };
   /**
@@ -192,12 +224,12 @@ export interface Renders {
    */
   readonly controlNotices: readonly FeatureRule[];
   /**
-   * The `qti-*` elements phase 1 renders or reads, the engine's included. Every element in the QTI
+   * The `qti-*` elements plate renders or reads, the engine's included. Every element in the QTI
    * namespace without the `qti-` prefix is HTML and renders as itself.
    */
   readonly elements: readonly string[];
   /**
-   * The response-processing elements phase 1 evaluates.
+   * The response-processing elements the engine evaluates.
    */
   readonly engine: readonly string[];
   /**
@@ -219,7 +251,7 @@ export interface Renders {
 }
 
 /**
- * What phase 1 renders, reads, shows a notice for and marks, as data.
+ * What plate renders, reads, shows a notice for and marks, as data.
  *
  * The emitter and the model builder read the same lists, so an element is rendered exactly when
  * the verdict does not name it unsupported.
@@ -234,6 +266,10 @@ export const renders = {
       baseTypes: ["string", "integer", "float"],
       cardinalities: ["single", "multiple", "ordered"],
       formats: ["plain", "preformatted", "xhtml"],
+    },
+    "qti-inline-choice-interaction": {
+      baseTypes: ["identifier"],
+      cardinalities: ["single"],
     },
     "qti-text-entry-interaction": {
       baseTypes: ["string", "integer", "float"],
@@ -257,6 +293,8 @@ export const renders = {
     ...interactionNames,
     "qti-prompt",
     "qti-simple-choice",
+    "qti-inline-choice",
+    "qti-label",
     ...engine,
   ],
   engine,
@@ -319,6 +357,13 @@ export const renders = {
       feature: 'cardinality="record"',
       on: textInteractions,
       when: { cardinality: "record", kind: "cardinality" },
+    },
+    // An Inline Choice with a choice a native option cannot show is shown whole as this notice
+    // (I8); nothing is refused for it.
+    {
+      feature: "qti-inline-choice-interaction",
+      on: ["qti-inline-choice-interaction"],
+      when: { elements: textSafeElements, kind: "not-text-safe" },
     },
   ],
 } as const satisfies Renders;
@@ -393,18 +438,20 @@ export const templateName = (uri: string): Option.Option<TemplateName> => {
 };
 
 /**
- * The owners of the QTI shared vocabulary classes M1 knows (I-19): the three interactions it
+ * The owners of the QTI shared vocabulary classes plate knows (I-19): the four interactions it
  * renders, and the item body, which carries the general utility classes.
  */
 export type ClassOwner =
   | "choice-interaction"
   | "text-entry-interaction"
   | "extended-text-interaction"
+  | "inline-choice-interaction"
   | "body";
 
 /**
  * The two vertical-writing classes, which each interaction owner holds (`vocab.txt:4802-4840` for
- * Choice, `:4961` for Text Entry, `:5171` for Extended Text).
+ * Choice, `:4961` for Text Entry, `:5171` for Extended Text, `:5818-5822` for Inline Choice, whose
+ * section names only `-rl` and which holds `-lr` as every interaction owner does).
  */
 const writingClasses = [
   "qti-writing-orientation-vertical-rl",
@@ -412,7 +459,7 @@ const writingClasses = [
 ] as const;
 
 /**
- * The vocabulary classes M1's stylesheet gives a presentation, by owner.
+ * The vocabulary classes plate's stylesheet gives a presentation, by owner.
  *
  * The inventory is closed: a `qti-*` class outside it has no rule. It holds no alias for the
  * corpus misspelling `qti-label-suffix-period`, and not `qti-keyword-emphasis` (M4). The rest of
@@ -467,6 +514,30 @@ export const styledClasses: Readonly<Record<ClassOwner, readonly string[]>> = {
     ...writingClasses,
   ],
   /**
+   * Inline Choice's selection widths and vertical writing: the summary table,
+   * `vocab.txt:4110-4141`, with section 1.2.7.1, `:5711`, and section 1.2.7.3, `:5818`. Each
+   * width's number is its class name's; section 1.2.7.1's line for `qti-input-width-35` says 40
+   * characters, a typo.
+   */
+  "inline-choice-interaction": [
+    "qti-input-width-1",
+    "qti-input-width-2",
+    "qti-input-width-3",
+    "qti-input-width-4",
+    "qti-input-width-6",
+    "qti-input-width-10",
+    "qti-input-width-15",
+    "qti-input-width-20",
+    "qti-input-width-25",
+    "qti-input-width-30",
+    "qti-input-width-35",
+    "qti-input-width-40",
+    "qti-input-width-45",
+    "qti-input-width-50",
+    "qti-input-width-72",
+    ...writingClasses,
+  ],
+  /**
    * Text Entry's input widths and vertical writing: the summary table, `vocab.txt:4063-4095`, with
    * section 1.2.2.1, `:4847`, and section 1.2.2.3, `:4961`.
    */
@@ -508,6 +579,10 @@ export const behaviourClasses: Readonly<Record<ClassOwner, readonly string[]>> =
    * 1.2.3.2.
    */
   "extended-text-interaction": ["qti-counter-up", "qti-counter-down"],
+  /**
+   * None: Inline Choice's vocabulary is all presentational.
+   */
+  "inline-choice-interaction": [],
   /**
    * None: Text Entry's vocabulary is all presentational.
    */

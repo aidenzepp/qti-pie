@@ -143,7 +143,8 @@ describe("the walk corpus", () => {
       Effect.gen(function* acceptsEveryProbe() {
         const walk = yield* written;
 
-        assert.isAbove(walk.items.length, 3);
+        assert.include(walk.items, "inline.xml");
+        assert.isAbove(walk.items.length, 4);
         for (const item of walk.items) {
           const verdict = yield* open(item, readWritten(item));
           assert.strictEqual(verdict.verdict, "accepted", item);

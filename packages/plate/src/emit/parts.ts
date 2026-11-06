@@ -15,6 +15,7 @@ interface PartsOf {
     | "prompt"
     | "root";
   "extended-text-interaction": "control" | "prompt" | "root";
+  "inline-choice-interaction": "control" | "label" | "option" | "placeholder" | "root";
   item: "message" | "messages" | "notice" | "root" | "status" | "statusHeading";
   "test-navigation":
     | "end"
@@ -29,7 +30,7 @@ interface PartsOf {
 }
 
 /**
- * The owner of a group of parts: the item chrome, one of the interactions phase 1 renders, or the
+ * The owner of a group of parts: the item chrome, one of the interactions plate renders, or the
  * test chrome's navigation, `test-navigation`.
  *
  * It is also the first key of {@link PartOverrides}.
@@ -64,7 +65,14 @@ export type Position = "flow" | "phrasing";
  * - `choice-item`: `li`, or a flow container under a Choices that is not a list.
  * - `native-input`: an `input`, whose `type` I1 writes back, so the native control stays the one the
  *   interaction computed.
- * - `text-input`: an `input` of type `text`, written or by default.
+ * - `text-input`: an `input` of type `text`, written in any case or by default.
+ * - `select`: a `select` with no `multiple` and no `size` other than 1, so it stays a drop-down that
+ *   posts one entry (spec §4.9 I2).
+ * - `option`: an `option` with no `label`, because a `label` replaces the text the option shows, and
+ *   a host supplies none of an item's data (rule `efed9867`).
+ * - `inline-label`: a `label`, or a phrasing container, so a Label stays phrasing content inside the
+ *   author's sentence. `label` is no phrasing container, and a `div` or `p` there would close the
+ *   author's `p` in the HTML parser.
  * - `any`: any element.
  */
 export type TagClass =
@@ -75,12 +83,15 @@ export type TagClass =
   | "fieldset"
   | "flow-container"
   | "heading"
+  | "inline-label"
   | "legend"
   | "li"
   | "list"
   | "native-input"
+  | "option"
   | "phrasing-container"
   | "prompt"
+  | "select"
   | "text-input"
   | "textarea";
 
@@ -114,12 +125,19 @@ export interface PartRow {
    */
   readonly listOwner: boolean;
   /**
-   * The attributes the interaction's connect function computes for this part, beyond the
-   * `data-slot` marker and the Root state (`data-mode`, `data-disabled`), which I1
-   * writes over a replacement's: every one the part can carry, some only in some states.
+   * The attributes plate owns on this part, which I1 writes over a replacement's: every one the
+   * interaction's connect function computes beyond the `data-slot` marker and the Root state
+   * (`data-mode`, `data-disabled`), some only in some states, and on the Inline Choice Option and
+   * Placeholder also `disabled` and `hidden`, which plate never writes there.
    *
-   * This records what the connect function computes, and `parts.test.ts` renders every row to
-   * hold the two equal; the merge itself writes whatever the props carry.
+   * A state attribute among them (`name`, `value`, `type`, `checked`, `selected`, `disabled`,
+   * `readonly`, `hidden`) is plate's whether plate writes it or leaves it off: the swap drops a
+   * replacement's, in any case, when the props do not carry it, so a host cannot set what plate
+   * computed absent. Every other name keeps the replacement's value when plate writes none.
+   *
+   * `parts.test.ts` renders every row to hold this list equal to what the connect function
+   * computes, the Option's and Placeholder's `disabled` and `hidden` aside; the merge itself
+   * writes whatever the props carry.
    */
   readonly merged: readonly string[];
   readonly part: PartKey;
@@ -366,6 +384,40 @@ const isTextType = (type: string | true | undefined): boolean =>
   type !== true && (type ?? "text").toLowerCase() === "text";
 
 /**
+ * Give an element's attribute by name in any ASCII case, as HTML reads attribute names, so a
+ * replacement cannot write `TYPE` or `MULTIPLE` past a check that reads `type` or `multiple`.
+ *
+ * @param attrs The element's attributes.
+ * @param name The attribute's name, in lower case.
+ * @returns The value of the first attribute whose name matches, or undefined when none does.
+ */
+export const attributeOf = (attrs: Attributes, name: string): string | true | undefined => {
+  const key = Object.keys(attrs).find((candidate) => candidate.toLowerCase() === name);
+
+  return key === undefined ? undefined : attrs[key];
+};
+
+/**
+ * Tell whether a `select`'s attributes keep it a drop-down that posts one entry: no `multiple`,
+ * which lets it post one entry per chosen option, and no `size` other than 1, which draws a list
+ * box.
+ *
+ * A written `size` is 1 only when it is a valid non-negative integer, ASCII digits, of value 1.
+ *
+ * @param attrs The `select`'s attributes.
+ * @returns Whether `multiple` is absent and `size` is absent or 1.
+ * @see https://html.spec.whatwg.org/multipage/form-elements.html#attr-select-size
+ */
+const isDropDown = (attrs: Attributes): boolean => {
+  const size = attributeOf(attrs, "size");
+
+  return (
+    attributeOf(attrs, "multiple") === undefined &&
+    (size === undefined || (size !== true && /^0*1$/u.test(size)))
+  );
+};
+
+/**
  * I3's test of each tag class, on the element a replacement returned.
  */
 const admits = {
@@ -376,13 +428,16 @@ const admits = {
   fieldset: ({ tag }) => tag === "fieldset",
   "flow-container": ({ tag }) => isFlowContainer(tag),
   heading: ({ tag }) => headings.has(tag),
+  "inline-label": ({ tag }) => tag === "label" || isPhrasingContainer(tag),
   legend: ({ tag }) => tag === "legend",
   li: ({ tag }) => tag === "li",
   list: ({ tag }) => lists.has(tag),
   "native-input": ({ tag }) => tag === "input",
+  option: ({ attrs, tag }) => tag === "option" && attributeOf(attrs, "label") === undefined,
   "phrasing-container": ({ tag }) => isPhrasingContainer(tag),
   prompt: ({ tag }) => tag === "p" || isFlowContainer(tag),
-  "text-input": ({ attrs, tag }) => tag === "input" && isTextType(attrs["type"]),
+  select: ({ attrs, tag }) => tag === "select" && isDropDown(attrs),
+  "text-input": ({ attrs, tag }) => tag === "input" && isTextType(attributeOf(attrs, "type")),
   textarea: ({ tag }) => tag === "textarea",
 } satisfies { readonly [C in TagClass]: (element: Element) => boolean };
 
@@ -393,7 +448,14 @@ const admits = {
  * The five navigation buttons are plain buttons (rule `9af3809b`): each defaults `type` to
  * `button`, and no navigation row merges `type`, `name`, `value` or a `form*` attribute, so a
  * host's replacement may give a button its own submit semantics while every attribute plate
- * computes still stands.
+ * computes still stands. Each merges `disabled`, so a button's replacement cannot disable the
+ * button plate leaves enabled; disabling it through an ancestor, such as a `fieldset disabled`, is
+ * the host's.
+ *
+ * The Inline Choice Option and Placeholder merge `disabled` and `hidden`, which plate never writes
+ * on them, so plate owns their absence: a replacement cannot disable or hide a choice, or the way
+ * back to no answer, on the option's own element; disabling the select through an ancestor, such
+ * as a `fieldset disabled`, is the host's.
  */
 const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
   {
@@ -557,6 +619,61 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
     ],
     part: "control",
     tagClass: "text-input",
+  },
+  {
+    defaults: {},
+    element: "qti-inline-choice-interaction",
+    interaction: "inline-choice-interaction",
+    listOwner: false,
+    merged: ["class"],
+    part: "root",
+    tagClass: "phrasing-container",
+  },
+  {
+    defaults: {},
+    element: "label",
+    interaction: "inline-choice-interaction",
+    listOwner: false,
+    merged: ["id", "for"],
+    part: "label",
+    tagClass: "inline-label",
+  },
+  {
+    defaults: {},
+    element: "select",
+    interaction: "inline-choice-interaction",
+    listOwner: false,
+    merged: [
+      "id",
+      "name",
+      "autocomplete",
+      "disabled",
+      "aria-label",
+      "aria-labelledby",
+      "aria-invalid",
+      "aria-describedby",
+      "autofocus",
+    ],
+    part: "control",
+    tagClass: "select",
+  },
+  {
+    defaults: {},
+    element: "option",
+    interaction: "inline-choice-interaction",
+    listOwner: false,
+    merged: ["value", "selected", "disabled", "hidden"],
+    part: "placeholder",
+    tagClass: "option",
+  },
+  {
+    defaults: {},
+    element: "option",
+    interaction: "inline-choice-interaction",
+    listOwner: false,
+    merged: ["value", "selected", "disabled", "hidden"],
+    part: "option",
+    tagClass: "option",
   },
   {
     defaults: {},
@@ -851,7 +968,8 @@ export const rowFor = <I extends InteractionKey>(
 
 /**
  * Tell whether a replacement's root element may stand for a part (I3), by its tag and, for the
- * text input class, its `type`.
+ * text input class its `type`, for the select class its `multiple` and `size`, and for the option
+ * class its `label`.
  *
  * @param row The part's row, as {@link rowFor} gives it for the placement.
  * @param element The root element the replacement returned.

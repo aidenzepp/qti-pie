@@ -1,21 +1,24 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Effect, Option, Predicate } from "effect";
+import { Effect, Option, Predicate, Result } from "effect";
 import { configure } from "#plate/configuration.ts";
 import type { Element, Node } from "#plate/emit/node.ts";
 import { shuffleOrder } from "#plate/engine/random.ts";
-import { entryName } from "#plate/form/encoding.ts";
+import { decode, entryName } from "#plate/form/encoding.ts";
 import type {
   BodyNode,
   ChoiceInteraction,
   ExtendedTextInteraction,
+  InlineChoiceInteraction,
   Item,
   TextEntryInteraction,
 } from "#plate/model/item.ts";
+import { nullOf } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
 import { choiceOrder, identifyMessages, payload, postings, redactItem } from "#plate/payload.ts";
 import type {
   ChoicePayload,
   ExtendedTextPayload,
+  InlineChoicePayload,
   InteractionPayload,
   Payload,
   PayloadNode,
@@ -461,12 +464,27 @@ const choiceFor = (built: Payload, response: string): ChoicePayload => {
  *
  * @param built The payload.
  * @param response The response identifier.
- * @returns The Text Entry or Extended Text payload; the test fails when it is a Choice.
+ * @returns The Text Entry or Extended Text payload; the test fails when it is a Choice or an
+ *   Inline Choice.
  */
 const textFor = (built: Payload, response: string): ExtendedTextPayload | TextEntryPayload => {
   const found = interactionFor(built, response);
 
-  return found.kind === "choice" ? assert.fail(`${response} is a Choice`) : found;
+  switch (found.kind) {
+    case "extended-text":
+    case "text-entry": {
+      return found;
+    }
+    case "choice": {
+      return assert.fail(`${response} is a Choice`);
+    }
+    case "inline-choice": {
+      return assert.fail(`${response} is an Inline Choice`);
+    }
+    default: {
+      return found satisfies never;
+    }
+  }
 };
 
 /**
@@ -496,6 +514,75 @@ const extendedTextFor = (built: Payload, response: string): ExtendedTextPayload 
     ? found
     : assert.fail(`${response} is not an Extended Text`);
 };
+
+/**
+ * Find the Inline Choice payload bound to a response.
+ *
+ * @param built The payload.
+ * @param response The response identifier.
+ * @returns The Inline Choice payload; the test fails when the interaction is not an Inline Choice.
+ */
+const inlineChoiceFor = (built: Payload, response: string): InlineChoicePayload => {
+  const found = interactionFor(built, response);
+
+  return found.kind === "inline-choice"
+    ? found
+    : assert.fail(`${response} is not an Inline Choice`);
+};
+
+/**
+ * An Inline Choice of two rivers with a Label, a placeholder and a too-few message, bound to the
+ * single identifier response `RIVER`.
+ */
+const river: InlineChoiceInteraction = {
+  ariaLabel: Option.none(),
+  ariaLabelledby: Option.none(),
+  choices: [
+    { content: [text("Seine")], fixed: false, identifier: "S" },
+    { content: [text("Loire")], fixed: false, identifier: "L" },
+  ],
+  class: "pick",
+  kind: "inline-choice",
+  label: Option.some([text("River")]),
+  messages: { min: Option.some("Pick a river.") },
+  minChoices: 1n,
+  path: "qti-assessment-item/qti-item-body/p/qti-inline-choice-interaction",
+  placeholder: Option.some("Choose one"),
+  required: true,
+  response: "RIVER",
+  shuffle: false,
+};
+
+/**
+ * An item whose one paragraph holds {@link river} in its sentence, redacted.
+ */
+const riverRedacted = redactItem({
+  ...item,
+  body: [
+    {
+      attributes: [],
+      children: [text("Paris stands on the "), river, text(".")],
+      kind: "element",
+      path: "qti-assessment-item/qti-item-body/p",
+      tag: "p",
+    },
+  ],
+  responses: new Map([
+    [
+      "RIVER",
+      {
+        areaMapping: Option.none(),
+        baseType: "identifier",
+        cardinality: "single",
+        correct: Option.none(),
+        defaultValue: Option.none(),
+        identifier: "RIVER",
+        mapping: Option.none(),
+      },
+    ],
+  ]),
+  unsupported: [],
+});
 
 /**
  * Find the Text Entry payload bound to a response.
@@ -603,6 +690,7 @@ const referencingNode = (node: BodyNode, ids: string): BodyNode => {
         ),
       };
     }
+    case "inline-choice":
     case "text":
     case "text-entry":
     case "unsupported": {
@@ -717,6 +805,54 @@ describe("payload", () => {
         assert.notInclude(written, marker, `${state} holds ${marker}`);
       }
     }
+  });
+
+  it("[Q-12] gives an Inline Choice exactly its thirteen keys, and restores the posted string with messages, else the value", () => {
+    const opened = inlineChoiceFor(payload(riverRedacted, answering), "RIVER");
+
+    assert.deepStrictEqual(Object.keys(opened).toSorted(), [
+      "autofocus",
+      "choices",
+      "class",
+      "editable",
+      "formName",
+      "invalid",
+      "kind",
+      "label",
+      "messageIds",
+      "name",
+      "placeholder",
+      "response",
+      "restore",
+    ]);
+    assert.deepStrictEqual(opened.choices, [
+      { content: [{ kind: "text", text: "Seine" }], identifier: "S" },
+      { content: [{ kind: "text", text: "Loire" }], identifier: "L" },
+    ]);
+    assert.deepStrictEqual(opened.label, Option.some([{ kind: "text", text: "River" }]));
+    assert.deepStrictEqual(opened.placeholder, Option.some("Choose one"));
+    assert.strictEqual(opened.formName, entryName(instance, "RIVER"));
+    assert.strictEqual(opened.restore, "");
+
+    const valued: View = {
+      ...answering,
+      posted: Option.some(new Map([["RIVER", ["L"]]])),
+      values: new Map([["RIVER", one({ baseType: "identifier", value: "S" })]]),
+    };
+    assert.strictEqual(inlineChoiceFor(payload(riverRedacted, valued), "RIVER").restore, "S");
+
+    const refusedRiver = inlineChoiceFor(
+      payload(riverRedacted, {
+        ...valued,
+        messages: [{ response: "RIVER", text: "Pick a river." }],
+      }),
+      "RIVER",
+    );
+    assert.strictEqual(refusedRiver.restore, "L");
+    assert.deepStrictEqual(
+      [refusedRiver.invalid, refusedRiver.autofocus, refusedRiver.messageIds],
+      [true, true, [`${instance}-RIVER-message-0`]],
+    );
   });
 
   it("refuses a full item in its type", () => {
@@ -1479,6 +1615,34 @@ describe("postings", () => {
       postingOf("NAMED", "string", 10),
       postingOf("ESSAY", "string", 8),
     ]);
+  });
+
+  it("[Q-12] gives an Inline Choice's response its posting in base 10, which decodes an empty entry as NULL and refuses two entries", () => {
+    const [posting, ...others] = postings(riverRedacted, instance);
+    assert.deepStrictEqual(posting, postingOf("RIVER", "identifier", 10));
+    assert.lengthOf(others, 0);
+
+    const { binding, options } = posting ?? assert.fail("RIVER has no posting.");
+    assert.deepStrictEqual(
+      Result.getSuccess(decode([[binding.name, ""]], binding, options)),
+      Option.some(nullOf("identifier", "single")),
+    );
+    assert.deepStrictEqual(
+      Option.map(
+        Result.getFailure(
+          decode(
+            [
+              [binding.name, "S"],
+              [binding.name, "L"],
+            ],
+            binding,
+            options,
+          ),
+        ),
+        (malformed) => [malformed._tag, malformed.reason],
+      ),
+      Option.some(["Malformed", "single-many"]),
+    );
   });
 
   it("gives no posting to a declared response no interaction binds, so a post carries nothing over its record value", () => {

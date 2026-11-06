@@ -18,6 +18,10 @@
  * - `pattern.xml`, a Text Entry with a `pattern-mask` and a `data-patternmask-message`.
  * - `ordered.xml`, an Extended Text bound to an `ordered` response, with `max-strings="3"` and a
  *   Prompt.
+ * - `inline.xml`, two Inline Choices in two sentences of the renderer's own text: one with a
+ *   `qti-label`, a `data-prompt`, `required`, the author's too-few message, a width class and a
+ *   shuffle whose last choice is fixed, and one with none of those. In each, the options and the
+ *   Placeholder start with different letters, so a test can type ahead to any of them.
  * - `derived/<corpus path without .xml>/<response>.xml`, one item per corpus text interaction that
  *   carries `pattern-mask`: the response's base type and cardinality, and the interaction's
  *   `pattern-mask`, `data-patternmask-message`, `expected-length` and `format` as written, under a
@@ -68,6 +72,11 @@ const patternItem = "pattern.xml";
  * The ordered Extended Text item, relative to the walk directory.
  */
 const orderedItem = "ordered.xml";
+
+/**
+ * The Inline Choice item, relative to the walk directory.
+ */
+const inlineItem = "inline.xml";
 
 /**
  * The text interactions a derived probe copies.
@@ -154,7 +163,7 @@ export interface WalkCorpus {
   readonly directory: string;
   /**
    * Every probe item, relative to the walk directory: the OD-14 (e) probe, the pattern item, the
-   * ordered Extended Text, then the derived probes.
+   * ordered Extended Text, the Inline Choice item, then the derived probes.
    */
   readonly items: readonly string[];
   /**
@@ -321,6 +330,29 @@ const orderedProbe = itemDocument(
     "</qti-extended-text-interaction>",
   ],
 );
+
+/**
+ * The Inline Choice item, the renderer's own text: nothing in it comes from a corpus item. The
+ * first sentence's Inline Choice has a `qti-label`, a `data-prompt`, `required`, the author's
+ * too-few message, a width class and a shuffle whose last choice is fixed, and its correct
+ * response is JUPITER; the second's has none of those, so its Placeholder is the locale's and no
+ * Label names it. In each, the initials of the options and of the Placeholder differ (C, M, J, V
+ * and N; S, Z, T and O), so a test can type ahead to any of them.
+ */
+const inlineProbe = [
+  '<?xml version="1.0" encoding="UTF-8"?>',
+  `<qti-assessment-item xmlns="${qtiNamespace}" identifier="inline" title="Inline choice probe" adaptive="false" time-dependent="false" xml:lang="en">`,
+  '  <qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier"><qti-correct-response><qti-value>JUPITER</qti-value></qti-correct-response></qti-response-declaration>',
+  '  <qti-response-declaration identifier="RESPONSE2" cardinality="single" base-type="identifier"/>',
+  '  <qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/>',
+  "  <qti-item-body>",
+  '    <p>The largest planet in the solar system is <qti-inline-choice-interaction response-identifier="RESPONSE" shuffle="true" required="true" class="qti-input-width-10" data-prompt="Choose a planet" data-min-selections-message="Pick a planet first."><qti-label>Planet</qti-label><qti-inline-choice identifier="MARS">Mars</qti-inline-choice><qti-inline-choice identifier="JUPITER">Jupiter</qti-inline-choice><qti-inline-choice identifier="VENUS">Venus</qti-inline-choice><qti-inline-choice identifier="NONE" fixed="true">None of these</qti-inline-choice></qti-inline-choice-interaction>.</p>',
+  '    <p>Water freezes at <qti-inline-choice-interaction response-identifier="RESPONSE2"><qti-inline-choice identifier="ZERO">zero</qti-inline-choice><qti-inline-choice identifier="TEN">ten</qti-inline-choice><qti-inline-choice identifier="HUNDRED">one hundred</qti-inline-choice></qti-inline-choice-interaction> degrees Celsius.</p>',
+  "  </qti-item-body>",
+  '  <qti-response-processing template="https://purl.imsglobal.org/spec/qti/v3p0/rptemplates/match_correct"/>',
+  "</qti-assessment-item>",
+  "",
+].join("\n");
 
 /**
  * Read an attribute in no namespace.
@@ -494,7 +526,8 @@ const writeText = (file: string, text: string): Effect.Effect<void, ProbeUnwrita
 
 /**
  * Write the walk corpus: the OD-14 (e) probe and its two documents, the pattern item, the ordered
- * Extended Text, and one derived probe per corpus text interaction that carries `pattern-mask`.
+ * Extended Text, the Inline Choice item, and one derived probe per corpus text interaction that
+ * carries `pattern-mask`.
  *
  * Fails with {@link ProbeUnderivable} or {@link ProbeUnwritable}, with `CorpusMissing` or
  * `CorpusFileUnreadable` when the corpus cannot be read, and with a `ConfigError` when neither
@@ -523,6 +556,7 @@ export const writeWalkCorpus: Effect.Effect<
     [od14SvgFile, od14Svg],
     [path.join(directory, patternItem), patternProbe],
     [path.join(directory, orderedItem), orderedProbe],
+    [path.join(directory, inlineItem), inlineProbe],
     ...derivations.map(
       (derivation, index) =>
         [
@@ -538,7 +572,7 @@ export const writeWalkCorpus: Effect.Effect<
     controls: [od14HtmlFile, od14SvgFile],
     derived,
     directory,
-    items: [od14Item, patternItem, orderedItem, ...derived.map((probe) => probe.item)],
+    items: [od14Item, patternItem, orderedItem, inlineItem, ...derived.map((probe) => probe.item)],
     od14: od14Item,
   };
 }).pipe(Effect.withSpan("writeWalkCorpus"));
@@ -561,7 +595,7 @@ const shellQuote = (value: string): string => `'${value.replaceAll("'", "'\\''")
  */
 export const instructions = (written: WalkCorpus): string =>
   [
-    `Wrote ${String(written.items.length)} probe items under ${written.directory}: the OD-14 (e) probe, the pattern item, the ordered Extended Text and ${String(written.derived.length)} derived probes.`,
+    `Wrote ${String(written.items.length)} probe items under ${written.directory}: the OD-14 (e) probe, the pattern item, the ordered Extended Text, the Inline Choice item and ${String(written.derived.length)} derived probes.`,
     "",
     "Serve them in the dev playground, from the repository root:",
     "",

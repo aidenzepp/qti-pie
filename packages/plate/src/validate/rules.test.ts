@@ -176,6 +176,32 @@ const interaction = (
 ): SourceElement => el(local, [attr("response-identifier", responseIdentifier), ...attributes]);
 
 /**
+ * Construct an Inline Choice with the given choice identifiers, each choice's text its identifier.
+ *
+ * @param responseIdentifier Its `response-identifier`.
+ * @param choices The identifiers of its `qti-inline-choice` children.
+ * @returns The interaction.
+ */
+const inlineChoice = (responseIdentifier: string, choices: readonly string[] = ["A", "B"]) =>
+  el(
+    "qti-inline-choice-interaction",
+    [attr("response-identifier", responseIdentifier)],
+    choices.map((identifier) =>
+      el("qti-inline-choice", [attr("identifier", identifier)], [text(identifier)]),
+    ),
+  );
+
+/**
+ * An item whose paragraph holds an Inline Choice of two choices bound to `RESPONSE`.
+ *
+ * @param cardinality The declaration's cardinality.
+ * @param baseType The declaration's base type.
+ * @returns The item.
+ */
+const inlineChoiceItem = (cardinality: string, baseType: string) =>
+  item([response("RESPONSE", cardinality, baseType)], [el("p", [], [inlineChoice("RESPONSE")])]);
+
+/**
  * Construct an item whose float `SCORE` holds a match table with one entry.
  *
  * @param target The entry's `target-value`, as written.
@@ -512,6 +538,39 @@ describe("checkRules", () => {
       );
     });
 
+    it("[Q-12] refuses the second of two inline choices named A", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [response("RESPONSE", "single", "identifier")],
+            [el("p", [], [inlineChoice("RESPONSE", ["A", "B", "A"])])],
+          ),
+        ),
+        [
+          {
+            detail: { identifier: "A" },
+            path: "qti-assessment-item/qti-item-body/p/qti-inline-choice-interaction/qti-inline-choice[3]/@identifier",
+            rule: "duplicate-identifier",
+          },
+        ],
+      );
+    });
+
+    it("[Q-12] accepts the same inline choice identifier in two Inline Choices", () => {
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [
+              response("RESPONSE", "single", "identifier"),
+              response("RESPONSE2", "single", "identifier"),
+            ],
+            [el("p", [], [inlineChoice("RESPONSE"), inlineChoice("RESPONSE2")])],
+          ),
+        ),
+        [],
+      );
+    });
+
     it("[I-1] accepts distinct declarations, and the same choice identifier in two interactions", () => {
       assert.deepStrictEqual(
         judged(
@@ -588,6 +647,34 @@ describe("checkRules", () => {
         ),
         [],
       );
+    });
+
+    it("[Q-12] refuses an Inline Choice bound to a multiple identifier or a single string declaration", () => {
+      for (const [cardinality, baseType] of [
+        ["multiple", "identifier"],
+        ["single", "string"],
+      ] as const) {
+        assert.deepStrictEqual(
+          judged(inlineChoiceItem(cardinality, baseType)),
+          [
+            {
+              detail: {
+                baseType,
+                cardinality,
+                interaction: "qti-inline-choice-interaction",
+                response: "RESPONSE",
+              },
+              path: "qti-assessment-item/qti-item-body/p/qti-inline-choice-interaction",
+              rule: "binding",
+            },
+          ],
+          `${cardinality} ${baseType}`,
+        );
+      }
+    });
+
+    it("[Q-12] accepts an Inline Choice bound to a single identifier declaration", () => {
+      assert.deepStrictEqual(judged(inlineChoiceItem("single", "identifier")), []);
     });
 
     it("[I-1] reads the declaration the interaction names, not any declaration in the item", () => {

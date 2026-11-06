@@ -1,13 +1,14 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Cause, Effect, Exit, Option, Result } from "effect";
-import { rowFor } from "#plate/emit/parts.ts";
+import { rowFor, scopedId } from "#plate/emit/parts.ts";
 import { configure } from "#plate/index.ts";
 import type { Accepted, Configuration, Element, Node, Verdict } from "#plate/index.ts";
 import { message } from "#plate/messages.ts";
+import type { BodyNode, InlineChoiceInteraction } from "#plate/model/item.ts";
 import { refusalRules } from "#plate/validate/refusal.ts";
-import { checkTree, textOf } from "#plate/test/accessibility.ts";
+import { attribute, checkTree, textOf } from "#plate/test/accessibility.ts";
 import { parseHtml, roundTrips } from "#plate/test/round-trip.ts";
-import { acceptedOf, openCorpus, threeStates } from "#plate/test/sweep.ts";
+import { acceptedOf, openCorpus, sweepInstance, threeStates } from "#plate/test/sweep.ts";
 import type { Member } from "#plate/test/sweep.ts";
 
 /**
@@ -21,6 +22,16 @@ const sweepTimeoutMs = 600_000;
  * The Notice part's `data-slot` marker, read through the part table.
  */
 const noticeSlot = rowFor("item", "notice").slot;
+
+/**
+ * The `data-slot` markers of an Inline Choice's Control, Placeholder and Option parts, read through
+ * the part table.
+ */
+const inlineChoiceSlots = {
+  control: rowFor("inline-choice-interaction", "control").slot,
+  option: rowFor("inline-choice-interaction", "option").slot,
+  placeholder: rowFor("inline-choice-interaction", "placeholder").slot,
+} as const;
 
 /**
  * The verdicts that carry an accepted document.
@@ -231,6 +242,91 @@ const treeProblems = (_rendering: Rendering, where: string, root: Element): read
     : [`${where}: checkTree at base level 2 finds ${JSON.stringify(violations)}`];
 };
 
+/**
+ * Collect the Inline Choices an item's body renders, in document order: those in its body and its
+ * body elements. An interaction inside a Prompt or a choice's content is not counted.
+ *
+ * @param nodes The body nodes.
+ * @returns The Inline Choices.
+ */
+const inlineChoicesOf = (nodes: readonly BodyNode[]): readonly InlineChoiceInteraction[] =>
+  nodes.flatMap((node): readonly InlineChoiceInteraction[] => {
+    switch (node.kind) {
+      case "element": {
+        return inlineChoicesOf(node.children);
+      }
+      case "inline-choice": {
+        return [node];
+      }
+      case "choice":
+      case "extended-text":
+      case "text":
+      case "text-entry":
+      case "unsupported": {
+        return [];
+      }
+      default: {
+        return node satisfies never;
+      }
+    }
+  });
+
+/**
+ * Check one state holds each of the item's Inline Choices as its Control: a `select` whose
+ * children are `option`s, the Placeholder first with `value=""`, then one Option for each
+ * choice, whatever order the choices were presented in.
+ *
+ * @param rendering The render, with its accepted document.
+ * @param where The member and state, which every problem names.
+ * @param root The state's root element.
+ * @returns Each problem found, empty when the state holds.
+ */
+const inlineChoiceProblems = (
+  rendering: Rendering,
+  where: string,
+  root: Element,
+): readonly string[] => {
+  const elements = elementsOf([root]);
+
+  return inlineChoicesOf(rendering.accepted.item.body).flatMap((interaction) => {
+    const at = `${where}: the Inline Choice bound to ${interaction.response}`;
+    const id = scopedId(sweepInstance, interaction.response, "control");
+    const control = elements.find((element) => element.attrs["id"] === id);
+    if (
+      control === undefined ||
+      control.tag !== "select" ||
+      control.attrs["data-slot"] !== inlineChoiceSlots.control
+    ) {
+      return [`${at} has no Control ${id}`];
+    }
+
+    const options = control.children.flatMap((child) =>
+      child.kind === "element" && child.tag === "option" ? [child] : [],
+    );
+    const [placeholder, ...rest] = options;
+    const values = rest.map((option) => attribute(option, "value") ?? "").toSorted();
+    const identifiers = interaction.choices.map((choice) => choice.identifier).toSorted();
+
+    return [
+      ...(options.length === control.children.length
+        ? []
+        : [`${at}: its Control holds a child that is not an option`]),
+      ...(placeholder?.attrs["data-slot"] === inlineChoiceSlots.placeholder &&
+      placeholder.attrs["value"] === ""
+        ? []
+        : [`${at}: its Control's first option is not the Placeholder with an empty value`]),
+      ...(rest.every((option) => option.attrs["data-slot"] === inlineChoiceSlots.option)
+        ? []
+        : [`${at}: an option after the Placeholder is not an Option`]),
+      ...(JSON.stringify(values) === JSON.stringify(identifiers)
+        ? []
+        : [
+            `${at}: its Options carry ${JSON.stringify(values)}, its choices are ${JSON.stringify(identifiers)}`,
+          ]),
+    ];
+  });
+};
+
 describe("the verdict and render sweep over the corpus", () => {
   it.effect(
     "every corpus member gets a verdict on its own location, and no defect escapes open",
@@ -329,6 +425,20 @@ describe("the verdict and render sweep over the corpus", () => {
         const renderings = renderingsOf(yield* openCorpus, yield* configure({}));
 
         assert.deepStrictEqual(statesProblems(renderings, treeProblems), []);
+      }),
+    sweepTimeoutMs,
+  );
+
+  it.effect(
+    "[Q-12] each accepted item with an Inline Choice holds, in its three states, a Control whose options are its Placeholder and its choices",
+    () =>
+      Effect.gen(function* everyInlineChoice() {
+        const renderings = renderingsOf(yield* openCorpus, yield* configure({})).filter(
+          (rendering) => inlineChoicesOf(rendering.accepted.item.body).length > 0,
+        );
+
+        assert.isNotEmpty(renderings, "no accepted corpus item renders an Inline Choice");
+        assert.deepStrictEqual(statesProblems(renderings, inlineChoiceProblems), []);
       }),
     sweepTimeoutMs,
   );

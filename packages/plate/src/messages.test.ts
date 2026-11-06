@@ -62,6 +62,7 @@ const english = {
   reviewNotAllowed: "review not allowed",
   score: "Score: 3",
   scored: "Scored",
+  selectPrompt: "Select an answer",
   skippingNotAllowed: "Answer this item before you submit it.",
   solution: "Solution",
   solutionItem: "Solution: Item 1",
@@ -107,6 +108,10 @@ describe("message", () => {
 
   it("writes choiceOf with its n and count", () => {
     assert.strictEqual(message("en", "choiceOf", { count: "4", n: "2" }), "Choice 2 of 4");
+  });
+
+  it("[Q-12] writes selectPrompt, an Inline Choice's placeholder text when it has no data-prompt", () => {
+    assert.strictEqual(message("en", "selectPrompt"), "Select an answer");
   });
 
   it("writes patternMismatch, the pattern-mask message a locale gives", () => {

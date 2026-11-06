@@ -6,8 +6,48 @@ changes. [`docs/spec-readings.md`](../../docs/spec-readings.md) numbers the read
 
 ## Unreleased
 
-The first entry lists the surface of M1 and M2. plate is not published, and both of its entry
-points are unstable until M3.
+The first entry lists the surface of M1 and M2, and what M3 adds to it. plate is not published,
+and both of its entry points are unstable until M3.
+
+### Inline Choice (M3)
+
+- `render` writes an Inline Choice as a native `select`. Its first option, the author's
+  `data-prompt` or else "Select an answer", posts an empty value, which `decode` reads as NULL. In
+  `review` and `solution`, the `select` is disabled and posts nothing.
+- `render`'s `parts` option takes the key `inline-choice-interaction`, with the parts `root`,
+  `label`, `control`, `placeholder` and `option`.
+- `PartSwapRefused` has a new cause, `select-content`. It refuses a replacement for `control`,
+  `placeholder` or `option` whose root does not hold exactly the nodes the part function receives,
+  directly under it and in the order given.
+- A replacement for `control` may not return a `select` that is `multiple` or has a `size` other
+  than 1, and one for `placeholder` or `option` may not return an `option` with a `label`.
+  `PartSwapRefused` refuses either with the cause `root-not-allowed`.
+- `checkResponses` and `score` judge an Inline Choice's response. For an identifier that names none
+  of its choices, `checkResponses` gives a message and `score` returns `ResponsesRefused`. Before,
+  both took any identifier.
+- `encodeRedacted` and `decodeRedacted` carry an Inline Choice, `results` reports a shuffled Inline
+  Choice's order, and `src/styles.css` styles its parts.
+
+### How plate reads an Inline Choice (2026-11-06)
+
+- `open` builds an Inline Choice where it showed a notice before.
+  `QTI3_BPIG_Examples/items/QTI3-inline-choice.xml` and
+  `qtiv3-examples/packaging/items/inline_choice.xml` are now `accepted`. They were
+  `accepted-with-unsupported`.
+- `open` refuses an Inline Choice whose response is not of cardinality `single` and base type
+  `identifier`, with the rule `binding`. The rule judges every Inline Choice, whatever its choices
+  hold, one inside a feedback block included.
+- `open` refuses two choices of one Inline Choice that share an identifier, with the rule
+  `duplicate-identifier`.
+- An item that breaks either rule is now `refused`. Before, it was `accepted-with-unsupported`, or
+  `unchecked` when it also held something plate leaves unchecked, such as MathML. No corpus
+  document breaks either rule.
+- An Inline Choice whose choices hold anything but text and the inline elements that
+  [`src/vocabulary.ts`](src/vocabulary.ts) lists keeps its notice, since an `option` shows only
+  text. The verdict lists it as unsupported, and nothing is refused for it.
+- `min-choices` above 1 on an Inline Choice is validated as written, as a Choice's is. Its response
+  holds at most one identifier, so under `validateResponses`, `checkResponses` gives a message for
+  every response.
 
 ### Items (M1)
 
@@ -50,6 +90,23 @@ points are unstable until M3.
 - A `StoredRecord` carries `version: 1`. plate refuses a record that M1's `score` wrote, since it
   names no version.
 - A Text Entry's and an Extended Text's controls carry `autocomplete="off"` in every mode.
+- `PartSwapRefused` refuses with `root-not-allowed` a replacement for a Text Entry's `control`
+  that writes its type in another case, such as `TYPE="checkbox"`, as it already refused
+  `type="checkbox"`.
+- A replacement's attribute whose name differs only in case from one plate computes, such as
+  `NAME` beside `name`, is dropped, so the root holds one attribute of that name, plate's. Before,
+  both were written, and the browser read the replacement's.
+- A replacement can no longer set a state plate leaves off: its `checked`, `selected`, `disabled`,
+  `readonly`, `name`, `value` or `type`, in any case, is dropped on a part whose state plate
+  computes, as are `disabled` and `hidden` on an Inline Choice option. So a replacement cannot set
+  a control's own state or content. Disabling controls through an ancestor, such as a container
+  swapped to a `fieldset disabled` or marked `inert`, is the host's; `render`'s `disabled` option
+  is the supported way to disable every control. A Label replacement that is not a `label` carries
+  no `for`, and still names the control through its id. Before, both were written.
+- `PartSwapRefused` refuses with `select-content` a replacement for an Extended Text's `control`
+  whose `textarea` holds anything beside the restored answer, or anything at all when no answer is
+  restored, since a textarea posts its text. Before, host text beside the answer was accepted and
+  posted as the candidate's.
 - `decode` refuses posted text that holds a character XML 1.0 cannot carry, such as U+0000 or
   U+FFFE, with `Malformed` and the reason `character`. A stored record or session with a string or
   URI value that holds such a character is refused when plate reads it back.

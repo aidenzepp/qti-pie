@@ -153,7 +153,12 @@ describe("the closed value sets", () => {
       [
         "interactionNames",
         interactionNames,
-        ["qti-choice-interaction", "qti-text-entry-interaction", "qti-extended-text-interaction"],
+        [
+          "qti-choice-interaction",
+          "qti-text-entry-interaction",
+          "qti-extended-text-interaction",
+          "qti-inline-choice-interaction",
+        ],
       ],
       [
         "engine",
@@ -193,15 +198,18 @@ describe("the closed value sets", () => {
           "qti-choice-interaction",
           "qti-text-entry-interaction",
           "qti-extended-text-interaction",
+          "qti-inline-choice-interaction",
           "qti-prompt",
           "qti-simple-choice",
+          "qti-inline-choice",
+          "qti-label",
           ...renders.engine,
         ],
       ],
       [
         "notices",
         renders.notices.map((notice) => notice.feature),
-        ["pattern-mask", 'cardinality="record"'],
+        ["pattern-mask", 'cardinality="record"', "qti-inline-choice-interaction"],
       ],
       [
         "controlNotices",
@@ -285,6 +293,52 @@ describe("the closed value sets", () => {
       [...renders.bindings["qti-extended-text-interaction"].formats],
       ["plain", "preformatted", "xhtml"],
     );
+    assert.sameMembers(
+      [...renders.bindings["qti-inline-choice-interaction"].baseTypes],
+      ["identifier"],
+    );
+    assert.sameMembers(
+      [...renders.bindings["qti-inline-choice-interaction"].cardinalities],
+      ["single"],
+    );
+  });
+
+  it("[Q-12] shows an Inline Choice as its notice unless its choices hold only text and the seventeen text-safe elements", () => {
+    const inlineChoice = renders.notices.filter(
+      (notice) => notice.feature === "qti-inline-choice-interaction",
+    );
+
+    assert.deepStrictEqual(
+      inlineChoice.map((notice) => notice.on),
+      [["qti-inline-choice-interaction"]],
+    );
+
+    const [rule] = inlineChoice;
+    const elements = rule?.when.kind === "not-text-safe" ? rule.when.elements : [];
+
+    assertDistinct(elements);
+    assert.sameMembers(
+      [...elements],
+      [
+        "span",
+        "em",
+        "strong",
+        "b",
+        "i",
+        "code",
+        "kbd",
+        "samp",
+        "var",
+        "small",
+        "big",
+        "tt",
+        "cite",
+        "dfn",
+        "abbr",
+        "acronym",
+        "bdi",
+      ],
+    );
   });
 
   it("shows pattern-mask as a notice only for a pattern the translator refuses", () => {
@@ -322,12 +376,14 @@ describe("the vocabulary class inventory", () => {
     "choice-interaction",
     "text-entry-interaction",
     "extended-text-interaction",
+    "inline-choice-interaction",
     "body",
   ];
   const interactionOwners: readonly ClassOwner[] = [
     "choice-interaction",
     "text-entry-interaction",
     "extended-text-interaction",
+    "inline-choice-interaction",
   ];
   const writingClasses = [
     "qti-writing-orientation-vertical-rl",
@@ -352,8 +408,9 @@ describe("the vocabulary class inventory", () => {
     );
   });
 
-  it("[I-19] gives the three interactions exactly the summary table's classes and the sections' three", () => {
-    // `vocab.txt:4026-4110`, the summary table (35 classes), then `:4325-5220`, the sections (3).
+  it("[I-19] [Q-12] gives the four interactions exactly the summary table's classes and the sections' three", () => {
+    // `vocab.txt:4026-4141`, the summary table (35 classes; Inline Choice's widths are Text Entry's),
+    // then `:4325-5822`, the sections (3).
     const summaryTable = [
       "qti-choices-stacking-1",
       "qti-choices-stacking-2",
@@ -403,6 +460,20 @@ describe("the vocabulary class inventory", () => {
     for (const owner of interactionOwners) {
       assert.includeMembers([...styledClasses[owner]], [...writingClasses], owner);
     }
+  });
+
+  it("[I-19] [Q-12] gives Inline Choice the fifteen widths and both writing classes, and no behaviour class", () => {
+    // `vocab.txt:4110-4141`, the summary table's Inline Choice row; `:5818`, section 1.2.7.3.
+    assert.deepStrictEqual(
+      [...styledClasses["inline-choice-interaction"]],
+      [
+        ...[1, 2, 3, 4, 6, 10, 15, 20, 25, 30, 35, 40, 45, 50, 72].map(
+          (width) => `qti-input-width-${width}`,
+        ),
+        ...writingClasses,
+      ],
+    );
+    assert.deepStrictEqual([...behaviourClasses["inline-choice-interaction"]], []);
   });
 
   it("[I-19] styles the six body utility classes and nothing else on the body", () => {

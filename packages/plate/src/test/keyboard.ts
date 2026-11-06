@@ -31,9 +31,11 @@ type Entry = readonly [string, string];
  * What a key does to the walk's model, by the control it lands on.
  *
  * `submit` covers a `button` and an `input` whose type submits; `text` covers the `input` types a
- * person types a line into; `other` is every element whose keys the walk does not model.
+ * person types a line into; `select` covers a drop-down `select`, one with no `multiple` and a
+ * display size of 1; `other` is every element whose keys the walk does not model, a list-box
+ * `select` included.
  */
-type Kind = "checkbox" | "other" | "radio" | "submit" | "text" | "textarea";
+type Kind = "checkbox" | "other" | "radio" | "select" | "submit" | "text" | "textarea";
 
 /**
  * An element of the walked tree, with what the walk reads from it.
@@ -67,11 +69,15 @@ interface Page {
 }
 
 /**
- * The control state a walk changes: which radios and checkboxes are checked, and each text
- * control's value.
+ * The control state a walk changes: which radios and checkboxes are checked, each text control's
+ * value, and each drop-down `select`'s selected `option`.
  */
 interface State {
   readonly checked: Set<Element>;
+  /**
+   * Each drop-down `select`'s selected `option`; a `select` with no option selected is absent.
+   */
+  readonly selected: Map<Element, Element>;
   readonly values: Map<Element, string>;
 }
 
@@ -109,6 +115,26 @@ const blockingTypes: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * Decide whether a `select` is a drop-down box: no `multiple`, and a display size of 1.
+ *
+ * The display size is `size` by HTML's rules for parsing non-negative integers, 1 when it is absent
+ * or does not parse; a `size` of 0 renders a drop-down box in both engines, as 1 does.
+ *
+ * @param select The `select` to read.
+ * @returns Whether it renders as a drop-down box rather than a list box.
+ * @see https://html.spec.whatwg.org/multipage/form-elements.html#concept-select-size
+ */
+const isDropDown = (select: Element): boolean => {
+  const digits = /^[\t\n\f\r ]*\+?(?<digits>\d+)/u.exec(attribute(select, "size") ?? "")?.groups?.[
+    "digits"
+  ];
+
+  return (
+    attribute(select, "multiple") === undefined && (digits === undefined || Number(digits) <= 1)
+  );
+};
+
+/**
  * Classify an element by what the walk's keys do to it.
  *
  * A `button` with a missing or unknown `type` is a submit button, as HTML's default says
@@ -129,6 +155,9 @@ const kindOf = (element: Element): Kind => {
       }
 
       return textTypes.has(type) ? "text" : "other";
+    }
+    case "select": {
+      return isDropDown(element) ? "select" : "other";
     }
     case "textarea": {
       return "textarea";
@@ -229,8 +258,68 @@ const ownText = (element: Element): string =>
   element.children.map((child) => (child.kind === "text" ? child.text : "")).join("");
 
 /**
- * Read the control state a tree starts with: `checked`, an `input`'s `value` and a `textarea`'s
- * text.
+ * Collect the text of every text node below an element, in tree order, as written.
+ *
+ * @param element The element to read.
+ * @returns Its descendant text, concatenated.
+ */
+const descendantText = (element: Element): string =>
+  element.children
+    .map((child) => (child.kind === "text" ? child.text : descendantText(child)))
+    .join("");
+
+/**
+ * Read an `option`'s text: its descendant text with ASCII whitespace stripped and collapsed.
+ *
+ * @param option The `option` to read.
+ * @returns The text a drop-down box shows for it.
+ * @see https://html.spec.whatwg.org/multipage/form-elements.html#dom-option-text
+ */
+const optionText = (option: Element): string =>
+  descendantText(option)
+    .replaceAll(/[\t\n\f\r ]+/gu, " ")
+    .trim();
+
+/**
+ * Read the value an `option` posts: its `value`, else its text.
+ *
+ * @param option The `option` to read.
+ * @returns The option's value.
+ * @see https://html.spec.whatwg.org/multipage/form-elements.html#concept-option-value
+ */
+const optionValue = (option: Element): string => attribute(option, "value") ?? optionText(option);
+
+/**
+ * List a `select`'s options: its `option` children, in tree order.
+ *
+ * @param select The `select` to read.
+ * @returns Its options.
+ */
+const optionsOf = (select: Element): readonly Element[] =>
+  select.children.filter(
+    (child): child is Element => child.kind === "element" && child.tag === "option",
+  );
+
+/**
+ * Read the option a drop-down `select` starts with selected, by HTML's selectedness setting
+ * algorithm: the last option carrying `selected`, else the first option that is not disabled.
+ *
+ * @param select The drop-down `select` to read.
+ * @returns The selected option, `undefined` when the select has none to select.
+ * @see https://html.spec.whatwg.org/multipage/form-elements.html#selectedness-setting-algorithm
+ */
+const initialOption = (select: Element): Element | undefined => {
+  const options = optionsOf(select);
+
+  return (
+    options.findLast((option) => attribute(option, "selected") !== undefined) ??
+    options.find((option) => !isDisabled(option))
+  );
+};
+
+/**
+ * Read the control state a tree starts with: `checked`, an `input`'s `value`, a `textarea`'s text
+ * and a drop-down `select`'s selected option.
  *
  * When several radios of one group carry `checked`, the last in document order is the checked one,
  * as the HTML parser leaves it.
@@ -239,7 +328,7 @@ const ownText = (element: Element): string =>
  * @returns The initial state.
  */
 const initialState = (page: Page): State => {
-  const state: State = { checked: new Set(), values: new Map() };
+  const state: State = { checked: new Set(), selected: new Map(), values: new Map() };
   for (const visit of page.visits) {
     const { element, kind } = visit;
     if (kind === "text") {
@@ -248,6 +337,11 @@ const initialState = (page: Page): State => {
 
     if (kind === "textarea") {
       state.values.set(element, ownText(element).replaceAll(/\r\n?/gu, "\n"));
+    }
+
+    const option = kind === "select" ? initialOption(element) : undefined;
+    if (option !== undefined) {
+      state.selected.set(element, option);
     }
 
     if (attribute(element, "checked") !== undefined) {
@@ -351,6 +445,54 @@ const type = (state: State, control: Visit, typed: string): void => {
 };
 
 /**
+ * Select an option of a focused drop-down `select` by type-ahead, as both engines do for one run
+ * of text typed without a pause, its list closed.
+ *
+ * Each character extends the run's prefix. A one-character search, the run's first character or a
+ * character that repeats the last one-character search, starts one option past the selected option
+ * (the first option when none is selected), so a repeated letter cycles through the options it
+ * starts; a longer prefix starts at the selected option, so typing on keeps a match. The search
+ * wraps and selects the first option whose text starts with the prefix, case-insensitively; a
+ * disabled option never matches, and no match leaves the selection. The Placeholder takes part like
+ * any option. A pause longer than the engines' one second ends a run, and the walk has no clock, so
+ * each `{ type }` key is one run and the next starts a new prefix: G, a pause, then L selects
+ * Lancaster, as "La" typed at once does. A space inside a run is type-ahead in Blink but opens
+ * WebKit's list; the walk follows Blink.
+ *
+ * @param state The control state to change.
+ * @param select The focused drop-down `select`.
+ * @param typed The run typed.
+ * @see https://github.com/chromium/chromium/blob/5c0058a0e1210412c7c76e455481b4e4173210f5/third_party/blink/renderer/core/html/forms/type_ahead.cc#L66-L126
+ * @see https://github.com/WebKit/WebKit/blob/6bea26d263294fb777243a6cb96c86c68b8037f2/Source/WebCore/html/TypeAhead.cpp#L56-L110
+ * @see https://github.com/chromium/chromium/blob/5c0058a0e1210412c7c76e455481b4e4173210f5/third_party/blink/renderer/core/html/forms/html_select_element.cc#L1557-L1563
+ */
+const typeAhead = (state: State, select: Element, typed: string): void => {
+  const options = optionsOf(select);
+  if (options.length === 0) {
+    return;
+  }
+
+  let buffer = "";
+  let repeating = "";
+  for (const character of typed) {
+    buffer += character;
+    const single = character === repeating || buffer === character;
+    repeating = single ? character : "";
+    const prefix = (single ? character : buffer).toLowerCase();
+    const selected = state.selected.get(select);
+    const at =
+      ((selected === undefined ? 0 : options.indexOf(selected)) + (single ? 1 : 0)) %
+      options.length;
+    const match = [...options.slice(at), ...options.slice(0, at)].find(
+      (option) => !isDisabled(option) && optionText(option).toLowerCase().startsWith(prefix),
+    );
+    if (match !== undefined) {
+      state.selected.set(select, match);
+    }
+  }
+};
+
+/**
  * Decide whether Enter in a text `input` submits its form, by HTML's implicit submission.
  *
  * A form with a default button, its first submit button, submits unless that button is disabled. A
@@ -376,10 +518,32 @@ const submitsImplicitly = (page: Page, form: Element): boolean => {
 };
 
 /**
+ * Decide whether Enter on a drop-down `select` submits its form.
+ *
+ * A `select` is no implicit-submission trigger in HTML, but both engines' drop-down key handlers
+ * call their implicit submission with the trigger flag off: it activates the form's first enabled
+ * submit button, past disabled ones, and with none it submits nothing, whatever fields the form
+ * holds.
+ *
+ * @param page The walked tree.
+ * @param form The select's form owner.
+ * @returns Whether the form is submitted.
+ * @see https://github.com/chromium/chromium/blob/5c0058a0e1210412c7c76e455481b4e4173210f5/third_party/blink/renderer/core/html/forms/select_type.cc#L446-L449
+ * @see https://github.com/chromium/chromium/blob/5c0058a0e1210412c7c76e455481b4e4173210f5/third_party/blink/renderer/core/html/forms/html_form_element.cc#L612-L630
+ * @see https://github.com/WebKit/WebKit/blob/6bea26d263294fb777243a6cb96c86c68b8037f2/Source/WebCore/html/HTMLSelectElement.cpp#L2101-L2102
+ * @see https://github.com/WebKit/WebKit/blob/6bea26d263294fb777243a6cb96c86c68b8037f2/Source/WebCore/html/HTMLFormElement.cpp#L190-L203
+ */
+const selectSubmits = (page: Page, form: Element): boolean =>
+  page.visits.some(
+    (visit) => visit.form === form && visit.kind === "submit" && !isDisabled(visit.element),
+  );
+
+/**
  * Apply Enter's native effect to the focused control.
  *
- * Enter adds a line feed in a `textarea`, submits from a text `input` by implicit submission, and
- * activates a submit button.
+ * Enter adds a line feed in a `textarea`, submits from a text `input` by implicit submission and
+ * from a drop-down `select` through its form's first enabled submit button, and activates a submit
+ * button.
  *
  * @param page The walked tree.
  * @param state The control state, changed in place.
@@ -393,7 +557,9 @@ const enter = (page: Page, state: State, focus: Visit): Outcome => {
   }
 
   const submits =
-    kind === "submit" || (kind === "text" && form !== undefined && submitsImplicitly(page, form));
+    kind === "submit" ||
+    (kind === "text" && form !== undefined && submitsImplicitly(page, form)) ||
+    (kind === "select" && form !== undefined && selectSubmits(page, form));
 
   return submits && form !== undefined ? { submitted: form } : { focus };
 };
@@ -456,7 +622,9 @@ const press = (page: Page, state: State, focus: Visit | undefined, key: Key): Ou
       return focus === undefined ? { focus } : space(page, state, focus);
     }
     default: {
-      if (focus !== undefined) {
+      if (focus?.kind === "select") {
+        typeAhead(state, focus.element, key.type);
+      } else if (focus !== undefined) {
         type(state, focus, key.type);
       }
 
@@ -469,8 +637,9 @@ const press = (page: Page, state: State, focus: Visit | undefined, key: Key): Ou
  * Build the entry list a form posts under a control state.
  *
  * Its controls are taken in tree order, skipping disabled controls and controls with no `name`: a
- * checked radio or checkbox posts its `value` (`on` without one), a text `input` its value, and a
- * `textarea` its value with every line break sent as CRLF. The submit button itself is not posted.
+ * checked radio or checkbox posts its `value` (`on` without one), a text `input` its value, a
+ * `textarea` its value with every line break sent as CRLF, and a drop-down `select` its selected
+ * option's value unless that option is disabled. The submit button itself is not posted.
  *
  * @param page The walked tree.
  * @param state The control state at submission.
@@ -489,6 +658,11 @@ const entriesOf = (page: Page, state: State, form: Element): readonly Entry[] =>
       case "checkbox":
       case "radio": {
         return state.checked.has(element) ? [[name, attribute(element, "value") ?? "on"]] : [];
+      }
+      case "select": {
+        const option = state.selected.get(element);
+
+        return option === undefined || isDisabled(option) ? [] : [[name, optionValue(option)]];
       }
       case "text": {
         return [[name, state.values.get(element) ?? ""]];
@@ -533,13 +707,19 @@ export const tabOrder = (tree: Element): readonly Element[] => {
  * along {@link tabOrder}, recomputed from the current state. Arrow keys on a radio move to the next
  * or previous enabled radio of its group, wrapping, and check it. Space checks a radio, toggles a
  * checkbox and types a space into a text control. Typed text appends to a focused text `input` or
- * `textarea`. Enter adds a line feed in a `textarea` and submits from a text `input` by implicit
- * submission. Enter or Space on a submit button submits its form. A form is the focused control's
- * nearest `form` ancestor; a control outside every form submits nothing. Not modelled: `select`,
- * `a` activation, `fieldset disabled`, `readonly`, `maxlength`, constraint validation, the
- * submitter's own entry, Enter on a focused radio or checkbox (a browser submits the form
- * implicitly from those too; the walk leaves focus where it is), and a named `hidden` input (a
- * browser posts it; the walk's `other` kind posts nothing).
+ * `textarea`, and on a focused drop-down `select` selects an option by type-ahead
+ * ({@link typeAhead}). Enter adds a line feed in a `textarea`, submits from a text `input` by
+ * implicit submission and from a drop-down `select` through its form's first enabled submit button
+ * ({@link selectSubmits}). Enter or Space on a submit button submits its form. A form is the
+ * focused control's nearest `form` ancestor; a control outside every form submits nothing. On a
+ * drop-down `select`, ArrowDown, ArrowUp and Space open its list without changing the value, as
+ * measured in Chromium and WebKit on macOS, so the walk leaves the value; ArrowLeft and ArrowRight
+ * leave it too, unmeasured. Not modelled: a `select`'s open list, `multiple` and a `size` above 1
+ * (both `other`), `optgroup`, an `option`'s `label`, `a` activation, `fieldset disabled`,
+ * `readonly`, `maxlength`, constraint validation, the submitter's own entry, Enter on a focused
+ * radio or checkbox (a browser submits the form implicitly from those too; the walk leaves focus
+ * where it is), and a named `hidden` input (a browser posts it; the walk's `other` kind posts
+ * nothing).
  *
  * @param tree The tree's root.
  * @param keys The keys pressed, in order.

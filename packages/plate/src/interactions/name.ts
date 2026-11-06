@@ -2,22 +2,25 @@
  * How the interactions name their groups and controls for assistive technology (§4.3, §4.8, Q10):
  * the names the author wrote, and the renderer's own for a control the author left unnamed.
  *
- * A Choice, a Text Entry and an Extended Text each read the author's `aria-label` and
- * `aria-labelledby` here, so every interaction scopes the author's ids the same way.
+ * A Choice, a Text Entry, an Extended Text and an Inline Choice each read the author's
+ * `aria-label` and `aria-labelledby` here, so every interaction scopes the author's ids the same
+ * way.
  *
  * An id of the author's `aria-labelledby` counts only when an element of the item carries it
  * ({@link resolvedLabelledby}); the payload keeps those ids alone, so no reference the renderer
  * writes names nothing.
  *
- * The renderer names a control only when the author gave it no name, by Q10's rule: each Control
- * of a text control with no Prompt and no `aria-label` or `aria-labelledby` (a blank `aria-label`,
- * and an `aria-labelledby` none of whose ids an element of the item carries, each counting as
- * none) is "Answer", or "Answer n of count", `n` its position among every Control the renderer
- * names in the item and `count` their number ({@link textControlName}); a Choice whose content
- * gives no text is "Choice n of count", `n` its position among the Choices as emitted and `count`
- * their number ({@link choiceControlName}). A Choice's content gives text when its text nodes, an
- * `img`'s `alt`, an element's `aria-label` or a notice hold anything but whitespace,
- * `aria-hidden="true"` content left out ({@link givesText}).
+ * The renderer names a control only when the author gave it no name, by Q10's rule. The text
+ * controls Q10 counts are a Text Entry's `input`, an Extended Text's `textarea`s and an Inline
+ * Choice's `select`: each Control of a text control with no Prompt, no Label whose content gives
+ * text (an Inline Choice's), and no `aria-label` or `aria-labelledby` (a blank `aria-label`, and an
+ * `aria-labelledby` none of whose ids an element of the item carries, each counting as none) is
+ * "Answer", or "Answer n of count", `n` its position among every Control the renderer names in the
+ * item and `count` their number ({@link textControlName}); a Choice whose content gives no text is
+ * "Choice n of count", `n` its position among the Choices as emitted and `count` their number
+ * ({@link choiceControlName}). A Choice's content gives text when its text nodes, an `img`'s
+ * `alt`, an element's `aria-label` or a notice hold anything but whitespace, `aria-hidden="true"`
+ * content left out ({@link givesText}).
  *
  * @module
  */
@@ -26,6 +29,7 @@ import type { Attributes } from "#plate/emit/node.ts";
 import { authoredIdrefs, splitTokens } from "#plate/emit/parts.ts";
 import { message, numeral } from "#plate/messages.ts";
 import type { Locale } from "#plate/messages.ts";
+import type { BodyAttribute, BodyNode } from "#plate/model/item.ts";
 import { trimXmlSpace } from "#plate/model/values.ts";
 import type { AttributePayload, PayloadNode, TextName } from "#plate/payload.ts";
 
@@ -40,26 +44,31 @@ const isWritten = (text: string): boolean => /[^\t\n\f\r ]/u.test(text);
 /**
  * Read an attribute of a body element, none when the element does not carry it.
  *
- * @param attributes The element's attributes, as the payload holds them.
+ * @param attributes The element's attributes, as the model or the payload holds them.
  * @param name The attribute's name.
  * @returns Its value, or none.
  */
 const attributeOf = (
-  attributes: readonly AttributePayload[],
+  attributes: readonly (AttributePayload | BodyAttribute)[],
   name: string,
 ): Option.Option<string> =>
   Option.fromNullishOr(attributes.find((attribute) => attribute.name === name)?.value);
 
 /**
- * Decide whether payload nodes give a reader any text, as `checkTree`'s `textOf` reads a subtree:
- * a text node, an `img`'s `alt` and an element's `aria-label`, each counting when it holds anything
- * but whitespace, and a notice, which the renderer writes as text. An element with
+ * Decide whether nodes give a reader any text, as `checkTree`'s `textOf` reads a subtree: a text
+ * node, an `img`'s `alt` and an element's `aria-label`, each counting when it holds anything but
+ * whitespace, and a notice, which the renderer writes as text. An element with
  * `aria-hidden="true"` gives none, nor does anything below it.
  *
- * @param nodes The nodes, a Choice's content as the payload holds it.
+ * It reads body nodes as well as payload nodes, so the payload's naming (`isUnnamed`, over the
+ * model) and the emitter's (over the payload) apply this one rule to the same content. An
+ * unsupported part counts as the notice the payload copies it into.
+ *
+ * @param nodes The nodes: a Choice's content or an Inline Choice's Label, as the model or the
+ *   payload holds it.
  * @returns Whether any of them gives text.
  */
-export const givesText = (nodes: readonly PayloadNode[]): boolean =>
+export const givesText = (nodes: readonly (BodyNode | PayloadNode)[]): boolean =>
   nodes.some((node) => {
     switch (node.kind) {
       case "text": {
@@ -73,17 +82,19 @@ export const givesText = (nodes: readonly PayloadNode[]): boolean =>
           (read("aria-label") || (node.tag === "img" && read("alt")) || givesText(node.children))
         );
       }
-      case "notice": {
+      case "notice":
+      case "unsupported": {
         return true;
       }
       case "choice":
       case "extended-text":
+      case "inline-choice":
       case "text-entry": {
         // No content holds an interaction: the emitter refuses one there (`nestedInteraction`).
         return false;
       }
       default: {
-        // Only a payload that lost its type on the way here holds another kind.
+        // Only nodes that lost their type on the way here hold another kind.
         node satisfies never;
 
         return false;
@@ -166,7 +177,8 @@ export const authorsName = (
 });
 
 /**
- * Name a Control of a text control that no Prompt names (§4.8, Q10).
+ * Name a Control of a text control that no Prompt or Label names (§4.8, Q10): a Text Entry's
+ * `input`, an Extended Text's `textarea` or an Inline Choice's `select`.
  *
  * The author's `aria-label` and `aria-labelledby` win ({@link authorsName}). A control with
  * neither, a blank `aria-label` and an `aria-labelledby` that names no id an element of the item
@@ -177,7 +189,8 @@ export const authorsName = (
  * @param name How the control is named, from the payload.
  * @param instance The item instance key, which scopes the author's ids.
  * @param locale The locale of the renderer's own text.
- * @param index The Control's index, from 0, among its text control's Controls: 0 for a Text Entry.
+ * @param index The Control's index, from 0, among its text control's Controls: 0 for a Text Entry
+ *   and an Inline Choice, which have one.
  * @returns The naming attributes.
  */
 export const textControlName = (

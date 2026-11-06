@@ -1,5 +1,5 @@
 /**
- * The item model: what phase 1 reads from a valid `qti-assessment-item`, typed, with every feature
+ * The item model: what plate reads from a valid `qti-assessment-item`, typed, with every feature
  * it does not render named as a notice or a mark.
  *
  * {@link buildItem} reads the declarations, the body and the response processing into one
@@ -44,7 +44,7 @@ import type {
 } from "#plate/vocabulary.ts";
 
 /**
- * A feature the item holds and phase 1 does not render, where it is, and how it is shown: a
+ * A feature the item holds and plate does not render, where it is, and how it is shown: a
  * `notice` in the body in place of its part, or a `mark` on the verdict only.
  */
 export interface UnsupportedFeature {
@@ -239,13 +239,14 @@ export interface BodyText {
 }
 
 /**
- * A `qti-simple-choice`: its identifier, its content, and whether it is fixed.
+ * A `qti-simple-choice` of a Choice, or a `qti-inline-choice` of an Inline Choice, which carries
+ * the same fields: its identifier, its content, and whether it is fixed.
  */
 export interface SimpleChoice {
   readonly content: readonly BodyNode[];
   /**
    * `fixed`, an `xs:boolean`, false when absent: a fixed choice keeps its document position when
-   * its Choice is shuffled.
+   * its interaction is shuffled.
    */
   readonly fixed: boolean;
   readonly identifier: string;
@@ -293,6 +294,65 @@ export interface ChoiceInteraction {
    * The identifier of the response it binds, `response-identifier`.
    */
   readonly response: string;
+  readonly shuffle: boolean;
+}
+
+/**
+ * A `qti-inline-choice-interaction` (Q-12), bound to an identifier response of single
+ * cardinality, which stands inside the author's sentence. The model keeps its choices in document
+ * order whatever `shuffle` says; the payload presents a shuffled Inline Choice's choices in the
+ * seeded order, each fixed choice at its own place, as a Choice's.
+ */
+export interface InlineChoiceInteraction {
+  /**
+   * The author's `aria-label`, which names the Control when no Label gives a name.
+   */
+  readonly ariaLabel: Option.Option<string>;
+  /**
+   * The author's `aria-labelledby`, an IDREFS value as written, which names the Control when no
+   * Label gives a name.
+   */
+  readonly ariaLabelledby: Option.Option<string>;
+  /**
+   * Each `qti-inline-choice` in document order, which has a `qti-simple-choice`'s identifier,
+   * content and `fixed`; the identifiers are unique within the interaction (info model 5.73.1).
+   */
+  readonly choices: readonly SimpleChoice[];
+  /**
+   * The author's `class` value, empty when absent.
+   */
+  readonly class: string;
+  readonly kind: "inline-choice";
+  /**
+   * The content of the interaction's first `qti-label`, none when it has none.
+   */
+  readonly label: Option.Option<readonly BodyNode[]>;
+  /**
+   * The author's replacement for the too-few message, `data-min-selections-message`.
+   */
+  readonly messages: { readonly min: Option.Option<string> };
+  /**
+   * `min-choices`, 0 when absent: a count, 0 to 2^63-1, held exactly (reading 46). One above 1 is
+   * kept as written, so under `validateResponses` no response of a single binding meets it.
+   */
+  readonly minChoices: bigint;
+  readonly path: string;
+  /**
+   * The author's `data-prompt`, the text of the option that stands for no answer.
+   */
+  readonly placeholder: Option.Option<string>;
+  /**
+   * `required`, an `xs:boolean`, false when absent: under `validateResponses`, a NULL response is
+   * refused even when `min-choices` is 0.
+   */
+  readonly required: boolean;
+  /**
+   * The identifier of the response it binds, `response-identifier`.
+   */
+  readonly response: string;
+  /**
+   * `shuffle`, an `xs:boolean`, false when absent.
+   */
   readonly shuffle: boolean;
 }
 
@@ -368,7 +428,7 @@ export interface ExtendedTextInteraction extends Omit<TextEntryInteraction, "kin
 }
 
 /**
- * A body part phase 1 does not render, shown as a notice in its place; its subtree is dropped.
+ * A body part plate does not render, shown as a notice in its place; its subtree is dropped.
  */
 export interface Unsupported {
   /**
@@ -380,17 +440,23 @@ export interface Unsupported {
 }
 
 /**
- * An interaction of the item model, the three phase 1 renders.
+ * An interaction of the item model, the four plate renders: Choice, Extended Text, Inline Choice
+ * and Text Entry.
  */
-export type Interaction = ChoiceInteraction | ExtendedTextInteraction | TextEntryInteraction;
+export type Interaction =
+  | ChoiceInteraction
+  | ExtendedTextInteraction
+  | InlineChoiceInteraction
+  | TextEntryInteraction;
 
 /**
- * A node of the item body.
+ * A node of the item body: an element, a text, one of the four interactions, or a notice.
  */
 export type BodyNode =
   | BodyElement
   | BodyText
   | ChoiceInteraction
+  | InlineChoiceInteraction
   | TextEntryInteraction
   | ExtendedTextInteraction
   | Unsupported;
@@ -432,13 +498,13 @@ export type Rule =
   | { readonly expression: Expression; readonly identifier: string; readonly kind: "set-outcome" };
 
 /**
- * A valid `qti-assessment-item` as phase 1 models it.
+ * A valid `qti-assessment-item` as plate models it.
  *
  * `responses` and `outcomes` hold the declarations of modelled base types and cardinalities, in
  * document order; every other declaration is a mark. `processing` is none when the item has no
- * response processing, or when phase 1 cannot run it, which `unsupported` then marks. Phase 1
- * cannot run it on an item with template processing, which phase 1 does not run and which may set a
- * value response processing reads, such as a correct response. `unsupported` lists every feature
+ * response processing, or when plate cannot run it, which `unsupported` then marks. Plate cannot
+ * run it on an item with template processing, which plate does not run and which may set a value
+ * response processing reads, such as a correct response. `unsupported` lists every feature
  * not rendered, in document order, each once per feature and path.
  */
 export interface Item {
@@ -1089,6 +1155,24 @@ const boundDeclaration = (build: Build, element: SourceElement): Option.Option<S
   );
 
 /**
+ * Report whether some nodes hold only text and the named elements, all the way down: what a native
+ * `option`, which holds only text, can show.
+ *
+ * @param nodes The nodes, such as a `qti-inline-choice`'s children.
+ * @param elements The local names of the QTI-namespace elements allowed among them.
+ * @returns Whether every descendant is text or such an element. An entity reference, or an element
+ *   of another namespace, is neither.
+ */
+const textSafe = (nodes: readonly SourceChild[], elements: readonly string[]): boolean =>
+  nodes.every(
+    (node) =>
+      node.kind === "text" ||
+      (node.kind === "element" &&
+        elements.includes(nameOf(node)) &&
+        textSafe(node.children, elements)),
+  );
+
+/**
  * Report whether a `renders` condition holds on an element.
  *
  * @param build The build.
@@ -1145,6 +1229,12 @@ const holds = (build: Build, condition: Condition, element: SourceElement): bool
           valueOf(declaration, "cardinality"),
         ),
       ) === condition.cardinality
+    );
+  }
+
+  if (condition.kind === "not-text-safe") {
+    return childrenNamed(element, "qti-inline-choice").some(
+      (choice) => !textSafe(choice.children, condition.elements),
     );
   }
 
@@ -1618,21 +1708,24 @@ const bodyNodes = (
   );
 
 /**
- * Read the first `qti-prompt` of an interaction.
+ * Read the content of an interaction's first child of one name, such as its `qti-prompt` or an
+ * Inline Choice's `qti-label`.
  *
  * @param build The build.
  * @param interaction The interaction.
- * @returns The prompt's content, none when it has no prompt, or a refusal.
+ * @param local The child's local name.
+ * @returns The child's content, none when it has no such child, or a refusal.
  */
-const promptOf = (
+const firstContent = (
   build: Build,
   interaction: SourceElement,
+  local: "qti-label" | "qti-prompt",
 ): Effect.Effect<Option.Option<readonly BodyNode[]>, Refusal> =>
   Effect.transposeOption(
-    Option.map(Arr.head(childrenNamed(interaction, "qti-prompt")), (prompt) => {
-      markElement(build, prompt, true);
+    Option.map(Arr.head(childrenNamed(interaction, local)), (child) => {
+      markElement(build, child, true);
 
-      return bodyNodes(build, prompt);
+      return bodyNodes(build, child);
     }),
   );
 
@@ -1696,6 +1789,27 @@ const textFields = (
   });
 
 /**
+ * Read a choice of a Choice or an Inline Choice, a `qti-simple-choice` or a `qti-inline-choice`:
+ * its identifier, its `fixed`, an `xs:boolean` false when absent, and its content.
+ *
+ * @param build The build.
+ * @param choice The choice.
+ * @returns The choice, or a refusal.
+ */
+const simpleChoiceOf = (
+  build: Build,
+  choice: SourceElement,
+): Effect.Effect<SimpleChoice, Refusal> =>
+  Effect.gen(function* simpleChoice() {
+    markElement(build, choice, true);
+
+    const identifier = yield* identifierAttribute(build, choice, "identifier");
+    const fixed = yield* xsBoolean(build, choice, "fixed", false);
+
+    return { content: yield* bodyNodes(build, choice), fixed, identifier };
+  });
+
+/**
  * Read a `qti-choice-interaction` bound as Choice renders it.
  *
  * @param build The build.
@@ -1712,18 +1826,10 @@ const choiceInteraction = (
     const maxChoices = yield* countAttribute(build, interaction, "max-choices");
     const minChoices = yield* countAttribute(build, interaction, "min-choices");
     const shuffle = yield* xsBoolean(build, interaction, "shuffle", false);
-    const prompt = yield* promptOf(build, interaction);
+    const prompt = yield* firstContent(build, interaction, "qti-prompt");
     const choices = yield* Effect.forEach(
       childrenNamed(interaction, "qti-simple-choice"),
-      (choice) =>
-        Effect.gen(function* simpleChoice() {
-          markElement(build, choice, true);
-
-          const identifier = yield* identifierAttribute(build, choice, "identifier");
-          const fixed = yield* xsBoolean(build, choice, "fixed", false);
-
-          return { content: yield* bodyNodes(build, choice), fixed, identifier };
-        }),
+      (choice) => simpleChoiceOf(build, choice),
     );
 
     return {
@@ -1748,14 +1854,58 @@ const choiceInteraction = (
   });
 
 /**
- * Read one of the three interactions phase 1 renders: its model when its binding is in `renders`
- * and it carries no notice feature, otherwise its notice. An Extended Text that carries a feature
- * of `renders.controlNotices`, such as `min-strings>100`, is still built, and the feature is
- * recorded as a notice that stands in place of its Controls.
+ * Read a `qti-inline-choice-interaction`, bound as Inline Choice renders it, to a single
+ * identifier.
+ *
+ * `min-choices`, `required`, `shuffle` and each choice's `fixed` are read as their XSD types read
+ * them, their outer whitespace gone (reading 7): `required=" true "` is true. `template-identifier`
+ * and `show-hide` are not read.
  *
  * @param build The build.
  * @param interaction The interaction.
- * @param name Which of the three it is.
+ * @returns The Inline Choice model, or a refusal.
+ */
+const inlineChoiceInteraction = (
+  build: Build,
+  interaction: SourceElement,
+): Effect.Effect<InlineChoiceInteraction, Refusal> =>
+  Effect.gen(function* readInlineChoice() {
+    const minChoices = yield* countAttribute(build, interaction, "min-choices");
+    const required = yield* xsBoolean(build, interaction, "required", false);
+    const shuffle = yield* xsBoolean(build, interaction, "shuffle", false);
+    const label = yield* firstContent(build, interaction, "qti-label");
+    const choices = yield* Effect.forEach(
+      childrenNamed(interaction, "qti-inline-choice"),
+      (choice) => simpleChoiceOf(build, choice),
+    );
+
+    return {
+      ariaLabel: valueOf(interaction, "aria-label"),
+      ariaLabelledby: valueOf(interaction, "aria-labelledby"),
+      choices,
+      class: Option.getOrElse(valueOf(interaction, "class"), () => ""),
+      kind: "inline-choice",
+      label,
+      messages: { min: valueOf(interaction, "data-min-selections-message") },
+      minChoices: Option.getOrElse(minChoices, () => 0n),
+      path: pathOf(build, interaction),
+      placeholder: valueOf(interaction, "data-prompt"),
+      required,
+      response: yield* identifierAttribute(build, interaction, "response-identifier"),
+      shuffle,
+    };
+  });
+
+/**
+ * Read one of the four interactions plate renders: its model when its binding is in `renders` and
+ * it carries no notice feature, otherwise its notice. An Inline Choice whose choices hold content a
+ * native `option` cannot show is the notice `qti-inline-choice-interaction`. An Extended Text that
+ * carries a feature of `renders.controlNotices`, such as `min-strings>100`, is still built, and the
+ * feature is recorded as a notice that stands in place of its Controls.
+ *
+ * @param build The build.
+ * @param interaction The interaction.
+ * @param name Which of the four it is.
  * @returns The body node, or the refusal `undeclared-response` when it binds no declaration.
  */
 const interactionNode = (
@@ -1807,6 +1957,17 @@ const interactionNode = (
       return { ...fields, kind: "text-entry" };
     }
 
+    if (name === "qti-inline-choice-interaction") {
+      const bound = bind(renders.bindings[name], declaration.value);
+      if (Result.isFailure(bound)) {
+        return yield* notice(build, bound.failure, path);
+      }
+
+      markElement(build, interaction, true);
+
+      return yield* inlineChoiceInteraction(build, interaction);
+    }
+
     const binding = renders.bindings[name];
     const bound = bind(binding, declaration.value);
     if (Result.isFailure(bound)) {
@@ -1831,7 +1992,7 @@ const interactionNode = (
       }
     }
 
-    const prompt = yield* promptOf(build, interaction);
+    const prompt = yield* firstContent(build, interaction, "qti-prompt");
 
     return {
       ...fields,

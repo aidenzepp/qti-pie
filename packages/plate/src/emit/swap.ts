@@ -1,12 +1,12 @@
 import { Data, Result } from "effect";
 import { h } from "#plate/emit/node.ts";
 import type { Attributes, Element, Node, PartFunction } from "#plate/emit/node.ts";
-import { allows, lists, splitTokens } from "#plate/emit/parts.ts";
+import { allows, attributeOf, lists, splitTokens } from "#plate/emit/parts.ts";
 import type { PartRow, TagClass } from "#plate/emit/parts.ts";
 
 /**
  * The ways a replacement part function can break the swap invariant, one per refusal of I2, I3, the
- * list joint rule and the legend joint rule.
+ * list joint rule, the legend joint rule and the handed-content rule (`select-content`).
  *
  * @see {@link PartSwapRefused}
  */
@@ -17,6 +17,7 @@ export const swapCauses = [
   "child-reordered",
   "list-item",
   "legend-first",
+  "select-content",
 ] as const;
 
 /**
@@ -37,6 +38,8 @@ const remedies = {
     "Place the legend Prompt as the <fieldset>'s first element child, unwrapped; wrap only the nodes after it.",
   "list-item": "Swap Choices too, or return an <li> from the Choice replacement.",
   "root-not-allowed": "Return an element the part may become as the replacement's root.",
+  "select-content":
+    "Place the nodes the part function receives directly under the returned root, in the order given, wrapping none and adding nothing beside them; restyle an option or a textarea through its marker.",
 } satisfies { readonly [C in SwapCause]: string };
 
 /**
@@ -60,6 +63,11 @@ const controlRemedy = (interaction: string): string =>
  * The check runs on every emit, not only in development, because a replacement is host code that
  * ships. `detail` names the returned element or the child at fault; the message adds what to
  * change. It is returned through a `Result`, never thrown.
+ *
+ * Beside I2 and I3 it holds three joint rules: the list rule (`list-item`), the legend rule
+ * (`legend-first`) and the handed-content rule (`select-content`), under which a `select`,
+ * `option` or `textarea` part's replacement holds exactly the nodes handed to it. The cause keeps
+ * the name it had when the rule held only the `select` and its options.
  */
 export class PartSwapRefused extends Data.TaggedError("PartSwapRefused")<{
   readonly cause: SwapCause;
@@ -112,12 +120,16 @@ const mayBecome = {
   "flow-container":
     "a flow container such as <div>, <section> or <span>, or a custom element, and never a control, link or list",
   heading: "a heading, <h1> to <h6>",
+  "inline-label": "a <label>, or a phrasing container such as <span>, or a custom element",
   legend: "a <legend>, which names its <fieldset> natively",
   li: "an <li>",
   list: "a <ul>, <ol> or <menu>",
   "native-input": 'an <input>, whose "type" the interaction writes',
+  option: 'an <option> with no "label", so it shows the text it holds',
   "phrasing-container": "a phrasing container such as <span>, or a custom element",
   prompt: "a <p>, or a flow or phrasing container such as <div> or <span>",
+  select:
+    'a <select> with no "multiple" and no "size" other than 1, a drop-down that posts one entry',
   "text-input": 'an <input> of type "text"',
   textarea: "a <textarea>",
 } satisfies { readonly [C in TagClass]: string };
@@ -126,15 +138,15 @@ const mayBecome = {
  * Name a node of the output tree for a refusal's detail.
  *
  * @param node The node.
- * @returns The element's tag in angle brackets, with its `type` when it is an `input`, or the text
- *   quoted and cut to 24 characters.
+ * @returns The element's tag in angle brackets, with its `type`, read in any case, when it is an
+ *   `input`, or the text quoted and cut to 24 characters.
  */
 const describeNode = (node: Node): string => {
   if (node.kind === "text") {
     return `text ${JSON.stringify(node.text.length > 24 ? `${node.text.slice(0, 24)}…` : node.text)}`;
   }
 
-  const { type } = node.attrs;
+  const type = attributeOf(node.attrs, "type");
 
   return node.tag === "input" && type !== undefined && type !== true
     ? `<input type=${JSON.stringify(type)}>`
@@ -288,6 +300,77 @@ const checkLegendFirst = (root: Element, children: readonly Node[]): Breach | un
 };
 
 /**
+ * The tag classes whose replacement holds exactly the nodes handed to it, as its own children in
+ * order, under the handed-content rule: a `select` holds only the item's `option`s, an `option`
+ * only its text, and a `textarea` only the restored answer, since a textarea's text is the value
+ * it posts. A host supplies none of an item's data and none of the candidate's answer.
+ */
+const holdsHandedOnly: ReadonlySet<TagClass> = new Set(["option", "select", "textarea"]);
+
+/**
+ * Say where a root's child at fault sits against the nodes handed to the replacement.
+ *
+ * @param children The nodes the emitter handed over.
+ * @param index The child's position under the returned root, from 0.
+ * @returns The handed child it stands in for, or that it stands beside them, or that none were
+ *   handed.
+ */
+const placementOf = (children: readonly Node[], index: number): string => {
+  if (index < children.length) {
+    return `where ${childAt(children, index)}, belongs`;
+  }
+
+  if (children.length === 0) {
+    return "though it was handed no nodes";
+  }
+
+  return `beside the ${children.length} ${children.length === 1 ? "node" : "nodes"} it was handed`;
+};
+
+/**
+ * Check the handed-content rule on a replacement's root: its children are the nodes handed to it,
+ * by identity, in order, none wrapped (in an `optgroup`, a `div` or a `span`) and nothing beside
+ * them.
+ *
+ * I3 has already kept the root a `select`, an `option` or a `textarea`, and I2 has placed every
+ * handed node below it; this rule adds that each sits directly under the root and that the root
+ * holds nothing else, so the `select` holds only the item's options, each `option` only its text,
+ * and the `textarea` only the restored answer, or nothing when none is restored.
+ *
+ * @param root The replacement's root.
+ * @param children The nodes the emitter handed over: the Placeholder and the Options, an option's
+ *   text, or the restored answer's text (none when nothing is restored).
+ * @returns The breach naming the root's first child at fault, or undefined when the root holds
+ *   exactly the handed nodes.
+ * @see https://html.spec.whatwg.org/multipage/form-elements.html#the-select-element
+ * @see https://html.spec.whatwg.org/multipage/form-elements.html#the-textarea-element
+ */
+const checkHandedOnly = (root: Element, children: readonly Node[]): Breach | undefined => {
+  const count = Math.max(root.children.length, children.length);
+  let index = 0;
+  while (index < count && root.children[index] === children[index]) {
+    index += 1;
+  }
+
+  if (index === count) {
+    return undefined;
+  }
+
+  const held = root.children[index];
+  if (held === undefined) {
+    return {
+      cause: "select-content",
+      detail: `${childAt(children, index)}, is not a child of the returned ${describeNode(root)}`,
+    };
+  }
+
+  return {
+    cause: "select-content",
+    detail: `the returned ${describeNode(root)} holds ${describeNode(held)} as its child ${index + 1}, ${placementOf(children, index)}`,
+  };
+};
+
+/**
  * Split a `class` value into its tokens, at ASCII whitespace as HTML does ({@link splitTokens}).
  *
  * @param value The attribute's value, if present.
@@ -298,15 +381,109 @@ const classTokens = (value: string | true | undefined): readonly string[] =>
   value === undefined || value === true ? [] : splitTokens(value);
 
 /**
+ * Lower-case an attribute name's ASCII letters, as the HTML tokenizer does and nothing more.
+ *
+ * @param name The attribute's name as the tree spells it.
+ * @returns `name` with A to Z lowered.
+ * @see https://html.spec.whatwg.org/multipage/parsing.html#attribute-name-state
+ */
+const asciiLower = (name: string): string =>
+  name.replaceAll(/[A-Z]/gu, (letter) => letter.toLowerCase());
+
+/**
+ * Lay sets of attributes over one another, each later set winning, with names compared in ASCII
+ * lower case, so exactly one attribute of each name survives.
+ *
+ * The HTML parser keeps the first of two attributes whose names match that way and drops the
+ * rest, so a replacement's `NAME` written beside plate's `name` would otherwise post under the
+ * replacement's name. Within one set the first spelling of a name wins, as the parser reads it and
+ * as the tag classes read it; across sets a later set's attribute takes the earlier one's place,
+ * under the later set's spelling.
+ *
+ * @param layers The sets, lowest precedence first.
+ * @returns One attribute of each name, in the order each name first appears.
+ */
+const overlay = (...layers: readonly Attributes[]): Attributes => {
+  const named = new Map<string, readonly [string, string | true]>();
+  for (const layer of layers) {
+    const seen = new Set<string>();
+    for (const [name, value] of Object.entries(layer)) {
+      const key = asciiLower(name);
+      if (!seen.has(key)) {
+        seen.add(key);
+        named.set(key, [name, value]);
+      }
+    }
+  }
+
+  return Object.fromEntries(named.values());
+};
+
+/**
  * Write a row's defaults under the attributes set over them, those attributes winning a conflict.
  *
  * @param defaults The row's defaulted attributes.
  * @param attrs The attributes written over the defaults.
  * @returns `attrs` itself when the row has no defaults, so the fast path keeps the props by
- *   identity; otherwise a copy holding the defaults and then `attrs`.
+ *   identity; otherwise the defaults overlaid by `attrs`, names compared in ASCII lower case.
  */
 const overDefaults = (defaults: PartRow["defaults"], attrs: Attributes): Attributes =>
-  Object.keys(defaults).length === 0 ? attrs : { ...defaults, ...attrs };
+  Object.keys(defaults).length === 0 ? attrs : overlay(defaults, attrs);
+
+/**
+ * The state attributes: the names whose presence is what a control posts, shows chosen or lets
+ * the candidate change. Where a row's `merged` list names one, it is plate's whether plate writes
+ * it or leaves it off, so a replacement cannot set that state on the part's own element: it neither
+ * pre-answers a control nor takes a choice or the Placeholder away there. The rule covers a
+ * control's own element, not its ancestors: a host that disables controls through a container (a
+ * `fieldset disabled`, an `inert` subtree) does so as the owner of everything around them, and
+ * `render`'s `disabled` option is the supported way to disable every control.
+ *
+ * `hidden` is merged only on the Inline Choice Option and Placeholder, where hiding an option
+ * would take it from the candidate as `disabled` does.
+ */
+const stateAttributes: ReadonlySet<string> = new Set([
+  "checked",
+  "disabled",
+  "hidden",
+  "name",
+  "readonly",
+  "selected",
+  "type",
+  "value",
+]);
+
+/**
+ * Name the attributes a swapped part must not carry beyond what its props write: each state
+ * attribute the row merges that the props leave off, and, on a Label whose root is not a `label`,
+ * `for`, which HTML gives a `label` alone (as the Choice's `labelAsSpan` leaves it off).
+ *
+ * @param row The part's row.
+ * @param root The replacement's root.
+ * @param props The attributes the part's connect function computed.
+ * @returns The names, in lower case; the props' names are compared in ASCII lower case.
+ * @see https://html.spec.whatwg.org/multipage/forms.html#attr-label-for
+ */
+const unwritten = (row: PartRow, root: Element, props: Attributes): ReadonlySet<string> => {
+  const written = new Set(Object.keys(props).map((name) => asciiLower(name)));
+  const names = row.merged.filter((name) => stateAttributes.has(name) && !written.has(name));
+
+  return new Set(
+    row.part === "label" && asciiLower(root.tag) !== "label" ? [...names, "for"] : names,
+  );
+};
+
+/**
+ * Leave out of a set of attributes those whose names, in ASCII lower case, are among `names`.
+ *
+ * @param attrs The attributes.
+ * @param names The names to leave out, in lower case.
+ * @returns `attrs` itself when `names` is empty, else a copy without them.
+ */
+const without = (attrs: Attributes, names: ReadonlySet<string>): Attributes =>
+  names.size === 0
+    ? attrs
+    : Object.fromEntries(Object.entries(attrs).filter(([name]) => !names.has(asciiLower(name))));
 
 /**
  * Apply I1: write every attribute of `props` onto the replacement's root, `props` winning a
@@ -314,39 +491,46 @@ const overDefaults = (defaults: PartRow["defaults"], attrs: Attributes): Attribu
  *
  * Every attribute the connect function computes is in `props`, so "required" means everything in
  * `props`; whatever else the root carries (`data-*`, `title`, further classes, a `type` over a
- * defaulted one) stands.
+ * defaulted one, an `aria-describedby` plate writes only when invalid) stands. Absence is a prop
+ * for the state attributes: a root attribute that names one of {@link stateAttributes} the row
+ * merges is dropped when the props leave it off, so plate's unchecked radio, unselected option,
+ * editable field and enabled button stay so on their own elements; disabling them through an
+ * ancestor is the host's ({@link stateAttributes}). A Label whose root is not a `label` carries no
+ * `for`, from the props or its own. Names are compared in ASCII lower case, so a root attribute
+ * spelled `NAME` or `SELECTED` gives way to the props' or is dropped, rather than standing beside
+ * them.
  *
  * @param root The replacement's root.
  * @param props The attributes the part carries.
- * @param defaults The row's defaulted attributes, which the root's own attributes override.
- * @returns A copy of `root` with the defaults, then its own attributes, then the props, and the
- *   same children: `class` holds the props' tokens and then the root's, each once, and is absent
- *   when neither side has one.
+ * @param row The part's row: its defaults, which the root's own attributes override, and the
+ *   `merged` list whose state attributes the props own by their absence.
+ * @returns A copy of `root` with the defaults, then its own attributes, then the props, one
+ *   attribute of each name and none of those {@link unwritten} names, and the same children:
+ *   `class` holds the props' tokens and then the root's (its `class` in any case), each once, and
+ *   is absent when neither side has one.
  */
-const mergeRequired = (
-  root: Element,
-  props: Attributes,
-  defaults: PartRow["defaults"],
-): Element => {
-  const merged = overDefaults(defaults, { ...root.attrs, ...props });
-  if (props["class"] === undefined && root.attrs["class"] === undefined) {
+const mergeRequired = (root: Element, props: Attributes, row: PartRow): Element => {
+  const dropped = unwritten(row, root, props);
+  const merged = overlay(row.defaults, without(root.attrs, dropped), without(props, dropped));
+  const rootClass = attributeOf(root.attrs, "class");
+  if (props["class"] === undefined && rootClass === undefined) {
     return h(root.tag, merged, root.children);
   }
 
-  const tokens = new Set([...classTokens(props["class"]), ...classTokens(root.attrs["class"])]);
+  const tokens = new Set([...classTokens(props["class"]), ...classTokens(rootClass)]);
 
-  return h(root.tag, { ...merged, class: [...tokens].join(" ") }, root.children);
+  return h(root.tag, overlay(merged, { class: [...tokens].join(" ") }), root.children);
 };
 
 /**
- * Write a role onto a node, when it is an element.
+ * Write a role onto a node, when it is an element, over a `role` it names in any case.
  *
  * @param node The node.
  * @param role The role's value.
- * @returns A copy of the element with `role` set, or the text node unchanged.
+ * @returns A copy of the element with one `role`, set to `role`, or the text node unchanged.
  */
 const withRole = (node: Node, role: string): Node =>
-  node.kind === "element" ? h(node.tag, { ...node.attrs, role }, node.children) : node;
+  node.kind === "element" ? h(node.tag, overlay(node.attrs, { role }), node.children) : node;
 
 /**
  * Copy an element's subtree with `role="listitem"` written onto each handed node, wherever the
@@ -391,10 +575,10 @@ const checkListItems = (list: Element, children: readonly Node[]): Breach | unde
  *
  * @param owner The list owner's root, after I1.
  * @param children The nodes the emitter handed over, the Choice roots.
- * @returns A copy of `owner` with the list roles written.
+ * @returns A copy of `owner` with the list roles written over any `role` named in another case.
  */
 const withListRoles = (owner: Element, children: readonly Node[]): Element =>
-  h(owner.tag, { ...owner.attrs, role: "list" }, markListItems(owner, new Set(children)));
+  h(owner.tag, overlay(owner.attrs, { role: "list" }), markListItems(owner, new Set(children)));
 
 /**
  * Construct the refusal of a breach at a part.
@@ -407,8 +591,9 @@ const refuse = (row: PartRow, breach: Breach): PartSwapRefused =>
   new PartSwapRefused({ ...breach, interaction: row.interaction, part: row.part });
 
 /**
- * Construct a swapped part's root: the replacement's, checked against I3, I2 and, for a legend
- * owner, the legend joint rule, with I1 applied over the row's defaults.
+ * Construct a swapped part's root: the replacement's, checked against I3, I2, for a legend owner
+ * the legend joint rule, and for a `select`, `option` or `textarea` part the handed-content rule,
+ * with I1 applied over the row's defaults.
  *
  * @param row The part's row.
  * @param props The attributes the part's connect function computed.
@@ -427,10 +612,11 @@ const swapIn = (
   const breach =
     checkRoot(row, root) ??
     checkChildren(row, root, children) ??
-    (row.legendOwner ? checkLegendFirst(root, children) : undefined);
+    (row.legendOwner ? checkLegendFirst(root, children) : undefined) ??
+    (holdsHandedOnly.has(row.tagClass) ? checkHandedOnly(root, children) : undefined);
 
   return breach === undefined
-    ? Result.succeed(mergeRequired(root, props, row.defaults))
+    ? Result.succeed(mergeRequired(root, props, row))
     : Result.fail(refuse(row, breach));
 };
 
@@ -442,10 +628,15 @@ const swapIn = (
  * defaults and then `props`, and `children` by identity, with no walk. With one, the replacement's
  * root must be an element of the row's tag class (I3) and hold every handed child once, in order
  * (I2); the row's defaults go under its attributes and `props` over them (I1), so a replacement may
- * override a default but never a prop. A legend owner (the Choice Root under the `legend` markup)
- * must keep the legend Prompt its first element child; the fast path holds it as handed. A list
- * owner (Choices) also applies the list joint rule on either path. Every breach is a
- * {@link PartSwapRefused} (I4), returned as the `Result`'s failure.
+ * override a default but never a prop, nor set a state attribute the row merges and the props leave
+ * off (`checked`, `selected`, `disabled`, `readonly`, an Option's `hidden`), and a Label whose root
+ * is not a `label` carries no `for`. A legend owner (the Choice Root under the `legend` markup)
+ * must keep the legend Prompt its first element child; the fast path holds it as handed. A
+ * `select`, `option` or `textarea` part (the Inline Choice Control, Placeholder and Option, and the
+ * Extended Text Control) must hold exactly the nodes handed to it, directly and in order, wrapping
+ * none and adding nothing beside them; the fast path holds them as handed. A list owner (Choices)
+ * also applies the list joint rule on either path. Every breach is a {@link PartSwapRefused} (I4),
+ * returned as the `Result`'s failure.
  *
  * @example
  *   Result.map(applyPart(rowFor("item", "root"), props, body), toHtml);

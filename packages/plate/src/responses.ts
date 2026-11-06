@@ -14,6 +14,7 @@ import type { Configuration } from "#plate/configuration.ts";
 import type { Malformed } from "#plate/form/encoding.ts";
 import { validateChoice } from "#plate/interactions/choice.ts";
 import { validateExtendedText } from "#plate/interactions/extended-text.ts";
+import { validateInlineChoice } from "#plate/interactions/inline-choice.ts";
 import { validateTextEntry } from "#plate/interactions/text-entry.ts";
 import { interactionsIn } from "#plate/model/interactions.ts";
 import type { Interaction, Item } from "#plate/model/item.ts";
@@ -21,6 +22,31 @@ import { nullOf } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
 import type { ValidationMessage } from "#plate/payload.ts";
 import type { Accepted } from "#plate/validate/verdict.ts";
+
+/**
+ * Give the NULL of the type an interaction binds: an identifier of a Choice's cardinality, a single
+ * identifier for an Inline Choice, and a single value of a text control's base type.
+ *
+ * @param interaction The interaction.
+ * @returns Its NULL.
+ */
+const ownNull = (interaction: Interaction): Value => {
+  switch (interaction.kind) {
+    case "choice": {
+      return nullOf("identifier", interaction.cardinality);
+    }
+    case "inline-choice": {
+      return nullOf("identifier", "single");
+    }
+    case "extended-text":
+    case "text-entry": {
+      return nullOf(interaction.baseType, "single");
+    }
+    default: {
+      return interaction satisfies never;
+    }
+  }
+};
 
 /**
  * Give an interaction's NULL, the input of a response the caller left out.
@@ -32,10 +58,7 @@ import type { Accepted } from "#plate/validate/verdict.ts";
  */
 const absent = (item: Item, interaction: Interaction): Value =>
   Option.match(Option.fromUndefinedOr(item.responses.get(interaction.response)), {
-    onNone: () =>
-      interaction.kind === "choice"
-        ? nullOf("identifier", interaction.cardinality)
-        : nullOf(interaction.baseType, "single"),
+    onNone: () => ownNull(interaction),
     onSome: (declaration) => nullOf(declaration.baseType, declaration.cardinality),
   });
 
@@ -58,6 +81,9 @@ const validate = (
     }
     case "extended-text": {
       return validateExtendedText(interaction, input, configuration);
+    }
+    case "inline-choice": {
+      return validateInlineChoice(interaction, input, configuration);
     }
     case "text-entry": {
       return validateTextEntry(interaction, input, configuration);

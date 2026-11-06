@@ -7,9 +7,10 @@
  * every field it names one by one and never spreads a model object, so a field the model gains
  * reaches the page only when this file names it. Neither copy holds a correct response, a mapping,
  * a response or outcome default, a processing rule, a template value or feedback content, and the
- * payload holds no seed: the view's seed only orders a shuffled Choice's choices. What the page
- * cannot be given, it cannot leak. A `solution` render shows correct responses only when the
- * author passes them as the view's values; nothing here reads them from the item.
+ * payload holds no seed: the view's seed only orders a shuffled Choice's or Inline Choice's
+ * choices. What the page cannot be given, it cannot leak. A `solution` render shows correct
+ * responses only when the author passes them as the view's values; nothing here reads them from the
+ * item.
  *
  * @module
  * @see {@link Item} for the model it reads.
@@ -22,13 +23,14 @@ import type { Resolved } from "#plate/emit/parts.ts";
 import { shuffleOrder } from "#plate/engine/random.ts";
 import { entryName, isPosted } from "#plate/form/encoding.ts";
 import type { Binding, DecodeOptions } from "#plate/form/encoding.ts";
-import { authorsLabel, resolvedLabelledby } from "#plate/interactions/name.ts";
+import { authorsLabel, givesText, resolvedLabelledby } from "#plate/interactions/name.ts";
 import type { Locale } from "#plate/messages.ts";
 import { interactionsIn } from "#plate/model/interactions.ts";
 import type {
   BodyNode,
   ChoiceInteraction,
   ExtendedTextInteraction,
+  InlineChoiceInteraction,
   Interaction,
   Item,
   SimpleChoice,
@@ -89,8 +91,8 @@ export interface View {
   readonly names: ReadonlyMap<string, string>;
   readonly posted: Option.Option<ReadonlyMap<string, readonly string[]>>;
   /**
-   * The configuration's `seed`, which keys a shuffled Choice's order with the instance and the
-   * response; keyed as the empty string when absent.
+   * The configuration's `seed`, which keys a shuffled Choice's or Inline Choice's order with the
+   * instance and the response; keyed as the empty string when absent.
    */
   readonly seed?: number;
   /**
@@ -150,7 +152,7 @@ export interface TextPayload {
 }
 
 /**
- * A body part phase 1 does not render, which the emitter shows as the Notice part.
+ * A body part plate does not render, which the emitter shows as the Notice part.
  */
 export interface NoticePayload {
   /**
@@ -233,8 +235,54 @@ export interface ChoicePayload extends ModePayload, ValidationPayload {
 }
 
 /**
- * Where a text control's first Control stands among the Controls the renderer names (Q10): `n`,
- * from 1, among the `count` of the item.
+ * An Inline Choice as the page may know it (Q-12): its binding, its Label, its placeholder, its
+ * choices in the order they are presented, how its Control is named and the identifier it restores.
+ */
+export interface InlineChoicePayload extends ModePayload, ValidationPayload {
+  /**
+   * The choices in presented order, as {@link ChoicePayload.choices} orders a Choice's.
+   */
+  readonly choices: readonly {
+    readonly content: readonly PayloadNode[];
+    readonly identifier: string;
+  }[];
+  /**
+   * The author's `class` value, empty when absent.
+   */
+  readonly class: string;
+  /**
+   * The name its Control posts under: the view's name for the response, else
+   * `entryName(instance, response)`.
+   */
+  readonly formName: string;
+  readonly kind: "inline-choice";
+  /**
+   * The content of the first `qti-label`, none when the interaction has none.
+   */
+  readonly label: Option.Option<readonly PayloadNode[]>;
+  /**
+   * How the Control is named for assistive technology when no Label gives it a name, as a text
+   * control's is.
+   */
+  readonly name: TextName;
+  /**
+   * The author's `data-prompt`, the text of the option that stands for no answer.
+   */
+  readonly placeholder: Option.Option<string>;
+  /**
+   * The identifier of the response it binds.
+   */
+  readonly response: string;
+  /**
+   * The identifier the Control shows as chosen: the string posted when the view has messages,
+   * else the view's value; empty for NULL.
+   */
+  readonly restore: string;
+}
+
+/**
+ * Where the first Control of a text control or an Inline Choice stands among the Controls the
+ * renderer names (Q10): `n`, from 1, among the `count` of the item.
  */
 export interface UnnamedPosition {
   readonly count: number;
@@ -242,16 +290,17 @@ export interface UnnamedPosition {
 }
 
 /**
- * How a text control is named.
+ * How a text control or an Inline Choice is named.
  *
  * `ariaLabel` is the author's, as written. `ariaLabelledby` holds the ids of the author's that an
  * element of the item carries, unscoped ({@link resolvedLabelledby}), none when none is carried.
  * `unnamed` is set exactly when the renderer names the control's Controls: it has neither of them
- * nor a Prompt, a blank `ariaLabel` counting as none, and it renders at least one Control. Every
- * Control the renderer names counts once, in document order across the item, which is the order
- * the Controls are emitted in: a Text Entry's one Control and each Control of an Extended Text. `n`
- * is the position of the control's first Control, an Extended Text's others following at `n + 1`
- * onwards, and `count` is how many there are.
+ * nor a Prompt, nor, for an Inline Choice, a Label that gives text, a blank `ariaLabel` counting as
+ * none, and it renders at least one Control. Every Control the renderer names counts once, in
+ * document order across the item, which is the order the Controls are emitted in: a Text Entry's
+ * and an Inline Choice's one Control and each Control of an Extended Text. `n` is the position of
+ * the control's first Control, an Extended Text's others following at `n + 1` onwards, and `count`
+ * is how many there are.
  */
 export interface TextName {
   readonly ariaLabel: Option.Option<string>;
@@ -338,7 +387,11 @@ export interface ExtendedTextPayload extends TextControlPayload {
 /**
  * An interaction payload, which the emitter hands to its interaction's render function.
  */
-export type InteractionPayload = ChoicePayload | ExtendedTextPayload | TextEntryPayload;
+export type InteractionPayload =
+  | ChoicePayload
+  | ExtendedTextPayload
+  | InlineChoicePayload
+  | TextEntryPayload;
 
 /**
  * A node of the payload's body.
@@ -453,7 +506,7 @@ interface Build {
    */
   readonly seed: Option.Option<number>;
   /**
-   * Each text control the renderer names, with where its first Control stands among the Controls
+   * Each interaction the renderer names, with where its first Control stands among the Controls
    * the renderer names ({@link TextName}).
    */
   readonly unnamed: ReadonlyMap<Interaction, UnnamedPosition>;
@@ -462,8 +515,10 @@ interface Build {
 
 /**
  * Collect the ids the author gave the elements of body nodes, in document order: the `id` of
- * every element, below elements and in Prompts and choice content, the places {@link copyNodes}
- * copies, so each one is an id an element of the rendered item carries.
+ * every element, below elements, in Prompts and Labels and in a Choice's choice content, the places
+ * the emitter writes as elements, so each one is an id an element of the rendered item carries. An
+ * Inline Choice's choice content gives none: each of its choices is written as the one text of an
+ * `option`, so an id inside one is never emitted.
  *
  * @param nodes The body nodes.
  * @returns The ids, unscoped.
@@ -486,6 +541,9 @@ const authoredIdsIn = (nodes: readonly BodyNode[]): readonly string[] =>
       case "extended-text": {
         return authoredIdsIn(Option.getOrElse(node.prompt, () => []));
       }
+      case "inline-choice": {
+        return authoredIdsIn(Option.getOrElse(node.label, () => []));
+      }
       case "text-entry":
       case "text":
       case "unsupported": {
@@ -498,19 +556,38 @@ const authoredIdsIn = (nodes: readonly BodyNode[]): readonly string[] =>
   });
 
 /**
- * Report whether an interaction is a text control with no authored name and no Prompt (Q10). A
- * blank `aria-label` ({@link authorsLabel}) and an `aria-labelledby` none of whose ids an element
- * of the item carries ({@link resolvedLabelledby}) are no authored names.
+ * Report whether the renderer names an interaction's Controls (Q10): a Text Entry with no authored
+ * name, an Extended Text with no authored name and no Prompt, or an Inline Choice with no authored
+ * name and no Label whose content gives text ({@link givesText}, the one Label check the emitter
+ * also reads). A Choice never: its Controls are named by their choices. A blank `aria-label`
+ * ({@link authorsLabel}) and an `aria-labelledby` none of whose ids an element of the item carries
+ * ({@link resolvedLabelledby}) are no authored names.
  *
  * @param interaction The interaction.
  * @param ids The ids the author gave the item's elements.
  * @returns Whether the renderer must name it.
  */
-const isUnnamed = (interaction: Interaction, ids: ReadonlySet<string>): boolean =>
-  interaction.kind !== "choice" &&
-  Option.isNone(authorsLabel(interaction)) &&
-  Option.isNone(resolvedLabelledby(interaction, ids)) &&
-  (interaction.kind === "text-entry" || Option.isNone(interaction.prompt));
+const isUnnamed = (interaction: Interaction, ids: ReadonlySet<string>): boolean => {
+  const unauthored =
+    Option.isNone(authorsLabel(interaction)) && Option.isNone(resolvedLabelledby(interaction, ids));
+  switch (interaction.kind) {
+    case "choice": {
+      return false;
+    }
+    case "text-entry": {
+      return unauthored;
+    }
+    case "extended-text": {
+      return unauthored && Option.isNone(interaction.prompt);
+    }
+    case "inline-choice": {
+      return unauthored && !Option.exists(interaction.label, givesText);
+    }
+    default: {
+      return interaction satisfies never;
+    }
+  }
+};
 
 /**
  * Give each validation message the id its Message part carries, so a Control's
@@ -598,7 +675,7 @@ const validationOf = (interaction: Interaction, build: Build): ValidationPayload
  * @returns The payload nodes.
  */
 const copyNodes = (nodes: readonly BodyNode[], build: Build): readonly PayloadNode[] =>
-  // oxlint-disable-next-line eslint/no-use-before-define -- `copyNodes` and `copyNode` are mutually recursive, as elements, Prompts and choices nest; the call runs only after both are defined.
+  // oxlint-disable-next-line eslint/no-use-before-define -- `copyNodes` and `copyNode` are mutually recursive, as elements, Prompts, Labels and choices nest; the call runs only after both are defined.
   nodes.map((node) => copyNode(node, build));
 
 /**
@@ -608,28 +685,29 @@ const copyNodes = (nodes: readonly BodyNode[], build: Build): readonly PayloadNo
 const keySeparator = "\u001F";
 
 /**
- * Give the identifiers of a Choice's choices in the order a render presents them.
+ * Give the identifiers of a Choice's or an Inline Choice's choices in the order a render presents
+ * them: the one function that presents both kinds and reports their order.
  *
- * A Choice with `shuffle` true is presented in {@link shuffleOrder}'s order under the key
+ * An interaction with `shuffle` true is presented in {@link shuffleOrder}'s order under the key
  * `<seed>\u001F<instance>\u001F<response>`, where the seed is written with `String` and an absent
  * seed is the empty string: its non-fixed choices are permuted among the non-fixed positions, and
- * each fixed choice keeps its document position. Any other Choice keeps document order. The same
- * Choice, seed and instance always give the same order, the one `render` presents, so a host can
- * report it, such as a result's `choiceSequence`. The order is presentation only: scores, records
- * and validation read identifiers, never positions.
+ * each fixed choice keeps its document position. Any other keeps document order. The same
+ * interaction, seed and instance always give the same order, the one `render` presents, so a host
+ * can report it, such as a result's `choiceSequence`. The order is presentation only: scores,
+ * records and validation read identifiers, never positions.
  *
  * @example
  *   // A shuffled Choice of choices A, B and C, none fixed, bound to RESPONSE:
  *   choiceOrder(interaction, Option.some(7), "_r_1_"); // ["B", "A", "C"]
  *   choiceOrder(interaction, Option.none(), "_r_1_"); // ["A", "C", "B"]
  *
- * @param interaction The Choice.
+ * @param interaction The Choice or Inline Choice: its choices, its response and its `shuffle`.
  * @param seed The configuration's `seed`, none when it has none.
- * @param instance The item instance key the Choice is rendered under.
+ * @param instance The item instance key the interaction is rendered under.
  * @returns The choice identifiers, in presented order.
  */
 export const choiceOrder = (
-  interaction: ChoiceInteraction,
+  interaction: Pick<ChoiceInteraction, "choices" | "response" | "shuffle">,
   seed: Option.Option<number>,
   instance: string,
 ): readonly string[] =>
@@ -645,17 +723,18 @@ export const choiceOrder = (
     : interaction.choices.map((choice) => choice.identifier);
 
 /**
- * Give a Choice's choices in the order they are presented, {@link choiceOrder}'s.
+ * Give a Choice's or an Inline Choice's choices in the order they are presented,
+ * {@link choiceOrder}'s, so the payload presents the order `choiceOrder` reports.
  *
- * A checked Choice's choice identifiers are unique (`duplicate-identifier`, info.txt:42411), so
- * each identifier names exactly one choice.
+ * A checked interaction's choice identifiers are unique (`duplicate-identifier`, info.txt:42411),
+ * so each identifier names exactly one choice.
  *
- * @param interaction The Choice.
+ * @param interaction The Choice or Inline Choice: its choices, its response and its `shuffle`.
  * @param build The build, which gives the seed and the instance.
  * @returns The choices, in presented order.
  */
 const presentedChoices = (
-  interaction: ChoiceInteraction,
+  interaction: Pick<ChoiceInteraction, "choices" | "response" | "shuffle">,
   build: Build,
 ): readonly SimpleChoice[] => {
   const byIdentifier = new Map(interaction.choices.map((choice) => [choice.identifier, choice]));
@@ -698,6 +777,23 @@ const choicePayload = (interaction: ChoiceInteraction, build: Build): ChoicePayl
 });
 
 /**
+ * Give how a text control or an Inline Choice is named: the author's `aria-label` as written, the
+ * ids of the author's `aria-labelledby` an element carries, and where the renderer numbers it.
+ *
+ * @param interaction The interaction.
+ * @param build The build.
+ * @returns Its name.
+ */
+const textNameOf = (
+  interaction: ExtendedTextInteraction | InlineChoiceInteraction | TextEntryInteraction,
+  build: Build,
+): TextName => ({
+  ariaLabel: interaction.ariaLabel,
+  ariaLabelledby: resolvedLabelledby(interaction, build.ids),
+  unnamed: Option.fromNullishOr(build.unnamed.get(interaction)),
+});
+
+/**
  * Copy the fields a Text Entry and an Extended Text share into their payload.
  *
  * @param interaction The text control.
@@ -714,11 +810,7 @@ const textControlPayload = (
   class: interaction.class,
   editable: build.editable,
   formName: formNameOf(build, interaction.response),
-  name: {
-    ariaLabel: interaction.ariaLabel,
-    ariaLabelledby: resolvedLabelledby(interaction, build.ids),
-    unnamed: Option.fromNullishOr(build.unnamed.get(interaction)),
-  },
+  name: textNameOf(interaction, build),
   placeholder: interaction.placeholder,
   response: interaction.response,
 });
@@ -740,6 +832,41 @@ const textEntryPayload = (interaction: TextEntryInteraction, build: Build): Text
       Option.match(Arr.head(shown(build, interaction.response)), {
         onNone: () => "",
         onSome: (single) => writeIn(single, interaction.base),
+      }),
+    onSome: (posted) => posted.get(interaction.response)?.[0] ?? "",
+  }),
+});
+
+/**
+ * Copy an Inline Choice into its payload (Q-12).
+ *
+ * @param interaction The Inline Choice.
+ * @param build The build.
+ * @returns Its payload: its choices in presented order, its Label, and `restore`, the string posted
+ *   when the view has messages, else the view's identifier, else empty.
+ */
+const inlineChoicePayload = (
+  interaction: InlineChoiceInteraction,
+  build: Build,
+): InlineChoicePayload => ({
+  ...validationOf(interaction, build),
+  choices: presentedChoices(interaction, build).map((choice) => ({
+    content: copyNodes(choice.content, build),
+    identifier: choice.identifier,
+  })),
+  class: interaction.class,
+  editable: build.editable,
+  formName: formNameOf(build, interaction.response),
+  kind: "inline-choice",
+  label: interaction.label.pipe(Option.map((label) => copyNodes(label, build))),
+  name: textNameOf(interaction, build),
+  placeholder: interaction.placeholder,
+  response: interaction.response,
+  restore: Option.match(build.posted, {
+    onNone: () =>
+      Option.match(Arr.head(shown(build, interaction.response)), {
+        onNone: () => "",
+        onSome: format,
       }),
     onSome: (posted) => posted.get(interaction.response)?.[0] ?? "",
   }),
@@ -863,14 +990,41 @@ const extendedTextPayload = (
 };
 
 /**
+ * Count the Controls an interaction renders: an Extended Text's `n`, and one for each other kind.
+ *
+ * @param interaction The interaction.
+ * @param build The build's posted strings and values, which give an Extended Text its Controls.
+ * @returns How many Controls it renders.
+ */
+const controlCount = (
+  interaction: Interaction,
+  build: Pick<Build, "posted" | "values">,
+): number => {
+  switch (interaction.kind) {
+    case "extended-text": {
+      return controlsOf(interaction, entriesOf(interaction, build).length).n;
+    }
+    case "choice":
+    case "inline-choice":
+    case "text-entry": {
+      return 1;
+    }
+    default: {
+      return interaction satisfies never;
+    }
+  }
+};
+
+/**
  * Number the Controls the renderer names (Q10), in document order across the item: a Text Entry's
- * one Control and each Control of an Extended Text, for each text control with no authored name
- * and no Prompt. An Extended Text that renders no Control, over the cap, takes no position.
+ * and an Inline Choice's one Control and each Control of an Extended Text, for each interaction
+ * {@link isUnnamed} says the renderer names. An Extended Text that renders no Control, over the
+ * cap, takes no position.
  *
  * @param interactions The item's interactions, in document order.
  * @param build The build's ids, which say whether an `aria-labelledby` names an element, and its
  *   posted strings and values, which give an Extended Text its Controls.
- * @returns Each text control the renderer names, with where its first Control stands.
+ * @returns Each interaction the renderer names, with where its first Control stands.
  */
 const unnamedPositions = (
   interactions: readonly Interaction[],
@@ -879,10 +1033,7 @@ const unnamedPositions = (
   const firsts: (readonly [Interaction, number])[] = [];
   let next = 1;
   for (const interaction of interactions.filter((each) => isUnnamed(each, build.ids))) {
-    const controls =
-      interaction.kind === "extended-text"
-        ? controlsOf(interaction, entriesOf(interaction, build).length).n
-        : 1;
+    const controls = controlCount(interaction, build);
     if (controls > 0) {
       firsts.push([interaction, next]);
       next += controls;
@@ -923,6 +1074,9 @@ const copyNode = (node: BodyNode, build: Build): PayloadNode => {
     }
     case "extended-text": {
       return extendedTextPayload(node, build);
+    }
+    case "inline-choice": {
+      return inlineChoicePayload(node, build);
     }
     default: {
       return node satisfies never;
@@ -970,10 +1124,34 @@ export interface Posting {
   readonly identifier: string;
   /**
    * The number base its integer is written in: the `base` of the first Text Entry or Extended
-   * Text, in document order, that binds the response, and 10 when only a Choice binds it.
+   * Text, in document order, that binds the response, and 10 when only a Choice or an Inline
+   * Choice binds it.
    */
   readonly options: DecodeOptions;
 }
+
+/**
+ * Give the number base an interaction's posted text is read in: a Text Entry's or an Extended
+ * Text's `base`, and none for a Choice or an Inline Choice, which post identifiers.
+ *
+ * @param interaction The interaction.
+ * @returns Its base, or none.
+ */
+const baseOf = (interaction: Interaction): Option.Option<number> => {
+  switch (interaction.kind) {
+    case "extended-text":
+    case "text-entry": {
+      return Option.some(interaction.base);
+    }
+    case "choice":
+    case "inline-choice": {
+      return Option.none();
+    }
+    default: {
+      return interaction satisfies never;
+    }
+  }
+};
 
 /**
  * Give the postings of a redacted item in one instance: one for each response of a posted base
@@ -1016,17 +1194,11 @@ export const postings = (redacted: Redacted, instance: string): readonly Posting
       return [];
     }
 
-    const typed = Arr.findFirst(
-      bound,
-      (interaction): interaction is ExtendedTextInteraction | TextEntryInteraction =>
-        interaction.kind !== "choice",
-    );
-
     return [
       {
         binding: { baseType, cardinality, name: entryName(instance, identifier) },
         identifier,
-        options: { base: Option.match(typed, { onNone: () => 10, onSome: ({ base }) => base }) },
+        options: { base: Option.getOrElse(Arr.findFirst(bound, baseOf), () => 10) },
       },
     ];
   });
@@ -1041,7 +1213,7 @@ export const postings = (redacted: Redacted, instance: string): readonly Posting
  *   posted strings.
  * @returns The payload. It holds no correct response, mapping, default, processing rule, seed,
  *   template value or feedback content of the item, whatever the view; the seed only orders a
- *   shuffled Choice's choices, and a value it shows is one the view gave.
+ *   shuffled Choice's or Inline Choice's choices, and a value it shows is one the view gave.
  */
 export const payload = (redacted: Redacted, view: View): Payload => {
   const messages = identifyMessages(view.instance, view.messages);

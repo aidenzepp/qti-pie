@@ -24,6 +24,7 @@ import { checkInstance } from "#plate/form/encoding.ts";
 import type { InstanceRequirement } from "#plate/form/encoding.ts";
 import { renderChoice } from "#plate/interactions/choice.ts";
 import { renderExtendedText } from "#plate/interactions/extended-text.ts";
+import { renderInlineChoice } from "#plate/interactions/inline-choice.ts";
 import { renderTextEntry } from "#plate/interactions/text-entry.ts";
 import type { Value } from "#plate/model/values.ts";
 import { payload, redactItem } from "#plate/payload.ts";
@@ -217,6 +218,9 @@ const interactionRenderer =
       }
       case "extended-text": {
         return renderExtendedText(interaction, built, state);
+      }
+      case "inline-choice": {
+        return renderInlineChoice(interaction, built, state);
       }
       case "text-entry": {
         return renderTextEntry(interaction, built, state);
