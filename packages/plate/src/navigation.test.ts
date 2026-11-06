@@ -135,6 +135,62 @@ const corpusDelivery = Effect.fnUntraced(function* corpusDelivery(
 });
 
 /**
+ * Write the text of a hand-built Choice item: `RESPONSE`, a single identifier whose correct
+ * response is `A`.
+ *
+ * @param identifier The item's identifier.
+ * @returns The item's text.
+ */
+const choiceItemXml = (identifier: string): string =>
+  [
+    `<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="${identifier}" title="${identifier}" adaptive="false" time-dependent="false">`,
+    '<qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier">',
+    "<qti-correct-response><qti-value>A</qti-value></qti-correct-response>",
+    "</qti-response-declaration>",
+    '<qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/>',
+    '<qti-item-body><qti-choice-interaction response-identifier="RESPONSE" shuffle="false" max-choices="1">',
+    '<qti-simple-choice identifier="A">Choice A</qti-simple-choice>',
+    '<qti-simple-choice identifier="B">Choice B</qti-simple-choice>',
+    "</qti-choice-interaction></qti-item-body>",
+    '<qti-response-processing template="https://purl.imsglobal.org/spec/qti/v3p0/rptemplates/match_correct.xml"/>',
+    "</qti-assessment-item>",
+  ].join("");
+
+/**
+ * Open a hand-built test of a linear, individual part holding the items `i1` and `i2`, then a
+ * nonlinear, simultaneous part whose one section holds only a section ref, which the test marks
+ * and does not deliver, so that part delivers no item. The test is at `tests/<identifier>.xml` and
+ * each item beside it.
+ *
+ * @param identifier The test's identifier.
+ * @returns The test and its items.
+ */
+const sectionRefDelivery = Effect.fnUntraced(function* sectionRefDelivery(identifier: string) {
+  const encoder = new TextEncoder();
+  const text = [
+    `<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="${identifier}" title="${identifier}">`,
+    '<qti-test-part identifier="P1" navigation-mode="linear" submission-mode="individual">',
+    '<qti-assessment-section identifier="S1" title="Section" visible="true">',
+    ...["i1", "i2"].map(
+      (ref) => `<qti-assessment-item-ref identifier="${ref}" href="${ref}.xml"/>`,
+    ),
+    "</qti-assessment-section></qti-test-part>",
+    '<qti-test-part identifier="P2" navigation-mode="nonlinear" submission-mode="simultaneous">',
+    '<qti-assessment-section identifier="S2" title="Section" visible="true">',
+    '<qti-assessment-section-ref identifier="elsewhere" href="elsewhere.xml"/>',
+    "</qti-assessment-section></qti-test-part>",
+    "</qti-assessment-test>",
+  ].join("");
+  const test = yield* openTest(`tests/${identifier}.xml`, encoder.encode(text));
+  const items = new Map<string, Accepted>();
+  for (const ref of ["i1", "i2"]) {
+    items.set(ref, yield* openItem(`tests/${ref}.xml`, encoder.encode(choiceItemXml(ref))));
+  }
+
+  return { items, test } satisfies Delivery;
+});
+
+/**
  * Start a session of a delivery and take some steps through `advance`, failing the test when one
  * is refused.
  *
@@ -281,6 +337,35 @@ describe("navigationState", () => {
           [1, "closed", false],
           [2, "closed", false],
           [3, "closed", false],
+        ]);
+      }),
+  );
+
+  it.effect(
+    "[T-4] once a test whose last part holds only a section ref has closed, lists the part it closed in, each item closed, in that part's modes",
+    () =>
+      Effect.gen(function* closedBeforeEmptyPart() {
+        const given = yield* sectionRefDelivery("SR");
+        const configuration = yield* configure({});
+        const session = sessionAfter(
+          given,
+          configuration,
+          ["i1", "i2"].map(() => ({
+            intent: { kind: "next" },
+            responses: { RESPONSE: chosen("A") },
+          })),
+        );
+        assert.strictEqual(session.status, "closed");
+
+        const state = stateOf(given.test, session);
+        assert.deepStrictEqual(state.allowed, []);
+        assert.strictEqual(state.navigation, "linear");
+        assert.strictEqual(state.submission, "individual");
+        assert.strictEqual(state.count, 2);
+        assert.strictEqual(state.position, 2);
+        assert.deepStrictEqual(itemsOf(state), [
+          [1, "closed", false],
+          [2, "closed", false],
         ]);
       }),
   );

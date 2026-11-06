@@ -4,11 +4,11 @@
  *
  * {@link navigationState} is what a host builds its navigation from, and what plate's navigation
  * parts render. It is pure and keeps nothing between calls. This is a browser module: it
- * value-imports from `effect` only `Array`, `Data`, `Option` and `Result`.
+ * value-imports from `effect` only `Array`, `Data`, `Option`, `pipe` and `Result`.
  *
  * @module
  */
-import { Array as Arr, Data, Option, Result } from "effect";
+import { Array as Arr, Data, Option, pipe, Result } from "effect";
 import type { Configuration } from "#plate/configuration.ts";
 import type { SectionChild, Test, TestPart } from "#plate/model/test.ts";
 import { isNull } from "#plate/model/values.ts";
@@ -47,9 +47,11 @@ export interface NavigationItem {
  *
  * While the test is open, `navigation`, `submission`, `position` and `count` are what `current`
  * gives: the current part's modes, the current item's sequence index and the session's item count,
- * and `items` are the current part's, in order. Once the test has closed, `allowed` is empty and
- * `items` are the test's last part's, in the modes of that part; `position` is then the sequence
- * index of the item the session closed on, 0 for a test with no item.
+ * and `items` are the current part's, in order. Once the test has closed, `allowed` is empty,
+ * `position` is the sequence index of the item the session closed on, and `items` and the modes
+ * are those of the part it closed in: the last part that holds an item, since a part with no item
+ * ends as the candidate reaches it. A test with no item has no such part, so its `items` are empty,
+ * its `position` is 0 and its modes are its last part's.
  */
 export interface NavigationState {
   /**
@@ -67,8 +69,10 @@ export interface NavigationState {
  * A broken invariant of the test model {@link navigationState} reads: a test with no test part,
  * which `check` never accepts, since a `qti-assessment-test` holds at least one `qti-test-part`.
  *
- * It cannot occur on a test `check` accepted, only on a hand-built one. It is thrown, never
- * returned, so {@link navigationState}'s error channel holds only what a session can cause.
+ * It cannot occur on a test `check` accepted, only on a hand-built one: a closed session of a test
+ * with no part holds no item and so closed in no part, and the navigation has no part to take its
+ * modes from. It is thrown, never returned, so {@link navigationState}'s error channel holds only
+ * what a session can cause.
  */
 export class PartlessTestDefect extends Data.TaggedError("PartlessTestDefect")<{
   readonly test: string;
@@ -77,7 +81,7 @@ export class PartlessTestDefect extends Data.TaggedError("PartlessTestDefect")<{
    * The test, and what to pass instead.
    */
   override get message(): string {
-    return `The test ${this.test} holds no test part, so its closed session has no last part to navigate. Pass the test check accepted, or build the test with at least one part.`;
+    return `The test ${this.test} holds no test part, so its navigation has no part to take its modes from. Pass the test check accepted, or build the test with at least one part.`;
   }
 }
 
@@ -112,6 +116,16 @@ const refsOf = (children: readonly SectionChild[]): readonly string[] =>
   children.flatMap((child) =>
     child.kind === "item-ref" ? [child.identifier] : refsOf(child.children),
   );
+
+/**
+ * Find the test part that holds an item ref.
+ *
+ * @param test The test.
+ * @param ref The item ref's identifier.
+ * @returns The part, or none when no part holds the ref.
+ */
+const partOf = (test: Test, ref: string): Option.Option<TestPart> =>
+  Arr.findFirst(test.parts, (part) => refsOf(part.children).includes(ref));
 
 /**
  * List the session items some test parts deliver, in the session's order.
@@ -160,7 +174,12 @@ interface Shown {
 }
 
 /**
- * Give the last part of a closed session's test and the item the session closed on.
+ * Give the part a closed session closed in and the item it closed on.
+ *
+ * The session closed on the item at its position, so the part that holds that item is the last
+ * part that holds an item: a later part with no item ended as the candidate reached it, and is
+ * never the part a session closes in. A test with no item closed at its start, on no item, and
+ * shows its last part, which delivers none.
  *
  * @param test The test.
  * @param session The session, closed.
@@ -168,18 +187,23 @@ interface Shown {
  * @throws {PartlessTestDefect} When the test holds no part, which `check` never accepts.
  */
 const closedShown = (test: Test, session: TestSession): Shown => {
-  const last = Arr.last(test.parts);
-  if (Option.isNone(last)) {
+  const closedOn = Option.fromUndefinedOr(session.items[session.position]);
+  const part = pipe(
+    closedOn,
+    Option.flatMap((item) => partOf(test, item.ref)),
+    Option.orElse(() => Arr.last(test.parts)),
+  );
+  if (Option.isNone(part)) {
     throw new PartlessTestDefect({ test: test.identifier });
   }
 
   return {
     count: session.items.length,
-    items: itemsOf(session, [last.value]),
-    navigation: last.value.navigation,
+    items: itemsOf(session, [part.value]),
+    navigation: part.value.navigation,
     open: false,
-    position: session.items[session.position]?.sequenceIndex ?? 0,
-    submission: last.value.submission,
+    position: Option.match(closedOn, { onNone: () => 0, onSome: (item) => item.sequenceIndex }),
+    submission: part.value.submission,
   };
 };
 
@@ -216,10 +240,7 @@ export const navigationState = (
       shownNow.kind === "item"
         ? {
             count: shownNow.count,
-            items: itemsOf(
-              session,
-              test.test.parts.filter((part) => refsOf(part.children).includes(shownNow.ref)),
-            ),
+            items: itemsOf(session, Option.toArray(partOf(test.test, shownNow.ref))),
             navigation: shownNow.navigation,
             open: true,
             position: shownNow.sequenceIndex,
