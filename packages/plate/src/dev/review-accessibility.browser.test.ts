@@ -618,7 +618,7 @@ eachEngine((it, name) => {
     );
 
     views.effect(
-      `[T-11] [T-12] The summary links each item's review as "Review: Item n" and its solution as "Solution: Item n", says in words why an item has no link, and names the results link "Download results (XML)", in ${treesRead(name)}`,
+      `[T-5] The summary links each item's review as "Review: Item n" and its solution as "Solution: Item n", says in words why an item has no link, and names the results link "Download results (XML)", in ${treesRead(name)}`,
       () =>
         withPage({ javaScriptEnabled: false }, (page) =>
           Effect.gen(function* summaryLinks() {

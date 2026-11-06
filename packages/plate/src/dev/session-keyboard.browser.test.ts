@@ -480,7 +480,7 @@ eachEngine((it) => {
     );
 
     keys.effect(
-      "[T-11] On a review page a Choice's controls are no stop, and a text Control is a stop whose value typing leaves unchanged",
+      "On a review page a Choice's controls are no stop, and a text Control is a stop whose value typing leaves unchanged",
       () =>
         withPage({ javaScriptEnabled: false }, (page) =>
           Effect.gen(function* reviewStops() {
