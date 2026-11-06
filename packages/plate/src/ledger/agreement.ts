@@ -1,6 +1,6 @@
 /**
- * The agreement test's reading (goal criterion 5): plate's verdict on each 1EdTech example package
- * beside pantry's, and the findings file that records every package on which they disagree.
+ * The agreement test's reading: plate's verdict on each 1EdTech example package beside pantry's,
+ * and the findings file that records every package on which they disagree.
  *
  * Pantry's verdicts come from `qti-verdicts.tsv`, a byte-equal copy of pantry's verdict file
  * ({@link verdictsSource}) at the commit {@link verdictsCommit} names. Plate's come from

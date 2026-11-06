@@ -290,6 +290,13 @@ const itemHost = (accepted: Accepted, configuration: Configuration): HtmlHost =>
       ),
       configuration,
     );
+    /**
+     * Answer a refused post: the item with the post's strings and the messages, and the Status
+     * part headed "Not accepted" with `autofocus`.
+     *
+     * @param refusals The messages that refuse the post.
+     * @returns The page.
+     */
     const refused = (refusals: readonly ValidationMessage[]): Response =>
       itemPage(
         { messages: refusals, posted },

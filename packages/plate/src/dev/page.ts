@@ -34,27 +34,26 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-  Config,
-  ConfigProvider,
-  Duration,
-  Effect,
-  Exit,
-  Option,
-  Ref,
-  Result,
-  Schema,
-} from "effect";
+import { Config, ConfigProvider, Effect, Option, Ref, Result, Schema } from "effect";
 import { decodeSession } from "#plate/codec/session.ts";
 import { decodeStoredFloat } from "#plate/codec/values.ts";
-import { assetHeaders, assetTypes, page, pageHeaders, pageHtml, slot } from "#plate/dev/frame.ts";
+import {
+  assetHeaders,
+  assetTypes,
+  page,
+  pageHeaders,
+  pageHtml,
+  servedFilePath,
+  slot,
+} from "#plate/dev/frame.ts";
 import type { Appearance, Page } from "#plate/dev/frame.ts";
-import { groupVerdicts, verdictCache } from "#plate/dev/listing.ts";
+import { groupVerdicts, keptOnSuccess, verdictCache } from "#plate/dev/listing.ts";
 import type { OpenFailure, VerdictCache, VerdictGroup } from "#plate/dev/listing.ts";
 import {
   packageAt,
   packageCache,
   packageHref,
+  packageSuffix,
   routePackages,
   testIn,
 } from "#plate/dev/packages.ts";
@@ -62,6 +61,7 @@ import type { PackageCache, PackagesFailure } from "#plate/dev/packages.ts";
 import { entriesOf, postOf, valuesOf } from "#plate/dev/post.ts";
 import { reviewPath, routeReview } from "#plate/dev/review-page.ts";
 import type { ReviewPlayground } from "#plate/dev/review-page.ts";
+import { sessionHref } from "#plate/dev/sitting.ts";
 import { sessionStore } from "#plate/dev/store.ts";
 import type { SessionEntry, SessionStore } from "#plate/dev/store.ts";
 import { routeSessions, sessionPath } from "#plate/dev/test-page.ts";
@@ -143,12 +143,6 @@ const hostItem = "QTI3_BPIG_Examples/items/BG007.xml";
  * The path the plain-HTML host is mounted at; the host sees each request's path with it stripped.
  */
 const hostMount = "/hosts/html";
-
-/**
- * The suffix of a directory phase 1's extraction unpacked a zip into: such a directory is a
- * package, which `/packages` lists.
- */
-const packageSuffix = ".zip.d";
 
 /**
  * The id of the index's region of test sessions in progress.
@@ -348,52 +342,20 @@ const itemTarget = (corpusPath: string, instance?: string): string =>
   ).toString()}`;
 
 /**
- * Check that a corpus path names a file below a directory without leaving it: relative, no empty,
- * `.` or `..` segment, and no backslash or NUL.
+ * Read the corpus path of an `/assets/*` request through {@link servedFilePath}, which decodes each
+ * segment of the request path on its own, so the path cannot climb out of the directory an item's
+ * asset base names.
  *
- * `readCorpusFile` refuses a path that leaves the corpus root on its own; this check also refuses
- * one that climbs and comes back, so a path names its file one way only.
- *
- * @param segments The path's segments, already decoded.
- * @returns The path joined with `/`, or none when a segment is refused.
- */
-const joinedSegments = (segments: readonly string[]): Option.Option<string> =>
-  segments.length > 0 &&
-  segments.every(
-    (segment) =>
-      segment !== "" &&
-      segment !== "." &&
-      segment !== ".." &&
-      !segment.includes("/") &&
-      !segment.includes("\\") &&
-      !segment.includes("\0"),
-  )
-    ? Option.some(segments.join("/"))
-    : Option.none();
-
-/**
- * Read the corpus path of an `/assets/*` request, decoding each segment of the request path on
- * its own.
- *
- * A segment that decodes to a separator or a dot segment (`..%2Fx`, `%2e%2e%2f`) is refused, so
- * the decoded path holds exactly the directories the request path names and cannot climb out of
- * the directory an item's asset base names. `check`'s URL pass leaves such a segment literal in the
- * URL it writes, inside the package as a URL (rule `723e580c`), so the route that serves package
- * files must decode it and refuse a climb.
+ * `check`'s URL pass leaves a segment such as `..%2Fx` literal in the URL it writes, inside the
+ * package as a URL (rule `723e580c`), so the route that serves package files must decode it and
+ * refuse a climb. `readCorpusFile` refuses a path that leaves the corpus root on its own; this read
+ * also refuses one that climbs and comes back.
  *
  * @param pathname The request path, still percent-encoded.
  * @returns The corpus path, or none when a segment does not decode or is refused.
  */
 const assetPath = (pathname: string): Option.Option<string> =>
-  Result.match(
-    Result.all(
-      pathname
-        .slice("/assets/".length)
-        .split("/")
-        .map((segment) => Result.try(() => decodeURIComponent(segment))),
-    ),
-    { onFailure: () => Option.none(), onSuccess: joinedSegments },
-  );
+  servedFilePath(pathname.slice("/assets/".length).split("/"));
 
 /**
  * Give the asset base of an item: its package directory under `/assets/`, each segment
@@ -921,7 +883,7 @@ const resumeOf = (
   const { locale } = shown.success.configuration;
 
   return Option.some({
-    href: `/sessions/${encodeURIComponent(id)}`,
+    href: sessionHref(id),
     label: message(locale, "resume", {
       count: numeral(locale, count),
       n: numeral(locale, sequenceIndex),
@@ -1586,8 +1548,8 @@ const answer = (
  *   const response = await handle(new Request("http://127.0.0.1:5190/"));
  *   // 200, the listing
  *
- * @param settings The configuration input, the config provider and the verdict cache, each
- *   optional.
+ * @param settings The configuration input, the config provider, and the verdict and package
+ *   caches, each optional.
  * @returns The handler.
  */
 export const createHandler = (settings: PlaygroundSettings = {}): Handler => {
@@ -1595,11 +1557,10 @@ export const createHandler = (settings: PlaygroundSettings = {}): Handler => {
     appearance: Ref.makeUnsafe<Appearance>({ dark: false, theme: emptyTheme }),
     configuration: settings.configuration ?? {},
     host: Effect.runSync(
-      Effect.cachedWithTTL(
+      keptOnSuccess(
         Effect.gen(function* builtHost() {
           return yield* htmlHost(hostItem, yield* readCorpusFile(hostItem));
         }),
-        (exit) => (Exit.isSuccess(exit) ? Duration.infinity : 0),
       ),
     ),
     packages: settings.packages ?? Effect.runSync(packageCache()),

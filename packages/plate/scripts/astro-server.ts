@@ -2,9 +2,9 @@
  * The Astro host's server: one scoped resource that builds `hosts/astro/` and serves the build on
  * `127.0.0.1:5192`, the one module that opens Astro's port.
  *
- * It serves the way the probe `p4-29` chose: a production build with `@astrojs/node` in
- * standalone mode, whose pages hold no script. Astro's dev server is never used: it injects
- * `/@vite/client` into every page and can background itself onto port 4321.
+ * It serves a production build with `@astrojs/node` in standalone mode, whose pages hold no
+ * script. Astro's dev server is never used: it injects `/@vite/client` into every page and can
+ * background itself onto port 4321.
  * `scripts/astro-check.ts` and the browser test `src/hosts/astro.browser.test.ts` open it;
  * importing it starts nothing.
  *
@@ -59,9 +59,9 @@ const serverEntry = path.join(hostDirectory, "dist", "server", "entry.mjs");
 const scratchDirectory = path.join(plateDirectory, "work", ".vp-tmp");
 
 /**
- * How often, and how many times, the server is dialled while it starts and after it stops. The
- * probe measured a quarter of a second to answer and under a tenth to free the port, unloaded;
- * ten seconds leaves room for a loaded machine.
+ * How often, and how many times, the server is dialled while it starts and after it stops.
+ * Measured on an unloaded machine, it took a quarter of a second to answer and under a tenth to
+ * free the port; ten seconds leaves room for a loaded machine.
  */
 const portWait = { attempts: 200, interval: "50 millis" } as const;
 
@@ -345,6 +345,9 @@ export const astroServer: Effect.Effect<{ readonly origin: string }, AstroFailed
  * the process on their own, so the scope around it stops the server before the process exits.
  */
 const stopped = Effect.callback((resume: (signalled: Effect.Effect<void>) => void) => {
+  /**
+   * Stop listening for both signals and end the wait.
+   */
   const stopSignal = () => {
     process.off("SIGINT", stopSignal);
     process.off("SIGTERM", stopSignal);

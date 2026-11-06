@@ -378,6 +378,12 @@ const writeCatalog = Effect.fnUntraced(function* writeCatalog(
   directory: string,
 ): Effect.fn.Return<string, CatalogUnwritable | Config.ConfigError, Scope.Scope> {
   const scratch = yield* scratchDirectory;
+  /**
+   * Construct the failure of a write under the scratch directory from what it rejected with.
+   *
+   * @param cause What the write rejected with.
+   * @returns The failure.
+   */
   const unwritable = (cause: unknown) =>
     new CatalogUnwritable({
       detail: cause instanceof Error ? cause.message : String(cause),

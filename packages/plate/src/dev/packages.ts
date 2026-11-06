@@ -2,8 +2,8 @@
  * The dev playground's packages: the package listing at `/packages`, each package's page at
  * `/packages/<id>`, and its files at `/packages/<id>/files/<path>`.
  *
- * The packages are every `*.zip.d` directory under the corpus root, the zips of the example corpus
- * as phase 1's extraction unpacked them, then the repository's M2 fixture package, `fixtures/m2/`.
+ * The packages are every `*.zip.d` directory under the corpus root, each a zip of the example
+ * corpus extracted beside it, then the repository's M2 fixture package, `fixtures/m2/`.
  * Each is read whole and judged by `openPackage` the first time something asks for it, and its
  * verdict is kept for the cache's life. A package's page lists its resources with the verdict on
  * each document and, when the package is accepted, a native form with one Start button per test;
@@ -24,7 +24,7 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { Effect, Option, Result, Schema } from "effect";
 import type { Config } from "effect";
-import { assetHeaders, assetTypes, page } from "#plate/dev/frame.ts";
+import { assetHeaders, assetTypes, page, servedFilePath } from "#plate/dev/frame.ts";
 import type { Page } from "#plate/dev/frame.ts";
 import { keptOnSuccess } from "#plate/dev/listing.ts";
 import { corpusRoot } from "#plate/document/corpus.ts";
@@ -117,9 +117,10 @@ export interface PackageCache {
 }
 
 /**
- * The suffix of a directory phase 1's extraction unpacked a zip into.
+ * The suffix of the directory a corpus zip is extracted into, `X.zip.d/` beside `X.zip`: such a
+ * directory is a package.
  */
-const packageSuffix = ".zip.d";
+export const packageSuffix = ".zip.d";
 
 /**
  * The fixture package's location, as the playground names it.
@@ -582,41 +583,11 @@ const packagePage = (entry: PackageEntry): Page => {
 };
 
 /**
- * Check the segments of a file's path, each decoded on its own: none is empty, `.` or `..`, and
- * none holds a separator, a backslash or NUL, so the path names exactly the directories the request
- * names and cannot climb out of the package's root.
- *
- * @param segments The request path's segments after `files`, still percent-encoded.
- * @returns The file's path from the package's root, or none when a segment does not decode or is
- *   refused.
- */
-const filePath = (segments: readonly string[]): Option.Option<string> =>
-  Result.match(
-    Result.all(segments.map((segment) => Result.try(() => decodeURIComponent(segment)))),
-    {
-      onFailure: () => Option.none(),
-      onSuccess: (decoded) =>
-        decoded.length > 0 &&
-        decoded.every(
-          (segment) =>
-            segment !== "" &&
-            segment !== "." &&
-            segment !== ".." &&
-            !segment.includes("/") &&
-            !segment.includes("\\") &&
-            !segment.includes("\0"),
-        )
-          ? Option.some(decoded.join("/"))
-          : Option.none(),
-    },
-  );
-
-/**
  * Serve one file of a package: only a file the accepted package lists, of a type the route serves,
  * with the asset headers and its type.
  *
  * @param entry The package.
- * @param file The file's path from the package's root, already checked by {@link filePath}.
+ * @param file The file's path from the package's root, already decoded by {@link servedFilePath}.
  * @returns The file's response, or the 404 page.
  */
 const serveFile = (
@@ -698,7 +669,7 @@ export const routePackages = (
         onSome: (found) =>
           files === undefined
             ? Effect.succeed(packagePage(found))
-            : Option.match(filePath(rest), {
+            : Option.match(servedFilePath(rest), {
                 onNone: () => Effect.succeed(notFound()),
                 onSome: (file) => serveFile(found, file),
               }),
