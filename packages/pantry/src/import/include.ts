@@ -84,12 +84,9 @@ const oneInclude = (
     const parseHandle = yield* Option.match(parse, {
       onNone: () => Effect.succeed(Option.none<(typeof XIncludeParseValue.handles)[number]>()),
       onSome: (value) =>
-        closedOf(
-          XIncludeParseValue.handles,
-          value,
-          "attribute-lexical",
-          "the parse attribute of xi:include",
-        ).pipe(Effect.map(Option.some)),
+        closedOf(XIncludeParseValue.handles, value, "P6", "the parse attribute of xi:include").pipe(
+          Effect.map(Option.some),
+        ),
     });
     const own = (value: Option.Option<string>) =>
       Option.toArray(value).map((text) => ({ node: entry.id, value: text }));
@@ -125,7 +122,8 @@ const oneInclude = (
  * @param nodes - The node index of the tree.
  * @param rows - The rows so far.
  * @returns The rows with each include's `XInclude`, attribute and `Fallback` rows added, or an
- *   `ImportRefused` under `attribute-lexical` for a `parse` outside its roster.
+ *   `ImportRefused` under `P6`, the closed table's rule for the column, for a `parse` outside its
+ *   roster.
  */
 export const includeRows = Effect.fn("import.includeRows")(function* includeRows(
   root: Element,
