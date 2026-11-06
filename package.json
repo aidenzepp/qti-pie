@@ -7,7 +7,7 @@
     "check": "pnpm run format && pnpm run lint && pnpm run typecheck",
     "format": "vp fmt --check",
     "lint": "vp lint --type-aware",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p packages/plate/src/tsconfig.json",
     "fix": "vp fmt && vp lint --fix",
     "test": "pnpm -r --workspace-concurrency=1 run test"
   },

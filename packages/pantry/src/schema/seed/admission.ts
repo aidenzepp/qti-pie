@@ -12,6 +12,7 @@ import * as generic from "#pantry/schema/kinds/generic.ts";
 import type { AdmissionRow, SchemaVersionHandle } from "#pantry/schema/kinds/generic.ts";
 import * as html from "#pantry/schema/kinds/html.ts";
 import * as lom from "#pantry/schema/kinds/lom.ts";
+import * as mathml from "#pantry/schema/kinds/mathml.ts";
 import * as qmd from "#pantry/schema/kinds/qmd.ts";
 import * as test from "#pantry/schema/kinds/test.ts";
 import * as ud from "#pantry/schema/kinds/ud.ts";
@@ -28,7 +29,7 @@ import { wildcardAdmissionRows } from "#pantry/schema/seed/wildcard-admission.ts
 
 /**
  * The registry of every kinds file, in composition order. A later phase's kinds file joins this
- * list in its regenerate-and-seed slice, as it joins `node.ts`'s spreads.
+ * list, as it joins `node.ts`'s spreads.
  */
 export const registries = [
   generic.registry,
@@ -43,6 +44,7 @@ export const registries = [
   ud.registry,
   xi.registry,
   test.registry,
+  mathml.registry,
 ];
 
 const kindOrder: ReadonlyMap<string, number> = new Map(
@@ -101,6 +103,7 @@ const kindsRows: readonly AdmissionRow[] = [
   ...xi.admission,
   ...test.admission,
   ...foreign.admission,
+  ...mathml.admission,
 ];
 
 /**
@@ -120,9 +123,9 @@ const composeAdmission = (rows: readonly AdmissionRow[]): readonly AdmissionRow[
   );
 
 /**
- * The admission rows of every kinds file alone, the host's explicit particles (spec 4.1 step 1),
- * composed as `admission` is. The derived wildcard rows are left out: they are the database's
- * representation of what a wildcard admits, not particles a host declares.
+ * The admission rows of every kinds file alone, the host's explicit particles, composed as
+ * `admission` is. The derived wildcard rows are left out: they are the database's representation of
+ * what a wildcard admits, not particles a host declares.
  */
 export const explicitAdmission: readonly AdmissionRow[] = composeAdmission(kindsRows);
 

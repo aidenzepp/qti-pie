@@ -27,5 +27,10 @@
     "isolatedModules": true
   },
   "include": ["packages", "tools", "vite.config.ts"],
-  "exclude": ["**/node_modules"]
+  "exclude": [
+    "**/node_modules",
+    "packages/plate/**/*.dom.ts",
+    "packages/plate/**/*.dom.test.ts",
+    "packages/plate/**/*.tsx"
+  ]
 }

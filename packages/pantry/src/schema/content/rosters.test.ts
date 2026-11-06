@@ -1,5 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import * as rosters from "#pantry/schema/content/rosters.ts";
+import { families } from "#pantry/schema/mathml/values.ts";
 
 /**
  * A roster of this slice and the literal list of its handles in XSD order.
@@ -215,6 +216,77 @@ const reused: readonly (readonly [keyof typeof rosters.relations, readonly strin
   ["YesNo", ["yes", "no"]],
 ];
 
+/**
+ * The 25 MathML enumeration rosters and the literal list each holds, in XSD order (the REC's for
+ * `closure`).
+ */
+const mathml: readonly (readonly [keyof typeof rosters.relations, readonly string[]])[] = [
+  ["MathmlBooleanValue", ["true", "false"]],
+  ["MathmlClosureValue", ["closed", "open", "open-closed", "closed-open"]],
+  ["MathmlColumnalignstyleValue", ["left", "center", "right"]],
+  ["MathmlDirValue", ["ltr", "rtl"]],
+  ["MathmlDisplayValue", ["block", "inline"]],
+  ["MathmlEdgeValue", ["left", "right"]],
+  ["MathmlFontstyleValue", ["normal", "italic"]],
+  ["MathmlFontweightValue", ["normal", "bold"]],
+  ["MathmlFormValue", ["prefix", "infix", "postfix"]],
+  ["MathmlGroupAlignmentValue", ["left", "center", "right", "decimalpoint"]],
+  ["MathmlIndentalignValue", ["left", "center", "right", "auto", "id"]],
+  ["MathmlIndentalignLineValue", ["left", "center", "right", "auto", "id", "indentalign"]],
+  ["MathmlInfixlinebreakstyleValue", ["before", "after", "duplicate"]],
+  ["MathmlLinebreakValue", ["auto", "newline", "nobreak", "goodbreak", "badbreak"]],
+  ["MathmlLinebreakstyleValue", ["before", "after", "duplicate", "infixlinebreakstyle"]],
+  ["MathmlLinestyleValue", ["none", "solid", "dashed"]],
+  ["MathmlLocationValue", ["w", "nw", "n", "ne", "e", "se", "s", "sw"]],
+  [
+    "MathmlLongdivstyleValue",
+    [
+      "lefttop",
+      "stackedrightright",
+      "mediumstackedrightright",
+      "shortstackedrightright",
+      "righttop",
+      "left/\\right",
+      "left)(right",
+      ":right=right",
+      "stackedleftleft",
+      "stackedleftlinetop",
+    ],
+  ],
+  [
+    "MathmlMathvariantValue",
+    [
+      "normal",
+      "bold",
+      "italic",
+      "bold-italic",
+      "double-struck",
+      "bold-fraktur",
+      "script",
+      "bold-script",
+      "fraktur",
+      "sans-serif",
+      "bold-sans-serif",
+      "sans-serif-italic",
+      "sans-serif-bold-italic",
+      "monospace",
+      "initial",
+      "tailed",
+      "looped",
+      "stretched",
+    ],
+  ],
+  [
+    "MathmlMspaceLinebreakValue",
+    ["auto", "newline", "nobreak", "goodbreak", "badbreak", "indentingnewline"],
+  ],
+  ["MathmlOccurrenceValue", ["prefix", "infix", "function-model"]],
+  ["MathmlOrderValue", ["numeric", "lexicographic"]],
+  ["MathmlOverflowValue", ["linebreak", "scroll", "elide", "truncate", "scale"]],
+  ["MathmlSideValue", ["left", "right", "leftoverlap", "rightoverlap"]],
+  ["MathmlVerticalalignValue", ["top", "bottom", "center", "baseline", "axis"]],
+];
+
 describe("content rosters", () => {
   it("adds 46 rosters", () => {
     assert.strictEqual(added.length, 46);
@@ -231,4 +303,30 @@ describe("content rosters", () => {
       assert.deepStrictEqual([...rosters.relations[name].handles], [...handles]);
     });
   }
+
+  it("adds 25 MathML enumeration rosters, one per roster family of values.ts", () => {
+    const rosterFamilies = families.filter((family) => family.class === "roster");
+
+    assert.strictEqual(mathml.length, 25);
+    assert.deepStrictEqual(
+      mathml.map(([name]) => name),
+      rosterFamilies.map((family) => family.valueType),
+    );
+  });
+
+  for (const [name, handles] of mathml) {
+    it(`${name} holds its literal list in XSD order and is a schema member`, () => {
+      assert.deepStrictEqual([...rosters.relations[name].handles], [...handles]);
+      assert.strictEqual(rosters.relations[name].name, name);
+    });
+  }
+
+  it("MathmlValueType holds the 67 family handles of values.ts in order", () => {
+    assert.strictEqual(rosters.MathmlValueType.handles.length, 67);
+    assert.deepStrictEqual(
+      [...rosters.MathmlValueType.handles],
+      families.map((family) => family.handle),
+    );
+    assert.strictEqual(rosters.relations.MathmlValueType, rosters.MathmlValueType);
+  });
 });

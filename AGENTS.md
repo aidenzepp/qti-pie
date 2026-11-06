@@ -22,7 +22,7 @@ is [aidenzepp/qti-pie](https://github.com/aidenzepp/qti-pie) (public, MIT-licens
 Run before completing implementation:
 
 ```sh
-pnpm check   # vp fmt --check, vp lint --type-aware, tsc --noEmit
+pnpm check   # vp fmt --check, vp lint --type-aware, tsc --noEmit (root, then packages/plate/src/tsconfig.json)
 pnpm test    # each package's tests, one package at a time
 ```
 

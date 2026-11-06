@@ -7,6 +7,7 @@ import type { InventoryAttribute } from "#pantry/schema/content/xsd-inventory.ts
 import { entryOf, inventory } from "#pantry/schema/content/xsd-inventory.ts";
 import { asiInventory } from "#pantry/schema/content/inventory/asi.ts";
 import { htmlInventory } from "#pantry/schema/content/inventory/html.ts";
+import { mathmlInventory } from "#pantry/schema/content/inventory/mathml.ts";
 import { processingInventory } from "#pantry/schema/content/inventory/processing.ts";
 import { testInventory } from "#pantry/schema/content/inventory/test.ts";
 
@@ -49,12 +50,13 @@ const countByClass = (
 };
 
 describe("xsd inventory completeness", () => {
-  it("holds 69 ASI, 76 HTML, 89 processing and 26 test entries", () => {
+  it("holds 69 ASI, 76 HTML, 89 processing, 26 test and 194 MathML entries", () => {
     assert.strictEqual(Object.keys(asiInventory).length, 69);
     assert.strictEqual(Object.keys(htmlInventory).length, 76);
     assert.strictEqual(Object.keys(processingInventory).length, 89);
     assert.strictEqual(Object.keys(testInventory).length, 26);
-    assert.strictEqual(Object.keys(inventory).length, 69 + 76 + 89 + 26);
+    assert.strictEqual(Object.keys(mathmlInventory).length, 194);
+    assert.strictEqual(Object.keys(inventory).length, 69 + 76 + 89 + 26 + 194);
   });
 
   it("names every handle the kinds files hold", () => {
