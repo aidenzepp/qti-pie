@@ -6,20 +6,23 @@
  * Registering the blocks as fixtures is p6-36's and p6-37's.
  *
  * A block is `{ name, part, version, site, xml, handles, pairs }`. `xml` is a fragment written with
- * the QTI namespace as the default and `m` for MathML, so the base item declares `xmlns:m`; `site`
- * says where a `ReplaceText` puts it: `"body"` inside `qti-item-body`, `"item"` after it as a child
- * of `qti-assessment-item` (the one host that needs it is `qti-modal-feedback`, which is no part of
- * the body). `handles` is what the block covers: for a host block the host handle first, then the
- * MathML handles inside it; for every other block its MathML handles. `pairs` is every MathML
- * `(kind, attribute)` pair the fragment writes. `part` is `"host"`, `"kind"`, `"attribute"` or
- * `"padded"`; `version` is the ASI schema version of the base item the block is for, `"3.0.0"` for
- * every block but one.
+ * the QTI namespace as the default and `m` for MathML, so the base document declares `xmlns:m`;
+ * `site` says where a `ReplaceText` puts it: `"body"` inside `qti-item-body`, `"item"` after it as
+ * a child of `qti-assessment-item` (the one host that needs it is `qti-modal-feedback`, which is no
+ * part of the body); three hosts sit only in a test or a stimulus: `"test-head"` is a child of the
+ * base `qti-assessment-test` before its first `qti-test-part` (`qti-rubric-block`), `"test-tail"`
+ * is after its `qti-outcome-processing` (`qti-test-feedback`), and `"stimulus-body"` is inside the
+ * base `qti-assessment-stimulus`'s `qti-stimulus-body`. `handles` is what the block covers: for a
+ * host block the host handle first, then the MathML handles inside it; for every other block its
+ * MathML handles. `pairs` is every MathML `(kind, attribute)` pair the fragment writes. `part` is
+ * `"host"`, `"kind"`, `"attribute"` or `"padded"`; `version` is the ASI schema version of the base
+ * document the block is for, `"3.0.0"` for every block but one.
  *
- * A host block puts `m:math` under one roster host of spec 3.4: the 63 entries of the composed
+ * A host block puts `m:math` under one roster host of spec 3.4: the 66 entries of the composed
  * inventory whose children name `m3:math`. An HTML host sits inside a `div`, with the parent it
  * needs (`td` in a table row, `li` in a `ul`, `dd` in a `dl`, `figcaption` in a `figure`); an ASI
  * host sits inside the interaction or container it needs. The blocks use these identifiers, which
- * the base item that carries them declares or ignores: `FEEDBACK` (outcome), `RESPONSE_GM`,
+ * the base document that carries them declares or ignores: `FEEDBACK` (outcome), `RESPONSE_GM`,
  * `RESPONSE_HT`, `RESPONSE_IC`, `RESPONSE_CH` and `RESPONSE_AS` (responses). Two host blocks that
  * declare or bind the same identifier are never in one fixture.
  *
@@ -110,26 +113,31 @@
  * inv, pkg, out = sys.argv[1], sys.argv[2], sys.argv[3]
  * leaf = json.load(open(inv))["elements"]
  *
- * # -- the roster hosts: every entry of the ASI and HTML leaves whose children name m3:math
+ * # -- the roster hosts: every entry of the ASI, test and HTML leaves whose children name m3:math (the ASI and test
+ * # -- hosts together in handle order, then the HTML hosts)
  * hosts = []
- * for name in ("asi", "html"):
+ * for name in ("asi", "test", "html"):
  *     text = open(os.path.join(pkg, "src/schema/content/inventory/%s.ts" % name)).read()
  *     for entry in re.split(r'\n  (?=["a-zA-Z][^\n]*: \{\n)', text):
  *         h = re.search(r'\n    handle: "([^"]+)"', entry)
  *         if h and 'child("m3:math"' in entry:
  *             hosts.append(h.group(1))
+ *     if name == "test": hosts.sort()
  *
  * M = "<m:math><m:mi>x</m:mi></m:math>"
  * # -- an ASI host: (the fragment's site, the fragment with {M} where m:math goes)
  * FB = 'outcome-identifier="FEEDBACK" identifier="FB" show-hide="show"'
  * TPL = 'template-identifier="TPL" identifier="TPLID" show-hide="show"'
  * GM = '<qti-gap-text identifier="GT" match-max="1">a</qti-gap-text>'
+ * RUBRIC = '<qti-rubric-block use="instructions" view="scorer"><qti-content-body>{M}</qti-content-body></qti-rubric-block>'
  * ASI = {
  *     "qti-item-body": ("body", "{M}"),
  *     "qti-content-body.feedback": ("body", "<qti-feedback-block %s><qti-content-body>{M}</qti-content-body></qti-feedback-block>" % FB),
  *     "qti-content-body.modal": ("item", "<qti-modal-feedback %s><qti-content-body>{M}</qti-content-body></qti-modal-feedback>" % FB),
  *     "qti-content-body.rubric": ("body", '<qti-rubric-block use="instructions" view="scorer"><qti-content-body>{M}</qti-content-body></qti-rubric-block>'),
  *     "qti-content-body.rubricTemplate": ("body", '<qti-rubric-block use="instructions" view="scorer"><qti-content-body><qti-template-block %s><qti-content-body>{M}</qti-content-body></qti-template-block></qti-content-body></qti-rubric-block>' % TPL),
+ *     "qti-content-body.testFeedback": ("test-tail", '<qti-test-feedback access="atEnd" %s><qti-content-body>{M}</qti-content-body></qti-test-feedback>' % FB),
+ *     "qti-content-body.testRubric": ("test-head", RUBRIC),
  *     "qti-content-body.template": ("body", "<qti-template-block %s><qti-content-body>{M}</qti-content-body></qti-template-block>" % TPL),
  *     "qti-feedback-inline": ("body", "<p><qti-feedback-inline %s>{M}</qti-feedback-inline></p>" % FB),
  *     "qti-gap-match-interaction": ("body", '<qti-gap-match-interaction response-identifier="RESPONSE_GM" max-associations="1">%s{M}<p><qti-gap identifier="G"/></p></qti-gap-match-interaction>' % GM),
@@ -141,6 +149,7 @@
  *     "qti-prompt": ("body", '<qti-choice-interaction response-identifier="RESPONSE_CH" max-choices="1"><qti-prompt>{M}</qti-prompt><qti-simple-choice identifier="CH">a</qti-simple-choice></qti-choice-interaction>'),
  *     "qti-simple-associable-choice": ("body", '<qti-associate-interaction response-identifier="RESPONSE_AS" max-associations="1"><qti-simple-associable-choice identifier="AS" match-max="1">{M}</qti-simple-associable-choice></qti-associate-interaction>'),
  *     "qti-simple-choice": ("body", '<qti-choice-interaction response-identifier="RESPONSE_CH" max-choices="1"><qti-simple-choice identifier="CH">{M}</qti-simple-choice></qti-choice-interaction>'),
+ *     "qti-stimulus-body": ("stimulus-body", "{M}"),
  *     "qti-template-inline": ("body", "<p><qti-template-inline %s>{M}</qti-template-inline></p>" % TPL),
  *     "qti-template-inline.rubric": ("body", '<qti-rubric-block use="instructions" view="scorer"><qti-content-body><p><qti-template-inline %s>{M}</qti-template-inline></p></qti-content-body></qti-rubric-block>' % TPL),
  * }
@@ -528,26 +537,30 @@
  * def identifiers(b):
  *     return set(re.findall(r'\b(?:identifier|response-identifier)="([^"]+)"', b["xml"])) if b["part"] == "host" else set()
  *
+ * # -- the base document a site belongs to: a group is one base document, so blocks of different documents never share one
+ * DOCS = ("item", "test", "stimulus")
+ * DOC_OF = {"body": "item", "item": "item", "test-head": "test", "test-tail": "test", "stimulus-body": "stimulus"}
+ *
  * # -- group: first the biggest blocks, each into the group it grows least, a new group when none fits
  * rel = {b["name"]: relations(b["xml"]) for b in blocks}
- * groups = []  # {"version", "blocks": [names], "rels": set, "ids": set}
+ * groups = []  # {"doc", "version", "blocks": [names], "rels": set, "ids": set}
  * order = sorted(blocks, key=lambda b: (-len(rel[b["name"]]), b["name"]))
  * for b in order:
  *     ids = identifiers(b)
  *     best = None
  *     for g in groups:
- *         if g["version"] != b["version"] or g["ids"] & ids: continue
+ *         if g["doc"] != DOC_OF[b["site"]] or g["version"] != b["version"] or g["ids"] & ids: continue
  *         grown = len(g["rels"] | rel[b["name"]])
  *         if grown <= MATHML_MAX and (best is None or grown - len(g["rels"]) < best[0]):
  *             best = (grown - len(g["rels"]), g)
  *     if best is None:
- *         g = {"version": b["version"], "blocks": [], "rels": set(), "ids": set()}
+ *         g = {"doc": DOC_OF[b["site"]], "version": b["version"], "blocks": [], "rels": set(), "ids": set()}
  *         groups.append(g)
  *     else:
  *         g = best[1]
  *     g["blocks"].append(b["name"]); g["rels"] |= rel[b["name"]]; g["ids"] |= ids
  * position = {b["name"]: i for i, b in enumerate(blocks)}
- * groups.sort(key=lambda g: (g["version"], min(position[n] for n in g["blocks"])))
+ * groups.sort(key=lambda g: (DOCS.index(g["doc"]), g["version"], min(position[n] for n in g["blocks"])))
  * for i, g in enumerate(groups):
  *     g["name"] = "math-gen-%d" % (i + 1)
  *     g["blocks"].sort(key=position.get)
@@ -559,14 +572,33 @@
  *     return ('<qti-assessment-item %s identifier="gen" title="gen" adaptive="false" time-dependent="false">'
  *             '<qti-item-body>%s</qti-item-body>%s</qti-assessment-item>') % (NS, body, tail)
  *
+ * def test_doc(head, tail):
+ *     # the base test: rubric blocks before the test part, the test feedback after the outcome processing
+ *     return ('<qti-assessment-test %s identifier="gen" title="gen"><qti-outcome-declaration identifier="FEEDBACK" cardinality="single" base-type="identifier"/>%s'
+ *             '<qti-test-part identifier="TP" navigation-mode="linear" submission-mode="individual"><qti-assessment-section identifier="S" title="s" visible="true">'
+ *             '<qti-assessment-item-ref identifier="I" href="i.xml"/></qti-assessment-section></qti-test-part>'
+ *             '<qti-outcome-processing><qti-set-outcome-value identifier="FEEDBACK"><qti-base-value base-type="identifier">x</qti-base-value></qti-set-outcome-value></qti-outcome-processing>'
+ *             '%s</qti-assessment-test>') % (NS, head, tail)
+ *
+ * def stimulus_doc(body):
+ *     return '<qti-assessment-stimulus %s identifier="gen" title="gen"><qti-stimulus-body>%s</qti-stimulus-body></qti-assessment-stimulus>' % (NS, body)
+ *
+ * def base_document(bs):
+ *     """The base document of a block or a group, with each block's fragment at its site."""
+ *     at = lambda site: "".join(b["xml"] for b in bs if b["site"] == site)
+ *     doc_name = DOC_OF[bs[0]["site"]]
+ *     assert all(DOC_OF[b["site"]] == doc_name for b in bs)
+ *     if doc_name == "test": return test_doc(at("test-head"), at("test-tail"))
+ *     if doc_name == "stimulus": return stimulus_doc(at("stimulus-body"))
+ *     return item(at("body") or "<p>a</p>", at("item"))
+ *
  * os.makedirs(out + "/items", exist_ok=True)
  * os.makedirs(out + "/groups", exist_ok=True)
  * by_name = {b["name"]: b for b in blocks}
  * for b in blocks + [annotation_xml]:
- *     open(out + "/items/%s.xml" % b["name"], "w").write(item(b["xml"] if b["site"] == "body" else "<p>a</p>", b["xml"] if b["site"] == "item" else ""))
+ *     open(out + "/items/%s.xml" % b["name"], "w").write(base_document([b]))
  * for g in groups:
- *     bs = [by_name[n] for n in g["blocks"]]
- *     open(out + "/groups/%s.xml" % g["name"], "w").write(item("".join(b["xml"] for b in bs if b["site"] == "body") or "<p>a</p>", "".join(b["xml"] for b in bs if b["site"] == "item")))
+ *     open(out + "/groups/%s.xml" % g["name"], "w").write(base_document([by_name[n] for n in g["blocks"]]))
  *
  * def ts(v): return json.dumps(v, indent=2, sort_keys=True)
  * def doc(*lines):
@@ -616,11 +648,13 @@
  * math-gen-14 (3.0.0): 42 blocks, base 90, mathml 40, total 130
  * math-gen-15 (3.0.0): 16 blocks, base 90, mathml 35, total 125
  * math-gen-16 (3.0.1): 1 blocks, base 90, mathml 3, total 93
- * hosts 63 presentation 43 content 150 attribute 193 blocks 451 groups 16
+ * math-gen-17 (3.0.0): 2 blocks, base 90, mathml 2, total 92
+ * math-gen-18 (3.0.0): 1 blocks, base 90, mathml 2, total 92
+ * hosts 66 presentation 43 content 150 attribute 193 blocks 454 groups 18
  * ```
  *
  * The oracle is `xmllint` over the flat XSD copy and catalog of `~/.cache/gr8des/qti3/oracle/`
- * (spec 3.2's form), against both ASI XSDs; each item is one of the 451 blocks, or
+ * (spec 3.2's form), against both ASI XSDs; each item is one of the 454 blocks, or
  * `annotationXmlBlock`, inside a base item, and each group item is the blocks of one group inside
  * one:
  *
@@ -632,10 +666,10 @@
  * done; done
  *
  * # output
- * items imsqti_asiv3p0_v1p0.xsd: 452 validate, 0 other lines
- * items imsqti_asiv3p0p1_v1p0.xsd: 452 validate, 0 other lines
- * groups imsqti_asiv3p0_v1p0.xsd: 16 validate, 0 other lines
- * groups imsqti_asiv3p0p1_v1p0.xsd: 16 validate, 0 other lines
+ * items imsqti_asiv3p0_v1p0.xsd: 455 validate, 0 other lines
+ * items imsqti_asiv3p0p1_v1p0.xsd: 455 validate, 0 other lines
+ * groups imsqti_asiv3p0_v1p0.xsd: 18 validate, 0 other lines
+ * groups imsqti_asiv3p0p1_v1p0.xsd: 18 validate, 0 other lines
  * ```
  */
 
@@ -657,11 +691,18 @@ export interface MathmlBlock {
   readonly pairs: readonly (readonly [kind: string, attribute: string])[];
   readonly part: "attribute" | "host" | "kind" | "padded";
   /**
-   * Where the fragment goes in the base item: inside `qti-item-body`, or after it.
+   * Where the fragment goes in its base document. In the base item: `"body"` inside
+   * `qti-item-body`, or `"item"` after it. In the base test: `"test-head"` as a child of
+   * `qti-assessment-test` before its first `qti-test-part`, where the XSD admits `qti-rubric-block`
+   * (the content model is `qti-outcome-declaration*`, `qti-time-limits?`, `qti-stylesheet*`,
+   * `qti-rubric-block*`, `qti-test-part+`, `qti-outcome-processing?`, `qti-test-feedback*`), or
+   * `"test-tail"` after `qti-outcome-processing` and before `</qti-assessment-test>`, where it
+   * admits `qti-test-feedback`. In the base stimulus: `"stimulus-body"` inside
+   * `qti-stimulus-body`.
    */
-  readonly site: "body" | "item";
+  readonly site: "body" | "item" | "stimulus-body" | "test-head" | "test-tail";
   /**
-   * The ASI schema version of the base item the block is for.
+   * The ASI schema version of the base document the block is for.
    */
   readonly version: "3.0.0" | "3.0.1";
   /**
@@ -671,7 +712,7 @@ export interface MathmlBlock {
 }
 
 /**
- * One generated fixture: blocks of one version that go into one base item together, and hold at
+ * One generated fixture: blocks of one version that go into one base document together, and hold at
  * most 40 MathML relations between them.
  */
 export interface MathmlGroup {
@@ -684,7 +725,7 @@ export interface MathmlGroup {
    */
   readonly name: string;
   /**
-   * The ASI schema version of the base item, the version of every block.
+   * The ASI schema version of the base document, the version of every block.
    */
   readonly version: "3.0.0" | "3.0.1";
 }
@@ -982,6 +1023,24 @@ export const mathmlBlocks: readonly MathmlBlock[] = [
     xml: '<qti-template-block template-identifier="TPL" identifier="TPLID" show-hide="show"><qti-content-body><m:math><m:mi>x</m:mi></m:math></qti-content-body></qti-template-block>',
   },
   {
+    handles: ["qti-content-body.testFeedback", "m:math", "m:mi"],
+    name: "host-qti-content-body-testFeedback",
+    pairs: [],
+    part: "host",
+    site: "test-tail",
+    version: "3.0.0",
+    xml: '<qti-test-feedback access="atEnd" outcome-identifier="FEEDBACK" identifier="FB" show-hide="show"><qti-content-body><m:math><m:mi>x</m:mi></m:math></qti-content-body></qti-test-feedback>',
+  },
+  {
+    handles: ["qti-content-body.testRubric", "m:math", "m:mi"],
+    name: "host-qti-content-body-testRubric",
+    pairs: [],
+    part: "host",
+    site: "test-head",
+    version: "3.0.0",
+    xml: '<qti-rubric-block use="instructions" view="scorer"><qti-content-body><m:math><m:mi>x</m:mi></m:math></qti-content-body></qti-rubric-block>',
+  },
+  {
     handles: ["qti-feedback-inline", "m:math", "m:mi"],
     name: "host-qti-feedback-inline",
     pairs: [],
@@ -1079,6 +1138,15 @@ export const mathmlBlocks: readonly MathmlBlock[] = [
     site: "body",
     version: "3.0.0",
     xml: '<qti-choice-interaction response-identifier="RESPONSE_CH" max-choices="1"><qti-simple-choice identifier="CH"><m:math><m:mi>x</m:mi></m:math></qti-simple-choice></qti-choice-interaction>',
+  },
+  {
+    handles: ["qti-stimulus-body", "m:math", "m:mi"],
+    name: "host-qti-stimulus-body",
+    pairs: [],
+    part: "host",
+    site: "stimulus-body",
+    version: "3.0.0",
+    xml: "<m:math><m:mi>x</m:mi></m:math>",
   },
   {
     handles: ["qti-template-inline", "m:math", "m:mi"],
@@ -7909,6 +7977,16 @@ const groupPlans: readonly MathmlGroupPlan[] = [
     blocks: ["kind-mfrac-3p0p1"],
     name: "math-gen-16",
     version: "3.0.1",
+  },
+  {
+    blocks: ["host-qti-content-body-testFeedback", "host-qti-content-body-testRubric"],
+    name: "math-gen-17",
+    version: "3.0.0",
+  },
+  {
+    blocks: ["host-qti-stimulus-body"],
+    name: "math-gen-18",
+    version: "3.0.0",
   },
 ];
 
