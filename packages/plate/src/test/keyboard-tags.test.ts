@@ -7,7 +7,7 @@ import { assert, describe, it } from "@effect/vitest";
  * The tests that walk an item by keys, by test file relative to the package directory, each title
  * as written, a `${…}` placeholder included. A walk is `keyboardWalk` in Node, directly or through
  * a helper that walks, such as `src/vertical.test.ts`'s `complete`, or Playwright's keyboard in a
- * browser test. Each one carries the `[keyboard]` token after its last ID token (spec §4.10), and
+ * browser test. Each one carries the `[keyboard]` token after its last ID token, and
  * no other test or `describe` block in any test file carries it, so the ledger lists only these as
  * keyboard tests.
  */

@@ -1,8 +1,8 @@
 /**
- * The walk through a test session's pages in Chromium and WebKit, with JavaScript off (spec §4.7
- * step 5, §4.15): the M2 fixture's session started, a tick saved by Next and shown again by
- * Previous, the browser's Back answered by the store's current item, a closed page resumed from
- * the playground's index, and Enter in a text field saving where the candidate stands.
+ * The walk through a test session's pages in Chromium and WebKit, with JavaScript off: the M2
+ * fixture's session started, a tick saved by Next and shown again by Previous, the browser's Back
+ * answered by the store's current item, a closed page resumed from the playground's index, and
+ * Enter in a text field saving where the candidate stands.
  *
  * Expected values come from the code the playground runs: parts are found through the part table,
  * intents are written by `encodeIntent`, the Resume link's name by `message`, and the values the

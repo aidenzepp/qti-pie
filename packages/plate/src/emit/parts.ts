@@ -115,7 +115,7 @@ export interface PartRow {
   readonly listOwner: boolean;
   /**
    * The attributes the interaction's connect function computes for this part, beyond the
-   * `data-slot` marker and the Root state of spec §4.4 (`data-mode`, `data-disabled`), which I1
+   * `data-slot` marker and the Root state (`data-mode`, `data-disabled`), which I1
    * writes over a replacement's: every one the part can carry, some only in some states.
    *
    * This records what the connect function computes, and `parts.test.ts` renders every row to
@@ -387,7 +387,7 @@ const admits = {
 } satisfies { readonly [C in TagClass]: (element: Element) => boolean };
 
 /**
- * The rows of spec §4.3's part table, in the spec's order, then the navigation rows of the test
+ * The rows of the part table, interactions first, then the navigation rows of the test
  * chrome (M2), before {@link partTable} derives each marker.
  *
  * The five navigation buttons are plain buttons (rule `9af3809b`): each defaults `type` to
@@ -728,8 +728,8 @@ const slotFor = (interaction: InteractionKey, part: PartKey): string =>
     : `${interaction}-${part.replaceAll(/[A-Z]/gu, (letter) => `-${letter.toLowerCase()}`)}`;
 
 /**
- * The part table of spec §4.3 and the test chrome's navigation rows, one row per part, in the
- * spec's order, each with its derived marker.
+ * The part table and the test chrome's navigation rows, one row per part, in
+ * {@link rows}' order, each with its derived marker.
  *
  * The Notice, the StatusHeading and the Choice Root and Prompt hold their context-free defaults: a
  * phrasing `span`, `h1`, and the `labelledby` markup with no legend. {@link rowFor} gives the row

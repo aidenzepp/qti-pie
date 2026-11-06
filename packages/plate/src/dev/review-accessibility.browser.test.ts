@@ -1,13 +1,13 @@
 /**
  * The accessibility tree of the M2 fixture's read-only views in Chromium and WebKit, with
- * JavaScript off (spec P4-37, §4.15): an item in review and in solution, and the closed test's
+ * JavaScript off: an item in review and in solution, and the closed test's
  * summary with its view links and its results link.
  *
  * Each test sits the fixture's test as a candidate does, by mouse and typing: P1's items answered
  * and P1 submitted through its confirm page, and for the tests that read P2 or the summary, P2
  * answered and submitted too. Playwright's computed tree is read in both engines and Chromium's own
  * tree in Chromium; `readonly`, which no computed tree carries, is read in Chromium's own tree and
- * in the DOM (spec §4.15).
+ * in the DOM.
  *
  * Expected values come from the code: the HTML each page answered gives the names, a Control's and
  * a region's through `nameOf` and a link's through `textOf`, its content; `solution` gives the

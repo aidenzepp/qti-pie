@@ -187,7 +187,7 @@ const submit = h("button", { type: "submit" }, [text("Submit")]);
 
 /**
  * The test navigation a native form post renders: each button part keeps its marker and has its
- * `type` swapped to `submit`, Previous, Next, Submit and End in spec §4.11's order.
+ * `type` swapped to `submit`, Previous, Next, Submit and End in that order.
  */
 const navigation = (
   [

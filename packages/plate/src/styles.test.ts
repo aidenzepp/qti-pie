@@ -61,10 +61,10 @@ const baseLine = "/* == base: QTI vocabulary classes == */";
 const themeLine = "/* == theme: plate's default theme, on the part markers == */";
 
 /**
- * The only attribute names a selector may test (spec §4.2; `data-disabled` by the Mind's ruling
- * on handle `66ece1f9`, for the disabled state; `data-orientation`, the authored orientation on the
- * Choice Root, from P2-04; from P4-21, `aria-current`, which the current item's button carries, and
- * `readonly`, which a text Control carries in review and solution).
+ * The only attribute names a selector may test: `data-slot`, the part marker; `data-mode` and
+ * `data-disabled`, the Root's state; `aria-invalid` and `type` on a Control; `data-orientation`,
+ * the authored orientation on the Choice Root; `aria-current`, which the current item's button
+ * carries; and `readonly`, which a text Control carries in review and solution.
  */
 const attributeNames: ReadonlySet<string> = new Set([
   "aria-current",
@@ -85,7 +85,7 @@ const typeNames: ReadonlySet<string> = new Set(["fieldset", "input", "legend", "
 
 /**
  * The only pseudo-classes: the four that hold selectors, and the four states the sheet reads
- * (never `:invalid`, `:valid`, `:user-invalid` or `:user-valid`, spec §4.2).
+ * (never `:invalid`, `:valid`, `:user-invalid` or `:user-valid`).
  */
 const pseudoClassNames: ReadonlySet<string> = new Set([
   "checked",
@@ -163,7 +163,7 @@ const forcedColors = "@media (forced-colors: active)";
 
 /**
  * The predefined counter styles the label classes name: `qti-labels-decimal`, `-lower-alpha`,
- * `-upper-alpha` and `-cjk-ideographic` (spec §4.3).
+ * `-upper-alpha` and `-cjk-ideographic`.
  */
 const counterStyles: ReadonlySet<string> = new Set([
   "cjk-ideographic",

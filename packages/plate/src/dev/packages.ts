@@ -1,6 +1,6 @@
 /**
  * The dev playground's packages: the package listing at `/packages`, each package's page at
- * `/packages/<id>`, and its files at `/packages/<id>/files/<path>` (spec P4-24, §4.3).
+ * `/packages/<id>`, and its files at `/packages/<id>/files/<path>`.
  *
  * The packages are every `*.zip.d` directory under the corpus root, the zips of the example corpus
  * as phase 1's extraction unpacked them, then the repository's M2 fixture package, `fixtures/m2/`.

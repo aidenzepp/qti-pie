@@ -391,7 +391,7 @@ export type BodyNode =
   | Unsupported;
 
 /**
- * An expression of the engine subset (spec §4.12), tagged by `kind`: `qti-match`, `qti-variable`,
+ * An expression of the engine subset, tagged by `kind`: `qti-match`, `qti-variable`,
  * `qti-correct`, `qti-base-value`, `qti-is-null`, `qti-map-response`, `qti-map-response-point`
  * and `qti-equal`. An `equal` is a `qti-equal` in its default `exact` tolerance mode, the one mode
  * the engine runs; one in `absolute` or `relative` mode is never built.
@@ -2225,7 +2225,7 @@ const matchCorrect: readonly Rule[] = [
 ];
 
 /**
- * The built-in templates, as the rule trees their text gives (`ea422814` §5.1): the files in QTI
+ * The built-in templates, as the rule trees their text gives: the files in QTI
  * 3's `rptemplates`, transcribed as data, because a browser module reads no file at run time.
  * `map_response_point` is `map_response` with `qti-map-response-point` in place of
  * `qti-map-response`. Of the Common Cartridge templates, `CC2_match` is `match_correct`;

@@ -1,5 +1,5 @@
 /**
- * The dev playground's read-only views of a test session (spec P4-26): an item in review at
+ * The dev playground's read-only views of a test session: an item in review at
  * `/sessions/<sid>/review/<n>`, an item with its correct responses at
  * `/sessions/<sid>/solution/<n>`, the session's Results Reporting document at
  * `/sessions/<sid>/results.xml`, and the closed test's summary page, which links them.

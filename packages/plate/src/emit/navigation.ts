@@ -1,5 +1,5 @@
 /**
- * The test chrome's navigation parts (spec §4.10, rule `9af3809b`): the component
+ * The test chrome's navigation parts (rule `9af3809b`): the component
  * `test-navigation`, a `nav` Root holding plain buttons and the item list, built from a
  * {@link NavigationState}.
  *

@@ -1,6 +1,6 @@
 /**
  * The session-page helpers (`#plate/test/session-page.ts`) in Chromium and WebKit, with JavaScript
- * off (spec §4.15), witnessed on the first page of the M2 fixture's test session.
+ * off, witnessed on the first page of the M2 fixture's test session.
  *
  * Expected values come from the code the playground runs: the HTML the session page answered,
  * whose parts are found through the part table and named by `nameOf`, and `encodeIntent`.

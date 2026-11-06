@@ -1,8 +1,7 @@
 /**
- * The keyboard on M2's session pages in Chromium and WebKit, with JavaScript off (spec §4.11,
- * §4.15): the tab order of a session page, the navigation pressed by Enter and Space, the confirm
- * page's Confirm and Return, a review page's stops, and P1 of the M2 fixture's test completed by
- * keys alone.
+ * The keyboard on M2's session pages in Chromium and WebKit, with JavaScript off: the tab order of
+ * a session page, the navigation pressed by Enter and Space, the confirm page's Confirm and Return,
+ * a review page's stops, and P1 of the M2 fixture's test completed by keys alone.
  *
  * Keys go through Playwright's keyboard, and the key that moves to the next control is the one
  * `nextControlKey` finds in the engine. Expected values come from the code the playground runs:

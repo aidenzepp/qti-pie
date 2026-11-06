@@ -89,7 +89,7 @@ const textInteractions = ["qti-text-entry-interaction", "qti-extended-text-inter
 const declarations = ["qti-response-declaration", "qti-outcome-declaration"] as const;
 
 /**
- * The response-processing elements of the engine (spec §4.12): the ten elements it evaluates and
+ * The response-processing elements of the engine: the ten elements it evaluates and
  * the three branches of `qti-response-condition`. `qti-equal` runs in its default `exact`
  * tolerance mode only; one in `absolute` or `relative` mode is a mark keyed
  * `tolerance-mode="<mode>"`.
@@ -175,7 +175,7 @@ export interface FeatureRule {
 }
 
 /**
- * The phase-1 "renders" set of spec §4.5, which the model builder, the verdict and the emitter
+ * The phase-1 "renders" set, which the model builder, the verdict and the emitter
  * read.
  */
 export interface Renders {
@@ -221,7 +221,7 @@ export interface Renders {
 }
 
 /**
- * What phase 1 renders, reads, shows a notice for and marks, as data (spec §4.5).
+ * What phase 1 renders, reads, shows a notice for and marks, as data.
  *
  * The emitter and the model builder read the same lists, so an element is rendered exactly when
  * the verdict does not name it unsupported.
@@ -677,7 +677,7 @@ export type OutcomeView = (typeof outcomeViews)[number];
  * closes it.
  *
  * Results Reporting's other two, `pendingResponseProcessing` and `pendingExternalScoring`, are
- * outside the set: M2's engine gives neither (spec §4.5).
+ * outside the set: M2's engine gives neither.
  */
 export const sessionStatuses = ["initial", "pendingSubmission", "final"] as const;
 
@@ -699,7 +699,7 @@ export const answeredStatuses = ["notpresented", "presented", "attempted", "answ
 export type AnsweredStatus = (typeof answeredStatuses)[number];
 
 /**
- * The keys of the test features M2 accepts and does not deliver (spec §4.6): each is a mark on the
+ * The keys of the test features M2 accepts and does not deliver: each is a mark on the
  * verdict at its path, never a notice, and the delivered sequence ignores it.
  *
  * An element feature is keyed by its QTI name. `qti-adaptive-selection` is selection, which M3

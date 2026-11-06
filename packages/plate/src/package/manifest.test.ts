@@ -129,8 +129,8 @@ const resourceOf = (manifest: Manifest, identifier: string): ManifestResource =>
 };
 
 /**
- * The extracted corpus manifests spec §3.2's xmllint baseline names: the four xmllint fails
- * against the profile their version names, and two it validates.
+ * Six extracted corpus manifests whose xmllint result is known: four that xmllint fails against
+ * the profile their version names, and two it validates.
  */
 const baseline = {
   begGuide: "QTI3_BeginnersGuide_Examples/BegGuide_March2025.zip.d/imsmanifest.xml",

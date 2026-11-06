@@ -82,7 +82,7 @@ interface Misspelling {
 }
 
 /**
- * The table of misspellings (spec §4.6), which gives an `unknown-attribute` refusal its
+ * The table of misspellings, which gives an `unknown-attribute` refusal its
  * suggestion.
  *
  * A name with no row is refused with no suggestion, and its wording says to remove the attribute.
@@ -446,7 +446,7 @@ const isSingleDeclaration = (parent: Option.Option<SourceElement>): boolean =>
   );
 
 /**
- * The shared readings this module applies over the XSD's rules, one row each (spec §4.13).
+ * The shared readings this module applies over the XSD's rules, one row each.
  *
  * Every refusal a row gives carries the row's reading in its detail, as `reading`, which the
  * verdict's wording cites; a `child-count` refusal carries `source`, a reading or a specification

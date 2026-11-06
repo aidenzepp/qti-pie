@@ -1,5 +1,5 @@
 /**
- * The dev playground's test sessions (spec P4-25): a package page's Start button posts to
+ * The dev playground's test sessions: a package page's Start button posts to
  * `/packages/<id>/tests`, which starts a session of that test and stores it, and each session has
  * one page, `/sessions/<sid>`, which shows the current item in the playground's own form and takes
  * the form's posts.
@@ -24,7 +24,7 @@
  * One URL per session: the browser's Back re-requests it and shows the item the stored session
  * makes current, so only the test's own Previous moves back. Every page carries the frame's
  * headers, which say `no-store`, and the form carries `autocomplete="off"`, so a browser restores
- * no Choice control's checked state over what the store holds (spec §4.7).
+ * no Choice control's checked state over what the store holds.
  *
  * The route returns the frame's {@link Page} for every HTML answer, so the playground's handler
  * writes it with the stylesheets, the theme box and the page headers, and a `Response` only for a
@@ -262,9 +262,9 @@ const itemOf = (sitting: Sitting, ref: string): Result.Result<Accepted, { messag
   }));
 
 /**
- * Construct the playground's replacement for every navigation button: its own submit button,
- * named for the session's intent and posting the intent the button is handed (spec §4.10's
- * recipe). The swap keeps everything plate computed, `disabled` and `aria-current` included.
+ * Construct the playground's replacement for every navigation button: its own submit button, named
+ * for the session's intent and posting the intent the button is handed. The swap keeps everything
+ * plate computed, `disabled` and `aria-current` included.
  *
  * @param instance The session's instance, the store's id.
  * @returns The part overrides.
@@ -320,7 +320,7 @@ const saveButton = (state: NavigationState, view: ItemView, instance: string): E
 };
 
 /**
- * Give the title a session page carries: `{state}: Item n of N, {test title}` (spec §4.11).
+ * Give the title a session page carries: `{state}: Item n of N, {test title}`.
  *
  * @param view The current item, whose configuration gives the locale.
  * @param state The page's state.
@@ -418,8 +418,8 @@ const itemPage = (sitting: Sitting, view: ItemView, shown: Shown): Page => {
  * Compose the page of a post refused for its responses: the Status part headed "Not accepted"
  * with the messages, first in reading order and without `autofocus`, and the item with the
  * strings posted, or its saved values when the refused post carried none, and its invalid
- * Controls, the first of which takes the page's one `autofocus` (spec §4.11, phase 3's
- * `refusedPage`).
+ * Controls, the first of which takes the page's one `autofocus`, as the item page's
+ * `refusedPage` does.
  *
  * @param sitting The session and its test.
  * @param view The current item.
@@ -476,7 +476,7 @@ const refusalText = (configuration: Configuration, refusal: IntentRefused): stri
  * Compose the page of an intent refused for a reason that concerns no single Control, such as
  * `skipping-not-allowed` or `end-of-part`: the item, with the values the post carried, and the
  * Status part headed "Not accepted" holding the refusal's message, with `autofocus`, the page's
- * one (spec §4.11).
+ * one.
  *
  * A refused intent changes nothing, so the post's values are not saved; they stay in the item's
  * Controls, so the next post carries them again. A closed item posts nothing, so it shows the
@@ -649,7 +649,7 @@ const startSession = Effect.fn("playground.session.start")(function* startSessio
  * After a confirmed part's end, the item, the next part's first, comes with the Status part
  * headed "Part submitted" with `autofocus`, the page's one: the form the browser posted named the
  * Status region of an item of the part that ended, which this page does not hold, so the region's
- * `autofocus` is what focuses it (spec §4.11).
+ * `autofocus` is what focuses it.
  *
  * @param playground The playground.
  * @param sitting The session and its test.

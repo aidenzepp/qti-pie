@@ -9,7 +9,7 @@
  * `#plate/dev/listing.ts`, keeps the `Accepted` item and the stored record on the server, and
  * sends only the HTML of `render(redact(…))` inside its own native form. A post is partitioned and
  * decoded on the server, checked with `checkResponses`, scored with `score`, and answered with the
- * page after a submit that spec §4.7 sets: the Status part first, one `autofocus`, and a title that
+ * page after a submit: the Status part first, one `autofocus`, and a title that
  * names the state. Every page is built through `h` and `toHtml`, so document text is escaped, and
  * every response carries the content-security headers of rule `723e580c`. It also serves plate's
  * stylesheet, its own sheet and the host CSS of the theme its theme box last accepted, which it
@@ -134,8 +134,8 @@ export interface PlaygroundSettings {
 const sessionLimit = 100;
 
 /**
- * The item the plain-HTML host serves at {@link hostMount}: BG007, read from the corpus cache
- * (spec §4.12), never from a committed copy (rule `3ad87993`).
+ * The item the plain-HTML host serves at {@link hostMount}: BG007, read from the corpus cache,
+ * never from a committed copy (rule `3ad87993`).
  */
 const hostItem = "QTI3_BPIG_Examples/items/BG007.xml";
 

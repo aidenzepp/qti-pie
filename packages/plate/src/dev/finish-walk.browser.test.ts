@@ -1,5 +1,5 @@
 /**
- * The finishing walk in Chromium and WebKit, with JavaScript off (spec P4-35, §4.15): the M2
+ * The finishing walk in Chromium and WebKit, with JavaScript off: the M2
  * fixture's test session taken to its end by mouse, through P1's Submit part and its confirm page,
  * the linear part P2, the summary, its Review and Solution pages and its results download; then
  * the plain-HTML host around BG007.

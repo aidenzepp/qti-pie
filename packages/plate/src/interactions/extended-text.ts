@@ -2,14 +2,14 @@
  * Extended Text (Q-5): its parts, its connect function and its response validation, on Choice's
  * module shape.
  *
- * {@link renderExtendedText} emits the structure of spec §4.3: a `qti-extended-text-interaction`
+ * {@link renderExtendedText} emits this structure: a `qti-extended-text-interaction`
  * Root holding the Prompt, when there is one, then the payload's `n` Controls, each a native
  * `textarea` whose only child is the text to restore. A `single` binding has one Control; a
  * `multiple` or `ordered` one has as many as the payload counts (Q9), every one posting under the
  * response's one name, and with more than one the Root is a group (Q10). The connect function
  * computes every attribute of every part once, and `applyPart` places each one, through the
  * embedder's replacement when there is one (ruling `fb4fe744` S1, S2). The browser's own textarea
- * keys apply (§4.8): Enter adds a line and Tab leaves, so each Control is one tab stop, in order.
+ * keys apply: Enter adds a line and Tab leaves, so each Control is one tab stop, in order.
  * In review and solution every Control is `readonly`, so it shows its text, stays a tab stop and
  * posts that text with the form, but takes no input; it is `disabled` only when the author
  * finished the item.
@@ -97,7 +97,7 @@ const rows: Rows = {
 const lineBreak = /\r\n?/gu;
 
 /**
- * Compute how one Control of an Extended Text is named (§4.8, Q10).
+ * Compute how one Control of an Extended Text is named.
  *
  * - Each Control of a group its Prompt or its author names, a group whose payload has no `unnamed`
  *   position, is the locale's "Answer i of n", `i` its place in the group and `n` the group's
@@ -230,7 +230,7 @@ const connect = (interaction: ExtendedTextPayload, payload: Payload, locale: Loc
 };
 
 /**
- * Render an Extended Text as spec §4.3 structures it: a `qti-extended-text-interaction` Root
+ * Render an Extended Text: a `qti-extended-text-interaction` Root
  * holding the Prompt, when there is one, then the cap's notice, when the payload holds it, then
  * the payload's `n` Controls, each a `textarea`.
  *

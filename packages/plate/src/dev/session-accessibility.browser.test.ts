@@ -1,6 +1,6 @@
 /**
  * The accessibility tree of M2's session pages while a candidate answers, in Chromium and WebKit
- * with JavaScript off (spec §4.15): the test navigation, the Status region after a refused answer
+ * with JavaScript off: the test navigation, the Status region after a refused answer
  * and after a part submit, and the confirm page.
  *
  * Every assertion reads Playwright's computed tree in both engines, and Chromium's own tree in
