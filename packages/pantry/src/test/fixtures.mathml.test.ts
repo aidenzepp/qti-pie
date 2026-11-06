@@ -1,15 +1,22 @@
 import { existsSync } from "node:fs";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
-import { Effect, Result } from "effect";
+import { Effect, Option, Result } from "effect";
 import { readRows } from "#pantry/import/package.ts";
+import { ruleOfError } from "#pantry/import/refusal.ts";
+import type { Rule } from "#pantry/import/refusal.ts";
 import { Rows } from "#pantry/import/tree.ts";
 import { AttributeIdref } from "#pantry/schema/attributes.ts";
 import { HtmlId } from "#pantry/schema/document.ts";
 import { arms } from "#pantry/schema/mathml/arms.ts";
 import { familyRelation } from "#pantry/schema/mathml/attributes.ts";
 import { Node } from "#pantry/schema/node.ts";
-import { examplesTarball, fixtureNames, materialize } from "#pantry/test/fixtures.ts";
+import {
+  examplesTarball,
+  fixtureNames,
+  materialize,
+  mathmlCommitNegatives,
+} from "#pantry/test/fixtures.ts";
 import type { FixtureName } from "#pantry/test/fixtures.ts";
 import { mathmlGroups } from "#pantry/test/mathml-blocks.ts";
 import type { MathmlGroup } from "#pantry/test/mathml-blocks.ts";
@@ -185,6 +192,134 @@ layer(NodeServices.layer, { excludeTestServices: true })(
             for (const pair of declaredPairs(group)) {
               assert.isTrue(pairs.has(pair), `${name} holds no ${pair} row`);
             }
+          }),
+      );
+    }
+  },
+);
+
+/**
+ * The 6 MathML negatives refused at import, before any guard runs, each with its rule: a closed
+ * narrowing (`display`, `closure`), an attribute or element the model lacks
+ * (`unmodeled-vocabulary`) and a required attribute.
+ */
+const importNegatives = [
+  ["math-display-center", "attribute-lexical"],
+  ["math-display-on-mi", "unmodeled-vocabulary"],
+  ["math-maction-bare", "required-attribute"],
+  ["math-unnamespaced", "unmodeled-vocabulary"],
+  ["math-data-attribute", "unmodeled-vocabulary"],
+  ["math-interval-closure", "attribute-lexical"],
+] as const satisfies readonly (readonly [FixtureName, Rule])[];
+
+/**
+ * The 22 MathML negatives the guards refuse, each with its rule, in the order of spec 4.11's table.
+ */
+const guardNegatives = [
+  ["math-mfrac-three", "union-count"],
+  ["math-semantics-order", "ordering"],
+  ["math-prescripts-twice", "union-count"],
+  ["math-apply-binary-one", "union-count"],
+  ["math-apply-unary-two", "union-count"],
+  ["math-apply-selector-bare", "union-count"],
+  ["math-partialdiff-one", "union-count"],
+  ["math-qualifier-order", "ordering"],
+  ["math-logbase-on-sin", "admission"],
+  ["math-bvar-two-ci", "union-count"],
+  ["math-bvar-two-degree", "union-count"],
+  ["math-piecewise-two-otherwise", "union-count"],
+  ["math-mscarries-last", "ordering"],
+  ["math-maligngroup-placement", "admission"],
+  ["math-maligngroup-first", "ordering"],
+  ["math-maction-selection", "union-count"],
+  ["math-mglyph-bare", "required-attribute"],
+  ["math-condition-no-bvar", "union-count"],
+  ["math-cn-rational-one", "attribute-lexical"],
+  ["math-share-dangling", "document-key"],
+  ["math-share-cycle", "document-key"],
+  ["math-bind-no-bvar", "union-count"],
+] as const satisfies readonly (readonly [FixtureName, Rule])[];
+
+/**
+ * The commit negatives `readRows` refuses itself, with the rule it names: the guard fires before
+ * the database can.
+ */
+const guardFirst = new Map<FixtureName, Rule>([["math-printed-variable", "union-count"]]);
+
+/**
+ * The rule `readRows` refuses a fixture under, or none when it reads.
+ *
+ * @param name - The fixture.
+ * @returns The effect of reading it.
+ */
+const ruleOf = (name: FixtureName) =>
+  Effect.gen(function* refusalRule() {
+    const dir = yield* materialize(name);
+    const result = yield* Effect.result(readRows(dir));
+
+    if (Result.isSuccess(result)) {
+      return Option.none<Rule>();
+    }
+
+    const { failure } = result;
+
+    if (failure._tag === "PlatformError") {
+      assert.fail(`${name} failed with the platform's error: ${failure.message}`);
+    }
+
+    return Option.some(ruleOfError(failure).rule);
+  });
+
+layer(NodeServices.layer, { excludeTestServices: true })(
+  "test/fixtures.ts MathML negatives",
+  (it) => {
+    it.effect("registers the 40 negatives under distinct names", () =>
+      Effect.sync(() => {
+        const names = [
+          ...importNegatives.map(([name]) => name),
+          ...guardNegatives.map(([name]) => name),
+          ...mathmlCommitNegatives.map(([name]) => name),
+        ];
+
+        assert.strictEqual(importNegatives.length, 6);
+        assert.strictEqual(guardNegatives.length, 22);
+        assert.strictEqual(mathmlCommitNegatives.length, 12);
+        assert.strictEqual(new Set(names).size, 40);
+
+        for (const name of names) {
+          assert.include(fixtureNames, name);
+        }
+      }),
+    );
+
+    for (const [name, rule] of [...importNegatives, ...guardNegatives]) {
+      it.effect.skipIf(!tarballPresent)(
+        `${name} is refused by readRows under ${rule} (skipped without the examples tarball)`,
+        () =>
+          Effect.gen(function* refusedUnder() {
+            assert.deepStrictEqual(
+              yield* ruleOf(name),
+              Option.some(rule),
+              `${name} was not refused under ${rule}`,
+            );
+          }),
+      );
+    }
+
+    for (const [name, rule] of mathmlCommitNegatives) {
+      const first = guardFirst.get(name);
+
+      it.effect.skipIf(!tarballPresent)(
+        first === undefined
+          ? `${name} passes readRows, so the database refuses it under ${rule} (skipped without the examples tarball)`
+          : `${name} is refused by readRows under ${first} before the database can refuse it under ${rule} (skipped without the examples tarball)`,
+        () =>
+          Effect.gen(function* passesRead() {
+            assert.deepStrictEqual(
+              yield* ruleOf(name),
+              Option.fromNullishOr(first),
+              `${name} read differently`,
+            );
           }),
       );
     }
