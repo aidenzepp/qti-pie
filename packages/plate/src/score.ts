@@ -49,8 +49,8 @@ export class RecordMismatch extends Data.TaggedError("RecordMismatch")<{
  * Why a response is not one {@link score} takes.
  *
  * - `undeclared`: the item scores no response by that identifier. It declares none, or declares one
- *   the renderer does not score: base type `point`, `duration` or `file`, cardinality `record`, or
- *   no base type.
+ *   the renderer does not score: base type `duration` or `file`, cardinality `record`, or no base
+ *   type.
  * - `not-a-value`: it is not a value at all (an integer as a number rather than a `bigint`, an empty
  *   string, two values in a single, …).
  * - `base-type`: a value of another base type than its declaration's.
@@ -87,7 +87,7 @@ export class InvalidResponses extends Data.TaggedError("InvalidResponses")<{
 
     return Option.match(this.expected, {
       onNone: () =>
-        `The responses hold ${name}, but the item scores no response by that identifier: it declares none, or declares one the renderer does not score (base type point, duration or file, cardinality record, or no base type). Leave ${name} out of the responses.`,
+        `The responses hold ${name}, but the item scores no response by that identifier: it declares none, or declares one the renderer does not score (base type duration or file, cardinality record, or no base type). Leave ${name} out of the responses.`,
       onSome: ({ baseType, cardinality }) =>
         `The response ${name} ${problemWords[this.problem]}. Pass a value of base type ${baseType} and cardinality ${cardinality}, an integer as a bigint and NULL as no values, as decode gives it.`,
     });

@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
-import { locales, message } from "#plate/messages.ts";
+import { locales, message, numeral } from "#plate/messages.ts";
 import type { MessageKey } from "#plate/messages.ts";
 
 /**
@@ -22,12 +22,18 @@ const english = {
   answerOf: "Answer 1 of 2",
   answering: "Answering",
   atLeast: "Select at least 1.",
+  atLeastOneString: "Enter at least 1 answer.",
+  atLeastStrings: "Enter at least 1 answers.",
   atMost: "Select at most 1.",
+  atMostOneString: "Enter at most 1 answer.",
+  atMostStrings: "Enter at most 1 answers.",
+  choiceOf: "Choice 1 of 2",
   malformedFile: "Enter text, not a file.",
   malformedNumber: "Enter a number.",
   malformedSingleMany: "Enter one answer.",
   notAccepted: "Not accepted",
   notice: "Not supported here: pattern-mask",
+  patternMismatch: "Enter an answer in the form this question asks for.",
   responseRecorded: "Response recorded",
   score: "Score: 3",
   scored: "Scored",
@@ -66,6 +72,27 @@ describe("message", () => {
     assert.strictEqual(message("en", "answerOf", { count: "2", n: "1" }), "Answer 1 of 2");
   });
 
+  it("writes choiceOf with its n and count", () => {
+    assert.strictEqual(message("en", "choiceOf", { count: "4", n: "2" }), "Choice 2 of 4");
+  });
+
+  it("writes patternMismatch, the pattern-mask message a locale gives", () => {
+    assert.strictEqual(
+      message("en", "patternMismatch"),
+      "Enter an answer in the form this question asks for.",
+    );
+  });
+
+  it("writes atLeastStrings and atMostStrings, an Extended Text container's counts, with their n", () => {
+    assert.strictEqual(message("en", "atLeastStrings", { n: "3" }), "Enter at least 3 answers.");
+    assert.strictEqual(message("en", "atMostStrings", { n: "5" }), "Enter at most 5 answers.");
+  });
+
+  it("writes atLeastOneString and atMostOneString, the singular a count of 1 takes", () => {
+    assert.strictEqual(message("en", "atLeastOneString"), "Enter at least 1 answer.");
+    assert.strictEqual(message("en", "atMostOneString"), "Enter at most 1 answer.");
+  });
+
   it("writes a key with no placeholder without params", () => {
     assert.strictEqual(message("en", "submit"), "Submit");
   });
@@ -86,6 +113,18 @@ describe("message", () => {
     assert.strictEqual(message("en", "answerOf"), "Answer {n} of {count}");
     // @ts-expect-error: answerOf's params need count beside n.
     assert.strictEqual(message("en", "answerOf", { n: "1" }), "Answer 1 of {count}");
+  });
+});
+
+describe("numeral", () => {
+  it("writes a number and a bigint as the locale writes numbers", () => {
+    assert.strictEqual(numeral("en", 3), "3");
+    assert.strictEqual(numeral("en", 12_000), "12,000");
+    assert.strictEqual(numeral("en", 12_000n), "12,000");
+  });
+
+  it("writes a bigint beyond 2^53 exactly", () => {
+    assert.strictEqual(numeral("en", 9_007_199_254_740_993n), "9,007,199,254,740,993");
   });
 });
 

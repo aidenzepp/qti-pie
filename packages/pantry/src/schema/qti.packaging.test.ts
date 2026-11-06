@@ -178,7 +178,7 @@ describe("qti packaging composition", () => {
   });
 
   it(
-    "holds exactly the full seed the recipe prints, split between the seed folder and seed_wildcard",
+    "holds exactly the full seed the recipe prints, split among the seed folders",
     () => {
       const committed = seedFiles().flatMap(insertRows);
 

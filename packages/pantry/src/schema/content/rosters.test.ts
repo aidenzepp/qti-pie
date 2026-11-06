@@ -189,6 +189,20 @@ const added: readonly (readonly [keyof typeof rosters.relations, readonly string
   ["MediaMuted", ["true", "false", "1", "0", "muted"]],
   ["MediaControls", ["true", "false", "1", "0", "controls"]],
   ["TrackDefaultValue", ["true", "false", "1", "0", "default"]],
+  // ASI 3.0.1 `TestPartDType` `navigation-mode` (`imsqti_asiv3p0p1_v1p0.xsd` lines 33365 to 33377).
+  ["NavigationMode", ["linear", "nonlinear"]],
+  // ASI 3.0.1 `TestPartDType` `submission-mode` (`imsqti_asiv3p0p1_v1p0.xsd` lines 33379 to 33391).
+  ["SubmissionMode", ["individual", "simultaneous"]],
+  // ASI 3.0.1 `TestFeedbackDType` `access` (`imsqti_asiv3p0p1_v1p0.xsd` lines 33220 to 33231).
+  ["TestFeedbackAccess", ["atEnd", "during"]],
+  // INFO#DataCharacteristic_BranchRule.Attr_target: the three exit targets.
+  ["BranchExit", ["EXIT_SECTION", "EXIT_TESTPART", "EXIT_TEST"]],
+  // Phase-5 spec 4.14: the five discriminators.
+  ["BranchTarget", ["exit", "ref"]],
+  ["StructureHolder", ["part", "section", "sectionRef", "itemRef"]],
+  ["ItemRefTarget", ["item", "lti"]],
+  ["PrefixedSource", ["declared", "mapped", "builtIn"]],
+  ["SectionVariableTarget", ["declared", "prefixed", "duration"]],
 ];
 
 /**
@@ -202,8 +216,8 @@ const reused: readonly (readonly [keyof typeof rosters.relations, readonly strin
 ];
 
 describe("content rosters", () => {
-  it("adds 37 rosters", () => {
-    assert.strictEqual(added.length, 37);
+  it("adds 46 rosters", () => {
+    assert.strictEqual(added.length, 46);
   });
 
   for (const [name, handles] of added) {

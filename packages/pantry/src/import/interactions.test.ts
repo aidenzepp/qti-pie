@@ -13,13 +13,16 @@ import {
   nearestInteraction,
   templateRef,
   typedCopy,
+  unboundInteractionRows,
 } from "#pantry/import/interactions.ts";
 import type { DeclaredVariable } from "#pantry/import/interactions.ts";
-import { ItemRefusal, Rows } from "#pantry/import/tree.ts";
+import { ItemRefusal, Rows, treeRows } from "#pantry/import/tree.ts";
 import type { IndexedNode, NodeIndex } from "#pantry/import/tree.ts";
 import { RectCoords, ShapeCoords } from "#pantry/schema/contracts.ts";
 import { CoordsRect, Coords } from "#pantry/schema/shapes.ts";
 import { ChoiceTemplateRef } from "#pantry/schema/choices.ts";
+import { Gap, GapMatchInteraction, GapText } from "#pantry/schema/interactions/gap.ts";
+import { TextEntryInteraction } from "#pantry/schema/interactions/text.ts";
 import {
   DeclaredMaxChoices,
   DeclaredShuffle,
@@ -31,6 +34,7 @@ import {
 import { AttributeLexical } from "#pantry/schema/node.ts";
 import type { NodeKindHandle } from "#pantry/schema/node.ts";
 import { uuidOf } from "#pantry/test/fixtures.ts";
+import { readXml } from "@qti-pie/crust/read.ts";
 import type { Attribute, Element } from "@qti-pie/crust/tree.ts";
 
 const documentId = "11111111-1111-4111-8111-111111111111";
@@ -527,6 +531,51 @@ describe("interactionRows", () => {
       );
 
       assert.strictEqual(built, rows);
+    }),
+  );
+});
+
+describe("unboundInteractionRows", () => {
+  const stimulus = `<qti-assessment-stimulus xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="hand" title="Hand"><qti-stimulus-body><p><qti-text-entry-interaction response-identifier="NOPE"/></p><qti-gap-match-interaction response-identifier="ALSO" shuffle="false"><qti-gap-text identifier="T1" match-max="1">one</qti-gap-text><p><qti-gap identifier="G1"/></p></qti-gap-match-interaction></qti-stimulus-body></qti-assessment-stimulus>`;
+
+  it.effect("writes each arm of a stimulus interaction and no binding", () =>
+    Effect.gen(function* unbound() {
+      const doc = yield* readXml(new TextEncoder().encode(stimulus));
+      const tree = yield* treeRows(
+        doc,
+        {
+          charset: doc.charset,
+          id: documentId,
+          kind: "document",
+          root: "stimulus",
+          version: "3.0.1",
+        },
+        Rows.empty(),
+      );
+
+      const built = yield* unboundInteractionRows(doc.root, tree.nodes, documentId, tree.rows);
+
+      assert.deepStrictEqual(
+        Rows.of(built, TextEntryInteraction).map(({ responseIdentifier, rootKind }) => ({
+          responseIdentifier,
+          rootKind,
+        })),
+        [{ responseIdentifier: "NOPE", rootKind: "stimulus" }],
+      );
+      assert.deepStrictEqual(
+        Rows.of(built, GapMatchInteraction).map(({ responseIdentifier, rootKind }) => ({
+          responseIdentifier,
+          rootKind,
+        })),
+        [{ responseIdentifier: "ALSO", rootKind: "stimulus" }],
+      );
+      assert.strictEqual(Rows.of(built, GapText).length, 1);
+      assert.strictEqual(Rows.of(built, Gap).length, 1);
+      assert.strictEqual(Rows.of(built, InteractionBinding).length, 0);
+      assert.strictEqual(Rows.of(built, TypedBinding).length, 0);
+      assert.strictEqual(Rows.of(built, RecordBinding).length, 0);
+      assert.strictEqual(Rows.of(built, GapMatchBinding).length, 0);
+      assert.strictEqual(Rows.of(built, ChoiceTemplateRef).length, 0);
     }),
   );
 });

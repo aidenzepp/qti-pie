@@ -30,6 +30,11 @@ const rowsOf = (body: string) =>
   Effect.gen(function* writeRows() {
     const text = `<qti-response-processing xmlns="${asi}" xmlns:xi="${xi}" xmlns:ma="urn:test:ma">${body}</qti-response-processing>`;
     const doc = yield* readXml(new TextEncoder().encode(text));
+    const declaring = yield* readXml(
+      new TextEncoder().encode(
+        `<qti-assessment-item xmlns="${asi}"><qti-outcome-declaration identifier="S" cardinality="single" base-type="float"/></qti-assessment-item>`,
+      ),
+    );
     const tree = crypto.randomUUID();
     const built = yield* treeRows(
       doc,
@@ -38,7 +43,7 @@ const rowsOf = (body: string) =>
     );
     const input: ProcessingInput = {
       document: tree,
-      env: environmentOf(doc, "test"),
+      env: environmentOf(declaring, "test"),
       language: "response",
       mode: "test",
       nodes: built.nodes,

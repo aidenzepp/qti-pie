@@ -534,7 +534,7 @@ describe("the vertical witness over the fixtures", () => {
   });
 
   describe("the keyboard-only completion", () => {
-    it.effect("[Q-2] [I-9b] BG007 by keyboard: true scores 1, false 0, none 0", () =>
+    it.effect("[Q-2] [I-9b] [keyboard] BG007 by keyboard: true scores 1, false 0, none 0", () =>
       Effect.gen(function* bg007() {
         const { accepted } = yield* acceptFixture(fixtures.bg007);
         const walks: readonly (readonly [readonly Key[], readonly unknown[], number])[] = [
@@ -552,46 +552,57 @@ describe("the vertical witness over the fixtures", () => {
       }),
     );
 
-    it.effect("[Q-20] [I-9b] BG010 by keyboard: YORK and york give 0.5, Paris and none 0", () =>
-      Effect.gen(function* bg010() {
-        const { accepted } = yield* acceptFixture(fixtures.bg010);
-        const walks: readonly (readonly [readonly Key[], number])[] = [
-          [["Tab", { type: "YORK" }, "Enter"], 0.5],
-          [["Tab", { type: "york" }, "Enter"], 0.5],
-          [["Tab", { type: "Paris" }, "Enter"], 0],
-          [["Tab", "Tab", "Enter"], 0],
-        ];
+    it.effect(
+      "[Q-20] [I-9b] [keyboard] BG010 by keyboard: YORK and york give 0.5, Paris and none 0",
+      () =>
+        Effect.gen(function* bg010() {
+          const { accepted } = yield* acceptFixture(fixtures.bg010);
+          const walks: readonly (readonly [readonly Key[], number])[] = [
+            [["Tab", { type: "YORK" }, "Enter"], 0.5],
+            [["Tab", { type: "york" }, "Enter"], 0.5],
+            [["Tab", { type: "Paris" }, "Enter"], 0],
+            [["Tab", "Tab", "Enter"], 0],
+          ];
 
-        for (const [keys, expected] of walks) {
-          const { record } = yield* complete(accepted, keys);
+          for (const [keys, expected] of walks) {
+            const { record } = yield* complete(accepted, keys);
 
-          assert.deepStrictEqual(valuesOf(record.outcomes, "SCORE"), [expected]);
-        }
-      }),
-    );
-
-    it.effect("[Q-5] BG011 by keyboard, past the video: the response is recorded, not scored", () =>
-      Effect.gen(function* bg011() {
-        const { accepted } = yield* acceptFixture(fixtures.bg011);
-        const answer = "Crows eat insects.";
-        const { record, tabOrder: stops } = yield* complete(accepted, [
-          "Tab",
-          "Tab",
-          { type: answer },
-          "Tab",
-          "Enter",
-        ]);
-
-        assert.deepStrictEqual(stops, ["video", "textarea", "button"]);
-        assert.isTrue(Option.isNone(accepted.item.processing), "BG011 has no response processing");
-        assert.strictEqual(record.attempt, "submitted");
-        assert.deepStrictEqual(valuesOf(record.responses, "RESPONSE"), [answer]);
-        assert.deepStrictEqual(valuesOf(record.outcomes, "SCORE"), [0], "SCORE stays its default");
-      }),
+            assert.deepStrictEqual(valuesOf(record.outcomes, "SCORE"), [expected]);
+          }
+        }),
     );
 
     it.effect(
-      "[I-9b] the hotspot item shows one notice, posts its other entries, and scores 0",
+      "[Q-5] [keyboard] BG011 by keyboard, past the video: the response is recorded, not scored",
+      () =>
+        Effect.gen(function* bg011() {
+          const { accepted } = yield* acceptFixture(fixtures.bg011);
+          const answer = "Crows eat insects.";
+          const { record, tabOrder: stops } = yield* complete(accepted, [
+            "Tab",
+            "Tab",
+            { type: answer },
+            "Tab",
+            "Enter",
+          ]);
+
+          assert.deepStrictEqual(stops, ["video", "textarea", "button"]);
+          assert.isTrue(
+            Option.isNone(accepted.item.processing),
+            "BG011 has no response processing",
+          );
+          assert.strictEqual(record.attempt, "submitted");
+          assert.deepStrictEqual(valuesOf(record.responses, "RESPONSE"), [answer]);
+          assert.deepStrictEqual(
+            valuesOf(record.outcomes, "SCORE"),
+            [0],
+            "SCORE stays its default",
+          );
+        }),
+    );
+
+    it.effect(
+      "[I-9b] [keyboard] the hotspot item shows one notice, posts its other entries, and scores 0",
       () =>
         Effect.gen(function* hotspot() {
           const { accepted } = yield* acceptFixture(fixtures.hotspot);

@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
-import { emitBody, htmlSubset } from "#plate/emit/body.ts";
+import { emitBody, emitNodes, htmlSubset } from "#plate/emit/body.ts";
 import type { RenderInteraction } from "#plate/emit/body.ts";
 import { h, text } from "#plate/emit/node.ts";
 import type { Element, Node } from "#plate/emit/node.ts";
@@ -9,11 +9,13 @@ import type { PartOverrides } from "#plate/emit/parts.ts";
 import { toHtml } from "#plate/emit/serialise.ts";
 import { entryName } from "#plate/form/encoding.ts";
 import { renderChoice } from "#plate/interactions/choice.ts";
+import { renderExtendedText } from "#plate/interactions/extended-text.ts";
 import { message } from "#plate/messages.ts";
 import type {
   ChoicePayload,
   ElementPayload,
   EmitState,
+  ExtendedTextPayload,
   NoticePayload,
   Payload,
   PayloadNode,
@@ -21,6 +23,7 @@ import type {
   TextPayload,
 } from "#plate/payload.ts";
 import { checkTree } from "#plate/test/accessibility.ts";
+import { growthFactor, growthLimit, growthRatio } from "#plate/test/growth.ts";
 import { roundTrips } from "#plate/test/round-trip.ts";
 
 /**
@@ -213,6 +216,17 @@ const idsIn = (nodes: readonly Node[]): readonly string[] =>
 const rootOf = (nodes: readonly Node[]): Element => h("div", { lang: "en" }, nodes);
 
 /**
+ * Collect the heading tags of a node list in document order, descendants included.
+ *
+ * @param nodes The nodes.
+ * @returns The tag of every `h1` to `h6` at or below them.
+ */
+const headingTagsIn = (nodes: readonly Node[]): readonly string[] =>
+  elementsIn(nodes)
+    .map(({ tag }) => tag)
+    .filter((tag) => /^h[1-6]$/u.test(tag));
+
+/**
  * A Text Entry bound to `RESPONSE`, unnamed, with no message.
  */
 const textEntry: TextEntryPayload = {
@@ -372,20 +386,112 @@ describe("emitBody", () => {
       }),
   );
 
-  it.effect("[I-8] headings shift so h1 sits at the heading level, capped at h6", () =>
-    Effect.gen(function* headings() {
+  it.effect(
+    "[I-8] in an item that starts at h1, headings shift so h1 sits at the heading level, capped at h6",
+    () =>
+      Effect.gen(function* headings() {
+        const nodes = yield* emit([
+          el("h1", {}, [txt("A")]),
+          el("h3", {}, [txt("B")]),
+          el("h6", {}, [txt("C")]),
+        ]);
+
+        assert.deepStrictEqual(nodes, [
+          h("h2", {}, [text("A")]),
+          h("h4", {}, [text("B")]),
+          h("h6", {}, [text("C")]),
+        ]);
+      }),
+  );
+
+  it.effect("[I-8] an item that starts at h1 emits h1 at the heading level, as before", () =>
+    Effect.gen(function* startsAtH1() {
       const nodes = yield* emit([
         el("h1", {}, [txt("A")]),
-        el("h3", {}, [txt("B")]),
-        el("h6", {}, [txt("C")]),
+        el("h2", {}, [txt("B")]),
+        el("h3", {}, [txt("C")]),
       ]);
 
-      assert.deepStrictEqual(nodes, [
-        h("h2", {}, [text("A")]),
-        h("h4", {}, [text("B")]),
-        h("h6", {}, [text("C")]),
-      ]);
+      assert.deepStrictEqual(headingTagsIn(nodes), ["h2", "h3", "h4"]);
+      assert.deepStrictEqual(checkTree(rootOf(nodes), { baseLevel: 2 }), []);
     }),
+  );
+
+  it.effect("[I-8] an item that starts at h2 emits h2 first at heading level 2", () =>
+    Effect.gen(function* startsAtH2() {
+      const nodes = yield* emit([
+        el("h2", {}, [txt("A")]),
+        el("p", {}, [txt("Text")]),
+        el("h3", {}, [txt("B")]),
+      ]);
+
+      assert.deepStrictEqual(headingTagsIn(nodes), ["h2", "h3"]);
+      assert.deepStrictEqual(checkTree(rootOf(nodes), { baseLevel: 2 }), []);
+    }),
+  );
+
+  it.effect("[I-8] an item that starts at h3 with a later h4 emits h2 then h3", () =>
+    Effect.gen(function* startsAtH3() {
+      const nodes = yield* emit([el("h3", {}, [txt("A")]), el("h4", {}, [txt("B")])]);
+
+      assert.deepStrictEqual(headingTagsIn(nodes), ["h2", "h3"]);
+      assert.deepStrictEqual(checkTree(rootOf(nodes), { baseLevel: 2 }), []);
+    }),
+  );
+
+  it.effect("[I-8] at heading level 4 an item that starts at h2 shifts by two, capped at h6", () =>
+    Effect.gen(function* levelFour() {
+      const nodes = yield* emit(
+        [
+          el("h2", {}, [txt("A")]),
+          el("h3", {}, [txt("B")]),
+          el("h4", {}, [txt("C")]),
+          el("h5", {}, [txt("D")]),
+        ],
+        4,
+      );
+
+      assert.deepStrictEqual(headingTagsIn(nodes), ["h4", "h5", "h6", "h6"]);
+      assert.deepStrictEqual(checkTree(rootOf(nodes), { baseLevel: 4 }), []);
+    }),
+  );
+
+  it.effect("[I-8] headings that go h2 then h1 take the shallowest, h1, as the heading level", () =>
+    Effect.gen(function* deeperFirst() {
+      const nodes = yield* emit([el("h2", {}, [txt("A")]), el("h1", {}, [txt("B")])]);
+
+      // The authored order skips a level before the shallowest heading, so heading-order fails.
+      assert.deepStrictEqual(headingTagsIn(nodes), ["h3", "h2"]);
+    }),
+  );
+
+  it.effect("[I-8] a heading the second line drops with its subtree does not set the shift", () =>
+    Effect.gen(function* droppedHeading() {
+      const nodes = yield* emit([
+        el("script", {}, [el("h1", {}, [txt("Dropped")])]),
+        el("h2", {}, [txt("Kept")]),
+      ]);
+
+      assert.deepStrictEqual(nodes, [h("h2", {}, [text("Kept")])]);
+    }),
+  );
+
+  it.effect(
+    "[I-8] a heading in a Prompt sets the shift, and the Prompt's content shares the body's",
+    () =>
+      Effect.gen(function* promptHeading() {
+        const prompt = [el("h2", {}, [txt("Ask")])];
+        const payload = payloadOf([
+          el("h3", {}, [txt("Part")]),
+          { ...choice, prompt: Option.some(prompt) },
+        ]);
+        const state = yield* stateAt(2);
+        const body = yield* Effect.fromResult(emitBody(payload, state, stub));
+        const promptNodes = yield* Effect.fromResult(emitNodes(prompt, payload, state, stub));
+
+        assert.deepStrictEqual(headingTagsIn(body), ["h3"]);
+        assert.deepStrictEqual(headingTagsIn(promptNodes), ["h2"]);
+      }),
   );
 
   it.effect("[I-8] rows directly under a table gain one tbody, so the table round-trips", () =>
@@ -966,4 +1072,157 @@ describe("emitBody, the XSD's HTML subset", () => {
       }
     }
   });
+});
+
+/**
+ * The choices, or the Extended Texts, each growth check renders first, before it renders
+ * {@link growthFactor} times as many.
+ */
+const fewerInteractions = 2000;
+
+/**
+ * Each growth check renders 16,000 interactions three times and 2,000 interactions 24 times. A
+ * render that read the whole body again for each choice or Prompt took about two minutes of that,
+ * far beyond vitest's default of 5 s, and a failing check should report its ratio, not a timeout.
+ */
+const growthTimeoutMs = 300_000;
+
+/**
+ * The render function `render` builds, dispatching each interaction to its module, so a choice's
+ * content and a Prompt go through {@link emitNodes} as they do in a render.
+ *
+ * @param payload The render's payload.
+ * @param state The render's emit state.
+ * @returns The function that renders one interaction through its module.
+ */
+const interactionsOf =
+  (payload: Payload, state: EmitState): RenderInteraction =>
+  (interaction) => {
+    switch (interaction.kind) {
+      case "choice": {
+        return renderChoice(interaction, payload, state);
+      }
+      case "extended-text": {
+        return renderExtendedText(interaction, payload, state);
+      }
+      case "text-entry": {
+        return stub(interaction);
+      }
+      default: {
+        return interaction satisfies never;
+      }
+    }
+  };
+
+/**
+ * A body of one single Choice with `count` choices, each a paragraph `cN`.
+ *
+ * @param count How many choices the Choice holds.
+ * @returns The body's payload nodes.
+ */
+const choicesBody = (count: number): readonly PayloadNode[] => [
+  {
+    ...choice,
+    choices: Array.from({ length: count }, (_, index) => ({
+      content: [el("p", {}, [txt(`c${index}`)])],
+      identifier: `C${index}`,
+    })),
+  },
+];
+
+/**
+ * A body of `count` single Extended Texts, each bound to its own response and each with a Prompt.
+ *
+ * @param count How many Extended Texts the body holds.
+ * @returns The body's payload nodes.
+ */
+const essaysBody = (count: number): readonly PayloadNode[] =>
+  Array.from({ length: count }, (_, index): ExtendedTextPayload => ({
+    autofocus: false,
+    base: 10,
+    baseType: "string",
+    cardinality: "single",
+    class: "",
+    expectedLines: Option.none(),
+    formName: entryName(instance, `R${index}`),
+    format: "plain",
+    invalid: false,
+    kind: "extended-text",
+    messageIds: [],
+    n: 1,
+    name: { ariaLabel: Option.none(), ariaLabelledby: Option.none(), unnamed: Option.none() },
+    notice: Option.none(),
+    placeholder: Option.none(),
+    prompt: Option.some([txt(`Prompt ${index}`)]),
+    response: `R${index}`,
+    restores: [""],
+  }));
+
+/**
+ * Give a render of a body as `render` runs one: the payload built, then the body emitted with
+ * each interaction rendered through its module.
+ *
+ * @param body Builds the body's payload nodes, once per render.
+ * @param state The emit state.
+ * @returns The render, which fails the test on a refusal.
+ */
+const renderOf =
+  (body: () => readonly PayloadNode[], state: EmitState): (() => void) =>
+  () => {
+    const payload = payloadOf(body());
+    Result.getOrThrow(emitBody(payload, state, interactionsOf(payload, state)));
+  };
+
+describe("emitBody, render time", () => {
+  it.effect(
+    "[I-8] renders 8 times the choices of one Choice in under 32 times the time",
+    () =>
+      Effect.gen(function* choicesInLinearTime() {
+        const state = yield* stateAt(2);
+        const more = fewerInteractions * growthFactor;
+        const payload = payloadOf(choicesBody(more));
+        const nodes = Result.getOrThrow(emitBody(payload, state, interactionsOf(payload, state)));
+        assert.lengthOf(
+          elementsIn(nodes).filter(({ tag }) => tag === "li"),
+          more,
+        );
+
+        const growth = yield* growthRatio(
+          renderOf(() => choicesBody(fewerInteractions), state),
+          renderOf(() => choicesBody(more), state),
+        );
+        assert.isBelow(
+          growth,
+          growthLimit,
+          `8 times the choices took ${growth.toFixed(1)} times as long`,
+        );
+      }),
+    growthTimeoutMs,
+  );
+
+  it.effect(
+    "[I-8] renders 8 times the Extended Texts, each with a Prompt, in under 32 times the time",
+    () =>
+      Effect.gen(function* essaysInLinearTime() {
+        const state = yield* stateAt(2);
+        const more = fewerInteractions * growthFactor;
+        const payload = payloadOf(essaysBody(more));
+        const nodes = Result.getOrThrow(emitBody(payload, state, interactionsOf(payload, state)));
+        assert.lengthOf(
+          elementsIn(nodes).filter(({ tag }) => tag === "textarea"),
+          more,
+        );
+
+        const growth = yield* growthRatio(
+          renderOf(() => essaysBody(fewerInteractions), state),
+          renderOf(() => essaysBody(more), state),
+        );
+        assert.isBelow(
+          growth,
+          growthLimit,
+          `8 times the Extended Texts took ${growth.toFixed(1)} times as long`,
+        );
+      }),
+    growthTimeoutMs,
+  );
 });

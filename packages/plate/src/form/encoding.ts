@@ -134,6 +134,12 @@ const meets: Readonly<Record<InstanceRequirement, (token: string) => boolean>> =
  * A lowercase UUID passes, as do React's `useId()` forms `_r_1_` (React 19.2 and later) and `:r1:`
  * (React 18 and 19.0); React 19.1's `«r1»` does not, so its caller passes a token of their own.
  *
+ * Two tokens that each pass can still collide when one extends the other after a `.` or `-`, such
+ * as `a` and `a.b`: an id joins the token to a response identifier with `-`, an entry name joins
+ * them with `.`, and an identifier may itself hold both, so instance `a` with response `b.X` posts
+ * under the same name as instance `a.b` with response `X`. Unique tokens of one length, such as
+ * UUIDs, never do.
+ *
  * @example
  *   checkInstance("_r_1_"); // Option.none()
  *   checkInstance("ab-"); // Option.some("id-boundary")

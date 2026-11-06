@@ -1,21 +1,23 @@
 /**
- * The evaluator: phase 1's engine subset (spec §4.12) run over an item's rule tree, as pure
- * functions of the item and the variables of one attempt.
+ * The evaluator: the engine subset (spec §4.12) run over an item's rule tree, as pure functions of
+ * the item and the variables of one attempt.
  *
  * {@link runRules} runs response rules in order, and {@link evaluateExpression} gives the value of
  * one expression. They take rules the item model ({@link Item}) built and variables that hold a
- * value for every modelled declaration, as the session record does. A rule that names an identifier
- * outside them, sets an outcome to a value of another type, or maps a response that has no mapping
- * is a failure of what the caller passed, and the caller can cause each one: the variables come
- * from a record the host hands back. An identifier the variables hold no value of is the record's
- * gap, and one the item declares nothing of is the item's; the failure says which. So the
- * functions stay plain and synchronous and return each failure, an {@link EngineFailure}, in a
- * `Result`; the first failure ends the run.
+ * value for every modelled declaration, as the session record does, and the attempt count the
+ * built-in `numAttempts` reads. A rule that names an identifier outside them, sets an outcome to a
+ * value of another type, or maps a response that has no mapping is a failure of what the caller
+ * passed, and the caller can cause each one: the variables come from a record the host hands back.
+ * An identifier the variables hold no value of is the record's gap, and one the item declares
+ * nothing of is the item's; the failure says which. So the functions stay plain and synchronous and
+ * return each failure, an {@link EngineFailure}, in a `Result`; the first failure ends the run.
  *
  * @module
  */
 import { Array as Arr, Data, Option, Result } from "effect";
 import type {
+  AreaMapEntry,
+  AreaMapping,
   Expression,
   Item,
   MapEntry,
@@ -23,24 +25,36 @@ import type {
   ResponseDeclaration,
   Rule,
 } from "#plate/model/item.ts";
-import { isNull, match, nullOf } from "#plate/model/values.ts";
+import { format, isNull, match, nullOf } from "#plate/model/values.ts";
 import type { Single, Value } from "#plate/model/values.ts";
 
 /**
- * The variables of one attempt: each response and each outcome by identifier.
+ * The variables of one attempt: each response and each outcome by identifier, and the attempt
+ * count.
  *
  * Responses and outcomes share one identifier space, because declaration identifiers are unique
  * together, so a `qti-variable` names at most one of them.
  */
 export interface Variables {
+  /**
+   * The value of the built-in response variable `numAttempts`: the number of attempts at the
+   * item, the one being processed included, because the count "increases by '1' at the start of
+   * each attempt". `runAttempt` in `#plate/engine/attempt.ts` always gives it. Without it, a
+   * `qti-variable` of `numAttempts` is the record's gap, as any other variable the record holds
+   * no value of.
+   *
+   * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#IV_Response
+   */
+  readonly numAttempts?: bigint;
   readonly outcomes: Readonly<Record<string, Value>>;
   readonly responses: Readonly<Record<string, Value>>;
 }
 
 /**
  * The failure of a rule tree that names an identifier the item or the variables do not hold in the
- * role the rule reads it in: a variable or a mapped response with no value, a `qti-correct` or a
- * `qti-map-response` of no declared response, or a `qti-set-outcome-value` of no declared outcome.
+ * role the rule reads it in: a variable or a mapped response with no value, a `qti-correct`, a
+ * `qti-map-response` or a `qti-map-response-point` of no declared response, or a
+ * `qti-set-outcome-value` of no declared outcome.
  *
  * In a valid item every identifier a rule names is declared, but the variables come from the record
  * the host hands back, which may lack a value, so the evaluator returns it. Its `holder` says which
@@ -112,24 +126,35 @@ export class OutcomeMismatchError extends Data.TaggedError("OutcomeMismatchError
 }
 
 /**
- * The failure of a `qti-map-response` whose response is declared without a `qti-mapping`.
+ * The failure of a `qti-map-response` whose response is declared without a `qti-mapping`, or of a
+ * `qti-map-response-point` whose response is declared without a `qti-area-mapping`.
  *
- * QTI maps a response "using the associated mapping, which must have been declared", and the
- * evaluator returns it.
+ * QTI maps a response "using the associated mapping, which must have been declared", and a point
+ * response through its "associated areaMapping"; the evaluator returns it.
  *
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#ExpMapResponse
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#ExpMapResponsePoint
  */
 export class UnmappedResponseError extends Data.TaggedError("UnmappedResponseError")<{
   /**
    * The response's identifier.
    */
   readonly identifier: string;
+
+  /**
+   * The mapping the expression reads and the declaration lacks: `qti-mapping` for
+   * `qti-map-response`, `qti-area-mapping` for `qti-map-response-point`.
+   */
+  readonly mapping: "qti-area-mapping" | "qti-mapping";
 }> {
   /**
-   * The response and the two ways to score it, in one line.
+   * The response, the mapping it lacks and the two ways to score it, in one line.
    */
   override get message(): string {
-    return `The rules map the response ${JSON.stringify(this.identifier)}, and its declaration has no qti-mapping: give the declaration a qti-mapping, or score it without qti-map-response.`;
+    const expression =
+      this.mapping === "qti-mapping" ? "qti-map-response" : "qti-map-response-point";
+
+    return `The rules map the response ${JSON.stringify(this.identifier)}, and its declaration has no ${this.mapping}: give the declaration a ${this.mapping}, or score it without ${expression}.`;
   }
 }
 
@@ -154,24 +179,48 @@ const own = (values: Readonly<Record<string, Value>>, identifier: string): Optio
   Object.hasOwn(values, identifier) ? Option.fromUndefinedOr(values[identifier]) : Option.none();
 
 /**
- * Give the value of a `qti-variable`: the response or the outcome of that identifier.
+ * Give the value of the built-in variable an identifier names, when the variables carry it: for
+ * `numAttempts`, the attempt count as a single integer.
  *
  * @param variables The variables of the attempt.
  * @param identifier The variable's identifier.
- * @returns Its current value, or an {@link UnknownIdentifierError} when neither the responses nor
- *   the outcomes hold it.
+ * @returns The value, or none for any other identifier and when the variables carry no count.
+ */
+const builtInValue = (variables: Variables, identifier: string): Option.Option<Value> =>
+  identifier === "numAttempts"
+    ? Option.map(Option.fromUndefinedOr(variables.numAttempts), (count): Value => ({
+        baseType: "integer",
+        cardinality: "single",
+        values: [{ baseType: "integer", value: count }],
+      }))
+    : Option.none();
+
+/**
+ * Give the value of a `qti-variable`: the response or the outcome of that identifier, else the
+ * built-in variable of that name.
+ *
+ * A declared variable wins over a built-in of the same name, as the prose rules read a reference
+ * (`variableType` in `#plate/validate/rules.ts`).
+ *
+ * @param variables The variables of the attempt.
+ * @param identifier The variable's identifier.
+ * @returns Its current value, or an {@link UnknownIdentifierError} when neither the responses, the
+ *   outcomes nor the built-in variables hold it.
  */
 const variableValue = (
   variables: Variables,
   identifier: string,
 ): Result.Result<Value, UnknownIdentifierError> =>
   Result.fromOption(
-    Option.orElse(own(variables.responses, identifier), () => own(variables.outcomes, identifier)),
+    Option.orElse(own(variables.responses, identifier), () =>
+      Option.orElse(own(variables.outcomes, identifier), () => builtInValue(variables, identifier)),
+    ),
     () => new UnknownIdentifierError({ holder: "record", identifier, role: "variable" }),
   );
 
 /**
- * Find the response declaration a `qti-correct` or a `qti-map-response` names.
+ * Find the response declaration a `qti-correct`, a `qti-map-response` or a
+ * `qti-map-response-point` names.
  *
  * @param item The item.
  * @param identifier The response's identifier.
@@ -212,6 +261,67 @@ const equal = (left: Single, right: Single): boolean =>
     { baseType: left.baseType, cardinality: "single", values: [left] },
     { baseType: right.baseType, cardinality: "single", values: [right] },
   );
+
+/**
+ * Give the key {@link distinct} tells a value apart by: its base type and its value as `format`
+ * writes it, so two values share a key exactly when {@link equal} finds them equal, however each
+ * was written (`+5` and `05` are one integer, `1.0` and `1e0` one float).
+ *
+ * Where `equal` and `format` part, the key follows `equal`: a `pair`'s identifiers are written in
+ * code-unit order, as `equal` matches a pair in either order, and a float's `-0` is written as `0`,
+ * as `equal` compares floats with `===`. That `===` makes a NaN equal to no value, itself included,
+ * so a NaN has no key. A base type holds no space, and neither does an identifier or a coordinate,
+ * so one space between the parts keeps two keys apart.
+ *
+ * @param single The value.
+ * @returns Its key; none for a NaN.
+ */
+const distinctKey = (single: Single): Option.Option<string> => {
+  if (single.baseType === "float") {
+    const value = Object.is(single.value, -0) ? 0 : single.value;
+
+    return Number.isNaN(value)
+      ? Option.none()
+      : Option.some(`float ${format({ baseType: "float", value })}`);
+  }
+
+  if (single.baseType === "pair") {
+    const [first, second] = single.value;
+    const value: readonly [string, string] = first <= second ? [first, second] : [second, first];
+
+    return Option.some(`pair ${format({ baseType: "pair", value })}`);
+  }
+
+  return Option.some(`${single.baseType} ${format(single)}`);
+};
+
+/**
+ * Drop a response's repeated values: each value is kept at its first occurrence, in order, and a
+ * later value {@link equal} finds equal to it is dropped.
+ *
+ * A `Set` of each value's {@link distinctKey} finds the repeats, so the time is linear in the
+ * number of values: a candidate's post of many members costs what its length costs, where comparing
+ * every pair would cost its square. A NaN has no key and is always kept, as `equal` finds it equal
+ * to nothing.
+ *
+ * @param values The response's values.
+ * @returns The values no earlier value equals, in order.
+ */
+const distinct = (values: readonly Single[]): readonly Single[] => {
+  const seen = new Set<string>();
+  const kept: Single[] = [];
+  for (const single of values) {
+    const key = distinctKey(single);
+    if (Option.isNone(key)) {
+      kept.push(single);
+    } else if (!seen.has(key.value)) {
+      seen.add(key.value);
+      kept.push(single);
+    }
+  }
+
+  return kept;
+};
 
 /**
  * Fold a string's case for a case-insensitive map entry: upper case then lower case, by Unicode's
@@ -268,8 +378,9 @@ const mappedValue = (mapping: Mapping, single: Single): number =>
 /**
  * Give the value of a `qti-map-response`: a single float.
  *
- * A value is the sum of the mapped values of the response's distinct values, so a `single` value
- * maps to its one value's, `{B,B,C}` counts `B` once, and a NULL response maps to 0. The mapping's
+ * A value is the sum of the mapped values of the response's distinct values, as {@link distinct}
+ * finds them in time linear in their number, keyed by {@link distinctKey}: so a `single` value maps
+ * to its one value's, `{B,B,C}` counts `B` once, and a NULL response maps to 0. The mapping's
  * `lower-bound` and `upper-bound` then clamp the sum, a single value's and a NULL's included
  * (reading 9.13).
  *
@@ -291,14 +402,14 @@ const mapResponse = (
     const declaration = yield* responseOf(item, identifier);
     const mapping = yield* Result.fromOption(
       declaration.mapping,
-      () => new UnmappedResponseError({ identifier }),
+      () => new UnmappedResponseError({ identifier, mapping: "qti-mapping" }),
     );
     const response = yield* Result.fromOption(
       own(variables.responses, identifier),
       () => new UnknownIdentifierError({ holder: "record", identifier, role: "response" }),
     );
     let sum = 0;
-    for (const single of Arr.dedupeWith(response.values, equal)) {
+    for (const single of distinct(response.values)) {
       sum += mappedValue(mapping, single);
     }
 
@@ -312,6 +423,286 @@ const mapResponse = (
 
     return mapped;
   });
+
+/**
+ * Convert an exact integer to a float: the nearest double, ties to even. It is the one conversion
+ * from an integer to a float (integer plan `10f98260` part C).
+ *
+ * Beyond 2^53 a double cannot hold every integer, so `2^53 + 1` becomes `2^53`. That loss is the
+ * float QTI specifies wherever an integer is compared as one, so it is not reported.
+ *
+ * @param integer The integer.
+ * @returns The nearest double.
+ */
+// oxlint-disable-next-line unicorn/prefer-native-coercion-functions -- `toFloat` names the one integer-to-float conversion the integer plan fixes, so its precision loss is documented and found in one place.
+const toFloat = (integer: bigint): number => Number(integer);
+
+/**
+ * Report whether a point lies on the segment between two vertices, its ends included.
+ *
+ * @param x The point's x coordinate.
+ * @param y The point's y coordinate.
+ * @param from One end, as `[x, y]`.
+ * @param to The other end.
+ * @returns Whether the point is on the segment.
+ */
+const onSegment = (
+  x: number,
+  y: number,
+  from: readonly [number, number],
+  to: readonly [number, number],
+): boolean => {
+  const [x1, y1] = from;
+  const [x2, y2] = to;
+
+  return (
+    (x2 - x1) * (y - y1) === (y2 - y1) * (x - x1) &&
+    Math.min(x1, x2) <= x &&
+    x <= Math.max(x1, x2) &&
+    Math.min(y1, y2) <= y &&
+    y <= Math.max(y1, y2)
+  );
+};
+
+/**
+ * Report whether a polygon holds a point: on an edge, or inside by the even-odd rule, as HTML's
+ * polygon area is. The last vertex joins the first, so a polygon that is not closed is closed.
+ *
+ * @param vertices The polygon's vertices, in order.
+ * @param x The point's x coordinate.
+ * @param y The point's y coordinate.
+ * @returns Whether the polygon holds the point.
+ * @see https://html.spec.whatwg.org/multipage/image-maps.html#attr-area-shape-poly
+ */
+const polygonHolds = (
+  vertices: readonly (readonly [number, number])[],
+  x: number,
+  y: number,
+): boolean => {
+  let inside = false;
+  for (const [index, to] of vertices.entries()) {
+    const from = vertices.at(index - 1) ?? to;
+    if (onSegment(x, y, from, to)) {
+      return true;
+    }
+
+    const [x1, y1] = from;
+    const [x2, y2] = to;
+    if (y1 > y !== y2 > y && x < ((x2 - x1) * (y - y1)) / (y2 - y1) + x1) {
+      inside = !inside;
+    }
+  }
+
+  return inside;
+};
+
+/* oxlint-disable anti-slop/no-shape-in-symbol-names -- `shape` is the QTI attribute of `qti-area-map-entry` and names an area's geometry, not a structure. */
+/**
+ * Report whether an area of each shape holds a point, its boundary included (9.15's default,
+ * reading 52), from the area's coordinates and the point's, as floats.
+ *
+ * The coordinates are QTI's, which are HTML's: `rect` is left-x, top-y, right-x, bottom-y;
+ * `circle` is center-x, center-y, radius; `ellipse` is center-x, center-y, h-radius, v-radius;
+ * `poly` is x1, y1, …, xN, yN; `default` holds every point. Where QTI says nothing, HTML's
+ * image-map rules decide: an area with fewer coordinates than its shape needs holds no point,
+ * coordinates beyond them are ignored (a `poly`'s odd last one too), a `rect`'s corners may come
+ * in either order, and a radius of zero or less holds no point.
+ *
+ * @see https://html.spec.whatwg.org/multipage/image-maps.html#image-map-processing-model
+ */
+const areaHolds: Readonly<
+  Record<AreaMapEntry["shape"], (coords: readonly number[], x: number, y: number) => boolean>
+> = {
+  circle: ([centerX, centerY, radius], x, y) =>
+    centerX !== undefined &&
+    centerY !== undefined &&
+    radius !== undefined &&
+    radius > 0 &&
+    (x - centerX) ** 2 + (y - centerY) ** 2 <= radius ** 2,
+  default: () => true,
+  ellipse: ([centerX, centerY, across, down], x, y) =>
+    centerX !== undefined &&
+    centerY !== undefined &&
+    across !== undefined &&
+    down !== undefined &&
+    across > 0 &&
+    down > 0 &&
+    ((x - centerX) / across) ** 2 + ((y - centerY) / down) ** 2 <= 1,
+  poly: (coords, x, y) => {
+    const vertices = Arr.chunksOf(coords, 2).flatMap(([vertexX, vertexY]) =>
+      vertexY === undefined ? [] : [[vertexX, vertexY] as const],
+    );
+
+    return vertices.length >= 3 && polygonHolds(vertices, x, y);
+  },
+  rect: ([left, top, right, bottom], x, y) =>
+    left !== undefined &&
+    top !== undefined &&
+    right !== undefined &&
+    bottom !== undefined &&
+    Math.min(left, right) <= x &&
+    x <= Math.max(left, right) &&
+    Math.min(top, bottom) <= y &&
+    y <= Math.max(top, bottom),
+};
+
+/**
+ * Find the first area, in document order, that holds a point.
+ *
+ * @param mapping The area mapping.
+ * @param x The point's x coordinate, as a float.
+ * @param y The point's y coordinate, as a float.
+ * @returns The area's index among the mapping's entries, or -1 when no area holds the point.
+ */
+const firstArea = (mapping: AreaMapping, x: number, y: number): number =>
+  mapping.entries.findIndex((entry) => areaHolds[entry.shape](entry.coords, x, y));
+/* oxlint-enable anti-slop/no-shape-in-symbol-names */
+
+/**
+ * Sum what an area mapping maps a response's points to, before the bounds.
+ *
+ * QTI tests the points "against each area in turn, with those listed first taking priority in the
+ * case where areas overlap", and "each area can be mapped once only". The rest is open (9.15), and
+ * these defaults (reading 52) hold until a ruling changes this function and its tests:
+ *
+ * - A point on a shape's boundary is inside (`rect`, `circle`, `ellipse` and `poly`, edges included;
+ *   `default` holds every point), as {@link areaHolds} reads it.
+ * - Areas are tried in document order and the first that holds a point maps it; each area is mapped
+ *   at most once.
+ * - Each distinct point that falls in no area adds `default-value` once, as `map_response` treats an
+ *   unmapped value. Points are told apart as {@link distinct} tells values apart, by their two
+ *   exact coordinates, in time linear in their number.
+ *
+ * A coordinate is compared after the one conversion, {@link toFloat}.
+ *
+ * @param mapping The response's area mapping.
+ * @param points The response's values, a point each.
+ * @returns The sum.
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#ExpMapResponsePoint
+ */
+const areaSum = (mapping: AreaMapping, points: readonly Single[]): number => {
+  const mapped = new Set<number>();
+  let sum = 0;
+  for (const single of distinct(points)) {
+    const area =
+      single.baseType === "point"
+        ? firstArea(mapping, toFloat(single.value[0]), toFloat(single.value[1]))
+        : -1;
+    const entry = mapping.entries[area];
+    if (entry === undefined) {
+      sum += mapping.defaultValue;
+    } else if (!mapped.has(area)) {
+      mapped.add(area);
+      sum += entry.mappedValue;
+    }
+  }
+
+  return sum;
+};
+
+/**
+ * Give the value of a `qti-map-response-point`: a single float.
+ *
+ * The value is {@link areaSum} of the response's points, so a NULL response maps to 0. The sum is
+ * clamped to the area mapping's `lower-bound` and `upper-bound`, a NULL's 0 included (9.13's rule,
+ * as `qti-map-response` applies it).
+ *
+ * @param item The item, whose declaration gives the area mapping.
+ * @param variables The variables of the attempt.
+ * @param identifier The response's identifier.
+ * @returns The mapped value; or an {@link UnknownIdentifierError} when the item declares no
+ *   modelled response by that name, an {@link UnmappedResponseError} when its declaration has no
+ *   area mapping, or an {@link UnknownIdentifierError} when the variables hold no value of it,
+ *   checked in that order.
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#ExpMapResponsePoint
+ */
+const mapResponsePoint = (
+  item: Item,
+  variables: Variables,
+  identifier: string,
+): Result.Result<Value, UnknownIdentifierError | UnmappedResponseError> =>
+  Result.gen(function* mapOnePointResponse() {
+    const declaration = yield* responseOf(item, identifier);
+    const mapping = yield* Result.fromOption(
+      declaration.areaMapping,
+      () => new UnmappedResponseError({ identifier, mapping: "qti-area-mapping" }),
+    );
+    const response = yield* Result.fromOption(
+      own(variables.responses, identifier),
+      () => new UnknownIdentifierError({ holder: "record", identifier, role: "response" }),
+    );
+    const lower = Option.getOrElse(mapping.lowerBound, () => Number.NEGATIVE_INFINITY);
+    const upper = Option.getOrElse(mapping.upperBound, () => Number.POSITIVE_INFINITY);
+    const mapped: Value = {
+      baseType: "float",
+      cardinality: "single",
+      values: [
+        {
+          baseType: "float",
+          value: Math.min(upper, Math.max(lower, areaSum(mapping, response.values))),
+        },
+      ],
+    };
+
+    return mapped;
+  });
+
+/**
+ * A single integer or float.
+ */
+type NumberSingle = Extract<Single, { readonly baseType: "float" | "integer" }>;
+
+/**
+ * Give the one number a single integer or float value holds.
+ *
+ * @param value The value, not NULL.
+ * @returns The single integer or float, or none when the value is not a single of a numeric base
+ *   type.
+ */
+const numberOf = (value: Value): Option.Option<NumberSingle> => {
+  const [single, ...rest] = value.values;
+  if (value.cardinality !== "single" || single === undefined || rest.length > 0) {
+    return Option.none();
+  }
+
+  return single.baseType === "integer" || single.baseType === "float"
+    ? Option.some(single)
+    : Option.none();
+};
+
+/**
+ * Report whether an integer and a float are the same number, exactly: the float is integral and
+ * converts to that integer. A float that is integral and finite converts to a `bigint` exactly, so
+ * the comparison loses nothing, as `bigint == number` would not (integer plan `10f98260` part C);
+ * no integer is converted to a float.
+ *
+ * @param integer The integer.
+ * @param float The float.
+ * @returns Whether they are equal.
+ */
+const integerIsFloat = (integer: bigint, float: number): boolean =>
+  Number.isInteger(float) && BigInt(float) === integer;
+
+/**
+ * Report whether two numbers are equal exactly: two integers or two floats by value, and an integer
+ * and a float as {@link integerIsFloat} compares them, so `1` and `1.0` are equal and `1` and
+ * `1.0000000000000002` are not.
+ *
+ * @param left One number.
+ * @param right The other.
+ * @returns Whether they are equal.
+ */
+const sameNumber = (left: NumberSingle, right: NumberSingle): boolean => {
+  if (left.baseType === "integer") {
+    return right.baseType === "integer"
+      ? left.value === right.value
+      : integerIsFloat(left.value, right.value);
+  }
+
+  return right.baseType === "integer"
+    ? integerIsFloat(right.value, left.value)
+    : left.value === right.value;
+};
 
 /**
  * Report whether a condition's value is true.
@@ -330,27 +721,42 @@ const isTrue = (value: Value): boolean => {
 };
 
 /**
- * Give the value of an expression of phase 1's engine subset.
+ * Give the value of an expression of the engine subset.
  *
- * - `variable`: the response's or the outcome's current value.
+ * - `variable`: the response's or the outcome's current value, else the built-in variable's
+ *   ({@link builtInValue}).
  * - `correct`: the response's correct response, else NULL of its declared type.
  * - `base-value`: the value as the item model parsed it.
  * - `is-null`: a single boolean, whether the operand is NULL.
  * - `match`: a single boolean, whether the operands match by `match` of the value model; NULL when
  *   either is NULL.
+ * - `equal`: a single boolean, whether the operands are the same number in `exact` mode
+ *   ({@link sameNumber}); NULL when either is NULL. QTI types both operands as single numbers; an
+ *   operand that is not one is not numerically equal to anything, so the value is false, as `match`
+ *   gives false for values of different types.
  * - `map-response`: a single float, the response's value through its declaration's mapping.
+ * - `map-response-point`: a single float, the response's points through its declaration's area
+ *   mapping.
  *
  * Operands are evaluated left to right, and the first failure is the result.
  *
+ * `typeOf` in `#plate/model/item.ts` gives each case's base type and cardinality without
+ * evaluating it, so the item model marks a tree whose `qti-set-outcome-value` this function would
+ * fail; it names the case or the function here that each of its cases mirrors, so a change to a
+ * case's type changes it too.
+ *
  * @param expression The expression.
- * @param item The item, whose declarations give the correct responses and the mappings.
+ * @param item The item, whose declarations give the correct responses, the mappings and the area
+ *   mappings.
  * @param variables The variables of the attempt.
  * @returns The expression's value; or an {@link UnknownIdentifierError} when it names a variable
  *   or response that is not held, or an {@link UnmappedResponseError} when a `map-response` names a
- *   response with no mapping.
+ *   response with no mapping or a `map-response-point` one with no area mapping.
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpMatch
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpEqual
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpIsNull
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#ExpMapResponse
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#ExpMapResponsePoint
  */
 export const evaluateExpression = (
   expression: Expression,
@@ -388,8 +794,28 @@ export const evaluateExpression = (
           : booleanOf(match(leftValue, rightValue));
       });
     }
+    case "equal": {
+      const [left, right] = expression.operands;
+
+      return Result.gen(function* equalOperands() {
+        const leftValue = yield* evaluateExpression(left, item, variables);
+        const rightValue = yield* evaluateExpression(right, item, variables);
+        if (isNull(leftValue) || isNull(rightValue)) {
+          return nullOf("boolean", "single");
+        }
+
+        return booleanOf(
+          Option.exists(Option.all([numberOf(leftValue), numberOf(rightValue)]), ([one, other]) =>
+            sameNumber(one, other),
+          ),
+        );
+      });
+    }
     case "map-response": {
       return mapResponse(item, variables, expression.identifier);
+    }
+    case "map-response-point": {
+      return mapResponsePoint(item, variables, expression.identifier);
     }
     default: {
       return expression satisfies never;

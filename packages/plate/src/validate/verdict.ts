@@ -22,8 +22,6 @@ import {
   walk,
   xincludeNamespace,
   xmlNamespace,
-  xmlnsNamespace,
-  xsiNamespace,
 } from "#plate/document/source.ts";
 import type {
   SourceAttribute,
@@ -38,8 +36,15 @@ import { classifyUrl, formatUrl, urlContextOf } from "#plate/model/url.ts";
 import { Refusal } from "#plate/validate/refusal.ts";
 import type { RefusalRule } from "#plate/validate/refusal.ts";
 import { checkRules } from "#plate/validate/rules.ts";
-import { checkStructure } from "#plate/validate/structure.ts";
-import type { ElementTable, Tables } from "#plate/validate/xsd.ts";
+import {
+  attributeName,
+  checkStructure,
+  governingTables,
+  isAllowance,
+  isInstanceAttribute,
+  tableOf,
+} from "#plate/validate/structure.ts";
+import type { ContentTable, Tables } from "#plate/validate/xsd.ts";
 
 /**
  * Why a valid document is left unchecked: it holds MathML (reading 2) or SSML (reading 3), whose
@@ -142,47 +147,42 @@ const mediaElements: ReadonlySet<string> = new Set(["audio", "picture", "video"]
 const mediaSources: ReadonlySet<string> = new Set(["source", "track"]);
 
 /**
- * Name an attribute as its path step spells it without the `@`: its local name in no namespace,
- * `xml:<local>` in the XML namespace and `{<namespace>}<local>` otherwise.
+ * Report whether an attribute is `xml:lang` or `xml:base`, which E3 keeps on any element beyond
+ * the structural walk's allowances.
  *
- * @param attribute The attribute's name parts.
- * @returns Its name.
+ * @param attribute The attribute.
+ * @returns Whether it is one of the two.
  */
-const attributeName = (attribute: Pick<SourceAttribute, "local" | "namespace">): string => {
-  if (attribute.namespace === "") {
-    return attribute.local;
-  }
-
-  return attribute.namespace === xmlNamespace
-    ? `xml:${attribute.local}`
-    : `{${attribute.namespace}}${attribute.local}`;
-};
+const isLangOrBase = (attribute: SourceAttribute): boolean =>
+  attribute.namespace === xmlNamespace &&
+  (attribute.local === "lang" || attribute.local === "base");
 
 /**
- * Report whether an attribute is one E3 keeps on any element without its table naming it: a
- * namespace declaration, `xsi:schemaLocation`, `xsi:noNamespaceSchemaLocation`, `xml:lang` or
- * `xml:base`.
+ * Report whether an attribute is one E3 keeps on any element without its table naming it: the
+ * structural walk's allowances ({@link isAllowance}: a namespace declaration,
+ * `xsi:schemaLocation` or `xsi:noNamespaceSchemaLocation`), `xsi:type` and `xsi:nil`
+ * ({@link isInstanceAttribute}), and, E3's one difference, `xml:lang` and `xml:base`
+ * ({@link isLangOrBase}).
+ *
+ * The structural walk judges `xsi:type` and `xsi:nil` on every element it checks (reading 47), so
+ * a valid `xsi:type` is kept, never marked; on an element only a wildcard admits neither is judged.
  *
  * @param attribute The attribute.
  * @returns Whether it is an allowance.
  */
-const isAllowance = (attribute: SourceAttribute): boolean =>
-  attribute.namespace === xmlnsNamespace ||
-  (attribute.namespace === xsiNamespace &&
-    (attribute.local === "schemaLocation" || attribute.local === "noNamespaceSchemaLocation")) ||
-  (attribute.namespace === xmlNamespace &&
-    (attribute.local === "lang" || attribute.local === "base"));
+const isKeptEverywhere = (attribute: SourceAttribute): boolean =>
+  isAllowance(attribute) || isInstanceAttribute(attribute) || isLangOrBase(attribute);
 
 /**
  * Report whether an element's table declares an attribute by its exact namespace and local name,
  * a prohibited declaration not counting.
  *
- * @param table The element's table.
+ * @param table The table that governs the element.
  * @param namespace The attribute's namespace, `""` for none.
  * @param local The attribute's local name.
  * @returns Whether the table declares it.
  */
-const declares = (table: ElementTable, namespace: string, local: string): boolean =>
+const declares = (table: ContentTable, namespace: string, local: string): boolean =>
   table.attributes.some(
     (declaration) =>
       declaration.use !== "prohibited" &&
@@ -193,16 +193,18 @@ const declares = (table: ElementTable, namespace: string, local: string): boolea
 /**
  * Report whether E3 keeps an attribute of a QTI-namespace element.
  *
- * It keeps an allowance and an attribute the element's table declares by name. Reading 10 accepts
- * both `aria-keyshorts` and `aria-keyshortcuts` where the table declares `aria-keyshorts` (the
- * empty elements), so `aria-keyshortcuts` is kept there too. Names compare exactly, as XML's do.
+ * It keeps an allowance and an attribute the table that governs the element declares by name.
+ * Reading 10 accepts both `aria-keyshorts` and `aria-keyshortcuts` where the table declares
+ * `aria-keyshorts` (the empty elements), so `aria-keyshortcuts` is kept there too. Names compare
+ * exactly, as XML's do.
  *
- * @param table The element's table, none when the XSD declares no element of its name.
+ * @param table The table that governs the element, none when the XSD declares no element of its
+ *   name.
  * @param attribute The attribute.
  * @returns Whether it stays; any other attribute was admitted only by a wildcard.
  */
-const isKept = (table: Option.Option<ElementTable>, attribute: SourceAttribute): boolean =>
-  isAllowance(attribute) ||
+const isKept = (table: Option.Option<ContentTable>, attribute: SourceAttribute): boolean =>
+  isKeptEverywhere(attribute) ||
   Option.exists(
     table,
     (declared) =>
@@ -213,23 +215,16 @@ const isKept = (table: Option.Option<ElementTable>, attribute: SourceAttribute):
   );
 
 /**
- * Look up an element's table, only among the tables' own keys.
- *
- * @param tables The tables.
- * @param local The element's local name in the QTI namespace.
- * @returns Its table, or none when the XSD declares no element of that name.
- */
-const tableOf = (tables: Tables, local: string): Option.Option<ElementTable> =>
-  Object.hasOwn(tables.elements, local)
-    ? Option.fromUndefinedOr(tables.elements[local])
-    : Option.none();
-
-/**
  * Secure one element's attributes: remove each one only a wildcard admits (E3) and pass each URL
  * attribute through `url.ts`.
  *
+ * An element the structural walk checked is read by the table that governs it, so an attribute a
+ * valid `xsi:type`'s type declares is kept (AD-9); any other QTI-namespace element by its name's
+ * table.
+ *
  * @param visit The element's visit.
  * @param tables The tables.
+ * @param governing The table that governs each element the structural walk checked.
  * @param marks Where E3's marks are collected.
  * @param drops Where each dropped URL's feature is collected, by element path.
  * @returns The attributes that stay, each kept URL in its parsed form.
@@ -237,6 +232,7 @@ const tableOf = (tables: Tables, local: string): Option.Option<ElementTable> =>
 const secureAttributes = (
   visit: Visit,
   tables: Tables,
+  governing: ReadonlyMap<SourceElement, ContentTable>,
   marks: UnsupportedFeature[],
   drops: Map<string, string[]>,
 ): readonly SourceAttribute[] => {
@@ -245,7 +241,10 @@ const secureAttributes = (
     return element.attributes;
   }
 
-  const table = tableOf(tables, element.local);
+  const table = Option.orElse(
+    Option.fromUndefinedOr(governing.get(element)),
+    (): Option.Option<ContentTable> => tableOf(tables, element.local),
+  );
   const kept: SourceAttribute[] = [];
   for (const attribute of element.attributes) {
     if (!isKept(table, attribute)) {
@@ -288,9 +287,12 @@ const secureAttributes = (
 const secure = (source: SourceDocument, tables: Tables): Secured => {
   const marks: UnsupportedFeature[] = [];
   const drops = new Map<string, string[]>();
+  const governing = governingTables(source, tables);
   const visits = [...walk(source)];
   const attributes = new Map(
-    visits.map((visit) => [visit.element, secureAttributes(visit, tables, marks, drops)] as const),
+    visits.map(
+      (visit) => [visit.element, secureAttributes(visit, tables, governing, marks, drops)] as const,
+    ),
   );
   const rebuilt = new Map<SourceElement, SourceElement>();
   for (const { element } of visits.toReversed()) {
@@ -620,7 +622,7 @@ export const check = (source: SourceDocument, tables: Tables): Verdict => {
     return { document, refusals: [notQtiRoot(source)], verdict: "refused" };
   }
 
-  const refusals = [...checkStructure(source, tables), ...checkRules(source)];
+  const refusals = [...checkStructure(source, tables), ...checkRules(source, tables)];
   if (Arr.isReadonlyArrayNonEmpty(refusals)) {
     return { document, refusals, verdict: "refused" };
   }
@@ -722,6 +724,18 @@ const optionalFact = (refusal: Refusal, key: string): Option.Option<string> =>
   Object.hasOwn(refusal.detail, key) ? Option.fromUndefinedOr(refusal.detail[key]) : Option.none();
 
 /**
+ * Write a fact of a refusal's detail that holds text the document controls, such as a parser's
+ * message, in a code span.
+ *
+ * @param refusal The refusal.
+ * @param key The fact's name.
+ * @param fallback What to write, as prose, when the detail lacks it.
+ * @returns The fact in a code span, or the fallback.
+ */
+const quoted = (refusal: Refusal, key: string, fallback: string): string =>
+  Option.match(optionalFact(refusal, key), { onNone: () => fallback, onSome: code });
+
+/**
  * Cite the reading a refusal's detail names, if any.
  *
  * @param refusal The refusal.
@@ -734,22 +748,25 @@ const citation = (refusal: Refusal): string =>
   });
 
 /**
- * Open a content refusal's sentence: the document and where in it.
+ * Open a content refusal's sentence: the document and where in it, each name the document controls
+ * in a code span.
  *
  * @param refusal The refusal.
  * @returns `**<document>, at <location>: refused.**`, or `**<document>: refused.**` for one that
  *   points at the whole document.
  */
 const opening = (refusal: Refusal): string => {
+  const document = code(refusal.document);
+
   switch (refusal.location.kind) {
     case "path": {
-      return `**${refusal.document}, at ${refusal.location.path}: refused.**`;
+      return `**${document}, at ${code(refusal.location.path)}: refused.**`;
     }
     case "position": {
-      return `**${refusal.document}, at line ${refusal.location.line}, column ${refusal.location.column}: refused.**`;
+      return `**${document}, at line ${refusal.location.line}, column ${refusal.location.column}: refused.**`;
     }
     case "document": {
-      return `**${refusal.document}: refused.**`;
+      return `**${document}: refused.**`;
     }
     default: {
       return refusal.location satisfies never;
@@ -778,7 +795,7 @@ const sentence = (refusal: Refusal, wrong: string, change: string): string =>
  * @returns The sentence.
  */
 const notQti = (refusal: Refusal, wrong: string, change: string): string =>
-  `**${refusal.document}: refused, not a QTI document.** ${wrong} Rule ${code(refusal.rule)}: a document is well-formed XML whose root is a QTI 3.0 element. To make it valid: ${change}.`;
+  `**${code(refusal.document)}: refused, not a QTI document.** ${wrong} Rule ${code(refusal.rule)}: a document is well-formed XML whose root is a QTI 3.0 element. To make it valid: ${change}.`;
 
 /**
  * Name a base type in a sentence, `untyped` for none.
@@ -801,13 +818,23 @@ const variableKind = (expected: string): string =>
  * Word an `expression-type` refusal.
  *
  * @param refusal The refusal.
- * @returns The sentence: a lookup operand against its table (reading 28), or an expression against
- *   the outcome it sets.
+ * @returns The sentence: a `qti-equal`'s operand that is not a single integer or float, counted
+ *   from 1; a lookup operand against its table (reading 28); or an expression against the outcome
+ *   it sets.
  */
 const expressionType = (refusal: Refusal): string => {
   const element = fact(refusal, "element", "the element");
   const identifier = fact(refusal, "identifier", "the outcome");
   const expression = `${fact(refusal, "expressionCardinality", "")} ${baseTypeText(fact(refusal, "expressionBaseType", ""))}`;
+  const operand = optionalFact(refusal, "operand");
+
+  if (Option.isSome(operand)) {
+    return sentence(
+      refusal,
+      `Operand ${operand.value} of ${code(element)} is a ${expression} value, not a single ${code("integer")} or ${code("float")}${citation(refusal)}.`,
+      `give operand ${operand.value} a single ${code("integer")} or ${code("float")} value`,
+    );
+  }
 
   return Option.match(optionalFact(refusal, "table"), {
     onNone: () =>
@@ -968,7 +995,7 @@ const wordings = {
 
     return notQti(
       refusal,
-      `The file is not well-formed XML: ${fact(refusal, "message", "the parser stopped")}${at}.`,
+      `The file is not well-formed XML: ${quoted(refusal, "message", "the parser stopped")}${at}.`,
       "correct the XML at that line",
     );
   },
@@ -989,7 +1016,7 @@ const wordings = {
 
     return notQti(
       refusal,
-      `The XML reader refused the file: ${fact(refusal, "detail", "it gave no detail")}${rule}.`,
+      `The XML reader refused the file: ${quoted(refusal, "detail", "it gave no detail")}${rule}.`,
       "replace this file with the QTI document it was meant to be",
     );
   },
@@ -1041,7 +1068,7 @@ const wordings = {
     });
   },
   "unknown-element": (refusal) => {
-    const { element } = named(refusal);
+    const { cite, element } = named(refusal);
 
     return Option.match(optionalFact(refusal, "parent"), {
       onNone: () =>
@@ -1051,11 +1078,17 @@ const wordings = {
           "use a QTI 3.0 element as the root",
         ),
       onSome: (parent) =>
-        sentence(
-          refusal,
-          `${code(parent)} may not hold ${code(element)}; QTI 3.0's schema allows no such child there.`,
-          `remove ${code(element)}, or use an element ${code(parent)} allows`,
-        ),
+        cite === ""
+          ? sentence(
+              refusal,
+              `${code(parent)} may not hold ${code(element)}; QTI 3.0's schema allows no such child there.`,
+              `remove ${code(element)}, or use an element ${code(parent)} allows`,
+            )
+          : sentence(
+              refusal,
+              `${code(parent)} may not hold ${code(element)}; XML Schema allows no such child there${cite}.`,
+              `remove ${code(element)}`,
+            ),
     });
   },
   "value-type": (refusal) => {

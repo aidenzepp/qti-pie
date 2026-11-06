@@ -41,7 +41,7 @@ import {
 } from "#pantry/schema/feedback.ts";
 import { AttributeLexical, Node } from "#pantry/schema/node.ts";
 import { nodeArms } from "#pantry/schema/qti.ts";
-import type { SchemaVersionHandle } from "#pantry/schema/node.ts";
+import type { RootKindHandle, SchemaVersionHandle } from "#pantry/schema/node.ts";
 import {
   CatalogInfo,
   CompanionMaterialsInfo,
@@ -111,7 +111,11 @@ interface Item {
  * Read a hand-written item whose declarations, body and trailing elements are given, and run the
  * builder over it with the outcomes above declared.
  */
-const built = (item: Item, declarations: ReadonlyMap<string, DeclaredVariable> = outcomes) =>
+const built = (
+  item: Item,
+  declarations: ReadonlyMap<string, DeclaredVariable> = outcomes,
+  rootKind: RootKindHandle = "item",
+) =>
   Effect.gen(function* run() {
     const text = `<qti-assessment-item xmlns="${itemNamespace}" identifier="hand" title="Hand" time-dependent="false">${outcomeElements}${item.head ?? ""}<qti-item-body>${item.body ?? ""}</qti-item-body>${item.tail ?? ""}</qti-assessment-item>`;
     const doc = yield* readXml(new TextEncoder().encode(text));
@@ -121,7 +125,7 @@ const built = (item: Item, declarations: ReadonlyMap<string, DeclaredVariable> =
         charset: doc.charset,
         id: documentId,
         kind: "document",
-        root: "item",
+        root: rootKind,
         version: item.version ?? "3.0.1",
       },
       Rows.empty(),
@@ -129,7 +133,7 @@ const built = (item: Item, declarations: ReadonlyMap<string, DeclaredVariable> =
 
     return {
       nodes: tree.nodes,
-      rows: yield* contentRows(doc.root, tree.nodes, documentId, declarations, tree.rows),
+      rows: yield* contentRows(doc.root, tree.nodes, documentId, rootKind, declarations, tree.rows),
     };
   });
 
@@ -850,6 +854,53 @@ describe("contentRows on a closed attribute outside its roster", () => {
         Rows.of(declared.rows, PrintedVariable).map((row) => row.powerForm),
         ["0"],
       );
+    }),
+  );
+});
+
+/**
+ * A rubric with a printed variable and a feedback inline, what a section or
+ * a stimulus holds that names variables no document of its own declares.
+ */
+const naming = `<qti-rubric-block use="instructions" view="candidate"><qti-content-body><p><qti-printed-variable identifier="VAR" base="VAR"/><qti-feedback-inline outcome-identifier="FEEDBACK" identifier="fi">f</qti-feedback-inline></p></qti-content-body></qti-rubric-block>`;
+
+const templated = naming.replace(
+  "</p>",
+  `<qti-template-inline template-identifier="T" identifier="ti">t</qti-template-inline></p>`,
+);
+
+const bindingRelations = [FeedbackOutcomeRef, PrintedVariableRef, PrintedVariableVarRef] as const;
+
+describe("contentRows over a root that declares nothing", () => {
+  it.effect("binds a section's feedback and printed variable to nothing and refuses nothing", () =>
+    Effect.gen(function* sectionRoot() {
+      const { rows } = yield* built({ body: naming }, new Map(), "section");
+      for (const relation of bindingRelations) {
+        assert.strictEqual(Rows.of(rows, relation).length, 0);
+      }
+      assert.strictEqual(Rows.of(rows, PrintedVariable).length, 1);
+    }),
+  );
+
+  it.effect("binds a stimulus's feedback, template content and printed variable to nothing", () =>
+    Effect.gen(function* stimulusRoot() {
+      const { rows } = yield* built({ body: templated }, new Map(), "stimulus");
+      for (const relation of [...bindingRelations, TemplateContentRef]) {
+        assert.strictEqual(Rows.of(rows, relation).length, 0);
+      }
+      assert.strictEqual(Rows.of(rows, PrintedVariable).length, 1);
+    }),
+  );
+
+  it.effect("binds a test's feedback into its own declarations as an item's is", () =>
+    Effect.gen(function* testRoot() {
+      const { rows } = yield* built({ body: templated, head: sixKindsHead }, outcomes, "test");
+      assert.strictEqual(Rows.of(rows, FeedbackOutcomeRef).length, 1);
+      assert.strictEqual(Rows.of(rows, PrintedVariableRef).length, 1);
+
+      const failure = yield* Effect.flip(built({ body: naming }, new Map(), "test"));
+      assert.instanceOf(failure, ItemRefusal);
+      assert.strictEqual(failure.rule, "binding-declared");
     }),
   );
 });

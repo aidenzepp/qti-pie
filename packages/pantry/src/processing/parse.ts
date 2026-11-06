@@ -194,6 +194,19 @@ const ruleEntries: readonly RuleEntry[] = [
 ];
 
 /**
+ * The three roots of the `expression` language, each a holder of one expression: a pre-condition,
+ * a branch rule with its `target`, and a template default with its `template-identifier`.
+ */
+const expressionRoots: ReadonlyMap<string, RuleEntry> = new Map<string, RuleEntry>([
+  ["qti-pre-condition", { attributes: [], class: "holder", kind: "qti-pre-condition" }],
+  ["qti-branch-rule", { attributes: ["target"], class: "holder", kind: "qti-branch-rule" }],
+  [
+    "qti-template-default",
+    { attributes: ["template-identifier"], class: "holder", kind: "qti-template-default" },
+  ],
+]);
+
+/**
  * What an element name is in the vocabulary: an expression or a rule with its entry, or one of the
  * two XInclude elements.
  */
@@ -264,7 +277,9 @@ const whiteSpaceClasses = {
   shape: "preserve",
   step: "collapse",
   substring: "collapse",
+  target: "collapse",
   template: "collapse",
+  "template-identifier": "collapse",
   "template-location": "collapse",
   tolerance: "collapse",
   "tolerance-mode": "preserve",
@@ -645,8 +660,12 @@ const parseHost = (
  * element the host's content model does not take, is `UnmodeledVocabulary` naming it. An
  * `xi:include` is parsed as data and never resolved.
  *
+ * An `expression` root (`qti-pre-condition`, `qti-branch-rule`, `qti-template-default`) is one
+ * holder of one expression, the AST's single top-level rule; the three processing roots are not
+ * admitted in that language, and an expression root is not admitted in the other three.
+ *
  * @param root - The `qti-response-processing`, `qti-outcome-processing` or
- *   `qti-template-processing` element.
+ *   `qti-template-processing` element, or for the `expression` language the root of one expression.
  * @param language - The processing language the root is written in.
  * @returns The AST, or the refusal naming the first element or attribute outside the vocabulary.
  */
@@ -655,6 +674,19 @@ export const parseProcessing = (
   language: Language,
 ): Effect.Effect<ProcessingAst, UnmodeledVocabulary> =>
   Effect.gen(function* parseProcessingRoot() {
+    if (language === "expression") {
+      const held = root.namespace === asiNamespace ? expressionRoots.get(root.local) : undefined;
+      if (held === undefined) {
+        return yield* new UnmodeledVocabulary({
+          kind: "element",
+          name: root.qname,
+          parent: Option.none(),
+        });
+      }
+
+      return { language, root, rules: [yield* parseHost(root, held, { path: [] })] };
+    }
+
     const classified = classify(root);
     if (
       Option.isNone(classified) ||

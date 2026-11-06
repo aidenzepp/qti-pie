@@ -192,6 +192,17 @@ describe("html/media", () => {
     }
   });
 
+  it("counts only a picture's children when it bounds the picture to one img", () => {
+    const capacity = media.rules.flatMap((rule) =>
+      rule.kind === "capacity" && rule.from.source.bindings.childKind === "img" ? [rule] : [],
+    );
+    assert.strictEqual(capacity.length, 1);
+    assert.deepStrictEqual(capacity[0]?.from.source.bindings, {
+      childKind: "img",
+      parentKind: "picture",
+    });
+  });
+
   it("holds a source in a picture to a srcset and a subtitles track to a srclang", () => {
     assert.deepStrictEqual(
       containmentsInto(media.relations.SourceSrcset).map(([, fields, into]) => [fields, into]),

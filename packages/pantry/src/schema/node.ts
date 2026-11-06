@@ -35,6 +35,7 @@ import * as html from "#pantry/schema/kinds/html.ts";
 import * as lom from "#pantry/schema/kinds/lom.ts";
 import * as qmd from "#pantry/schema/kinds/qmd.ts";
 import * as ud from "#pantry/schema/kinds/ud.ts";
+import * as test from "#pantry/schema/kinds/test.ts";
 import * as foreign from "#pantry/schema/kinds/foreign.ts";
 import * as xi from "#pantry/schema/kinds/xi.ts";
 import {
@@ -65,6 +66,7 @@ export const vocabularies = [
   csmd,
   ud,
   xi,
+  test,
   foreign,
 ] as const;
 
@@ -84,6 +86,7 @@ export const kindTuples = [
   csmd.kinds,
   ud.kinds,
   xi.kinds,
+  test.kinds,
   foreign.kinds,
 ] as const;
 
@@ -102,6 +105,7 @@ export const attributeTuples = [
   csmd.attributes,
   ud.attributes,
   xi.attributes,
+  test.attributes,
   foreign.attributes,
 ] as const;
 
@@ -157,6 +161,7 @@ export const NodeKind = closed("NodeKind", [
   ...csmd.kinds,
   ...ud.kinds,
   ...xi.kinds,
+  ...test.kinds,
   ...foreign.kinds,
 ]);
 
@@ -179,6 +184,7 @@ export const AttributeName = closed("AttributeName", [
   ...csmd.attributes,
   ...ud.attributes,
   ...xi.attributes,
+  ...test.attributes,
   ...foreign.attributes,
 ]);
 

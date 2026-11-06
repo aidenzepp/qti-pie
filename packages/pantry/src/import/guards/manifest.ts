@@ -570,9 +570,9 @@ const manifestIdSpace = (rows: Rows): Finding => {
 
 /**
  * The local name of the root element each root kind of a document has, for the roots that
- * `RootOfType` names. The registries hold only the kinds the model reads so far
- * (`qti-assessment-test`, `-section` and `-stimulus` are not yet among them), so the names are
- * written out here.
+ * `RootOfType` names. `RootKind` holds handles such as `rptemplate` and `usagedata`, not element
+ * names, and the non-QTI roots (`lom`, `usageData`) are no node kind, so the pairs are written out
+ * here.
  */
 const rootElements: readonly (readonly [local: string, root: RootKindHandle])[] = [
   ["lom", "externalLom"],

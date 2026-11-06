@@ -10,6 +10,8 @@
  * `processingRows` over the {@link NodeIndex} this module's tree rows built, once the declaration
  * and body rows are in.
  */
+import { includeRows } from "#pantry/import/include.ts";
+import { toolRows as toolRowsOf } from "#pantry/import/tool.ts";
 import { judgedLater } from "#pantry/import/judged.ts";
 import type { ImportRefused } from "#pantry/import/refusal.ts";
 import { Effect, Option } from "effect";
@@ -19,12 +21,8 @@ import { contentRows } from "#pantry/import/content.ts";
 import { htmlRows } from "#pantry/import/html.ts";
 import { interactionRows } from "#pantry/import/interactions.ts";
 import { mappingRows } from "#pantry/import/mapping.ts";
-import {
-  contentIncludeRows,
-  processingRows as processingTreeRows,
-} from "#pantry/import/processing.ts";
+import { processingRows as processingTreeRows } from "#pantry/import/processing.ts";
 import type { ProcessingRefused } from "#pantry/import/processing.ts";
-import { requiredAttribute } from "#pantry/import/required.ts";
 import {
   closedOf,
   ItemRefusal,
@@ -61,15 +59,11 @@ import {
 } from "#pantry/schema/declaration.ts";
 import {
   ChoiceIdentifier,
-  EmbedSourceUri,
-  LongDescriptionUri,
   LongInterpretationUri,
   ManifestIdentifier,
   OutcomeScaleValue,
   PackagePath,
   RecordFieldIdentifier,
-  ToolName,
-  ToolVersion,
   VariableReference,
 } from "#pantry/schema/contracts.ts";
 import type { DeclarationShape } from "#pantry/schema/declaration.ts";
@@ -87,7 +81,6 @@ import {
   DocumentIdentifier,
   DocumentTitle,
 } from "#pantry/schema/document.ts";
-import { Img, ImgHeight, ImgLongdesc, ImgWidth, P } from "#pantry/schema/html.ts";
 import {
   ChoiceInteraction,
   ChoiceInteractionMaxSelectionsMessage,
@@ -109,10 +102,6 @@ import {
   AssessmentItemLabel,
   DeclaredAdaptive,
   ItemBody,
-  ItemTool,
-  ItemToolBoth,
-  ItemToolName,
-  ItemToolVersion,
   Prompt,
 } from "#pantry/schema/item.ts";
 import { DocumentLang } from "#pantry/schema/lang.ts";
@@ -248,29 +237,20 @@ export const documentLangRows = (
   );
 
 /**
- * The tool row of an item root and the arm that holds the strings it wrote, as read; none when it
- * wrote neither `tool-name` nor `tool-version`.
+ * The tool row of an item root and the arm that holds the strings it wrote, each processed by its
+ * `replace` whitespace class; none when it wrote neither `tool-name` nor `tool-version`. A string
+ * that processing changed keeps its lexical form in an `AttributeLexical` row.
  */
-const toolRows = (rows: Rows, root: Element, tree: Uuid): Rows => {
-  const name = lexicalOf(root, "tool-name");
-  const version = lexicalOf(root, "tool-version");
-  if (Option.isSome(name) && Option.isSome(version)) {
-    return Rows.add(Rows.add(rows, ItemTool, [{ shape: "both", tree }]), ItemToolBoth, [
-      { toolName: ToolName(name.value), toolVersion: ToolVersion(version.value), tree },
-    ]);
-  }
+const toolRows = (
+  rows: Rows,
+  root: Element,
+  rootNode: { readonly id: Uuid; readonly kind: NodeKindHandle },
+  tree: Uuid,
+): Rows => {
+  const nameRead = attributeOf(rows, root, rootNode, "tool-name", "replace");
+  const versionRead = attributeOf(nameRead.rows, root, rootNode, "tool-version", "replace");
 
-  if (Option.isSome(name)) {
-    return Rows.add(Rows.add(rows, ItemTool, [{ shape: "nameOnly", tree }]), ItemToolName, [
-      { toolName: ToolName(name.value), tree },
-    ]);
-  }
-
-  return Option.isSome(version)
-    ? Rows.add(Rows.add(rows, ItemTool, [{ shape: "versionOnly", tree }]), ItemToolVersion, [
-        { toolVersion: ToolVersion(version.value), tree },
-      ])
-    : rows;
+  return toolRowsOf(versionRead.rows, "item", tree, nameRead.value, versionRead.value);
 };
 
 /**
@@ -583,24 +563,40 @@ const valueRows = Effect.fn("import.valueRows")(function* valueRows(
 });
 
 /**
- * The rows of one `qti-choice-interaction` and its binding to the response variable it names.
+ * Where a choice interaction stands: in an item, which declares the variables it binds to, or in a
+ * stimulus, which declares none.
+ */
+type BindingScope =
+  | {
+      readonly adaptive: XsBooleanHandle;
+      readonly declarations: ReadonlyMap<string, Declared>;
+      readonly documentId: Uuid;
+      readonly rootKind: "item";
+    }
+  | { readonly rootKind: "stimulus" };
+
+/**
+ * The rows of one `qti-choice-interaction` and, in an item, its binding to the response variable it
+ * names.
  *
  * No family builder of `interactions.ts` writes `ChoiceInteraction`, so this M0 builder stays and
  * the pass calls it beside them.
  *
- * @returns The rows; `ItemRefusal` for a `response-identifier` that no declaration of the document
- *   names, since no type can be copied to the binding; `ImportRefused` (`attribute-lexical`) for a
- *   `max-choices` or `min-choices` outside the non-negative integers.
+ * @param scope - Where the interaction stands. An item's scope carries its declarations, so the
+ *   interaction binds to the declaration it names. A stimulus has none: the arm keeps
+ *   `response-identifier` as written, nothing is refused for it and no binding rows are written
+ *   (GOAL 5.15).
+ * @returns The rows; `ItemRefusal` for an item's `response-identifier` that no declaration of the
+ *   document names, since no type can be copied to the binding; `ImportRefused`
+ *   (`attribute-lexical`) for a `max-choices` or `min-choices` outside the non-negative integers.
  */
 const choiceInteractionRows = Effect.fn("import.choiceInteractionRows")(
   function* choiceInteractionRows(
     rows: Rows,
     element: Element,
     node: NodeEntry,
-    item: { readonly adaptive: XsBooleanHandle; readonly documentId: Uuid },
-    declarations: ReadonlyMap<string, Declared>,
+    scope: BindingScope,
   ): Effect.fn.Return<Rows, ImportRefused | ItemRefusal> {
-    const { adaptive, documentId } = item;
     const attributes = reader(rows, element, node);
     const responseIdentifier = Option.getOrElse(
       attributes.read("response-identifier", "collapse"),
@@ -612,8 +608,9 @@ const choiceInteractionRows = Effect.fn("import.choiceInteractionRows")(
     const orientation = attributes.read("orientation", "preserve");
     const minMessage = attributes.read("data-min-selections-message", "replace");
     const maxMessage = attributes.read("data-max-selections-message", "replace");
-    const declared = declarations.get(responseIdentifier);
-    if (declared === undefined) {
+    const declared =
+      scope.rootKind === "item" ? scope.declarations.get(responseIdentifier) : undefined;
+    if (scope.rootKind === "item" && declared === undefined) {
       return yield* new ItemRefusal({
         detail: `The choice interaction names the response variable "${responseIdentifier}", which no declaration of this item declares. Declare it with a qti-response-declaration, or correct the response-identifier.`,
         rule: "binding-declared",
@@ -663,7 +660,7 @@ const choiceInteractionRows = Effect.fn("import.choiceInteractionRows")(
         minChoicesN: min.value,
         orientation: orientationHandle,
         responseIdentifier,
-        rootKind: "item",
+        rootKind: scope.rootKind,
         shuffle: shuffleHandle,
       },
     ]);
@@ -682,6 +679,11 @@ const choiceInteractionRows = Effect.fn("import.choiceInteractionRows")(
       ChoiceInteractionMaxSelectionsMessage,
       written(maxMessage, (own) => ({ node: node.id, value: own })),
     );
+    if (scope.rootKind === "stimulus" || declared === undefined) {
+      return built;
+    }
+
+    const { adaptive, documentId } = scope;
     built = Rows.add(built, InteractionBinding, [
       {
         adaptive,
@@ -766,6 +768,58 @@ const choiceRows = Effect.fn("import.choiceRows")(function* choiceRows(
     SimpleChoiceTemplateIdentifier,
     written(templateIdentifier, (own) => ({ node: node.id, value: VariableReference(own) })),
   );
+});
+
+/**
+ * The rows of one `qti-prompt` under `parent`: the one writer of `Prompt`, which the item loop and
+ * {@link unboundChoiceRows} share.
+ */
+const promptRows = (rows: Rows, node: NodeEntry, parent: NodeEntry): Rows =>
+  Rows.add(rows, Prompt, [{ id: node.id, parent: parent.id }]);
+
+/**
+ * The choice interaction, simple choice and prompt rows of a tree that declares no variables.
+ *
+ * GOAL 5.15: "so a stimulus interaction's `response-identifier` is stored as a bare identifier".
+ * Each `qti-choice-interaction` is written with the stimulus scope, so it binds to nothing and
+ * refuses no identifier; each `qti-simple-choice` whose parent is a choice interaction goes through
+ * `choiceRows`; each `qti-prompt` goes through the item pass's prompt writer. The other family
+ * kinds are `unboundInteractionRows`'s.
+ *
+ * @param rows - The rows so far, holding the tree's `Node` rows.
+ * @param walked - Each element of the tree with its parent, as `withParents` yields them.
+ * @param nodes - The node index of the tree.
+ * @returns The rows with the choice arms added; `ImportRefused` (`attribute-lexical`) for a
+ *   `max-choices` or `min-choices` outside the non-negative integers. `ItemRefusal` is in the type
+ *   because the arm writer shares it with the item scope; the stimulus scope never raises it.
+ */
+export const unboundChoiceRows = Effect.fn("import.unboundChoiceRows")(function* unboundChoiceRows(
+  rows: Rows,
+  walked: readonly (readonly [Element, Option.Option<Element>])[],
+  nodes: NodeIndex,
+): Effect.fn.Return<Rows, ImportRefused | ItemRefusal> {
+  let built = rows;
+  for (const [element, parent] of walked) {
+    const node = nodes.get(element);
+    const parentNode = Option.flatMapNullishOr(parent, (above) => nodes.get(above));
+    if (node === undefined) {
+      continue;
+    }
+
+    if (node.kind === "qti-choice-interaction") {
+      built = yield* choiceInteractionRows(built, element, node, { rootKind: "stimulus" });
+    } else if (
+      node.kind === "qti-simple-choice" &&
+      Option.isSome(parentNode) &&
+      parentNode.value.kind === "qti-choice-interaction"
+    ) {
+      built = yield* choiceRows(built, element, node, parentNode.value.id);
+    } else if (node.kind === "qti-prompt" && Option.isSome(parentNode)) {
+      built = promptRows(built, node, parentNode.value);
+    }
+  }
+
+  return built;
 });
 
 /**
@@ -900,13 +954,12 @@ export const semanticRows = Effect.fn("import.semanticRows")(function* semanticR
     } else if (node.kind === "qti-value" && Option.isSome(set)) {
       built = yield* valueRows(built, element, node, set.value, positions.get(node.id) ?? 0n);
     } else if (node.kind === "qti-choice-interaction") {
-      built = yield* choiceInteractionRows(
-        built,
-        element,
-        node,
-        { adaptive, documentId },
+      built = yield* choiceInteractionRows(built, element, node, {
+        adaptive,
         declarations,
-      );
+        documentId,
+        rootKind: "item",
+      });
     } else if (
       node.kind === "qti-simple-choice" &&
       Option.isSome(parentNode) &&
@@ -922,42 +975,21 @@ export const semanticRows = Effect.fn("import.semanticRows")(function* semanticR
 });
 
 /**
- * The `xi:include` elements of an item that lie outside its processing roots, in document order.
- * An include nested in another include or in a fallback is listed beside it.
- *
- * @param element - The element to search from.
- * @param nodes - The item's node index.
- * @returns The include elements.
- */
-const contentIncludes = (element: Element, nodes: NodeIndex): readonly Element[] => {
-  const kind = nodes.get(element)?.kind;
-  if (kind === "qti-response-processing" || kind === "qti-template-processing") {
-    return [];
-  }
-
-  return [
-    ...(kind === "xi:include" ? [element] : []),
-    ...element.children.flatMap((child) =>
-      child.kind === "element" ? contentIncludes(child, nodes) : [],
-    ),
-  ];
-};
-
-/**
  * Write the rows of an item document: its tree, its `Document` row with the identifier and title
- * rows, the item root and the body, prompt, paragraph and image rows under it, and, after those,
+ * rows, the item root and the body, prompt rows under it, and, after those,
  * the rows of its response and template processing trees.
  *
  * Every attribute passes through `typedAttribute` with its whitespace class: `identifier`,
- * `adaptive`, `time-dependent`, `src` and `longdesc` collapse, `title` replaces, and `alt`,
- * `height` and `width` are kept as read. `adaptive` takes its XSD default `false` when absent. A
- * root may not omit the required `time-dependent`: a stored `false` would be indistinguishable
- * from a present one, so the importer refuses the item as `typed-copy`.
+ * `adaptive` and `time-dependent` collapse and `title` replaces; the HTML pass applies the classes
+ * of the `img` attributes. `adaptive` takes its XSD default `false` when absent. A root may not
+ * omit the required `time-dependent`: a stored `false` would be indistinguishable from a present
+ * one, so the importer refuses the item as `typed-copy`.
  *
  * After the M0 rows, the M1 builders run in a fixed order, each on the rows so far: the attributes,
- * the HTML profile, the interactions, the content models and the mappings. `attributeRows` reads
- * the root kind from the `Tree` row `treeRows` wrote and fails without it, so it runs on rows that
- * hold `treeRows`'s output, never on `Rows.empty()` and never before `treeRows`.
+ * the HTML profile (every HTML arm, `p` and `img` included), the includes, the interactions, the
+ * content models and the mappings. `attributeRows` reads the root kind from the `Tree` row
+ * `treeRows` wrote and fails without it, so it runs on rows that hold `treeRows`'s output, never on
+ * `Rows.empty()` and never before `treeRows`.
  *
  * @param input - The decoded item and where its package lists it.
  * @param rows - The rows so far.
@@ -1079,9 +1111,15 @@ export const itemRows = Effect.fn("import.itemRows")(function* itemRows(
   built = Rows.add(
     built,
     AssessmentItemLabel,
-    written(label.value, (value) => ({ node: rootNode.id, tree: documentId, value, version })),
+    written(label.value, (value) => ({
+      node: rootNode.id,
+      root: "item",
+      tree: documentId,
+      value,
+      version,
+    })),
   );
-  built = toolRows(built, root, documentId);
+  built = toolRows(built, root, rootNode, documentId);
 
   const walked = withParents(root, Option.none());
   built = documentLangRows(built, input, documentId, walked);
@@ -1104,48 +1142,13 @@ export const itemRows = Effect.fn("import.itemRows")(function* itemRows(
     if (node.kind === "qti-item-body" && Option.isSome(parentNode)) {
       built = Rows.add(built, ItemBody, [{ id: node.id, item: parentNode.value.id }]);
     } else if (node.kind === "qti-prompt" && Option.isSome(parentNode)) {
-      built = Rows.add(built, Prompt, [{ id: node.id, parent: parentNode.value.id }]);
-    } else if (node.kind === "p") {
-      built = Rows.add(built, P, [{ id: node.id }]);
-    } else if (node.kind === "img") {
-      const src = attributeOf(built, element, node, "src", "collapse");
-      built = src.rows;
-      const longdesc = attributeOf(built, element, node, "longdesc", "collapse");
-      built = longdesc.rows;
-      const height = lexicalOf(element, "height");
-      const width = lexicalOf(element, "width");
-      const alt = yield* requiredAttribute(element, "alt", lexicalOf(element, "alt"));
-      const imgSrc = yield* requiredAttribute(element, "src", src.value);
-      built = Rows.add(built, Img, [{ alt, id: node.id, src: EmbedSourceUri(imgSrc) }]);
-      built = Rows.add(
-        built,
-        ImgLongdesc,
-        Option.match(longdesc.value, {
-          onNone: () => [],
-          onSome: (value) => [{ node: node.id, value: LongDescriptionUri(value) }],
-        }),
-      );
-      built = Rows.add(
-        built,
-        ImgHeight,
-        Option.match(height, {
-          onNone: () => [],
-          onSome: (value) => [{ node: node.id, value: judgedLater(value) }],
-        }),
-      );
-      built = Rows.add(
-        built,
-        ImgWidth,
-        Option.match(width, {
-          onNone: () => [],
-          onSome: (value) => [{ node: node.id, value: judgedLater(value) }],
-        }),
-      );
+      built = promptRows(built, node, parentNode.value);
     }
   }
 
   built = yield* attributeRows(root, nodes, documentId, built);
   built = yield* htmlRows(root, nodes, built);
+  built = yield* includeRows(root, nodes, built);
   built = yield* interactionRows(
     root,
     nodes,
@@ -1154,7 +1157,7 @@ export const itemRows = Effect.fn("import.itemRows")(function* itemRows(
     { adaptive: adaptiveLexical },
     built,
   );
-  built = yield* contentRows(root, nodes, documentId, declarations, built);
+  built = yield* contentRows(root, nodes, documentId, "item", declarations, built);
   built = yield* mappingRows(root, nodes, documentId, declarations, built);
 
   const env = environmentOf(doc, "item");
@@ -1176,10 +1179,6 @@ export const itemRows = Effect.fn("import.itemRows")(function* itemRows(
         built,
       );
     }
-  }
-
-  for (const element of contentIncludes(root, nodes)) {
-    built = yield* contentIncludeRows(built, nodes, element);
   }
 
   return { documentId, nodes, rows: built };

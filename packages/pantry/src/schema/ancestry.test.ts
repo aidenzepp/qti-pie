@@ -8,6 +8,7 @@ import * as generic from "#pantry/schema/kinds/generic.ts";
 import * as html from "#pantry/schema/kinds/html.ts";
 import * as lom from "#pantry/schema/kinds/lom.ts";
 import * as qmd from "#pantry/schema/kinds/qmd.ts";
+import * as test from "#pantry/schema/kinds/test.ts";
 import {
   ancestryHandles,
   banned,
@@ -15,6 +16,7 @@ import {
   fbFlagged,
   FLAGS,
   handleOf,
+  interactionKinds,
   KindEnters,
   reachable,
 } from "#pantry/schema/seed/ancestry.ts";
@@ -31,6 +33,7 @@ const admission = [
   ...cp.admission,
   ...lom.admission,
   ...qmd.admission,
+  ...test.admission,
 ];
 
 const kinds = [...new Set(admission.flatMap((row) => [row.parent, row.child]))];
@@ -84,6 +87,29 @@ describe("seed/ancestry", () => {
     }
   });
 
+  it("bans at a testfb set every interaction, template and rubric block, and admits the printed variable and inline feedback", () => {
+    const flags = ["testfb"] as const;
+    for (const kind of [
+      ...interactionKinds,
+      "qti-template-block",
+      "qti-template-block.rubric",
+      "qti-template-inline",
+      "qti-template-inline.rubric",
+      "qti-rubric-block",
+      "qti-rubric-block.test",
+    ]) {
+      assert.isTrue(banned([...flags], kind), `testfb ${kind} is banned`);
+    }
+
+    for (const kind of ["qti-printed-variable", "qti-feedback-inline", "p"]) {
+      assert.isFalse(banned([...flags], kind), `testfb ${kind} is admitted`);
+    }
+
+    for (const kind of ["qti-rubric-block.test", "qti-test-feedback"]) {
+      assert.deepStrictEqual(KindEnters[kind], ["testfb"]);
+    }
+  });
+
   it("steps by the kind's entering flags", () => {
     assert.strictEqual(nextOf("root", "qti-choice-interaction"), "int");
     assert.strictEqual(nextOf("int", "qti-prompt"), "int.choice");
@@ -117,9 +143,9 @@ describe("seed/ancestry", () => {
     }
   });
 
-  it("declares the Ancestry roster over the 56 handles, and the three columns that name it", () => {
+  it("declares the Ancestry roster over the 60 handles, and the three columns that name it", () => {
     assert.deepStrictEqual([...node.Ancestry.handles], [...ancestryHandles]);
-    assert.strictEqual(node.Ancestry.handles.length, 56);
+    assert.strictEqual(node.Ancestry.handles.length, 60);
     assert.strictEqual(node.Node.fields.ancestry.roster.name, "Ancestry");
     assert.strictEqual(node.Edge.fields.parentAncestry.roster.name, "Ancestry");
     assert.strictEqual(node.Edge.fields.childAncestry.roster.name, "Ancestry");

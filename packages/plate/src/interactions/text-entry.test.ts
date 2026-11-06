@@ -8,9 +8,15 @@ import { authoredId, partForSlot, resolveOverrides, rowFor } from "#plate/emit/p
 import type { PartOf } from "#plate/emit/parts.ts";
 import { Malformed, decode, entryName } from "#plate/form/encoding.ts";
 import type { Entry } from "#plate/form/encoding.ts";
+import { renderExtendedText } from "#plate/interactions/extended-text.ts";
 import { renderTextEntry, validateTextEntry } from "#plate/interactions/text-entry.ts";
 import { message } from "#plate/messages.ts";
-import type { BodyNode, Item, TextEntryInteraction } from "#plate/model/item.ts";
+import type {
+  BodyNode,
+  ExtendedTextInteraction,
+  Item,
+  TextEntryInteraction,
+} from "#plate/model/item.ts";
 import type { Value } from "#plate/model/values.ts";
 import { payload, redactItem } from "#plate/payload.ts";
 import type { EmitState, Payload, View } from "#plate/payload.ts";
@@ -59,6 +65,7 @@ const city: TextEntryInteraction = {
   expectedLength: Option.some(12n),
   kind: "text-entry",
   path: `${paragraphPath}/qti-text-entry-interaction`,
+  patternMask: Option.none(),
   patternMaskMessage: Option.none(),
   placeholder: Option.some("A city"),
   response,
@@ -79,6 +86,32 @@ const length: TextEntryInteraction = {
  * A second unnamed Text Entry, bound to its own string response.
  */
 const second: TextEntryInteraction = { ...city, response: "SECOND" };
+
+/**
+ * A span of the paragraph whose authored id, `capital-label`, an `aria-labelledby` can name.
+ */
+const capitalLabel: BodyNode = {
+  attributes: [{ name: "id", value: "capital-label" }],
+  children: [words("Capital of England")],
+  kind: "element",
+  path: `${paragraphPath}/span`,
+  tag: "span",
+};
+
+/**
+ * The author's message for a mismatch on {@link masked}.
+ */
+const maskMessage = "Enter up to six digits and points.";
+
+/**
+ * The city's Text Entry with a `pattern-mask` of up to six digits and points, and the author's
+ * `data-patternmask-message`.
+ */
+const masked: TextEntryInteraction = {
+  ...city,
+  patternMask: Option.some("([0-9.]{0,6})"),
+  patternMaskMessage: Option.some(maskMessage),
+};
 
 /**
  * Construct an item whose body is one paragraph holding text and the Text Entries, each bound to a
@@ -116,6 +149,7 @@ const itemOf = (
     interactions.map((interaction) => [
       interaction.response,
       {
+        areaMapping: Option.none(),
         baseType: interaction.baseType,
         cardinality: "single",
         correct: Option.none(),
@@ -128,6 +162,57 @@ const itemOf = (
   title: "Capitals",
   unsupported: [],
 });
+
+/**
+ * An Extended Text bound to an ordered list `RIVERS` of at most three strings, so it renders three
+ * Controls in a group its Prompt names.
+ */
+const rivers: ExtendedTextInteraction = {
+  ...city,
+  cardinality: "ordered",
+  class: "",
+  expectedLength: Option.none(),
+  expectedLines: Option.none(),
+  format: "plain",
+  kind: "extended-text",
+  maxStrings: Option.some(3n),
+  minStrings: 0n,
+  path: "qti-assessment-item/qti-item-body/qti-extended-text-interaction",
+  placeholder: Option.none(),
+  prompt: Option.some([words("Name three rivers.")]),
+  response: "RIVERS",
+};
+
+/**
+ * Construct an item whose body is an Extended Text, then the paragraph of {@link itemOf} holding
+ * {@link city}.
+ *
+ * @param group The Extended Text.
+ * @returns The item.
+ */
+const besideGroup = (group: ExtendedTextInteraction): Item => {
+  const alone = itemOf([city]);
+
+  return {
+    ...alone,
+    body: [group, ...alone.body],
+    responses: new Map([
+      ...alone.responses,
+      [
+        group.response,
+        {
+          areaMapping: Option.none(),
+          baseType: group.baseType,
+          cardinality: group.cardinality,
+          correct: Option.none(),
+          defaultValue: Option.none(),
+          identifier: group.response,
+          mapping: Option.none(),
+        },
+      ],
+    ]),
+  };
+};
 
 /**
  * The view of a first render: no messages, nothing posted, no values and no author's names.
@@ -170,9 +255,9 @@ const emitState: Effect.Effect<EmitState> = Effect.fromResult(resolveOverrides()
 );
 
 /**
- * Render a payload's body, each Text Entry through {@link renderTextEntry}, and place it in a
- * minimal item: a Root carrying `lang`, and a plain `form`, as an author composes it, holding the
- * body and a submit button after it.
+ * Render a payload's body, each Text Entry through {@link renderTextEntry} and each Extended Text
+ * through {@link renderExtendedText}, and place it in a minimal item: a Root carrying `lang`, and a
+ * plain `form`, as an author composes it, holding the body and a submit button after it.
  *
  * @param built The payload.
  * @returns The item's root.
@@ -182,11 +267,22 @@ const page = (built: Payload): Effect.Effect<Element> =>
     const state = yield* emitState;
     const body = yield* Effect.orDie(
       Effect.fromResult(
-        emitBody(built, state, (interaction) =>
-          interaction.kind === "text-entry"
-            ? renderTextEntry(interaction, built, state)
-            : assert.fail(`This test renders Text Entries only, not ${interaction.kind}.`),
-        ),
+        emitBody(built, state, (interaction) => {
+          switch (interaction.kind) {
+            case "text-entry": {
+              return renderTextEntry(interaction, built, state);
+            }
+            case "extended-text": {
+              return renderExtendedText(interaction, built, state);
+            }
+            case "choice": {
+              return assert.fail("This test renders no Choice.");
+            }
+            default: {
+              return interaction satisfies never;
+            }
+          }
+        }),
       ),
     );
 
@@ -300,13 +396,7 @@ describe("renderTextEntry", () => {
         const labelledControl = onlyPart(labelled, "control");
         const referenced = yield* page(
           payloadOf([{ ...city, ariaLabelledby: Option.some("capital-label") }], answering, [
-            {
-              attributes: [{ name: "id", value: "capital-label" }],
-              children: [words("Capital of England")],
-              kind: "element",
-              path: `${paragraphPath}/span`,
-              tag: "span",
-            },
+            capitalLabel,
             words(": "),
           ]),
         );
@@ -337,7 +427,89 @@ describe("renderTextEntry", () => {
   );
 
   it.effect(
-    "[Q-20] a keyboard walk (Tab, type York, Enter) posts York under the Control's name",
+    "[Q-20] writes no aria-labelledby whose ids name no element of the item, and names the Control the renderer's way",
+    () =>
+      Effect.gen(function* danglingAriaLabelledby() {
+        const answers = [
+          message("en", "answerOf", { count: "2", n: "1" }),
+          message("en", "answerOf", { count: "2", n: "2" }),
+        ];
+
+        for (const ids of ["nope", "nope missing"]) {
+          const tree = yield* page(
+            payloadOf([{ ...city, ariaLabelledby: Option.some(ids) }, second]),
+          );
+          const controls = partsIn(tree, "control");
+
+          assert.deepStrictEqual(
+            controls.map((control) => control.attrs["aria-labelledby"]),
+            [undefined, undefined],
+            ids,
+          );
+          assert.deepStrictEqual(
+            controls.map((control) => control.attrs["aria-label"]),
+            answers,
+            ids,
+          );
+          assert.deepStrictEqual(
+            controls.map((control) => nameOf(control, tree)),
+            answers,
+            ids,
+          );
+          assert.deepStrictEqual(checkTree(tree, { baseLevel: 2 }), [], ids);
+        }
+      }),
+  );
+
+  it.effect(
+    "[Q-20] keeps the ids of the author's aria-labelledby that name an element of the item, and drops the others",
+    () =>
+      Effect.gen(function* partlyDangling() {
+        const tree = yield* page(
+          payloadOf([{ ...city, ariaLabelledby: Option.some("nope capital-label") }], answering, [
+            capitalLabel,
+            words(": "),
+          ]),
+        );
+        const control = onlyPart(tree, "control");
+
+        assert.strictEqual(control.attrs["aria-labelledby"], authoredId(instance, "capital-label"));
+        assert.isUndefined(control.attrs["aria-label"]);
+        assert.strictEqual(nameOf(control, tree), "Capital of England");
+        assert.deepStrictEqual(checkTree(tree, { baseLevel: 2 }), []);
+      }),
+  );
+
+  it.effect(
+    "[Q-20] writes no aria-label for an authored one that is empty or blank, and names the Control the renderer's way",
+    () =>
+      Effect.gen(function* blankAriaLabel() {
+        for (const label of ["", "   "]) {
+          const tree = yield* page(payloadOf([{ ...city, ariaLabel: Option.some(label) }, second]));
+
+          assert.deepStrictEqual(
+            partsIn(tree, "control").map((control) => control.attrs["aria-label"]),
+            [
+              message("en", "answerOf", { count: "2", n: "1" }),
+              message("en", "answerOf", { count: "2", n: "2" }),
+            ],
+            JSON.stringify(label),
+          );
+          assert.deepStrictEqual(
+            partsIn(tree, "control").map((control) => nameOf(control, tree)),
+            [
+              message("en", "answerOf", { count: "2", n: "1" }),
+              message("en", "answerOf", { count: "2", n: "2" }),
+            ],
+            JSON.stringify(label),
+          );
+          assert.deepStrictEqual(checkTree(tree, { baseLevel: 2 }), [], JSON.stringify(label));
+        }
+      }),
+  );
+
+  it.effect(
+    "[Q-20] [keyboard] a keyboard walk (Tab, type York, Enter) posts York under the Control's name",
     () =>
       Effect.gen(function* typeAndSubmit() {
         const tree = yield* page(payloadOf([city]));
@@ -359,18 +531,20 @@ describe("renderTextEntry", () => {
       }),
   );
 
-  it.effect("[Q-20] names the Control by the author's form name when names gives one", () =>
-    Effect.gen(function* authoredFormName() {
-      const tree = yield* page(
-        payloadOf([city], { ...answering, names: new Map([[response, "city"]]) }),
-      );
+  it.effect(
+    "[Q-20] [keyboard] names the Control by the author's form name when names gives one",
+    () =>
+      Effect.gen(function* authoredFormName() {
+        const tree = yield* page(
+          payloadOf([city], { ...answering, names: new Map([[response, "city"]]) }),
+        );
 
-      assert.strictEqual(onlyPart(tree, "control").attrs["name"], "city");
-      assert.deepStrictEqual(
-        keyboardWalk(tree, ["Tab", { type: "York" }, "Enter"]),
-        Option.some([["city", "York"]]),
-      );
-    }),
+        assert.strictEqual(onlyPart(tree, "control").attrs["name"], "city");
+        assert.deepStrictEqual(
+          keyboardWalk(tree, ["Tab", { type: "York" }, "Enter"]),
+          Option.some([["city", "York"]]),
+        );
+      }),
   );
 
   it.effect(
@@ -397,6 +571,36 @@ describe("renderTextEntry", () => {
           control.attrs["aria-describedby"],
           built.messages.map((entry) => entry.id).join(" "),
         );
+        assert.deepStrictEqual(
+          elementsIn(tree).filter((element) => element.attrs["autofocus"] !== undefined),
+          [control],
+        );
+        assert.deepStrictEqual(checkTree(tree, { baseLevel: 2 }), []);
+      }),
+  );
+
+  it.effect(
+    "[Q-20] renders 12a refused by pattern-mask back with its message: aria-invalid, aria-describedby and one autofocus",
+    () =>
+      Effect.gen(function* afterPatternMismatch() {
+        const messages = validateTextEntry(
+          masked,
+          yield* decoded(masked, [[name, "12a"]]),
+          yield* configure({ validateResponses: true }),
+        );
+        const built = payloadOf([masked], {
+          ...answering,
+          messages,
+          posted: Option.some(new Map([[response, ["12a"]]])),
+        });
+        const tree = yield* page(built);
+        const control = onlyPart(tree, "control");
+
+        assert.deepStrictEqual(messages, [{ response, text: maskMessage }]);
+        assert.lengthOf(built.messages, 1);
+        assert.strictEqual(control.attrs["value"], "12a");
+        assert.strictEqual(control.attrs["aria-invalid"], "true");
+        assert.strictEqual(control.attrs["aria-describedby"], built.messages[0]?.id);
         assert.deepStrictEqual(
           elementsIn(tree).filter((element) => element.attrs["autofocus"] !== undefined),
           [control],
@@ -482,6 +686,31 @@ describe("renderTextEntry", () => {
     }),
   );
 
+  it.effect(
+    '[Q-20] [Q-5] names the Control "Answer" beside an Extended Text group its Prompt or its author names, whose Controls the group numbers',
+    () =>
+      Effect.gen(function* besideNamedGroup() {
+        const authored: ExtendedTextInteraction = {
+          ...rivers,
+          ariaLabel: Option.some("Rivers"),
+          prompt: Option.none(),
+        };
+
+        for (const group of [rivers, authored]) {
+          const tree = yield* page(payload(redactItem(besideGroup(group)), answering));
+          const textareas = elementsIn(tree).filter((element) => element.tag === "textarea");
+
+          assert.strictEqual(nameOf(onlyPart(tree, "control"), tree), message("en", "answer"));
+          assert.deepStrictEqual(
+            textareas.map((control) => nameOf(control, tree)),
+            ["1", "2", "3"].map((n) => message("en", "answerOf", { count: "3", n })),
+          );
+          assert.deepStrictEqual(checkTree(tree, { baseLevel: 2 }), []);
+          assert.isTrue(roundTrips(tree));
+        }
+      }),
+  );
+
   it.effect("[Q-20] passes checkTree inside a p, and the tree round-trips", () =>
     Effect.gen(function* insideParagraph() {
       for (const interactions of [[city], [city, second], [length]]) {
@@ -558,7 +787,68 @@ describe("validateTextEntry", () => {
   );
 
   it.effect(
-    "[Q-20] accepts every decoded value, an integer in its base and NULL included, whatever validateResponses says",
+    "[Q-20] checks pattern-mask under validateResponses only: 12a gives the author's message, 12.5 none",
+    () =>
+      Effect.gen(function* patternMismatch() {
+        const strict = yield* configure({ validateResponses: true });
+        const lenient = yield* configure({});
+        const mismatch = yield* decoded(masked, [[name, "12a"]]);
+
+        assert.deepStrictEqual(validateTextEntry(masked, mismatch, strict), [
+          { response, text: maskMessage },
+        ]);
+        assert.deepStrictEqual(
+          validateTextEntry({ ...masked, patternMaskMessage: Option.none() }, mismatch, strict),
+          [{ response, text: message("en", "patternMismatch") }],
+        );
+        assert.deepStrictEqual(
+          validateTextEntry(masked, yield* decoded(masked, [[name, "12.5"]]), strict),
+          [],
+        );
+        assert.deepStrictEqual(validateTextEntry(masked, mismatch, lenient), []);
+      }),
+  );
+
+  it.effect("[Q-20] checks no NULL against pattern-mask, even one that refuses empty text", () =>
+    Effect.gen(function* nullAgainstPattern() {
+      const digits: TextEntryInteraction = { ...masked, patternMask: Option.some("[0-9]+") };
+      const value = yield* decoded(digits, [[name, ""]]);
+
+      assert.deepStrictEqual(value, { baseType: "string", cardinality: "single", values: [] });
+      assert.deepStrictEqual(
+        validateTextEntry(digits, value, yield* configure({ validateResponses: true })),
+        [],
+      );
+    }),
+  );
+
+  it.effect(
+    "[Q-20] matches a float posted 1.50 against pattern-mask as 1.5, and a string as typed",
+    () =>
+      Effect.gen(function* canonicalFloat() {
+        const strict = yield* configure({ validateResponses: true });
+        const oneDecimal = Option.some(String.raw`[0-9]\.[0-9]`);
+        const measured: TextEntryInteraction = { ...length, patternMask: oneDecimal };
+        const typed: TextEntryInteraction = { ...city, patternMask: oneDecimal };
+        const mismatch = [{ response, text: message("en", "patternMismatch") }];
+
+        assert.deepStrictEqual(
+          validateTextEntry(measured, yield* decoded(measured, [[name, "1.50"]]), strict),
+          [],
+        );
+        assert.deepStrictEqual(
+          validateTextEntry(measured, yield* decoded(measured, [[name, "1.55"]]), strict),
+          mismatch,
+        );
+        assert.deepStrictEqual(
+          validateTextEntry(typed, yield* decoded(typed, [[name, "1.50"]]), strict),
+          mismatch,
+        );
+      }),
+  );
+
+  it.effect(
+    "[Q-20] accepts every decoded value without a pattern-mask, an integer in its base and NULL included, whatever validateResponses says",
     () =>
       Effect.gen(function* decodedValues() {
         const hex: TextEntryInteraction = { ...length, base: 16, baseType: "integer" };
