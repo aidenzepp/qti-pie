@@ -97,7 +97,6 @@ import {
   GoverningOf,
   KindNamespace,
   NodeKind,
-  openClasses,
   openElementClasses,
   Required,
   SchemaVersion,
@@ -107,6 +106,7 @@ import {
   ValueDomainOf,
   ValueIdentity,
 } from "#pantry/grammar/install.ts";
+import { openClasses } from "#pantry/grammar/kinds.ts";
 import { handlePrefixes } from "#pantry/model/xdm.ts";
 import { NamespacePrefix, OpenElementName } from "#pantry/qti/chardata.ts";
 import { keyText, namespaceText } from "#pantry/qti/limits.ts";

@@ -19,14 +19,8 @@ import { Array as Arr, Duration, Effect, Formatter, Option } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
 import { openDomain } from "#pantry/grammar/attributes.ts";
 import { patternFlags } from "#pantry/grammar/domains.ts";
-import { schemaVersions } from "#pantry/grammar/kinds.ts";
-import {
-  AttributeGrammar,
-  GoverningOf,
-  grammar,
-  openClasses,
-  ValueDomainOf,
-} from "#pantry/grammar/install.ts";
+import { openClasses, schemaVersions } from "#pantry/grammar/kinds.ts";
+import { AttributeGrammar, GoverningOf, grammar, ValueDomainOf } from "#pantry/grammar/install.ts";
 import { foldGrammarOf, shredGrammarOf } from "#pantry/model/composed.ts";
 import { fold } from "#pantry/model/folds.ts";
 import type { FoldedRows } from "#pantry/model/folds.ts";
