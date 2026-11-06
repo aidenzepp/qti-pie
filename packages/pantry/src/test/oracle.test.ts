@@ -2757,20 +2757,19 @@ const hrefPackage = (input: HrefCase) => ({
 
 /**
  * The breaches of each package law a case's reading names, counted by hand from the sources:
- * CP 1.2 §6.6.2 and reading 102 (an href's launch parameters and fragment are not its path, and a
- * path with a dot segment or a percent-encoding is outside the form, refused under "Href form"; a
- * scheme or a leading `/` is external), InterchangePackage (b) (a listed in-package file is an
- * entry) and §6.11.5 B ii (a dependency names a sibling, never its own resource).
+ * CP 1.2 §6.6.2 and reading 102 (an href's launch parameters and fragment are not its path; every
+ * href resolves before a law reads it, so `./item.xml` names `item.xml`, `a%20b.png` names
+ * `a b.png` and `img/./a.png` names `img/a.png`, neither an entry; a scheme or a leading `/` is
+ * external), InterchangePackage (b) (a listed in-package file is an entry) and §6.11.5 B ii (a
+ * dependency names a sibling, never its own resource). Nothing in the box is a stated limit.
  *
  * @param input - The case.
  * @returns Each law's expected count.
  */
 const hrefExpected = (input: HrefCase) => ({
-  "File exists": input.file === "missing.png" ? 1 : 0,
-  "Href form":
-    (input.href === "./item.xml" ? 1 : 0) +
-    (input.file === "a%20b.png" || input.file === "img/./a.png" ? 1 : 0),
-  "Href listed": input.href === "./item.xml" ? 1 : 0,
+  "File exists": ["missing.png", "a%20b.png", "img/./a.png"].includes(input.file) ? 1 : 0,
+  "Href form": 0,
+  "Href listed": 0,
   "Self dependency": input.dependency === "W" ? 1 : 0,
 });
 
@@ -2883,22 +2882,23 @@ const referencePackage = (input: ReferenceCase) => ({
 
 /**
  * Each law's count over a references' case, read off by hand from InterchangePackage (d) and
- * readings 102 and 103: `../a.png` names `a.png` from `items/` (RFC 3986 §5.2.4's removal of a
- * leading dot segment) and climbs above the package root from the root, refused under "Href form";
- * an `xml:base` beside a reference the representation resolves is refused under it too;
- * `missing.png` resolves to no entry ("File exists"); every other value resolves to an entry or is
- * external or the document itself.
+ * readings 102 and 103: with no `xml:base`, `../a.png` names `a.png` from `items/` (RFC 3986
+ * §5.2.4) and climbs above the package root from the root, external; under the paragraph's
+ * `xml:base="x/"`, every relative value resolves below `x/`, where no entry is, but `../a.png`,
+ * which climbs back to the document's directory and names an entry; `missing.png` resolves to no
+ * entry ("File exists"); an external URI and the document's own fragment name nothing to check.
+ * Nothing in the box is a stated limit.
  *
  * @param input - The case.
  * @returns Each law's expected count.
  */
 const referenceExpected = (input: ReferenceCase) => {
   const resolves = !["http://x.org/a.png", "#top"].includes(input.src);
-  const climbsAbove = input.src === "../a.png" && input.path === "item.xml";
+  const missing = input.base ? input.src !== "../a.png" : input.src === "missing.png";
 
   return {
-    "File exists": input.src === "missing.png" ? 1 : 0,
-    "Href form": (climbsAbove ? 1 : 0) + (input.base && resolves ? 1 : 0),
+    "File exists": resolves && missing ? 1 : 0,
+    "Href form": 0,
   };
 };
 
@@ -2940,7 +2940,7 @@ describe("the references reading 103's census names, over generated packages", (
                 c.note("missing");
               }
 
-              if (input.base && expected["Href form"] > 0) {
+              if (input.base && expected["File exists"] > 0) {
                 c.note("base");
               }
 

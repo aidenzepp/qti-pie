@@ -223,7 +223,13 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
       status: "G",
     },
   ],
-  [45, { owner: "G5, Q5.08", status: "P" }],
+  [
+    45,
+    {
+      owner: "G5, Q5.08; a value a key holds is held to reading 133's key-text bound",
+      status: "P",
+    },
+  ],
   [46, { owner: "G5's derived `int8`", status: "P" }],
   [
     47,
@@ -429,7 +435,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     94,
     {
       owner:
-        "AL1: `xs:NCName` and the types derived from it, over XML 1.0 Second Edition's name tables (`src/grammar/domains.ts`, read from the cached specification by `domains.test.ts`, judged against xmllint by `lexical.oracle.test.ts`); the oracle's bare variable reference",
+        "AL1: `xs:NCName` and the types derived from it, over XML 1.0 Second Edition's name tables (`src/grammar/domains.ts`, read from the cached specification by `domains.test.ts`, judged against xmllint by `lexical.oracle.test.ts`); the oracle's bare variable reference; a name a key holds is held to reading 133's key-text bound; an open attribute's local name to 255 (`OpenLocal`)",
       status: "G",
     },
   ],
@@ -493,7 +499,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     102,
     {
       owner:
-        "HP's `ResourceHref` `path ‖ params` and `Reference` `lead ‖ target ‖ params ‖ trail` (`E1_derived`), href-listed and the documents named over the path, `ReferencePath`'s removal of leading dot segments over `DotSegments` (`E1_derived`), and the stated limit `Href_form` over `File`, `ResourceHref`, `Reference`, `ReferencePath`, `DocumentDirectory` and the manifest's `xml:base` (`src/qti/package.ts`, `resolvedHref` of `src/qti/limits.ts`); the oracle's Href form, Href listed and File exists",
+        "P's resolution at import (`src/import/overlays/package.ts` `resolveIn`, `baseIn`, `hrefResolverOf`; RFC 3986 §2.1 and §5.2, each value read by its whitespace class, `xml:base` and the manifest's Base resolved, dot segments removed, segments percent-decoded); `HrefScope` on `File`, `ResourceHref`, `FileHref`, `ResourceFile` and `Reference`, their resolved `path`, `Reference` `lead ‖ target ‖ params ‖ trail` and its scope's written-form implications (`E1_derived`), `resolvedPathPattern` (`E1_derived`), href-listed over (scope, path), `Document_entry` on a document-typed href, and the stated limit `Href_form` (`scope <> unresolved`, `srcsetCandidatePattern`) (`src/qti/package.ts`); the oracle's own resolver `src/test/resolution.ts` and its Href form, Href listed, Document entry and File exists",
       status: "G",
     },
   ],
@@ -501,7 +507,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     103,
     {
       owner:
-        "the census `ReferenceAttribute` (`src/grammar/references.ts`, `asiCensus`, `xiCensus`, `mathmlCensus`, `ssmlCensus`; installed by `src/grammar/install.ts`), read by HP's R6 `file-exists` over `Reference` and `ReferencePath` (`src/qti/package.ts`)",
+        "the census `ReferenceAttribute` (`src/grammar/references.ts`, `asiCensus`, `xiCensus`, `mathmlCensus`, `ssmlCensus`; installed by `src/grammar/install.ts`), each value resolved by `src/import/overlays/package.ts` `referenceRowsOf` with the `xml:base` in scope (`basesOf`), read by R6 `file-exists` over `Reference` and `ReferencePath` (`src/qti/package.ts`)",
       status: "P",
     },
   ],
@@ -730,6 +736,14 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
   ],
   [132, { owner: "AL1 (`printfFormat` on `qti-printed-variable`'s `format`)", status: "G" }],
   [
+    133,
+    {
+      owner:
+        "S-ORACLE's `keyText` (`src/qti/limits.ts`: `keyTextCodePoints` 646, held to grizzle's `keyTextBytes` by `limits.test.ts`), the oracle's Key text bound (rule `key-text-bound`) over the schema's key copies (`src/test/key-copies.ts`), held to the import's rows by `src/test/oracle.keys.test.ts`; in code points until grizzle beta.1's `str.bytes(N)`, then in bytes. The import writes every copy whatever its length, so the database refuses an over-long one under `key-text-bound`, the oracle's rule",
+      status: "G",
+    },
+  ],
+  [
     134,
     {
       owner:
@@ -846,11 +860,7 @@ const readingDepartures: ReadonlyMap<string, number> = new Map([
  * The rules nothing states yet that a named slice owns, by `family parent subject`, with the
  * slice.
  */
-const planned: ReadonlyMap<string, string> = new Map([
-  ["attribute:required qti-area-map-entry coords", "Q5.09, coords by shape"],
-  ["attribute:required qti-associable-hotspot coords", "Q5.09, coords by shape"],
-  ["attribute:required qti-hotspot-choice coords", "Q5.09, coords by shape"],
-]);
+const planned: ReadonlyMap<string, string> = new Map();
 
 /**
  * The attribute names the document layer admits on every kind, beside the open classes: XML's

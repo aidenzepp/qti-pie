@@ -23,7 +23,7 @@ import * as identity from "#pantry/qti/identity.ts";
 import { identityLaws } from "#pantry/qti/identity.ts";
 import * as interactions from "#pantry/qti/interactions.ts";
 import { interactionLaws } from "#pantry/qti/interactions.ts";
-import { AuthorApp, exportWork } from "#pantry/qti/logins.ts";
+import { AuthorApp, exportWork, importWork } from "#pantry/qti/logins.ts";
 import * as mapping from "#pantry/qti/mapping.ts";
 import { mappingLaws } from "#pantry/qti/mapping.ts";
 import * as metadata from "#pantry/qti/metadata.ts";
@@ -166,7 +166,7 @@ describe("qti/logins.ts, the author application", () => {
     assert.strictEqual(AuthorApp.roles.author.role, Author);
   });
 
-  it("owns the export scan as its one workload, and no import program", () => {
-    assert.deepStrictEqual(AuthorApp.workload, [exportWork]);
+  it("owns the export scan and the import's write program as its workload", () => {
+    assert.deepStrictEqual(AuthorApp.workload, [exportWork, importWork]);
   });
 });

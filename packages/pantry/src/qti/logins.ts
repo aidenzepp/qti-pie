@@ -1,13 +1,22 @@
 /**
  * The login that opens a connection: the author application, over the author role, with the export
- * scan as its workload.
+ * scan and the import's write program as its workload.
  *
- * The import is no program of its workload: a family member is written from an array or a Stream,
- * never from a query or a parameter, so `importPackage` sends a ChangeSet built per package (the W5
- * amendment's C19).
+ * The import's write program is declared with no rows, so that grizzle compiles it wherever it
+ * compiles a workload: `grizzle generate`, `grizzle check` and every `DbLayer` startup. A schema
+ * whose writes cannot compile then fails there, never at the first import (R87, whose
+ * `BranchResolution.instanceEnd` made every import's ChangeSet refuse once a migrated schema ran
+ * it). The declared program carries no package: a family member is written from an array or a
+ * Stream, never from a query or a parameter, so `importPackage` still sends a ChangeSet built per
+ * package (the W5 amendment's C19), which `db.apply` compiles for its call from the same
+ * Description.
  */
 import { login, workload } from "@bjornpagen/grizzle";
+import { Result } from "effect";
 import { documentScan, documentsOf, entriesOf } from "#pantry/export/scan.ts";
+import { overlayRowsOf } from "#pantry/import/overlays/index.ts";
+import { changeSetOf } from "#pantry/import/write.ts";
+import type { PackageInputs } from "#pantry/import/write.ts";
 import { Author } from "#pantry/qti/roles.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 
@@ -19,7 +28,35 @@ import { Qti } from "#pantry/qti/schema.ts";
 export const exportWork = workload(Author, { documentScan, documentsOf, entriesOf });
 
 /**
+ * A package's inputs with no row: the overlays of no document, and every other keyed set empty.
+ * `overlayRowsOf` of no document mints no id and has no two rows to conflict.
+ */
+const noRows: PackageInputs = {
+  ...Result.getOrThrowWith(
+    overlayRowsOf([], () => crypto.randomUUID()),
+    (conflict) => conflict,
+  ),
+  Comment: new Map(),
+  Doctype: new Map(),
+  Document: new Map(),
+  Node: new Map(),
+  OpenElementName: new Map(),
+  Package: new Map(),
+  Pi: new Map(),
+};
+
+/**
+ * The import's write program: `changeSetOf`'s ChangeSet with no rows. grizzle compiles a ChangeSet
+ * from its Description, which names each insert and none of its rows, so this is the program every
+ * package's import compiles, and its compilation runs grizzle's write filler over every family of
+ * the schema. It is declared to be compiled, never run.
+ */
+export const importWork = workload(Author, { importWrite: changeSetOf(Author, noRows) });
+
+/**
  * The author application's login, `qti__author_app` on the cluster. Its name is the one every
  * earlier installation used, so a migration from scratch needs no `--rename @…`.
  */
-export const AuthorApp = login(Qti, "author_app", [Author], { workload: [exportWork] });
+export const AuthorApp = login(Qti, "author_app", [Author], {
+  workload: [exportWork, importWork],
+});

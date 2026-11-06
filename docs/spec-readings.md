@@ -445,15 +445,17 @@ against it. A reading that is not an information-model-over-XSD case says which 
     a value of base type integer, in `qti-value`, in `qti-base-value` or in a typed-value attribute of reading 7 such
     as `map-key`, is accepted and kept exactly, however many digits it has: `9007199254740993` and
     `9007199254740992` are two values, and so are `1000000000000000000000000000000` and
-    `1000000000000000000000000000001`. A package never refuses an integer for its size, never rounds one to a float
-    and never stores one as an infinity, and it compares and computes integer results exactly. This reading is
-    about values. A count attribute such as `max-choices` is not a value of the integer base type: a shared reading of
-    its own holds counts to the signed 64-bit range, read exactly, and refuses a count beyond it with its rule and
-    location. An attribute the XSD types `xs:int`, such as `base`, keeps `xs:int`'s range. Where
-    QTI's types make a result a float, an integer operand becomes the nearest float, and an integer beyond the
-    largest finite float becomes the largest finite float of its sign. This is not a case of documents
-    in conflict: the sources agree that the type is unbounded and say nothing of overflow, and this reading forbids
-    a package to add a bound, so reading 1 holds without an exception. (2026-11-04.)
+    `1000000000000000000000000000001`. A package never refuses an integer for its size, never rounds one to a float and
+    never stores one as an infinity, and it compares and computes integer results exactly. A value a key holds is the
+    one exception, as a text rather than an integer: a `qti-value`'s or `qti-base-value`'s folded text and a `map-key`
+    are copied into keys, and so are held to reading 133's key-text bound, 646 characters. This reading is about values.
+    A count attribute such as `max-choices` is not a value of the integer base type: a shared reading of its own holds
+    counts to the signed 64-bit range, read exactly, and refuses a count beyond it with its rule and location. An
+    attribute the XSD types `xs:int`, such as `base`, keeps `xs:int`'s range. Where QTI's types make a result a float,
+    an integer operand becomes the nearest float, and an integer beyond the largest finite float becomes the largest
+    finite float of its sign. This is not a case of documents in conflict: the sources agree that the type is unbounded
+    and say nothing of overflow, and this reading forbids a package to add a bound beyond reading 133's stated limit of
+    the representation. (2026-11-04.)
 46. **A count attribute holds a signed 64-bit integer.** The count attributes (`max-choices`, `min-choices`,
     `max-associations`, `min-associations`, `match-max`, `match-min`, `max-plays` and `min-plays` on the interactions
     and choices that carry them, the order interactions' `min-choices` among them) and `figures` on `qti-round-to` and
@@ -719,16 +721,17 @@ against it. A reading that is not an information-model-over-XSD case says which 
       law from it. The fold's running text rides the tree's predecessor and last axes, so it is a column of their keys,
       and grizzle refuses at compile a key whose B-tree entry can pass PostgreSQL's `BTMaxItemSize`
       (`UnrepresentableKey`). So the running text and `stringValue` are `keyText` (`src/qti/limits.ts`), bounded to
-      `keyTextCodePoints`, the code points one entry holds beside the widest key's other columns, and a folded value
-      past the bound is refused by `keyText`'s pattern on the fold's text, by name: a stated limit of the
-      representation, not this reading's law. The corpus (28 packages, 353 documents) holds 3,095 simple-content
-      elements; the 227 under a checked domain are at most 92 code points; of the copied kinds, `qti-base-value` is at
-      most 102 (1,208 elements), `lom:entry` 86 (59), `qti-value` 45 (898) and `lom:language` 2 (44), a LOM title's
-      `lom:string` 121 (66), a learning resource type's `lom:value` 15 and `lom:source` 11 (18 each), and no `ud:value`
-      is QTI 3's (the corpus's 77 are QTI 2.2's, refused `not-qti3` by reading 89); and the two over the bound
-      (`lom:string`, 967 and 723 code points) are descriptions, `xs:normalizedString` and not copied, so not folded.
-      (Recorded 2026-11-06, from W5 Q5.03; the copied kinds brought up to date at the readings merge, and the learning
-      resource type's terms added by RV seat M, measured over the 1EdTech corpus at 0a92fbb.)
+      reading 133's key-text bound, 646 code points (`keyTextCodePoints`), the most grizzle's `keyTextBytes` leaves room
+      for beside the widest key's other columns, and a folded value past the bound is refused by `keyText`'s pattern on
+      the fold's text, by name: a stated limit of the representation, not this reading's law. The corpus (28 packages,
+      353 documents) holds 3,095 simple-content elements; the 227 under a checked domain are at most 92 code points; of
+      the copied kinds, `qti-base-value` is at most 102 (1,208 elements), `lom:entry` 86 (59), `qti-value` 45 (898) and
+      `lom:language` 2 (44), a LOM title's `lom:string` 121 (66), a learning resource type's `lom:value` 15 and
+      `lom:source` 11 (18 each), and no `ud:value` is QTI 3's (the corpus's 77 are QTI 2.2's, refused `not-qti3` by
+      reading 89); and the two over the bound (`lom:string`, 967 and 723 code points) are descriptions,
+      `xs:normalizedString` and not copied, so not folded. (Recorded 2026-11-06, from W5 Q5.03; the copied kinds brought
+      up to date at the readings merge, and the learning resource type's terms added by RV seat M, measured over the
+      1EdTech corpus at 0a92fbb.)
 
     This binds pantry and plate alike. pantry checks all of it but those two limits. plate does not yet check the
     text: under a `lax` wildcard it refuses element children and attributes other than the four `xsi:` ones, and
@@ -1394,15 +1397,15 @@ against it. A reading that is not an information-model-over-XSD case says which 
     `imsqti_rptemplate_xmlv3p0` resources of one file each), and the oracle judges it refused under `P8` with those two
     files read as documents and without them. This binds pantry and plate alike. This is not a case of documents in
     conflict. (Decided 2026-11-06 by W5 Q5.06 under the operator's standing ruling of 2026-11-05 that the spec wins.)
-94. **An `xs:NCName` takes its name characters from XML 1.0 Second Edition, as XML Schema 1.0 reads them, and has no
-    length bound.** XML Schema Part 2 (W3C Recommendation, 28 October 2004) gives `NCName` the lexical space of the
-    `NCName` production of Namespaces in XML (section 3.3.7), whose 1999 Recommendation writes it as `(Letter | '_')
-    (NCNameChar)*` over XML 1.0's `Letter`, `Digit`, `CombiningChar` and `Extender` (productions [4] and [5]). Part 2's
-    schema for schemas states the same type as the pattern `[\i-[:]][\c-[:]]*`, and its Appendix F defines `\i` as the
-    characters `Letter | '_' | ':'` match and `\c` as those `NameChar` matches (section F.1.1), citing XML 1.0 Second
-    Edition, whose `Letter` is `BaseChar | Ideographic` (Appendix B). XML 1.0 Fifth Edition's `NameStartChar` and
-    `NameChar` (productions [4] and [4a]) hold every one of those characters and more, so the two readings differ in
-    two cases, and both are refused here:
+94. **An `xs:NCName` takes its name characters from XML 1.0 Second Edition, as XML Schema 1.0 reads them, and the
+    production states no length.** XML Schema Part 2 (W3C Recommendation, 28 October 2004) gives `NCName` the lexical
+    space of the `NCName` production of Namespaces in XML (section 3.3.7), whose 1999 Recommendation writes it as
+    `(Letter | '_') (NCNameChar)*` over XML 1.0's `Letter`, `Digit`, `CombiningChar` and `Extender` (productions [4] and
+    [5]). Part 2's schema for schemas states the same type as the pattern `[\i-[:]][\c-[:]]*`, and its Appendix F
+    defines `\i` as the characters `Letter | '_' | ':'` match and `\c` as those `NameChar` matches (section F.1.1),
+    citing XML 1.0 Second Edition, whose `Letter` is `BaseChar | Ideographic` (Appendix B). XML 1.0 Fifth Edition's
+    `NameStartChar` and `NameChar` (productions [4] and [4a]) hold every one of those characters and more, so the two
+    readings differ in two cases, and both are refused here:
     - a character no Second Edition table holds, anywhere in the name: a letter Unicode assigned after version 2.0,
       such as `㐀` (U+3400), a character of the supplementary planes, such as `𐀀` (U+10000), or one the Second
       Edition leaves out on purpose, such as `Ĳ` (U+0132);
@@ -1410,12 +1413,14 @@ against it. A reading that is not an information-model-over-XSD case says which 
       (U+02D0), so `ːa` is refused and `aː` is accepted.
 
     libxml2 2.9.13's `xmllint` gives the same verdict on each of these. The production states no length, so a name of
-    any length is valid. Every type derived from `xs:NCName` reads it so: `xs:ID`, `xs:IDREF`, `xs:ENTITY` and QTI's
+    any length is valid. A name a key holds is held to reading 133's key-text bound (646 characters), and an open
+    attribute's local name, which a key holds beside a namespace name, to 255: stated limits of the representation, not
+    of `xs:NCName`. Every type derived from `xs:NCName` reads it so: `xs:ID`, `xs:IDREF`, `xs:ENTITY` and QTI's
     identifier types, and the bare variable reference that names a declaration. Reading 55 is not changed by this: a
-    `pattern-mask` is a response pattern plate checks, and its `\i` and `\c` follow the later edition by that
-    reading's own decision. This binds pantry and plate alike. This is not a case of documents in conflict: QTI's XSDs
-    are XML Schema 1.0 (reading 71), and XML Schema 1.0 decides the lexical space of its own types. (Decided 2026-11-06
-    under the operator's standing ruling of 2026-11-05 that the spec wins.)
+    `pattern-mask` is a response pattern plate checks, and its `\i` and `\c` follow the later edition by that reading's
+    own decision. This binds pantry and plate alike. This is not a case of documents in conflict: QTI's XSDs are XML
+    Schema 1.0 (reading 71), and XML Schema 1.0 decides the lexical space of its own types. (Decided 2026-11-06 under
+    the operator's standing ruling of 2026-11-05 that the spec wins.)
 
 95. **An entity reference's name is an `NCName`: no entity name holds a colon.** Namespaces in XML 1.0 (Third
     Edition), section 7, Conformance of Documents: in a namespace-well-formed document, "No entity names, processing
@@ -1530,68 +1535,123 @@ against it. A reading that is not an information-model-over-XSD case says which 
      no verdict moves. This binds pantry and plate alike. This is not a case of documents in conflict: XML Schema
      decides its own ID table. (Decided 2026-11-06 by W5 seat PI under the operator's standing ruling of 2026-11-05 that
      the spec wins.)
-102. **An href is read as its path and its params: a resource's `href` may carry launch parameters its file's `href`
-     does not, a reference's query or fragment names no other file, and only the path names a file.** IMS Content
-     Packaging 1.2 (Information Model, Version 1.2 Public Draft v2.0, section 6.6.2, the Resource class; line 770 of
-     `imscp_infov1p2pd2.txt`, line 2384 of the published `.html`): "A file reference declared in a Resource{ Href }
-     shall have an associated declaration in a File object in the same Resource. The Href of the associated File object
-     shall reference the same file as the Resource{ Href }. The Resource{ Href } and associated File{ Href } URIs may
-     differ in that the Resource{ Href } may contain “launch” parameters in the URI." RFC 3986 (section 3.3, line 1204):
-     "The path is terminated by the first question mark ("?") or number sign ("#") character, or by the end of the URI."
-     So every href is read in two written pieces, `path ‖ params`: `path` up to its first `?` or `#`, and `params`,
-     empty or the query and fragment from there. A resource's href names the file at its path: `href-listed` compares
-     the path with its own files' hrefs, and a document-typed resource names the document at its path (reading 93). A
-     reference in a document (an `img`'s `src`, a `source`'s media fragment `#t=00:00:01`, an item ref's `href`) is read
-     the same way, and its params name no other file.
+102. **An href is read as its path and its params, and the importer resolves its path before any row is written:
+     merged with its base, its dot segments removed and each segment percent-decoded, so a law compares resolved
+     paths.** IMS Content Packaging 1.2 (Information Model, Version 1.2 Public Draft v2.0, section 6.6.2, the Resource
+     class; line 770 of `imscp_infov1p2pd2.txt`, line 2384 of the published `.html`): "A file reference declared in a
+     Resource{ Href } shall have an associated declaration in a File object in the same Resource. The Href of the
+     associated File object shall reference the same file as the Resource{ Href }. The Resource{ Href } and associated
+     File{ Href } URIs may differ in that the Resource{ Href } may contain “launch” parameters in the URI." RFC 3986
+     (section 3.3, line 1204): "The path is terminated by the first question mark ("?") or number sign ("#")
+     character, or by the end of the URI." So every href is read in two written pieces, `path ‖ params`: `path` up to
+     its first `?` or `#`, and `params`, empty or the query and fragment from there. Only the path names a file: a
+     resource's launch parameters, a reference's query or media fragment (`#t=00:00:01`) name no other file.
 
-     A path names a package entry only where this representation resolves it: a relative path of plain segments, the
-     `resolvedHref` form of `src/qti/limits.ts`, which names the entry at its document's directory followed by the path
-     (RFC 3986, sections 5.2.2 and 5.2.3; the manifest's directory is the package root). A path is external, admitted
-     and never resolved, when it starts with a scheme (an absolute URI, reading 35) or with `/`. The second is a
-     judgment: RFC 3986 (section 4.2, line 1440) calls a reference that begins with `//` a network-path reference and
-     one that begins with a single `/` an absolute-path reference, and both resolve against the authority and root of
-     the location a package is read from, not against the package's own root; Content Packaging binds only "a URI that
-     resolves to a location within the InterchangePackage" (InterchangePackage (b) and (d), lines 409 and 411), says
-     that "The files described by a resource may be local or remote" (line 276), and has the references from the root
-     manifest to files in a package interchange file be relative references, "relative to the root of the PIF" (PIF (d),
-     line 416). So neither kind names a package entry, and neither is refused. A document's reference may start with dot
-     segments: RFC 3986's dot-segment removal (section 5.2.4, line 1805) drops each leading `./`, and each leading `../`
-     removes the last segment of the document's directory, so `../passages/a.xml` from `items/i.xml` names
-     `passages/a.xml`. The removal is stated for up to eight leading `../` segments, each depth's segments read from a
-     closed table of patterns, so no loop is needed. Every other path is in the package but takes a resolution no
-     relation states, so it is refused under the stated limit "Href form" (`href-form`), never under a law of Content
-     Packaging or QTI: a dot segment after a plain one (`a/../b.xml`), a reference that climbs above the package root or
-     by more than eight segments, any dot segment in a `cp:file` or `cp:resource` href, a percent-encoding
-     (`a%20b.xml`), a backslash, whitespace in the path, a `:` in the first segment of a path with no scheme, and an
-     `xml:base` in a document that holds a resolved reference or on a `cp:manifest`, `cp:resources` or `cp:resource`. A
-     `cp:file`'s and a `cp:resource`'s href are compared as written, so whitespace around them is in that list too; a
-     document's reference sets its surrounding whitespace aside, as `xs:anyURI` collapses it and an HTML URL may be
-     "potentially surrounded by spaces". A `srcset` is read as one image candidate, its URL alone, and one of several
-     candidates or with a descriptor is refused under the same limit.
+     Every href is resolved by the importer before its row is written (`src/import/overlays/package.ts` `resolveIn`),
+     a `cp:file`'s and a `cp:resource`'s as much as a document's reference, by RFC 3986's reference resolution
+     (sections 5.2.2 to 5.2.4, lines 1701 to 1844) in these steps:
+     - The value is read by its attribute's whitespace class (XML Schema Part 2, section 4.3.6): an `xs:anyURI`, every
+       QTI `href`, every manifest href and every `xml:base`, collapses; HTML's `URLDType` (`src`, `srcset`, `poster`),
+       an `xs:normalizedString`, replaces each tab, line feed and carriage return with a space; `object@data`, an
+       `xs:string`, is kept as written. The spaces around it are then set aside, as an `xs:anyURI` collapses them and
+       an HTML URL may be "potentially surrounded by spaces".
+     - A path that starts with a scheme (an absolute URI, reading 35) or with `/` is external, admitted and never
+       resolved where a `cp:file` or a content reference holds it, and refused where a law needs it to name an entry
+       (a document-typed resource's href, "Document entry"). The second is a judgment: RFC 3986 (section 4.2,
+       line 1440) calls a reference that begins with `//` a network-path reference and one that begins with a single `/`
+       an absolute-path reference, and both resolve against the authority and root of the location a package is read
+       from, not against the package's own root; Content Packaging binds only "a URI that resolves to a location
+       within the InterchangePackage" (InterchangePackage (b) and (d), lines 409 and 411), says that "The files
+       described by a resource may be local or remote" (line 276), and has the references from the root manifest to
+       files in a package interchange file be relative references, "relative to the root of the PIF" (PIF (d), line
+       416).
+     - A path that is empty, as the empty reference, a query alone and a fragment alone have, names its own document
+       (RFC 3986, section 4.4: such a reference's "dereference should not result in a new retrieval action"), even in
+       the scope of an `xml:base`, and is never resolved.
+     - Any other path is merged with its base (section 5.2.3): the `xml:base` in scope (reading 103), each resolved
+       against the one above it, or else the document's own path, the manifest's directory being the package root.
+       Its dot segments are then removed (section 5.2.4), a segment written `%2E` or `%2e` counting as a `.`, since a
+       percent-encoded unreserved character is the character itself (sections 2.3 and 6.2.2.2). A path whose `..`
+       segments climb above the package root resolves outside it, external and admitted, as `../../a.png` from
+       `items/` is: the package root is a directory of the location the package is read from, not the URI's root.
+     - Each segment that remains is percent-decoded (section 2.1), its octets read as UTF-8 (section 2.5, and XLink
+       1.0's section 5.4, which escapes a character outside the URI set as its UTF-8 octets). The importer decodes
+       after it splits the path at `/`, so a `%2F` stays data within its segment (section 2.2: a percent-encoded
+       reserved character is not equivalent to the character). The path names the entry it spells: `my%20sign.png`
+       and `my sign.png` from `items/i.xml` both name `items/my sign.png` (Aiden's ruling of 2026-11-06, PR #46
+       comment 3: an href is percent-decoded before it is resolved, RFC 3986 sections 2.1 and 5.2, which goes past
+       main, whose resolver never decoded), `images/../images/sign.png` names `items/images/sign.png`, `a/./b.png`
+       names `items/a/b.png`, and `a/b/..` names the directory `items/a/`, which no entry is (`file-exists`).
 
-     The corpus moves no verdict, counted by a scan of every manifest and every XML document of its 28 packages: no
+     A resource's href names the document at its resolved path (reading 93); `href-listed` compares it with its own
+     files' resolved paths, and an external href with its files' hrefs as written, since the representation resolves
+     no URI outside the package. No relation can percent-decode a name, so the resolution is the importer's: the
+     database holds each href's outcome (`HrefScope`: `entry`, `external`, `document` or `unresolved`) and the path it
+     names, compares the path with `Entry`, and proves what a row can (a resolved path holds no dot segment, a target
+     with a scheme or a leading `/` is external, only an empty target names its document); the law oracle resolves by
+     a second implementation of RFC 3986 that shares no code with the importer (`src/test/resolution.ts`), the
+     differential that holds the importer to the RFC.
+
+     What the importer reads no name from is refused under the stated limit "Href form" (`href-form`), never under a
+     law of Content Packaging or QTI, each for a cause the representation cannot state, and each lifted by what is
+     named:
+     - a `%` that starts no percent-encoding (`a%zz.png`, a `%` at the end): RFC 3986 (section 2.1) gives it no octet,
+       so the path names nothing, while the URL Standard keeps it as written, as a validation error; an `xs:anyURI`'s
+       value domain refuses it first (reading 71). A ruling that a URL-typed attribute follows the URL Standard there
+       would lift it.
+     - percent-encoded octets that spell no UTF-8 (`%FF`, a lone `%C3`): an entry's path is Unicode text, so the
+       octets name no entry the representation can compare with; which file they name depends on the archive's own
+       name encoding (a zip without its UTF-8 flag names in code page 437). Reading an entry's name as the octets the
+       archive stores would lift it.
+     - a segment that decodes to a `/` or U+0000 (`a%2Fb.png`, `%00`): the `/` is data in its segment, naming a file
+       whose name holds `/`, and a resolved path is one text whose segments are separated by `/`, so it cannot hold
+       that segment apart (a path held as one row per segment would lift it); PostgreSQL text holds no U+0000, so that
+       one stays.
+     - a backslash: XLink's escaping makes it the name's octet `%5C`, while the URL Standard, which HTML resolves its
+       URL attributes by, reads it as `/` in a URL of a special scheme, so the two sources a QTI document's hrefs
+       answer to name different files by it. A ruling of which reading governs each attribute type would lift it.
+     - a tab, line feed or carriage return a preserving type keeps in the path (`object@data`): XLink's escaping makes
+       it the name's octet, while the URL Standard removes it. The same ruling would lift it. Under the other types the
+       whitespace class has turned each into a space first, so there it is resolved.
+     - a `:` in the first segment of a path with no scheme (`1:a.png`; `./1:a.png` is resolved): RFC 3986 (section
+       4.2) makes it no relative reference, since it "would be mistaken for a scheme name", while the URL Standard
+       reads it as a path; an `xs:anyURI`'s value domain refuses it first. The same ruling would lift it.
+     - a `srcset` of several image candidates or with a descriptor: the HTML Standard's own parsing algorithm splits
+       a `srcset` into candidates, which the representation does not state, and a `ReferencePath` holds one path per
+       attribute. Stating that algorithm, with a candidate's index in the key, would lift it.
+
+     Lifted from the earlier limit: dot segments anywhere in a path, a climb above the root (now external), any
+     percent-encoding that decodes to UTF-8, whitespace inside a path that its type replaces or collapses, an
+     `xml:base` in a document, and an `xml:base` on a `cp:manifest`, `cp:resources` or `cp:resource`, which IMS
+     Content Packaging 1.2 resolves by RFC 3986 (section 6.11.1, the Base class: "Relative references appearing
+     within the scope of a Base object shall then be interpreted according to the rules defined in RFC3986").
+
+     The corpus moves no verdict, counted by a scan of every manifest and every XML document of its 28 packages, and
+     again on 2026-11-06 over the 1,657 file-reference and `xml:base` attributes of every XML entry of its zips: no
      `cp:resource` href holds a query or a fragment; every `cp:file` href is a plain relative path; no element anywhere
-     holds an `xml:base`. Among the documents' references, `BPIG_22April` holds two media fragments
-     (`asl/item123.mp4#t=00:00:01,00:00:10.0` and `asl/item123.mp4#t=00:00:16.0`, whose path is an entry) and three
-     stimulus refs `../passages/unbelievableNight.xml` from `items/`, which name the entry
-     `passages/unbelievableNight.xml`; `maxfiles` holds three response-processing `template-location`s
-     `../rptemplates/match_correct.xml` and `../rptemplates/map_response.xml`, which name entries; no reference holds a
-     dot segment after a plain one or climbs above the root; `BBQsTest` holds thirteen absolute `http:` references in
-     `a@href` and `img@src`, external; the four `srcset` values are each one URL with no descriptor. This binds pantry
-     and plate alike. This is not a case of documents in conflict: Content Packaging states the launch parameters, and
-     RFC 3986 decides where a path ends. (Decided 2026-11-06 by W5 seat HP under the operator's standing ruling of
-     2026-11-05 that the spec wins.)
+     holds an `xml:base`; no relative href holds a `%`, a space, a tab, a backslash or a dot segment after a plain one.
+     Among the documents' references, `BPIG_22April` holds two media fragments (`asl/item123.mp4#t=00:00:01,00:00:10.0`
+     and `asl/item123.mp4#t=00:00:16.0`, whose path is an entry) and three stimulus refs
+     `../passages/unbelievableNight.xml` from `items/`, which name the entry `passages/unbelievableNight.xml`;
+     `maxfiles` holds three response-processing `template-location`s `../rptemplates/match_correct.xml` and
+     `../rptemplates/map_response.xml`, which name entries; no reference climbs above the root; `BBQsTest` holds
+     thirteen absolute `http:` references in `a@href` and `img@src`, external; the four `srcset` values are each one URL
+     with no descriptor. This binds pantry and plate alike. This is not a case of documents in conflict: Content
+     Packaging states the launch parameters and the base, and RFC 3986 decides where a path ends and what it names.
+     (Decided 2026-11-06 by W5 seat HP under the operator's standing ruling of 2026-11-05 that the spec wins; restated
+     2026-11-06 by RV seat P, on the review of PR #46, under Aiden's ruling of 2026-11-06 on percent-decoding.)
 
 103. **A document's file references are the attributes its vocabularies define as the location of a file, and each one
-     that resolves within the package names a file the manifest describes.** IMS Content Packaging 1.2 (Information
-     Model, Version 1.2 Public Draft v2.0, section 6.3, the InterchangePackage class; lines 409 and 411 of
-     `imscp_infov1p2pd2.txt`) says "b) Any file described in the Manifest using a URI that resolves to a location within
-     the InterchangePackage shall be included in the InterchangePackage" and "d) Files contained in the
-     InterchangePackage may contain internal references to other files (e.g., a HTML content file may reference a JPEG
-     content file ...). When a file contained in an InterchangePackage references another file using a URI that resolves
-     to a location within the InterchangePackage, the referenced file shall be described in the InterchangePackage’s
-     Manifest." Content Packaging does not say which attributes of a file are its references to other files. Each
-     vocabulary's own specification does, so the census reads them there:
+     that resolves within the package names a file the manifest describes; an `xml:base` is a base, resolved and never
+     a file reference.** IMS Content Packaging 1.2 (Information Model, Version 1.2 Public Draft v2.0, section 6.3, the
+     InterchangePackage class; lines 409 and 411 of `imscp_infov1p2pd2.txt`) says "b) Any file described in the
+     Manifest using a URI that resolves to a location within the InterchangePackage shall be included in the
+     InterchangePackage" and "d) Files contained in the InterchangePackage may contain internal references to other
+     files (e.g., a HTML content file may reference a JPEG content file ...). When a file contained in an
+     InterchangePackage references another file using a URI that resolves to a location within the InterchangePackage,
+     the referenced file shall be described in the InterchangePackage’s Manifest." Content Packaging does not say which
+     attributes of a file are its references to other files. Each vocabulary's own specification does, so the census
+     reads them there:
      - QTI's HTML subset: `a@href`, a hyperlink; `blockquote@cite` and `q@cite`, the quotation's source; `img@src`,
        `img@longdesc`, `object@data`, `audio@src`, `video@src`, `video@poster`, `source@src` and `track@src`, HTML's URL
        attributes; and `source@srcset`, HTML's list of image candidate strings, each candidate's URL one reference.
@@ -1607,18 +1667,30 @@ against it. A reading that is not an information-model-over-XSD case says which 
        SSML 1.1's `audio@src` and `lexicon@uri`.
 
      Left out, each because its value names no file as written: `cp:file@href` and `cp:resource@href`, the manifest's
-     own description of its files, which (b) binds; `xml:base`, a base and not a reference;
-     `qti-interaction-module@primary-path` and `@fallback-path`, a module location the AMD loader extends with `.js`
-     (the guide's `modules/lib/handlebarsV2.min`, line 8501); `qti-response-processing@template`, a template's
-     identifier (reading 51); and the URIs that identify rather than locate, `qti-custom-operator@definition`,
-     `qti-portable-custom-interaction@custom-interaction-type-identifier`, MathML's `definitionURL`, and the usage
-     data's `context` and `glossary`. A census attribute's value is read as reading 102 reads an href: only its path
-     names a file, and a path names a package entry only in the `resolvedHref` form. Upstream's census, from its own
-     specification's section 4.6, holds the HTML attributes, the `href` of `qti-stylesheet` and the four other
-     `qti-*-ref` files above, and `xi:include@href`; the rest are added here by the same rule, and the three refs'
-     `href` is the one path their targets are read through. This binds pantry and plate alike. This is not a case of
-     documents in conflict: Content Packaging states the rule, and each vocabulary says which of its attributes name
-     files. (Decided 2026-11-06 by W5 seat PG under the operator's standing ruling of 2026-11-05 that the spec wins.)
+     own description of its files, which (b) binds; `qti-interaction-module@primary-path` and `@fallback-path`, a
+     module location the AMD loader extends with `.js` (the guide's `modules/lib/handlebarsV2.min`, line 8501);
+     `qti-response-processing@template`, a template's identifier (reading 51); and the URIs that identify rather than
+     locate, `qti-custom-operator@definition`, `qti-portable-custom-interaction@custom-interaction-type-identifier`,
+     MathML's `definitionURL`, and the usage data's `context` and `glossary`.
+
+     An `xml:base` is left out too, as a base and not a reference: xml.xsd says it "provides a URI to be used as the
+     base for interpreting any relative URIs in the scope of the element on which it appears; its value is inherited"
+     (`~/.cache/gr8des/qti3/xsd/w3/xml.xsd`, lines 118 to 122), and the information model's `base` is "An optional URI
+     used to change the base for resolving relative URI for the scope of this object" (section 5.15.6). So it names no
+     file of its own: each `xml:base` is resolved against the base above it, the innermost in scope having "the highest
+     precedence" (RFC 3986, section 5.1), and every reference in its scope, the element's own attributes included,
+     resolves against it; in the manifest, IMS Content Packaging 1.2's Base class (section 6.11.1) does the same for a
+     `cp:file`'s and a `cp:resource`'s href.
+
+     A census attribute's value, and a manifest href, is resolved as reading 102 resolves an href: only its path names a
+     file, merged with the `xml:base` in scope or the document's own path, its dot segments removed and each segment
+     percent-decoded. Upstream's census, from its own specification's section 4.6, holds the HTML attributes, the `href`
+     of `qti-stylesheet` and the four other `qti-*-ref` files above, and `xi:include@href`; the rest are added here by
+     the same rule, and the three refs' `href` is the one path their targets are read through. This binds pantry and
+     plate alike. This is not a case of documents in conflict: Content Packaging states the rule, each vocabulary says
+     which of its attributes name files, and XML Base says what a base is. (Decided 2026-11-06 by W5 seat PG under the
+     operator's standing ruling of 2026-11-05 that the spec wins; the `xml:base` clause restated 2026-11-06 by
+     RV seat P, on the review of PR #46.)
 
 104. **A choice's identifier names it among its document's choices of its class, and names no item variable.** Each
      choice class of the information model says of its identifier "This identifier must not be used by any other
@@ -2216,8 +2288,35 @@ against it. A reading that is not an information-model-over-XSD case says which 
      only be formatted in the e, E, f, g, G, r or R styles" (section 7.30) is advice and is not read. (Decided
      2026-11-06 by RV seat G, on the review of PR #46, under the operator's standing ruling of 2026-11-05 that the spec
      wins; at most one conversion is the operator's decision of 2026-11-06 on item L4.)
+133. **A key text holds at most 646 characters: a stated limit of the representation, not a law of QTI.** No QTI
+     specification bounds the length of an identifier, an ID, an IDREF, an `xml:lang`, a title, an href, a map key or a
+     value's lexical form (readings 45 and 94 state that the productions state no length). pantry's representation still
+     refuses one past a bound, because grizzle puts every text that takes part in a cross-row equality in a B-tree key,
+     and PostgreSQL refuses a B-tree entry above `BTMaxItemSize`, 2,704 bytes at `BLCKSZ` 8192 (`nbtree.h`). Such a
+     text is copied into a field of type `keyText` (`src/qti/limits.ts`). keyText is a pattern of at most 646 code
+     points, the most grizzle's own rule, `keyTextBytes`, leaves room for beside the widest key's other fields: the
+     tree's predecessor axis on `Node` (a uuid, five naturals and a closed id beside the string value's running text,
+     whose NULL-able hidden columns add an 8-byte null bitmap). `limits.test.ts` holds 646 to fit and 647 to be refused.
+     The one bound applies evenly: every text the schema copies into a keyText field counts against it, so a
+     647-character `<p id>` is refused just as a 647-character resource identifier is, by the oracle's "Key text bound"
+     (rule `key-text-bound`) and by the database under the same rule: the import writes the copy's row whatever its
+     length, as it writes every copy (no host-side pre-filter leaves an over-long copy out), and keyText's own check
+     refuses it. `src/test/oracle.keys.test.ts` holds the database's rule, read from the import's rows, to the oracle's.
+     The law oracle reads the list of such copies from the schema's statements (`src/test/key-copies.ts`), and
+     `src/test/oracle.keys.test.ts` holds its verdict to the import's rows in 1-, 2-, 3- and 4-byte scripts. A key
+     text's namespace-name kin, `namespaceText`, holds at most 409 code points beside a uuid and a local name of 255,
+     and an entry path holds the key text's 646.
 
-<!-- Reading 133 is reserved. -->
+     The operator's ruling is a bound in UTF-8 bytes rather than code points: about 2,587 ASCII, 1,293 two-byte, 862 CJK
+     or 646 astral characters. It waits on grizzle. A text contract, the one byte bound grizzle has at `a2ff5eb`, is a
+     type of its own, so a containment can't copy an unbounded `Attribute.lexical` into it ("the sides' field types
+     differ"). grizzle has accepted a byte bound that is, like a pattern, no part of a text's type for beta.1,
+     `str.bytes(N)` (`docs/grizzle-findings.md`), and `keyText` becomes `str.bytes(keyTextBytes(...))` when it lands. On
+     what would lift the bound itself, grizzle's statement: "The bound is permanent for any key a foreign key references
+     or a put arbitrates on, while PostgreSQL's B-tree is its only unique index. For other keys it would be lifted by a
+     hash-exclusion key form, which grizzle does not plan." This binds pantry alone: plate holds no key. (Decided
+     2026-11-06 by RV seat S-ORACLE, on the review of PR #46 and Aiden's question of 2026-11-06, under the operator's
+     ruling that the bound is applied evenly.)
 
 134. **An item's or a test's languages are listed by its records' general categories, compared as language tags.** The
      QTI 3.0 Metadata binding says "There must be one value for each of the languages referred to by the language

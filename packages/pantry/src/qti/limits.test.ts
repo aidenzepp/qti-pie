@@ -1,26 +1,25 @@
 /**
- * The key-text bound against grizzle's own representability rule: the derivation's constants
- * against PostgreSQL's, and every key of the composed `Qti` that holds a key text against the
- * bound.
+ * The key-text bounds against grizzle's own representability rule, `keyTextBytes(fields)`, which
+ * measures a key's B-tree entry as the schema's compilation does: each bound fits beside its key's
+ * other fields and one code point more does not, and every key of the composed `Qti` that holds a
+ * text holds it at its kind's one bound and is representable.
  */
+import { keyTextBytes, natural, str, uuid } from "@bjornpagen/grizzle";
+import type { FieldBase } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
-import { Option, Predicate, Schema } from "effect";
+import { Option, Predicate, Result, Schema } from "effect";
+import { OpenLocal } from "#pantry/qti/attributes.ts";
 import {
   boundedTextPattern,
-  btreeEntryBytes,
-  btreeMaxItemSize,
-  keyDatums,
   keyText,
-  keyTextBound,
   keyTextCodePoints,
   keyTextPattern,
   localNameCodePoints,
   namespaceCodePoints,
+  namespaceText,
   namespaceTextPattern,
-  textDatum,
   widestTextKey,
 } from "#pantry/qti/limits.ts";
-import type { KeyDatum } from "#pantry/qti/limits.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 
 /**
@@ -189,16 +188,56 @@ const textBound = (field: Field): number | undefined => {
 };
 
 /**
- * The datum of each SQL type a key's other fields take, at grizzle's width and alignment
- * (`schema/representability.ts` `datumBound`).
+ * Whether a value is a grizzle field descriptor, which carries its SQL type.
+ *
+ * @param value - A relation's field as grizzle keeps it.
+ * @returns Whether it is a field.
  */
-const datumsBySql: ReadonlyMap<string, KeyDatum> = new Map<string, KeyDatum>([
-  ["bigint", keyDatums.bigint],
-  ["boolean", keyDatums.boolean],
-  ["code", keyDatums.code],
-  ["smallint", keyDatums.code],
-  ["uuid", keyDatums.uuid],
-]);
+const isField = (value: unknown): value is FieldBase =>
+  Predicate.hasProperty(value, "sql") && Predicate.isString(value.sql);
+
+/**
+ * The field descriptors of each stored relation of the composed schema, by relation and name.
+ */
+const descriptors: ReadonlyMap<string, ReadonlyMap<string, FieldBase>> = new Map(
+  Object.values(Qti.relations).flatMap((member) =>
+    member.kind === "relation"
+      ? [
+          [
+            member.name,
+            new Map(
+              Object.entries(member.fields).flatMap(
+                ([name, field]): (readonly [string, FieldBase])[] => {
+                  // An accumulated or generated field is stored as its own type, a drawn one as a natural.
+                  if (Predicate.hasProperty(field, "writing") && field.writing === "drawn") {
+                    return [[name, natural]];
+                  }
+
+                  const stored: unknown = Predicate.hasProperty(field, "field")
+                    ? field.field
+                    : field;
+
+                  return isField(stored) ? [[name, stored]] : [];
+                },
+              ),
+            ),
+          ] as const,
+        ]
+      : [],
+  ),
+);
+
+/**
+ * Measure a key by grizzle's rule: the bytes a text could still hold beside all of its fields.
+ *
+ * @param fields - The key's fields.
+ * @returns The bytes left, or the refusal's message where the entry can pass PostgreSQL's limit.
+ */
+const roomBeside = (fields: readonly FieldBase[]): Result.Result<number, string> =>
+  Result.try({
+    catch: String,
+    try: () => keyTextBytes(fields),
+  });
 
 /**
  * Write a term as a failure's message names it.
@@ -258,12 +297,9 @@ const kindOf = (
 };
 
 describe("qti/limits.ts", () => {
-  it("derives BTMaxItemSize as PostgreSQL states it, and writes the key text's pattern from its bound", () => {
-    // Oracle: the specification. PostgreSQL 19 refuses an over-long B-tree entry with "index row
-    // size … exceeds btree version 4 maximum 2704" at BLCKSZ 8192 (nbtutils.c, _bt_check_third_page,
-    // BTMaxItemSize); and the pattern's language is the bounded text the bound names, read by
-    // JavaScript's RegExp, whose grammar `str.regex` takes (ECMAScript under `su`).
-    assert.strictEqual(btreeMaxItemSize, 2704);
+  it("writes each bounded pattern as the literal of its bound, whose language is every text of that many code points", () => {
+    // Oracle: the pattern's language read by JavaScript's RegExp, whose grammar `str.regex` takes
+    // (ECMAScript under `su`): the bounded text the bound names, a newline and the empty text in.
     assert.strictEqual(keyTextPattern, boundedTextPattern(keyTextCodePoints));
     assert.strictEqual(namespaceTextPattern, boundedTextPattern(namespaceCodePoints));
     assert.isTrue(
@@ -279,39 +315,45 @@ describe("qti/limits.ts", () => {
     assert.isFalse(language.test("a".repeat(keyTextCodePoints + 1)));
   });
 
-  it("bounds a key text by the most code points one B-tree entry holds beside each shape of other datums", () => {
-    // Oracle: the rule restated as arithmetic, exhausted over a small scope: the bound fits and
-    // one code point more does not, and the covering shape's bound is the exported one.
-    // Bound: every multiset of 0 to 3 datums over uuid, smallint code and bigint (20 combinations).
-    const kinds: readonly KeyDatum[] = [keyDatums.uuid, keyDatums.code, keyDatums.bigint];
-    const combinations: KeyDatum[][] = [[]];
-    for (let size = 1; size <= 3; size += 1) {
-      for (const prefix of combinations.filter((combination) => combination.length === size - 1)) {
-        const last = kinds.indexOf(prefix.at(-1) ?? keyDatums.uuid);
-        for (const datum of kinds.slice(last)) {
-          combinations.push([...prefix, datum]);
-        }
-      }
-    }
+  it("bounds a key text and a namespace name by the most grizzle's keyTextBytes holds beside their widest keys, one code point more refused", () => {
+    // Oracle: grizzle's own rule (`keyTextBytes`, public/text.ts of the vendored engine), the
+    // measure the schema's compilation refuses an entry by: each bound's text fits beside its
+    // widest key's other fields, and the text of one code point more does not. The key text's
+    // widest key, the tree's predecessor axis, holds NULL-able hidden columns, whose 8-byte null
+    // bitmap `keyTextBytes` does not count, so its text fits where a byte is left (limits.ts).
+    // Bound: the key text beside `widestTextKey`, and the namespace name beside a uuid and a local
+    // name, `OpenAttributeName(node, uri, local)`.
+    assert.isAtLeast(
+      Result.getOrElse(roomBeside([...widestTextKey, keyText]), () => -1),
+      1,
+    );
+    assert.strictEqual(
+      Result.getOrElse(
+        roomBeside([...widestTextKey, str.regex("^.{0,255}.{0,255}.{0,137}$", "su")]),
+        () => -1,
+      ),
+      0,
+    );
+    assert.strictEqual(keyTextCodePoints, 646);
+    assert.strictEqual(boundedTextPattern(647), "^.{0,255}.{0,255}.{0,137}$");
 
-    assert.strictEqual(combinations.length, 20);
-    for (const others of combinations) {
-      const bound = keyTextBound(others);
-
-      assert.isAtMost(btreeEntryBytes([...others, textDatum(bound)]), btreeMaxItemSize);
-      assert.isAbove(btreeEntryBytes([...others, textDatum(bound + 1)]), btreeMaxItemSize);
-    }
-
-    assert.strictEqual(keyTextCodePoints, keyTextBound(widestTextKey));
-    assert.strictEqual(keyTextCodePoints, 648);
+    assert.isTrue(Result.isSuccess(roomBeside([uuid, OpenLocal, namespaceText])));
+    assert.match(
+      Result.getOrElse(
+        Result.flip(roomBeside([uuid, OpenLocal, str.regex("^.{0,255}.{0,155}$", "su")])),
+        () => "",
+      ),
+      /UnrepresentableKey/u,
+    );
+    assert.strictEqual(boundedTextPattern(namespaceCodePoints + 1), "^.{0,255}.{0,155}$");
+    assert.strictEqual(localNameCodePoints, 255);
   });
 
-  it("fits every index of the composed schema that holds a text within one B-tree entry, each text at its kind's one bound", () => {
-    // Oracle: grizzle's representability rule (schema/representability.ts keyLayout), restated
-    // in limits.ts, over every index a statement of `Qti` installs as `laws/model/plan.ts` lowers
-    // it: each key, each containment's two sides, and each family's member and owner, a counted
-    // family's hidden index beside its terms. A slice that puts a key text in a wider index fails
-    // here, and the shape and its bound in limits.ts widen in one place.
+  it("holds every text an index of the composed schema keys at its kind's one bound, in an entry grizzle represents", () => {
+    // Oracle: grizzle's representability rule (`keyTextBytes`) over every index a statement of
+    // `Qti` installs as `laws/model/plan.ts` lowers it: each key, each containment's two sides, and
+    // each family's member and owner, a counted family's hidden index beside its terms. A slice
+    // that puts a key text in a wider index fails here.
     // Bound: every relation's primary key and every statement of `Qti`.
     const keys: readonly IndexedKey[] = [
       ...[...relations.values()].map(({ name, primaryKey }): IndexedKey => ({
@@ -334,33 +376,15 @@ describe("qti/limits.ts", () => {
         Predicate.isString(term) && fields !== undefined ? fields[term] : undefined,
       );
       const texts = named.flatMap((field) => (field?.sql === "text" ? [field] : []));
-      const bounds = texts.map(textBound);
 
-      if (texts.length === 0 || bounds.includes(undefined)) {
+      if (texts.length === 0 || texts.map(textBound).includes(undefined)) {
         continue;
       }
 
       const where = `${label} ${relation}(${terms.map(termText).join(", ")})`;
-      const others = named.flatMap((field, at): readonly KeyDatum[] => {
-        if (field?.sql === "text") {
-          return [];
-        }
-
-        const term = terms[at];
-        const datum =
-          term === undefined || Predicate.isString(term)
-            ? datumsBySql.get(field?.sql ?? "")
-            : keyDatums.bigint;
-        assert.isDefined(datum, `${where}: a field of a measured type`);
-
-        return datum === undefined ? [] : [datum];
-      });
-      const datums = [
-        ...others,
-        ...Array.from({ length: hidden }, () => keyDatums.bigint),
-        ...bounds.map((bound) => textDatum(bound ?? 0)),
-      ];
-
+      const held = terms.map((term) =>
+        Predicate.isString(term) ? descriptors.get(relation)?.get(term) : natural,
+      );
       for (const [at, field] of named.entries()) {
         const term = terms[at];
         if (field?.sql === "text" && Predicate.isString(term)) {
@@ -375,7 +399,16 @@ describe("qti/limits.ts", () => {
         }
       }
 
-      assert.isAtMost(btreeEntryBytes(datums), btreeMaxItemSize, where);
+      assert.isFalse(held.includes(undefined), `${where}: every term a field of its relation`);
+      assert.isTrue(
+        Result.isSuccess(
+          roomBeside([
+            ...held.flatMap((field) => (field === undefined ? [] : [field])),
+            ...Array.from({ length: hidden }, () => natural),
+          ]),
+        ),
+        `${where}: grizzle represents its entry`,
+      );
       measured.add(`${relation}(${terms.map(termText).join(", ")})`);
     }
 
@@ -383,7 +416,6 @@ describe("qti/limits.ts", () => {
       "Document(package, path)",
       "OpenElementName(node, namespace)",
       "OpenAttributeName(node, uri, local)",
-      "FileHref(package, href)",
       "Resource(package, identifier)",
     ]) {
       assert.isTrue(measured.has(key), `measured ${key}`);

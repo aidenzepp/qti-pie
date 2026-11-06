@@ -636,6 +636,71 @@ const witness = (lang: string, value: string): readonly Insert[] => [
 ];
 
 /**
+ * Fold ASCII capitals to lower case, RFC 5646 §2.1.1's comparison of language tags
+ * (`Compute.lowerAscii`).
+ *
+ * @param text - The text.
+ * @returns It case-folded.
+ */
+const lowerAscii = (text: string): string =>
+  text.replaceAll(/[A-Z]/gu, (letter) => letter.toLowerCase());
+
+/**
+ * Collapse a text as XML Schema 1.0 Part 2 §4.3.6's whiteSpace `collapse` does an
+ * `xs:language`'s: each tab, line feed and carriage return a space, each run of spaces one, and
+ * none at either end.
+ *
+ * @param text - The text.
+ * @returns It collapsed.
+ */
+const collapsed = (text: string): string =>
+  text
+    .replaceAll(/[\t\n\r]/gu, " ")
+    .replaceAll(/ +/gu, " ")
+    .replace(/^ /u, "")
+    .replace(/ $/u, "");
+
+/**
+ * The general category every listing case's LOM language belongs to: the one that describes the
+ * first document, which {@link witness}'s row names.
+ */
+const listingGeneral = uuidOf(9);
+
+/**
+ * One R26 listing, the builder's rows for it: a LOM language of the first document's one general
+ * category, its tag its value case-folded as written (`LomLanguage`'s `E1_derived`), the category's
+ * language set over that tag, and the first document's stated `xml:lang` form with its one witness,
+ * whose value is the form collapsed and case-folded (`GeneralLang`'s `E1_derived`). Every row's own
+ * CHECKs and immediate keys hold, so the one key left to judge is the witness's containment into
+ * the category's languages.
+ *
+ * @param xmlLang - The document's `xml:lang` form.
+ * @param lomLang - The `lom:language` element's string value, as written.
+ * @returns The statements' rows.
+ */
+const listing = (xmlLang: string, lomLang: string): readonly Insert[] => [
+  {
+    rows: [{ fields: { carriers: 1, general: listingGeneral, lang: lowerAscii(lomLang) } }],
+    table: "resource_lom_language_set",
+  },
+  {
+    rows: [
+      {
+        fields: {
+          general: listingGeneral,
+          lang: lomLang,
+          node: uuidOf(6),
+          tag: lowerAscii(lomLang),
+        },
+        hidden: slotted("ResourceLomLanguageSet.carriers", onlySlot),
+      },
+    ],
+    table: "lom_language",
+  },
+  ...witness(xmlLang, lowerAscii(collapsed(xmlLang))),
+];
+
+/**
  * An `IdentityText` row of a `qti-description` under a governing type, with its IDREF token count
  * and their concatenation's end as a case states them.
  *
@@ -1081,6 +1146,42 @@ describe.skipIf(!hasLease)("qti/identity.db.test.ts, on the lease", () => {
         }
 
         assertAccepted(yield* verdictOf(client, witness(" fr\n", "fr")), "the collapsed value");
+      }).pipe(Effect.scoped),
+    leaseTestTimeoutMs,
+  );
+
+  it.effect(
+    "refuses a document language no LOM language of its category lists as written, by the witness's containment into the category's languages, and accepts one listed in another case (spec reading 134)",
+    () =>
+      // Oracle: the specification as a checker, spec reading 134: QTI 3.0 Metadata §2.7.1.3 ("There
+      // must be one value for each of the languages referred to by the language attributes"),
+      // compared as language tags, case-insensitively (RFC 5646 §2.1.1); `xml:lang` is an
+      // `xs:language`, collapsed (XML Schema 1.0 Part 2 §3.3.3), and a LOM language is
+      // `CharacterString`, an `xs:string` as written, so whitespace around it makes it no tag (RFC
+      // 5646 §2.1: "Whitespace is not permitted in a language tag"). PostgreSQL judges it by the
+      // foreign key `GeneralLang(general, value) to ResourceLomLanguageSet(general, lang)`, set
+      // immediate: 23503 on that key where the category lists no language the form states.
+      // Bound: the small scope exhausted, every pair of four forms of `xml:lang` (plain, padded,
+      // upper case and a region subtag) and six LOM languages (plain, padded with spaces, upper
+      // case, the region in lower case, a trailing line feed, and another language), 24 cases.
+      Effect.gen(function* listedAsWritten() {
+        const client = yield* loginSession;
+        const key = yield* constraintDescribed(
+          client,
+          "general_lang",
+          "foreign key GeneralLang(general, value) to ResourceLomLanguageSet(general, lang)",
+        );
+        for (const xmlLang of ["en", " en\t", "EN", "en-GB"]) {
+          for (const lomLang of ["en", " en ", "EN", "en-gb", "en\n", "fr"]) {
+            const label = `xml:lang ${JSON.stringify(xmlLang)} beside LOM ${JSON.stringify(lomLang)}`;
+            const refused = yield* verdictOf(client, listing(xmlLang, lomLang), [key]);
+            if (lowerAscii(collapsed(xmlLang)) === lowerAscii(lomLang)) {
+              assertAccepted(refused, label);
+            } else {
+              assertRefusedBy(refused, key, "23503", label);
+            }
+          }
+        }
       }).pipe(Effect.scoped),
     leaseTestTimeoutMs,
   );

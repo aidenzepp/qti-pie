@@ -9,11 +9,9 @@
  * is the one module under `src/grammar/` that imports grizzle (`purity.test.ts`), so the generators
  * stay pure and each schema module imports its rosters and relations from here.
  *
- * Six of them, {@link ChildGrammar}, {@link Follow}, {@link Last}, {@link Symbol},
- * {@link GoverningOf} and {@link AttributeGrammar}, declare `pack: "hex"`: a generator builds their
- * rows and the generators' tests review them, so the migration states each constant as one
- * bit-string literal under its row count and digest, which `grizzle check` decodes, rather than a
- * line per row (README, "Closed relations").
+ * The migration states each constant as one hex literal under its row count and digest, which
+ * `grizzle check` decodes, the one form grizzle writes (README, "Closed relations"); a generator
+ * builds the rows and the generators' tests review them.
  *
  * `Follow` and `Last` are keyed by their automaton ({@link ContentModel}), and `Symbol` by its
  * shared model ({@link SharedModel}), as the content grammar generates them (`content.ts`): a
@@ -441,7 +439,6 @@ export const ChildGrammar = closed.relation(
     position,
     version,
   })),
-  { pack: "hex" },
 );
 
 /**
@@ -453,7 +450,6 @@ export const Follow = closed.relation(
   { from: familyPosition, model: closedId(ContentModel), to: familyPosition },
   ["model", "from", "to"],
   grammar.content.follow.rows.map(({ from, model, to }) => ({ from, model, to })),
-  { pack: "hex" },
 );
 
 /**
@@ -465,7 +461,6 @@ export const Last = closed.relation(
   { model: closedId(ContentModel), position: familyPosition },
   ["model", "position"],
   grammar.content.last.rows.map(({ model, position }) => ({ model, position })),
-  { pack: "hex" },
 );
 
 /**
@@ -497,7 +492,6 @@ export const Symbol = closed.relation(
     model,
     position,
   })),
-  { pack: "hex" },
 );
 
 /**
@@ -829,7 +823,6 @@ export const GoverningOf = closed.relation(
   },
   ["version", "kind", "governs"],
   governingRows(),
-  { pack: "hex" },
 );
 
 /**
@@ -982,7 +975,6 @@ export const AttributeGrammar = closed.relation(
       use,
     })),
   ),
-  { pack: "hex" },
 );
 
 /**
@@ -1005,7 +997,6 @@ export const AttributeSlotOf = closed.relation(
       slot: position,
     })),
   ),
-  { pack: "hex" },
 );
 
 /**

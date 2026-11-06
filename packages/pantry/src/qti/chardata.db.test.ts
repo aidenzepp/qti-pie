@@ -6,10 +6,12 @@
  * A row whose own laws are row CHECKs is written through the author role (`db.apply`), and the
  * outcome is `invariant-rejected` with the expected law among its `laws` (membership, since a
  * merged native names several, C22). A row that breaks a deferred foreign key, or whose acceptance
- * by its own laws alone is the contract, is written by a direct SQL writer: the author login,
- * `SET ROLE` to the author role, at SERIALIZABLE, its foreign keys deferred and then the one under
- * test set immediate, so PostgreSQL's SQLSTATE and the constraint it names are the verdict, and the
- * transaction rolls back.
+ * by its own laws alone is the contract, is written by a direct SQL writer (grizzle's README,
+ * "Direct SQL access"): the author login, `SET ROLE` to the author role, at SERIALIZABLE, the row
+ * inserted into its table with every column a writer fills, its foreign keys deferred and then the
+ * one under test set immediate, so PostgreSQL's SQLSTATE and the constraint it names are the
+ * verdict, and the transaction rolls back. A role writes a table, never its own view of it, which
+ * it holds SELECT on alone (README, "Security model").
  *
  * Every case writes rows no stored node names, so none needs a document on the lease. The cases
  * over a stored tree (a node of an arm's kind without its arm row, a prefix declared twice on one
@@ -27,6 +29,7 @@ import { describe } from "vitest";
 import { loginConnection } from "#pantry/db/connection.ts";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import {
+  Flag,
   KindByNameUnder,
   KindNamespace,
   NodeKind,
@@ -37,8 +40,10 @@ import {
 } from "#pantry/grammar/install.ts";
 import { Document, OpenElementName, XmlStandalone } from "#pantry/qti/chardata.ts";
 import { AuthorApp } from "#pantry/qti/logins.ts";
+import { manifestPath } from "#pantry/qti/package.ts";
 import { Author } from "#pantry/qti/roles.ts";
 import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
+import { isUriReference } from "#pantry/test/uri-reference.ts";
 import { mathmlNamespace } from "#pantry/vocab/namespaces.ts";
 
 /**
@@ -115,10 +120,29 @@ const isServerError = (error: unknown): error is DatabaseError =>
   error instanceof Error && "code" in error && "constraint" in error;
 
 /**
- * A row a direct writer inserts into one of the author role's views: its columns as the view names
- * them, a closed id by its code.
+ * A row a direct writer inserts into one of `Qti`'s tables: every column it fills by name, a closed
+ * id by its code.
  */
 type SqlRow = Readonly<Record<string, string | number>>;
+
+/**
+ * Read the columns of one of `Qti`'s tables a direct writer fills: every live column PostgreSQL
+ * does not generate, a family's hidden ones among them (README, "Direct SQL access": a family's
+ * values are a direct writer's to fill).
+ *
+ * @param client - The session.
+ * @param table - The table.
+ * @returns The columns' names, none for a table the schema does not hold.
+ */
+const writtenColumnsOf = (client: Client, table: string) =>
+  rowsOf<{ readonly name: string }>(
+    client,
+    `SELECT a.attname AS name FROM pg_catalog.pg_attribute a
+      WHERE a.attrelid = pg_catalog.to_regclass($1) AND a.attnum > 0 AND NOT a.attisdropped
+        AND a.attgenerated = ''
+      ORDER BY a.attnum`,
+    [`${qtiSchema}.${table}`],
+  ).pipe(Effect.map((rows) => rows.map(({ name }) => name)));
 
 /**
  * The foreign keys from one of `Qti`'s tables into another, by constraint name, read from the
@@ -141,20 +165,26 @@ const foreignKeys = (client: Client, from: string, to: string) =>
   ).pipe(Effect.map((rows) => rows.map(({ conname }) => conname)));
 
 /**
- * Insert one row as the author role, every foreign key deferred, then set the given ones
- * immediate, and roll back: the server's verdict on the row by those constraints alone, or none
- * when the row's own laws and those constraints accept it.
+ * Insert one row into its table as the author role, every foreign key deferred, then set the given
+ * ones immediate, and roll back: the server's verdict on the row by those constraints alone, or
+ * none when the row's own laws and those constraints accept it.
  *
  * @param client - The session.
- * @param view - The author role's view to insert into.
- * @param row - The row.
+ * @param table - The table to insert into.
+ * @param row - The row, exactly the table's written columns; any other row fails the case before
+ *   any statement runs.
  * @param immediate - The constraints to check at once after the insert.
  * @returns The server's error, or none when every statement succeeded; fails with any other
  *   failure.
  */
-const deferredInsert = (client: Client, view: string, row: SqlRow, immediate: readonly string[]) =>
+const deferredInsert = (client: Client, table: string, row: SqlRow, immediate: readonly string[]) =>
   Effect.gen(function* insertDeferred() {
     const columns = Object.keys(row);
+    assert.sameMembers(
+      columns,
+      yield* writtenColumnsOf(client, table),
+      `${table}: the row fills every column a direct writer fills`,
+    );
     yield* rowsOf(client, "BEGIN ISOLATION LEVEL SERIALIZABLE");
 
     const outcome = yield* Effect.gen(function* statements() {
@@ -162,7 +192,7 @@ const deferredInsert = (client: Client, view: string, row: SqlRow, immediate: re
       yield* rowsOf(client, "SET CONSTRAINTS ALL DEFERRED");
       yield* rowsOf(
         client,
-        `INSERT INTO ${authorRole}.${view} (${columns.join(", ")}) VALUES (${columns
+        `INSERT INTO ${qtiSchema}.${table} (${columns.join(", ")}) VALUES (${columns
           .map((_, at) => `$${String(at + 1)}`)
           .join(", ")})`,
         Object.values(row),
@@ -180,6 +210,122 @@ const deferredInsert = (client: Client, view: string, row: SqlRow, immediate: re
 
     return outcome;
   });
+
+/**
+ * Read the type one of `Qti`'s columns casts its values to: a grizzle text domain for a field of a
+ * pattern contract, by the name PostgreSQL prints it with.
+ *
+ * @param client - The session.
+ * @param table - The table.
+ * @param column - The column.
+ * @returns The domain's name, schema-qualified.
+ */
+const domainOf = (client: Client, table: string, column: string) =>
+  rowsOf<{ readonly domain: string }>(
+    client,
+    `SELECT a.atttypid::pg_catalog.regtype::text AS domain FROM pg_catalog.pg_attribute a
+      WHERE a.attrelid = pg_catalog.to_regclass($1) AND a.attname = $2 AND NOT a.attisdropped`,
+    [`${qtiSchema}.${table}`, column],
+  ).pipe(
+    Effect.map(
+      (rows) =>
+        rows[0]?.domain ?? assert.fail(`${table}.${column}: the catalogue holds no such column`),
+    ),
+  );
+
+/**
+ * Cast one text to a domain as the author role, and roll back: PostgreSQL's verdict on the value by
+ * the domain's CHECK, as a statement casts a value before any row's constraint (README, "Direct SQL
+ * access": a value its pattern refuses is 23514, as the statement casts it).
+ *
+ * @param client - The session.
+ * @param domain - The domain, as {@link domainOf} names it.
+ * @param text - The value.
+ * @returns The server's error, or none when the domain admits the value; fails with any other
+ *   failure.
+ */
+const castTo = (client: Client, domain: string, text: string) =>
+  Effect.gen(function* cast() {
+    yield* rowsOf(client, "BEGIN");
+
+    const outcome = yield* Effect.gen(function* statements() {
+      yield* rowsOf(client, `SET LOCAL ROLE ${authorRole}`);
+      yield* rowsOf(client, `SELECT $1::${domain} AS value`, [text]);
+    }).pipe(
+      Effect.as(Option.none<DatabaseError>()),
+      Effect.catch((error) =>
+        isServerError(error.cause) ? Effect.succeed(Option.some(error.cause)) : Effect.fail(error),
+      ),
+    );
+    yield* rowsOf(client, "ROLLBACK");
+
+    return outcome;
+  });
+
+/**
+ * Judge many texts by a domain in one statement as the author role: `pg_input_is_valid` reads each
+ * through the domain's input, its CHECK among it, and answers false for a value the domain refuses.
+ *
+ * @param client - The session.
+ * @param domain - The domain, as {@link domainOf} names it.
+ * @param texts - The values.
+ * @returns Each value's verdict, in order.
+ */
+const admittedBy = (client: Client, domain: string, texts: readonly string[]) =>
+  Effect.gen(function* admitted() {
+    yield* rowsOf(client, "BEGIN");
+    yield* rowsOf(client, `SET LOCAL ROLE ${authorRole}`);
+
+    const rows = yield* rowsOf<{ readonly admitted: boolean; readonly text: string }>(
+      client,
+      `SELECT t.text, pg_catalog.pg_input_is_valid(t.text, $2) AS admitted
+         FROM pg_catalog.unnest($1::text[]) WITH ORDINALITY AS t(text, at)
+        ORDER BY t.at`,
+      [[...texts], domain],
+    );
+    yield* rowsOf(client, "ROLLBACK");
+
+    return rows;
+  });
+
+/**
+ * The characters the namespace name box is drawn over: a letter, a digit, every delimiter whose
+ * place RFC 3986's grammar fixes, and a space, which no URI reference holds.
+ */
+const uriCharacters = ["a", "1", ".", ":", "/", "?", "#", "%", "@", "[", "]", " "] as const;
+
+/**
+ * Every text of at most three of {@link uriCharacters}, the empty one first: the small scope of
+ * namespace names, exhausted.
+ */
+const shortUris: readonly string[] = [0, 1, 2, 3].flatMap((length) =>
+  Array.from({ length: uriCharacters.length ** length }, (_, at) =>
+    Array.from(
+      { length },
+      (_unused, place) =>
+        uriCharacters[Math.floor(at / uriCharacters.length ** place) % uriCharacters.length],
+    ).join(""),
+  ),
+);
+
+/**
+ * Namespace names by name, each a case RFC 3986's grammar decides by one of its rules: the QTI
+ * namespace, a URN, a relative reference with every part, an IP literal, and the refusals spec
+ * reading 131 names (an unclosed IP literal, a space, a percent sign without two hex digits, a port
+ * that is no digits) with an IRI's character beyond ASCII and leading whitespace.
+ */
+const namedUris = [
+  "http://www.imsglobal.org/xsd/imsqtiasi_v3p0",
+  "urn:x:y",
+  "../a/b;c?d=e#f",
+  "http://[::1]/",
+  "http://[bad",
+  "a b",
+  "%zz",
+  "http://h:x/",
+  "http://\u{4F8B}.jp/",
+  " urn:x",
+] as const;
 
 /**
  * A uuid no stored row holds: the arms' rows below name it as their node.
@@ -202,7 +348,12 @@ const codeOf = (handles: readonly string[], handle: string): number => {
 
 /**
  * Each arm and the document row, with a row of it whose node is no stored node, and the table its
- * containment into `Node` is installed on.
+ * containment into `Node` is installed on. The document row is the manifest's, lawful on its own
+ * CHECKs: every optional field its null object (no declaration, so `none` version and standalone
+ * and the empty encoding; the `none` resource type, which only `imsmanifest.xml` bears, by
+ * `RootOfType`), no family member yet (each count 0), no site naming it (so its context is the
+ * empty set and its nearest context the document node, by `E1_derived`), and its node's copied
+ * tuple the document node's.
  */
 const arms: readonly { readonly row: SqlRow; readonly table: string }[] = [
   { row: { node: strayNode, value: "a comment" }, table: "comment" },
@@ -210,15 +361,34 @@ const arms: readonly { readonly row: SqlRow; readonly table: string }[] = [
   { row: { node: strayNode, value: "<!DOCTYPE r>" }, table: "doctype" },
   {
     row: {
+      assembled: "false",
+      bindings: 0,
       charset: "UTF-8",
+      choices: 0,
+      context: "0".repeat(Flag.handles.length),
+      context_nearest: strayNode,
+      context_nearest_kind: codeOf(NodeKind.handles, "document"),
       encoding: "",
       export_charset: "UTF-8",
+      hottexts: 0,
+      idref_targets: 0,
+      ids: 0,
+      langs: 0,
       node: strayNode,
+      node_children: 1,
+      node_document: strayNode,
+      node_governs: codeOf(TypeName.handles, "none"),
+      node_kind: codeOf(NodeKind.handles, "document"),
+      node_parent_kind: codeOf(NodeKind.handles, "document"),
+      node_start: 0,
       package: strayNode,
-      path: "item.xml",
+      path: manifestPath,
       resource_type: codeOf(ResourceType.handles, "none"),
-      root_kind: codeOf(NodeKind.handles, "qti-assessment-item"),
+      root_kind: codeOf(NodeKind.handles, "cp:manifest"),
       standalone: codeOf(XmlStandalone.handles, "none"),
+      targeted_by: 0,
+      variables: 0,
+      version: codeOf(SchemaVersion.handles, "3.0.1"),
       xml_version: "none",
     },
     table: "document",
@@ -379,7 +549,8 @@ describe.skipIf(!hasLease)("qti/chardata.db.test.ts, on the lease", () => {
         () =>
           // Oracle: PostgreSQL, the `Document` CHECK (q1.02's no-declaration rule), judged as the
           // row is inserted.
-          // Bound: each field a declaration alone writes, set without one.
+          // Bound: each field a declaration alone writes, set without one, on the manifest's row,
+          // whose `none` resource type `RootOfType` admits, so the one check under test refuses it.
           Effect.gen(function* noDeclaration() {
             const db = yield* Db.open(AuthorApp.roles.author, {});
             const base = {
@@ -397,9 +568,9 @@ describe.skipIf(!hasLease)("qti/chardata.db.test.ts, on the lease", () => {
               nodeParentKind: "document",
               nodeStart: 0n,
               package: strayNode,
-              path: "item.xml",
+              path: manifestPath,
               resourceType: "none",
-              rootKind: "qti-assessment-item",
+              rootKind: "cp:manifest",
               standalone: "none",
               version: "3.0.0",
               xmlVersion: "none",
@@ -691,6 +862,42 @@ describe.skipIf(!hasLease)("qti/chardata.db.test.ts, on the lease", () => {
               );
 
               assert.isUndefined(refused, refused?.message);
+            }
+          }).pipe(Effect.scoped),
+      );
+
+      it.effect(
+        "refuses a namespace name that is no RFC 3986 URI reference by NamespaceUri's domain, and admits a relative reference, as the specification's grammar judges every name of the box (spec reading 131)",
+        () =>
+          // Oracle: the law oracle's own recogniser of RFC 3986's `URI-reference`, Appendix A's
+          // grammar run rule by rule (`#pantry/test/uri-reference.ts`), against Namespaces in XML
+          // 1.0 §3 ("either a URI reference … or an empty string") and §2.1 (RFC 3986): PostgreSQL
+          // judges `Namespace.uri`'s domain, `NamespaceUri`'s pattern as grizzle installs it, and a
+          // refused name's cast is 23514 by the domain's CHECK, named `check` (rule
+          // `namespace-name`).
+          // Bound: the small scope exhausted, every name of at most three of twelve characters (1,885
+          // names, the empty one among them), and ten names drawn by name; one refused and one
+          // admitted cast besides.
+          Effect.gen(function* namespaceName() {
+            const client = yield* loginSession;
+            const domain = yield* domainOf(client, "namespace", "uri");
+
+            const refused = Option.getOrUndefined(yield* castTo(client, domain, "http://[bad"));
+            assert.strictEqual(refused?.code, "23514", refused?.message ?? "admitted");
+            assert.strictEqual(refused?.constraint, "check");
+            assert.isTrue(
+              refused?.dataType !== undefined && domain.endsWith(refused.dataType),
+              `the refusal names the domain ${domain}: ${refused?.dataType ?? "none"}`,
+            );
+
+            const relative = Option.getOrUndefined(yield* castTo(client, domain, "../a/b;c?d=e#f"));
+            assert.isUndefined(relative, relative?.message);
+
+            for (const { admitted, text } of yield* admittedBy(client, domain, [
+              ...shortUris,
+              ...namedUris,
+            ])) {
+              assert.strictEqual(admitted, isUriReference(text), JSON.stringify(text));
             }
           }).pipe(Effect.scoped),
       );

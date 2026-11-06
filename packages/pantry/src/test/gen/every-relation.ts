@@ -9,8 +9,9 @@
  * the content that writes the overlays of its kind, each written the way its laws admit:
  *
  * - **the manifest** lists every entry once, with a LOM record whose identifier and title are its
- *   document's for each item and the test, dependencies, a qtiMetadata record, and a language
- *   string;
+ *   document's for each item and the test, dependencies, a qtiMetadata record, a language string,
+ *   and a learning resource type of the LOM vocabulary whose value, `exercise`, reading 122
+ *   allows;
  * - **the item** declares a context variable, mapped responses of an identifier and of each base type
  *   whose map keys have typed values (integer, float, point, pair and directed pair), an area
  *   mapping, outcomes with a normal range, a match table, an interpolation table and a record
@@ -19,7 +20,8 @@
  *   ARIA range and an IDREFS, an SSML fragment with a mark, a table whose cell's `headers` names
  *   its header, a printed variable whose base names a variable, a `q` with no quotation mark beside
  *   or inside it, template and feedback content, choice, hottext, hotspot, slider, custom (holding
- *   a foreign element) and portable custom interactions, and response processing;
+ *   a foreign element) and portable custom interactions, and response processing that holds a
+ *   `qti-equal-rounded`, a `qti-round-to` and a `qti-equal` with a `tolerance`;
  * - **a second item** whose response processing is a published template, which the test places three
  *   times;
  * - **the stimulus** has a doctype, a processing instruction, a comment, an `xml:base` and an
@@ -266,6 +268,25 @@ const itemOf = (members: MemberCounts): string =>
     '    <qti-set-outcome-value identifier="COUNT">',
     '      <qti-round><qti-variable identifier="SCORE"/></qti-round>',
     "    </qti-set-outcome-value>",
+    "    <qti-response-condition>",
+    "      <qti-response-if>",
+    "        <qti-and>",
+    '          <qti-equal-rounded rounding-mode="decimalPlaces" figures="2">',
+    '            <qti-variable identifier="SCORE"/>',
+    '            <qti-base-value base-type="float">1.5</qti-base-value>',
+    "          </qti-equal-rounded>",
+    '          <qti-equal tolerance-mode="absolute" tolerance="0.5 1">',
+    '            <qti-variable identifier="SCORE"/>',
+    '            <qti-base-value base-type="float">1.5</qti-base-value>',
+    "          </qti-equal>",
+    "        </qti-and>",
+    '        <qti-set-outcome-value identifier="SCORE">',
+    '          <qti-round-to rounding-mode="significantFigures" figures="3">',
+    '            <qti-variable identifier="SCORE"/>',
+    "          </qti-round-to>",
+    "        </qti-set-outcome-value>",
+    "      </qti-response-if>",
+    "    </qti-response-condition>",
     '    <qti-lookup-outcome-value identifier="LEVEL"><qti-variable identifier="COUNT"/></qti-lookup-outcome-value>',
     '    <qti-lookup-outcome-value identifier="GRADE"><qti-variable identifier="SCORE"/></qti-lookup-outcome-value>',
     "    <qti-response-condition>",
@@ -535,6 +556,12 @@ const manifestOf = (bulk: Bulk | undefined): string =>
     '        <imsmd:title><imsmd:string language="en">Every relation</imsmd:string></imsmd:title>',
     "        <imsmd:language>en</imsmd:language>",
     "      </imsmd:general>",
+    "      <imsmd:educational>",
+    "        <imsmd:learningResourceType>",
+    "          <imsmd:source>LOMv1.0</imsmd:source>",
+    "          <imsmd:value>exercise</imsmd:value>",
+    "        </imsmd:learningResourceType>",
+    "      </imsmd:educational>",
     "    </imsmd:lom>",
     "  </metadata>",
     "  <organizations/>",

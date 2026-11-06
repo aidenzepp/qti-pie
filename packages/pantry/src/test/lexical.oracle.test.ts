@@ -21,10 +21,11 @@
  * types must match both. Every disagreement is recorded below ({@link recorded}) with its reason,
  * or the test fails; a record no disagreement matches fails too.
  *
- * Gated on the XSD cache. It writes `work/xsd-lexical/`: the batches, `probes.tsv` (every probe)
- * and `differences.tsv` (every disagreement, with the record that classifies it).
+ * Gated on the XSD cache. Each run writes a folder of its own, `work/xsd-lexical-*`
+ * (`#pantry/test/scratch-directory.ts`), removed when the run ends: the batches, `probes.tsv`
+ * (every probe) and `differences.tsv` (every disagreement, with the record that classifies it). A
+ * fixed folder let two runs at once remove each other's batches under xmllint.
  */
-import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, layer } from "@effect/vitest";
 import { matching } from "@grizzle/testing/pattern";
@@ -41,6 +42,7 @@ import { openClasses, schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import { loadXsd, nameKey, xsdContents } from "#pantry/test/gen/grammar.ts";
 import type { XsdName } from "#pantry/test/gen/grammar.ts";
+import { scratchDirectory } from "#pantry/test/scratch-directory.ts";
 import { driverImports, driverNamespace, writeXsdOracle } from "#pantry/test/xsd-catalog.ts";
 import type { ProbeDeclaration, XsdOracle } from "#pantry/test/xsd-catalog.ts";
 import { checkCache } from "#pantry/vocab/derive/sources.ts";
@@ -50,11 +52,6 @@ import { globalKinds } from "#pantry/vocab/inventory/vocabularies.ts";
 import type { Domain, ValueType } from "#pantry/vocab/inventory/types.ts";
 import { OracleLayer, xmllintValidate } from "#pantry/xml/oracle.ts";
 import type { XsdMessage } from "#pantry/xml/oracle.ts";
-
-/**
- * The folder this test writes to, `packages/pantry/work/xsd-lexical`.
- */
-const outputRoot = path.resolve(import.meta.dirname, "..", "..", "work", "xsd-lexical");
 
 /**
  * The timeout, in milliseconds, for the one test: one `xmllint` run per version over every probe,
@@ -651,6 +648,20 @@ const familiesOf = (domain: ValueDomain, xsd: Option.Option<Domain>): readonly s
 const drawablePattern = 400;
 
 /**
+ * Whether a pattern repeats without a bound outside its classes and escapes (`*`, `+` or `{n,}`),
+ * which the pattern generator refuses: every repetition it draws states its bound (`matching`,
+ * `@grizzle/testing/pattern`). It refuses only after building every class the pattern names, and
+ * XML's `Char` class, astral plane included, is over a million characters, so a refusal took
+ * seconds per domain (xs:anySimpleType, xs:normalizedString, URLDType and alphabet.datatype). Such
+ * a domain is probed by its families and enumerations alone, as a refused draw left it.
+ *
+ * @param pattern - A domain's compiled pattern.
+ * @returns Whether it repeats without a bound.
+ */
+const repeatsUnbounded = (pattern: string): boolean =>
+  /[*+]|\{\d+,\}/u.test(pattern.replaceAll(/\\.|\[(?:\\.|[^\\\]])*\]/gsu, ""));
+
+/**
  * Read a numeric literal as a number: `INF`, `+INF` and `-INF` as the infinities, anything else as
  * JavaScript's `Number` reads it after trimming, so `NaN` and every non-number read `NaN`.
  *
@@ -776,7 +787,7 @@ const drawnOf = (domain: ValueDomain): readonly string[] => {
   }
 
   const drawn =
-    domain.pattern.length > drawablePattern
+    domain.pattern.length > drawablePattern || repeatsUnbounded(domain.pattern)
       ? []
       : Result.getOrElse(
           Result.try(() =>
@@ -1336,12 +1347,14 @@ const probesOf = Effect.fn("lexical.probesOf")(function* probesOf(grammar: Compo
  * Judge one version's probes: write them as one batch, validate it, and compare each probe's
  * outcome with the grammar's verdict.
  *
+ * @param outputRoot - The run's folder, which the batches are written to.
  * @param oracle - The oracle's inputs.
  * @param version - The version.
  * @param probes - Its probes.
  * @returns One report line per probe, and the disagreements.
  */
 const judgeBatch = Effect.fn("lexical.judgeBatch")(function* judgeBatch(
+  outputRoot: string,
   oracle: XsdOracle,
   version: SchemaVersion,
   probes: readonly Probe[],
@@ -1517,20 +1530,21 @@ describe.skipIf(!cached)("lexical.oracle.test.ts, the domains against xmllint", 
         Effect.gen(function* compareDomains() {
           const fs = yield* FileSystem.FileSystem;
           const grammar = yield* Effect.fromResult(composed()).pipe(Effect.orDie);
-
-          yield* fs.remove(outputRoot, { force: true, recursive: true });
-          yield* fs.makeDirectory(outputRoot, { recursive: true });
+          const outputRoot = yield* scratchDirectory("xsd-lexical-");
 
           const { declarations, probes, unprobed } = yield* probesOf(grammar);
           const oracle = yield* writeXsdOracle(`${outputRoot}/oracle`, declarations);
+          // Each version's batch is its own xmllint process, so the two run at once.
           const judged = yield* Effect.all(
             schemaVersions.map((version) =>
               judgeBatch(
+                outputRoot,
                 oracle,
                 version,
                 probes.filter((probe) => probe.version === version),
               ),
             ),
+            { concurrency: "unbounded" },
           );
           const disagreements = judged.flatMap((held) => held.disagreements);
           const matches = disagreements.map(recordOf);
@@ -1590,7 +1604,7 @@ describe.skipIf(!cached)("lexical.oracle.test.ts, the domains against xmllint", 
             [],
             "every record still matches a disagreement",
           );
-        }),
+        }).pipe(Effect.scoped),
       { timeout: testTimeoutMs },
     );
   });
@@ -1601,7 +1615,7 @@ describe.skipIf(!cached)("lexical.oracle.test.ts, libxml2's recorded departures"
     it.effect("libxml2 still departs from XML Schema as each xmllint record says", () =>
       Effect.gen(function* proveDepartures() {
         const fs = yield* FileSystem.FileSystem;
-        const directory = `${outputRoot}-proofs`;
+        const directory = yield* scratchDirectory("xsd-lexical-proofs-");
         const oracle = yield* writeXsdOracle(`${directory}/oracle`);
         const departed: string[] = [];
 
@@ -1635,7 +1649,7 @@ describe.skipIf(!cached)("lexical.oracle.test.ts, libxml2's recorded departures"
         }
 
         assert.deepStrictEqual(departed, [], "every recorded libxml2 departure still holds");
-      }),
+      }).pipe(Effect.scoped),
     );
   });
 });

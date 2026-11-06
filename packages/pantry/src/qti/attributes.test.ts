@@ -35,12 +35,9 @@ import {
 } from "#pantry/qti/attributes.ts";
 import { chardataLaws } from "#pantry/qti/chardata.ts";
 import {
-  keyDatums,
-  keyTextBound,
   localNameCodePoints,
   namespaceCodePoints,
   namespaceTextPattern,
-  textDatum,
 } from "#pantry/qti/limits.ts";
 import { nodeLaws } from "#pantry/qti/node.ts";
 import { Qti } from "#pantry/qti/schema.ts";
@@ -129,13 +126,11 @@ describe("qti/attributes.ts, declared", () => {
   });
 
   it("writes each bounded pattern as the literal of its derived bound", () => {
-    // Oracle: `#pantry/qti/limits.ts`, which restates grizzle's representability rule: an open
-    // attribute's namespace takes the schema-wide namespace bound, what `(node, uri, local)` leaves
-    // beside a uuid and a local name, and its local name the one counted repetition of that bound.
-    assert.strictEqual(
-      namespaceCodePoints,
-      keyTextBound([keyDatums.uuid, textDatum(localNameCodePoints)]),
-    );
+    // Oracle: `#pantry/qti/limits.ts`, whose bounds `limits.test.ts` holds to grizzle's
+    // `keyTextBytes`: an open attribute's namespace takes the schema-wide namespace bound, what
+    // `(node, uri, local)` leaves beside a uuid and a local name, and its local name the one
+    // counted repetition of that bound.
+    assert.strictEqual(namespaceCodePoints, 409);
     assert.strictEqual(OpenAttributeName.fields.uri.desc.source, namespaceTextPattern);
     assert.strictEqual(OpenAttributeName.fields.elementNamespace.desc.source, namespaceTextPattern);
     assert.match(OpenAttributeName.fields.local.desc.source, /\{0,(?<rest>\d+)\}\$$/u);
