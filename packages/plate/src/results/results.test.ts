@@ -1161,6 +1161,61 @@ describe("results", () => {
   );
 
   it.effect(
+    "refuses a session whose item holds saved responses that do not fit the item's declarations, naming that item",
+    () =>
+      Effect.gen(function* misfitSavedResponses() {
+        const single = yield* fixtureItem("p1-single-choice.xml");
+        const test = yield* acceptTest("saved", [
+          part("P1", individual, [
+            ref("one", "p1-single-choice.xml"),
+            ref("two", "p1-single-choice.xml"),
+          ]),
+        ]);
+        const input = (saved: Responses): ResultsInput => ({
+          context,
+          items: new Map([
+            ["one", single],
+            ["two", single],
+          ]),
+          kind: "test",
+          session: storedSession(test, [
+            sessionItem(single, "one", 1, saving({ RESPONSE: identifiers("A") })),
+            sessionItem(single, "two", 2, saving(saved)),
+          ]),
+          test,
+        });
+        const misfits = {
+          "a response the item does not score": { OTHER: identifiers("A") },
+          "another base type": {
+            RESPONSE: {
+              baseType: "string",
+              cardinality: "single",
+              values: [{ baseType: "string", value: "A" }],
+            },
+          },
+          "two values where one is declared": { RESPONSE: identifiers("A", "B") },
+        } satisfies Readonly<Record<string, Responses>>;
+
+        assert.deepStrictEqual(failureTag(input({ RESPONSE: identifiers("B") })), Option.none());
+        for (const [name, saved] of Object.entries(misfits)) {
+          const failure = Option.getOrElse(Result.getFailure(results(input(saved))), () =>
+            assert.fail(`results wrote a session holding ${name}`),
+          );
+          assert.strictEqual(failure._tag, "InvalidSession", name);
+          assert.strictEqual(
+            failure._tag === "InvalidSession" ? failure.stage : "",
+            "decode",
+            name,
+          );
+
+          const issue = failure._tag === "InvalidSession" ? failure.issue : "";
+          assert.include(issue, JSON.stringify("two"), name);
+          assert.notInclude(issue, JSON.stringify("one"), name);
+        }
+      }),
+  );
+
+  it.effect(
     "refuses items that do not hold the session's items, and a session that does not fit its test",
     () =>
       Effect.gen(function* refusedSession() {

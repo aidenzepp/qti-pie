@@ -1,5 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
+import { encodeSession } from "#plate/codec/session.ts";
 import { configure } from "#plate/configuration.ts";
 import type { Configuration } from "#plate/configuration.ts";
 import { encodeIntent } from "#plate/form/intent.ts";
@@ -683,6 +684,66 @@ describe("advance", () => {
         assert.isTrue(Option.isNone(refusal.sequenceIndex));
       }
     }),
+  );
+
+  it.effect(
+    "refuses a step whose responses do not fit the current item's declarations, two values in a single among them, and saves nothing",
+    () =>
+      Effect.gen(function* misfitStep() {
+        const given = yield* delivery({ navigation: "nonlinear", submission: "individual" });
+        const configuration = yield* configure({});
+        const session = started(given, configuration);
+        const stored = (): string => JSON.stringify(Result.getOrThrow(encodeSession(session)));
+        const before = stored();
+        const misfits = {
+          "a multiple for a single": { RESPONSE: ticked("A", "B") },
+          "a response the item does not score": { OTHER: chosen("A") },
+          "another base type": {
+            RESPONSE: {
+              baseType: "string",
+              cardinality: "single",
+              values: [{ baseType: "string", value: "A" }],
+            },
+          },
+          "two values in a single": {
+            RESPONSE: {
+              baseType: "identifier",
+              cardinality: "single",
+              values: [
+                { baseType: "identifier", value: "A" },
+                { baseType: "identifier", value: "B" },
+              ],
+            },
+          },
+        } satisfies Readonly<Record<string, Responses>>;
+        const intents: readonly Intent[] = [
+          { kind: "next" },
+          { kind: "go", sequenceIndex: 2 },
+          { kind: "submit-item" },
+          { kind: "end-part" },
+        ];
+
+        for (const intent of intents) {
+          const post = (responses: Responses) =>
+            advance(given.test, given.items, session, { intent, responses }, configuration, {
+              now: after(1),
+            });
+          accepted(post(answer));
+          for (const [name, responses] of Object.entries(misfits)) {
+            const where = `${encodeIntent(intent)} with ${name}`;
+            const failure = Option.getOrElse(Result.getFailure(post(responses)), () =>
+              assert.fail(`advance accepted ${where}`),
+            );
+            assert.strictEqual(failure._tag, "StepResponseMisfit", where);
+            if (failure._tag === "StepResponseMisfit") {
+              assert.strictEqual(failure.response, Object.keys(responses)[0], where);
+              assert.strictEqual(failure.sequenceIndex, 1, where);
+            }
+          }
+        }
+
+        assert.strictEqual(stored(), before);
+      }),
   );
 
   it.effect("passes an invalid time and a missing item through, as no rule of the test", () =>

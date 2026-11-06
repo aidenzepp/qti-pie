@@ -1,8 +1,10 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
+import { encodeSession } from "#plate/codec/session.ts";
 import { configure } from "#plate/configuration.ts";
 import { navigationState, renderNavigation } from "#plate/navigation.ts";
 import type { NavigationState } from "#plate/navigation.ts";
+import { results } from "#plate/results/results.ts";
 import { allowedIntents } from "#plate/session/intents.ts";
 import type { Intent, TestSession } from "#plate/session/session.ts";
 import { current, permits, startTest } from "#plate/session/start.ts";
@@ -46,28 +48,75 @@ const itemXml = [
 ].join("");
 
 /**
- * Write the text of a test of one nonlinear part with individual submission and one section,
- * whose item refs `i1` to `i<count>` all name `choice.xml` beside the test.
- *
- * @param count How many item refs the section holds.
- * @returns The test's text.
+ * How a test holds its item refs: all in one section of one part, each in a part of its own, or
+ * each in a section of its own, the sections siblings in one part. A read that finds a ref by
+ * walking the test again pays for every part, section and ref before it, so each arrangement gives
+ * that walk a different cost per ref.
  */
-const testXml = (count: number): string =>
+type Arrangement = "one part" | "parts" | "sections";
+
+/**
+ * Write the text of one nonlinear test part with individual submission.
+ *
+ * @param identifier The part's identifier.
+ * @param sections The text of its sections.
+ * @returns The part's text.
+ */
+const partXml = (identifier: string, sections: readonly string[]): string =>
   [
-    '<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="T" title="T">',
-    '<qti-test-part identifier="P" navigation-mode="nonlinear" submission-mode="individual">',
-    '<qti-assessment-section identifier="S" title="Section" visible="true">',
-    ...Array.from(
-      { length: count },
-      (_, index) => `<qti-assessment-item-ref identifier="i${index + 1}" href="choice.xml"/>`,
-    ),
-    "</qti-assessment-section></qti-test-part></qti-assessment-test>",
+    `<qti-test-part identifier="${identifier}" navigation-mode="nonlinear" submission-mode="individual">`,
+    ...sections,
+    "</qti-test-part>",
   ].join("");
 
 /**
- * A test of many item refs and a session of it, just started: item 1 is current.
+ * Write the text of one section.
+ *
+ * @param identifier The section's identifier.
+ * @param refs The sequence indices of the item refs it holds, each ref `i<index>`.
+ * @returns The section's text.
+ */
+const sectionXml = (identifier: string, refs: readonly number[]): string =>
+  [
+    `<qti-assessment-section identifier="${identifier}" title="Section" visible="true">`,
+    ...refs.map((index) => `<qti-assessment-item-ref identifier="i${index}" href="choice.xml"/>`),
+    "</qti-assessment-section>",
+  ].join("");
+
+/**
+ * Write the text of a test whose item refs `i1` to `i<count>`, in that order, all name
+ * `choice.xml` beside the test.
+ *
+ * @param count How many item refs the test holds.
+ * @param arrangement How it holds them: in one section of one part unless given.
+ * @returns The test's text.
+ */
+const testXml = (count: number, arrangement: Arrangement = "one part"): string => {
+  const indices = Array.from({ length: count }, (_, index) => index + 1);
+  const parts = {
+    "one part": () => [partXml("P", [sectionXml("S", indices)])],
+    parts: () => indices.map((index) => partXml(`P${index}`, [sectionXml(`S${index}`, [index])])),
+    sections: () => [
+      partXml(
+        "P",
+        indices.map((index) => sectionXml(`S${index}`, [index])),
+      ),
+    ],
+  } satisfies Readonly<Record<Arrangement, () => readonly string[]>>;
+
+  return [
+    '<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="T" title="T">',
+    ...parts[arrangement](),
+    "</qti-assessment-test>",
+  ].join("");
+};
+
+/**
+ * A test of many item refs, the items it delivers by ref, and a session of it, just started: item 1
+ * is current.
  */
 interface Sitting {
+  readonly items: ReadonlyMap<string, Accepted>;
   readonly session: TestSession;
   readonly test: AcceptedTest;
 }
@@ -76,15 +125,16 @@ interface Sitting {
  * Open the test of {@link testXml} and its one item, and start a session of it.
  *
  * @param count How many item refs the test holds.
- * @returns The test and the session.
+ * @param arrangement How the test holds them.
+ * @returns The test, its items and the session.
  */
-const sittingOf = Effect.fnUntraced(function* sittingOf(count: number) {
+const sittingOf = Effect.fnUntraced(function* sittingOf(count: number, arrangement: Arrangement) {
   const encoder = new TextEncoder();
   const itemVerdict = yield* open("tests/choice.xml", encoder.encode(itemXml));
   const item = Option.getOrElse(acceptedItem(itemVerdict), () =>
     assert.fail(`choice.xml is ${itemVerdict.verdict}, not an accepted item`),
   );
-  const testVerdict = yield* open("tests/T.xml", encoder.encode(testXml(count)));
+  const testVerdict = yield* open("tests/T.xml", encoder.encode(testXml(count, arrangement)));
   const test =
     (testVerdict.verdict === "accepted" || testVerdict.verdict === "accepted-with-unsupported") &&
     testVerdict.kind === "test"
@@ -101,7 +151,7 @@ const sittingOf = Effect.fnUntraced(function* sittingOf(count: number) {
     (failure) => assert.fail(`startTest refused: ${failure.message}`),
   );
 
-  return { session, test } satisfies Sitting;
+  return { items, session, test } satisfies Sitting;
 });
 
 /**
@@ -115,12 +165,17 @@ interface Sittings {
 /**
  * Open the smaller and the larger sitting.
  *
+ * @param fewer The item refs of the smaller sitting: {@link fewerRefs} unless given.
+ * @param arrangement How each test holds its item refs: in one section of one part unless given.
  * @returns Both sittings.
  */
-const sittings = Effect.fnUntraced(function* sittings() {
+const sittings = Effect.fnUntraced(function* sittings(
+  fewer: number = fewerRefs,
+  arrangement: Arrangement = "one part",
+) {
   return {
-    fewer: yield* sittingOf(fewerRefs),
-    more: yield* sittingOf(fewerRefs * growthFactor),
+    fewer: yield* sittingOf(fewer, arrangement),
+    more: yield* sittingOf(fewer * growthFactor, arrangement),
   } satisfies Sittings;
 });
 
@@ -302,4 +357,57 @@ describe("the navigation reads, read time", () => {
       }),
     growthTimeoutMs,
   );
+});
+
+/**
+ * Write a closed session of a sitting in the form the host stores, and give a read that writes its
+ * result.
+ *
+ * @param sitting The sitting.
+ * @returns A read that writes the session's result, failing the test on a refusal.
+ */
+const reportOf = ({ items, session, test }: Sitting): (() => void) => {
+  const stored = Result.getOrThrow(encodeSession(closed(session)));
+
+  return () => {
+    Result.getOrThrow(results({ context: {}, items, kind: "test", session: stored, test }));
+  };
+};
+
+/**
+ * The `results` checks: each arrangement of item refs, the item refs of its smaller test, before
+ * a test with {@link growthFactor} times as many, and the words its title names it with.
+ *
+ * A result resolves each item's session control. Resolving it by walking the test up to the ref
+ * costs a step per part, section and ref before it, which shows above the linear work of writing
+ * each item's result only at these sizes: soonest where each ref sits in a part of its own, latest
+ * where every ref shares one section.
+ */
+const resultChecks = [
+  { arrangement: "one part", fewer: 4000, where: "in one part" },
+  { arrangement: "parts", fewer: 1000, where: "each in its own part" },
+  { arrangement: "sections", fewer: 2000, where: "each in its own section" },
+] as const satisfies readonly {
+  readonly arrangement: Arrangement;
+  readonly fewer: number;
+  readonly where: string;
+}[];
+
+describe("results, write time", () => {
+  for (const { arrangement, fewer, where } of resultChecks) {
+    it.effect(
+      `results reports a closed session of 8 times the item refs, ${where}, in under 32 times the time`,
+      () =>
+        Effect.gen(function* resultsInLinearTime() {
+          const pair = yield* sittings(fewer, arrangement);
+          const growth = yield* growthRatio(reportOf(pair.fewer), reportOf(pair.more));
+          assert.isBelow(
+            growth,
+            growthLimit,
+            `results over 8 times the item refs, ${where}, took ${growth.toFixed(1)} times as long`,
+          );
+        }),
+      growthTimeoutMs,
+    );
+  }
 });
