@@ -11,6 +11,7 @@
  * `m:bind` whose head is a content expression is judged by its head instead (part 4): the
  * qualifiers the head admits, in the REC's order, and the operands its class allows.
  */
+import type { Uuid } from "@bjornpagen/grizzle";
 import { Effect } from "effect";
 import { ImportRefused } from "#pantry/import/refusal.ts";
 import { Rows } from "#pantry/import/tree.ts";
@@ -25,7 +26,8 @@ import {
 } from "#pantry/schema/mathml/models.ts";
 import type { Model, Particle } from "#pantry/schema/mathml/models.ts";
 import { qualifierOrder } from "#pantry/schema/mathml/operators.ts";
-import { Edge, Node } from "#pantry/schema/node.ts";
+import { MathmlCbytes } from "#pantry/schema/mathml/attributes.ts";
+import { Edge, Node, TextNode, Ws } from "#pantry/schema/node.ts";
 
 /**
  * The handles of the MathML kinds: the keys of the XSD inventory leaf, `m:semantics.ci` included.
@@ -470,15 +472,47 @@ const refusal = (
 };
 
 /**
+ * Refuse the first `MathmlCbytes` row whose value is not its `m:cbytes` node's text with the
+ * whitespace removed (spec MA11, `text-copy`, spec 4.7).
+ *
+ * No law states a copy of text, so the guard reads the node's `text` and `ws` children in
+ * `position` order, joins their values and removes every space, tab, newline and carriage return.
+ *
+ * @param rows - The rows an import built for one package.
+ * @param edges - Every `Edge` row by parent id, each list in `position` order.
+ * @returns The refusal for the first row, in the order the rows were added, or nothing.
+ */
+const cbytesFinding = (
+  rows: Rows,
+  edges: ReadonlyMap<string, readonly { readonly child: Uuid }[]>,
+): ImportRefused | undefined => {
+  const texts = new Map(
+    [...Rows.of(rows, TextNode), ...Rows.of(rows, Ws)].map((row) => [row.id, row.value]),
+  );
+  for (const row of Rows.of(rows, MathmlCbytes)) {
+    const text = (edges.get(row.id) ?? []).map((edge) => texts.get(edge.child) ?? "").join("");
+    const copy = text.replaceAll(/[ \t\n\r]/gu, "");
+    if (copy !== row.value) {
+      return new ImportRefused({
+        detail: `m:cbytes ${row.id} holds the value ${JSON.stringify(row.value)}, but its text with the spaces, tabs and line breaks removed is ${JSON.stringify(copy)}. Make the value the node's text with its whitespace removed.`,
+        rule: "text-copy",
+      });
+    }
+  }
+
+  return undefined;
+};
+
+/**
  * Refuse the first MathML node, in document order, whose element children break the content model
- * of its kind.
+ * of its kind, then the first `m:cbytes` whose value does not copy its text.
  *
  * It reads every `Node` row whose kind is a MathML handle, and for each the element children its
  * `Edge` rows give in `position` order. Nodes are visited in preorder from each tree's root, so
  * the first finding is the one earliest in the document. No row is written.
  *
  * @param rows - The rows an import built for one package.
- * @returns Nothing when every MathML node matches its model.
+ * @returns Nothing when every MathML node matches its model and every `m:cbytes` copies its text.
  */
 export const mathmlGuards = Effect.fn("mathmlGuards")(function* mathmlGuards(
   rows: Rows,
@@ -512,5 +546,10 @@ export const mathmlGuards = Effect.fn("mathmlGuards")(function* mathmlGuards(
         pending.push(child);
       }
     }
+  }
+
+  const copy = cbytesFinding(rows, edges);
+  if (copy !== undefined) {
+    yield* copy;
   }
 });
