@@ -36,7 +36,7 @@ import {
 } from "effect";
 import type { ReaderRefusal, WellFormednessError } from "@qti-pie/crust/errors.ts";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
-import { contentModelOf, noSharedModel } from "#pantry/grammar/content.ts";
+import { noSharedModel } from "#pantry/grammar/content.ts";
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import type { NotQti3, UnmodeledVocabulary } from "#pantry/model/shred.ts";
@@ -3310,15 +3310,16 @@ const contentOrderLaws: Readonly<
 };
 
 /**
- * The content grammar as an explanation reads it, keyed as the grammar is: `Follow`'s successors
- * by `model position`, `Last`'s ends by model, the kinds one position names by `version parent
- * position` (`Admission`) and the kinds several name by `shared-model position` (`Symbol`).
+ * The content grammar as an explanation reads it, every lookup a map's: each family's content
+ * model by `version parent` (`ContentModelOf`), `Follow`'s successors by `model position`, `Last`'s
+ * ends by model, and the kinds at each position of each family by `version parent position`, those
+ * its `Admission` gives the position and then those its shared model's `Symbol` does.
  */
 interface ContentIndex {
   readonly ends: ReadonlyMap<string, readonly string[]>;
   readonly kinds: ReadonlyMap<string, readonly string[]>;
+  readonly models: ReadonlyMap<string, string>;
   readonly next: ReadonlyMap<string, readonly string[]>;
-  readonly shared: ReadonlyMap<string, readonly string[]>;
 }
 
 /**
@@ -3371,21 +3372,29 @@ const contentIndexOf = (constants: RefusalConstants): ContentIndex => {
   }
 
   const { admission, content } = constants;
+  const symbols = Map.groupBy(content.symbol.rows, ({ model }) => model);
   const index: ContentIndex = {
     ends: grouped(content.last.rows.map(({ model, position }) => [model, position] as const)),
-    kinds: grouped(
-      admission.rows.map(
+    kinds: grouped([
+      ...admission.rows.map(
         ({ child, parent, position, version }) =>
           [positionKey(version, parent, position), child] as const,
+      ),
+      ...content.sharedModelOf.rows.flatMap(({ model, parent, version }) =>
+        model === noSharedModel
+          ? []
+          : (symbols.get(model) ?? []).map(
+              ({ kind, position }) => [positionKey(version, parent, position), kind] as const,
+            ),
+      ),
+    ]),
+    models: new Map(
+      content.contentModelOf.rows.map(
+        ({ model, parent, version }) => [`${version} ${parent}`, model] as const,
       ),
     ),
     next: grouped(
       content.follow.rows.map(({ from, model, to }) => [`${model} ${from}`, to] as const),
-    ),
-    shared: grouped(
-      content.symbol.rows.map(
-        ({ kind, model, position }) => [`${model} ${position}`, kind] as const,
-      ),
     ),
   };
   contentIndexes.set(constants, index);
@@ -3453,19 +3462,10 @@ const brokenStateOf = (law: LawName, witness: RefusalWitness): Option.Option<Bro
 const allowedAfter = (broken: BrokenState, constants: RefusalConstants): readonly Allowed[] => {
   const index = contentIndexOf(constants);
   const { parent, state, version } = broken;
-  const model = Option.getOrElse(contentModelOf(constants.content, { parent, version }), () => "");
-  const shared = Option.match(constants.content.sharedModelOf.lookup({ parent, version }), {
-    onNone: () => noSharedModel,
-    onSome: (row) => row.model,
-  });
+  const model = index.models.get(`${version} ${parent}`) ?? "";
 
   return Arr.sort(index.next.get(`${model} ${state}`) ?? [], byPosition).map((position) => ({
-    kinds: [
-      ...new Set([
-        ...(index.kinds.get(positionKey(version, parent, position)) ?? []),
-        ...(index.shared.get(`${shared} ${position}`) ?? []),
-      ]),
-    ],
+    kinds: index.kinds.get(positionKey(version, parent, position)) ?? [],
     position,
     source: Option.map(constants.content.sourceOf({ parent, position, version }), sourceText),
   }));
@@ -3506,10 +3506,8 @@ const brokenStateText = (
 ): string => {
   const { kind, parent, state, version } = broken;
   if (broken.law === "N7 Last") {
-    const ends = Option.match(contentModelOf(constants.content, { parent, version }), {
-      onNone: () => [],
-      onSome: (model) => contentIndexOf(constants).ends.get(model) ?? [],
-    });
+    const index = contentIndexOf(constants);
+    const ends = index.ends.get(index.models.get(`${version} ${parent}`) ?? "") ?? [];
 
     return `${parent}'s children end in state ${state} of its content model in ${version}, which ends only in ${Arr.sort(ends, byPosition).join(", ") || "no state"}; after state ${state} it needs one of ${allowedText(allowed)}`;
   }
