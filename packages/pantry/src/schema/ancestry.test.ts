@@ -7,6 +7,7 @@ import * as cp from "#pantry/schema/kinds/cp.ts";
 import * as generic from "#pantry/schema/kinds/generic.ts";
 import * as html from "#pantry/schema/kinds/html.ts";
 import * as lom from "#pantry/schema/kinds/lom.ts";
+import * as mathml from "#pantry/schema/kinds/mathml.ts";
 import * as qmd from "#pantry/schema/kinds/qmd.ts";
 import * as test from "#pantry/schema/kinds/test.ts";
 import type { Flag, KindEnterTable } from "#pantry/schema/seed/ancestry.ts";
@@ -35,6 +36,7 @@ const admission = [
   ...html.admission,
   ...cp.admission,
   ...lom.admission,
+  ...mathml.admission,
   ...qmd.admission,
   ...test.admission,
 ];
@@ -61,6 +63,7 @@ describe("seed/ancestry", () => {
       "tmpl",
       "rubric",
       "modal",
+      "math",
     ]) {
       assert.include(ancestryHandles, handle);
     }
@@ -132,8 +135,7 @@ describe("seed/ancestry", () => {
     );
   });
 
-  it("hands no absorbing flag today, so every step is the union", () => {
-    assert.deepStrictEqual([...absorbing], []);
+  it("steps by the union where no absorbing flag is held or entered", () => {
     assert.deepStrictEqual(stepOf(["fb"], "qti-choice-interaction", KindEnters), ["fb", "int"]);
     assert.deepStrictEqual(stepOf(["int"], "qti-prompt", KindEnters), ["int", "choice"]);
     assert.deepStrictEqual(stepOf([], "p", KindEnters), []);
@@ -189,6 +191,59 @@ describe("seed/ancestry", () => {
     });
   });
 
+  describe("the math flag", () => {
+    it("is entered by m:math alone, and by no qti kind", () => {
+      assert.deepStrictEqual(KindEnters["m:math"], ["math"]);
+      assert.isUndefined(KindEnters["m:annotation-xml"]);
+      assert.deepStrictEqual(
+        Object.entries(KindEnters)
+          .filter(([, entered]) => entered.includes("math"))
+          .map(([kind]) => kind),
+        ["m:math"],
+      );
+    });
+
+    it("is absorbing, so m:math hands {math} from any set", () => {
+      assert.deepStrictEqual([...absorbing], ["math"]);
+      assert.deepStrictEqual(stepOf([], "m:math", KindEnters), ["math"]);
+      assert.deepStrictEqual(stepOf(["fb", "int"], "m:math", KindEnters), ["math"]);
+      assert.deepStrictEqual(stepOf(["math"], "m:math", KindEnters), ["math"]);
+    });
+
+    it("keeps {math} beneath every kind at a math set, a flag-entering kind included", () => {
+      assert.deepStrictEqual(stepOf(["math"], "qti-choice-interaction", KindEnters), ["math"]);
+      assert.deepStrictEqual(stepOf(["math"], "qti-prompt", KindEnters), ["math"]);
+      assert.deepStrictEqual(stepOf(["math"], "m:annotation-xml", KindEnters), ["math"]);
+      assert.deepStrictEqual(stepOf(["math"], "p", KindEnters), ["math"]);
+      assert.strictEqual(nextOf("math", "qti-choice-interaction"), "math");
+    });
+
+    it("leaves m:annotation-xml outside a math element entering nothing", () => {
+      assert.deepStrictEqual(stepOf([], "m:annotation-xml", KindEnters), []);
+      assert.strictEqual(nextOf("root", "m:annotation-xml"), "root");
+    });
+
+    it("bans m:math at a math set and no qti kind", () => {
+      assert.isTrue(banned(["math"], "m:math"));
+      assert.isFalse(banned([], "m:math"));
+      for (const kind of ["qti-printed-variable", "qti-choice-interaction", "qti-gap"]) {
+        assert.isFalse(banned(["math"], kind), `math ${kind} is admitted`);
+      }
+      assert.isTrue(banned([], "qti-gap"));
+      assert.isUndefined(nextOf("math", "m:math"));
+    });
+
+    it("reaches a ban at m:math > m:semantics > m:annotation-xml > div > m:math", () => {
+      let flags: readonly Flag[] = [];
+      for (const kind of ["m:math", "m:semantics", "m:annotation-xml", "div"]) {
+        assert.isFalse(banned(flags, kind), `${handleOf(flags)} ${kind} is admitted`);
+        flags = stepOf(flags, kind, KindEnters);
+      }
+      assert.strictEqual(handleOf(flags), "math");
+      assert.isTrue(banned(flags, "m:math"));
+    });
+  });
+
   it("flags the feedback handles", () => {
     assert.include(fbFlagged, "fb");
     assert.include(fbFlagged, "fb.int");
@@ -203,9 +258,9 @@ describe("seed/ancestry", () => {
     }
   });
 
-  it("declares the Ancestry roster over the 60 handles, and the three columns that name it", () => {
+  it("declares the Ancestry roster over the 61 handles, and the three columns that name it", () => {
     assert.deepStrictEqual([...node.Ancestry.handles], [...ancestryHandles]);
-    assert.strictEqual(node.Ancestry.handles.length, 60);
+    assert.strictEqual(node.Ancestry.handles.length, 61);
     assert.strictEqual(node.Node.fields.ancestry.roster.name, "Ancestry");
     assert.strictEqual(node.Edge.fields.parentAncestry.roster.name, "Ancestry");
     assert.strictEqual(node.Edge.fields.childAncestry.roster.name, "Ancestry");
