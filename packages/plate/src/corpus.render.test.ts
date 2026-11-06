@@ -327,7 +327,7 @@ const inlineChoiceProblems = (
   });
 };
 
-describe("the verdict and render sweep over the corpus", () => {
+describe("the verdict and render sweep over the corpus", { tags: ["corpus"] }, () => {
   it.effect(
     "every corpus member gets a verdict on its own location, and no defect escapes open",
     () =>

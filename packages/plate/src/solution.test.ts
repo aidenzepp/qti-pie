@@ -55,15 +55,18 @@ const solutionOfRedacted = (): Responses =>
   solution(redact(acceptForTest(bg007Item)));
 
 describe("solution", () => {
-  it.effect("gives BG007's correct choice, read from the corpus", () =>
-    Effect.gen(function* bg007Solution() {
-      const verdict = yield* open(bg007, yield* readCorpusFile(bg007));
-      const accepted = Option.getOrElse(acceptedItem(verdict), () =>
-        assert.fail(`${bg007} is ${verdict.verdict}, not accepted`),
-      );
+  it.effect(
+    "gives BG007's correct choice, read from the corpus",
+    () =>
+      Effect.gen(function* bg007Solution() {
+        const verdict = yield* open(bg007, yield* readCorpusFile(bg007));
+        const accepted = Option.getOrElse(acceptedItem(verdict), () =>
+          assert.fail(`${bg007} is ${verdict.verdict}, not accepted`),
+        );
 
-      assert.deepStrictEqual(solution(accepted), { RESPONSE: identifierValue("true") });
-    }),
+        assert.deepStrictEqual(solution(accepted), { RESPONSE: identifierValue("true") });
+      }),
+    { tags: ["corpus"] },
   );
 
   it("gives NULL of the declared type for a response that declares no correct response", () => {
