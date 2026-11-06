@@ -261,8 +261,8 @@ const resultsAnswer = (sitting: Sitting, origin: string): Page | Response =>
 /**
  * Route one request for a session's read-only views: `GET /sessions/<sid>/review/<n>` and
  * `/solution/<n>`, each only while `permits` allows it, and `GET /sessions/<sid>/results.xml`.
- * Another method there is a 405; any other path, a session the store does not hold, an `n` the
- * session lacks and a view its item's session control forbids are 404s.
+ * Another method there is a 405 whose `Allow` names GET; any other path, a session the store does
+ * not hold, an `n` the session lacks and a view its item's session control forbids are 404s.
  *
  * @example
  *   const outcome = await Effect.runPromise(
@@ -289,7 +289,9 @@ export const routeReview = (
 
   if (request.method !== "GET") {
     return Effect.succeed(
-      notePage(405, "Method not allowed", `${request.method} is not taken at ${url.pathname}.`),
+      notePage(405, "Method not allowed", `${request.method} is not taken at ${url.pathname}.`, {
+        allow: "GET",
+      }),
     );
   }
 

@@ -68,10 +68,23 @@ export const home: Element = h("p", {}, [
  * @param status The status code.
  * @param title The page's title and heading.
  * @param said What the page says, a developer error's message included.
+ * @param headers The headers the page carries besides the page headers, such as a 405's `Allow`.
  * @returns The page.
  */
-export const notePage = (status: number, title: string, said: string): Page =>
-  page(status, "en", title, [h("h1", {}, [text(title)]), h("p", {}, [text(said)]), home]);
+export const notePage = (
+  status: number,
+  title: string,
+  said: string,
+  headers: Readonly<Record<string, string>> = {},
+): Page =>
+  page(
+    status,
+    "en",
+    title,
+    [h("h1", {}, [text(title)]), h("p", {}, [text(said)]), home],
+    [],
+    headers,
+  );
 
 /**
  * Construct the page of a developer error: a failure the playground's own code or state caused,

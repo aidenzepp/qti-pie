@@ -435,12 +435,21 @@ describe("routeReview", () => {
       }),
   );
 
-  it.effect("refuses another method than GET with a 405", () =>
+  it.effect("refuses another method than GET with a 405 whose Allow names GET", () =>
     Effect.gen(function* refusedMethod() {
       const { closed, playground } = yield* delivered;
-      const target = `/sessions/${closed.id}/review/1`;
+      const targets = [
+        `/sessions/${closed.id}/review/1`,
+        `/sessions/${closed.id}/solution/1`,
+        `/sessions/${closed.id}/results.xml`,
+      ];
 
-      assert.strictEqual(shown(yield* ask(playground, target, "POST"), target).page.status, 405);
+      for (const target of targets) {
+        const { page } = shown(yield* ask(playground, target, "POST"), target);
+
+        assert.strictEqual(page.status, 405, target);
+        assert.deepStrictEqual(page.headers, { allow: "GET" }, target);
+      }
     }),
   );
 
