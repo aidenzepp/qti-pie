@@ -1467,68 +1467,123 @@ against it. A reading that is not an information-model-over-XSD case says which 
      no verdict moves. This binds pantry and plate alike. This is not a case of documents in conflict: XML Schema
      decides its own ID table. (Decided 2026-11-06 by W5 seat PI under the operator's standing ruling of 2026-11-05 that
      the spec wins.)
-102. **An href is read as its path and its params: a resource's `href` may carry launch parameters its file's `href`
-     does not, a reference's query or fragment names no other file, and only the path names a file.** IMS Content
-     Packaging 1.2 (Information Model, Version 1.2 Public Draft v2.0, section 6.6.2, the Resource class; line 770 of
-     `imscp_infov1p2pd2.txt`, line 2384 of the published `.html`): "A file reference declared in a Resource{ Href }
-     shall have an associated declaration in a File object in the same Resource. The Href of the associated File object
-     shall reference the same file as the Resource{ Href }. The Resource{ Href } and associated File{ Href } URIs may
-     differ in that the Resource{ Href } may contain “launch” parameters in the URI." RFC 3986 (section 3.3, line 1204):
-     "The path is terminated by the first question mark ("?") or number sign ("#") character, or by the end of the URI."
-     So every href is read in two written pieces, `path ‖ params`: `path` up to its first `?` or `#`, and `params`,
-     empty or the query and fragment from there. A resource's href names the file at its path: `href-listed` compares
-     the path with its own files' hrefs, and a document-typed resource names the document at its path (reading 93). A
-     reference in a document (an `img`'s `src`, a `source`'s media fragment `#t=00:00:01`, an item ref's `href`) is read
-     the same way, and its params name no other file.
+102. **An href is read as its path and its params, and the importer resolves its path before any row is written:
+     merged with its base, its dot segments removed and each segment percent-decoded, so a law compares resolved
+     paths.** IMS Content Packaging 1.2 (Information Model, Version 1.2 Public Draft v2.0, section 6.6.2, the Resource
+     class; line 770 of `imscp_infov1p2pd2.txt`, line 2384 of the published `.html`): "A file reference declared in a
+     Resource{ Href } shall have an associated declaration in a File object in the same Resource. The Href of the
+     associated File object shall reference the same file as the Resource{ Href }. The Resource{ Href } and associated
+     File{ Href } URIs may differ in that the Resource{ Href } may contain “launch” parameters in the URI." RFC 3986
+     (section 3.3, line 1204): "The path is terminated by the first question mark ("?") or number sign ("#")
+     character, or by the end of the URI." So every href is read in two written pieces, `path ‖ params`: `path` up to
+     its first `?` or `#`, and `params`, empty or the query and fragment from there. Only the path names a file: a
+     resource's launch parameters, a reference's query or media fragment (`#t=00:00:01`) name no other file.
 
-     A path names a package entry only where this representation resolves it: a relative path of plain segments, the
-     `resolvedHref` form of `src/qti/limits.ts`, which names the entry at its document's directory followed by the path
-     (RFC 3986, sections 5.2.2 and 5.2.3; the manifest's directory is the package root). A path is external, admitted
-     and never resolved, when it starts with a scheme (an absolute URI, reading 35) or with `/`. The second is a
-     judgment: RFC 3986 (section 4.2, line 1440) calls a reference that begins with `//` a network-path reference and
-     one that begins with a single `/` an absolute-path reference, and both resolve against the authority and root of
-     the location a package is read from, not against the package's own root; Content Packaging binds only "a URI that
-     resolves to a location within the InterchangePackage" (InterchangePackage (b) and (d), lines 409 and 411), says
-     that "The files described by a resource may be local or remote" (line 276), and has the references from the root
-     manifest to files in a package interchange file be relative references, "relative to the root of the PIF" (PIF (d),
-     line 416). So neither kind names a package entry, and neither is refused. A document's reference may start with dot
-     segments: RFC 3986's dot-segment removal (section 5.2.4, line 1805) drops each leading `./`, and each leading `../`
-     removes the last segment of the document's directory, so `../passages/a.xml` from `items/i.xml` names
-     `passages/a.xml`. The removal is stated for up to eight leading `../` segments, each depth's segments read from a
-     closed table of patterns, so no loop is needed. Every other path is in the package but takes a resolution no
-     relation states, so it is refused under the stated limit "Href form" (`href-form`), never under a law of Content
-     Packaging or QTI: a dot segment after a plain one (`a/../b.xml`), a reference that climbs above the package root or
-     by more than eight segments, any dot segment in a `cp:file` or `cp:resource` href, a percent-encoding
-     (`a%20b.xml`), a backslash, whitespace in the path, a `:` in the first segment of a path with no scheme, and an
-     `xml:base` in a document that holds a resolved reference or on a `cp:manifest`, `cp:resources` or `cp:resource`. A
-     `cp:file`'s and a `cp:resource`'s href are compared as written, so whitespace around them is in that list too; a
-     document's reference sets its surrounding whitespace aside, as `xs:anyURI` collapses it and an HTML URL may be
-     "potentially surrounded by spaces". A `srcset` is read as one image candidate, its URL alone, and one of several
-     candidates or with a descriptor is refused under the same limit.
+     Every href is resolved by the importer before its row is written (`src/import/overlays/package.ts` `resolveIn`),
+     a `cp:file`'s and a `cp:resource`'s as much as a document's reference, by RFC 3986's reference resolution
+     (sections 5.2.2 to 5.2.4, lines 1701 to 1844) in these steps:
+     - The value is read by its attribute's whitespace class (XML Schema Part 2, section 4.3.6): an `xs:anyURI`, every
+       QTI `href`, every manifest href and every `xml:base`, collapses; HTML's `URLDType` (`src`, `srcset`, `poster`),
+       an `xs:normalizedString`, replaces each tab, line feed and carriage return with a space; `object@data`, an
+       `xs:string`, is kept as written. The spaces around it are then set aside, as an `xs:anyURI` collapses them and
+       an HTML URL may be "potentially surrounded by spaces".
+     - A path that starts with a scheme (an absolute URI, reading 35) or with `/` is external, admitted and never
+       resolved where a `cp:file` or a content reference holds it, and refused where a law needs it to name an entry
+       (a document-typed resource's href, "Document entry"). The second is a judgment: RFC 3986 (section 4.2,
+       line 1440) calls a reference that begins with `//` a network-path reference and one that begins with a single `/`
+       an absolute-path reference, and both resolve against the authority and root of the location a package is read
+       from, not against the package's own root; Content Packaging binds only "a URI that resolves to a location
+       within the InterchangePackage" (InterchangePackage (b) and (d), lines 409 and 411), says that "The files
+       described by a resource may be local or remote" (line 276), and has the references from the root manifest to
+       files in a package interchange file be relative references, "relative to the root of the PIF" (PIF (d), line
+       416).
+     - A path that is empty, as the empty reference, a query alone and a fragment alone have, names its own document
+       (RFC 3986, section 4.4: such a reference's "dereference should not result in a new retrieval action"), even in
+       the scope of an `xml:base`, and is never resolved.
+     - Any other path is merged with its base (section 5.2.3): the `xml:base` in scope (reading 103), each resolved
+       against the one above it, or else the document's own path, the manifest's directory being the package root.
+       Its dot segments are then removed (section 5.2.4), a segment written `%2E` or `%2e` counting as a `.`, since a
+       percent-encoded unreserved character is the character itself (sections 2.3 and 6.2.2.2). A path whose `..`
+       segments climb above the package root resolves outside it, external and admitted, as `../../a.png` from
+       `items/` is: the package root is a directory of the location the package is read from, not the URI's root.
+     - Each segment that remains is percent-decoded (section 2.1), its octets read as UTF-8 (section 2.5, and XLink
+       1.0's section 5.4, which escapes a character outside the URI set as its UTF-8 octets). The importer decodes
+       after it splits the path at `/`, so a `%2F` stays data within its segment (section 2.2: a percent-encoded
+       reserved character is not equivalent to the character). The path names the entry it spells: `my%20sign.png`
+       and `my sign.png` from `items/i.xml` both name `items/my sign.png` (Aiden's ruling of 2026-11-06, PR #46
+       comment 3: an href is percent-decoded before it is resolved, RFC 3986 sections 2.1 and 5.2, which goes past
+       main, whose resolver never decoded), `images/../images/sign.png` names `items/images/sign.png`, `a/./b.png`
+       names `items/a/b.png`, and `a/b/..` names the directory `items/a/`, which no entry is (`file-exists`).
 
-     The corpus moves no verdict, counted by a scan of every manifest and every XML document of its 28 packages: no
+     A resource's href names the document at its resolved path (reading 93); `href-listed` compares it with its own
+     files' resolved paths, and an external href with its files' hrefs as written, since the representation resolves
+     no URI outside the package. No relation can percent-decode a name, so the resolution is the importer's: the
+     database holds each href's outcome (`HrefScope`: `entry`, `external`, `document` or `unresolved`) and the path it
+     names, compares the path with `Entry`, and proves what a row can (a resolved path holds no dot segment, a target
+     with a scheme or a leading `/` is external, only an empty target names its document); the law oracle resolves by
+     a second implementation of RFC 3986 that shares no code with the importer (`src/test/resolution.ts`), the
+     differential that holds the importer to the RFC.
+
+     What the importer reads no name from is refused under the stated limit "Href form" (`href-form`), never under a
+     law of Content Packaging or QTI, each for a cause the representation cannot state, and each lifted by what is
+     named:
+     - a `%` that starts no percent-encoding (`a%zz.png`, a `%` at the end): RFC 3986 (section 2.1) gives it no octet,
+       so the path names nothing, while the URL Standard keeps it as written, as a validation error; an `xs:anyURI`'s
+       value domain refuses it first (reading 71). A ruling that a URL-typed attribute follows the URL Standard there
+       would lift it.
+     - percent-encoded octets that spell no UTF-8 (`%FF`, a lone `%C3`): an entry's path is Unicode text, so the
+       octets name no entry the representation can compare with; which file they name depends on the archive's own
+       name encoding (a zip without its UTF-8 flag names in code page 437). Reading an entry's name as the octets the
+       archive stores would lift it.
+     - a segment that decodes to a `/` or U+0000 (`a%2Fb.png`, `%00`): the `/` is data in its segment, naming a file
+       whose name holds `/`, and a resolved path is one text whose segments are separated by `/`, so it cannot hold
+       that segment apart (a path held as one row per segment would lift it); PostgreSQL text holds no U+0000, so that
+       one stays.
+     - a backslash: XLink's escaping makes it the name's octet `%5C`, while the URL Standard, which HTML resolves its
+       URL attributes by, reads it as `/` in a URL of a special scheme, so the two sources a QTI document's hrefs
+       answer to name different files by it. A ruling of which reading governs each attribute type would lift it.
+     - a tab, line feed or carriage return a preserving type keeps in the path (`object@data`): XLink's escaping makes
+       it the name's octet, while the URL Standard removes it. The same ruling would lift it. Under the other types the
+       whitespace class has turned each into a space first, so there it is resolved.
+     - a `:` in the first segment of a path with no scheme (`1:a.png`; `./1:a.png` is resolved): RFC 3986 (section
+       4.2) makes it no relative reference, since it "would be mistaken for a scheme name", while the URL Standard
+       reads it as a path; an `xs:anyURI`'s value domain refuses it first. The same ruling would lift it.
+     - a `srcset` of several image candidates or with a descriptor: the HTML Standard's own parsing algorithm splits
+       a `srcset` into candidates, which the representation does not state, and a `ReferencePath` holds one path per
+       attribute. Stating that algorithm, with a candidate's index in the key, would lift it.
+
+     Lifted from the earlier limit: dot segments anywhere in a path, a climb above the root (now external), any
+     percent-encoding that decodes to UTF-8, whitespace inside a path that its type replaces or collapses, an
+     `xml:base` in a document, and an `xml:base` on a `cp:manifest`, `cp:resources` or `cp:resource`, which IMS
+     Content Packaging 1.2 resolves by RFC 3986 (section 6.11.1, the Base class: "Relative references appearing
+     within the scope of a Base object shall then be interpreted according to the rules defined in RFC3986").
+
+     The corpus moves no verdict, counted by a scan of every manifest and every XML document of its 28 packages, and
+     again on 2026-11-06 over the 1,657 file-reference and `xml:base` attributes of every XML entry of its zips: no
      `cp:resource` href holds a query or a fragment; every `cp:file` href is a plain relative path; no element anywhere
-     holds an `xml:base`. Among the documents' references, `BPIG_22April` holds two media fragments
-     (`asl/item123.mp4#t=00:00:01,00:00:10.0` and `asl/item123.mp4#t=00:00:16.0`, whose path is an entry) and three
-     stimulus refs `../passages/unbelievableNight.xml` from `items/`, which name the entry
-     `passages/unbelievableNight.xml`; `maxfiles` holds three response-processing `template-location`s
-     `../rptemplates/match_correct.xml` and `../rptemplates/map_response.xml`, which name entries; no reference holds a
-     dot segment after a plain one or climbs above the root; `BBQsTest` holds thirteen absolute `http:` references in
-     `a@href` and `img@src`, external; the four `srcset` values are each one URL with no descriptor. This binds pantry
-     and plate alike. This is not a case of documents in conflict: Content Packaging states the launch parameters, and
-     RFC 3986 decides where a path ends. (Decided 2026-11-06 by W5 seat HP under the operator's standing ruling of
-     2026-11-05 that the spec wins.)
+     holds an `xml:base`; no relative href holds a `%`, a space, a tab, a backslash or a dot segment after a plain one.
+     Among the documents' references, `BPIG_22April` holds two media fragments (`asl/item123.mp4#t=00:00:01,00:00:10.0`
+     and `asl/item123.mp4#t=00:00:16.0`, whose path is an entry) and three stimulus refs
+     `../passages/unbelievableNight.xml` from `items/`, which name the entry `passages/unbelievableNight.xml`;
+     `maxfiles` holds three response-processing `template-location`s `../rptemplates/match_correct.xml` and
+     `../rptemplates/map_response.xml`, which name entries; no reference climbs above the root; `BBQsTest` holds
+     thirteen absolute `http:` references in `a@href` and `img@src`, external; the four `srcset` values are each one URL
+     with no descriptor. This binds pantry and plate alike. This is not a case of documents in conflict: Content
+     Packaging states the launch parameters and the base, and RFC 3986 decides where a path ends and what it names.
+     (Decided 2026-11-06 by W5 seat HP under the operator's standing ruling of 2026-11-05 that the spec wins; restated
+     2026-11-06 by RV seat P, on the review of PR #46, under Aiden's ruling of 2026-11-06 on percent-decoding.)
 
 103. **A document's file references are the attributes its vocabularies define as the location of a file, and each one
-     that resolves within the package names a file the manifest describes.** IMS Content Packaging 1.2 (Information
-     Model, Version 1.2 Public Draft v2.0, section 6.3, the InterchangePackage class; lines 409 and 411 of
-     `imscp_infov1p2pd2.txt`) says "b) Any file described in the Manifest using a URI that resolves to a location within
-     the InterchangePackage shall be included in the InterchangePackage" and "d) Files contained in the
-     InterchangePackage may contain internal references to other files (e.g., a HTML content file may reference a JPEG
-     content file ...). When a file contained in an InterchangePackage references another file using a URI that resolves
-     to a location within the InterchangePackage, the referenced file shall be described in the InterchangePackage’s
-     Manifest." Content Packaging does not say which attributes of a file are its references to other files. Each
-     vocabulary's own specification does, so the census reads them there:
+     that resolves within the package names a file the manifest describes; an `xml:base` is a base, resolved and never
+     a file reference.** IMS Content Packaging 1.2 (Information Model, Version 1.2 Public Draft v2.0, section 6.3, the
+     InterchangePackage class; lines 409 and 411 of `imscp_infov1p2pd2.txt`) says "b) Any file described in the
+     Manifest using a URI that resolves to a location within the InterchangePackage shall be included in the
+     InterchangePackage" and "d) Files contained in the InterchangePackage may contain internal references to other
+     files (e.g., a HTML content file may reference a JPEG content file ...). When a file contained in an
+     InterchangePackage references another file using a URI that resolves to a location within the InterchangePackage,
+     the referenced file shall be described in the InterchangePackage’s Manifest." Content Packaging does not say which
+     attributes of a file are its references to other files. Each vocabulary's own specification does, so the census
+     reads them there:
      - QTI's HTML subset: `a@href`, a hyperlink; `blockquote@cite` and `q@cite`, the quotation's source; `img@src`,
        `img@longdesc`, `object@data`, `audio@src`, `video@src`, `video@poster`, `source@src` and `track@src`, HTML's URL
        attributes; and `source@srcset`, HTML's list of image candidate strings, each candidate's URL one reference.
@@ -1544,18 +1599,30 @@ against it. A reading that is not an information-model-over-XSD case says which 
        SSML 1.1's `audio@src` and `lexicon@uri`.
 
      Left out, each because its value names no file as written: `cp:file@href` and `cp:resource@href`, the manifest's
-     own description of its files, which (b) binds; `xml:base`, a base and not a reference;
-     `qti-interaction-module@primary-path` and `@fallback-path`, a module location the AMD loader extends with `.js`
-     (the guide's `modules/lib/handlebarsV2.min`, line 8501); `qti-response-processing@template`, a template's
-     identifier (reading 51); and the URIs that identify rather than locate, `qti-custom-operator@definition`,
-     `qti-portable-custom-interaction@custom-interaction-type-identifier`, MathML's `definitionURL`, and the usage
-     data's `context` and `glossary`. A census attribute's value is read as reading 102 reads an href: only its path
-     names a file, and a path names a package entry only in the `resolvedHref` form. Upstream's census, from its own
-     specification's section 4.6, holds the HTML attributes, the `href` of `qti-stylesheet` and the four other
-     `qti-*-ref` files above, and `xi:include@href`; the rest are added here by the same rule, and the three refs'
-     `href` is the one path their targets are read through. This binds pantry and plate alike. This is not a case of
-     documents in conflict: Content Packaging states the rule, and each vocabulary says which of its attributes name
-     files. (Decided 2026-11-06 by W5 seat PG under the operator's standing ruling of 2026-11-05 that the spec wins.)
+     own description of its files, which (b) binds; `qti-interaction-module@primary-path` and `@fallback-path`, a
+     module location the AMD loader extends with `.js` (the guide's `modules/lib/handlebarsV2.min`, line 8501);
+     `qti-response-processing@template`, a template's identifier (reading 51); and the URIs that identify rather than
+     locate, `qti-custom-operator@definition`, `qti-portable-custom-interaction@custom-interaction-type-identifier`,
+     MathML's `definitionURL`, and the usage data's `context` and `glossary`.
+
+     An `xml:base` is left out too, as a base and not a reference: xml.xsd says it "provides a URI to be used as the
+     base for interpreting any relative URIs in the scope of the element on which it appears; its value is inherited"
+     (`~/.cache/gr8des/qti3/xsd/w3/xml.xsd`, lines 118 to 122), and the information model's `base` is "An optional URI
+     used to change the base for resolving relative URI for the scope of this object" (section 5.15.6). So it names no
+     file of its own: each `xml:base` is resolved against the base above it, the innermost in scope having "the highest
+     precedence" (RFC 3986, section 5.1), and every reference in its scope, the element's own attributes included,
+     resolves against it; in the manifest, IMS Content Packaging 1.2's Base class (section 6.11.1) does the same for a
+     `cp:file`'s and a `cp:resource`'s href.
+
+     A census attribute's value, and a manifest href, is resolved as reading 102 resolves an href: only its path names a
+     file, merged with the `xml:base` in scope or the document's own path, its dot segments removed and each segment
+     percent-decoded. Upstream's census, from its own specification's section 4.6, holds the HTML attributes, the `href`
+     of `qti-stylesheet` and the four other `qti-*-ref` files above, and `xi:include@href`; the rest are added here by
+     the same rule, and the three refs' `href` is the one path their targets are read through. This binds pantry and
+     plate alike. This is not a case of documents in conflict: Content Packaging states the rule, each vocabulary says
+     which of its attributes name files, and XML Base says what a base is. (Decided 2026-11-06 by W5 seat PG under the
+     operator's standing ruling of 2026-11-05 that the spec wins; the `xml:base` clause restated 2026-11-06 by
+     RV seat P, on the review of PR #46.)
 
 104. **A choice's identifier names it among its document's choices of its class, and names no item variable.** Each
      choice class of the information model says of its identifier "This identifier must not be used by any other

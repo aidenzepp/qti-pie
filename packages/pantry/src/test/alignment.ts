@@ -487,7 +487,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     102,
     {
       owner:
-        "HP's `ResourceHref` `path ‖ params` and `Reference` `lead ‖ target ‖ params ‖ trail` (`E1_derived`), href-listed and the documents named over the path, `ReferencePath`'s removal of leading dot segments over `DotSegments` (`E1_derived`), and the stated limit `Href_form` over `File`, `ResourceHref`, `Reference`, `ReferencePath`, `DocumentDirectory` and the manifest's `xml:base` (`src/qti/package.ts`, `resolvedHref` of `src/qti/limits.ts`); the oracle's Href form, Href listed and File exists",
+        "P's resolution at import (`resolveIn`, `src/import/overlays/package.ts`): each href's `HrefScope` and resolved path on `ResourceHref`, `File` and `Reference`, their written pieces and a resolved path's lack of dot segments proved by `E1_derived` (`src/qti/package.ts`); file-listed, href-listed, Document entry and file-exists over resolved paths; the stated limit `Href_form` over the `unresolved` scope; the oracle's own RFC 3986 resolver (`src/test/resolution.ts`)",
       status: "G",
     },
   ],
@@ -495,7 +495,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     103,
     {
       owner:
-        "the census `ReferenceAttribute` (`src/grammar/references.ts`, `asiCensus`, `xiCensus`, `mathmlCensus`, `ssmlCensus`; installed by `src/grammar/install.ts`), read by HP's R6 `file-exists` over `Reference` and `ReferencePath` (`src/qti/package.ts`)",
+        "the census `ReferenceAttribute` (`src/grammar/references.ts`, `asiCensus`, `xiCensus`, `mathmlCensus`, `ssmlCensus`; installed by `src/grammar/install.ts`), read by HP's R6 `file-exists` over `Reference` and `ReferencePath` (`src/qti/package.ts`); each `xml:base` is the base `resolveIn` resolves every reference in its scope against, never a reference itself",
       status: "P",
     },
   ],
