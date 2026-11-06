@@ -617,6 +617,30 @@ const placeNode = (
       };
     }
 
+    case "inline-choice": {
+      const label = node.label.pipe(
+        Option.map((nodes) => placeNodes(nodes, drops, placed, inMedia)),
+      );
+      const choices = node.choices.map((choice) => ({
+        choice,
+        placed: placeNodes(choice.content, drops, placed, inMedia),
+      }));
+
+      return {
+        lifted: [
+          ...Option.match(label, { onNone: () => [], onSome: (result) => result.lifted }),
+          ...choices.flatMap((entry) => entry.placed.lifted),
+        ],
+        nodes: [
+          {
+            ...node,
+            choices: choices.map((entry) => ({ ...entry.choice, content: entry.placed.nodes })),
+            label: label.pipe(Option.map((result) => result.nodes)),
+          },
+        ],
+      };
+    }
+
     case "text":
     case "text-entry":
     case "unsupported": {

@@ -11,7 +11,8 @@ import { Option } from "effect";
 import type { BodyNode, Interaction } from "#plate/model/item.ts";
 
 /**
- * Collect the interactions of body nodes in document order, inside elements, Prompts and choices.
+ * Collect the interactions of body nodes in document order, inside elements, Prompts, Labels and
+ * choices.
  *
  * @param nodes The body nodes.
  * @returns The interactions.
@@ -31,6 +32,13 @@ export const interactionsIn = (nodes: readonly BodyNode[]): readonly Interaction
       }
       case "extended-text": {
         return [node, ...interactionsIn(Option.getOrElse(node.prompt, () => []))];
+      }
+      case "inline-choice": {
+        return [
+          node,
+          ...interactionsIn(Option.getOrElse(node.label, () => [])),
+          ...node.choices.flatMap((choice) => interactionsIn(choice.content)),
+        ];
       }
       case "text-entry": {
         return [node];

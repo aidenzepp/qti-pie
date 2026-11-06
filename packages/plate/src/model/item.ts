@@ -439,17 +439,23 @@ export interface Unsupported {
 }
 
 /**
- * An interaction of the item model, the three phase 1 renders.
+ * An interaction of the item model, the four plate renders: Choice, Extended Text, Inline Choice
+ * and Text Entry.
  */
-export type Interaction = ChoiceInteraction | ExtendedTextInteraction | TextEntryInteraction;
+export type Interaction =
+  | ChoiceInteraction
+  | ExtendedTextInteraction
+  | InlineChoiceInteraction
+  | TextEntryInteraction;
 
 /**
- * A node of the item body.
+ * A node of the item body: an element, a text, one of the four interactions, or a notice.
  */
 export type BodyNode =
   | BodyElement
   | BodyText
   | ChoiceInteraction
+  | InlineChoiceInteraction
   | TextEntryInteraction
   | ExtendedTextInteraction
   | Unsupported;

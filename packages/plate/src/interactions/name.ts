@@ -2,8 +2,9 @@
  * How the interactions name their groups and controls for assistive technology (§4.3, §4.8, Q10):
  * the names the author wrote, and the renderer's own for a control the author left unnamed.
  *
- * A Choice, a Text Entry and an Extended Text each read the author's `aria-label` and
- * `aria-labelledby` here, so every interaction scopes the author's ids the same way.
+ * A Choice, a Text Entry, an Extended Text and an Inline Choice each read the author's
+ * `aria-label` and `aria-labelledby` here, so every interaction scopes the author's ids the same
+ * way.
  *
  * An id of the author's `aria-labelledby` counts only when an element of the item carries it
  * ({@link resolvedLabelledby}); the payload keeps those ids alone, so no reference the renderer
@@ -26,6 +27,7 @@ import type { Attributes } from "#plate/emit/node.ts";
 import { authoredIdrefs, splitTokens } from "#plate/emit/parts.ts";
 import { message, numeral } from "#plate/messages.ts";
 import type { Locale } from "#plate/messages.ts";
+import type { BodyAttribute, BodyNode } from "#plate/model/item.ts";
 import { trimXmlSpace } from "#plate/model/values.ts";
 import type { AttributePayload, PayloadNode, TextName } from "#plate/payload.ts";
 
@@ -40,26 +42,31 @@ const isWritten = (text: string): boolean => /[^\t\n\f\r ]/u.test(text);
 /**
  * Read an attribute of a body element, none when the element does not carry it.
  *
- * @param attributes The element's attributes, as the payload holds them.
+ * @param attributes The element's attributes, as the model or the payload holds them.
  * @param name The attribute's name.
  * @returns Its value, or none.
  */
 const attributeOf = (
-  attributes: readonly AttributePayload[],
+  attributes: readonly (AttributePayload | BodyAttribute)[],
   name: string,
 ): Option.Option<string> =>
   Option.fromNullishOr(attributes.find((attribute) => attribute.name === name)?.value);
 
 /**
- * Decide whether payload nodes give a reader any text, as `checkTree`'s `textOf` reads a subtree:
- * a text node, an `img`'s `alt` and an element's `aria-label`, each counting when it holds anything
- * but whitespace, and a notice, which the renderer writes as text. An element with
+ * Decide whether nodes give a reader any text, as `checkTree`'s `textOf` reads a subtree: a text
+ * node, an `img`'s `alt` and an element's `aria-label`, each counting when it holds anything but
+ * whitespace, and a notice, which the renderer writes as text. An element with
  * `aria-hidden="true"` gives none, nor does anything below it.
  *
- * @param nodes The nodes, a Choice's content as the payload holds it.
+ * It reads body nodes as well as payload nodes, so the payload's naming (`isUnnamed`, over the
+ * model) and the emitter's (over the payload) apply this one rule to the same content. An
+ * unsupported part counts as the notice the payload copies it into.
+ *
+ * @param nodes The nodes: a Choice's content or an Inline Choice's Label, as the model or the
+ *   payload holds it.
  * @returns Whether any of them gives text.
  */
-export const givesText = (nodes: readonly PayloadNode[]): boolean =>
+export const givesText = (nodes: readonly (BodyNode | PayloadNode)[]): boolean =>
   nodes.some((node) => {
     switch (node.kind) {
       case "text": {
@@ -73,7 +80,8 @@ export const givesText = (nodes: readonly PayloadNode[]): boolean =>
           (read("aria-label") || (node.tag === "img" && read("alt")) || givesText(node.children))
         );
       }
-      case "notice": {
+      case "notice":
+      case "unsupported": {
         return true;
       }
       case "choice":
