@@ -150,7 +150,8 @@ export interface ItemView {
   readonly configuration: Configuration;
   /**
    * Whether the item is closed: its part has ended, the test has closed, or its attempt limit is
-   * above 0 and reached. Its controls render disabled.
+   * above 0 and reached. Its controls render disabled, and `advance` ignores the responses a step
+   * carries for it, so its `values` stay the ones it closed with whatever a host posts.
    */
   readonly disabled: boolean;
   /**

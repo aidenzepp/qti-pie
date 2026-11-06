@@ -359,9 +359,14 @@ const moved = (
 
 /**
  * Carry out what one request asks of a test session: move, submit the current item or part, or end
- * the current part, after saving the responses it posts on the current item.
+ * the current part, after saving the responses it posts on the current item while that item is
+ * open.
  *
- * Each intent goes to the transition that owns it, which saves the step first. In a linear part
+ * Each intent goes to the transition that owns it, which saves the step first. When the current
+ * item is closed (its view is `disabled`), the step goes on with its intent alone: the responses
+ * it carries are ignored, nothing is refused for them, and the item keeps the values it closed
+ * with, which `itemView` shows and `results` reports. So a host may post a closed item's form as
+ * rendered, whose disabled controls post nothing, or pass whatever it decoded. In a linear part
  * with individual submission, `next` from an item with no processed attempt submits it first and
  * then moves, and `next` on the part's last item ends the part; `end-part` is not offered there
  * and is refused (`linear-jump`). In a linear part with simultaneous submission, `next` is refused
@@ -379,7 +384,7 @@ const moved = (
  * @param test The test the session was started from.
  * @param items The test's items, keyed by item ref identifier, as `startTest` took them.
  * @param session The session.
- * @param step The intent, and the responses posted with it.
+ * @param step The intent, and the responses posted with it, which are saved only on an open item.
  * @param configuration The host's configuration, whose locale a submission's messages take.
  * @param context The transition.
  * @param context.now When it happens.
@@ -407,6 +412,7 @@ export const advance = (
         return Result.fail(closedRefusal(intent));
       }
 
+      const carried: Step = shown.disabled ? { intent } : step;
       const advancing: Advancing = {
         configuration,
         items,
@@ -419,13 +425,13 @@ export const advance = (
         case "go":
         case "next":
         case "previous": {
-          return moved(advancing, session, { ...step, intent });
+          return moved(advancing, session, { ...carried, intent });
         }
         case "submit-item": {
-          return submitted(advancing, session, step);
+          return submitted(advancing, session, carried);
         }
         case "submit-part": {
-          return asIntent(intent, submitPart(test, items, session, step, context));
+          return asIntent(intent, submitPart(test, items, session, carried, context));
         }
         case "end-part": {
           return advancing.linearIndividual
@@ -438,7 +444,7 @@ export const advance = (
                   sequenceIndex: Option.some(shown.sequenceIndex),
                 }),
               )
-            : asIntent(intent, endPart(test, items, session, step, context));
+            : asIntent(intent, endPart(test, items, session, carried, context));
         }
         default: {
           return intent satisfies never;
