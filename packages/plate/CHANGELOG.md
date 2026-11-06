@@ -6,8 +6,45 @@ changes. [`docs/spec-readings.md`](../../docs/spec-readings.md) numbers the read
 
 ## Unreleased
 
-The first entry lists the surface of M1 and M2. plate is not published, and both of its entry
-points are unstable until M3.
+The first entry lists the surface of M1 and M2, and what M3 adds to it. plate is not published,
+and both of its entry points are unstable until M3.
+
+### Inline Choice (M3)
+
+- `render` writes an Inline Choice as a native `select`. Its first option, the author's
+  `data-prompt` or else "Select an answer", posts an empty value, which `decode` reads as NULL. In
+  `review` and `solution`, the `select` is disabled and posts nothing.
+- `render`'s `parts` option takes the key `inline-choice-interaction`, with the parts `root`,
+  `label`, `control`, `placeholder` and `option`.
+- `PartSwapRefused` has a new cause, `select-content`. It refuses a replacement for `control`,
+  `placeholder` or `option` whose root does not hold exactly the nodes the part function receives,
+  directly under it and in the order given.
+- `checkResponses` and `score` judge an Inline Choice's response. For an identifier that names none
+  of its choices, `checkResponses` gives a message and `score` returns `ResponsesRefused`. Before,
+  both took any identifier.
+- `encodeRedacted` and `decodeRedacted` carry an Inline Choice, `results` reports a shuffled Inline
+  Choice's order, and `src/styles.css` styles its parts.
+
+### How plate reads an Inline Choice (2026-11-06)
+
+- `open` builds an Inline Choice where it showed a notice before.
+  `QTI3_BPIG_Examples/items/QTI3-inline-choice.xml` and
+  `qtiv3-examples/packaging/items/inline_choice.xml` are now `accepted`. They were
+  `accepted-with-unsupported`.
+- `open` refuses an Inline Choice whose response is not of cardinality `single` and base type
+  `identifier`, with the rule `binding`. The rule judges every Inline Choice, whatever its choices
+  hold, one inside a feedback block included.
+- `open` refuses two choices of one Inline Choice that share an identifier, with the rule
+  `duplicate-identifier`.
+- An item that breaks either rule is now `refused`. Before, it was `accepted-with-unsupported`, or
+  `unchecked` when it also held something plate leaves unchecked, such as MathML. No corpus
+  document breaks either rule.
+- An Inline Choice whose choices hold anything but text and the inline elements that
+  [`src/vocabulary.ts`](src/vocabulary.ts) lists keeps its notice, since an `option` shows only
+  text. The verdict lists it as unsupported, and nothing is refused for it.
+- `min-choices` above 1 on an Inline Choice is validated as written, as a Choice's is. Its response
+  holds at most one identifier, so under `validateResponses`, `checkResponses` gives a message for
+  every response.
 
 ### Items (M1)
 

@@ -350,6 +350,23 @@ describe("README.md", () => {
     assert.strictEqual(readme().slice(0, opening.length), opening);
   });
 
+  it("[Q-12] names inline choice among the interactions the paragraph after the opening says plate renders", () => {
+    const [paragraph = ""] = readme()
+      .slice(opening.length)
+      .trimStart()
+      .split(/\n{2,}/u);
+    const sentence =
+      paragraph
+        .replaceAll("\n", " ")
+        .split(/(?<=\.) /u)
+        .find((candidate) => candidate.startsWith("plate renders ")) ??
+      assert.fail('the paragraph after the opening has no sentence that starts "plate renders"');
+
+    for (const interaction of ["choice", "inline choice", "text entry", "extended text"]) {
+      assert.include(sentence, interaction, `the sentence names ${interaction}`);
+    }
+  });
+
   it("gives the ledger command on a line of its own and holds each section's heading", () => {
     const lines = readme().split("\n");
 

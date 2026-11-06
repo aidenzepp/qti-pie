@@ -9,10 +9,10 @@ Render QTI 3.0 items and tests for candidates, on the server and in the browser.
 plate is a library of parts and pure functions. `open` checks a QTI 3.0 document, `render` writes
 an item as HTML with native form controls, and `score` scores the responses that come back.
 `openPackage` checks a content package, and a test session takes a candidate through a test's
-items. plate renders choice, text entry and extended text interactions, and each verdict names
-the features that plate does not render. plate has no form, submit control, submission flow or
-store. The host page owns those. plate reads XML through [crust](../crust/README.md), never
-depends on pantry, and is pre-release.
+items. plate renders choice, inline choice, text entry and extended text interactions, and each
+verdict names the features that plate does not render. plate has no form, submit control,
+submission flow or store. The host page owns those. plate reads XML through
+[crust](../crust/README.md), never depends on pantry, and is pre-release.
 
 ## Install
 
@@ -330,9 +330,16 @@ its fields.
 
 A host can rely on these, and [`src/interactions/`](src/interactions/) documents the rest:
 
-- A shuffled Choice's order follows the configuration's `seed`, `render`'s `instance` and the
-  response. Keep the `seed` stable across restarts, pass the `instance` you stored, and vary the
-  `seed` per candidate when every candidate gets the same instance.
+- A shuffled Choice's or Inline Choice's order follows the configuration's `seed`, `render`'s
+  `instance` and the response. Keep the `seed` stable across restarts, pass the `instance` you
+  stored, and vary the `seed` per candidate when every candidate gets the same instance.
+- An Inline Choice is a native `select`. Its first option, the author's `data-prompt` or else
+  "Select an answer", posts an empty value, which `decode` reads as NULL.
+- An `option` shows only text, so an Inline Choice renders only when its choices hold nothing but
+  text and the inline elements that [`src/vocabulary.ts`](src/vocabulary.ts) lists, such as `em`
+  and `code`. Any other Inline Choice shows a notice in its place, and the verdict names it.
+- In `review` and `solution`, an Inline Choice's `select` is disabled, so the form posts nothing
+  for it.
 - `checkResponses` checks a `pattern-mask` only when `validateResponses` is on, and matches a number
   in its canonical form ([`src/interactions/pattern.ts`](src/interactions/pattern.ts)). `score`
   never checks it.
@@ -369,7 +376,8 @@ this split. A host that sends the accepted item to the browser sends what `redac
   HTML does not allow the attribute on a radio or a checkbox, and without both, the browser can
   show a choice that plate did not render.
 - Render a restored item with the instance and the configuration you first rendered it with. Its
-  record does not say which they were, and a shuffled Choice's order depends on both.
+  record does not say which they were, and a shuffled Choice's or Inline Choice's order depends
+  on both.
 - An accepted package's `files` holds each file inside the package that the manifest lists, except
   the documents of its QTI resources, which can hold correct responses. A QTI resource's document
   is the file its `href` names, such as an item, a test or a response-processing document. For a
