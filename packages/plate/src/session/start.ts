@@ -336,11 +336,10 @@ const parseReference = (value: string): Reference => {
  * Remove the `.` and `..` segments of a path (RFC 3986 §5.2.4), each segment read through a
  * decoding first.
  *
- * A host may name a document by a relative path, such as `tests/a.xml`, which RFC 3986 never gives
- * a base. Such a path is read as though it began at a root, so a `..` that would rise above its
- * first segment is dropped, as one rising above a root is, and the result stays relative.
- * {@link appendSegments} decodes each segment before it removes the dot segments, as the manifest
- * reader does, so `%2E%2E` climbs as `..` does on both sides.
+ * A path without a root, such as a URN's, is read as though it began at one, so a `..` that would
+ * rise above its first segment is dropped, as one rising above a root is, and the result stays
+ * relative. {@link appendSegments} decodes each segment before it removes the dot segments, as the
+ * manifest reader does, so `%2E%2E` climbs as `..` does on both sides.
  *
  * @param path The path.
  * @param decode How each segment is read.
@@ -355,67 +354,83 @@ const removeDotSegments = (path: string, decode: (segment: string) => string): s
 };
 
 /**
- * Merge a relative path with its base's path (RFC 3986 §5.2.3).
+ * Append a relative path to the directory of a base's path (RFC 3986 §5.2.3) through
+ * {@link appendSegments}, the rule `openPackage` resolves an item ref by: each of the path's
+ * segments is decoded, a segment with a malformed escape left as written, and its dot segments are
+ * removed against the base's, while the base's own segments stay as written, a `.`, an escape, a
+ * `?` or a `#` among them.
  *
- * @param base The base.
+ * A rooted base's `..` that would rise above its root is dropped. A base without a root is read as
+ * though it began at one, so a `..` that would rise above its first segment is dropped too, and the
+ * result stays relative.
+ *
+ * @param base The base's path as written, after its scheme and authority.
+ * @param rooted Whether the base's path is rooted: it starts with `/`, or the base has an authority
+ *   and an empty path.
  * @param path The relative path, which does not start with `/`.
- * @returns The path under the base's directory.
+ * @returns The path the two name.
+ * @see https://www.rfc-editor.org/rfc/rfc3986#section-5.2.3
  */
-const mergePaths = (base: Reference, path: string): string =>
-  base.authority !== undefined && base.path === ""
-    ? `/${path}`
-    : `${base.path.slice(0, base.path.lastIndexOf("/") + 1)}${path}`;
+const appendedPath = (base: string, rooted: boolean, path: string): string => {
+  const directory = (rooted ? base.slice(1) : base).split("/").slice(0, -1);
+  const { segments } = appendSegments(directory, path.split("/"), decodeSegment);
 
-/**
- * Resolve a reference against a base (RFC 3986 §5.2.2), its path merged and not yet free of dot
- * segments.
- *
- * @param base The base.
- * @param reference The reference.
- * @returns The target's parts.
- * @see https://www.rfc-editor.org/rfc/rfc3986#section-5.2.2
- */
-const resolve = (base: Reference, reference: Reference): Reference => {
-  if (reference.scheme !== undefined) {
-    return reference;
-  }
-
-  if (reference.authority !== undefined) {
-    return { ...reference, scheme: base.scheme };
-  }
-
-  if (reference.path === "" || reference.path.startsWith("/")) {
-    return { ...base, path: reference.path === "" ? base.path : reference.path };
-  }
-
-  return { ...base, path: mergePaths(base, reference.path) };
+  return `${rooted ? "/" : ""}${segments.join("/")}`;
 };
 
 /**
- * Give the document an item ref names: its `href` resolved against the test document's location
- * as RFC 3986 §5.2 resolves a reference against its base, with its query and fragment set aside.
+ * Write a location from its scheme, its authority and its path, leaving out a part it lacks.
  *
- * A package keys each file by its real name and names its document by the package's location, a
- * `/` and that name, and its manifest reader decodes each segment of a file's `href`, so
- * `items/a%20b.xml` names the file `items/a b.xml`. A target without a scheme or an authority is
- * such a location, so each of its path segments is decoded the same way, a segment with a
- * malformed escape left as written. A target with a scheme or an authority is a URI, kept as
- * written, as the manifest reader keeps an absolute `href`.
+ * @param scheme The scheme, without its colon.
+ * @param authority The authority, without its `//`.
+ * @param path The path.
+ * @returns The location.
+ */
+const located = (scheme: string | undefined, authority: string | undefined, path: string): string =>
+  [
+    scheme === undefined ? "" : `${scheme}:`,
+    authority === undefined ? "" : `//${authority}`,
+    path,
+  ].join("");
+
+/**
+ * Give the document an item ref names: its `href` resolved against the test document's location
+ * by the rule `openPackage` resolves an item ref against its test's path, so a test a package
+ * accepted starts with the items the package resolved for it. The `href`'s query and fragment are
+ * set aside.
+ *
+ * A package names each document by the package's location, a `/` and the file's real name, and
+ * resolves a relative `href` against the test's real name with only the `href`'s segments decoded
+ * ({@link appendedPath}). So the test document's location is taken as written, whatever its
+ * segments hold, and `items/a%20b.xml` names the file `items/a b.xml` beside it. An `href` that
+ * starts with `/` keeps the test document's scheme and authority and replaces its path, its
+ * segments decoded the same way. An `href` with a scheme or an authority is a URI, kept as written
+ * but for its dot segments. A package refuses both as naming no file inside it.
  *
  * @param test The test.
  * @param ref The item ref.
  * @returns The location of the document the ref names.
  */
 const namedDocument = (test: Test, ref: ItemRef): string => {
-  const target = resolve(parseReference(test.document), parseReference(ref.href));
-  const isLocation = target.scheme === undefined && target.authority === undefined;
-  const path = removeDotSegments(target.path, isLocation ? decodeSegment : (segment) => segment);
+  const reference = parseReference(ref.href);
+  const base = parseReference(test.document);
+  if (reference.scheme !== undefined || reference.authority !== undefined) {
+    return located(
+      reference.scheme ?? base.scheme,
+      reference.authority,
+      removeDotSegments(reference.path, (segment) => segment),
+    );
+  }
 
-  return [
-    target.scheme === undefined ? "" : `${target.scheme}:`,
-    target.authority === undefined ? "" : `//${target.authority}`,
-    path,
-  ].join("");
+  const origin = located(base.scheme, base.authority, "");
+  if (reference.path.startsWith("/")) {
+    return `${origin}${removeDotSegments(reference.path, decodeSegment)}`;
+  }
+
+  const path = test.document.slice(origin.length);
+  const rooted = path.startsWith("/") || (base.authority !== undefined && path === "");
+
+  return `${origin}${appendedPath(path, rooted, reference.path)}`;
 };
 
 /**
