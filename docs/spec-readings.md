@@ -621,26 +621,29 @@ against it. A reading that is not an information-model-over-XSD case says which 
       the item's set does not import usage data and its `xsi:type` names no type there (section 3.3.4, Element Locally
       Valid (Element), clause 4.2). This is reading 81's limit, the grammar keyed by version and not by schema set,
       extended to the types an `xsi:type` names, and it closes with that limit.
-    - A simple-content string value is folded into `Node.stringValue` only where its governor's `TextDomain`
-      checks something or an overlay copies the text. A domain whose pattern admits every string of XML characters
-      and that states no facet (`xs:anySimpleType` and `xs:normalizedString`) can fail no text, so its elements' text
-      is not folded unless their kind is one of `copiedTextKinds` (`src/qti/node.ts`: `lom:entry`, `lom:language`,
-      `qti-value`, `qti-base-value` and `ud:value`, whose text an overlay compares or checks against another row) or
-      the element is a LOM title's `lom:string` (`copiedTitleText`, whose text `lom-title` compares, reading 62). The
-      fold's step is selected by a closed read over the copies the child carries, `TextDomain(version,
-      GoverningOf(version, parentKind, parentGoverns))` outside those domains, or `parentKind` among the copied kinds,
-      or a title's string; a copied kind gets no TextDomain law from it. The fold's running text rides the tree's
-      predecessor and last axes, so it is a column of their keys, and grizzle refuses at compile a key whose B-tree
-      entry can pass PostgreSQL's `BTMaxItemSize` (`UnrepresentableKey`). So the running text and `stringValue` are
-      `keyText` (`src/qti/limits.ts`), bounded to `keyTextCodePoints`, the code points one entry holds beside the
-      widest key's other columns, and a folded value past the bound is refused by `keyText`'s pattern on the fold's
-      text, by name: a stated limit of the representation, not this reading's law. The corpus (28 packages, 353
-      documents) holds 3,095 simple-content elements; the 227 under a checked domain are at most 92 code points; of the
-      copied kinds, `qti-base-value` is at most 102 (1,208 elements), `lom:entry` 86 (59), `qti-value` 45 (898) and
-      `lom:language` 2 (44), a LOM title's `lom:string` 121 (66), and no `ud:value` is QTI 3's (the corpus's 77 are QTI
-      2.2's, refused `not-qti3` by reading 89); and the two over the bound (`lom:string`, 967 and 723 code points) are
-      descriptions, `xs:normalizedString` and not copied, so not folded. (Recorded 2026-11-06, from W5 Q5.03; the copied
-      kinds brought up to date at the readings merge.)
+    - A simple-content string value is folded into `Node.stringValue` only where its governor's `TextDomain` checks
+      something or an overlay copies the text. A domain whose pattern admits every string of XML characters and that
+      states no facet (`xs:anySimpleType` and `xs:normalizedString`) can fail no text, so its elements' text is not
+      folded unless their kind is one of `copiedTextKinds` (`src/qti/node.ts`: `lom:entry`, `lom:language`, `qti-value`,
+      `qti-base-value` and `ud:value`, whose text an overlay compares or checks against another row) or the element is a
+      LOM title's `lom:string` (`copiedTitleText`, whose text `lom-title` compares, reading 62), or a LOM learning
+      resource type's `lom:source` or `lom:value` (`copiedVocabularyText`, whose text `lom-learning-resource-type`
+      reads, reading 122). The fold's step is selected by a closed read over the copies the child carries,
+      `TextDomain(version, GoverningOf(version, parentKind, parentGoverns))` outside those domains, or `parentKind`
+      among the copied kinds, or a title's string or a learning resource type's term; a copied kind gets no TextDomain
+      law from it. The fold's running text rides the tree's predecessor and last axes, so it is a column of their keys,
+      and grizzle refuses at compile a key whose B-tree entry can pass PostgreSQL's `BTMaxItemSize`
+      (`UnrepresentableKey`). So the running text and `stringValue` are `keyText` (`src/qti/limits.ts`), bounded to
+      `keyTextCodePoints`, the code points one entry holds beside the widest key's other columns, and a folded value
+      past the bound is refused by `keyText`'s pattern on the fold's text, by name: a stated limit of the
+      representation, not this reading's law. The corpus (28 packages, 353 documents) holds 3,095 simple-content
+      elements; the 227 under a checked domain are at most 92 code points; of the copied kinds, `qti-base-value` is at
+      most 102 (1,208 elements), `lom:entry` 86 (59), `qti-value` 45 (898) and `lom:language` 2 (44), a LOM title's
+      `lom:string` 121 (66), a learning resource type's `lom:value` 15 and `lom:source` 11 (18 each), and no `ud:value`
+      is QTI 3's (the corpus's 77 are QTI 2.2's, refused `not-qti3` by reading 89); and the two over the bound
+      (`lom:string`, 967 and 723 code points) are descriptions, `xs:normalizedString` and not copied, so not folded.
+      (Recorded 2026-11-06, from W5 Q5.03; the copied kinds brought up to date at the readings merge, and the learning
+      resource type's terms added by RV seat M, measured over the 1EdTech corpus at 0a92fbb.)
 
     This binds pantry and plate alike. pantry checks all of it but those two limits. plate does not yet check the
     text: under a `lax` wildcard it refuses element children and attributes other than the four `xsi:` ones, and
@@ -1846,9 +1849,29 @@ against it. A reading that is not an information-model-over-XSD case says which 
      on `ToleranceToken` for each value's sign, the values split as `TextIdref` splits a text
      (`src/qti/operators.ts`). (Decided 2026-11-06 by RV seat O, on the review of PR #46, under the operator's standing
      ruling of 2026-11-05 that the spec wins.)
-
-<!-- Reading 122 is reserved. -->
-
+122. **A LOM `learningResourceType` of the LOM vocabulary is neither `exam` nor `self assessment`.** The QTI 3.0
+     Metadata binding says: "QTI objects are designed to be reusable in a variety of assessment scenarios. Therefore,
+     the LOM-defined values self assessment and exam are forbidden. If the standard LOM vocabulary is used then only
+     the values exercise or questionnaire should be used to describe an item" (section 2.7.5.1,
+     https://www.imsglobal.org/sites/default/files/spec/qti/v3/md-bind/index.html, normative by its section 1.2). The
+     ban is of the _LOM-defined_ values, so it binds a term of the LOM vocabulary. A term is the LOM vocabulary's when
+     its `source` is `LOMv1.0`; when its `source` is empty, which the loose binding's `default="LOMv1.0"` fills
+     (`imsmd_loose_v1p3p2.xsd` line 1288, `LearningResourceType.Type`); or when it writes no `source`, which this
+     reading reads as the same default. A term of any other source is another vocabulary's, which the loose binding
+     "does not enforce" (section 3.6), so its `exam` is not refused (reading 1). Source and value are compared
+     collapsed, so `<value> self  assessment </value>` is refused and `<source> LOMv1.0 </source>` is the LOM's source;
+     a source of whitespace alone collapses to the empty source and is read as it is, as reading 62 reads an `xml:lang`
+     of whitespace alone. The comparison keeps case, so `Exam` is no LOM-defined value, and `self-assessment` is none
+     either. "Should" (exercise, questionnaire) is advice and is not read. The binding's Schematron caps a type at one
+     `source` and one `value` (lines 529 and 533, reading 130), so a second is refused under `child-set` before this law
+     reads the first. A `value` of another LOM vocabulary (an interactivity type's `exam`) and an element of another
+     namespace inside the type are not read. The law is `lom-learning-resource-type` (`src/qti/metadata.ts`,
+     `LomResourceType` and `LomResourceTypeSource`): a type whose value collapses to a forbidden one has a source naming
+     another vocabulary. It holds over every document's LOM, a resource's metadata, the manifest's own and an external
+     record. The 1EdTech corpus holds 18 `learningResourceType`s, every one of source `RDNLTSNType`, so no verdict
+     moves. Main refused the two values whatever the source; this reading refuses only the LOM vocabulary's. This binds
+     pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-06 by RV seat M, on the
+     review of PR #46, under the operator's standing ruling of 2026-11-05 that the spec wins.)
 123. **A `bdo` carries `dir`, and its value is `ltr` or `rtl`.** The information model says of BDO "Authors must
      specify the dir attribute on this tag, with the value ltr to specify a left-to-right override and with the value
      rtl to specify a right-to-left override. The auto value must not be specified" (section 5.11, in both versions).

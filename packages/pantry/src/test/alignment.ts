@@ -643,6 +643,14 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     },
   ],
   [
+    122,
+    {
+      owner:
+        "M's `LomResourceType` and `LomResourceTypeSource` overlays (`src/qti/metadata.ts`), the law `lom-learning-resource-type` as a containment of a forbidden value's type in a source of another vocabulary, over `Node.stringValue` folded by `copiedVocabularyText` (`src/qti/node.ts`); the oracle's LOM learning resource type",
+      status: "G",
+    },
+  ],
+  [
     123,
     {
       owner:
