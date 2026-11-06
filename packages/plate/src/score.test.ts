@@ -559,6 +559,7 @@ describe("the public surface", () => {
         "openPackage",
         "partition",
         "permits",
+        "postings",
         "redact",
         "render",
         "renderNavigation",

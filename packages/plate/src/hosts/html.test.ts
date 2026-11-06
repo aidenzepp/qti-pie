@@ -18,6 +18,18 @@ import { parseHtml } from "#plate/test/round-trip.ts";
 const location = "QTI3_BPIG_Examples/items/BG007.xml";
 
 /**
+ * A hand-built Text Entry item whose integer is written in base 16: the largest byte, `ff`, is
+ * correct, and `match_correct` scores it 1. Its location names no file; the host only puts it on
+ * the verdict.
+ */
+const hexItem = {
+  bytes: new TextEncoder().encode(
+    '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" adaptive="false" time-dependent="false" xml:lang="en" identifier="largest-byte" title="The largest byte"><qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="integer"><qti-correct-response><qti-value>255</qti-value></qti-correct-response></qti-response-declaration><qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"><qti-default-value><qti-value>0</qti-value></qti-default-value></qti-outcome-declaration><qti-item-body><p>The largest byte, in hexadecimal, is <qti-text-entry-interaction response-identifier="RESPONSE" base="16"/>.</p></qti-item-body><qti-response-processing template="https://purl.imsglobal.org/spec/qti/v3p0/rptemplates/match_correct"/></qti-assessment-item>',
+  ),
+  location: "largest-byte.xml",
+} as const;
+
+/**
  * The origin every request here names; the handler reads only the path.
  */
 const origin = "http://host.test";
@@ -82,6 +94,21 @@ const controlName = (elements: readonly Element[], choice: string): string => {
 
   return name === undefined || name === true
     ? assert.fail(`no Choice Control posts ${choice}`)
+    : name;
+};
+
+/**
+ * Give the entry name of the page's one Text Entry Control, as a browser posts it.
+ *
+ * @param elements The GET page's elements.
+ * @returns The Control's `name`.
+ */
+const textEntryName = (elements: readonly Element[]): string => {
+  const [control, ...others] = slotted(elements, rowFor("text-entry-interaction", "control").slot);
+  const name = control?.attrs["name"];
+
+  return others.length > 0 || name === undefined || name === true
+    ? assert.fail("the page does not hold exactly one named Text Entry Control")
     : name;
 };
 
@@ -183,6 +210,27 @@ describe("the plain-HTML host", () => {
           1,
         );
       }),
+  );
+
+  it.effect("scores a Text Entry's integer in the base it declares: ff in base 16 scores 1", () =>
+    Effect.gen(function* postHex() {
+      const { locale } = yield* configure({});
+      const handler = yield* htmlHost(hexItem.location, hexItem.bytes);
+      const page = yield* pageOf(yield* Effect.promise(() => handler(new Request(`${origin}/`))));
+      const response = yield* Effect.promise(() =>
+        handler(formPost([[textEntryName(page.elements), "ff"]])),
+      );
+      const { elements } = yield* pageOf(response);
+      const [status, ...otherStatuses] = slotted(elements, rowFor("item", "status").slot);
+
+      assert.strictEqual(response.status, 200);
+      assert.lengthOf(otherStatuses, 0);
+      assert.lengthOf(slotted(elements, rowFor("item", "message").slot), 0);
+      assert.include(
+        textOf(status ?? assert.fail("the page holds no Status part")),
+        message(locale, "score", { score: "1" }),
+      );
+    }),
   );
 
   it.effect("answers another path with 404 and another method with 405", () =>

@@ -110,7 +110,9 @@ export type {
 
 export { itemRefs, openPackage } from "#plate/package/open.ts";
 
-export type { Redacted, RenderMode, ValidationMessage } from "#plate/payload.ts";
+export type { Posting, Redacted, RenderMode, ValidationMessage } from "#plate/payload.ts";
+
+export { postings } from "#plate/payload.ts";
 
 export type { Options, Rendered } from "#plate/render.ts";
 

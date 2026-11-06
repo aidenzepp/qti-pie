@@ -4,14 +4,13 @@ import { readCorpusFile } from "#plate/document/corpus.ts";
 import { readSource } from "#plate/document/read.ts";
 import { qtiNamespace, walk } from "#plate/document/source.ts";
 import type { SourceDocument, SourceElement } from "#plate/document/source.ts";
-import { isPosted } from "#plate/form/encoding.ts";
 import {
   checkResponses,
   configure,
   decode,
-  entryName,
   open,
   partition,
+  postings,
   redact,
   render,
   score,
@@ -403,8 +402,8 @@ const checkRenders = Effect.fnUntraced(function* checkRenders(fixture: Rendering
 /**
  * Answer a fixture by keyboard alone, as its author composes it: render the item with a fixed
  * instance, put it in the author's native form, walk the form by keys until it submits, keep the
- * entries named for the instance, decode each response under its name, check the responses, then
- * score them.
+ * entries named for the instance, decode each response under its name in its interaction's base,
+ * check the responses, then score them.
  *
  * @param accepted The accepted fixture.
  * @param keys The keys pressed, which must submit the form.
@@ -427,19 +426,9 @@ const complete = Effect.fnUntraced(function* complete(
   const responses: Readonly<Record<string, Value>> = yield* Effect.fromResult(
     Result.all(
       Object.fromEntries(
-        redacted.responses.flatMap(({ baseType, cardinality, identifier }) =>
-          isPosted(baseType)
-            ? [
-                [
-                  identifier,
-                  decode(posted.own, {
-                    baseType,
-                    cardinality,
-                    name: entryName(rendered.instance, identifier),
-                  }),
-                ] as const,
-              ]
-            : [],
+        postings(redacted, rendered.instance).map(
+          ({ binding, identifier, options }) =>
+            [identifier, decode(posted.own, binding, options)] as const,
         ),
       ),
     ),
