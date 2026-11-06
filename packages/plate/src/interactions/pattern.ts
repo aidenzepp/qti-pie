@@ -82,13 +82,16 @@ export const patternMessage = (
     : Option.none();
 
 /**
- * The message a string Text Entry or Extended Text gives for each reason its entry did not decode.
+ * The message a Text Entry or Extended Text gives for each reason its entry did not decode, but
+ * for a numeric binding's `number`, whose message {@link malformedMessage} gives itself.
  *
- * `decode` keeps a string as posted, so for one it fails only as `file` (a file was posted) or
- * `single-many` (the entry was posted twice), each with its own message. `number` and `identifier`,
- * which only a {@link Malformed} built by hand carries here, get the general `notAccepted`.
+ * A file (`file`) and a second entry (`single-many`) get their own messages on every binding.
+ * `identifier` on any binding, `character`, which a browser never posts, and `number` on a
+ * `string` binding, which only a {@link Malformed} built by hand carries, get the general
+ * `notAccepted`.
  */
-const stringRefusals = {
+const refusals = {
+  character: "notAccepted",
   file: "malformedFile",
   identifier: "notAccepted",
   number: "notAccepted",
@@ -98,9 +101,10 @@ const stringRefusals = {
 /**
  * Give the message a text entry that did not decode earns, a tier (a) check.
  *
- * A `string` binding gives the message of the {@link Malformed} reason, `malformedFile` for a file
- * and `malformedSingleMany` for a second entry. An `integer` or `float` binding gives the author's
- * `data-patternmask-message` when set, else `malformedNumber`.
+ * Every binding gives `malformedFile` for a file and `malformedSingleMany` for a second entry. On
+ * an `integer` or `float` binding, a text that is not a number gives the author's
+ * `data-patternmask-message` when set, else `malformedNumber`. Any other reason gives
+ * `notAccepted`.
  *
  * @param interaction The Text Entry or Extended Text: its base type and the author's message.
  * @param reason Why the entry did not decode.
@@ -112,6 +116,6 @@ export const malformedMessage = (
   reason: Malformed["reason"],
   locale: Locale,
 ): string =>
-  interaction.baseType === "string"
-    ? message(locale, stringRefusals[reason])
-    : Option.getOrElse(interaction.patternMaskMessage, () => message(locale, "malformedNumber"));
+  reason === "number" && interaction.baseType !== "string"
+    ? Option.getOrElse(interaction.patternMaskMessage, () => message(locale, "malformedNumber"))
+    : message(locale, refusals[reason]);

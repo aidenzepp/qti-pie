@@ -1,8 +1,7 @@
 import { existsSync } from "node:fs";
-import { connect } from "node:net";
 import path from "node:path";
 import { assert } from "@effect/vitest";
-import { ConfigProvider, Effect, Predicate, Result } from "effect";
+import { ConfigProvider, Effect, Result } from "effect";
 import { textOf } from "#plate/test/accessibility.ts";
 import {
   Engine,
@@ -16,6 +15,7 @@ import {
   walkCorpusLayer,
   withPage,
 } from "#plate/test/browsers.ts";
+import { dial } from "#plate/test/dial.ts";
 import { elementsOf } from "#plate/test/playground-page.ts";
 import { parseHtml } from "#plate/test/round-trip.ts";
 
@@ -36,28 +36,6 @@ const titleOf = (html: string): string => {
 
   return title === undefined ? "" : textOf(title);
 };
-
-/**
- * Open a TCP connection to a port on `127.0.0.1` and close it at once.
- *
- * @param port The port.
- * @returns `accepted` when something listens there, `refused` when nothing does.
- */
-const dial = (port: number) =>
-  Effect.callback<"accepted" | "refused">((resume) => {
-    const socket = connect(port, "127.0.0.1");
-    socket.once("connect", () => {
-      socket.destroy();
-      resume(Effect.succeed("accepted"));
-    });
-    socket.once("error", (error) => {
-      resume(
-        Predicate.hasProperty(error, "code") && error.code === "ECONNREFUSED"
-          ? Effect.succeed("refused")
-          : Effect.die(error),
-      );
-    });
-  });
 
 /**
  * Read the tag of a result's failure.

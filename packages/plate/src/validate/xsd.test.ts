@@ -21,10 +21,17 @@ import type {
   AttributeTable,
   AttributeType,
   ChildName,
+  ChildOccurrence,
   ContentTable,
   ElementTable,
 } from "#plate/validate/xsd.ts";
-import { generateTables, patternEquivalents, Tables } from "#plate/validate/xsd.ts";
+import {
+  generateOccurrences,
+  generateTables,
+  Occurrences,
+  patternEquivalents,
+  Tables,
+} from "#plate/validate/xsd.ts";
 
 /**
  * Construct an element in the XML Schema namespace, as an XSD fragment holds it.
@@ -1321,6 +1328,296 @@ describe("generateTables: each named type's own table", () => {
       const decoded = yield* Schema.decodeUnknownEffect(Tables)(JSON.parse(json));
       assert.deepStrictEqual(decoded, tables);
       assert.deepStrictEqual(decoded.types["HolderDType"]?.children, [qti("part")]);
+    }),
+  );
+});
+
+/**
+ * Construct a particle with its XSD attributes, given as name and value pairs, and its content.
+ *
+ * @param local The particle's construct, such as `element` or `sequence`.
+ * @param pairs Its attributes, such as `{ maxOccurs: "unbounded", ref: "img" }`.
+ * @param children Its particles.
+ * @returns The particle.
+ */
+const particle = (
+  local: "any" | "choice" | "element" | "group" | "sequence",
+  pairs: Readonly<Record<string, string>>,
+  ...children: readonly SourceElement[]
+): SourceElement =>
+  xs(
+    local,
+    Object.entries(pairs).map(([name, value]) => attr(name, value)),
+    children,
+  );
+
+/**
+ * The counts of a child in the QTI namespace.
+ *
+ * @param local The child's local name.
+ * @param minOccurs The least number of times it is admitted.
+ * @param maxOccurs The greatest number of times, or `unbounded`.
+ * @returns The child's counts.
+ */
+const counted = (local: string, minOccurs: string, maxOccurs: string): ChildOccurrence => ({
+  local,
+  maxOccurs,
+  minOccurs,
+  namespace: qtiNamespace,
+});
+
+/**
+ * Construct a named complex type that derives from a base by `extension` or `restriction`, with
+ * its own content.
+ *
+ * @param name The type's name.
+ * @param derivation How it derives.
+ * @param base The base's name.
+ * @param content Its own content model.
+ * @returns The complex type.
+ */
+const derived = (
+  name: string,
+  derivation: "extension" | "restriction",
+  base: string,
+  content: SourceElement,
+): SourceElement =>
+  complexType(name, xs("complexContent", [], [xs(derivation, [attr("base", base)], [content])]));
+
+describe("generateOccurrences", () => {
+  it.effect("a sequence adds a child's counts, and a particle's occurs scale its content", () =>
+    Effect.gen(function* sequenceCounts() {
+      const occurrences = yield* generateOccurrences(
+        schema(
+          complexType("EmptyDType"),
+          complexType(
+            "ListDType",
+            particle(
+              "sequence",
+              {},
+              element("a", "EmptyDType"),
+              particle("element", { minOccurs: "0", name: "a", type: "EmptyDType" }),
+              particle("sequence", { maxOccurs: "3", minOccurs: "2" }, element("b", "EmptyDType")),
+              particle("element", {
+                maxOccurs: "unbounded",
+                minOccurs: "0",
+                name: "b",
+                type: "EmptyDType",
+              }),
+            ),
+          ),
+          element("list", "ListDType"),
+        ),
+      );
+
+      const expected = [counted("a", "1", "2"), counted("b", "2", "unbounded")];
+      assert.deepStrictEqual(occurrences.elements["list"], expected);
+      assert.deepStrictEqual(occurrences.types["ListDType"], expected);
+    }),
+  );
+
+  it.effect(
+    "a choice takes each child's least and greatest count over its branches, a branch without it counting none",
+    () =>
+      Effect.gen(function* choiceCounts() {
+        const occurrences = yield* generateOccurrences(
+          schema(
+            complexType("EmptyDType"),
+            complexType(
+              "ChoiceDType",
+              particle(
+                "sequence",
+                {},
+                particle(
+                  "choice",
+                  { maxOccurs: "2" },
+                  element("a", "EmptyDType"),
+                  particle("sequence", {}, element("a", "EmptyDType"), element("b", "EmptyDType")),
+                ),
+                particle(
+                  "sequence",
+                  { maxOccurs: "unbounded" },
+                  particle("element", {
+                    maxOccurs: "0",
+                    minOccurs: "0",
+                    name: "c",
+                    type: "EmptyDType",
+                  }),
+                ),
+              ),
+            ),
+            complexType(
+              "WildDType",
+              particle(
+                "choice",
+                {},
+                element("a", "EmptyDType"),
+                particle("any", { namespace: "##other" }),
+              ),
+            ),
+          ),
+        );
+
+        assert.deepStrictEqual(occurrences.types["ChoiceDType"], [
+          counted("a", "1", "2"),
+          counted("b", "0", "2"),
+          counted("c", "0", "0"),
+        ]);
+        assert.deepStrictEqual(occurrences.types["WildDType"], [counted("a", "0", "1")]);
+      }),
+  );
+
+  it.effect(
+    "a group reference and an extension add their counts, and a restriction's are its own",
+    () =>
+      Effect.gen(function* derivedCounts() {
+        const occurrences = yield* generateOccurrences(
+          schema(
+            complexType("EmptyDType"),
+            xs(
+              "group",
+              [attr("name", "meta.Group")],
+              [particle("sequence", {}, element("footer", "EmptyDType"))],
+            ),
+            complexType(
+              "BaseDType",
+              particle(
+                "sequence",
+                {},
+                element("title", "EmptyDType"),
+                particle("group", { minOccurs: "0", ref: "meta.Group" }),
+              ),
+            ),
+            derived(
+              "LongDType",
+              "extension",
+              "BaseDType",
+              particle(
+                "sequence",
+                {},
+                particle("element", { minOccurs: "0", name: "title", type: "EmptyDType" }),
+              ),
+            ),
+            derived(
+              "ShortDType",
+              "restriction",
+              "BaseDType",
+              particle("sequence", {}, element("title", "EmptyDType")),
+            ),
+          ),
+        );
+
+        assert.deepStrictEqual(occurrences.types["BaseDType"], [
+          counted("footer", "0", "1"),
+          counted("title", "1", "1"),
+        ]);
+        assert.deepStrictEqual(occurrences.types["LongDType"], [
+          counted("footer", "0", "1"),
+          counted("title", "1", "2"),
+        ]);
+        assert.deepStrictEqual(occurrences.types["ShortDType"], [counted("title", "1", "1")]);
+      }),
+  );
+
+  it.effect(
+    "one name declared with two types takes each child's least and greatest count over them",
+    () =>
+      Effect.gen(function* declarationCounts() {
+        const occurrences = yield* generateOccurrences(
+          schema(
+            complexType("EmptyDType"),
+            complexType("HeadDType", particle("sequence", {}, element("version", "EmptyDType"))),
+            complexType(
+              "NoteDType",
+              particle(
+                "sequence",
+                {},
+                particle("element", {
+                  maxOccurs: "unbounded",
+                  name: "line",
+                  type: "EmptyDType",
+                }),
+              ),
+            ),
+            complexType(
+              "ManifestDType",
+              particle("sequence", {}, element("metadata", "HeadDType")),
+            ),
+            complexType(
+              "ResourceDType",
+              particle(
+                "sequence",
+                {},
+                particle("element", {
+                  minOccurs: "0",
+                  name: "metadata",
+                  type: "NoteDType",
+                }),
+              ),
+            ),
+            element("manifest", "ManifestDType"),
+            element("resource", "ResourceDType"),
+          ),
+        );
+
+        assert.deepStrictEqual(occurrences.elements["manifest"], [counted("metadata", "1", "1")]);
+        assert.deepStrictEqual(occurrences.elements["resource"], [counted("metadata", "0", "1")]);
+        assert.deepStrictEqual(occurrences.elements["metadata"], [
+          counted("line", "0", "unbounded"),
+          counted("version", "0", "1"),
+        ]);
+        assert.deepStrictEqual(occurrences.types["HeadDType"], [counted("version", "1", "1")]);
+      }),
+  );
+
+  it.effect(
+    "every element table and type entry has its occurrences, which encode and decode through the Schema",
+    () =>
+      Effect.gen(function* occurrenceKeys() {
+        const fragment = schema(
+          complexType("EmptyDType"),
+          simpleType("CodeDType", restrictionOf("xs:string")),
+          complexType("HolderDType", particle("sequence", {}, element("part", "EmptyDType"))),
+          element("holder", "HolderDType"),
+          element("code", "CodeDType"),
+        );
+        const tables = yield* generateTables(fragment);
+        const occurrences = yield* generateOccurrences(fragment);
+
+        assert.deepStrictEqual(Object.keys(occurrences.elements), Object.keys(tables.elements));
+        assert.deepStrictEqual(Object.keys(occurrences.types), Object.keys(tables.types));
+        assert.deepStrictEqual(occurrences.types["CodeDType"], []);
+
+        const json = JSON.stringify(yield* Schema.encodeEffect(Occurrences)(occurrences));
+        assert.deepStrictEqual(
+          yield* Schema.decodeUnknownEffect(Occurrences)(JSON.parse(json)),
+          occurrences,
+        );
+      }),
+  );
+
+  it.effect("a count that is not a non-negative integer fails with TableGenerationError", () =>
+    Effect.gen(function* badCount() {
+      const error = yield* generateOccurrences(
+        schema(
+          complexType("EmptyDType"),
+          complexType(
+            "BadDType",
+            particle(
+              "sequence",
+              {},
+              particle("element", {
+                minOccurs: "-1",
+                name: "a",
+                type: "EmptyDType",
+              }),
+            ),
+          ),
+        ),
+      ).pipe(Effect.flip);
+
+      assert.strictEqual(error._tag, "TableGenerationError");
+      assert.strictEqual(error.construct, "xs:element");
     }),
   );
 });

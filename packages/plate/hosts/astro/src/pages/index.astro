@@ -1,0 +1,292 @@
+---
+/**
+ * The Astro host: one on-demand page around BG010, composed from plate's public surface alone,
+ * with no island and no script.
+ *
+ * Each request reads BG010's bytes from the corpus root that `PLATE_CORPUS_DIR` names (the scoped
+ * server, `scripts/astro-server.ts`, resolves it as `corpusRoot` does), opens and redacts the item,
+ * and places `render`'s HTML with `set:html` inside the host's own `<form method="POST">`, so the
+ * fragment is served byte for byte as plate wrote it. A post is decoded through `postings`, checked
+ * with `checkResponses` and scored with `score`, and the page comes back with the Status part above
+ * the form. The host keeps no record, so each post is scored as a first attempt.
+ *
+ * It keeps the README's duty for a form that holds a Choice: the form carries `autocomplete="off"`
+ * and the page sends `Cache-Control: no-store`.
+ *
+ * It imports plate's stylesheet, `@qti-pie/plate/styles.css`, which Astro bundles into a linked
+ * sheet in the page's head, never an inline `<style>`. The item Root's containment rule there keeps
+ * authored content inside the item.
+ */
+import "#plate/styles.css";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import { Config, Effect, Option, Result } from "effect";
+import {
+  acceptedItem,
+  checkResponses,
+  configure,
+  decode,
+  open,
+  partition,
+  postings,
+  redact,
+  render,
+  renderStatus,
+  score,
+} from "#plate/index.ts";
+import type { Entry, Options, StatusInput, StoredRecord, ValidationMessage, Value } from "#plate/index.ts";
+
+/**
+ * Render the page on each request, never at build time: it reads the corpus and takes posts.
+ */
+export const prerender = false;
+
+/**
+ * BG010's path under the corpus root: an inline Text Entry in a paragraph.
+ */
+const location = "QTI3_BPIG_Examples/items/BG010.xml";
+
+/**
+ * The instance token every render here uses, so a post names the entries its page wrote.
+ */
+const instance = "q1";
+
+/**
+ * The floats a stored record writes as names, since JSON has no number for them.
+ */
+const namedFloats = {
+  "-0": -0,
+  "-INF": Number.NEGATIVE_INFINITY,
+  INF: Number.POSITIVE_INFINITY,
+  NaN: Number.NaN,
+} as const;
+
+/**
+ * Construct the model of a page that says one thing instead of serving the item.
+ *
+ * @param status The HTTP status.
+ * @param title The page's title and heading.
+ * @param detail What the paragraph says.
+ * @returns The page's model.
+ */
+const note = (status: number, title: string, detail: string) =>
+  ({ detail, kind: "note", status, title }) as const;
+
+/**
+ * Build the page's model for this request: the item's page, or a note saying why not.
+ */
+const program = Effect.gen(function* astroPage() {
+  const corpus = yield* Config.String("PLATE_CORPUS_DIR").pipe(Config.withDefault(""));
+
+  if (corpus === "") {
+    return note(
+      500,
+      "No corpus",
+      "PLATE_CORPUS_DIR is not set. Serve this host through scripts/astro-server.ts, which sets it, or set it to the directory that holds 1EdTech's QTI 3 examples.",
+    );
+  }
+
+  const bytes = yield* Effect.result(
+    Effect.tryPromise(() => readFile(path.join(corpus, location))),
+  );
+
+  if (Result.isFailure(bytes)) {
+    return note(
+      500,
+      "Item unreadable",
+      `Cannot read ${location} under ${corpus}. Set PLATE_CORPUS_DIR to the directory that holds 1EdTech's QTI 3 examples.`,
+    );
+  }
+
+  const verdict = yield* open(location, bytes.success);
+  const configuration = yield* configure({});
+  const accepted = acceptedItem(verdict);
+
+  if (Option.isNone(accepted)) {
+    return note(
+      500,
+      "Item not accepted",
+      `plate's verdict on ${location} is ${verdict.verdict}, for a document of kind ${verdict.kind}, so this host has no item to serve. Set PLATE_CORPUS_DIR to the 1EdTech examples plate accepts BG010 from.`,
+    );
+  }
+
+  const item = accepted.value;
+  const redacted = redact(item);
+
+  /**
+   * Construct the item's page: the Status part when a post gave one, then the form around the
+   * item.
+   *
+   * @param options What `render` shows: the posted values, or a refused post's strings and
+   *   messages.
+   * @param status What the Status part shows, none before a post.
+   * @returns The page's model.
+   */
+  const itemPage = (options: Options, status?: StatusInput) => {
+    const rendered = render(redacted, configuration, { ...options, instance });
+    const shown = status === undefined ? undefined : renderStatus(status, configuration);
+
+    if (rendered._tag === "Failure") {
+      return note(500, "Host error", rendered.failure.message);
+    }
+
+    if (shown?._tag === "Failure") {
+      return note(500, "Host error", shown.failure.message);
+    }
+
+    return {
+      html: rendered.success.html,
+      kind: "item",
+      lang: configuration.locale,
+      statusPart: shown?.success.html ?? "",
+      title: redacted.title,
+    } as const;
+  };
+
+  /**
+   * Write the score a stored record holds, as the candidate reads it in the locale.
+   *
+   * @param record The record `score` returned.
+   * @returns The single value of `SCORE`, or none when the item has no response processing or
+   *   `SCORE` is absent or NULL.
+   */
+  const scoreText = (record: StoredRecord): string | undefined => {
+    const [single] = record.outcomes["SCORE"]?.values ?? [];
+    const format = new Intl.NumberFormat(configuration.locale);
+
+    if (item.item.processing._tag === "None" || single === undefined) {
+      return undefined;
+    }
+
+    if (single.baseType === "float") {
+      const { value } = single;
+
+      return format.format(
+        value === "-0" || value === "-INF" || value === "INF" || value === "NaN"
+          ? namedFloats[value]
+          : value,
+      );
+    }
+
+    if (single.baseType === "integer") {
+      return format.format(BigInt(single.value));
+    }
+
+    return Array.isArray(single.value) ? single.value.join(" ") : String(single.value);
+  };
+
+  if (Astro.request.method === "GET" || Astro.request.method === "HEAD") {
+    return itemPage({});
+  }
+
+  if (Astro.request.method !== "POST") {
+    return note(405, "Method not allowed", "Open the page with GET, or post its form.");
+  }
+
+  const form = yield* Effect.result(Effect.tryPromise(() => Astro.request.formData()));
+
+  if (Result.isFailure(form)) {
+    return note(400, "Unreadable post", "The post's body could not be read as a form; submit the form again.");
+  }
+
+  const entries = Array.from(form.success, ([name, value]): Entry => [name, value]);
+  const { own } = partition(entries, instance);
+  const decoded = postings(redacted, instance).map(({ binding, identifier, options }) => ({
+    binding,
+    identifier,
+    result: decode(own, binding, options),
+  }));
+  const posted = Object.fromEntries(
+    decoded.map(({ binding, identifier }) => [
+      identifier,
+      own.flatMap(([name, value]) => (name !== binding.name || value instanceof Blob ? [] : [value])),
+    ]),
+  );
+  const messages = checkResponses(
+    item,
+    Object.fromEntries(
+      decoded.map(({ identifier, result }) => [
+        identifier,
+        result._tag === "Success" ? result.success : result.failure,
+      ]),
+    ),
+    configuration,
+  );
+  /**
+   * Construct the page of a refused post: the item with the post's strings and the messages, and
+   * the Status part headed "Not accepted" with `autofocus`.
+   *
+   * @param refusals The messages that refuse the post.
+   * @returns The page's model.
+   */
+  const refused = (refusals: readonly ValidationMessage[]) =>
+    itemPage(
+      { messages: refusals, posted },
+      { autofocus: true, heading: "notAccepted", instance, messages: refusals },
+    );
+
+  if (messages.length > 0) {
+    return refused(messages);
+  }
+
+  const values: Readonly<Record<string, Value>> = Object.fromEntries(
+    decoded.flatMap(({ identifier, result }) =>
+      result._tag === "Success" ? [[identifier, result.success] as const] : [],
+    ),
+  );
+  const stored = score(item, values);
+
+  if (stored._tag === "Failure") {
+    return stored.failure._tag === "ResponsesRefused"
+      ? refused(stored.failure.messages)
+      : note(500, "Host error", stored.failure.message);
+  }
+
+  const written = scoreText(stored.success);
+
+  return itemPage(
+    { values },
+    written === undefined
+      ? { autofocus: true, heading: "responseRecorded", instance }
+      : { autofocus: true, heading: "scored", instance, score: written },
+  );
+});
+
+const page = await Effect.runPromise(
+  program.pipe(Effect.catch((error) => Effect.succeed(note(500, "Host error", error.message)))),
+);
+
+Astro.response.headers.set("cache-control", "no-store");
+
+if (page.kind === "note") {
+  Astro.response.status = page.status;
+}
+---
+<!doctype html>
+<html lang={page.kind === "item" ? page.lang : "en"}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{page.title}</title>
+  </head>
+  <body>
+    <main>
+      {
+        page.kind === "item" ? (
+          <Fragment>
+            <Fragment set:html={page.statusPart} />
+            <form method="POST" autocomplete="off">
+              <Fragment set:html={page.html} />
+              <button type="submit">Submit</button>
+            </form>
+          </Fragment>
+        ) : (
+          <Fragment>
+            <h1>{page.title}</h1>
+            <p>{page.detail}</p>
+          </Fragment>
+        )
+      }
+    </main>
+  </body>
+</html>

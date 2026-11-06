@@ -18,7 +18,7 @@ import { brandRedacted } from "#plate/payload.ts";
 import type { Redacted, RedactedFields } from "#plate/payload.ts";
 import { redact, render } from "#plate/render.ts";
 import { open } from "#plate/validate/open.ts";
-import { acceptForTest } from "#plate/validate/verdict.ts";
+import { acceptForTest, acceptedItem } from "#plate/validate/verdict.ts";
 import type { Verdict } from "#plate/validate/verdict.ts";
 
 /**
@@ -514,10 +514,9 @@ const acceptedAndRoundTripped = Effect.fnUntraced(function* acceptedAndRoundTrip
   unsupported: readonly string[],
 ) {
   const verdict = yield* open("items/text.xml", bytes);
-  const accepted =
-    verdict.verdict === "accepted" || verdict.verdict === "accepted-with-unsupported"
-      ? verdict.accepted
-      : assert.fail(`${name} is ${verdict.verdict}`);
+  const accepted = Option.getOrElse(acceptedItem(verdict), () =>
+    assert.fail(`${name} is ${verdict.verdict}`),
+  );
 
   assert.strictEqual(
     verdict.verdict,
@@ -582,8 +581,10 @@ describe("the verdict and the codec on shuffle and fixed", () => {
         yield* acceptedAndRoundTripped("a shuffled Choice", bytes, []);
 
         const verdict = yield* open("items/shuffled.xml", bytes);
-        const accepted =
-          verdict.verdict === "accepted" ? verdict.accepted : assert.fail(verdict.verdict);
+        const accepted = acceptedItem(verdict).pipe(
+          Option.filter(() => verdict.verdict === "accepted"),
+          Option.getOrElse(() => assert.fail(verdict.verdict)),
+        );
         const text = JSON.stringify(Result.getOrThrow(encodeRedacted(redact(accepted))));
 
         assert.include(text, '"fixed":true,"identifier":"B"');
@@ -689,10 +690,12 @@ describe("decodeRedacted on a deeply nested body", () => {
       Effect.gen(function* decodesDeepestItem() {
         const deepest: Verdict = yield* open("deep.xml", nestedDivs(254));
         const pastReader: Verdict = yield* open("deep.xml", nestedDivs(255));
-        const accepted =
-          deepest.verdict === "accepted"
-            ? deepest.accepted
-            : assert.fail(`The 254-deep item is ${deepest.verdict}, not accepted.`);
+        const accepted = acceptedItem(deepest).pipe(
+          Option.filter(() => deepest.verdict === "accepted"),
+          Option.getOrElse(() =>
+            assert.fail(`The 254-deep item is ${deepest.verdict}, not accepted.`),
+          ),
+        );
         const redacted = redact(accepted);
         // oxlint-disable-next-line unicorn/prefer-structured-clone -- The test proves the item survives JSON text, the form a host sends; `structuredClone` would keep the bigints and Options JSON drops.
         const handedOver: unknown = JSON.parse(

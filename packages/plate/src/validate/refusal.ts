@@ -3,9 +3,9 @@
  *
  * A refusal is data, not an error class: the verdict holds it beside the document it judges, and
  * the reader adapter fails with it. The structural validator, the prose rules, the item model, the
- * verdict and the reader adapter all produce {@link Refusal}, and no other module defines one, so a
- * caller and a test see one roster, {@link refusalRules}, whichever stage refused. The wording that
- * turns a refusal into a sentence belongs to the verdict.
+ * verdict, the reader adapter and the package reader all produce {@link Refusal}, and no other
+ * module defines one, so a caller and a test see one roster, {@link refusalRules}, whichever stage
+ * refused. The wording that turns a refusal into a sentence belongs to the verdict.
  *
  * @module
  */
@@ -18,10 +18,20 @@ import { Schema } from "effect";
  * readings' placements and child counts), the next seven the prose rules' (responses, identifiers,
  * bindings, templates, value types, variables and expression types), then `count-range`, which the
  * structural validator gives for reading 46's count attributes and the item model for the
- * `max-choices` and `min-choices` it reads, then the verdict's `not-qti-root`, and last the reader
+ * `max-choices` and `min-choices` it reads, then the verdict's `not-qti-root`, then the reader
  * adapter's `not-well-formed`, located by line and column, and `reader-refused`, located at the
- * whole document with the shared reader's own rule in {@link Refusal.readerRule}. Adding a rule
- * here is the only way a stage gains a new refusal.
+ * whole document with the shared reader's own rule in {@link Refusal.readerRule}.
+ *
+ * The last thirteen are M2's. A test's prose rules give `expression-placement`, an outcome-only
+ * expression outside outcome processing (reading 23). The manifest gives `not-qti3-package`, a root
+ * outside QTI 3.0's content packaging namespace, `package-profile`, a `schemaversion` other than
+ * the two accepted, and `dependency-unresolved`. The file rules give `package-manifest-missing`,
+ * `package-path-outside`, `package-file-unlisted` and `package-file-missing`. Opening a package
+ * gives `item-ref-unresolved`, `ambiguous-reference`, a dotted reference that two readings resolve
+ * (reading 48), `resource-type-mismatch`, a resource whose document's root is not the one its
+ * declared type names, and `lom-identifier` and `lom-title`, an item's or test's identifier or
+ * title that its resource's own LOM metadata gives otherwise (reading 62). Adding a rule here is
+ * the only way a stage gains a new refusal.
  */
 export const refusalRules = [
   "unknown-element",
@@ -43,6 +53,19 @@ export const refusalRules = [
   "not-qti-root",
   "not-well-formed",
   "reader-refused",
+  "expression-placement",
+  "not-qti3-package",
+  "package-profile",
+  "package-manifest-missing",
+  "package-path-outside",
+  "package-file-unlisted",
+  "package-file-missing",
+  "dependency-unresolved",
+  "item-ref-unresolved",
+  "ambiguous-reference",
+  "resource-type-mismatch",
+  "lom-identifier",
+  "lom-title",
 ] as const;
 
 /**

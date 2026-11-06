@@ -14,9 +14,16 @@ import { message } from "#plate/messages.ts";
 import type { BodyNode, ChoiceInteraction, Item } from "#plate/model/item.ts";
 import type { Value } from "#plate/model/values.ts";
 import { payload, redactItem } from "#plate/payload.ts";
-import type { ChoicePayload, EmitState, Payload, TextEntryPayload, View } from "#plate/payload.ts";
+import type {
+  ChoicePayload,
+  EmitState,
+  Payload,
+  RenderMode,
+  TextEntryPayload,
+  View,
+} from "#plate/payload.ts";
 import { checkTree, nameOf, textOf } from "#plate/test/accessibility.ts";
-import { keyboardWalk } from "#plate/test/keyboard.ts";
+import { keyboardWalk, tabOrder } from "#plate/test/keyboard.ts";
 import { roundTrips } from "#plate/test/round-trip.ts";
 
 /**
@@ -133,10 +140,38 @@ const answering: View = {
   instance,
   locale: "en",
   messages: [],
+  mode: "answering",
   names: new Map(),
   posted: Option.none(),
   values: new Map(),
 };
+
+/**
+ * Construct the view of a render in a mode that shows values, `review` or `solution`.
+ *
+ * @param mode The mode.
+ * @param interaction The Choice, which gives the value's cardinality.
+ * @param chosen The identifiers the value holds, in order.
+ * @returns The view, with the value under the Choice's response.
+ */
+const showing = (
+  mode: RenderMode,
+  interaction: ChoiceInteraction,
+  ...chosen: readonly string[]
+): View => ({
+  ...answering,
+  mode,
+  values: new Map([
+    [
+      response,
+      {
+        baseType: "identifier",
+        cardinality: interaction.cardinality,
+        values: chosen.map((value) => ({ baseType: "identifier", value })),
+      },
+    ],
+  ]),
+});
 
 /**
  * Compute the payload of an item holding one Choice.
@@ -853,6 +888,120 @@ describe("renderChoice", () => {
   );
 
   it.effect(
+    "[Q-2] in review and solution, disables every Control, checks the view's values and leaves no tab stop in the group",
+    () =>
+      Effect.gen(function* notEditable() {
+        for (const mode of ["review", "solution"] as const) {
+          for (const [interaction, chosen, checked] of [
+            [colours, ["B"], [undefined, true, undefined]],
+            [pairs, ["A", "C"], [true, undefined, true]],
+            [paragraphPrompt, ["C"], [undefined, undefined, true]],
+          ] as const) {
+            const built = payloadOf(interaction, showing(mode, interaction, ...chosen));
+            const root = yield* render(built);
+            const tree = page(root, built);
+            const controls = partsIn(root, "control");
+            const submit = childAt(childAt(tree, 0), 1);
+            const at = `${mode} ${interaction.cardinality} ${chosen.join(" ")}`;
+
+            assert.isFalse(choiceIn(built).editable, at);
+            assert.strictEqual(root.attrs["data-mode"], mode, at);
+            assert.deepStrictEqual(
+              controls.map((control) => control.attrs["disabled"]),
+              [true, true, true],
+              at,
+            );
+            assert.deepStrictEqual(
+              controls.map((control) => control.attrs["checked"]),
+              [...checked],
+              at,
+            );
+            assert.deepStrictEqual(checkTree(tree, { baseLevel: 2 }), [], at);
+            assert.deepStrictEqual(tabOrder(tree), [submit], at);
+            assert.deepStrictEqual(
+              keyboardWalk(tree, ["Tab", "ArrowDown", "Space", "Enter"]),
+              Option.some([]),
+              at,
+            );
+          }
+        }
+      }),
+  );
+
+  it.effect(
+    "[Q-2] in review, keeps the group's and every Control's name as nameOf gives them in answering",
+    () =>
+      Effect.gen(function* namesInReview() {
+        const unprompted = (
+          ariaLabel: Option.Option<string>,
+          ariaLabelledby: Option.Option<string>,
+        ): ChoiceInteraction => ({ ...colours, ariaLabel, ariaLabelledby, prompt: Option.none() });
+        const cases = [
+          ["legend Prompt", colours],
+          ["labelledby Prompt", paragraphPrompt],
+          ["content with no text", swatches],
+          ["aria-label", unprompted(Option.some("Pick a city"), Option.none())],
+          ["blank aria-label", unprompted(Option.some("   "), Option.none())],
+          ["dangling aria-labelledby", unprompted(Option.none(), Option.some("nope missing"))],
+          [
+            "empty aria-label, dangling aria-labelledby",
+            unprompted(Option.some(""), Option.some("nope")),
+          ],
+        ] as const;
+        for (const [at, interaction] of cases) {
+          const named = (view: View) =>
+            Effect.gen(function* names() {
+              const built = payloadOf(interaction, view);
+              const root = yield* render(built);
+              const tree = page(root, built);
+
+              assert.deepStrictEqual(checkTree(tree, { baseLevel: 2 }), [], `${view.mode} ${at}`);
+
+              return {
+                controls: partsIn(tree, "control").map((control) => nameOf(control, tree)),
+                group: nameOf(root, tree),
+                labelledby: root.attrs["aria-labelledby"],
+              };
+            });
+          const answered = yield* named(answering);
+          const reviewed = yield* named(showing("review", interaction, "A"));
+
+          assert.deepStrictEqual(reviewed, answered, at);
+          assert.isTrue(
+            answered.controls.every((control) => control !== ""),
+            at,
+          );
+        }
+      }),
+  );
+
+  it.effect(
+    "[Q-2] writes no autocomplete on any Control in answering, review or solution, and disables none in answering",
+    () =>
+      Effect.gen(function* noAutocomplete() {
+        for (const interaction of [colours, pairs]) {
+          for (const mode of ["answering", "review", "solution"] as const) {
+            const root = yield* render(payloadOf(interaction, showing(mode, interaction, "A")));
+            const controls = partsIn(root, "control");
+            const at = `${mode} ${interaction.cardinality}`;
+
+            assert.lengthOf(controls, 3, at);
+            assert.isTrue(
+              controls.every((control) => control.attrs["autocomplete"] === undefined),
+              at,
+            );
+            assert.isTrue(
+              controls.every(
+                (control) => (control.attrs["disabled"] === true) === (mode !== "answering"),
+              ),
+              at,
+            );
+          }
+        }
+      }),
+  );
+
+  it.effect(
     "[Q-2] [I-8] emits a choice's content as the body does: an h1 at the heading level, an authored id scoped",
     () =>
       Effect.gen(function* contentAsBody() {
@@ -1118,6 +1267,7 @@ describe("renderChoice", () => {
           base: 10,
           baseType: "string",
           class: "",
+          editable: true,
           expectedLength: Option.none(),
           formName: entryName(instance, "TEXT"),
           invalid: false,

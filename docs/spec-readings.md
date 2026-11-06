@@ -486,8 +486,8 @@ against it. A reading that is not an information-model-over-XSD case says which 
     count: XML Schema then assesses the element laxly, against the ur-type definition (section 3.3.4, Schema-Validity
     Assessment (Element), after clause 2), which is the lax walk itself, so its children are assessed laxly in turn.
     This binds pantry and plate alike, so the two never read the same file differently. plate is the only
-    implementation so far, and it still keeps such an element unchecked with everything below it, attributes and
-    children included. This is not a case of documents in conflict: XML Schema decides what is valid, and only the
+    implementation so far: it refuses element children and attributes other than the four `xsi:` ones, and accepts
+    the text unchecked. This is not a case of documents in conflict: XML Schema decides what is valid, and only the
     text is beyond what a package here can check. (The renderer's phase-3 default, delivery spec section 5.1, applied
     in plate, narrowed to the text by XML Schema Part 1, section 3.3.4; 2026-11-05.)
 61. **An element in QTI's own namespace inside `qti-ordering`'s extension slot is valid.** The information model says
@@ -496,3 +496,117 @@ against it. A reading that is not an information-model-over-XSD case says which 
     content, not read as QTI ordering. `qti-selection`'s slot is not covered: its information model text says the child
     tags "must be new tags i.e. not reused QTI ASI tags" (section 5.129.4). (2026-11-06.)
 62. **An item's or test's identifier and title must equal those its package's LOM metadata gives it, where that metadata gives one; a package where they differ is invalid and is refused.** The information model says of the item identifier (section 4.1.1) that "the two MUST be the same", and the same of the test identifier (section 4.4.1) and the item title (section 4.1.2: "these two MUST be the same"). The metadata binding says the identifier and title "must" match the object's own (sections 2.7.1.1, #Gen1, and 2.7.1.2, #Gen2). A resource whose metadata gives no identifier or title is outside the rule. (2026-11-06.)
+63. **Item session control is resolved attribute by attribute: each of its seven attributes comes from the nearest
+    element that writes it.** For an item ref, each attribute of `qti-item-session-control` is taken from the item ref,
+    then from each enclosing section from the innermost out, then from the test part, and from its default only where
+    none of them writes it. A section or item ref that writes only `max-attempts` keeps the part's `show-feedback`. The
+    information model says these constraints can be given for an item ref, a section or a whole test part, that "a
+    setting at qti-test-part level affects all items in that part unless the setting is overridden at the
+    qti-assessment-section level or ultimately at the individual qti-assessment-item-ref", and that the defaults "are
+    used only in the absence of any applicable constraint" (section 7.19, ItemSessionControl). The XSD gives six of the
+    attributes defaults (`show-feedback` false, `allow-review` true, `show-solution` false, `allow-comment` false,
+    `allow-skipping` true and `validate-responses` false), and XML Schema adds an attribute's default to every element
+    that omits it (XML Schema Part 1, section 3.4.5, Attribute Default Value). Read element by element, a section that
+    writes only `max-attempts` would then set `show-feedback` back to false. `max-attempts` has no default in the XSD,
+    and where no element writes it, it is 1 for a non-adaptive item (section 7.19.1). 1EdTech's own test examples give a
+    part `show-feedback="true"` and a section or item ref only `max-attempts`. This follows the information model and
+    sets aside the element-wide reading of the XSD's defaults: an attribute an element does not write is no constraint,
+    so it overrides nothing. This binds pantry and plate alike, so the two never read the same file differently. plate
+    is the only implementation so far: pantry records which attributes each element writes and delivers nothing. (The
+    operator's ruling, accepting the renderer's default; applied in plate by its phase-4 delivery spec, section 4.5;
+    2026-11-04.)
+64. **A `min-time` greater than its `max-time` is valid; each limit applies on its own, and where both cannot hold,
+    `max-time` wins.** The information model gives `min-time` as the minimum and `max-time` as the maximum duration, in
+    seconds, allocated to what holds them, and applies minimum times to sections and items only in linear navigation
+    (section 2.8.5, Time Limits; section 7.40, TimeLimits, and its characteristics 7.40.1 and 7.40.2). The XSD types
+    each as a non-negative double. Neither document orders the two, and no rule makes a document that writes `min-time`
+    above `max-time` invalid, so under reading 1 it is valid, and neither package refuses it. Each limit applies as if
+    the other were absent: `min-time` keeps the candidate in a linear section or item until it has elapsed, and
+    `max-time` ends the time allowed whether or not `min-time` has elapsed, so `min-time` never holds a candidate past
+    `max-time`. `allow-late-submission` still decides whether a response given after `max-time` is accepted (section
+    7.40.3). This binds pantry and plate alike, so the two never read the same file differently, and both accept such a
+    document today. Neither enforces a time limit yet: plate accepts `qti-time-limits` and marks it unsupported, and
+    pantry stores both limits as written. This is not a case of documents in conflict: the sources are silent on how the
+    two limits relate. (The renderer's pick, under the operator's delegation; 2026-11-04.)
+65. **A section's rubric is shown with each item the section holds.** The information model says section rubric "is
+    presented to the candidate with each item contained (directly or indirectly) by the section", and, as sections nest,
+    that "the rubric presented for each item is the concatenation of the rubric blocks from the top-most section down to
+    the item's immediately enclosing section" (section 4.2.14, the `qti-rubric-block` attribute of the AssessmentSection
+    class). Each block is shown only to the views its `view` names. The implementation guide says rubric at test, part
+    and section level is presented when the candidate first enters the structure that holds it, and that test- and
+    part-level rubric need not stay visible after that but must remain available (section 4.6.1, Rubric Blocks). That
+    relief names test and part rubric, not section rubric, and showing a section's rubric with each of its items also
+    shows it on entry, so the guide's rule is met. This binds plate, which delivers tests; pantry stores rubric blocks
+    and delivers nothing. plate does not show test, part or section rubric yet: it accepts `qti-rubric-block` there and
+    marks it unsupported, and it follows this reading when it shows one. This is not a case of documents in conflict:
+    the two documents' rules hold together, and only the information model says what happens after entry. (The
+    operator's ruling, accepting the renderer's default; 2026-11-04.)
+66. **A `fixed` child keeps its place in the sequence selection leaves, not its place in the document.** The information
+    model says a fixed child "must never be shuffled", and that with a selection rule "fixed elements do not have their
+    position fixed until after selection has taken place": selecting three of `{A,B,C,D}` might give `{A,B,C}`, and with
+    `B` fixed a shuffle may give `{C,B,A}` but not `{A,C,B}` (section 4.2.3, the `fixed` characteristic of the
+    AssessmentSection class, and section 5.6.3, the same characteristic of the AssessmentItemRef class). Selection runs
+    first. Ordering then shuffles the selected children that are not fixed around those that are, and each fixed child
+    keeps its position in the selected sequence. The implementation guide says ordering runs after selection and that
+    fixed children "maintain their positions as specified in the source XML" (section 4.5.2, Ordering), which cannot
+    hold once selection has dropped a child before a fixed one. This follows the information model, with its example,
+    and sets aside the guide's sentence. This binds plate, which delivers tests; pantry stores `fixed` as written and
+    delivers nothing. plate does not select or order yet: it delivers every child in document order and marks
+    `qti-selection` and `qti-ordering` unsupported, and it follows this reading when it does. (The operator's ruling,
+    accepting the renderer's default; 2026-11-04.)
+67. **A package's manifest is judged against the content-packaging profile its `schemaversion` names, and its resource
+    types are that profile's spellings.** `3.0.0` names the QTI 3.0 profile, `imsqtiv3p0_imscpv1p2_v1p0.xsd`, and
+    `3.0.1` the QTI 3.0.1 profile, `imsqtiv3p0p1_imscpv1p2_v1p0.xsd`. Each profile enumerates its own value and no
+    other, so a manifest with any other `schemaversion`, or none, is valid against neither and is refused. Content
+    Packaging says the schema version declares the version of the profile that governs the manifest (IMS Content
+    Packaging 1.2, section 6.4.4, SchemaVersion). The two profiles differ: the 3.0 profile lists the resource type
+    `imsbasiclti_xmlv1p3` and admits `cpx:variant`, while the 3.0.1 profile lists `imslti_xmlv1p1` and `imsltia_xmlv1p0`
+    in its place and forbids `cpx:variant`. A resource's `type` is one its profile enumerates, spelled as the profile
+    spells it. The implementation guide says the schema version "MUST be set to" `3.0.0` (section 6.1.1, Manifest),
+    which the 3.0.1 profile refuses, and spells the response-processing type `imsqti_responseprocessing_xmlv3p0`
+    (section 6.2, Content), where both profiles spell it `imsqti_resprocessing_xmlv3p0`. The packaging sections of the
+    3.0 and 3.0.1 XSD bindings, which mark themselves not normative, say the schema version must be `3.0.0` and `3.0.1`
+    respectively, each for the profile it names (section 8, ASI Packaging), and the 3.0.1 binding spells the
+    response-processing type as the profiles do. 1EdTech's own LTI example packages declare `3.0.0` and give resources
+    the type `imslti_xmlv1p1`, which only the 3.0.1 profile lists, so they are refused. This follows the profile XSDs,
+    the schemas a manifest is validated against, and sets aside the implementation guide's version and spelling. This
+    binds pantry and plate alike, so the two never read the same package differently, and both implement it. (The
+    operator's ruling, accepting the renderer's default; applied in plate by its phase-4 delivery spec, section 4.3;
+    2026-11-04.)
+68. **A duration in a results report is a number of seconds.** Every duration a report writes, an item's built-in
+    `duration` (a float) and a test's, part's or section's (base type duration, reading 29), is its seconds in
+    `xs:double`'s lexical form: `90.5`, never `PT1M30.5S`. Results Reporting defines a duration value as a time period
+    "represented as a single float that records time in seconds", represented with `xsd:double` (QTI Results Reporting
+    3.0, section 2.7.3, BaseTypeEnum), as the information model does (section 8.13, BaseTypeEnum), and the information
+    model gives an item's `duration` as "a single float that records the accumulated time (in seconds)" (section
+    2.2.2.2, Response Variable). The Results Reporting XSD types `value` as `xs:normalizedString` (`ValueDType`), so it
+    cannot tell the two forms apart: one of 1EdTech's results examples writes its durations as ISO 8601 strings and
+    still validates. Results Reporting's own basic example writes `100` (section 5.3.8.1). This binds plate, which
+    writes results reports; pantry neither writes nor reads one. This is not a case of documents in conflict: both
+    specifications define the value as seconds, and an example the XSD cannot check is not followed. (The operator's
+    ruling, accepting the renderer's default; applied in plate by its phase-4 delivery spec, section 4.9; 2026-11-04.)
+69. **A results report carries no extension content outside outcome information.** Results Reporting names one permitted
+    extension point, the OutcomeInformation class, says any proprietary extension is non-conformant (QTI Results
+    Reporting 3.0, section 4.1, Extending the Data Model), and says an exporting system "MUST NOT create an instance
+    that contains any proprietary properties" (section 6.3, System Export Conformance), while an importing system
+    identifies such an instance as invalid (section 6.2, System Import Conformance). Its XSD also ends every response
+    variable with a strict wildcard for elements of other namespaces (`ResponseVariableDType`, through `grpStrict.any`),
+    the same wildcard that `outcomeInformation` holds. That wildcard is not a permitted extension point, so content
+    there is a proprietary extension. plate writes no extension content at all, in `outcomeInformation` or in a response
+    variable. This binds plate, which writes results reports; pantry neither writes nor reads one. This follows the
+    specification's text, which names one extension point, and sets aside the wider XSD. (The operator's ruling,
+    accepting the renderer's default; applied in plate by its phase-4 delivery spec, section 4.9; 2026-11-04.)
+70. **Under `allow-skipping="false"`, a response counts toward skipping only when the delivered item has a control that
+    can post it.** The information model defines an item as skipped when "all response variables are submitted with
+    their default value or are NULL", forbids submitting it under `allow-skipping="false"` until at least one response
+    has another value, applies the rule only in a part with individual submission, and says "an item with no response
+    variables cannot be skipped" (section 7.19.6, the `allow-skipping` characteristic of the ItemSessionControl class).
+    It does not say how to count a response the candidate has no means to give. A response no interaction binds, one
+    bound only to an interaction plate shows as a notice in place of its controls, and one of a base type that no
+    interaction plate delivers can post: none of these can take another value from the candidate. Counting them would
+    leave an item that can never be submitted and, in a linear part, never left. Such a response does not count, and a
+    value a submission carries for it does not answer the item either. An item with no response that counts is treated
+    as an item with no response variables: it is never skipped, so it never blocks moving on or submitting. This binds
+    plate, which delivers tests; pantry delivers nothing. This is not a case of documents in conflict: the information
+    model is silent on responses a candidate cannot give, and this follows its own rule for an item with none. (The
+    renderer's ruling in its phase-4 repair, applied in plate; 2026-11-06.)

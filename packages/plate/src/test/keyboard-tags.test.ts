@@ -7,12 +7,21 @@ import { assert, describe, it } from "@effect/vitest";
  * The tests that walk an item by keys, by test file relative to the package directory, each title
  * as written, a `${…}` placeholder included. A walk is `keyboardWalk` in Node, directly or through
  * a helper that walks, such as `src/vertical.test.ts`'s `complete`, or Playwright's keyboard in a
- * browser test. Each one carries the `[keyboard]` token after its last ID token (spec §4.10), and
+ * browser test. Each one carries the `[keyboard]` token after its last ID token, and
  * no other test or `describe` block in any test file carries it, so the ledger lists only these as
  * keyboard tests.
  */
 /* oxlint-disable eslint/no-template-curly-in-string -- a browser test's title is a template literal, and this list holds it as written, so its `${…}` placeholders are text to match, never to interpolate. */
 const walks: ReadonlyMap<string, readonly string[]> = new Map([
+  [
+    "src/delivery.test.ts",
+    [
+      "[T-4] [T-7] [T-14] [S-0] [S-7] [keyboard] BGtest.xml, nonlinear and individual: each item answered by keys and submitted alone, Previous and an item button move between items, End part closes the test, and the scores are 1, 1, 1, 0, 1 and 0",
+      "[T-4] [T-7] [T-14] [S-0] [S-7] [keyboard] CASE, linear and individual with max-attempts 2: a wrong first attempt scores 0 and leaves the item open, the second scores 1, Next submits each later item, the last Next closes the test, and the scores are 1, 1 and 1",
+      "[T-4] [T-7] [T-11] [T-14] [S-0] [S-7] [keyboard] the fixture's two parts, P1 nonlinear and simultaneous then P2 linear and simultaneous: answers saved by Next, Previous and an item button, each part submitted whole, the shuffled Choice restored in its order, and the scores are 1, 1, 2, none and 1",
+      "[keyboard] OD-2: two items of one session share a test-built form, and partition keeps each item's entries apart, so each decodes and scores its own",
+    ],
+  ],
   [
     "src/dev/keyboard-choice.browser.test.ts",
     [
@@ -43,6 +52,12 @@ const walks: ReadonlyMap<string, readonly string[]> = new Map([
       "[Q-2] [keyboard] BG007 completes in the playground: its form walked by keys, posted, and scored 1",
       "[Q-20] [keyboard] BG010 completes in the playground: York typed, posted, and scored 1",
       "[Q-5] [keyboard] BG011 completes in the playground: past the video, its answer typed, posted, and the response recorded",
+    ],
+  ],
+  [
+    "src/dev/session-keyboard.browser.test.ts",
+    [
+      "[T-4] [keyboard] P1 completed by keys alone: each item answered, Enter on Next between them, Enter on Submit part, and Enter on Confirm on the confirm page, which lists the three answered; P2's first item follows with the Part submitted Status focused",
     ],
   ],
   [
@@ -108,13 +123,26 @@ const walks: ReadonlyMap<string, readonly string[]> = new Map([
 /* oxlint-enable eslint/no-template-curly-in-string */
 
 /**
+ * Write a pattern for text whose parentheses balance, nested to a depth.
+ *
+ * @param depth How deep the parentheses may nest.
+ * @returns The pattern's source, which matches no unbalanced `(` or `)`.
+ */
+const balanced = (depth: number): string =>
+  depth === 0 ? "[^()]*" : String.raw`(?:[^()]|\(${balanced(depth - 1)}\))*`;
+
+/**
  * A test's title: the string literal that opens a `describe(…)`, `it(…)` or `test(…)` call, or an
  * `.effect(…)` call on the `it` an `it.layer(…)` scope hands its callback (`walk.effect(…)` in a
- * browser test), modifiers included. A `describe` title counts because the ledger reads the token
- * in a test's full name, which holds the titles of the `describe` blocks around it.
+ * browser test), modifiers included. A curried `.each(table)(…)` call gives the title of its second
+ * call, its table's parentheses nested up to eight deep. A `describe` title counts because the
+ * ledger reads the token in a test's full name, which holds the titles of the `describe` blocks
+ * around it.
  */
-const titlePattern =
-  /\b(?:describe|it|test|[a-z][A-Za-z]*(?=\.effect\b))(?:\.[A-Za-z]+)*\(\s*(?<quote>["'`])(?<title>(?:\\.|(?!\k<quote>)[^\\])*)\k<quote>/gu;
+const titlePattern = new RegExp(
+  String.raw`\b(?:describe|it|test|[a-z][A-Za-z]*(?=\.effect\b))(?:\.[A-Za-z]+)*(?:(?<=\.each)\(${balanced(8)}\))?\(\s*(?<quote>["'\x60])(?<title>(?:\\.|(?!\k<quote>)[^\\])*)\k<quote>`,
+  "gu",
+);
 
 /**
  * The package directory, `packages/plate`.

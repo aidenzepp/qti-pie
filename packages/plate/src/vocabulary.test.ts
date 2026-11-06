@@ -1,19 +1,30 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option } from "effect";
+import { packageTables } from "#plate/package/tables.ts";
 import { growthFactor, growthLimit, growthRatio } from "#plate/test/growth.ts";
 import {
+  answeredStatuses,
   // oxlint-disable-next-line anti-slop/no-shape-in-symbol-names -- `shape` is the QTI attribute of `qti-area-map-entry` and names an area's geometry, not a structure.
   areaShapes,
   baseTypes,
   behaviourClasses,
   cardinalities,
+  cpVersions,
   interactionNames,
+  manifestNamespace,
   messageAttributes,
+  navigationModes,
   renders,
+  resourceRoots,
+  resourceTypes,
+  sessionControlDefaults,
+  sessionStatuses,
   styledClasses,
+  submissionModes,
   templateName,
   templateNames,
   templatePrefixes,
+  testMarks,
 } from "#plate/vocabulary.ts";
 import type { ClassOwner } from "#plate/vocabulary.ts";
 
@@ -407,5 +418,163 @@ describe("the vocabulary class inventory", () => {
       ],
     );
     assert.deepStrictEqual([...behaviourClasses.body], []);
+  });
+});
+
+describe("M2's closed sets", () => {
+  /**
+   * The eight QTI resource types both CP profiles list (`imsqtiv3p0_imscpv1p2_v1p0.xsd:397-404`,
+   * `imsqtiv3p0p1_imscpv1p2_v1p0.xsd:350-357`).
+   */
+  const qtiTypes = [
+    "imsqti_test_xmlv3p0",
+    "imsqti_section_xmlv3p0",
+    "imsqti_item_xmlv3p0",
+    "imsqti_resprocessing_xmlv3p0",
+    "imsqti_outcomes_xmlv3p0",
+    "imsqti_stimulus_xmlv3p0",
+    "imsqti_fragment_xmlv3p0",
+    "imsqti_rptemplate_xmlv3p0",
+  ];
+
+  it("has the two navigation modes and the two submission modes", () => {
+    assert.deepStrictEqual([...navigationModes], ["linear", "nonlinear"]);
+    assert.deepStrictEqual([...submissionModes], ["individual", "simultaneous"]);
+  });
+
+  it("names the two CP profile versions, each with its profile's resource types", () => {
+    assert.deepStrictEqual([...cpVersions], ["3.0.0", "3.0.1"]);
+    assert.sameMembers(Object.keys(resourceTypes), [...cpVersions]);
+    assert.sameMembers(
+      [...resourceTypes["3.0.0"]],
+      [
+        ...qtiTypes,
+        "associatedcontent/learning-application-resource",
+        "webcontent",
+        "imsbasiclti_xmlv1p3",
+        "controlfile",
+        "resourcemetadata/xml",
+        "resourceextmetadata/xml",
+        "qtiusagedata/xml",
+        "pls",
+        "css2",
+        "css3",
+        "extension",
+      ],
+    );
+    assert.sameMembers(
+      [...resourceTypes["3.0.1"]],
+      [
+        ...qtiTypes,
+        "associatedcontent/learning-application-resource",
+        "webcontent",
+        "imslti_xmlv1p1",
+        "imsltia_xmlv1p0",
+        "controlfile",
+        "resourcemetadata/xml",
+        "resourceextmetadata/xml",
+        "qtiusagedata/xml",
+        "pls",
+        "css2",
+        "css3",
+        "extension",
+      ],
+    );
+    for (const version of cpVersions) {
+      assertDistinct(resourceTypes[version]);
+    }
+  });
+
+  it("lists each profile's resource types as the committed package tables' type enumeration does, in order", () => {
+    for (const version of cpVersions) {
+      const resource = packageTables.get(version)?.get(manifestNamespace)?.elements["resource"];
+      const type = resource?.attributes.find((attribute) => attribute.local === "type")?.type;
+      assert.strictEqual(type?.kind, "enumeration", version);
+
+      assert.deepStrictEqual(
+        [...resourceTypes[version]],
+        type?.kind === "enumeration" ? [...type.values] : [],
+        version,
+      );
+    }
+  });
+
+  it("lists imslti_xmlv1p1 among the 3.0.1 resource types only", () => {
+    assert.notInclude([...resourceTypes["3.0.0"]], "imslti_xmlv1p1");
+    assert.include([...resourceTypes["3.0.1"]], "imslti_xmlv1p1");
+  });
+
+  it("pairs seven QTI resource types with the root their document has, and imsqti_fragment_xmlv3p0 with none", () => {
+    assert.strictEqual(resourceRoots.length, 7);
+    assert.sameDeepMembers(
+      resourceRoots.map(([type, root]) => [type, root]),
+      [
+        ["imsqti_item_xmlv3p0", "qti-assessment-item"],
+        ["imsqti_test_xmlv3p0", "qti-assessment-test"],
+        ["imsqti_section_xmlv3p0", "qti-assessment-section"],
+        ["imsqti_stimulus_xmlv3p0", "qti-assessment-stimulus"],
+        ["imsqti_outcomes_xmlv3p0", "qti-outcome-declaration"],
+        ["imsqti_rptemplate_xmlv3p0", "qti-response-processing"],
+        ["imsqti_resprocessing_xmlv3p0", "qti-response-processing"],
+      ],
+    );
+
+    const types = resourceRoots.map(([type]) => type);
+    assertDistinct(types);
+    assert.notInclude(types, "imsqti_fragment_xmlv3p0");
+    for (const version of cpVersions) {
+      assert.includeMembers([...resourceTypes[version]], types, version);
+    }
+  });
+
+  it("gives the six session-control attributes the XSD defaults, and max-attempts none", () => {
+    assert.deepStrictEqual(sessionControlDefaults, {
+      "allow-comment": false,
+      "allow-review": true,
+      "allow-skipping": true,
+      "show-feedback": false,
+      "show-solution": false,
+      "validate-responses": false,
+    });
+    assert.notProperty(sessionControlDefaults, "max-attempts");
+  });
+
+  it("has the three session statuses and the four answered statuses", () => {
+    assert.deepStrictEqual([...sessionStatuses], ["initial", "pendingSubmission", "final"]);
+    assert.deepStrictEqual(
+      [...answeredStatuses],
+      ["notpresented", "presented", "attempted", "answered"],
+    );
+  });
+
+  it("keys exactly spec §4.6's marks, adaptive selection and xi:include, each once", () => {
+    assertDistinct(testMarks);
+    assert.include([...testMarks], "max-attempts:negative");
+    assert.notInclude([...testMarks], "resource-type-mismatch");
+    assert.sameMembers(
+      [...testMarks],
+      [
+        "qti-selection",
+        "qti-adaptive-selection",
+        "qti-ordering",
+        "qti-time-limits",
+        "qti-pre-condition",
+        "qti-branch-rule",
+        "qti-outcome-processing",
+        "qti-rubric-block",
+        "qti-test-feedback",
+        "qti-assessment-section-ref",
+        "qti-stylesheet",
+        "qti-context-declaration",
+        "qti-template-default",
+        "qti-variable-mapping",
+        "qti-weight",
+        "xi:include",
+        'allow-comment="true"',
+        "max-attempts:negative",
+        "root:qti-assessment-section",
+        "root:qti-assessment-stimulus",
+      ],
+    );
   });
 });

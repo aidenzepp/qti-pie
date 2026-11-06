@@ -4,14 +4,13 @@ import { readCorpusFile } from "#plate/document/corpus.ts";
 import { readSource } from "#plate/document/read.ts";
 import { qtiNamespace, walk } from "#plate/document/source.ts";
 import type { SourceDocument, SourceElement } from "#plate/document/source.ts";
-import { isPosted } from "#plate/form/encoding.ts";
 import {
   checkResponses,
   configure,
   decode,
-  entryName,
   open,
   partition,
+  postings,
   redact,
   render,
   score,
@@ -35,6 +34,7 @@ import { checkTree, textOf } from "#plate/test/accessibility.ts";
 import { keyboardWalk, tabOrder } from "#plate/test/keyboard.ts";
 import type { Key } from "#plate/test/keyboard.ts";
 import { parseHtml, roundTrips } from "#plate/test/round-trip.ts";
+import { acceptedItem } from "#plate/validate/verdict.ts";
 
 /**
  * The fixtures, by their path under the corpus root, which `open` takes as their location.
@@ -81,11 +81,11 @@ const openFixture = Effect.fnUntraced(function* openFixture(location: string) {
 const acceptFixture = Effect.fnUntraced(function* acceptFixture(location: string) {
   const { bytes, verdict } = yield* openFixture(location);
   const source = yield* readSource(location, bytes);
-  if (verdict.verdict === "accepted" || verdict.verdict === "accepted-with-unsupported") {
-    return { accepted: verdict.accepted, source };
-  }
+  const accepted = Option.getOrElse(acceptedItem(verdict), () =>
+    assert.fail(`${location} is ${verdict.verdict}, not accepted`),
+  );
 
-  return assert.fail(`${location} is ${verdict.verdict}, not accepted`);
+  return { accepted, source };
 });
 
 /**
@@ -402,8 +402,8 @@ const checkRenders = Effect.fnUntraced(function* checkRenders(fixture: Rendering
 /**
  * Answer a fixture by keyboard alone, as its author composes it: render the item with a fixed
  * instance, put it in the author's native form, walk the form by keys until it submits, keep the
- * entries named for the instance, decode each response under its name, check the responses, then
- * score them.
+ * entries named for the instance, decode each response under its name in its interaction's base,
+ * check the responses, then score them.
  *
  * @param accepted The accepted fixture.
  * @param keys The keys pressed, which must submit the form.
@@ -426,19 +426,9 @@ const complete = Effect.fnUntraced(function* complete(
   const responses: Readonly<Record<string, Value>> = yield* Effect.fromResult(
     Result.all(
       Object.fromEntries(
-        redacted.responses.flatMap(({ baseType, cardinality, identifier }) =>
-          isPosted(baseType)
-            ? [
-                [
-                  identifier,
-                  decode(posted.own, {
-                    baseType,
-                    cardinality,
-                    name: entryName(rendered.instance, identifier),
-                  }),
-                ] as const,
-              ]
-            : [],
+        postings(redacted, rendered.instance).map(
+          ({ binding, identifier, options }) =>
+            [identifier, decode(posted.own, binding, options)] as const,
         ),
       ),
     ),
@@ -632,10 +622,12 @@ describe("an item whose template processing sets its correct response", () => {
       Effect.gen(function* templateDigging() {
         const location = "QTI3_BPIG_Examples/items/template_digging.xml";
         const { verdict } = yield* openFixture(location);
-        const accepted =
-          verdict.verdict === "accepted-with-unsupported"
-            ? verdict.accepted
-            : assert.fail(`${location} is ${verdict.verdict}, not accepted-with-unsupported`);
+        const accepted = acceptedItem(verdict).pipe(
+          Option.filter(() => verdict.verdict === "accepted-with-unsupported"),
+          Option.getOrElse(() =>
+            assert.fail(`${location} is ${verdict.verdict}, not accepted-with-unsupported`),
+          ),
+        );
         const fifteen = yield* Effect.fromResult(score(accepted, { RESPONSE: floatAnswer(15) }));
         const twenty = yield* Effect.fromResult(score(accepted, { RESPONSE: floatAnswer(20) }));
 

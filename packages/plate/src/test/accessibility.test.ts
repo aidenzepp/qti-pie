@@ -186,6 +186,21 @@ const status = h(
 const submit = h("button", { type: "submit" }, [text("Submit")]);
 
 /**
+ * The test navigation a native form post renders: each button part keeps its marker and has its
+ * `type` swapped to `submit`, Previous, Next, Submit and End in that order.
+ */
+const navigation = (
+  [
+    ["previous", "Previous"],
+    ["next", "Next"],
+    ["submit", "Submit"],
+    ["end", "End"],
+  ] as const
+).map(([part, name]) =>
+  h("button", { "data-slot": slot("test-navigation", part), type: "submit" }, [text(name)]),
+);
+
+/**
  * The positive Choice: a Prompt and two rows.
  */
 const capital = choice("Which city is the capital of France?", [
@@ -688,6 +703,30 @@ describe("checkTree", () => {
 
   it("submit-order: passes a form whose submit button is last", () => {
     assert.deepStrictEqual(checksOf(item([status, capital, submit])), []);
+  });
+
+  it("submit-order: passes a Choice, then a Save button, then four navigation submit buttons", () => {
+    const save = h("button", { type: "submit" }, [text("Save")]);
+    assert.deepStrictEqual(
+      checkTree(item([status, capital, save, ...navigation]), { baseLevel: 2 }),
+      [],
+    );
+  });
+
+  it("submit-order: a text input after several submit buttons flags each of them", () => {
+    const note = h("input", { "aria-label": "Note", name: "q1-note", type: "text" });
+    assert.deepStrictEqual(
+      checkTree(item([status, capital, submit, ...navigation, note]), { baseLevel: 2 }),
+      Array.from({ length: 5 }, () => ({
+        check: "submit-order",
+        path: ["qti-assessment-item", "form", "button"],
+      })),
+    );
+  });
+
+  it("submit-order: a plain button after a submit button of its form", () => {
+    const plain = h("button", { type: "button" }, [text("Hint")]);
+    assert.deepStrictEqual(checksOf(item([status, capital, submit, plain])), ["submit-order"]);
   });
 
   it("submit-order: passes a plain button before a control, and a control in a later form", () => {

@@ -17,7 +17,7 @@ import { ValueSchema } from "#plate/codec/values.ts";
 import type { Configuration } from "#plate/configuration.ts";
 import { runAttempt } from "#plate/engine/attempt.ts";
 import type { EngineFailure } from "#plate/engine/evaluate.ts";
-import type { Item, ResponseDeclaration } from "#plate/model/item.ts";
+import type { Item, OutcomeDeclaration, ResponseDeclaration } from "#plate/model/item.ts";
 import { fresh } from "#plate/model/record.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
 import type { Value } from "#plate/model/values.ts";
@@ -156,40 +156,94 @@ const belonging = (item: Item, record: ItemRecord): Result.Result<ItemRecord, Re
       );
 
 /**
- * Say what is wrong with one response a stored record holds, as a value of its declaration's type.
+ * A kind of variable a stored record holds by identifier: a response or an outcome.
+ */
+type StoredVariable = "outcome" | "response";
+
+/**
+ * What a record holding an undeclared variable of each {@link StoredVariable} kind is told.
+ */
+const undeclaredWords: Readonly<Record<StoredVariable, string>> = {
+  outcome: "the item declares no outcome by that identifier",
+  response: "the item scores no response by that identifier",
+};
+
+/**
+ * Say what is wrong with one variable a stored record holds, as a value of its declaration's
+ * type.
  *
  * The record's codec has already checked the value is a value, so only its base type and
  * cardinality are left to check.
  *
- * @param identifier The response's identifier.
- * @param declaration The response's declaration, none when the item scores no such response.
+ * @param variable Whether it is a response or an outcome.
+ * @param identifier The variable's identifier.
+ * @param declaration The variable's declaration, none when the item declares no such variable
+ *   (or, for a response, declares one it does not score).
  * @param value The record's value of it.
- * @returns The issue, in words that name the response, or none when the value fits.
+ * @returns The issue, in words that name the variable, or none when the value fits.
  */
 const storedMisfit = (
+  variable: StoredVariable,
   identifier: string,
-  declaration: Option.Option<ResponseDeclaration>,
+  declaration: Option.Option<Pick<OutcomeDeclaration, "baseType" | "cardinality">>,
   value: Value,
 ): Option.Option<string> => {
   const name = JSON.stringify(identifier);
 
   return Option.match(declaration, {
-    onNone: () =>
-      Option.some(
-        `it holds the response ${name}, but the item scores no response by that identifier`,
-      ),
+    onNone: () => Option.some(`it holds the ${variable} ${name}, but ${undeclaredWords[variable]}`),
     onSome: ({ baseType, cardinality }) =>
       value.baseType === baseType && value.cardinality === cardinality
         ? Option.none()
         : Option.some(
-            `its response ${name} has base type ${value.baseType} and cardinality ${value.cardinality}, but the item declares it with base type ${baseType} and cardinality ${cardinality}`,
+            `its ${variable} ${name} has base type ${value.baseType} and cardinality ${value.cardinality}, but the item declares it with base type ${baseType} and cardinality ${cardinality}`,
           ),
   });
 };
 
 /**
+ * Find the first of a record's variables of one kind that does not fit the item's declarations.
+ *
+ * @param variable Whether the values are responses or outcomes.
+ * @param declarations The item's declarations of that kind, by identifier.
+ * @param values The record's values of that kind, by identifier.
+ * @returns The first issue, or none when every value fits.
+ */
+const firstMisfit = (
+  variable: StoredVariable,
+  declarations: ReadonlyMap<string, Pick<OutcomeDeclaration, "baseType" | "cardinality">>,
+  values: Readonly<Record<string, Value>>,
+): Option.Option<string> =>
+  Option.firstSomeOf(
+    Object.entries(values).map(([identifier, value]) =>
+      storedMisfit(
+        variable,
+        identifier,
+        Option.fromUndefinedOr(declarations.get(identifier)),
+        value,
+      ),
+    ),
+  );
+
+/**
+ * Give a record back, or refuse it with the issue found.
+ *
+ * @param record The decoded record.
+ * @param issue What does not fit, none when everything does.
+ * @returns The record, or {@link InvalidRecord} at stage `decode` with the issue.
+ */
+const unlessMisfit = (
+  record: ItemRecord,
+  issue: Option.Option<string>,
+): Result.Result<ItemRecord, InvalidRecord> =>
+  Option.match(issue, {
+    onNone: () => Result.succeed(record),
+    onSome: (found) => Result.fail(new InvalidRecord({ issue: found, stage: "decode" })),
+  });
+
+/**
  * Check that each response a decoded record holds is one the item scores, of its declaration's
- * base type and cardinality.
+ * base type and cardinality: the check {@link score} runs on the record it is handed.
  *
  * A declared response the record lacks is left to the engine, which fails
  * `UnknownIdentifierError` if the processing reads it. Outcomes are not checked: the attempt resets
@@ -200,17 +254,34 @@ const storedMisfit = (
  * @returns The record, or {@link InvalidRecord} at stage `decode` naming the first response that
  *   does not fit.
  */
-const fitting = (item: Item, record: ItemRecord): Result.Result<ItemRecord, InvalidRecord> =>
-  Option.match(
-    Option.firstSomeOf(
-      Object.entries(record.responses).map(([identifier, value]) =>
-        storedMisfit(identifier, Option.fromUndefinedOr(item.responses.get(identifier)), value),
-      ),
+const responsesFitting = (
+  item: Item,
+  record: ItemRecord,
+): Result.Result<ItemRecord, InvalidRecord> =>
+  unlessMisfit(record, firstMisfit("response", item.responses, record.responses));
+
+/**
+ * Check that a decoded record is one {@link score} could have written for the item: each response
+ * it holds is one the item scores, and each outcome one the item declares, each of its
+ * declaration's base type and cardinality.
+ *
+ * `restore` and `results` run it, so a record that does not fit is refused rather than given back
+ * or written into a result. It checks the responses as `score` checks the record it is handed, and
+ * the outcomes too, which `score` leaves alone because an attempt resets them; every record `score`
+ * writes fits, since the engine sets only declared outcomes, each to a value of its type. A
+ * declared variable the record lacks is not refused.
+ *
+ * @param item The item.
+ * @param record The decoded record, which belongs to the item.
+ * @returns The record, or {@link InvalidRecord} at stage `decode` naming the first response, then
+ *   the first outcome, that does not fit.
+ */
+export const fitting = (item: Item, record: ItemRecord): Result.Result<ItemRecord, InvalidRecord> =>
+  unlessMisfit(
+    record,
+    Option.orElse(firstMisfit("response", item.responses, record.responses), () =>
+      firstMisfit("outcome", item.outcomes, record.outcomes),
     ),
-    {
-      onNone: () => Result.succeed(record),
-      onSome: (issue) => Result.fail(new InvalidRecord({ issue, stage: "decode" })),
-    },
   );
 
 /**
@@ -316,7 +387,7 @@ export const score = (
     const before =
       record === undefined
         ? fresh(item, "")
-        : yield* fitting(item, yield* belonging(item, yield* decodeRecord(record)));
+        : yield* responsesFitting(item, yield* belonging(item, yield* decodeRecord(record)));
     const checked = yield* checkedResponses(item, responses);
     const messages = checkResponses(document, checked, tierA);
     if (messages.length > 0) {
