@@ -1,26 +1,34 @@
 /**
  * The closed relations of variables and the references to them: `DeclarationKind`, `Declares`,
  * `BuiltInVariable`, `VariableReference`, `ContentReference`, `ChoiceBound`, `ChoiceCount` and
- * `SectionPart` (fin.md §14, §17; review R9).
+ * `SectionPart` (fin.md §14, §17; review R9); and of the references a document makes to the files
+ * of its package, `ReferenceAttribute` (spec reading 95).
  *
  * Each is a priori, a fact of QTI's vocabulary, so it is a closed relation. The rows are a
  * vocabulary's facet ({@link ReferenceFacet}), and {@link references} codes the facets of a
  * composition in its rosters. The ASI facet is derived, never typed: QTI's readings below, each
  * citing its source, applied to the XSDs' attribute declarations and content-model IR
  * (`src/vocab/inventory/`). A reading states only what the XSD does not: which attribute pairs
- * bound a count, what a reference names, which variables are built in, which kinds are processing.
- * The XSD states the rest: which kinds declare which attributes, how each attribute is typed, what
- * a kind's content holds, and what a section's model repeats.
+ * bound a count, what a reference names, which variables are built in, which kinds are processing,
+ * which attributes name a file. The XSD states the rest: which kinds declare which attributes, how
+ * each attribute is typed, what a kind's content holds, and what a section's model repeats.
  *
- * None has a version digit, because each holds in 3.0.0 and 3.0.1 alike: an attribute is read in
- * every version that declares it, and `references.test.ts` checks every relation against both XSDs.
+ * Only `ReferenceAttribute` has a version digit, read from the versions that declare each of its
+ * attributes. The others hold in 3.0.0 and 3.0.1 alike: an attribute is read in every version that
+ * declares it, and `references.test.ts` checks every relation against both XSDs.
  *
  * @see {@link https://www.imsglobal.org/spec/qti/v3p0/info | QTI 3.0 ASI Information Model}
  */
 import { Array as Arr, Option, Result } from "effect";
-import { closed, idField, roster } from "#pantry/grammar/closed.ts";
-import type { Closed, ClosedRelationError, IdField, Roster } from "#pantry/grammar/closed.ts";
-import type { KindSet } from "#pantry/grammar/kinds.ts";
+import { closed, idField, roster, valueField } from "#pantry/grammar/closed.ts";
+import type {
+  Closed,
+  ClosedRelationError,
+  IdField,
+  Roster,
+  ValueField,
+} from "#pantry/grammar/closed.ts";
+import type { KindSet, SchemaVersion } from "#pantry/grammar/kinds.ts";
 import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
 import { contentModels } from "#pantry/vocab/inventory/models.ts";
 import type {
@@ -64,11 +72,15 @@ export interface ReferenceRow {
 }
 
 /**
- * One variable QTI declares itself, so that a document names it undeclared, and the declaration
- * kind it stands as.
+ * One variable QTI declares itself in the processing a document's root holds, so that the document
+ * names it undeclared: the root, the variable, and the declaration kind, base type and cardinality
+ * it stands as there.
  */
 export interface BuiltInRow {
+  readonly baseType: string;
+  readonly cardinality: string;
   readonly declaration: string;
+  readonly root: string;
   readonly variable: string;
 }
 
@@ -109,15 +121,56 @@ export interface ChoiceCountRow {
 }
 
 /**
+ * The targets a branch rule names that are no identifier of the test, each spelled exactly, in code
+ * order: the `ReservedTarget` roster's handles. "The following values are reserved and have special
+ * meaning when used as a target identifier: EXIT_SECTION jumps over all the remaining children of
+ * the current section to the item (or section) immediately following it; EXIT_TESTPART finishes the
+ * current test-part immediately and EXIT_TEST finishes the entire assessment-test immediately"
+ * (information model §5.23.1, BranchRule `target`, `info.txt` line 20610; the UP audit's A25). A
+ * target of any other spelling names an identifier.
+ */
+export const reservedTargets = ["EXIT_SECTION", "EXIT_TESTPART", "EXIT_TEST"] as const;
+
+/**
+ * A `ReservedTarget` handle.
+ */
+export type ReservedTarget = (typeof reservedTargets)[number];
+
+/**
+ * How a file reference's value names the files it references, in code order: the `ReferenceForm`
+ * roster's handles. A `uri` value is one URI reference; a `srcset` value is HTML's list of image
+ * candidate strings, each candidate's URL one reference (HTML, "srcset attributes").
+ */
+export const referenceForms = ["uri", "srcset"] as const;
+
+/**
+ * A `ReferenceForm` handle.
+ */
+export type ReferenceForm = (typeof referenceForms)[number];
+
+/**
+ * One attribute by which an element of a kind names a file of its package, in the versions that
+ * declare it, and how its value names it (spec reading 95).
+ */
+export interface FileReferenceRow {
+  readonly form: ReferenceForm;
+  readonly kind: string;
+  readonly name: string;
+  readonly versions: readonly SchemaVersion[];
+}
+
+/**
  * A vocabulary's share of the reference relations: its declaration kinds, its built-in variables,
- * its references, its count bounds, the kinds whose choices bound their counts, and the kinds a
- * section of it holds as parts. A vocabulary with none of these states {@link noReferences}.
+ * its references, its count bounds, the kinds whose choices bound their counts, the kinds a section
+ * of it holds as parts, and the attributes by which its elements name files. A vocabulary with none
+ * of these states {@link noReferences}.
  */
 export interface ReferenceFacet {
   readonly builtIns: readonly BuiltInRow[];
   readonly choiceBounds: readonly BoundRow[];
   readonly choiceCounts: readonly ChoiceCountRow[];
   readonly declarations: readonly string[];
+  readonly fileReferences: readonly FileReferenceRow[];
   readonly references: readonly ReferenceRow[];
   readonly sectionParts: readonly string[];
 }
@@ -130,9 +183,170 @@ export const noReferences: ReferenceFacet = {
   choiceBounds: [],
   choiceCounts: [],
   declarations: [],
+  fileReferences: [],
   references: [],
   sectionParts: [],
 };
+
+/**
+ * One entry of spec reading 95's census: an attribute that names a file, on the listed kinds, or on
+ * every kind of the vocabulary that declares it where none are listed, how its value names the
+ * file, and the source that makes its value a reference to a file.
+ */
+export interface CensusEntry {
+  readonly form: ReferenceForm;
+  readonly kinds: Option.Option<readonly [string, ...string[]]>;
+  readonly name: string;
+  readonly source: string;
+}
+
+/**
+ * A census entry on the listed kinds.
+ *
+ * @param name - The attribute.
+ * @param kinds - The kinds that carry it as a file reference.
+ * @param source - What makes its value a reference to a file.
+ * @param form - How its value names the file, `uri` unless stated.
+ * @returns The entry.
+ */
+const onKinds = (
+  name: string,
+  kinds: readonly [string, ...string[]],
+  source: string,
+  form: ReferenceForm = "uri",
+): CensusEntry => ({ form, kinds: Option.some(kinds), name, source });
+
+/**
+ * Spec reading 95's census in the ASI vocabulary: the attributes of QTI's HTML subset whose HTML
+ * definition is a URL its element links to, cites, embeds or loads, and QTI's own attributes the
+ * information model defines as the location of a file. IMS Content Packaging 1.2's
+ * InterchangePackage (d) then requires every file such a value resolves to within the package to be
+ * one the manifest describes (`imscp_infov1p2pd2.txt:411`).
+ *
+ * Left out, each because its value names no file as written: `cp:file` and `cp:resource`'s `href`,
+ * the manifest's own file list, which InterchangePackage (b) binds through `File`; `xml:base`,
+ * which names a base, not a resource; `qti-interaction-module`'s `primary-path` and
+ * `fallback-path`, an AMD module location the loader extends with `.js` (the implementation
+ * guide's `modules/lib/handlebarsV2.min`, `impl.txt:8501`); `qti-response-processing`'s
+ * `template`, the identifier of a published template (spec reading 51); and the identifiers
+ * `qti-custom-operator`'s `definition` and `qti-portable-custom-interaction`'s
+ * `custom-interaction-type-identifier`.
+ */
+export const asiCensus: readonly CensusEntry[] = [
+  onKinds("href", ["a"], "HTML, the a element: the hyperlink's URL"),
+  onKinds("cite", ["blockquote", "q"], "HTML, blockquote and q: the URL of the quotation's source"),
+  onKinds("src", ["img"], "HTML, the img element: the image's URL"),
+  onKinds("longdesc", ["img"], "HTML 4.01 §13.2: a link to the image's long description"),
+  onKinds("data", ["object"], "HTML, the object element: the resource's URL"),
+  onKinds("src", ["audio", "video", "source", "track"], "HTML, media elements: the resource's URL"),
+  onKinds("poster", ["video"], "HTML, the video element: the poster frame's URL"),
+  onKinds("srcset", ["source"], "HTML, srcset attributes: image candidate strings", "srcset"),
+  onKinds(
+    "href",
+    ["qti-stylesheet"],
+    "information model, Stylesheet: the stylesheet's location (§5.137)",
+  ),
+  onKinds(
+    "href",
+    ["qti-assessment-item-ref", "qti-assessment-section-ref", "qti-assessment-stimulus-ref"],
+    "information model, AssessmentItemRef §6.6, AssessmentSectionRef §6.8 and AssessmentStimulusRef §7.6: the referenced file",
+  ),
+  onKinds(
+    "href",
+    ["qti-adaptive-engine-ref", "qti-adaptive-settings-ref"],
+    "information model, the adaptive selection references: the engine's and the settings' files",
+  ),
+  onKinds(
+    "href",
+    ["qti-metadata-ref", "qti-usagedata-ref"],
+    "information model, the metadata and usage-data references: the file's location",
+  ),
+  onKinds(
+    "primary-configuration",
+    ["qti-interaction-modules"],
+    "information model §7.18 and the implementation guide's modules/maths_config.js (impl.txt:8500): a module configuration file",
+  ),
+  onKinds(
+    "secondary-configuration",
+    ["qti-interaction-modules"],
+    "information model §7.18 (spec reading 11): a fallback module configuration file",
+  ),
+  onKinds(
+    "template-location",
+    ["qti-response-processing"],
+    "information model §5.119 and the implementation guide's ../rptemplates/match_correct.xml (impl.txt:13693): a template file",
+  ),
+  onKinds(
+    "long-interpretation",
+    ["qti-outcome-declaration"],
+    "information model §5.115: a URI that points to a fuller interpretation of the outcome",
+  ),
+];
+
+/**
+ * Spec reading 95's census in XInclude: `xi:include`'s `href`, "a URI reference ... the location of
+ * the resource to include" (XInclude 1.0 §3.1).
+ */
+export const xiCensus: readonly CensusEntry[] = [
+  onKinds("href", ["xi:include"], "XInclude 1.0 §3.1: the location of the resource to include"),
+];
+
+/**
+ * Spec reading 95's census in MathML 3: `href`, which makes any element a hyperlink (§2.1.6);
+ * `math`'s `altimg`, its fallback image, and `cdgroup`, a content dictionary group file (§2.2.1);
+ * `mglyph`'s `src`, the glyph's image (§3.2.1.2); `share`'s `src`, the shared expression (§4.2.7);
+ * and the `src` of `annotation` and `annotation-xml`, the annotation's location (§5.1.2).
+ * `definitionURL` identifies a symbol's definition and names no file, so it is left out.
+ */
+export const mathmlCensus: readonly CensusEntry[] = [
+  { form: "uri", kinds: Option.none(), name: "href", source: "MathML 3 §2.1.6: a hyperlink" },
+  onKinds("altimg", ["m:math"], "MathML 3 §2.2.1: the fallback image"),
+  onKinds("cdgroup", ["m:math"], "MathML 3 §2.2.1: a content dictionary group file"),
+  onKinds("src", ["m:mglyph"], "MathML 3 §3.2.1.2: the glyph's image"),
+  onKinds("src", ["m:share"], "MathML 3 §4.2.7: the shared expression"),
+  onKinds(
+    "src",
+    ["m:annotation", "m:annotation-xml"],
+    "MathML 3 §5.1.2: the annotation's location",
+  ),
+];
+
+/**
+ * Spec reading 95's census in SSML 1.1: `audio`'s `src`, the audio file (§3.3.1), and `lexicon`'s
+ * `uri`, the pronunciation lexicon document (§3.1.4).
+ */
+export const ssmlCensus: readonly CensusEntry[] = [
+  onKinds("src", ["ssml:audio"], "SSML 1.1 §3.3.1: the audio file"),
+  onKinds("uri", ["ssml:lexicon"], "SSML 1.1 §3.1.4: the lexicon document"),
+];
+
+/**
+ * Read a census against a vocabulary's attribute declarations: one row per declaration an entry
+ * names, in the versions that declare it.
+ *
+ * @param declarations - The attribute declarations.
+ * @param census - The census.
+ * @param inVocabulary - Whether a kind is the vocabulary's, for an entry that lists no kinds.
+ * @returns The rows, in declaration order.
+ */
+export const fileReferencesIn = (
+  declarations: readonly AttributeDeclaration[],
+  census: readonly CensusEntry[],
+  inVocabulary: (kind: string) => boolean,
+): readonly FileReferenceRow[] =>
+  declarations.flatMap(({ kind, name, versions }) =>
+    census
+      .filter(
+        (entry) =>
+          entry.name === name &&
+          Option.match(entry.kinds, {
+            onNone: () => inVocabulary(kind),
+            onSome: (kinds) => kinds.includes(kind),
+          }),
+      )
+      .slice(0, 1)
+      .map(({ form }) => ({ form, kind, name, versions })),
+  );
 
 /**
  * The attribute whose presence makes a kind a declaration: a variable's declaration is the element
@@ -145,20 +359,72 @@ export const noReferences: ReferenceFacet = {
 const declaringAttribute = "cardinality";
 
 /**
+ * The roots whose processing holds an item's built-in variables: an item's, and a response
+ * processing template's, which an item's response processing names (information model §2.2.2,
+ * Item Variables).
+ */
+export const itemRoots = ["qti-assessment-item", "qti-response-processing"] as const;
+
+/**
+ * The roots whose processing holds a test's built-in variables: a test's, and a section's, whose
+ * processing a test reaches (information model §2.2.2, the test-level `duration`; spec reading 29).
+ */
+export const testRoots = ["qti-assessment-test", "qti-assessment-section"] as const;
+
+/**
  * The variables QTI declares itself, which a document's processing names without declaring them,
- * each with the declaration kind it stands as: the built-in response variables `numAttempts` and
- * `duration`, the built-in outcome variable `completionStatus` and the built-in context variable
- * `QTI_CONTEXT` (information model §2.2.2, Item Variables: the context, response and outcomes
- * variables). The order is their codes'. No XSD names them.
+ * each by the roots that hold it, with the declaration kind, base type and cardinality it stands as
+ * there (information model §2.2.2, Item Variables, and §2.2.2.1, Context Variable; spec reading 29,
+ * the UP audit's A63; `info.txt` lines 8462 to 8468 and 9214):
  *
- * Spec reading 29 types `duration` by where it is read; its declaration kind is the same
- * everywhere.
+ * - An item's built-in response variables `numAttempts`, a single integer, and `duration`, "a single
+ *   float that records the accumulated time (in seconds)", and its built-in outcome variable
+ *   `completionStatus`, a single identifier;
+ * - A test's, a section's and a part's `duration`, "a single value of base-type duration";
+ * - The built-in context variable `QTI_CONTEXT`, a record, which has no base type ("Variables with
+ *   record cardinality have no base-type"), so its base type is `none`, in both.
+ *
+ * `duration` stands as a response declaration wherever it is read; only its base type follows the
+ * root. The variables' order is their codes'. No XSD names them.
  */
 const builtIns: readonly BuiltInRow[] = [
-  { declaration: "qti-response-declaration", variable: "numAttempts" },
-  { declaration: "qti-response-declaration", variable: "duration" },
-  { declaration: "qti-outcome-declaration", variable: "completionStatus" },
-  { declaration: "qti-context-declaration", variable: "QTI_CONTEXT" },
+  ...itemRoots.flatMap((root): readonly BuiltInRow[] => [
+    {
+      baseType: "integer",
+      cardinality: "single",
+      declaration: "qti-response-declaration",
+      root,
+      variable: "numAttempts",
+    },
+    {
+      baseType: "float",
+      cardinality: "single",
+      declaration: "qti-response-declaration",
+      root,
+      variable: "duration",
+    },
+    {
+      baseType: "identifier",
+      cardinality: "single",
+      declaration: "qti-outcome-declaration",
+      root,
+      variable: "completionStatus",
+    },
+  ]),
+  ...testRoots.map((root): BuiltInRow => ({
+    baseType: "duration",
+    cardinality: "single",
+    declaration: "qti-response-declaration",
+    root,
+    variable: "duration",
+  })),
+  ...[...itemRoots, ...testRoots].map((root): BuiltInRow => ({
+    baseType: "none",
+    cardinality: "record",
+    declaration: "qti-context-declaration",
+    root,
+    variable: "QTI_CONTEXT",
+  })),
 ];
 
 /**
@@ -185,9 +451,24 @@ const processingRoots = [
  * The root of an item's content: what an item's content models reach, processing apart, is where
  * {@link contentNames} and the printed variable name an item's own declarations. A test's
  * `qti-test-feedback` and `qti-template-default` are outside it: the first names its test's
- * outcome, the second its referenced item's template variable, neither a declaration of an item.
+ * outcome ({@link testFeedback}), the second its referenced item's template variable, neither a
+ * declaration of an item.
  */
 const itemRoot = "qti-assessment-item";
+
+/**
+ * The reference a test's own content makes to its declarations: a test feedback's
+ * `outcome-identifier`, "The identifier of an outcome variable that must have a base-type of
+ * identifier and be of either single or multiple cardinality. The visibility of the test feedback
+ * is controlled by assigning a value (or values) to this outcome variable during Outcomes
+ * Processing" (information model §5.157.2, TestFeedback; the UP audit's A43, spec reading 68). It
+ * names an outcome the test declares, read as the bare identifier.
+ */
+const testFeedback = {
+  attribute: "outcome-identifier",
+  declarations: ["qti-outcome-declaration"],
+  kind: "qti-test-feedback",
+} as const;
 
 /**
  * The XSD types that spell a variable reference as a member of an attribute's union, beside the
@@ -565,20 +846,60 @@ const itemContentKinds: ReadonlySet<string> = new Set(
 /**
  * The ASI vocabulary's facet, derived from the XSDs' attribute declarations and content models: its
  * four declaration kinds, the built-in variables, the references processing and an item's content
- * make, the interactions' and choices' count bounds, the order interactions' choices, and the kinds
- * a section holds as parts.
+ * make and a test feedback's outcome ({@link testFeedback}), the interactions' and choices' count
+ * bounds, the order interactions' choices, the kinds a section holds as parts, and its file
+ * references.
  */
 export const asiReferences: ReferenceFacet = {
   builtIns,
   choiceBounds: boundsIn(attributeDeclarations),
   choiceCounts: Array.from(orderedChoices, ([kind, choice]) => ({ choice, kind })),
   declarations: declarationsIn(attributeDeclarations),
+  fileReferences: fileReferencesIn(attributeDeclarations, asiCensus, () => false),
   references: [
     ...processingReferences(attributeDeclarations, processingKinds),
     ...contentReferences(attributeDeclarations, itemContentKinds),
+    ...attributesIn(attributeDeclarations, new Set([testFeedback.kind]))
+      .filter(({ attribute }) => attribute.name === testFeedback.attribute)
+      .map(({ kind }): ReferenceRow => ({
+        attribute: testFeedback.attribute,
+        kind,
+        names: { _tag: "declaration", kinds: testFeedback.declarations },
+        spelling: "bare",
+      })),
   ],
   sectionParts: sectionPartsIn(contentModels),
 };
+
+/**
+ * The reference facet of a vocabulary whose only references are to files: its share of
+ * {@link fileReferencesIn}, its kinds named by their handle's prefix.
+ *
+ * @param census - The vocabulary's census.
+ * @param prefix - The prefix every kind of the vocabulary's handles carries.
+ * @returns The facet.
+ */
+const fileReferenceFacet = (census: readonly CensusEntry[], prefix: string): ReferenceFacet => ({
+  ...noReferences,
+  fileReferences: fileReferencesIn(attributeDeclarations, census, (kind) =>
+    kind.startsWith(prefix),
+  ),
+});
+
+/**
+ * MathML's reference facet: its file references ({@link mathmlCensus}).
+ */
+export const mathmlReferences: ReferenceFacet = fileReferenceFacet(mathmlCensus, "m:");
+
+/**
+ * SSML's reference facet: its file references ({@link ssmlCensus}).
+ */
+export const ssmlReferences: ReferenceFacet = fileReferenceFacet(ssmlCensus, "ssml:");
+
+/**
+ * XInclude's reference facet: its file reference ({@link xiCensus}).
+ */
+export const xiReferences: ReferenceFacet = fileReferenceFacet(xiCensus, "xi:");
 
 /**
  * A `NodeKind` key field.
@@ -600,10 +921,14 @@ type DeclarationField = IdField<"declaration", string>;
  */
 export interface References {
   /**
-   * `BuiltInVariable` as a function: each built-in variable → the declaration kind it stands as,
-   * so a reference to it reads as one to a declaration of that kind.
+   * `BuiltInVariable` as a function: each (root, built-in variable) → the declaration kind, base
+   * type and cardinality it stands as under the root, so a reference to it there reads as one to a
+   * declaration of that kind and type.
    */
-  readonly builtIn: Closed<readonly [IdField<"variable", string>], readonly [DeclarationField]>;
+  readonly builtIn: Closed<
+    readonly [IdField<"root", string>, IdField<"variable", string>],
+    readonly [DeclarationField, ValueField<"baseType", string>, ValueField<"cardinality", string>]
+  >;
   /**
    * The `BuiltInVariable` roster: a reference whose identifier is one of its handles names that
    * built-in variable.
@@ -648,6 +973,22 @@ export interface References {
    */
   readonly sectionPart: KindSet<string>;
   /**
+   * `ReferenceAttribute`: (version, kind, name) → form, every attribute by which an element of a
+   * kind names a file of its package in the version, and how its value names it (spec reading 95).
+   */
+  readonly referenceAttribute: Closed<
+    readonly [IdField<"version", SchemaVersion>, KindField, AttributeField<"name">],
+    readonly [IdField<"form", ReferenceForm>]
+  >;
+  /**
+   * The `ReferenceForm` roster, {@link referenceForms}.
+   */
+  readonly referenceForm: Roster<ReferenceForm>;
+  /**
+   * The `ReservedTarget` roster, {@link reservedTargets}.
+   */
+  readonly reservedTarget: Roster<ReservedTarget>;
+  /**
    * The `ReferenceSpelling` roster, {@link spellings}.
    */
   readonly spelling: Roster<Spelling>;
@@ -681,6 +1022,7 @@ const restrictionOf = (reference: ReferenceRow): readonly string[] =>
  * @param input.facets - The facets, in composition order.
  * @param input.kinds - The `NodeKind` roster.
  * @param input.names - The `AttributeName` roster.
+ * @param input.versions - The `SchemaVersion` roster.
  * @returns The relations, or the first reason one has no constant: a declaration kind or built-in
  *   variable stated twice (`RepeatedValue`); two rows at one key, such as two spellings of one
  *   reference or two bounds on one kind (`KeyCollision`); or a kind, attribute or declaration kind
@@ -690,6 +1032,7 @@ export const references = (input: {
   readonly facets: readonly ReferenceFacet[];
   readonly kinds: Roster<string>;
   readonly names: Roster<string>;
+  readonly versions: Roster<SchemaVersion>;
 }): Result.Result<References, ClosedRelationError> =>
   Result.gen(function* generateReferences() {
     const { facets } = input;
@@ -701,18 +1044,28 @@ export const references = (input: {
     );
     const declaration = idField("declaration", declarationKind);
     const stated = facets.flatMap((facet) => facet.builtIns);
-    const builtInVariable = yield* roster(
-      "BuiltInVariable",
-      stated.map(({ variable }) => variable),
-    );
+    const builtInVariable = yield* roster("BuiltInVariable", [
+      ...new Set(stated.map(({ variable }) => variable)),
+    ]);
     const spelling = yield* roster("ReferenceSpelling", spellings);
+    const referenceForm = yield* roster("ReferenceForm", referenceForms);
     const rows = facets.flatMap((facet) => facet.references);
 
     return {
       builtIn: yield* closed({
-        key: [idField("variable", builtInVariable)],
+        key: [idField("root", input.kinds), idField("variable", builtInVariable)],
         name: "BuiltInVariable",
-        payload: [declaration],
+        payload: [
+          declaration,
+          valueField(
+            "baseType",
+            stated.map(({ baseType }) => baseType),
+          ),
+          valueField(
+            "cardinality",
+            stated.map(({ cardinality }) => cardinality),
+          ),
+        ],
         rows: stated,
       }),
       builtInVariable,
@@ -751,6 +1104,18 @@ export const references = (input: {
         payload: [declaration],
         rows: declarationKind.handles.map((handle) => ({ declaration: handle, kind: handle })),
       }),
+      referenceAttribute: yield* closed({
+        key: [idField("version", input.versions), kind, idField("name", input.names)],
+        name: "ReferenceAttribute",
+        payload: [idField("form", referenceForm)],
+        rows: facets
+          .flatMap((facet) => facet.fileReferences)
+          .flatMap(({ form, kind: owner, name, versions }) =>
+            versions.map((version) => ({ form, kind: owner, name, version })),
+          ),
+      }),
+      referenceForm,
+      reservedTarget: yield* roster("ReservedTarget", reservedTargets),
       sectionPart: yield* closed({
         key: [kind],
         name: "SectionPart",

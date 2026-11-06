@@ -5,14 +5,19 @@ import { int } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Formatter, Option, Result } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
-import { composed } from "#pantry/grammar/compose.ts";
+import { composed, layerAttributeNames } from "#pantry/grammar/compose.ts";
 import type { ComposedGrammar, Kind, Name } from "#pantry/grammar/compose.ts";
 import { fixedKinds, foreignKinds, openClasses, schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import { shredGrammarOf } from "#pantry/model/composed.ts";
 import { shred } from "#pantry/model/shred.ts";
 import { toyFacets, toyGrammar, toySources, toyVocabulary } from "#pantry/test/gen/grammar.ts";
-import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
+import {
+  attributeDeclarations,
+  globalAttributes,
+  typeAttributeDeclarations,
+} from "#pantry/vocab/inventory/attributes.ts";
+import type { Domain } from "#pantry/vocab/inventory/types.ts";
 import { coveredElements } from "#pantry/vocab/inventory/extensions.ts";
 import { asiNamespace } from "#pantry/vocab/namespaces.ts";
 
@@ -63,6 +68,25 @@ describe("the composition", () => {
         [Option.some(0), Option.some(1), Option.some(2), Option.some(3)],
       );
     }),
+  );
+
+  it.effect(
+    "types every global attribute the leaf declares as a static name, each coded right after the open classes",
+    () =>
+      // Oracle: the leaf's `globalAttributes`, read directly: the document layer's static list is
+      // exactly its names, and each holds the code the run-time layer gave it, 4 onward.
+      Effect.gen(function* layerNames() {
+        const { kinds } = yield* grammar;
+        const globals = globalAttributes.map(({ name }) => name);
+
+        assert.deepStrictEqual(new Set(layerAttributeNames), new Set(globals));
+        assert.deepStrictEqual(
+          new Set(
+            globals.map((name) => Option.getOrElse(kinds.attributeName.codeOf(name), () => -1)),
+          ),
+          new Set(globals.map((_, at) => openClasses.length + at)),
+        );
+      }),
   );
 
   it.effect(
@@ -379,5 +403,111 @@ describe("spec reading 81, through the codec", () => {
         );
       }),
     300_000,
+  );
+});
+
+/**
+ * Whether a leaf definition is or is derived from `xs:ID`: atomic, with the built-in `ID`.
+ *
+ * @param domain - The leaf definition.
+ * @returns Whether it is an ID type.
+ */
+const isId = (domain: Domain): boolean => domain._tag === "atomic" && domain.builtin === "ID";
+
+/**
+ * Each (version, host)'s declared attributes as the leaf states them: a kind's by its handle, a
+ * governing type's by its `TypeName` handle, each name with whether its type is an ID.
+ */
+const declaredUses: ReadonlyMap<string, ReadonlyMap<string, boolean>> = (() => {
+  const uses = new Map<string, Map<string, boolean>>();
+  const note = (host: string, versions: readonly string[], name: string, domain: Domain) => {
+    for (const version of versions) {
+      const at = `${version} ${host}`;
+      uses.set(at, (uses.get(at) ?? new Map<string, boolean>()).set(name, isId(domain)));
+    }
+  };
+  for (const { domain, kind, name, versions } of attributeDeclarations) {
+    note(kind, versions, name, domain);
+  }
+
+  for (const { domain, name, owner, versions } of typeAttributeDeclarations) {
+    note(owner, versions, name, domain);
+  }
+
+  return uses;
+})();
+
+describe("spec reading 101, wild IDs", () => {
+  it.effect(
+    "admit no wild xml:id on a kind or governor whose declared uses include an ID-derived one, and keep it on every other: every admitted (version, kind) and (version, governor)",
+    (ctx) =>
+      // Oracle: XML Schema 1.0 Part 1, §3.4.4, Element Locally Valid (Complex Type), clause 5.2,
+      // over the leaf's own declarations (`attributeDeclarations`, `typeAttributeDeclarations`):
+      // an `xml:id` the host does not declare is a wild ID where its type is `xml.xsd`'s `xs:ID`,
+      // and it stands on no host that declares an ID-derived use. The same declarations say where
+      // the reading bars it, so a host that declares none keeps every `xml:id` its wildcard gave it
+      // before the reading, which the measured before/after diff of the slice's report counts.
+      // Bound: every (version, kind) the attribute grammar admits a name on, and every (version,
+      // governor), in both versions.
+      Effect.gen(function* wildIds() {
+        const { attributes } = yield* Effect.fromResult(composed());
+        const hosts = [
+          ...Map.groupBy(
+            attributes.admission.rows,
+            ({ kind, version }): string => `${version} ${kind}`,
+          ),
+          ...Map.groupBy(
+            attributes.governed.rows,
+            ({ governor, version }): string => `${version} ${governor}`,
+          ),
+        ];
+        const typeOf = new Map<string, string>(
+          attributes.governor.rows.map(
+            ({ governor, governs, version }) =>
+              [`${version} ${governor}`, `${version} ${governs}`] as const,
+          ),
+        );
+
+        return yield* searched(
+          ctx,
+          exhaust(
+            {
+              box: `every admitted (version, kind) and (version, governor), ${hosts.length}`,
+              caseHang: Duration.minutes(1),
+              coverage: requiredInSpace<"declares an ID" | "declares no ID">([
+                "declares an ID",
+                "declares no ID",
+              ]),
+              generator: int(0, hosts.length - 1),
+              limit: hosts.length,
+              literal: Formatter.format,
+              oracle: {
+                kind: "specification",
+                name: "XML Schema 1.0 Part 1, §3.4.4 clause 5.2, over the leaf's declarations",
+              },
+              suite: "grammar/compose/wild-ids",
+            },
+            (index, c) =>
+              Effect.sync(() => {
+                const [at, rows] = hosts[index] ?? ["", []];
+                const uses = declaredUses.get(typeOf.get(at) ?? at) ?? new Map<string, boolean>();
+                const declaresId = [...uses.values()].some(Boolean);
+                c.note(declaresId ? "declares an ID" : "declares no ID");
+
+                const wild = rows.filter(
+                  ({ domain, name }) =>
+                    name === "xml:id" &&
+                    !uses.has(name) &&
+                    attributes.identity
+                      .lookup({ domain })
+                      .pipe(Option.exists(({ identity }) => identity === "ID")),
+                );
+
+                assert.deepStrictEqual(declaresId ? wild.map(({ name }) => name) : [], [], at);
+              }),
+          ),
+        );
+      }),
+    120_000,
   );
 });

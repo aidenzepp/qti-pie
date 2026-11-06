@@ -9,9 +9,9 @@ import path from "node:path";
 import { NodeChildProcessSpawner, NodeServices } from "@effect/platform-node";
 import { Duration, Effect, FileSystem, Formatter, Layer, Result } from "effect";
 import { anyUriPattern } from "#pantry/grammar/domains.ts";
-import { anyUri as anyUriSource } from "#pantry/schema/patterns.ts";
 import { vpFmt } from "#pantry/test/vp-fmt.ts";
 import { builtinDomainOf, renderPatterns } from "#pantry/vocab/derive/domains.ts";
+import { anyUriSource } from "#pantry/vocab/inventory/patterns.ts";
 
 /**
  * The package folder, `packages/pantry`, which the committed leaf and `vp fmt` are relative to.

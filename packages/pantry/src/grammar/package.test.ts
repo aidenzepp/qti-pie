@@ -4,7 +4,16 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect, FileSystem, Formatter, Option, Result } from "effect";
 import type { Element } from "@qti-pie/crust/tree.ts";
 import { fin, roster } from "#pantry/grammar/closed.ts";
-import { cp, documentRoots, lom, manifestRoot, asi, ud } from "#pantry/grammar/facets.ts";
+import {
+  cp,
+  documentRoots,
+  fragmentRoots,
+  lom,
+  manifestRoot,
+  asi,
+  ud,
+  xi,
+} from "#pantry/grammar/facets.ts";
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
 import { packageGrammar } from "#pantry/grammar/package.ts";
 import { checkCache, xsdDirectory } from "#pantry/vocab/derive/sources.ts";
@@ -32,7 +41,7 @@ const relations = Effect.gen(function* packageRelations() {
 
   return yield* Effect.fromResult(
     packageGrammar({
-      facets: [asi, cp, lom, ud].map(({ package: stated }) => stated),
+      facets: [asi, cp, lom, ud, xi].map(({ package: stated }) => stated),
       kinds,
       versions,
     }),
@@ -125,7 +134,8 @@ describe.skipIf(!cached)("ResourceTypeOf against the content-packaging XSDs", ()
  * processing type `imsqti_responseprocessing_xmlv3p0`; the content-packaging XSDs, which
  * `ResourceTypeOf` follows, enumerate `imsqti_resprocessing_xmlv3p0`, so it is written as the XSD
  * spells it (spec reading 73). The table's other types (a fragment, web content, LTI links, PLS
- * lexicons, control files, non-IMS metadata, stylesheets) are no document of the composition.
+ * lexicons, control files, non-IMS metadata, stylesheets) are no document of the composition, but
+ * the fragment, an included document read in place (spec reading 107).
  */
 const statedRoots: readonly { readonly root: string; readonly type: string }[] = [
   { root: "qti-assessment-test", type: "imsqti_test_xmlv3p0" },
@@ -161,16 +171,25 @@ describe("RootOfType", () => {
     "holds exactly the (type, root) pairs the implementation guide states, and the document roots are the manifest's and theirs",
     () =>
       // Oracle: the specification as a checker, the guide's resource types and their files' roots,
-      // stated above. Set equality, so a pair dropped, added or re-rooted fails, as does a document
-      // root no stated file holds.
+      // stated above, and the guide's `imsqti_fragment_xmlv3p0`, "QTI 3 inclusion (XInclude)", whose
+      // document's root is any kind an include stands for (spec reading 107), the rows
+      // `include.test.ts` proves against each parent's automaton. Set equality, so a pair dropped,
+      // added or re-rooted fails, as does a document root no stated file holds.
       Effect.gen(function* roots() {
         const { rootOfType } = yield* relations;
+        const fragments = fragmentRoots.map(({ root }) => ({
+          root,
+          type: "imsqti_fragment_xmlv3p0",
+        }));
 
-        assert.deepStrictEqual(new Set(rootOfType.rows.map(pair)), new Set(statedRoots.map(pair)));
+        assert.deepStrictEqual(
+          new Set(rootOfType.rows.map(pair)),
+          new Set([...statedRoots, ...fragments].map(pair)),
+        );
         assert.strictEqual(manifestRoot, statedManifest);
         assert.deepStrictEqual(
           new Set(documentRoots),
-          new Set([statedManifest, ...statedRoots.map(({ root }) => root)]),
+          new Set([statedManifest, ...[...statedRoots, ...fragments].map(({ root }) => root)]),
         );
       }),
   );

@@ -2,15 +2,21 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it } from "@effect/vitest";
 import { exhaust } from "@grizzle/testing/explore";
 import { requiredInSpace } from "@grizzle/testing/features";
-import { array, element } from "@grizzle/testing/gen";
+import { array, element, int } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
-import { Duration, Effect, Formatter, Option, Result } from "effect";
+import { Array as Arr, Duration, Effect, Formatter, Option, Result } from "effect";
 import { admittedOf, governorOf, textDomainOf } from "#pantry/grammar/attributes.ts";
 import { roster } from "#pantry/grammar/closed.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 import { foreignKinds, isForeignKind, schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
-import { noType, typeHandle, xsiTypesOf } from "#pantry/grammar/xsi.ts";
+import {
+  expandedNameOf,
+  noType,
+  typeHandle,
+  typePrefixes,
+  xsiTypesOf,
+} from "#pantry/grammar/xsi.ts";
 import type { ContentModel, ExpandedName, TypeDerivation } from "#pantry/vocab/inventory/types.ts";
 import { checkCache } from "#pantry/vocab/derive/sources.ts";
 import { typeDerivations } from "#pantry/vocab/inventory/models.ts";
@@ -18,6 +24,7 @@ import type { SourcePath } from "#pantry/vocab/derive/sources.ts";
 import { xsNamespace } from "#pantry/vocab/namespaces.ts";
 import {
   loadXsd,
+  nameKey,
   resolverOf,
   toySources,
   validateContents,
@@ -58,6 +65,25 @@ const derivations: readonly TypeDerivation[] = [
   { derived: [other], type: other, versions: schemaVersions },
 ];
 
+/**
+ * The toy kinds' namespace, the toy types' own.
+ */
+const toyNamespaces: ReadonlyMap<string, string> = new Map(
+  ["k0", "k1", "k2"].map((kind) => [kind, "urn:toy"] as const),
+);
+
+/**
+ * The namespaces of four vocabularies, as `#pantry/vocab/namespaces.ts` writes them: the curriculum
+ * standards metadata and LOM, which the content-packaging set lists, QTI's own, which it does not,
+ * and XML Schema's.
+ */
+const setNamespaces = {
+  asi: "http://www.imsglobal.org/xsd/imsqtiasi_v3p0",
+  csmd: "http://www.imsglobal.org/xsd/qti/qtiv3p0/imscsmd_v1p1",
+  lom: "http://ltsc.ieee.org/xsd/LOM",
+  xs: xsNamespace,
+} as const;
+
 describe("XsiType", () => {
   it.effect(
     "holds exactly the types each kind's declared type derives, and only the null type for an anonymous one, every assignment of declared types to 3 kinds",
@@ -88,7 +114,13 @@ describe("XsiType", () => {
               }));
               c.note(declared.includes(-1) ? "anonymous" : "typed");
 
-              const result = xsiTypesOf({ derivations, kinds, models, versions });
+              const result = xsiTypesOf({
+                derivations,
+                kinds,
+                models,
+                namespaceOf: toyNamespaces,
+                versions,
+              });
               assert.isTrue(Result.isSuccess(result));
               if (Result.isSuccess(result)) {
                 const { xsiType } = result.success;
@@ -119,6 +151,48 @@ describe("XsiType", () => {
       ),
   );
 
+  it("names a derived type only where a schema set of its kind's documents holds it", () => {
+    // Oracle: XML Schema 1.0 Part 1, §3.3.4 clause 4.1 with spec reading 72's schema sets, by hand:
+    // a csmd kind stands only in a manifest, whose set holds csmd's types, LOM's and XML Schema's
+    // own, and no ASI type. Bound: one kind, each of the four namespaces' types; residual none.
+    const declared: ExpandedName = { local: "GUID.Type", namespace: setNamespaces.csmd };
+    const derived = Object.values(setNamespaces).map((namespace) => ({ local: "T", namespace }));
+    const result = Result.flatMap(roster("NodeKind", ["csmd:GUID"]), (kinds) =>
+      Result.flatMap(roster("SchemaVersion", schemaVersions), (versions) =>
+        xsiTypesOf({
+          derivations: [
+            { derived: [declared, ...derived], type: declared, versions: schemaVersions },
+          ],
+          kinds,
+          models: [
+            {
+              content: { _tag: "empty" },
+              kind: "csmd:GUID",
+              sources: toySources(schemaVersions),
+              type: Option.some(declared),
+              versions: schemaVersions,
+            },
+          ],
+          namespaceOf: new Map([["csmd:GUID", setNamespaces.csmd]]),
+          versions,
+        }),
+      ),
+    );
+
+    assert.deepStrictEqual(
+      result.pipe(
+        Result.map(({ xsiType }) =>
+          [declared, ...derived].map((type) =>
+            Option.isSome(
+              xsiType.lookup({ kind: "csmd:GUID", type: typeHandle(type), version: "3.0.1" }),
+            ),
+          ),
+        ),
+      ),
+      Result.succeed([true, false, true, true, true]),
+    );
+  });
+
   it("refuses a declared type no derivation lists", () => {
     const result = Result.flatMap(roster("NodeKind", ["k0"]), (kinds) =>
       Result.flatMap(roster("SchemaVersion", schemaVersions), (versions) =>
@@ -134,6 +208,7 @@ describe("XsiType", () => {
               versions: schemaVersions,
             },
           ],
+          namespaceOf: toyNamespaces,
           versions,
         }),
       ),
@@ -172,15 +247,16 @@ const typedSchemas: readonly (readonly [SourcePath, SchemaVersion, string])[] = 
 ];
 
 /**
- * Read a `TypeName` handle back as the name it spells.
+ * Read a named type's `TypeName` handle back as the name it spells.
  *
- * @param handle - A named type's handle, `{namespace}local`.
+ * @param handle - A named type's handle, never {@link noType}.
  * @returns The name.
  */
-const nameOfHandle = (handle: string): ExpandedName => ({
-  local: handle.slice(handle.indexOf("}") + 1),
-  namespace: handle.slice(1, handle.indexOf("}")),
-});
+const nameOfHandle = (handle: string): ExpandedName =>
+  Option.getOrThrowWith(
+    expandedNameOf(handle),
+    () => new Error(`${handle} spells no named type, so the probe has no name to write.`),
+  );
 
 /**
  * A probe of an element's `xsi:type`, with the kind it probes.
@@ -225,7 +301,9 @@ const typeProbesOf = (input: {
     input.set.elements.has(`{${name.namespace}}${name.local}`) &&
     Option.contains(resolve(name.namespace, name.local, "document"), kind);
   const typed =
-    declared !== noType && reading.type === declared && nameOfHandle(declared).namespace === target;
+    declared !== noType &&
+    reading.type === nameKey(nameOfHandle(declared)) &&
+    nameOfHandle(declared).namespace === target;
   if (!global && !typed) {
     return [];
   }
@@ -372,9 +450,14 @@ describe("Governor", () => {
             ({ owner, versions }) => owner === governs && versions.includes(version),
           );
           const read = textDomainOf(attributes, { governs, kind, version });
+          // An empty domain, xs:NOTATION's, has no compiled pattern and is a domain all the same.
           const domain = read.pipe(
             Option.flatMap((handle) =>
-              Option.fromNullishOr(attributes.domains.find((held) => held.handle === handle)),
+              attributes.emptyDomains.includes(handle)
+                ? Option.some(handle)
+                : Option.fromNullishOr(
+                    attributes.domains.find((held) => held.handle === handle)?.handle,
+                  ),
             ),
           );
           if (
@@ -400,6 +483,84 @@ describe("Governor", () => {
 
         assert.isAbove(attributes.governor.rows.length, 0);
         assert.deepStrictEqual(disagreements, []);
+      }),
+    60_000,
+  );
+});
+
+describe("the TypeName spelling", () => {
+  it.effect(
+    "spells every pinned type by a prefix table that is a bijection over the pinned namespaces, reads every handle back, and keeps every handle within a PostgreSQL name",
+    (ctx) =>
+      // Oracle: the specification turned into a checker: an expanded name {namespace}local is
+      // read back from its handle (a round trip), the table's prefixes are distinct and each is
+      // empty or ends at its only `:`, and grizzle's handle limit, 63 UTF-8 bytes (README, "Tables
+      // and types").
+      // Bound: every type the pinned XSDs' derivations name, and every TypeName handle of
+      // production, exhausted.
+      Effect.gen(function* everyType() {
+        const grammar = yield* Effect.fromResult(composed());
+        const names = [
+          ...new Map(
+            typeDerivations
+              .flatMap(({ derived, type }) => [type, ...derived])
+              .map((name) => [`{${name.namespace}}${name.local}`, name] as const),
+          ).values(),
+        ];
+        const prefixes = [...typePrefixes.values()];
+
+        assert.strictEqual(new Set(prefixes).size, prefixes.length);
+        assert.isTrue(
+          prefixes.every(
+            (prefix) =>
+              prefix === "" || (prefix.endsWith(":") && prefix.indexOf(":") === prefix.length - 1),
+          ),
+        );
+        assert.deepStrictEqual(
+          new Set(names.map(({ namespace }) => namespace)).difference(new Set(typePrefixes.keys())),
+          new Set(),
+        );
+
+        yield* searched(
+          ctx,
+          exhaust(
+            {
+              box: `every type the pinned derivations name, ${names.length}`,
+              caseHang: Duration.minutes(1),
+              coverage: requiredInSpace<"built-in" | "prefixed" | "unprefixed">([
+                "built-in",
+                "prefixed",
+                "unprefixed",
+              ]),
+              generator: int(0, names.length - 1),
+              limit: names.length,
+              literal: Formatter.format,
+              oracle: { kind: "universal", name: "expandedNameOf ∘ typeHandle = id" },
+              suite: "grammar/xsi/type-handles",
+            },
+            (index, c) =>
+              Effect.sync(() => {
+                const name = Arr.getUnsafe(names, index);
+                const handle = typeHandle(name);
+                if (name.namespace === xsNamespace) {
+                  c.note("built-in");
+                } else {
+                  c.note(handle.includes(":") ? "prefixed" : "unprefixed");
+                }
+
+                assert.notStrictEqual(handle, noType);
+                assert.deepStrictEqual(expandedNameOf(handle), Option.some(name));
+                assert.isAtMost(new TextEncoder().encode(handle).length, 63, handle);
+              }),
+          ),
+        );
+
+        for (const handle of grammar.xsi.typeName.handles) {
+          assert.strictEqual(
+            Option.match(expandedNameOf(handle), { onNone: () => noType, onSome: typeHandle }),
+            handle,
+          );
+        }
       }),
     60_000,
   );

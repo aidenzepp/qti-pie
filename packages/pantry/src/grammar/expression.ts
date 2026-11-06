@@ -436,3 +436,658 @@ export const mathArities: ReadonlyMap<string, MathArity> = new Map(
     { ...arity, qualifiers: ownQualifiers.get(kind) ?? [] },
   ]),
 );
+
+// Expression typing (O4, plan §1.7; the W5 amendment's C6, C16 and C17; Q5.10).
+
+/**
+ * The base types an expression's value is typed with, in code order: the `ValueBase` roster's
+ * handles. These are expression-typing codes, not QTI's declaration codes: QTI's eleven base types,
+ * spelled as `BaseType` spells them, then `any`, the type of `qti-null`, whose value "is treated as
+ * if it is of any desired base-type" (information model §2.11.1.4, Null), and `unknown`, the type
+ * of a value no declaration of its document types: a response processing template's parameter, a
+ * test's item variable, a record's field, a custom operator's result. `ValueBaseOf` maps `BaseType`
+ * onto it, `none` (a record's base type) onto `unknown`.
+ *
+ * @see {@link https://www.imsglobal.org/spec/qti/v3p0/info#ExprNull | QTI 3.0 information model, Null}
+ */
+export const valueBases = [
+  "boolean",
+  "integer",
+  "float",
+  "string",
+  "identifier",
+  "uri",
+  "duration",
+  "point",
+  "pair",
+  "directedPair",
+  "file",
+  "any",
+  "unknown",
+] as const;
+
+/**
+ * A `ValueBase` handle.
+ */
+export type ValueBase = (typeof valueBases)[number];
+
+/**
+ * The cardinalities an expression's value is typed with, in code order: the `ValueCardinality`
+ * roster's handles. QTI's four cardinalities, then `unknown`, the cardinality of `qti-null` and of
+ * a value no declaration types. `ValueCardinalityOf` maps `Cardinality` onto it.
+ */
+export const valueCardinalities = ["single", "multiple", "ordered", "record", "unknown"] as const;
+
+/**
+ * A `ValueCardinality` handle.
+ */
+export type ValueCardinality = (typeof valueCardinalities)[number];
+
+/**
+ * The processing languages an expression or a rule is written in, in code order: the `Language`
+ * roster's handles. Response, outcome and template processing, the three roots' (information model
+ * §2.6 to §2.8), and `none` for an expression outside every processing root, such as a test's
+ * branch rule or precondition, or a rule a fallback holds.
+ */
+export const languages = ["response", "outcome", "template", "none"] as const;
+
+/**
+ * A `Language` handle.
+ */
+export type Language = (typeof languages)[number];
+
+/**
+ * How a processing reference names its variable, in code order: the `Resolution` roster's handles.
+ * `declared`, a declaration of its document; `builtIn`, one of the built-in variables
+ * (`BuiltInVariable`); `unresolved`, neither, which only a document that is no item may hold: a
+ * response processing template's parameters and a test's item variables are declared elsewhere.
+ */
+export const resolutions = ["declared", "builtIn", "unresolved"] as const;
+
+/**
+ * A `Resolution` handle.
+ */
+export type Resolution = (typeof resolutions)[number];
+
+/**
+ * The tables a processing reference needs its declaration to hold, in code order: the
+ * `ReferencedTable` roster's handles. `qti-map-response` needs a `qti-mapping` and
+ * `qti-map-response-point` a `qti-area-mapping` (information model §2.11.3.29 and §2.11.3.30);
+ * `qti-lookup-outcome-value` a `qti-match-table` or a `qti-interpolation-table` (§2.5.1.4); every
+ * other reference `none`.
+ */
+export const referencedTables = [
+  "none",
+  "qti-mapping",
+  "qti-area-mapping",
+  "qti-match-table",
+  "qti-interpolation-table",
+] as const;
+
+/**
+ * A `ReferencedTable` handle.
+ */
+export type ReferencedTable = (typeof referencedTables)[number];
+
+/**
+ * The response processing templates 1EdTech publishes, in code order: the `RpTemplate` roster's
+ * handles, `none` for a `template` URI that names none of them. The two forms of the published
+ * URI prefix, each with or without `.xml`, name each (QTI 3.0 implementation guide, Response
+ * Processing Templates; the corpus's `rptemplates/` documents).
+ */
+export const rpTemplates = [
+  "none",
+  "match_correct",
+  "map_response",
+  "map_response_point",
+  "CC2_match",
+  "CC2_match_basic",
+  "CC2_map_response",
+] as const;
+
+/**
+ * An `RpTemplate` handle.
+ */
+export type RpTemplate = (typeof rpTemplates)[number];
+
+/**
+ * The URI prefixes a published template's `template` URI is written under.
+ */
+export const rpTemplatePrefixes = [
+  "https://purl.imsglobal.org/spec/qti/v3p0/rptemplates/",
+  "https://www.imsglobal.org/question/qti_v3p0/rptemplates/",
+] as const;
+
+/**
+ * XML whitespace, `S`, possibly none, as a pattern's piece.
+ */
+const ws = "[\\t\\n\\r ]*";
+
+/**
+ * Escape a literal for a pattern: every character the pattern grammar reads as syntax.
+ *
+ * @param text - The literal.
+ * @returns It, each syntax character behind a backslash.
+ */
+const escaped = (text: string): string => text.replaceAll(/[.*+?^${}()|[\]\\/-]/gu, "\\$&");
+
+/**
+ * The pattern each published template's `template` URI matches: either prefix, the template's
+ * name, an optional `.xml`, with the whitespace an `xs:anyURI` collapses around it.
+ *
+ * @param template - The template.
+ * @returns The anchored pattern.
+ */
+export const rpTemplatePattern = (template: Exclude<RpTemplate, "none">): string =>
+  `^${ws}(?:${rpTemplatePrefixes.map(escaped).join("|")})${escaped(template)}(?:\\.xml)?${ws}$`;
+
+/**
+ * How an expression kind's result type follows from its operands and its attributes, beside the
+ * closed sets of results it may take at all (`ResultBase`, `ResultCardinality`):
+ *
+ * - `fixed`: the sets are one type, and say it all;
+ * - `numeric`: `integer` when every typed operand is an integer, `unknown` when one is unknown, else
+ *   `float` (information model §2.11.3: Sum, Product, Subtract, Min, Max);
+ * - `container`: its operands' one base type, `any` for none, `unknown` for several;
+ * - `first`: its one operand's base type (Index, Random);
+ * - `second`: its second operand's type (Delete);
+ * - `declared`: the type of the variable its `identifier` names (Variable, Default, Correct);
+ * - `attribute`: its own attribute's (BaseValue's and TestVariables' `base-type`, MathOperator's
+ *   `name`).
+ */
+export type Typing =
+  | "attribute"
+  | "container"
+  | "declared"
+  | "first"
+  | "fixed"
+  | "numeric"
+  | "second";
+
+/**
+ * One expression kind's typing: the base types and cardinalities its operands may have, its first
+ * operand's and its later operands' apart, whether they must share one base type or one
+ * cardinality, the results it may give and how, and whether only outcome processing admits it.
+ * `unknown` is no operand's restriction: an operand of a type no declaration says passes every
+ * rule, as the information model's typing defers it (spec reading 4).
+ */
+export interface ExpressionTyping {
+  readonly kind: string;
+  readonly lead: readonly ValueCardinality[];
+  readonly oneBase: boolean;
+  readonly oneCardinality: boolean;
+  readonly operandBases: readonly ValueBase[];
+  readonly outcomeOnly: boolean;
+  readonly resultBases: readonly ValueBase[];
+  readonly resultCardinalities: readonly ValueCardinality[];
+  readonly tail: readonly ValueCardinality[];
+  readonly typing: Typing;
+}
+
+/**
+ * QTI's eleven base types, the typed values an operand may hold.
+ */
+const allBases: readonly ValueBase[] = valueBases.filter(
+  (base) => base !== "any" && base !== "unknown",
+);
+
+/**
+ * The numerical base types: integer and float, never duration (information model §2.11.3, the
+ * comparison operators' "numerical base-type"; Duration Lt and Duration Gte take durations apart).
+ */
+const numerical: readonly ValueBase[] = ["integer", "float"];
+
+/**
+ * Every base type but duration, which Match, Member and Contains refuse ("not of base-type
+ * duration", information model §2.11.3.28, §2.11.3.33 and §2.11.3.8).
+ */
+const notDuration: readonly ValueBase[] = allBases.filter((base) => base !== "duration");
+
+/**
+ * QTI's four cardinalities.
+ */
+const allCardinalities: readonly ValueCardinality[] = ["single", "multiple", "ordered", "record"];
+
+/**
+ * Every cardinality but record.
+ */
+const notRecord: readonly ValueCardinality[] = ["single", "multiple", "ordered"];
+
+/**
+ * The containers, multiple and ordered.
+ */
+const containers: readonly ValueCardinality[] = ["multiple", "ordered"];
+
+/**
+ * A kind that takes operands, every one of the same base types and cardinalities.
+ *
+ * @param kind - The kind.
+ * @param operandBases - The base types its operands may have.
+ * @param cardinalities - The cardinalities its operands may have.
+ * @param result - Its result.
+ * @returns The typing, its result fixed unless `result` says how.
+ */
+const operator = (
+  kind: string,
+  operandBases: readonly ValueBase[],
+  cardinalities: readonly ValueCardinality[],
+  result: Pick<ExpressionTyping, "resultBases" | "resultCardinalities" | "typing">,
+  shared: Partial<Pick<ExpressionTyping, "oneBase" | "oneCardinality">> = {},
+): ExpressionTyping => ({
+  kind,
+  lead: cardinalities,
+  oneBase: shared.oneBase ?? false,
+  oneCardinality: shared.oneCardinality ?? false,
+  operandBases,
+  outcomeOnly: false,
+  resultBases: result.resultBases,
+  resultCardinalities: result.resultCardinalities,
+  tail: cardinalities,
+  typing: result.typing,
+});
+
+/**
+ * A fixed result of one type.
+ *
+ * @param base - Its base type.
+ * @param cardinality - Its cardinality.
+ * @returns The result.
+ */
+const fixed = (
+  base: ValueBase,
+  cardinality: ValueCardinality,
+): Pick<ExpressionTyping, "resultBases" | "resultCardinalities" | "typing"> => ({
+  resultBases: [base],
+  resultCardinalities: [cardinality],
+  typing: "fixed",
+});
+
+/**
+ * A kind with no operand, of one fixed type.
+ *
+ * @param kind - The kind.
+ * @param base - Its result's base type.
+ * @param cardinality - Its result's cardinality.
+ * @param outcomeOnly - Whether only outcome processing admits it.
+ * @returns The typing.
+ */
+const leaf = (
+  kind: string,
+  base: ValueBase,
+  cardinality: ValueCardinality,
+  outcomeOnly = false,
+): ExpressionTyping => ({
+  ...operator(kind, [], [], fixed(base, cardinality)),
+  outcomeOnly,
+});
+
+/**
+ * A boolean single result, every predicate's.
+ */
+const predicate = fixed("boolean", "single");
+
+/**
+ * The typing of every QTI expression kind, read against the information model's §2.11 (each
+ * operator's "sub-expressions" and "result" paragraphs) and the old checker's P23 table
+ * (`docs/goals/qti/phase-3.md` 4.10), which this replaces. `expression.test.ts` holds its kinds to
+ * `OperatorArity`'s, the 64 the ASI XSD's expression group names.
+ *
+ * @see {@link https://www.imsglobal.org/spec/qti/v3p0/info#Expr3 | QTI 3.0 information model, §2.11.3 Operators}
+ */
+export const expressionTypings: readonly ExpressionTyping[] = [
+  ...["qti-and", "qti-any-n", "qti-not", "qti-or"].map((kind) =>
+    operator(kind, ["boolean"], ["single"], predicate),
+  ),
+  {
+    ...leaf("qti-base-value", "boolean", "single"),
+    resultBases: allBases,
+    typing: "attribute",
+  },
+  operator("qti-container-size", allBases, containers, fixed("integer", "single")),
+  operator("qti-contains", notDuration, containers, predicate, {
+    oneBase: true,
+    oneCardinality: true,
+  }),
+  ...["qti-correct", "qti-default", "qti-variable"].map((kind): ExpressionTyping => ({
+    ...leaf(kind, "unknown", "unknown"),
+    resultBases: [...allBases, "unknown"],
+    resultCardinalities: valueCardinalities,
+    typing: "declared",
+  })),
+  operator("qti-custom-operator", allBases, allCardinalities, fixed("unknown", "unknown")),
+  {
+    ...operator(
+      "qti-delete",
+      allBases,
+      containers,
+      {
+        resultBases: valueBases,
+        resultCardinalities: valueCardinalities,
+        typing: "second",
+      },
+      { oneBase: true },
+    ),
+    lead: ["single"],
+  },
+  ...["qti-duration-gte", "qti-duration-lt"].map((kind) =>
+    operator(kind, ["duration"], ["single"], predicate),
+  ),
+  ...["qti-equal", "qti-equal-rounded", "qti-gt", "qti-gte", "qti-lt", "qti-lte"].map((kind) =>
+    operator(kind, numerical, ["single"], predicate),
+  ),
+  operator("qti-field-value", allBases, ["record"], fixed("unknown", "single")),
+  ...["qti-gcd", "qti-lcm"].map((kind) =>
+    operator(kind, ["integer"], notRecord, fixed("integer", "single")),
+  ),
+  ...["qti-index", "qti-random"].map((kind) =>
+    operator(kind, allBases, containers, {
+      resultBases: valueBases,
+      resultCardinalities: ["single"],
+      typing: "first",
+    }),
+  ),
+  operator("qti-inside", ["point"], notRecord, predicate),
+  ...(
+    [
+      ["qti-integer-divide", "integer"],
+      ["qti-integer-modulus", "integer"],
+      ["qti-integer-to-float", "float"],
+    ] as const
+  ).map(([kind, result]) => operator(kind, ["integer"], ["single"], fixed(result, "single"))),
+  operator("qti-is-null", allBases, allCardinalities, predicate),
+  leaf("qti-map-response", "float", "single"),
+  leaf("qti-map-response-point", "float", "single"),
+  operator("qti-match", notDuration, allCardinalities, predicate, {
+    oneBase: true,
+    oneCardinality: true,
+  }),
+  leaf("qti-math-constant", "float", "single"),
+  operator("qti-math-operator", numerical, ["single"], {
+    resultBases: numerical,
+    resultCardinalities: ["single"],
+    typing: "attribute",
+  }),
+  ...["qti-max", "qti-min", "qti-product", "qti-sum"].map((kind) =>
+    operator(kind, numerical, notRecord, {
+      resultBases: ["integer", "float", "unknown"],
+      resultCardinalities: ["single"],
+      typing: "numeric",
+    }),
+  ),
+  operator("qti-subtract", numerical, ["single"], {
+    resultBases: ["integer", "float", "unknown"],
+    resultCardinalities: ["single"],
+    typing: "numeric",
+  }),
+  {
+    ...operator("qti-member", notDuration, containers, predicate, { oneBase: true }),
+    lead: ["single"],
+  },
+  operator(
+    "qti-multiple",
+    allBases,
+    ["single", "multiple"],
+    { resultBases: valueBases, resultCardinalities: ["multiple"], typing: "container" },
+    { oneBase: true },
+  ),
+  ...["qti-ordered", "qti-repeat"].map((kind) =>
+    operator(
+      kind,
+      allBases,
+      ["single", "ordered"],
+      { resultBases: valueBases, resultCardinalities: ["ordered"], typing: "container" },
+      { oneBase: true },
+    ),
+  ),
+  leaf("qti-null", "any", "unknown"),
+  ...[
+    "qti-number-correct",
+    "qti-number-incorrect",
+    "qti-number-presented",
+    "qti-number-responded",
+    "qti-number-selected",
+  ].map((kind) => leaf(kind, "integer", "single", true)),
+  ...["qti-outcome-maximum", "qti-outcome-minimum"].map((kind) =>
+    leaf(kind, "unknown", "multiple", true),
+  ),
+  ...["qti-pattern-match", "qti-string-match", "qti-substring"].map((kind) =>
+    operator(kind, ["string"], ["single"], predicate),
+  ),
+  ...(
+    [
+      ["qti-divide", "float"],
+      ["qti-power", "float"],
+      ["qti-round", "integer"],
+      ["qti-round-to", "float"],
+      ["qti-truncate", "integer"],
+    ] as const
+  ).map(([kind, result]) => operator(kind, numerical, ["single"], fixed(result, "single"))),
+  leaf("qti-random-float", "float", "single"),
+  leaf("qti-random-integer", "integer", "single"),
+  operator("qti-stats-operator", numerical, containers, fixed("float", "single")),
+  {
+    ...leaf("qti-test-variables", "unknown", "multiple", true),
+    resultBases: [...allBases, "unknown"],
+    typing: "attribute",
+  },
+];
+
+/**
+ * Whether a kind takes operands: a leaf's operand sets are empty, so no operand rule reads it.
+ *
+ * @param typing - The kind's typing.
+ * @returns Whether its operands have any cardinality.
+ */
+const takesOperands = (typing: ExpressionTyping): boolean => typing.lead.length > 0;
+
+/**
+ * `OperandBase`: the set of (kind, base) where an operand of an expression of the kind may be of
+ * the base type. A kind that takes operands admits `unknown` beside its own, and `any` is no
+ * operand's bit (`ValueBaseBit`), so an operand no declaration types breaks no rule.
+ *
+ * @param typings - The kinds' typings.
+ * @returns The rows, each (kind, base) once.
+ */
+export const operandBaseRows = (
+  typings: readonly ExpressionTyping[],
+): readonly { readonly base: ValueBase; readonly kind: string }[] =>
+  typings.flatMap((typing) =>
+    takesOperands(typing)
+      ? [...typing.operandBases, "unknown" as const].map((base) => ({ base, kind: typing.kind }))
+      : [],
+  );
+
+/**
+ * `LeadCardinality` or `TailCardinality`: the set of (kind, cardinality) where an expression's
+ * first operand, or a later one, may be of the cardinality. Only Member and Delete tell them
+ * apart.
+ *
+ * @param typings - The kinds' typings.
+ * @param place - Which operands: the first, `lead`, or the later ones, `tail`.
+ * @returns The rows, each (kind, cardinality) once.
+ */
+export const placeCardinalityRows = (
+  typings: readonly ExpressionTyping[],
+  place: "lead" | "tail",
+): readonly { readonly cardinality: ValueCardinality; readonly kind: string }[] =>
+  typings.flatMap((typing) =>
+    typing[place].map((cardinality) => ({ cardinality, kind: typing.kind })),
+  );
+
+/**
+ * `ResultBase`: the set of (kind, base) an expression of the kind may be typed with.
+ *
+ * @param typings - The kinds' typings.
+ * @returns The rows.
+ */
+export const resultBaseRows = (
+  typings: readonly ExpressionTyping[],
+): readonly { readonly base: ValueBase; readonly kind: string }[] =>
+  typings.flatMap((typing) => typing.resultBases.map((base) => ({ base, kind: typing.kind })));
+
+/**
+ * `ResultCardinality`: the set of (kind, cardinality) an expression of the kind may be typed with.
+ *
+ * @param typings - The kinds' typings.
+ * @returns The rows.
+ */
+export const resultCardinalityRows = (
+  typings: readonly ExpressionTyping[],
+): readonly { readonly cardinality: ValueCardinality; readonly kind: string }[] =>
+  typings.flatMap((typing) =>
+    typing.resultCardinalities.map((cardinality) => ({ cardinality, kind: typing.kind })),
+  );
+
+/**
+ * The kinds of one typing, a handle list a law reads through `Compute.in` (C8).
+ *
+ * @param typings - The kinds' typings.
+ * @param typing - The typing.
+ * @returns Its kinds, in table order.
+ */
+export const kindsTyped = (
+  typings: readonly ExpressionTyping[],
+  typing: Typing,
+): readonly string[] => typings.filter((row) => row.typing === typing).map(({ kind }) => kind);
+
+/**
+ * The processing roots and the language each opens (information model §2.6, §2.7 and §2.8).
+ */
+export const processingRoots = [
+  ["qti-response-processing", "response"],
+  ["qti-outcome-processing", "outcome"],
+  ["qti-template-processing", "template"],
+] as const satisfies readonly (readonly [string, Language])[];
+
+/**
+ * The rules whose one expression is a condition, boolean and single (information model §2.5.1.2,
+ * ResponseIf and ResponseElseIf, and their outcome and template counterparts; §2.8.1.6,
+ * TemplateConstraint): rule P21.
+ */
+export const conditionKinds = [
+  "qti-outcome-else-if",
+  "qti-outcome-if",
+  "qti-response-else-if",
+  "qti-response-if",
+  "qti-template-constraint",
+  "qti-template-else-if",
+  "qti-template-if",
+] as const;
+
+/**
+ * The rules that set the variable their `identifier` names to their one expression's value, which
+ * must fit the variable's type (information model §2.5.1.3, SetOutcomeValue, and §2.8.1: the
+ * template, default and correct setters): rule P20.
+ */
+export const setKinds = [
+  "qti-set-correct-response",
+  "qti-set-default-value",
+  "qti-set-outcome-value",
+  "qti-set-template-value",
+] as const;
+
+/**
+ * The rule that looks its one expression's value up in a table of its variable's declaration
+ * (information model §2.5.1.4, LookupOutcomeValue): rule P22.
+ */
+export const lookupKind = "qti-lookup-outcome-value";
+
+/**
+ * Every rule and processing kind: the three roots, their fragments, the conditions and their
+ * branches, the setters, the lookup and the exits (information model §2.5 to §2.8, the old
+ * parser's table B).
+ */
+export const ruleKinds = [
+  ...processingRoots.map(([kind]) => kind),
+  ...conditionKinds,
+  ...setKinds,
+  lookupKind,
+  "qti-exit-response",
+  "qti-exit-template",
+  "qti-exit-test",
+  "qti-outcome-condition",
+  "qti-outcome-else",
+  "qti-outcome-processing-fragment",
+  "qti-response-condition",
+  "qti-response-else",
+  "qti-response-processing-fragment",
+  "qti-template-condition",
+  "qti-template-else",
+] as const;
+
+/**
+ * The roots whose processing a test's built-in variables reach: a test's and a section's
+ * (information model §2.2.2, the test-level `duration`; spec reading 29). Every other root, an
+ * item's and a response processing template's, holds an item's built-ins.
+ */
+export const testRoots = ["qti-assessment-test", "qti-assessment-section"] as const;
+
+/**
+ * The built-in variables each root holds, with the type a reference to one has (information model
+ * §2.2.2, Item Variables, and §2.2.2.1, Context Variable; spec reading 29, the UP audit's A63): an
+ * item's `numAttempts`, `duration` (a float of seconds), `completionStatus` and `QTI_CONTEXT`; a
+ * test's or a section's `duration` (a duration) and `QTI_CONTEXT`. `test` marks the second.
+ */
+export const builtInTypes = [
+  { baseType: "integer", cardinality: "single", test: false, variable: "numAttempts" },
+  { baseType: "float", cardinality: "single", test: false, variable: "duration" },
+  { baseType: "identifier", cardinality: "single", test: false, variable: "completionStatus" },
+  { baseType: "unknown", cardinality: "record", test: false, variable: "QTI_CONTEXT" },
+  { baseType: "duration", cardinality: "single", test: true, variable: "duration" },
+  { baseType: "unknown", cardinality: "record", test: true, variable: "QTI_CONTEXT" },
+] as const satisfies readonly {
+  readonly baseType: ValueBase;
+  readonly cardinality: ValueCardinality;
+  readonly test: boolean;
+  readonly variable: string;
+}[];
+
+/**
+ * The base type of the literal a variable reference stands in place of.
+ *
+ * @param kind - The referring element's kind.
+ * @param attribute - The attribute the reference is made by.
+ * @returns `string` for a pattern, `float` for a random float's bounds, else `integer`.
+ */
+const literalBaseOf = (kind: string, attribute: string): ValueBase => {
+  if (attribute === "pattern") {
+    return "string";
+  }
+
+  return kind === "qti-random-float" ? "float" : "integer";
+};
+
+/**
+ * `ReferenceBase`: (kind, attribute) → base, the base type a variable named in place of a literal
+ * must have, single (rule P24): the literal member of the attribute's union, a string for
+ * `qti-pattern-match`'s `pattern`, a float for `qti-random-float`'s bounds, an integer for every
+ * other (information model §2.11.3: the `integerOrVariableRef`, `floatOrVariableRef` and
+ * `stringOrVariableRef` attributes).
+ *
+ * @param references - The variable references processing makes: `VariableReference`'s rows over the
+ *   expression kinds.
+ * @returns One row per reference that stands in place of a literal, its `identifier` aside.
+ */
+export const referenceBaseRows = (
+  references: readonly { readonly attribute: string; readonly kind: string }[],
+): readonly { readonly attribute: string; readonly base: ValueBase; readonly kind: string }[] =>
+  references
+    .filter(({ attribute }) => attribute !== "identifier")
+    .map(({ attribute, kind }) => ({ attribute, base: literalBaseOf(kind, attribute), kind }));
+
+/**
+ * The pattern of the names `qti-math-operator` gives an integer result: `signum`, `floor` and
+ * `ceil` (information model §2.11.3.32, MathOperator); every other name gives a float. The name is
+ * an `xs:string` enumeration, `whiteSpace` preserve, so the pattern is exact.
+ */
+export const integerMathOperators = "^(?:signum|floor|ceil)$";
+
+/**
+ * The pattern a lexical form of a coded value matches when it spells the handle: the handle itself,
+ * exactly, since `base-type` and `qti-math-operator`'s `name` are `xs:string` enumerations whose
+ * `whiteSpace` is preserve.
+ *
+ * @param handle - The handle.
+ * @returns The anchored pattern.
+ */
+export const spelledPattern = (handle: string): string => `^${escaped(handle)}$`;

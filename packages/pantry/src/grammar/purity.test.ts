@@ -21,11 +21,11 @@ const pureLayers = "{vocab,grammar,model}/**/*.ts";
 const install = "grammar/install.ts";
 
 /**
- * The modules outside `src/test/` that import its helpers today. The list only shrinks: a module
- * that stops importing them, or one that starts, fails the test until the list says so.
- * `processing/fixtures.ts` leaves with `src/processing/`.
+ * The modules outside `src/test/` that import its helpers today: none since the processing
+ * fixtures' materializer moved to `src/test/processing-fixtures.ts` (Q5.10). The list only shrinks:
+ * a module that starts importing them fails the test until the list says so.
  */
-const pending = ["processing/fixtures.ts: #pantry/test/fixtures.ts"];
+const pending: readonly string[] = [];
 
 /**
  * Collect every module specifier a TypeScript module names: its imports and re-exports, type-only
@@ -139,15 +139,41 @@ describe("the test helpers", () => {
     assert.deepStrictEqual(offences(files, ["#pantry/test/"]), pending);
   });
 
-  // The law oracle is kept (review T9): the tests that judge by it, the XSD differential among
-  // them (spec-alignment slice A2), and the XDM generator that names its laws so a renamed law
-  // breaks the build. The list changes only with a reason.
-  it("reach the law oracle only from the tests that judge by it and the generator that names its laws", () => {
+  // The law oracle is kept (review T9) for the tests that judge by it, for the XDM generator, which
+  // names its laws so a renamed law breaks the build, and for the importer's test locator
+  // (`test/locate.ts`), which finds the row a refusal breaks by the oracle's verdicts for the tests
+  // that import through it. A test judges by it in one of two ways:
+  // - by its verdicts and tables (`judge`, `documentBreaches`, `lawsOf`): the XSD differential
+  //   (spec-alignment slice A2), the corpus prewitness, the folds' law model, shred's held roots
+  //   under a strict wildcard (C13, which a kept root must leave with no law broken), the database
+  //   witnesses of `Node` and identity, and the importer's overlays, which read what the oracle
+  //   reads;
+  // - by its law catalog (`lawNames`, `nodeLawNames`, `ruleOf`, `lawSources`, `contentLawOf`):
+  //   each W5 schema module's test checks that every law the module states is an oracle law with
+  //   a rule, so a renamed law breaks the build there as well.
+  // The list changes only with a reason.
+  it("reach the law oracle only from the tests that judge by it, the generator that names its laws and the importer's test locator", () => {
     const files = globSync("**/*.ts", { cwd: sourceRoot }).toSorted();
 
     assert.deepStrictEqual(offences(files, ["#pantry/test/oracle.ts"]), [
+      "import/overlays/interactions.test.ts: #pantry/test/oracle.ts",
+      "import/overlays/metadata.test.ts: #pantry/test/oracle.ts",
+      "import/refusal.test.ts: #pantry/test/oracle.ts",
       "model/folds.test.ts: #pantry/test/oracle.ts",
+      "model/shred.test.ts: #pantry/test/oracle.ts",
+      "qti/attributes.test.ts: #pantry/test/oracle.ts",
+      "qti/chardata.test.ts: #pantry/test/oracle.ts",
+      "qti/declarations.test.ts: #pantry/test/oracle.ts",
+      "qti/identity.test.ts: #pantry/test/oracle.ts",
+      "qti/interactions.test.ts: #pantry/test/oracle.ts",
+      "qti/mapping.test.ts: #pantry/test/oracle.ts",
+      "qti/metadata.test.ts: #pantry/test/oracle.ts",
+      "qti/node.db.test.ts: #pantry/test/oracle.ts",
+      "qti/node.test.ts: #pantry/test/oracle.ts",
+      "qti/package.test.ts: #pantry/test/oracle.ts",
+      "qti/tests.test.ts: #pantry/test/oracle.ts",
       "test/gen/xdm.ts: #pantry/test/oracle.ts",
+      "test/locate.ts: #pantry/test/oracle.ts",
       "test/oracle.test.ts: #pantry/test/oracle.ts",
       "test/prewitness.corpus.test.ts: #pantry/test/oracle.ts",
       "test/xsd.corpus.test.ts: #pantry/test/oracle.ts",

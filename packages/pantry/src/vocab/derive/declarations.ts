@@ -51,6 +51,7 @@ import {
   declaredType,
   entryOfType,
   firstXs,
+  loadSchema,
   qualify,
   refuse,
   valueTypeOf,
@@ -67,6 +68,7 @@ import {
   sourcesWriter,
   typeNameOf,
 } from "#pantry/vocab/derive/models.ts";
+import type { SourcePath } from "#pantry/vocab/derive/sources.ts";
 import { redefinitionKey } from "#pantry/vocab/derive/ssml.ts";
 import type { Declaration, SchemaView, World } from "#pantry/vocab/derive/models.ts";
 import type {
@@ -86,7 +88,12 @@ import type {
   ValueType,
   VocabularyRoster,
 } from "#pantry/vocab/inventory/types.ts";
-import { vocabularyNamespaces, xmlNamespace, xsNamespace } from "#pantry/vocab/namespaces.ts";
+import {
+  vocabularyNamespaces,
+  xlinkNamespace,
+  xmlNamespace,
+  xsNamespace,
+} from "#pantry/vocab/namespaces.ts";
 
 /**
  * What one version's XSDs declare about one kind: its attributes, its attribute wildcard and its
@@ -123,6 +130,53 @@ const lastOfEach = (rows: readonly AttributeRow[]): readonly AttributeRow[] =>
 const xmlPrefix = "xml:";
 
 /**
+ * The prefix an attribute handle carries for a name in the XLink namespace.
+ */
+const xlinkPrefix = "xlink:";
+
+/**
+ * The pin of XLink's attribute declarations, `xlink/xlink.xsd`, which the content-packaging
+ * extension imports (`cpext/imsqtiv3p0p1_cpextv1p2_v1p0.xsd` line 10) and which declares ten global
+ * attributes and no element.
+ */
+const xlinkSource = "xlink/xlink.xsd" satisfies SourcePath;
+
+/**
+ * Read a global attribute of a schema as the schema declares it.
+ *
+ * @param schema - The schema, or none where the version reads no such schema.
+ * @param file - The schema's file, which a refusal names.
+ * @param prefix - The prefix its handles carry, such as `xml:` or `xlink:`.
+ * @param name - The handle, such as `xml:lang` or `xlink:href`.
+ * @returns Its value type and domain, or an {@link XsdReadingError} for a name the schema does not
+ *   declare.
+ */
+const globalAttributeIn = (
+  schema: Option.Option<XsdSchema>,
+  file: string,
+  prefix: string,
+  name: string,
+): Result.Result<GlobalAttributeDeclaration, DomainError> =>
+  Result.gen(function* globalAttributeInBody() {
+    const local = name.slice(prefix.length);
+    const declaration = schema.pipe(
+      Option.flatMap((held) => Option.fromNullishOr(held.attributes.get(local))),
+    );
+
+    if (Option.isNone(schema) || Option.isNone(declaration)) {
+      return yield* refuse(`${file} declares no global attribute ${local}`);
+    }
+
+    const type = yield* declaredType(schema.value, declaration.value);
+
+    return {
+      domain: yield* valueDomainOf(schema.value, type, `attribute ${name}`),
+      name,
+      type,
+    };
+  });
+
+/**
  * Read a global attribute of the XML namespace as `w3/xml.xsd` declares it.
  *
  * @param world - The version's schemas, `xml.xsd` among them.
@@ -134,25 +188,12 @@ export const globalAttributeOf = (
   world: World,
   name: string,
 ): Result.Result<GlobalAttributeDeclaration, DomainError> =>
-  Result.gen(function* globalAttributeOfBody() {
-    const local = name.slice(xmlPrefix.length);
-    const view = Option.fromNullishOr(world.get(xmlNamespace));
-    const declaration = view.pipe(
-      Option.flatMap(({ schema }) => Option.fromNullishOr(schema.attributes.get(local))),
-    );
-
-    if (Option.isNone(view) || Option.isNone(declaration)) {
-      return yield* refuse(`xml.xsd declares no global attribute ${local}`);
-    }
-
-    const type = yield* declaredType(view.value.schema, declaration.value);
-
-    return {
-      domain: yield* valueDomainOf(view.value.schema, type, `attribute ${name}`),
-      name,
-      type,
-    };
-  });
+  globalAttributeIn(
+    Option.map(Option.fromNullishOr(world.get(xmlNamespace)), ({ schema }) => schema),
+    "xml.xsd",
+    xmlPrefix,
+    name,
+  );
 
 /**
  * The four attributes XML Schema declares in its instance namespace, which no pinned file states:
@@ -187,19 +228,27 @@ const openType: ValueType = {
 };
 
 /**
- * Read the global attributes every schema processor knows, and the open names' type: `xml.xsd`'s
- * four as it declares them, XML Schema's instance attributes, and `xs:anySimpleType`.
+ * Read the global attributes a kind may carry under their closed handles, and the open names'
+ * type: `xml.xsd`'s four as it declares them, XML Schema's instance attributes, XLink's ten as
+ * `xlink.xsd` declares them, and `xs:anySimpleType`.
  *
- * @returns The global attributes, `xml:` first, and the open type's declaration under the name
- *   `xs:anySimpleType`.
+ * @returns The global attributes, `xml:` first, then `xsi:`, then `xlink:`, and the open type's
+ *   declaration under the name `xs:anySimpleType`.
  */
 export const loadGlobalAttributes = Effect.fn("vocab.loadGlobalAttributes")(
   function* loadGlobalAttributes() {
     const { world } = yield* loadWorld("3.0.1");
     const xml = Option.fromNullishOr(world.get(xmlNamespace));
+    const xlink = yield* loadSchema(xlinkSource);
 
     if (Option.isNone(xml)) {
       return yield* new XsdReadingError({ detail: "no version reads w3/xml.xsd" });
+    }
+
+    if (xlink.targetNamespace !== xlinkNamespace) {
+      return yield* new XsdReadingError({
+        detail: `${xlinkSource} declares the namespace ${xlink.targetNamespace}, not XLink's`,
+      });
     }
 
     const globals: GlobalAttributeDeclaration[] = [];
@@ -216,6 +265,14 @@ export const loadGlobalAttributes = Effect.fn("vocab.loadGlobalAttributes")(
         name,
         type,
       });
+    }
+
+    for (const local of xlink.attributes.keys()) {
+      globals.push(
+        yield* Effect.fromResult(
+          globalAttributeIn(Option.some(xlink), xlinkSource, xlinkPrefix, `${xlinkPrefix}${local}`),
+        ),
+      );
     }
 
     return {
@@ -439,13 +496,14 @@ const governingReadingOf = (
 ): Result.Result<GoverningReading, DomainError> =>
   Result.gen(function* governingReadingOfBody() {
     const derivations = yield* derivationsOf(world, documents);
+    // `derivationsOf` reads a type by its expanded name, `{namespace}local`.
     const declared = new Set<string>();
 
     for (const [view, document] of documents) {
       for (const { type } of yield* declarationsIn(view, document.root)) {
         if (type._tag !== "anyType") {
-          for (const name of Option.toArray(type.named)) {
-            declared.add(typeHandle(name));
+          for (const { local, namespace } of Option.toArray(type.named)) {
+            declared.add(`{${namespace}}${local}`);
           }
         }
       }
@@ -453,8 +511,8 @@ const governingReadingOf = (
 
     const governors = new Map<string, KindReading>();
 
-    for (const handle of declared) {
-      for (const name of derivations.get(handle)?.derived.slice(1) ?? []) {
+    for (const expanded of declared) {
+      for (const name of derivations.get(expanded)?.derived.slice(1) ?? []) {
         const owner = typeHandle(name);
         const view = world.get(name.namespace);
         const definition = Option.flatMap(Option.fromNullishOr(view), (held) =>
@@ -1511,7 +1569,7 @@ export const renderAttributes = (
     "",
     ...commentOf([
       [
-        "The attributes every schema processor declares, which kinds admit under their closed handles: `w3/xml.xsd`'s four, as it declares them, and the four of XML Schema's instance namespace, as XML Schema 1.0 Part 1, 3.2.7, declares them.",
+        "The global attribute declarations kinds admit under their closed handles: `w3/xml.xsd`'s four, as it declares them; the four of XML Schema's instance namespace, as XML Schema 1.0 Part 1, 3.2.7, declares them; and `xlink/xlink.xsd`'s ten, as it declares them, which the content-packaging extension imports.",
       ],
     ]),
     "export const globalAttributes: readonly GlobalAttributeDeclaration[] = [",

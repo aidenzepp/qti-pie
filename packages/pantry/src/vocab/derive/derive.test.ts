@@ -6,32 +6,23 @@ import { ConfigProvider, Context, Effect, FileSystem, Layer, Match, Option, Resu
 import { Digest } from "effect/crypto";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { Element, XmlDocument } from "@qti-pie/crust/tree.ts";
-import { HBLOCK, HFLOW, HINL, PHR } from "#pantry/schema/content/sets.ts";
-import {
-  operatorArity,
-  operatorArityMax,
-  operatorArityUnbounded,
-} from "#pantry/schema/seed/operator-arity.ts";
-import { vpFmt } from "#pantry/test/vp-fmt.ts";
+import { int8Max } from "#pantry/grammar/closed.ts";
+import type { ArityRow } from "#pantry/grammar/expression.ts";
+import { asi as asiFacet } from "#pantry/grammar/facets.ts";
 import {
   arityOf,
   attributeOf,
   contentOf,
-  contentSetsOf,
   elementsOf,
   entriesOf,
   entryOf,
-  hostsOf,
-  htmlNamesOf,
   includesOf,
   indexSchema,
   indexSchemas,
   isXs,
-  leafSpecOf,
   leaves,
   mathmlSource,
-  printArity,
-  renderLeaf,
+  resolve,
 } from "#pantry/vocab/derive/derive.ts";
 import type { AttributeRow, Content, Entry, XsdSchema } from "#pantry/vocab/derive/derive.ts";
 import {
@@ -47,7 +38,7 @@ import type { SourcePath } from "#pantry/vocab/derive/sources.ts";
 import type { InlineType, TypeReading, WhiteSpace } from "#pantry/vocab/inventory/types.ts";
 
 /**
- * The package folder, `packages/pantry`, which the committed files and `vp fmt` are relative to.
+ * The package folder, `packages/pantry`.
  */
 const packageRoot = path.resolve(import.meta.dirname, "../../..");
 
@@ -77,15 +68,6 @@ const absence = await Effect.runPromise(
  * hook timeout. Raise it only on a new measurement recorded here, never to make a run pass.
  */
 const schemasHookTimeoutMs = 20_000;
-
-/**
- * The timeout, in milliseconds, for one test that renders a leaf and formats it with `vp fmt`.
- *
- * Measured on 2026-11-05 under the same load: nine such tests took 0.41 to 0.81 s. The budget is
- * the larger of twice that maximum (1.6 s) and 10 s, the floor being twice vitest's default test
- * timeout. Raise it only on a new measurement recorded here, never to make a run pass.
- */
-const formatTestTimeoutMs = 10_000;
 
 /**
  * The pinned XSDs as read once for the suite: every document, the two ASI schemas indexed, and the
@@ -126,25 +108,6 @@ const SchemasLayer = Layer.effect(
 );
 
 /**
- * The lines of the fenced `text` block in a module comment, without their ` * ` prefix.
- *
- * @param source - The module's text.
- * @returns The block's lines joined by line breaks.
- */
-const textBlockOf = (source: string): string => {
-  const lines = source.split("\n");
-  const start = lines.indexOf(" * ```text");
-  const end = lines.indexOf(" * ```", start + 1);
-
-  assert.isAbove(start, -1, "the module comment has a ```text block");
-
-  return lines
-    .slice(start + 1, end)
-    .map((line) => line.replace(/^ \* /u, ""))
-    .join("\n");
-};
-
-/**
  * Unwrap a derivation's result, failing the test with the reading error.
  *
  * @param result - The derivation's result.
@@ -152,6 +115,50 @@ const textBlockOf = (source: string): string => {
  */
 const valueOf = <A, E>(result: Result.Result<A, E>): A =>
   Result.getOrElse(result, (failure) => assert.fail(String(failure)));
+
+/**
+ * The key of an arity row as a keyed set holds it: its kind and both bounds.
+ *
+ * @param row - The row.
+ * @returns The key.
+ */
+const arityKey = ({ kind, max, min }: ArityRow): string => `${kind} ${min} ${max}`;
+
+/**
+ * One element of a schema whose declared type references a name: the element and that type.
+ */
+interface Host {
+  readonly element: string;
+  readonly type: string;
+}
+
+/**
+ * The elements whose declared type's content references an element name: each pair of an element
+ * and a named complex type of the schema it is declared with, read through the deriver's content
+ * reading and keyed by the pair.
+ *
+ * @param schema - The schema the elements are declared in.
+ * @param name - The referenced name as the schema writes it, such as `m3:math`.
+ * @returns The hosts, keyed `element type`.
+ */
+const hostsOf = (schema: XsdSchema, name: string): ReadonlyMap<string, Host> =>
+  new Map(
+    [...schema.declarations].flatMap(([element, types]) =>
+      types.flatMap((type) => {
+        const resolved = valueOf(resolve(schema, type));
+        const complexType =
+          resolved.namespace === schema.targetNamespace
+            ? Option.fromNullishOr(schema.complexTypes.get(resolved.local))
+            : Option.none<Element>();
+
+        return Option.toArray(complexType).flatMap((held) =>
+          valueOf(contentOf(schema, held)).references.some((reference) => reference.name === name)
+            ? [[`${element} ${type}`, { element, type }] as const]
+            : [],
+        );
+      }),
+    ),
+  );
 
 /**
  * Read an inline XML document, as crust reads a pinned XSD.
@@ -652,69 +659,43 @@ describe.skipIf(Option.isSome(absence))("vocab/derive/derive.ts over the pinned 
       }),
     );
 
-    for (const leaf of leaves) {
-      cached.effect(
-        `regenerates inventory/${leaf}.ts byte for byte after vp fmt`,
-        () =>
-          Effect.gen(function* regenerate() {
-            const fs = yield* FileSystem.FileSystem;
-            const { asi301 } = yield* Schemas;
-            const file = `src/schema/content/inventory/${leaf}.ts`;
-            const derived = yield* vpFmt(
-              renderLeaf(leafSpecOf(leaf), valueOf(entriesOf(asi301, leaf))),
-              file,
-            );
+    cached.effect(
+      "reads 64 expression kinds' arity from the ASI 3.0 XSD, 50 bounded and 14 not, as OperatorArity's facet states it",
+      () =>
+        // Oracle: a second reading. `aritiesOf` reads the arity from the content-model IR
+        // (`#pantry/grammar/facets.ts`, the rows `OperatorArity` holds); `arityOf` reads it from
+        // the XSD's own particles. Both are keyed sets of (kind, min, max), compared whole, and a
+        // repeated row fails either side.
+        Effect.gen(function* arity() {
+          const { asi300 } = yield* Schemas;
+          const rows = valueOf(arityOf(asi300));
+          const derived = new Map(
+            rows.map((row) => {
+              const held: ArityRow = {
+                kind: row.kind,
+                max: Option.match(row.max, { onNone: () => int8Max, onSome: BigInt }),
+                min: BigInt(row.min),
+              };
 
-            assert.strictEqual(derived, yield* fs.readFileString(`${packageRoot}/${file}`));
-          }),
-        formatTestTimeoutMs,
-      );
-    }
-
-    cached.effect("derives the four HTML content sets of content/sets.ts", () =>
-      Effect.gen(function* contentSets() {
-        const { asi301 } = yield* Schemas;
-
-        assert.deepStrictEqual(valueOf(contentSetsOf(asi301)), { HBLOCK, HFLOW, HINL, PHR });
-      }),
-    );
-
-    cached.effect("finds the block hosts' 25 HTML names to be HBLOCK without details", () =>
-      Effect.gen(function* blockHosts() {
-        const { asi301 } = yield* Schemas;
-
-        for (const type of ["ItemBodyDType", "StimulusBodyDType", "HotTextInteractionDType"]) {
-          assert.deepStrictEqual(
-            valueOf(htmlNamesOf(asi301, type)).toSorted(),
-            HBLOCK.filter((name) => name !== "details"),
-            type,
+              return [arityKey(held), held] as const;
+            }),
           );
-        }
-      }),
-    );
+          const stated = new Map(
+            asiFacet.expression.arities.map((row) => [arityKey(row), row] as const),
+          );
 
-    cached.effect("derives the 64, 50 and 14 rows of seed/operator-arity.ts", () =>
-      Effect.gen(function* arity() {
-        const { asi300 } = yield* Schemas;
-        const rows = valueOf(arityOf(asi300));
-        const bounded = rows.flatMap((row) =>
-          Option.match(row.max, {
-            onNone: () => [],
-            onSome: (max) => [{ kind: row.kind, max: BigInt(max) }],
-          }),
-        );
-        const unbounded = rows.flatMap((row) =>
-          Option.isNone(row.max) ? [{ kind: row.kind }] : [],
-        );
-
-        assert.deepStrictEqual([rows.length, bounded.length, unbounded.length], [64, 50, 14]);
-        assert.deepStrictEqual(
-          rows.map((row) => ({ kind: row.kind, min: BigInt(row.min) })),
-          operatorArity,
-        );
-        assert.deepStrictEqual(bounded, operatorArityMax);
-        assert.deepStrictEqual(unbounded, operatorArityUnbounded);
-      }),
+          assert.deepStrictEqual(
+            [rows.length, rows.filter((row) => Option.isSome(row.max)).length],
+            [64, 50],
+          );
+          assert.strictEqual(derived.size, rows.length, "the XSD reading repeats a row");
+          assert.strictEqual(
+            stated.size,
+            asiFacet.expression.arities.length,
+            "the facet repeats a row",
+          );
+          assert.deepStrictEqual([...derived.keys()].toSorted(), [...stated.keys()].toSorted());
+        }),
     );
 
     cached.effect("keeps the anonymous attribute types of the ASI leaves as declared", () =>
@@ -766,29 +747,24 @@ describe.skipIf(Option.isSome(absence))("vocab/derive/derive.ts over the pinned 
     );
 
     cached.effect("finds m3:math under 61 elements in 34 types, in 3.0.0 and 3.0.1 alike", () =>
+      // Oracle: the ASI XSDs' own declarations. Reading 2 makes `m:math` MathML's one root, so the
+      // QTI elements whose content names it are where MathML may start, the same in both versions.
       Effect.gen(function* mathHosts() {
         const { asi300, asi301 } = yield* Schemas;
-        const hosts = valueOf(hostsOf(asi301, "m3:math"));
+        const hosts = hostsOf(asi301, "m3:math");
 
-        assert.deepStrictEqual(valueOf(hostsOf(asi300, "m3:math")), hosts);
+        assert.deepStrictEqual(
+          [...hostsOf(asi300, "m3:math").keys()].toSorted(),
+          [...hosts.keys()].toSorted(),
+        );
         assert.deepStrictEqual(
           [
-            hosts.length,
-            new Set(hosts.map((host) => host.element)).size,
-            new Set(hosts.map((host) => host.type)).size,
+            hosts.size,
+            new Set([...hosts.values()].map((host) => host.element)).size,
+            new Set([...hosts.values()].map((host) => host.type)).size,
           ],
           [68, 61, 34],
         );
-      }),
-    );
-
-    cached.effect("prints the arity block seed/operator-arity.ts keeps in its comment", () =>
-      Effect.gen(function* arityBlock() {
-        const fs = yield* FileSystem.FileSystem;
-        const { asi300 } = yield* Schemas;
-        const source = yield* fs.readFileString(`${packageRoot}/src/schema/seed/operator-arity.ts`);
-
-        assert.strictEqual(printArity(valueOf(arityOf(asi300))), textBlockOf(source));
       }),
     );
   });

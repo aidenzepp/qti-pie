@@ -1442,6 +1442,26 @@ const xsiSchemaLocationType = inlineType("list", "collapse", list(ref("xs:anyURI
 
 const xsiTypeType = named("xs:QName", "collapse");
 
+const xlinkTypeType = named("xlink:typeType", "collapse");
+
+const xlinkHrefType = named("xlink:hrefType", "collapse");
+
+const xlinkRoleType = named("xlink:roleType", "collapse");
+
+const xlinkArcroleType = named("xlink:arcroleType", "collapse");
+
+const xlinkTitleType = named("xlink:titleAttrType", "preserve");
+
+const xlinkShowType = named("xlink:showType", "collapse");
+
+const xlinkActuateType = named("xlink:actuateType", "collapse");
+
+const xlinkLabelType = named("xlink:labelType", "collapse");
+
+const xlinkFromType = named("xlink:fromType", "collapse");
+
+const xlinkToType = named("xlink:toType", "collapse");
+
 const qtiCalculatorTypeTextType = inlineType(
   "xs:string",
   "preserve",
@@ -3884,6 +3904,62 @@ const xmlSpaceDomain = atomic(
 );
 
 const xsiSchemaLocationDomain = listOf(xsAnyURIDomain, [["whiteSpace", "collapse"]], []);
+
+const xlinkTypeDomain = atomic(
+  "string",
+  "token",
+  [
+    ["whiteSpace", "collapse"],
+    ["enumeration", "simple"],
+    ["enumeration", "extended"],
+    ["enumeration", "title"],
+    ["enumeration", "resource"],
+    ["enumeration", "locator"],
+    ["enumeration", "arc"],
+  ],
+  [],
+);
+
+const xlinkRoleDomain = atomic(
+  "anyURI",
+  "anyURI",
+  [
+    ["whiteSpace", "collapse"],
+    ["minLength", "1"],
+  ],
+  [
+    [
+      "([A-Za-z][A-Za-z0-9+\\-.]*:([^/#\\[\\]%]|%[0-9A-Fa-f]{2})([^#%]|%[0-9A-Fa-f]{2})*|([A-Za-z][A-Za-z0-9+\\-.]*:)?((/([^/?#\\[\\]%]|%[0-9A-Fa-f]{2})*)+|//(([^/?#\\[\\]@%]|%[0-9A-Fa-f]{2})*@)?\\[(([0-9A-Fa-f]{1,4}(:[0-9A-Fa-f]{1,4})*(::([0-9A-Fa-f]{1,4}(:[0-9A-Fa-f]{1,4})*)?)?|::([0-9A-Fa-f]{1,4}(:[0-9A-Fa-f]{1,4})*)?)(:[0-9]{1,3}(\\.[0-9]{1,3}){3})?|([0-9A-Fa-f]{1,4}(:[0-9A-Fa-f]{1,4}){0,4})?::(25[0-5]|2[0-4][0-9]|[01]?[0-9]?[0-9])\\.(25[0-5]|2[0-4][0-9]|[01]?[0-9]?[0-9])\\.(25[0-5]|2[0-4][0-9]|[01]?[0-9]?[0-9])\\.(25[0-5]|2[0-4][0-9]|[01]?[0-9]?[0-9]))\\](:[0-9]*)?(/([^/?#\\[\\]%]|%[0-9A-Fa-f]{2})*)*)(\\?([^#%]|%[0-9A-Fa-f]{2})*)?|([^/?#\\[\\]:%]|%[0-9A-Fa-f]{2})+(/([^/?#\\[\\]%]|%[0-9A-Fa-f]{2})*)*(\\?([^#%]|%[0-9A-Fa-f]{2})*)?)?(#([^#%]|%[0-9A-Fa-f]{2})*)?",
+    ],
+  ],
+);
+
+const xlinkShowDomain = atomic(
+  "string",
+  "token",
+  [
+    ["whiteSpace", "collapse"],
+    ["enumeration", "new"],
+    ["enumeration", "replace"],
+    ["enumeration", "embed"],
+    ["enumeration", "other"],
+    ["enumeration", "none"],
+  ],
+  [],
+);
+
+const xlinkActuateDomain = atomic(
+  "string",
+  "token",
+  [
+    ["whiteSpace", "collapse"],
+    ["enumeration", "onLoad"],
+    ["enumeration", "onRequest"],
+    ["enumeration", "other"],
+    ["enumeration", "none"],
+  ],
+  [],
+);
 
 const qtiCalculatorTypeTextDomain = atomic(
   "string",
@@ -30118,9 +30194,10 @@ export const textTypes: readonly TextType[] = [
 ];
 
 /**
- * The attributes every schema processor declares, which kinds admit under their closed handles:
- * `w3/xml.xsd`'s four, as it declares them, and the four of XML Schema's instance namespace, as XML
- * Schema 1.0 Part 1, 3.2.7, declares them.
+ * The global attribute declarations kinds admit under their closed handles: `w3/xml.xsd`'s four, as
+ * it declares them; the four of XML Schema's instance namespace, as XML Schema 1.0 Part 1, 3.2.7,
+ * declares them; and `xlink/xlink.xsd`'s ten, as it declares them, which the content-packaging
+ * extension imports.
  */
 export const globalAttributes: readonly GlobalAttributeDeclaration[] = [
   global("xml:lang", xmlLangType, xmlLangDomain),
@@ -30131,6 +30208,16 @@ export const globalAttributes: readonly GlobalAttributeDeclaration[] = [
   global("xsi:type", xsiTypeType, roleDatatypeItemDomain),
   global("xsi:nil", xsBooleanType, xsBooleanDomain),
   global("xsi:noNamespaceSchemaLocation", xsAnyURIType, xsAnyURIDomain),
+  global("xlink:type", xlinkTypeType, xlinkTypeDomain),
+  global("xlink:href", xlinkHrefType, xsAnyURIDomain),
+  global("xlink:role", xlinkRoleType, xlinkRoleDomain),
+  global("xlink:arcrole", xlinkArcroleType, xlinkRoleDomain),
+  global("xlink:title", xlinkTitleType, xsStringDomain),
+  global("xlink:show", xlinkShowType, xlinkShowDomain),
+  global("xlink:actuate", xlinkActuateType, xlinkActuateDomain),
+  global("xlink:label", xlinkLabelType, identifierDTypeDomain),
+  global("xlink:from", xlinkFromType, identifierDTypeDomain),
+  global("xlink:to", xlinkToType, identifierDTypeDomain),
 ];
 
 /**
@@ -30196,7 +30283,7 @@ const typeText = (
  * 75).
  */
 export const typeAttributeDeclarations: readonly TypeAttributeDeclaration[] = [
-  ...typeDeclares("{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}ARIABaseEmptyDType", everyVersion, [
+  ...typeDeclares("ARIABaseEmptyDType", everyVersion, [
     attribute("role", "optional", roleType, roleDomain, [
       xsd(imsqtiAsiv3p0V1p0Xsd, 33_603),
       xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_837),
@@ -30470,12 +30557,8 @@ export const typeAttributeDeclarations: readonly TypeAttributeDeclaration[] = [
       xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_113),
     ]),
   ]),
-  ...typeDeclares(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}AdaptiveHrefDType",
-    everyVersion,
-    qtiAdaptiveEngineRefAttributes,
-  ),
-  ...typeDeclares("{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}AreaMapEntryDType", everyVersion, [
+  ...typeDeclares("AdaptiveHrefDType", everyVersion, qtiAdaptiveEngineRefAttributes),
+  ...typeDeclares("AreaMapEntryDType", everyVersion, [
     attribute("shape", "required", shapeType, shapeDomain, [
       xsd(imsqtiAsiv3p0V1p0Xsd, 33_563),
       xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_797),
@@ -30489,44 +30572,36 @@ export const typeAttributeDeclarations: readonly TypeAttributeDeclaration[] = [
       xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_816),
     ]),
   ]),
+  ...typeDeclares("AssessmentSectionRefDType", everyVersion, [
+    attribute("identifier", "required", identifierDTypeType, identifierDTypeDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_904),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_138),
+    ]),
+    attribute("class", "optional", classType, classDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_905),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_139),
+    ]),
+    attribute("href", "required", xsAnyURIType, xsAnyURIDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_910),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_144),
+    ]),
+  ]),
+  ...typeDeclares("AssessmentStimulusRefDType", everyVersion, [
+    attribute("identifier", "required", identifierDTypeType, identifierDTypeDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_926),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_160),
+    ]),
+    attribute("href", "required", xsAnyURIType, xsAnyURIDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_927),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_161),
+    ]),
+    attribute("title", "optional", xsNormalizedStringType, xsNormalizedStringDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_928),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_162),
+    ]),
+  ]),
   ...typeDeclares(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}AssessmentSectionRefDType",
-    everyVersion,
-    [
-      attribute("identifier", "required", identifierDTypeType, identifierDTypeDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_904),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_138),
-      ]),
-      attribute("class", "optional", classType, classDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_905),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_139),
-      ]),
-      attribute("href", "required", xsAnyURIType, xsAnyURIDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_910),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_144),
-      ]),
-    ],
-  ),
-  ...typeDeclares(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}AssessmentStimulusRefDType",
-    everyVersion,
-    [
-      attribute("identifier", "required", identifierDTypeType, identifierDTypeDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_926),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_160),
-      ]),
-      attribute("href", "required", xsAnyURIType, xsAnyURIDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_927),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_161),
-      ]),
-      attribute("title", "optional", xsNormalizedStringType, xsNormalizedStringDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_928),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_162),
-      ]),
-    ],
-  ),
-  ...typeDeclares(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}ContextUniqueIDRefDType",
+    "ContextUniqueIDRefDType",
     ["3.0.0"],
     [
       attribute("identifier", "required", uniqueIdentifierRefDTypeType, xsIDREFSItemDomain, [
@@ -30535,7 +30610,7 @@ export const typeAttributeDeclarations: readonly TypeAttributeDeclaration[] = [
     ],
   ),
   ...typeDeclares(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}ContextUniqueIDRefDType",
+    "ContextUniqueIDRefDType",
     ["3.0.1"],
     [
       attribute("identifier", "required", identifierDTypeType, identifierDTypeDomain, [
@@ -30543,117 +30618,105 @@ export const typeAttributeDeclarations: readonly TypeAttributeDeclaration[] = [
       ]),
     ],
   ),
-  ...typeDeclares("{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}CorrectDType", everyVersion, [
+  ...typeDeclares("CorrectDType", everyVersion, [
     attribute("identifier", "required", identifierDTypeType, identifierDTypeDomain, [
       xsd(imsqtiAsiv3p0V1p0Xsd, 33_998),
       xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_232),
     ]),
   ]),
-  ...typeDeclares("{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}DefaultDType", everyVersion, [
+  ...typeDeclares("DefaultDType", everyVersion, [
     attribute("identifier", "required", identifierDTypeType, identifierDTypeDomain, [
       xsd(imsqtiAsiv3p0V1p0Xsd, 34_014),
       xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_248),
     ]),
   ]),
-  ...typeDeclares(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}InteractionModuleDType",
-    everyVersion,
-    [
-      attribute("id", "required", xsNCNameType, identifierDTypeDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 34_042),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_276),
-      ]),
-      attribute("primary-path", "optional", xsAnyURIType, xsAnyURIDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 34_043),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_277),
-      ]),
-      attribute("fallback-path", "optional", xsAnyURIType, xsAnyURIDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 34_044),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_278),
-      ]),
-    ],
-  ),
-  ...typeDeclares(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}InterpolationTableEntryDType",
-    everyVersion,
-    [
-      attribute("source-value", "required", xsDoubleType, toleranceItemMember2Domain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 34_057),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_291),
-      ]),
-      defaulted(
-        "include-boundary",
-        "optional",
-        xsBooleanType,
-        xsBooleanDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 34_058), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_292)],
-        "true",
-      ),
-      attribute("target-value", "required", xsStringType, xsStringDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 34_059),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_293),
-      ]),
-    ],
-  ),
-  ...typeDeclares(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}ItemSessionControlDType",
-    everyVersion,
-    [
-      attribute("max-attempts", "optional", xsIntType, xsIntDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 34_078),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_312),
-      ]),
-      defaulted(
-        "show-feedback",
-        "optional",
-        xsBooleanType,
-        xsBooleanDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 34_079), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_313)],
-        "false",
-      ),
-      defaulted(
-        "allow-review",
-        "optional",
-        xsBooleanType,
-        xsBooleanDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 34_080), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_314)],
-        "true",
-      ),
-      defaulted(
-        "show-solution",
-        "optional",
-        xsBooleanType,
-        xsBooleanDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 34_081), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_315)],
-        "false",
-      ),
-      defaulted(
-        "allow-comment",
-        "optional",
-        xsBooleanType,
-        xsBooleanDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 34_082), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_316)],
-        "false",
-      ),
-      defaulted(
-        "allow-skipping",
-        "optional",
-        xsBooleanType,
-        xsBooleanDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 34_083), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_317)],
-        "true",
-      ),
-      defaulted(
-        "validate-responses",
-        "optional",
-        xsBooleanType,
-        xsBooleanDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 34_084), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_318)],
-        "false",
-      ),
-    ],
-  ),
-  ...typeDeclares("{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}MapEntryDType", everyVersion, [
+  ...typeDeclares("InteractionModuleDType", everyVersion, [
+    attribute("id", "required", xsNCNameType, identifierDTypeDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 34_042),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_276),
+    ]),
+    attribute("primary-path", "optional", xsAnyURIType, xsAnyURIDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 34_043),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_277),
+    ]),
+    attribute("fallback-path", "optional", xsAnyURIType, xsAnyURIDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 34_044),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_278),
+    ]),
+  ]),
+  ...typeDeclares("InterpolationTableEntryDType", everyVersion, [
+    attribute("source-value", "required", xsDoubleType, toleranceItemMember2Domain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 34_057),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_291),
+    ]),
+    defaulted(
+      "include-boundary",
+      "optional",
+      xsBooleanType,
+      xsBooleanDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 34_058), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_292)],
+      "true",
+    ),
+    attribute("target-value", "required", xsStringType, xsStringDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 34_059),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_293),
+    ]),
+  ]),
+  ...typeDeclares("ItemSessionControlDType", everyVersion, [
+    attribute("max-attempts", "optional", xsIntType, xsIntDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 34_078),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_312),
+    ]),
+    defaulted(
+      "show-feedback",
+      "optional",
+      xsBooleanType,
+      xsBooleanDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 34_079), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_313)],
+      "false",
+    ),
+    defaulted(
+      "allow-review",
+      "optional",
+      xsBooleanType,
+      xsBooleanDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 34_080), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_314)],
+      "true",
+    ),
+    defaulted(
+      "show-solution",
+      "optional",
+      xsBooleanType,
+      xsBooleanDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 34_081), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_315)],
+      "false",
+    ),
+    defaulted(
+      "allow-comment",
+      "optional",
+      xsBooleanType,
+      xsBooleanDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 34_082), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_316)],
+      "false",
+    ),
+    defaulted(
+      "allow-skipping",
+      "optional",
+      xsBooleanType,
+      xsBooleanDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 34_083), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_317)],
+      "true",
+    ),
+    defaulted(
+      "validate-responses",
+      "optional",
+      xsBooleanType,
+      xsBooleanDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 34_084), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_318)],
+      "false",
+    ),
+  ]),
+  ...typeDeclares("MapEntryDType", everyVersion, [
     attribute("map-key", "required", xsNormalizedStringType, xsNormalizedStringDomain, [
       xsd(imsqtiAsiv3p0V1p0Xsd, 34_098),
       xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_332),
@@ -30671,42 +30734,26 @@ export const typeAttributeDeclarations: readonly TypeAttributeDeclaration[] = [
       "false",
     ),
   ]),
-  ...typeDeclares(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}MapResponseDType",
-    everyVersion,
-    qtiMapResponsePointAttributes,
-  ),
-  ...typeDeclares(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}MatchTableEntryDType",
-    everyVersion,
-    [
-      attribute("source-value", "required", xsIntType, xsIntDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 34_138),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_372),
-      ]),
-      attribute("target-value", "required", baseTypeType, baseTypeDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 34_139),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_373),
-      ]),
-    ],
-  ),
-  ...typeDeclares("{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}MathConstantDType", everyVersion, [
+  ...typeDeclares("MapResponseDType", everyVersion, qtiMapResponsePointAttributes),
+  ...typeDeclares("MatchTableEntryDType", everyVersion, [
+    attribute("source-value", "required", xsIntType, xsIntDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 34_138),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_372),
+    ]),
+    attribute("target-value", "required", baseTypeType, baseTypeDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 34_139),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_373),
+    ]),
+  ]),
+  ...typeDeclares("MathConstantDType", everyVersion, [
     attribute("name", "required", nameType, nameDomain, [
       xsd(imsqtiAsiv3p0V1p0Xsd, 34_179),
       xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_413),
     ]),
   ]),
-  ...typeDeclares(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}NumberDType",
-    everyVersion,
-    qtiNumberCorrectAttributes,
-  ),
-  ...typeDeclares(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}OutcomeMinMaxDType",
-    everyVersion,
-    qtiOutcomeMinimumAttributes,
-  ),
-  ...typeDeclares("{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}ParamDType", everyVersion, [
+  ...typeDeclares("NumberDType", everyVersion, qtiNumberCorrectAttributes),
+  ...typeDeclares("OutcomeMinMaxDType", everyVersion, qtiOutcomeMinimumAttributes),
+  ...typeDeclares("ParamDType", everyVersion, [
     attribute("name", "required", xsStringType, xsStringDomain, [
       xsd(imsqtiAsiv3p0V1p0Xsd, 34_255),
       xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_489),
@@ -30724,81 +30771,77 @@ export const typeAttributeDeclarations: readonly TypeAttributeDeclaration[] = [
       xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_504),
     ]),
   ]),
-  ...typeDeclares(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}PrintedVariableDType",
-    everyVersion,
-    [
-      attribute("id", "optional", uniqueIdentifierDTypeType, uniqueIdentifierDTypeDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 34_314),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_548),
-      ]),
-      attribute("class", "optional", classType, classDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 34_315),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_549),
-      ]),
-      attribute("xml:lang", "optional", xmlLangType, xmlLangDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 34_320),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_554),
-      ]),
-      attribute("label", "optional", xsNormalizedStringType, xsNormalizedStringDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 34_321),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_555),
-      ]),
-      attribute("xml:base", "optional", xsAnyURIType, xsAnyURIDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 34_322),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_556),
-      ]),
-      attribute("identifier", "required", identifierDTypeType, identifierDTypeDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 34_323),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_557),
-      ]),
-      attribute("format", "optional", xsNormalizedStringType, xsNormalizedStringDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 34_324),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_558),
-      ]),
-      defaulted(
-        "base",
-        "optional",
-        baseType,
-        baseDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 34_325), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_559)],
-        "10",
-      ),
-      attribute("index", "optional", baseType, baseDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 34_337),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_571),
-      ]),
-      defaulted(
-        "power-form",
-        "optional",
-        xsBooleanType,
-        xsBooleanDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 34_349), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_583)],
-        "false",
-      ),
-      attribute("field", "optional", xsNormalizedStringType, xsNormalizedStringDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 34_350),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_584),
-      ]),
-      defaulted(
-        "delimiter",
-        "optional",
-        xsNormalizedStringType,
-        xsNormalizedStringDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 34_351), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_585)],
-        ";",
-      ),
-      defaulted(
-        "mapping-indicator",
-        "optional",
-        xsNormalizedStringType,
-        xsNormalizedStringDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 34_352), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_586)],
-        "=",
-      ),
-    ],
-  ),
-  ...typeDeclares("{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}RandomFloatDType", everyVersion, [
+  ...typeDeclares("PrintedVariableDType", everyVersion, [
+    attribute("id", "optional", uniqueIdentifierDTypeType, uniqueIdentifierDTypeDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 34_314),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_548),
+    ]),
+    attribute("class", "optional", classType, classDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 34_315),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_549),
+    ]),
+    attribute("xml:lang", "optional", xmlLangType, xmlLangDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 34_320),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_554),
+    ]),
+    attribute("label", "optional", xsNormalizedStringType, xsNormalizedStringDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 34_321),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_555),
+    ]),
+    attribute("xml:base", "optional", xsAnyURIType, xsAnyURIDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 34_322),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_556),
+    ]),
+    attribute("identifier", "required", identifierDTypeType, identifierDTypeDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 34_323),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_557),
+    ]),
+    attribute("format", "optional", xsNormalizedStringType, xsNormalizedStringDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 34_324),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_558),
+    ]),
+    defaulted(
+      "base",
+      "optional",
+      baseType,
+      baseDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 34_325), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_559)],
+      "10",
+    ),
+    attribute("index", "optional", baseType, baseDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 34_337),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_571),
+    ]),
+    defaulted(
+      "power-form",
+      "optional",
+      xsBooleanType,
+      xsBooleanDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 34_349), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_583)],
+      "false",
+    ),
+    attribute("field", "optional", xsNormalizedStringType, xsNormalizedStringDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 34_350),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_584),
+    ]),
+    defaulted(
+      "delimiter",
+      "optional",
+      xsNormalizedStringType,
+      xsNormalizedStringDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 34_351), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_585)],
+      ";",
+    ),
+    defaulted(
+      "mapping-indicator",
+      "optional",
+      xsNormalizedStringType,
+      xsNormalizedStringDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 34_352), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_586)],
+      "=",
+    ),
+  ]),
+  ...typeDeclares("RandomFloatDType", everyVersion, [
     defaulted(
       "min",
       "optional",
@@ -30812,7 +30855,7 @@ export const typeAttributeDeclarations: readonly TypeAttributeDeclaration[] = [
       xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_664),
     ]),
   ]),
-  ...typeDeclares("{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}RandomIntegerDType", everyVersion, [
+  ...typeDeclares("RandomIntegerDType", everyVersion, [
     defaulted(
       "min",
       "optional",
@@ -30834,7 +30877,7 @@ export const typeAttributeDeclarations: readonly TypeAttributeDeclaration[] = [
       "1",
     ),
   ]),
-  ...typeDeclares("{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}StyleSheetDType", everyVersion, [
+  ...typeDeclares("StyleSheetDType", everyVersion, [
     attribute("href", "required", xsAnyURIType, xsAnyURIDomain, [
       xsd(imsqtiAsiv3p0V1p0Xsd, 34_533),
       xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_767),
@@ -30852,17 +30895,13 @@ export const typeAttributeDeclarations: readonly TypeAttributeDeclaration[] = [
       xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_770),
     ]),
   ]),
-  ...typeDeclares(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}TemplateUniqueIDRefDType",
-    everyVersion,
-    [
-      attribute("template-identifier", "required", identifierDTypeType, identifierDTypeDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 34_549),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_783),
-      ]),
-    ],
-  ),
-  ...typeDeclares("{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}TestVariablesDType", everyVersion, [
+  ...typeDeclares("TemplateUniqueIDRefDType", everyVersion, [
+    attribute("template-identifier", "required", identifierDTypeType, identifierDTypeDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 34_549),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_783),
+    ]),
+  ]),
+  ...typeDeclares("TestVariablesDType", everyVersion, [
     attribute("section-identifier", "optional", identifierDTypeType, identifierDTypeDomain, [
       xsd(imsqtiAsiv3p0V1p0Xsd, 34_565),
       xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_799),
@@ -30888,7 +30927,7 @@ export const typeAttributeDeclarations: readonly TypeAttributeDeclaration[] = [
       xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_812),
     ]),
   ]),
-  ...typeDeclares("{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}TimeLimitsDType", everyVersion, [
+  ...typeDeclares("TimeLimitsDType", everyVersion, [
     attribute("min-time", "optional", nonNegativeDoubleDTypeType, nonNegativeDoubleDTypeDomain, [
       xsd(imsqtiAsiv3p0V1p0Xsd, 34_627),
       xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_861),
@@ -30906,7 +30945,7 @@ export const typeAttributeDeclarations: readonly TypeAttributeDeclaration[] = [
       "false",
     ),
   ]),
-  ...typeDeclares("{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}VariableDType", everyVersion, [
+  ...typeDeclares("VariableDType", everyVersion, [
     attribute("identifier", "required", identifierDTypeType, identifierDTypeDomain, [
       xsd(imsqtiAsiv3p0V1p0Xsd, 34_732),
       xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_966),
@@ -30916,21 +30955,17 @@ export const typeAttributeDeclarations: readonly TypeAttributeDeclaration[] = [
       xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_967),
     ]),
   ]),
-  ...typeDeclares(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}VariableMappingDType",
-    everyVersion,
-    [
-      attribute("source-identifier", "required", identifierDTypeType, identifierDTypeDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 34_749),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_983),
-      ]),
-      attribute("target-identifier", "required", identifierDTypeType, identifierDTypeDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 34_750),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_984),
-      ]),
-    ],
-  ),
-  ...typeDeclares("{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}WeightDType", everyVersion, [
+  ...typeDeclares("VariableMappingDType", everyVersion, [
+    attribute("source-identifier", "required", identifierDTypeType, identifierDTypeDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 34_749),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_983),
+    ]),
+    attribute("target-identifier", "required", identifierDTypeType, identifierDTypeDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 34_750),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_984),
+    ]),
+  ]),
+  ...typeDeclares("WeightDType", everyVersion, [
     attribute("identifier", "required", identifierDTypeType, identifierDTypeDomain, [
       xsd(imsqtiAsiv3p0V1p0Xsd, 34_765),
       xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_999),
@@ -30940,705 +30975,683 @@ export const typeAttributeDeclarations: readonly TypeAttributeDeclaration[] = [
       xsd(imsqtiAsiv3p0p1V1p0Xsd, 35_000),
     ]),
   ]),
-  ...typeDeclares(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}BaseSequenceEmptyDType",
-    everyVersion,
-    [
-      attribute("role", "optional", roleType, roleDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_603),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_837),
-      ]),
-      attribute("aria-controls", "optional", xsIDREFSType, xsIDREFSDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_689),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_923),
-      ]),
-      attribute("aria-describedby", "optional", xsIDREFSType, xsIDREFSDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_690),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_924),
-      ]),
-      attribute("aria-flowto", "optional", xsIDREFSType, xsIDREFSDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_691),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_925),
-      ]),
-      attribute("aria-label", "optional", xsNormalizedStringType, xsNormalizedStringDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_692),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_926),
-      ]),
-      attribute("aria-labelledby", "optional", xsIDREFSType, xsIDREFSDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_693),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_927),
-      ]),
-      attribute("aria-level", "optional", aRIALevelIntegerDTypeType, aRIALevelIntegerDTypeDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_694),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_928),
-      ]),
-      defaulted(
-        "aria-live",
-        "optional",
-        ariaLiveType,
-        ariaLiveDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_695), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_929)],
-        "off",
-      ),
-      defaulted(
-        "aria-orientation",
-        "optional",
-        ariaOrientationType,
-        ariaOrientationDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_709), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_943)],
-        "horizontal",
-      ),
-      attribute("aria-owns", "optional", xsIDREFSType, xsIDREFSDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_722),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_956),
-      ]),
-      defaulted(
-        "aria-hidden",
-        "optional",
-        xsBooleanType,
-        xsBooleanDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_723), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_957)],
-        "false",
-      ),
-      attribute("aria-activedescendant", "optional", xsIDREFType, xsIDREFSItemDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_724),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_958),
-      ]),
-      defaulted(
-        "aria-atomic",
-        "optional",
-        xsBooleanType,
-        xsBooleanDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_725), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_959)],
-        "false",
-      ),
-      defaulted(
-        "aria-autocomplete",
-        "optional",
-        ariaAutocompleteType,
-        ariaAutocompleteDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_726), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_960)],
-        "none",
-      ),
-      defaulted(
-        "aria-busy",
-        "optional",
-        xsBooleanType,
-        xsBooleanDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_741), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_975)],
-        "false",
-      ),
-      defaulted(
-        "aria-checked",
-        "optional",
-        ariaCheckedType,
-        ariaCheckedDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_742), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_976)],
-        "undefined",
-      ),
-      defaulted(
-        "aria-disabled",
-        "optional",
-        xsBooleanType,
-        xsBooleanDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_757), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_991)],
-        "false",
-      ),
-      defaulted(
-        "aria-expanded",
-        "optional",
-        ariaExpandedType,
-        ariaExpandedDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_758), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_992)],
-        "undefined",
-      ),
-      defaulted(
-        "aria-haspopup",
-        "optional",
-        xsBooleanType,
-        xsBooleanDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_772), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_006)],
-        "false",
-      ),
-      defaulted(
-        "aria-invalid",
-        "optional",
-        ariaInvalidType,
-        ariaInvalidDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_773), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_007)],
-        "false",
-      ),
-      defaulted(
-        "aria-multiline",
-        "optional",
-        xsBooleanType,
-        xsBooleanDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_788), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_022)],
-        "false",
-      ),
-      defaulted(
-        "aria-multiselectable",
-        "optional",
-        xsBooleanType,
-        xsBooleanDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_789), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_023)],
-        "false",
-      ),
-      attribute(
-        "aria-posinset",
-        "optional",
-        aRIALevelIntegerDTypeType,
-        aRIALevelIntegerDTypeDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_790), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_024)],
-      ),
-      defaulted(
-        "aria-pressed",
-        "optional",
-        ariaCheckedType,
-        ariaCheckedDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_791), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_025)],
-        "undefined",
-      ),
-      defaulted(
-        "aria-readonly",
-        "optional",
-        xsBooleanType,
-        xsBooleanDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_806), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_040)],
-        "false",
-      ),
-      defaulted(
-        "aria-relevant",
-        "optional",
-        ariaRelevantType,
-        ariaRelevantDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_807), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_041)],
-        "additions text",
-      ),
-      defaulted(
-        "aria-required",
-        "optional",
-        xsBooleanType,
-        xsBooleanDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_812), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_046)],
-        "false",
-      ),
-      defaulted(
-        "aria-selected",
-        "optional",
-        ariaExpandedType,
-        ariaExpandedDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_813), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_047)],
-        "undefined",
-      ),
-      attribute("aria-setsize", "optional", xsIntegerType, xsIntegerDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_827),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_061),
-      ]),
-      defaulted(
-        "aria-sort",
-        "optional",
-        ariaSortType,
-        ariaSortDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_828), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_062)],
-        "none",
-      ),
-      attribute("aria-valuemax", "optional", xsDecimalType, xsDecimalDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_843),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_077),
-      ]),
-      attribute("aria-valuemin", "optional", xsDecimalType, xsDecimalDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_844),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_078),
-      ]),
-      attribute("aria-valuenow", "optional", xsDecimalType, xsDecimalDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_845),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_079),
-      ]),
-      attribute("aria-valuetext", "optional", xsStringType, xsStringDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_846),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_080),
-      ]),
-      defaulted(
-        "aria-modal",
-        "optional",
-        xsBooleanType,
-        xsBooleanDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_847), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_081)],
-        "false",
-      ),
-      defaulted(
-        "aria-current",
-        "optional",
-        ariaCurrentType,
-        ariaCurrentDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_848), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_082)],
-        "false",
-      ),
-      attribute("aria-placeholder", "optional", xsStringType, xsStringDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_869),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_103),
-      ]),
-      attribute("aria-colcount", "optional", xsNonNegativeIntegerType, xsNonNegativeIntegerDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_870),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_104),
-      ]),
-      attribute("aria-rowcount", "optional", xsNonNegativeIntegerType, xsNonNegativeIntegerDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_871),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_105),
-      ]),
-      attribute("aria-colindex", "optional", xsNonNegativeIntegerType, xsNonNegativeIntegerDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_872),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_106),
-      ]),
-      attribute("aria-rowindex", "optional", xsNonNegativeIntegerType, xsNonNegativeIntegerDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_873),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_107),
-      ]),
-      attribute("aria-colspan", "optional", xsNonNegativeIntegerType, xsNonNegativeIntegerDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_874),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_108),
-      ]),
-      attribute("aria-rowspan", "optional", xsNonNegativeIntegerType, xsNonNegativeIntegerDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_875),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_109),
-      ]),
-      attribute("aria-keyshorts", "optional", xsStringType, xsStringDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_876),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_110),
-      ]),
-      attribute("aria-roledescription", "optional", xsStringType, xsStringDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_877),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_111),
-      ]),
-      attribute("aria-errormessage", "optional", xsIDREFType, xsIDREFSItemDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_878),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_112),
-      ]),
-      attribute("aria-details", "optional", xsIDREFType, xsIDREFSItemDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_879),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_113),
-      ]),
-      attribute("id", "optional", uniqueIdentifierDTypeType, uniqueIdentifierDTypeDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 25_187),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_333),
-      ]),
-      attribute("class", "optional", classType, classDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 25_188),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_334),
-      ]),
-      attribute("lang", "optional", xsNormalizedStringType, xsNormalizedStringDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 25_193),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_339),
-      ]),
-      attribute("xml:lang", "optional", xmlLangType, xmlLangDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 25_194),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_340),
-      ]),
-      attribute("label", "optional", xsNormalizedStringType, xsNormalizedStringDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 25_195),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_341),
-      ]),
-      defaulted(
-        "dir",
-        "optional",
-        dirType,
-        dirDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 25_196), xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_342)],
-        "auto",
-      ),
-      attribute("data-catalog-idref", "optional", xsIDREFType, xsIDREFSItemDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 25_211),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_357),
-      ]),
-      attribute(
-        "data-qti-suppress-tts",
-        "optional",
-        dataQtiSuppressTtsType,
-        dataQtiSuppressTtsDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 25_212), xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_358)],
-      ),
-    ],
-  ),
-  ...typeDeclares(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}BaseSequenceXBaseEmptyDType",
-    everyVersion,
-    brAttributes,
-  ),
-  ...typeDeclares(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}AssociableHotspotDType",
-    everyVersion,
-    [
-      attribute("role", "optional", roleType, roleDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_603),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_837),
-      ]),
-      attribute("aria-controls", "optional", xsIDREFSType, xsIDREFSDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_689),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_923),
-      ]),
-      attribute("aria-describedby", "optional", xsIDREFSType, xsIDREFSDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_690),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_924),
-      ]),
-      attribute("aria-flowto", "optional", xsIDREFSType, xsIDREFSDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_691),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_925),
-      ]),
-      attribute("aria-label", "optional", xsNormalizedStringType, xsNormalizedStringDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_692),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_926),
-      ]),
-      attribute("aria-labelledby", "optional", xsIDREFSType, xsIDREFSDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_693),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_927),
-      ]),
-      attribute("aria-level", "optional", aRIALevelIntegerDTypeType, aRIALevelIntegerDTypeDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_694),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_928),
-      ]),
-      defaulted(
-        "aria-live",
-        "optional",
-        ariaLiveType,
-        ariaLiveDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_695), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_929)],
-        "off",
-      ),
-      defaulted(
-        "aria-orientation",
-        "optional",
-        ariaOrientationType,
-        ariaOrientationDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_709), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_943)],
-        "horizontal",
-      ),
-      attribute("aria-owns", "optional", xsIDREFSType, xsIDREFSDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_722),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_956),
-      ]),
-      defaulted(
-        "aria-hidden",
-        "optional",
-        xsBooleanType,
-        xsBooleanDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_723), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_957)],
-        "false",
-      ),
-      attribute("aria-activedescendant", "optional", xsIDREFType, xsIDREFSItemDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_724),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_958),
-      ]),
-      defaulted(
-        "aria-atomic",
-        "optional",
-        xsBooleanType,
-        xsBooleanDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_725), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_959)],
-        "false",
-      ),
-      defaulted(
-        "aria-autocomplete",
-        "optional",
-        ariaAutocompleteType,
-        ariaAutocompleteDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_726), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_960)],
-        "none",
-      ),
-      defaulted(
-        "aria-busy",
-        "optional",
-        xsBooleanType,
-        xsBooleanDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_741), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_975)],
-        "false",
-      ),
-      defaulted(
-        "aria-checked",
-        "optional",
-        ariaCheckedType,
-        ariaCheckedDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_742), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_976)],
-        "undefined",
-      ),
-      defaulted(
-        "aria-disabled",
-        "optional",
-        xsBooleanType,
-        xsBooleanDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_757), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_991)],
-        "false",
-      ),
-      defaulted(
-        "aria-expanded",
-        "optional",
-        ariaExpandedType,
-        ariaExpandedDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_758), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_992)],
-        "undefined",
-      ),
-      defaulted(
-        "aria-haspopup",
-        "optional",
-        xsBooleanType,
-        xsBooleanDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_772), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_006)],
-        "false",
-      ),
-      defaulted(
-        "aria-invalid",
-        "optional",
-        ariaInvalidType,
-        ariaInvalidDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_773), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_007)],
-        "false",
-      ),
-      defaulted(
-        "aria-multiline",
-        "optional",
-        xsBooleanType,
-        xsBooleanDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_788), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_022)],
-        "false",
-      ),
-      defaulted(
-        "aria-multiselectable",
-        "optional",
-        xsBooleanType,
-        xsBooleanDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_789), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_023)],
-        "false",
-      ),
-      attribute(
-        "aria-posinset",
-        "optional",
-        aRIALevelIntegerDTypeType,
-        aRIALevelIntegerDTypeDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_790), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_024)],
-      ),
-      defaulted(
-        "aria-pressed",
-        "optional",
-        ariaCheckedType,
-        ariaCheckedDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_791), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_025)],
-        "undefined",
-      ),
-      defaulted(
-        "aria-readonly",
-        "optional",
-        xsBooleanType,
-        xsBooleanDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_806), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_040)],
-        "false",
-      ),
-      defaulted(
-        "aria-relevant",
-        "optional",
-        ariaRelevantType,
-        ariaRelevantDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_807), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_041)],
-        "additions text",
-      ),
-      defaulted(
-        "aria-required",
-        "optional",
-        xsBooleanType,
-        xsBooleanDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_812), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_046)],
-        "false",
-      ),
-      defaulted(
-        "aria-selected",
-        "optional",
-        ariaExpandedType,
-        ariaExpandedDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_813), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_047)],
-        "undefined",
-      ),
-      attribute("aria-setsize", "optional", xsIntegerType, xsIntegerDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_827),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_061),
-      ]),
-      defaulted(
-        "aria-sort",
-        "optional",
-        ariaSortType,
-        ariaSortDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_828), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_062)],
-        "none",
-      ),
-      attribute("aria-valuemax", "optional", xsDecimalType, xsDecimalDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_843),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_077),
-      ]),
-      attribute("aria-valuemin", "optional", xsDecimalType, xsDecimalDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_844),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_078),
-      ]),
-      attribute("aria-valuenow", "optional", xsDecimalType, xsDecimalDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_845),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_079),
-      ]),
-      attribute("aria-valuetext", "optional", xsStringType, xsStringDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_846),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_080),
-      ]),
-      defaulted(
-        "aria-modal",
-        "optional",
-        xsBooleanType,
-        xsBooleanDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_847), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_081)],
-        "false",
-      ),
-      defaulted(
-        "aria-current",
-        "optional",
-        ariaCurrentType,
-        ariaCurrentDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_848), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_082)],
-        "false",
-      ),
-      attribute("aria-placeholder", "optional", xsStringType, xsStringDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_869),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_103),
-      ]),
-      attribute("aria-colcount", "optional", xsNonNegativeIntegerType, xsNonNegativeIntegerDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_870),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_104),
-      ]),
-      attribute("aria-rowcount", "optional", xsNonNegativeIntegerType, xsNonNegativeIntegerDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_871),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_105),
-      ]),
-      attribute("aria-colindex", "optional", xsNonNegativeIntegerType, xsNonNegativeIntegerDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_872),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_106),
-      ]),
-      attribute("aria-rowindex", "optional", xsNonNegativeIntegerType, xsNonNegativeIntegerDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_873),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_107),
-      ]),
-      attribute("aria-colspan", "optional", xsNonNegativeIntegerType, xsNonNegativeIntegerDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_874),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_108),
-      ]),
-      attribute("aria-rowspan", "optional", xsNonNegativeIntegerType, xsNonNegativeIntegerDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_875),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_109),
-      ]),
-      attribute("aria-keyshorts", "optional", xsStringType, xsStringDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_876),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_110),
-      ]),
-      attribute("aria-roledescription", "optional", xsStringType, xsStringDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_877),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_111),
-      ]),
-      attribute("aria-errormessage", "optional", xsIDREFType, xsIDREFSItemDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_878),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_112),
-      ]),
-      attribute("aria-details", "optional", xsIDREFType, xsIDREFSItemDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_879),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_113),
-      ]),
-      attribute("id", "optional", uniqueIdentifierDTypeType, uniqueIdentifierDTypeDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 25_412),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_558),
-      ]),
-      attribute("class", "optional", classType, classDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 25_413),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_559),
-      ]),
-      attribute("lang", "optional", xsNormalizedStringType, xsNormalizedStringDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 25_418),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_564),
-      ]),
-      attribute("xml:lang", "optional", xmlLangType, xmlLangDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 25_419),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_565),
-      ]),
-      attribute("label", "optional", xsNormalizedStringType, xsNormalizedStringDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 25_420),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_566),
-      ]),
-      attribute("xml:base", "optional", xsAnyURIType, xsAnyURIDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 25_421),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_567),
-      ]),
-      defaulted(
-        "dir",
-        "optional",
-        dirType,
-        dirDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 25_422), xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_568)],
-        "auto",
-      ),
-      attribute("data-catalog-idref", "optional", xsIDREFType, xsIDREFSItemDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 25_437),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_583),
-      ]),
-      attribute(
-        "data-qti-suppress-tts",
-        "optional",
-        dataQtiSuppressTtsType,
-        dataQtiSuppressTtsDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 25_438), xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_584)],
-      ),
-      attribute("identifier", "required", identifierDTypeType, identifierDTypeDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 24_780),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 24_866),
-      ]),
-      attribute("template-identifier", "optional", identifierDTypeType, identifierDTypeDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 24_781),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 24_867),
-      ]),
-      defaulted(
-        "show-hide",
-        "optional",
-        showHideType,
-        showHideDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 24_782), xsd(imsqtiAsiv3p0p1V1p0Xsd, 24_868)],
-        "show",
-      ),
-      attribute("match-group", "optional", matchGroupType, matchGroupDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 24_795),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 24_881),
-      ]),
-      attribute("shape", "required", shapeType, shapeDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 24_800),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 24_886),
-      ]),
-      attribute("coords", "required", coordsDTypeType, coordsDTypeDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 24_818),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 24_904),
-      ]),
-      attribute("hotspot-label", "optional", xsStringType, xsStringDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 24_819),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 24_905),
-      ]),
-      attribute("match-max", "required", xsNonNegativeIntegerType, xsNonNegativeIntegerDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 24_820),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 24_906),
-      ]),
-      defaulted(
-        "match-min",
-        "optional",
-        xsNonNegativeIntegerType,
-        xsNonNegativeIntegerDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 24_821), xsd(imsqtiAsiv3p0p1V1p0Xsd, 24_907)],
-        "0",
-      ),
-    ],
-  ),
-  ...typeDeclares(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}BRDType",
-    everyVersion,
-    brAttributes,
-  ),
-  ...typeDeclares("{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}ColDType", everyVersion, [
+  ...typeDeclares("BaseSequenceEmptyDType", everyVersion, [
+    attribute("role", "optional", roleType, roleDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_603),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_837),
+    ]),
+    attribute("aria-controls", "optional", xsIDREFSType, xsIDREFSDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_689),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_923),
+    ]),
+    attribute("aria-describedby", "optional", xsIDREFSType, xsIDREFSDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_690),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_924),
+    ]),
+    attribute("aria-flowto", "optional", xsIDREFSType, xsIDREFSDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_691),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_925),
+    ]),
+    attribute("aria-label", "optional", xsNormalizedStringType, xsNormalizedStringDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_692),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_926),
+    ]),
+    attribute("aria-labelledby", "optional", xsIDREFSType, xsIDREFSDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_693),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_927),
+    ]),
+    attribute("aria-level", "optional", aRIALevelIntegerDTypeType, aRIALevelIntegerDTypeDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_694),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_928),
+    ]),
+    defaulted(
+      "aria-live",
+      "optional",
+      ariaLiveType,
+      ariaLiveDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_695), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_929)],
+      "off",
+    ),
+    defaulted(
+      "aria-orientation",
+      "optional",
+      ariaOrientationType,
+      ariaOrientationDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_709), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_943)],
+      "horizontal",
+    ),
+    attribute("aria-owns", "optional", xsIDREFSType, xsIDREFSDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_722),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_956),
+    ]),
+    defaulted(
+      "aria-hidden",
+      "optional",
+      xsBooleanType,
+      xsBooleanDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_723), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_957)],
+      "false",
+    ),
+    attribute("aria-activedescendant", "optional", xsIDREFType, xsIDREFSItemDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_724),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_958),
+    ]),
+    defaulted(
+      "aria-atomic",
+      "optional",
+      xsBooleanType,
+      xsBooleanDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_725), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_959)],
+      "false",
+    ),
+    defaulted(
+      "aria-autocomplete",
+      "optional",
+      ariaAutocompleteType,
+      ariaAutocompleteDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_726), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_960)],
+      "none",
+    ),
+    defaulted(
+      "aria-busy",
+      "optional",
+      xsBooleanType,
+      xsBooleanDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_741), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_975)],
+      "false",
+    ),
+    defaulted(
+      "aria-checked",
+      "optional",
+      ariaCheckedType,
+      ariaCheckedDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_742), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_976)],
+      "undefined",
+    ),
+    defaulted(
+      "aria-disabled",
+      "optional",
+      xsBooleanType,
+      xsBooleanDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_757), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_991)],
+      "false",
+    ),
+    defaulted(
+      "aria-expanded",
+      "optional",
+      ariaExpandedType,
+      ariaExpandedDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_758), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_992)],
+      "undefined",
+    ),
+    defaulted(
+      "aria-haspopup",
+      "optional",
+      xsBooleanType,
+      xsBooleanDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_772), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_006)],
+      "false",
+    ),
+    defaulted(
+      "aria-invalid",
+      "optional",
+      ariaInvalidType,
+      ariaInvalidDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_773), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_007)],
+      "false",
+    ),
+    defaulted(
+      "aria-multiline",
+      "optional",
+      xsBooleanType,
+      xsBooleanDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_788), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_022)],
+      "false",
+    ),
+    defaulted(
+      "aria-multiselectable",
+      "optional",
+      xsBooleanType,
+      xsBooleanDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_789), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_023)],
+      "false",
+    ),
+    attribute("aria-posinset", "optional", aRIALevelIntegerDTypeType, aRIALevelIntegerDTypeDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_790),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_024),
+    ]),
+    defaulted(
+      "aria-pressed",
+      "optional",
+      ariaCheckedType,
+      ariaCheckedDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_791), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_025)],
+      "undefined",
+    ),
+    defaulted(
+      "aria-readonly",
+      "optional",
+      xsBooleanType,
+      xsBooleanDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_806), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_040)],
+      "false",
+    ),
+    defaulted(
+      "aria-relevant",
+      "optional",
+      ariaRelevantType,
+      ariaRelevantDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_807), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_041)],
+      "additions text",
+    ),
+    defaulted(
+      "aria-required",
+      "optional",
+      xsBooleanType,
+      xsBooleanDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_812), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_046)],
+      "false",
+    ),
+    defaulted(
+      "aria-selected",
+      "optional",
+      ariaExpandedType,
+      ariaExpandedDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_813), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_047)],
+      "undefined",
+    ),
+    attribute("aria-setsize", "optional", xsIntegerType, xsIntegerDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_827),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_061),
+    ]),
+    defaulted(
+      "aria-sort",
+      "optional",
+      ariaSortType,
+      ariaSortDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_828), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_062)],
+      "none",
+    ),
+    attribute("aria-valuemax", "optional", xsDecimalType, xsDecimalDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_843),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_077),
+    ]),
+    attribute("aria-valuemin", "optional", xsDecimalType, xsDecimalDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_844),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_078),
+    ]),
+    attribute("aria-valuenow", "optional", xsDecimalType, xsDecimalDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_845),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_079),
+    ]),
+    attribute("aria-valuetext", "optional", xsStringType, xsStringDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_846),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_080),
+    ]),
+    defaulted(
+      "aria-modal",
+      "optional",
+      xsBooleanType,
+      xsBooleanDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_847), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_081)],
+      "false",
+    ),
+    defaulted(
+      "aria-current",
+      "optional",
+      ariaCurrentType,
+      ariaCurrentDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_848), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_082)],
+      "false",
+    ),
+    attribute("aria-placeholder", "optional", xsStringType, xsStringDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_869),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_103),
+    ]),
+    attribute("aria-colcount", "optional", xsNonNegativeIntegerType, xsNonNegativeIntegerDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_870),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_104),
+    ]),
+    attribute("aria-rowcount", "optional", xsNonNegativeIntegerType, xsNonNegativeIntegerDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_871),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_105),
+    ]),
+    attribute("aria-colindex", "optional", xsNonNegativeIntegerType, xsNonNegativeIntegerDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_872),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_106),
+    ]),
+    attribute("aria-rowindex", "optional", xsNonNegativeIntegerType, xsNonNegativeIntegerDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_873),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_107),
+    ]),
+    attribute("aria-colspan", "optional", xsNonNegativeIntegerType, xsNonNegativeIntegerDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_874),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_108),
+    ]),
+    attribute("aria-rowspan", "optional", xsNonNegativeIntegerType, xsNonNegativeIntegerDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_875),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_109),
+    ]),
+    attribute("aria-keyshorts", "optional", xsStringType, xsStringDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_876),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_110),
+    ]),
+    attribute("aria-roledescription", "optional", xsStringType, xsStringDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_877),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_111),
+    ]),
+    attribute("aria-errormessage", "optional", xsIDREFType, xsIDREFSItemDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_878),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_112),
+    ]),
+    attribute("aria-details", "optional", xsIDREFType, xsIDREFSItemDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_879),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_113),
+    ]),
+    attribute("id", "optional", uniqueIdentifierDTypeType, uniqueIdentifierDTypeDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 25_187),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_333),
+    ]),
+    attribute("class", "optional", classType, classDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 25_188),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_334),
+    ]),
+    attribute("lang", "optional", xsNormalizedStringType, xsNormalizedStringDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 25_193),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_339),
+    ]),
+    attribute("xml:lang", "optional", xmlLangType, xmlLangDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 25_194),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_340),
+    ]),
+    attribute("label", "optional", xsNormalizedStringType, xsNormalizedStringDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 25_195),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_341),
+    ]),
+    defaulted(
+      "dir",
+      "optional",
+      dirType,
+      dirDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 25_196), xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_342)],
+      "auto",
+    ),
+    attribute("data-catalog-idref", "optional", xsIDREFType, xsIDREFSItemDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 25_211),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_357),
+    ]),
+    attribute(
+      "data-qti-suppress-tts",
+      "optional",
+      dataQtiSuppressTtsType,
+      dataQtiSuppressTtsDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 25_212), xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_358)],
+    ),
+  ]),
+  ...typeDeclares("BaseSequenceXBaseEmptyDType", everyVersion, brAttributes),
+  ...typeDeclares("AssociableHotspotDType", everyVersion, [
+    attribute("role", "optional", roleType, roleDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_603),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_837),
+    ]),
+    attribute("aria-controls", "optional", xsIDREFSType, xsIDREFSDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_689),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_923),
+    ]),
+    attribute("aria-describedby", "optional", xsIDREFSType, xsIDREFSDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_690),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_924),
+    ]),
+    attribute("aria-flowto", "optional", xsIDREFSType, xsIDREFSDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_691),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_925),
+    ]),
+    attribute("aria-label", "optional", xsNormalizedStringType, xsNormalizedStringDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_692),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_926),
+    ]),
+    attribute("aria-labelledby", "optional", xsIDREFSType, xsIDREFSDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_693),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_927),
+    ]),
+    attribute("aria-level", "optional", aRIALevelIntegerDTypeType, aRIALevelIntegerDTypeDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_694),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_928),
+    ]),
+    defaulted(
+      "aria-live",
+      "optional",
+      ariaLiveType,
+      ariaLiveDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_695), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_929)],
+      "off",
+    ),
+    defaulted(
+      "aria-orientation",
+      "optional",
+      ariaOrientationType,
+      ariaOrientationDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_709), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_943)],
+      "horizontal",
+    ),
+    attribute("aria-owns", "optional", xsIDREFSType, xsIDREFSDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_722),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_956),
+    ]),
+    defaulted(
+      "aria-hidden",
+      "optional",
+      xsBooleanType,
+      xsBooleanDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_723), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_957)],
+      "false",
+    ),
+    attribute("aria-activedescendant", "optional", xsIDREFType, xsIDREFSItemDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_724),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_958),
+    ]),
+    defaulted(
+      "aria-atomic",
+      "optional",
+      xsBooleanType,
+      xsBooleanDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_725), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_959)],
+      "false",
+    ),
+    defaulted(
+      "aria-autocomplete",
+      "optional",
+      ariaAutocompleteType,
+      ariaAutocompleteDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_726), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_960)],
+      "none",
+    ),
+    defaulted(
+      "aria-busy",
+      "optional",
+      xsBooleanType,
+      xsBooleanDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_741), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_975)],
+      "false",
+    ),
+    defaulted(
+      "aria-checked",
+      "optional",
+      ariaCheckedType,
+      ariaCheckedDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_742), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_976)],
+      "undefined",
+    ),
+    defaulted(
+      "aria-disabled",
+      "optional",
+      xsBooleanType,
+      xsBooleanDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_757), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_991)],
+      "false",
+    ),
+    defaulted(
+      "aria-expanded",
+      "optional",
+      ariaExpandedType,
+      ariaExpandedDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_758), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_992)],
+      "undefined",
+    ),
+    defaulted(
+      "aria-haspopup",
+      "optional",
+      xsBooleanType,
+      xsBooleanDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_772), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_006)],
+      "false",
+    ),
+    defaulted(
+      "aria-invalid",
+      "optional",
+      ariaInvalidType,
+      ariaInvalidDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_773), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_007)],
+      "false",
+    ),
+    defaulted(
+      "aria-multiline",
+      "optional",
+      xsBooleanType,
+      xsBooleanDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_788), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_022)],
+      "false",
+    ),
+    defaulted(
+      "aria-multiselectable",
+      "optional",
+      xsBooleanType,
+      xsBooleanDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_789), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_023)],
+      "false",
+    ),
+    attribute("aria-posinset", "optional", aRIALevelIntegerDTypeType, aRIALevelIntegerDTypeDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_790),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_024),
+    ]),
+    defaulted(
+      "aria-pressed",
+      "optional",
+      ariaCheckedType,
+      ariaCheckedDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_791), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_025)],
+      "undefined",
+    ),
+    defaulted(
+      "aria-readonly",
+      "optional",
+      xsBooleanType,
+      xsBooleanDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_806), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_040)],
+      "false",
+    ),
+    defaulted(
+      "aria-relevant",
+      "optional",
+      ariaRelevantType,
+      ariaRelevantDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_807), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_041)],
+      "additions text",
+    ),
+    defaulted(
+      "aria-required",
+      "optional",
+      xsBooleanType,
+      xsBooleanDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_812), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_046)],
+      "false",
+    ),
+    defaulted(
+      "aria-selected",
+      "optional",
+      ariaExpandedType,
+      ariaExpandedDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_813), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_047)],
+      "undefined",
+    ),
+    attribute("aria-setsize", "optional", xsIntegerType, xsIntegerDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_827),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_061),
+    ]),
+    defaulted(
+      "aria-sort",
+      "optional",
+      ariaSortType,
+      ariaSortDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_828), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_062)],
+      "none",
+    ),
+    attribute("aria-valuemax", "optional", xsDecimalType, xsDecimalDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_843),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_077),
+    ]),
+    attribute("aria-valuemin", "optional", xsDecimalType, xsDecimalDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_844),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_078),
+    ]),
+    attribute("aria-valuenow", "optional", xsDecimalType, xsDecimalDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_845),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_079),
+    ]),
+    attribute("aria-valuetext", "optional", xsStringType, xsStringDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_846),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_080),
+    ]),
+    defaulted(
+      "aria-modal",
+      "optional",
+      xsBooleanType,
+      xsBooleanDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_847), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_081)],
+      "false",
+    ),
+    defaulted(
+      "aria-current",
+      "optional",
+      ariaCurrentType,
+      ariaCurrentDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_848), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_082)],
+      "false",
+    ),
+    attribute("aria-placeholder", "optional", xsStringType, xsStringDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_869),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_103),
+    ]),
+    attribute("aria-colcount", "optional", xsNonNegativeIntegerType, xsNonNegativeIntegerDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_870),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_104),
+    ]),
+    attribute("aria-rowcount", "optional", xsNonNegativeIntegerType, xsNonNegativeIntegerDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_871),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_105),
+    ]),
+    attribute("aria-colindex", "optional", xsNonNegativeIntegerType, xsNonNegativeIntegerDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_872),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_106),
+    ]),
+    attribute("aria-rowindex", "optional", xsNonNegativeIntegerType, xsNonNegativeIntegerDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_873),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_107),
+    ]),
+    attribute("aria-colspan", "optional", xsNonNegativeIntegerType, xsNonNegativeIntegerDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_874),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_108),
+    ]),
+    attribute("aria-rowspan", "optional", xsNonNegativeIntegerType, xsNonNegativeIntegerDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_875),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_109),
+    ]),
+    attribute("aria-keyshorts", "optional", xsStringType, xsStringDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_876),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_110),
+    ]),
+    attribute("aria-roledescription", "optional", xsStringType, xsStringDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_877),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_111),
+    ]),
+    attribute("aria-errormessage", "optional", xsIDREFType, xsIDREFSItemDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_878),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_112),
+    ]),
+    attribute("aria-details", "optional", xsIDREFType, xsIDREFSItemDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_879),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_113),
+    ]),
+    attribute("id", "optional", uniqueIdentifierDTypeType, uniqueIdentifierDTypeDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 25_412),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_558),
+    ]),
+    attribute("class", "optional", classType, classDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 25_413),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_559),
+    ]),
+    attribute("lang", "optional", xsNormalizedStringType, xsNormalizedStringDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 25_418),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_564),
+    ]),
+    attribute("xml:lang", "optional", xmlLangType, xmlLangDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 25_419),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_565),
+    ]),
+    attribute("label", "optional", xsNormalizedStringType, xsNormalizedStringDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 25_420),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_566),
+    ]),
+    attribute("xml:base", "optional", xsAnyURIType, xsAnyURIDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 25_421),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_567),
+    ]),
+    defaulted(
+      "dir",
+      "optional",
+      dirType,
+      dirDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 25_422), xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_568)],
+      "auto",
+    ),
+    attribute("data-catalog-idref", "optional", xsIDREFType, xsIDREFSItemDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 25_437),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_583),
+    ]),
+    attribute(
+      "data-qti-suppress-tts",
+      "optional",
+      dataQtiSuppressTtsType,
+      dataQtiSuppressTtsDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 25_438), xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_584)],
+    ),
+    attribute("identifier", "required", identifierDTypeType, identifierDTypeDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 24_780),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 24_866),
+    ]),
+    attribute("template-identifier", "optional", identifierDTypeType, identifierDTypeDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 24_781),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 24_867),
+    ]),
+    defaulted(
+      "show-hide",
+      "optional",
+      showHideType,
+      showHideDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 24_782), xsd(imsqtiAsiv3p0p1V1p0Xsd, 24_868)],
+      "show",
+    ),
+    attribute("match-group", "optional", matchGroupType, matchGroupDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 24_795),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 24_881),
+    ]),
+    attribute("shape", "required", shapeType, shapeDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 24_800),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 24_886),
+    ]),
+    attribute("coords", "required", coordsDTypeType, coordsDTypeDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 24_818),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 24_904),
+    ]),
+    attribute("hotspot-label", "optional", xsStringType, xsStringDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 24_819),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 24_905),
+    ]),
+    attribute("match-max", "required", xsNonNegativeIntegerType, xsNonNegativeIntegerDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 24_820),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 24_906),
+    ]),
+    defaulted(
+      "match-min",
+      "optional",
+      xsNonNegativeIntegerType,
+      xsNonNegativeIntegerDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 24_821), xsd(imsqtiAsiv3p0p1V1p0Xsd, 24_907)],
+      "0",
+    ),
+  ]),
+  ...typeDeclares("BRDType", everyVersion, brAttributes),
+  ...typeDeclares("ColDType", everyVersion, [
     attribute("role", "optional", roleType, roleDomain, [
       xsd(imsqtiAsiv3p0V1p0Xsd, 33_603),
       xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_837),
@@ -31959,343 +31972,336 @@ export const typeAttributeDeclarations: readonly TypeAttributeDeclaration[] = [
       xsd(imsqtiAsiv3p0p1V1p0Xsd, 26_236),
     ]),
   ]),
-  ...typeDeclares(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}EndAttemptInteractionDType",
-    everyVersion,
-    [
-      attribute("role", "optional", roleType, roleDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_603),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_837),
-      ]),
-      attribute("aria-controls", "optional", xsIDREFSType, xsIDREFSDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_689),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_923),
-      ]),
-      attribute("aria-describedby", "optional", xsIDREFSType, xsIDREFSDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_690),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_924),
-      ]),
-      attribute("aria-flowto", "optional", xsIDREFSType, xsIDREFSDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_691),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_925),
-      ]),
-      attribute("aria-label", "optional", xsNormalizedStringType, xsNormalizedStringDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_692),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_926),
-      ]),
-      attribute("aria-labelledby", "optional", xsIDREFSType, xsIDREFSDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_693),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_927),
-      ]),
-      attribute("aria-level", "optional", aRIALevelIntegerDTypeType, aRIALevelIntegerDTypeDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_694),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_928),
-      ]),
-      defaulted(
-        "aria-live",
-        "optional",
-        ariaLiveType,
-        ariaLiveDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_695), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_929)],
-        "off",
-      ),
-      defaulted(
-        "aria-orientation",
-        "optional",
-        ariaOrientationType,
-        ariaOrientationDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_709), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_943)],
-        "horizontal",
-      ),
-      attribute("aria-owns", "optional", xsIDREFSType, xsIDREFSDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_722),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_956),
-      ]),
-      defaulted(
-        "aria-hidden",
-        "optional",
-        xsBooleanType,
-        xsBooleanDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_723), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_957)],
-        "false",
-      ),
-      attribute("aria-activedescendant", "optional", xsIDREFType, xsIDREFSItemDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_724),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_958),
-      ]),
-      defaulted(
-        "aria-atomic",
-        "optional",
-        xsBooleanType,
-        xsBooleanDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_725), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_959)],
-        "false",
-      ),
-      defaulted(
-        "aria-autocomplete",
-        "optional",
-        ariaAutocompleteType,
-        ariaAutocompleteDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_726), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_960)],
-        "none",
-      ),
-      defaulted(
-        "aria-busy",
-        "optional",
-        xsBooleanType,
-        xsBooleanDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_741), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_975)],
-        "false",
-      ),
-      defaulted(
-        "aria-checked",
-        "optional",
-        ariaCheckedType,
-        ariaCheckedDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_742), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_976)],
-        "undefined",
-      ),
-      defaulted(
-        "aria-disabled",
-        "optional",
-        xsBooleanType,
-        xsBooleanDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_757), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_991)],
-        "false",
-      ),
-      defaulted(
-        "aria-expanded",
-        "optional",
-        ariaExpandedType,
-        ariaExpandedDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_758), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_992)],
-        "undefined",
-      ),
-      defaulted(
-        "aria-haspopup",
-        "optional",
-        xsBooleanType,
-        xsBooleanDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_772), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_006)],
-        "false",
-      ),
-      defaulted(
-        "aria-invalid",
-        "optional",
-        ariaInvalidType,
-        ariaInvalidDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_773), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_007)],
-        "false",
-      ),
-      defaulted(
-        "aria-multiline",
-        "optional",
-        xsBooleanType,
-        xsBooleanDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_788), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_022)],
-        "false",
-      ),
-      defaulted(
-        "aria-multiselectable",
-        "optional",
-        xsBooleanType,
-        xsBooleanDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_789), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_023)],
-        "false",
-      ),
-      attribute(
-        "aria-posinset",
-        "optional",
-        aRIALevelIntegerDTypeType,
-        aRIALevelIntegerDTypeDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_790), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_024)],
-      ),
-      defaulted(
-        "aria-pressed",
-        "optional",
-        ariaCheckedType,
-        ariaCheckedDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_791), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_025)],
-        "undefined",
-      ),
-      defaulted(
-        "aria-readonly",
-        "optional",
-        xsBooleanType,
-        xsBooleanDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_806), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_040)],
-        "false",
-      ),
-      defaulted(
-        "aria-relevant",
-        "optional",
-        ariaRelevantType,
-        ariaRelevantDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_807), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_041)],
-        "additions text",
-      ),
-      defaulted(
-        "aria-required",
-        "optional",
-        xsBooleanType,
-        xsBooleanDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_812), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_046)],
-        "false",
-      ),
-      defaulted(
-        "aria-selected",
-        "optional",
-        ariaExpandedType,
-        ariaExpandedDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_813), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_047)],
-        "undefined",
-      ),
-      attribute("aria-setsize", "optional", xsIntegerType, xsIntegerDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_827),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_061),
-      ]),
-      defaulted(
-        "aria-sort",
-        "optional",
-        ariaSortType,
-        ariaSortDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_828), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_062)],
-        "none",
-      ),
-      attribute("aria-valuemax", "optional", xsDecimalType, xsDecimalDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_843),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_077),
-      ]),
-      attribute("aria-valuemin", "optional", xsDecimalType, xsDecimalDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_844),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_078),
-      ]),
-      attribute("aria-valuenow", "optional", xsDecimalType, xsDecimalDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_845),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_079),
-      ]),
-      attribute("aria-valuetext", "optional", xsStringType, xsStringDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_846),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_080),
-      ]),
-      defaulted(
-        "aria-modal",
-        "optional",
-        xsBooleanType,
-        xsBooleanDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_847), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_081)],
-        "false",
-      ),
-      defaulted(
-        "aria-current",
-        "optional",
-        ariaCurrentType,
-        ariaCurrentDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_848), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_082)],
-        "false",
-      ),
-      attribute("aria-placeholder", "optional", xsStringType, xsStringDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_869),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_103),
-      ]),
-      attribute("aria-colcount", "optional", xsNonNegativeIntegerType, xsNonNegativeIntegerDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_870),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_104),
-      ]),
-      attribute("aria-rowcount", "optional", xsNonNegativeIntegerType, xsNonNegativeIntegerDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_871),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_105),
-      ]),
-      attribute("aria-colindex", "optional", xsNonNegativeIntegerType, xsNonNegativeIntegerDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_872),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_106),
-      ]),
-      attribute("aria-rowindex", "optional", xsNonNegativeIntegerType, xsNonNegativeIntegerDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_873),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_107),
-      ]),
-      attribute("aria-colspan", "optional", xsNonNegativeIntegerType, xsNonNegativeIntegerDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_874),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_108),
-      ]),
-      attribute("aria-rowspan", "optional", xsNonNegativeIntegerType, xsNonNegativeIntegerDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_875),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_109),
-      ]),
-      attribute("aria-keyshorts", "optional", xsStringType, xsStringDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_876),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_110),
-      ]),
-      attribute("aria-roledescription", "optional", xsStringType, xsStringDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_877),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_111),
-      ]),
-      attribute("aria-errormessage", "optional", xsIDREFType, xsIDREFSItemDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_878),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_112),
-      ]),
-      attribute("aria-details", "optional", xsIDREFType, xsIDREFSItemDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_879),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_113),
-      ]),
-      attribute("id", "optional", uniqueIdentifierDTypeType, uniqueIdentifierDTypeDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 25_412),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_558),
-      ]),
-      attribute("class", "optional", classType, classDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 25_413),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_559),
-      ]),
-      attribute("lang", "optional", xsNormalizedStringType, xsNormalizedStringDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 25_418),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_564),
-      ]),
-      attribute("xml:lang", "optional", xmlLangType, xmlLangDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 25_419),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_565),
-      ]),
-      attribute("label", "optional", xsNormalizedStringType, xsNormalizedStringDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 25_420),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_566),
-      ]),
-      attribute("xml:base", "optional", xsAnyURIType, xsAnyURIDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 25_421),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_567),
-      ]),
-      defaulted(
-        "dir",
-        "optional",
-        dirType,
-        dirDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 25_422), xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_568)],
-        "auto",
-      ),
-      attribute("data-catalog-idref", "optional", xsIDREFType, xsIDREFSItemDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 25_437),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_583),
-      ]),
-      attribute(
-        "data-qti-suppress-tts",
-        "optional",
-        dataQtiSuppressTtsType,
-        dataQtiSuppressTtsDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 25_438), xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_584)],
-      ),
-      attribute("response-identifier", "required", identifierDTypeType, identifierDTypeDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 26_782),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 26_928),
-      ]),
-      attribute("title", "required", xsStringType, xsStringDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 26_783),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 26_929),
-      ]),
-      attribute("count-attempt", "optional", xsBooleanType, xsBooleanDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 26_784),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 26_930),
-      ]),
-    ],
-  ),
-  ...typeDeclares("{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}GapDType", everyVersion, [
+  ...typeDeclares("EndAttemptInteractionDType", everyVersion, [
+    attribute("role", "optional", roleType, roleDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_603),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_837),
+    ]),
+    attribute("aria-controls", "optional", xsIDREFSType, xsIDREFSDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_689),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_923),
+    ]),
+    attribute("aria-describedby", "optional", xsIDREFSType, xsIDREFSDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_690),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_924),
+    ]),
+    attribute("aria-flowto", "optional", xsIDREFSType, xsIDREFSDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_691),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_925),
+    ]),
+    attribute("aria-label", "optional", xsNormalizedStringType, xsNormalizedStringDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_692),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_926),
+    ]),
+    attribute("aria-labelledby", "optional", xsIDREFSType, xsIDREFSDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_693),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_927),
+    ]),
+    attribute("aria-level", "optional", aRIALevelIntegerDTypeType, aRIALevelIntegerDTypeDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_694),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_928),
+    ]),
+    defaulted(
+      "aria-live",
+      "optional",
+      ariaLiveType,
+      ariaLiveDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_695), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_929)],
+      "off",
+    ),
+    defaulted(
+      "aria-orientation",
+      "optional",
+      ariaOrientationType,
+      ariaOrientationDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_709), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_943)],
+      "horizontal",
+    ),
+    attribute("aria-owns", "optional", xsIDREFSType, xsIDREFSDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_722),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_956),
+    ]),
+    defaulted(
+      "aria-hidden",
+      "optional",
+      xsBooleanType,
+      xsBooleanDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_723), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_957)],
+      "false",
+    ),
+    attribute("aria-activedescendant", "optional", xsIDREFType, xsIDREFSItemDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_724),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_958),
+    ]),
+    defaulted(
+      "aria-atomic",
+      "optional",
+      xsBooleanType,
+      xsBooleanDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_725), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_959)],
+      "false",
+    ),
+    defaulted(
+      "aria-autocomplete",
+      "optional",
+      ariaAutocompleteType,
+      ariaAutocompleteDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_726), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_960)],
+      "none",
+    ),
+    defaulted(
+      "aria-busy",
+      "optional",
+      xsBooleanType,
+      xsBooleanDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_741), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_975)],
+      "false",
+    ),
+    defaulted(
+      "aria-checked",
+      "optional",
+      ariaCheckedType,
+      ariaCheckedDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_742), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_976)],
+      "undefined",
+    ),
+    defaulted(
+      "aria-disabled",
+      "optional",
+      xsBooleanType,
+      xsBooleanDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_757), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_991)],
+      "false",
+    ),
+    defaulted(
+      "aria-expanded",
+      "optional",
+      ariaExpandedType,
+      ariaExpandedDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_758), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_992)],
+      "undefined",
+    ),
+    defaulted(
+      "aria-haspopup",
+      "optional",
+      xsBooleanType,
+      xsBooleanDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_772), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_006)],
+      "false",
+    ),
+    defaulted(
+      "aria-invalid",
+      "optional",
+      ariaInvalidType,
+      ariaInvalidDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_773), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_007)],
+      "false",
+    ),
+    defaulted(
+      "aria-multiline",
+      "optional",
+      xsBooleanType,
+      xsBooleanDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_788), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_022)],
+      "false",
+    ),
+    defaulted(
+      "aria-multiselectable",
+      "optional",
+      xsBooleanType,
+      xsBooleanDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_789), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_023)],
+      "false",
+    ),
+    attribute("aria-posinset", "optional", aRIALevelIntegerDTypeType, aRIALevelIntegerDTypeDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_790),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_024),
+    ]),
+    defaulted(
+      "aria-pressed",
+      "optional",
+      ariaCheckedType,
+      ariaCheckedDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_791), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_025)],
+      "undefined",
+    ),
+    defaulted(
+      "aria-readonly",
+      "optional",
+      xsBooleanType,
+      xsBooleanDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_806), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_040)],
+      "false",
+    ),
+    defaulted(
+      "aria-relevant",
+      "optional",
+      ariaRelevantType,
+      ariaRelevantDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_807), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_041)],
+      "additions text",
+    ),
+    defaulted(
+      "aria-required",
+      "optional",
+      xsBooleanType,
+      xsBooleanDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_812), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_046)],
+      "false",
+    ),
+    defaulted(
+      "aria-selected",
+      "optional",
+      ariaExpandedType,
+      ariaExpandedDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_813), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_047)],
+      "undefined",
+    ),
+    attribute("aria-setsize", "optional", xsIntegerType, xsIntegerDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_827),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_061),
+    ]),
+    defaulted(
+      "aria-sort",
+      "optional",
+      ariaSortType,
+      ariaSortDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_828), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_062)],
+      "none",
+    ),
+    attribute("aria-valuemax", "optional", xsDecimalType, xsDecimalDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_843),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_077),
+    ]),
+    attribute("aria-valuemin", "optional", xsDecimalType, xsDecimalDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_844),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_078),
+    ]),
+    attribute("aria-valuenow", "optional", xsDecimalType, xsDecimalDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_845),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_079),
+    ]),
+    attribute("aria-valuetext", "optional", xsStringType, xsStringDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_846),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_080),
+    ]),
+    defaulted(
+      "aria-modal",
+      "optional",
+      xsBooleanType,
+      xsBooleanDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_847), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_081)],
+      "false",
+    ),
+    defaulted(
+      "aria-current",
+      "optional",
+      ariaCurrentType,
+      ariaCurrentDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_848), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_082)],
+      "false",
+    ),
+    attribute("aria-placeholder", "optional", xsStringType, xsStringDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_869),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_103),
+    ]),
+    attribute("aria-colcount", "optional", xsNonNegativeIntegerType, xsNonNegativeIntegerDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_870),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_104),
+    ]),
+    attribute("aria-rowcount", "optional", xsNonNegativeIntegerType, xsNonNegativeIntegerDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_871),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_105),
+    ]),
+    attribute("aria-colindex", "optional", xsNonNegativeIntegerType, xsNonNegativeIntegerDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_872),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_106),
+    ]),
+    attribute("aria-rowindex", "optional", xsNonNegativeIntegerType, xsNonNegativeIntegerDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_873),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_107),
+    ]),
+    attribute("aria-colspan", "optional", xsNonNegativeIntegerType, xsNonNegativeIntegerDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_874),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_108),
+    ]),
+    attribute("aria-rowspan", "optional", xsNonNegativeIntegerType, xsNonNegativeIntegerDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_875),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_109),
+    ]),
+    attribute("aria-keyshorts", "optional", xsStringType, xsStringDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_876),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_110),
+    ]),
+    attribute("aria-roledescription", "optional", xsStringType, xsStringDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_877),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_111),
+    ]),
+    attribute("aria-errormessage", "optional", xsIDREFType, xsIDREFSItemDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_878),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_112),
+    ]),
+    attribute("aria-details", "optional", xsIDREFType, xsIDREFSItemDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_879),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_113),
+    ]),
+    attribute("id", "optional", uniqueIdentifierDTypeType, uniqueIdentifierDTypeDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 25_412),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_558),
+    ]),
+    attribute("class", "optional", classType, classDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 25_413),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_559),
+    ]),
+    attribute("lang", "optional", xsNormalizedStringType, xsNormalizedStringDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 25_418),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_564),
+    ]),
+    attribute("xml:lang", "optional", xmlLangType, xmlLangDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 25_419),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_565),
+    ]),
+    attribute("label", "optional", xsNormalizedStringType, xsNormalizedStringDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 25_420),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_566),
+    ]),
+    attribute("xml:base", "optional", xsAnyURIType, xsAnyURIDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 25_421),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_567),
+    ]),
+    defaulted(
+      "dir",
+      "optional",
+      dirType,
+      dirDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 25_422), xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_568)],
+      "auto",
+    ),
+    attribute("data-catalog-idref", "optional", xsIDREFType, xsIDREFSItemDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 25_437),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_583),
+    ]),
+    attribute(
+      "data-qti-suppress-tts",
+      "optional",
+      dataQtiSuppressTtsType,
+      dataQtiSuppressTtsDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 25_438), xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_584)],
+    ),
+    attribute("response-identifier", "required", identifierDTypeType, identifierDTypeDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 26_782),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 26_928),
+    ]),
+    attribute("title", "required", xsStringType, xsStringDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 26_783),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 26_929),
+    ]),
+    attribute("count-attempt", "optional", xsBooleanType, xsBooleanDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 26_784),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 26_930),
+    ]),
+  ]),
+  ...typeDeclares("GapDType", everyVersion, [
     attribute("role", "optional", roleType, roleDomain, [
       xsd(imsqtiAsiv3p0V1p0Xsd, 33_603),
       xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_837),
@@ -32640,12 +32646,8 @@ export const typeAttributeDeclarations: readonly TypeAttributeDeclaration[] = [
       "false",
     ),
   ]),
-  ...typeDeclares(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}HRDType",
-    everyVersion,
-    brAttributes,
-  ),
-  ...typeDeclares("{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}HotspotChoiceDType", everyVersion, [
+  ...typeDeclares("HRDType", everyVersion, brAttributes),
+  ...typeDeclares("HotspotChoiceDType", everyVersion, [
     attribute("role", "optional", roleType, roleDomain, [
       xsd(imsqtiAsiv3p0V1p0Xsd, 33_603),
       xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_837),
@@ -32990,7 +32992,7 @@ export const typeAttributeDeclarations: readonly TypeAttributeDeclaration[] = [
       xsd(imsqtiAsiv3p0p1V1p0Xsd, 28_054),
     ]),
   ]),
-  ...typeDeclares("{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}ImgDType", everyVersion, [
+  ...typeDeclares("ImgDType", everyVersion, [
     attribute("role", "optional", roleType, roleDomain, [
       xsd(imsqtiAsiv3p0V1p0Xsd, 33_603),
       xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_837),
@@ -33327,7 +33329,7 @@ export const typeAttributeDeclarations: readonly TypeAttributeDeclaration[] = [
       xsd(imsqtiAsiv3p0p1V1p0Xsd, 28_415),
     ]),
   ]),
-  ...typeDeclares("{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}SourceDType", everyVersion, [
+  ...typeDeclares("SourceDType", everyVersion, [
     attribute("role", "optional", roleType, roleDomain, [
       xsd(imsqtiAsiv3p0V1p0Xsd, 33_603),
       xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_837),
@@ -33660,376 +33662,363 @@ export const typeAttributeDeclarations: readonly TypeAttributeDeclaration[] = [
       xsd(imsqtiAsiv3p0p1V1p0Xsd, 32_024),
     ]),
   ]),
-  ...typeDeclares(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}TextEntryInteractionDType",
-    everyVersion,
-    [
-      attribute("role", "optional", roleType, roleDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_603),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_837),
-      ]),
-      attribute("aria-controls", "optional", xsIDREFSType, xsIDREFSDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_689),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_923),
-      ]),
-      attribute("aria-describedby", "optional", xsIDREFSType, xsIDREFSDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_690),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_924),
-      ]),
-      attribute("aria-flowto", "optional", xsIDREFSType, xsIDREFSDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_691),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_925),
-      ]),
-      attribute("aria-label", "optional", xsNormalizedStringType, xsNormalizedStringDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_692),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_926),
-      ]),
-      attribute("aria-labelledby", "optional", xsIDREFSType, xsIDREFSDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_693),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_927),
-      ]),
-      attribute("aria-level", "optional", aRIALevelIntegerDTypeType, aRIALevelIntegerDTypeDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_694),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_928),
-      ]),
-      defaulted(
-        "aria-live",
-        "optional",
-        ariaLiveType,
-        ariaLiveDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_695), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_929)],
-        "off",
-      ),
-      defaulted(
-        "aria-orientation",
-        "optional",
-        ariaOrientationType,
-        ariaOrientationDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_709), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_943)],
-        "horizontal",
-      ),
-      attribute("aria-owns", "optional", xsIDREFSType, xsIDREFSDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_722),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_956),
-      ]),
-      defaulted(
-        "aria-hidden",
-        "optional",
-        xsBooleanType,
-        xsBooleanDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_723), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_957)],
-        "false",
-      ),
-      attribute("aria-activedescendant", "optional", xsIDREFType, xsIDREFSItemDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_724),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_958),
-      ]),
-      defaulted(
-        "aria-atomic",
-        "optional",
-        xsBooleanType,
-        xsBooleanDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_725), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_959)],
-        "false",
-      ),
-      defaulted(
-        "aria-autocomplete",
-        "optional",
-        ariaAutocompleteType,
-        ariaAutocompleteDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_726), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_960)],
-        "none",
-      ),
-      defaulted(
-        "aria-busy",
-        "optional",
-        xsBooleanType,
-        xsBooleanDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_741), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_975)],
-        "false",
-      ),
-      defaulted(
-        "aria-checked",
-        "optional",
-        ariaCheckedType,
-        ariaCheckedDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_742), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_976)],
-        "undefined",
-      ),
-      defaulted(
-        "aria-disabled",
-        "optional",
-        xsBooleanType,
-        xsBooleanDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_757), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_991)],
-        "false",
-      ),
-      defaulted(
-        "aria-expanded",
-        "optional",
-        ariaExpandedType,
-        ariaExpandedDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_758), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_992)],
-        "undefined",
-      ),
-      defaulted(
-        "aria-haspopup",
-        "optional",
-        xsBooleanType,
-        xsBooleanDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_772), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_006)],
-        "false",
-      ),
-      defaulted(
-        "aria-invalid",
-        "optional",
-        ariaInvalidType,
-        ariaInvalidDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_773), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_007)],
-        "false",
-      ),
-      defaulted(
-        "aria-multiline",
-        "optional",
-        xsBooleanType,
-        xsBooleanDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_788), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_022)],
-        "false",
-      ),
-      defaulted(
-        "aria-multiselectable",
-        "optional",
-        xsBooleanType,
-        xsBooleanDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_789), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_023)],
-        "false",
-      ),
-      attribute(
-        "aria-posinset",
-        "optional",
-        aRIALevelIntegerDTypeType,
-        aRIALevelIntegerDTypeDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_790), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_024)],
-      ),
-      defaulted(
-        "aria-pressed",
-        "optional",
-        ariaCheckedType,
-        ariaCheckedDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_791), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_025)],
-        "undefined",
-      ),
-      defaulted(
-        "aria-readonly",
-        "optional",
-        xsBooleanType,
-        xsBooleanDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_806), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_040)],
-        "false",
-      ),
-      defaulted(
-        "aria-relevant",
-        "optional",
-        ariaRelevantType,
-        ariaRelevantDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_807), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_041)],
-        "additions text",
-      ),
-      defaulted(
-        "aria-required",
-        "optional",
-        xsBooleanType,
-        xsBooleanDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_812), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_046)],
-        "false",
-      ),
-      defaulted(
-        "aria-selected",
-        "optional",
-        ariaExpandedType,
-        ariaExpandedDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_813), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_047)],
-        "undefined",
-      ),
-      attribute("aria-setsize", "optional", xsIntegerType, xsIntegerDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_827),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_061),
-      ]),
-      defaulted(
-        "aria-sort",
-        "optional",
-        ariaSortType,
-        ariaSortDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_828), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_062)],
-        "none",
-      ),
-      attribute("aria-valuemax", "optional", xsDecimalType, xsDecimalDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_843),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_077),
-      ]),
-      attribute("aria-valuemin", "optional", xsDecimalType, xsDecimalDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_844),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_078),
-      ]),
-      attribute("aria-valuenow", "optional", xsDecimalType, xsDecimalDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_845),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_079),
-      ]),
-      attribute("aria-valuetext", "optional", xsStringType, xsStringDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_846),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_080),
-      ]),
-      defaulted(
-        "aria-modal",
-        "optional",
-        xsBooleanType,
-        xsBooleanDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_847), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_081)],
-        "false",
-      ),
-      defaulted(
-        "aria-current",
-        "optional",
-        ariaCurrentType,
-        ariaCurrentDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_848), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_082)],
-        "false",
-      ),
-      attribute("aria-placeholder", "optional", xsStringType, xsStringDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_869),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_103),
-      ]),
-      attribute("aria-colcount", "optional", xsNonNegativeIntegerType, xsNonNegativeIntegerDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_870),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_104),
-      ]),
-      attribute("aria-rowcount", "optional", xsNonNegativeIntegerType, xsNonNegativeIntegerDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_871),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_105),
-      ]),
-      attribute("aria-colindex", "optional", xsNonNegativeIntegerType, xsNonNegativeIntegerDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_872),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_106),
-      ]),
-      attribute("aria-rowindex", "optional", xsNonNegativeIntegerType, xsNonNegativeIntegerDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_873),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_107),
-      ]),
-      attribute("aria-colspan", "optional", xsNonNegativeIntegerType, xsNonNegativeIntegerDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_874),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_108),
-      ]),
-      attribute("aria-rowspan", "optional", xsNonNegativeIntegerType, xsNonNegativeIntegerDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_875),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_109),
-      ]),
-      attribute("aria-keyshorts", "optional", xsStringType, xsStringDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_876),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_110),
-      ]),
-      attribute("aria-roledescription", "optional", xsStringType, xsStringDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_877),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_111),
-      ]),
-      attribute("aria-errormessage", "optional", xsIDREFType, xsIDREFSItemDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_878),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_112),
-      ]),
-      attribute("aria-details", "optional", xsIDREFType, xsIDREFSItemDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_879),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_113),
-      ]),
-      attribute("id", "optional", uniqueIdentifierDTypeType, uniqueIdentifierDTypeDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 25_412),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_558),
-      ]),
-      attribute("class", "optional", classType, classDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 25_413),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_559),
-      ]),
-      attribute("lang", "optional", xsNormalizedStringType, xsNormalizedStringDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 25_418),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_564),
-      ]),
-      attribute("xml:lang", "optional", xmlLangType, xmlLangDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 25_419),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_565),
-      ]),
-      attribute("label", "optional", xsNormalizedStringType, xsNormalizedStringDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 25_420),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_566),
-      ]),
-      attribute("xml:base", "optional", xsAnyURIType, xsAnyURIDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 25_421),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_567),
-      ]),
-      defaulted(
-        "dir",
-        "optional",
-        dirType,
-        dirDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 25_422), xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_568)],
-        "auto",
-      ),
-      attribute("data-catalog-idref", "optional", xsIDREFType, xsIDREFSItemDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 25_437),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_583),
-      ]),
-      attribute(
-        "data-qti-suppress-tts",
-        "optional",
-        dataQtiSuppressTtsType,
-        dataQtiSuppressTtsDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 25_438), xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_584)],
-      ),
-      attribute(
-        "response-identifier",
-        "required",
-        uniqueIdentifierRefDTypeType,
-        xsIDREFSItemDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_380), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_539)],
-      ),
-      defaulted(
-        "base",
-        "optional",
-        xsIntType,
-        xsIntDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_381), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_540)],
-        "10",
-      ),
-      attribute("string-identifier", "optional", uniqueIdentifierRefDTypeType, xsIDREFSItemDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_382),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_541),
-      ]),
-      attribute(
-        "expected-length",
-        "optional",
-        xsNonNegativeIntegerType,
-        xsNonNegativeIntegerDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_383), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_542)],
-      ),
-      attribute("pattern-mask", "optional", xsStringType, xsStringDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_384),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_543),
-      ]),
-      attribute("placeholder-text", "optional", xsStringType, xsStringDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_385),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_544),
-      ]),
-      attribute("format", "optional", xsNormalizedStringType, xsNormalizedStringDomain, [
-        xsd(imsqtiAsiv3p0V1p0Xsd, 33_386),
-        xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_545),
-      ]),
-      attribute(
-        "data-patternmask-message",
-        "optional",
-        xsNormalizedStringType,
-        xsNormalizedStringDomain,
-        [xsd(imsqtiAsiv3p0V1p0Xsd, 33_387), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_546)],
-      ),
-    ],
-  ),
-  ...typeDeclares("{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}TrackDType", everyVersion, [
+  ...typeDeclares("TextEntryInteractionDType", everyVersion, [
+    attribute("role", "optional", roleType, roleDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_603),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_837),
+    ]),
+    attribute("aria-controls", "optional", xsIDREFSType, xsIDREFSDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_689),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_923),
+    ]),
+    attribute("aria-describedby", "optional", xsIDREFSType, xsIDREFSDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_690),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_924),
+    ]),
+    attribute("aria-flowto", "optional", xsIDREFSType, xsIDREFSDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_691),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_925),
+    ]),
+    attribute("aria-label", "optional", xsNormalizedStringType, xsNormalizedStringDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_692),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_926),
+    ]),
+    attribute("aria-labelledby", "optional", xsIDREFSType, xsIDREFSDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_693),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_927),
+    ]),
+    attribute("aria-level", "optional", aRIALevelIntegerDTypeType, aRIALevelIntegerDTypeDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_694),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_928),
+    ]),
+    defaulted(
+      "aria-live",
+      "optional",
+      ariaLiveType,
+      ariaLiveDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_695), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_929)],
+      "off",
+    ),
+    defaulted(
+      "aria-orientation",
+      "optional",
+      ariaOrientationType,
+      ariaOrientationDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_709), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_943)],
+      "horizontal",
+    ),
+    attribute("aria-owns", "optional", xsIDREFSType, xsIDREFSDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_722),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_956),
+    ]),
+    defaulted(
+      "aria-hidden",
+      "optional",
+      xsBooleanType,
+      xsBooleanDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_723), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_957)],
+      "false",
+    ),
+    attribute("aria-activedescendant", "optional", xsIDREFType, xsIDREFSItemDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_724),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_958),
+    ]),
+    defaulted(
+      "aria-atomic",
+      "optional",
+      xsBooleanType,
+      xsBooleanDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_725), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_959)],
+      "false",
+    ),
+    defaulted(
+      "aria-autocomplete",
+      "optional",
+      ariaAutocompleteType,
+      ariaAutocompleteDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_726), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_960)],
+      "none",
+    ),
+    defaulted(
+      "aria-busy",
+      "optional",
+      xsBooleanType,
+      xsBooleanDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_741), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_975)],
+      "false",
+    ),
+    defaulted(
+      "aria-checked",
+      "optional",
+      ariaCheckedType,
+      ariaCheckedDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_742), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_976)],
+      "undefined",
+    ),
+    defaulted(
+      "aria-disabled",
+      "optional",
+      xsBooleanType,
+      xsBooleanDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_757), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_991)],
+      "false",
+    ),
+    defaulted(
+      "aria-expanded",
+      "optional",
+      ariaExpandedType,
+      ariaExpandedDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_758), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_992)],
+      "undefined",
+    ),
+    defaulted(
+      "aria-haspopup",
+      "optional",
+      xsBooleanType,
+      xsBooleanDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_772), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_006)],
+      "false",
+    ),
+    defaulted(
+      "aria-invalid",
+      "optional",
+      ariaInvalidType,
+      ariaInvalidDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_773), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_007)],
+      "false",
+    ),
+    defaulted(
+      "aria-multiline",
+      "optional",
+      xsBooleanType,
+      xsBooleanDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_788), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_022)],
+      "false",
+    ),
+    defaulted(
+      "aria-multiselectable",
+      "optional",
+      xsBooleanType,
+      xsBooleanDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_789), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_023)],
+      "false",
+    ),
+    attribute("aria-posinset", "optional", aRIALevelIntegerDTypeType, aRIALevelIntegerDTypeDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_790),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_024),
+    ]),
+    defaulted(
+      "aria-pressed",
+      "optional",
+      ariaCheckedType,
+      ariaCheckedDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_791), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_025)],
+      "undefined",
+    ),
+    defaulted(
+      "aria-readonly",
+      "optional",
+      xsBooleanType,
+      xsBooleanDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_806), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_040)],
+      "false",
+    ),
+    defaulted(
+      "aria-relevant",
+      "optional",
+      ariaRelevantType,
+      ariaRelevantDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_807), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_041)],
+      "additions text",
+    ),
+    defaulted(
+      "aria-required",
+      "optional",
+      xsBooleanType,
+      xsBooleanDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_812), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_046)],
+      "false",
+    ),
+    defaulted(
+      "aria-selected",
+      "optional",
+      ariaExpandedType,
+      ariaExpandedDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_813), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_047)],
+      "undefined",
+    ),
+    attribute("aria-setsize", "optional", xsIntegerType, xsIntegerDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_827),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_061),
+    ]),
+    defaulted(
+      "aria-sort",
+      "optional",
+      ariaSortType,
+      ariaSortDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_828), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_062)],
+      "none",
+    ),
+    attribute("aria-valuemax", "optional", xsDecimalType, xsDecimalDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_843),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_077),
+    ]),
+    attribute("aria-valuemin", "optional", xsDecimalType, xsDecimalDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_844),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_078),
+    ]),
+    attribute("aria-valuenow", "optional", xsDecimalType, xsDecimalDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_845),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_079),
+    ]),
+    attribute("aria-valuetext", "optional", xsStringType, xsStringDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_846),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_080),
+    ]),
+    defaulted(
+      "aria-modal",
+      "optional",
+      xsBooleanType,
+      xsBooleanDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_847), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_081)],
+      "false",
+    ),
+    defaulted(
+      "aria-current",
+      "optional",
+      ariaCurrentType,
+      ariaCurrentDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_848), xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_082)],
+      "false",
+    ),
+    attribute("aria-placeholder", "optional", xsStringType, xsStringDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_869),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_103),
+    ]),
+    attribute("aria-colcount", "optional", xsNonNegativeIntegerType, xsNonNegativeIntegerDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_870),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_104),
+    ]),
+    attribute("aria-rowcount", "optional", xsNonNegativeIntegerType, xsNonNegativeIntegerDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_871),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_105),
+    ]),
+    attribute("aria-colindex", "optional", xsNonNegativeIntegerType, xsNonNegativeIntegerDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_872),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_106),
+    ]),
+    attribute("aria-rowindex", "optional", xsNonNegativeIntegerType, xsNonNegativeIntegerDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_873),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_107),
+    ]),
+    attribute("aria-colspan", "optional", xsNonNegativeIntegerType, xsNonNegativeIntegerDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_874),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_108),
+    ]),
+    attribute("aria-rowspan", "optional", xsNonNegativeIntegerType, xsNonNegativeIntegerDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_875),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_109),
+    ]),
+    attribute("aria-keyshorts", "optional", xsStringType, xsStringDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_876),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_110),
+    ]),
+    attribute("aria-roledescription", "optional", xsStringType, xsStringDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_877),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_111),
+    ]),
+    attribute("aria-errormessage", "optional", xsIDREFType, xsIDREFSItemDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_878),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_112),
+    ]),
+    attribute("aria-details", "optional", xsIDREFType, xsIDREFSItemDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_879),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_113),
+    ]),
+    attribute("id", "optional", uniqueIdentifierDTypeType, uniqueIdentifierDTypeDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 25_412),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_558),
+    ]),
+    attribute("class", "optional", classType, classDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 25_413),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_559),
+    ]),
+    attribute("lang", "optional", xsNormalizedStringType, xsNormalizedStringDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 25_418),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_564),
+    ]),
+    attribute("xml:lang", "optional", xmlLangType, xmlLangDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 25_419),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_565),
+    ]),
+    attribute("label", "optional", xsNormalizedStringType, xsNormalizedStringDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 25_420),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_566),
+    ]),
+    attribute("xml:base", "optional", xsAnyURIType, xsAnyURIDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 25_421),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_567),
+    ]),
+    defaulted(
+      "dir",
+      "optional",
+      dirType,
+      dirDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 25_422), xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_568)],
+      "auto",
+    ),
+    attribute("data-catalog-idref", "optional", xsIDREFType, xsIDREFSItemDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 25_437),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_583),
+    ]),
+    attribute(
+      "data-qti-suppress-tts",
+      "optional",
+      dataQtiSuppressTtsType,
+      dataQtiSuppressTtsDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 25_438), xsd(imsqtiAsiv3p0p1V1p0Xsd, 25_584)],
+    ),
+    attribute("response-identifier", "required", uniqueIdentifierRefDTypeType, xsIDREFSItemDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_380),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_539),
+    ]),
+    defaulted(
+      "base",
+      "optional",
+      xsIntType,
+      xsIntDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_381), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_540)],
+      "10",
+    ),
+    attribute("string-identifier", "optional", uniqueIdentifierRefDTypeType, xsIDREFSItemDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_382),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_541),
+    ]),
+    attribute("expected-length", "optional", xsNonNegativeIntegerType, xsNonNegativeIntegerDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_383),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_542),
+    ]),
+    attribute("pattern-mask", "optional", xsStringType, xsStringDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_384),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_543),
+    ]),
+    attribute("placeholder-text", "optional", xsStringType, xsStringDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_385),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_544),
+    ]),
+    attribute("format", "optional", xsNormalizedStringType, xsNormalizedStringDomain, [
+      xsd(imsqtiAsiv3p0V1p0Xsd, 33_386),
+      xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_545),
+    ]),
+    attribute(
+      "data-patternmask-message",
+      "optional",
+      xsNormalizedStringType,
+      xsNormalizedStringDomain,
+      [xsd(imsqtiAsiv3p0V1p0Xsd, 33_387), xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_546)],
+    ),
+  ]),
+  ...typeDeclares("TrackDType", everyVersion, [
     attribute("role", "optional", roleType, roleDomain, [
       xsd(imsqtiAsiv3p0V1p0Xsd, 33_603),
       xsd(imsqtiAsiv3p0p1V1p0Xsd, 33_837),
@@ -34355,7 +34344,7 @@ export const typeAttributeDeclarations: readonly TypeAttributeDeclaration[] = [
     ]),
   ]),
   ...typeDeclares(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}TrackDType",
+    "TrackDType",
     ["3.0.0"],
     [
       attribute("default", "optional", xsBooleanType, xsBooleanDomain, [
@@ -34364,7 +34353,7 @@ export const typeAttributeDeclarations: readonly TypeAttributeDeclaration[] = [
     ],
   ),
   ...typeDeclares(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}TrackDType",
+    "TrackDType",
     ["3.0.1"],
     [
       attribute("default", "optional", defaultType, defaultDomain, [
@@ -34372,7 +34361,7 @@ export const typeAttributeDeclarations: readonly TypeAttributeDeclaration[] = [
       ]),
     ],
   ),
-  ...typeDeclares("{http://www.imsglobal.org/xsd/imsqti_usagedata_v3p0}ValueDType", everyVersion, [
+  ...typeDeclares("ud:ValueDType", everyVersion, [
     attribute("fieldIdentifier", "optional", identifierDTypeType, identifierDTypeDomain, [
       xsd(usagedataImsqtiUsagedatav3p0V1p0Xsd, 290),
       xsd(usagedataImsqtiUsagedatav3p0V1p0Xsd, 290),
@@ -34382,7 +34371,7 @@ export const typeAttributeDeclarations: readonly TypeAttributeDeclaration[] = [
       xsd(usagedataImsqtiUsagedatav3p0V1p0Xsd, 291),
     ]),
   ]),
-  ...typeDeclares("{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}ValueDType", everyVersion, [
+  ...typeDeclares("ValueDType", everyVersion, [
     attribute("field-identifier", "optional", identifierDTypeType, identifierDTypeDomain, [
       xsd(imsqtiAsiv3p0V1p0Xsd, 34_672),
       xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_906),
@@ -34392,7 +34381,7 @@ export const typeAttributeDeclarations: readonly TypeAttributeDeclaration[] = [
       xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_907),
     ]),
   ]),
-  ...typeDeclares("{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}FileHrefCardDType", everyVersion, [
+  ...typeDeclares("FileHrefCardDType", everyVersion, [
     attribute("mime-type", "required", mimeTypeDTypeType, mimeTypeDTypeDomain, [
       xsd(imsqtiAsiv3p0V1p0Xsd, 34_028),
       xsd(imsqtiAsiv3p0p1V1p0Xsd, 34_262),
@@ -34404,96 +34393,21 @@ export const typeAttributeDeclarations: readonly TypeAttributeDeclaration[] = [
  * The attribute wildcard of every such complex type.
  */
 export const typeAttributeWildcards: readonly TypeAttributeWildcard[] = [
-  typeWildcard(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}AssessmentSectionRefDType",
-    everyVersion,
-    "##any",
-    "lax",
-  ),
-  typeWildcard(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}AssessmentStimulusRefDType",
-    everyVersion,
-    "##any",
-    "lax",
-  ),
-  typeWildcard(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}BaseSequenceEmptyDType",
-    everyVersion,
-    "##any",
-    "lax",
-  ),
-  typeWildcard(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}BaseSequenceXBaseEmptyDType",
-    everyVersion,
-    "##any",
-    "lax",
-  ),
-  typeWildcard(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}AssociableHotspotDType",
-    everyVersion,
-    "##any",
-    "lax",
-  ),
-  typeWildcard(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}BRDType",
-    everyVersion,
-    "##any",
-    "lax",
-  ),
-  typeWildcard(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}ColDType",
-    everyVersion,
-    "##any",
-    "lax",
-  ),
-  typeWildcard(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}EndAttemptInteractionDType",
-    everyVersion,
-    "##any",
-    "lax",
-  ),
-  typeWildcard(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}GapDType",
-    everyVersion,
-    "##any",
-    "lax",
-  ),
-  typeWildcard(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}HRDType",
-    everyVersion,
-    "##any",
-    "lax",
-  ),
-  typeWildcard(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}HotspotChoiceDType",
-    everyVersion,
-    "##any",
-    "lax",
-  ),
-  typeWildcard(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}ImgDType",
-    everyVersion,
-    "##any",
-    "lax",
-  ),
-  typeWildcard(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}SourceDType",
-    everyVersion,
-    "##any",
-    "lax",
-  ),
-  typeWildcard(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}TextEntryInteractionDType",
-    everyVersion,
-    "##any",
-    "lax",
-  ),
-  typeWildcard(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}TrackDType",
-    everyVersion,
-    "##any",
-    "lax",
-  ),
+  typeWildcard("AssessmentSectionRefDType", everyVersion, "##any", "lax"),
+  typeWildcard("AssessmentStimulusRefDType", everyVersion, "##any", "lax"),
+  typeWildcard("BaseSequenceEmptyDType", everyVersion, "##any", "lax"),
+  typeWildcard("BaseSequenceXBaseEmptyDType", everyVersion, "##any", "lax"),
+  typeWildcard("AssociableHotspotDType", everyVersion, "##any", "lax"),
+  typeWildcard("BRDType", everyVersion, "##any", "lax"),
+  typeWildcard("ColDType", everyVersion, "##any", "lax"),
+  typeWildcard("EndAttemptInteractionDType", everyVersion, "##any", "lax"),
+  typeWildcard("GapDType", everyVersion, "##any", "lax"),
+  typeWildcard("HRDType", everyVersion, "##any", "lax"),
+  typeWildcard("HotspotChoiceDType", everyVersion, "##any", "lax"),
+  typeWildcard("ImgDType", everyVersion, "##any", "lax"),
+  typeWildcard("SourceDType", everyVersion, "##any", "lax"),
+  typeWildcard("TextEntryInteractionDType", everyVersion, "##any", "lax"),
+  typeWildcard("TrackDType", everyVersion, "##any", "lax"),
 ];
 
 /**
@@ -34502,722 +34416,252 @@ export const typeAttributeWildcards: readonly TypeAttributeWildcard[] = [
  * that type (spec readings 60 and 75).
  */
 export const typeTexts: readonly TypeText[] = [
+  typeText("xs:anySimpleType", everyVersion, xsAnySimpleTypeType, xsAnySimpleTypeDomain),
+  typeText("xs:anyURI", everyVersion, xsAnyURIType, xsAnyURIDomain),
+  typeText("xs:base64Binary", everyVersion, xsBase64BinaryType, mCbytesTextDomain),
+  typeText("xs:boolean", everyVersion, xsBooleanType, xsBooleanDomain),
+  typeText("xs:date", everyVersion, xsDateType, xsDateDomain),
+  typeText("xs:dateTime", everyVersion, xsDateTimeType, xsDateTimeDomain),
+  typeText("xs:decimal", everyVersion, xsDecimalType, xsDecimalDomain),
+  typeText("xs:double", everyVersion, xsDoubleType, toleranceItemMember2Domain),
+  typeText("xs:duration", everyVersion, xsDurationType, xsDurationDomain),
+  typeText("xs:float", everyVersion, xsFloatType, xsFloatDomain),
+  typeText("xs:gDay", everyVersion, xsGDayType, xsGDayDomain),
+  typeText("xs:gMonth", everyVersion, xsGMonthType, xsGMonthDomain),
+  typeText("xs:gMonthDay", everyVersion, xsGMonthDayType, xsGMonthDayDomain),
+  typeText("xs:gYear", everyVersion, xsGYearType, xsGYearDomain),
+  typeText("xs:gYearMonth", everyVersion, xsGYearMonthType, xsGYearMonthDomain),
+  typeText("xs:hexBinary", everyVersion, xsHexBinaryType, xsHexBinaryDomain),
+  typeText("xs:NOTATION", everyVersion, xsNOTATIONType, xsNOTATIONDomain),
+  typeText("xs:QName", everyVersion, xsiTypeType, roleDatatypeItemDomain),
+  typeText("xs:string", everyVersion, xsStringType, xsStringDomain),
+  typeText("xs:time", everyVersion, xsTimeType, xsTimeDomain),
+  typeText("xs:ENTITIES", everyVersion, xsENTITIESType, xsENTITIESDomain),
+  typeText("xs:ENTITY", everyVersion, xsENTITYType, xsENTITIESItemDomain),
+  typeText("xs:ID", everyVersion, xsIDType, uniqueIdentifierDTypeDomain),
+  typeText("xs:IDREF", everyVersion, xsIDREFType, xsIDREFSItemDomain),
+  typeText("xs:IDREFS", everyVersion, xsIDREFSType, xsIDREFSDomain),
+  typeText("xs:NCName", everyVersion, xsNCNameType, identifierDTypeDomain),
+  typeText("xs:NMTOKEN", everyVersion, xsNMTOKENType, xsNMTOKENSItemDomain),
+  typeText("xs:NMTOKENS", everyVersion, xsNMTOKENSType, xsNMTOKENSDomain),
+  typeText("xs:Name", everyVersion, xsNameType, xsNameDomain),
+  typeText("xs:byte", everyVersion, xsByteType, xsByteDomain),
+  typeText("xs:int", everyVersion, xsIntType, xsIntDomain),
+  typeText("xs:integer", everyVersion, xsIntegerType, xsIntegerDomain),
+  typeText("xs:language", everyVersion, xsLanguageType, xmlLangMember1Domain),
+  typeText("xs:long", everyVersion, xsLongType, xsLongDomain),
+  typeText("xs:negativeInteger", everyVersion, xsNegativeIntegerType, xsNegativeIntegerDomain),
   typeText(
-    "{http://www.w3.org/2001/XMLSchema}anySimpleType",
-    everyVersion,
-    xsAnySimpleTypeType,
-    xsAnySimpleTypeDomain,
-  ),
-  typeText("{http://www.w3.org/2001/XMLSchema}anyURI", everyVersion, xsAnyURIType, xsAnyURIDomain),
-  typeText(
-    "{http://www.w3.org/2001/XMLSchema}base64Binary",
-    everyVersion,
-    xsBase64BinaryType,
-    mCbytesTextDomain,
-  ),
-  typeText(
-    "{http://www.w3.org/2001/XMLSchema}boolean",
-    everyVersion,
-    xsBooleanType,
-    xsBooleanDomain,
-  ),
-  typeText("{http://www.w3.org/2001/XMLSchema}date", everyVersion, xsDateType, xsDateDomain),
-  typeText(
-    "{http://www.w3.org/2001/XMLSchema}dateTime",
-    everyVersion,
-    xsDateTimeType,
-    xsDateTimeDomain,
-  ),
-  typeText(
-    "{http://www.w3.org/2001/XMLSchema}decimal",
-    everyVersion,
-    xsDecimalType,
-    xsDecimalDomain,
-  ),
-  typeText(
-    "{http://www.w3.org/2001/XMLSchema}double",
-    everyVersion,
-    xsDoubleType,
-    toleranceItemMember2Domain,
-  ),
-  typeText(
-    "{http://www.w3.org/2001/XMLSchema}duration",
-    everyVersion,
-    xsDurationType,
-    xsDurationDomain,
-  ),
-  typeText("{http://www.w3.org/2001/XMLSchema}float", everyVersion, xsFloatType, xsFloatDomain),
-  typeText("{http://www.w3.org/2001/XMLSchema}gDay", everyVersion, xsGDayType, xsGDayDomain),
-  typeText("{http://www.w3.org/2001/XMLSchema}gMonth", everyVersion, xsGMonthType, xsGMonthDomain),
-  typeText(
-    "{http://www.w3.org/2001/XMLSchema}gMonthDay",
-    everyVersion,
-    xsGMonthDayType,
-    xsGMonthDayDomain,
-  ),
-  typeText("{http://www.w3.org/2001/XMLSchema}gYear", everyVersion, xsGYearType, xsGYearDomain),
-  typeText(
-    "{http://www.w3.org/2001/XMLSchema}gYearMonth",
-    everyVersion,
-    xsGYearMonthType,
-    xsGYearMonthDomain,
-  ),
-  typeText(
-    "{http://www.w3.org/2001/XMLSchema}hexBinary",
-    everyVersion,
-    xsHexBinaryType,
-    xsHexBinaryDomain,
-  ),
-  typeText(
-    "{http://www.w3.org/2001/XMLSchema}NOTATION",
-    everyVersion,
-    xsNOTATIONType,
-    xsNOTATIONDomain,
-  ),
-  typeText(
-    "{http://www.w3.org/2001/XMLSchema}QName",
-    everyVersion,
-    xsiTypeType,
-    roleDatatypeItemDomain,
-  ),
-  typeText("{http://www.w3.org/2001/XMLSchema}string", everyVersion, xsStringType, xsStringDomain),
-  typeText("{http://www.w3.org/2001/XMLSchema}time", everyVersion, xsTimeType, xsTimeDomain),
-  typeText(
-    "{http://www.w3.org/2001/XMLSchema}ENTITIES",
-    everyVersion,
-    xsENTITIESType,
-    xsENTITIESDomain,
-  ),
-  typeText(
-    "{http://www.w3.org/2001/XMLSchema}ENTITY",
-    everyVersion,
-    xsENTITYType,
-    xsENTITIESItemDomain,
-  ),
-  typeText(
-    "{http://www.w3.org/2001/XMLSchema}ID",
-    everyVersion,
-    xsIDType,
-    uniqueIdentifierDTypeDomain,
-  ),
-  typeText(
-    "{http://www.w3.org/2001/XMLSchema}IDREF",
-    everyVersion,
-    xsIDREFType,
-    xsIDREFSItemDomain,
-  ),
-  typeText("{http://www.w3.org/2001/XMLSchema}IDREFS", everyVersion, xsIDREFSType, xsIDREFSDomain),
-  typeText(
-    "{http://www.w3.org/2001/XMLSchema}NCName",
-    everyVersion,
-    xsNCNameType,
-    identifierDTypeDomain,
-  ),
-  typeText(
-    "{http://www.w3.org/2001/XMLSchema}NMTOKEN",
-    everyVersion,
-    xsNMTOKENType,
-    xsNMTOKENSItemDomain,
-  ),
-  typeText(
-    "{http://www.w3.org/2001/XMLSchema}NMTOKENS",
-    everyVersion,
-    xsNMTOKENSType,
-    xsNMTOKENSDomain,
-  ),
-  typeText("{http://www.w3.org/2001/XMLSchema}Name", everyVersion, xsNameType, xsNameDomain),
-  typeText("{http://www.w3.org/2001/XMLSchema}byte", everyVersion, xsByteType, xsByteDomain),
-  typeText("{http://www.w3.org/2001/XMLSchema}int", everyVersion, xsIntType, xsIntDomain),
-  typeText(
-    "{http://www.w3.org/2001/XMLSchema}integer",
-    everyVersion,
-    xsIntegerType,
-    xsIntegerDomain,
-  ),
-  typeText(
-    "{http://www.w3.org/2001/XMLSchema}language",
-    everyVersion,
-    xsLanguageType,
-    xmlLangMember1Domain,
-  ),
-  typeText("{http://www.w3.org/2001/XMLSchema}long", everyVersion, xsLongType, xsLongDomain),
-  typeText(
-    "{http://www.w3.org/2001/XMLSchema}negativeInteger",
-    everyVersion,
-    xsNegativeIntegerType,
-    xsNegativeIntegerDomain,
-  ),
-  typeText(
-    "{http://www.w3.org/2001/XMLSchema}nonNegativeInteger",
+    "xs:nonNegativeInteger",
     everyVersion,
     xsNonNegativeIntegerType,
     xsNonNegativeIntegerDomain,
   ),
   typeText(
-    "{http://www.w3.org/2001/XMLSchema}nonPositiveInteger",
+    "xs:nonPositiveInteger",
     everyVersion,
     xsNonPositiveIntegerType,
     xsNonPositiveIntegerDomain,
   ),
+  typeText("xs:normalizedString", everyVersion, xsNormalizedStringType, xsNormalizedStringDomain),
+  typeText("xs:positiveInteger", everyVersion, xsPositiveIntegerType, mPositiveIntegerDomain),
+  typeText("xs:short", everyVersion, xsShortType, xsShortDomain),
+  typeText("xs:token", everyVersion, xsTokenType, xsTokenDomain),
+  typeText("xs:unsignedByte", everyVersion, xsUnsignedByteType, xsUnsignedByteDomain),
+  typeText("xs:unsignedInt", everyVersion, xsUnsignedIntType, xsUnsignedIntDomain),
+  typeText("xs:unsignedLong", everyVersion, xsUnsignedLongType, mUnsignedIntegerDomain),
+  typeText("xs:unsignedShort", everyVersion, xsUnsignedShortType, xsUnsignedShortDomain),
+  typeText("IdentifierListDType", everyVersion, identifierListDTypeType, identifierDTypeDomain),
+  typeText("IntegerListDType", everyVersion, integerListDTypeType, xsIntDomain),
+  typeText("MimeTypeListDType", everyVersion, mimeTypeListDTypeType, mimeTypeDTypeDomain),
+  typeText("StringListDType", everyVersion, stringListDTypeType, xsStringDomain),
+  typeText("ToleranceListDType", everyVersion, toleranceListDTypeType, toleranceItemDomain),
   typeText(
-    "{http://www.w3.org/2001/XMLSchema}normalizedString",
-    everyVersion,
-    xsNormalizedStringType,
-    xsNormalizedStringDomain,
-  ),
-  typeText(
-    "{http://www.w3.org/2001/XMLSchema}positiveInteger",
-    everyVersion,
-    xsPositiveIntegerType,
-    mPositiveIntegerDomain,
-  ),
-  typeText("{http://www.w3.org/2001/XMLSchema}short", everyVersion, xsShortType, xsShortDomain),
-  typeText("{http://www.w3.org/2001/XMLSchema}token", everyVersion, xsTokenType, xsTokenDomain),
-  typeText(
-    "{http://www.w3.org/2001/XMLSchema}unsignedByte",
-    everyVersion,
-    xsUnsignedByteType,
-    xsUnsignedByteDomain,
-  ),
-  typeText(
-    "{http://www.w3.org/2001/XMLSchema}unsignedInt",
-    everyVersion,
-    xsUnsignedIntType,
-    xsUnsignedIntDomain,
-  ),
-  typeText(
-    "{http://www.w3.org/2001/XMLSchema}unsignedLong",
-    everyVersion,
-    xsUnsignedLongType,
-    mUnsignedIntegerDomain,
-  ),
-  typeText(
-    "{http://www.w3.org/2001/XMLSchema}unsignedShort",
-    everyVersion,
-    xsUnsignedShortType,
-    xsUnsignedShortDomain,
-  ),
-  typeText(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}IdentifierListDType",
-    everyVersion,
-    identifierListDTypeType,
-    identifierDTypeDomain,
-  ),
-  typeText(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}IntegerListDType",
-    everyVersion,
-    integerListDTypeType,
-    xsIntDomain,
-  ),
-  typeText(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}MimeTypeListDType",
-    everyVersion,
-    mimeTypeListDTypeType,
-    mimeTypeDTypeDomain,
-  ),
-  typeText(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}StringListDType",
-    everyVersion,
-    stringListDTypeType,
-    xsStringDomain,
-  ),
-  typeText(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}ToleranceListDType",
-    everyVersion,
-    toleranceListDTypeType,
-    toleranceItemDomain,
-  ),
-  typeText(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}ARIARelevantListDType",
+    "ARIARelevantListDType",
     everyVersion,
     aRIARelevantListDTypeType,
     ariaRelevantItemDomain,
   ),
+  typeText("ViewEnumDType", everyVersion, viewEnumDTypeType, viewItemDomain),
   typeText(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}ViewEnumDType",
-    everyVersion,
-    viewEnumDTypeType,
-    viewItemDomain,
-  ),
-  typeText(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}ARIALevelIntegerDType",
+    "ARIALevelIntegerDType",
     everyVersion,
     aRIALevelIntegerDTypeType,
     aRIALevelIntegerDTypeDomain,
   ),
+  typeText("CoordsDType", everyVersion, coordsDTypeType, coordsDTypeDomain),
   typeText(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}CoordsDType",
-    everyVersion,
-    coordsDTypeType,
-    coordsDTypeDomain,
-  ),
-  typeText(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}EncVariableStringDType",
+    "EncVariableStringDType",
     everyVersion,
     encVariableStringDTypeType,
     patternMember2Domain,
   ),
+  typeText("FileHrefDType", everyVersion, qtiFileHrefTextType, xsAnyURIDomain),
+  typeText("IdentifierDType", everyVersion, identifierDTypeType, identifierDTypeDomain),
+  typeText("LengthDType", everyVersion, lengthDTypeType, lengthDTypeDomain),
+  typeText("MimeTypeDType", everyVersion, mimeTypeDTypeType, mimeTypeDTypeDomain),
   typeText(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}FileHrefDType",
-    everyVersion,
-    qtiFileHrefTextType,
-    xsAnyURIDomain,
-  ),
-  typeText(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}IdentifierDType",
-    everyVersion,
-    identifierDTypeType,
-    identifierDTypeDomain,
-  ),
-  typeText(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}LengthDType",
-    everyVersion,
-    lengthDTypeType,
-    lengthDTypeDomain,
-  ),
-  typeText(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}MimeTypeDType",
-    everyVersion,
-    mimeTypeDTypeType,
-    mimeTypeDTypeDomain,
-  ),
-  typeText(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}NonNegativeDoubleDType",
+    "NonNegativeDoubleDType",
     everyVersion,
     nonNegativeDoubleDTypeType,
     nonNegativeDoubleDTypeDomain,
   ),
+  typeText("SupportExtStringDType", everyVersion, supportExtStringDTypeType, useMember1Domain),
+  typeText("URLDType", everyVersion, uRLDTypeType, xsNormalizedStringDomain),
   typeText(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}SupportExtStringDType",
-    everyVersion,
-    supportExtStringDTypeType,
-    useMember1Domain,
-  ),
-  typeText(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}URLDType",
-    everyVersion,
-    uRLDTypeType,
-    xsNormalizedStringDomain,
-  ),
-  typeText(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}UniqueIdentifierDType",
+    "UniqueIdentifierDType",
     everyVersion,
     uniqueIdentifierDTypeType,
     uniqueIdentifierDTypeDomain,
   ),
   typeText(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}UniqueIdentifierRefDType",
+    "UniqueIdentifierRefDType",
     everyVersion,
     uniqueIdentifierRefDTypeType,
     xsIDREFSItemDomain,
   ),
+  typeText("UseExtensionStringDType", everyVersion, useExtensionStringDTypeType, useMember1Domain),
+  typeText("VariableStringDType", everyVersion, variableStringDTypeType, baseMember2Domain),
   typeText(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}UseExtensionStringDType",
-    everyVersion,
-    useExtensionStringDTypeType,
-    useMember1Domain,
-  ),
-  typeText(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}VariableStringDType",
-    everyVersion,
-    variableStringDTypeType,
-    baseMember2Domain,
-  ),
-  typeText(
-    "{http://www.imsglobal.org/xsd/qti/qtiv3p0/imsafa3p0drd_v1p0}ExtensionString.Type",
+    "drd:ExtensionString.Type",
     everyVersion,
     extensionStringTypeType,
     drdAccessModeTextMember2Domain,
   ),
+  typeText("qmd:String256DType", everyVersion, qmdToolNameTextType, qmdToolNameTextDomain),
+  typeText("ud:DateDType", everyVersion, dateDTypeType, dateDTypeDomain),
+  typeText("ud:IdentifierDType", everyVersion, identifierDTypeType, identifierDTypeDomain),
+  typeText("m:SymbolName", everyVersion, mSymbolNameType, identifierDTypeDomain),
+  typeText("m:base64", everyVersion, mCbytesTextType, mCbytesTextDomain),
+  typeText("m:mpadded-length", everyVersion, mMpaddedLengthType, mMpaddedLengthDomain),
+  typeText("m:linestyle", everyVersion, mLinestyleType, columnlinesItemDomain),
+  typeText("m:verticalalign", everyVersion, mVerticalalignType, rowalignItemDomain),
+  typeText("m:columnalignstyle", everyVersion, mColumnalignstyleType, numalignDomain),
+  typeText("m:notationstyle", everyVersion, mNotationstyleType, mNotationstyleDomain),
+  typeText("m:unsigned-integer", everyVersion, mUnsignedIntegerType, mUnsignedIntegerDomain),
+  typeText("m:integer", everyVersion, mIntegerType, xsIntegerDomain),
+  typeText("m:number", everyVersion, mNumberType, xsDecimalDomain),
+  typeText("m:character", everyVersion, mCharacterType, mCharacterDomain),
+  typeText("m:color", everyVersion, mColorType, mColorDomain),
+  typeText("m:group-alignment", everyVersion, mGroupAlignmentType, groupalignDomain),
   typeText(
-    "{http://www.imsglobal.org/xsd/imsqti_metadata_v3p0}String256DType",
-    everyVersion,
-    qmdToolNameTextType,
-    qmdToolNameTextDomain,
-  ),
-  typeText(
-    "{http://www.imsglobal.org/xsd/imsqti_usagedata_v3p0}DateDType",
-    everyVersion,
-    dateDTypeType,
-    dateDTypeDomain,
-  ),
-  typeText(
-    "{http://www.imsglobal.org/xsd/imsqti_usagedata_v3p0}IdentifierDType",
-    everyVersion,
-    identifierDTypeType,
-    identifierDTypeDomain,
-  ),
-  typeText(
-    "{http://www.w3.org/1998/Math/MathML}SymbolName",
-    everyVersion,
-    mSymbolNameType,
-    identifierDTypeDomain,
-  ),
-  typeText(
-    "{http://www.w3.org/1998/Math/MathML}base64",
-    everyVersion,
-    mCbytesTextType,
-    mCbytesTextDomain,
-  ),
-  typeText(
-    "{http://www.w3.org/1998/Math/MathML}mpadded-length",
-    everyVersion,
-    mMpaddedLengthType,
-    mMpaddedLengthDomain,
-  ),
-  typeText(
-    "{http://www.w3.org/1998/Math/MathML}linestyle",
-    everyVersion,
-    mLinestyleType,
-    columnlinesItemDomain,
-  ),
-  typeText(
-    "{http://www.w3.org/1998/Math/MathML}verticalalign",
-    everyVersion,
-    mVerticalalignType,
-    rowalignItemDomain,
-  ),
-  typeText(
-    "{http://www.w3.org/1998/Math/MathML}columnalignstyle",
-    everyVersion,
-    mColumnalignstyleType,
-    numalignDomain,
-  ),
-  typeText(
-    "{http://www.w3.org/1998/Math/MathML}notationstyle",
-    everyVersion,
-    mNotationstyleType,
-    mNotationstyleDomain,
-  ),
-  typeText(
-    "{http://www.w3.org/1998/Math/MathML}unsigned-integer",
-    everyVersion,
-    mUnsignedIntegerType,
-    mUnsignedIntegerDomain,
-  ),
-  typeText(
-    "{http://www.w3.org/1998/Math/MathML}integer",
-    everyVersion,
-    mIntegerType,
-    xsIntegerDomain,
-  ),
-  typeText(
-    "{http://www.w3.org/1998/Math/MathML}number",
-    everyVersion,
-    mNumberType,
-    xsDecimalDomain,
-  ),
-  typeText(
-    "{http://www.w3.org/1998/Math/MathML}character",
-    everyVersion,
-    mCharacterType,
-    mCharacterDomain,
-  ),
-  typeText("{http://www.w3.org/1998/Math/MathML}color", everyVersion, mColorType, mColorDomain),
-  typeText(
-    "{http://www.w3.org/1998/Math/MathML}group-alignment",
-    everyVersion,
-    mGroupAlignmentType,
-    groupalignDomain,
-  ),
-  typeText(
-    "{http://www.w3.org/1998/Math/MathML}group-alignment-list",
+    "m:group-alignment-list",
     everyVersion,
     mGroupAlignmentListType,
     mGroupAlignmentListDomain,
   ),
   typeText(
-    "{http://www.w3.org/1998/Math/MathML}group-alignment-list-list",
+    "m:group-alignment-list-list",
     everyVersion,
     mGroupAlignmentListListType,
     mGroupAlignmentListListDomain,
   ),
+  typeText("m:positive-integer", everyVersion, mPositiveIntegerType, mPositiveIntegerDomain),
+  typeText("m:length", everyVersion, mLengthType, mathsizeMember1Domain),
+  typeText("xi:parseType", everyVersion, xiParseTypeType, xiParseTypeDomain),
+  typeText("ssml:duration", everyVersion, durationType, timedesignationDatatypeDomain),
+  typeText("ssml:number", everyVersion, numberType, rateDatatypeMember1Domain),
+  typeText("ssml:relative", everyVersion, relativeType, relativeDomain),
+  typeText("ssml:percent", everyVersion, percentType, pitchDatatypeMember3Domain),
+  typeText("ssml:nonnegpercent", everyVersion, nonnegpercentType, rateDatatypeMember2Domain),
+  typeText("ssml:semitone", everyVersion, semitoneType, pitchDatatypeMember4Domain),
+  typeText("ssml:hertz.number", everyVersion, hertzNumberType, pitchDatatypeMember1Domain),
+  typeText("ssml:hertz.relative", everyVersion, hertzRelativeType, pitchDatatypeMember2Domain),
+  typeText("ssml:db.datatype", everyVersion, dbDatatypeType, volumeDatatypeMember1Domain),
+  typeText("ssml:height.scale", everyVersion, heightScaleType, pitchDatatypeMember5Domain),
+  typeText("ssml:speed.scale", everyVersion, speedScaleType, rateDatatypeMember3Domain),
+  typeText("ssml:volume.scale", everyVersion, volumeScaleType, volumeDatatypeMember2Domain),
+  typeText("ssml:pitch.datatype", everyVersion, pitchDatatypeType, pitchDatatypeDomain),
+  typeText("ssml:range.datatype", everyVersion, rangeDatatypeType, pitchDatatypeDomain),
+  typeText("ssml:rate.datatype", everyVersion, rateDatatypeType, rateDatatypeDomain),
+  typeText("ssml:volume.datatype", everyVersion, volumeDatatypeType, volumeDatatypeDomain),
   typeText(
-    "{http://www.w3.org/1998/Math/MathML}positive-integer",
-    everyVersion,
-    mPositiveIntegerType,
-    mPositiveIntegerDomain,
-  ),
-  typeText(
-    "{http://www.w3.org/1998/Math/MathML}length",
-    everyVersion,
-    mLengthType,
-    mathsizeMember1Domain,
-  ),
-  typeText(
-    "{http://www.w3.org/2001/XInclude}parseType",
-    everyVersion,
-    xiParseTypeType,
-    xiParseTypeDomain,
-  ),
-  typeText(
-    "{http://www.w3.org/2001/10/synthesis}duration",
-    everyVersion,
-    durationType,
-    timedesignationDatatypeDomain,
-  ),
-  typeText(
-    "{http://www.w3.org/2001/10/synthesis}number",
-    everyVersion,
-    numberType,
-    rateDatatypeMember1Domain,
-  ),
-  typeText(
-    "{http://www.w3.org/2001/10/synthesis}relative",
-    everyVersion,
-    relativeType,
-    relativeDomain,
-  ),
-  typeText(
-    "{http://www.w3.org/2001/10/synthesis}percent",
-    everyVersion,
-    percentType,
-    pitchDatatypeMember3Domain,
-  ),
-  typeText(
-    "{http://www.w3.org/2001/10/synthesis}nonnegpercent",
-    everyVersion,
-    nonnegpercentType,
-    rateDatatypeMember2Domain,
-  ),
-  typeText(
-    "{http://www.w3.org/2001/10/synthesis}semitone",
-    everyVersion,
-    semitoneType,
-    pitchDatatypeMember4Domain,
-  ),
-  typeText(
-    "{http://www.w3.org/2001/10/synthesis}hertz.number",
-    everyVersion,
-    hertzNumberType,
-    pitchDatatypeMember1Domain,
-  ),
-  typeText(
-    "{http://www.w3.org/2001/10/synthesis}hertz.relative",
-    everyVersion,
-    hertzRelativeType,
-    pitchDatatypeMember2Domain,
-  ),
-  typeText(
-    "{http://www.w3.org/2001/10/synthesis}db.datatype",
-    everyVersion,
-    dbDatatypeType,
-    volumeDatatypeMember1Domain,
-  ),
-  typeText(
-    "{http://www.w3.org/2001/10/synthesis}height.scale",
-    everyVersion,
-    heightScaleType,
-    pitchDatatypeMember5Domain,
-  ),
-  typeText(
-    "{http://www.w3.org/2001/10/synthesis}speed.scale",
-    everyVersion,
-    speedScaleType,
-    rateDatatypeMember3Domain,
-  ),
-  typeText(
-    "{http://www.w3.org/2001/10/synthesis}volume.scale",
-    everyVersion,
-    volumeScaleType,
-    volumeDatatypeMember2Domain,
-  ),
-  typeText(
-    "{http://www.w3.org/2001/10/synthesis}pitch.datatype",
-    everyVersion,
-    pitchDatatypeType,
-    pitchDatatypeDomain,
-  ),
-  typeText(
-    "{http://www.w3.org/2001/10/synthesis}range.datatype",
-    everyVersion,
-    rangeDatatypeType,
-    pitchDatatypeDomain,
-  ),
-  typeText(
-    "{http://www.w3.org/2001/10/synthesis}rate.datatype",
-    everyVersion,
-    rateDatatypeType,
-    rateDatatypeDomain,
-  ),
-  typeText(
-    "{http://www.w3.org/2001/10/synthesis}volume.datatype",
-    everyVersion,
-    volumeDatatypeType,
-    volumeDatatypeDomain,
-  ),
-  typeText(
-    "{http://www.w3.org/2001/10/synthesis}contourpoint.datatype",
+    "ssml:contourpoint.datatype",
     everyVersion,
     contourpointDatatypeType,
     contourDatatypeItemDomain,
   ),
+  typeText("ssml:contour.datatype", everyVersion, contourDatatypeType, contourDatatypeDomain),
+  typeText("ssml:gender.datatype", everyVersion, genderDatatypeType, genderDatatypeDomain),
+  typeText("ssml:level.datatype", everyVersion, levelDatatypeType, levelDatatypeDomain),
+  typeText("ssml:strength.datatype", everyVersion, strengthDatatypeType, strengthDatatypeDomain),
+  typeText("ssml:version.datatype", everyVersion, versionDatatypeType, xsNMTOKENSItemDomain),
   typeText(
-    "{http://www.w3.org/2001/10/synthesis}contour.datatype",
-    everyVersion,
-    contourDatatypeType,
-    contourDatatypeDomain,
-  ),
-  typeText(
-    "{http://www.w3.org/2001/10/synthesis}gender.datatype",
-    everyVersion,
-    genderDatatypeType,
-    genderDatatypeDomain,
-  ),
-  typeText(
-    "{http://www.w3.org/2001/10/synthesis}level.datatype",
-    everyVersion,
-    levelDatatypeType,
-    levelDatatypeDomain,
-  ),
-  typeText(
-    "{http://www.w3.org/2001/10/synthesis}strength.datatype",
-    everyVersion,
-    strengthDatatypeType,
-    strengthDatatypeDomain,
-  ),
-  typeText(
-    "{http://www.w3.org/2001/10/synthesis}version.datatype",
-    everyVersion,
-    versionDatatypeType,
-    xsNMTOKENSItemDomain,
-  ),
-  typeText(
-    "{http://www.w3.org/2001/10/synthesis}voicename.datatype",
+    "ssml:voicename.datatype",
     everyVersion,
     voicenameDatatypeType,
     nameDatatypeMember1ItemDomain,
   ),
   typeText(
-    "{http://www.w3.org/2001/10/synthesis}voicenames.datatype",
+    "ssml:voicenames.datatype",
     everyVersion,
     voicenamesDatatypeType,
     nameDatatypeMember1Domain,
   ),
+  typeText("ssml:name.datatype", everyVersion, nameDatatypeType, nameDatatypeDomain),
+  typeText("ssml:alphabet.datatype", everyVersion, alphabetDatatypeType, alphabetDatatypeDomain),
   typeText(
-    "{http://www.w3.org/2001/10/synthesis}name.datatype",
-    everyVersion,
-    nameDatatypeType,
-    nameDatatypeDomain,
-  ),
-  typeText(
-    "{http://www.w3.org/2001/10/synthesis}alphabet.datatype",
-    everyVersion,
-    alphabetDatatypeType,
-    alphabetDatatypeDomain,
-  ),
-  typeText(
-    "{http://www.w3.org/2001/10/synthesis}onlangfailure.datatype",
+    "ssml:onlangfailure.datatype",
     everyVersion,
     onlangfailureDatatypeType,
     onlangfailureDatatypeDomain,
   ),
+  typeText("ssml:role.datatype", everyVersion, roleDatatypeType, roleDatatypeDomain),
   typeText(
-    "{http://www.w3.org/2001/10/synthesis}role.datatype",
-    everyVersion,
-    roleDatatypeType,
-    roleDatatypeDomain,
-  ),
-  typeText(
-    "{http://www.w3.org/2001/10/synthesis}timedesignation.datatype",
+    "ssml:timedesignation.datatype",
     everyVersion,
     timedesignationDatatypeType,
     timedesignationDatatypeDomain,
   ),
   typeText(
-    "{http://www.w3.org/2001/10/synthesis}emptystring.datatype",
+    "ssml:emptystring.datatype",
     everyVersion,
     emptystringDatatypeType,
     ageDatatypeMember2Domain,
   ),
+  typeText("ssml:age.datatype", everyVersion, ageDatatypeType, ageDatatypeDomain),
+  typeText("ssml:variant.datatype", everyVersion, variantDatatypeType, variantDatatypeDomain),
+  typeText("ssml:languages.datatype", everyVersion, languagesDatatypeType, languagesDatatypeDomain),
+  typeText("ssml:required.datatype", everyVersion, requiredDatatypeType, requiredDatatypeDomain),
   typeText(
-    "{http://www.w3.org/2001/10/synthesis}age.datatype",
-    everyVersion,
-    ageDatatypeType,
-    ageDatatypeDomain,
-  ),
-  typeText(
-    "{http://www.w3.org/2001/10/synthesis}variant.datatype",
-    everyVersion,
-    variantDatatypeType,
-    variantDatatypeDomain,
-  ),
-  typeText(
-    "{http://www.w3.org/2001/10/synthesis}languages.datatype",
-    everyVersion,
-    languagesDatatypeType,
-    languagesDatatypeDomain,
-  ),
-  typeText(
-    "{http://www.w3.org/2001/10/synthesis}required.datatype",
-    everyVersion,
-    requiredDatatypeType,
-    requiredDatatypeDomain,
-  ),
-  typeText(
-    "{http://www.w3.org/2001/10/synthesis}requiredlist.datatype",
+    "ssml:requiredlist.datatype",
     everyVersion,
     requiredlistDatatypeType,
     requiredDatatypeMember1Domain,
   ),
   typeText(
-    "{http://www.w3.org/2001/10/synthesis}requireditem.datatype",
+    "ssml:requireditem.datatype",
     everyVersion,
     requireditemDatatypeType,
     requiredDatatypeMember1ItemDomain,
   ),
+  typeText("ssml:ordering.datatype", everyVersion, orderingDatatypeType, requiredDatatypeDomain),
   typeText(
-    "{http://www.w3.org/2001/10/synthesis}ordering.datatype",
-    everyVersion,
-    orderingDatatypeType,
-    requiredDatatypeDomain,
-  ),
-  typeText(
-    "{http://www.w3.org/2001/10/synthesis}orderinglist.datatype",
+    "ssml:orderinglist.datatype",
     everyVersion,
     orderinglistDatatypeType,
     requiredDatatypeMember1Domain,
   ),
   typeText(
-    "{http://www.w3.org/2001/10/synthesis}orderingitem.datatype",
+    "ssml:orderingitem.datatype",
     everyVersion,
     orderingitemDatatypeType,
     requiredDatatypeMember1ItemDomain,
   ),
   typeText(
-    "{http://www.w3.org/2001/10/synthesis}onvoicefailure.datatype",
+    "ssml:onvoicefailure.datatype",
     everyVersion,
     onvoicefailureDatatypeType,
     onvoicefailureDatatypeDomain,
   ),
+  typeText("ssml:fetchhint.datatype", everyVersion, fetchhintDatatypeType, fetchhintDatatypeDomain),
   typeText(
-    "{http://www.w3.org/2001/10/synthesis}fetchhint.datatype",
-    everyVersion,
-    fetchhintDatatypeType,
-    fetchhintDatatypeDomain,
-  ),
-  typeText(
-    "{http://www.w3.org/2001/10/synthesis}phonemetype.datatype",
+    "ssml:phonemetype.datatype",
     everyVersion,
     phonemetypeDatatypeType,
     phonemetypeDatatypeDomain,
   ),
-  typeText(
-    "{http://www.imsglobal.org/xsd/imsqti_usagedata_v3p0}ValueDType",
-    everyVersion,
-    xsNormalizedStringType,
-    xsNormalizedStringDomain,
-  ),
-  typeText(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}ValueDType",
-    everyVersion,
-    xsNormalizedStringType,
-    xsNormalizedStringDomain,
-  ),
-  typeText(
-    "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}FileHrefCardDType",
-    everyVersion,
-    xsAnyURIType,
-    xsAnyURIDomain,
-  ),
+  typeText("ud:ValueDType", everyVersion, xsNormalizedStringType, xsNormalizedStringDomain),
+  typeText("ValueDType", everyVersion, xsNormalizedStringType, xsNormalizedStringDomain),
+  typeText("FileHrefCardDType", everyVersion, xsAnyURIType, xsAnyURIDomain),
 ];

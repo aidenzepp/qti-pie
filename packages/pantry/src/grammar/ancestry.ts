@@ -5,8 +5,8 @@
  * An ancestry is the set of flags a node's ancestors enter, one `bit(10)` on `Node`. A node hands
  * its children `ancestry = parentAncestry | Enters[kind]`, and a node of kind k may sit in its
  * parent's ancestry when that ancestry holds no flag of `Banned[k]` and every flag of `Needs[k]`.
- * The flags are independent, so these three constants replace the product automaton `AncestryStep`,
- * 56 states × 363 kinds written out as 18,924 rows.
+ * The flags are independent, so the three sets are the whole grammar: each flag is judged on its
+ * own, and no state stands for a combination of flags.
  *
  * Each set is keyed by (kind, flag), kind first, so kind k's row is the 10 cells from k·10,
  * `substring(S FROM k·10 + 1 FOR 10)`: a `bit(10)` laid out as an ancestry is, `fb` leftmost.

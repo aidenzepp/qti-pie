@@ -20,13 +20,21 @@ import type { ChildFacet } from "#pantry/grammar/children.ts";
 import type { ContentFacet, ModelEdit } from "#pantry/grammar/content.ts";
 import { aritiesOf } from "#pantry/grammar/expression.ts";
 import type { ExpressionFacet } from "#pantry/grammar/expression.ts";
+import { fragmentRootsOf, fragmentType, includeAlternativesOf } from "#pantry/grammar/include.ts";
 import { foreignKinds, schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import type { PackageFacet, ResourceTypes, RootOf } from "#pantry/grammar/package.ts";
-import { asiReferences, noReferences } from "#pantry/grammar/references.ts";
+import {
+  asiReferences,
+  mathmlReferences,
+  noReferences,
+  ssmlReferences,
+  xiReferences,
+} from "#pantry/grammar/references.ts";
 import type { ReferenceFacet } from "#pantry/grammar/references.ts";
 import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
 import { contentModels } from "#pantry/vocab/inventory/models.ts";
+import { vocabularies as rosters } from "#pantry/vocab/inventory/vocabularies.ts";
 import type {
   AttributeDeclaration,
   ContentModel,
@@ -209,13 +217,54 @@ const resourceTypesIn = (
 };
 
 /**
+ * Where `qti-ordering`'s restated model comes from: spec reading 102 (upstream's 61)
+ * (`aidenzepp/qti-pie`, 8e573eca), which the information model's §5.98.3 states and the XSD's own
+ * mapping of the same sentence elsewhere writes.
+ */
+const orderingSource =
+  "spec reading 102 (upstream's 61): information model §5.98.3, 'may be new tags and reused QTI ASI tags', as the XSD writes the same sentence at §5.36.2 and §5.144.1 (##any)";
+
+/**
+ * `qti-ordering`'s content, as spec reading 102 (upstream's 61) restates it: any number of elements
+ * of any namespace, assessed laxly, `sequence(any ##any lax 0..n)`.
+ *
+ * The XSD writes `##other` (`imsqti_asiv3p0p1_v1p0.xsd` lines 29976 and 24031), which refuses an
+ * element in QTI's own namespace or in none. The information model says the extension's child tags
+ * "may be new tags and reused QTI ASI tags" (§5.98.3, `info.txt` line 36355), and the XSD's own
+ * mapping of that sentence elsewhere is `##any`: the custom interaction's (§5.36.2, line 22937, XSD
+ * line 26364) and the template's (§5.144.1, line 44649, XSD line 32555); where the information
+ * model says "must be new tags" it writes `##other` (§5.33.6, §5.37.5 and §5.129.4). The
+ * information model outranks the XSD, so the slot is `##any`: a QTI element there is kept as
+ * extension content, a foreign element of its own namespace (a QTI root stays foreign by spec
+ * reading 6), an HTML, MathML, SSML or XInclude global is read as its kind, and an element in no
+ * namespace is admitted too, which "any set of child tags" allows. `qti-selection`'s slot keeps the
+ * XSD's `##other` (§5.129.4: "must be new tags i.e. not reused QTI ASI tags").
+ */
+const orderingModel: Particle = {
+  _tag: "group",
+  compositor: "sequence",
+  occurs: { max: Option.some(1), min: 1 },
+  particles: [
+    {
+      _tag: "any",
+      namespace: "##any",
+      occurs: { max: Option.none(), min: 0 },
+      processing: "lax",
+      sources: cited(orderingSource),
+    },
+  ],
+  sources: cited(orderingSource),
+};
+
+/**
  * The ASI vocabulary's facets, its HTML and its test, PCI, catalog and stimulus kinds included, the
  * one namespace they share:
  *
  * - Its 22 interactions, and the expression kinds' arities, both projected from the IR;
  * - The ancestry blocks of an item's content, and a test's rubric block and feedback entering `test`,
  *   under which no template sits (spec reading 25);
- * - Spec reading 26, a section holds at least one part;
+ * - Spec reading 26, a section holds at least one part; spec reading 102 (upstream's 61),
+ *   `qti-ordering`'s extension slot admits any namespace ({@link orderingModel});
  * - HTML's `colgroup` with `span` holding no `col`, and the default hotspot that ends its
  *   interaction;
  * - The response bindings, the package roots and the references.
@@ -287,6 +336,7 @@ export const asi: Facets = {
         parent: "qti-assessment-section",
         source: "spec reading 26",
       },
+      { _tag: "restate", parent: "qti-ordering", particle: orderingModel, source: orderingSource },
     ],
     models: [],
     roots: [],
@@ -423,7 +473,7 @@ export const ud: Facets = {
  * SSML's facets: spec reading 40, `meta`, `metadata` and `lexicon` before every other SSML element
  * of `speak` and before its text that is not whitespace. The XSD's sequence orders the elements;
  * the restated model orders the text too, at one text position Unique Particle Attribution keeps
- * unique (`content.ts`, the `first` edit).
+ * unique (`content.ts`, the `first` edit). Its file references are spec reading 95's.
  */
 export const ssml: Facets = {
   ...noFacets,
@@ -439,6 +489,7 @@ export const ssml: Facets = {
     models: [],
     roots: [],
   },
+  references: ssmlReferences,
 };
 
 /**
@@ -847,6 +898,8 @@ const contentExpressionParents: readonly (readonly [kind: string, file: string, 
  *   error for one math element to contain another"). With the root rule, no MathML element stands
  *   inside an element `annotation-xml` admits by `anyElement`, whose content the RelaxNG bars from
  *   MathML (line 61).
+ *
+ * Its file references are spec reading 95's (`mathmlCensus` of `references.ts`).
  */
 export const mathml: Facets = {
   ...noFacets,
@@ -925,6 +978,103 @@ export const mathml: Facets = {
       },
     ],
   },
+  references: mathmlReferences,
+};
+
+/**
+ * Each kind's expanded name and local name, from the vocabularies' rosters: the names a fragment's
+ * root is read by.
+ */
+const kindNames: ReadonlyMap<string, { readonly local: string; readonly name: string }> = new Map(
+  rosters.flatMap(({ kinds, namespace }) =>
+    kinds.map(({ handle, local }) => [handle, { local, name: `${namespace}}${local}` }] as const),
+  ),
+);
+
+/**
+ * The kinds an included fragment's document may have as its root (spec readings 76, 107 and
+ * 109): every kind an include stands for somewhere, but a context-split kind, under the fragment
+ * resource type of the implementation guide's §6.2.
+ */
+export const fragmentRoots: readonly RootOf[] = fragmentRootsOf(
+  includeAlternativesOf(contentModels),
+  (kind) => kindNames.get(kind)?.name ?? kind,
+  (kind) => kindNames.get(kind)?.local ?? kind,
+).map((root) => ({ root, type: fragmentType }));
+
+/**
+ * Where spec reading 111 restates an include's content from: XInclude's own text, which the XSD
+ * makes wider.
+ */
+const includeSource =
+  "spec reading 111: XInclude 1.0 Second Edition §3.1, 'The children property of the xi:include element may include a single xi:fallback element; the appearance of more than one xi:fallback element ... is a fatal error'";
+
+/**
+ * Any number of elements an include ignores: of another namespace than XInclude's, or of none, each
+ * assessed laxly, as `XInclude.xsd`'s `includeType` writes them.
+ *
+ * @returns The particle.
+ */
+const ignoredContent = (): Particle => ({
+  _tag: "group",
+  compositor: "choice",
+  occurs: { max: Option.none(), min: 0 },
+  particles: (["##other", "##local"] as const).map((namespace): Particle => ({
+    _tag: "any",
+    namespace,
+    occurs: { max: Option.some(1), min: 1 },
+    processing: "lax",
+    sources: cited(includeSource),
+  })),
+  sources: cited(includeSource),
+});
+
+/**
+ * `xi:include`'s content, as spec reading 111 restates it: the elements it ignores, and at most one
+ * `xi:fallback` among them, where `XInclude.xsd`'s `includeType` admits any number (XInclude 1.0
+ * Second Edition, §3.1). The XSD's text and its other children stay as they are.
+ */
+const includeModel: Particle = {
+  _tag: "group",
+  compositor: "sequence",
+  occurs: { max: Option.some(1), min: 1 },
+  particles: [
+    ignoredContent(),
+    {
+      _tag: "group",
+      compositor: "sequence",
+      occurs: { max: Option.some(1), min: 0 },
+      particles: [
+        {
+          _tag: "element",
+          kinds: ["xi:fallback"],
+          occurs: { max: Option.some(1), min: 1 },
+          sources: cited(includeSource),
+        },
+        ignoredContent(),
+      ],
+      sources: cited(includeSource),
+    },
+  ],
+  sources: cited(includeSource),
+};
+
+/**
+ * XInclude's facets: its file reference, spec reading 95's; the roots of the fragments it
+ * includes, which a fragment resource lists (spec reading 107); and spec reading 111's one
+ * fallback an include may hold ({@link includeModel}).
+ */
+export const xi: Facets = {
+  ...noFacets,
+  content: {
+    edits: [
+      { _tag: "restate", parent: "xi:include", particle: includeModel, source: includeSource },
+    ],
+    models: [],
+    roots: [],
+  },
+  package: { resourceTypes: [], roots: fragmentRoots },
+  references: xiReferences,
 };
 
 /**
@@ -938,6 +1088,7 @@ export const vocabularyFacets = new Map([
   ["mathml", mathml],
   ["ssml", ssml],
   ["ud", ud],
+  ["xi", xi],
 ]);
 
 /**
@@ -947,12 +1098,13 @@ export const manifestRoot = "cp:manifest";
 
 /**
  * The element kinds a document's root may be in production's composition: the manifest's root,
- * then each root kind a vocabulary's package facet names, once, in facet order.
+ * then each root kind a vocabulary's package facet names, once, in facet order, an included
+ * fragment's last (spec reading 107).
  */
 export const documentRoots: readonly [string, ...string[]] = [
   manifestRoot,
   ...new Set(
-    [asi, lom, ud]
+    [asi, lom, ud, xi]
       .flatMap((facets: Facets): readonly RootOf[] => facets.package.roots)
       .map(({ root }) => root),
   ),

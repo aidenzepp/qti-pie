@@ -1106,9 +1106,19 @@ interface ClassCell {
 }
 
 /**
+ * The kinds whose element wildcard a spec reading restates, and the wildcard it reads in place of
+ * the XSD's: spec reading 102 (upstream's 61), `qti-ordering`'s extension slot `##any` where the
+ * XSD writes `##other` (information model §5.98.3; `facets.ts`, `orderingModel`).
+ */
+const restatedWildcards: ReadonlyMap<string, readonly (typeof anyTypeWildcard)[]> = new Map([
+  ["qti-ordering", [anyTypeWildcard]],
+]);
+
+/**
  * Every cell: each kind of each version a model states, with its element and attribute wildcards,
  * and each foreign kind, whose wildcards are `xs:anyType`'s and whose namespace, a foreign
- * element's own, is one no schema declares.
+ * element's own, is one no schema declares. A kind of {@link restatedWildcards} holds the
+ * reading's wildcard in place of the XSD's.
  */
 const classCells: readonly ClassCell[] = [
   ...contentModels.flatMap(({ content, kind, versions }) =>
@@ -1116,7 +1126,7 @@ const classCells: readonly ClassCell[] = [
       attributes: attributeWildcards.filter(
         (row) => row.kind === kind && row.versions.includes(version),
       ),
-      elements: wildcardsIn(content),
+      elements: restatedWildcards.get(kind) ?? wildcardsIn(content),
       kind,
       own: namespaceOfKind.get(kind) ?? "",
       version,
@@ -1251,6 +1261,61 @@ describe("vocab/open.ts namespace classes against XML Schema 1.0, 3.10.4", () =>
                 assert.strictEqual(wrong.join("\n"), "");
               }),
           ),
+        );
+      }),
+    hookTimeoutMs,
+  );
+});
+
+describe("XLink's global attributes (C30)", () => {
+  it.effect(
+    "are admitted, with xlink.xsd's types, on exactly the kinds whose lax or strict attribute wildcard admits another namespace and whose documents the content-packaging set assesses, and on the foreign kinds: every admission row of every kind, both versions",
+    () =>
+      // Oracle: XML Schema 1.0 Part 1, §3.10.4 and §3.4.4 clause 3.2, over the leaf's attribute
+      // wildcards, with spec reading 72's schema sets read directly: only the content-packaging
+      // set imports xlink.xsd (`cpext/imsqtiv3p0p1_cpextv1p2_v1p0.xsd` line 10), and a foreign
+      // element, assessed against `xs:anyType`'s lax `##any`, stands in documents of every set.
+      // Bound: every (version, kind) the attribute grammar admits a name on.
+      Effect.gen(function* xlinkHosts() {
+        const grammar = yield* Effect.fromResult(composed());
+        const covered = coveredBy(grammar.kinds);
+        const inCpSet = new Set(["cp", "cpx", "csmd", "drd", "lom", "qmd"]);
+        const vocabularyOf = new Map<string, string>(
+          vocabularies.map(({ name, namespace }) => [namespace, name] as const),
+        );
+        const expected = new Set<string>();
+        for (const { kind, namespace, processing, versions } of attributeWildcards) {
+          const own = Option.match(grammar.kinds.elementName.lookup({ kind }), {
+            onNone: () => "",
+            onSome: (name) => name.namespace,
+          });
+          if (
+            grammar.kinds.nodeKind.has(kind) &&
+            namespace !== "##local" &&
+            processing !== "skip" &&
+            inCpSet.has(vocabularyOf.get(own) ?? "")
+          ) {
+            for (const version of versions.filter((held) => !covered(held, kind))) {
+              expected.add(`${version} ${kind}`);
+            }
+          }
+        }
+
+        for (const version of schemaVersions) {
+          for (const kind of Object.values(foreignKinds)) {
+            expected.add(`${version} ${kind}`);
+          }
+        }
+
+        const admitted = Map.groupBy(
+          grammar.attributes.admission.rows.filter(({ name }) => name.startsWith("xlink:")),
+          ({ kind, version }): string => `${version} ${kind}`,
+        );
+
+        assert.deepStrictEqual(new Set(admitted.keys()), expected);
+        assert.deepStrictEqual(
+          [...admitted.values()].filter((rows) => rows.length !== 10).map((rows) => rows.length),
+          [],
         );
       }),
     hookTimeoutMs,

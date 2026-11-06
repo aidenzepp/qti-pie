@@ -337,6 +337,32 @@ describe("The spec readings", () => {
     }
   });
 
+  it("read 17: an item's and a test's rubric block's view lists at least one view, an outcome declaration's may list none, every declaring kind against every list of at most two views and the empty and blank values", () => {
+    // Oracle: the information model's RubricBlock and TestRubricBlock `view`, "A list from an
+    // enumerated value set" of multiplicity [1] (§5.120.2, §5.160.1), and OutcomeDeclaration's of
+    // [0..1] (§4.5.4); a list of n views is one of the six names, n times, between whitespace.
+    // Bound: every list of 0 to 2 of the six views, a blank value and a name outside the six.
+    const views = ["author", "candidate", "proctor", "scorer", "testConstructor", "tutor"];
+    const lists = [
+      [],
+      ...views.map((view) => [view]),
+      ...views.flatMap((left) => views.map((right) => [left, right])),
+    ];
+    const atLeastOne = new Set(["qti-rubric-block", "qti-rubric-block.test"]);
+    for (const { kind, version } of declarersOf("view")) {
+      const domain = Option.getOrThrow(domainAt(version, kind, "view"));
+      const wrong = [
+        ...lists.filter(
+          (list) => matches(domain, list.join(" ")) !== (list.length > 0 || !atLeastOne.has(kind)),
+        ),
+        ...[" \t "].filter((blank) => matches(domain, blank) === atLeastOne.has(kind)),
+        ...["viewer", "author viewer"].filter((value) => matches(domain, value)),
+      ];
+
+      assert.deepStrictEqual(wrong, [], `${version} ${kind}`);
+    }
+  });
+
   it("read 18 and 83: an order, graphic-order or position object interaction's min-choices is at least 1, every other kind's at least 0", () => {
     // Reading 18: "If specified, min-choices must be 1 or greater" of the order interactions
     // (§5.97.2, §5.61.1); reading 83: the same sentence of the position object (§5.107.2).
@@ -761,7 +787,7 @@ describe.skipIf(!cached)("The XSD's attribute uses", () => {
                     row.version === version &&
                     row.kind === kind &&
                     !isLayerName(row.name) &&
-                    (!row.name.startsWith("xml:") ||
+                    ((!row.name.startsWith("xml:") && !row.name.startsWith("xlink:")) ||
                       expected.has(row.name) ||
                       !models.some(({ anyAttribute }) => anyAttribute)),
                 )

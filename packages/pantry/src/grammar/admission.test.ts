@@ -28,13 +28,30 @@ import {
   XsdOracleLayer,
   xsdContents,
 } from "#pantry/test/gen/grammar.ts";
-import type { Content } from "#pantry/test/gen/grammar.ts";
+import type { Content, Particle as TestParticle } from "#pantry/test/gen/grammar.ts";
 import {
   contentExpressionParents,
   mathmlNamespace,
   mathmlRoot,
   semanticsContexp,
 } from "#pantry/test/gen/relaxng.ts";
+
+/**
+ * The wildcards a parent's content reads, a spec reading's in place of the XSD's: spec reading 102
+ * (upstream's 61) reads `qti-ordering`'s extension slot as `##any` where the XSD writes `##other`
+ * (information model §5.98.3; `facets.ts`, `orderingModel`).
+ *
+ * @param parent - The parent's kind.
+ * @param wildcards - Its XSD particles' wildcards.
+ * @returns The wildcards the grammar reads.
+ */
+const readWildcards = (
+  parent: string,
+  wildcards: readonly Extract<TestParticle, { readonly _tag: "any" }>[],
+): readonly Extract<TestParticle, { readonly _tag: "any" }>[] =>
+  parent === "qti-ordering"
+    ? wildcards.map((wildcard) => ({ ...wildcard, namespace: "##any" }))
+    : wildcards;
 
 /**
  * The composed grammar of production, failing the test that reads it when a generator refuses.
@@ -72,6 +89,18 @@ const schemas: readonly (readonly [SourcePath, (typeof schemaVersions)[number]])
  * suites. Twice the six reads' worst, rounded up.
  */
 const xsdTimeout = 120_000;
+
+/**
+ * How long one of the two compose searches may take, each a few hundred toy grammars composed in
+ * turn. Vitest's 5 s default was met under load (seats PG and IN, 2026-11-06). Measured on
+ * 2026-11-06 at `0f6264a` with this file's searches run alone on seeds 1 to 3: the projection
+ * search took 3195, 2475 and 2573 ms and the restated search 940, 770 and 643 ms at one-minute
+ * load averages of 14.6 to 16.0. Beside the whole free suite, on seeds 1, 101, 202, 303 and 202
+ * again, they took 3704, 4074, 2908, 5168 and 7074 ms, and 1128, 1127, 879, 1655 and 1741 ms, at
+ * loads of 26 to 28 where sampled. The budget is five times the slowest, 35.4 s, rounded up to the
+ * next second. Raise it only on a new measurement recorded here, never to make a run pass.
+ */
+const searchTimeout = 36_000;
 
 /**
  * The character data XML Schema Part 1 §3.4.4 lets stand between an element's children, by its
@@ -119,7 +148,7 @@ describe.skipIf(!cached)("Admission against the XSD", () => {
                   ),
                 ),
             );
-            const wildcards = particles.flatMap(wildcardsOf);
+            const wildcards = readWildcards(parent, particles.flatMap(wildcardsOf));
             const admitted = admission.rows
               .filter((row) => row.version === version && row.parent === parent)
               .map(({ child }) => child);
@@ -182,8 +211,9 @@ describe.skipIf(!cached)("Admission against the XSD", () => {
       // root XSD and what that imports (spec reading 72), but for reading 6's roots, which stay
       // foreign; any other name is undeclared there. A parent read from several roots finds a
       // declaration any of their sets holds, as reading 72's limit says. The document node
-      // declares the roots its model (R5) names. The box is every parent the walks reach, in
-      // either version, by every element name.
+      // declares the roots its model (R5) names, and `qti-ordering`'s slot is spec reading 102's
+      // `##any` (`readWildcards`). The box is every parent the walks reach, in either version, by
+      // every element name.
       Effect.gen(function* locality() {
         const { kinds } = yield* grammar;
         const names = kinds.elementName.rows.map(({ local, namespace }) => ({ local, namespace }));
@@ -244,7 +274,7 @@ describe.skipIf(!cached)("Admission against the XSD", () => {
                 }
               }
 
-              for (const wildcard of wildcardsOf(particle)) {
+              for (const wildcard of readWildcards(parent, wildcardsOf(particle))) {
                 for (const name of names) {
                   const key = `{${name.namespace}}${name.local}`;
                   if (
@@ -552,6 +582,7 @@ describe("Admission projected from content models", () => {
             }),
         ),
       ),
+    searchTimeout,
   );
 });
 
@@ -561,83 +592,86 @@ describe("Admission projected from content models", () => {
 const restatedKinds = ["e1", "e2", "e3", "e4"] as const;
 
 describe("Admission through compose", () => {
-  it.effect("refuses a triple two vocabularies both state, and keeps one stated once", (ctx) =>
-    // Oracle: the specification as a checker: a closed relation's key (E4) holds one row per
-    // (version, parent, child), whichever vocabulary states it.
-    // Bound: up to 6 rows over 4 kinds, one restated.
-    searched(
-      ctx,
-      explore(
-        {
-          caseHang: Duration.minutes(1),
-          concurrency: 1,
-          coverage: required<"restated" | "stated once">(["restated", "stated once"], {
-            cases: 200,
-            sense: notesOnly,
-          }),
-          draw: drawn((source) => ({
-            restated: source.draw(int(0, 1)) === 1,
-            rows: source.draw(
-              array(
-                (s) => ({
-                  child: s.draw(element(restatedKinds)),
-                  parent: s.draw(element(restatedKinds)),
-                }),
-                { max: 6, min: 1 },
+  it.effect(
+    "refuses a triple two vocabularies both state, and keeps one stated once",
+    (ctx) =>
+      // Oracle: the specification as a checker: a closed relation's key (E4) holds one row per
+      // (version, parent, child), whichever vocabulary states it.
+      // Bound: up to 6 rows over 4 kinds, one restated.
+      searched(
+        ctx,
+        explore(
+          {
+            caseHang: Duration.minutes(1),
+            concurrency: 1,
+            coverage: required<"restated" | "stated once">(["restated", "stated once"], {
+              cases: 200,
+              sense: notesOnly,
+            }),
+            draw: drawn((source) => ({
+              restated: source.draw(int(0, 1)) === 1,
+              rows: source.draw(
+                array(
+                  (s) => ({
+                    child: s.draw(element(restatedKinds)),
+                    parent: s.draw(element(restatedKinds)),
+                  }),
+                  { max: 6, min: 1 },
+                ),
               ),
-            ),
-          })),
-          kept: [],
-          literal: Formatter.format,
-          runs: 200,
-          shrink: completeShrink,
-          steerEvery: 16,
-          suite: "grammar/admission/restated",
-        },
-        ({ restated, rows }, c) =>
-          Effect.sync(() => {
-            c.note(restated ? "restated" : "stated once");
+            })),
+            kept: [],
+            literal: Formatter.format,
+            runs: 200,
+            shrink: completeShrink,
+            steerEvery: 16,
+            suite: "grammar/admission/restated",
+          },
+          ({ restated, rows }, c) =>
+            Effect.sync(() => {
+              c.note(restated ? "restated" : "stated once");
 
-            const triples = [
-              ...new Map(
-                rows.map((row) => [
-                  `${row.parent} ${row.child}`,
-                  { ...row, version: "3.0.1" as const },
-                ]),
-              ).values(),
-            ];
-            const [first] = triples;
-            const second = restated && first !== undefined ? [first] : [];
-            const result = toyGrammar([
-              toyVocabulary({
-                admission: triples,
-                attributes: [],
-                data: ["ws"],
-                facets: toyFacets({}),
-                kinds: restatedKinds,
-              }),
-              toyVocabulary({
-                admission: second,
-                attributes: [],
-                data: [],
-                facets: toyFacets({}),
-                kinds: [],
-              }),
-            ]);
+              const triples = [
+                ...new Map(
+                  rows.map((row) => [
+                    `${row.parent} ${row.child}`,
+                    { ...row, version: "3.0.1" as const },
+                  ]),
+                ).values(),
+              ];
+              const [first] = triples;
+              const second = restated && first !== undefined ? [first] : [];
+              const result = toyGrammar([
+                toyVocabulary({
+                  admission: triples,
+                  attributes: [],
+                  data: ["ws"],
+                  facets: toyFacets({}),
+                  kinds: restatedKinds,
+                }),
+                toyVocabulary({
+                  admission: second,
+                  attributes: [],
+                  data: [],
+                  facets: toyFacets({}),
+                  kinds: [],
+                }),
+              ]);
 
-            if (second.length > 0) {
-              assert.strictEqual(
-                Result.isFailure(result) ? result.failure._tag : "composed",
-                "KeyCollision",
-              );
-            } else {
-              assert.deepStrictEqual(
-                result.pipe(Result.map((composedToy) => composedToy.admission.rows.length)),
-                Result.succeed(triples.length),
-              );
-            }
-          }),
+              if (second.length > 0) {
+                assert.strictEqual(
+                  Result.isFailure(result) ? result.failure._tag : "composed",
+                  "KeyCollision",
+                );
+              } else {
+                assert.deepStrictEqual(
+                  result.pipe(Result.map((composedToy) => composedToy.admission.rows.length)),
+                  Result.succeed(triples.length),
+                );
+              }
+            }),
+        ),
       ),
-    ),
+    searchTimeout,
   );
 });

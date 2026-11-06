@@ -43,7 +43,13 @@ import type {
   Roster,
   ValueField,
 } from "#pantry/grammar/closed.ts";
-import { compile, domainPrimitives, identities, openCompiled } from "#pantry/grammar/domains.ts";
+import {
+  compile,
+  domainPrimitives,
+  identities,
+  isEmptyDefinition,
+  openCompiled,
+} from "#pantry/grammar/domains.ts";
 import type {
   CompiledDomain,
   DomainPrimitive,
@@ -310,6 +316,19 @@ const xmlParse = (domain: Domain): Domain => ({
 });
 
 /**
+ * An `xi:include`'s `accept` or `accept-language`, which `XInclude.xsd` types `xs:string`: spec
+ * reading 111 narrows it to the characters an HTTP header holds, since XInclude says "Values
+ * containing characters outside the range #x20 through #x7E must be flagged as fatal errors"
+ * (XInclude 1.0 Second Edition, §3.1).
+ *
+ * @param domain - The XSD's definition.
+ * @returns It with the pattern.
+ * @see {@link https://www.w3.org/TR/xinclude/#include_element | XInclude 1.0, 3.1 xi:include Element}
+ */
+const httpHeaderText = (domain: Domain): Domain =>
+  withFacets(domain, [{ facet: "pattern", value: "[ -~]*" }]);
+
+/**
  * An Extended Language Range (RFC 4647, §2.2), `(1*8ALPHA / "*") *("-" (1*8alphanum / "*"))`, as
  * an XSD pattern, but for the two values SSML 1.1 §3.2.1 disallows, `und` and `zxx`, compared
  * without regard to ASCII case (RFC 4647, §2: language ranges "are to be treated as
@@ -460,11 +479,17 @@ const mathmlNotationReadings: readonly SpecReading[] = [
  *   name: any text, typed by the overlay.
  * - 15: a `variable-identifier-ref` names an outcome declaration, an identifier and not an `IDREF`.
  * - 16: `normal-maximum` is greater than zero.
+ * - 17: an item's or a test's rubric block's `view` lists at least one view, the information model's
+ *   "A list from an enumerated value set" of a characteristic of multiplicity [1] (§5.120.2 and
+ *   §5.160.1), where the XSD's list admits none. An outcome declaration's `view` (§4.5.4, [0..1])
+ *   keeps the XSD's list.
  * - 18: an order or graphic-order interaction's `min-choices` is at least 1.
  * - 39: an SSML `speak/@version` is `1.1`.
  * - 42: an SSML `voice/@languages` holds language ranges, `und`, `zxx` and `*` refused.
  * - 46: a count, and `figures`, is a signed 64-bit integer.
  * - 76: an `xi:include`'s `parse` is `xml` ({@link xmlParse}).
+ * - 111: an `xi:include`'s `accept` and `accept-language` hold characters from #x20 to #x7E alone
+ *   ({@link httpHeaderText}).
  * - 83: a position object interaction's `min-choices` is at least 1.
  *
  * Reading 14, restated, follows the XSD (a text-entry interaction's `response-identifier` and
@@ -501,6 +526,9 @@ export const specReadings: readonly SpecReading[] = [
       { facet: "minExclusive", value: "0" },
     ],
   })),
+  on(17, ["qti-rubric-block", "qti-rubric-block.test"], "view", "xsd", (domain) =>
+    withFacets(domain, [{ facet: "minLength", value: "1" }]),
+  ),
   on(
     18,
     ["qti-order-interaction", "qti-graphic-order-interaction"],
@@ -512,6 +540,8 @@ export const specReadings: readonly SpecReading[] = [
     withFacets(domain, [{ facet: "minInclusive", value: "1" }]),
   ),
   on(76, ["xi:include"], "parse", "xsd", xmlParse),
+  on(111, ["xi:include"], "accept", "xsd", httpHeaderText),
+  on(111, ["xi:include"], "accept-language", "xsd", httpHeaderText),
   on(39, ["ssml:speak"], "version", "xsd", ssmlVersion),
   on(42, ["ssml:voice"], "languages", "xsd", ssmlLanguages),
   ...[...counts, "figures"].map((name): SpecReading => ({
@@ -698,6 +728,14 @@ export interface AttributeGrammar {
    */
   readonly domains: readonly ValueDomain[];
   /**
+   * The `ValueDomain` handles of the empty domains, after {@link AttributeGrammar.domains} in code
+   * order: each definition whose lexical space holds no value (`isEmptyDefinition`), which no
+   * pattern spells, so `ValueDomain` holds no row of it and no lexical form is in it. In the pinned
+   * grammar only `xs:NOTATION`'s, whose value space is the notations a schema declares and no
+   * pinned XSD declares one (XML Schema Part 2, §3.2.19).
+   */
+  readonly emptyDomains: readonly string[];
+  /**
    * `GovernedAttribute`: each attribute an element may carry in a version under a governor, with
    * its value domain, its use and its position among the names that governor admits there. Under a
    * governor, the XSD-derived admission is the governing type's, and the rules spec readings state
@@ -860,9 +898,54 @@ const compiledUnread = (domain: Domain): ReturnType<typeof compile> => {
  */
 interface DomainRoster {
   readonly byDefinition: Map<string, ValueDomain>;
+  readonly empty: Map<string, string>;
   readonly handles: Set<string>;
   readonly ordered: ValueDomain[];
 }
+
+/**
+ * A domain a row names: its handle, which a compiled domain's and an empty domain's alike carry.
+ */
+interface DomainRef {
+  readonly handle: string;
+}
+
+/**
+ * Take the handle a domain would take, followed by a count where another definition holds it.
+ *
+ * @param domains - The roster.
+ * @param name - The handle it would take.
+ * @returns A handle no other definition holds.
+ */
+const freeHandle = (domains: DomainRoster, name: string): string => {
+  let handle = name;
+  for (let count = 2; domains.handles.has(handle); count += 1) {
+    handle = `${name} (${count})`;
+  }
+
+  return handle;
+};
+
+/**
+ * Add an empty domain to the roster, or find the one of its handle: a definition whose lexical
+ * space holds no value has no pattern, and every such definition of one type is the same set.
+ *
+ * @param domains - The roster.
+ * @param name - The handle it would take.
+ * @returns The roster's empty domain of that name.
+ */
+const internEmpty = (domains: DomainRoster, name: string): DomainRef => {
+  const known = domains.empty.get(name);
+  if (known !== undefined) {
+    return { handle: known };
+  }
+
+  const handle = freeHandle(domains, name);
+  domains.empty.set(name, handle);
+  domains.handles.add(handle);
+
+  return { handle };
+};
 
 /**
  * Add a compiled domain to the roster, or find the domain of its definition.
@@ -883,11 +966,7 @@ const intern = (domains: DomainRoster, compiled: CompiledDomain, name: string): 
     return known;
   }
 
-  let handle = name;
-  for (let count = 2; domains.handles.has(handle); count += 1) {
-    handle = `${name} (${count})`;
-  }
-
+  const handle = freeHandle(domains, name);
   const domain = { ...compiled, handle };
   domains.byDefinition.set(key, domain);
   domains.handles.add(handle);
@@ -923,7 +1002,8 @@ const handleOf = (type: ValueType, anonymous: string, readings: readonly SpecRea
  * @param declared.name - The attribute's name.
  * @param declared.type - The declared type.
  * @param anonymous - The handle an anonymous type's domain would take.
- * @returns The domain, or the declaration's compile failure.
+ * @returns The domain, an empty one where its lexical space holds no value, or the declaration's
+ *   compile failure.
  */
 const domainOf = (
   domains: DomainRoster,
@@ -934,7 +1014,7 @@ const domainOf = (
     readonly type: ValueType;
   },
   anonymous: string,
-): Result.Result<ValueDomain, UncompiledDomain> => {
+): Result.Result<DomainRef, UncompiledDomain> => {
   const readings = readingsOf(declared.kind, declared.name);
   let { domain } = declared;
   for (const reading of readings) {
@@ -945,13 +1025,20 @@ const domainOf = (
     ? "exact"
     : "xsd";
 
+  const handle = handleOf(declared.type, anonymous, readings);
+
   return (readings.length === 0 ? compiledUnread(domain) : compile(domain, whiteSpace)).pipe(
-    Result.map((compiled) =>
-      intern(domains, compiled, handleOf(declared.type, anonymous, readings)),
-    ),
-    Result.mapError(
-      (cause) =>
-        new UncompiledDomain({ detail: cause.message, kind: declared.kind, name: declared.name }),
+    Result.map((compiled): DomainRef => intern(domains, compiled, handle)),
+    Result.orElse((cause) =>
+      isEmptyDefinition(cause)
+        ? Result.succeed(internEmpty(domains, handle))
+        : Result.fail(
+            new UncompiledDomain({
+              detail: cause.message,
+              kind: declared.kind,
+              name: declared.name,
+            }),
+          ),
     ),
   );
 };
@@ -960,7 +1047,7 @@ const domainOf = (
  * One attribute an element may carry in one version, with its compiled domain.
  */
 interface Admitted {
-  readonly domain: ValueDomain;
+  readonly domain: DomainRef;
   readonly kind: string;
   readonly name: string;
   readonly use: Use;
@@ -982,10 +1069,15 @@ export const generate = (
   input: AttributeGrammarInput,
 ): Result.Result<AttributeGrammar, AttributeGrammarError> =>
   Result.gen(function* generateAttributes() {
-    const domains: DomainRoster = { byDefinition: new Map(), handles: new Set(), ordered: [] };
+    const domains: DomainRoster = {
+      byDefinition: new Map(),
+      empty: new Map(),
+      handles: new Set(),
+      ordered: [],
+    };
     const admitted: Admitted[] = [];
     const texts: {
-      readonly domain: ValueDomain;
+      readonly domain: DomainRef;
       readonly kind: string;
       readonly version: SchemaVersion;
     }[] = [];
@@ -1019,7 +1111,7 @@ export const generate = (
     // hold keeps its place.
     const governed: (Admitted & { readonly governor: string })[] = [];
     const typeTexts: {
-      readonly domain: ValueDomain;
+      readonly domain: DomainRef;
       readonly governs: string;
       readonly version: SchemaVersion;
     }[] = [];
@@ -1050,10 +1142,10 @@ export const generate = (
       }
     }
 
-    const domainRoster = yield* roster(
-      "ValueDomain",
-      domains.ordered.map(({ handle }) => handle),
-    );
+    const domainRoster = yield* roster("ValueDomain", [
+      ...domains.ordered.map(({ handle }) => handle),
+      ...domains.empty.values(),
+    ]);
     const version: IdField<"version", string> = idField("version", input.versions);
     const kind = idField("kind", input.kinds);
     const domain = idField("domain", domainRoster);
@@ -1164,6 +1256,7 @@ export const generate = (
     return {
       admission,
       domains: domains.ordered,
+      emptyDomains: [...domains.empty.values()],
       governed: governedRelation,
       governor,
       identity,

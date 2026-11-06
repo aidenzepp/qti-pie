@@ -8,10 +8,15 @@
  *
  * An element a declaration assesses strictly may carry `xsi:type` only where its value is a QName
  * that resolves to a type definition validly derived from the declared one (XML Schema 1.0 Part 1,
- * §3.3.4 Element Locally Valid (Element), clause 4; derivation by §3.4.6 and §3.14.6). The codec
- * resolves the QName against the element's in-scope namespaces, and the law reads this set. An
- * element of an anonymous declared type admits no named type, since none derives from an anonymous
- * one: its only row is {@link noType}, its own type with no `xsi:type`.
+ * §3.3.4 Element Locally Valid (Element), clause 4; derivation by §3.4.6 and §3.14.6), and the
+ * definition is one of the schema its document is assessed against (clause 4.1, "resolves to a type
+ * definition"; spec reading 72's schema sets). So a kind's row names a derived type only where a
+ * schema set its documents are assessed against holds it, its own schema's or XML Schema's
+ * (`typeAvailable` of `#pantry/vocab/open.ts`): a content-packaging kind such as `csmd:GUID` names
+ * no ASI type, which no manifest's set imports. A kind standing in several sets takes the union,
+ * reading 72's limit. The codec resolves the QName against the element's in-scope namespaces, and
+ * the law reads this set. An element of an anonymous declared type admits no named type, since none
+ * derives from an anonymous one: its only row is {@link noType}, its own type with no `xsi:type`.
  *
  * A foreign element has no declaration, so no derivation constrains its `xsi:type`, and this law
  * selects it out. Its `xsi:type` still governs it where the QName resolves to a type its document's
@@ -34,22 +39,84 @@ import type {
   Sources,
   TypeDerivation,
 } from "#pantry/vocab/inventory/types.ts";
+import { vocabularyNamespaces, xsNamespace } from "#pantry/vocab/namespaces.ts";
+import { typeAvailable } from "#pantry/vocab/open.ts";
 
 /**
  * The null object of a node's governing type: the `TypeName` handle of no named type, which an
  * anonymous declared type, a foreign element whose `xsi:type` gives it no type, and a node that is
- * no element take. No type's handle is spelled so, since every other one opens with `{`.
+ * no element take. No pinned XSD names a type `none` in QTI's namespace, whose type handles carry
+ * no prefix, so no type's handle is spelled so (`xsi.test.ts`).
  */
 export const noType = "none";
 
 /**
- * Spell a type's expanded name as its `TypeName` handle, `{namespace}local` (James Clark's
- * notation), so no two types share one.
+ * The prefix each pinned namespace's type handles open with: the one its vocabulary's kind handles
+ * carry (`vocabularyNamespaces`), none for QTI's own, and `xs:` for XML Schema's built-ins.
+ *
+ * Each namespace has its own prefix and each prefix ends a handle's first `:` or opens none, so a
+ * handle spells exactly one expanded name ({@link expandedNameOf}). A handle is held in a
+ * PostgreSQL `name`, at most 63 UTF-8 bytes (grizzle's README, "Tables and types"), which an
+ * expanded name `{namespace}local` overruns 132 times among the pinned types; a prefixed one is at
+ * most 40 bytes.
+ */
+export const typePrefixes: ReadonlyMap<string, string> = new Map([
+  ...Object.values(vocabularyNamespaces).map(
+    ({ namespace, prefix }) => [namespace, prefix] as const,
+  ),
+  [xsNamespace, "xs:"],
+]);
+
+/**
+ * The namespace each type handle prefix stands for: {@link typePrefixes} read backward.
+ */
+const prefixedNamespaces: ReadonlyMap<string, string> = new Map(
+  [...typePrefixes].map(([namespace, prefix]) => [prefix, namespace] as const),
+);
+
+/**
+ * Spell a type's expanded name as its `TypeName` handle: its namespace's prefix
+ * ({@link typePrefixes}), then its local name, so `xs:NCName`, `lom:Identifier.Type` and, in QTI's
+ * own namespace, `ItemBodyDType`. A type in a namespace no pinned XSD declares, which no roster
+ * holds, keeps its expanded name, `{namespace}local`, which opens with a `{` no prefixed handle
+ * does, so no two names share a handle.
  *
  * @param name - The type's name.
  * @returns The handle.
  */
-export const typeHandle = ({ local, namespace }: ExpandedName): string => `{${namespace}}${local}`;
+export const typeHandle = ({ local, namespace }: ExpandedName): string => {
+  const prefix = typePrefixes.get(namespace);
+
+  return prefix === undefined ? `{${namespace}}${local}` : `${prefix}${local}`;
+};
+
+/**
+ * Read a `TypeName` handle back as the expanded name it spells, {@link typeHandle}'s inverse.
+ *
+ * @param handle - A handle {@link typeHandle} spelled, or {@link noType}.
+ * @returns The name, or none for {@link noType} and for a handle whose prefix no pinned namespace
+ *   has.
+ */
+export const expandedNameOf = (handle: string): Option.Option<ExpandedName> => {
+  if (handle === noType) {
+    return Option.none();
+  }
+
+  if (handle.startsWith("{")) {
+    const close = handle.indexOf("}");
+
+    return close > 0
+      ? Option.some({ local: handle.slice(close + 1), namespace: handle.slice(1, close) })
+      : Option.none();
+  }
+
+  const colon = handle.indexOf(":");
+
+  return Option.map(
+    Option.fromNullishOr(prefixedNamespaces.get(handle.slice(0, colon + 1))),
+    (namespace) => ({ local: handle.slice(colon + 1), namespace }),
+  );
+};
 
 /**
  * `XsiType`: (version, kind, type) where an element of the kind may name the type in its
@@ -166,6 +233,8 @@ const derivationIndexOf = (derivations: readonly TypeDerivation[]): DerivationIn
  * @param input.derivations - The named types validly derived from each type, per version.
  * @param input.kinds - The `NodeKind` roster.
  * @param input.models - The content models, each with its declared type.
+ * @param input.namespaceOf - The namespace of each modeled kind, empty for a kind of no
+ *   vocabulary.
  * @param input.versions - The `SchemaVersion` roster.
  * @returns The relations, or the first model whose type no derivation lists, or the first row no
  *   constant can hold.
@@ -174,6 +243,7 @@ export const xsiTypesOf = (input: {
   readonly derivations: readonly TypeDerivation[];
   readonly kinds: Roster<string>;
   readonly models: readonly ContentModel[];
+  readonly namespaceOf: ReadonlyMap<string, string>;
   readonly versions: Roster<SchemaVersion>;
 }): Result.Result<XsiTypes, XsiTypeError> =>
   Result.gen(function* generateXsiTypes() {
@@ -204,7 +274,14 @@ export const xsiTypesOf = (input: {
             );
           }
 
-          rows.push(...derived.map((held) => ({ kind, source, type: typeHandle(held), version })));
+          const namespace = input.namespaceOf.get(kind) ?? "";
+          rows.push(
+            ...derived
+              .filter(
+                (held) => held.namespace === namespace || typeAvailable(namespace, held.namespace),
+              )
+              .map((held) => ({ kind, source, type: typeHandle(held), version })),
+          );
         }
       }
     }

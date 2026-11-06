@@ -26,12 +26,14 @@
  * digit strings. A bound on a float, double or non-integer decimal needs the typed value, so it
  * stays data, the domain's residual `facets`, which a law column per primitive reads.
  *
- * The pattern is written in the syntax PostgreSQL's advanced regular expressions and JavaScript's
- * `u`-flag regular expressions share: bracket expressions of code points, non-capturing groups,
- * bounded quantifiers of at most 255 (PostgreSQL's `RE_DUP_MAX`), lookahead, and lookbehind of one
- * character (PostgreSQL has read lookbehind since 9.6). XSD's own regex
- * dialect (`\i`, `\c`, block and category escapes, class subtraction) is translated, never passed
- * through.
+ * The pattern is written in the syntax PostgreSQL's advanced regular expressions, JavaScript's
+ * `u`-flag regular expressions and grizzle's `str.regex` grammar share: bracket expressions of code
+ * points, non-capturing groups, alternation and bounded quantifiers of at most 255 (PostgreSQL's
+ * `RE_DUP_MAX`), and no lookaround, which grizzle's admission refuses
+ * (`scalar/regex/parse.ts`). So where a type's constraints intersect, the pattern is their product,
+ * and a collapsed core that may not begin or end with whitespace has its first and last characters
+ * narrowed, never asserted. XSD's own regex dialect (`\i`, `\c`, block and category escapes, class
+ * subtraction) is translated, never passed through.
  *
  * @see {@link https://www.w3.org/TR/xmlschema-2/#rf-whiteSpace | XML Schema Part 2, 4.3.6 whiteSpace}
  * @see {@link https://www.w3.org/TR/xmlschema-2/#regexs | XML Schema Part 2, Appendix F, Regular Expressions}
@@ -662,14 +664,13 @@ const categoryOf = (name: string): CodeSet => {
  * - `seq`: its parts in order; none is the empty string.
  * - `alt`: one of its arms.
  * - `repeat`: its body `min` to `max` times, `max` none for unbounded.
- * - `edge`: no character, where the character after it (`start`) or before it (`end`) is not XML
- *   whitespace: a collapsed value's core begins and ends so.
- * - `and`: every arm over the same span, the intersection of their languages. `boundary` says what
- *   ends the span: the end of the value, or the end of a list item's token.
+ *
+ * No node asserts without matching, so no tree is written with a lookaround: an intersection is
+ * built as its product ({@link intersection}), and a word narrowed at an end by its first or last
+ * character ({@link firstIn}, {@link lastIn}).
  */
 export type Regex =
   | { readonly _tag: "alt"; readonly arms: readonly Regex[] }
-  | { readonly _tag: "and"; readonly arms: readonly Regex[]; readonly boundary: Boundary }
   | { readonly _tag: "chars"; readonly set: CodeSet }
   | {
       readonly _tag: "repeat";
@@ -677,14 +678,7 @@ export type Regex =
       readonly max: Option.Option<number>;
       readonly min: number;
     }
-  | { readonly _tag: "edge"; readonly side: "end" | "start" }
   | { readonly _tag: "seq"; readonly parts: readonly Regex[] };
-
-/**
- * What ends the span an intersection's arms each match: the end of the whole value, or the end of
- * a whitespace-free list item.
- */
-export type Boundary = "end" | "token";
 
 /**
  * The language with no word: what a set with no character leaves, and what an intersection or a
@@ -775,31 +769,6 @@ const repeat = (body: Regex, min: number, max: Option.Option<number>): Regex => 
   }
 
   return { _tag: "repeat", body, max, min };
-};
-
-/**
- * A zero-width assertion that the character after (`start`) or before (`end`) is not XML
- * whitespace.
- *
- * @param side - Which character it reads.
- * @returns The tree.
- */
-const edge = (side: "end" | "start"): Regex => ({ _tag: "edge", side });
-
-/**
- * An intersection: {@link nothing} where an arm is, the one arm where only one is left.
- *
- * @param arms - Its arms.
- * @param boundary - What ends the span they each match.
- * @returns The tree.
- */
-const both = (arms: readonly Regex[], boundary: Boundary): Regex => {
-  const [only] = arms;
-  if (arms.some(isNothing)) {
-    return nothing;
-  }
-
-  return arms.length === 1 && only !== undefined ? only : { _tag: "and", arms, boundary };
 };
 
 /**
@@ -2048,21 +2017,912 @@ const lengthBounds = (facets: readonly Facet[]): LengthBounds => {
 };
 
 /**
+ * Map every character set of a tree.
+ *
+ * @param tree - The tree.
+ * @param map - What each set becomes: a set, or a tree in its place.
+ * @returns The tree, each set replaced.
+ */
+const mapSets = (tree: Regex, map: (set: CodeSet) => Regex): Regex => {
+  switch (tree._tag) {
+    case "chars": {
+      return map(tree.set);
+    }
+    case "seq": {
+      return seq(...tree.parts.map((part) => mapSets(part, map)));
+    }
+    case "alt": {
+      return alt(...tree.arms.map((arm) => mapSets(arm, map)));
+    }
+    case "repeat": {
+      return repeat(mapSets(tree.body, map), tree.min, tree.max);
+    }
+    default: {
+      return tree satisfies never;
+    }
+  }
+};
+
+/**
+ * The least and the most length of a tree's words, the most `Infinity` where an unbounded
+ * repetition holds a nonempty word. {@link nothing} has no word, so its least is `Infinity` and its
+ * most `-Infinity`, and no length lies between them.
+ */
+interface Lengths {
+  readonly max: number;
+  readonly min: number;
+}
+
+/**
+ * The lengths of the trees read so far: a product reads the lengths of each subtree at every span.
+ */
+const lengthsCache = new WeakMap<Regex, Lengths>();
+
+/**
+ * Read the least and the most length of a tree's words.
+ *
+ * @param tree - The tree.
+ * @returns Its {@link Lengths}.
+ */
+const lengthsOf = (tree: Regex): Lengths => {
+  const known = lengthsCache.get(tree);
+  if (known !== undefined) {
+    return known;
+  }
+
+  const read = (): Lengths => {
+    switch (tree._tag) {
+      case "chars": {
+        return { max: 1, min: 1 };
+      }
+      case "seq": {
+        const parts = tree.parts.map(lengthsOf);
+
+        return {
+          max: parts.reduce((total, { max }) => total + max, 0),
+          min: parts.reduce((total, { min }) => total + min, 0),
+        };
+      }
+      case "alt": {
+        const arms = tree.arms.map(lengthsOf);
+
+        return {
+          max: Math.max(...arms.map(({ max }) => max)),
+          min: Math.min(...arms.map(({ min }) => min)),
+        };
+      }
+      case "repeat": {
+        const body = lengthsOf(tree.body);
+        const most = Option.getOrElse(tree.max, () => Number.POSITIVE_INFINITY);
+
+        return { max: body.max === 0 ? 0 : body.max * most, min: body.min * tree.min };
+      }
+      default: {
+        return tree satisfies never;
+      }
+    }
+  };
+  const lengths = read();
+  lengthsCache.set(tree, lengths);
+
+  return lengths;
+};
+
+/**
+ * Whether a tree's language holds the empty word.
+ *
+ * @param tree - The tree.
+ * @returns Whether it is nullable.
+ */
+const admitsEmpty = (tree: Regex): boolean => lengthsOf(tree).min === 0;
+
+/**
+ * Every character a tree's words may hold: the union of its sets.
+ *
+ * @param tree - The tree.
+ * @returns Its alphabet.
+ */
+const alphabetOf = (tree: Regex): CodeSet => {
+  switch (tree._tag) {
+    case "chars": {
+      return tree.set;
+    }
+    case "seq": {
+      return union(...tree.parts.map(alphabetOf));
+    }
+    case "alt": {
+      return union(...tree.arms.map(alphabetOf));
+    }
+    case "repeat": {
+      return alphabetOf(tree.body);
+    }
+    default: {
+      return tree satisfies never;
+    }
+  }
+};
+
+/**
+ * Every character a tree's words may begin with.
+ *
+ * @param tree - The tree.
+ * @returns The union of its first positions' sets.
+ */
+const firstSetOf = (tree: Regex): CodeSet => {
+  switch (tree._tag) {
+    case "chars": {
+      return tree.set;
+    }
+    case "seq": {
+      const reached = tree.parts.findIndex((part) => !admitsEmpty(part));
+
+      return union(
+        ...(reached === -1 ? tree.parts : tree.parts.slice(0, reached + 1)).map(firstSetOf),
+      );
+    }
+    case "alt": {
+      return union(...tree.arms.map(firstSetOf));
+    }
+    case "repeat": {
+      return firstSetOf(tree.body);
+    }
+    default: {
+      return tree satisfies never;
+    }
+  }
+};
+
+/**
+ * A tree's mirror image: every sequence's parts in the reverse order, so its language is the
+ * reversal of every word.
+ *
+ * @param tree - The tree.
+ * @returns The reversed tree.
+ */
+const reversed = (tree: Regex): Regex => {
+  switch (tree._tag) {
+    case "chars": {
+      return tree;
+    }
+    case "seq": {
+      return seq(...tree.parts.map(reversed).toReversed());
+    }
+    case "alt": {
+      return alt(...tree.arms.map(reversed));
+    }
+    case "repeat": {
+      return repeat(reversed(tree.body), tree.min, tree.max);
+    }
+    default: {
+      return tree satisfies never;
+    }
+  }
+};
+
+/**
+ * Narrow a tree to its nonempty words whose first character is in a set, exactly, by the shape of
+ * the tree: a set keeps the characters both hold; an alternation narrows each arm; a sequence's
+ * word begins in its first part, or, where that part may be empty, in the rest; and a nonempty
+ * word of `body{m,M}` is a nonempty word of `body` that begins it, then `body{max(m-1,0),M-1}`
+ * (where `body` may be empty, `body{m,M}` is `body{0,M}`, so the iterations before the first
+ * nonempty one drop out and the count still fits). A tree whose words are all nonempty and begin
+ * in the set is itself.
+ *
+ * This is how a word is held to begin with a character that is not whitespace without asserting
+ * it: the narrowed tree matches exactly the words the assertion would let through.
+ *
+ * @param tree - The tree.
+ * @param set - The characters a word may begin with.
+ * @returns The narrowed tree.
+ */
+const firstIn = (tree: Regex, set: CodeSet): Regex => {
+  const first = firstSetOf(tree);
+  if (!admitsEmpty(tree) && sameSet(intersect(first, set), first)) {
+    return tree;
+  }
+
+  switch (tree._tag) {
+    case "chars": {
+      return chars(intersect(tree.set, set));
+    }
+    case "seq": {
+      const [head, ...rest] = tree.parts;
+      if (head === undefined) {
+        return nothing;
+      }
+
+      const tail = seq(...rest);
+
+      return alt(seq(firstIn(head, set), tail), admitsEmpty(head) ? firstIn(tail, set) : nothing);
+    }
+    case "alt": {
+      return alt(...tree.arms.map((arm) => firstIn(arm, set)));
+    }
+    case "repeat": {
+      return seq(
+        firstIn(tree.body, set),
+        repeat(tree.body, Math.max(tree.min - 1, 0), tree.max.pipe(Option.map((most) => most - 1))),
+      );
+    }
+    default: {
+      return tree satisfies never;
+    }
+  }
+};
+
+/**
+ * Narrow a tree to its nonempty words whose last character is in a set: {@link firstIn} of its
+ * mirror image, mirrored back.
+ *
+ * @param tree - The tree.
+ * @param set - The characters a word may end with.
+ * @returns The narrowed tree.
+ */
+const lastIn = (tree: Regex, set: CodeSet): Regex => reversed(firstIn(reversed(tree), set));
+
+/**
+ * The most positions a tree's automaton is built with ({@link automatonOf}) when an intersection
+ * decides an inclusion ({@link includedIn}) or builds a deterministic automaton ({@link dfaOf}).
+ * Past it an inclusion is left unanswered, which only keeps a product from being simplified, and no
+ * automaton is built; the widest tree an intersection reads today, MathML's `unsigned-integer`
+ * bound, has a few hundred.
+ */
+const automatonPositions = 20_000;
+
+/**
+ * The most pairs of automaton states an inclusion question explores before it is left unanswered.
+ */
+const inclusionStates = 100_000;
+
+/**
+ * The positions of a tree once each counted repetition is written out: what its automaton holds.
+ *
+ * @param tree - The tree.
+ * @returns The count.
+ */
+const positionsOf = (tree: Regex): number => {
+  switch (tree._tag) {
+    case "chars": {
+      return 1;
+    }
+    case "seq": {
+      return tree.parts.reduce((total, part) => total + positionsOf(part), 0);
+    }
+    case "alt": {
+      return tree.arms.reduce((total, arm) => total + positionsOf(arm), 0);
+    }
+    case "repeat": {
+      return positionsOf(tree.body) * Option.getOrElse(tree.max, () => tree.min + 1);
+    }
+    default: {
+      return tree satisfies never;
+    }
+  }
+};
+
+/**
+ * A tree's position automaton (Glushkov's), each counted repetition written out: one position per
+ * character set, the positions a word may begin and end at, whether it may be empty, and the
+ * positions that may follow each. Every position lies on some word, since no subtree of a tree the
+ * constructors build is {@link nothing}.
+ */
+interface Automaton {
+  readonly first: readonly number[];
+  readonly follow: readonly (readonly number[])[];
+  readonly last: ReadonlySet<number>;
+  readonly nullable: boolean;
+  readonly sets: readonly CodeSet[];
+}
+
+/**
+ * The first and last positions of a subtree's automaton, and whether it may be empty.
+ */
+interface Fragment {
+  readonly first: readonly number[];
+  readonly last: readonly number[];
+  readonly nullable: boolean;
+}
+
+/**
+ * Build a tree's {@link Automaton}: `body{m,M}` as `m` copies of `body` and `M - m` optional ones,
+ * `body{m,}` as `m` copies and one that loops.
+ *
+ * @param tree - The tree.
+ * @returns Its automaton.
+ */
+const automatonOf = (tree: Regex): Automaton => {
+  const sets: CodeSet[] = [];
+  const follow: Set<number>[] = [];
+  const link = (from: readonly number[], to: readonly number[]): void => {
+    for (const at of from) {
+      for (const next of to) {
+        follow[at]?.add(next);
+      }
+    }
+  };
+  const sequence = (parts: readonly (() => Fragment)[]): Fragment => {
+    let left: Fragment = { first: [], last: [], nullable: true };
+    for (const part of parts) {
+      const right = part();
+      link(left.last, right.first);
+      left = {
+        first: left.nullable ? [...left.first, ...right.first] : left.first,
+        last: right.nullable ? [...left.last, ...right.last] : right.last,
+        nullable: left.nullable && right.nullable,
+      };
+    }
+
+    return left;
+  };
+  const build = (node: Regex): Fragment => {
+    switch (node._tag) {
+      case "chars": {
+        sets.push(node.set);
+        follow.push(new Set());
+
+        return { first: [sets.length - 1], last: [sets.length - 1], nullable: false };
+      }
+      case "seq": {
+        return sequence(node.parts.map((part) => () => build(part)));
+      }
+      case "alt": {
+        const arms = node.arms.map(build);
+
+        return {
+          first: arms.flatMap(({ first }) => first),
+          last: arms.flatMap(({ last }) => last),
+          nullable: arms.some((arm) => arm.nullable),
+        };
+      }
+      case "repeat": {
+        const once = (): Fragment => build(node.body);
+        const optional = (): Fragment => ({ ...build(node.body), nullable: true });
+        const looped = (): Fragment => {
+          const body = build(node.body);
+          link(body.last, body.first);
+
+          return { ...body, nullable: true };
+        };
+        const more = Option.match(node.max, {
+          onNone: () => [looped],
+          onSome: (most) => Array.from({ length: most - node.min }, () => optional),
+        });
+
+        return sequence([...Array.from({ length: node.min }, () => once), ...more]);
+      }
+      default: {
+        return node satisfies never;
+      }
+    }
+  };
+  const whole = build(tree);
+
+  return {
+    first: whole.first,
+    follow: follow.map((next) => [...next].toSorted((a, b) => a - b)),
+    last: new Set(whole.last),
+    nullable: whole.nullable,
+    sets,
+  };
+};
+
+/**
+ * One code point of each run of the code space on which a family of sets each either holds every
+ * point or none: the start of every run of every set, and the point after its end.
+ *
+ * @param sets - The sets.
+ * @returns The points, ascending.
+ */
+const representatives = (sets: readonly CodeSet[]): readonly number[] =>
+  [...new Set(sets.flatMap((set) => set.flatMap(([lo, hi]) => [lo, hi + 1])))].toSorted(
+    (a, b) => a - b,
+  );
+
+/**
+ * A state of an automaton's subset construction: the start, or the positions a word read so far
+ * may have ended at, ascending.
+ */
+type Subset = readonly number[] | "start";
+
+/**
+ * The positions a word may reach next from a state: the automaton's first positions from the
+ * start, else every position that may follow one of the state's.
+ *
+ * @param automaton - The automaton.
+ * @param state - The state.
+ * @returns The positions, ascending.
+ */
+const successorsOf = (automaton: Automaton, state: Subset): readonly number[] =>
+  [
+    ...new Set(
+      state === "start" ? automaton.first : state.flatMap((at) => automaton.follow[at] ?? []),
+    ),
+  ].toSorted((a, b) => a - b);
+
+/**
+ * Whether a word that leaves an automaton in a state is one of its words.
+ *
+ * @param automaton - The automaton.
+ * @param state - The state.
+ * @returns Whether the state accepts.
+ */
+const acceptsAt = (automaton: Automaton, state: Subset): boolean =>
+  state === "start" ? automaton.nullable : state.some((at) => automaton.last.has(at));
+
+/**
+ * Whether every word of one tree is a word of another, decided on their automata by the subset
+ * construction run over both at once: the inclusion fails at a reachable pair of states where the
+ * first accepts and the second does not, or where the first may still read a character the second
+ * cannot (every position lies on a word). Exact where it answers; a question past
+ * {@link automatonPositions} or {@link inclusionStates} is answered `false`, which only keeps an
+ * intersection from being simplified.
+ *
+ * @param small - The tree that may be included.
+ * @param big - The tree that may include it.
+ * @returns Whether `small`'s language is included in `big`'s.
+ */
+const includedIn = (small: Regex, big: Regex): boolean => {
+  if (positionsOf(small) > automatonPositions || positionsOf(big) > automatonPositions) {
+    return false;
+  }
+
+  const mine = automatonOf(small);
+  const theirs = automatonOf(big);
+  const queue: (readonly [Subset, Subset])[] = [["start", "start"]];
+  const seen = new Set<string>();
+  for (const [left, right] of queue) {
+    if (acceptsAt(mine, left) && !acceptsAt(theirs, right)) {
+      return false;
+    }
+
+    const fromLeft = successorsOf(mine, left);
+    const fromRight = successorsOf(theirs, right);
+    const candidates = [...fromLeft, ...fromRight].map(
+      (at, index) => (index < fromLeft.length ? mine.sets[at] : theirs.sets[at]) ?? [],
+    );
+    for (const point of representatives(candidates)) {
+      const toLeft = fromLeft.filter((at) => holds(mine.sets[at] ?? [], point));
+      const toRight = fromRight.filter((at) => holds(theirs.sets[at] ?? [], point));
+      const key = `${toLeft.join(",")}|${toRight.join(",")}`;
+      if (toLeft.length > 0 && !seen.has(key)) {
+        if (toRight.length === 0 || seen.size >= inclusionStates) {
+          return false;
+        }
+
+        seen.add(key);
+        queue.push([toLeft, toRight]);
+      }
+    }
+  }
+
+  return true;
+};
+
+/**
+ * A deterministic automaton over code points: state 0 the start, each state's moves as disjoint
+ * sets, each with the state it leads to (a character no move holds leads to no word), and which
+ * states accept.
+ */
+interface Dfa {
+  readonly accepting: readonly boolean[];
+  readonly moves: readonly (readonly (readonly [CodeSet, number])[])[];
+}
+
+/**
+ * The most states a language's automaton is built with ({@link dfaOf}) before a product refuses
+ * to track it.
+ */
+const dfaStates = 256;
+
+/**
+ * The most positions a product ({@link tracked}) may be written with, counted by
+ * {@link positionsOf}: grizzle's `regexMaxPositions` (`core/limits.ts`, 4,096 NFA positions once
+ * counted repetitions are written out), past which its admission refuses a pattern, so a product
+ * past it is refused here, naming the reason.
+ */
+const productPositions = 4096;
+
+/**
+ * Merge the states of an automaton that accept alike and move alike (Moore's refinement), each
+ * block numbered by the first state in it, so the start stays state 0.
+ *
+ * @param dfa - The automaton.
+ * @returns The minimal automaton of its language.
+ */
+const minimized = (dfa: Dfa): Dfa => {
+  const refine = (partition: readonly number[]): readonly number[] => {
+    const numbering = new Map<string, number>();
+    const next = dfa.moves.map((moves, state) => {
+      const byBlock = new Map<number, CodeRange[]>();
+      for (const [set, target] of moves) {
+        const block = partition[target] ?? -1;
+        byBlock.set(block, [...(byBlock.get(block) ?? []), ...set]);
+      }
+
+      const signature = `${partition[state] ?? -1}/${[...byBlock]
+        .toSorted(([a], [b]) => a - b)
+        .map(([block, runs]) => `${block}:${JSON.stringify(setOf(runs))}`)
+        .join(";")}`;
+      const known = numbering.get(signature) ?? numbering.size;
+      numbering.set(signature, known);
+
+      return known;
+    });
+
+    return new Set(next).size === new Set(partition).size ? next : refine(next);
+  };
+  const merged = refine(dfa.accepting.map((accepts) => (accepts ? 1 : 0)));
+  const count = new Set(merged).size;
+  const representative = Array.from({ length: count }, (_, block) => merged.indexOf(block));
+
+  return {
+    accepting: representative.map((state) => dfa.accepting[state] ?? false),
+    moves: representative.map((state) => {
+      const byBlock = new Map<number, CodeRange[]>();
+      for (const [set, target] of dfa.moves[state] ?? []) {
+        const block = merged[target] ?? 0;
+        byBlock.set(block, [...(byBlock.get(block) ?? []), ...set]);
+      }
+
+      return [...byBlock].map(([block, runs]): readonly [CodeSet, number] => [setOf(runs), block]);
+    }),
+  };
+};
+
+/**
+ * A tree's minimal deterministic automaton, by the subset construction over its position
+ * automaton, or none past {@link automatonPositions} positions or {@link dfaStates} states.
+ *
+ * @param tree - The tree.
+ * @returns The automaton.
+ */
+const dfaOf = (tree: Regex): Option.Option<Dfa> => {
+  if (positionsOf(tree) > automatonPositions) {
+    return Option.none();
+  }
+
+  const automaton = automatonOf(tree);
+  const states: Subset[] = ["start"];
+  const numbered = new Map<string, number>([["start", 0]]);
+  const moves: (readonly (readonly [CodeSet, number])[])[] = [];
+  for (const state of states) {
+    if (states.length > dfaStates) {
+      return Option.none();
+    }
+
+    const candidates = successorsOf(automaton, state);
+    const points = representatives(candidates.map((at) => automaton.sets[at] ?? []));
+    const byTarget = new Map<number, CodeRange[]>();
+    for (const [index, point] of points.entries()) {
+      const next = candidates.filter((at) => holds(automaton.sets[at] ?? [], point));
+      if (next.length > 0) {
+        const key = next.join(",");
+        const target = numbered.get(key) ?? states.length;
+        if (target === states.length) {
+          numbered.set(key, target);
+          states.push(next);
+        }
+
+        const end = (points[index + 1] ?? 0x11_00_00) - 1;
+        byTarget.set(target, [...(byTarget.get(target) ?? []), [point, end]]);
+      }
+    }
+
+    moves.push(
+      [...byTarget].map(([target, runs]): readonly [CodeSet, number] => [setOf(runs), target]),
+    );
+  }
+
+  return Option.some(
+    minimized({ accepting: states.map((state) => acceptsAt(automaton, state)), moves }),
+  );
+};
+
+/**
+ * What a subtree's words do to an automaton from one state: each state they may lead to, with the
+ * tree of the words that lead there.
+ */
+type Reads = ReadonlyMap<number, Regex>;
+
+/**
+ * Add a tree of words to those that lead to a state, unless it has no word.
+ *
+ * @param into - The trees, by the state they lead to.
+ * @param state - The state.
+ * @param piece - The tree.
+ */
+const joinAt = (into: Map<number, Regex>, state: number, piece: Regex): void => {
+  if (!isNothing(piece)) {
+    into.set(state, alt(into.get(state) ?? nothing, piece));
+  }
+};
+
+/**
+ * What a sequence's words do from a state: each part read from each state the parts before it
+ * lead to, its pieces joined state to state.
+ *
+ * @param parts - The parts.
+ * @param state - The state the first part starts in.
+ * @param read - What one subtree's words do from a state.
+ * @returns The trees of the sequence's words, by the state they lead to.
+ */
+const sequenceFrom = (
+  parts: readonly Regex[],
+  state: number,
+  read: (node: Regex, from: number) => Reads,
+): Map<number, Regex> => {
+  let reached = new Map<number, Regex>([[state, empty]]);
+  for (const part of parts) {
+    const next = new Map<number, Regex>();
+    for (const [from, before] of reached) {
+      for (const [to, piece] of read(part, from)) {
+        joinAt(next, to, seq(before, piece));
+      }
+    }
+
+    reached = next;
+  }
+
+  return reached;
+};
+
+/**
+ * What `body*` does from a state, by Kleene's construction: the states its nonempty iterations
+ * reach, then, through each of them in turn, the words of one or more iterations from each to
+ * each, and the empty word at the state itself.
+ *
+ * @param body - The repeated tree.
+ * @param state - The state.
+ * @param read - What one subtree's words do from a state.
+ * @returns The trees of the repetition's words, by the state they lead to.
+ */
+const closureFrom = (
+  body: Regex,
+  state: number,
+  read: (node: Regex, from: number) => Reads,
+): Reads => {
+  const once = firstIn(body, xmlChar);
+  const reached = [state];
+  for (const from of reached) {
+    for (const to of read(once, from).keys()) {
+      if (!reached.includes(to)) {
+        reached.push(to);
+      }
+    }
+  }
+
+  let paths = reached.map((from) => reached.map((to) => read(once, from).get(to) ?? nothing));
+  for (const [via] of reached.entries()) {
+    const before = paths;
+    const loop = star(before[via]?.[via] ?? nothing);
+    paths = before.map((row, from) =>
+      row.map((cell, to) =>
+        alt(cell, seq(before[from]?.[via] ?? nothing, loop, before[via]?.[to] ?? nothing)),
+      ),
+    );
+  }
+
+  const out = new Map<number, Regex>([[state, opt(paths[0]?.[0] ?? nothing)]]);
+  for (const [index, to] of reached.entries()) {
+    if (to !== state) {
+      joinAt(out, to, paths[0]?.[index] ?? nothing);
+    }
+  }
+
+  return out;
+};
+
+/**
+ * The words of a tree that an automaton accepts, as one tree, exactly: each subtree is read from
+ * each state it may start in, into the states its words lead to, the tree's own shape kept. A set
+ * splits by the automaton's moves; an alternation reads arm by arm; a sequence part after part
+ * ({@link sequenceFrom}); a counted repetition as one iteration then the rest, and the empty word
+ * where it may run no time; and an unbounded one by Kleene's construction ({@link closureFrom}). A
+ * subtree every character of which keeps the automaton where it is stays whole.
+ *
+ * @param tree - The tree.
+ * @param dfa - The automaton.
+ * @returns The tree of the intersection, {@link nothing} where it has no word.
+ */
+const tracked = (tree: Regex, dfa: Dfa): Regex => {
+  const memo = new Map<Regex, Map<number, Reads>>();
+  const tails = new Map<Regex, Regex>();
+  const loops = dfa.moves.map((moves, state) =>
+    setOf(moves.filter(([, target]) => target === state).flatMap(([set]) => set)),
+  );
+  const after = (node: Regex, state: number): Reads => {
+    const byState = memo.get(node) ?? new Map<number, Reads>();
+    memo.set(node, byState);
+
+    const known = byState.get(state);
+    if (known !== undefined) {
+      return known;
+    }
+
+    const alphabet = alphabetOf(node);
+    let read: Reads = new Map([[state, node]]);
+    if (!sameSet(intersect(alphabet, loops[state] ?? []), alphabet)) {
+      switch (node._tag) {
+        case "chars": {
+          const out = new Map<number, Regex>();
+          for (const [set, to] of dfa.moves[state] ?? []) {
+            joinAt(out, to, chars(intersect(node.set, set)));
+          }
+
+          read = out;
+          break;
+        }
+        case "alt": {
+          const out = new Map<number, Regex>();
+          for (const arm of node.arms) {
+            for (const [to, piece] of after(arm, state)) {
+              joinAt(out, to, piece);
+            }
+          }
+
+          read = out;
+          break;
+        }
+        case "seq": {
+          read = sequenceFrom(node.parts, state, after);
+          break;
+        }
+        case "repeat": {
+          if (node.min === 0 && Option.isNone(node.max)) {
+            read = closureFrom(node.body, state, after);
+            break;
+          }
+
+          const tail =
+            tails.get(node) ??
+            repeat(
+              node.body,
+              Math.max(node.min - 1, 0),
+              node.max.pipe(Option.map((most) => most - 1)),
+            );
+          tails.set(node, tail);
+
+          const out = sequenceFrom([node.body, tail], state, after);
+          if (node.min === 0) {
+            joinAt(out, state, empty);
+          }
+
+          read = out;
+          break;
+        }
+        default: {
+          read = node satisfies never;
+        }
+      }
+    }
+
+    byState.set(state, read);
+
+    return read;
+  };
+
+  return alt(
+    ...[...after(tree, 0)].flatMap(([state, words]) =>
+      dfa.accepting[state] === true ? [words] : [],
+    ),
+  );
+};
+
+/**
+ * Narrow every tree to the characters all of them may hold, until no alphabet shrinks: a word of
+ * the intersection reads only characters every language may read, so each tree keeps exactly its
+ * words over that common alphabet ({@link mapSets}, each character of a word read by one set), and
+ * the intersection is unchanged.
+ *
+ * @param trees - The trees.
+ * @returns The narrowed trees.
+ */
+const narrowed = (trees: readonly Regex[]): readonly Regex[] => {
+  const alphabets = trees.map(alphabetOf);
+  let common: CodeSet = xmlChar;
+  for (const alphabet of alphabets) {
+    common = intersect(common, alphabet);
+  }
+
+  if (alphabets.every((alphabet) => sameSet(alphabet, common))) {
+    return trees;
+  }
+
+  return narrowed(trees.map((tree) => mapSets(tree, (set) => chars(intersect(set, common)))));
+};
+
+/**
+ * The intersection of two languages, as one tree of their product, exactly or not at all:
+ *
+ * 1. Both narrow to their common alphabet ({@link narrowed}).
+ * 2. Where one now includes the other ({@link includedIn}), the intersection is the included one;
+ *    where each includes the other, the one of fewer positions, the first on a tie.
+ * 3. Otherwise it is one read through the other's minimal automaton ({@link tracked}), the automaton
+ *    of fewer states: a fixed sequence of sets, such as `[0-9]{4}-[0-9]{2}-[0-9]{2}`, is a chain of
+ *    states, and the product cuts the other to its columns.
+ *
+ * It is refused, never approximated, where neither automaton is built within {@link dfaStates}
+ * states, or where the product would be written past {@link productPositions} positions: grizzle's
+ * grammar has no lookahead to assert both over one span.
+ *
+ * @param left - A tree.
+ * @param right - A tree.
+ * @returns The tree of the words of both, or an {@link UnreadDefinition}.
+ */
+const intersectTwo = (left: Regex, right: Regex): Result.Result<Regex, UnreadDefinition> => {
+  const [mine = nothing, theirs = nothing] = narrowed([left, right]);
+  if (isNothing(mine) || isNothing(theirs)) {
+    return Result.succeed(nothing);
+  }
+
+  const mineInTheirs = includedIn(mine, theirs);
+  const theirsInMine = includedIn(theirs, mine);
+  if (mineInTheirs && theirsInMine) {
+    return Result.succeed(positionsOf(theirs) < positionsOf(mine) ? theirs : mine);
+  }
+
+  if (mineInTheirs || theirsInMine) {
+    return Result.succeed(mineInTheirs ? mine : theirs);
+  }
+
+  const theirsDfa = dfaOf(theirs);
+  const mineDfa = dfaOf(mine);
+  const product = Option.match(theirsDfa, {
+    onNone: () => mineDfa.pipe(Option.map((dfa) => tracked(theirs, dfa))),
+    onSome: (dfa) =>
+      Option.some(
+        Option.match(mineDfa, {
+          onNone: () => tracked(mine, dfa),
+          onSome: (other) =>
+            other.moves.length < dfa.moves.length ? tracked(theirs, other) : tracked(mine, dfa),
+        }),
+      ),
+  });
+  if (Option.isNone(product)) {
+    return refuse(
+      `an intersection of two languages neither of whose automata has at most ${dfaStates} states, which no one pattern without lookahead is built for`,
+    );
+  }
+
+  return positionsOf(product.value) > productPositions
+    ? refuse(
+        `an intersection whose product pattern needs more than ${productPositions} positions, grizzle's regexMaxPositions, written out`,
+      )
+    : Result.succeed(product.value);
+};
+
+/**
+ * The intersection of languages, as one tree ({@link intersectTwo}, left to right). The
+ * intersection of none is every value, {@link anything}.
+ *
+ * @param arms - The trees.
+ * @returns The tree of the words of every one, or an {@link UnreadDefinition}.
+ */
+const intersection = (arms: readonly Regex[]): Result.Result<Regex, UnreadDefinition> =>
+  Result.gen(function* intersectionBody() {
+    const [first = anything, ...rest] = arms;
+    let held = first;
+    for (const arm of rest) {
+      held = yield* intersectTwo(held, arm);
+    }
+
+    return held;
+  });
+
+/**
  * The lexical part of an atomic definition, before its whitespace class is folded in and before its
  * enumeration narrows it: its lexical space ({@link lexicalOf}) intersected with each pattern set
- * nothing else implies, then with its lengths.
+ * nothing else implies, then with its lengths, as one tree ({@link intersection}).
  *
  * A string's or `anySimpleType`'s lexical space holds every value, so a pattern set implies it. A
  * set another set's shape includes is implied by it (`\i\c*` by `[\i-[:]][\c-[:]]*`), and an
  * integer's interval implies the integer built-in's own set.
  *
  * @param domain - The atomic definition, its enumeration aside.
- * @param boundary - What ends the value's span, for an intersection.
  * @returns The tree and the residual facets.
  */
 const atomicCore = (
   domain: Extract<Domain, { readonly _tag: "atomic" }>,
-  boundary: Boundary,
 ): Result.Result<{ readonly facets: readonly ValueFacet[]; readonly tree: Regex }, CompileError> =>
   Result.gen(function* atomicCoreBody() {
     const { facets } = domain;
@@ -2094,44 +2954,8 @@ const atomicCore = (
       ...lengths,
     ];
 
-    return { facets: lexical.facets, tree: both(arms, boundary) };
+    return { facets: lexical.facets, tree: yield* intersection(arms) };
   });
-
-/**
- * Map every character set of a tree.
- *
- * @param tree - The tree.
- * @param map - What each set becomes: a set, or a tree in its place.
- * @returns The tree, each set replaced.
- */
-const mapSets = (tree: Regex, map: (set: CodeSet) => Regex): Regex => {
-  switch (tree._tag) {
-    case "chars": {
-      return map(tree.set);
-    }
-    case "seq": {
-      return seq(...tree.parts.map((part) => mapSets(part, map)));
-    }
-    case "alt": {
-      return alt(...tree.arms.map((arm) => mapSets(arm, map)));
-    }
-    case "repeat": {
-      return repeat(mapSets(tree.body, map), tree.min, tree.max);
-    }
-    case "and": {
-      return both(
-        tree.arms.map((arm) => mapSets(arm, map)),
-        tree.boundary,
-      );
-    }
-    case "edge": {
-      return tree;
-    }
-    default: {
-      return tree satisfies never;
-    }
-  }
-};
 
 /**
  * Fold `replace` into a tree: a set that holds the space also holds tab, line feed and carriage
@@ -2204,19 +3028,6 @@ const spacesOf = (tree: Regex): Spaces => {
         nullable: tree.min === 0 || body.nullable,
       };
     }
-    case "and": {
-      const arms = tree.arms.map(spacesOf);
-
-      return {
-        doubled: arms.every(({ doubled }) => doubled),
-        first: arms.every(({ first }) => first),
-        last: arms.every(({ last }) => last),
-        nullable: arms.every(({ nullable }) => nullable),
-      };
-    }
-    case "edge": {
-      return { doubled: false, first: false, last: false, nullable: true };
-    }
     default: {
       return tree satisfies never;
     }
@@ -2250,9 +3061,6 @@ const spacesToRuns = (tree: Regex, inRun = false): Regex => {
 
       return rest.length === 0 ? plus(whitespaceChar) : alt(plus(whitespaceChar), chars(rest));
     }
-    case "edge": {
-      return tree;
-    }
     case "seq": {
       return seq(...tree.parts.map((part) => spacesToRuns(part)));
     }
@@ -2264,12 +3072,6 @@ const spacesToRuns = (tree: Regex, inRun = false): Regex => {
         spacesToRuns(tree.body, Option.isNone(tree.max) && tree.min <= 1),
         tree.min,
         tree.max,
-      );
-    }
-    case "and": {
-      return both(
-        tree.arms.map((arm) => spacesToRuns(arm)),
-        tree.boundary,
       );
     }
     default: {
@@ -2320,9 +3122,6 @@ const glushkovOf = (tree: Regex, run: Option.Option<Run> = Option.none()): Glush
 
       return { first: [position], follow: [], last: [position], nullable: false };
     }
-    case "edge": {
-      return { first: [], follow: [], last: [], nullable: true };
-    }
     case "seq": {
       let left: Glushkov = { first: [], follow: [], last: [], nullable: true };
       for (const right of tree.parts.map((part) => glushkovOf(part))) {
@@ -2340,20 +3139,14 @@ const glushkovOf = (tree: Regex, run: Option.Option<Run> = Option.none()): Glush
 
       return left;
     }
-    case "alt":
-    case "and": {
-      const arms = tree.arms.map((arm) =>
-        glushkovOf(arm, tree._tag === "alt" ? run : Option.none()),
-      );
+    case "alt": {
+      const arms = tree.arms.map((arm) => glushkovOf(arm, run));
 
       return {
         first: arms.flatMap(({ first }) => first),
         follow: arms.flatMap(({ follow }) => follow),
         last: arms.flatMap(({ last }) => last),
-        nullable:
-          tree._tag === "alt"
-            ? arms.some(({ nullable }) => nullable)
-            : arms.every(({ nullable }) => nullable),
+        nullable: arms.some(({ nullable }) => nullable),
       };
     }
     case "repeat": {
@@ -2396,8 +3189,7 @@ const droppable = (position: SpacePosition): boolean =>
  * Two space positions may stand together safely when both are whole iterations of one unbounded
  * repetition whose least count is at most 1 (two adjacent iterations become one, which the count
  * still allows), or when either is a whole iteration of a repetition whose least count is 0 (it
- * gives up that iteration). Sound, so a `true` is a proof; an intersection's arms count as one
- * language, every pair of each checked.
+ * gives up that iteration). Sound, so a `true` is a proof.
  *
  * @param tree - The tree, its sets free of tab, line feed and carriage return.
  * @returns Whether every word's spaces may be merged.
@@ -2420,10 +3212,11 @@ const mergeSafe = (tree: Regex): boolean =>
  * Where no word may begin or end with a space or hold two together, that is the whole fold. Where
  * one may, a raw form's core must also begin and end with a character that is not whitespace,
  * since collapsing removes every space at an edge, so a word that holds one there is never what a
- * collapse yields (`" ?q"` is a URI reference by RFC 2396, `"?q"` is not); and where two spaces
- * may stand together, merging them must keep the word in the language, which {@link mergeSafe}
- * proves of the tree or the definition is refused. A value of whitespace alone collapses to the
- * empty word.
+ * collapse yields (`" ?q"` is a URI reference by RFC 2396, `"?q"` is not): the core is the runs'
+ * tree narrowed to its nonempty words whose first and last characters are no whitespace
+ * ({@link firstIn}, {@link lastIn}). Where two spaces may stand together, merging them must keep
+ * the word in the language, which {@link mergeSafe} proves of the tree or the definition is
+ * refused. A value of whitespace alone collapses to the empty word.
  *
  * @param tree - The language after collapsing.
  * @returns The language as written, or an {@link UnreadDefinition} when merging two spaces may
@@ -2444,7 +3237,8 @@ const foldCollapse = (tree: Regex): Result.Result<Regex, UnreadDefinition> => {
     return Result.succeed(seq(anyWhitespace, spacesToRuns(collapsed), anyWhitespace));
   }
 
-  const core = seq(edge("start"), spacesToRuns(collapsed), edge("end"));
+  const solid = subtract(xmlChar, whitespace);
+  const core = firstIn(lastIn(spacesToRuns(collapsed), solid), solid);
 
   return Result.succeed(
     alt(seq(anyWhitespace, core, anyWhitespace), ...(spaces.nullable ? [anyWhitespace] : [])),
@@ -2452,30 +3246,29 @@ const foldCollapse = (tree: Regex): Result.Result<Regex, UnreadDefinition> => {
 };
 
 /**
- * Whether a tree's language holds the empty word.
+ * Narrow a tree to the words a list item may be: no whitespace, and not empty, exactly.
  *
- * @param tree - The tree.
- * @returns Whether it is nullable.
- */
-const spacesNullable = (tree: Regex): boolean => spacesOf(tree).nullable;
-
-/**
- * Narrow a tree to the words a list item may be: no whitespace, and not empty.
+ * A word holds no whitespace exactly when each of its characters, each read by one set of the
+ * tree, is outside the whitespace, so the tree with whitespace taken out of every set keeps exactly
+ * its whitespace-free words; a set the reader built from `.`, `\s`, `\S` or a negated class is a
+ * set like any other, so none of them can still read a space. Of those words, the nonempty ones
+ * are {@link firstIn} over every character, or, for a repetition of a body with no empty word, the
+ * repetition counted from one.
  *
  * @param tree - The item type's language.
  * @returns The language of its tokens.
  */
 const asToken = (tree: Regex): Regex => {
   const bare = mapSets(tree, (set) => chars(subtract(set, whitespace)));
-  if (!spacesNullable(bare)) {
+  if (!admitsEmpty(bare)) {
     return bare;
   }
 
-  if (bare._tag === "repeat" && bare.min === 0 && !spacesNullable(bare.body)) {
+  if (bare._tag === "repeat" && bare.min === 0 && !admitsEmpty(bare.body)) {
     return repeat(bare.body, 1, bare.max);
   }
 
-  return both([plus(chars(subtract(xmlChar, whitespace))), bare], "token");
+  return firstIn(bare, xmlChar);
 };
 
 /**
@@ -2596,47 +3389,31 @@ const spellRepeat = (body: string, min: number, max: Option.Option<number>): str
 };
 
 /**
- * Write a tree as a pattern, each intersection's arms lookaheads that must reach the span's end:
- * the rest of the value for an `end` boundary, or the next whitespace or the value's end for a
- * `token` boundary.
+ * Write a tree as a pattern: a set as one character or a bracket expression, a sequence part by
+ * part (an alternation among them in a group), an alternation arm by arm, and a repetition as its
+ * body (a group unless it is one set) and a quantifier. No construct of the tree asserts without
+ * matching, so the pattern holds no lookaround.
  *
  * @param tree - The tree.
- * @param rest - The pattern that must match after it, to the value's end.
  * @returns The pattern.
  */
-const emit = (tree: Regex, rest: string): string => {
+const emit = (tree: Regex): string => {
   switch (tree._tag) {
     case "chars": {
       return spellSet(tree.set);
     }
     case "seq": {
-      let written = "";
-      for (const part of tree.parts.toReversed()) {
-        const spelled = emit(part, `${written}${rest}`);
-        written = `${part._tag === "alt" ? `(?:${spelled})` : spelled}${written}`;
-      }
-
-      return written;
+      return tree.parts
+        .map((part) => (part._tag === "alt" ? `(?:${emit(part)})` : emit(part)))
+        .join("");
     }
     case "alt": {
-      return tree.arms.map((arm) => emit(arm, rest)).join("|");
+      return tree.arms.map(emit).join("|");
     }
     case "repeat": {
-      const body = emit(tree.body, rest);
+      const body = emit(tree.body);
 
       return spellRepeat(isAtom(tree.body) ? body : `(?:${body})`, tree.min, tree.max);
-    }
-    case "and": {
-      const follow = tree.boundary === "token" ? "(?![^ \\t\\n\\r])" : rest;
-      const [last, ...ahead] = tree.arms.toReversed();
-
-      return `${ahead
-        .toReversed()
-        .map((arm) => `(?=(?:${emit(arm, follow)})${follow})`)
-        .join("")}${last === undefined ? "" : `(?:${emit(last, follow)})`}`;
-    }
-    case "edge": {
-      return tree.side === "start" ? "(?=[^ \\t\\n\\r])" : "(?<=[^ \\t\\n\\r])";
     }
     default: {
       return tree satisfies never;
@@ -2650,23 +3427,25 @@ const emit = (tree: Regex, rest: string): string => {
  * @param tree - The tree.
  * @returns `^…$`.
  */
-const emitWhole = (tree: Regex): string => `^(?:${emit(tree, "$")})$`;
+const emitWhole = (tree: Regex): string => `^(?:${emit(tree)})$`;
 
 /**
  * Keep the enumeration values a context can reach, and match them.
  *
  * @param values - The values, as the definition states them.
  * @param reachable - Whether a value can be the normalized form in this context.
- * @param rest - The definition's other constraints, as a host regex, which each value must also
- *   meet.
+ * @param rest - The definition's other constraints, as a tree whose language each value must also
+ *   be in. {@link nothing} keeps no value: it is written as the empty pattern, which a host would
+ *   read as the empty word's.
  * @returns The alternation of the kept values.
  */
 const enumerationOf = (
   values: readonly string[],
   reachable: (value: string) => boolean,
-  rest: RegExp,
+  rest: Regex,
 ): Result.Result<Regex, UnreadDefinition> => {
-  const kept = values.filter((value) => reachable(value) && rest.test(value));
+  const host = new RegExp(emitWhole(rest), "u");
+  const kept = values.filter((value) => reachable(value) && !isNothing(rest) && host.test(value));
 
   return kept.length === 0
     ? refuse("an enumeration none of whose values the context can reach")
@@ -2701,13 +3480,12 @@ const compileAtomic = (
 ): Result.Result<{ readonly facets: readonly ValueFacet[]; readonly tree: Regex }, CompileError> =>
   Result.gen(function* compileAtomicBody() {
     const whiteSpace = yield* classOf(domain.facets);
-    const boundary: Boundary = context._tag === "token" ? "token" : "end";
     const values = valuesOf(domain.facets, "enumeration");
     const withoutEnumeration = {
       ...domain,
       facets: domain.facets.filter(({ facet }) => facet !== "enumeration"),
     };
-    const core = yield* atomicCore(withoutEnumeration, boundary);
+    const core = yield* atomicCore(withoutEnumeration);
     let { tree } = core;
     if (values.length > 0) {
       if (domain.primitive !== "string" && domain.primitive !== "anySimpleType") {
@@ -2716,7 +3494,6 @@ const compileAtomic = (
         );
       }
 
-      const rest = new RegExp(emitWhole(tree), "u");
       const reachable = (value: string): boolean => {
         if (context._tag === "token") {
           return value !== "" && !/[ \t\n\r]/u.test(value);
@@ -2728,7 +3505,7 @@ const compileAtomic = (
 
         return whiteSpace === "replace" ? !/[\t\n\r]/u.test(value) : isCollapsed(value);
       };
-      tree = yield* enumerationOf(values, reachable, rest);
+      tree = yield* enumerationOf(values, reachable, tree);
     }
 
     if (context._tag === "token") {
@@ -2861,6 +3638,22 @@ const compiledCache = new WeakMap<
 >();
 
 /**
+ * The detail of {@link UnreadDefinition} for a definition whose lexical space is empty, which no
+ * pattern grizzle admits spells (it refuses a `Compute.matches` pattern no text matches): the
+ * attribute grammar reads such a definition as an empty domain, one with no pattern.
+ */
+export const emptyDefinition = "a definition whose lexical space holds no value";
+
+/**
+ * Whether a compile failure is a definition's empty lexical space, {@link emptyDefinition}.
+ *
+ * @param failure - The failure.
+ * @returns Whether the definition holds no value.
+ */
+export const isEmptyDefinition = (failure: CompileError): boolean =>
+  failure._tag === "UnreadDefinition" && failure.detail === emptyDefinition;
+
+/**
  * Compile a definition, uncached ({@link compile}).
  *
  * @param domain - The definition.
@@ -2881,7 +3674,7 @@ const compileUncached = (
       exact: reading === "exact",
     });
     if (isNothing(tree)) {
-      return yield* refuse("a definition whose lexical space holds no value");
+      return yield* refuse(emptyDefinition);
     }
 
     return {

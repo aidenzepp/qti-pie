@@ -30,15 +30,21 @@ import { roster } from "#pantry/grammar/closed.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
 import {
+  asiCensus,
   asiReferences,
+  mathmlCensus,
   references,
   sectionPartsIn,
   spellings,
+  ssmlCensus,
+  xiCensus,
 } from "#pantry/grammar/references.ts";
 import type { Spelling } from "#pantry/grammar/references.ts";
-import { ncName } from "#pantry/schema/patterns.ts";
+import { compile, patternFlags } from "#pantry/grammar/domains.ts";
+import { builtinDomainOf } from "#pantry/vocab/derive/domains.ts";
 import { checkCache } from "#pantry/vocab/derive/sources.ts";
 import type { SourcePath } from "#pantry/vocab/derive/sources.ts";
+import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
 import { asiNamespace } from "#pantry/vocab/namespaces.ts";
 import {
   elementsOf,
@@ -86,6 +92,7 @@ const production = grammar.pipe(
         facets: [asiReferences],
         kinds: kinds.nodeKind,
         names: kinds.attributeName,
+        versions: kinds.versions,
       }),
     ),
   ),
@@ -176,6 +183,14 @@ const reading = {
     [`{${xs}}NCName`, "bare"],
   ]),
   section: "qti-assessment-section",
+  // A test feedback's `outcome-identifier`, "The identifier of an outcome variable that must have
+  // a base-type of identifier and be of either single or multiple cardinality" (information model
+  // §5.157.2, TestFeedback; the UP audit's A43): the one reference a test's own content makes.
+  testFeedback: {
+    attribute: "outcome-identifier",
+    declarations: ["qti-outcome-declaration"],
+    kind: "qti-test-feedback",
+  },
 } as const;
 
 /**
@@ -349,6 +364,16 @@ describe.skipIf(!cached)("the reference relations against the XSD", () => {
             }
           }
 
+          if (
+            namesOf(contents.get(reading.testFeedback.kind) ?? []).has(
+              reading.testFeedback.attribute,
+            )
+          ) {
+            const { attribute, declarations, kind } = reading.testFeedback;
+            stated.push(keyed(kind, attribute, "bare"));
+            restricted.push(...declarations.map((target) => keyed(kind, attribute, target)));
+          }
+
           compare(
             "VariableReference",
             stated,
@@ -456,22 +481,39 @@ describe("the reference relations of production", () => {
   );
 
   it.effect(
-    "hold exactly the information model's built-in variables, each as the declaration kind it stands as",
+    "hold exactly the information model's built-in variables under each root, each as the declaration kind, base type and cardinality it stands as there",
     () =>
       // Oracle: the specification as a checker, the information model's §2.2.2 (Item Variables):
       // "There is one built-in context variable: 'QTI_CONTEXT'" (§2.2.2.1), "There are two
       // built-in response variables: 'numAttempts' and 'duration'" (§2.2.2.2), and "There is one
-      // built-in outcome variable, 'completionStatus'" (§2.2.2.3).
+      // built-in outcome variable, 'completionStatus'" (§2.2.2.3); `numAttempts` "an integer",
+      // an item's `duration` "a single float", a test's, part's or section's "a single value of
+      // base-type duration" (info.txt lines 8462 to 8468 and 9214, spec reading 29), and a record,
+      // QTI_CONTEXT, of no base type. An item's and a response processing template's processing
+      // holds an item's, a test's and a section's a test's.
       Effect.gen(function* builtInsAreTheSpecs() {
         const { builtIn } = yield* production;
+        const item = ["qti-assessment-item", "qti-response-processing"];
+        const test = ["qti-assessment-test", "qti-assessment-section"];
 
         assert.deepStrictEqual(
-          new Set(builtIn.rows.map(({ declaration, variable }) => keyed(variable, declaration))),
+          new Set(
+            builtIn.rows.map(({ baseType, cardinality, declaration, root, variable }) =>
+              keyed(root, variable, declaration, baseType, cardinality),
+            ),
+          ),
           new Set([
-            keyed("QTI_CONTEXT", "qti-context-declaration"),
-            keyed("numAttempts", "qti-response-declaration"),
-            keyed("duration", "qti-response-declaration"),
-            keyed("completionStatus", "qti-outcome-declaration"),
+            ...item.flatMap((root) => [
+              keyed(root, "numAttempts", "qti-response-declaration", "integer", "single"),
+              keyed(root, "duration", "qti-response-declaration", "float", "single"),
+              keyed(root, "completionStatus", "qti-outcome-declaration", "identifier", "single"),
+            ]),
+            ...test.map((root) =>
+              keyed(root, "duration", "qti-response-declaration", "duration", "single"),
+            ),
+            ...[...item, ...test].map((root) =>
+              keyed(root, "QTI_CONTEXT", "qti-context-declaration", "none", "record"),
+            ),
           ]),
         );
       }),
@@ -481,9 +523,15 @@ describe("the reference relations of production", () => {
   it.effect(
     "name each built-in variable by an identifier a reference can spell",
     () =>
+      // Oracle: `xs:NCName` as the value domains compile it (`#pantry/grammar/domains.ts`, whose
+      // name tables `domains.test.ts` reads from the cached XML 1.0 specification), the domain a
+      // bare reference's value is judged by.
       Effect.gen(function* builtInsAreIdentifiers() {
         const { builtInVariable } = yield* production;
-        const identifier = new RegExp(ncName, "u");
+        const { pattern } = yield* Effect.fromResult(
+          Result.flatMap(builtinDomainOf("NCName"), (domain) => compile(domain, "exact")),
+        );
+        const identifier = new RegExp(pattern, patternFlags);
 
         assert.isNotEmpty(builtInVariable.handles);
         assert.deepStrictEqual(
@@ -581,7 +629,8 @@ describe("references", () => {
 
               const kinds = yield* Effect.fromResult(roster("NodeKind", toyKinds));
               const names = yield* Effect.fromResult(roster("AttributeName", toyNames));
-              const outcome = references({ facets, kinds, names });
+              const versions = yield* Effect.fromResult(roster("SchemaVersion", schemaVersions));
+              const outcome = references({ facets, kinds, names, versions });
 
               assert.strictEqual(
                 Result.isSuccess(outcome) ? "succeeded" : outcome.failure._tag,
@@ -600,15 +649,16 @@ describe("references", () => {
               const parts = new Set(facets.flatMap((facet) => facet.sectionParts));
 
               assert.deepStrictEqual(relations.declarationKind.handles, declarations);
-              assert.deepStrictEqual(
-                relations.builtInVariable.handles,
-                builtIns.map(({ variable }) => variable),
-              );
+              assert.deepStrictEqual(relations.builtInVariable.handles, [
+                ...new Set(builtIns.map(({ variable }) => variable)),
+              ]);
               assert.deepStrictEqual([...relations.spelling.handles], [...spellings]);
-              for (const { declaration, variable } of builtIns) {
+              for (const { baseType, cardinality, declaration, root, variable } of builtIns) {
                 assert.deepStrictEqual(
-                  Option.map(relations.builtIn.lookup({ variable }), (row) => row.declaration),
-                  Option.some(declaration),
+                  Option.map(relations.builtIn.lookup({ root, variable }), (row) =>
+                    keyed(row.declaration, row.baseType, row.cardinality),
+                  ),
+                  Option.some(keyed(declaration, baseType, cardinality)),
                 );
               }
 
@@ -665,5 +715,71 @@ describe("references", () => {
             }),
         ),
       ),
+  );
+});
+
+/**
+ * Spec reading 95's census, every vocabulary's entries, and the prefix of the kinds an entry that
+ * lists none reads.
+ */
+const censuses = [
+  { census: asiCensus, prefix: Option.none<string>() },
+  { census: mathmlCensus, prefix: Option.some("m:") },
+  { census: ssmlCensus, prefix: Option.some("ssml:") },
+  { census: xiCensus, prefix: Option.some("xi:") },
+] as const;
+
+describe("ReferenceAttribute, spec reading 95's census", () => {
+  it.effect(
+    "names exactly the census's declared attributes, each in the versions its XSD declares it, with its entry's form, and every listed kind declares its attribute",
+    () =>
+      // Oracle: the pinned XSDs' attribute declarations (`attributeDeclarations`), read directly
+      // against the reading's census.
+      // Bound: every census entry and every attribute declaration.
+      Effect.gen(function* census() {
+        const { references: relations } = yield* grammar;
+        const expected = new Set<string>();
+        const unlisted: string[] = [];
+        for (const { census: entries, prefix } of censuses) {
+          for (const entry of entries) {
+            const declaring = attributeDeclarations.filter(
+              ({ kind, name }) =>
+                name === entry.name &&
+                Option.match(entry.kinds, {
+                  onNone: () => Option.exists(prefix, (held) => kind.startsWith(held)),
+                  onSome: (kinds) => kinds.includes(kind),
+                }),
+            );
+            for (const kind of Option.getOrElse(entry.kinds, () => [])) {
+              if (!declaring.some((declaration) => declaration.kind === kind)) {
+                unlisted.push(`${kind}@${entry.name}`);
+              }
+            }
+
+            for (const { kind, name, versions } of declaring) {
+              for (const version of versions) {
+                expected.add(`${version} ${kind} ${name} ${entry.form}`);
+              }
+            }
+          }
+        }
+
+        assert.deepStrictEqual(unlisted, []);
+        assert.deepStrictEqual(
+          new Set(
+            relations.referenceAttribute.rows.map(
+              ({ form, kind, name, version }) => `${version} ${kind} ${name} ${form}`,
+            ),
+          ),
+          expected,
+        );
+        assert.deepStrictEqual(
+          relations.referenceAttribute.rows
+            .filter(({ form }) => form === "srcset")
+            .map(({ kind, name }) => `${kind}@${name}`),
+          ["source@srcset", "source@srcset"],
+        );
+      }),
+    composeTimeout,
   );
 });

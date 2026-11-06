@@ -82,9 +82,13 @@ import type {
 } from "#pantry/grammar/kinds.ts";
 import { characterKinds, contentOf } from "#pantry/grammar/content.ts";
 import type { ContentError, ContentGrammar } from "#pantry/grammar/content.ts";
+import { includeAlternativesOf, includeGrammar } from "#pantry/grammar/include.ts";
+import type { IncludeGrammar } from "#pantry/grammar/include.ts";
+import { heldRootsUnder, namesUnder, typesAvailable } from "#pantry/grammar/names.ts";
+import type { HeldRootsUnder, NamesUnder, TypesAvailable } from "#pantry/grammar/names.ts";
 import { packageGrammar } from "#pantry/grammar/package.ts";
 import { references } from "#pantry/grammar/references.ts";
-import { noType, xsiTypesOf } from "#pantry/grammar/xsi.ts";
+import { expandedNameOf, noType, xsiTypesOf } from "#pantry/grammar/xsi.ts";
 import type { XsiTypeError, XsiTypes } from "#pantry/grammar/xsi.ts";
 import type { References } from "#pantry/grammar/references.ts";
 import type { PackageGrammar } from "#pantry/grammar/package.ts";
@@ -101,11 +105,12 @@ import { coveredElements } from "#pantry/vocab/inventory/extensions.ts";
 import { globalKinds, vocabularies as rosters } from "#pantry/vocab/inventory/vocabularies.ts";
 import type {
   ContentModel,
+  Domain,
   Source,
   TypeText,
   VocabularyRoster,
 } from "#pantry/vocab/inventory/types.ts";
-import { xsNamespace } from "#pantry/vocab/namespaces.ts";
+import { namespaceClassOf, xsNamespace } from "#pantry/vocab/namespaces.ts";
 import * as open from "#pantry/vocab/open.ts";
 
 /**
@@ -154,22 +159,24 @@ const vocabulary = <const R extends VocabularyRoster>(
 };
 
 /**
- * A layer of the composition that no XSD declares: kinds that name no element, or none, and the
- * facets that state what no XSD does.
+ * A layer of the composition that no XSD declares: kinds that name no element, or none, the
+ * attribute names it holds, and the facets that state what no XSD does.
  *
  * @param kinds - The layer's kinds, none of them an element.
  * @param stated - Its facets.
+ * @param attributes - The attribute names it holds, empty for a layer of kinds alone.
  * @returns The layer as the composition reads it.
  */
-const layer = <const K extends readonly string[]>(
+const layer = <const K extends readonly string[], const A extends readonly string[]>(
   kinds: K,
   stated: Facets,
+  attributes: A,
 ): Vocabulary & {
-  readonly attributes: readonly [];
+  readonly attributes: A;
   readonly kinds: readonly { readonly handle: K[number]; readonly local: "" }[];
 } => ({
   admission: [],
-  attributes: [],
+  attributes,
   declarations: [],
   facets: stated,
   kinds: kinds.map((handle) => ({ handle, local: "" as const })),
@@ -178,15 +185,44 @@ const layer = <const K extends readonly string[]>(
 });
 
 /**
+ * The global attribute names every `AttributeName` roster holds through the document layer, as the
+ * leaf's `globalAttributes` spells them: `xml.xsd`'s four, XML Schema's four instance attributes
+ * and XLink's ten. The roster takes them from the leaf at run time (`generateKinds`'s `layer`); the
+ * document layer lists them again so the static {@link Name} is the roster, a vocabulary's
+ * `attributes` being the only names it reads. A name the roster already holds keeps its code, so
+ * the list moves no code. `compose.test.ts` checks it against the leaf.
+ */
+export const layerAttributeNames = [
+  "xml:lang",
+  "xml:space",
+  "xml:base",
+  "xml:id",
+  "xsi:schemaLocation",
+  "xsi:type",
+  "xsi:nil",
+  "xsi:noNamespaceSchemaLocation",
+  "xlink:type",
+  "xlink:href",
+  "xlink:role",
+  "xlink:arcrole",
+  "xlink:title",
+  "xlink:show",
+  "xlink:actuate",
+  "xlink:label",
+  "xlink:from",
+  "xlink:to",
+] as const;
+
+/**
  * Every vocabulary of production, in composition order: character data, the eleven vocabularies the
  * pinned XSDs declare, the open vocabulary and the document layer. Codes follow this order, so a
  * vocabulary joins at the end.
  */
 export const vocabularies = [
-  layer(characterKinds, facets.noFacets),
+  layer(characterKinds, facets.noFacets, []),
   ...rosters.map(vocabulary),
-  layer([], facets.openVocabulary),
-  layer([], facets.documentLayer),
+  layer([], facets.openVocabulary, []),
+  layer([], facets.documentLayer, layerAttributeNames),
 ] as const;
 
 /**
@@ -243,6 +279,46 @@ export const coveredBy = (
 };
 
 /**
+ * Read the namespace an element of a kind is written in, empty for a kind no vocabulary declares.
+ *
+ * @param kinds - The composition's kinds.
+ * @param kind - The kind.
+ * @returns Its namespace name.
+ */
+const namespaceOfKind = (kinds: Kinds<string, string>, kind: string): string =>
+  Option.match(kinds.elementName.lookup({ kind }), {
+    onNone: () => "",
+    onSome: ({ namespace }) => namespace,
+  });
+
+/**
+ * Whether an attribute's type definition is or is derived from `xs:ID`: the leaf's definition of an
+ * ID-derived type, `UniqueIdentifierDType` among them, is atomic with the built-in `ID`.
+ *
+ * @param attribute - The attribute's declaration, or its admission under a wildcard.
+ * @returns Whether its type is an ID.
+ */
+const isIdType = ({ domain }: { readonly domain: Domain }): boolean =>
+  domain._tag === "atomic" && domain.builtin === "ID";
+
+/**
+ * Whether an element may carry a wild ID: XML Schema 1.0 Part 1, §3.4.4, Element Locally Valid
+ * (Complex Type), clause 5.2: "If the wild IDs is non-empty, there must not be any attribute uses
+ * among the {attribute uses} whose {attribute declaration}'s {type definition} is or is derived
+ * from ID". A wild ID is an attribute a wildcard admits whose declaration's type is an ID: only
+ * `xml:id`, which `xml.xsd` types `xs:ID`, under a `lax` or `strict` wildcard (under `skip` it is
+ * not assessed, so it has no type). So an element whose uses include an ID-derived one admits no
+ * `xml:id` its type does not declare (spec reading 101). Clause 5.1, at most one wild ID, holds by
+ * construction: `xml:id` is the only global attribute of an ID type.
+ *
+ * @param attribute - An attribute a wildcard admits.
+ * @param declaresId - Whether the element's own attribute uses include an ID-derived one.
+ * @returns Whether the element may carry it.
+ */
+const admitsWild = (attribute: { readonly domain: Domain }, declaresId: boolean): boolean =>
+  !declaresId || !isIdType(attribute);
+
+/**
  * State the document layer's attributes, each where its kind's vocabulary does not declare it:
  *
  * - The `xsi:` names on every element kind, but `xsi:nil`, which XML Schema admits only on an element
@@ -257,17 +333,23 @@ export const coveredBy = (
  * - On each foreign kind, the `xml:` names with `xml.xsd`'s types, and the open classes but `data-*`
  *   (`open.foreignAttributes`).
  *
+ * But a kind whose declared uses include an ID-derived one admits no wild ID, the `xml:id` its
+ * wildcard would validate ({@link admitsWild}, spec reading 101).
+ *
  * A foreign element is one a `lax` element wildcard admits with no declaration, and XML Schema
  * assesses it laxly, against `xs:anyType`, whose attribute wildcard is `##any` and `lax`: so its
  * `xml:` names are validated, as a `lax` attribute wildcard's are.
  *
  * @param kinds - The composition's kinds.
  * @param declared - The keys of the attributes the vocabularies admit ({@link attributeKey}).
+ * @param declaresId - The (version, kind)s whose declared uses include an ID-derived one,
+ *   `<version> <kind>`.
  * @returns The layer, read as its XSD types the attributes.
  */
 const layerOf = (
   kinds: Kinds<string, string>,
   declared: ReadonlySet<string>,
+  declaresId: ReadonlySet<string>,
 ): readonly Declared[] => {
   const covered = coveredBy(kinds);
   const hosts = [
@@ -276,8 +358,9 @@ const layerOf = (
       .flatMap(({ kind, namespace, processing, versions: holding }) =>
         holding.flatMap((version) =>
           open
-            .attributesUnder({ namespace, processing })
+            .attributesUnder({ namespace, processing }, namespaceOfKind(kinds, kind))
             .filter(({ name }) => !covered(version, kind) || name === "data-*")
+            .filter((attribute) => admitsWild(attribute, declaresId.has(`${version} ${kind}`)))
             .map((attribute) => ({ attribute, kind, version })),
         ),
       ),
@@ -321,28 +404,26 @@ const layerOf = (
 };
 
 /**
- * The built-in simple types whose texts the grammar states no domain for: `xs:NOTATION`, whose
- * value space is the QNames of the notations the schema declares (XML Schema Part 2, 3.2.19). No
- * pinned XSD declares one, so no text is valid for it, and the domain compiler refuses a definition
- * whose lexical space holds no value (`#pantry/grammar/domains.ts`). A foreign element whose
- * `xsi:type` names it is therefore not governed, and its text is not checked: a recorded limit of
- * spec reading 60.
- */
-const uncompiledTypes: ReadonlySet<string> = new Set([`{${xsNamespace}}NOTATION`]);
-
-/**
  * Read the texts of the named types a composition's elements may be governed by: each leaf row of
- * a type in XML Schema's namespace or one of the composition's vocabularies', but
- * {@link uncompiledTypes}'. A toy composition reads the built-ins alone.
+ * a type in XML Schema's namespace or one of the composition's vocabularies'. A toy composition
+ * reads the built-ins alone.
+ *
+ * `xs:NOTATION`'s text is among them: its value space is the QNames of the notations the schema
+ * declares (XML Schema Part 2, 3.2.19), and no pinned XSD declares one, so its domain is empty, a
+ * `ValueDomain` handle with no pattern (`emptyDomains` of the attribute grammar, C47): a foreign
+ * element whose `xsi:type` names it holds no valid text. No pattern spells the empty language that
+ * grizzle admits (it refuses a `Compute.matches` pattern no text matches,
+ * `scalar/regex/admit.ts:121`), so the laws read the domain's emptiness, not a pattern.
  *
  * @param namespaces - The namespaces of the composition's vocabularies.
  * @returns The rows.
  */
 const governingTextsOf = (namespaces: ReadonlySet<string>): readonly TypeText[] =>
-  typeTexts.filter(
-    ({ owner }) =>
-      !uncompiledTypes.has(owner) &&
-      [xsNamespace, ...namespaces].some((namespace) => owner.startsWith(`{${namespace}}`)),
+  typeTexts.filter(({ owner }) =>
+    Option.exists(
+      expandedNameOf(owner),
+      ({ namespace }) => namespace === xsNamespace || namespaces.has(namespace),
+    ),
   );
 
 /**
@@ -384,9 +465,11 @@ interface GovernedAttributes {
  * kind's: the type's declarations through the kind's own spec readings (`readDeclarations`), the
  * `xml:` names and open classes the type's attribute wildcard admits, but on a kind spec reading 81
  * covers only `data-*`, since that reading follows the element's name, and the `xsi:` names but
- * `xsi:nil`, which no pinned element declaration makes nillable. An element under a simple type
- * carries the `xsi:` names alone (XML Schema 1.0 Part 1, §3.3.4, Element Locally Valid (Type),
- * clause 3.1.1), `xsi:nil` among them on a foreign element, which no declaration assesses.
+ * `xsi:nil`, which no pinned element declaration makes nillable; and no wild ID where the type's
+ * declared uses include an ID-derived one ({@link admitsWild}, spec reading 101). An element under
+ * a simple type carries the `xsi:` names alone (XML Schema 1.0 Part 1, §3.3.4, Element Locally
+ * Valid (Type), clause 3.1.1), `xsi:nil` among them on a foreign element, which no declaration
+ * assesses.
  *
  * @param kinds - The composition's kinds.
  * @param xsi - The `xsi:type` law's relations.
@@ -429,11 +512,13 @@ const governedOf = (
         versions: [version],
       })),
     );
+    const declaresId = own.some(isIdType);
     const hosts = [
       ...(wildcardOf.get(key) ?? []).flatMap(({ namespace, processing }) =>
         open
-          .attributesUnder({ namespace, processing })
-          .filter(({ name }) => !covered(version, kind) || name === "data-*"),
+          .attributesUnder({ namespace, processing }, namespaceOfKind(kinds, kind))
+          .filter(({ name }) => !covered(version, kind) || name === "data-*")
+          .filter((attribute) => admitsWild(attribute, declaresId)),
       ),
       ...open.xsiAttributes.filter(({ name }) => name !== "xsi:nil" || isForeignKind(kind)),
     ];
@@ -483,6 +568,20 @@ export interface Grammar<K extends string, N extends string> {
   readonly barredBy: BarredBy;
   readonly bindingFit: BindingFit;
   readonly content: ContentGrammar;
+  /**
+   * `HeldRootsUnder`: (version, parent) → names, the expanded names of spec reading 6's roots a
+   * strictly held family's `strict` wildcards assess against their global declarations (C13).
+   */
+  readonly heldRootsUnder: HeldRootsUnder;
+  /**
+   * The kinds an include stands for under each parent whose model holds one (spec reading 107).
+   */
+  readonly include: IncludeGrammar;
+  /**
+   * `KindByNameUnder`: (version, parent) → names, the expanded names of the element kinds a parent
+   * that admits a foreign element admits, which no foreign element under it holds (C8).
+   */
+  readonly kindByNameUnder: NamesUnder;
   readonly kinds: Kinds<K, N>;
   /**
    * The last-slot rules the vocabularies state, for the law that reads them (`LastWhere`).
@@ -496,6 +595,11 @@ export interface Grammar<K extends string, N extends string> {
    * The relations of variable references and their declarations (review R9).
    */
   readonly references: References;
+  /**
+   * `TypeAvailable`: type → namespaces, the vocabulary namespaces under whose elements an
+   * `xsi:type` may name the type (C15, C36; spec readings 60 and 72).
+   */
+  readonly typeAvailable: TypesAvailable;
   /**
    * The `TypedCardinality` roster.
    */
@@ -522,6 +626,15 @@ export type ComposeError =
   | XsiTypeError;
 
 /**
+ * Read a `TypeName` handle's namespace.
+ *
+ * @param type - The handle.
+ * @returns Its namespace name, empty for the null type.
+ */
+const typeNamespaceOf = (type: string): string =>
+  Option.match(expandedNameOf(type), { onNone: () => "", onSome: ({ namespace }) => namespace });
+
+/**
  * Run every generator over a vocabulary list.
  *
  * @param list - The vocabularies, in composition order.
@@ -534,7 +647,9 @@ export const compose = <const V extends readonly Vocabulary[]>(
     const stated = list.map((entry) => entry.facets);
     const base = yield* generateKinds({
       interactions: stated.flatMap((facet) => facet.interactions),
-      layer: [...open.xsiAttributes, ...open.xmlAttributes].map(({ name }) => name),
+      layer: [...open.xsiAttributes, ...open.xmlAttributes, ...open.xlinkAttributes].map(
+        ({ name }) => name,
+      ),
       vocabularies: list,
     });
     const namespaceOf = (kind: string) =>
@@ -602,17 +717,27 @@ export const compose = <const V extends readonly Vocabulary[]>(
         versions.map((version) => attributeKey({ kind, name, version })),
       ),
     );
+    const declaresId = new Set(
+      declarations
+        .filter(isIdType)
+        .flatMap(({ kind, versions }) => versions.map((version) => `${version} ${kind}`)),
+    );
     const xsi = yield* xsiTypesOf({
       derivations: typeDerivations,
       kinds: kinds.nodeKind,
       models: list.flatMap((entry) => entry.models),
+      namespaceOf: new Map(
+        list.flatMap(({ models, namespace }) =>
+          models.map(({ kind }) => [kind, namespace] as const),
+        ),
+      ),
       versions: kinds.versions,
     });
     const governingTexts = governingTextsOf(
       new Set(list.flatMap(({ namespace }) => (namespace === "" ? [] : [namespace]))),
     );
     const attributes = yield* generateAttributes({
-      declarations: [...declarations, ...layerOf(kinds, declared)],
+      declarations: [...declarations, ...layerOf(kinds, declared, declaresId)],
       ...governedOf(kinds, xsi, governingTexts),
       kinds: kinds.nodeKind,
       names: kinds.attributeName,
@@ -621,6 +746,9 @@ export const compose = <const V extends readonly Vocabulary[]>(
       typeTexts: governingTexts,
       versions: kinds.versions,
     });
+    const namespaces = [
+      ...new Set(list.flatMap(({ namespace }) => (namespace === "" ? [] : [namespace]))),
+    ];
     const baseTypeRoster = yield* roster("BaseType", baseTypes);
     const cardinalities = yield* roster("TypedCardinality", typedCardinalities);
     const expression = stated.map((facet) => facet.expression);
@@ -645,6 +773,35 @@ export const compose = <const V extends readonly Vocabulary[]>(
       baseTypes: baseTypeRoster,
       bindingFit: yield* bindingFit({ facets: expression, rosters: fitRosters }),
       content: installed.content,
+      heldRootsUnder: yield* heldRootsUnder({
+        classOf: (namespace, parent) => foreignKinds[namespaceClassOf(namespace, parent)],
+        held: installed.content.strictlyHeld.rows,
+        kinds: kinds.nodeKind,
+        namespaceOf,
+        reads: open.wildcardReads,
+        roots: globalKinds.flatMap(({ kind, versions }) =>
+          open.foreignRoots.has(kind)
+            ? Option.toArray(kinds.elementName.lookup({ kind })).map(({ local, namespace }) => ({
+                kind,
+                local,
+                namespace,
+                versions,
+              }))
+            : [],
+        ),
+        versions: kinds.versions,
+      }),
+      include: yield* includeGrammar({
+        alternatives: includeAlternativesOf(list.flatMap((entry) => entry.models)),
+        kinds: kinds.nodeKind,
+        versions: kinds.versions,
+      }),
+      kindByNameUnder: yield* namesUnder({
+        admitted: admission.rows,
+        kinds: kinds.nodeKind,
+        nameOf: (kind) => Option.getOrUndefined(kinds.elementName.lookup({ kind })),
+        versions: kinds.versions,
+      }),
       kinds,
       lastWhere: stated.flatMap((facet) => facet.children.lastWhere),
       mappableBaseType: yield* mappableBaseType(baseTypeRoster),
@@ -659,6 +816,14 @@ export const compose = <const V extends readonly Vocabulary[]>(
         facets: stated.map((facet) => facet.references),
         kinds: kinds.nodeKind,
         names: kinds.attributeName,
+        versions: kinds.versions,
+      }),
+      typeAvailable: yield* typesAvailable({
+        available: open.typeAvailable,
+        everywhere: (type) => type === noType || typeNamespaceOf(type) === xsNamespace,
+        namespaceOf: typeNamespaceOf,
+        types: xsi.typeName,
+        vocabularies: namespaces,
       }),
       typedCardinalities: cardinalities,
       xsi,

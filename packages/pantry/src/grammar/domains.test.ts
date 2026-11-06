@@ -226,7 +226,7 @@ const syntheticDomains: readonly { readonly domain: Domain; readonly where: stri
     ["collapse", "a b( c)*"],
     ["preserve", "a b"],
     ["collapse", anyUriPattern],
-    ["collapse", " a"],
+    ["collapse", " ?a"],
     ["collapse", "( a)*b"],
     ["collapse", "([ x]|y)+z"],
   ] as const
@@ -354,8 +354,8 @@ const characterOf =
 
 /**
  * Draw a word of a language tree: every set a character of it, every repetition a few times past
- * its least, an intersection's last arm (the others may refuse the word; the laws below read it
- * either way).
+ * its least. A tree holds no intersection, which the compiler builds as its product, so every word
+ * drawn is in the language.
  *
  * @param tree - The tree.
  * @returns The generator.
@@ -385,14 +385,6 @@ const wordOf =
         const times = source.draw(int(tree.min, tree.min + extra));
 
         return Array.from({ length: times }, () => source.draw(wordOf(tree.body))).join("");
-      }
-      case "edge": {
-        return "";
-      }
-      case "and": {
-        const last = tree.arms.at(-1);
-
-        return last === undefined ? "" : source.draw(wordOf(last));
       }
       default: {
         return tree satisfies never;
@@ -552,24 +544,26 @@ const foldFeatures = [
 ] as const;
 
 /**
+ * A collapsed `xs:token` restricted by one pattern.
+ *
+ * @param pattern - The XSD pattern.
+ * @returns The definition.
+ */
+const collapsedToken = (pattern: string): Domain => ({
+  _tag: "atomic",
+  builtin: "token",
+  facets: [{ facet: "whiteSpace", value: "collapse" }],
+  patterns: [[pattern]],
+  primitive: "string",
+});
+
+/**
  * Whether a collapsed `xs:token` restricted by one pattern compiles.
  *
  * @param pattern - The XSD pattern.
  * @returns Whether its domain folds.
  */
-const folds = (pattern: string) =>
-  Result.isSuccess(
-    compile(
-      {
-        _tag: "atomic",
-        builtin: "token",
-        facets: [{ facet: "whiteSpace", value: "collapse" }],
-        patterns: [[pattern]],
-        primitive: "string",
-      },
-      "xsd",
-    ),
-  );
+const folds = (pattern: string) => Result.isSuccess(compile(collapsedToken(pattern), "xsd"));
 
 describe("The whitespace fold", () => {
   it.effect(
@@ -610,13 +604,25 @@ describe("The whitespace fold", () => {
     120_000,
   );
 
-  it("refuses to fold exactly the collapsed languages in which two spaces that do not merge may stand together", () => {
+  it("refuses to fold exactly the collapsed languages in which two spaces that do not merge may stand together, and refuses as empty those whose every word begins or ends with a space", () => {
     for (const pattern of ["a  b", "a[ x][ y]b", "a( )( )b"]) {
       assert.isFalse(folds(pattern), `the pattern ${JSON.stringify(pattern)} under collapse`);
     }
 
-    for (const pattern of [" a", "a ", "( a)*", "a[ b]*c", "([ x]|y)+z"]) {
+    for (const pattern of [" ?a", "a ?", "( a)*", "a[ b]*c", "([ x]|y)+z"]) {
       assert.isTrue(folds(pattern), `the pattern ${JSON.stringify(pattern)} under collapse`);
+    }
+
+    // Every word of these begins or ends with a space, which collapsing never yields, so the
+    // narrowed core holds no word and the definition is refused as holding no value.
+    for (const pattern of [" a", "a ", "( a)+"]) {
+      const compiled = compile(collapsedToken(pattern), "xsd");
+      assert.isTrue(
+        Result.isFailure(compiled) &&
+          compiled.failure._tag === "UnreadDefinition" &&
+          compiled.failure.detail.includes("holds no value"),
+        `the pattern ${JSON.stringify(pattern)} under collapse`,
+      );
     }
   });
 });
@@ -1192,8 +1198,9 @@ const escapeAt = (points: readonly string[], at: number, inClass: boolean): Esca
  * Check a pattern against the syntax PostgreSQL's advanced regular expressions and JavaScript's
  * `u`-flag regular expressions share: a bracket expression holds code points, ranges and escapes
  * of a code point; outside one, an escape is of a metacharacter or a code point; a group is
- * `(?:`, `(?=`, `(?!` or `(?<=` (PostgreSQL has read lookbehind since 9.6); a quantifier's counts
- * are at most 255; and no `.`, no class shorthand, no backreference, no `\x` and no `\u{…}`.
+ * `(?:`, never a lookaround, which grizzle's `str.regex` grammar refuses (`scalar/regex/parse.ts`);
+ * a quantifier's counts are at most 255; and no `.`, no class shorthand, no backreference, no `\x`
+ * and no `\u{…}`.
  *
  * @param pattern - The pattern.
  * @returns Each way it leaves the shared syntax.
@@ -1218,10 +1225,7 @@ const outsideSharedSyntax = (pattern: string): readonly string[] => {
     } else if (point === ".") {
       problems.push(`a . at ${at}`);
     } else if (point === "(" && points[at + 1] === "?") {
-      if (
-        !/^[:=!]$/u.test(points[at + 2] ?? "") &&
-        points.slice(at + 2, at + 4).join("") !== "<="
-      ) {
+      if (points[at + 2] !== ":") {
         problems.push(`a group (?${points[at + 2] ?? ""} at ${at}`);
       }
     } else if (point === "(") {

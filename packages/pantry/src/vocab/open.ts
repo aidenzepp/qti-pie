@@ -228,23 +228,74 @@ export const typeAvailable = (parent: string, type: string): boolean =>
 export type GlobalAttribute = GlobalAttributeDeclaration;
 
 /**
- * The XML-namespace attributes `w3/xml.xsd` declares globally, as it declares them: the only global
- * attribute declarations the pinned XSDs hold (fin.md, D2's refinement). A `lax` or `strict`
- * wildcard validates each against its declaration, so these are the types a kind under either
- * admits them with ({@link xmlAttributesUnder}).
+ * The XML-namespace attributes `w3/xml.xsd` declares globally, as it declares them (fin.md, D2's
+ * refinement). A `lax` or `strict` wildcard validates each against its declaration, so these are
+ * the types a kind under either admits them with ({@link xmlAttributesUnder}).
+ *
+ * They are not the only global attribute declarations the pinned XSDs hold: `xlink/xlink.xsd`
+ * declares ten more (lines 29 to 105), which the content-packaging extension imports
+ * (`cpext/imsqtiv3p0p1_cpextv1p2_v1p0.xsd` line 10), {@link xlinkAttributes}; and XML Schema
+ * itself declares the four `xsi:` names, {@link xsiAttributes}.
  */
 export const xmlAttributes: readonly GlobalAttribute[] = globalAttributes.filter(({ name }) =>
   name.startsWith("xml:"),
 );
 
 /**
- * The four `xml:` names as a `skip` wildcard admits them: unvalidated, so each value is read under
- * the open type, while the name keeps its closed handle.
+ * XLink's ten global attributes, as `xlink/xlink.xsd` declares them (lines 29 to 105): `type`,
+ * `show` and `actuate` enumerations, `href` an `xs:anyURI`, `role` and `arcrole` an `xs:anyURI` of
+ * at least one character, `title` an `xs:string`, and `label`, `from` and `to` an `xs:NCName`. Only
+ * the content-packaging set imports them ({@link attributeSchemaSets}), so a kind admits them under
+ * their closed handles only where its documents are assessed against that set (C30 of
+ * `docs/research/up.md`).
  */
-const unvalidatedXmlAttributes: readonly GlobalAttribute[] = xmlAttributes.map(({ name }) => ({
-  ...openAttribute,
-  name,
-}));
+export const xlinkAttributes: readonly GlobalAttribute[] = globalAttributes.filter(({ name }) =>
+  name.startsWith("xlink:"),
+);
+
+/**
+ * The schema sets ({@link schemaSets}) whose documents are assessed against each attribute-only
+ * schema's global declarations, because the set's root XSD imports it: `xml.xsd` by the ASI XSDs
+ * (lines 12 to 15) and the content-packaging XSDs (lines 12 to 16), and XLink by the
+ * content-packaging extension the content-packaging XSDs import. The loose LOM binding and the
+ * usage-data XSD import neither.
+ */
+export const attributeSchemaSets = {
+  xlink: ["cp"],
+  xml: ["asi", "cp"],
+} as const satisfies Readonly<Record<string, readonly (keyof typeof schemaSets)[]>>;
+
+/**
+ * Whether an element of a namespace may carry an attribute-only schema's global attributes under
+ * their closed handles: some schema set its documents are assessed against imports the schema. An
+ * element of a vocabulary stands in the documents of every set that lists the vocabulary, and one
+ * of no vocabulary's namespace, a foreign element, in documents of every set (spec reading 72), so
+ * one grammar serves all of them and admits the declarations any of those sets holds: reading 72's
+ * limit, for attributes as for elements.
+ *
+ * @param host - The element's namespace, empty for a kind of no vocabulary.
+ * @param schema - The attribute-only schema.
+ * @returns Whether a set the element's documents are assessed against imports it.
+ */
+export const holdsGlobals = (host: string, schema: keyof typeof attributeSchemaSets): boolean => {
+  const held = vocabularyOf.get(host);
+  const imports: readonly string[] = attributeSchemaSets[schema];
+
+  return Object.entries(schemaSets).some(
+    ([set, members]: readonly [string, readonly string[]]) =>
+      imports.includes(set) && (held === undefined || members.includes(held)),
+  );
+};
+
+/**
+ * Global attributes as a `skip` wildcard admits them: unvalidated, so each value is read under the
+ * open type, while the name keeps its closed handle.
+ *
+ * @param declared - The global attributes.
+ * @returns Them, each under the open type.
+ */
+const unvalidated = (declared: readonly GlobalAttribute[]): readonly GlobalAttribute[] =>
+  declared.map(({ name }) => ({ ...openAttribute, name }));
 
 /**
  * The `xml:` attributes a kind admits under an attribute wildcard that admits the XML namespace, by
@@ -259,8 +310,18 @@ const unvalidatedXmlAttributes: readonly GlobalAttribute[] = xmlAttributes.map((
  */
 const xmlAttributesUnder: Readonly<Record<Processing, readonly GlobalAttribute[]>> = {
   lax: xmlAttributes,
-  skip: unvalidatedXmlAttributes,
+  skip: unvalidated(xmlAttributes),
   strict: xmlAttributes,
+};
+
+/**
+ * XLink's attributes a kind admits under an attribute wildcard that admits XLink's namespace, by
+ * the wildcard's processing, as {@link xmlAttributesUnder} reads `xml.xsd`'s.
+ */
+const xlinkAttributesUnder: Readonly<Record<Processing, readonly GlobalAttribute[]>> = {
+  lax: xlinkAttributes,
+  skip: unvalidated(xlinkAttributes),
+  strict: xlinkAttributes,
 };
 
 /**
@@ -441,28 +502,35 @@ const openAs = (name: OpenClass): GlobalAttribute => ({ ...openAttribute, name }
  * §3.10.4 and §3.4.4, clause 3.1):
  *
  * - The `xml:` names `xml.xsd` declares, where the constraint admits the XML namespace, which is
- *   never a target namespace (`other`): under `lax` and `strict` validated against `xml.xsd`'s
- *   declarations, so with their types; under `skip` unvalidated, so as free text under their closed
- *   handles.
+ *   never a target namespace (`other`), and a schema set the element's documents are assessed
+ *   against imports `xml.xsd` ({@link holdsGlobals}): under `lax` and `strict` validated against
+ *   `xml.xsd`'s declarations, so with their types; under `skip` unvalidated, so as free text under
+ *   their closed handles.
+ * - XLink's ten names the same way, where the constraint admits XLink's namespace, likewise never a
+ *   target namespace, and a set the element's documents are assessed against imports XLink: the
+ *   content-packaging set's.
  * - The open classes of every namespace class the constraint admits ({@link namespaceClassesUnder}),
  *   as free text, unless it is `strict`, which lets through no attribute that no schema declares,
  *   and no schema declares one of an open class.
  *
  * @param wildcard - The wildcard's namespace constraint and processing, as the leaf states them.
- * @returns The attributes, the `xml:` names first, then the classes in roster order.
+ * @param host - The namespace of the element that holds it, empty for a kind of no vocabulary.
+ * @returns The attributes, the `xml:` names first, then XLink's, then the classes in roster order.
  */
-export const attributesUnder = ({
-  namespace,
-  processing,
-}: Pick<AttributeWildcard, "namespace" | "processing">): readonly GlobalAttribute[] => {
+export const attributesUnder = (
+  { namespace, processing }: Pick<AttributeWildcard, "namespace" | "processing">,
+  host: string,
+): readonly GlobalAttribute[] => {
   const classes = namespaceClassesUnder[namespace];
-  const xml = classes.includes("other") ? xmlAttributesUnder[processing] : [];
+  const other = classes.includes("other");
+  const xml = other && holdsGlobals(host, "xml") ? xmlAttributesUnder[processing] : [];
+  const xlink = other && holdsGlobals(host, "xlink") ? xlinkAttributesUnder[processing] : [];
   const open =
     processing === "strict"
       ? []
       : openClasses.filter((name) => classes.some((held) => openClassesIn[held].includes(name)));
 
-  return [...xml, ...open.map(openAs)];
+  return [...xml, ...xlink, ...open.map(openAs)];
 };
 
 /**
@@ -478,8 +546,11 @@ const anyTypeWildcard = { namespace: "##any", processing: "lax" } as const satis
 /**
  * The attributes every foreign kind admits: those {@link anyTypeWildcard} adds, but `data-*`, the
  * class of HTML's custom data names, which a foreign element's markup is not ({@link openClassOf}
- * reads its names in no namespace as `no-namespace`).
+ * reads its names in no namespace as `no-namespace`). A foreign element stands in documents of
+ * every schema set, so it admits `xml.xsd`'s and XLink's names with their types
+ * ({@link holdsGlobals}).
  */
 export const foreignAttributes: readonly GlobalAttribute[] = attributesUnder(
   anyTypeWildcard,
+  "",
 ).filter(({ name }) => name !== "data-*");

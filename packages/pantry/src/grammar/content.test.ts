@@ -9,13 +9,16 @@ import { sample } from "@grizzle/testing/source";
 import { searched } from "@grizzle/testing/vitest";
 import { runOfProcess } from "@grizzle/testing/vitest/run";
 import { Array as Arr, Duration, Effect, FileSystem, Formatter, Option } from "effect";
+import { int8Max } from "#pantry/grammar/closed.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
 import { contentEnds, contentStep } from "#pantry/grammar/content.ts";
+import { fragmentRoots } from "#pantry/grammar/facets.ts";
 import { foreignKinds, isForeignKind, schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import { checkCache, sourcePaths, xsdDirectory } from "#pantry/vocab/derive/sources.ts";
 import type { Source } from "#pantry/vocab/inventory/types.ts";
+import { asiNamespace } from "#pantry/vocab/namespaces.ts";
 import type { NamespaceClass } from "#pantry/vocab/namespaces.ts";
 import type { SourcePath } from "#pantry/vocab/derive/sources.ts";
 import {
@@ -23,6 +26,7 @@ import {
   resolverOf,
   elementsOf,
   loadXsd,
+  nameKey,
   validateContents,
   wildcardsOf,
   XsdOracleLayer,
@@ -33,6 +37,8 @@ import type {
   DrawnChild,
   Particle,
   ProbeDocument,
+  Validated,
+  XsdName,
   XsdSet,
 } from "#pantry/test/gen/grammar.ts";
 import { relaxNgModels, semanticsContexp } from "#pantry/test/gen/relaxng.ts";
@@ -497,6 +503,303 @@ const wildcardProbesOf = (input: {
   );
 };
 
+/**
+ * One place spec reading 88 records, where libxml2 widens a sequence: an element particle and the
+ * repeated wildcard right after it, and the element particle before them, if any.
+ */
+interface Widened {
+  readonly before: Option.Option<Extract<Particle, { readonly _tag: "element" }>>;
+  readonly element: Extract<Particle, { readonly _tag: "element" }>;
+  readonly wildcard: Extract<Particle, { readonly _tag: "any" }>;
+}
+
+/**
+ * A particle as libxml2 reads it, and each place it widens the XSD's.
+ */
+interface Widening {
+  readonly particle: Particle;
+  readonly widened: readonly Widened[];
+}
+
+/**
+ * Restate a particle as libxml2 2.9.13's `xmllint` reads it, by spec reading 88. That reading sets
+ * the verdict aside as a defect of the oracle.
+ *
+ * - The defect: in a sequence, take an element particle with no substitution group that repeats
+ *   without bound from at most one occurrence, followed by a wildcard that may repeat. libxml2 ends
+ *   the element in a state that repeats it (`xmlschemas.c` line 12791), and starts the wildcard in
+ *   that same state, which its repeat returns to (lines 12852 and 12924). So after a child the
+ *   wildcard holds, the element is admitted again.
+ * - The restatement: `E*, W*` becomes `(E | W)*`. An `E` of one or more keeps its first `E`, and a
+ *   `W` of one or more keeps its last `W`.
+ * - A sequence that occurs exactly once adds no state of its own in libxml2, so its particles are
+ *   read in place, as the group reference `grpStrict.any` is. Any other group ends in a state of
+ *   its own and widens nothing across its bounds.
+ *
+ * @param particle - The XSD's particle.
+ * @returns The restated particle, and each place it widens.
+ */
+const libxmlWidened = (particle: Particle): Widening => {
+  const widened: Widened[] = [];
+  const once = { max: 1, min: 1 } as const;
+  const walk = (node: Particle): Particle => {
+    switch (node._tag) {
+      case "element":
+      case "any": {
+        return node;
+      }
+      case "all":
+      case "choice": {
+        return { ...node, particles: node.particles.map(walk) };
+      }
+      case "sequence": {
+        const inPlace = (child: Particle): readonly Particle[] =>
+          child._tag === "sequence" && child.occurs.min === 1 && child.occurs.max === 1
+            ? child.particles.flatMap(inPlace)
+            : [walk(child)];
+        const parts = node.particles.flatMap(inPlace);
+        const restated: Particle[] = [];
+        for (let at = 0; at < parts.length; at += 1) {
+          const here = parts[at];
+          const next = parts[at + 1];
+          const before = parts[at - 1];
+          if (
+            here?._tag === "element" &&
+            here.members.length === 1 &&
+            here.occurs.max === Number.POSITIVE_INFINITY &&
+            here.occurs.min <= 1 &&
+            next?._tag === "any" &&
+            next.occurs.max > 1
+          ) {
+            widened.push({
+              before: before?._tag === "element" ? Option.some(before) : Option.none(),
+              element: here,
+              wildcard: next,
+            });
+            restated.push({
+              _tag: "sequence",
+              occurs: once,
+              particles: [
+                ...(here.occurs.min === 1 ? [{ ...here, occurs: once }] : []),
+                {
+                  _tag: "choice",
+                  occurs: { max: Number.POSITIVE_INFINITY, min: 0 },
+                  particles: [
+                    { ...here, occurs: once },
+                    { ...next, occurs: once },
+                  ],
+                },
+                ...(next.occurs.min >= 1 ? [{ ...next, occurs: once }] : []),
+              ],
+            });
+            at += 1;
+          } else if (here !== undefined) {
+            restated.push(here);
+          }
+        }
+
+        return { ...node, particles: restated };
+      }
+      default: {
+        return node satisfies never;
+      }
+    }
+  };
+
+  return { particle: walk(particle), widened };
+};
+
+/**
+ * A model's language as acceptors over child kinds: the XSD's, and libxml2's by spec reading 88.
+ */
+interface Languages {
+  readonly libxml: (kinds: readonly string[]) => boolean;
+  readonly xsd: (kinds: readonly string[]) => boolean;
+}
+
+/**
+ * The XSD's language of a model and libxml2's, by spec reading 88 ({@link libxmlWidened}), as
+ * acceptors over child kinds. A wildcard stands for the admitted kinds no element particle names,
+ * as in `acceptorOf`.
+ *
+ * @param composedGrammar - The grammar.
+ * @param version - The version the model's rows are read in.
+ * @param parent - The model's kind.
+ * @param particle - The model's particle, by the tests' reader.
+ * @returns The two acceptors.
+ */
+const languagesOf = (
+  composedGrammar: ComposedGrammar,
+  version: SchemaVersion,
+  parent: string,
+  particle: Particle,
+): Languages => {
+  const { admission, kinds } = composedGrammar;
+  const resolve = (members: readonly { readonly name: XsdName }[]) =>
+    members.flatMap((member) =>
+      Option.toArray(resolverOf(kinds)(member.name.namespace, member.name.local, parent)),
+    );
+  const named = new Set(elementsOf(particle).flatMap(({ members }) => resolve(members)));
+  const byWildcard = admission.rows
+    .filter(
+      (row) =>
+        row.version === version &&
+        row.parent === parent &&
+        Option.isSome(kinds.isElement.lookup({ kind: row.child })) &&
+        !named.has(row.child),
+    )
+    .map(({ child }) => child);
+
+  return {
+    libxml: acceptorOf(libxmlWidened(particle).particle, resolve, byWildcard),
+    xsd: acceptorOf(particle, resolve, byWildcard),
+  };
+};
+
+/**
+ * Whether spec reading 88 explains a family xmllint accepts: libxml2's widened sequence accepts it
+ * and the XSD's own refuses it, so libxml2 admits an element again after a child of the repeated
+ * wildcard that follows it.
+ *
+ * @param composedGrammar - The grammar.
+ * @param version - The version the rows are read in.
+ * @param readings - The parent's contents, by the tests' reader; the first is the probed one.
+ * @param probe - The family.
+ * @returns Whether the reading rules it.
+ */
+const widenedOnly = (
+  composedGrammar: ComposedGrammar,
+  version: SchemaVersion,
+  readings: readonly Content[] | undefined,
+  probe: KindProbe,
+): boolean =>
+  Option.exists(
+    Option.flatMap(Option.fromNullishOr(readings?.[0]), ({ particle }) => particle),
+    (particle) => {
+      const { libxml, xsd } = languagesOf(composedGrammar, version, probe.parentKind, particle);
+
+      return libxml(probe.kinds) && !xsd(probe.kinds);
+    },
+  );
+
+/**
+ * Whether spec reading 102 (upstream's 61) rules a family the grammar accepts and xmllint refuses:
+ * a family of `qti-ordering`, whose extension slot the reading widens from the XSD's `##other` to
+ * `##any` (information model §5.98.3), that holds a child in QTI's own namespace or in none, which
+ * `##other` refuses and `##any` admits.
+ *
+ * @param composedGrammar - The grammar.
+ * @param probe - The family.
+ * @returns Whether the reading rules it.
+ */
+const reading102 = (composedGrammar: ComposedGrammar, probe: KindProbe): boolean =>
+  probe.parentKind === "qti-ordering" &&
+  probe.kinds.some((kind) =>
+    Option.match(composedGrammar.kinds.elementName.lookup({ kind }), {
+      onNone: () => kind === foreignKinds.own || kind === foreignKinds.absent,
+      onSome: ({ namespace }) => namespace === asiNamespace || namespace === "",
+    }),
+  );
+
+/**
+ * Classify the grammar's verdict on a foreign element's probe against xmllint's: they agree,
+ * reading 102 (upstream's 61) rules their difference ({@link reading102}), or they disagree.
+ *
+ * @param composedGrammar - The grammar.
+ * @param probe - The family.
+ * @param expected - The grammar's verdict.
+ * @param verdict - What xmllint said of it.
+ * @returns The ruling.
+ */
+const foreignRuling = (
+  composedGrammar: ComposedGrammar,
+  probe: KindProbe,
+  expected: boolean,
+  verdict: Validated | undefined,
+): "agrees" | "disagrees" | "reading 102" => {
+  if (verdict !== undefined && verdict.refused !== expected) {
+    return "agrees";
+  }
+
+  return expected && verdict?.refused === true && reading102(composedGrammar, probe)
+    ? "reading 102"
+    : "disagrees";
+};
+
+/**
+ * Classify the grammar's verdict on an xmllint probe against xmllint's: they agree, a spec reading
+ * rules their difference, or they disagree. Reading 26 and reading 88 rule a family the grammar
+ * refuses and xmllint accepts: reading 26 one of a section that holds no part, and reading 88 one
+ * only libxml2's widened sequence accepts ({@link widenedOnly}). Spec reading 102 (upstream's 61)
+ * rules a family the grammar accepts and xmllint refuses: one of `qti-ordering` holding a child of
+ * QTI's namespace or none ({@link reading102}). Spec reading 111 rules a family of `xi:include`
+ * holding two fallbacks, which XInclude 1.0 §3.1 refuses and `XInclude.xsd` admits.
+ *
+ * @param input - The probe and both verdicts.
+ * @param input.expected - The grammar's verdict.
+ * @param input.grammar - The grammar.
+ * @param input.probe - The family.
+ * @param input.readings - The parent's contents, by the tests' reader.
+ * @param input.verdict - What xmllint said of it.
+ * @param input.version - The version the rows are read in.
+ * @returns The ruling.
+ */
+const xmllintRuling = (input: {
+  readonly expected: boolean;
+  readonly grammar: ComposedGrammar;
+  readonly probe: KindProbe;
+  readonly readings: readonly Content[] | undefined;
+  readonly verdict: Validated | undefined;
+  readonly version: SchemaVersion;
+}): "agrees" | "disagrees" | "reading 26" | "reading 102" | "reading 111" | "reading 88" => {
+  const { expected, probe, verdict } = input;
+  if (verdict !== undefined && verdict.refused !== expected) {
+    return "agrees";
+  }
+
+  if (
+    !expected &&
+    verdict?.refused === false &&
+    probe.parentKind === "xi:include" &&
+    probe.kinds.filter((kind) => kind === "xi:fallback").length > 1
+  ) {
+    return "reading 111";
+  }
+
+  if (expected && verdict?.refused === true && reading102(input.grammar, probe)) {
+    return "reading 102";
+  }
+
+  if (expected || verdict?.refused !== false) {
+    return "disagrees";
+  }
+
+  if (
+    probe.parentKind === "qti-assessment-section" &&
+    !probe.kinds.some((child) => sectionParts.has(child))
+  ) {
+    return "reading 26";
+  }
+
+  return widenedOnly(input.grammar, input.version, input.readings, probe)
+    ? "reading 88"
+    : "disagrees";
+};
+
+/**
+ * Whether a spec reading narrows the XSD to refuse a family it accepts. Reading 26: a section holds
+ * at least one part, where its XSD admits none, so a section's family that holds no part. Reading
+ * 111: an include holds at most one fallback (XInclude 1.0 §3.1), where its XSD admits any number,
+ * so an include's family that holds two.
+ *
+ * @param parent - The family's parent.
+ * @param children - The family.
+ * @returns Whether a reading narrows it.
+ */
+const narrowedByReading = (parent: string, children: readonly string[]): boolean =>
+  (parent === "qti-assessment-section" && !children.some((child) => sectionParts.has(child))) ||
+  (parent === "xi:include" && children.filter((child) => child === "xi:fallback").length > 1);
+
 describe.skipIf(!cached)("the content automata against the XSD", () => {
   it.effect(
     "accept exactly the child sequences the independent reading's automaton accepts, every model with one content: every sequence of at most 3 children (4 over an alphabet of at most 4) over at most 4 kinds it names, one only its wildcard admits and one it refuses, drawn from the run seed",
@@ -570,13 +873,7 @@ describe.skipIf(!cached)("the content automata against the XSD", () => {
                 compared += 1;
                 const installed = accepts(composedGrammar, version, parent, children);
                 const xsd = oracle(children);
-                // Spec reading 26: a section holds at least one part, where its XSD admits none. The
-                // installed model refuses exactly the sequences the XSD accepts that hold no part.
-                const reading26 =
-                  parent === "qti-assessment-section" &&
-                  xsd &&
-                  !installed &&
-                  !children.some((child) => sectionParts.has(child));
+                const narrowed = xsd && !installed && narrowedByReading(parent, children);
                 // Spec reading 2: under the models it restates or edits, the MathML 3 RelaxNG
                 // decides, in both directions, and where the XSD differs it is the reading's.
                 const rng = relaxNgModels.get(parent);
@@ -591,7 +888,7 @@ describe.skipIf(!cached)("the content automata against the XSD", () => {
                   } else if (installed !== xsd) {
                     ruled += 1;
                   }
-                } else if (reading26) {
+                } else if (narrowed) {
                   ruled += 1;
                 } else if (installed !== xsd) {
                   disagreements.push(
@@ -605,7 +902,7 @@ describe.skipIf(!cached)("the content automata against the XSD", () => {
 
         yield* Effect.promise(() =>
           ctx.annotate(
-            `${models} models (${drawnFrom} naming more than ${namedBound} kinds, whose ${namedBound} the run seed drew), ${compared} sequences, ${ruled} ruled by readings 2 and 26; ${skipped} kinds skipped for holding more than one content`,
+            `${models} models (${drawnFrom} naming more than ${namedBound} kinds, whose ${namedBound} the run seed drew), ${compared} sequences, ${ruled} ruled by readings 2, 26 and 111; ${skipped} kinds skipped for holding more than one content`,
             "bound",
           ),
         );
@@ -619,7 +916,11 @@ describe.skipIf(!cached)("the content automata against the XSD", () => {
     "agree with xmllint, counts and arities included, on every ASI model with a named type and one content: 6 families of at most 2 of its admitted element kinds a model, drawn from the run seed",
     (ctx) =>
       // Oracle: libxml2's schema validator over the pinned ASI XSDs, against the automaton with
-      // the two count laws beside it, Counted and OperatorArity.
+      // the two count laws beside it, Counted and OperatorArity. Where the grammar and the XSD's
+      // own order refuse a family that libxml2's widened sequence accepts, its verdict is spec
+      // reading 88's to set aside, and is counted as ruled; where the grammar accepts a family of
+      // `qti-ordering` the XSD's `##other` refuses, reading 102 (upstream's 61) widens the slot to
+      // `##any`, and the family is counted as widened.
       // Bound: probeBound's families a model, a fresh draw each run (TEST_SEED replays it), over
       // the admitted kinds the ASI schema set declares; a kind with more than one content is
       // skipped, and both counts reported.
@@ -630,7 +931,9 @@ describe.skipIf(!cached)("the content automata against the XSD", () => {
         const target = "http://www.imsglobal.org/xsd/imsqtiasi_v3p0";
         const failures: string[] = [];
         let probed = 0;
+        let ruled = 0;
         let skipped = 0;
+        let widened = 0;
         for (const [root, version] of schemas.slice(0, 2)) {
           const { set } = yield* loadXsd(root);
           const { contents } = xsdContents(set, (namespace, local, parent) =>
@@ -654,12 +957,17 @@ describe.skipIf(!cached)("the content automata against the XSD", () => {
               countsHold(composedGrammar, version, probe.parentKind, probe.kinds) &&
               arityHolds(composedGrammar, probe.parentKind, probe.kinds);
             const verdict = verdicts[index];
-            const reading26 =
-              probe.parentKind === "qti-assessment-section" &&
-              !expected &&
-              verdict?.refused === false &&
-              !probe.kinds.some((child) => sectionParts.has(child));
-            if (!reading26 && (verdict === undefined || verdict.refused === expected)) {
+            const ruling = xmllintRuling({
+              expected,
+              grammar: composedGrammar,
+              probe,
+              readings: contents.get(probe.parentKind),
+              verdict,
+              version,
+            });
+            ruled += ruling === "reading 88" || ruling === "reading 111" ? 1 : 0;
+            widened += ruling === "reading 102" ? 1 : 0;
+            if (ruling === "disagrees") {
               failures.push(
                 `${version} ${probe.parentKind} [${probe.kinds.join(", ")}]: the grammar ${expected ? "accepts" : "refuses"}, xmllint ${verdict?.refused === true ? "refuses" : "accepts"}${(verdict?.messages.length ?? 0) > 0 ? `: ${verdict?.messages[0] ?? ""}` : ""}`,
               );
@@ -669,7 +977,7 @@ describe.skipIf(!cached)("the content automata against the XSD", () => {
 
         yield* Effect.promise(() =>
           ctx.annotate(
-            `${probed} probes; ${skipped} kinds skipped for holding more than one content`,
+            `${probed} probes, ${ruled} ruled by readings 88 and 111 and ${widened} by reading 102 (upstream's 61); ${skipped} kinds skipped for holding more than one content`,
             "xmllint",
           ),
         );
@@ -688,7 +996,9 @@ describe.skipIf(!cached)("the content automata against the XSD", () => {
       // constraint, processing and position, both where it admits the child and where it refuses.
       // A drawn element carries no xsi:type, so under a strict wildcard nothing assesses it, and
       // the grammar's verdict is the automaton's with `StrictlyHeld`'s refusal beside it (spec
-      // reading 72, §3.10.4 clause 2).
+      // reading 72, §3.10.4 clause 2). `qti-ordering`'s slot is reading 102's `##any`,
+      // where xmllint reads the XSD's `##other`: an element of QTI's namespace or none there is
+      // accepted by the grammar and refused by xmllint, and counted as widened.
       Effect.gen(function* foreignAtWildcards() {
         const composedGrammar = yield* grammar;
         const { kinds } = composedGrammar;
@@ -696,6 +1006,7 @@ describe.skipIf(!cached)("the content automata against the XSD", () => {
         let probed = 0;
         let models = 0;
         let unprobed = 0;
+        let widened = 0;
         for (const [root, version, target] of wildcardSchemas) {
           const { set } = yield* loadXsd(root);
           const resolve = resolverOf(kinds);
@@ -738,7 +1049,9 @@ describe.skipIf(!cached)("the content automata against the XSD", () => {
               arityHolds(composedGrammar, probe.parentKind, probe.kinds) &&
               !strictlyHeld;
             const verdict = verdicts[index];
-            if (verdict === undefined || verdict.refused === expected) {
+            const ruling = foreignRuling(composedGrammar, probe, expected, verdict);
+            widened += ruling === "reading 102" ? 1 : 0;
+            if (ruling === "disagrees") {
               failures.push(
                 `${root} ${probe.parentKind} [${probe.kinds.join(", ")}]: the grammar ${expected ? "accepts" : "refuses"}, xmllint ${verdict?.refused === true ? "refuses" : "accepts"}${(verdict?.messages.length ?? 0) > 0 ? `: ${verdict?.messages[0] ?? ""}` : ""}`,
               );
@@ -748,7 +1061,7 @@ describe.skipIf(!cached)("the content automata against the XSD", () => {
 
         yield* Effect.promise(() =>
           ctx.annotate(
-            `${models} models with a wildcard, ${probed} probes, ${unprobed} models with no global element or named type to probe`,
+            `${models} models with a wildcard, ${probed} probes, ${widened} ruled by reading 102 (upstream's 61), ${unprobed} models with no global element or named type to probe`,
             "xmllint",
           ),
         );
@@ -765,7 +1078,9 @@ describe.skipIf(!cached)("the content automata against the XSD", () => {
  * the root of each file a §6.2 resource type the composition reads holds, the class its
  * description names (an AssessmentTest, AssessmentSection, AssessmentItem, OutcomeDeclaration,
  * AssessmentStimulus and ResponseProcessing, the last both a template's and a resource's), §6.3's
- * external metadata (LOM's `lom`) and §6.5's usage data (`usageData`).
+ * external metadata (LOM's `lom`) and §6.5's usage data (`usageData`); and the root of §6.2's
+ * `imsqti_fragment_xmlv3p0`, "QTI 3 inclusion (XInclude)", any kind an include stands for (spec
+ * reading 107), which `include.test.ts` proves against each parent's automaton.
  */
 const statedRoots: ReadonlySet<string> = new Set([
   "cp:manifest",
@@ -777,6 +1092,7 @@ const statedRoots: ReadonlySet<string> = new Set([
   "qti-response-processing",
   "lom:lom",
   "ud:usageData",
+  ...fragmentRoots.map(({ root }) => root),
 ]);
 
 /**
@@ -787,20 +1103,136 @@ const documentChildren = [
   "doctype",
   "qti-assessment-item",
   "cp:manifest",
-  "p",
+  "qti-prompt",
   "ws",
   "comment",
 ] as const;
 
+/**
+ * Find a model's counted group: a group whose bound a position automaton relaxes, its least at
+ * least 2 or its greatest finite and at least 2, at its top or inside sequences that occur once.
+ *
+ * @param particle - The model's particle, as the tests' reader reads it.
+ * @returns The group, or none for a model with none there.
+ */
+const countedGroupOf = (particle: Particle): Option.Option<Particle> => {
+  if (particle._tag === "element" || particle._tag === "any") {
+    return Option.none();
+  }
+
+  const { max, min } = particle.occurs;
+  if (min >= 2 || (max >= 2 && Number.isFinite(max))) {
+    return Option.some(particle);
+  }
+
+  return particle._tag === "sequence" && min === 1 && max === 1
+    ? Arr.findFirst(particle.particles, (member) => Option.isSome(countedGroupOf(member))).pipe(
+        Option.flatMap(countedGroupOf),
+      )
+    : Option.none();
+};
+
+/**
+ * Build the probes of one operator whose model is a counted group: every family of at most 3
+ * children over two operands the group names and one element kind the operator does not admit,
+ * under the operator's named type. A model with no counted group, more than one content or a type
+ * outside QTI's namespace has none.
+ *
+ * @param input - The operator and what probing it reads.
+ * @param input.grammar - The grammar.
+ * @param input.parent - The operator's kind.
+ * @param input.readings - Its contents, as the reader walked them.
+ * @param input.resolve - The composition's resolution.
+ * @param input.version - The schema's version.
+ * @returns The probes.
+ */
+const countedGroupProbes = (input: {
+  readonly grammar: ComposedGrammar;
+  readonly parent: string;
+  readonly readings: readonly Content[];
+  readonly resolve: (namespace: string, local: string, parent: string) => Option.Option<string>;
+  readonly version: SchemaVersion;
+}): readonly KindProbe[] => {
+  const { admission, kinds } = input.grammar;
+  const { parent, resolve, version } = input;
+  const [reading, ...others] = input.readings;
+  if (reading === undefined || others.length > 0 || !reading.type.startsWith(`{${asiNamespace}}`)) {
+    return [];
+  }
+
+  return reading.particle.pipe(Option.flatMap(countedGroupOf), Option.toArray).flatMap((held) => {
+    const operands = [
+      ...new Set(
+        elementsOf(held)
+          .flatMap(({ members }) => members)
+          .flatMap((member) =>
+            Option.toArray(resolve(member.name.namespace, member.name.local, parent)),
+          ),
+      ),
+    ].slice(0, 2);
+    const unadmitted = Arr.findFirst(
+      kinds.nodeKind.handles,
+      (kind) =>
+        !isForeignKind(kind) &&
+        Option.isSome(kinds.elementName.lookup({ kind })) &&
+        Option.isNone(admission.lookup({ child: kind, parent, version })),
+    );
+    const type = {
+      local: reading.type.slice(reading.type.indexOf("}") + 1),
+      namespace: asiNamespace,
+    };
+
+    return sequencesOf([...operands, ...Option.toArray(unadmitted)], 3).map((word): KindProbe => ({
+      children: word.map((kind) => childOf(input.grammar, kind)),
+      kinds: word,
+      parent: { _tag: "type", type },
+      parentKind: parent,
+      type: Option.none(),
+    }));
+  });
+};
+
+/**
+ * Whether OperatorArity holds a group's relaxed bound: the operator's `OperatorArity` is exactly
+ * the group's (min, max), and each repeat of the group is one element child, every member one
+ * element particle exactly once and the group a choice or of one member, so the count of element
+ * children is the group's repeat count.
+ *
+ * @param composedGrammar - The grammar.
+ * @param parent - The operator's kind.
+ * @param group - The group, as the tests' reader reads it.
+ * @returns Whether the Arity law states the group's bound.
+ */
+const arityStates = (
+  composedGrammar: ComposedGrammar,
+  parent: string,
+  group: Extract<Particle, { readonly particles: readonly Particle[] }>,
+): boolean => {
+  const { max, min } = group.occurs;
+  const exact = Option.exists(
+    composedGrammar.operatorArity.lookup({ kind: parent }),
+    (row) => row.min === BigInt(min) && row.max === (Number.isFinite(max) ? BigInt(max) : int8Max),
+  );
+
+  return (
+    exact &&
+    (group._tag === "choice" || group.particles.length === 1) &&
+    group.particles.every(
+      (member) => member._tag === "element" && member.occurs.min === 1 && member.occurs.max === 1,
+    )
+  );
+};
+
 describe.skipIf(!cached)("the occurrence bounds the automata relax", () => {
   it.effect(
-    "are laws beside them: an element particle's in Counted, a group's in OperatorArity, and Counted holds those, nothing else",
+    "are laws beside them: an element particle's in Counted, a group's in OperatorArity at exactly its bound, and Counted holds those, nothing else",
     () =>
       // Oracle: the tests' own reading of the XSDs. A position automaton holds a particle's bound
       // exactly when its least is 0 or 1 and its greatest 1 or unbounded (Brüggemann-Klein and
       // Wood); every other bound is a count, which Counted states for one particle's children
       // and OperatorArity for a whole content's, and which only holds as a total where no
-      // enclosing group may repeat or be absent.
+      // enclosing group may repeat or be absent. A group's bound is OperatorArity's (min, max)
+      // exactly, and each of its repeats one element child.
       Effect.gen(function* relaxed() {
         const composedGrammar = yield* grammar;
         const { admission, content, kinds, operatorArity } = composedGrammar;
@@ -836,7 +1268,11 @@ describe.skipIf(!cached)("the occurrence bounds the automata relax", () => {
                   }
                 }
               } else if (relaxes && particle._tag !== "element" && particle._tag !== "any") {
-                if (enclosed || !arities.has(parent)) {
+                if (
+                  enclosed ||
+                  !arities.has(parent) ||
+                  !arityStates(composedGrammar, parent, particle)
+                ) {
                   unstatable.push(`${root} ${parent}: a ${particle._tag} of ${min}..${max}`);
                 }
               } else if (relaxes) {
@@ -865,6 +1301,57 @@ describe.skipIf(!cached)("the occurrence bounds the automata relax", () => {
           ),
           expected,
         );
+      }).pipe(Effect.provide(XsdOracleLayer)),
+    xsdTimeout,
+  );
+  it.effect(
+    "agree with xmllint on every operator whose content is a counted group of operands, the automaton's 1..n and Arity's count together: every family of at most 3 children over two of its operands and one element kind it does not admit, in both versions",
+    (ctx) =>
+      // Oracle: libxml2's schema validator over the pinned ASI XSDs, against the automaton with
+      // OperatorArity beside it (`arityHolds`): the automaton relaxes the group's 2..2 to 1..n
+      // (Q5.10's finding: `qti-contains` with one operand), and the Arity law holds the count.
+      // Bound: every family of 0 to 3 children over two operands the group names and one element
+      // kind the operator does not admit, the named invalid variant, under every operator whose
+      // model is a counted group, in both versions.
+      Effect.gen(function* countedGroups() {
+        const composedGrammar = yield* grammar;
+        const { kinds } = composedGrammar;
+        const failures: string[] = [];
+        let probed = 0;
+        let operators = 0;
+        for (const [root, version] of schemas.slice(0, 2)) {
+          const { set } = yield* loadXsd(root);
+          const resolve = resolverOf(kinds);
+          const { contents } = xsdContents(set, resolve);
+          const probes = [...contents].flatMap(([parent, readings]) =>
+            countedGroupProbes({ grammar: composedGrammar, parent, readings, resolve, version }),
+          );
+          operators += new Set(probes.map(({ parentKind }) => parentKind)).size;
+
+          const verdicts = yield* Effect.scoped(validateContents(root, asiNamespace, probes));
+          for (const [index, probe] of probes.entries()) {
+            probed += 1;
+            const expected =
+              accepts(composedGrammar, version, probe.parentKind, probe.kinds) &&
+              countsHold(composedGrammar, version, probe.parentKind, probe.kinds) &&
+              arityHolds(composedGrammar, probe.parentKind, probe.kinds);
+            const verdict = verdicts[index];
+            if (verdict === undefined || verdict.refused === expected) {
+              failures.push(
+                `${version} ${probe.parentKind} [${probe.kinds.join(", ")}]: the grammar ${expected ? "accepts" : "refuses"}, xmllint ${verdict?.refused === true ? "refuses" : "accepts"}${(verdict?.messages.length ?? 0) > 0 ? `: ${verdict?.messages[0] ?? ""}` : ""}`,
+              );
+            }
+          }
+        }
+
+        yield* Effect.promise(() =>
+          ctx.annotate(
+            `${operators} counted-group operators over both versions, ${probed} families`,
+            "xmllint",
+          ),
+        );
+        assert.isAbove(operators, 0);
+        assert.deepStrictEqual(failures.slice(0, 40), []);
       }).pipe(Effect.provide(XsdOracleLayer)),
     xsdTimeout,
   );
@@ -1189,6 +1676,380 @@ describe.skipIf(!cached)("spec reading 40 in ssml:speak", () => {
               }),
           ),
         );
+      }).pipe(Effect.provide(XsdOracleLayer)),
+    xsdTimeout,
+  );
+});
+
+/**
+ * The pinned schema sets spec reading 88's census walks, every set a pinned document is assessed
+ * against (spec reading 72), each with the version its rows are read in and, for a set whose
+ * widened places are probed, its target namespace.
+ */
+const widenedSchemas: readonly {
+  readonly root: SourcePath;
+  readonly target: Option.Option<string>;
+  readonly version: SchemaVersion;
+}[] = [
+  {
+    root: "imsqti_asiv3p0_v1p0.xsd",
+    target: Option.some("http://www.imsglobal.org/xsd/imsqtiasi_v3p0"),
+    version: "3.0.0",
+  },
+  {
+    root: "imsqti_asiv3p0p1_v1p0.xsd",
+    target: Option.some("http://www.imsglobal.org/xsd/imsqtiasi_v3p0"),
+    version: "3.0.1",
+  },
+  {
+    root: "imsqtiv3p0_imscpv1p2_v1p0.xsd",
+    target: Option.some("http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"),
+    version: "3.0.0",
+  },
+  {
+    root: "imsqtiv3p0p1_imscpv1p2_v1p0.xsd",
+    target: Option.some("http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"),
+    version: "3.0.1",
+  },
+  { root: "imsqti_metadatav3p0_v1p0.xsd", target: Option.none(), version: "3.0.1" },
+  { root: "usagedata/imsqti_usagedatav3p0_v1p0.xsd", target: Option.none(), version: "3.0.1" },
+];
+
+/**
+ * Every place libxml2's sequence construction widens a model the walks of the pinned schema sets
+ * reach, as `version parent element`: spec reading 88's census, a set. A new pin that adds one
+ * fails the reading's test until the reading names it.
+ *
+ * The DRD's 3.0.1 model is the fourth place, and no walk reaches it: a 3.0.1 manifest gives
+ * `cpx:variant`, the only particle that leads to the DRD, no occurrence. Its element stands only
+ * under a wildcard. So the test checks that the grammar installs it as it installs the 3.0.0 model
+ * the walk does reach ({@link unwalkedTwin}).
+ */
+const widenedPlaces: readonly string[] = [
+  "3.0.0 drd:accessForAllResource drd:isPartialAdaptationOf",
+  "3.0.0 qti-companion-materials-info qti-physical-material",
+  "3.0.1 qti-companion-materials-info qti-physical-material",
+];
+
+/**
+ * The widened model no walk reaches in one version, and the version whose walk reaches it.
+ */
+const unwalkedTwin = {
+  kind: "drd:accessForAllResource",
+  reached: "3.0.0",
+  unwalked: "3.0.1",
+} as const;
+
+/**
+ * Write a family's installed automaton and admissions in one version, as a set of rows, so that two
+ * versions compare as sets.
+ *
+ * @param composedGrammar - The grammar.
+ * @param version - The version.
+ * @param parent - The family's kind.
+ * @returns The rows, each as text, sorted.
+ */
+const automatonRowsOf = (
+  composedGrammar: ComposedGrammar,
+  version: SchemaVersion,
+  parent: string,
+): readonly string[] =>
+  [
+    ...composedGrammar.content.follow.rows
+      .filter((row) => row.version === version && row.parent === parent)
+      .map(({ from, to }) => `follow ${from} ${to}`),
+    ...composedGrammar.content.last.rows
+      .filter((row) => row.version === version && row.parent === parent)
+      .map(({ position }) => `last ${position}`),
+    ...composedGrammar.admission.rows
+      .filter((row) => row.version === version && row.parent === parent)
+      .map(({ child, position }) => `admits ${child} at ${position}`),
+  ].toSorted();
+
+/**
+ * One family spec reading 88's test probes: the probe, the version its rows are read in, and the
+ * XSD's verdict and libxml2's, by the reading.
+ */
+type WidenedProbe = KindProbe & {
+  readonly libxml: boolean;
+  readonly version: SchemaVersion;
+  readonly xsd: boolean;
+};
+
+/**
+ * Write each place libxml2 widens a kind's models as `version parent element`, over every content
+ * the kind holds.
+ *
+ * @param version - The version the rows are read in.
+ * @param parent - The kind.
+ * @param readings - Its contents, as the tests' reader walked them.
+ * @param resolve - The composition's resolution.
+ * @returns The places.
+ */
+const placesOf = (
+  version: SchemaVersion,
+  parent: string,
+  readings: readonly Content[],
+  resolve: (namespace: string, local: string, parent: string) => Option.Option<string>,
+): readonly string[] =>
+  readings
+    .flatMap(({ particle }) => Option.toArray(particle))
+    .flatMap((particle) => libxmlWidened(particle).widened)
+    .map(
+      ({ element: widened }) =>
+        `${version} ${parent} ${widened.members.flatMap(({ name }) => Option.toArray(resolve(name.namespace, name.local, parent))).join("|")}`,
+    );
+
+/**
+ * Draw spec reading 88's families of one model: at each place libxml2 widens it, every sequence of
+ * at most 3 children over the element particle before the place, its element, and the first kind,
+ * in lexical order, that the grammar admits, no element particle names and the schema set declares
+ * globally, so that xmllint assesses it against its declaration. The parent is its named type in
+ * the target namespace, or, for a type of another namespace, the global element the set declares.
+ *
+ * @param input - The model and what probing it reads.
+ * @param input.grammar - The grammar.
+ * @param input.parent - The model's kind.
+ * @param input.reading - Its one content, by the tests' reader.
+ * @param input.set - The schema set.
+ * @param input.target - The target namespace of a type probe.
+ * @param input.version - The version its rows are read in.
+ * @returns The families, none for a model libxml2 does not widen.
+ */
+const widenedProbesOf = (input: {
+  readonly grammar: ComposedGrammar;
+  readonly parent: string;
+  readonly reading: Content;
+  readonly set: XsdSet;
+  readonly target: string;
+  readonly version: SchemaVersion;
+}): readonly WidenedProbe[] => {
+  const { grammar: composedGrammar, parent, reading, set, version } = input;
+  const { kinds } = composedGrammar;
+  const resolve = resolverOf(kinds);
+  const kindOf = (particle: Widened["element"]): readonly string[] =>
+    particle.members.flatMap(({ name }) =>
+      Option.toArray(resolve(name.namespace, name.local, parent)),
+    );
+
+  return Option.toArray(reading.particle).flatMap((particle) => {
+    const named = new Set(elementsOf(particle).flatMap(kindOf));
+    const held = composedGrammar.admission.rows
+      .filter(
+        (row) =>
+          row.version === version &&
+          row.parent === parent &&
+          !isForeignKind(row.child) &&
+          !named.has(row.child) &&
+          Option.exists(kinds.elementName.lookup({ kind: row.child }), (written) =>
+            set.elements.has(nameKey(written)),
+          ),
+      )
+      .map(({ child }) => child)
+      .toSorted();
+    // A wrapper in the target namespace can name only that namespace's types, so a model whose
+    // type is another's is probed as the global element its schema declares.
+    const name = Option.getOrUndefined(kinds.elementName.lookup({ kind: parent }));
+    const probe: KindProbe["parent"] =
+      !reading.type.startsWith(`{${input.target}}`) &&
+      name !== undefined &&
+      set.elements.has(nameKey(name))
+        ? { _tag: "global", name }
+        : {
+            _tag: "type",
+            type: {
+              local: reading.type.slice(reading.type.indexOf("}") + 1),
+              namespace: input.target,
+            },
+          };
+    const { libxml, xsd } = languagesOf(composedGrammar, version, parent, particle);
+
+    return libxmlWidened(particle).widened.flatMap((place) => {
+      const letters = [
+        ...Option.match(place.before, { onNone: () => [], onSome: kindOf }),
+        ...kindOf(place.element),
+        ...held.slice(0, 1),
+      ];
+      assert.lengthOf(letters, Option.isSome(place.before) ? 3 : 2, parent);
+
+      return sequencesOf(letters, 3).map((children): WidenedProbe => ({
+        children: children.map((kind) => childOf(composedGrammar, kind)),
+        kinds: children,
+        libxml: libxml(children),
+        parent: probe,
+        parentKind: parent,
+        type: Option.none(),
+        version,
+        xsd: xsd(children),
+      }));
+    });
+  });
+};
+
+/**
+ * Judge one of spec reading 88's families: the grammar must give the XSD's verdict, and xmllint the
+ * reading's record of libxml2's.
+ *
+ * @param composedGrammar - The grammar.
+ * @param root - The schema set's root file.
+ * @param probe - The family.
+ * @param verdict - What xmllint said of it.
+ * @returns Each disagreement, as a line.
+ */
+const widenedFailures = (
+  composedGrammar: ComposedGrammar,
+  root: SourcePath,
+  probe: WidenedProbe,
+  verdict: Validated | undefined,
+): readonly string[] => {
+  const installed =
+    accepts(composedGrammar, probe.version, probe.parentKind, probe.kinds) &&
+    countsHold(composedGrammar, probe.version, probe.parentKind, probe.kinds) &&
+    arityHolds(composedGrammar, probe.parentKind, probe.kinds);
+  const family = `${root} ${probe.parentKind} [${probe.kinds.join(", ")}]`;
+  const said = verdict?.refused === true ? "refuses" : "accepts";
+  const message = verdict?.messages[0] ?? "";
+
+  return [
+    ...(installed === probe.xsd
+      ? []
+      : [
+          `${family}: the grammar ${installed ? "accepts" : "refuses"} and the XSD ${probe.xsd ? "accepts" : "refuses"}`,
+        ]),
+    ...(verdict !== undefined && verdict.refused !== probe.libxml
+      ? []
+      : [
+          `${family}: xmllint ${said} and reading 88's record of it ${probe.libxml ? "accepts" : "refuses"}${message === "" ? "" : `: ${message}`}`,
+        ]),
+  ];
+};
+
+/**
+ * The children spec reading 102 (upstream's 61) admits in `qti-ordering`'s extension slot, one of
+ * each kind of child: a QTI element no declaration names (`own-namespace-element`), an element in
+ * no namespace, one of another namespace, an HTML, a MathML, an SSML and an XInclude global, read
+ * as their kinds, and a QTI root, which spec reading 6 keeps foreign.
+ */
+const orderingChildren = [
+  foreignKinds.own,
+  foreignKinds.absent,
+  foreignKinds.other,
+  "div",
+  "m:math",
+  "ssml:speak",
+  "xi:include",
+] as const;
+
+describe("spec reading 102 (upstream's 61), qti-ordering's extension slot", () => {
+  it.effect(
+    "admits any element of any namespace in any number and order, character data apart, and qti-selection's slot keeps refusing QTI's namespace and none: every family of at most 3 children over one of each kind of child, in both versions",
+    () =>
+      // Oracle: reading 102's model as a checker, `sequence(any ##any lax 0..n)`: every element
+      // child admitted, in any order and number, and no text, the content being element-only;
+      // `qti-selection` keeps the XSD's `##other` (information model §5.129.4).
+      // Bound: every family of 0 to 3 children over the seven kinds of child above and `text`, the
+      // named invalid variant, under both parents, in both versions.
+      Effect.gen(function* reading102Slot() {
+        const composedGrammar = yield* grammar;
+        const wrong: string[] = [];
+        let families = 0;
+        for (const version of schemaVersions) {
+          for (const children of sequencesOf([...orderingChildren, "text"], 3)) {
+            families += 1;
+            const ordering = !children.includes("text");
+            const selection =
+              ordering &&
+              !children.some(
+                (kind) =>
+                  kind === foreignKinds.own || kind === foreignKinds.absent || kind === "div",
+              );
+            if (accepts(composedGrammar, version, "qti-ordering", children) !== ordering) {
+              wrong.push(`${version} qti-ordering [${children.join(", ")}]`);
+            }
+
+            if (accepts(composedGrammar, version, "qti-selection", children) !== selection) {
+              wrong.push(`${version} qti-selection [${children.join(", ")}]`);
+            }
+          }
+        }
+
+        assert.isAbove(families, 0);
+        assert.deepStrictEqual(wrong.slice(0, 40), []);
+      }),
+    xsdTimeout,
+  );
+});
+
+describe.skipIf(!cached)("spec reading 88, a repeated wildcard keeps its sequence's order", () => {
+  it.effect(
+    "refuses the element before a repeated wildcard after a child the wildcard holds, as the XSD does, where xmllint accepts it and nothing else: every family of at most 3 children over that element, the one before it and a declared kind the wildcard admits, in each widened place of the pinned schema sets",
+    (ctx) =>
+      // Oracle: the XSD's sequence, by the tests' own reader and acceptor (XML Schema 1.0 Part 1,
+      // §3.8.4, Element Sequence Valid), for the grammar. libxml2's schema validator for the
+      // reading's record of it: the same particle widened as `libxmlWidened` says, so xmllint
+      // accepting anything beyond that, or no longer accepting it, fails here.
+      // Bound: the census of every widened place the walks of the pinned schema sets reach
+      // (`widenedSchemas`), then every sequence of at most 3 children over 3 kinds a place, 40
+      // families, 3 places; exhaustive, so no residual.
+      Effect.gen(function* readingEightyEight() {
+        const composedGrammar = yield* grammar;
+        const resolve = resolverOf(composedGrammar.kinds);
+        const found = new Set<string>();
+        const failures: string[] = [];
+        let probed = 0;
+        let ruled = 0;
+        for (const { root, target: probedIn, version } of widenedSchemas) {
+          const { set } = yield* loadXsd(root);
+          const { contents } = xsdContents(set, resolve);
+          for (const [parent, readings] of contents) {
+            for (const place of placesOf(version, parent, readings, resolve)) {
+              found.add(place);
+            }
+          }
+
+          for (const target of Option.toArray(probedIn)) {
+            // Only a kind with one content has one model to probe.
+            const probes = [...contents].flatMap(([parent, readings]) => {
+              const [reading, ...others] = readings;
+
+              return reading === undefined || others.length > 0
+                ? []
+                : widenedProbesOf({
+                    grammar: composedGrammar,
+                    parent,
+                    reading,
+                    set,
+                    target,
+                    version,
+                  });
+            });
+            const verdicts =
+              probes.length === 0
+                ? []
+                : yield* Effect.scoped(validateContents(root, target, probes));
+            for (const [index, probe] of probes.entries()) {
+              const verdict = verdicts[index];
+              probed += 1;
+              ruled += verdict?.refused === false && !probe.xsd ? 1 : 0;
+              failures.push(...widenedFailures(composedGrammar, root, probe, verdict));
+            }
+          }
+        }
+
+        yield* Effect.promise(() =>
+          ctx.annotate(
+            `${found.size} widened places, ${probed} families, ${ruled} that xmllint accepts and the XSD refuses`,
+            "bound",
+          ),
+        );
+        assert.deepStrictEqual([...found].toSorted(), widenedPlaces, "reading 88's census");
+        assert.deepStrictEqual(
+          automatonRowsOf(composedGrammar, unwalkedTwin.unwalked, unwalkedTwin.kind),
+          automatonRowsOf(composedGrammar, unwalkedTwin.reached, unwalkedTwin.kind),
+          "the DRD's 3.0.1 model, which no walk reaches, is installed as its 3.0.0 model",
+        );
+        assert.deepStrictEqual(failures.slice(0, 40), []);
+        assert.isAbove(ruled, 0, "xmllint no longer widens these sequences: revisit reading 88");
       }).pipe(Effect.provide(XsdOracleLayer)),
     xsdTimeout,
   );

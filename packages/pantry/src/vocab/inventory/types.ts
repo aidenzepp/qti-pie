@@ -390,7 +390,8 @@ export interface TextType {
  */
 export interface TypeAttributeDeclaration extends Omit<AttributeDeclaration, "kind"> {
   /**
-   * The type's `TypeName` handle, `{namespace}local`.
+   * The type's `TypeName` handle, its namespace's prefix and its local name (`typeHandle` of
+   * `#pantry/grammar/xsi.ts`).
    */
   readonly owner: string;
 }
@@ -401,7 +402,8 @@ export interface TypeAttributeDeclaration extends Omit<AttributeDeclaration, "ki
  */
 export interface TypeAttributeWildcard extends Omit<AttributeWildcard, "kind"> {
   /**
-   * The type's `TypeName` handle, `{namespace}local`.
+   * The type's `TypeName` handle, its namespace's prefix and its local name (`typeHandle` of
+   * `#pantry/grammar/xsi.ts`).
    */
   readonly owner: string;
 }
@@ -414,7 +416,8 @@ export interface TypeAttributeWildcard extends Omit<AttributeWildcard, "kind"> {
  */
 export interface TypeText extends Omit<TextType, "kind"> {
   /**
-   * The type's `TypeName` handle, `{namespace}local`.
+   * The type's `TypeName` handle, its namespace's prefix and its local name (`typeHandle` of
+   * `#pantry/grammar/xsi.ts`).
    */
   readonly owner: string;
 }

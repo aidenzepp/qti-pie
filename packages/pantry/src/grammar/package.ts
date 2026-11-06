@@ -5,8 +5,8 @@
  *
  * A text whose legal values are fixed is a roster, so a resource's `type` is a `ResourceType`
  * handle, spelled exactly as its lexical form, which is how the attribute's lexical form derives
- * its code. `ResourceTypeOf` and `RootOfType` are rows of those handles, and grizzle packs each
- * into a constant with no table.
+ * its code. `ResourceTypeOf` and `RootOfType` are sets of those handles' rows, and grizzle packs
+ * each into a constant with no table.
  */
 import { Result } from "effect";
 import { closed, idField, roster } from "#pantry/grammar/closed.ts";
@@ -31,7 +31,8 @@ export interface RootOf {
 
 /**
  * A vocabulary's share of the package relations: the resource types it states, and the root kinds
- * of the documents a type lists, stated by the vocabulary of the root kind.
+ * of the documents a type lists, stated by the vocabulary of the root kind, or by XInclude's for an
+ * included fragment, whose root may be a kind of any vocabulary an include stands for.
  */
 export interface PackageFacet {
   readonly resourceTypes: readonly ResourceTypes[];
@@ -55,13 +56,15 @@ export interface PackageGrammar {
     readonly []
   >;
   /**
-   * `RootOfType`, the function from a resource type to the root element kind of the documents it
-   * lists: 9 rows over the 21 types, the law on a `Document`'s (resource type, root kind) cell
-   * (`root-type-reverse`). A type absent from it lists no document.
+   * `RootOfType`, the set of (resource type, root element kind) pairs: each type that lists
+   * documents with the kinds their roots may be, the law on a `Document`'s (resource type, root
+   * kind) cell (`root-type-reverse`). Each type but one has one root; an included fragment's type
+   * has every kind an include stands for (spec reading 107). A type absent from it lists no
+   * document.
    */
   readonly rootOfType: Closed<
-    readonly [IdField<"type", string>],
-    readonly [IdField<"root", string>]
+    readonly [IdField<"type", string>, IdField<"root", string>],
+    readonly []
   >;
 }
 
@@ -99,9 +102,9 @@ export const packageGrammar = (input: {
         ),
       }),
       rootOfType: yield* closed({
-        key: [type],
+        key: [type, idField("root", input.kinds)],
         name: "RootOfType",
-        payload: [idField("root", input.kinds)],
+        payload: [],
         rows: input.facets.flatMap((facet) => facet.roots),
       }),
     };

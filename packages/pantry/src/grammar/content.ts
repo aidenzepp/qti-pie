@@ -13,6 +13,22 @@
  * at-most-once and exclusive choice; a bound of 2…n, which a position automaton relaxes, is a count
  * law, `Counted(version, parent, position) → (min, max)`.
  *
+ * A group's bound of 2…n the automaton relaxes too, to `1..n` (`automatonOf` links a repeatable
+ * group's last positions to its first, whatever its bounds), and no position carries it, so
+ * `Counted` does not hold it. Every such bound in the pinned XSDs is a `choice` of 2..2 whose every
+ * member is one operand exactly once, the content of nineteen expression operators: the fifteen
+ * that share the pair at `imsqti_asiv3p0p1_v1p0.xsd:29337` (`qti-contains`, `qti-delete`,
+ * `qti-divide`, `qti-duration-gte`, `qti-duration-lt`, `qti-gt`, `qti-gte`, `qti-integer-divide`,
+ * `qti-integer-modulus`, `qti-lt`, `qti-lte`, `qti-match`, `qti-member`, `qti-power`,
+ * `qti-subtract`), and `qti-equal`, `qti-equal-rounded`, `qti-string-match` and `qti-substring`,
+ * each with its own (lines 26945, 27046, 32183, 32264); so the operator's child count is the
+ * group's repeat count, and `OperatorArity(kind) → (min, max)`, which `aritiesOf` reads off that
+ * same group, holds it: law O4, `Arity` (`src/qti/expressions.ts`), counts an expression's operands
+ * against it. The automaton admits `qti-contains` with one operand, and Arity refuses it.
+ * `content.test.ts` proves both halves: its occurrence-bound census refuses any counted group whose
+ * operator's `OperatorArity` is not exactly its bound or whose repeat is not one child, and its
+ * xmllint differential exhausts every family of at most 3 children over each such operator.
+ *
  * Q3's `automatonOf` builds every automaton from the content-model IR; this module installs them.
  */
 import { Array as Arr, Option, pipe, Result, Schema } from "effect";
