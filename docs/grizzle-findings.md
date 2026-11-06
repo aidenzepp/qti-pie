@@ -1392,6 +1392,10 @@ rows, `importWork` in `src/qti/logins.ts`.
 - The patch is `work/rv/r87/workload-guard.patch`. It holds `logins.ts`, the `schema.test.ts` assertion, and three new
   test files: `src/qti/logins.test.ts`, `src/test/gen/assembly.compile.test.ts` and `src/test/gen/assembly.db.test.ts`.
 - It lands with the pin that fixes 2. Until then generate refuses with 2's text.
+- A cost worth telling grizzle: `workload(role, programs)` takes about 10 s for each ChangeSet program over `Qti`, so a
+  workload cannot hold one program per generated package. It took 9.2 s for one program and 72.5 s for five, measured
+  2026-11-06 at load average 60. `assembly.compile.test.ts` therefore compiles a spread of six. Every package's
+  program has one Description, so the six stand for all of them.
 
 ### Not grizzle's: the law oracle raises no reading-87 breach
 
@@ -1416,7 +1420,8 @@ messages, but nothing raises either one.
   (`~/.cache/gr8des/rvp/prof/CPU.20261106.125400.50691.0.001.cpuprofile`, at load average 42) puts 57 s of its 139 s
   in `logins.ts`: 32.7 s in `workload` → `levelSchema` → `descText` and 24.4 s in `login` → `admitLogin` →
   `sameDesc`. That is most of why `src/import/package.ts` takes about 8.6 s to import, against 4.8 s on `main`, as
-  Aiden's review of PR #46 measured.
+  Aiden's review of PR #46 measured. R87's workload guard meets the same cost: there, `workload(role, programs)` takes
+  about 10 s for each ChangeSet program over `Qti` (the R87 section above).
 - **Cause**, at `64f0427` and unchanged at grizzle `main` `40963d6` (`origin/main` on 2026-11-06;
   `git log 64f0427..40963d6` over the five files below is empty):
   - `workload(R, programs)` checks each program's schema with `levelSchema`
