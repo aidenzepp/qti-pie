@@ -233,9 +233,9 @@ const interactionRenderer =
  * It resolves the overrides once, takes the instance from `options.instance` or draws a lowercase
  * UUID (`crypto.randomUUID()`, never derived from the seed), builds the payload from the redacted
  * item and the options, and emits the body and the Root. A shuffled Choice is presented in the
- * order the configuration's `seed`, the instance and its response key. The Root's `data-mode` names
- * `options.mode`. It writes no form, submit control, title or record. Given the same instance,
- * configuration and inputs, it gives the same HTML, and it returns the instance it used.
+ * order the configuration's `seed`, the instance and its response key give. The Root's `data-mode`
+ * names `options.mode`. It writes no form, submit control, title or record. Given the same
+ * instance, configuration and inputs, it gives the same HTML, and it returns the instance it used.
  *
  * @example
  *   const rendered = render(redact(accepted), configuration, { instance: "q1" });

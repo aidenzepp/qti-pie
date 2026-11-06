@@ -82,12 +82,12 @@ export const patternMessage = (
     : Option.none();
 
 /**
- * The message a Text Entry or Extended Text gives for each reason its entry did not decode.
+ * The message a Text Entry or Extended Text gives for each reason its entry did not decode, but
+ * for a numeric binding's `number`, whose message {@link malformedMessage} gives itself.
  *
  * A file (`file`) and a second entry (`single-many`) get their own messages on every binding.
- * `number` here is a string binding's, which only a {@link Malformed} built by hand carries, and so
- * is `identifier` on any binding: each gets the general `notAccepted`. A numeric binding's `number`
- * is {@link malformedMessage}'s own.
+ * `identifier` on any binding, and `number` on a `string` binding, which only a {@link Malformed}
+ * built by hand carries, get the general `notAccepted`.
  */
 const refusals = {
   file: "malformedFile",
@@ -99,8 +99,8 @@ const refusals = {
 /**
  * Give the message a text entry that did not decode earns, a tier (a) check.
  *
- * Every binding gives `malformedFile` for a file and `malformedSingleMany` for a second entry. An
- * `integer` or `float` binding gives a text that is not a number the author's
+ * Every binding gives `malformedFile` for a file and `malformedSingleMany` for a second entry. On
+ * an `integer` or `float` binding, a text that is not a number gives the author's
  * `data-patternmask-message` when set, else `malformedNumber`. Any other reason gives
  * `notAccepted`.
  *

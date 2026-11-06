@@ -61,7 +61,8 @@ export const itemPart = (
  *   Result.map(emitItem(payload, state, body), toHtml);
  *   // a qti-assessment-item element, its id `<instance>-item`, holding the body's HTML
  *
- * @param payload The render's payload, which gives the language, the instance and the state.
+ * @param payload The render's payload, which gives the language, the instance, the mode and
+ *   `finished`.
  * @param state The emit state, which holds the part overrides.
  * @param body The emitted body, which the Root holds.
  * @returns The item Root, or the refusal of a replacement that breaks the swap invariant.

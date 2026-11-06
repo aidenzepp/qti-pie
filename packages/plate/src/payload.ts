@@ -58,8 +58,8 @@ export interface ValidationMessage {
 export type RenderMode = "answering" | "review" | "solution";
 
 /**
- * The author's inputs to one render: the instance, the seed, the values to show, the entry names,
- * and the messages of a post the author refused.
+ * The author's inputs to one render: the instance, the mode, the seed, the values to show, the
+ * entry names, and the messages of a post the author refused.
  *
  * The library decides no flow, so every field is the author's: each map is keyed by response
  * identifier, and a response it omits takes the default the field names. `messages` decides how
@@ -350,8 +350,7 @@ export type PayloadNode = ElementPayload | InteractionPayload | NoticePayload | 
  *
  * `lang` is the item's `xml:lang`, else the view's locale. `finished` is the view's: the author
  * disabled every control. `mode` is the view's, the state the Root's and each interaction Root's
- * `data-mode` name. `notices` names the unsupported features the body shows as
- * notices.
+ * `data-mode` name. `notices` names the unsupported features the body shows as notices.
  */
 export interface Payload {
   readonly body: readonly PayloadNode[];
