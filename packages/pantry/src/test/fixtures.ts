@@ -5,6 +5,8 @@ import { Config, Effect, FileSystem, Match, Option, Schema, Stream } from "effec
 import type { PlatformError } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import type { Uuid } from "@bjornpagen/grizzle";
+import { mathmlGroups } from "#pantry/test/mathml-blocks.ts";
+import type { MathmlBlock, MathmlGroup } from "#pantry/test/mathml-blocks.ts";
 
 /**
  * The version of this module's own extraction code, one of the four inputs of every fixture's hash.
@@ -450,6 +452,35 @@ const mathmlNames = [
 ] as const;
 
 /**
+ * The names of the 18 generated MathML positives of phase 6 (spec 4.11's second table): one for
+ * each group of `mathmlGroups`, the group's blocks inserted into one base document of its version.
+ * Groups 1 to 16 are items, over `math-inline-choice`'s item (3.0.0) or `math-mathml`'s (3.0.1);
+ * group 17 is an assessment test over `test-template-default`'s test, and group 18 an assessment
+ * stimulus over `stimulus-shared`'s passage, both 3.0.0, because three hosts sit only in a test or
+ * a stimulus.
+ */
+const generatedMathmlNames = [
+  "math-gen-1",
+  "math-gen-2",
+  "math-gen-3",
+  "math-gen-4",
+  "math-gen-5",
+  "math-gen-6",
+  "math-gen-7",
+  "math-gen-8",
+  "math-gen-9",
+  "math-gen-10",
+  "math-gen-11",
+  "math-gen-12",
+  "math-gen-13",
+  "math-gen-14",
+  "math-gen-15",
+  "math-gen-16",
+  "math-gen-17",
+  "math-gen-18",
+] as const;
+
+/**
  * The names `materialize` accepts: `simple`, its seven variants and the eleven hand-edited
  * packages, each the same package with the edits of its row in the spec table, `sharedMedia`, the
  * examples' shared-media package unedited, `quoted-q`, phase 2's hand-broken package,
@@ -457,8 +488,8 @@ const mathmlNames = [
  * hand-written HTML positives of {@link htmlElements}, the 14 XML copies of {@link copyNames}, and
  * the packaging phase's metadata and content cuts with their negatives, and the 11 positive
  * fixtures of phase 5's tests, sections and stimuli ({@link testNames}), and its 63 negatives
- * ({@link negativeNames}), the ten wildcard fixtures of {@link wildcardNames} and the 12 cut MathML
- * positives of {@link mathmlNames}.
+ * ({@link negativeNames}), the ten wildcard fixtures of {@link wildcardNames}, the 12 cut MathML
+ * positives of {@link mathmlNames} and the 18 generated ones of {@link generatedMathmlNames}.
  */
 export const fixtureNames = [
   "simple",
@@ -546,6 +577,7 @@ export const fixtureNames = [
   "usage3-bad-name",
   ...wildcardNames,
   ...mathmlNames,
+  ...generatedMathmlNames,
 ] as const;
 
 /**
@@ -4334,6 +4366,249 @@ const mathmlSpecs: Record<(typeof mathmlNames)[number], FixtureSpec> = {
 };
 
 /**
+ * The MathML namespace, which a generated fixture's base document declares as `m`.
+ */
+const mathmlNamespace = "http://www.w3.org/1998/Math/MathML";
+
+/**
+ * The response declarations of the host blocks' interactions, each with the `cardinality` and
+ * `base-type` its interaction takes: a gap match and an associate interaction bind several pairs,
+ * the others one identifier.
+ */
+const generatedResponses = [
+  ["RESPONSE_AS", "multiple", "pair"],
+  ["RESPONSE_CH", "single", "identifier"],
+  ["RESPONSE_GM", "multiple", "directedPair"],
+  ["RESPONSE_HT", "single", "identifier"],
+  ["RESPONSE_IC", "single", "identifier"],
+] as const;
+
+/**
+ * The fragment of a generated group at one of its sites, the blocks in group order.
+ *
+ * @param group - The generated group.
+ * @param site - The site of {@link MathmlBlock}.
+ * @returns The blocks' XML written one after the other, empty when no block is for the site.
+ */
+const generatedAt = (group: MathmlGroup, site: MathmlBlock["site"]): string =>
+  group.blocks
+    .filter((block) => block.site === site)
+    .map((block) => block.xml)
+    .join("");
+
+/**
+ * The declaration of the `FEEDBACK` outcome the group's feedback blocks name, an identifier
+ * outcome, or nothing when no block of the group names it.
+ *
+ * @param group - The generated group.
+ * @returns The declaration's text.
+ */
+const generatedOutcome = (group: MathmlGroup): string =>
+  group.blocks.some((block) => block.xml.includes('outcome-identifier="FEEDBACK"'))
+    ? '<qti-outcome-declaration identifier="FEEDBACK" cardinality="single" base-type="identifier"/>'
+    : "";
+
+/**
+ * The edits that put a generated group into its base item: the response declarations of the
+ * interactions the group's blocks hold, the `FEEDBACK` outcome and the `TPL` template variable they
+ * name, the blocks of the body site at the start of the item body and those of the item site last
+ * in the item, after its response processing. Each is a `ReplaceText` at an exact anchor of the
+ * base, which both base items share.
+ *
+ * @param item - The base item's path in its zip.
+ * @param group - The generated group.
+ * @returns The edits, which apply before the cut.
+ */
+const generatedItemEdits = (item: string, group: MathmlGroup): readonly TextEdit[] => {
+  const responses = generatedResponses
+    .filter(([identifier]) =>
+      group.blocks.some((block) => block.xml.includes(`response-identifier="${identifier}"`)),
+    )
+    .map(
+      ([identifier, cardinality, baseType]) =>
+        `<qti-response-declaration identifier="${identifier}" cardinality="${cardinality}" base-type="${baseType}"/>`,
+    )
+    .join("");
+  const template = group.blocks.some((block) => block.xml.includes('template-identifier="TPL"'))
+    ? '<qti-template-declaration identifier="TPL" cardinality="single" base-type="identifier"/>'
+    : "";
+  const scoreOutcome =
+    '<qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/>';
+
+  return [
+    replaceIn(item, "</qti-response-declaration>", `</qti-response-declaration>${responses}`),
+    replaceIn(item, scoreOutcome, `${scoreOutcome}${generatedOutcome(group)}${template}`),
+    replaceIn(item, "<qti-item-body>", `<qti-item-body>${generatedAt(group, "body")}`),
+    replaceIn(
+      item,
+      "</qti-assessment-item>",
+      `${generatedAt(group, "item")}</qti-assessment-item>`,
+    ),
+  ];
+};
+
+/**
+ * The files a generated group's blocks name by a relative `altimg`, `data`, `href` or `src`: the
+ * `a.html` of an anchor, the `o.png` of an object and the like. The package holds each, so that
+ * every file reference the importer reads names a `PackageEntry` (the file-exists law).
+ *
+ * @param group - The generated group.
+ * @returns The distinct paths, relative to the group's document, in block order.
+ */
+const generatedFiles = (group: MathmlGroup): readonly string[] => [
+  ...new Set(
+    group.blocks.flatMap((block) =>
+      [...block.xml.matchAll(/\s(?:altimg|data|href|src)="(?<file>[^"#]+)"/gu)]
+        .map((match) => match.groups?.["file"] ?? "")
+        .filter((value) => value !== "" && !/^(?:[A-Za-z][A-Za-z0-9+.-]*:|\/)/u.test(value)),
+    ),
+  ),
+];
+
+/**
+ * The spec of a generated group over a base item.
+ *
+ * @param base - The cut spec of the base item, `math-inline-choice` (3.0.0) or `math-mathml`
+ *   (3.0.1).
+ * @param item - The base item's path in its zip.
+ * @param group - The generated group, of the base's version.
+ * @returns The spec: the base's cut with the group's files and edits before it.
+ */
+const generatedItem = (base: FixtureSpec, item: string, group: MathmlGroup): FixtureSpec => ({
+  edits: [
+    ...generatedFiles(group).map((file) =>
+      addText(path.posix.join(path.posix.dirname(item), file), "x"),
+    ),
+    ...generatedItemEdits(item, group),
+    ...base.edits,
+  ],
+  member: base.member,
+  name: group.name,
+});
+
+/**
+ * The spec of the generated test group: `test-template-default`'s test with `xmlns:m` on its root,
+ * the `FEEDBACK` outcome the test feedback names and the group's rubric block before its test part
+ * and test feedback after it, which has no outcome processing for them to follow.
+ *
+ * @param group - The generated group whose blocks are for the test.
+ * @returns The spec.
+ */
+const generatedTest = (group: MathmlGroup): FixtureSpec => {
+  const base = testSpecs["test-template-default"];
+  const file = "template-default-test.xml";
+  const part = '<qti-test-part identifier="PART"';
+
+  return {
+    edits: [
+      ...base.edits,
+      replaceIn(
+        file,
+        ' identifier="TEMPLATE-DEFAULT"',
+        ` xmlns:m="${mathmlNamespace}" identifier="TEMPLATE-DEFAULT"`,
+      ),
+      replaceIn(file, part, `${generatedOutcome(group)}${generatedAt(group, "test-head")}${part}`),
+      replaceIn(file, "</qti-test-part>", `</qti-test-part>${generatedAt(group, "test-tail")}`),
+    ],
+    member: base.member,
+    name: group.name,
+  };
+};
+
+/**
+ * The spec of the generated stimulus group: `stimulus-shared`'s passage with `xmlns:m` on its root
+ * and the group's blocks first in its stimulus body.
+ *
+ * @param group - The generated group whose blocks are for the stimulus body.
+ * @returns The spec.
+ */
+const generatedStimulus = (group: MathmlGroup): FixtureSpec => {
+  const base = testSpecs["stimulus-shared"];
+  const file = "passages/unbelievableNight.xml";
+
+  return {
+    edits: [
+      ...base.edits,
+      replaceIn(
+        file,
+        'identifier="Stimulus1"',
+        `xmlns:m="${mathmlNamespace}" identifier="Stimulus1"`,
+      ),
+      replaceIn(
+        file,
+        "<qti-stimulus-body>",
+        `<qti-stimulus-body>${generatedAt(group, "stimulus-body")}`,
+      ),
+    ],
+    member: base.member,
+    name: group.name,
+  };
+};
+
+/**
+ * The spec of one generated group, over the base document its first block's site names.
+ *
+ * @param group - A group of `mathmlGroups`.
+ * @returns The spec.
+ */
+const generatedSpec = (group: MathmlGroup): FixtureSpec => {
+  const site = group.blocks[0]?.site;
+
+  if (site === "test-head" || site === "test-tail") {
+    return generatedTest(group);
+  }
+
+  if (site === "stimulus-body") {
+    return generatedStimulus(group);
+  }
+
+  return group.version === "3.0.1"
+    ? generatedItem(mathmlSpecs["math-mathml"], "items/MathML.xml", group)
+    : generatedItem(mathmlSpecs["math-inline-choice"], "inline_choice_math.xml", group);
+};
+
+/**
+ * The generated group of a fixture name.
+ *
+ * @param name - One of {@link generatedMathmlNames}.
+ * @returns The group of `mathmlGroups` of that name.
+ */
+const generatedGroup = (name: (typeof generatedMathmlNames)[number]): MathmlGroup => {
+  const group = mathmlGroups.find((found) => found.name === name);
+
+  if (group === undefined) {
+    throw new Error(`mathmlGroups has no group ${name}`);
+  }
+
+  return group;
+};
+
+/**
+ * The specs of {@link generatedMathmlNames}: one for each group of `mathmlGroups`, by the group's
+ * name.
+ */
+const generatedMathmlSpecs: Record<(typeof generatedMathmlNames)[number], FixtureSpec> = {
+  "math-gen-1": generatedSpec(generatedGroup("math-gen-1")),
+  "math-gen-10": generatedSpec(generatedGroup("math-gen-10")),
+  "math-gen-11": generatedSpec(generatedGroup("math-gen-11")),
+  "math-gen-12": generatedSpec(generatedGroup("math-gen-12")),
+  "math-gen-13": generatedSpec(generatedGroup("math-gen-13")),
+  "math-gen-14": generatedSpec(generatedGroup("math-gen-14")),
+  "math-gen-15": generatedSpec(generatedGroup("math-gen-15")),
+  "math-gen-16": generatedSpec(generatedGroup("math-gen-16")),
+  "math-gen-17": generatedSpec(generatedGroup("math-gen-17")),
+  "math-gen-18": generatedSpec(generatedGroup("math-gen-18")),
+  "math-gen-2": generatedSpec(generatedGroup("math-gen-2")),
+  "math-gen-3": generatedSpec(generatedGroup("math-gen-3")),
+  "math-gen-4": generatedSpec(generatedGroup("math-gen-4")),
+  "math-gen-5": generatedSpec(generatedGroup("math-gen-5")),
+  "math-gen-6": generatedSpec(generatedGroup("math-gen-6")),
+  "math-gen-7": generatedSpec(generatedGroup("math-gen-7")),
+  "math-gen-8": generatedSpec(generatedGroup("math-gen-8")),
+  "math-gen-9": generatedSpec(generatedGroup("math-gen-9")),
+};
+
+/**
  * The spec table: one row per {@link FixtureName}, so adding a name without its row does not
  * compile.
  *
@@ -4386,6 +4661,7 @@ const specs: Record<FixtureName, FixtureSpec> = {
   ...negativeSpecs,
   ...wildcardSpecs,
   ...mathmlSpecs,
+  ...generatedMathmlSpecs,
   "bad-identifier-value": {
     edits: [
       replaceIn("choice.xml", "<qti-value>ChoiceA</qti-value>", "<qti-value>Choice A</qti-value>"),
