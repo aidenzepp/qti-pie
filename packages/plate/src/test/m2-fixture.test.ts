@@ -80,15 +80,18 @@ describe("fixtures/m2", () => {
           assert.isTrue(result.valid, `${file}: ${result.messages.join("\n")}`);
         }
       }),
-    asiTimeoutMs * qtiDocuments.length,
+    { tags: ["qti-xsd"], timeout: asiTimeoutMs * qtiDocuments.length },
   );
 
-  it.effect("the manifest validates against the QTI 3.0.1 profile of CP 1.2", () =>
-    Effect.gen(function* manifestValid() {
-      const result = yield* validateAgainst(manifestXsd, yield* fixtureText("imsmanifest.xml"));
+  it.effect(
+    "the manifest validates against the QTI 3.0.1 profile of CP 1.2",
+    () =>
+      Effect.gen(function* manifestValid() {
+        const result = yield* validateAgainst(manifestXsd, yield* fixtureText("imsmanifest.xml"));
 
-      assert.isTrue(result.valid, `imsmanifest.xml: ${result.messages.join("\n")}`);
-    }),
+        assert.isTrue(result.valid, `imsmanifest.xml: ${result.messages.join("\n")}`);
+      }),
+    { tags: ["qti-xsd"] },
   );
 
   it.effect("the multiple-choice item shuffles its choices and fixes one, its last, in place", () =>
