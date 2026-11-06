@@ -5,6 +5,8 @@ import { Effect, Exit, FileSystem, Option } from "effect";
 import { externalRows } from "#pantry/import/external.ts";
 import { recordFile } from "#pantry/import/record.ts";
 import { Rows } from "#pantry/import/tree.ts";
+import { renderTree } from "#pantry/export/render.ts";
+import { NodeXmlLang } from "#pantry/schema/attributes.ts";
 import { Document } from "#pantry/schema/document.ts";
 import { CsmSet } from "#pantry/schema/csm.ts";
 import {
@@ -15,6 +17,7 @@ import {
 } from "#pantry/schema/metadata.ts";
 import { Node, TreeMisc } from "#pantry/schema/node.ts";
 import { materialize } from "#pantry/test/fixtures.ts";
+import { canonicalize } from "@qti-pie/crust/canonical.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 
 /**
@@ -90,6 +93,41 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/external.ts", (
       const set = only(Rows.of(rows, CsmSet));
       const host = only(Rows.of(rows, Node).filter((node) => node.id === set.host));
       assert.strictEqual(host.kind, "lom:lom");
+    }),
+  );
+
+  suite.effect("a lom:string keeps its xml:lang as a NodeXmlLang row and renders it back", () =>
+    Effect.gen(function* langRecord() {
+      const text =
+        '<?xml version="1.0" encoding="UTF-8"?>' +
+        '<lom xmlns="http://ltsc.ieee.org/xsd/LOM"><classification><taxonPath><source>' +
+        '<string xml:lang="en">jacs</string></source></taxonPath></classification></lom>';
+      const doc = yield* readXml(new TextEncoder().encode(text));
+      const { rows } = yield* externalRows(
+        doc,
+        {
+          package: packageId,
+          path: "meta/choice.xml",
+          resource: "choice-meta",
+          resourceType: "resourcemetadata/xml",
+          version: "3.0.0",
+        },
+        Rows.empty(),
+      );
+      const document = only(Rows.of(rows, Document));
+      const string = only(Rows.of(rows, Node).filter((node) => node.kind === "lom:string"));
+      const lang = only(Rows.of(rows, NodeXmlLang));
+
+      assert.strictEqual(lang.value, "en");
+      assert.strictEqual(lang.attribute, "xml:lang");
+      assert.strictEqual(lang.kind, "lom:string");
+      assert.strictEqual(lang.rootKind, "externalLom");
+      assert.strictEqual(lang.tree, document.id);
+      assert.strictEqual(lang.node, string.id);
+      assert.strictEqual(
+        new TextDecoder().decode(canonicalize(renderTree(rows, document.id))),
+        new TextDecoder().decode(canonicalize(doc)),
+      );
     }),
   );
 

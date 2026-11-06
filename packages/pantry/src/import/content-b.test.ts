@@ -867,7 +867,14 @@ const negatives: readonly Negative[] = [
     fixture: "cut-choice",
     law: capacityLaw(
       side(Picture, ["id"]),
-      side(Edge, ["parent"], [{ field: "childKind", value: "img" }]),
+      side(
+        Edge,
+        ["parent"],
+        [
+          { field: "childKind", value: "img" },
+          { field: "parentKind", value: "picture" },
+        ],
+      ),
       1n,
       1n,
     ),

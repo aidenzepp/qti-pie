@@ -14,6 +14,7 @@ import { bindingFit } from "#pantry/schema/seed/binding-fit.ts";
 import * as csm from "#pantry/schema/csm.ts";
 import * as usage from "#pantry/schema/usage.ts";
 import { printSeed } from "#pantry/test/seed.ts";
+import { seedPrintTestTimeoutMs } from "#pantry/test/settings.ts";
 
 /**
  * The part of a ChangeSet's description the test reads: each stratum's members by operation and
@@ -43,16 +44,23 @@ const stored = () =>
   );
 
 /**
- * The `01-seed.sql` of the one `seed` migration folder: the history holds exactly one.
+ * The migration folder whose name ends `suffix`: the history holds exactly one.
  */
-const committedSeed = (): string => {
+const folderEnding = (suffix: string): string => {
   const folders = readdirSync(migrations, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory() && entry.name.endsWith("_seed"))
-    .map((entry) => path.join(migrations, entry.name, "01-seed.sql"));
+    .filter((entry) => entry.isDirectory() && entry.name.endsWith(suffix))
+    .map((entry) => path.join(migrations, entry.name));
   assert.strictEqual(folders.length, 1);
 
-  return readFileSync(folders[0] ?? "", "utf-8");
+  return folders[0] ?? "";
 };
+
+/**
+ * The `01-seed.sql` of the one `seed` migration folder, which holds the seed rows of the first
+ * history. The `seed_tests` folder is excluded by its name: `_seed` does not end `_seed_tests`.
+ */
+const committedSeed = (): string =>
+  readFileSync(path.join(folderEnding("_seed"), "01-seed.sql"), "utf-8");
 
 /**
  * The tuples one table's INSERT statements hold, as strings.
@@ -136,9 +144,19 @@ describe("qti packaging composition", () => {
     );
   });
 
-  it("holds exactly the full seed the recipe prints, in the one seed folder", () => {
-    assert.strictEqual(committedSeed(), printSeed([]));
-  });
+  it(
+    "holds exactly the full seed the recipe prints, split between the seed folder and seed_tests",
+    () => {
+      const seedTests = folderEnding("_seed_tests");
+
+      assert.strictEqual(committedSeed(), printSeed(["--minus", seedTests]));
+      assert.strictEqual(
+        readFileSync(path.join(seedTests, "01-seed.sql"), "utf-8"),
+        printSeed(["--minus", folderEnding("_seed")]),
+      );
+    },
+    seedPrintTestTimeoutMs,
+  );
 
   it("keeps the BindingFit rows as the seed module holds them", () => {
     assert.isAbove(bindingFit.length, 0);

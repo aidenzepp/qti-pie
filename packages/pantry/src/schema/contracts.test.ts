@@ -7,13 +7,16 @@ import { Qti } from "#pantry/schema/qti.ts";
 import * as valueContracts from "#pantry/schema/value-contracts.ts";
 
 /**
- * The 136 contracts of the schema tightening, from the dry run `p13-d1` (its list (c)): the 254
- * contracts the contracts document lists as present after the canonical wave, less none, over 264
- * columns. Sorted.
+ * The 146 contracts of the schema tightening (the 136 of the dry run `p13-d1` and the eleven of
+ * phase 5, less `SectionReference`, which phase 5 retyped away), from the dry run `p13-d1` (its
+ * list (c)): the 254 contracts the contracts document lists as present after the canonical wave,
+ * less none, over 264 columns. Sorted.
  */
 const derived = [
   "AccessMode",
   "AccessModeAdapted",
+  "AdaptiveRefHref",
+  "AdaptiveRefIdentifier",
   "AriaInteger",
   "AriaPositiveInteger",
   "CaseItemUri",
@@ -62,6 +65,7 @@ const derived = [
   "InterpolationTargetPairValue",
   "InterpolationTargetPointValue",
   "InterpolationTargetUriValue",
+  "ItemRefHref",
   "LangStringLanguage",
   "LiteralDirectedPairValue",
   "LiteralDurationValue",
@@ -85,6 +89,7 @@ const derived = [
   "MapKeyPairValue",
   "MapKeyPointValue",
   "MapKeyUriValue",
+  "MappedVariableName",
   "MappingScore",
   "MatchDefaultDirectedPairValue",
   "MatchDefaultDurationValue",
@@ -114,18 +119,23 @@ const derived = [
   "RecordFieldIdentifier",
   "RectCoords",
   "ResourceEntryHref",
-  "SectionReference",
+  "SectionRefHref",
   "ShapeCoords",
   "ShowHideIdentifier",
+  "SliderBound",
   "StatisticContextUri",
   "StatisticMeasure",
   "StatisticName",
+  "StimulusRefHref",
+  "StimulusRefIdentifier",
   "StringCount",
   "StylesheetUri",
   "TableSpan",
   "TemplateLocationUri",
   "TemplateParameterName",
   "TemplateUri",
+  "TestStructureIdentifier",
+  "TimeLimitSeconds",
   "ToolName",
   "ToolVendor",
   "ToolVersion",
@@ -145,6 +155,7 @@ const derived = [
   "UsageValueToken",
   "VariableReference",
   "WeightReference",
+  "WeightValue",
   "XIncludeUri",
   "XmlBaseUri",
   "XmlEntityName",
@@ -194,12 +205,37 @@ describe("schema/contracts", () => {
     );
   });
 
-  it("makes exactly the 136 contracts the dry run derived", () => {
+  it("makes exactly the 146 contracts the dry run and phase 5 derived", () => {
     const { arms, written } = everyName();
 
-    assert.strictEqual(written.length, 72);
+    assert.strictEqual(written.length, 82);
     assert.strictEqual(arms.length, 64);
     assert.deepStrictEqual([...written, ...arms].toSorted(), derived);
+  });
+
+  it("makes the eleven contracts of phase 5 over their base patterns", () => {
+    const eleven: readonly (readonly [
+      { readonly base: { readonly pattern: { readonly source: string } }; readonly name: string },
+      string,
+      string,
+    ])[] = [
+      [contracts.TestStructureIdentifier, "TestStructureIdentifier", patterns.ncName],
+      [contracts.StimulusRefIdentifier, "StimulusRefIdentifier", patterns.ncName],
+      [contracts.AdaptiveRefIdentifier, "AdaptiveRefIdentifier", patterns.ncName],
+      [contracts.MappedVariableName, "MappedVariableName", patterns.ncName],
+      [contracts.ItemRefHref, "ItemRefHref", patterns.anyUri],
+      [contracts.SectionRefHref, "SectionRefHref", patterns.anyUri],
+      [contracts.StimulusRefHref, "StimulusRefHref", patterns.anyUri],
+      [contracts.AdaptiveRefHref, "AdaptiveRefHref", patterns.anyUri],
+      [contracts.WeightValue, "WeightValue", patterns.xsDouble],
+      [contracts.TimeLimitSeconds, "TimeLimitSeconds", patterns.nonNegativeDouble],
+      [contracts.SliderBound, "SliderBound", patterns.nonNegativeDouble],
+    ];
+
+    for (const [made, name, base] of eleven) {
+      assert.strictEqual(made.name, name);
+      assert.strictEqual(made.base.pattern.source, base, name);
+    }
   });
 
   it("names no contract twice", () => {
