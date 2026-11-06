@@ -3,14 +3,21 @@ import { Effect, Option, Result } from "effect";
 import { configure } from "#plate/configuration.ts";
 import type { Configuration } from "#plate/configuration.ts";
 import { readCorpusFile } from "#plate/document/corpus.ts";
+import { h } from "#plate/emit/node.ts";
+import type { Attributes, Element, Node } from "#plate/emit/node.ts";
+import { rowFor } from "#plate/emit/parts.ts";
+import type { PartOf } from "#plate/emit/parts.ts";
 import { encodeIntent } from "#plate/form/intent.ts";
+import { message, numeral } from "#plate/messages.ts";
 import type { Value } from "#plate/model/values.ts";
-import { navigationState, PartlessTestDefect } from "#plate/navigation.ts";
-import type { NavigationState } from "#plate/navigation.ts";
+import { navigationState, PartlessTestDefect, renderNavigation } from "#plate/navigation.ts";
+import type { NavigationOptions, NavigationState } from "#plate/navigation.ts";
 import { advance } from "#plate/session/advance.ts";
 import { allowedIntents } from "#plate/session/intents.ts";
 import type { Step, TestSession } from "#plate/session/session.ts";
 import { startTest } from "#plate/session/start.ts";
+import { checkAllowlist, sourceModules, valueClosure } from "#plate/test/imports.ts";
+import { parseHtml } from "#plate/test/round-trip.ts";
 import { open } from "#plate/validate/open.ts";
 import { acceptedItem, acceptTestForTest } from "#plate/validate/verdict.ts";
 import type { Accepted, AcceptedTest } from "#plate/validate/verdict.ts";
@@ -403,4 +410,259 @@ describe("navigationState", () => {
       }, PartlessTestDefect);
     }),
   );
+});
+
+/**
+ * Render a navigation and parse the HTML as a browser would, failing the test when the render
+ * fails.
+ *
+ * @param state The navigation.
+ * @param configuration The host's configuration.
+ * @param options The part overrides and the order, none by default.
+ * @returns The HTML and the Root it parses to.
+ */
+const renderedRoot = (
+  state: NavigationState,
+  configuration: Configuration,
+  options?: NavigationOptions,
+): { readonly html: string; readonly root: Element } => {
+  const html = Result.getOrElse(renderNavigation(state, configuration, options), (failure) =>
+    assert.fail(`renderNavigation refused: ${failure.message}`),
+  );
+  const [root] = parseHtml(html);
+
+  return root?.kind === "element"
+    ? { html, root }
+    : assert.fail(`renderNavigation wrote no Root: ${html}`);
+};
+
+/**
+ * List an element and every element below it, in document order.
+ *
+ * @param node The node to walk.
+ * @returns The elements, `node` first when it is one.
+ */
+const elementsOf = (node: Node): readonly Element[] =>
+  node.kind === "element" ? [node, ...node.children.flatMap(elementsOf)] : [];
+
+/**
+ * Give the text a node holds, its descendants' in order.
+ *
+ * @param node The node.
+ * @returns The text.
+ */
+const textOf = (node: Node): string =>
+  node.kind === "text" ? node.text : node.children.map(textOf).join("");
+
+/**
+ * List the elements below a Root that carry a navigation part's marker, read through the part
+ * table.
+ *
+ * @param root The navigation Root.
+ * @param part The part.
+ * @returns The part's elements, in document order.
+ */
+const partsOf = (root: Element, part: PartOf<"test-navigation">): readonly Element[] => {
+  const { slot } = rowFor("test-navigation", part);
+
+  return elementsOf(root).filter((element) => element.attrs["data-slot"] === slot);
+};
+
+/**
+ * Give the part key each child of a Root carries, read through the part table.
+ *
+ * @param root The navigation Root.
+ * @returns The part keys of the Root's children, in order.
+ */
+const childParts = (root: Element): readonly string[] =>
+  root.children.map((child) => {
+    const slot = child.kind === "element" ? child.attrs["data-slot"] : undefined;
+
+    return (
+      (["previous", "next", "items", "submit", "end"] as const).find(
+        (part) => rowFor("test-navigation", part).slot === slot,
+      ) ?? assert.fail(`a Root child carries ${String(slot)}`)
+    );
+  });
+
+/**
+ * The navigation parts that are buttons.
+ */
+const buttonParts = [
+  "previous",
+  "next",
+  "itemButton",
+  "submit",
+  "end",
+] as const satisfies readonly PartOf<"test-navigation">[];
+
+/**
+ * A host's replacement that makes a navigation button its own submit button, posting the intent
+ * the button is handed, as the recipe for a native post writes it.
+ *
+ * @param props The attributes the button carries.
+ * @param children The button's label.
+ * @returns A submit button named `s-1.intent` whose value is `props["data-intent"]`.
+ */
+const submitting = (props: Attributes, children: readonly Node[]): Element =>
+  h("button", { name: "s-1.intent", type: "submit", value: props["data-intent"] ?? "" }, children);
+
+/**
+ * Copy a tree without the attributes a host's submit swap writes: `type`, `name` and `value`.
+ *
+ * @param node The node.
+ * @returns The node, every element's attributes without those three.
+ */
+const withoutSubmitAttributes = (node: Node): Node =>
+  node.kind === "text"
+    ? node
+    : h(
+        node.tag,
+        Object.fromEntries(
+          Object.entries(node.attrs).filter(([name]) => !["name", "type", "value"].includes(name)),
+        ),
+        node.children.map(withoutSubmitAttributes),
+      );
+
+describe("renderNavigation", () => {
+  it.effect(
+    "[T-4] renders BGtest.xml's navigationState: the part's modes, each item's state in words, the current item marked, and each button disabled exactly when the data does not allow its intent",
+    () =>
+      Effect.gen(function* guideNavigation() {
+        const given = yield* corpusDelivery(guide, "BGtest.xml", guideRefs);
+        const configuration = yield* configure({});
+        const session = sessionAfter(given, configuration, [
+          { intent: { kind: "next" }, responses: { RESPONSE: chosen("A") } },
+        ]);
+        const state = stateOf(given.test, session);
+        const { root } = renderedRoot(state, configuration);
+
+        assert.strictEqual(root.tag, "nav");
+        assert.strictEqual(root.attrs["aria-label"], message("en", "testNavigation"));
+        assert.strictEqual(root.attrs["data-navigation"], "nonlinear");
+        assert.strictEqual(root.attrs["data-submission"], "individual");
+        assert.deepStrictEqual(childParts(root), ["previous", "items", "next", "submit", "end"]);
+
+        const itemButtons = partsOf(root, "itemButton");
+        assert.deepStrictEqual(
+          itemButtons.map(textOf),
+          (
+            [
+              [1, "itemAnswered"],
+              [2, "itemNotAnswered"],
+              [3, "itemNotAnswered"],
+              [4, "itemNotAnswered"],
+              [5, "itemNotAnswered"],
+              [6, "itemNotAnswered"],
+            ] as const
+          ).map(([n, words]) =>
+            message("en", "itemState", {
+              item: message("en", "itemOf", { count: numeral("en", 6), n: numeral("en", n) }),
+              state: message("en", words),
+            }),
+          ),
+        );
+        assert.deepStrictEqual(
+          itemButtons.map((button) => button.attrs["aria-current"]),
+          [undefined, "step", undefined, undefined, undefined, undefined],
+        );
+
+        const allowed = new Set(allowedNow(given.test, session));
+        const buttons = buttonParts.flatMap((part) => partsOf(root, part));
+        assert.lengthOf(buttons, 10);
+        for (const button of buttons) {
+          const intent = button.attrs["data-intent"] ?? assert.fail("a button has no intent");
+          assert.strictEqual(button.attrs["type"], "button");
+          assert.strictEqual(button.attrs["disabled"] !== undefined, !allowed.has(String(intent)));
+        }
+      }),
+  );
+
+  it.effect(
+    "[T-4] is pure: two renders are byte-equal, a linear part's default Root holds Next and Submit, and order [next] holds Next only",
+    () =>
+      Effect.gen(function* linearNavigation() {
+        const given = yield* corpusDelivery(caseFolder, "-TX_G06SAMP_000.xml", caseRefs);
+        const configuration = yield* configure({});
+        const state = stateOf(given.test, sessionAfter(given, configuration, []));
+        const first = renderedRoot(state, configuration);
+
+        assert.strictEqual(renderedRoot(state, configuration).html, first.html);
+        assert.strictEqual(state.navigation, "linear");
+        assert.deepStrictEqual(childParts(first.root), ["next", "submit"]);
+        assert.deepStrictEqual(
+          childParts(renderedRoot(state, configuration, { order: ["next"] }).root),
+          ["next"],
+        );
+      }),
+  );
+
+  it.effect(
+    "[T-4] keeps everything but type, name and value when a host swaps every button for its own submit button",
+    () =>
+      Effect.gen(function* submitSwap() {
+        const given = yield* corpusDelivery(guide, "BGtest.xml", guideRefs);
+        const configuration = yield* configure({});
+        const state = stateOf(given.test, sessionAfter(given, configuration, []));
+        const swapped = renderedRoot(state, configuration, {
+          parts: {
+            "test-navigation": Object.fromEntries(buttonParts.map((part) => [part, submitting])),
+          },
+        }).root;
+
+        assert.deepStrictEqual(
+          withoutSubmitAttributes(swapped),
+          withoutSubmitAttributes(renderedRoot(state, configuration).root),
+        );
+
+        const buttons = buttonParts.flatMap((part) => partsOf(swapped, part));
+        assert.lengthOf(buttons, 10);
+        for (const button of buttons) {
+          assert.strictEqual(button.attrs["type"], "submit");
+          assert.strictEqual(button.attrs["name"], "s-1.intent");
+          assert.strictEqual(button.attrs["value"], button.attrs["data-intent"]);
+        }
+      }),
+  );
+
+  it.effect(
+    "[T-4] refuses a swap of a button to a div with PartSwapRefused, and an unknown part with UnknownPart",
+    () =>
+      Effect.gen(function* refusedSwaps() {
+        const given = yield* corpusDelivery(guide, "BGtest.xml", guideRefs);
+        const configuration = yield* configure({});
+        const state = stateOf(given.test, sessionAfter(given, configuration, []));
+        const failureOf = (options: NavigationOptions) =>
+          Result.match(renderNavigation(state, configuration, options), {
+            onFailure: (error) => error,
+            onSuccess: () => assert.fail("renderNavigation took a swap it should refuse"),
+          });
+
+        const div = failureOf({
+          parts: { "test-navigation": { submit: (_props, children) => h("div", {}, children) } },
+        });
+        assert.strictEqual(div._tag, "PartSwapRefused");
+        if (div._tag === "PartSwapRefused") {
+          assert.strictEqual(div.cause, "root-not-allowed");
+          assert.strictEqual(div.part, "submit");
+        }
+
+        const unknown = failureOf({ parts: { "test-navigation": { pager: submitting } } });
+        assert.strictEqual(unknown._tag, "UnknownPart");
+        if (unknown._tag === "UnknownPart") {
+          assert.strictEqual(unknown.interaction, "test-navigation");
+          assert.deepStrictEqual(unknown.part, Option.some("pager"));
+        }
+      }),
+  );
+});
+
+describe("src/navigation.ts as a browser module", () => {
+  it("is among the browser roots, reaches the navigation parts and keeps the browser allowlist", () => {
+    const modules = sourceModules();
+
+    assert.isTrue(modules.has("src/navigation.ts"));
+    assert.include(valueClosure(modules, ["src/navigation.ts"]), "src/emit/navigation.ts");
+    assert.deepStrictEqual(checkAllowlist(modules, ["src/navigation.ts"]), []);
+  });
 });
