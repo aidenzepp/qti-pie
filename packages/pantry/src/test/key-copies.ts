@@ -19,12 +19,12 @@
  *   is.
  *
  * A copy out of a `keyText` field is bounded where that field is written, so only these first hops
- * are listed. Each selection and check is evaluated by {@link holdsWhere}, a host reading of the
- * predicate grizzle keeps for it, over the fields the oracle knows of a row
+ * are listed. Each selection and check is read from the predicate grizzle keeps for it and
+ * evaluated on the host in SQL's three-valued logic, over the fields the oracle knows of a row
  * ({@link attributeFields}, {@link nodeFields}).
  */
 import type { Law, LawSide } from "@bjornpagen/grizzle";
-import { Array as Arr, Option, Predicate, Result } from "effect";
+import { Array as Arr, Option, Predicate, Result, Schema } from "effect";
 import { keyText } from "#pantry/qti/limits.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 
@@ -36,8 +36,8 @@ export const attributeFields = ["governs", "kind", "lexical", "name", "version"]
 
 /**
  * The fields of a `Node` row the oracle knows before the database writes it: its own kind, version,
- * governing type, start and characters, its parent's kind and governing type and its
- * grandparent's kind, and its string value.
+ * governing type, start and characters, its parent's kind and governing type, its grandparent's
+ * kind, and its string value.
  */
 export const nodeFields = [
   "chars",
@@ -52,16 +52,60 @@ export const nodeFields = [
 ] as const;
 
 /**
+ * A field of an `Attribute` row the oracle knows.
+ */
+type AttributeField = (typeof attributeFields)[number];
+
+/**
+ * A field of a `Node` row the oracle knows.
+ */
+type NodeField = (typeof nodeFields)[number];
+
+/**
+ * The known field names of each document relation.
+ */
+const knownNames = {
+  Attribute: new Set<string>(attributeFields),
+  Node: new Set<string>(nodeFields),
+} as const;
+
+/**
+ * Whether a field name is one the oracle knows of an `Attribute` row.
+ *
+ * @param name - The field's name.
+ * @returns Whether it is in {@link attributeFields}.
+ */
+const isAttributeField = (name: string): name is AttributeField => knownNames.Attribute.has(name);
+
+/**
+ * Whether a field name is one the oracle knows of a `Node` row.
+ *
+ * @param name - The field's name.
+ * @returns Whether it is in {@link nodeFields}.
+ */
+const isNodeField = (name: string): name is NodeField => knownNames.Node.has(name);
+
+/**
  * One value a predicate reads: a text, a natural, a boolean, or a set of a roster's handles.
  */
 export type Datum = bigint | boolean | ReadonlySet<string> | string;
 
 /**
+ * The schema of a {@link Datum}, which reads a closed relation's facts and a literal's value.
+ */
+const DatumSchema = Schema.Union([
+  Schema.String,
+  Schema.BigInt,
+  Schema.Boolean,
+  Schema.ReadonlySet(Schema.String),
+]);
+
+/**
  * The known fields of a row of each document relation, by relation.
  */
 export interface DocumentRows {
-  readonly Attribute: Readonly<Record<(typeof attributeFields)[number], Datum>>;
-  readonly Node: Readonly<Record<(typeof nodeFields)[number], Datum>>;
+  readonly Attribute: Readonly<Record<AttributeField, Datum>>;
+  readonly Node: Readonly<Record<NodeField, Datum>>;
 }
 
 /**
@@ -70,21 +114,13 @@ export interface DocumentRows {
 export type DocumentRelation = keyof DocumentRows;
 
 /**
- * The known fields of each document relation, by relation.
- */
-const documentFields: { readonly [R in DocumentRelation]: ReadonlySet<string> } = {
-  Attribute: new Set(attributeFields),
-  Node: new Set(nodeFields),
-};
-
-/**
  * Whether a relation name is a document relation's.
  *
  * @param name - The relation's name.
  * @returns Whether the oracle has rows of it.
  */
 const isDocumentRelation = (name: string): name is DocumentRelation =>
-  Object.hasOwn(documentFields, name);
+  Object.hasOwn(knownNames, name);
 
 /**
  * How a statement writes a document's text into a key text: a containment's copy, a check's
@@ -93,9 +129,14 @@ const isDocumentRelation = (name: string): name is DocumentRelation =>
 export type CopiedBy = "check" | "contained" | "fold";
 
 /**
- * One key text of the schema a document's text is written into, of one document relation.
+ * A row's known fields as a predicate reads them, by name.
  */
-interface CopyOf<R extends DocumentRelation> {
+type Row = Readonly<Record<string, Datum>>;
+
+/**
+ * The parts of a copy every document relation shares.
+ */
+interface Copy {
   readonly by: CopiedBy;
   /**
    * The `keyText` field that holds the text, `Relation.field`.
@@ -108,331 +149,410 @@ interface CopyOf<R extends DocumentRelation> {
    * @param row - The row's known fields.
    * @returns Whether its text is held.
    */
-  readonly holds: (row: DocumentRows[R]) => boolean;
+  readonly holds: (row: Row) => boolean;
   /**
-   * The statement as grizzle's outcome names it: the containment or the fold, and for a check its
-   * name, the relation and the two fields it equates.
+   * The statement as grizzle's outcome names it (`src/import/refusal.ts` `lawIdentity`): the
+   * containment or the fold, and for a check its name, its relation and the two fields it equates.
    */
   readonly law: string;
   /**
-   * The known field whose value is held: the source's for a containment or a check, the owner's
-   * end for a fold.
-   */
-  readonly reads: keyof DocumentRows[R] & string;
-  readonly source: R;
-  /**
-   * The statement's place among the schema's statements, which keys the copies with the field:
-   * two statements may share an identity and differ by their selections alone.
+   * The statement's place among the schema's statements, which keys the copies with the field: two
+   * statements may share an identity and differ by their selections alone.
    */
   readonly statement: number;
 }
 
 /**
- * One key text a document's text is written into: {@link CopyOf} over one of the document
- * relations.
+ * One key text of the schema a document's text is written into, by the document relation it reads
+ * and the known field of that relation whose value is held: the source's for a containment or a
+ * check, the owner's end for a fold.
  */
-export type KeyCopy = { readonly [R in DocumentRelation]: CopyOf<R> }[DocumentRelation];
+export type KeyCopy =
+  | (Copy & { readonly reads: AttributeField; readonly source: "Attribute" })
+  | (Copy & { readonly reads: NodeField; readonly source: "Node" });
 
 /**
- * A copy before its statement's place is known: {@link KeyCopy} without `statement`.
- */
-type Unplaced = KeyCopy extends infer C
-  ? C extends KeyCopy
-    ? Omit<C, "statement">
-    : never
-  : never;
-
-/**
- * A term of a predicate as grizzle keeps it, the part of its language a copy's selection or check
- * reads. Any other term is `opaque`: a selection that holds one cannot be read, and a check reads
- * it as unknown.
+ * A term of a predicate, the part of grizzle's predicate language a copy's selection or check
+ * reads. Any other term is `unread`: a selection that holds one cannot be evaluated, and a check
+ * reads it as unknown.
  */
 type Term =
-  | { readonly args: readonly Term[]; readonly kind: "and" | "or" }
   | { readonly args: readonly Term[]; readonly fn: string; readonly kind: "compute" }
+  | { readonly args: readonly Term[]; readonly kind: "and" | "or" }
   | {
       readonly args: readonly Term[];
-      readonly field: string;
-      readonly kind: "closedAt";
+      readonly field: Option.Option<string>;
+      readonly kind: "closed";
       readonly relation: string;
     }
-  | { readonly args: readonly Term[]; readonly kind: "closedRow"; readonly relation: string }
   | { readonly arg: Term; readonly kind: "in"; readonly values: readonly Term[] }
   | { readonly arg: Term; readonly kind: "not" }
   | { readonly field: string; readonly kind: "field" }
   | { readonly kind: "compare"; readonly left: Term; readonly op: string; readonly right: Term }
   | { readonly kind: "literal"; readonly value: Datum }
-  | { readonly kind: "opaque"; readonly shape: string };
+  | { readonly kind: "unread"; readonly term: string };
 
 /**
- * Read the closed relation a closed read names.
- *
- * @param raw - The term as grizzle keeps it.
- * @returns The relation's name, empty when the term names none.
+ * A predicate's term as grizzle keeps it, read field by field: every field a term of
+ * {@link Term} has, each optional, and a literal's value unread.
  */
-const relationNameOf = (raw: object): string =>
-  Predicate.hasProperty(raw, "relation") && Predicate.isString(raw.relation) ? raw.relation : "";
-
-/**
- * Read the arguments of a term that has them.
- *
- * @param raw - The term as grizzle keeps it.
- * @returns Its arguments, read as terms; none when it has no list of them.
- */
-const argsOf = (raw: object): readonly Term[] =>
-  Predicate.hasProperty(raw, "args") && Array.isArray(raw.args) ? raw.args.map(termOf) : [];
-
-/**
- * Read a literal's value as a datum: a text, a natural, a boolean or a set of handles.
- *
- * @param value - The value grizzle keeps.
- * @returns The datum, or none for a value of any other type.
- */
-const datumOf = (value: unknown): Option.Option<Datum> => {
-  if (
-    Predicate.isString(value) ||
-    Predicate.isBigInt(value) ||
-    Predicate.isBoolean(value) ||
-    (value instanceof Set && [...value].every(Predicate.isString))
-  ) {
-    return Option.some(value);
-  }
-
-  return Option.none();
-};
-
-/**
- * Read one term of a predicate grizzle keeps into the part of its language {@link Term} names.
- *
- * @param raw - The term as grizzle keeps it.
- * @returns The term; `opaque` for any other.
- */
-const termOf = (raw: unknown): Term => {
-  if (Predicate.isString(raw)) {
-    return { kind: "literal", value: raw };
-  }
-
-  if (!Predicate.isObject(raw) || !Predicate.hasProperty(raw, "kind")) {
-    return { kind: "opaque", shape: typeof raw };
-  }
-
-  const { kind } = raw;
-  const opaque: Term = { kind: "opaque", shape: String(kind) };
-  switch (kind) {
-    case "and":
-    case "or": {
-      return { args: argsOf(raw), kind };
-    }
-    case "not": {
-      return Predicate.hasProperty(raw, "arg") ? { arg: termOf(raw.arg), kind } : opaque;
-    }
-    case "compare": {
-      return Predicate.hasProperty(raw, "op") &&
-        Predicate.isString(raw.op) &&
-        Predicate.hasProperty(raw, "left") &&
-        Predicate.hasProperty(raw, "right")
-        ? { kind, left: termOf(raw.left), op: raw.op, right: termOf(raw.right) }
-        : opaque;
-    }
-    case "field": {
-      return Predicate.hasProperty(raw, "field") && Predicate.isString(raw.field)
-        ? { field: raw.field, kind }
-        : opaque;
-    }
-    case "literal": {
-      return Predicate.hasProperty(raw, "value")
-        ? Option.match(datumOf(raw.value), {
-            onNone: () => opaque,
-            onSome: (value): Term => ({ kind, value }),
-          })
-        : opaque;
-    }
-    case "in": {
-      return Predicate.hasProperty(raw, "arg") &&
-        Predicate.hasProperty(raw, "values") &&
-        Array.isArray(raw.values)
-        ? { arg: termOf(raw.arg), kind, values: raw.values.map(termOf) }
-        : opaque;
-    }
-    case "closedAt": {
-      return Predicate.hasProperty(raw, "field") && Predicate.isString(raw.field)
-        ? { args: argsOf(raw), field: raw.field, kind, relation: relationNameOf(raw) }
-        : opaque;
-    }
-    case "closedRow": {
-      return { args: argsOf(raw), kind, relation: relationNameOf(raw) };
-    }
-    case "compute": {
-      return Predicate.hasProperty(raw, "fn") && Predicate.isString(raw.fn)
-        ? { args: argsOf(raw), fn: raw.fn, kind }
-        : opaque;
-    }
-    default: {
-      return opaque;
-    }
-  }
-};
-
-/**
- * List the fields a term reads of its row, and the shapes it holds that {@link Term} does not read.
- *
- * @param term - The term.
- * @returns Its fields and its opaque shapes.
- */
-const readsOf = (
-  term: Term,
-): { readonly fields: readonly string[]; readonly opaque: readonly string[] } => {
-  const fields: string[] = [];
-  const opaque: string[] = [];
-  const walk = (at: Term): void => {
-    switch (at.kind) {
-      case "field": {
-        fields.push(at.field);
-        break;
-      }
-      case "opaque": {
-        opaque.push(at.shape);
-        break;
-      }
-      case "literal": {
-        break;
-      }
-      case "not": {
-        walk(at.arg);
-        break;
-      }
-      case "in": {
-        walk(at.arg);
-        at.values.forEach(walk);
-        break;
-      }
-      case "compare": {
-        walk(at.left);
-        walk(at.right);
-        break;
-      }
-      default: {
-        at.args.forEach(walk);
-      }
-    }
-  };
-  walk(term);
-
-  return { fields, opaque };
-};
-
-/**
- * One closed relation of the schema as its rows are installed: its key fields in order and its
- * facts.
- */
-interface ClosedFacts {
-  readonly key: readonly string[];
-  readonly rows: readonly Readonly<Record<string, unknown>>[];
+interface StoredTerm {
+  readonly arg?: StoredTerm;
+  readonly args?: readonly StoredTerm[];
+  readonly field?: string;
+  readonly fn?: string;
+  readonly kind: string;
+  readonly left?: StoredTerm;
+  readonly op?: string;
+  readonly relation?: string;
+  readonly right?: StoredTerm;
+  readonly value?: unknown;
+  readonly values?: readonly unknown[];
 }
 
 /**
- * The closed relations of the composed schema, by name, as their rows are installed.
+ * The schema of a {@link StoredTerm}.
  */
-const closedFacts: ReadonlyMap<string, ClosedFacts> = new Map(
-  Object.values(Qti.relations).flatMap((member: unknown) =>
-    Predicate.isObject(member) &&
-    Predicate.hasProperty(member, "kind") &&
-    member.kind === "closedRelation" &&
-    Predicate.hasProperty(member, "name") &&
-    Predicate.isString(member.name) &&
-    Predicate.hasProperty(member, "key") &&
-    Array.isArray(member.key) &&
-    Predicate.hasProperty(member, "rows") &&
-    Array.isArray(member.rows)
-      ? [[member.name, { key: member.key.map(String), rows: member.rows }] as const]
-      : [],
+const StoredTermSchema: Schema.Codec<StoredTerm> = Schema.Struct({
+  arg: Schema.optionalKey(Schema.suspend((): Schema.Codec<StoredTerm> => StoredTermSchema)),
+  args: Schema.optionalKey(
+    Schema.Array(Schema.suspend((): Schema.Codec<StoredTerm> => StoredTermSchema)),
   ),
-);
+  field: Schema.optionalKey(Schema.String),
+  fn: Schema.optionalKey(Schema.String),
+  kind: Schema.String,
+  left: Schema.optionalKey(Schema.suspend((): Schema.Codec<StoredTerm> => StoredTermSchema)),
+  op: Schema.optionalKey(Schema.String),
+  relation: Schema.optionalKey(Schema.String),
+  right: Schema.optionalKey(Schema.suspend((): Schema.Codec<StoredTerm> => StoredTermSchema)),
+  value: Schema.optionalKey(Schema.Unknown),
+  values: Schema.optionalKey(Schema.Array(Schema.Unknown)),
+});
+
+/**
+ * A side of a statement as grizzle keeps it: a selection with the predicate its desc holds, or a
+ * whole relation, stored or closed, and its terms, a `pred` one as an object over its field.
+ */
+const SideSchema = Schema.Struct({
+  source: Schema.Union([
+    Schema.Struct({
+      desc: Schema.Struct({ predicate: StoredTermSchema }),
+      relation: Schema.Struct({ name: Schema.String }),
+    }),
+    Schema.Struct({ kind: Schema.String, name: Schema.String }),
+  ]),
+  terms: Schema.NonEmptyArray(
+    Schema.Union([Schema.String, Schema.Struct({ field: Schema.String })]),
+  ),
+});
+
+/**
+ * A side as {@link SideSchema} reads it.
+ */
+type StoredSide = typeof SideSchema.Type;
+
+/**
+ * The statements a copy comes from as grizzle keeps them: a containment or a mirrors, a fold, and a
+ * check with its predicate.
+ */
+const StatementSchema = Schema.Union([
+  Schema.Struct({
+    kind: Schema.Literals(["contained", "mirrors"]),
+    left: SideSchema,
+    right: SideSchema,
+  }),
+  Schema.Struct({
+    end: SideSchema,
+    family: Schema.Struct({
+      slots: Schema.Struct({ count: Schema.String, owner: Schema.Struct({ name: Schema.String }) }),
+    }),
+    kind: Schema.Literal("fold"),
+    monoid: Schema.Struct({ name: Schema.String }),
+    step: SideSchema,
+  }),
+  Schema.Struct({
+    desc: Schema.Struct({ name: Schema.String, predicate: StoredTermSchema }),
+    kind: Schema.Literal("check"),
+    relation: Schema.Struct({ name: Schema.String }),
+  }),
+]);
+
+/**
+ * A statement's kind, read before its shape.
+ */
+const KindSchema = Schema.Struct({ kind: Schema.String });
+
+/**
+ * The kinds of statement a copy comes from, each of which {@link StatementSchema} must read.
+ */
+const copyKinds: ReadonlySet<string> = new Set(["check", "contained", "fold", "mirrors"]);
+
+/**
+ * A statement as {@link StatementSchema} reads it.
+ */
+type StoredStatement = typeof StatementSchema.Type;
+
+/**
+ * Read a term of a stored predicate into {@link Term}.
+ *
+ * @param stored - The term as grizzle keeps it.
+ * @returns The term; `unread` for a term of any other kind or of a shape its kind does not have.
+ */
+const termOf = (stored: StoredTerm): Term => {
+  const unread: Term = { kind: "unread", term: stored.kind };
+  const { arg, field, fn, left, op, relation, right, values } = stored;
+  const readers = new Map<string, () => Term>([
+    ["and", () => ({ args: (stored.args ?? []).map(termOf), kind: "and" })],
+    [
+      "closedAt",
+      () =>
+        relation === undefined
+          ? unread
+          : {
+              args: (stored.args ?? []).map(termOf),
+              field: Option.fromUndefinedOr(field),
+              kind: "closed",
+              relation,
+            },
+    ],
+    [
+      "closedRow",
+      () =>
+        relation === undefined
+          ? unread
+          : {
+              args: (stored.args ?? []).map(termOf),
+              field: Option.none(),
+              kind: "closed",
+              relation,
+            },
+    ],
+    [
+      "compare",
+      () =>
+        op === undefined || left === undefined || right === undefined
+          ? unread
+          : { kind: "compare", left: termOf(left), op, right: termOf(right) },
+    ],
+    [
+      "compute",
+      () =>
+        fn === undefined ? unread : { args: (stored.args ?? []).map(termOf), fn, kind: "compute" },
+    ],
+    ["field", () => (field === undefined ? unread : { field, kind: "field" })],
+    [
+      "in",
+      () =>
+        arg === undefined || values === undefined
+          ? unread
+          : {
+              arg: termOf(arg),
+              kind: "in",
+              values: values.map((value) =>
+                Option.match(Schema.decodeUnknownOption(StoredTermSchema)(value), {
+                  onNone: () =>
+                    Option.match(Schema.decodeUnknownOption(DatumSchema)(value), {
+                      onNone: () => unread,
+                      onSome: (datum): Term => ({ kind: "literal", value: datum }),
+                    }),
+                  onSome: termOf,
+                }),
+              ),
+            },
+    ],
+    [
+      "literal",
+      () =>
+        Option.match(Schema.decodeUnknownOption(DatumSchema)(stored.value), {
+          onNone: () => unread,
+          onSome: (value): Term => ({ kind: "literal", value }),
+        }),
+    ],
+    ["not", () => (arg === undefined ? unread : { arg: termOf(arg), kind: "not" })],
+    ["or", () => ({ args: (stored.args ?? []).map(termOf), kind: "or" })],
+  ]);
+
+  return readers.get(stored.kind)?.() ?? unread;
+};
+
+/**
+ * List the terms directly below a term.
+ *
+ * @param term - The term.
+ * @returns Its operands, in order.
+ */
+const operandsOf = (term: Term): readonly Term[] => {
+  switch (term.kind) {
+    case "and":
+    case "or":
+    case "closed":
+    case "compute": {
+      return term.args;
+    }
+    case "compare": {
+      return [term.left, term.right];
+    }
+    case "in": {
+      return [term.arg, ...term.values];
+    }
+    case "not": {
+      return [term.arg];
+    }
+    case "field":
+    case "literal":
+    case "unread": {
+      return [];
+    }
+    default: {
+      return term satisfies never;
+    }
+  }
+};
+
+/**
+ * List a term and every term below it.
+ *
+ * @param term - The term.
+ * @returns It and its subterms, depth first.
+ */
+const subtermsOf = (term: Term): readonly Term[] => [term, ...operandsOf(term).flatMap(subtermsOf)];
+
+/**
+ * A closed relation of the schema as its rows are installed: its key fields in order and its facts,
+ * each field a datum.
+ */
+const ClosedSchema = Schema.Struct({
+  key: Schema.Array(Schema.String),
+  kind: Schema.Literal("closedRelation"),
+  name: Schema.String,
+  rows: Schema.Array(Schema.Record(Schema.String, DatumSchema)),
+});
+
+/**
+ * A closed relation's facts as {@link ClosedSchema} reads them.
+ */
+type ClosedFacts = typeof ClosedSchema.Type;
+
+/**
+ * Each closed relation's facts, read on first use.
+ */
+const closedFacts = new Map<string, Option.Option<ClosedFacts>>();
+
+/**
+ * Read a closed relation's facts.
+ *
+ * @param relation - The relation's name.
+ * @returns Its facts, none for a name that is no closed relation of the schema.
+ */
+const factsOf = (relation: string): Option.Option<ClosedFacts> => {
+  const known = closedFacts.get(relation);
+  if (known !== undefined) {
+    return known;
+  }
+
+  const member = Object.entries(Qti.relations).find(([name]) => name === relation)?.[1];
+  const read = Schema.decodeUnknownOption(ClosedSchema)(member);
+  closedFacts.set(relation, read);
+
+  return read;
+};
+
+/**
+ * Write a datum as a key's text: a text as itself, a natural or a boolean as it prints, a set as
+ * its members, and an absent value as nothing.
+ *
+ * @param datum - The datum.
+ * @returns Its text.
+ */
+export const datumText = (datum: Datum | undefined): string => {
+  if (datum === undefined || Predicate.isString(datum)) {
+    return datum ?? "";
+  }
+
+  return Predicate.isBigInt(datum) || Predicate.isBoolean(datum)
+    ? String(datum)
+    : [...datum].join(" ");
+};
 
 /**
  * Write the text a closed read's key is indexed by.
  *
- * @param values - The key's leading values, in key order.
+ * @param values - The key's values, in key order.
  * @returns The text.
  */
-const keyTextOf = (values: readonly unknown[]): string => values.map(String).join("\u001f");
+const keyLabelOf = (values: readonly (Datum | undefined)[]): string =>
+  values.map(datumText).join("\u001F");
 
 /**
- * The rows of each closed relation by its whole key, built on first read.
+ * Each closed relation's index by a key prefix of one length: the rows each prefix starts, built on
+ * first read.
  */
-const rowsByKey = new Map<string, ReadonlyMap<string, Readonly<Record<string, unknown>>>>();
+const prefixIndex = new Map<string, ReadonlyMap<string, readonly Row[]>>();
 
 /**
- * The completions of each key prefix of each closed relation, by the relation and the prefix's
- * length, built on first read.
- */
-const completions = new Map<string, ReadonlyMap<string, ReadonlySet<string>>>();
-
-/**
- * Read a closed relation's payload field at a whole key, as `C.at(field, …)` does: no value where
- * it holds no tuple, which a predicate reads as unknown, as SQL reads grizzle's NULL.
+ * Read the rows of a closed relation whose key starts with a prefix.
  *
- * @param relation - The relation's name.
- * @param field - The payload field.
- * @param args - The key's values, in key order.
- * @returns The field's value, none where the relation holds no tuple at the key.
+ * @param facts - The relation's facts.
+ * @param prefix - The prefix's values, in key order.
+ * @returns The rows, none where no tuple starts with it.
  */
-const closedAt = (relation: string, field: string, args: readonly Datum[]): Datum | undefined => {
-  const facts = closedFacts.get(relation);
-  if (facts === undefined) {
-    return undefined;
-  }
-
-  let index = rowsByKey.get(relation);
+const rowsStarting = (facts: ClosedFacts, prefix: readonly Datum[]): readonly Row[] => {
+  const label = `${facts.name}/${String(prefix.length)}`;
+  let index = prefixIndex.get(label);
   if (index === undefined) {
-    index = new Map(facts.rows.map((row) => [keyTextOf(facts.key.map((k) => row[k])), row]));
-    rowsByKey.set(relation, index);
-  }
-
-  const value = index.get(keyTextOf(args))?.[field];
-
-  return Option.getOrUndefined(datumOf(value));
-};
-
-/**
- * Read the completions of a key prefix in a closed relation, as `C.row(…)` does: the set of the
- * values the one key field the prefix leaves open takes among the tuples that start with it, empty
- * where none does.
- *
- * @param relation - The relation's name.
- * @param args - The prefix's values, in key order.
- * @returns The set.
- */
-const closedRow = (relation: string, args: readonly Datum[]): ReadonlySet<string> => {
-  const facts = closedFacts.get(relation);
-  if (facts === undefined) {
-    return new Set();
-  }
-
-  const label = `${relation}/${String(args.length)}`;
-  let index = completions.get(label);
-  if (index === undefined) {
-    const built = new Map<string, Set<string>>();
-    const open = facts.key[args.length] ?? "";
+    const built = new Map<string, Row[]>();
     for (const row of facts.rows) {
-      const prefix = keyTextOf(facts.key.slice(0, args.length).map((k) => row[k]));
-      const held = built.get(prefix) ?? new Set<string>();
-      held.add(String(row[open]));
-      built.set(prefix, held);
+      const at = keyLabelOf(facts.key.slice(0, prefix.length).map((name) => row[name]));
+      const held = built.get(at);
+      if (held === undefined) {
+        built.set(at, [row]);
+      } else {
+        held.push(row);
+      }
     }
 
     index = built;
-    completions.set(label, index);
+    prefixIndex.set(label, index);
   }
 
-  return index.get(keyTextOf(args)) ?? new Set();
+  return index.get(keyLabelOf(prefix)) ?? [];
+};
+
+/**
+ * Read a closed relation at a key, as grizzle's two closed reads do: `C.at(field, …)` reads a
+ * payload field at a whole key, and no value where the relation holds no tuple there, which a
+ * predicate reads as unknown as SQL reads grizzle's NULL; `C.row(…)` reads the set of the values
+ * the one key field a prefix leaves open takes among the tuples that start with it, empty where
+ * none does.
+ *
+ * @param relation - The relation's name.
+ * @param field - The payload field for `C.at`, none for `C.row`.
+ * @param args - The key's or the prefix's values, in key order.
+ * @returns The read, unknown for a name that is no closed relation.
+ */
+const closedRead = (
+  relation: string,
+  field: Option.Option<string>,
+  args: readonly Datum[],
+): Datum | undefined => {
+  const facts = Option.getOrUndefined(factsOf(relation));
+  if (facts === undefined) {
+    return facts;
+  }
+
+  const rows = rowsStarting(facts, args);
+
+  return Option.match(field, {
+    onNone: () => new Set(rows.map((row) => datumText(row[facts.key[args.length] ?? ""]))),
+    onSome: (payload) => rows[0]?.[payload],
+  });
 };
 
 /**
  * The patterns `Compute.matches` reads, compiled once each: `str.regex`'s grammar under `u`,
  * anchored by `^` and `$`, as grizzle's agent guide states it.
  */
-const compiled = new Map<string, RegExp>();
+const compiledPatterns = new Map<string, RegExp>();
 
 /**
  * Test a text against a pattern `Compute.matches` reads.
@@ -442,10 +562,10 @@ const compiled = new Map<string, RegExp>();
  * @returns Whether the text matches it.
  */
 const matches = (text: string, pattern: string): boolean => {
-  let regex = compiled.get(pattern);
+  let regex = compiledPatterns.get(pattern);
   if (regex === undefined) {
     regex = new RegExp(pattern, "u");
-    compiled.set(pattern, regex);
+    compiledPatterns.set(pattern, regex);
   }
 
   return regex.test(text);
@@ -464,24 +584,37 @@ const equal = (left: Datum, right: Datum): boolean =>
     : left === right;
 
 /**
- * Order two data of one ordered type, a text or a natural.
+ * Order two data that are both texts or both naturals.
  *
  * @param left - One datum.
  * @param right - The other.
  * @returns Negative, zero or positive as `left` sorts before, with or after `right`; none for two
- *   data that are not both texts or both naturals.
+ *   data of no one ordered type.
  */
 const ordered = (left: Datum, right: Datum): number | undefined => {
-  if (Predicate.isBigInt(left) && Predicate.isBigInt(right)) {
-    return left < right ? -1 : Number(left > right);
+  const both =
+    (Predicate.isBigInt(left) && Predicate.isBigInt(right)) ||
+    (Predicate.isString(left) && Predicate.isString(right));
+  if (!both) {
+    return undefined;
   }
 
-  if (Predicate.isString(left) && Predicate.isString(right)) {
-    return left < right ? -1 : Number(left > right);
+  if (left < right) {
+    return -1;
   }
 
-  return undefined;
+  return left > right ? 1 : 0;
 };
+
+/**
+ * The order comparisons a `compare` term makes, by operator, over {@link ordered}'s sign.
+ */
+const orderTests = new Map<string, (order: number) => boolean>([
+  ["ge", (order) => order >= 0],
+  ["gt", (order) => order > 0],
+  ["le", (order) => order <= 0],
+  ["lt", (order) => order < 0],
+]);
 
 /**
  * Compare two data as a `compare` term's operator does.
@@ -489,7 +622,7 @@ const ordered = (left: Datum, right: Datum): number | undefined => {
  * @param op - The operator: `eq`, `ne`, `lt`, `le`, `gt` or `ge`.
  * @param left - The left datum.
  * @param right - The right datum.
- * @returns The comparison, unknown for an operator or a pair of types it does not order.
+ * @returns The comparison, unknown for another operator or a pair of types it does not order.
  */
 const compared = (op: string, left: Datum, right: Datum): boolean | undefined => {
   if (op === "eq" || op === "ne") {
@@ -497,33 +630,21 @@ const compared = (op: string, left: Datum, right: Datum): boolean | undefined =>
   }
 
   const order = ordered(left, right);
-  if (order === undefined) {
-    return undefined;
-  }
+  const test = orderTests.get(op);
 
-  const byOp: Readonly<Record<string, boolean>> = {
-    ge: order >= 0,
-    gt: order > 0,
-    le: order <= 0,
-    lt: order < 0,
-  };
-
-  return byOp[op];
+  return order === undefined || test === undefined ? undefined : test(order);
 };
 
 /**
- * Apply one `Compute` function a copy's predicate reads to its arguments' values.
+ * Apply a `Compute` function a copy's predicate reads to two arguments' values: `subset` and
+ * `union` of two sets, `matches`, `startsWith` and `endsWith` of two texts.
  *
- * @param fn - The function: `subset`, `union`, `matches`, `startsWith` or `endsWith`.
- * @param args - Its arguments' values.
+ * @param fn - The function.
+ * @param left - Its first argument's value.
+ * @param right - Its second argument's value.
  * @returns Its value, unknown for any other function or arguments of other types.
  */
-const computed = (fn: string, args: readonly Datum[]): Datum | undefined => {
-  const [left, right] = args;
-  if (left === undefined || right === undefined) {
-    return undefined;
-  }
-
+const computed = (fn: string, left: Datum, right: Datum): Datum | undefined => {
   if (left instanceof Set && right instanceof Set) {
     if (fn === "subset") {
       return [...left].every((member) => right.has(member));
@@ -532,21 +653,23 @@ const computed = (fn: string, args: readonly Datum[]): Datum | undefined => {
     return fn === "union" ? new Set([...left, ...right]) : undefined;
   }
 
-  if (Predicate.isString(left) && Predicate.isString(right)) {
-    const byFn: Readonly<Record<string, () => boolean>> = {
-      endsWith: () => left.endsWith(right),
-      matches: () => matches(left, right),
-      startsWith: () => left.startsWith(right),
-    };
-
-    return byFn[fn]?.();
+  if (!Predicate.isString(left) || !Predicate.isString(right)) {
+    return undefined;
   }
 
-  return undefined;
+  if (fn === "matches") {
+    return matches(left, right);
+  }
+
+  if (fn === "startsWith") {
+    return left.startsWith(right);
+  }
+
+  return fn === "endsWith" ? left.endsWith(right) : undefined;
 };
 
 /**
- * Evaluate the operands of a term, each known or the whole unknown.
+ * Evaluate the operands of a term, the whole unknown where any is.
  *
  * @param terms - The operands.
  * @param value - Evaluates one operand.
@@ -556,56 +679,103 @@ const allKnown = (
   terms: readonly Term[],
   value: (term: Term) => Datum | undefined,
 ): readonly Datum[] | undefined => {
-  const values: Datum[] = [];
-  for (const term of terms) {
-    const known = value(term);
-    if (known === undefined) {
-      return undefined;
-    }
+  const values = terms.map(value);
+  const known = values.filter((held) => held !== undefined);
 
-    values.push(known);
+  return known.length === values.length ? known : undefined;
+};
+
+/**
+ * Combine the values of an `and` or an `or` in Kleene's logic: a decisive operand decides it, every
+ * operand known and none decisive gives the other value, and else it is unknown.
+ *
+ * @param values - The operands' values.
+ * @param decisive - `false` for an `and`, `true` for an `or`.
+ * @returns The value.
+ */
+const kleene = (values: readonly (Datum | undefined)[], decisive: boolean): boolean | undefined => {
+  if (values.includes(decisive)) {
+    return decisive;
   }
 
-  return values;
+  return values.every((held) => held === !decisive) ? !decisive : undefined;
+};
+
+/**
+ * Decide an `in` term: true where its operand equals a member, else unknown where its operand or a
+ * member is unknown, else false.
+ *
+ * @param held - The operand's value.
+ * @param members - The members' values.
+ * @returns The value.
+ */
+const among = (
+  held: Datum | undefined,
+  members: readonly (Datum | undefined)[],
+): boolean | undefined => {
+  if (held === undefined) {
+    return undefined;
+  }
+
+  if (members.some((member) => member !== undefined && equal(held, member))) {
+    return true;
+  }
+
+  return members.includes(undefined) ? undefined : false;
+};
+
+/**
+ * Apply a closed read or a `Compute` function to its arguments' values.
+ *
+ * @param term - The read or the call.
+ * @param args - Its arguments' values, none when any is unknown.
+ * @returns Its value, unknown where an argument is or the call has not two of them.
+ */
+const applied = (
+  term: Extract<Term, { readonly kind: "closed" | "compute" }>,
+  args: readonly Datum[] | undefined,
+): Datum | undefined => {
+  if (args === undefined) {
+    return args;
+  }
+
+  if (term.kind === "closed") {
+    return closedRead(term.relation, term.field, args);
+  }
+
+  const [left, right] = args;
+
+  return args.length === 2 && left !== undefined && right !== undefined
+    ? computed(term.fn, left, right)
+    : undefined;
 };
 
 /**
  * Evaluate a term over a row in SQL's three-valued logic: a field the row does not know, a closed
- * read at a key its relation holds no tuple at, and any opaque term are unknown, `and`, `or` and
- * `not` are Kleene's, and every other operation of an unknown operand is unknown. `forced` is a
- * comparison read as false wherever it occurs.
+ * read at a key its relation holds no tuple at, and an unread term are unknown, `and`, `or` and
+ * `not` are Kleene's, and every other operation of an unknown operand is unknown. A comparison
+ * `forced` holds is read as false wherever it occurs.
  *
  * @param term - The term.
  * @param row - The row's known fields.
- * @param forced - The comparison to read as false, none for none.
+ * @param forced - Whether a comparison is to be read as false.
  * @returns Its value, unknown as `undefined`.
  */
-const evaluate = (
-  term: Term,
-  row: Readonly<Record<string, Datum>>,
-  forced?: (term: Term) => boolean,
-): Datum | undefined => {
+const evaluate = (term: Term, row: Row, forced: (term: Term) => boolean): Datum | undefined => {
   const value = (at: Term): Datum | undefined => evaluate(at, row, forced);
   switch (term.kind) {
     case "literal": {
       return term.value;
     }
     case "field": {
-      return Object.hasOwn(row, term.field) ? row[term.field] : undefined;
+      return row[term.field];
     }
-    case "opaque": {
+    case "unread": {
       return undefined;
     }
     case "and":
     case "or": {
-      const decisive = term.kind === "or";
-      const values = term.args.map(value);
-
-      if (values.includes(decisive)) {
-        return decisive;
-      }
-
-      return values.every((held) => held === !decisive) ? !decisive : undefined;
+      return kleene(term.args.map(value), term.kind === "or");
     }
     case "not": {
       const held = value(term.arg);
@@ -613,41 +783,22 @@ const evaluate = (
       return Predicate.isBoolean(held) ? !held : undefined;
     }
     case "compare": {
-      if (forced?.(term) === true) {
+      const sides = allKnown([term.left, term.right], value);
+      if (forced(term)) {
         return false;
       }
-
-      const sides = allKnown([term.left, term.right], value);
 
       return sides === undefined ? undefined : compared(term.op, sides[0] ?? "", sides[1] ?? "");
     }
     case "in": {
-      const held = value(term.arg);
-      if (held === undefined) {
-        return undefined;
-      }
-
-      const values = term.values.map(value);
-      if (values.some((member) => member !== undefined && equal(held, member))) {
-        return true;
-      }
-
-      return values.includes(undefined) ? undefined : false;
+      return among(value(term.arg), term.values.map(value));
     }
-    case "closedAt": {
-      const key = allKnown(term.args, value);
-
-      return key === undefined ? undefined : closedAt(term.relation, term.field, key);
-    }
-    case "closedRow": {
-      const key = allKnown(term.args, value);
-
-      return key === undefined ? undefined : closedRow(term.relation, key);
-    }
+    case "closed":
     case "compute": {
-      const args = allKnown(term.args, value);
-
-      return args === undefined ? undefined : computed(term.fn, args);
+      return applied(term, allKnown(term.args, value));
+    }
+    default: {
+      return term satisfies never;
     }
   }
 };
@@ -661,8 +812,11 @@ const evaluate = (
  */
 const selectedBy =
   (term: Option.Option<Term>) =>
-  (row: Readonly<Record<string, Datum>>): boolean =>
-    Option.match(term, { onNone: () => true, onSome: (held) => evaluate(held, row) === true });
+  (row: Row): boolean =>
+    Option.match(term, {
+      onNone: () => true,
+      onSome: (held) => evaluate(held, row, () => false) === true,
+    });
 
 /**
  * Read a check's equation as a test of a row: the row must hold the equation where the check is
@@ -675,96 +829,50 @@ const selectedBy =
  */
 const forcedBy =
   (term: Term, equation: (term: Term) => boolean) =>
-  (row: Readonly<Record<string, Datum>>): boolean =>
+  (row: Row): boolean =>
     evaluate(term, row, equation) === false;
 
 /**
- * Read a statement value grizzle keeps for one side of a law: the relation it reads, its
- * selection's predicate if it is a selection, and its terms.
- *
- * @param side - The side as grizzle keeps it.
- * @returns The side, or none for a value of any other shape.
- */
-const sideOf = (
-  side: unknown,
-): Option.Option<{
-  readonly predicate: Option.Option<Term>;
-  readonly relation: Readonly<{ fields: Readonly<Record<string, unknown>>; name: string }>;
-  readonly terms: readonly string[];
-}> => {
-  if (
-    !Predicate.isObject(side) ||
-    !Predicate.hasProperty(side, "source") ||
-    !Predicate.isObject(side.source) ||
-    !Predicate.hasProperty(side, "terms") ||
-    !Array.isArray(side.terms)
-  ) {
-    return Option.none();
-  }
-
-  const { source } = side;
-  const relation = Predicate.hasProperty(source, "relation") ? source.relation : source;
-  const desc = Predicate.hasProperty(source, "desc") ? source.desc : undefined;
-  if (
-    !Predicate.isObject(relation) ||
-    !Predicate.hasProperty(relation, "name") ||
-    !Predicate.isString(relation.name) ||
-    !Predicate.hasProperty(relation, "fields") ||
-    !Predicate.isObject(relation.fields)
-  ) {
-    return Option.none();
-  }
-
-  return Option.some({
-    predicate:
-      Predicate.isObject(desc) && Predicate.hasProperty(desc, "predicate")
-        ? Option.some(termOf(desc.predicate))
-        : Option.none(),
-    relation: { fields: relation.fields, name: relation.name },
-    terms: side.terms.map((term: unknown) =>
-      Predicate.isObject(term) && Predicate.hasProperty(term, "field")
-        ? `pred:${String(term.field)}`
-        : String(term),
-    ),
-  });
-};
-
-/**
- * Whether a field's type is `keyText`: the type itself, or an accumulator or a generated field of
- * it.
- *
- * @param field - The field as grizzle keeps it.
- * @returns Whether it holds a key text.
- */
-export const isKeyText = (field: unknown): boolean =>
-  field === keyText ||
-  (Predicate.isObject(field) && Predicate.hasProperty(field, "field") && field.field === keyText);
-
-/**
- * Write a side of a law as grizzle's outcome names it.
+ * Read a stored side's relation and its selection's predicate.
  *
  * @param side - The side.
- * @param side.relation - The relation it reads.
- * @param side.relation.name - The relation's name.
- * @param side.terms - Its terms, a `pred` one as `pred:field`.
- * @returns The side.
+ * @returns The relation's name and the predicate, none for a whole relation.
  */
-const lawSideOf = (side: {
-  readonly relation: { readonly name: string };
-  readonly terms: readonly string[];
-}): LawSide => ({
-  relation: side.relation.name,
+const sourceOf = (
+  side: StoredSide,
+): { readonly name: string; readonly predicate: Option.Option<Term> } =>
+  "desc" in side.source
+    ? {
+        name: side.source.relation.name,
+        predicate: Option.some(termOf(side.source.desc.predicate)),
+      }
+    : { name: side.source.name, predicate: Option.none() };
+
+/**
+ * Read a stored side's terms, each a field's name, a `pred` term's field among them.
+ *
+ * @param side - The side.
+ * @returns The fields, in pairing order.
+ */
+const fieldsOf = (side: StoredSide): readonly string[] =>
+  side.terms.map((term) => (Predicate.isString(term) ? term : term.field));
+
+/**
+ * Write a stored side as a law's side.
+ *
+ * @param side - The side.
+ * @returns The law side, its selection's conjuncts left out, as an outcome names it.
+ */
+const lawSideOf = (side: StoredSide): LawSide => ({
+  relation: sourceOf(side).name,
   selection: { conjuncts: [] },
-  terms: side.terms.map((term) =>
-    term.startsWith("pred:")
-      ? { field: term.slice("pred:".length), kind: "pred" }
-      : { field: term, kind: "field" },
+  terms: Arr.map(side.terms, (term): LawSide["terms"][number] =>
+    Predicate.isString(term) ? { field: term, kind: "field" } : { field: term.field, kind: "pred" },
   ),
 });
 
 /**
- * Write a law's sides as `src/import/refusal.ts` `lawIdentity` spells them, so a copy is named by
- * the identity its law's outcome has.
+ * Write a law side as `src/import/refusal.ts` `lawIdentity` spells it.
  *
  * @param side - The side.
  * @returns Its text.
@@ -773,10 +881,9 @@ const sideText = (side: LawSide): string =>
   `${side.relation}(${side.terms.map((term) => (term.kind === "field" ? term.field : `pred(${term.field})`)).join(", ")})`;
 
 /**
- * Write a law's identity as `src/import/refusal.ts` `lawIdentity` does, for the two kinds a copy
- * comes from.
+ * Write a containment's or a fold's identity as `src/import/refusal.ts` `lawIdentity` does.
  *
- * @param law - A containment or a fold.
+ * @param law - The law.
  * @returns Its identity.
  */
 const identityOf = (law: Law): string => {
@@ -790,8 +897,45 @@ const identityOf = (law: Law): string => {
 };
 
 /**
- * A copy the derivation could not read: a selection that reads a field the oracle does not know of
- * its row, or a term no part of {@link Term}.
+ * A stored relation of the schema as grizzle keeps it, its fields' types unread.
+ */
+const StoredRelationSchema = Schema.Struct({
+  fields: Schema.Record(Schema.String, Schema.Unknown),
+  kind: Schema.Literal("relation"),
+  name: Schema.String,
+});
+
+/**
+ * Every field of the composed schema whose type is `keyText`, an accumulator or a generated field
+ * of it included, as `Relation.field`.
+ */
+export const keyTextFields: ReadonlySet<string> = new Set(
+  Object.values(Qti.relations).flatMap((member) =>
+    Option.match(Schema.decodeUnknownOption(StoredRelationSchema)(member), {
+      onNone: () => [],
+      onSome: ({ fields, name }) =>
+        Object.entries(fields).flatMap(([field, type]) =>
+          type === keyText || (Predicate.hasProperty(type, "field") && type.field === keyText)
+            ? [`${name}.${field}`]
+            : [],
+        ),
+    }),
+  ),
+);
+
+/**
+ * Whether a relation's field is of type `keyText`.
+ *
+ * @param relation - The relation's name.
+ * @param field - The field's name.
+ * @returns Whether it is in {@link keyTextFields}.
+ */
+const holdsKeyText = (relation: string, field: string): boolean =>
+  keyTextFields.has(`${relation}.${field}`);
+
+/**
+ * A copy the derivation could not read: one that holds a field the oracle does not know of its row,
+ * or whose selection reads one, or reads a term no part of {@link Term}.
  */
 export interface UnreadCopy {
   readonly field: string;
@@ -800,321 +944,280 @@ export interface UnreadCopy {
 }
 
 /**
- * Build a document relation's copy, checking that its selection reads only fields the oracle knows
- * of the row, since an unknown one would leave rows the database copies uncounted.
- *
- * @param copy - The copy.
- * @param copy.by - How its statement writes the text.
- * @param copy.field - The `keyText` field that holds it.
- * @param copy.law - Its statement's identity.
- * @param copy.reads - The known field whose value is held.
- * @param copy.source - The document relation it reads.
- * @param copy.term - The selection's or check's predicate.
- * @param copy.test - Decides from the row's known fields whether its text is held.
- * @returns The copy, or why it cannot be read.
+ * A copy before it is checked against the fields the oracle knows.
  */
-const copyOf = (copy: {
+interface Drafted {
   readonly by: CopiedBy;
   readonly field: string;
   readonly law: string;
   readonly reads: string;
   readonly source: DocumentRelation;
+  readonly statement: number;
   readonly term: Option.Option<Term>;
-  readonly test: (row: Readonly<Record<string, Datum>>) => boolean;
-}): Result.Result<Unplaced, UnreadCopy> => {
-  const known = documentFields[copy.source];
-  const unread = (reason: string): Result.Result<Unplaced, UnreadCopy> =>
-    Result.fail({ field: copy.field, law: copy.law, reason });
-  if (!known.has(copy.reads)) {
-    return unread(`it holds ${copy.source}.${copy.reads}, which the oracle does not know`);
-  }
+  readonly test: (row: Row) => boolean;
+}
 
-  const reads = Option.match(copy.term, {
-    onNone: () => ({ fields: [], opaque: [] }),
-    onSome: readsOf,
+/**
+ * Check a drafted copy against the fields the oracle knows of its relation's rows, since a field it
+ * does not know would leave rows the database copies uncounted.
+ *
+ * @param draft - The copy.
+ * @returns The copy, or why it cannot be counted.
+ */
+const checked = (draft: Drafted): Result.Result<KeyCopy, UnreadCopy> => {
+  const unread = (reason: string): Result.Result<KeyCopy, UnreadCopy> =>
+    Result.fail({ field: draft.field, law: draft.law, reason });
+  const below = Option.match(draft.term, { onNone: () => [], onSome: subtermsOf });
+  const unknown = below.flatMap((term) => {
+    if (term.kind === "unread") {
+      return [`a ${term.term} term`];
+    }
+
+    return term.kind === "field" && !knownNames[draft.source].has(term.field)
+      ? [`${draft.source}.${term.field}`]
+      : [];
   });
-  const unknown = reads.fields.filter((field) => !known.has(field));
-  if (copy.by !== "check" && (unknown.length > 0 || reads.opaque.length > 0)) {
-    return unread(
-      `its selection reads ${[...unknown.map((field) => `${copy.source}.${field}`), ...reads.opaque.map((shape) => `a ${shape} term`)].join(", ")}, which the oracle cannot evaluate`,
-    );
+  if (draft.by !== "check" && unknown.length > 0) {
+    return unread(`its selection reads ${unknown.join(", ")}, which the oracle cannot evaluate`);
   }
 
-  return Result.succeed({
-    by: copy.by,
-    field: copy.field,
-    holds: copy.test,
-    law: copy.law,
-    reads: copy.reads,
-    source: copy.source,
-  } as Unplaced);
+  const copy = {
+    by: draft.by,
+    field: draft.field,
+    holds: draft.test,
+    law: draft.law,
+    statement: draft.statement,
+  };
+  const { reads } = draft;
+  if (draft.source === "Attribute" && isAttributeField(reads)) {
+    return Result.succeed({ ...copy, reads, source: "Attribute" });
+  }
+
+  return draft.source === "Node" && isNodeField(reads)
+    ? Result.succeed({ ...copy, reads, source: "Node" })
+    : unread(`it holds ${draft.source}.${reads}, which the oracle does not know`);
 };
 
 /**
- * List the copies one containment's direction makes of a document's text into a key text: each
+ * Draft the copies one containment's direction makes of a document's text into a key text: each
  * pair of terms whose source field is no key text and whose target field is.
  *
  * @param from - The side whose tuples are contained.
  * @param to - The side they are among.
- * @returns The copies, each read or why it cannot be.
+ * @param statement - The statement's place among the schema's.
+ * @returns The copies.
  */
 const containedCopies = (
-  from: unknown,
-  to: unknown,
-): readonly Result.Result<Unplaced, UnreadCopy>[] =>
-  Option.match(Option.all([sideOf(from), sideOf(to)]), {
-    onNone: () => [],
-    onSome: ([source, target]) => {
-      const { name } = source.relation;
-      if (!isDocumentRelation(name)) {
-        return [];
-      }
-
-      const law = identityOf({ from: lawSideOf(source), kind: "contained", to: lawSideOf(target) });
-
-      return source.terms.flatMap((term, at) => {
-        const held = target.terms[at] ?? "";
-
-        return isKeyText(target.relation.fields[held]) && !isKeyText(source.relation.fields[term])
-          ? [
-              copyOf({
-                by: "contained",
-                field: `${target.relation.name}.${held}`,
-                law,
-                reads: term,
-                source: name,
-                term: source.predicate,
-                test: selectedBy(source.predicate),
-              }),
-            ]
-          : [];
-      });
-    },
-  });
-
-/**
- * List the copy a fold makes: a `Monoid.concat` fold into a `keyText` accumulator whose members are
- * rows of a document relation holds its owner's end where a member it steps steps.
- *
- * @param statement - The fold as grizzle keeps it.
- * @returns The copy, read or why it cannot be; none for a fold of any other shape.
- */
-const foldCopies = (statement: object): readonly Result.Result<Unplaced, UnreadCopy>[] => {
-  if (
-    !Predicate.hasProperty(statement, "step") ||
-    !Predicate.hasProperty(statement, "end") ||
-    !Predicate.hasProperty(statement, "monoid") ||
-    !Predicate.hasProperty(statement, "family") ||
-    !Predicate.isObject(statement.family) ||
-    !Predicate.hasProperty(statement.family, "slots") ||
-    !Predicate.isObject(statement.family.slots)
-  ) {
+  from: StoredSide,
+  to: StoredSide,
+  statement: number,
+): readonly Drafted[] => {
+  const source = sourceOf(from);
+  const target = sourceOf(to).name;
+  const { name } = source;
+  if (!isDocumentRelation(name)) {
     return [];
   }
 
-  const { slots } = statement.family;
-  const monoid =
-    Predicate.isObject(statement.monoid) && Predicate.hasProperty(statement.monoid, "name")
-      ? String(statement.monoid.name)
-      : "";
-  const owner =
-    Predicate.hasProperty(slots, "owner") &&
-    Predicate.isObject(slots.owner) &&
-    Predicate.hasProperty(slots.owner, "name")
-      ? String(slots.owner.name)
-      : "";
-  const count = Predicate.hasProperty(slots, "count") ? String(slots.count) : "";
+  const law = identityOf({ from: lawSideOf(from), kind: "contained", to: lawSideOf(to) });
+  const targets = fieldsOf(to);
 
-  return Option.match(Option.all([sideOf(statement.step), sideOf(statement.end)]), {
-    onNone: () => [],
-    onSome: ([step, end]) => {
-      const held = end.terms.at(-1) ?? "";
-      const { name } = step.relation;
-      if (
-        monoid !== "concat" ||
-        !isKeyText(end.relation.fields[held]) ||
-        !isDocumentRelation(name) ||
-        end.relation.name !== name
-      ) {
-        return [];
-      }
+  return fieldsOf(from).flatMap((reads, at): readonly Drafted[] => {
+    const held = targets[at] ?? "";
 
-      return [
-        copyOf({
-          by: "fold",
-          field: `${end.relation.name}.${held}`,
-          law: identityOf({
-            end: lawSideOf(end),
-            family: { count, owner },
-            kind: "fold",
-            monoid,
-            step: lawSideOf(step),
-          }),
-          reads: held,
-          source: name,
-          term: step.predicate,
-          test: selectedBy(step.predicate),
-        }),
-      ];
-    },
+    return holdsKeyText(target, held) && !holdsKeyText(name, reads)
+      ? [
+          {
+            by: "contained",
+            field: `${target}.${held}`,
+            law,
+            reads,
+            source: name,
+            statement,
+            term: source.predicate,
+            test: selectedBy(source.predicate),
+          },
+        ]
+      : [];
   });
 };
 
 /**
- * List the copies a check makes on a document relation: each equation of a field of no `keyText`
+ * Draft the copy a fold makes: a `Monoid.concat` fold into a `keyText` accumulator of a document
+ * relation whose members are its own rows holds its owner's end where a member it steps steps.
+ *
+ * @param fold - The fold.
+ * @param statement - The statement's place among the schema's.
+ * @returns The copy, none for a fold of any other kind.
+ */
+const foldCopies = (
+  fold: Extract<StoredStatement, { readonly kind: "fold" }>,
+  statement: number,
+): readonly Drafted[] => {
+  const step = sourceOf(fold.step);
+  const owner = sourceOf(fold.end).name;
+  const held = fieldsOf(fold.end).at(-1) ?? "";
+  const { name } = step;
+  if (
+    fold.monoid.name !== "concat" ||
+    !holdsKeyText(owner, held) ||
+    !isDocumentRelation(name) ||
+    owner !== name
+  ) {
+    return [];
+  }
+
+  return [
+    {
+      by: "fold",
+      field: `${owner}.${held}`,
+      law: identityOf({
+        end: lawSideOf(fold.end),
+        family: { count: fold.family.slots.count, owner: fold.family.slots.owner.name },
+        kind: "fold",
+        monoid: fold.monoid.name,
+        step: lawSideOf(fold.step),
+      }),
+      reads: held,
+      source: name,
+      statement,
+      term: step.predicate,
+      test: selectedBy(step.predicate),
+    },
+  ];
+};
+
+/**
+ * Read the equation a term states between a field of no `keyText` type and a `keyText` field of
+ * one relation's row.
+ *
+ * @param relation - The row's relation.
+ * @param term - The term.
+ * @returns The `keyText` field and the field it equals, none for any other term.
+ */
+const equationOf = (
+  relation: string,
+  term: Term,
+): Option.Option<{ readonly held: string; readonly reads: string }> => {
+  if (
+    term.kind !== "compare" ||
+    term.op !== "eq" ||
+    term.left.kind !== "field" ||
+    term.right.kind !== "field"
+  ) {
+    return Option.none();
+  }
+
+  const [left, right] = [term.left.field, term.right.field];
+  if (holdsKeyText(relation, left) === holdsKeyText(relation, right)) {
+    return Option.none();
+  }
+
+  return Option.some(
+    holdsKeyText(relation, left) ? { held: left, reads: right } : { held: right, reads: left },
+  );
+};
+
+/**
+ * Draft the copies a check makes on a document relation: each equation of a field of no `keyText`
  * type with a `keyText` field of the same row, which the row must hold where the rest of the check
  * leaves it no other way to.
  *
- * @param statement - The check as grizzle keeps it.
- * @returns The copies, each read or why it cannot be.
+ * @param check - The check.
+ * @param statement - The statement's place among the schema's.
+ * @returns The copies.
  */
-const checkCopies = (statement: object): readonly Result.Result<Unplaced, UnreadCopy>[] => {
-  const relation =
-    Predicate.hasProperty(statement, "relation") && Predicate.isObject(statement.relation)
-      ? statement.relation
-      : {};
-  const desc = Predicate.hasProperty(statement, "desc") ? statement.desc : undefined;
-  const name =
-    Predicate.hasProperty(relation, "name") && Predicate.isString(relation.name)
-      ? relation.name
-      : "";
-  const fields =
-    Predicate.hasProperty(relation, "fields") && Predicate.isObject(relation.fields)
-      ? (relation.fields as Readonly<Record<string, unknown>>)
-      : {};
-  if (
-    !isDocumentRelation(name) ||
-    !Predicate.isObject(desc) ||
-    !Predicate.hasProperty(desc, "predicate")
-  ) {
+const checkCopies = (
+  check: Extract<StoredStatement, { readonly kind: "check" }>,
+  statement: number,
+): readonly Drafted[] => {
+  const { name } = check.relation;
+  if (!isDocumentRelation(name)) {
     return [];
   }
 
-  const check =
-    Predicate.hasProperty(desc, "name") && Predicate.isString(desc.name) ? desc.name : "";
-  const predicate = termOf(desc.predicate);
-  const equations: { readonly held: string; readonly read: string }[] = [];
-  const walk = (term: Term): void => {
-    if (
-      term.kind === "compare" &&
-      term.op === "eq" &&
-      term.left.kind === "field" &&
-      term.right.kind === "field"
-    ) {
-      const [left, right] = [term.left.field, term.right.field];
-      if (isKeyText(fields[left]) !== isKeyText(fields[right])) {
-        equations.push(
-          isKeyText(fields[left]) ? { held: left, read: right } : { held: right, read: left },
-        );
-      }
-    }
-
-    switch (term.kind) {
-      case "and":
-      case "or":
-      case "closedRow":
-      case "compute":
-      case "closedAt": {
-        term.args.forEach(walk);
-        break;
-      }
-      case "not": {
-        walk(term.arg);
-        break;
-      }
-      case "in": {
-        walk(term.arg);
-        term.values.forEach(walk);
-        break;
-      }
-      case "compare": {
-        walk(term.left);
-        walk(term.right);
-        break;
-      }
-      default: {
-        break;
-      }
-    }
-  };
-  walk(predicate);
-
-  return Arr.dedupeWith(equations, (a, b) => a.held === b.held && a.read === b.read).map(
-    ({ held, read }) =>
-      copyOf({
-        by: "check",
-        field: `${name}.${held}`,
-        law: `check ${check} on ${name}: ${read} = ${held}`,
-        reads: read,
-        source: name,
-        term: Option.some(predicate),
-        test: forcedBy(
-          predicate,
-          (term) =>
-            term.kind === "compare" &&
-            term.op === "eq" &&
-            term.left.kind === "field" &&
-            term.right.kind === "field" &&
-            new Set([term.left.field, term.right.field]).size === 2 &&
-            [term.left.field, term.right.field].includes(held) &&
-            [term.left.field, term.right.field].includes(read),
-        ),
-      }),
+  const predicate = termOf(check.desc.predicate);
+  const equations = Arr.dedupeWith(
+    subtermsOf(predicate).flatMap((term) => Option.toArray(equationOf(name, term))),
+    (a, b) => a.held === b.held && a.reads === b.reads,
   );
+
+  return equations.map(({ held, reads }) => ({
+    by: "check",
+    field: `${name}.${held}`,
+    law: `check ${check.desc.name} on ${name}: ${reads} = ${held}`,
+    reads,
+    source: name,
+    statement,
+    term: Option.some(predicate),
+    test: forcedBy(predicate, (term) =>
+      Option.exists(
+        equationOf(name, term),
+        (equation) => equation.held === held && equation.reads === reads,
+      ),
+    ),
+  }));
 };
 
 /**
- * List the copies one statement makes of a document's text into a key text.
+ * Draft the copies one statement makes of a document's text into a key text.
  *
- * @param statement - The statement as grizzle keeps it.
- * @returns Its copies, each read or why it cannot be.
+ * @param statement - The statement.
+ * @param at - Its place among the schema's.
+ * @returns Its copies.
  */
-const statementCopies = (statement: unknown): readonly Result.Result<Unplaced, UnreadCopy>[] => {
-  if (!Predicate.isObject(statement) || !Predicate.hasProperty(statement, "kind")) {
-    return [];
-  }
-
+const statementCopies = (statement: StoredStatement, at: number): readonly Drafted[] => {
   switch (statement.kind) {
     case "contained": {
-      return Predicate.hasProperty(statement, "left") && Predicate.hasProperty(statement, "right")
-        ? containedCopies(statement.left, statement.right)
-        : [];
+      return containedCopies(statement.left, statement.right, at);
     }
     case "mirrors": {
-      return Predicate.hasProperty(statement, "left") && Predicate.hasProperty(statement, "right")
-        ? [
-            ...containedCopies(statement.left, statement.right),
-            ...containedCopies(statement.right, statement.left),
-          ]
-        : [];
+      return [
+        ...containedCopies(statement.left, statement.right, at),
+        ...containedCopies(statement.right, statement.left, at),
+      ];
     }
     case "fold": {
-      return foldCopies(statement);
+      return foldCopies(statement, at);
     }
     case "check": {
-      return checkCopies(statement);
+      return checkCopies(statement, at);
     }
     default: {
-      return [];
+      return statement satisfies never;
     }
   }
 };
 
 /**
- * Read every copy the schema makes of a document's text into a key text, from its statements, in
- * their order.
+ * Read every copy a schema's statements make of a document's text into a key text, in their order.
  *
- * @param statements - The schema's statements as grizzle keeps them.
- * @returns Each copy, read or why it cannot be.
+ * @param statements - The schema's statements.
+ * @returns Each copy, or why it cannot be counted.
  */
 export const copiesOf = (
-  statements: readonly unknown[],
+  statements: typeof Qti.statements,
 ): readonly Result.Result<KeyCopy, UnreadCopy>[] =>
-  statements.flatMap((statement, at) =>
-    statementCopies(statement).map(
-      Result.map((copy): KeyCopy => ({ ...copy, statement: at }) as KeyCopy),
-    ),
-  );
+  statements.flatMap((statement, at) => {
+    const kind = Option.getOrElse(
+      Option.map(Schema.decodeUnknownOption(KindSchema)(statement), (read) => read.kind),
+      () => "",
+    );
+    if (!copyKinds.has(kind)) {
+      return [];
+    }
+
+    return Option.match(Schema.decodeUnknownOption(StatementSchema)(statement), {
+      onNone: () => [
+        Result.fail({
+          field: "",
+          law: `statement ${String(at)}`,
+          reason: `it is a ${kind} of a shape the derivation does not read`,
+        }),
+      ],
+      onSome: (read) => statementCopies(read, at).map(checked),
+    });
+  });
 
 /**
  * Every copy the composed `Qti` makes of a document's text into a key text, the list the oracle's
