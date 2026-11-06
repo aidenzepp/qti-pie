@@ -50,6 +50,13 @@ export interface SessionStore {
    */
   readonly get: (id: string) => Option.Option<SessionEntry>;
   /**
+   * The ids the store holds, in the order their sessions were started, so the playground's index
+   * can resume each.
+   *
+   * @returns The ids, none evicted.
+   */
+  readonly ids: () => readonly string[];
+  /**
    * Hold an entry under an id, replacing any held there. A new id that would take the store past
    * {@link sessionLimit} evicts the entry stored first; an id already held keeps its place, so
    * eviction follows the order sessions were started.
@@ -74,6 +81,7 @@ export const sessionStore = (): SessionStore => {
 
   return {
     get: (id) => Option.fromUndefinedOr(entries.get(id)),
+    ids: () => [...entries.keys()],
     set: (id, entry) => {
       entries.set(id, entry);
       for (const oldest of entries.keys()) {
