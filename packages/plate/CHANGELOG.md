@@ -65,7 +65,9 @@ A host built on an earlier commit of M2 sees these changes.
   item. An item with none of them is never refused as `skipping-not-allowed`.
 - An accepted package's `files` leaves out the document of every QTI resource: items, tests,
   sections, stimuli, outcome declarations, response processing, response-processing templates and
-  fragments. Every file it holds is one a host may serve.
+  fragments. It also leaves out every file listed by a QTI resource that has no `href` or an
+  absolute one, because plate cannot tell which of them is its document. A QTI document listed in
+  any other way stays.
 - `restore` takes the item as well as its record, `restore(document, record)`. It refuses with
   `InvalidRecord` a record whose responses or outcomes do not fit the item's declarations.
   `results` refuses such a record too: with `InvalidRecord` for an item, and with `InvalidSession`
