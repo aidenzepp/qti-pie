@@ -1307,17 +1307,17 @@ closed-relation constant now always one hex literal.
   The bound was qti-pie's own arithmetic, a re-spelling of grizzle's rule, and at `f66c05b` an index entry counts
   "exact offsets and the null bitmap" (the commit's message), which that arithmetic did not.
 - **Classification:** our misuse, a re-spelled bound. The fix is to hold `keyText` to grizzle's public
-  `keyTextBytes(fields)`, which lane S-ORACLE's interim bound in `src/qti/limits.ts` does (`e0fcddbf`, "bound keyText
-  by grizzle's own keyTextBytes, 646 code points"). `keyTextBytes` alone still leaves this axis 8 bytes over, by the
-  null bitmap of its NULL-able hidden columns (the next entry), so the tree holds `keyTextCodePoints` at 646, an
-  interim until grizzle's fix. The octet contract was to follow at grizzle `a2ff5eb`: there the bound would be N =
+  `keyTextBytes(fields)`, which lane S-ORACLE's interim bound in `src/qti/limits.ts` does (`e0fcddbf`, "bound keyText by
+  grizzle's own keyTextBytes, 646 code points"). `keyTextBytes` alone still leaves this axis 8 bytes over, by the null
+  bitmap of its NULL-able hidden columns (the next entry), so the tree holds `keyTextCodePoints` at 646, an interim
+  until grizzle's fix (`fce1088`). The octet contract was to follow at grizzle `a2ff5eb`: there the bound would be N =
   2,587 bytes, the largest for which `keyTextBytes([...widestTextKey, keyText])` still leaves a byte, with no `proves`
   needed, because `a2ff5eb`'s bound analysis reads `octetLength` off the predicate. A containment cannot copy a text
   into a contract field, though (the entry after next), so the contract is set aside. Instead `keyText` becomes
   `str.bytes(keyTextBytes(...))` once grizzle beta.1's byte refinement lands, a flip of `src/qti/limits.ts` alone; until
   then it stays the 646-code-point pattern.
 
-### `keyTextBytes` leaves out a tree axis's null bitmap (grizzle defect, open at `f66c05b`, fixing before beta.1)
+### `keyTextBytes` leaves out a tree axis's null bitmap (grizzle defect, open at `f66c05b`, fixed in `fce1088`)
 
 - **Seen.** The schema refused at compile (`schemaArtifacts`, R87's `work/rv/r87/compile.ts`) with `UnrepresentableKey
   at fold Node at Node.fold.count (src/qti/node.ts:537:20): the UNIQUE of Node the predecessor axis of the tree of Node
@@ -1334,12 +1334,16 @@ closed-relation constant now always one hex literal.
 - **Workaround in this repo.** `src/qti/limits.ts` `keyTextCodePoints` is 646 (`e0fcddbf`), the most for which
   `keyTextBytes` still leaves a byte. The further text it sizes costs 7 bytes (header and worst padding), and the bitmap
   costs 8, so the key text fits exactly where a byte is left. `limits.test.ts` holds 646 to leave a byte and 647 to
-  leave none. The 646 is an interim: once grizzle's fix lands, the bound goes back to `keyTextBytes` directly.
-- **Classification:** a grizzle defect, confirmed by the grizzle session and fixing before beta.1; nothing to file.
-  The grizzle session took it in its lane K: `keyTextBytes(fields)` will promise the worst case over every index
-  grizzle plans over those fields, the null bitmap and hidden columns included, under a generated test that holds the
-  bound admitted and tight. qti-pie's 646 interim is `e0fcddbf`, and grizzle's fixing commit is recorded here when it
-  lands.
+  leave none. The 646 is an interim: with grizzle's fix, `fce1088`, the bound goes back to `keyTextBytes` directly.
+- **Classification:** a grizzle defect, confirmed by the grizzle session and fixed before beta.1, in `fce1088`; nothing
+  to file. The grizzle session took it in its lane K: `keyTextBytes(fields)` will promise the worst case over every
+  index grizzle plans over those fields, the null bitmap and hidden columns included, under a generated test that holds
+  the bound admitted and tight. qti-pie's 646 interim is `e0fcddbf`.
+- **Fixed in `fce1088` (`fce10882b08165ebb44125fc0c9ddac6572c6495`),** pushed to grizzle `main` with its gate green, and
+  checked at `fce1088`, which `git ls-remote` showed as `origin/main` on 2026-11-06: "keyTextBytes leaves room for an
+  index tuple's null bitmap, so a text at its result fits every index planned over its fields, a key over a selection
+  and a family's axis included" (its message). qti-pie repins to it (lane N2). The 646 interim stays, and reading 133
+  with it, until lane S-ORACLE measures the edge on the new pin.
 
 ### A text contract can't be the target of a copy (a limit; accepted for grizzle beta.1 as `str.bytes(N)`)
 
