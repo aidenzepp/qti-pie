@@ -130,7 +130,7 @@ const item: Item = {
           // oxlint-disable-next-line unicorn/no-thenable -- `then` is the branch's rule list, the name the item model fixes; it is an array, never a function.
           then: [
             {
-              expression: { kind: "base-value", value: float(1) },
+              expression: { kind: "base-value", operands: [], value: float(1) },
               identifier: "SCORE",
               kind: "set-outcome",
             },
@@ -138,8 +138,13 @@ const item: Item = {
           when: {
             kind: "match",
             operands: [
-              { identifier: "RESPONSE", kind: "variable" },
-              { identifier: "RESPONSE", kind: "correct" },
+              {
+                identifier: "RESPONSE",
+                kind: "variable",
+                operands: [],
+                weightIdentifier: Option.none(),
+              },
+              { identifier: "RESPONSE", kind: "correct", operands: [] },
             ],
           },
         },
@@ -147,7 +152,7 @@ const item: Item = {
       kind: "condition",
       otherwise: Option.some([
         {
-          expression: { kind: "base-value", value: float(0) },
+          expression: { kind: "base-value", operands: [], value: float(0) },
           identifier: "SCORE",
           kind: "set-outcome",
         },

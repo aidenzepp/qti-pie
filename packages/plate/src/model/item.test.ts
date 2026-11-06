@@ -287,7 +287,7 @@ const setsCorrectResponse: SourceElement = el(
  * @returns The rule.
  */
 const scoreRule = (value: number): Rule => ({
-  expression: { kind: "base-value", value: float(value) },
+  expression: { kind: "base-value", operands: [], value: float(value) },
   identifier: "SCORE",
   kind: "set-outcome",
 });
@@ -313,8 +313,13 @@ const matchCorrect: readonly Rule[] = [
         {
           kind: "match",
           operands: [
-            { identifier: "RESPONSE", kind: "variable" },
-            { identifier: "RESPONSE", kind: "correct" },
+            {
+              identifier: "RESPONSE",
+              kind: "variable",
+              operands: [],
+              weightIdentifier: Option.none(),
+            },
+            { identifier: "RESPONSE", kind: "correct", operands: [] },
           ],
         },
         [scoreRule(1)],
@@ -332,14 +337,25 @@ const matchCorrect: readonly Rule[] = [
 const mapResponsePoint: readonly Rule[] = [
   {
     branches: [
-      branch({ kind: "is-null", operand: { identifier: "RESPONSE", kind: "variable" } }, [
-        scoreRule(0),
-      ]),
+      branch(
+        {
+          kind: "is-null",
+          operands: [
+            {
+              identifier: "RESPONSE",
+              kind: "variable",
+              operands: [],
+              weightIdentifier: Option.none(),
+            },
+          ],
+        },
+        [scoreRule(0)],
+      ),
     ],
     kind: "condition",
     otherwise: Option.some([
       {
-        expression: { identifier: "RESPONSE", kind: "map-response-point" },
+        expression: { identifier: "RESPONSE", kind: "map-response-point", operands: [] },
         identifier: "SCORE",
         kind: "set-outcome",
       },
@@ -353,7 +369,12 @@ const mapResponsePoint: readonly Rule[] = [
  * @param identifier The variable's identifier.
  * @returns The expression.
  */
-const variableOf = (identifier: string): Expression => ({ identifier, kind: "variable" });
+const variableOf = (identifier: string): Expression => ({
+  identifier,
+  kind: "variable",
+  operands: [],
+  weightIdentifier: Option.none(),
+});
 
 /**
  * Construct a single identifier value.
@@ -402,17 +423,28 @@ const cc2MatchBasic: readonly Rule[] = [
       branch(
         {
           kind: "match",
-          operands: [variableOf("RESPONSE"), { identifier: "RESPONSE", kind: "correct" }],
+          operands: [
+            variableOf("RESPONSE"),
+            { identifier: "RESPONSE", kind: "correct", operands: [] },
+          ],
         },
         [
           setRule("SCORE", variableOf("MAXSCORE")),
-          setRule("FEEDBACKBASIC", { kind: "base-value", value: identifierValue("correct") }),
+          setRule("FEEDBACKBASIC", {
+            kind: "base-value",
+            operands: [],
+            value: identifierValue("correct"),
+          }),
         ],
       ),
     ],
     kind: "condition",
     otherwise: Option.some([
-      setRule("FEEDBACKBASIC", { kind: "base-value", value: identifierValue("incorrect") }),
+      setRule("FEEDBACKBASIC", {
+        kind: "base-value",
+        operands: [],
+        value: identifierValue("incorrect"),
+      }),
     ]),
   },
 ];
@@ -423,19 +455,39 @@ const cc2MatchBasic: readonly Rule[] = [
  */
 const cc2MapResponse: readonly Rule[] = [
   {
-    branches: [branch({ kind: "is-null", operand: variableOf("RESPONSE") }, [scoreRule(0)])],
+    branches: [branch({ kind: "is-null", operands: [variableOf("RESPONSE")] }, [scoreRule(0)])],
     kind: "condition",
-    otherwise: Option.some([setRule("SCORE", { identifier: "RESPONSE", kind: "map-response" })]),
+    otherwise: Option.some([
+      setRule("SCORE", { identifier: "RESPONSE", kind: "map-response", operands: [] }),
+    ]),
   },
   {
     branches: [
-      branch({ kind: "equal", operands: [variableOf("MAXSCORE"), variableOf("SCORE")] }, [
-        setRule("FEEDBACK", { kind: "base-value", value: identifierValue("correct") }),
-      ]),
+      branch(
+        {
+          includeLowerBound: true,
+          includeUpperBound: true,
+          kind: "equal",
+          operands: [variableOf("MAXSCORE"), variableOf("SCORE")],
+          tolerance: [],
+          toleranceMode: "exact",
+        },
+        [
+          setRule("FEEDBACK", {
+            kind: "base-value",
+            operands: [],
+            value: identifierValue("correct"),
+          }),
+        ],
+      ),
     ],
     kind: "condition",
     otherwise: Option.some([
-      setRule("FEEDBACK", { kind: "base-value", value: identifierValue("incorrect") }),
+      setRule("FEEDBACK", {
+        kind: "base-value",
+        operands: [],
+        value: identifierValue("incorrect"),
+      }),
     ]),
   },
 ];
@@ -921,14 +973,25 @@ describe("buildItem", () => {
         Option.some<readonly Rule[]>([
           {
             branches: [
-              branch({ kind: "is-null", operand: { identifier: "RESPONSE", kind: "variable" } }, [
-                scoreRule(0),
-              ]),
+              branch(
+                {
+                  kind: "is-null",
+                  operands: [
+                    {
+                      identifier: "RESPONSE",
+                      kind: "variable",
+                      operands: [],
+                      weightIdentifier: Option.none(),
+                    },
+                  ],
+                },
+                [scoreRule(0)],
+              ),
             ],
             kind: "condition",
             otherwise: Option.some([
               {
-                expression: { identifier: "RESPONSE", kind: "map-response" },
+                expression: { identifier: "RESPONSE", kind: "map-response", operands: [] },
                 identifier: "SCORE",
                 kind: "set-outcome",
               },
@@ -1312,11 +1375,15 @@ describe("buildItem", () => {
       Effect.gen(function* readsEqual() {
         const expected: readonly Rule[] = [
           setRule("SAME", {
+            includeLowerBound: true,
+            includeUpperBound: true,
             kind: "equal",
             operands: [
-              { kind: "base-value", value: integer(1n) },
-              { kind: "base-value", value: float(1) },
+              { kind: "base-value", operands: [], value: integer(1n) },
+              { kind: "base-value", operands: [], value: float(1) },
             ],
+            tolerance: [],
+            toleranceMode: "exact",
           }),
         ];
 
@@ -1332,6 +1399,51 @@ describe("buildItem", () => {
           assert.deepStrictEqual(built.processing, Option.some(expected));
           assert.deepStrictEqual(built.unsupported, []);
         }
+      }),
+  );
+
+  it.effect(
+    "reads a qti-equal's tolerance token by token and its bounds, in exact mode, with no mark",
+    () =>
+      Effect.gen(function* readsTolerance() {
+        const built = yield* buildItem(
+          item({
+            after: [
+              equalBlock(
+                [
+                  attr("tolerance", " 0.5\tSAME "),
+                  attr("include-lower-bound", "false"),
+                  attr("tolerance-mode", "exact"),
+                ],
+                "1",
+                "1.0",
+              ),
+            ],
+            body: [],
+            declarations: [declaration("qti-outcome-declaration", "SAME", "boolean", "single")],
+          }),
+        );
+
+        assert.deepStrictEqual(
+          built.processing,
+          Option.some([
+            setRule("SAME", {
+              includeLowerBound: false,
+              includeUpperBound: true,
+              kind: "equal",
+              operands: [
+                { kind: "base-value", operands: [], value: integer(1n) },
+                { kind: "base-value", operands: [], value: float(1) },
+              ],
+              tolerance: [
+                { _tag: "literal", value: 0.5 },
+                { _tag: "ref", identifier: "SAME" },
+              ],
+              toleranceMode: "exact",
+            }),
+          ]),
+        );
+        assert.deepStrictEqual(built.unsupported, []);
       }),
   );
 
@@ -2617,7 +2729,58 @@ describe("buildItem", () => {
         built.processing,
         Option.some([
           {
-            expression: { identifier: "numAttempts", kind: "variable" },
+            expression: {
+              identifier: "numAttempts",
+              kind: "variable",
+              operands: [],
+              weightIdentifier: Option.none(),
+            },
+            identifier: "ATTEMPTS",
+            kind: "set-outcome",
+          },
+        ]),
+      );
+      assert.deepStrictEqual(built.unsupported, []);
+    }),
+  );
+
+  it.effect("reads a qti-variable's weight-identifier and holds it, with no mark", () =>
+    Effect.gen(function* readsWeightIdentifier() {
+      const built = yield* buildItem(
+        item({
+          after: [
+            el(
+              "qti-response-processing",
+              [],
+              [
+                el(
+                  "qti-set-outcome-value",
+                  [attr("identifier", "ATTEMPTS")],
+                  [
+                    el("qti-variable", [
+                      attr("identifier", "numAttempts"),
+                      attr("weight-identifier", " W "),
+                    ]),
+                  ],
+                ),
+              ],
+            ),
+          ],
+          body: [],
+          declarations: [declaration("qti-outcome-declaration", "ATTEMPTS", "integer", "single")],
+        }),
+      );
+
+      assert.deepStrictEqual(
+        built.processing,
+        Option.some([
+          {
+            expression: {
+              identifier: "numAttempts",
+              kind: "variable",
+              operands: [],
+              weightIdentifier: Option.some("W"),
+            },
             identifier: "ATTEMPTS",
             kind: "set-outcome",
           },
@@ -2969,7 +3132,12 @@ describe("buildItem", () => {
           built.processing,
           Option.some<readonly Rule[]>([
             {
-              expression: { identifier: "RESPONSE", kind: "variable" },
+              expression: {
+                identifier: "RESPONSE",
+                kind: "variable",
+                operands: [],
+                weightIdentifier: Option.none(),
+              },
               identifier: "SCORE",
               kind: "set-outcome",
             },

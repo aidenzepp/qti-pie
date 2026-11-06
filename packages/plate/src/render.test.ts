@@ -191,6 +191,7 @@ const item: Item = {
     {
       expression: {
         kind: "base-value",
+        operands: [],
         value: one({ baseType: "identifier", value: "MarkerRuleValue" }),
       },
       identifier: "FEEDBACK",
