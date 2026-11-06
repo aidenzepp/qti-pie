@@ -490,6 +490,102 @@ export const companionNames = [
 ] as const;
 
 /**
+ * The names of phase 9's 29 XML-path negatives, each a hand-broken copy of a catalog or companion
+ * positive (or of `simple`) that breaks the laws of one rule, in the order of the spec's 4.9
+ * table. They are a list of their own, not part of {@link negativeNames}, which holds phase 5's 63
+ * test-document negatives. `card-empty` and `entry-empty` are not here: decision 324 accepts an
+ * empty card and an empty entry, and they are positives of {@link catalogNames}.
+ *
+ * - The catalog: `support-twice`, `default-twice` (one `true`, one `1`), `idref-html`,
+ *   `idref-missing`, `catalog-id-twice`, `catalog-no-id`, `card-file-no-type`, `info-empty`,
+ *   `catalog-empty`, `card-mixed`, `html-twice`, `card-file-first`, `default-default`,
+ *   `support-case`, `support-ext-empty`, `card-file-missing`, `card-file-undescribed`,
+ *   `card-interaction-in-modal`, `card-gap-outside` and `body-lang`.
+ * - The companion materials: `physical-first`, `calculator-no-description`, `two-infos` (two
+ *   `qti-calculator-info` in one calculator), `rule-both-systems`, `calculator-Basic`, `unit-case`,
+ *   `increment-text`, `rule-system-SI` and `icon-missing`.
+ */
+export const catalogNegativeNames = [
+  "support-twice",
+  "default-twice",
+  "idref-html",
+  "idref-missing",
+  "catalog-id-twice",
+  "catalog-no-id",
+  "card-file-no-type",
+  "info-empty",
+  "catalog-empty",
+  "card-mixed",
+  "html-twice",
+  "card-file-first",
+  "physical-first",
+  "calculator-no-description",
+  "two-infos",
+  "rule-both-systems",
+  "default-default",
+  "support-case",
+  "support-ext-empty",
+  "calculator-Basic",
+  "unit-case",
+  "increment-text",
+  "rule-system-SI",
+  "card-file-missing",
+  "icon-missing",
+  "card-file-undescribed",
+  "card-interaction-in-modal",
+  "card-gap-outside",
+  "body-lang",
+] as const;
+
+/**
+ * The rules each of {@link catalogNegativeNames} may be refused under, from the predicted column
+ * of the spec's 4.9 table, as the metadata fixtures' verdicts are written. A leased run that
+ * refuses one under a rule outside its row reports a finding; it does not edit this table.
+ *
+ * - `child-set` or `ordering` name the content model's automaton, which refuses an empty container, a
+ *   repeated child and a missing required child alike.
+ * - The two element-text negatives (`calculator-Basic`, `increment-text`) are the text-domain rule,
+ *   `text-copy`; the attribute ones (`default-default`, `support-case`, `support-ext-empty`,
+ *   `unit-case`) are `attribute-lexical`.
+ * - `card-file-undescribed` is `file-listed` (reading 103: a file a document references is described
+ *   in the manifest).
+ */
+export const catalogVerdicts: readonly (readonly [
+  (typeof catalogNegativeNames)[number],
+  readonly string[],
+])[] = [
+  ["support-twice", ["card-support"]],
+  ["default-twice", ["card-default"]],
+  ["idref-html", ["idref-target"]],
+  ["idref-missing", ["idref-target"]],
+  ["catalog-id-twice", ["document-key"]],
+  ["catalog-no-id", ["required-attribute"]],
+  ["card-file-no-type", ["required-attribute"]],
+  ["info-empty", ["child-set", "ordering"]],
+  ["catalog-empty", ["child-set", "ordering"]],
+  ["card-mixed", ["child-set", "ordering"]],
+  ["html-twice", ["child-set", "ordering"]],
+  ["card-file-first", ["ordering"]],
+  ["physical-first", ["ordering"]],
+  ["calculator-no-description", ["child-set", "ordering"]],
+  ["two-infos", ["child-set", "ordering"]],
+  ["rule-both-systems", ["child-set", "ordering"]],
+  ["default-default", ["attribute-lexical"]],
+  ["support-case", ["attribute-lexical"]],
+  ["support-ext-empty", ["attribute-lexical"]],
+  ["calculator-Basic", ["text-copy"]],
+  ["unit-case", ["attribute-lexical"]],
+  ["increment-text", ["text-copy"]],
+  ["rule-system-SI", ["unmodeled-vocabulary"]],
+  ["card-file-missing", ["file-exists"]],
+  ["icon-missing", ["file-exists"]],
+  ["card-file-undescribed", ["file-listed"]],
+  ["card-interaction-in-modal", ["ancestry-ban"]],
+  ["card-gap-outside", ["ancestry-ban"]],
+  ["body-lang", ["document-lang"]],
+];
+
+/**
  * The names of the ten wildcard fixtures of phase 11 (spec W12): foreign content under the lax
  * hosts of `qti-custom-operator`, `xi:include`, `xi:fallback` and LOM, the four refusals, and
  * `test-selection-foreign`, a test with an extension element and an `xml:lang` on the strict
@@ -518,7 +614,8 @@ const wildcardNames = [
  * phase 5's tests, sections and stimuli ({@link testNames}) and its 63 negatives
  * ({@link negativeNames}), the five restored-check fixtures of {@link restoredNames}, the six
  * assembly fixtures of {@link assemblyNames}, the 14 catalog positives of {@link catalogNames}, the
- * four companion-materials positives of {@link companionNames}, the
+ * four companion-materials positives of {@link companionNames}, the 29 XML-path negatives of
+ * {@link catalogNegativeNames}, the
  * ten wildcard fixtures of {@link wildcardNames}, and `rtest01`, the
  * examples' included fragment in place (spec reading 117), with one negative per include law.
  */
@@ -554,6 +651,7 @@ export const fixtureNames = [
   ...assemblyNames,
   ...catalogNames,
   ...companionNames,
+  ...catalogNegativeNames,
   "lomrest",
   "lomrest-two-titles",
   "lomrest-two-purposes",
@@ -4899,6 +4997,268 @@ const companionSpecs: Record<(typeof companionNames)[number], FixtureSpec> = {
 };
 
 /**
+ * The spec of an XML-path negative over a catalog or companion positive: the positive's edits,
+ * then `edits`, which see its result (a spec's edits apply by kind, so the positive's cut still
+ * applies last).
+ *
+ * @param name - The negative's name.
+ * @param base - The positive it edits.
+ * @param edits - The edits that make the breach.
+ * @returns The spec.
+ */
+const catalogNegativeOver = (
+  name: (typeof catalogNegativeNames)[number],
+  base: (typeof catalogNames)[number] | (typeof companionNames)[number],
+  edits: readonly Edit[],
+): FixtureSpec => {
+  const positive = { ...catalogSpecs, ...companionSpecs }[base];
+
+  return { edits: [...positive.edits, ...edits], member: positive.member, name };
+};
+
+/**
+ * The spec of an XML-path negative over `simple`, whose item gains one catalog `c1` holding
+ * `cards`, named by its first paragraph.
+ *
+ * @param name - The negative's name.
+ * @param cards - The `qti-card` elements of the catalog.
+ * @param edits - Further edits, such as the files the cards name.
+ * @returns The spec.
+ */
+const simpleCatalogNegative = (
+  name: (typeof catalogNegativeNames)[number],
+  cards: string,
+  edits: readonly Edit[] = [],
+): FixtureSpec =>
+  overSimple(name, [
+    ...edits,
+    ...simpleWithCatalog(
+      "c1",
+      `<qti-catalog-info><qti-catalog id="c1">${cards}</qti-catalog></qti-catalog-info>`,
+    ),
+  ]);
+
+/**
+ * The edit that lists `files` in the manifest's one resource, after `images/sign.png`.
+ *
+ * @param files - The `href`s to list.
+ * @returns The edit as plain data.
+ */
+const listFiles = (files: readonly string[]): TextEdit =>
+  replaceIn(
+    "imsmanifest.xml",
+    '<file href="images/sign.png"/>',
+    [
+      '<file href="images/sign.png"/>',
+      ...files.map((file) => `            <file href="${file}"/>`),
+    ].join(CRLF),
+  );
+
+/**
+ * A card holding one card file, as `simple`'s catalog negatives write it.
+ *
+ * @param attributes - The `qti-file-href` element's attributes, with their leading space.
+ * @param href - The file's text.
+ * @returns The `qti-card` element.
+ */
+const fileCard = (attributes: string, href: string): string =>
+  `<qti-card support="sign-language"><qti-file-href${attributes}>${href}</qti-file-href></qti-card>`;
+
+/**
+ * A card of the given `support` holding html content only.
+ *
+ * @param support - The `support` value as written.
+ * @returns The `qti-card` element.
+ */
+const textCard = (support: string): string =>
+  `<qti-card support="${support}"><qti-html-content>Read aloud.</qti-html-content></qti-card>`;
+
+/**
+ * One rule system, `qti-rule-system-<system>`, with the minimum length 30 and the major increment
+ * `1 Meter`.
+ *
+ * @param system - `si` or `us`.
+ * @returns The element's text.
+ */
+const ruleOf = (system: string): string =>
+  `<qti-rule-system-${system}><qti-minimum-length>30</qti-minimum-length><qti-major-increment unit="Meter">1</qti-major-increment></qti-rule-system-${system}>`;
+
+/**
+ * The specs of {@link catalogNegativeNames}. The catalog negatives that need a card the corpus
+ * item lacks add it to `cut-catalog-supports`' one catalog; the file negatives are `simple` with
+ * one card; the companion negatives add one material to `cut-companion`.
+ *
+ * - `catalog-no-id` and `catalog-id-twice` add a second catalog to the item's `qti-catalog-info`, so
+ *   the one `data-catalog-idref` still names a catalog.
+ * - `idref-html` names a `span`'s own `id`, `idref-missing` an `id` nothing holds.
+ * - `card-file-missing` and `icon-missing` list the file in the manifest and leave it out of the
+ *   package, so only the file's existence is broken; `card-file-undescribed` keeps the file in the
+ *   package and out of the manifest.
+ * - `card-interaction-in-modal` puts a `qti-text-entry-interaction` (with its response declaration)
+ *   in the card of `catalog-hosts`' modal feedback (decision 309 A); `card-gap-outside` a `qti-gap`
+ *   in a card with no gap match around it.
+ * - `body-lang` is `catalog-lang` with an `xml:lang="es"` on the item body's first paragraph
+ *   (decision 85).
+ */
+const catalogNegativeSpecs: Record<(typeof catalogNegativeNames)[number], FixtureSpec> = {
+  "body-lang": catalogNegativeOver("body-lang", "catalog-lang", [
+    replaceIn(
+      "choice.xml",
+      '<p data-catalog-idref="catalog1">Look',
+      '<p xml:lang="es" data-catalog-idref="catalog1">Look',
+    ),
+  ]),
+  "calculator-Basic": catalogNegativeOver("calculator-Basic", "cut-companion", [
+    companionBefore(companionCalculator("Basic", "")),
+  ]),
+  "calculator-no-description": catalogNegativeOver("calculator-no-description", "cut-companion", [
+    companionBefore(
+      "<qti-calculator><qti-calculator-type>basic</qti-calculator-type></qti-calculator>",
+    ),
+  ]),
+  "card-file-first": simpleCatalogNegative(
+    "card-file-first",
+    '<qti-card support="sign-language"><qti-file-href mime-type="image/png">images/sign.png</qti-file-href><qti-html-content>The sign.</qti-html-content></qti-card>',
+  ),
+  "card-file-missing": simpleCatalogNegative(
+    "card-file-missing",
+    fileCard(' mime-type="image/png"', "images/absent.png"),
+    [listFiles(["images/absent.png"])],
+  ),
+  "card-file-no-type": simpleCatalogNegative("card-file-no-type", fileCard("", "images/sign.png")),
+  "card-file-undescribed": simpleCatalogNegative(
+    "card-file-undescribed",
+    fileCard(' mime-type="image/png"', "images/unlisted.png"),
+    [{ _tag: "copyFile", from: "images/sign.png", to: "images/unlisted.png" }],
+  ),
+  "card-gap-outside": catalogNegativeOver("card-gap-outside", "cut-catalog-supports", [
+    addCatalogCard(
+      '<qti-card support="spoken"><qti-html-content><p>The word <qti-gap identifier="G1"/>.</p></qti-html-content></qti-card>',
+    ),
+  ]),
+  "card-interaction-in-modal": catalogNegativeOver("card-interaction-in-modal", "catalog-hosts", [
+    replaceIn(
+      bgChoiceItem,
+      '<qti-outcome-declaration base-type="float"',
+      '<qti-response-declaration identifier="RESPONSE2" cardinality="single" base-type="string"/><qti-outcome-declaration base-type="float"',
+    ),
+    replaceIn(
+      bgChoiceItem,
+      "<qti-html-content>Done means finished.</qti-html-content>",
+      '<qti-html-content><p>Done: <qti-text-entry-interaction response-identifier="RESPONSE2"/></p></qti-html-content>',
+    ),
+  ]),
+  "card-mixed": catalogNegativeOver("card-mixed", "cut-catalog-supports", [
+    addCatalogCard(
+      '<qti-card support="spoken"><qti-html-content>Read aloud.</qti-html-content><qti-card-entry xml:lang="en"><qti-html-content>Read aloud.</qti-html-content></qti-card-entry></qti-card>',
+    ),
+  ]),
+  "catalog-empty": simpleCatalogNegative("catalog-empty", ""),
+  "catalog-id-twice": catalogNegativeOver("catalog-id-twice", "cut-catalog-supports", [
+    replaceIn(
+      catalogSupportsItem,
+      "</qti-catalog-info>",
+      `<qti-catalog id="catalog1">${textCard("spoken")}</qti-catalog></qti-catalog-info>`,
+    ),
+  ]),
+  "catalog-no-id": catalogNegativeOver("catalog-no-id", "cut-catalog-supports", [
+    replaceIn(
+      catalogSupportsItem,
+      "</qti-catalog-info>",
+      `<qti-catalog>${textCard("spoken")}</qti-catalog></qti-catalog-info>`,
+    ),
+  ]),
+  "default-default": catalogNegativeOver("default-default", "cut-catalog-supports", [
+    replaceIn(
+      catalogSupportsItem,
+      '<qti-card-entry xml:lang="es">',
+      '<qti-card-entry xml:lang="es" default="yes">',
+    ),
+  ]),
+  "default-twice": catalogNegativeOver("default-twice", "cut-catalog-supports", [
+    replaceIn(
+      catalogSupportsItem,
+      '<qti-card-entry xml:lang="es">',
+      '<qti-card-entry xml:lang="es" default="true">',
+    ),
+    replaceIn(
+      catalogSupportsItem,
+      '<qti-card-entry xml:lang="de">',
+      '<qti-card-entry xml:lang="de" default="1">',
+    ),
+  ]),
+  "html-twice": catalogNegativeOver("html-twice", "cut-catalog-supports", [
+    addCatalogCard(
+      '<qti-card support="spoken"><qti-html-content>Read aloud.</qti-html-content><qti-html-content>Read it twice.</qti-html-content></qti-card>',
+    ),
+  ]),
+  "icon-missing": overSimple("icon-missing", [
+    listFiles(["images/absent.svg"]),
+    replaceIn(
+      "choice.xml",
+      "<qti-item-body>",
+      "<qti-companion-materials-info><qti-digital-material><qti-file-href>images/sign.png</qti-file-href><qti-resource-icon>images/absent.svg</qti-resource-icon></qti-digital-material></qti-companion-materials-info><qti-item-body>",
+    ),
+  ]),
+  "idref-html": catalogNegativeOver("idref-html", "cut-catalog-supports", [
+    replaceIn(
+      catalogSupportsItem,
+      "accurate.</span>",
+      'accurate.</span> <span id="html1" data-catalog-idref="html1">here</span>',
+    ),
+  ]),
+  "idref-missing": catalogNegativeOver("idref-missing", "cut-catalog-supports", [
+    replaceIn(
+      catalogSupportsItem,
+      "accurate.</span>",
+      'accurate.</span> <span data-catalog-idref="nowhere">here</span>',
+    ),
+  ]),
+  "increment-text": catalogNegativeOver("increment-text", "cut-companion", [
+    companionBefore(companionRule("si", "30", "", companionIncrement("major", "Meter", "one"))),
+  ]),
+  "info-empty": overSimple("info-empty", [
+    replaceIn("choice.xml", "</qti-item-body>", `</qti-item-body>${CRLF}    <qti-catalog-info/>`),
+  ]),
+  "physical-first": catalogNegativeOver("physical-first", "cut-companion", [
+    companionBefore("<qti-physical-material>Scratch paper</qti-physical-material>"),
+  ]),
+  "rule-both-systems": catalogNegativeOver("rule-both-systems", "cut-companion", [
+    companionBefore(
+      `<qti-rule><qti-description>A rule of both systems</qti-description>${ruleOf("si")}${ruleOf("us")}</qti-rule>`,
+    ),
+  ]),
+  "rule-system-SI": catalogNegativeOver("rule-system-SI", "cut-companion", [
+    companionBefore(
+      companionRule("si", "30", "", companionIncrement("major", "Meter", "1")).replaceAll(
+        "qti-rule-system-si",
+        "qti-rule-system-SI",
+      ),
+    ),
+  ]),
+  "support-case": catalogNegativeOver("support-case", "cut-catalog-supports", [
+    addCatalogCard(textCard("Spoken")),
+  ]),
+  "support-ext-empty": catalogNegativeOver("support-ext-empty", "cut-catalog-supports", [
+    addCatalogCard(textCard("ext:")),
+  ]),
+  "support-twice": catalogNegativeOver("support-twice", "cut-catalog-supports", [
+    addCatalogCard(textCard("keyword-translation")),
+  ]),
+  "two-infos": catalogNegativeOver("two-infos", "cut-companion", [
+    companionBefore(
+      companionCalculator(
+        "basic",
+        `<qti-calculator-info>${companionFileInfo}</qti-calculator-info><qti-calculator-info>${companionFileInfo}</qti-calculator-info>`,
+      ),
+    ),
+  ]),
+  "unit-case": catalogNegativeOver("unit-case", "cut-companion", [
+    companionBefore(companionRule("si", "30", "", companionIncrement("major", "meter", "1"))),
+  ]),
+};
+
+/**
  * The edits of `test-selection-foreign`, over `test-selection`'s text edits: an `xml:lang` and one
  * `ma:ext` child, with its namespace declaration, on the first section's `qti-selection` and on
  * section C's `qti-ordering`. Both are strict attribute hosts (3.3 strict/a and strict/d): the
@@ -5026,6 +5386,7 @@ const specs: Record<FixtureName, FixtureSpec> = {
   ...assemblySpecs,
   ...catalogSpecs,
   ...companionSpecs,
+  ...catalogNegativeSpecs,
   ...wildcardSpecs,
   "bad-identifier-value": {
     edits: [

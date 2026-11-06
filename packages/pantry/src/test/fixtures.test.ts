@@ -8,6 +8,8 @@ import {
   FIXTURES_VERSION,
   assemblyNames,
   catalogNames,
+  catalogNegativeNames,
+  catalogVerdicts,
   companionNames,
   editBytes,
   fixtureNames,
@@ -521,6 +523,101 @@ const catalogPresent: readonly (readonly [(typeof catalogNames)[number], string,
   ["card-empty", "items/CatalogWithMultipleSupports.xml", '<qti-card support="spoken"/>'],
   ["entry-empty", "items/CatalogWithMultipleSupports.xml", '<qti-card-entry xml:lang="en"/>'],
 ];
+
+/**
+ * For each XML-path negative, a file of its package and the text its edit put there.
+ */
+const catalogNegativePresent: readonly (readonly [
+  (typeof catalogNegativeNames)[number],
+  string,
+  string,
+])[] = [
+  [
+    "support-twice",
+    "items/CatalogWithMultipleSupports.xml",
+    '<qti-card support="keyword-translation"><qti-html-content>Read aloud.',
+  ],
+  [
+    "default-twice",
+    "items/CatalogWithMultipleSupports.xml",
+    '<qti-card-entry xml:lang="de" default="1">',
+  ],
+  [
+    "idref-html",
+    "items/CatalogWithMultipleSupports.xml",
+    '<span id="html1" data-catalog-idref="html1">',
+  ],
+  ["idref-missing", "items/CatalogWithMultipleSupports.xml", 'data-catalog-idref="nowhere"'],
+  [
+    "catalog-id-twice",
+    "items/CatalogWithMultipleSupports.xml",
+    '<qti-catalog id="catalog1"><qti-card support="spoken">',
+  ],
+  [
+    "catalog-no-id",
+    "items/CatalogWithMultipleSupports.xml",
+    '<qti-catalog><qti-card support="spoken">',
+  ],
+  ["card-file-no-type", "choice.xml", "<qti-file-href>images/sign.png</qti-file-href>"],
+  ["info-empty", "choice.xml", "<qti-catalog-info/>"],
+  ["catalog-empty", "choice.xml", '<qti-catalog id="c1"></qti-catalog>'],
+  [
+    "card-mixed",
+    "items/CatalogWithMultipleSupports.xml",
+    '<qti-card support="spoken"><qti-html-content>Read aloud.</qti-html-content><qti-card-entry',
+  ],
+  [
+    "html-twice",
+    "items/CatalogWithMultipleSupports.xml",
+    "</qti-html-content><qti-html-content>Read it twice.",
+  ],
+  [
+    "card-file-first",
+    "choice.xml",
+    '<qti-file-href mime-type="image/png">images/sign.png</qti-file-href><qti-html-content>',
+  ],
+  [
+    "physical-first",
+    "elements.xml",
+    "<qti-companion-materials-info><qti-physical-material>Scratch paper</qti-physical-material>",
+  ],
+  [
+    "calculator-no-description",
+    "elements.xml",
+    "<qti-calculator-type>basic</qti-calculator-type></qti-calculator>",
+  ],
+  ["two-infos", "elements.xml", "</qti-calculator-info><qti-calculator-info>"],
+  ["rule-both-systems", "elements.xml", "</qti-rule-system-si><qti-rule-system-us>"],
+  ["default-default", "items/CatalogWithMultipleSupports.xml", 'default="yes"'],
+  ["support-case", "items/CatalogWithMultipleSupports.xml", '<qti-card support="Spoken">'],
+  ["support-ext-empty", "items/CatalogWithMultipleSupports.xml", '<qti-card support="ext:">'],
+  ["calculator-Basic", "elements.xml", "<qti-calculator-type>Basic</qti-calculator-type>"],
+  ["unit-case", "elements.xml", '<qti-major-increment unit="meter">'],
+  ["increment-text", "elements.xml", '<qti-major-increment unit="Meter">one</qti-major-increment>'],
+  ["rule-system-SI", "elements.xml", "<qti-rule-system-SI>"],
+  ["card-file-missing", "choice.xml", "images/absent.png</qti-file-href>"],
+  ["icon-missing", "choice.xml", "<qti-resource-icon>images/absent.svg</qti-resource-icon>"],
+  ["card-file-undescribed", "choice.xml", "images/unlisted.png</qti-file-href>"],
+  [
+    "card-interaction-in-modal",
+    "items/BG007.xml",
+    '<p>Done: <qti-text-entry-interaction response-identifier="RESPONSE2"/></p>',
+  ],
+  ["card-gap-outside", "items/CatalogWithMultipleSupports.xml", '<qti-gap identifier="G1"/>'],
+  ["body-lang", "choice.xml", '<p xml:lang="es" data-catalog-idref="catalog1">'],
+];
+
+/**
+ * The negatives whose package deliberately lists a file it lacks (`missing`) or holds a file its
+ * manifest does not list (`undescribed`), each with that file's path.
+ */
+const catalogNegativeFiles = {
+  missing: [
+    ["card-file-missing", "images/absent.png"],
+    ["icon-missing", "images/absent.svg"],
+  ],
+  undescribed: [["card-file-undescribed", "images/unlisted.png"]],
+} as const;
 
 /**
  * The paths a manifest lists as `file`s, each once.
@@ -1717,6 +1814,109 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts", (it
           assert.include(padded, '<qti-major-increment unit="Meter"> 1.5 </qti-major-increment>');
           assert.include(padded, "<qti-minimum-length> 30 </qti-minimum-length>");
           assert.include(padded, "A ruler&#9;of one metre");
+        }),
+      ),
+    180_000,
+  );
+
+  it.effect(
+    "the XML-path negative names are the spec's 29, with a verdict row each, and the empty card and entry are no negatives",
+    () =>
+      Effect.sync(() => {
+        assert.strictEqual(catalogNegativeNames.length, 29);
+        assert.strictEqual(new Set(catalogNegativeNames).size, 29);
+        assert.deepStrictEqual(
+          catalogVerdicts.map(([name]) => name),
+          [...catalogNegativeNames],
+        );
+        assert.deepStrictEqual(
+          [...new Set(catalogNegativePresent.map(([name]) => name))],
+          [...catalogNegativeNames],
+        );
+        assert.includeMembers([...fixtureNames], [...catalogNegativeNames]);
+
+        for (const [name, rules] of catalogVerdicts) {
+          assert.isAbove(rules.length, 0, name);
+          assert.strictEqual(new Set(rules).size, rules.length, name);
+        }
+
+        for (const name of catalogNegativeNames) {
+          assert.notInclude(
+            [
+              ...negativeNames,
+              ...restoredNames,
+              ...assemblyNames,
+              ...catalogNames,
+              ...companionNames,
+            ],
+            name,
+          );
+        }
+
+        assert.notInclude([...catalogNegativeNames], "card-empty");
+        assert.notInclude([...catalogNegativeNames], "entry-empty");
+        assert.includeMembers([...catalogNames], ["card-empty", "entry-empty"]);
+      }),
+  );
+
+  it.effect(
+    "each XML-path negative materializes under 2 MB, holds XML documents that parse, carries its edit and breaks nothing the manifest lists beyond its own file",
+    () =>
+      inFreshRoot(() =>
+        Effect.gen(function* catalogNegatives() {
+          const fs = yield* FileSystem.FileSystem;
+          const missing = new Map<string, string>(catalogNegativeFiles.missing);
+          const undescribed = new Map<string, string>(catalogNegativeFiles.undescribed);
+
+          for (const name of catalogNegativeNames) {
+            const dir = yield* materialize(name);
+            const files = yield* filesOf(dir);
+            const manifest = yield* fs.readFileString(`${dir}/imsmanifest.xml`);
+            const listed = listedFilesOf(manifest);
+            const packaged = files.filter((file) => file !== "imsmanifest.xml");
+            let size = 0;
+
+            for (const file of files) {
+              size += Number((yield* fs.stat(`${dir}/${file}`)).size);
+
+              if (file.endsWith(".xml") && file !== "imsmanifest.xml") {
+                const document = yield* readXml(yield* fs.readFile(`${dir}/${file}`));
+
+                if (!file.startsWith("links/")) {
+                  assert.strictEqual(document.root.namespace, qtiNamespace, `${name}/${file}`);
+                }
+              }
+            }
+
+            assert.isBelow(size, 2 * 1024 * 1024, name);
+            assert.deepStrictEqual(
+              packaged,
+              [
+                ...listed.filter((file) => file !== missing.get(name)),
+                ...(undescribed.has(name) ? [undescribed.get(name) ?? ""] : []),
+              ].toSorted(),
+              name,
+            );
+
+            const absent = missing.get(name);
+            const unlisted = undescribed.get(name);
+
+            if (absent !== undefined) {
+              assert.include(listed, absent, name);
+              assert.notInclude(packaged, absent, name);
+            }
+
+            if (unlisted !== undefined) {
+              assert.notInclude(listed, unlisted, name);
+              assert.include(packaged, unlisted, name);
+            }
+          }
+
+          for (const [name, file, needle] of catalogNegativePresent) {
+            const dir = yield* materialize(name);
+
+            assert.include(yield* fs.readFileString(`${dir}/${file}`), needle, `${name}: ${file}`);
+          }
         }),
       ),
     180_000,
