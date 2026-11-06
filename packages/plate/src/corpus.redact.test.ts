@@ -5,7 +5,6 @@ import { configure, encodeRedacted, open, redact } from "#plate/index.ts";
 import type { Accepted, Configuration, RedactedJson } from "#plate/index.ts";
 import type { Expression, Item, ResponseDeclaration, Rule } from "#plate/model/item.ts";
 import { format } from "#plate/model/values.ts";
-import type { Single } from "#plate/model/values.ts";
 import { acceptedOf, openCorpus, threeStates } from "#plate/test/sweep.ts";
 import type { Member, RenderState } from "#plate/test/sweep.ts";
 
@@ -47,7 +46,13 @@ const longEnough = /.{3}/su;
 /**
  * Where an item holds a secret.
  */
-type SecretOrigin = "area-map entry" | "correct response" | "mapping key" | "processing base value";
+type SecretOrigin =
+  | "area-map entry"
+  | "correct response"
+  | "mapping key"
+  | "processing base value"
+  | "processing inside coords"
+  | "processing pattern";
 
 /**
  * A value the item holds and its page must not see, with where the item holds it.
@@ -136,46 +141,73 @@ const occursIn = (markup: string, text: string): boolean =>
   spellingsOf(text).some((spelling) => markup.includes(spelling));
 
 /**
- * Collect the values an expression's `qti-base-value` expressions hold, the expression's own and
- * its sub-expressions' at any depth.
+ * Give the attribute literals an expression holds itself that may give the answer away: a
+ * `qti-base-value`'s values, a `qti-inside`'s `coords`, joined as an area-map entry's are, and a
+ * `qti-pattern-match`'s literal `pattern` (one that names a variable gives nothing away itself).
+ *
+ * @param expression The expression.
+ * @returns The literals as candidates, in written order; none for any other kind.
+ */
+const ownCandidatesOf = (expression: Expression): readonly Secret[] => {
+  if (expression.kind === "base-value") {
+    return expression.value.values.map((single) => ({
+      origin: "processing base value",
+      text: format(single),
+    }));
+  }
+
+  if (expression.kind === "inside") {
+    return [{ origin: "processing inside coords", text: expression.coords.join(",") }];
+  }
+
+  return expression.kind === "pattern-match" && expression.pattern._tag === "literal"
+    ? [{ origin: "processing pattern", text: expression.pattern.value }]
+    : [];
+};
+
+/**
+ * Collect the attribute literals an expression and its sub-expressions hold at any depth that may
+ * give the answer away ({@link ownCandidatesOf}).
  *
  * Sub-expressions sit in `operands`, as in every expression the model holds, so an expression kind
  * the engine gains later is walked without a change here.
  *
  * @param expression The expression.
- * @returns The base values' single values, in document order.
+ * @returns The literals as candidates, in document order.
  */
-const expressionValuesOf = (expression: Expression): readonly Single[] =>
-  expression.kind === "base-value"
-    ? expression.value.values
-    : expression.operands.flatMap((operand) => expressionValuesOf(operand));
+const expressionCandidatesOf = (expression: Expression): readonly Secret[] => [
+  ...ownCandidatesOf(expression),
+  ...expression.operands.flatMap((operand) => expressionCandidatesOf(operand)),
+];
 
 /**
- * Collect every value the `qti-base-value` expressions of a run of response rules hold, at any
- * depth: a lookup's expression as a set's, and nothing of an exit.
+ * Collect every attribute literal the expressions of a run of response rules hold that may give
+ * the answer away ({@link expressionCandidatesOf}), at any depth: a lookup's expression as a
+ * set's, and nothing of an exit.
  *
  * @param rules The rules, the item's response processing or a branch of it.
- * @returns The base values' single values, in document order.
+ * @returns The literals as candidates, in document order.
  */
-const baseValuesOf = (rules: readonly Rule[]): readonly Single[] =>
+const processingCandidatesOf = (rules: readonly Rule[]): readonly Secret[] =>
   rules.flatMap((rule) => {
     if (rule.kind === "condition") {
       return [
         ...rule.branches.flatMap((branch) => [
-          ...expressionValuesOf(branch.when),
-          ...baseValuesOf(branch.then),
+          ...expressionCandidatesOf(branch.when),
+          ...processingCandidatesOf(branch.then),
         ]),
-        ...baseValuesOf(Option.getOrElse(rule.otherwise, () => [])),
+        ...processingCandidatesOf(Option.getOrElse(rule.otherwise, () => [])),
       ];
     }
 
-    return rule.kind === "exit" ? [] : expressionValuesOf(rule.expression);
+    return rule.kind === "exit" ? [] : expressionCandidatesOf(rule.expression);
   });
 
 /**
  * List the values an item holds that its page must not see, before any is judged a secret: the
- * lexical form of each correct response value, mapping key and processing base value, and each
- * area-map entry's `coords`.
+ * lexical form of each correct response value, mapping key and processing base value, each
+ * area-map entry's and processing `qti-inside`'s `coords`, and each processing
+ * `qti-pattern-match`'s literal `pattern`.
  *
  * @param item The item.
  * @returns Each candidate, with where the item holds it.
@@ -209,11 +241,7 @@ const candidatesOf = (item: Item): readonly Secret[] => [
   ]),
   ...Option.match(item.processing, {
     onNone: () => [],
-    onSome: (rules) =>
-      baseValuesOf(rules).map((single) => ({
-        origin: "processing base value" as const,
-        text: format(single),
-      })),
+    onSome: processingCandidatesOf,
   }),
 ];
 
