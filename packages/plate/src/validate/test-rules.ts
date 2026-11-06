@@ -265,7 +265,8 @@ const duplicateIdentifier = (
  *
  * A section with an XInclude child is not counted: the inclusion is not performed, and what it
  * would supply may be the member the count needs, so refusing it could refuse a valid section
- * (reading 1). The verdict leaves such a document unchecked.
+ * (reading 1). The verdict accepts such a document: a test's include is marked `xi:include`, and a
+ * section document carries its root's mark.
  *
  * @param source The document.
  * @param visit The element's visit.

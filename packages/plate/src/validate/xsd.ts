@@ -2264,8 +2264,8 @@ const product = (left: Range["max"], right: Range["max"]): Range["max"] => {
  * Read a particle's `minOccurs` and `maxOccurs`, each 1 when absent, as XML Schema defines them.
  *
  * @param particle The particle.
- * @returns Its range, or {@link TableGenerationError} for a count that is not a non-negative
- *   integer, or for `maxOccurs` not `unbounded`.
+ * @returns Its range, or {@link TableGenerationError} for a `minOccurs` that is not a non-negative
+ *   integer or a `maxOccurs` that is neither one nor `unbounded`.
  */
 const occursOf = Effect.fnUntraced(function* occursOf(
   particle: SourceElement,
@@ -2415,8 +2415,8 @@ const particleCounts = Effect.fnUntraced(function* particleCounts(
 });
 
 /**
- * Count the children the content model a holder holds names: a complex type's, a derivation's or a
- * named group's model group or group reference, or none when it holds neither.
+ * Count the children named by the content model a holder holds: the model group or group reference
+ * of a complex type, a derivation or a named group, or none when it holds neither.
  *
  * @param context The generation's context.
  * @param holder The holder.

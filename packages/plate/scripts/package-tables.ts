@@ -222,6 +222,12 @@ const locationOf = (element: SourceElement): string | undefined =>
  *   construct.
  */
 const importsOf = (xsd: ReadXsd): Effect.Effect<readonly string[], ClosureUnresolved> => {
+  /**
+   * Fail the listing of this XSD's imports.
+   *
+   * @param detail Which location or construct cannot be followed, and what to change.
+   * @returns The failure, {@link ClosureUnresolved} at this XSD's path.
+   */
   const unresolved = (detail: string) =>
     Effect.fail(new ClosureUnresolved({ detail, path: xsd.path }));
   const files: string[] = [];
@@ -379,7 +385,7 @@ const byNamespace = (
  * Table each namespace a profile's tables reach, from its namespace outward, with the closure's
  * file for it.
  *
- * @param profile The profile's file.
+ * @param profile The profile, as read.
  * @param files The closure's files by namespace.
  * @returns The tables and occurrences, or the failure to generate one, or
  *   {@link ClosureUnresolved} when the tables reach a namespace no file of the closure declares.

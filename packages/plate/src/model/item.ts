@@ -198,6 +198,11 @@ export type OutcomeReporting = Pick<
 
 /**
  * Construct the refusal of an attribute of the document being read, at that attribute's path.
+ *
+ * @param attribute The attribute at fault.
+ * @param rule The rule it breaks.
+ * @param detail The facts the verdict's wording names.
+ * @returns The refusal, located at the attribute in the document its reader walks.
  */
 type AttributeRefusal = (
   attribute: SourceAttribute,
@@ -391,10 +396,10 @@ export type BodyNode =
   | Unsupported;
 
 /**
- * An expression of the engine subset, tagged by `kind`: `qti-match`, `qti-variable`,
- * `qti-correct`, `qti-base-value`, `qti-is-null`, `qti-map-response`, `qti-map-response-point`
- * and `qti-equal`. An `equal` is a `qti-equal` in its default `exact` tolerance mode, the one mode
- * the engine runs; one in `absolute` or `relative` mode is never built.
+ * An expression of the engine subset, tagged by `kind`: `qti-match`, `qti-variable`, `qti-correct`,
+ * `qti-base-value`, `qti-is-null`, `qti-map-response`, `qti-map-response-point` and `qti-equal`. An
+ * `equal` is a `qti-equal` in its default `exact` tolerance mode, the one mode the engine runs; one
+ * in `absolute` or `relative` mode is never built.
  */
 export type Expression =
   | { readonly kind: "match"; readonly operands: readonly [Expression, Expression] }
@@ -2225,17 +2230,17 @@ const matchCorrect: readonly Rule[] = [
 ];
 
 /**
- * The built-in templates, as the rule trees their text gives: the files in QTI
- * 3's `rptemplates`, transcribed as data, because a browser module reads no file at run time.
- * `map_response_point` is `map_response` with `qti-map-response-point` in place of
- * `qti-map-response`. Of the Common Cartridge templates, `CC2_match` is `match_correct`;
- * `CC2_match_basic` sets `SCORE` to `MAXSCORE` and `FEEDBACKBASIC` to `correct` on a match, else
- * `FEEDBACKBASIC` to `incorrect`; and `CC2_map_response` is `map_response`, then sets `FEEDBACK` to
- * `correct` when `MAXSCORE` and `SCORE` are equal in `exact` mode, else to `incorrect`. A
- * template's tree goes through {@link runnable} as inline rules do, and is also checked for what it
- * needs: one that names a variable the item does not declare, such as `MAXSCORE`, is marked and
- * never refused, and so is one that needs a declaration the item does not provide, such as a
- * `qti-mapping` or a `SCORE` of a single float.
+ * The built-in templates, as the rule trees their text gives: the files in QTI 3's `rptemplates`,
+ * transcribed as data, because a browser module reads no file at run time. `map_response_point` is
+ * `map_response` with `qti-map-response-point` in place of `qti-map-response`. Of the Common
+ * Cartridge templates, `CC2_match` is `match_correct`; `CC2_match_basic` sets `SCORE` to `MAXSCORE`
+ * and `FEEDBACKBASIC` to `correct` on a match, else `FEEDBACKBASIC` to `incorrect`; and
+ * `CC2_map_response` is `map_response`, then sets `FEEDBACK` to `correct` when `MAXSCORE` and
+ * `SCORE` are equal in `exact` mode, else to `incorrect`. A template's tree goes through
+ * {@link runnable} as inline rules do, and is also checked for what it needs: one that names a
+ * variable the item does not declare, such as `MAXSCORE`, is marked and never refused, and so is
+ * one that needs a declaration the item does not provide, such as a `qti-mapping` or a `SCORE` of a
+ * single float.
  */
 const templates = {
   CC2_map_response: [

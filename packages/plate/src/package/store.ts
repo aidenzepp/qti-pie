@@ -18,6 +18,7 @@
  */
 import { Option, Result } from "effect";
 import type { Array as Arr } from "effect";
+import { appendSegments } from "#plate/document/href.ts";
 import type { Manifest } from "#plate/package/manifest.ts";
 import { Refusal } from "#plate/validate/refusal.ts";
 import type { Location, RefusalRule } from "#plate/validate/refusal.ts";
@@ -77,10 +78,10 @@ const refuse = (
  *
  * A backslash separates segments as `/` does, as an archive written on Windows spells its paths. A
  * `.` segment is removed and a `..` segment removes the segment before it, as RFC 3986 section
- * 5.2.4 removes dot segments, so `items/sub/../a.xml` is `items/a.xml`, and a key that ends in a
- * dot segment names a directory, ending in `/`. A key is a file's name, not a URI reference: a `%`,
- * a `?` and a `#` are characters of the name and are never decoded or set aside, which is what the
- * manifest's resolved `href` paths are compared with.
+ * 5.2.4 removes dot segments ({@link appendSegments}), so `items/sub/../a.xml` is `items/a.xml`,
+ * and a key that ends in a dot segment names a directory, ending in `/`. A key is a file's name,
+ * not a URI reference: a `%`, a `?` and a `#` are characters of the name and are never decoded or
+ * set aside, which is what the manifest's resolved `href` paths are compared with.
  *
  * @param path The key as the package's reader found it.
  * @param location The package's location, which a refusal carries as its `document`.
@@ -90,36 +91,24 @@ const refuse = (
  * @see https://www.rfc-editor.org/rfc/rfc3986#section-5.2.4
  */
 export const normalisePath = (path: string, location: string): Result.Result<string, Refusal> => {
-  const outside = Result.fail(refuse(location, "package-path-outside", wholePackage, { path }));
-  const written = path.replaceAll("\\", "/").split("/");
-  const segments: string[] = [];
-  for (const [index, segment] of written.entries()) {
-    if (segment === "..") {
-      if (segments.length === 0) {
-        return outside;
-      }
-
-      segments.pop();
-    }
-
-    if (segment !== "." && segment !== "..") {
-      segments.push(segment);
-    } else if (index === written.length - 1) {
-      segments.push("");
-    }
-  }
-
+  const { climbed, segments } = appendSegments(
+    [],
+    path.replaceAll("\\", "/").split("/"),
+    (segment) => segment,
+  );
   const normal = segments.join("/");
 
-  return normal.startsWith("/") ? outside : Result.succeed(normal);
+  return climbed || normal.startsWith("/")
+    ? Result.fail(refuse(location, "package-path-outside", wholePackage, { path }))
+    : Result.succeed(normal);
 };
 
 /**
- * Whether a path in normal form names a directory, as an archive lists one: the root, or a path
- * that ends in `/`. A directory holds no file, so the file rules pass over it.
+ * Report whether a path in normal form names a directory, as an archive lists one: the root, or a
+ * path that ends in `/`. A directory holds no file, so the file rules pass over it.
  *
  * @param path The path.
- * @returns True for a directory.
+ * @returns Whether it names a directory.
  */
 const isDirectory = (path: string): boolean => path === "" || path.endsWith("/");
 

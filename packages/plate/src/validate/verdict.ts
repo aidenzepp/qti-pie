@@ -1,7 +1,7 @@
 /**
- * The verdict on a document, the one gate between a source and an item a host may
- * redact, score or render, or a test it may deliver, and the sentences that word a refusal for the
- * host and the author.
+ * The verdict on a document, the one gate between a source and an item a host may redact, score or
+ * render, or a test it may deliver, and the sentences that word a refusal for the host and the
+ * author.
  *
  * {@link check} refuses a root outside QTI's namespace, then runs the structural validator, the
  * item prose rules and the test prose rules together, then leaves unchecked what it cannot judge.
@@ -222,11 +222,11 @@ type AcceptedByKind =
  * - `accepted-with-unsupported`: valid, with features plate does not render or deliver, each named.
  * - `accepted`: valid, and plate renders or delivers all of it.
  *
- * Every arm carries `kind`: an accepting verdict's is `item`, `test`, `section` or
- * `stimulus`, and `accepted` is the {@link Accepted}, {@link AcceptedTest},
- * {@link AcceptedSection} or {@link AcceptedStimulus} to match, so `kind` narrows it. `unchecked`
- * and `refused` carry the root's kind, `"none"` when it is none of the six. Read an accepted item
- * through {@link acceptedItem}. `document` is the document's location.
+ * Every arm carries `kind`: an accepting verdict's is `item`, `test`, `section` or `stimulus`, and
+ * `accepted` is the {@link Accepted}, {@link AcceptedTest}, {@link AcceptedSection} or
+ * {@link AcceptedStimulus} to match, so `kind` narrows it. `unchecked` and `refused` carry the
+ * root's kind, `"none"` when it is none of the six. Read an accepted item through
+ * {@link acceptedItem}. `document` is the document's location.
  */
 export type Verdict =
   | {
@@ -1298,6 +1298,13 @@ const templateRequirements = (refusal: Refusal): string => {
 const wordings = {
   "ambiguous-reference": (refusal) => {
     const reference = code(fact(refusal, "reference", ""));
+    /**
+     * Word one reading of the reference from the two facts that hold it.
+     *
+     * @param prefix The name of the fact that holds the reading's item ref, part or section.
+     * @param variable The name of the fact that holds the variable it names there.
+     * @returns The prefix with the variable, each as code.
+     */
     const reading = (prefix: string, variable: string): string =>
       `${code(fact(refusal, prefix, ""))} with the variable ${code(fact(refusal, variable, ""))}`;
 

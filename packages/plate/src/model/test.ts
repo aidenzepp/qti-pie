@@ -25,8 +25,8 @@ import {
   pathOf,
   pathsOf,
   refusal,
-  requiredValue,
   requiredAttribute,
+  requiredValue,
   valueOf,
   xmlWhitespaceRun,
   xsBoolean,
@@ -182,15 +182,11 @@ const commentMark: TestMark = 'allow-comment="true"';
 const negativeAttemptsMark: TestMark = "max-attempts:negative";
 
 /**
- * The item model's marks, which `renders` lists.
+ * The item model's marks, which `renders` lists, that sit on an outcome declaration, such as
+ * `base-type="duration"`.
  */
-const itemMarks: readonly FeatureRule[] = renders.marks;
-
-/**
- * The item model's marks that sit on an outcome declaration, such as `base-type="duration"`.
- */
-const declarationMarks: readonly FeatureRule[] = itemMarks.filter(
-  (mark) => mark.on !== "body" && mark.on.includes("qti-outcome-declaration"),
+const declarationMarks: readonly FeatureRule[] = renders.marks.filter(
+  (mark: FeatureRule) => mark.on !== "body" && mark.on.includes("qti-outcome-declaration"),
 );
 
 /**

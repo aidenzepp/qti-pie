@@ -33,9 +33,9 @@ import { resolveInside, schemePrefix } from "#plate/document/href.ts";
 import { readSource } from "#plate/document/read.ts";
 import { attributePath, qtiNamespace, walk } from "#plate/document/source.ts";
 import type { SourceDocument, SourceElement } from "#plate/document/source.ts";
+import { itemRefsIn } from "#plate/model/item-refs.ts";
 import { trimXmlSpace } from "#plate/model/values.ts";
 import { readManifest } from "#plate/package/manifest.ts";
-import { itemRefsIn } from "#plate/model/item-refs.ts";
 import type { Manifest, ManifestResource } from "#plate/package/manifest.ts";
 import { checkFiles, fileLocation, manifestFile, packageFiles } from "#plate/package/store.ts";
 import { Refusal } from "#plate/validate/refusal.ts";
@@ -726,6 +726,12 @@ const contentsOf = (
   tests: ReadonlyMap<string, ReadonlyMap<string, string>>,
   location: string,
 ): PackageContents => {
+  /**
+   * Give the accepted item of the document at a path.
+   *
+   * @param path The document's path.
+   * @returns Its item, none when no accepted item document is there.
+   */
   const itemAt = (path: string): Option.Option<Accepted> =>
     verdictAt(documents, path).pipe(Option.flatMap(acceptedItem));
 
