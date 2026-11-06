@@ -2210,11 +2210,13 @@ against it. A reading that is not an information-model-over-XSD case says which 
      whose NULL-able hidden columns add an 8-byte null bitmap). `limits.test.ts` holds 646 to fit and 647 to be refused.
      The one bound applies evenly: every text the schema copies into a keyText field counts against it, so a
      647-character `<p id>` is refused just as a 647-character resource identifier is, by the oracle's "Key text bound"
-     (rule `key-text-bound`) and by the database, whose copy of the id has no row that can hold it. The law oracle reads
-     the list of such copies from the schema's statements (`src/test/key-copies.ts`), and `src/test/oracle.keys.test.ts`
-     holds its verdict to the import's rows in 1-, 2-, 3- and 4-byte scripts. A key text's namespace-name kin,
-     `namespaceText`, holds at most 409 code points beside a uuid and a local name of 255, and an entry path holds the
-     key text's 646.
+     (rule `key-text-bound`) and by the database under the same rule: the import writes the copy's row whatever its
+     length, as it writes every copy (no host-side pre-filter leaves an over-long copy out), and keyText's own check
+     refuses it. `src/test/oracle.keys.test.ts` holds the database's rule, read from the import's rows, to the oracle's.
+     The law oracle reads the list of such copies from the schema's statements (`src/test/key-copies.ts`), and
+     `src/test/oracle.keys.test.ts` holds its verdict to the import's rows in 1-, 2-, 3- and 4-byte scripts. A key
+     text's namespace-name kin, `namespaceText`, holds at most 409 code points beside a uuid and a local name of 255,
+     and an entry path holds the key text's 646.
 
      The operator's ruling is a bound in UTF-8 bytes rather than code points: about 2,587 ASCII, 1,293 two-byte, 862 CJK
      or 646 astral characters. It waits on grizzle. A text contract, the one byte bound grizzle has at `a2ff5eb`, is a
