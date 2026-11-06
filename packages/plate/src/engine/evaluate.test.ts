@@ -6,6 +6,7 @@ import {
   UnknownIdentifierError,
   UnmappedResponseError,
   evaluateExpression,
+  evaluators,
   runRules,
 } from "#plate/engine/evaluate.ts";
 import type { Variables } from "#plate/engine/evaluate.ts";
@@ -23,6 +24,7 @@ import type {
 import { buildItem } from "#plate/model/item.ts";
 import { match, nullOf, parseLexical } from "#plate/model/values.ts";
 import type { ModelledBaseType, Single, Value } from "#plate/model/values.ts";
+import { expressionKinds } from "#plate/model/expression.ts";
 
 /**
  * Construct a single identifier value.
@@ -1224,5 +1226,31 @@ describe("map-response-point", () => {
       { _tag: failure._tag, identifier: failure.identifier, mapping: failure.mapping },
       { _tag: "UnmappedResponseError", identifier: "UNMAPPED", mapping: "qti-area-mapping" },
     );
+  });
+});
+
+describe("evaluators", () => {
+  it("holds an evaluator for each of M1's eight kinds and the stub marker for every other kind", () => {
+    const landed = expressionKinds.filter((kind) => evaluators[kind] !== "unlanded");
+    const stubbed = expressionKinds.filter((kind) => evaluators[kind] === "unlanded");
+    for (const kind of landed) {
+      assert.isFunction(evaluators[kind], kind);
+    }
+
+    assert.deepStrictEqual(landed, [
+      "base-value",
+      "correct",
+      "equal",
+      "is-null",
+      "map-response",
+      "map-response-point",
+      "match",
+      "variable",
+    ]);
+    assert.deepStrictEqual(
+      stubbed,
+      expressionKinds.filter((kind) => !landed.includes(kind)),
+    );
+    assert.lengthOf(stubbed, 56);
   });
 });

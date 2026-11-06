@@ -1,17 +1,27 @@
 /**
- * The engine's references to variables, a leaf: the value a `qti-variable` reads
- * ({@link variableValue}), from the responses and outcomes the record holds ({@link own}) or from a
- * built-in variable ({@link builtInValue}).
+ * The engine's references to variables: the value a `qti-variable` reads ({@link variableValue}),
+ * from the responses and outcomes the record holds ({@link own}) or from a built-in variable
+ * ({@link builtInValue}), and the run-time resolver of an attribute that holds a literal or names a
+ * variable ({@link referenceValue}).
  *
- * It value-imports only `effect` and `#plate/engine/failures.ts`, and reads `Variables` from
- * `#plate/engine/evaluate.ts` as a type.
+ * It value-imports only `effect`'s `Option` and `Result`, `#plate/engine/failures.ts` and
+ * `#plate/model/values.ts`, and reads `Variables` from `#plate/engine/evaluate.ts` and the
+ * reference types from `#plate/model/expression.ts` as types, so every expression family may
+ * import it.
  *
  * @module
  */
 import { Option, Result } from "effect";
 import type { Variables } from "#plate/engine/evaluate.ts";
 import { UnknownIdentifierError } from "#plate/engine/failures.ts";
-import type { Value } from "#plate/model/values.ts";
+import type {
+  FloatOrRef,
+  IntOrIdentifier,
+  IntegerOrRef,
+  StringOrRef,
+} from "#plate/model/expression.ts";
+import { nullOf } from "#plate/model/values.ts";
+import type { Single, Value } from "#plate/model/values.ts";
 
 /**
  * Look up a variable by identifier among the record's own keys.
@@ -69,3 +79,83 @@ export const variableValue = (
     ),
     () => new UnknownIdentifierError({ holder: "record", identifier, role: "variable" }),
   );
+
+/**
+ * An attribute that holds a literal or names a variable, with what its kind rule's reference facet
+ * says of it: the base type its literal has and a named variable must have, and whether a
+ * reference there is checked.
+ *
+ * The base type ties the attribute's type to its literal's: an `IntegerOrRef` or an
+ * `IntOrIdentifier` is an integer, a `FloatOrRef` a float and a `StringOrRef` a string. Every
+ * reference facet is checked but `qti-equal`'s `tolerance`, whose reference the validator does
+ * not judge (9.11).
+ */
+export type ReferenceSite =
+  | { readonly baseType: "float"; readonly checked: boolean; readonly reference: FloatOrRef }
+  | {
+      readonly baseType: "integer";
+      readonly checked: boolean;
+      readonly reference: IntOrIdentifier | IntegerOrRef;
+    }
+  | { readonly baseType: "string"; readonly checked: boolean; readonly reference: StringOrRef };
+
+/**
+ * Construct the single value that holds one single.
+ *
+ * @param single The single.
+ * @returns The value, of the single's base type.
+ */
+const singleOf = (single: Single): Value => ({
+  baseType: single.baseType,
+  cardinality: "single",
+  values: [single],
+});
+
+/**
+ * Give the value an attribute that holds a literal or names a variable stands for when its
+ * expression is evaluated.
+ *
+ * A literal gives itself as a single value of its base type: a `StringOrRef` literal its text as
+ * written, braces included. A reference gives the named variable's value as {@link variableValue}
+ * reads it, and its type is not checked: a NULL or a value of another type is the caller's to turn
+ * into the NULL its kind gives. The reader split a `StringOrRef` against the item's declarations
+ * (ruling R1), so the resolver never meets a braced name that names nothing.
+ *
+ * A name the variables hold no value of fails at a checked site, as `qti-variable` does, which a
+ * checked item never reaches: the validator refuses a reference to no declaration (P8), and the
+ * item model marks one to a variable the engine does not hold. At an unchecked site, `qti-equal`'s
+ * `tolerance`, it gives NULL of the site's base type instead (9.11's default).
+ *
+ * @param variables The variables of the attempt.
+ * @param site The attribute's value and its reference facet.
+ * @returns The value; or an {@link UnknownIdentifierError} when a checked site names a variable the
+ *   variables hold no value of.
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#IT_Use
+ */
+export const referenceValue = (
+  variables: Variables,
+  site: ReferenceSite,
+): Result.Result<Value, UnknownIdentifierError> => {
+  if (site.reference._tag === "ref") {
+    const held = variableValue(variables, site.reference.identifier);
+
+    return site.checked
+      ? held
+      : Result.succeed(Result.getOrElse(held, () => nullOf(site.baseType, "single")));
+  }
+
+  switch (site.baseType) {
+    case "float": {
+      return Result.succeed(singleOf({ baseType: "float", value: site.reference.value }));
+    }
+    case "integer": {
+      return Result.succeed(singleOf({ baseType: "integer", value: site.reference.value }));
+    }
+    case "string": {
+      return Result.succeed(singleOf({ baseType: "string", value: site.reference.value }));
+    }
+    default: {
+      return site satisfies never;
+    }
+  }
+};

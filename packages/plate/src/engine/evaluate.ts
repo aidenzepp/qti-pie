@@ -12,30 +12,29 @@
  * nothing of is the item's; the failure says which. So the functions stay plain and synchronous and
  * return each failure, an {@link EngineFailure}, in a `Result`; the first failure ends the run.
  *
+ * Each expression kind's evaluator lives in its family's table under `#plate/engine/expressions/`,
+ * and this module dispatches through the one table the ten make ({@link evaluators}). A family
+ * reads {@link Scope} and the evaluator's types from here as types only, so the value imports point
+ * one way: from here to the families.
+ *
  * @module
  */
-import { Array as Arr, Option, Result } from "effect";
-import {
-  OutcomeMismatchError,
-  UnknownIdentifierError,
-  UnmappedResponseError,
-} from "#plate/engine/failures.ts";
+import { Data, Option, Result } from "effect";
+import { OutcomeMismatchError, UnknownIdentifierError } from "#plate/engine/failures.ts";
 import type { EngineFailure } from "#plate/engine/failures.ts";
-import { foldCase } from "#plate/engine/math.ts";
-import { booleanOf, numberOf, sameNumber, toFloat } from "#plate/engine/numbers.ts";
-import { own, variableValue } from "#plate/engine/refs.ts";
-import { areaHolds } from "#plate/engine/expressions/shapes.ts";
-import type {
-  AreaMapping,
-  Expression,
-  Item,
-  MapEntry,
-  Mapping,
-  ResponseDeclaration,
-  Rule,
-} from "#plate/model/item.ts";
-import { format, isNull, match, nullOf } from "#plate/model/values.ts";
-import type { Single, Value } from "#plate/model/values.ts";
+import { arithmeticEvaluators } from "#plate/engine/expressions/arithmetic.ts";
+import { comparisonEvaluators } from "#plate/engine/expressions/comparison.ts";
+import { containersEvaluators } from "#plate/engine/expressions/containers.ts";
+import { functionsEvaluators } from "#plate/engine/expressions/functions.ts";
+import { integersEvaluators } from "#plate/engine/expressions/integers.ts";
+import { logicEvaluators } from "#plate/engine/expressions/logic.ts";
+import { referencesEvaluators } from "#plate/engine/expressions/references.ts";
+import { roundingEvaluators } from "#plate/engine/expressions/rounding.ts";
+import { testEvaluators } from "#plate/engine/expressions/test.ts";
+import { textEvaluators } from "#plate/engine/expressions/text.ts";
+import type { ExpressionKind } from "#plate/model/expression.ts";
+import type { Expression, Item, Rule } from "#plate/model/item.ts";
+import type { Value } from "#plate/model/values.ts";
 
 export {
   OutcomeMismatchError,
@@ -68,290 +67,137 @@ export interface Variables {
 }
 
 /**
- * Find the response declaration a `qti-correct`, a `qti-map-response` or a
- * `qti-map-response-point` names.
+ * The evaluator's context: the item whose declarations give the correct responses, the mappings
+ * and the area mappings, and the variables of the attempt.
  *
- * @param item The item.
- * @param identifier The response's identifier.
- * @returns The declaration, or an {@link UnknownIdentifierError} when the item declares no
- *   modelled response by that name.
+ * Every evaluator takes it whole, so a field the engine adds reaches every family with no change
+ * to an evaluator's signature. The family tests build it only through `scopeOf` in
+ * `#plate/test/processing.ts`.
  */
-const responseOf = (
-  item: Item,
-  identifier: string,
-): Result.Result<ResponseDeclaration, UnknownIdentifierError> =>
-  Result.fromOption(
-    Option.fromUndefinedOr(item.responses.get(identifier)),
-    () => new UnknownIdentifierError({ holder: "item", identifier, role: "response" }),
-  );
+export interface Scope {
+  readonly item: Item;
+  readonly variables: Variables;
+}
 
 /**
- * Report whether two singles are equal, as `match` compares single values: the same base type,
- * numbers by value, strings and identifiers by code point, and a `pair` in either order.
- *
- * @param left One single.
- * @param right The other.
- * @returns Whether they are equal.
+ * The variant of each expression kind: the member of {@link Expression} whose `kind` it is, `never`
+ * for a kind the union does not hold.
  */
-const equal = (left: Single, right: Single): boolean =>
-  match(
-    { baseType: left.baseType, cardinality: "single", values: [left] },
-    { baseType: right.baseType, cardinality: "single", values: [right] },
-  );
+type Variants = { readonly [K in ExpressionKind]: Extract<Expression, { readonly kind: K }> };
 
 /**
- * Give the key {@link distinct} tells a value apart by: its base type and its value as `format`
- * writes it, so two values share a key exactly when {@link equal} finds them equal, however each
- * was written (`+5` and `05` are one integer, `1.0` and `1e0` one float).
+ * The evaluator an evaluator calls for its operands: it gives the value of any expression in a
+ * scope.
  *
- * Where `equal` and `format` part, the key follows `equal`: a `pair`'s identifiers are written in
- * code-unit order, as `equal` matches a pair in either order, and a float's `-0` is written as `0`,
- * as `equal` compares floats with `===`. That `===` makes a NaN equal to no value, itself included,
- * so a NaN has no key. A base type holds no space, and neither does an identifier or a coordinate,
- * so one space between the parts keeps two keys apart.
- *
- * @param single The value.
- * @returns Its key; none for a NaN.
+ * @param expression The expression, an operand of the caller.
+ * @param scope The item and the variables of the attempt.
+ * @returns The expression's value, or the first {@link EngineFailure} of its evaluation.
  */
-const distinctKey = (single: Single): Option.Option<string> => {
-  if (single.baseType === "float") {
-    const value = Object.is(single.value, -0) ? 0 : single.value;
+export type Evaluate = (
+  expression: Expression,
+  scope: Scope,
+) => Result.Result<Value, EngineFailure>;
 
-    return Number.isNaN(value)
-      ? Option.none()
-      : Option.some(`float ${format({ baseType: "float", value })}`);
-  }
+/**
+ * The evaluator of one expression kind: it takes the kind's own variant, so it destructures the
+ * variant's `operands` tuple and reads its attributes with no check of the kind.
+ *
+ * @param expression The expression, of kind `K`.
+ * @param scope The item and the variables of the attempt.
+ * @param evaluate The evaluator of its operands.
+ * @returns The expression's value, or the first {@link EngineFailure} of its evaluation.
+ */
+export type Evaluator<K extends ExpressionKind> = (
+  expression: Variants[K],
+  scope: Scope,
+  evaluate: Evaluate,
+) => Result.Result<Value, EngineFailure>;
 
-  if (single.baseType === "pair") {
-    const [first, second] = single.value;
-    const value: readonly [string, string] = first <= second ? [first, second] : [second, first];
+/**
+ * The stub marker: the entry of a kind its family has not landed (ruling R2). A test tells it from
+ * a landed entry, which is a function. The dispatcher never reaches it on a checked item, because
+ * the reader marks an unlanded kind, so its processing never runs.
+ */
+export type Unlanded = "unlanded";
 
-    return Option.some(`pair ${format({ baseType: "pair", value })}`);
-  }
-
-  return Option.some(`${single.baseType} ${format(single)}`);
+/**
+ * A family's table: one entry per kind of the family, its evaluator or the stub marker.
+ */
+export type FamilyTable<K extends ExpressionKind> = {
+  readonly [P in K]: Evaluator<P> | Unlanded;
 };
 
 /**
- * Drop a response's repeated values: each value is kept at its first occurrence, in order, and a
- * later value {@link equal} finds equal to it is dropped.
- *
- * A `Set` of each value's {@link distinctKey} finds the repeats, so the time is linear in the
- * number of values: a candidate's post of many members costs what its length costs, where comparing
- * every pair would cost its square. A NaN has no key and is always kept, as `equal` finds it equal
- * to nothing.
- *
- * @param values The response's values.
- * @returns The values no earlier value equals, in order.
+ * Every kind's entry: the ten families' tables in one, keyed by {@link ExpressionKind}. Its type
+ * requires an entry for each of the 64 kinds, so a kind no family holds fails the type check.
  */
-const distinct = (values: readonly Single[]): readonly Single[] => {
-  const seen = new Set<string>();
-  const kept: Single[] = [];
-  for (const single of values) {
-    const key = distinctKey(single);
-    if (Option.isNone(key)) {
-      kept.push(single);
-    } else if (!seen.has(key.value)) {
-      seen.add(key.value);
-      kept.push(single);
-    }
-  }
-
-  return kept;
+export const evaluators: FamilyTable<ExpressionKind> = {
+  ...arithmeticEvaluators,
+  ...comparisonEvaluators,
+  ...containersEvaluators,
+  ...functionsEvaluators,
+  ...integersEvaluators,
+  ...logicEvaluators,
+  ...referencesEvaluators,
+  ...roundingEvaluators,
+  ...testEvaluators,
+  ...textEvaluators,
 };
 
 /**
- * Report whether a map entry compares its key exactly: a string key when it is `case-sensitive`,
- * and a key of every other base type always, identifiers included.
+ * The dispatcher reached a kind whose family holds the stub marker, a defect of the engine that no
+ * checked item can cause.
  *
- * @param entry The map entry.
- * @returns Whether its key compares exactly.
+ * It cannot occur: the item model's reader marks every kind its family has not landed, so a
+ * processing that holds one is none and never runs, and the validator holds such a kind untyped
+ * (rulings R2 and R3). It is thrown, never returned, so {@link EngineFailure} holds only failures a
+ * caller can cause, and it is not exported.
  */
-const comparesExactly = (entry: MapEntry): boolean =>
-  entry.caseSensitive || entry.key.baseType !== "string";
+class UnlandedKindDefect extends Data.TaggedError("UnlandedKindDefect")<{
+  readonly kind: ExpressionKind;
+}> {
+  /**
+   * The kind reached, and what to do with it.
+   */
+  override get message(): string {
+    return `The engine reached qti-${this.kind}, whose evaluator has not landed, though the item model marks such a kind. This is a defect in the engine; report it with the item that caused it.`;
+  }
+}
 
 /**
- * Report whether a map entry's key matches a response value: exactly when the entry compares
- * exactly, else as strings with case folded.
+ * Give the value of an expression through its kind's entry in {@link evaluators}.
  *
- * @param entry The map entry.
- * @param single The response value.
- * @returns Whether the entry maps it.
+ * The kind and the variant are passed apart so the entry the kind indexes takes that variant.
+ *
+ * @param kind The expression's kind.
+ * @param expression The expression.
+ * @param scope The item and the variables of the attempt.
+ * @returns The expression's value, or the first {@link EngineFailure} of its evaluation.
+ * @throws {UnlandedKindDefect} When the kind's entry is the stub marker, which no checked item
+ *   reaches.
  */
-const keyMatches = (entry: MapEntry, single: Single): boolean =>
-  !comparesExactly(entry) && entry.key.baseType === "string" && single.baseType === "string"
-    ? foldCase(entry.key.value) === foldCase(single.value)
-    : equal(entry.key, single);
-
-/**
- * Give the value a mapping maps one response value to: the value of the first entry in document
- * order that matches it, else the mapping's default.
- *
- * Overlapping entries are valid, so a value two or more entries match takes the first of them in
- * document order. That rule is a placeholder while spec §12 Q5 is open: the operator's answer
- * changes this one expression and its test. BG010 lists its case-sensitive `York` before its
- * `york`, so its `York` maps by the first and `YORK` by the second.
- *
- * @param mapping The response's mapping.
- * @param single The response value.
- * @returns The mapped value.
- */
-const mappedValue = (mapping: Mapping, single: Single): number =>
-  Option.match(
-    Arr.findFirst(mapping.entries, (entry) => keyMatches(entry, single)),
-    { onNone: () => mapping.defaultValue, onSome: (entry) => entry.value },
-  );
-
-/**
- * Give the value of a `qti-map-response`: a single float.
- *
- * A value is the sum of the mapped values of the response's distinct values, as {@link distinct}
- * finds them in time linear in their number, keyed by {@link distinctKey}: so a `single` value maps
- * to its one value's, `{B,B,C}` counts `B` once, and a NULL response maps to 0. The mapping's
- * `lower-bound` and `upper-bound` then clamp the sum, a single value's and a NULL's included
- * (reading 9.13).
- *
- * @param item The item, whose declaration gives the mapping.
- * @param variables The variables of the attempt.
- * @param identifier The response's identifier.
- * @returns The mapped value; or an {@link UnknownIdentifierError} when the item declares no
- *   modelled response by that name, an {@link UnmappedResponseError} when its declaration has no
- *   mapping, or an {@link UnknownIdentifierError} when the variables hold no value of it, checked
- *   in that order.
- * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#ExpMapResponse
- */
-const mapResponse = (
-  item: Item,
-  variables: Variables,
-  identifier: string,
-): Result.Result<Value, UnknownIdentifierError | UnmappedResponseError> =>
-  Result.gen(function* mapOneResponse() {
-    const declaration = yield* responseOf(item, identifier);
-    const mapping = yield* Result.fromOption(
-      declaration.mapping,
-      () => new UnmappedResponseError({ identifier, mapping: "qti-mapping" }),
-    );
-    const response = yield* Result.fromOption(
-      own(variables.responses, identifier),
-      () => new UnknownIdentifierError({ holder: "record", identifier, role: "response" }),
-    );
-    let sum = 0;
-    for (const single of distinct(response.values)) {
-      sum += mappedValue(mapping, single);
-    }
-
-    const lower = Option.getOrElse(mapping.lowerBound, () => Number.NEGATIVE_INFINITY);
-    const upper = Option.getOrElse(mapping.upperBound, () => Number.POSITIVE_INFINITY);
-    const mapped: Value = {
-      baseType: "float",
-      cardinality: "single",
-      values: [{ baseType: "float", value: Math.min(upper, Math.max(lower, sum)) }],
-    };
-
-    return mapped;
-  });
-
-/* oxlint-disable anti-slop/no-shape-in-symbol-names -- `shape` is the QTI attribute of `qti-area-map-entry` and names an area's geometry, not a structure. */
-/**
- * Find the first area, in document order, that holds a point.
- *
- * @param mapping The area mapping.
- * @param x The point's x coordinate, as a float.
- * @param y The point's y coordinate, as a float.
- * @returns The area's index among the mapping's entries, or -1 when no area holds the point.
- */
-const firstArea = (mapping: AreaMapping, x: number, y: number): number =>
-  mapping.entries.findIndex((entry) => areaHolds[entry.shape](entry.coords, x, y));
-/* oxlint-enable anti-slop/no-shape-in-symbol-names */
-
-/**
- * Sum what an area mapping maps a response's points to, before the bounds.
- *
- * QTI tests the points "against each area in turn, with those listed first taking priority in the
- * case where areas overlap", and "each area can be mapped once only". The rest is open (9.15), and
- * these defaults (reading 52) hold until a ruling changes this function and its tests:
- *
- * - A point on a shape's boundary is inside (`rect`, `circle`, `ellipse` and `poly`, edges included;
- *   `default` holds every point), as {@link areaHolds} reads it.
- * - Areas are tried in document order and the first that holds a point maps it; each area is mapped
- *   at most once.
- * - Each distinct point that falls in no area adds `default-value` once, as `map_response` treats an
- *   unmapped value. Points are told apart as {@link distinct} tells values apart, by their two
- *   exact coordinates, in time linear in their number.
- *
- * A coordinate is compared after the one conversion, {@link toFloat}.
- *
- * @param mapping The response's area mapping.
- * @param points The response's values, a point each.
- * @returns The sum.
- * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#ExpMapResponsePoint
- */
-const areaSum = (mapping: AreaMapping, points: readonly Single[]): number => {
-  const mapped = new Set<number>();
-  let sum = 0;
-  for (const single of distinct(points)) {
-    const area =
-      single.baseType === "point"
-        ? firstArea(mapping, toFloat(single.value[0]), toFloat(single.value[1]))
-        : -1;
-    const entry = mapping.entries[area];
-    if (entry === undefined) {
-      sum += mapping.defaultValue;
-    } else if (!mapped.has(area)) {
-      mapped.add(area);
-      sum += entry.mappedValue;
-    }
+const dispatch = <K extends ExpressionKind>(
+  kind: K,
+  expression: Variants[K],
+  scope: Scope,
+): Result.Result<Value, EngineFailure> => {
+  const entry: Evaluator<K> | Unlanded = evaluators[kind];
+  if (entry === "unlanded") {
+    throw new UnlandedKindDefect({ kind });
   }
 
-  return sum;
+  // oxlint-disable-next-line eslint/no-use-before-define -- `dispatch` and `evaluate` are mutually recursive, as operands nest; the call runs only after both are defined.
+  return entry(expression, scope, evaluate);
 };
 
 /**
- * Give the value of a `qti-map-response-point`: a single float.
+ * Give the value of an expression in a scope, as every evaluator's `evaluate` does.
  *
- * The value is {@link areaSum} of the response's points, so a NULL response maps to 0. The sum is
- * clamped to the area mapping's `lower-bound` and `upper-bound`, a NULL's 0 included (9.13's rule,
- * as `qti-map-response` applies it).
- *
- * @param item The item, whose declaration gives the area mapping.
- * @param variables The variables of the attempt.
- * @param identifier The response's identifier.
- * @returns The mapped value; or an {@link UnknownIdentifierError} when the item declares no
- *   modelled response by that name, an {@link UnmappedResponseError} when its declaration has no
- *   area mapping, or an {@link UnknownIdentifierError} when the variables hold no value of it,
- *   checked in that order.
- * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#ExpMapResponsePoint
+ * @param expression The expression.
+ * @param scope The item and the variables of the attempt.
+ * @returns The expression's value, or the first {@link EngineFailure} of its evaluation.
  */
-const mapResponsePoint = (
-  item: Item,
-  variables: Variables,
-  identifier: string,
-): Result.Result<Value, UnknownIdentifierError | UnmappedResponseError> =>
-  Result.gen(function* mapOnePointResponse() {
-    const declaration = yield* responseOf(item, identifier);
-    const mapping = yield* Result.fromOption(
-      declaration.areaMapping,
-      () => new UnmappedResponseError({ identifier, mapping: "qti-area-mapping" }),
-    );
-    const response = yield* Result.fromOption(
-      own(variables.responses, identifier),
-      () => new UnknownIdentifierError({ holder: "record", identifier, role: "response" }),
-    );
-    const lower = Option.getOrElse(mapping.lowerBound, () => Number.NEGATIVE_INFINITY);
-    const upper = Option.getOrElse(mapping.upperBound, () => Number.POSITIVE_INFINITY);
-    const mapped: Value = {
-      baseType: "float",
-      cardinality: "single",
-      values: [
-        {
-          baseType: "float",
-          value: Math.min(upper, Math.max(lower, areaSum(mapping, response.values))),
-        },
-      ],
-    };
-
-    return mapped;
-  });
+const evaluate: Evaluate = (expression, scope) => dispatch(expression.kind, expression, scope);
 
 /**
  * Report whether a condition's value is true.
@@ -372,107 +218,28 @@ const isTrue = (value: Value): boolean => {
 /**
  * Give the value of an expression of the engine subset.
  *
- * - `variable`: the response's or the outcome's current value, else the built-in variable's
- *   (`builtInValue` in `#plate/engine/refs.ts`).
- * - `correct`: the response's correct response, else NULL of its declared type.
- * - `base-value`: the value as the item model parsed it.
- * - `is-null`: a single boolean, whether the operand is NULL.
- * - `match`: a single boolean, whether the operands match by `match` of the value model; NULL when
- *   either is NULL.
- * - `equal`: a single boolean, whether the operands are the same number in `exact` mode
- *   ({@link sameNumber}); NULL when either is NULL. QTI types both operands as single numbers; an
- *   operand that is not one is not numerically equal to anything, so the value is false, as `match`
- *   gives false for values of different types.
- * - `map-response`: a single float, the response's value through its declaration's mapping.
- * - `map-response-point`: a single float, the response's points through its declaration's area
- *   mapping.
+ * Each kind's evaluator in its family's table gives the value, and its doc says what that value
+ * is. Operands are evaluated left to right, and the first failure is the result.
  *
- * Operands are evaluated left to right, and the first failure is the result.
- *
- * `typeOf` in `#plate/model/item.ts` gives each case's base type and cardinality without
+ * `typeOf` in `#plate/model/item.ts` gives each kind's base type and cardinality without
  * evaluating it, so the item model marks a tree whose `qti-set-outcome-value` this function would
- * fail; it names the case or the function here that each of its cases mirrors, so a change to a
- * case's type changes it too.
+ * fail; it names the evaluator each of its cases mirrors, so a change to a kind's type changes it
+ * too.
  *
  * @param expression The expression.
  * @param item The item, whose declarations give the correct responses, the mappings and the area
  *   mappings.
  * @param variables The variables of the attempt.
- * @returns The expression's value; or an {@link UnknownIdentifierError} when it names a variable
- *   or response that is not held, or an {@link UnmappedResponseError} when a `map-response` names a
- *   response with no mapping or a `map-response-point` one with no area mapping.
- * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpMatch
- * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpEqual
- * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpIsNull
- * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#ExpMapResponse
- * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#ExpMapResponsePoint
+ * @returns The expression's value; or an {@link EngineFailure}: an {@link UnknownIdentifierError}
+ *   when it names a variable or response that is not held, or an {@link UnmappedResponseError} when
+ *   a `map-response` names a response with no mapping or a `map-response-point` one with no area
+ *   mapping.
  */
 export const evaluateExpression = (
   expression: Expression,
   item: Item,
   variables: Variables,
-): Result.Result<Value, UnknownIdentifierError | UnmappedResponseError> => {
-  switch (expression.kind) {
-    case "variable": {
-      return variableValue(variables, expression.identifier);
-    }
-    case "correct": {
-      return Result.map(responseOf(item, expression.identifier), (declaration) =>
-        Option.getOrElse(declaration.correct, () =>
-          nullOf(declaration.baseType, declaration.cardinality),
-        ),
-      );
-    }
-    case "base-value": {
-      return Result.succeed(expression.value);
-    }
-    case "is-null": {
-      const [operand] = expression.operands;
-
-      return Result.map(evaluateExpression(operand, item, variables), (value) =>
-        booleanOf(isNull(value)),
-      );
-    }
-    case "match": {
-      const [left, right] = expression.operands;
-
-      return Result.gen(function* matchOperands() {
-        const leftValue = yield* evaluateExpression(left, item, variables);
-        const rightValue = yield* evaluateExpression(right, item, variables);
-
-        return isNull(leftValue) || isNull(rightValue)
-          ? nullOf("boolean", "single")
-          : booleanOf(match(leftValue, rightValue));
-      });
-    }
-    case "equal": {
-      const [left, right] = expression.operands;
-
-      return Result.gen(function* equalOperands() {
-        const leftValue = yield* evaluateExpression(left, item, variables);
-        const rightValue = yield* evaluateExpression(right, item, variables);
-        if (isNull(leftValue) || isNull(rightValue)) {
-          return nullOf("boolean", "single");
-        }
-
-        return booleanOf(
-          Option.exists(Option.all([numberOf(leftValue), numberOf(rightValue)]), ([one, other]) =>
-            sameNumber(one, other),
-          ),
-        );
-      });
-    }
-    case "map-response": {
-      return mapResponse(item, variables, expression.identifier);
-    }
-    case "map-response-point": {
-      return mapResponsePoint(item, variables, expression.identifier);
-    }
-    default: {
-      return expression satisfies never;
-    }
-  }
-};
+): Result.Result<Value, EngineFailure> => evaluate(expression, { item, variables });
 
 /**
  * Set an outcome, as `qti-set-outcome-value` does.
