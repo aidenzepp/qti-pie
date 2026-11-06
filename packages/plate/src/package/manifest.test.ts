@@ -147,7 +147,7 @@ const baseline = {
 } as const;
 
 describe("package/manifest.ts", () => {
-  describe("the corpus", () => {
+  describe("the corpus", { tags: ["corpus"] }, () => {
     it.effect(
       "[P-1] [P-4] BegGuide_March2025's manifest is read under CP 3.0.1, with its eleven resources",
       () =>

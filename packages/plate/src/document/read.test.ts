@@ -21,17 +21,20 @@ import {
 const bytesOf = (xml: string): Uint8Array => new TextEncoder().encode(xml);
 
 describe("document/read.ts", () => {
-  it.effect("CAT/test.xml is refused by the reader at its first undeclared entity, nbsp", () =>
-    Effect.gen(function* undeclaredEntity() {
-      const location = "qtiv3-examples/CAT/test.xml";
-      const refusal = yield* Effect.flip(readSource(location, yield* readCorpusFile(location)));
+  it.effect(
+    "CAT/test.xml is refused by the reader at its first undeclared entity, nbsp",
+    () =>
+      Effect.gen(function* undeclaredEntity() {
+        const location = "qtiv3-examples/CAT/test.xml";
+        const refusal = yield* Effect.flip(readSource(location, yield* readCorpusFile(location)));
 
-      assert.strictEqual(refusal.rule, "reader-refused");
-      assert.strictEqual(Option.getOrUndefined(refusal.readerRule), "undeclared-entity");
-      assert.deepStrictEqual(refusal.location, { kind: "document" });
-      assert.strictEqual(refusal.document, location);
-      assert.include(refusal.detail["detail"], '"nbsp"');
-    }),
+        assert.strictEqual(refusal.rule, "reader-refused");
+        assert.strictEqual(Option.getOrUndefined(refusal.readerRule), "undeclared-entity");
+        assert.deepStrictEqual(refusal.location, { kind: "document" });
+        assert.strictEqual(refusal.document, location);
+        assert.include(refusal.detail["detail"], '"nbsp"');
+      }),
+    { tags: ["corpus"] },
   );
 
   it.effect("a mismatched end tag is refused as not well-formed at a line and column", () =>
@@ -46,16 +49,19 @@ describe("document/read.ts", () => {
     }),
   );
 
-  it.effect("BG007 reads to a QTI root that keeps its xmlns:xsi declaration", () =>
-    Effect.gen(function* bg007() {
-      const location = "QTI3_BPIG_Examples/items/BG007.xml";
-      const source = yield* readSource(location, yield* readCorpusFile(location));
+  it.effect(
+    "BG007 reads to a QTI root that keeps its xmlns:xsi declaration",
+    () =>
+      Effect.gen(function* bg007() {
+        const location = "QTI3_BPIG_Examples/items/BG007.xml";
+        const source = yield* readSource(location, yield* readCorpusFile(location));
 
-      assert.strictEqual(source.location, location);
-      assert.strictEqual(source.root.local, "qti-assessment-item");
-      assert.strictEqual(source.root.namespace, qtiNamespace);
-      assert.deepInclude(source.root.attributes, attr("xsi", xsiNamespace, xmlnsNamespace));
-    }),
+        assert.strictEqual(source.location, location);
+        assert.strictEqual(source.root.local, "qti-assessment-item");
+        assert.strictEqual(source.root.namespace, qtiNamespace);
+        assert.deepInclude(source.root.attributes, attr("xsi", xsiNamespace, xmlnsNamespace));
+      }),
+    { tags: ["corpus"] },
   );
 
   it.effect(
