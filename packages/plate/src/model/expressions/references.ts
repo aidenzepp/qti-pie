@@ -1,9 +1,8 @@
 /**
  * The references family of the item model: the kind rules and reader specs of `qti-variable`,
- * `qti-correct`, `qti-base-value`, `qti-map-response` and `qti-map-response-point`, and the
- * unlanded rule and stub reader spec of each kind the family has not landed (`qti-default`,
- * `qti-null`, `qti-random-integer` and `qti-random-float`), which its slice (`p7-10`) and M3.b-2
- * replace.
+ * `qti-correct`, `qti-base-value`, `qti-map-response`, `qti-map-response-point`, `qti-default` and
+ * `qti-null`, and the unlanded rule and stub reader spec of the two kinds the family has not landed
+ * (`qti-random-integer` and `qti-random-float`), which M3.b-2 replaces.
  *
  * It value-imports only `effect`, `#plate/model/expression.ts`, the leaf
  * `#plate/model/attributes.ts`, `#plate/model/values.ts` and `#plate/vocabulary.ts`, and names the
@@ -68,6 +67,34 @@ const correctRule: KindRule = {
 };
 
 /**
+ * The rule of `qti-default`: the type of the variable it names, a response, an outcome, a template
+ * or context variable, or a built-in, whose declared default value it reads. The declaration facet
+ * types it as that declaration and has the validator refuse a name no variable has (P8) and the
+ * walks mark one the engine does not hold, as for `qti-variable`.
+ *
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#ExpDefault
+ */
+const defaultRule: KindRule = {
+  declaration: { attribute: "identifier", expected: "variable" },
+  operandsAccept: acceptsAnyOperands,
+  references: [],
+  resultType: declared,
+};
+
+/**
+ * The rule of `qti-null`: a NULL "treated as if it is of any desired base-type", so any base type
+ * of a cardinality unknown, which every operand rule and every check of a type accepts. The qti
+ * package types it the same (`resultTypes` in `packages/pantry/src/processing/types.ts`).
+ *
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#AbstractAttribute_ExpressionGroup_qti-null
+ */
+const nullRule: KindRule = {
+  operandsAccept: acceptsAnyOperands,
+  references: [],
+  resultType: () => ({ baseType: "any", cardinality: "unknown" }),
+};
+
+/**
  * The rule of `qti-base-value`: a single value of its `base-type`, which the caller passes in its
  * attributes.
  *
@@ -105,8 +132,8 @@ const mapResponsePointRule: KindRule = {
 };
 
 /**
- * The references family's kind rules by kind: M1's five, and the unlanded rule for each kind the
- * family has not landed.
+ * The references family's kind rules by kind: M1's five, `qti-default` and `qti-null`, and the
+ * unlanded rule for each kind the family has not landed.
  */
 export const referencesRules: FamilyRules<
   | "base-value"
@@ -121,10 +148,10 @@ export const referencesRules: FamilyRules<
 > = {
   "base-value": baseValueRule,
   correct: correctRule,
-  default: unlandedRule,
+  default: defaultRule,
   "map-response": mapResponseRule,
   "map-response-point": mapResponsePointRule,
-  null: unlandedRule,
+  null: nullRule,
   "random-float": unlandedRule,
   "random-integer": unlandedRule,
   variable: variableRule,
@@ -189,6 +216,28 @@ const mapResponsePointReader: ReaderSpec<"map-response-point"> = {
 };
 
 /**
+ * The reader spec of `qti-default`: no operand, and its `identifier`.
+ */
+const defaultReader: ReaderSpec<"default"> = {
+  _tag: "generic",
+  arity: "none",
+  attributes: (context, element) =>
+    Effect.map(
+      identifierAttribute(context.walk, element, "identifier"),
+      (identifier) => (operands) => ({ identifier, kind: "default", operands }),
+    ),
+};
+
+/**
+ * The reader spec of `qti-null`: no operand, and no attribute.
+ */
+const nullReader: ReaderSpec<"null"> = {
+  _tag: "generic",
+  arity: "none",
+  attributes: () => Effect.succeed((operands) => ({ kind: "null", operands })),
+};
+
+/**
  * The reader spec of `qti-base-value`: its `base-type` and its text, typed as that base type. A
  * base type the value model does not hold, `duration` or `file`, is the mark
  * `base-type="<type>"` at its path, and builds nothing.
@@ -240,8 +289,8 @@ const baseValueReader: ReaderSpec<"base-value"> = {
 const unlanded: UnlandedReader = { _tag: "unlanded" };
 
 /**
- * The references family's reader specs by kind: M1's five, and the stub for each kind the family
- * has not landed.
+ * The references family's reader specs by kind: M1's five, `qti-default` and `qti-null`, and the
+ * stub for each kind the family has not landed.
  */
 export const referencesReaders: FamilyReaders<
   | "base-value"
@@ -256,10 +305,10 @@ export const referencesReaders: FamilyReaders<
 > = {
   "base-value": baseValueReader,
   correct: correctReader,
-  default: unlanded,
+  default: defaultReader,
   "map-response": mapResponseReader,
   "map-response-point": mapResponsePointReader,
-  null: unlanded,
+  null: nullReader,
   "random-float": unlanded,
   "random-integer": unlanded,
   variable: variableReader,

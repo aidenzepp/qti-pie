@@ -1,8 +1,9 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option } from "effect";
-import { attr } from "#plate/document/source.ts";
+import { attr, el } from "#plate/document/source.ts";
 import type { SourceElement } from "#plate/document/source.ts";
 import type { Expression } from "#plate/model/expression.ts";
+import { kindRules } from "#plate/model/expressions/read.ts";
 import { buildItem } from "#plate/model/item.ts";
 import { float, integer } from "#plate/test/fixtures.ts";
 import {
@@ -10,6 +11,7 @@ import {
   expressionElement,
   outcomeDeclaration,
   processingItem,
+  refusalsOf,
   responseDeclaration,
   setOutcomeElement,
   variableElement,
@@ -194,5 +196,146 @@ describe("the references family's reader specs", () => {
         { feature: "qti-variable", path: `${setOut}/qti-variable`, shown: "mark" },
       ]);
     }),
+  );
+});
+
+/**
+ * The path of the `qti-response-processing` of an item {@link processingItem} builds.
+ */
+const processing = "qti-assessment-item/qti-response-processing";
+
+/**
+ * Construct a single template declaration.
+ *
+ * @param identifier Its `identifier`.
+ * @param baseType Its `base-type`.
+ * @returns The `qti-template-declaration`.
+ */
+const templateDeclaration = (identifier: string, baseType: string): SourceElement =>
+  el("qti-template-declaration", [
+    attr("base-type", baseType),
+    attr("cardinality", "single"),
+    attr("identifier", identifier),
+  ]);
+
+/**
+ * Construct a `qti-default` of a variable.
+ *
+ * @param identifier The variable it names, as written.
+ * @returns The element.
+ */
+const defaultElement = (identifier: string): SourceElement =>
+  expressionElement("default", [attr("identifier", identifier)]);
+
+/**
+ * Construct an item whose processing sets the float outcome `SCORE` to one expression.
+ *
+ * @param expression The expression element.
+ * @param declarations The declarations beside `SCORE`'s, in document order after it.
+ * @returns The item document.
+ */
+const scoreItem = (expression: SourceElement, declarations: readonly SourceElement[] = []) =>
+  processingItem(
+    [outcomeDeclaration("SCORE", "float"), ...declarations],
+    [setOutcomeElement("SCORE", expression)],
+  );
+
+describe("the references family's qti-default and qti-null", () => {
+  it.effect(
+    "[I-9a] read a qti-default by its identifier, trimmed, and a qti-null, with processing some",
+    () =>
+      Effect.gen(function* readsDefaultAndNull() {
+        const read = {
+          default: yield* readOut(defaultElement(" OUT\n")),
+          null: yield* readOut(expressionElement("null")),
+        };
+
+        assert.deepStrictEqual(read, {
+          default: Option.some<Expression>({ identifier: "OUT", kind: "default", operands: [] }),
+          null: Option.some<Expression>({ kind: "null", operands: [] }),
+        });
+      }),
+  );
+
+  it("[I-9a] refuse a qti-default that names no declared variable as undeclared-variable (P8)", () => {
+    assert.deepStrictEqual(refusalsOf(scoreItem(defaultElement("NOPE"))), [
+      {
+        detail: { element: "qti-default", expected: "variable", identifier: "NOPE" },
+        path: `${setOut}/qti-default`,
+        rule: "undeclared-variable",
+      },
+    ]);
+  });
+
+  it.effect(
+    "[I-9a] mark a qti-default that names a template variable variable:<id>, its processing none",
+    () =>
+      Effect.gen(function* marksTemplateDefault() {
+        const document = scoreItem(defaultElement("T"), [templateDeclaration("T", "float")]);
+        const built = yield* buildItem(document);
+
+        assert.deepStrictEqual(refusalsOf(document), []);
+        assert.deepStrictEqual(built.processing, Option.none());
+        assert.deepStrictEqual(built.unsupported, [
+          {
+            feature: "qti-template-declaration",
+            path: "qti-assessment-item/qti-template-declaration",
+            shown: "mark",
+          },
+          { feature: "variable:T", path: processing, shown: "mark" },
+        ]);
+      }),
+  );
+
+  it("[I-9a] refuse a qti-default of a string outcome set into the float SCORE as expression-type (P20)", () => {
+    assert.deepStrictEqual(
+      refusalsOf(scoreItem(defaultElement("LABEL"), [outcomeDeclaration("LABEL", "string")])),
+      [
+        {
+          detail: {
+            element: "qti-set-outcome-value",
+            expressionBaseType: "string",
+            expressionCardinality: "single",
+            identifier: "SCORE",
+            outcomeBaseType: "float",
+            outcomeCardinality: "single",
+          },
+          path: setOut,
+          rule: "expression-type",
+        },
+      ],
+    );
+  });
+
+  it.effect(
+    "[I-9a] type a qti-null as any base type, so it is refused nothing set into the float SCORE or as a qti-and operand, and builds with processing some",
+    () =>
+      Effect.gen(function* typesNull() {
+        const nullElement = expressionElement("null");
+        const documents = [
+          scoreItem(nullElement),
+          processingItem(
+            [outcomeDeclaration("PASSED", "boolean")],
+            [
+              setOutcomeElement(
+                "PASSED",
+                expressionElement("and", [], [nullElement, baseValueElement("boolean", "true")]),
+              ),
+            ],
+          ),
+        ];
+
+        assert.deepStrictEqual(kindRules.null.resultType([], {}), {
+          baseType: "any",
+          cardinality: "unknown",
+        });
+        for (const document of documents) {
+          const built = yield* buildItem(document);
+
+          assert.deepStrictEqual(refusalsOf(document), []);
+          assert.isTrue(Option.isSome(built.processing), "the processing runs");
+          assert.deepStrictEqual(built.unsupported, []);
+        }
+      }),
   );
 });

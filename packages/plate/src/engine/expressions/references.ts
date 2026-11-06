@@ -1,8 +1,8 @@
 /**
  * The references family of the engine: the evaluators of the expressions that read a variable, a
- * declaration or a literal, `qti-variable`, `qti-correct`, `qti-base-value`, `qti-map-response`
- * and `qti-map-response-point`, and the stub markers of the kinds the family has not landed
- * (`qti-default`, `qti-null`, `qti-random-integer` and `qti-random-float`).
+ * declaration or a literal, `qti-variable`, `qti-correct`, `qti-base-value`, `qti-map-response`,
+ * `qti-map-response-point`, `qti-default` and `qti-null`, and the stub markers of the two kinds the
+ * family has not landed (`qti-random-integer` and `qti-random-float`).
  *
  * It value-imports only engine leaves, `#plate/model/values.ts` and `effect`'s `Option`, `Array`
  * and `Result`, and reads the evaluator's types from `#plate/engine/evaluate.ts` as types, so the
@@ -15,7 +15,7 @@ import type { Evaluator, FamilyTable, Variables } from "#plate/engine/evaluate.t
 import { UnknownIdentifierError, UnmappedResponseError } from "#plate/engine/failures.ts";
 import { foldCase } from "#plate/engine/math.ts";
 import { toFloat } from "#plate/engine/numbers.ts";
-import { own, variableValue } from "#plate/engine/refs.ts";
+import { builtInValue, own, variableValue } from "#plate/engine/refs.ts";
 import { areaHolds } from "#plate/engine/expressions/shapes.ts";
 import type {
   AreaMapping,
@@ -372,9 +372,69 @@ const evaluateMapResponsePoint: Evaluator<"map-response-point"> = (expression, s
   mapResponsePoint(scope.item, scope.variables, expression.identifier);
 
 /**
- * The references family's evaluators by kind: M1's five landed, and the stub marker for each kind
- * the family has not landed (ruling R2), which the dispatcher in `#plate/engine/evaluate.ts` never
- * reaches on a checked item.
+ * Give the value of a `qti-default`: the default value declared for the variable it names, else
+ * NULL of that variable's type, as the information model says: it "returns the associated
+ * defaultValue or NULL if no default value was declared".
+ *
+ * It reads the declaration, never the attempt's value. A response or an outcome with no
+ * `qti-default-value` gives NULL of its base type and cardinality, a single integer or float
+ * outcome included: the 0 an attempt starts such an outcome at is not a declared default. A
+ * declared variable wins over a built-in of the same name, as `qti-variable` reads it. The built-in
+ * `numAttempts`, which the variables carry, has no declaration and so no declared default: it gives
+ * NULL of its type, a single integer. Template processing, whose `qti-set-default-value` could
+ * change a default, never runs first: the item model runs no response processing of an item that
+ * has it.
+ *
+ * @param expression The `qti-default`.
+ * @param scope The item, whose declarations give the defaults, and the variables.
+ * @returns The declared default or the NULL, or an {@link UnknownIdentifierError} when the item
+ *   declares no modelled response or outcome by that name and the variables carry no built-in of
+ *   it. The item model marks such a name, so a checked item never reaches that failure.
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#ExpDefault
+ */
+const evaluateDefault: Evaluator<"default"> = (expression, scope) => {
+  const declaration =
+    scope.item.responses.get(expression.identifier) ??
+    scope.item.outcomes.get(expression.identifier);
+  if (declaration !== undefined) {
+    return Result.succeed(
+      Option.getOrElse(declaration.defaultValue, () =>
+        nullOf(declaration.baseType, declaration.cardinality),
+      ),
+    );
+  }
+
+  return Result.fromOption(
+    Option.map(builtInValue(scope.variables, expression.identifier), (value) =>
+      nullOf(value.baseType, value.cardinality),
+    ),
+    () =>
+      new UnknownIdentifierError({
+        holder: "item",
+        identifier: expression.identifier,
+        role: "variable",
+      }),
+  );
+};
+
+/**
+ * Give the value of a `qti-null`: NULL, "treated as if it is of any desired base-type".
+ *
+ * A value carries a base type and a cardinality, so this NULL carries a single string's, the type
+ * of an empty string, which the information model also treats as NULL. No check reads them: the
+ * kind's rule types it any base type, which every operand rule and every check of a type accepts,
+ * and an outcome set to it stores its own typed NULL (`setOutcome` in
+ * `#plate/engine/evaluate.ts`).
+ *
+ * @returns The NULL.
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#AbstractAttribute_ExpressionGroup_qti-null
+ */
+const evaluateNull: Evaluator<"null"> = () => Result.succeed(nullOf("string", "single"));
+
+/**
+ * The references family's evaluators by kind: M1's five, `qti-default` and `qti-null` landed, and
+ * the stub marker for each kind the family has not landed (ruling R2), which the dispatcher in
+ * `#plate/engine/evaluate.ts` never reaches on a checked item.
  */
 export const referencesEvaluators: FamilyTable<
   | "base-value"
@@ -389,10 +449,10 @@ export const referencesEvaluators: FamilyTable<
 > = {
   "base-value": evaluateBaseValue,
   correct: evaluateCorrect,
-  default: "unlanded",
+  default: evaluateDefault,
   "map-response": evaluateMapResponse,
   "map-response-point": evaluateMapResponsePoint,
-  null: "unlanded",
+  null: evaluateNull,
   "random-float": "unlanded",
   "random-integer": "unlanded",
   variable: evaluateVariable,
