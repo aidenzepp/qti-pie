@@ -6,6 +6,8 @@ import type { Configuration } from "#plate/configuration.ts";
 import { readCorpusFile } from "#plate/document/corpus.ts";
 import { nullOf } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
+import { openPackage } from "#plate/package/open.ts";
+import { manifestFile } from "#plate/package/store.ts";
 import { redact, render } from "#plate/render.ts";
 import type { TestSession } from "#plate/session/session.ts";
 import {
@@ -21,6 +23,7 @@ import type { Current, ItemView } from "#plate/session/start.ts";
 import { open } from "#plate/validate/open.ts";
 import { acceptedItem } from "#plate/validate/verdict.ts";
 import type { Accepted, AcceptedTest } from "#plate/validate/verdict.ts";
+import { manifestNamespace } from "#plate/vocabulary.ts";
 
 /**
  * The folder of the Beginner's Guide examples under the corpus root.
@@ -231,6 +234,63 @@ const startedWith = Effect.fnUntraced(function* startedWith(
   );
 
   return startTest(test, new Map([["first", item]]), yield* configure({}), {
+    instance,
+    now: startedAt,
+  });
+});
+
+/**
+ * Where a hand-built package sits and how it names its files: the package's location, the real
+ * name of the directory that holds its test and its item and the item's real file name, and both
+ * as the manifest's and the test's `href` values write them.
+ */
+interface PackagePlace {
+  readonly directory: string;
+  readonly directoryHref: string;
+  readonly item: string;
+  readonly itemHref: string;
+  readonly location: string;
+}
+
+/**
+ * Open a hand-built package, a test at `<directory>/test.xml` whose one item ref `first` names an
+ * item at `<directory>/items/<item>`, and start a session of its test with the items
+ * `openPackage` resolved for it, as a host does.
+ *
+ * @param place Where the package sits and how it names its files.
+ * @returns What `startTest` returned.
+ */
+const startedFromPackage = Effect.fnUntraced(function* startedFromPackage(place: PackagePlace) {
+  const encoder = new TextEncoder();
+  const testHref = `${place.directoryHref}/test.xml`;
+  const itemHref = `${place.directoryHref}/items/${place.itemHref}`;
+  const manifest = [
+    `<manifest xmlns="${manifestNamespace}" identifier="M"><metadata><schema>QTI Package</schema>`,
+    "<schemaversion>3.0.0</schemaversion></metadata><organizations/><resources>",
+    `<resource identifier="T" type="imsqti_test_xmlv3p0" href="${testHref}"><file href="${testHref}"/></resource>`,
+    `<resource identifier="I" type="imsqti_item_xmlv3p0" href="${itemHref}"><file href="${itemHref}"/></resource>`,
+    "</resources></manifest>",
+  ].join("");
+  const texts: readonly (readonly [path: string, text: string])[] = [
+    [manifestFile, manifest],
+    [`${place.directory}/test.xml`, testXml("hrefs", [["first", `items/${place.itemHref}`]])],
+    [
+      `${place.directory}/items/${place.item}`,
+      itemXml("first", { choices: ["A", "B"], defaultValue: false, shuffle: false }),
+    ],
+  ];
+  const files = new Map(texts.map(([path, text]) => [path, encoder.encode(text)] as const));
+  const verdict = yield* openPackage(place.location, files);
+  if (verdict.verdict !== "accepted" && verdict.verdict !== "accepted-with-unsupported") {
+    return assert.fail(`the package at ${place.location} is ${verdict.verdict}`);
+  }
+
+  const [delivery] = verdict.accepted.tests.values();
+  if (delivery === undefined) {
+    return assert.fail(`the package at ${place.location} holds no test`);
+  }
+
+  return startTest(delivery.test, delivery.items, yield* configure({}), {
     instance,
     now: startedAt,
   });
@@ -466,6 +526,60 @@ describe("startTest", () => {
         "tests/a%20b%zz.xml",
       );
     }),
+  );
+
+  it.effect(
+    "starts every test openPackage accepted: a location holding %41 or ./, a directory named d%41 or d#1, and a URL location naming its item a%20b.xml",
+    () =>
+      Effect.gen(function* packagedHrefs() {
+        const plain: PackagePlace = {
+          directory: "d",
+          directoryHref: "d",
+          item: "first.xml",
+          itemHref: "first.xml",
+          location: "pkgs/m2",
+        };
+        const places: readonly (readonly [string, PackagePlace])[] = [
+          ["control", plain],
+          [
+            "control: a directory named dA, written d%41",
+            { ...plain, directory: "dA", directoryHref: "d%41" },
+          ],
+          ["a location holding %41", { ...plain, location: "pkgs/m%41" }],
+          ["a location holding ./", { ...plain, location: "./pkgs/m2" }],
+          ["a directory named d%41", { ...plain, directory: "d%41", directoryHref: "d%2541" }],
+          ["a directory named d#1", { ...plain, directory: "d#1", directoryHref: "d%231" }],
+          [
+            "a URL location naming its item a%20b.xml",
+            {
+              ...plain,
+              item: "a b.xml",
+              itemHref: "a%20b.xml",
+              location: "https://example.org/pkgs/m2",
+            },
+          ],
+        ];
+
+        const outcomes = yield* Effect.all(
+          places.map(([label, place]) =>
+            Effect.map(startedFromPackage(place), (outcome) => [
+              label,
+              Result.match(outcome, {
+                onFailure: (failure) =>
+                  failure._tag === "TestNotDeliverable"
+                    ? `${failure.reason}: expected ${failure.expected}`
+                    : failure._tag,
+                onSuccess: () => "started",
+              }),
+            ]),
+          ),
+        );
+
+        assert.deepStrictEqual(
+          outcomes,
+          places.map(([label]) => [label, "started"]),
+        );
+      }),
   );
 
   it.effect("refuses a session instance checkInstance refuses, and an invalid now", () =>
