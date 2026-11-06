@@ -78,6 +78,7 @@ export const givesText = (nodes: readonly PayloadNode[]): boolean =>
       }
       case "choice":
       case "extended-text":
+      case "inline-choice":
       case "text-entry": {
         // No content holds an interaction: the emitter refuses one there (`nestedInteraction`).
         return false;

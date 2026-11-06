@@ -78,13 +78,13 @@ const nestedPlaces: Readonly<Record<NestedWithin, string>> = {
 };
 
 /**
- * An interaction met inside a Prompt or a choice's content, a defect that no checked item can
- * cause.
+ * An interaction met inside a Prompt, a choice's content or an Inline Choice's Label, a defect
+ * that no checked item can cause.
  *
- * It cannot occur through the library: QTI's schema admits no interaction inside a Prompt or a
- * choice's content, `check` refuses one, `redact` copies only what `check` accepted, and
- * `decodeRedacted` refuses JSON that holds one. Only a payload built by hand can hold one. It is
- * thrown, never returned.
+ * It cannot occur through the library: QTI's schema admits no interaction inside a Prompt, a
+ * choice's content or an Inline Choice's Label, `check` refuses one, `redact` copies only what
+ * `check` accepted, and `decodeRedacted` refuses JSON that holds one. Only a payload built by hand
+ * can hold one. It is thrown, never returned.
  */
 export class NestedInteractionDefect extends Data.TaggedError("NestedInteractionDefect")<{
   readonly kind: InteractionPayload["kind"];
@@ -100,8 +100,9 @@ export class NestedInteractionDefect extends Data.TaggedError("NestedInteraction
 }
 
 /**
- * Give the render function for content where QTI's schema admits no interaction, a Prompt's or a
- * choice's: meeting one is a defect, since only a payload built by hand can hold one.
+ * Give the render function for content where QTI's schema admits no interaction, a Prompt's, a
+ * choice's or an Inline Choice's Label's: meeting one is a defect, since only a payload built by
+ * hand can hold one.
  *
  * @param within Where the content sits.
  * @returns A render function that throws {@link NestedInteractionDefect}, naming the interaction
@@ -682,6 +683,7 @@ const nodeOf = (node: PayloadNode, walk: Walk): Result.Result<readonly Node[], P
     }
     case "choice":
     case "extended-text":
+    case "inline-choice":
     case "text-entry": {
       return Result.map(walk.renderInteraction(node), (root) => [root]);
     }
@@ -696,9 +698,10 @@ const nodeOf = (node: PayloadNode, walk: Walk): Result.Result<readonly Node[], P
 
 /**
  * Collect the levels of the headings the emitter writes among payload nodes, in document order: a
- * heading the HTML subset keeps, below elements it keeps, and in an interaction's Prompt or choice
- * content, which {@link emitNodes} writes with the same shift. A heading below an element outside
- * {@link htmlSubset} is dropped with that element, so it is left out.
+ * heading the HTML subset keeps, below elements it keeps, and in an interaction's Prompt, choice
+ * content or Inline Choice Label, which {@link emitNodes} writes with the same shift. An Inline
+ * Choice's choice content is written as option text, never as nodes, so it gives none. A heading
+ * below an element outside {@link htmlSubset} is dropped with that element, so it is left out.
  *
  * @param nodes The payload nodes.
  * @returns Each written heading's authored level, 1 to 6.
@@ -723,6 +726,9 @@ const headingLevelsIn = (nodes: readonly PayloadNode[]): readonly number[] =>
       }
       case "extended-text": {
         return headingLevelsIn(Option.getOrElse(node.prompt, () => []));
+      }
+      case "inline-choice": {
+        return headingLevelsIn(Option.getOrElse(node.label, () => []));
       }
       case "notice":
       case "text":

@@ -279,6 +279,9 @@ const page = (built: Payload): Effect.Effect<Element> =>
             case "choice": {
               return assert.fail("This test renders no Choice.");
             }
+            case "inline-choice": {
+              return assert.fail("This test renders no Inline Choice.");
+            }
             default: {
               return interaction satisfies never;
             }
