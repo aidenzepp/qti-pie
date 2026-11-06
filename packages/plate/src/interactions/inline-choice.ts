@@ -275,12 +275,12 @@ export const renderInlineChoice = (
     const replacement = (part: InlineChoicePart) =>
       Option.getOrUndefined(state.parts.replacementFor(owner, part));
     const props = connect(interaction, payload, state.locale);
-    const placeOption = (row: PartRow, option: OptionProps, part: "option" | "placeholder") =>
-      applyPart(row, option.props, [text(option.text)], replacement(part));
+    const placeOption = (part: "option" | "placeholder", option: OptionProps) =>
+      applyPart(rows[part], option.props, [text(option.text)], replacement(part));
 
-    const placeholder = yield* placeOption(rows.placeholder, props.placeholder, "placeholder");
+    const placeholder = yield* placeOption("placeholder", props.placeholder);
     const options = yield* pipe(
-      props.options.map((option) => placeOption(rows.option, option, "option")),
+      props.options.map((option) => placeOption("option", option)),
       Result.all,
     );
     const control = yield* applyPart(

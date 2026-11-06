@@ -707,18 +707,18 @@ export const tabOrder = (tree: Element): readonly Element[] => {
  * along {@link tabOrder}, recomputed from the current state. Arrow keys on a radio move to the next
  * or previous enabled radio of its group, wrapping, and check it. Space checks a radio, toggles a
  * checkbox and types a space into a text control. Typed text appends to a focused text `input` or
- * `textarea`, and on a focused drop-down `select` selects an option by type-ahead ({@link
- * typeAhead}). Enter adds a line feed in a `textarea`, submits from a text `input` by implicit
- * submission and from a drop-down `select` through its form's first enabled submit button ({@link
- * selectSubmits}). Enter or Space on a submit button submits its form. A form is the focused
- * control's nearest `form` ancestor; a control outside every form submits nothing. On a drop-down
- * `select`, ArrowDown, ArrowUp and Space open its list without changing the value, as measured in
- * Chromium and WebKit on macOS, so the walk leaves the value; ArrowLeft and ArrowRight leave it
- * too, unmeasured. Not modelled: a `select`'s open list, `multiple` and a
- * `size` above 1 (both `other`), `optgroup`, an `option`'s `label`, `a` activation, `fieldset
- * disabled`, `readonly`, `maxlength`, constraint validation, the submitter's own entry, Enter on a
- * focused radio or checkbox (a browser submits the form implicitly from those too; the walk leaves
- * focus where it is), and a named `hidden` input (a browser posts it; the walk's `other` kind posts
+ * `textarea`, and on a focused drop-down `select` selects an option by type-ahead
+ * ({@link typeAhead}). Enter adds a line feed in a `textarea`, submits from a text `input` by
+ * implicit submission and from a drop-down `select` through its form's first enabled submit button
+ * ({@link selectSubmits}). Enter or Space on a submit button submits its form. A form is the
+ * focused control's nearest `form` ancestor; a control outside every form submits nothing. On a
+ * drop-down `select`, ArrowDown, ArrowUp and Space open its list without changing the value, as
+ * measured in Chromium and WebKit on macOS, so the walk leaves the value; ArrowLeft and ArrowRight
+ * leave it too, unmeasured. Not modelled: a `select`'s open list, `multiple` and a `size` above 1
+ * (both `other`), `optgroup`, an `option`'s `label`, `a` activation, `fieldset disabled`,
+ * `readonly`, `maxlength`, constraint validation, the submitter's own entry, Enter on a focused
+ * radio or checkbox (a browser submits the form implicitly from those too; the walk leaves focus
+ * where it is), and a named `hidden` input (a browser posts it; the walk's `other` kind posts
  * nothing).
  *
  * @param tree The tree's root.
