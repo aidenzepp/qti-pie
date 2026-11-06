@@ -7,6 +7,7 @@ import * as cp from "#pantry/schema/kinds/cp.ts";
 import * as cpx from "#pantry/schema/kinds/cpx.ts";
 import * as csmd from "#pantry/schema/kinds/csmd.ts";
 import * as drd from "#pantry/schema/kinds/drd.ts";
+import * as foreign from "#pantry/schema/kinds/foreign.ts";
 import * as generic from "#pantry/schema/kinds/generic.ts";
 import type {
   AdmissionRow,
@@ -16,6 +17,7 @@ import type {
 import * as html from "#pantry/schema/kinds/html.ts";
 import * as lom from "#pantry/schema/kinds/lom.ts";
 import * as qmd from "#pantry/schema/kinds/qmd.ts";
+import * as test from "#pantry/schema/kinds/test.ts";
 import * as ud from "#pantry/schema/kinds/ud.ts";
 import * as xi from "#pantry/schema/kinds/xi.ts";
 import { AttributeName, NodeKind } from "#pantry/schema/node.ts";
@@ -27,7 +29,7 @@ const htmlAdmission = html.admission;
 
 const versions = ["3.0.0", "3.0.1"] as const satisfies readonly SchemaVersionHandle[];
 
-const composed: readonly AdmissionRow[] = [...asiAdmission, ...htmlAdmission];
+const composed: readonly AdmissionRow[] = [...asiAdmission, ...htmlAdmission, ...test.admission];
 
 const key = (version: string, parent: string, child: string): string =>
   `${version}|${parent}|${child}`;
@@ -261,6 +263,8 @@ const registries: readonly Readonly<Record<string, RegistryRow>>[] = [
   csmd.registry,
   ud.registry,
   xi.registry,
+  test.registry,
+  foreign.registry,
 ];
 
 const attributeTuples: readonly (readonly string[])[] = [
@@ -275,6 +279,8 @@ const attributeTuples: readonly (readonly string[])[] = [
   csmd.attributes,
   ud.attributes,
   xi.attributes,
+  test.attributes,
+  foreign.attributes,
 ];
 
 describe("the roster append", () => {
@@ -302,8 +308,8 @@ describe("the roster append", () => {
     }
   });
 
-  it("composes NodeKind from the eleven tuples", () => {
-    const sum = [generic, asi, html, cp, lom, qmd, cpx, drd, csmd, ud, xi].reduce(
+  it("composes NodeKind from the thirteen tuples", () => {
+    const sum = [generic, asi, html, cp, lom, qmd, cpx, drd, csmd, ud, xi, test, foreign].reduce(
       (n, kinds) => n + kinds.kinds.length,
       0,
     );
@@ -315,6 +321,7 @@ describe("the roster append", () => {
     for (const [kinds, registry] of [
       [asi.kinds, asi.registry],
       [html.kinds, html.registry],
+      [test.kinds, test.registry],
     ] as const) {
       assert.deepStrictEqual(Object.keys(registry).toSorted(), [...kinds].toSorted());
     }
@@ -322,8 +329,14 @@ describe("the roster append", () => {
 
   it("gives every inventory handle a registry attribute set equal to its entry's names", () => {
     for (const entry of Object.values(inventory)) {
-      const row = { ...asi.registry, ...html.registry }[entry.handle];
+      const row = { ...asi.registry, ...html.registry, ...test.registry }[entry.handle];
       assert.isDefined(row, entry.handle);
+      // A test kind whose heading slice has not filled its row waits: `kinds/test.test.ts`'s
+      // `awaiting` pins which. p5-19 fills the last row and deletes this skip.
+      if (entry.handle in test.registry && row?.attributes.length === 0) {
+        continue;
+      }
+
       assert.deepStrictEqual(
         new Set(row?.attributes),
         new Set(entry.attributes.map((attribute) => attribute.name)),

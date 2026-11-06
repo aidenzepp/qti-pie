@@ -5,8 +5,10 @@ import { compounds, scanSheet, uses, varReferences } from "#plate/test/css.ts";
 import type { Compound, CssUnsupported, Use } from "#plate/test/css.ts";
 
 /**
- * Lines 15 to 34 of `work/planning/095fa660/fmt-probe/formatted.css`, what `vp fmt` writes for this
- * package's constructs, copied byte for byte.
+ * What `vp fmt` writes for this package's constructs, copied byte for byte from its output: one
+ * declaration per line, attribute values in double quotes, and a selector too long for one line
+ * broken inside its parentheses, each argument of `:where(` and `:has(` on a line of its own and
+ * each closing parenthesis on its own line.
  */
 const formatted = `:where(
   [data-slot="choice-interaction-choice"]:has(

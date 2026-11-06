@@ -1,7 +1,8 @@
 import { Effect, Option } from "effect";
 
-import { collapse, replace, UnmodeledVocabulary } from "#pantry/import/tree.ts";
-import type { WhiteSpace } from "#pantry/import/tree.ts";
+import { UnmodeledVocabulary } from "#pantry/import/tree.ts";
+import { collapse, replace } from "#pantry/import/whitespace.ts";
+import type { WhiteSpace } from "#pantry/import/whitespace.ts";
 import type {
   AttributeValue,
   ExpressionNode,
@@ -16,6 +17,7 @@ import type {
 import * as asi from "#pantry/schema/kinds/asi.ts";
 import * as xi from "#pantry/schema/kinds/xi.ts";
 import { ncName, xsDouble, xsInteger } from "#pantry/schema/patterns.ts";
+import { attributeWildcard, wildcardHost } from "#pantry/schema/seed/wildcard.ts";
 import type { Element } from "@qti-pie/crust/tree.ts";
 
 /**
@@ -192,6 +194,19 @@ const ruleEntries: readonly RuleEntry[] = [
 ];
 
 /**
+ * The three roots of the `expression` language, each a holder of one expression: a pre-condition,
+ * a branch rule with its `target`, and a template default with its `template-identifier`.
+ */
+const expressionRoots: ReadonlyMap<string, RuleEntry> = new Map<string, RuleEntry>([
+  ["qti-pre-condition", { attributes: [], class: "holder", kind: "qti-pre-condition" }],
+  ["qti-branch-rule", { attributes: ["target"], class: "holder", kind: "qti-branch-rule" }],
+  [
+    "qti-template-default",
+    { attributes: ["template-identifier"], class: "holder", kind: "qti-template-default" },
+  ],
+]);
+
+/**
  * What an element name is in the vocabulary: an expression or a rule with its entry, or one of the
  * two XInclude elements.
  */
@@ -262,7 +277,9 @@ const whiteSpaceClasses = {
   shape: "preserve",
   step: "collapse",
   substring: "collapse",
+  target: "collapse",
   template: "collapse",
+  "template-identifier": "collapse",
   "template-location": "collapse",
   tolerance: "collapse",
   "tolerance-mode": "preserve",
@@ -280,6 +297,32 @@ const xsiNamespace = "http://www.w3.org/2001/XMLSchema-instance";
 const asiNamespace = asi.registry["qti-response-processing"].namespace;
 
 const xIncludeNamespace = xi.registry["xi:include"].namespace;
+
+/**
+ * The kinds this parser classifies that carry a wildcard, read from the seed rows rather than
+ * listed: the ones whose attribute wildcard and whose element wildcard admit foreign content.
+ */
+const wildcardKinds = ["qti-custom-operator", "xi:fallback", "xi:include"] as const;
+
+const attributeWildcardHosts: ReadonlySet<string> = new Set(
+  attributeWildcard.map((row) => row.host).filter((host) => wildcardKinds.some((k) => k === host)),
+);
+
+const elementWildcardHosts: ReadonlySet<string> = new Set(
+  wildcardHost.map((row) => row.host).filter((host) => wildcardKinds.some((k) => k === host)),
+);
+
+/**
+ * The attributes XML Schema declares in the `xsi` namespace, which every element carries and the
+ * tree walk judges and stores: `xsi:schemaLocation`, `xsi:type`, `xsi:nil` and
+ * `xsi:noNamespaceSchemaLocation`.
+ */
+const declaredXsiNames: ReadonlySet<string> = new Set([
+  "nil",
+  "noNamespaceSchemaLocation",
+  "schemaLocation",
+  "type",
+]);
 
 /**
  * The element children of `element`, in document order, each with its index among them.
@@ -335,30 +378,46 @@ const applyWhiteSpace = (lexical: string, whiteSpace: WhiteSpace): string => {
 /**
  * Read an element's attributes, each in both forms and under its `whiteSpace` class.
  *
- * Namespace declarations and `xsi:schemaLocation` are admitted on every element and are not
- * attributes of the kind; any other attribute outside `allowed` is refused, naming the first.
+ * Namespace declarations and the four `xsi` attributes XML Schema declares are admitted on every
+ * element and are not attributes of the kind; any other attribute outside `allowed` is refused,
+ * naming the first. On a host of an attribute wildcard, an attribute with a namespace is wildcard
+ * content: it is passed over, not read, and the tree walk judges it. On an element that carries
+ * `xsi:type` every attribute outside `allowed` is passed over the same way: a derived type may add
+ * it, and the tree walk stores it or refuses it.
  */
 const readAttributes = (
   element: Element,
   allowed: readonly string[],
+  kind: string,
 ): Effect.Effect<ReadonlyMap<string, AttributeValue>, UnmodeledVocabulary> =>
   Effect.gen(function* readAttributeValues() {
     const read = new Map<string, AttributeValue>();
+    const typed = element.attributes.some(
+      (attribute) => attribute.namespace === xsiNamespace && attribute.local === "type",
+    );
     for (const attribute of element.attributes) {
       if (attribute.namespace === xmlnsNamespace) {
         continue;
       }
 
-      if (attribute.namespace === xsiNamespace && attribute.local === "schemaLocation") {
+      if (attribute.namespace === xsiNamespace && declaredXsiNames.has(attribute.local)) {
+        continue;
+      }
+
+      if (attribute.namespace !== "" && attributeWildcardHosts.has(kind)) {
         continue;
       }
 
       const whiteSpace = whiteSpaceOf.get(attribute.local);
-      if (
+      const outside =
         attribute.namespace !== "" ||
         whiteSpace === undefined ||
-        !allowed.includes(attribute.local)
-      ) {
+        !allowed.includes(attribute.local);
+      if (outside && typed) {
+        continue;
+      }
+
+      if (outside) {
         return yield* new UnmodeledVocabulary({
           kind: "attribute",
           name: attribute.qname,
@@ -395,6 +454,70 @@ const extend = (position: Position, index: number): Position => ({
   path: [...position.path, index],
 });
 
+type ParseInclude = (
+  element: Element,
+  position: Position,
+) => Effect.Effect<IncludeNode, UnmodeledVocabulary>;
+
+/**
+ * The `xi:include` elements in a wildcard child's subtree, in document order: the child itself when
+ * it is one, else the ones under it. Each is parsed as any include is, so its attributes are read
+ * once, by the one parser.
+ */
+const wildcardIncludes = (
+  element: Element,
+  position: Position,
+  parseInclude: ParseInclude,
+): Effect.Effect<readonly IncludeNode[], UnmodeledVocabulary> =>
+  Effect.gen(function* wildcardIncludeSearch() {
+    if (element.namespace === xIncludeNamespace && element.local === "include") {
+      return [yield* parseInclude(element, position)];
+    }
+
+    const found: IncludeNode[] = [];
+    for (const { child, index } of elementChildren(element)) {
+      found.push(...(yield* wildcardIncludes(child, extend(position, index), parseInclude)));
+    }
+
+    return found;
+  });
+
+/**
+ * Parse an `xi:include`, keeping its `xi:fallback` child as an element.
+ *
+ * Includes are never resolved: the node stands for the element as written, whether or not its
+ * `href` names a file.
+ */
+export const parseInclude = (
+  element: Element,
+  position: Position,
+): Effect.Effect<IncludeNode, UnmodeledVocabulary> =>
+  Effect.gen(function* parseIncludeElement() {
+    const attributes = yield* readAttributes(element, includeAttributes, "xi:include");
+    let fallback: Option.Option<Element> = Option.none();
+    const includes: IncludeNode[] = [];
+    for (const { child, index } of elementChildren(element)) {
+      const classified = classify(child);
+      if (elementWildcardHosts.has("xi:include") && child.namespace !== xIncludeNamespace) {
+        includes.push(...(yield* wildcardIncludes(child, extend(position, index), parseInclude)));
+        continue;
+      }
+
+      if (
+        Option.isNone(classified) ||
+        classified.value._tag !== "fallback" ||
+        Option.isSome(fallback)
+      ) {
+        return yield* refuseElement(child, element);
+      }
+
+      yield* readAttributes(child, [], "xi:fallback");
+      fallback = Option.some(child);
+    }
+
+    return { attributes, element, fallback, includes, kind: "xi:include", position };
+  });
+
 /**
  * Parse an expression element and, recursively, its operands.
  *
@@ -407,11 +530,17 @@ const parseExpression = (
   position: Position,
 ): Effect.Effect<ExpressionNode, UnmodeledVocabulary> =>
   Effect.gen(function* parseExpressionElement() {
-    const attributes = yield* readAttributes(element, entry.attributes);
+    const attributes = yield* readAttributes(element, entry.attributes, entry.kind);
     const operands: ExpressionNode[] = [];
+    const includes: IncludeNode[] = [];
     for (const { child, index } of elementChildren(element)) {
       const classified = classify(child);
       if (Option.isNone(classified) || classified.value._tag !== "expression") {
+        if (elementWildcardHosts.has(entry.kind)) {
+          includes.push(...(yield* wildcardIncludes(child, extend(position, index), parseInclude)));
+          continue;
+        }
+
         return yield* refuseElement(child, element);
       }
 
@@ -421,41 +550,12 @@ const parseExpression = (
     return {
       attributes,
       element,
+      includes,
       kind: entry.kind,
       operands,
       position,
       text: element.local === "qti-base-value" ? Option.some(textOf(element)) : Option.none(),
     };
-  });
-
-/**
- * Parse an `xi:include`, keeping its `xi:fallback` child as an element.
- *
- * Includes are never resolved: the node stands for the element as written, whether or not its
- * `href` names a file.
- */
-const parseInclude = (
-  element: Element,
-  position: Position,
-): Effect.Effect<IncludeNode, UnmodeledVocabulary> =>
-  Effect.gen(function* parseIncludeElement() {
-    const attributes = yield* readAttributes(element, includeAttributes);
-    let fallback: Option.Option<Element> = Option.none();
-    for (const { child } of elementChildren(element)) {
-      const classified = classify(child);
-      if (
-        Option.isNone(classified) ||
-        classified.value._tag !== "fallback" ||
-        Option.isSome(fallback)
-      ) {
-        return yield* refuseElement(child, element);
-      }
-
-      yield* readAttributes(child, []);
-      fallback = Option.some(child);
-    }
-
-    return { attributes, element, fallback, kind: "xi:include", position };
   });
 
 /**
@@ -509,7 +609,7 @@ const parseHost = (
   position: Position,
 ): Effect.Effect<RuleNode, UnmodeledVocabulary> =>
   Effect.gen(function* parseRuleElement() {
-    const attributes = yield* readAttributes(element, entry.attributes);
+    const attributes = yield* readAttributes(element, entry.attributes, entry.kind);
     const branches: RuleNode[] = [];
     const statements: (IncludeNode | RuleNode)[] = [];
     let expression: Option.Option<ExpressionNode> = Option.none();
@@ -560,8 +660,12 @@ const parseHost = (
  * element the host's content model does not take, is `UnmodeledVocabulary` naming it. An
  * `xi:include` is parsed as data and never resolved.
  *
+ * An `expression` root (`qti-pre-condition`, `qti-branch-rule`, `qti-template-default`) is one
+ * holder of one expression, the AST's single top-level rule; the three processing roots are not
+ * admitted in that language, and an expression root is not admitted in the other three.
+ *
  * @param root - The `qti-response-processing`, `qti-outcome-processing` or
- *   `qti-template-processing` element.
+ *   `qti-template-processing` element, or for the `expression` language the root of one expression.
  * @param language - The processing language the root is written in.
  * @returns The AST, or the refusal naming the first element or attribute outside the vocabulary.
  */
@@ -570,6 +674,19 @@ export const parseProcessing = (
   language: Language,
 ): Effect.Effect<ProcessingAst, UnmodeledVocabulary> =>
   Effect.gen(function* parseProcessingRoot() {
+    if (language === "expression") {
+      const held = root.namespace === asiNamespace ? expressionRoots.get(root.local) : undefined;
+      if (held === undefined) {
+        return yield* new UnmodeledVocabulary({
+          kind: "element",
+          name: root.qname,
+          parent: Option.none(),
+        });
+      }
+
+      return { language, root, rules: [yield* parseHost(root, held, { path: [] })] };
+    }
+
     const classified = classify(root);
     if (
       Option.isNone(classified) ||

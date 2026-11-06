@@ -9,12 +9,12 @@
  * The first characters of an XML Namespaces NCName: the XML 1.0 NameStartChar production without
  * the colon, written as classes because grizzle's grammar has no `\p`.
  */
-const ncNameStart = "A-Z_a-zÀ-ÖØ-öø-˿Ͱ-ͽͿ-῿‌-‍⁰-↏Ⰰ-⿯、-퟿豈-﷏ﷰ-�\u{10000}-\u{EFFFF}" as const;
+export const ncNameStart = "A-Z_a-zÀ-ÖØ-öø-˿Ͱ-ͽͿ-῿‌-‍⁰-↏Ⰰ-⿯、-퟿豈-﷏ﷰ-�\u{10000}-\u{EFFFF}" as const;
 
 /**
  * The later characters of an NCName: the start characters and the NameChar additions of XML 1.0.
  */
-const ncNameContinuation = `${ncNameStart}\\-.0-9·̀-ͯ‿-⁀` as const;
+export const ncNameContinuation = `${ncNameStart}\\-.0-9·̀-ͯ‿-⁀` as const;
 
 /**
  * The NCName production without anchors, bounded to 256 characters because identifiers sit in keys

@@ -26,7 +26,15 @@ import {
 } from "@bjornpagen/grizzle";
 import type { FieldBase } from "@bjornpagen/grizzle";
 import { CpSchema, XsBoolean } from "#pantry/schema/content/rosters.ts";
-import { Edge, Node, RootKind, SchemaVersion, Tree } from "#pantry/schema/node.ts";
+import {
+  AttributeName,
+  Edge,
+  Node,
+  NodeKind,
+  RootKind,
+  SchemaVersion,
+  Tree,
+} from "#pantry/schema/node.ts";
 import {
   AccessMode,
   AccessModeAdapted,
@@ -485,9 +493,15 @@ export const variantDrdArms = {
 };
 
 /**
- * What holds an `xs:ID` of a manifest: the manifest itself, a resource, or a variant.
+ * What holds an `xs:ID` of a manifest: the manifest itself, a resource, a variant, or an element's
+ * `xml:id`.
  */
-export const ManifestIdHolder = closed("ManifestIdHolder", ["manifest", "resource", "variant"]);
+export const ManifestIdHolder = closed("ManifestIdHolder", [
+  "manifest",
+  "resource",
+  "variant",
+  "xmlId",
+]);
 
 /**
  * An `xs:ID` of a manifest, one row per value: the manifest document has one ID space, so a
@@ -528,6 +542,24 @@ export const ManifestIdOfVariant = relation(
 );
 
 /**
+ * The `ManifestId` of an `xml:id`: an element of the manifest tree whose `xml:id` shares the
+ * manifest's `xs:ID` space. `attribute` is always `xml:id`; `foreign-attributes.ts` holds the
+ * statements that read `AttributeAdmission`. The `lom` set declares no `xml:id`, so no record
+ * arm exists.
+ */
+export const ManifestXmlId = relation(
+  "ManifestXmlId",
+  {
+    attribute: closedId(AttributeName),
+    id: ManifestIdentifier,
+    kind: closedId(NodeKind),
+    node: uuid,
+    package: uuid,
+  },
+  ["package", "id"],
+);
+
+/**
  * The statements of the manifest-wide `xs:ID` space. Each id belongs to a package, and the
  * alternatives statement sends each holder to its arm. Each arm is mirrored onto its owner's
  * `identifier`, so every package, resource and variant has exactly its id row and no id row lacks
@@ -540,10 +572,13 @@ const manifestIdRules = [
     manifest: ManifestIdOfManifest,
     resource: ManifestIdOfResource,
     variant: ManifestIdOfVariant,
+    xmlId: ManifestXmlId,
   }),
   mirrors(on(ManifestIdOfManifest, "package", "id"), on(Package, "id", "identifier")),
   mirrors(on(ManifestIdOfResource, "package", "id"), on(Resource, "package", "identifier")),
   mirrors(on(ManifestIdOfVariant, "package", "id"), on(Variant, "package", "identifier")),
+  key(ManifestXmlId, ["node"]),
+  contained(on(ManifestXmlId, "node", "package", "kind"), on(Node, "id", "tree", "kind")),
 ] as const;
 
 /**
@@ -583,6 +618,7 @@ export const relations = {
   ManifestMetadata,
   ManifestSchema,
   ManifestSchemaVersion,
+  ManifestXmlId,
   Organizations,
   Package,
   PackageEntry,

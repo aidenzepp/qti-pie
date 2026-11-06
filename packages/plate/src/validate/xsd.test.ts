@@ -17,7 +17,13 @@ import {
   xmlnsNamespace,
   xsdNamespace,
 } from "#plate/document/source.ts";
-import type { AttributeType, ChildName, ElementTable } from "#plate/validate/xsd.ts";
+import type {
+  AttributeTable,
+  AttributeType,
+  ChildName,
+  ContentTable,
+  ElementTable,
+} from "#plate/validate/xsd.ts";
 import { generateTables, patternEquivalents, Tables } from "#plate/validate/xsd.ts";
 
 /**
@@ -36,12 +42,17 @@ const xs = (
 
 /**
  * Wrap definitions in an `xs:schema` whose target and default namespace is QTI's, whose local
- * elements are qualified, and which binds `xs`, `m3` and `xi`, as the QTI XSD's root does.
+ * elements are qualified, and which binds `xs`, `m3` and `xi`, as the QTI XSD's root does, with
+ * further attributes on the root.
  *
+ * @param attributes The root's further attributes, such as `blockDefault`.
  * @param definitions The schema's top-level definitions.
  * @returns The fragment as a source document.
  */
-const schema = (...definitions: readonly SourceElement[]): SourceDocument =>
+const schemaWith = (
+  attributes: readonly SourceAttribute[],
+  ...definitions: readonly SourceElement[]
+): SourceDocument =>
   doc(
     "fragment.xsd",
     xs(
@@ -53,10 +64,20 @@ const schema = (...definitions: readonly SourceElement[]): SourceDocument =>
         attr("xi", xincludeNamespace, xmlnsNamespace),
         attr("targetNamespace", qtiNamespace),
         attr("elementFormDefault", "qualified"),
+        ...attributes,
       ],
       definitions,
     ),
   );
+
+/**
+ * Wrap definitions in an `xs:schema` as {@link schemaWith} does, with no further root attributes.
+ *
+ * @param definitions The schema's top-level definitions.
+ * @returns The fragment as a source document.
+ */
+const schema = (...definitions: readonly SourceElement[]): SourceDocument =>
+  schemaWith([], ...definitions);
 
 /**
  * Construct an `xs:attribute` from its XSD attributes, given as name and value pairs.
@@ -84,6 +105,24 @@ const attribute = (
  */
 const complexType = (name: string, ...children: readonly SourceElement[]): SourceElement =>
   xs("complexType", [attr("name", name)], children);
+
+/**
+ * Construct a named `xs:simpleType` holding one derivation.
+ *
+ * @param name The type's name.
+ * @param derivation Its `xs:restriction`, `xs:list` or `xs:union`.
+ * @returns The simple type.
+ */
+const simpleType = (name: string, derivation: SourceElement): SourceElement =>
+  xs("simpleType", [attr("name", name)], [derivation]);
+
+/**
+ * Construct an `xs:restriction` of a base, with no facets.
+ *
+ * @param base The base's QName, such as `xs:string`.
+ * @returns The restriction.
+ */
+const restrictionOf = (base: string): SourceElement => xs("restriction", [attr("base", base)]);
 
 /**
  * Construct a global `xs:element` of a named type.
@@ -132,6 +171,46 @@ const groupRef = (ref: string): SourceElement => xs("group", [attr("ref", ref)])
 const qti = (local: string): ChildName => ({ local, namespace: qtiNamespace });
 
 /**
+ * Name a type in the XML Schema namespace.
+ *
+ * @param local The type's local name, such as `string`.
+ * @returns The type's name.
+ */
+const xsName = (local: string): ChildName => ({ local, namespace: xsdNamespace });
+
+/**
+ * The derivation part of a named type's entry, its table set aside: its base and derivation, or a
+ * union's members.
+ *
+ * @param tables The generated tables.
+ * @param name The type's local name.
+ * @returns The derivation part; the test fails when the tables hold no such type.
+ */
+const derivationOf = (tables: Tables, name: string) => {
+  const entry = tables.types[name];
+  assert.isDefined(entry, `the tables hold the type ${name}`);
+
+  return entry.derivation === "union"
+    ? { derivation: entry.derivation, members: entry.members }
+    : { base: entry.base, derivation: entry.derivation };
+};
+
+/**
+ * The fields an element table and a type's entry share, every key present, so two tables compare
+ * on exactly those.
+ *
+ * @param table An element table or a type's entry.
+ * @returns Its wildcards, attributes, children and text.
+ */
+const contentOf = ({ anyAttribute, anyElement, attributes, children, text }: ContentTable) => ({
+  anyAttribute,
+  anyElement,
+  attributes,
+  children,
+  text,
+});
+
+/**
  * Generate the tables of a fragment and take one element's table.
  *
  * @param document The XSD fragment.
@@ -156,15 +235,22 @@ const builtin = (name: "boolean" | "int" | "integer" | "NCName" | "normalizedStr
   ({ kind: "builtin", name }) as const;
 
 /**
- * The table of an element with only the given attributes and no content, as `p1-08a` leaves it.
+ * The table of a global element with only the given attributes and no content, as `p1-08a` leaves
+ * it, declared with the given named types.
  *
  * @param attributes The element's attribute tables, sorted.
+ * @param types The local names of its declared types in the QTI namespace, sorted.
  * @returns The element table.
  */
-const attributesOnly = (attributes: ElementTable["attributes"]): ElementTable => ({
+const attributesOnly = (
+  attributes: ElementTable["attributes"],
+  ...types: readonly string[]
+): ElementTable => ({
   attributes,
   children: [],
+  global: true,
   text: false,
+  types: types.map(qti),
 });
 
 describe("generateTables", () => {
@@ -194,10 +280,13 @@ describe("generateTables", () => {
 
       assert.deepStrictEqual(
         table,
-        attributesOnly([
-          { local: "id", namespace: "", type: builtin("string"), use: "required" },
-          { local: "label", namespace: "", type: builtin("normalizedString"), use: "optional" },
-        ]),
+        attributesOnly(
+          [
+            { local: "id", namespace: "", type: builtin("string"), use: "required" },
+            { local: "label", namespace: "", type: builtin("normalizedString"), use: "optional" },
+          ],
+          "DerivedDType",
+        ),
       );
     }),
   );
@@ -232,7 +321,10 @@ describe("generateTables", () => {
 
       assert.deepStrictEqual(
         table,
-        attributesOnly([{ local: "id", namespace: "", type: builtin("string"), use: "optional" }]),
+        attributesOnly(
+          [{ local: "id", namespace: "", type: builtin("string"), use: "optional" }],
+          "NarrowDType",
+        ),
       );
     }),
   );
@@ -262,16 +354,19 @@ describe("generateTables", () => {
 
       assert.deepStrictEqual(
         table,
-        attributesOnly([
-          { local: "a", namespace: "", type: builtin("int"), use: "optional" },
-          {
-            default: "false",
-            local: "b",
-            namespace: "",
-            type: builtin("boolean"),
-            use: "optional",
-          },
-        ]),
+        attributesOnly(
+          [
+            { local: "a", namespace: "", type: builtin("int"), use: "optional" },
+            {
+              default: "false",
+              local: "b",
+              namespace: "",
+              type: builtin("boolean"),
+              use: "optional",
+            },
+          ],
+          "GroupedDType",
+        ),
       );
     }),
   );
@@ -310,7 +405,10 @@ describe("generateTables", () => {
       };
       assert.deepStrictEqual(
         table,
-        attributesOnly([{ local: "shape", namespace: "", type: areaKinds, use: "required" }]),
+        attributesOnly(
+          [{ local: "shape", namespace: "", type: areaKinds, use: "required" }],
+          "AreaDType",
+        ),
       );
     }),
   );
@@ -345,20 +443,23 @@ describe("generateTables", () => {
 
       assert.deepStrictEqual(
         table,
-        attributesOnly([
-          {
-            local: "class",
-            namespace: "",
-            type: { item: builtin("string"), kind: "list" },
-            use: "optional",
-          },
-          {
-            local: "min",
-            namespace: "",
-            type: { kind: "union", members: [builtin("integer"), builtin("NCName")] },
-            use: "optional",
-          },
-        ]),
+        attributesOnly(
+          [
+            {
+              local: "class",
+              namespace: "",
+              type: { item: builtin("string"), kind: "list" },
+              use: "optional",
+            },
+            {
+              local: "min",
+              namespace: "",
+              type: { kind: "union", members: [builtin("integer"), builtin("NCName")] },
+              use: "optional",
+            },
+          ],
+          "MixedDType",
+        ),
       );
     }),
   );
@@ -401,20 +502,23 @@ describe("generateTables", () => {
 
       assert.deepStrictEqual(
         table,
-        attributesOnly([
-          {
-            local: "aria-level",
-            namespace: "",
-            type: { kind: "builtin", minInclusive: "1", name: "integer" },
-            use: "optional",
-          },
-          {
-            local: "width",
-            namespace: "",
-            type: { base: "string", kind: "pattern", pattern: "[0-9]+%?" },
-            use: "optional",
-          },
-        ]),
+        attributesOnly(
+          [
+            {
+              local: "aria-level",
+              namespace: "",
+              type: { kind: "builtin", minInclusive: "1", name: "integer" },
+              use: "optional",
+            },
+            {
+              local: "width",
+              namespace: "",
+              type: { base: "string", kind: "pattern", pattern: "[0-9]+%?" },
+              use: "optional",
+            },
+          ],
+          "HeadingDType",
+        ),
       );
     }),
   );
@@ -481,9 +585,10 @@ describe("generateTables", () => {
 
       assert.deepStrictEqual(
         table,
-        attributesOnly([
-          { local: "lang", namespace: xmlNamespace, type: builtin("string"), use: "optional" },
-        ]),
+        attributesOnly(
+          [{ local: "lang", namespace: xmlNamespace, type: builtin("string"), use: "optional" }],
+          "TextDType",
+        ),
       );
     }),
   );
@@ -513,15 +618,23 @@ describe("generateTables", () => {
 
       assert.deepStrictEqual(
         table,
-        attributesOnly([
-          {
-            local: "refs",
-            namespace: "",
-            type: { item: builtin("NCName"), kind: "list" },
-            use: "optional",
-          },
-          { local: "response-identifier", namespace: "", type: builtin("NCName"), use: "required" },
-        ]),
+        attributesOnly(
+          [
+            {
+              local: "refs",
+              namespace: "",
+              type: { item: builtin("NCName"), kind: "list" },
+              use: "optional",
+            },
+            {
+              local: "response-identifier",
+              namespace: "",
+              type: builtin("NCName"),
+              use: "required",
+            },
+          ],
+          "TextEntryDType",
+        ),
       );
     }),
   );
@@ -549,7 +662,9 @@ describe("generateTables", () => {
         anyAttribute: { namespace: "##any", process: "lax" },
         attributes: [{ local: "id", namespace: "", type: builtin("string"), use: "optional" }],
         children: [],
+        global: true,
         text: false,
+        types: [qti("ParagraphDType")],
       });
     }),
   );
@@ -568,10 +683,14 @@ describe("generateTables", () => {
 
       assert.deepStrictEqual(
         table,
-        attributesOnly([
-          { local: "a", namespace: "", type: builtin("string"), use: "optional" },
-          { local: "b", namespace: "", type: builtin("boolean"), use: "optional" },
-        ]),
+        attributesOnly(
+          [
+            { local: "a", namespace: "", type: builtin("string"), use: "optional" },
+            { local: "b", namespace: "", type: builtin("boolean"), use: "optional" },
+          ],
+          "FirstDType",
+          "SecondDType",
+        ),
       );
     }),
   );
@@ -735,7 +854,9 @@ describe("generateTables", () => {
         anyElement: { namespace: "##other", process: "lax" },
         attributes: [],
         children: [],
+        global: true,
         text: false,
+        types: [qti("ExtensionDType")],
       });
     }),
   );
@@ -825,6 +946,381 @@ describe("generateTables", () => {
         { local: "math", namespace: mathmlNamespace },
         { local: "include", namespace: xincludeNamespace },
       ]);
+    }),
+  );
+});
+
+describe("generateTables: declared types, global names and derivations", () => {
+  it.effect(
+    "a name declared globally with one type and locally with another records both types and is global",
+    () =>
+      Effect.gen(function* globalAndLocal() {
+        const table = yield* tableOf(
+          schema(
+            complexType("FirstDType"),
+            complexType("SecondDType"),
+            complexType("HolderDType", model("sequence", element("body", "FirstDType"))),
+            element("body", "SecondDType"),
+          ),
+          "body",
+        );
+
+        assert.isTrue(table.global);
+        assert.deepStrictEqual(table.types, [qti("FirstDType"), qti("SecondDType")]);
+        assert.notProperty(table, "anonymousType");
+      }),
+  );
+
+  it.effect("a name declared only locally is not global", () =>
+    Effect.gen(function* localOnly() {
+      const tables = yield* generateTables(
+        schema(
+          complexType("PartDType"),
+          complexType("HolderDType", model("sequence", element("part", "PartDType"))),
+          element("holder", "HolderDType"),
+        ),
+      );
+
+      assert.isFalse(tables.elements["part"]?.global);
+      assert.deepStrictEqual(tables.elements["part"]?.types, [qti("PartDType")]);
+      assert.isTrue(tables.elements["holder"]?.global);
+    }),
+  );
+
+  it.effect("an extension and a restriction record their bases and derivations", () =>
+    Effect.gen(function* derivations() {
+      const tables = yield* generateTables(
+        schema(
+          complexType("BaseDType", attribute({ name: "id", type: "xs:string" })),
+          complexType(
+            "WiderDType",
+            xs("complexContent", [], [xs("extension", [attr("base", "BaseDType")])]),
+          ),
+          complexType(
+            "NarrowDType",
+            xs("complexContent", [], [xs("restriction", [attr("base", "BaseDType")])]),
+          ),
+          complexType(
+            "TextDType",
+            xs("simpleContent", [], [xs("extension", [attr("base", "CodeDType")])]),
+          ),
+          simpleType("CodeDType", restrictionOf("xs:NCName")),
+        ),
+      );
+
+      assert.deepStrictEqual(derivationOf(tables, "WiderDType"), {
+        base: qti("BaseDType"),
+        derivation: "extension",
+      });
+      assert.deepStrictEqual(derivationOf(tables, "NarrowDType"), {
+        base: qti("BaseDType"),
+        derivation: "restriction",
+      });
+      assert.deepStrictEqual(derivationOf(tables, "TextDType"), {
+        base: qti("CodeDType"),
+        derivation: "extension",
+      });
+      assert.deepStrictEqual(derivationOf(tables, "CodeDType"), {
+        base: xsName("NCName"),
+        derivation: "restriction",
+      });
+      assert.deepStrictEqual(Object.keys(tables.types), [
+        "BaseDType",
+        "CodeDType",
+        "NarrowDType",
+        "TextDType",
+        "WiderDType",
+      ]);
+    }),
+  );
+
+  it.effect(
+    "a complex type with neither complexContent nor simpleContent restricts xs:anyType",
+    () =>
+      Effect.gen(function* noDerivation() {
+        const tables = yield* generateTables(
+          schema(complexType("PlainDType", attribute({ name: "id", type: "xs:string" }))),
+        );
+
+        assert.deepStrictEqual(derivationOf(tables, "PlainDType"), {
+          base: xsName("anyType"),
+          derivation: "restriction",
+        });
+      }),
+  );
+
+  it.effect(
+    "a union records its members, memberTypes then inline ones by their base, and no base",
+    () =>
+      Effect.gen(function* union() {
+        const tables = yield* generateTables(
+          schema(
+            simpleType("CodeDType", restrictionOf("xs:NCName")),
+            simpleType(
+              "ToleranceDType",
+              xs(
+                "union",
+                [attr("memberTypes", "xs:integer CodeDType")],
+                [xs("simpleType", [], [restrictionOf("xs:double")])],
+              ),
+            ),
+          ),
+        );
+
+        assert.deepStrictEqual(derivationOf(tables, "ToleranceDType"), {
+          derivation: "union",
+          members: [xsName("integer"), qti("CodeDType"), xsName("double")],
+        });
+      }),
+  );
+
+  it.effect(
+    "an inline type records anonymousType and no name for it, and no type records xs:anyType",
+    () =>
+      Effect.gen(function* anonymous() {
+        const tables = yield* generateTables(
+          schema(
+            complexType(
+              "HolderDType",
+              model(
+                "sequence",
+                xs(
+                  "element",
+                  [attr("name", "kind")],
+                  [xs("simpleType", [], [restrictionOf("xs:string")])],
+                ),
+                xs("element", [attr("name", "box")], [xs("complexType")]),
+                xs("element", [attr("name", "anything")]),
+              ),
+            ),
+            element("holder", "HolderDType"),
+          ),
+        );
+
+        assert.isTrue(tables.elements["kind"]?.anonymousType);
+        assert.deepStrictEqual(tables.elements["kind"]?.types, []);
+        assert.isTrue(tables.elements["box"]?.anonymousType);
+        assert.deepStrictEqual(tables.elements["box"]?.types, []);
+        assert.notProperty(tables.elements["anything"], "anonymousType");
+        assert.deepStrictEqual(tables.elements["anything"]?.types, [xsName("anyType")]);
+      }),
+  );
+
+  it.effect("a named list type fails with TableGenerationError naming xs:list", () =>
+    Effect.gen(function* namedList() {
+      const error = yield* generateTables(
+        schema(simpleType("CodesDType", xs("list", [attr("itemType", "xs:NCName")]))),
+      ).pipe(Effect.flip);
+
+      assert.strictEqual(error._tag, "TableGenerationError");
+      assert.strictEqual(error.construct, "xs:list");
+    }),
+  );
+
+  it.effect(
+    "nillable, abstract, block, final, blockDefault, finalDefault and substitutionGroup each fail, naming it",
+    () =>
+      Effect.gen(function* refused() {
+        const empty = complexType("EmptyDType");
+        const cases: readonly (readonly [string, SourceDocument])[] = [
+          [
+            "nillable",
+            schema(
+              empty,
+              xs("element", [
+                attr("name", "e"),
+                attr("type", "EmptyDType"),
+                attr("nillable", "true"),
+              ]),
+            ),
+          ],
+          [
+            "abstract",
+            schema(
+              xs("complexType", [attr("name", "AbstractDType"), attr("abstract", "true")]),
+              element("e", "AbstractDType"),
+            ),
+          ],
+          [
+            "block",
+            schema(
+              empty,
+              xs("element", [attr("name", "e"), attr("type", "EmptyDType"), attr("block", "#all")]),
+            ),
+          ],
+          [
+            "final",
+            schema(
+              xs("complexType", [attr("name", "FinalDType"), attr("final", "extension")]),
+              element("e", "FinalDType"),
+            ),
+          ],
+          [
+            "blockDefault",
+            schemaWith([attr("blockDefault", "#all")], empty, element("e", "EmptyDType")),
+          ],
+          [
+            "finalDefault",
+            schemaWith([attr("finalDefault", "restriction")], empty, element("e", "EmptyDType")),
+          ],
+          [
+            "substitutionGroup",
+            schema(
+              empty,
+              element("head", "EmptyDType"),
+              xs("element", [
+                attr("name", "member"),
+                attr("type", "EmptyDType"),
+                attr("substitutionGroup", "head"),
+              ]),
+            ),
+          ],
+        ];
+
+        for (const [construct, document] of cases) {
+          const error = yield* generateTables(document).pipe(Effect.flip);
+
+          assert.strictEqual(error._tag, "TableGenerationError", construct);
+          assert.strictEqual(error.construct, construct);
+        }
+      }),
+  );
+
+  it.effect('abstract="false" and nillable="false" generate tables', () =>
+    Effect.gen(function* notRefused() {
+      const tables = yield* generateTables(
+        schema(
+          xs("complexType", [attr("name", "ConcreteDType"), attr("abstract", "false")]),
+          xs("element", [
+            attr("name", "e"),
+            attr("type", "ConcreteDType"),
+            attr("abstract", "false"),
+            attr("nillable", "false"),
+          ]),
+        ),
+      );
+
+      assert.deepStrictEqual(tables.elements["e"]?.types, [qti("ConcreteDType")]);
+    }),
+  );
+});
+
+describe("generateTables: each named type's own table", () => {
+  it.effect(
+    "a type's entry holds its own table, and an extension's holds its base's attributes and its own",
+    () =>
+      Effect.gen(function* typeTables() {
+        const lax = { namespace: "##other", process: "lax" } as const;
+        const tables = yield* generateTables(
+          schema(
+            complexType("EmptyDType"),
+            complexType(
+              "BaseDType",
+              model(
+                "sequence",
+                element("part", "EmptyDType"),
+                xs("any", [attr("namespace", "##other"), attr("processContents", "lax")]),
+              ),
+              attribute({ name: "id", type: "xs:string", use: "required" }),
+              xs("anyAttribute", [attr("namespace", "##other"), attr("processContents", "lax")]),
+            ),
+            complexType(
+              "DerivedDType",
+              xs(
+                "complexContent",
+                [],
+                [
+                  xs(
+                    "extension",
+                    [attr("base", "BaseDType")],
+                    [attribute({ name: "label", type: "xs:normalizedString" })],
+                  ),
+                ],
+              ),
+            ),
+            simpleType("CodeDType", restrictionOf("xs:NCName")),
+            simpleType("EitherDType", xs("union", [attr("memberTypes", "xs:integer CodeDType")])),
+            element("derived", "DerivedDType"),
+          ),
+        );
+        const id: AttributeTable = {
+          local: "id",
+          namespace: "",
+          type: builtin("string"),
+          use: "required",
+        };
+        const label: AttributeTable = {
+          local: "label",
+          namespace: "",
+          type: builtin("normalizedString"),
+          use: "optional",
+        };
+
+        assert.deepStrictEqual(tables.types["BaseDType"], {
+          anyAttribute: lax,
+          anyElement: lax,
+          attributes: [id],
+          base: xsName("anyType"),
+          children: [qti("part")],
+          derivation: "restriction",
+          text: false,
+        });
+        assert.deepStrictEqual(tables.types["DerivedDType"], {
+          anyAttribute: lax,
+          anyElement: lax,
+          attributes: [id, label],
+          base: qti("BaseDType"),
+          children: [qti("part")],
+          derivation: "extension",
+          text: false,
+        });
+        assert.deepStrictEqual(tables.types["EmptyDType"], {
+          attributes: [],
+          base: xsName("anyType"),
+          children: [],
+          derivation: "restriction",
+          text: false,
+        });
+        assert.deepStrictEqual(tables.types["CodeDType"], {
+          attributes: [],
+          base: xsName("NCName"),
+          children: [],
+          derivation: "restriction",
+          text: true,
+        });
+        assert.deepStrictEqual(tables.types["EitherDType"], {
+          attributes: [],
+          children: [],
+          derivation: "union",
+          members: [xsName("integer"), qti("CodeDType")],
+          text: true,
+        });
+
+        const { derived } = tables.elements;
+        const derivedType = tables.types["DerivedDType"];
+        assert.isDefined(derived);
+        assert.isDefined(derivedType);
+        assert.deepStrictEqual(contentOf(derived), contentOf(derivedType));
+      }),
+  );
+
+  it.effect("a type entry's table encodes and decodes through the Schema", () =>
+    Effect.gen(function* typeRoundTrip() {
+      const tables = yield* generateTables(
+        schema(
+          complexType("EmptyDType"),
+          complexType(
+            "HolderDType",
+            model("sequence", element("part", "EmptyDType")),
+            attribute({ name: "id", type: "xs:string" }),
+          ),
+        ),
+      );
+
+      const json = JSON.stringify(yield* Schema.encodeEffect(Tables)(tables));
+      const decoded = yield* Schema.decodeUnknownEffect(Tables)(JSON.parse(json));
+      assert.deepStrictEqual(decoded, tables);
+      assert.deepStrictEqual(decoded.types["HolderDType"]?.children, [qti("part")]);
     }),
   );
 });

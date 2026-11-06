@@ -8,8 +8,11 @@ import type {
   ProcessingAst,
   RuleNode,
 } from "#pantry/processing/ast.ts";
+import { resolvePrefixed } from "#pantry/processing/env.ts";
 import type { DeclarationEntry, Environment } from "#pantry/processing/env.ts";
 import { literalOrRef, patternOrRef } from "#pantry/processing/parse.ts";
+import { prefixedReadings } from "#pantry/processing/prefixed.ts";
+import type { PrefixedForm } from "#pantry/processing/prefixed.ts";
 import { resultType } from "#pantry/processing/types.ts";
 import type {
   BaseTypeOrAny,
@@ -54,7 +57,19 @@ export interface TypedAst extends Omit<ProcessingAst, "rules"> {
 /**
  * The bin 2 rules the checker owns, by id.
  */
-export type PId = "P8" | "P20" | "P21" | "P22" | "P23" | "P24" | "P25" | "P26" | "P27" | "P29";
+export type PId =
+  | "P8"
+  | "P20"
+  | "P21"
+  | "P22"
+  | "P23"
+  | "P24"
+  | "P25"
+  | "P26"
+  | "P27"
+  | "P29"
+  | "item-duration"
+  | "prefixed-ref";
 
 /**
  * A place the checker could not type, and so could not compare: a variable no declaration types, a
@@ -73,6 +88,9 @@ export interface Unresolved {
 /**
  * The outcome of a check: the typed AST with the places it could not type (empty when it typed
  * everything), or the first rule broken.
+ *
+ * A refusal carries `readings`: for `prefixed-ref`, every reading of the name that resolves (none
+ * when the name names no variable, two or more when it is ambiguous); empty for every other rule.
  */
 export type CheckResult =
   | { readonly _tag: "ok"; readonly typed: TypedAst; readonly unresolved: readonly Unresolved[] }
@@ -80,6 +98,7 @@ export type CheckResult =
       readonly _tag: "refused";
       readonly kind: string;
       readonly position: Position;
+      readonly readings: readonly PrefixedForm[];
       readonly rule: PId;
     };
 
@@ -376,8 +395,12 @@ const baseTypeOf = (value: string | undefined): BaseTypeOrAny =>
  *
  * A rule fires only when the types it compares are known: a comparison against `unknown` or `any`
  * is not a refusal. A reference whose identifier the environment does not hold is refused naming P8
- * in `item` mode; in `template` mode it is a template parameter, and in `test` mode a variable a
- * test environment would type, and either types `unknown` and is recorded as unresolved. A
+ * in `item` and `test` mode, except that in `test` mode a name declared nowhere whole that has a
+ * prefixed form's shape is typed by `resolvePrefixed` in the test's reach, and refused
+ * `prefixed-ref` when no reading or more than one resolves. A resolved prefixed name in a reference
+ * attribute meets P24 like a whole name: the variable it resolves to is a template or outcome
+ * variable of the matching base type; in `template` mode it is a template
+ * parameter, typed `unknown` and recorded as unresolved. A
  * `qti-custom-operator` and the field of a `qti-field-value` are `unknown` and unresolved too (P49
  * is a record, never a refusal).
  *
@@ -389,8 +412,13 @@ export const checkProcessing = (ast: ProcessingAst, env: Environment): CheckResu
   const unresolved: Unresolved[] = [];
   let refusal: Extract<CheckResult, { readonly _tag: "refused" }> | undefined;
 
-  const refuse = (rule: PId, kind: string, position: Position): void => {
-    refusal ??= { _tag: "refused", kind, position, rule };
+  const refuse = (
+    rule: PId,
+    kind: string,
+    position: Position,
+    readings: readonly PrefixedForm[] = [],
+  ): void => {
+    refusal ??= { _tag: "refused", kind, position, readings, rule };
   };
 
   const note = (
@@ -426,14 +454,71 @@ export const checkProcessing = (ast: ProcessingAst, env: Environment): CheckResu
     return declared;
   };
 
+  /**
+   * The type of a prefixed name in the test's reach: the one reading that resolves gives it, and
+   * none or several refuse `prefixed-ref` with the readings that resolved.
+   */
+  const typePrefixed = (identifier: string, kind: string, position: Position): EffectiveType => {
+    const resolution = resolvePrefixed(identifier, env);
+    if (resolution._tag === "resolved") {
+      return resolution.type;
+    }
+
+    refuse(
+      "prefixed-ref",
+      kind,
+      position,
+      resolution._tag === "ambiguous" ? resolution.readings : [],
+    );
+
+    return unknownType;
+  };
+
+  /**
+   * Whether a name read is the `duration` of an item that is not time dependent, which no
+   * expression may read (S-R49, INFO#IV_Response): the item's own built-in in `item` mode, or an
+   * item reference's item-session built-in through the test's reach.
+   */
+  const untimedDuration = (identifier: string): boolean => {
+    if (env.mode === "item") {
+      return identifier === "duration" && !env.timeDependent;
+    }
+
+    const resolution = resolvePrefixed(identifier, env);
+    if (
+      resolution._tag !== "resolved" ||
+      resolution.source !== "builtIn" ||
+      resolution.reading.variable !== "duration"
+    ) {
+      return false;
+    }
+
+    const entry = env.reach.get(resolution.reading.prefix);
+
+    return entry?.kind === "item-ref" && !entry.scope.timeDependent;
+  };
+
   const reference = (identifier: string, kind: string, position: Position): EffectiveType => {
     const declared = read(identifier, kind, position);
     const found = declared?.type ?? env.builtIns.get(identifier);
     if (found !== undefined) {
+      if (declared === undefined && untimedDuration(identifier)) {
+        refuse("item-duration", kind, position);
+      }
+
       return found;
     }
 
-    if (env.mode === "item") {
+    if (env.mode === "test" && prefixedReadings(identifier).length > 0) {
+      const type = typePrefixed(identifier, kind, position);
+      if (untimedDuration(identifier)) {
+        refuse("item-duration", kind, position);
+      }
+
+      return type;
+    }
+
+    if (env.mode !== "template") {
       refuse("P8", kind, position);
     }
 
@@ -445,7 +530,8 @@ export const checkProcessing = (ast: ProcessingAst, env: Environment): CheckResu
   };
 
   /**
-   * The type of the variable a rule writes, refusing P8 in `item` mode when nothing is named.
+   * The type of the variable a rule writes, refusing P8 in `item` and `test` mode when nothing is
+   * named, except a `test` name of a prefixed form's shape, which is typed through the reach.
    */
   const target = (
     identifier: string,
@@ -453,13 +539,27 @@ export const checkProcessing = (ast: ProcessingAst, env: Environment): CheckResu
     position: Position,
   ): EffectiveType | undefined => {
     const found = env.declarations.get(identifier)?.type ?? env.builtIns.get(identifier);
-    if (found === undefined && env.mode === "item") {
+    if (found !== undefined) {
+      return found;
+    }
+
+    if (env.mode === "test" && prefixedReadings(identifier).length > 0) {
+      return typePrefixed(identifier, kind, position);
+    }
+
+    if (env.mode !== "template") {
       refuse("P8", kind, position);
     }
 
-    return found;
+    return undefined;
   };
 
+  /**
+   * P24: a reference in an attribute names a template or outcome variable of the matching base type
+   * and single cardinality. A name declared whole or a built-in meets it directly; in `test` mode a
+   * resolved prefixed name meets it through the variable it resolves to, and an unresolved or
+   * ambiguous one is left to `reference`, which has refused it `prefixed-ref`.
+   */
   const checkAttributeReference = (
     node: ExpressionNode,
     name: string,
@@ -475,6 +575,17 @@ export const checkProcessing = (ast: ProcessingAst, env: Environment): CheckResu
     const variable = declared?.kind === "template" || declared?.kind === "outcome";
     if (named && (!variable || !compatible(type, expected))) {
       refuse("P24", node.kind, node.position);
+    }
+
+    if (!named && env.mode === "test") {
+      const resolution = resolvePrefixed(identifier, env);
+      const fitting =
+        resolution._tag === "resolved" &&
+        (resolution.variableKind === "template" || resolution.variableKind === "outcome") &&
+        compatible(resolution.type, expected);
+      if (resolution._tag === "resolved" && !fitting) {
+        refuse("P24", node.kind, node.position);
+      }
     }
   };
 
@@ -574,12 +685,26 @@ export const checkProcessing = (ast: ProcessingAst, env: Environment): CheckResu
     }
   };
 
+  /**
+   * The type of the template variable a template default sets: the declaration the item
+   * reference's item holds under `template-identifier`, or `undefined` when the environment has no
+   * item reference holder or the item declares no such template variable.
+   */
+  const templateOf = (node: RuleNode): EffectiveType | undefined => {
+    const declared = env.holder?.declarations.get(processed(node, "template-identifier") ?? "");
+
+    return declared?.kind === "template" ? declared.type : undefined;
+  };
+
   const typeRule = (node: RuleNode): TypedRuleNode => {
     const kind: string = node.kind;
-    const written =
-      setKinds.has(kind) || kind === "qti-lookup-outcome-value"
-        ? target(processed(node, "identifier") ?? "", kind, node.position)
-        : undefined;
+    let written: EffectiveType | undefined;
+    if (setKinds.has(kind) || kind === "qti-lookup-outcome-value") {
+      written = target(processed(node, "identifier") ?? "", kind, node.position);
+    } else if (kind === "qti-template-default") {
+      written = templateOf(node);
+    }
+
     const expression = node.expression.pipe(Option.map((e) => typeExpression(e)));
     if (Option.isSome(expression)) {
       if (
@@ -588,7 +713,7 @@ export const checkProcessing = (ast: ProcessingAst, env: Environment): CheckResu
       ) {
         refuse("P21", kind, node.position);
       } else if (
-        setKinds.has(kind) &&
+        (setKinds.has(kind) || kind === "qti-template-default") &&
         written !== undefined &&
         !compatible(expression.value.type, written)
       ) {

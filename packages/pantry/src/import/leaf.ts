@@ -6,7 +6,8 @@
 import type { AnyRelation, Fact, Uuid } from "@bjornpagen/grizzle";
 import { Effect } from "effect";
 import type { ImportRefused } from "#pantry/import/refusal.ts";
-import { closedOf, collapse, replace, Rows } from "#pantry/import/tree.ts";
+import { closedOf, Rows } from "#pantry/import/tree.ts";
+import { collapse, replace } from "#pantry/import/whitespace.ts";
 import type { NodeIndex } from "#pantry/import/tree.ts";
 import {
   QmdFeedbackTypeValue,

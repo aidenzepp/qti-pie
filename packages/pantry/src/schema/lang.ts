@@ -71,12 +71,13 @@ export const arms = {};
  *
  * A language row belongs to its document and, through the document's resource, to the record of the
  * same resource. The resource's set is keyed by its record and, because `ResourceLom` holds
- * `(package, resource)` as a key, by the resource as well. Every `xml:lang` of an item tree is a
- * `DocumentLang` row; manifest `lom:string` languages are not item documents and are not refused. A
- * flagged document language is in the resource's LOM set and the resource's record has a `general`
- * category; every `lom:language` of a resource record's general category is in that set, while a
- * meta-metadata language is the record's own language and is not. A label in an item tree needs
- * both tool values (goal 3.12).
+ * `(package, resource)` as a key, by the resource as well. Every `xml:lang` of an item tree or of a
+ * test tree is a `DocumentLang` row (R26 binds assessment items, tests and object banks, and
+ * sections and stimuli stay outside); manifest `lom:string` languages are not item documents and
+ * are not refused. A flagged document language is in the resource's LOM set and the resource's
+ * record has a `general` category; every `lom:language` of a resource record's general category is
+ * in that set, while a meta-metadata language is the record's own language and is not. A label in
+ * an item tree needs both tool values (goal 3.12).
  */
 export const rules = [
   contained(
@@ -96,6 +97,10 @@ export const rules = [
   ),
   contained(
     on(select(NodeXmlLang, { rootKind: "item" }), "tree", "value"),
+    on(DocumentLang, "document", "value"),
+  ),
+  contained(
+    on(select(NodeXmlLang, { rootKind: "test" }), "tree", "value"),
     on(DocumentLang, "document", "value"),
   ),
   contained(

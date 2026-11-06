@@ -3,18 +3,23 @@
  * author would compose them, behind one Fetch handler.
  *
  * The library decides no form, submit control, flow or attempt limit (rule `a9d04969`), so this
- * module owns them all: it lists four corpus documents, opens one with `open`, keeps the
- * `Accepted` item and the stored record on the server, and sends only the HTML of
- * `render(redact(…))` inside its own native form. A post is partitioned and decoded on the server,
- * checked with `checkResponses`, scored with `score`, and answered with the page after a submit
- * that spec §4.7 sets: the Status part first, one `autofocus`, and a title that names the state.
- * Every page is built through `h` and `toHtml`, so document text is escaped, and every response
- * carries the content-security headers of rule `723e580c`. It also serves plate's stylesheet, its
- * own sheet and the host CSS of the theme its theme box last accepted, which it keeps with a dark
- * flag in memory until it restarts. Every page links the three sheets, carries `class="dark"` on
- * `html` while the flag is on, and ends with the theme box, the playground's own form beside the
- * item's. It reads the corpus through `readCorpusFile` and opens no port: `scripts/serve.ts` is the
- * listener.
+ * module owns them all: it lists every member of the corpus's document set under the verdict
+ * `open` gives it, reports those verdicts as a table at `/verdicts` and the feature ledger the one
+ * command last wrote at `/ledger`, opens any member through the verdict cache of
+ * `#plate/dev/listing.ts`, keeps the `Accepted` item and the stored record on the server, and
+ * sends only the HTML of `render(redact(…))` inside its own native form. A post is partitioned and
+ * decoded on the server, checked with `checkResponses`, scored with `score`, and answered with the
+ * page after a submit that spec §4.7 sets: the Status part first, one `autofocus`, and a title that
+ * names the state. Every page is built through `h` and `toHtml`, so document text is escaped, and
+ * every response carries the content-security headers of rule `723e580c`. It also serves plate's
+ * stylesheet, its own sheet and the host CSS of the theme its theme box last accepted, which it
+ * keeps with a dark flag in memory until it restarts. Every page links the three sheets, carries
+ * `class="dark"` on `html` while the flag is on, and ends with the theme box, the playground's own
+ * form beside the item's. It reads the corpus through `readCorpusFile` and the ledger from
+ * `PLATE_LEDGER_DIR`, and opens no port: `scripts/serve.ts` is the listener.
+ *
+ * The item form's action names the Status region as its fragment, so the page after a submit opens
+ * at the result.
  *
  * @module
  */
@@ -22,14 +27,16 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { ConfigProvider, Effect, Option, Ref, Result, Schema } from "effect";
-import type { Config } from "effect";
+import { Config, ConfigProvider, Effect, Option, Ref, Result, Schema } from "effect";
 import { decodeStoredFloat } from "#plate/codec/values.ts";
+import { groupVerdicts, verdictCache } from "#plate/dev/listing.ts";
+import type { OpenFailure, VerdictCache, VerdictGroup } from "#plate/dev/listing.ts";
 import { emptyTheme, parseTheme, themeCss, themeText } from "#plate/dev/theme.ts";
 import type { Theme, ThemeRefused } from "#plate/dev/theme.ts";
 import type { CorpusFileUnreadable, CorpusMissing } from "#plate/document/corpus.ts";
 import { readCorpusFile } from "#plate/document/corpus.ts";
 import { text } from "#plate/emit/node.ts";
+import { scopedId } from "#plate/emit/parts.ts";
 import { toHtml } from "#plate/emit/serialise.ts";
 import { isPosted } from "#plate/form/encoding.ts";
 import {
@@ -39,7 +46,6 @@ import {
   entryName,
   h,
   Malformed,
-  open,
   partition,
   redact,
   render,
@@ -62,9 +68,13 @@ import type {
   ValidationMessage,
   Value,
 } from "#plate/index.ts";
+import { ledgerDirectory } from "#plate/ledger/directory.ts";
+import { Ledger } from "#plate/ledger/report.ts";
+import { ledgerHtml, verdictTable } from "#plate/ledger/view.ts";
 import { message } from "#plate/messages.ts";
 import type { BodyNode } from "#plate/model/item.ts";
 import { describeRefusal } from "#plate/validate/verdict.ts";
+import type { Verdict } from "#plate/validate/verdict.ts";
 
 /**
  * A Fetch handler: one request in, one response out.
@@ -75,48 +85,17 @@ export type Handler = (request: Request) => Promise<Response>;
  * The settings of one playground, each optional.
  *
  * `configuration` is the input `configure` decodes, every default when absent; `provider` is where
- * `readCorpusFile` reads `PLATE_CORPUS_DIR` and `HOME`, the process environment when absent.
+ * `readCorpusFile` reads `PLATE_CORPUS_DIR` and `HOME` and the ledger page reads
+ * `PLATE_LEDGER_DIR`, the process environment when absent; `verdicts` is the cache that opens and
+ * keeps the corpus's members, a new one over `openMember` when absent. Handlers given one cache
+ * share its opens, and a test counts them through the cache's opener; the cache reads the corpus
+ * root of the first handler that asks, so share one only between handlers over the same root.
  */
 export interface PlaygroundSettings {
   readonly configuration?: Partial<Configuration>;
   readonly provider?: ConfigProvider.ConfigProvider;
+  readonly verdicts?: VerdictCache;
 }
-
-/**
- * A corpus document the listing names: its short label, what it shows, and its corpus path.
- */
-export interface ListedDocument {
-  readonly label: string;
-  readonly path: string;
-  readonly shows: string;
-}
-
-/**
- * The documents the listing names, in order: phase 1's three accepted fixtures and the refused
- * CAT test.
- */
-export const documents: readonly ListedDocument[] = [
-  {
-    label: "BG007",
-    path: "QTI3_BPIG_Examples/items/BG007.xml",
-    shows: "a Choice, true or false, scored by match_correct",
-  },
-  {
-    label: "BG010",
-    path: "QTI3_BPIG_Examples/items/BG010.xml",
-    shows: "a Text Entry in a quotation, scored by map_response",
-  },
-  {
-    label: "BG011",
-    path: "QTI3_BeginnersGuide_Examples/items/BG011.xml",
-    shows: "an Extended Text below an image and a video, with no response processing",
-  },
-  {
-    label: "CAT",
-    path: "qtiv3-examples/CAT/test.xml",
-    shows: "a test document, which open refuses",
-  },
-];
 
 /**
  * The most sessions a playground keeps; the oldest is evicted first (OD-10's placeholder).
@@ -124,14 +103,33 @@ export const documents: readonly ListedDocument[] = [
 const sessionLimit = 100;
 
 /**
- * The headers of every HTML page (`work/planning/mind/od14-decisions.md`, rule `723e580c`): no
- * script and no `'unsafe-inline'` in any directive, posts only to this origin, and no caching.
- * The stylesheets and the theme box's redirect carry them too, a stylesheet with its own type.
+ * The headers of every HTML page (rule `723e580c`): no script and no `'unsafe-inline'` in any
+ * directive, posts only to this origin, and no caching. The stylesheets and the theme box's
+ * redirect carry them too, a stylesheet with its own type. The policy stands behind `check`'s URL
+ * pass: it refuses by default and allows only what a rendered item loads, so markup the pass let
+ * through still cannot run script or post to another origin.
+ *
+ * `object-src 'self'` lets an item's `object` load a package document from `/assets/`.
+ * `frame-src 'self'` is there for Chromium, which also checks the document an `object` loads
+ * into its nested browsing context against `frame-src` (then `child-src`, then `default-src`).
+ * WebKit and Firefox check `object-src` alone, as CSP Level 3 says: an `object`'s requests,
+ * the navigation of its nested browsing context included, fall under `object-src`, whose fallback
+ * list holds neither `frame-src` nor `child-src`. The nested document is sandboxed by its own
+ * header ({@link assetHeaders}), not by this policy.
+ *
+ * @see https://w3c.github.io/webappsec-csp/#directive-object-src (CSP Level 3, object-src, its note)
+ * @see https://w3c.github.io/webappsec-csp/#effective-directive-for-a-request (object, embed: object-src)
+ * @see https://w3c.github.io/webappsec-csp/#directive-fallback-list (object-src falls back to default-src only)
+ * @see https://github.com/WebKit/WebKit/commit/fb743bfbe7abba7c7553bf73eef0ba6d3d1cf1c4 (WebKit: the nested browsing context of an object or embed respects object-src)
+ * @see https://github.com/WebKit/WebKit/blob/5e62f67e97ebccc9da92e1ab166cfe640767dea4/LayoutTests/http/tests/security/contentSecurityPolicy/object-src-allows-object-blocked-by-frame-src.html (WebKit's test: object-src 'self' with frame-src 'none' loads the document)
+ * @see https://github.com/chromium/chromium/blob/3cb88deaf2150d76f4c414a90862f07440a404cc/content/browser/renderer_host/navigation_request.cc#L8405-L8423 (Chromium checks frame-src on every child navigation, an object's included)
+ * @see https://github.com/chromium/chromium/blob/3cb88deaf2150d76f4c414a90862f07440a404cc/services/network/public/cpp/content_security_policy/content_security_policy.cc#L1281-L1308 (Chromium's frame-src falls back to child-src, then default-src)
+ * @see https://github.com/mozilla-firefox/firefox/blob/935e9f7e39fcb9d738d3ac064905dcf4cc0c9cfc/dom/security/nsCSPUtils.cpp#L385-L388 (Firefox maps an object's load to object-src)
  */
 const pageHeaders = {
   "cache-control": "no-store",
   "content-security-policy":
-    "default-src 'none'; style-src 'self'; img-src 'self' https: http:; media-src 'self' https: http:; object-src 'self'; script-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+    "default-src 'none'; style-src 'self'; img-src 'self' https: http:; media-src 'self' https: http:; object-src 'self'; frame-src 'self'; script-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
   "content-type": "text/html; charset=utf-8",
   "referrer-policy": "no-referrer",
   "x-content-type-options": "nosniff",
@@ -192,6 +190,53 @@ const sheets: ReadonlyMap<string, URL> = new Map([
 ]);
 
 /**
+ * The command that writes the ledger, which the ledger page and its errors name.
+ */
+const ledgerCommand = "pnpm --filter @qti-pie/plate ledger";
+
+/**
+ * The file the ledger page reads: `ledger.json` in the folder the one command writes to,
+ * {@link ledgerDirectory}.
+ */
+const ledgerFile = ledgerDirectory.pipe(
+  Config.map((directory) => path.join(directory, "ledger.json")),
+);
+
+/**
+ * Decode `ledger.json`'s text, as the one command encodes it.
+ */
+const decodeLedger = Schema.decodeEffect(Schema.fromJsonString(Ledger));
+
+/**
+ * The ledger page found no `ledger.json`: the one command has not written one there yet.
+ */
+class LedgerMissing extends Schema.TaggedError<LedgerMissing>()("LedgerMissing", {
+  path: Schema.String,
+}) {
+  /**
+   * The file and what to run.
+   */
+  override get message(): string {
+    return `No ledger is written at ${this.path} yet. Run ${ledgerCommand} from the repository root, then reload the page.`;
+  }
+}
+
+/**
+ * The ledger page could not read `ledger.json`, or read one that does not decode as a ledger.
+ */
+class LedgerUnreadable extends Schema.TaggedError<LedgerUnreadable>()("LedgerUnreadable", {
+  detail: Schema.String,
+  path: Schema.String,
+}) {
+  /**
+   * The file, why, and what to run.
+   */
+  override get message(): string {
+    return `Cannot read the ledger ${this.path}: ${this.detail}. Run ${ledgerCommand} from the repository root to write it again, then reload the page.`;
+  }
+}
+
+/**
  * The failure of a read of one of the package's stylesheets: the file is missing or unreadable.
  */
 class SheetUnreadable extends Schema.TaggedError<SheetUnreadable>()("SheetUnreadable", {
@@ -236,13 +281,14 @@ interface Appearance {
 }
 
 /**
- * A playground's state and settings: its theme box's appearance, its sessions, oldest first, and
- * its configuration input.
+ * A playground's state and settings: its theme box's appearance, its sessions, oldest first, its
+ * configuration input, and the verdicts of the corpus's members.
  */
 interface Playground {
   readonly appearance: Ref.Ref<Appearance>;
   readonly configuration: Partial<Configuration>;
   readonly sessions: Map<string, Session>;
+  readonly verdicts: VerdictCache;
 }
 
 /**
@@ -334,8 +380,14 @@ const sheetLinks: readonly Element[] = ["/styles.css", "/playground.css", "/them
 );
 
 /**
+ * The id of the theme box's heading, which names the box.
+ */
+const themeHeadingId = "playground-theme-heading";
+
+/**
  * Construct the theme box: the playground's own form, outside the item's, that posts a pasted
- * theme, the dark flag and the page to return to `/theme`.
+ * theme, the dark flag and the page to return to `/theme`, named by its heading, Theme, so a screen
+ * reader announces it by that name and not as an unnamed group.
  *
  * Its textarea shows the stored theme as `themeText` writes it, and its Dark checkbox is checked
  * while the flag is on, so applying the box unchanged keeps the appearance.
@@ -344,8 +396,8 @@ const sheetLinks: readonly Element[] = ["/styles.css", "/playground.css", "/them
  * @returns The form.
  */
 const themeBox = ({ appearance, back }: Chrome): Element =>
-  h("form", { action: "/theme", method: "post" }, [
-    h("h2", {}, [text("Theme")]),
+  h("form", { action: "/theme", "aria-labelledby": themeHeadingId, method: "post" }, [
+    h("h2", { id: themeHeadingId }, [text("Theme")]),
     h("p", {}, [
       text(
         "Paste a shadcn theme's :root and .dark blocks, tick Dark to use the .dark block, and apply the theme. The dev playground keeps it until the server restarts.",
@@ -481,7 +533,9 @@ const joinedSegments = (segments: readonly string[]): Option.Option<string> =>
  *
  * A segment that decodes to a separator or a dot segment (`..%2Fx`, `%2e%2e%2f`) is refused, so
  * the decoded path holds exactly the directories the request path names and cannot climb out of
- * the directory an item's asset base names (`work/planning/mind/od14-decisions.md`).
+ * the directory an item's asset base names. `check`'s URL pass leaves such a segment literal in the
+ * URL it writes, inside the package as a URL (rule `723e580c`), so the route that serves package
+ * files must decode it and refuse a climb.
  *
  * @param pathname The request path, still percent-encoded.
  * @returns The corpus path, or none when a segment does not decode or is refused.
@@ -547,27 +601,52 @@ const remember = (playground: Playground, instance: string, session: Session): v
 };
 
 /**
- * Construct the listing page: the four documents, each a link to its item page.
+ * Give the heading of a top folder of the corpus: its name, or `Corpus root` for members at the
+ * root.
  *
+ * @param folder The folder, `.` for the root.
+ * @returns The heading's text.
+ */
+const folderHeading = (folder: string): string => (folder === "." ? "Corpus root" : folder);
+
+/**
+ * Construct the listing page: the playground's reports in a `nav`, then one region per verdict,
+ * named by its heading with the verdict and its count, holding a heading per top folder and a list
+ * of its members, each a link to its item page whose text is its corpus path.
+ *
+ * @param groups The members, grouped by verdict and then by top folder.
  * @returns The page.
  */
-const listing = (): Page =>
+const listing = (groups: readonly VerdictGroup[]): Page =>
   page(200, "en", "plate dev playground", [
     h("h1", {}, [text("plate dev playground")]),
     h("p", {}, [
       text(
-        "Open a document, answer it with the keyboard or the mouse, and submit the form. The server scores the answer; no script runs.",
+        "Every document of the example corpus, by its verdict and then by its top folder. Open one, answer it with the keyboard or the mouse, and submit the form. The server scores the answer; no script runs.",
       ),
     ]),
-    h(
-      "ul",
-      {},
-      documents.map((entry) =>
-        h("li", {}, [
-          h("a", { href: itemTarget(entry.path) }, [text(entry.label)]),
-          text(`: ${entry.shows} (${entry.path})`),
+    h("nav", {}, [
+      h("ul", {}, [
+        h("li", {}, [h("a", { href: "/verdicts" }, [text("Verdicts")])]),
+        h("li", {}, [h("a", { href: "/ledger" }, [text("Ledger")])]),
+      ]),
+    ]),
+    ...groups.map(({ count, folders, verdict }) =>
+      h("section", { "aria-labelledby": `verdict-${verdict}`, "data-verdict": verdict }, [
+        h("h2", { "data-count": String(count), id: `verdict-${verdict}` }, [
+          text(`${verdict} (${String(count)})`),
         ]),
-      ),
+        ...folders.flatMap(({ folder, members }) => [
+          h("h3", {}, [text(folderHeading(folder))]),
+          h(
+            "ul",
+            {},
+            members.map((member) =>
+              h("li", {}, [h("a", { href: itemTarget(member) }, [text(member)])]),
+            ),
+          ),
+        ]),
+      ]),
     ),
   ]);
 
@@ -603,11 +682,80 @@ const verdictPage = (
   ]);
 
 /**
+ * Construct the verdicts page: the per-document verdict report as a table, one row per member of
+ * the document set in its order, its path the row header and a link to its item page.
+ *
+ * @param verdicts Every member's verdict, from the verdict cache.
+ * @returns The page.
+ */
+const verdictsPage = (verdicts: readonly Verdict[]): Page =>
+  page(200, "en", "Verdicts", [
+    h("h1", {}, [text("Verdicts")]),
+    h("p", {}, [
+      text(
+        "The verdict open gives each document of the example corpus, with each refusal or reason it is unchecked, and the unsupported features an accepted document holds. Each path opens its document.",
+      ),
+    ]),
+    verdictTable(verdicts),
+    home,
+  ]);
+
+/**
+ * Construct the ledger page: the ledger as the view writes it, an `article` whose headings start
+ * at `h1`.
+ *
+ * @param ledger The ledger the one command wrote.
+ * @returns The page.
+ */
+const ledgerPage = (ledger: Ledger): Page =>
+  page(200, "en", "Feature ledger", [ledgerHtml(ledger), home]);
+
+/**
+ * Construct the page `/ledger` shows before the one command has written a ledger: the file it
+ * looked for, and the command to run before reloading.
+ *
+ * @param missing The file that is not there.
+ * @returns The page.
+ */
+const noLedgerPage = (missing: LedgerMissing): Page =>
+  page(200, "en", "No feature ledger yet", [
+    h("h1", {}, [text("No feature ledger yet")]),
+    h("p", {}, [text(`No ledger is written at ${missing.path} yet.`)]),
+    h("p", {}, [
+      text("Run "),
+      h("code", {}, [text(ledgerCommand)]),
+      text(" from the repository root, then reload this page."),
+    ]),
+    home,
+  ]);
+
+/**
+ * The id of an item page's title, which names the item's form.
+ */
+const titleId = "playground-title";
+
+/**
+ * Give the id of the Status region a page after a submit holds: the id `renderStatus` gives the
+ * region of an instance, which the item form's action names as its fragment.
+ *
+ * @param instance The item's instance token.
+ * @returns The region's id.
+ */
+const resultId = (instance: string): string => scopedId(instance, "status");
+
+/**
  * Compose an item page: the item's title, then the item region, holding the Status part when the
  * page follows a post and the playground's native form around the rendered item and its Submit.
+ * The form is named by the item's title, so a screen reader announces it by that name and not as
+ * an unnamed group.
  *
- * The form posts to the item's target with its instance token and no fragment, so a browser
- * flushes the page's one `autofocus`.
+ * The form posts to the item's target with its instance token and, as its fragment, the id of the
+ * Status region that every page after a submit holds first in reading order. That page is the
+ * answer to the post, so the browser opens it at the fragment, with no script: HTML's "scroll to
+ * the fragment" focuses the region, which carries `tabindex="-1"`, scrolls it into view and starts
+ * sequential focus navigation there, so reading starts at the result, not at the top of the page.
+ * The action is written before the post's outcome is known, so the fragment is the same after
+ * every submit, and the page of every outcome holds the region it names.
  *
  * @param accepted The accepted document.
  * @param session The item's corpus path and instance token.
@@ -646,7 +794,8 @@ const itemPage = (
       const form = h(
         "form",
         {
-          action: itemTarget(session.path, session.instance),
+          action: `${itemTarget(session.path, session.instance)}#${resultId(session.instance)}`,
+          "aria-labelledby": titleId,
           method: "post",
           novalidate: true,
         },
@@ -658,7 +807,7 @@ const itemPage = (
         locale,
         message(locale, "title", { state: message(locale, view.state), title }),
         [
-          h("h1", {}, [text(title)]),
+          h("h1", { id: titleId }, [text(title)]),
           home,
           h("div", { id: "playground-item" }, [...status.map((_, index) => slot(index)), form]),
         ],
@@ -778,7 +927,8 @@ const scoreText = (
       return Option.some(new Intl.NumberFormat(locale).format(BigInt(single.value)));
     }
     case "directedPair":
-    case "pair": {
+    case "pair":
+    case "point": {
       return Option.some(single.value.join(" "));
     }
     case "boolean":
@@ -795,7 +945,15 @@ const scoreText = (
 
 /**
  * Construct the page of a refused post: the Status part with the messages first, and the item
- * with the posted text and its invalid Controls, the first of which takes `autofocus`.
+ * with the posted text and its invalid Controls, the first of which takes the page's one
+ * `autofocus`.
+ *
+ * The Status region is the fragment's target here as after any submit: the action named it before
+ * the outcome was known, and the messages are the result a screen reader reads first. The first
+ * invalid Control keeps `autofocus`, so keyboard focus can start where the answer is corrected.
+ * HTML skips autofocus in a document whose fragment names an element, so a browser that follows
+ * that rule leaves focus on the region, and the next Tab moves into the item; one that does not
+ * moves focus on to the Control.
  *
  * @param target The item's instance and session.
  * @param configuration The configuration.
@@ -822,8 +980,9 @@ const refusedPage = (
   );
 
 /**
- * Construct the page after a scored post: the Status part first, with `autofocus`, and the item
- * restored from the posted values, disabled with its Submit once the attempt limit is reached.
+ * Construct the page after a scored post: the Status part first, the fragment's target, with
+ * `autofocus`, and the item restored from the posted values, disabled with its Submit once the
+ * attempt limit is reached.
  *
  * @param target The item's instance and session, after the attempt.
  * @param configuration The configuration, which gives `maxAttempts` (0 means unlimited).
@@ -850,8 +1009,8 @@ const scoredPage = (
 
 /**
  * Construct the page a route's failure answers with: the 404 page for a path the corpus does not
- * hold, and a developer error's page when the corpus or a stylesheet is missing or the settings are
- * missing or invalid.
+ * hold, and a developer error's page when the corpus, a stylesheet or the ledger is missing or
+ * unreadable or the settings are missing or invalid.
  *
  * @param error The failure.
  * @returns The page.
@@ -862,11 +1021,13 @@ const routeFailure = (
     | CorpusFileUnreadable
     | CorpusMissing
     | InvalidConfiguration
+    | LedgerUnreadable
     | SheetUnreadable,
 ): Page => (error._tag === "CorpusFileUnreadable" ? notFound() : failurePage(error));
 
 /**
- * Open a document and answer with its item page, or with its refusals or unchecked reasons.
+ * Answer a member of the document set with its item page, or with its refusals or unchecked
+ * reasons, from its cached verdict; a path that names no member is not found.
  *
  * @param playground The playground.
  * @param corpusPath The document's corpus path, as the request named it.
@@ -875,22 +1036,19 @@ const routeFailure = (
 const openItem = Effect.fn("playground.openItem")(function* openItem(
   playground: Playground,
   corpusPath: string,
-): Effect.fn.Return<
-  Page,
-  Config.ConfigError | CorpusFileUnreadable | CorpusMissing | InvalidConfiguration
-> {
-  const relative = joinedSegments(corpusPath.split("/"));
-  if (Option.isNone(relative)) {
+): Effect.fn.Return<Page, InvalidConfiguration | OpenFailure> {
+  const member = yield* playground.verdicts.verdictOf(corpusPath);
+  if (Option.isNone(member)) {
     return notFound();
   }
 
   const configuration = yield* configure(playground.configuration);
-  const verdict = yield* open(relative.value, yield* readCorpusFile(relative.value));
+  const verdict = member.value;
 
   switch (verdict.verdict) {
     case "refused": {
       return verdictPage(
-        relative.value,
+        corpusPath,
         "Refused",
         verdict.refusals.map((refusal) => [
           { "data-rule": refusal.rule },
@@ -900,7 +1058,7 @@ const openItem = Effect.fn("playground.openItem")(function* openItem(
     }
     case "unchecked": {
       return verdictPage(
-        relative.value,
+        corpusPath,
         "Unchecked",
         verdict.reasons.map((reason) => [
           { "data-reason": reason.reason },
@@ -915,11 +1073,11 @@ const openItem = Effect.fn("playground.openItem")(function* openItem(
         accepted: verdict.accepted,
         attempts: 0,
         last: Option.none(),
-        path: relative.value,
+        path: corpusPath,
         record: Option.none(),
       });
 
-      return itemPage(verdict.accepted, { instance, path: relative.value }, configuration, {
+      return itemPage(verdict.accepted, { instance, path: corpusPath }, configuration, {
         disabled: false,
         options: {},
         state: "answering",
@@ -1040,6 +1198,33 @@ const submit = Effect.fn("playground.submit")(function* submit(
       return scoredPage({ instance: target.instance, session: next }, configuration, shown);
     },
   });
+});
+
+/**
+ * Read the ledger the one command last wrote, from `ledger.json` in `PLATE_LEDGER_DIR`.
+ *
+ * @returns The ledger; fails with {@link LedgerMissing} when the file is not there, and with
+ *   {@link LedgerUnreadable} when it cannot be read or does not decode as a ledger.
+ */
+const readLedger = Effect.fn("playground.readLedger")(function* readLedger(): Effect.fn.Return<
+  Ledger,
+  Config.ConfigError | LedgerMissing | LedgerUnreadable
+> {
+  const file = yield* ledgerFile;
+  const contents = yield* Effect.tryPromise({
+    catch: (cause) =>
+      cause instanceof Error && "code" in cause && cause.code === "ENOENT"
+        ? new LedgerMissing({ path: file })
+        : new LedgerUnreadable({
+            detail: cause instanceof Error ? cause.message : String(cause),
+            path: file,
+          }),
+    try: () => readFile(file, "utf-8"),
+  });
+
+  return yield* decodeLedger(contents).pipe(
+    Effect.mapError((error) => new LedgerUnreadable({ detail: error.message, path: file })),
+  );
 });
 
 /**
@@ -1207,8 +1392,11 @@ const postTheme = Effect.fn("playground.postTheme")(function* postTheme(
 });
 
 /**
- * Route one request: the listing, an item page, a post, an asset, a stylesheet, or a theme box
- * post; anything else is a 404, and a method a route does not take is a 405.
+ * Route one request: the listing, the verdicts page, the ledger page, an item page, a post, an
+ * asset, a stylesheet, or a theme box post; anything else is a 404, and a method a route does not
+ * take is a 405. A member the listing or the verdicts page cannot read is a developer error there,
+ * since the page's own address exists; so is a ledger that cannot be read, while a ledger not yet
+ * written shows the command that writes it.
  *
  * @param playground The playground.
  * @param request The request.
@@ -1219,15 +1407,49 @@ const route = (
   request: Request,
 ): Effect.Effect<
   Page | Response,
-  Config.ConfigError | CorpusFileUnreadable | CorpusMissing | InvalidConfiguration | SheetUnreadable
+  | Config.ConfigError
+  | CorpusFileUnreadable
+  | CorpusMissing
+  | InvalidConfiguration
+  | LedgerUnreadable
+  | SheetUnreadable
 > => {
   const url = new URL(request.url);
   const refusedMethod = Effect.succeed(
     notePage(405, "Method not allowed", `${request.method} is not taken at ${url.pathname}.`),
   );
+  /**
+   * Answer a GET with a page built from every member's verdict, and any other method with the 405
+   * page. A member that cannot be read answers with a developer error's page.
+   *
+   * @param shown Builds the page from the verdicts, in the document set's order.
+   * @returns The page.
+   */
+  const fromVerdicts = (shown: (verdicts: readonly Verdict[]) => Page) =>
+    request.method === "GET"
+      ? playground.verdicts.verdicts.pipe(
+          Effect.map(shown),
+          Effect.catchTag("CorpusFileUnreadable", (unreadable) =>
+            Effect.succeed(failurePage(unreadable)),
+          ),
+        )
+      : refusedMethod;
 
   if (url.pathname === "/") {
-    return request.method === "GET" ? Effect.succeed(listing()) : refusedMethod;
+    return fromVerdicts((verdicts) => listing(groupVerdicts(verdicts)));
+  }
+
+  if (url.pathname === "/verdicts") {
+    return fromVerdicts(verdictsPage);
+  }
+
+  if (url.pathname === "/ledger") {
+    return request.method === "GET"
+      ? readLedger().pipe(
+          Effect.map(ledgerPage),
+          Effect.catchTag("LedgerMissing", (missing) => Effect.succeed(noLedgerPage(missing))),
+        )
+      : refusedMethod;
   }
 
   if (url.pathname === "/item") {
@@ -1308,11 +1530,13 @@ const answer = (
       );
 
 /**
- * Construct a playground's Fetch handler, with its own sessions, theme and dark flag.
+ * Construct a playground's Fetch handler, with its own sessions, theme and dark flag, and its own
+ * verdict cache unless the settings give one: a member's verdict, once its open succeeds, is kept
+ * for the handler's life.
  *
- * It runs `open`, `configure` and the corpus read with `Effect.runPromise`; `render`,
- * `renderStatus`, `decode`, `checkResponses` and `score` are plain functions. A failure the
- * playground's settings or code cause answers with a 500 page that gives its message, and the
+ * It runs `open`, `configure`, the corpus read and the ledger read with `Effect.runPromise`;
+ * `render`, `renderStatus`, `decode`, `checkResponses` and `score` are plain functions. A failure
+ * the playground's settings or code cause answers with a 500 page that gives its message, and the
  * promise never rejects.
  *
  * @example
@@ -1320,7 +1544,8 @@ const answer = (
  *   const response = await handle(new Request("http://127.0.0.1:5190/"));
  *   // 200, the listing
  *
- * @param settings The configuration input and the config provider, each optional.
+ * @param settings The configuration input, the config provider and the verdict cache, each
+ *   optional.
  * @returns The handler.
  */
 export const createHandler = (settings: PlaygroundSettings = {}): Handler => {
@@ -1328,7 +1553,14 @@ export const createHandler = (settings: PlaygroundSettings = {}): Handler => {
     appearance: Ref.makeUnsafe<Appearance>({ dark: false, theme: emptyTheme }),
     configuration: settings.configuration ?? {},
     sessions: new Map(),
+    verdicts: settings.verdicts ?? Effect.runSync(verdictCache()),
   };
+  /**
+   * Provide the settings' config provider to an effect, or leave it on the process environment.
+   *
+   * @param effect The effect to run.
+   * @returns The effect, reading its configuration from `settings.provider` when one is given.
+   */
   const provided = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, E> =>
     settings.provider === undefined
       ? effect

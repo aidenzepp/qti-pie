@@ -5,13 +5,25 @@ import { Effect, FileSystem, Option } from "effect";
 import type { Language, ProcessingAst } from "#pantry/processing/ast.ts";
 import { checkProcessing } from "#pantry/processing/check.ts";
 import type {
+  CheckResult,
   TypedAst,
   TypedExpression,
   TypedRuleNode,
   Unresolved,
 } from "#pantry/processing/check.ts";
-import { emptyEnvironment, environmentOf, withDeclarations } from "#pantry/processing/env.ts";
-import type { DeclarationEntry, Environment } from "#pantry/processing/env.ts";
+import {
+  emptyEnvironment,
+  environmentOf,
+  resolvePrefixed,
+  withDeclarations,
+  withReach,
+} from "#pantry/processing/env.ts";
+import type {
+  DeclarationEntry,
+  Environment,
+  ItemRefScope,
+  ReachEntry,
+} from "#pantry/processing/env.ts";
 import { corpusPackage, templateDocuments } from "#pantry/processing/fixtures.ts";
 import { parseProcessing } from "#pantry/processing/parse.ts";
 import { numerical, resultType, resultTypes, unify } from "#pantry/processing/types.ts";
@@ -421,6 +433,17 @@ const parseBody = (body: string) =>
   });
 
 /**
+ * Parse an outcome processing tree written as a string.
+ */
+const parseOutcome = (body: string) =>
+  Effect.gen(function* parseOutcomeText() {
+    const text = `<qti-outcome-processing xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0">${body}</qti-outcome-processing>`;
+    const document = yield* readXml(new TextEncoder().encode(text));
+
+    return yield* parseProcessing(document.root, "outcome");
+  });
+
+/**
  * The result of a check that must be `ok`.
  */
 const okOf = (ast: ProcessingAst, env: Environment) => {
@@ -515,14 +538,13 @@ layer(NodeServices.layer, { excludeTestServices: true })("processing/check.ts", 
     }),
   );
 
-  suite.effect("checks outcome.xml ok under the test environment, and unresolved without it", () =>
+  suite.effect("checks outcome.xml ok under the test environment, and refuses P8 without it", () =>
     Effect.gen(function* checkOutcome() {
       const { ast } = yield* parseValid("outcome");
       assert.deepStrictEqual(okOf(ast, testEnvironment).unresolved, []);
-      assert.deepStrictEqual(summary(okOf(ast, emptyEnvironment("test")).unresolved), [
-        ["untyped-variable", "TOTAL"],
-        ["untyped-variable", "TOTAL"],
-      ]);
+
+      const undeclared = checkProcessing(ast, emptyEnvironment("test"));
+      assert.deepStrictEqual(undeclared._tag === "refused" && undeclared.rule, "P8");
     }),
   );
 
@@ -615,31 +637,35 @@ layer(NodeServices.layer, { excludeTestServices: true })("processing/check.ts", 
     }),
   );
 
-  suite.effect("records a reference in a mixed-union attribute, refusing it in item mode", () =>
-    Effect.gen(function* checkAttributeReference() {
-      const ast = yield* parseBody(
-        `<qti-set-outcome-value identifier="X"><qti-equal-rounded rounding-mode="decimalPlaces" figures="N"><qti-base-value base-type="float">1</qti-base-value><qti-base-value base-type="float">1</qti-base-value></qti-equal-rounded></qti-set-outcome-value>`,
-      );
-      const target = [outcomeOf("X", "boolean")];
-      const undeclared = checkProcessing(ast, withDeclarations(emptyEnvironment("item"), target));
-      assert.deepStrictEqual(undeclared._tag === "refused" && [undeclared.rule, undeclared.kind], [
-        "P8",
-        "qti-equal-rounded",
-      ]);
-      assert.deepStrictEqual(
-        summary(okOf(ast, withDeclarations(emptyEnvironment("test"), target)).unresolved),
-        [["untyped-variable", "N"]],
-      );
-      assert.deepStrictEqual(summary(okOf(ast, emptyEnvironment("template")).unresolved), [
-        ["template-parameter", "N"],
-      ]);
+  suite.effect(
+    "records a reference in a mixed-union attribute, refusing it in item and test mode",
+    () =>
+      Effect.gen(function* checkAttributeReference() {
+        const ast = yield* parseBody(
+          `<qti-set-outcome-value identifier="X"><qti-equal-rounded rounding-mode="decimalPlaces" figures="N"><qti-base-value base-type="float">1</qti-base-value><qti-base-value base-type="float">1</qti-base-value></qti-equal-rounded></qti-set-outcome-value>`,
+        );
+        const target = [outcomeOf("X", "boolean")];
+        const undeclared = checkProcessing(ast, withDeclarations(emptyEnvironment("item"), target));
+        assert.deepStrictEqual(
+          undeclared._tag === "refused" && [undeclared.rule, undeclared.kind],
+          ["P8", "qti-equal-rounded"],
+        );
 
-      const declared = withDeclarations(emptyEnvironment("item"), [
-        ...target,
-        outcomeOf("N", "integer"),
-      ]);
-      assert.deepStrictEqual(okOf(ast, declared).unresolved, []);
-    }),
+        const inTest = checkProcessing(ast, withDeclarations(emptyEnvironment("test"), target));
+        assert.deepStrictEqual(inTest._tag === "refused" && [inTest.rule, inTest.kind], [
+          "P8",
+          "qti-equal-rounded",
+        ]);
+        assert.deepStrictEqual(summary(okOf(ast, emptyEnvironment("template")).unresolved), [
+          ["template-parameter", "N"],
+        ]);
+
+        const declared = withDeclarations(emptyEnvironment("item"), [
+          ...target,
+          outcomeOf("N", "integer"),
+        ]);
+        assert.deepStrictEqual(okOf(ast, declared).unresolved, []);
+      }),
   );
 
   suite.effect(
@@ -704,7 +730,7 @@ const checkBroken = (name: string, language: "response" | "template", mode: "ite
  * The refusals of the bin 2 rules this file checks: one broken tree each, refused naming exactly
  * its rule and the kind of the node that breaks it.
  */
-const refusals = [
+const cases = [
   ["p20-float-into-integer-outcome", "response", "P20", "qti-set-outcome-value"],
   ["p21-sum-as-condition", "response", "P21", "qti-response-if"],
   ["p22-string-into-lookup", "response", "P22", "qti-lookup-outcome-value"],
@@ -734,7 +760,7 @@ const refusals = [
 ] as const;
 
 layer(NodeServices.layer, { excludeTestServices: true })("processing/check.ts rules", (suite) => {
-  for (const [name, language, rule, kind] of refusals) {
+  for (const [name, language, rule, kind] of cases) {
     suite.effect(`refuses ${name} naming ${rule}`, () =>
       Effect.gen(function* refuseBroken() {
         const result = yield* checkBroken(name, language, "item");
@@ -794,6 +820,663 @@ layer(NodeServices.layer, { excludeTestServices: true })("processing/check.ts ru
           ["custom-operator", "com.example.Operator"],
         ]);
       }
+    }),
+  );
+});
+
+/**
+ * Parse a single-expression root (`qti-pre-condition`, `qti-branch-rule`, `qti-template-default`)
+ * written as a string.
+ */
+const parseSingle = (root: string, attributes: string, body: string) =>
+  Effect.gen(function* parseSingleRoot() {
+    const text = `<${root} xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"${attributes}>${body}</${root}>`;
+    const document = yield* readXml(new TextEncoder().encode(text));
+
+    return yield* parseProcessing(document.root, "expression");
+  });
+
+/**
+ * A `qti-variable` reference, written as the expression of a rule.
+ */
+const variableRef = (identifier: string): string => `<qti-variable identifier="${identifier}"/>`;
+
+/**
+ * The rule and the readings of a refusal, or the failure of a check that was not refused.
+ */
+const refusalOf = (result: CheckResult) =>
+  result._tag === "refused" ? [result.rule, result.readings] : assert.fail("not refused");
+
+/**
+ * An item reference's scope: the declarations of its item and its mapping targets typed as their
+ * sources.
+ */
+const scopeOf = (
+  declarations: readonly DeclarationEntry[],
+  mappings: readonly (readonly [string, EffectiveType])[] = [],
+  timeDependent = false,
+): ItemRefScope => ({
+  declarations: new Map(declarations.map((d) => [d.identifier, d])),
+  mappings: new Map(mappings),
+  timeDependent,
+});
+
+/**
+ * An item reference in a test's reach.
+ */
+const itemRefOf = (scope: ItemRefScope): ReachEntry => ({ kind: "item-ref", scope });
+
+/**
+ * A test environment declaring `X`, `D` and `ANY` and holding the given reach.
+ */
+const reachEnvironment = (
+  reach: readonly (readonly [string, ReachEntry])[],
+  holder?: ItemRefScope,
+) =>
+  withReach(
+    withDeclarations(emptyEnvironment("test"), [
+      outcomeOf("ANY", "any"),
+      outcomeOf("D", "duration"),
+      outcomeOf("X", "float"),
+    ]),
+    new Map(reach),
+    holder,
+  );
+
+/**
+ * The reading of a name that has no instance.
+ */
+const plain = (prefix: string, variable: string) => ({ instance: undefined, prefix, variable });
+
+/**
+ * A `qti-set-outcome-value` of `ANY`, a variable of any type, to the variable named, as a
+ * response-language body.
+ */
+const setX = (name: string): string =>
+  `<qti-set-outcome-value identifier="ANY">${variableRef(name)}</qti-set-outcome-value>`;
+
+describe("the test environment's built-ins", () => {
+  it("types duration as a duration in test mode and a float in item mode", () => {
+    assert.deepStrictEqual(emptyEnvironment("test").builtIns.get("duration"), {
+      baseType: "duration",
+      cardinality: "single",
+    });
+    assert.deepStrictEqual(emptyEnvironment("item").builtIns.get("duration"), {
+      baseType: "float",
+      cardinality: "single",
+    });
+  });
+});
+
+layer(NodeServices.layer, { excludeTestServices: true })(
+  "processing/check.ts in test mode",
+  (suite) => {
+    const test = withDeclarations(emptyEnvironment("test"), [
+      outcomeOf("X", "float"),
+      outcomeOf("D", "duration"),
+      outcomeOf("I1.SCORE", "float"),
+    ]);
+
+    suite.effect("refuses an undeclared unprefixed name P8, read and written", () =>
+      Effect.gen(function* refuseUnprefixed() {
+        const read = checkProcessing(
+          yield* parseBody(
+            `<qti-set-outcome-value identifier="X">${variableRef("MISSING")}</qti-set-outcome-value>`,
+          ),
+          test,
+        );
+        assert.deepStrictEqual(read._tag === "refused" && [read.rule, read.kind], [
+          "P8",
+          "qti-variable",
+        ]);
+
+        const written = checkProcessing(
+          yield* parseBody(
+            `<qti-set-outcome-value identifier="MISSING">${variableRef("X")}</qti-set-outcome-value>`,
+          ),
+          test,
+        );
+        assert.deepStrictEqual(written._tag === "refused" && [written.rule, written.kind], [
+          "P8",
+          "qti-set-outcome-value",
+        ]);
+      }),
+    );
+
+    suite.effect("takes a declared dotted name whole, typed by its declaration", () =>
+      Effect.gen(function* declaredDotted() {
+        const ast = yield* parseBody(
+          `<qti-set-outcome-value identifier="X">${variableRef("I1.SCORE")}</qti-set-outcome-value>`,
+        );
+        const result = okOf(ast, test);
+        assert.deepStrictEqual(result.unresolved, []);
+        assert.deepStrictEqual(typeOfKind(result.typed, "qti-variable"), ["float/single"]);
+      }),
+    );
+
+    suite.effect(
+      "refuses a prefixed name that no reach resolves prefixed-ref, with no reading",
+      () =>
+        Effect.gen(function* undeclaredPrefixed() {
+          const ast = yield* parseBody(
+            `<qti-set-outcome-value identifier="X">${variableRef("I2.SCORE")}</qti-set-outcome-value>`,
+          );
+          assert.deepStrictEqual(refusalOf(checkProcessing(ast, test)), ["prefixed-ref", []]);
+        }),
+    );
+
+    suite.effect("types a reference to duration as a duration", () =>
+      Effect.gen(function* durationRef() {
+        const ast = yield* parseBody(
+          `<qti-set-outcome-value identifier="D">${variableRef("duration")}</qti-set-outcome-value>`,
+        );
+        assert.deepStrictEqual(typeOfKind(okOf(ast, test).typed, "qti-variable"), [
+          "duration/single",
+        ]);
+      }),
+    );
+
+    suite.effect("checks a pre-condition root, refusing an outcome-only expression P25", () =>
+      Effect.gen(function* preCondition() {
+        const fine = yield* parseSingle("qti-pre-condition", "", variableRef("X"));
+        assert.deepStrictEqual(okOf(fine, test).unresolved, []);
+
+        const refused = checkProcessing(
+          yield* parseSingle(
+            "qti-pre-condition",
+            "",
+            '<qti-gt><qti-number-correct/><qti-base-value base-type="integer">0</qti-base-value></qti-gt>',
+          ),
+          test,
+        );
+        assert.deepStrictEqual(refused._tag === "refused" && [refused.rule, refused.kind], [
+          "P25",
+          "qti-number-correct",
+        ]);
+      }),
+    );
+
+    suite.effect("refuses an outcome-only expression in a branch rule and a template default", () =>
+      Effect.gen(function* otherRoots() {
+        const branch = checkProcessing(
+          yield* parseSingle(
+            "qti-branch-rule",
+            ' target="EXIT_TEST"',
+            '<qti-outcome-maximum outcome-identifier="X"/>',
+          ),
+          test,
+        );
+        assert.deepStrictEqual(branch._tag === "refused" && branch.rule, "P25");
+
+        const template = checkProcessing(
+          yield* parseSingle(
+            "qti-template-default",
+            ' template-identifier="T"',
+            '<qti-test-variables variable-identifier="X"/>',
+          ),
+          test,
+        );
+        assert.deepStrictEqual(template._tag === "refused" && template.rule, "P25");
+      }),
+    );
+  },
+);
+
+/**
+ * The types of the `qti-variable` references of `setX(name)` under an environment that must accept
+ * it.
+ */
+const typedAs = (name: string, env: Environment) =>
+  Effect.gen(function* typeName() {
+    const ast = yield* parseBody(setX(name));
+    const result = okOf(ast, env);
+    assert.deepStrictEqual(result.unresolved, []);
+
+    return typeOfKind(result.typed, "qti-variable");
+  });
+
+/**
+ * The rule and readings `setX(name)` is refused with under an environment.
+ */
+const refusedAs = (name: string, env: Environment) =>
+  Effect.gen(function* refuseName() {
+    return refusalOf(checkProcessing(yield* parseBody(setX(name)), env));
+  });
+
+/**
+ * A template default of `T` holding one `qti-base-value`.
+ */
+const templateDefaultOf = (base: string, text: string) =>
+  parseSingle(
+    "qti-template-default",
+    ' template-identifier="T"',
+    `<qti-base-value base-type="${base}">${text}</qti-base-value>`,
+  );
+
+/**
+ * An outcome tree that sets `LIST` to a weighted `qti-test-variables` of a base type.
+ */
+const weighted = (base: string) =>
+  `<qti-set-outcome-value identifier="LIST"><qti-test-variables variable-identifier="X" weight-identifier="W" base-type="${base}"/></qti-set-outcome-value>`;
+
+const weightedOutcome = (base: string) => parseOutcome(weighted(base));
+
+/**
+ * The reach of the P24 cases: `I1`, whose item declares outcomes `COUNT`, `SCORE`, `F` and
+ * `NAME`, template `T` and response `RESP`, with mapping targets `M` and `MF`, and `PART`.
+ */
+const p24Environment = (declarations: readonly DeclarationEntry[]) =>
+  reachEnvironment([
+    [
+      "I1",
+      itemRefOf(
+        scopeOf(
+          declarations,
+          [
+            ["M", { baseType: "integer", cardinality: "single" }],
+            ["MF", { baseType: "float", cardinality: "single" }],
+          ],
+          true,
+        ),
+      ),
+    ],
+    ["PART", { kind: "part" }],
+  ]);
+
+const p24Reach = p24Environment([
+  outcomeOf("COUNT", "integer"),
+  outcomeOf("SCORE", "float"),
+  outcomeOf("F", "float"),
+  outcomeOf("NAME", "string"),
+  { ...outcomeOf("T", "integer"), kind: "template", paramVariable: true },
+  { ...outcomeOf("RESP", "integer"), kind: "response" },
+]);
+
+const figuresBody = (figures: string): string =>
+  `<qti-set-outcome-value identifier="ANY"><qti-equal-rounded rounding-mode="decimalPlaces" figures="${figures}"><qti-base-value base-type="float">1</qti-base-value><qti-base-value base-type="float">1</qti-base-value></qti-equal-rounded></qti-set-outcome-value>`;
+
+const randomBody = (max: string): string =>
+  `<qti-set-outcome-value identifier="ANY"><qti-random-float min="0" max="${max}"/></qti-set-outcome-value>`;
+
+const patternBody = (pattern: string): string =>
+  `<qti-set-outcome-value identifier="ANY"><qti-pattern-match pattern="${pattern}"><qti-base-value base-type="string">x</qti-base-value></qti-pattern-match></qti-set-outcome-value>`;
+
+const p24Of = (body: string, env: Environment) =>
+  Effect.gen(function* checkBodyUnder() {
+    const result = checkProcessing(yield* parseBody(body), env);
+
+    return result._tag === "refused" ? [result.rule, result.kind] : result._tag;
+  });
+
+const reachingV = (type: "integer" | "float") =>
+  reachEnvironment([["I2", itemRefOf(scopeOf([outcomeOf("V", type)]))]]);
+
+layer(NodeServices.layer, { excludeTestServices: true })(
+  "processing/check.ts types a prefixed name in a test's reach",
+  (suite) => {
+    suite.effect("types I1.SCORE from the declaration of its item", () =>
+      Effect.gen(function* declared() {
+        const env = reachEnvironment([["I1", itemRefOf(scopeOf([outcomeOf("SCORE", "float")]))]]);
+        assert.deepStrictEqual(yield* typedAs("I1.SCORE", env), ["float/single"]);
+        assert.deepStrictEqual(resolvePrefixed("I1.SCORE", env), {
+          _tag: "resolved",
+          names: "item-ref",
+          reading: plain("I1", "SCORE"),
+          source: "declared",
+          type: { baseType: "float", cardinality: "single" },
+          variableKind: "outcome",
+        });
+      }),
+    );
+
+    suite.effect("prefers a mapping target to a declaration of the same name", () =>
+      Effect.gen(function* mapped() {
+        const env = reachEnvironment([
+          [
+            "I1",
+            itemRefOf(
+              scopeOf(
+                [outcomeOf("SCORE", "integer")],
+                [["SCORE", { baseType: "float", cardinality: "single" }]],
+              ),
+            ),
+          ],
+        ]);
+        assert.deepStrictEqual(yield* typedAs("I1.SCORE", env), ["float/single"]);
+
+        const resolved = resolvePrefixed("I1.SCORE", env);
+        assert.deepStrictEqual(resolved._tag === "resolved" && resolved.source, "mapped");
+      }),
+    );
+
+    suite.effect("types I1.2.SCORE through the instance form", () =>
+      Effect.gen(function* instance() {
+        const env = reachEnvironment([["I1", itemRefOf(scopeOf([outcomeOf("SCORE", "float")]))]]);
+        assert.deepStrictEqual(yield* typedAs("I1.2.SCORE", env), ["float/single"]);
+
+        const resolved = resolvePrefixed("I1.2.SCORE", env);
+        assert.deepStrictEqual(resolved._tag === "resolved" && resolved.reading, {
+          instance: { spelling: "2", value: 2n },
+          prefix: "I1",
+          variable: "SCORE",
+        });
+      }),
+    );
+
+    suite.effect("types I1.A.B from a declaration named A.B", () =>
+      Effect.gen(function* dotted() {
+        const env = reachEnvironment([["I1", itemRefOf(scopeOf([outcomeOf("A.B", "float")]))]]);
+        assert.deepStrictEqual(yield* typedAs("I1.A.B", env), ["float/single"]);
+      }),
+    );
+
+    suite.effect("types PART.duration as a duration and I1.duration as a float", () =>
+      Effect.gen(function* durations() {
+        const env = reachEnvironment([
+          ["PART", { kind: "part" }],
+          ["SECTION", { kind: "section" }],
+          ["I1", itemRefOf(scopeOf([], [], true))],
+        ]);
+        assert.deepStrictEqual(yield* typedAs("PART.duration", env), ["duration/single"]);
+        assert.deepStrictEqual(yield* typedAs("SECTION.duration", env), ["duration/single"]);
+        assert.deepStrictEqual(yield* typedAs("I1.duration", env), ["float/single"]);
+        assert.deepStrictEqual(yield* typedAs("I1.numAttempts", env), ["integer/single"]);
+
+        const resolved = resolvePrefixed("PART.duration", env);
+        assert.deepStrictEqual(resolved._tag === "resolved" && [resolved.names, resolved.source], [
+          "part",
+          "duration",
+        ]);
+      }),
+    );
+
+    suite.effect("refuses what names nothing prefixed-ref with no reading", () =>
+      Effect.gen(function* nothing() {
+        const env = reachEnvironment([
+          ["PART", { kind: "part" }],
+          ["I1", itemRefOf(scopeOf([outcomeOf("SCORE", "float")]))],
+        ]);
+        assert.deepStrictEqual(yield* refusedAs("NOPE.SCORE", env), ["prefixed-ref", []]);
+        assert.deepStrictEqual(yield* refusedAs("I1.MISSING", env), ["prefixed-ref", []]);
+        assert.deepStrictEqual(yield* refusedAs("PART.SCORE", env), ["prefixed-ref", []]);
+        assert.deepStrictEqual(yield* refusedAs("PART.2.duration", env), ["prefixed-ref", []]);
+        assert.deepStrictEqual(resolvePrefixed("NOPE.SCORE", env), { _tag: "unresolved" });
+      }),
+    );
+
+    suite.effect("accepts a dotted name when exactly one reading names a variable", () =>
+      Effect.gen(function* oneReading() {
+        const env = reachEnvironment([
+          ["a", itemRefOf(scopeOf([outcomeOf("SCORE", "integer")]))],
+          ["a.b", itemRefOf(scopeOf([outcomeOf("SCORE", "float")]))],
+        ]);
+        assert.deepStrictEqual(yield* typedAs("a.b.SCORE", env), ["float/single"]);
+        assert.deepStrictEqual(resolvePrefixed("a.b.SCORE", env), {
+          _tag: "resolved",
+          names: "item-ref",
+          reading: plain("a.b", "SCORE"),
+          source: "declared",
+          type: { baseType: "float", cardinality: "single" },
+          variableKind: "outcome",
+        });
+      }),
+    );
+
+    suite.effect("refuses a dotted name two readings resolve, naming both left to right", () =>
+      Effect.gen(function* twoReadings() {
+        const env = reachEnvironment([
+          ["a", itemRefOf(scopeOf([outcomeOf("b.SCORE", "float")]))],
+          ["a.b", itemRefOf(scopeOf([outcomeOf("SCORE", "float")]))],
+        ]);
+        assert.deepStrictEqual(yield* refusedAs("a.b.SCORE", env), [
+          "prefixed-ref",
+          [plain("a", "b.SCORE"), plain("a.b", "SCORE")],
+        ]);
+      }),
+    );
+
+    suite.effect("refuses an instance reading and a plain one that both resolve", () =>
+      Effect.gen(function* instanceAndPlain() {
+        const env = reachEnvironment([
+          ["a", itemRefOf(scopeOf([outcomeOf("SCORE", "float")]))],
+          ["a.2", itemRefOf(scopeOf([outcomeOf("SCORE", "float")]))],
+        ]);
+        assert.deepStrictEqual(yield* refusedAs("a.2.SCORE", env), [
+          "prefixed-ref",
+          [
+            { instance: { spelling: "2", value: 2n }, prefix: "a", variable: "SCORE" },
+            plain("a.2", "SCORE"),
+          ],
+        ]);
+      }),
+    );
+
+    suite.effect("counts a section's duration as a reading", () =>
+      Effect.gen(function* sectionReading() {
+        const env = reachEnvironment([
+          ["a", itemRefOf(scopeOf([outcomeOf("b.duration", "float")]))],
+          ["a.b", { kind: "section" }],
+        ]);
+        assert.deepStrictEqual(yield* refusedAs("a.b.duration", env), [
+          "prefixed-ref",
+          [plain("a", "b.duration"), plain("a.b", "duration")],
+        ]);
+      }),
+    );
+
+    suite.effect("takes a name declared whole as the declaration, never split", () =>
+      Effect.gen(function* whole() {
+        const env = withDeclarations(
+          reachEnvironment([["I1", itemRefOf(scopeOf([outcomeOf("SCORE", "integer")]))]]),
+          [outcomeOf("I1.SCORE", "float")],
+        );
+        assert.deepStrictEqual(yield* typedAs("I1.SCORE", env), ["float/single"]);
+      }),
+    );
+
+    suite.effect("checks one section document under each reaching test's environment", () =>
+      Effect.gen(function* perTest() {
+        const ast = yield* parseBody(setX("LOCAL"));
+        const declaring = withDeclarations(reachEnvironment([]), [outcomeOf("LOCAL", "float")]);
+        assert.deepStrictEqual(okOf(ast, declaring).unresolved, []);
+        assert.deepStrictEqual(refusalOf(checkProcessing(ast, reachEnvironment([]))), ["P8", []]);
+
+        const dotted = yield* parseBody(setX("a.b.SCORE"));
+        const only = reachEnvironment([["a.b", itemRefOf(scopeOf([outcomeOf("SCORE", "float")]))]]);
+        const both = reachEnvironment([
+          ["a", itemRefOf(scopeOf([outcomeOf("b.SCORE", "float")]))],
+          ["a.b", itemRefOf(scopeOf([outcomeOf("SCORE", "float")]))],
+        ]);
+        assert.deepStrictEqual(typeOfKind(okOf(dotted, only).typed, "qti-variable"), [
+          "float/single",
+        ]);
+        assert.deepStrictEqual(refusalOf(checkProcessing(dotted, both)), [
+          "prefixed-ref",
+          [plain("a", "b.SCORE"), plain("a.b", "SCORE")],
+        ]);
+      }),
+    );
+
+    suite.effect("resolves I2.SCORE whole in one test and through item ref I2 in another", () =>
+      Effect.gen(function* wholeOrThrough() {
+        const ast = yield* parseBody(setX("I2.SCORE"));
+        const whole = withDeclarations(reachEnvironment([]), [outcomeOf("I2.SCORE", "float")]);
+        const through = reachEnvironment([
+          ["I2", itemRefOf(scopeOf([outcomeOf("SCORE", "float")]))],
+        ]);
+        assert.deepStrictEqual(typeOfKind(okOf(ast, whole).typed, "qti-variable"), [
+          "float/single",
+        ]);
+        assert.deepStrictEqual(typeOfKind(okOf(ast, through).typed, "qti-variable"), [
+          "float/single",
+        ]);
+        assert.deepStrictEqual(refusalOf(checkProcessing(ast, reachEnvironment([]))), [
+          "prefixed-ref",
+          [],
+        ]);
+      }),
+    );
+
+    suite.effect("types the name a rule writes through the reach too", () =>
+      Effect.gen(function* written() {
+        const env = reachEnvironment([["I1", itemRefOf(scopeOf([outcomeOf("SCORE", "float")]))]]);
+        const ast = yield* parseBody(
+          `<qti-set-outcome-value identifier="I1.SCORE">${variableRef("X")}</qti-set-outcome-value>`,
+        );
+        assert.deepStrictEqual(okOf(ast, env).unresolved, []);
+
+        const unknown = yield* parseBody(
+          `<qti-set-outcome-value identifier="NOPE.SCORE">${variableRef("X")}</qti-set-outcome-value>`,
+        );
+        assert.deepStrictEqual(refusalOf(checkProcessing(unknown, env)), ["prefixed-ref", []]);
+      }),
+    );
+
+    suite.effect("checks a template default against the template declaration of its item", () =>
+      Effect.gen(function* templateDefault() {
+        const template: DeclarationEntry = {
+          ...outcomeOf("T", "integer"),
+          kind: "template",
+          paramVariable: true,
+        };
+        const env = reachEnvironment([], scopeOf([template]));
+
+        assert.deepStrictEqual(okOf(yield* templateDefaultOf("integer", "3"), env).unresolved, []);
+        assert.deepStrictEqual(
+          refusalOf(checkProcessing(yield* templateDefaultOf("string", "x"), env)),
+          ["P20", []],
+        );
+      }),
+    );
+
+    suite.effect("refuses a weighted test variable that is not a float P29, in a test", () =>
+      Effect.gen(function* weight() {
+        const test = withDeclarations(reachEnvironment([]), [
+          {
+            ...outcomeOf("LIST", "float"),
+            type: { baseType: "float", cardinality: "multiple" },
+          },
+        ]);
+        assert.deepStrictEqual(
+          refusalOf(checkProcessing(yield* weightedOutcome("integer"), test)),
+          ["P29", []],
+        );
+        assert.deepStrictEqual(okOf(yield* weightedOutcome("float"), test).unresolved, []);
+      }),
+    );
+
+    suite.effect(
+      "refuses an item reference's duration item-duration unless its item is timed",
+      () =>
+        Effect.gen(function* testHalf() {
+          const untimed = reachEnvironment([["I1", itemRefOf(scopeOf([]))]]);
+          const timed = reachEnvironment([["I1", itemRefOf(scopeOf([], [], true))]]);
+          assert.deepStrictEqual(yield* refusedAs("I1.duration", untimed), ["item-duration", []]);
+          assert.deepStrictEqual(yield* refusedAs("I1.2.duration", untimed), ["item-duration", []]);
+          assert.deepStrictEqual(yield* typedAs("I1.duration", timed), ["float/single"]);
+          assert.deepStrictEqual(yield* typedAs("I1.numAttempts", untimed), ["integer/single"]);
+        }),
+    );
+
+    suite.effect("reads a declared or mapped duration of an untimed item as that variable", () =>
+      Effect.gen(function* declaredDuration() {
+        const declared = reachEnvironment([
+          ["I1", itemRefOf(scopeOf([outcomeOf("duration", "integer")]))],
+          [
+            "I2",
+            itemRefOf(scopeOf([], [["duration", { baseType: "string", cardinality: "single" }]])),
+          ],
+        ]);
+        assert.deepStrictEqual(yield* typedAs("I1.duration", declared), ["integer/single"]);
+        assert.deepStrictEqual(yield* typedAs("I2.duration", declared), ["string/single"]);
+      }),
+    );
+
+    suite.effect(
+      "accepts a resolved prefixed name that is an outcome, a template or a mapping",
+      () =>
+        Effect.gen(function* acceptedP24() {
+          assert.deepStrictEqual(yield* p24Of(figuresBody("I1.COUNT"), p24Reach), "ok");
+          assert.deepStrictEqual(yield* p24Of(figuresBody("I1.T"), p24Reach), "ok");
+          assert.deepStrictEqual(yield* p24Of(figuresBody("I1.M"), p24Reach), "ok");
+          assert.deepStrictEqual(yield* p24Of(randomBody("I1.F"), p24Reach), "ok");
+          assert.deepStrictEqual(yield* p24Of(patternBody("{I1.NAME}"), p24Reach), "ok");
+        }),
+    );
+
+    suite.effect("refuses P24 for a resolved prefixed name that is not a fitting variable", () =>
+      Effect.gen(function* refusedP24() {
+        const notFitting = [
+          [figuresBody("I1.SCORE"), "qti-equal-rounded"],
+          [figuresBody("I1.RESP"), "qti-equal-rounded"],
+          [figuresBody("I1.MF"), "qti-equal-rounded"],
+          [figuresBody("I1.numAttempts"), "qti-equal-rounded"],
+          [figuresBody("PART.duration"), "qti-equal-rounded"],
+          [patternBody("{I1.COUNT}"), "qti-pattern-match"],
+        ] as const;
+        for (const [body, kind] of notFitting) {
+          assert.deepStrictEqual(yield* p24Of(body, p24Reach), ["P24", kind]);
+        }
+      }),
+    );
+
+    suite.effect("still refuses an unresolved prefixed name in a reference attribute", () =>
+      Effect.gen(function* unresolvedP24() {
+        const result = checkProcessing(yield* parseBody(figuresBody("NOPE.X")), p24Reach);
+        assert.deepStrictEqual(refusalOf(result), ["prefixed-ref", []]);
+      }),
+    );
+
+    suite.effect("applies P24 to the variable each reaching test resolves", () =>
+      Effect.gen(function* perTest() {
+        const body = figuresBody("I2.V");
+        assert.deepStrictEqual(yield* p24Of(body, reachingV("integer")), "ok");
+        assert.deepStrictEqual(yield* p24Of(body, reachingV("float")), [
+          "P24",
+          "qti-equal-rounded",
+        ]);
+      }),
+    );
+  },
+);
+
+/**
+ * The item mode environment of an item root with the given `time-dependent`, declaring `ANY`.
+ */
+const itemEnvironment = (timeDependent: boolean) =>
+  Effect.gen(function* itemOf() {
+    const text = `<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" time-dependent="${timeDependent}"/>`;
+    const document = yield* readXml(new TextEncoder().encode(text));
+
+    return withDeclarations(environmentOf(document, "item"), [outcomeOf("ANY", "any")]);
+  });
+
+describe("an item's own duration (S-R49, item half)", () => {
+  it.effect("refuses duration item-duration when the item is not time dependent", () =>
+    Effect.gen(function* untimedItem() {
+      const env = yield* itemEnvironment(false);
+      assert.strictEqual(env.timeDependent, false);
+      assert.deepStrictEqual(refusalOf(checkProcessing(yield* parseBody(setX("duration")), env)), [
+        "item-duration",
+        [],
+      ]);
+    }),
+  );
+
+  it.effect("accepts the same duration when the item is time dependent, typed float", () =>
+    Effect.gen(function* timedItem() {
+      const env = yield* itemEnvironment(true);
+      assert.strictEqual(env.timeDependent, true);
+
+      const result = okOf(yield* parseBody(setX("duration")), env);
+      assert.deepStrictEqual(typeOfKind(result.typed, "qti-variable"), ["float/single"]);
+    }),
+  );
+
+  it.effect("accepts the other built-ins of an item that is not time dependent", () =>
+    Effect.gen(function* otherBuiltIns() {
+      const env = yield* itemEnvironment(false);
+      okOf(yield* parseBody(setX("numAttempts")), env);
     }),
   );
 });

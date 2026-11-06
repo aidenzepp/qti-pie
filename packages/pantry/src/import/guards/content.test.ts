@@ -2,7 +2,9 @@ import { assert, describe, it } from "@effect/vitest";
 import type { AnyRelation, Fact, Uuid } from "@bjornpagen/grizzle";
 import { Effect } from "effect";
 import { ContentGuardRefusal, contentGuards } from "#pantry/import/guards/content.ts";
+import { ItemGuardRefusal, itemGuards } from "#pantry/import/guards/item.ts";
 import { itemRows } from "#pantry/import/item.ts";
+import { testRows } from "#pantry/import/test.ts";
 import { Rows } from "#pantry/import/tree.ts";
 import {
   ChoiceIdentifier,
@@ -18,6 +20,7 @@ import { Gap, GapText } from "#pantry/schema/interactions/gap.ts";
 import { HottextOwner } from "#pantry/schema/interactions/hot.ts";
 import { OrderInteraction } from "#pantry/schema/interactions/order.ts";
 import { MediaInteraction } from "#pantry/schema/interactions/other.ts";
+import { Document, DocumentTitle } from "#pantry/schema/document.ts";
 import { DocumentLang, ResourceLomGeneral, ResourceLomLanguageSet } from "#pantry/schema/lang.ts";
 import { ResourceLom } from "#pantry/schema/metadata.ts";
 import { AttributeLexical, AttributeSpelling, Node } from "#pantry/schema/node.ts";
@@ -86,6 +89,75 @@ const refusal = (rule: ContentGuardRefusal["rule"], version: SchemaVersionHandle
 
     return failure;
   });
+
+/**
+ * Run the content guards over the rows of a test document whose part is `part`, failing with
+ * their refusal.
+ */
+const guardedTest = (part: string) =>
+  Effect.gen(function* guardedTestDocument() {
+    const text = `<qti-assessment-test xmlns="${itemNamespace}" identifier="T" title="A test">${part}</qti-assessment-test>`;
+    const doc = yield* readXml(new TextEncoder().encode(text));
+    const built = yield* testRows(
+      {
+        doc,
+        packageId,
+        path: "test.xml",
+        resource: "test",
+        resourceLomHasGeneral: false,
+        resourceType: "imsqti_test_xmlv3p0",
+        version: "3.0.1",
+      },
+      Rows.empty(),
+    );
+
+    return yield* contentGuards(built.rows);
+  });
+
+const partOf = (children: string) =>
+  `<qti-test-part identifier="P" navigation-mode="linear" submission-mode="individual">${children}</qti-test-part>`;
+
+const sectionOf = (children: string) =>
+  `<qti-assessment-section identifier="S" title="S" visible="true">${children}</qti-assessment-section>`;
+
+const sessionControl = `<qti-item-session-control max-attempts="1"/>`;
+
+const adaptive = `<qti-adaptive-selection><qti-adaptive-engine-ref identifier="E" href="e.xml"/></qti-adaptive-selection>`;
+
+const itemRef = `<qti-assessment-item-ref identifier="I" href="i.xml"/>`;
+
+const orderingRefusal = (part: string) =>
+  Effect.gen(function* orderingRefusalOfTest() {
+    const failure = yield* Effect.flip(guardedTest(part));
+
+    assert.instanceOf(failure, ContentGuardRefusal);
+    assert.strictEqual(failure.rule, "ordering");
+  });
+
+describe("contentGuards ordering of the test kinds", () => {
+  it.effect("refuses a part whose item session control follows a section", () =>
+    Effect.gen(function* partOrder() {
+      yield* orderingRefusal(partOf(`${sectionOf(itemRef)}${sessionControl}`));
+      yield* guardedTest(partOf(`${sessionControl}${sectionOf(itemRef)}`));
+    }),
+  );
+
+  it.effect("refuses a section holding an adaptive selection and a selection", () =>
+    Effect.gen(function* adaptiveAndSelection() {
+      yield* orderingRefusal(partOf(sectionOf(`${adaptive}<qti-selection select="1"/>${itemRef}`)));
+      yield* guardedTest(partOf(sectionOf(`${adaptive}${itemRef}`)));
+      yield* guardedTest(partOf(sectionOf(`<qti-selection select="1"/>${itemRef}`)));
+    }),
+  );
+
+  it.effect("refuses a section whose ordering precedes its selection", () =>
+    Effect.gen(function* selectionOrder() {
+      yield* orderingRefusal(
+        partOf(sectionOf(`<qti-ordering shuffle="true"/><qti-selection select="1"/>${itemRef}`)),
+      );
+    }),
+  );
+});
 
 const cell = "<tr><td>a</td></tr>";
 
@@ -261,6 +333,12 @@ const nodeId = (rows: Rows, kind: string, index = 0): Uuid => {
 
   return found.id;
 };
+
+/**
+ * `rows` with every document read as a `test` document, the rows of its tree unchanged.
+ */
+const asTest = (rows: Rows): Rows =>
+  edited(rows, Document, (facts) => facts.map((fact) => ({ ...fact, root: "test" as const })));
 
 const hottext = (identifier: string) => `<qti-hottext identifier="${identifier}">a</qti-hottext>`;
 
@@ -529,6 +607,79 @@ describe("contentGuards varref-copy", () => {
   );
 });
 
+const asRoot = (rows: Rows, root: "section" | "stimulus") =>
+  edited(rows, Document, (facts) => facts.map((fact) => ({ ...fact, root })));
+
+describe("contentGuards varref-copy by root", () => {
+  const body = `<p><qti-printed-variable identifier="VAR" base="VAR"/></p>`;
+
+  it.effect("reads no printed variable under a section or stimulus root", () =>
+    Effect.gen(function* otherRoots() {
+      const rows = yield* rowsOf("3.0.1", body);
+      const bare = edited(rows, PrintedVariableVarRef, () => []);
+      for (const root of ["section", "stimulus"] as const) {
+        yield* contentGuards(asRoot(bare, root));
+      }
+    }),
+  );
+
+  it.effect("still refuses the same printed variable under an item root", () =>
+    Effect.gen(function* itemRoot() {
+      const rows = yield* rowsOf("3.0.1", body);
+      yield* refusalOfRows(
+        "varref-copy",
+        edited(rows, PrintedVariableVarRef, () => []),
+        "VAR",
+      );
+    }),
+  );
+});
+
+describe("contentGuards on a test root", () => {
+  it.effect("refuses a test document with no title as an item's guards do", () =>
+    Effect.gen(function* testRequired() {
+      const rows = yield* rowsOf("3.0.1", `<p>a</p>`);
+      yield* itemGuards(asTest(rows));
+
+      const failure = yield* Effect.flip(itemGuards(asTest(edited(rows, DocumentTitle, () => []))));
+
+      assert.instanceOf(failure, ItemGuardRefusal);
+      assert.strictEqual(failure.rule, "typed-copy");
+    }),
+  );
+
+  it.effect("refuses a test whose language set differs from its DocumentLang rows", () =>
+    Effect.gen(function* testLanguageSet() {
+      const rows = yield* rowsOf("3.0.1", `<p xml:lang="fr">a</p>`);
+      yield* contentGuards(asTest(rows));
+      yield* refusalOfRows("lang-set-copy", asTest(edited(rows, DocumentLang, () => [])), "fr");
+    }),
+  );
+});
+
+/**
+ * `rows` with each item body read as a stimulus body.
+ */
+const asStimulus = (rows: Rows): Rows =>
+  edited(rows, Node, (facts) =>
+    facts.map((fact) =>
+      fact.kind === "qti-item-body" ? { ...fact, kind: "qti-stimulus-body" as const } : fact,
+    ),
+  );
+
+describe("itemGuards body-empty on a stimulus body", () => {
+  it.effect("refuses a qti-stimulus-body with no element child", () =>
+    Effect.gen(function* emptyStimulusBody() {
+      yield* itemGuards(asStimulus(yield* rowsOf("3.0.1", `<p>a</p>`)));
+
+      const failure = yield* Effect.flip(itemGuards(asStimulus(yield* rowsOf("3.0.1", ""))));
+
+      assert.instanceOf(failure, ItemGuardRefusal);
+      assert.strictEqual(failure.rule, "body-empty");
+    }),
+  );
+});
+
 describe("contentGuards lang-set-copy", () => {
   it.effect("refuses a DocumentLang set lacking a value a node carries", () =>
     Effect.gen(function* missingLanguage() {
@@ -653,6 +804,19 @@ describe("contentGuards owner-copy", () => {
   );
 });
 
+const masteryRefused = (attributes: string) =>
+  Effect.gen(function* masteryRefusedRange() {
+    const error = yield* Effect.flip(
+      contentGuards(yield* rowsOf("3.0.1", "", outcome(attributes))),
+    );
+    assert.strictEqual(error.rule, "mastery-range");
+  });
+
+const masteryAccepted = (attributes: string) =>
+  Effect.gen(function* masteryAcceptedRange() {
+    yield* contentGuards(yield* rowsOf("3.0.1", "", outcome(attributes)));
+  });
+
 describe("contentGuards conditioned optionals", () => {
   it.effect("refuses an extended-text bound to a multiple response with no max-strings", () =>
     Effect.gen(function* maxStrings() {
@@ -695,6 +859,16 @@ describe("contentGuards conditioned optionals", () => {
           outcome(` normal-minimum="0" mastery-value="0.5" normal-maximum="1"`),
         ),
       );
+    }),
+  );
+
+  it.effect("reads an overflowing mastery-range literal as the largest finite double", () =>
+    Effect.gen(function* overflow() {
+      yield* masteryRefused(` normal-maximum="1e400" mastery-value="INF"`);
+      yield* masteryAccepted(` normal-maximum="INF" mastery-value="1e400"`);
+      yield* masteryAccepted(` normal-minimum="-INF" mastery-value="-1e400"`);
+      yield* masteryRefused(` normal-minimum="-1e400" mastery-value="-INF"`);
+      yield* masteryAccepted(` normal-maximum="1.7976931348623157e308" mastery-value="1e400"`);
     }),
   );
 

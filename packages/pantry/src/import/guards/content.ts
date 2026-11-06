@@ -11,8 +11,9 @@
  */
 import type { AnyRelation, Fact, Uuid } from "@bjornpagen/grizzle";
 import { Effect, Option, Schema } from "effect";
-import { collapse, replace, Rows } from "#pantry/import/tree.ts";
-import type { WhiteSpace } from "#pantry/import/tree.ts";
+import { Rows } from "#pantry/import/tree.ts";
+import { collapse, replace } from "#pantry/import/whitespace.ts";
+import type { WhiteSpace } from "#pantry/import/whitespace.ts";
 import { IdrefAttribute } from "#pantry/schema/content/rosters.ts";
 import { entryOf } from "#pantry/schema/content/xsd-inventory.ts";
 import { spelledText, typedValues } from "#pantry/schema/attribute-homes.ts";
@@ -224,8 +225,10 @@ const bodyHosts: ReadonlySet<string> = new Set([
   "qti-feedback-block.template",
   "qti-modal-feedback",
   "qti-rubric-block",
+  "qti-rubric-block.test",
   "qti-template-block",
   "qti-template-block.rubric",
+  "qti-test-feedback",
 ]);
 
 const bodyOrder = (kind: string): number | undefined => {
@@ -261,6 +264,121 @@ const promptHosts: ReadonlySet<string> = new Set([
   "qti-slider-interaction",
   "qti-upload-interaction",
 ]);
+
+/**
+ * The ranks of the M4 kinds' sequences (spec 3.4, ASI 3.0.1). A kind absent from a table is not
+ * part of its parent's sequence.
+ */
+const testOrder: ReadonlyMap<string, number> = new Map([
+  ["qti-context-declaration", 0],
+  ["qti-outcome-declaration", 1],
+  ["qti-time-limits", 2],
+  ["qti-stylesheet", 3],
+  ["qti-rubric-block.test", 4],
+  ["qti-test-part", 5],
+  ["qti-outcome-processing", 6],
+  ["qti-test-feedback", 7],
+]);
+
+const partOrder: ReadonlyMap<string, number> = new Map([
+  ["qti-pre-condition", 0],
+  ["qti-branch-rule", 1],
+  ["qti-item-session-control", 2],
+  ["qti-time-limits", 3],
+  ["qti-rubric-block.test", 4],
+  ["qti-assessment-section", 5],
+  ["qti-assessment-section-ref", 5],
+  ["qti-test-feedback", 6],
+]);
+
+const sectionOrder: ReadonlyMap<string, number> = new Map([
+  ["qti-pre-condition", 0],
+  ["qti-branch-rule", 1],
+  ["qti-item-session-control", 2],
+  ["qti-time-limits", 3],
+  ["qti-adaptive-selection", 4],
+  ["qti-selection", 4],
+  ["qti-ordering", 5],
+  ["qti-rubric-block.test", 6],
+  ["qti-assessment-item-ref", 7],
+  ["qti-assessment-section", 7],
+  ["qti-assessment-section-ref", 7],
+  ["xi:include", 7],
+]);
+
+const itemRefOrder: ReadonlyMap<string, number> = new Map([
+  ["qti-pre-condition", 0],
+  ["qti-branch-rule", 1],
+  ["qti-item-session-control", 2],
+  ["qti-time-limits", 3],
+  ["qti-variable-mapping", 4],
+  ["qti-weight", 5],
+  ["qti-template-default", 6],
+]);
+
+const stimulusOrder: ReadonlyMap<string, number> = new Map([
+  ["qti-stylesheet", 0],
+  ["qti-stimulus-body", 1],
+  ["qti-catalog-info", 2],
+]);
+
+const adaptiveOrder: ReadonlyMap<string, number> = new Map([
+  ["qti-adaptive-engine-ref", 0],
+  ["qti-adaptive-settings-ref", 1],
+  ["qti-usagedata-ref", 2],
+  ["qti-metadata-ref", 3],
+]);
+
+const m4Orders: ReadonlyMap<string, readonly [order: ReadonlyMap<string, number>, model: string]> =
+  new Map([
+    [
+      "qti-assessment-test",
+      [
+        testOrder,
+        "declarations, time limits, stylesheets, rubric blocks, test parts, outcome processing, test feedback",
+      ],
+    ],
+    [
+      "qti-test-part",
+      [
+        partOrder,
+        "pre-conditions, branch rules, item session control, time limits, rubric blocks, sections, test feedback",
+      ],
+    ],
+    [
+      "qti-assessment-section",
+      [
+        sectionOrder,
+        "pre-conditions, branch rules, item session control, time limits, adaptive selection or selection and ordering, rubric blocks, children",
+      ],
+    ],
+    [
+      "qti-assessment-item-ref",
+      [
+        itemRefOrder,
+        "pre-conditions, branch rules, item session control, time limits, variable mappings, weights, template defaults",
+      ],
+    ],
+    ["qti-assessment-stimulus", [stimulusOrder, "stylesheets, the stimulus body, catalog info"]],
+    [
+      "qti-adaptive-selection",
+      [adaptiveOrder, "engine, settings, usage data, metadata references"],
+    ],
+  ]);
+
+/**
+ * A section's own sequence offers either an adaptive selection or a selection and an ordering,
+ * never both (S-R28).
+ */
+const adaptiveWithSelection = (family: Family): boolean => {
+  const kinds = new Set(family.children.map((child) => child.kind));
+
+  return (
+    family.kind === "qti-assessment-section" &&
+    kinds.has("qti-adaptive-selection") &&
+    (kinds.has("qti-selection") || kinds.has("qti-ordering"))
+  );
+};
 
 const pictureOrder: ReadonlyMap<string, number> = new Map([
   ["source", 0],
@@ -339,6 +457,22 @@ const orderingOf = (family: Family, defaults: ReadonlySet<string>): string | und
 
   if (kind === "picture") {
     return broken((name) => pictureOrder.get(name), "source, img");
+  }
+
+  if (adaptiveWithSelection(family)) {
+    return "a qti-adaptive-selection and a qti-selection or qti-ordering are both present; the section holds one or the other";
+  }
+
+  const m4 = m4Orders.get(kind);
+  if (m4 !== undefined) {
+    return broken((name) => m4[0].get(name), m4[1]);
+  }
+
+  if (kind === "qti-rubric-block.test") {
+    return broken(
+      (name) => (name === "qti-printed-variable" ? 3 : bodyOrder(name)),
+      "qti-stylesheet, qti-content-body, qti-catalog-info, qti-printed-variable",
+    );
   }
 
   if (bodyHosts.has(kind)) {
@@ -666,7 +800,9 @@ const replaceClass = (rows: Rows): Finding => {
 };
 
 /**
- * The whitespace class of the families when the inventory names no class for the kind.
+ * The whitespace class of the families when the inventory names no class for the kind: the same
+ * twelve names as `import/attributes.ts` reads (`xml:space`, `xml:id` and the ten `xlink:` names),
+ * so `lexicalCopy` checks the typed copy of each instead of skipping a name with no class.
  */
 const familyClass: ReadonlyMap<string, WhiteSpace> = new Map([
   ["class", "collapse"],
@@ -676,8 +812,20 @@ const familyClass: ReadonlyMap<string, WhiteSpace> = new Map([
   ["id", "collapse"],
   ["label", "replace"],
   ["lang", "replace"],
+  ["xlink:actuate", "collapse"],
+  ["xlink:arcrole", "collapse"],
+  ["xlink:from", "collapse"],
+  ["xlink:href", "collapse"],
+  ["xlink:label", "collapse"],
+  ["xlink:role", "collapse"],
+  ["xlink:show", "collapse"],
+  ["xlink:title", "preserve"],
+  ["xlink:to", "collapse"],
+  ["xlink:type", "collapse"],
   ["xml:base", "collapse"],
+  ["xml:id", "collapse"],
   ["xml:lang", "collapse"],
+  ["xml:space", "collapse"],
 ]);
 
 /**
@@ -919,9 +1067,18 @@ const variablePattern = new RegExp(patterns.integerOrVariableString, "u");
 
 /**
  * `varref-copy`: a `PrintedVariableVarRef` row exists exactly for a `base` or `index` whose value
- * is a variable name and not an integer, and names that variable.
+ * is a variable name and not an integer, and names that variable. Only item and test roots are
+ * read: a section or stimulus root writes no such rows.
  */
 const varrefCopy = (rows: Rows): Finding => {
+  const roots = new Map(Rows.of(rows, Document).map((document) => [document.id, document.root]));
+  const trees = new Map(Rows.of(rows, Node).map((node) => [node.id, node.tree]));
+  const read = (node: Uuid): boolean => {
+    const tree = trees.get(node);
+    const root = tree === undefined ? undefined : roots.get(tree);
+
+    return root === undefined || root === "item" || root === "test";
+  };
   const spellings: readonly {
     readonly attribute: string;
     readonly node: string;
@@ -937,17 +1094,16 @@ const varrefCopy = (rows: Rows): Finding => {
       node: row.node,
       value: row.value,
     })),
-  ];
+  ].filter(({ node }) => read(node));
   const named = new Map(
     spellings
       .filter(({ value }) => !integerPattern.test(value) && variablePattern.test(value))
       .map(({ attribute, node, value }) => [`${node} ${attribute}`, value]),
   );
   const references = new Map(
-    Rows.of(rows, PrintedVariableVarRef).map((row) => [
-      `${row.node} ${row.attribute}`,
-      row.identifier,
-    ]),
+    Rows.of(rows, PrintedVariableVarRef)
+      .filter((row) => read(row.node))
+      .map((row) => [`${row.node} ${row.attribute}`, row.identifier]),
   );
   for (const [key, identifier] of named) {
     if (references.get(key) !== identifier) {
@@ -1007,7 +1163,7 @@ const langSetCopy = (rows: Rows, index: Index): Finding => {
   const declared = Map.groupBy(Rows.of(rows, DocumentLang), (row) => row.document);
   const documents = new Set([
     ...Rows.of(rows, Document)
-      .filter((document) => document.root === "item")
+      .filter((document) => document.root === "item" || document.root === "test")
       .map((document) => document.id),
     ...declared.keys(),
   ]);
@@ -1138,12 +1294,26 @@ const ariaValueRange = (rows: Rows): Finding => {
   return undefined;
 };
 
+/**
+ * An `xs:double` literal as a number (reading 56): only `INF` and `-INF` name infinities, so a
+ * finite literal beyond the largest finite double reads as that double of its sign, not as
+ * infinity. An underflow to zero stays as `Number` reads it, and `NaN` stays `NaN`.
+ */
 const doubleOf = (text: string): number => {
   if (text === "INF") {
     return Number.POSITIVE_INFINITY;
   }
 
-  return text === "-INF" ? Number.NEGATIVE_INFINITY : Number(text);
+  if (text === "-INF") {
+    return Number.NEGATIVE_INFINITY;
+  }
+
+  const value = Number(text);
+  if (value === Number.POSITIVE_INFINITY) {
+    return Number.MAX_VALUE;
+  }
+
+  return value === Number.NEGATIVE_INFINITY ? -Number.MAX_VALUE : value;
 };
 
 const byDeclaration = (

@@ -29,13 +29,18 @@ const compare = (left: string, right: string): number => {
 };
 
 /**
- * The attribute admission rows of the registries, deduplicated on (kind, attribute) and sorted by
- * kind, then attribute.
+ * The attribute admission rows of the registries and of any further rows, deduplicated on
+ * (kind, attribute) and sorted by kind, then attribute.
  */
 export const attributeAdmissionRows = (
   registries: readonly RegistryLike[],
+  further: readonly AttributeAdmissionRow[] = [],
 ): readonly AttributeAdmissionRow[] => {
   const unique = new Map<string, AttributeAdmissionRow>();
+  for (const row of further) {
+    unique.set(`${row.kind}\u0000${row.attribute}`, row);
+  }
+
   for (const registry of registries) {
     for (const [kind, row] of Object.entries(registry)) {
       for (const attribute of row.attributes) {

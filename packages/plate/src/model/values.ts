@@ -1,6 +1,6 @@
 /**
- * QTI values and NULL as phase 1 holds them: a base type, a cardinality and the values, with the
- * lexical parse and format of each base type and the equality `qti-match` uses.
+ * QTI values and NULL as the value model holds them: a base type, a cardinality and the values,
+ * with the lexical parse and format of each base type and the equality `qti-match` uses.
  *
  * The session record, the engine and the form encoding all carry a {@link Value}, so this module
  * owns the one value representation, and the one NCName rule the validator reuses.
@@ -10,7 +10,7 @@
 import { Data, Option, Result } from "effect";
 
 /**
- * The base types phase 1 holds values of: every QTI base type but `point`, `duration` and `file`.
+ * The base types the value model holds values of: every QTI base type but `duration` and `file`.
  */
 export const modelledBaseTypes = [
   "identifier",
@@ -18,25 +18,26 @@ export const modelledBaseTypes = [
   "integer",
   "float",
   "string",
+  "point",
   "pair",
   "directedPair",
   "uri",
 ] as const;
 
 /**
- * A base type phase 1 holds values of.
+ * A base type the value model holds values of.
  */
 export type ModelledBaseType = (typeof modelledBaseTypes)[number];
 
 /**
- * The cardinalities a phase-1 value takes. Records are not modelled.
+ * The cardinalities the value model holds values of. Records are not modelled.
  */
 export const modelledCardinalities = ["single", "multiple", "ordered"] as const;
 
 /**
- * Report whether phase 1 holds values of a base type.
+ * Report whether the value model holds values of a base type.
  *
- * `point`, `duration` and `file` are valid QTI base types the value model does not hold, so their
+ * `duration` and `file` are valid QTI base types the value model does not hold, so their
  * declarations are marked unsupported rather than refused.
  *
  * @param baseType A `base-type` attribute value.
@@ -46,6 +47,30 @@ export const isModelled = (baseType: string): baseType is ModelledBaseType =>
   modelledBaseTypes.some((name) => name === baseType);
 
 /**
+ * The body of the character class of an NCName's first character: XML 1.0 (Fifth Edition)'s
+ * `NameStartChar` without the colon, written as the inside of a `u`-flag character class, so
+ * `[${nameStartClass}]` matches one such character. Each range is a range of code points.
+ *
+ * The XSD regular-expression translator builds `\i` from it, and {@link ncName} its first
+ * character.
+ *
+ * @see https://www.w3.org/TR/2008/REC-xml-20081126/#NT-NameStartChar
+ */
+export const nameStartClass = String.raw`A-Z_a-z\u{C0}-\u{D6}\u{D8}-\u{F6}\u{F8}-\u{2FF}\u{370}-\u{37D}\u{37F}-\u{1FFF}\u{200C}-\u{200D}\u{2070}-\u{218F}\u{2C00}-\u{2FEF}\u{3001}-\u{D7FF}\u{F900}-\u{FDCF}\u{FDF0}-\u{FFFD}\u{10000}-\u{EFFFF}`;
+
+/**
+ * The body of the character class of an NCName's later characters: XML 1.0 (Fifth Edition)'s
+ * `NameChar` without the colon, written as the inside of a `u`-flag character class, so
+ * `[${nameClass}]` matches one such character. Each range is a range of code points.
+ *
+ * The XSD regular-expression translator builds `\c` from it, and {@link ncName} the characters
+ * after the first.
+ *
+ * @see https://www.w3.org/TR/2008/REC-xml-20081126/#NT-NameChar
+ */
+export const nameClass = String.raw`-.0-9A-Z_a-z\u{B7}\u{C0}-\u{D6}\u{D8}-\u{F6}\u{F8}-\u{37D}\u{37F}-\u{1FFF}\u{200C}-\u{200D}\u{203F}-\u{2040}\u{2070}-\u{218F}\u{2C00}-\u{2FEF}\u{3001}-\u{D7FF}\u{F900}-\u{FDCF}\u{FDF0}-\u{FFFD}\u{10000}-\u{EFFFF}`;
+
+/**
  * An XML NCName: a `Name` of XML 1.0 (Fifth Edition), `NameStartChar` then `NameChar`s, with the
  * colon removed from both. The `u` flag makes each range a range of code points, so a character
  * outside the Basic Multilingual Plane matches as one character and a lone surrogate never does.
@@ -53,8 +78,7 @@ export const isModelled = (baseType: string): baseType is ModelledBaseType =>
  * @see https://www.w3.org/TR/2008/REC-xml-20081126/#NT-NameStartChar
  * @see https://www.w3.org/TR/xml-names/#NT-NCName
  */
-const ncName =
-  /^[A-Z_a-z\u{C0}-\u{D6}\u{D8}-\u{F6}\u{F8}-\u{2FF}\u{370}-\u{37D}\u{37F}-\u{1FFF}\u{200C}-\u{200D}\u{2070}-\u{218F}\u{2C00}-\u{2FEF}\u{3001}-\u{D7FF}\u{F900}-\u{FDCF}\u{FDF0}-\u{FFFD}\u{10000}-\u{EFFFF}][-.0-9A-Z_a-z\u{B7}\u{C0}-\u{D6}\u{D8}-\u{F6}\u{F8}-\u{37D}\u{37F}-\u{1FFF}\u{200C}-\u{200D}\u{203F}-\u{2040}\u{2070}-\u{218F}\u{2C00}-\u{2FEF}\u{3001}-\u{D7FF}\u{F900}-\u{FDCF}\u{FDF0}-\u{FFFD}\u{10000}-\u{EFFFF}]*$/u;
+const ncName = new RegExp(`^[${nameStartClass}][${nameClass}]*$`, "u");
 
 /**
  * Report whether text is an XML NCName, the lexical space of a QTI identifier.
@@ -105,6 +129,17 @@ export const trimXmlSpace = (text: string): string => {
 const pairLexical = /^(?<source>[^\t\n\r ]+)[\t\n\r ]+(?<destination>[^\t\n\r ]+)$/u;
 
 /**
+ * The lexical form of a point: two integers, each as {@link integerLexical} writes one, separated
+ * by XML whitespace, the horizontal coordinate first.
+ *
+ * QTI 3.0 calls a point an integer tuple and states no range for its coordinates, so each is held
+ * exactly at any size, as an integer is (reading 45).
+ *
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#Enumerated_BaseTypeEnum
+ */
+const pointLexical = /^(?<x>[+-]?[0-9]+)[\t\n\r ]+(?<y>[+-]?[0-9]+)$/u;
+
+/**
  * The lexical space of a QTI integer, and of `xs:integer`: an optional sign and ASCII digits, as
  * many as written.
  *
@@ -136,11 +171,12 @@ export const doubleLexical =
 
 /**
  * One QTI value, tagged by its base type: a string for `identifier`, `string` and `uri`; a
- * `bigint` for `integer`; a number for `float`; a boolean for `boolean`; and two identifiers for
- * `pair` and `directedPair`, the source first.
+ * `bigint` for `integer`; a number for `float`; a boolean for `boolean`; two `bigint`s for `point`,
+ * the horizontal coordinate first; and two identifiers for `pair` and `directedPair`, the source
+ * first.
  *
- * An integer is exact at any size. A float is an xs:double. `SingleSchema` in
- * `#plate/codec/values.ts` checks and encodes this type at the boundaries.
+ * An integer, and each coordinate of a point, is exact at any size. A float is an xs:double.
+ * `SingleSchema` in `#plate/codec/values.ts` checks and encodes this type at the boundaries.
  */
 export type Single =
   | { readonly baseType: "identifier"; readonly value: string }
@@ -148,6 +184,7 @@ export type Single =
   | { readonly baseType: "integer"; readonly value: bigint }
   | { readonly baseType: "float"; readonly value: number }
   | { readonly baseType: "string"; readonly value: string }
+  | { readonly baseType: "point"; readonly value: readonly [bigint, bigint] }
   | { readonly baseType: "pair"; readonly value: readonly [string, string] }
   | { readonly baseType: "directedPair"; readonly value: readonly [string, string] }
   | { readonly baseType: "uri"; readonly value: string };
@@ -200,6 +237,7 @@ const expected = {
   identifier: "an NCName: a letter or _ first, then letters, digits, -, _ or .",
   integer: "decimal digits with an optional sign, such as -12",
   pair: "two NCNames separated by whitespace, such as A B",
+  point: "two integers separated by whitespace, x then y, such as 102 113",
   string: "any text",
   uri: "any text",
 } satisfies Record<ModelledBaseType, string>;
@@ -274,6 +312,25 @@ const readInteger = (lexical: string): Option.Option<Single> =>
     : Option.none();
 
 /**
+ * Read the lexical form of a point as its two exact coordinates.
+ *
+ * `BigInt` reads only text {@link pointLexical} has admitted as an integer, which it always
+ * accepts, so it never throws.
+ *
+ * @param lexical The lexical form, with no outer whitespace removed.
+ * @returns The point, x then y, or none when the text is not two integers separated by whitespace.
+ */
+const readPoint = (lexical: string): Option.Option<Single> => {
+  const coordinates = pointLexical.exec(lexical)?.groups;
+  const x = coordinates?.["x"];
+  const y = coordinates?.["y"];
+
+  return x === undefined || y === undefined
+    ? Option.none()
+    : Option.some({ baseType: "point", value: [BigInt(x), BigInt(y)] });
+};
+
+/**
  * Read the lexical form of a pair or directed pair.
  *
  * @param baseType Which of the two to read.
@@ -309,6 +366,7 @@ const readers = {
     valueIf(isNcName(lexical), { baseType: "identifier", value: lexical }),
   integer: readInteger,
   pair: (lexical: string) => readPair("pair", lexical),
+  point: readPoint,
   string: (lexical: string) => valueIf(true, { baseType: "string", value: lexical }),
   uri: (lexical: string) => valueIf(true, { baseType: "uri", value: lexical }),
 } satisfies Record<ModelledBaseType, (lexical: string) => Option.Option<Single>>;
@@ -380,11 +438,11 @@ const formatFloat = (number: number): string => {
  * Write a value in its base type's lexical form.
  *
  * `String` writes the exact decimal digits of an integer of any size, never an exponent: no `+`,
- * no leading zeros, and `0` for a written `-0`.
+ * no leading zeros, and `0` for a written `-0`. A point's coordinates are written the same way.
  *
  * @param single The value to write.
  * @returns The lexical form, which {@link parseLexical} reads back to the same value; a pair is its
- *   two identifiers separated by one space.
+ *   two identifiers, and a point its two coordinates, separated by one space.
  */
 export const format = (single: Single): string => {
   if (single.baseType === "boolean") {
@@ -397,6 +455,10 @@ export const format = (single: Single): string => {
 
   if (single.baseType === "float") {
     return formatFloat(single.value);
+  }
+
+  if (single.baseType === "point") {
+    return `${String(single.value[0])} ${String(single.value[1])}`;
   }
 
   if (single.baseType === "pair" || single.baseType === "directedPair") {
@@ -412,8 +474,8 @@ export const format = (single: Single): string => {
  * @param left One value.
  * @param right The other value.
  * @returns Whether they share a base type and are equal: a `pair` in either order, a
- *   `directedPair` in order, integers and floats by value (`===` compares two bigints by value)
- *   and strings by code point.
+ *   `directedPair` in order, a `point` when both coordinates are equal, integers and floats by
+ *   value (`===` compares two bigints by value) and strings by code point.
  */
 const sameSingle = (left: Single, right: Single): boolean => {
   if (left.baseType === "pair" && right.baseType === "pair") {
@@ -424,6 +486,10 @@ const sameSingle = (left: Single, right: Single): boolean => {
   }
 
   if (left.baseType === "directedPair" && right.baseType === "directedPair") {
+    return left.value[0] === right.value[0] && left.value[1] === right.value[1];
+  }
+
+  if (left.baseType === "point" && right.baseType === "point") {
     return left.value[0] === right.value[0] && left.value[1] === right.value[1];
   }
 

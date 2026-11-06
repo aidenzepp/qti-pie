@@ -469,6 +469,144 @@ export const TrackDefaultValue = closed("TrackDefaultValue", [
 ]);
 
 /**
+ * How a `qti-` wildcard admits the namespaces of its elements: any, any but the target namespace,
+ * or any but the target namespace and no namespace (`xs:any` `namespace` of `##any`, `##other`
+ * and `##other ##local`).
+ */
+export const NamespacePolicy = closed("NamespacePolicy", ["any", "other", "otherOrLocal"]);
+
+/**
+ * How strictly a wildcard judges the content it admits (`xs:any` `processContents`).
+ */
+export const ProcessContents = closed("ProcessContents", ["lax", "strict", "skip"]);
+
+/**
+ * The namespaces the four schema sets and their imports name, by the prefix `seed/wildcard.ts`
+ * gives each, and `absent` for no namespace (XML Schema's word; a roster handle cannot be empty).
+ * A column of this roster holds a seeded namespace, never an author's. Handles are prefixes, not
+ * URIs: grizzle lowers a roster to a PostgreSQL enum, whose labels hold at most 63 bytes.
+ */
+export const SchemaNamespace = closed("SchemaNamespace", [
+  "asi",
+  "cp",
+  "cpx",
+  "csmd",
+  "drd",
+  "lom",
+  "mathml",
+  "qmd",
+  "ssml",
+  "ud",
+  "xi",
+  "xlink",
+  "xml",
+  "xmlns",
+  "xsi",
+  "absent",
+]);
+
+/**
+ * The schema sets a foreign tree is judged against: the QTI assessment-item schema, the content
+ * packaging manifest schema, the LOM schema and the usage data schema.
+ */
+export const SchemaSet = closed("SchemaSet", ["asi", "manifest", "lom", "usagedata"]);
+
+/**
+ * The values of `xlink:type` (`w3/xlink.xsd` line 31).
+ */
+export const XlinkTypeValue = closed("XlinkTypeValue", [
+  "simple",
+  "extended",
+  "title",
+  "resource",
+  "locator",
+  "arc",
+]);
+
+/**
+ * The values of `xlink:show` (`w3/xlink.xsd` line 72).
+ */
+export const XlinkShowValue = closed("XlinkShowValue", [
+  "new",
+  "replace",
+  "embed",
+  "other",
+  "none",
+]);
+
+/**
+ * The values of `xlink:actuate` (`w3/xlink.xsd` line 84).
+ */
+export const XlinkActuateValue = closed("XlinkActuateValue", [
+  "onLoad",
+  "onRequest",
+  "other",
+  "none",
+]);
+
+/**
+ * The values of `xml:space` (`w3/xml.xsd`'s enumeration).
+ */
+export const XmlSpace = closed("XmlSpace", ["default", "preserve"]);
+
+/**
+ * The `navigation-mode` of a test part: the paths a candidate may take through it
+ * (`imsqti_asiv3p0p1_v1p0.xsd` lines 33365 to 33377).
+ */
+export const NavigationMode = closed("NavigationMode", ["linear", "nonlinear"]);
+
+/**
+ * The `submission-mode` of a test part: when responses go to response processing
+ * (`imsqti_asiv3p0p1_v1p0.xsd` lines 33379 to 33391).
+ */
+export const SubmissionMode = closed("SubmissionMode", ["individual", "simultaneous"]);
+
+/**
+ * The `access` of a test feedback: when it shows to the candidate
+ * (`imsqti_asiv3p0p1_v1p0.xsd` lines 33220 to 33231).
+ */
+export const TestFeedbackAccess = closed("TestFeedbackAccess", ["atEnd", "during"]);
+
+/**
+ * The three exit values of a branch rule `target` (INFO#DataCharacteristic_BranchRule.Attr_target).
+ */
+export const BranchExit = closed("BranchExit", ["EXIT_SECTION", "EXIT_TESTPART", "EXIT_TEST"]);
+
+/**
+ * Which a branch rule target is: an exit value or a reference to an identifier.
+ */
+export const BranchTarget = closed("BranchTarget", ["exit", "ref"]);
+
+/**
+ * Which kind of test structure node holds a child.
+ */
+export const StructureHolder = closed("StructureHolder", [
+  "part",
+  "section",
+  "sectionRef",
+  "itemRef",
+]);
+
+/**
+ * What an item reference resolves to: an item or a learning tools interoperability tool.
+ */
+export const ItemRefTarget = closed("ItemRefTarget", ["item", "lti"]);
+
+/**
+ * Where a prefixed identifier is declared: by the item, by a mapping or by the built in set.
+ */
+export const PrefixedSource = closed("PrefixedSource", ["declared", "mapped", "builtIn"]);
+
+/**
+ * What a section variable reference names: a declared variable, a prefixed one or a duration.
+ */
+export const SectionVariableTarget = closed("SectionVariableTarget", [
+  "declared",
+  "prefixed",
+  "duration",
+]);
+
+/**
  * The values of the `fence` attribute; the twelve `true false` attributes share it
  * (`mathml3-presentation.xsd` lines 190 to 191), in XSD order. Distinct from every roster of
  * another vocabulary even where the members match.
@@ -821,6 +959,8 @@ export const relations = {
   AriaTrueFalseUndefined,
   BooleanLiteral,
   Bound,
+  BranchExit,
+  BranchTarget,
   CellAlign,
   CellScope,
   CellValign,
@@ -828,6 +968,7 @@ export const relations = {
   CrossOrigin,
   ExternalScored,
   IdrefAttribute,
+  ItemRefTarget,
   MathConstantName,
   MathOperatorName,
   MathmlBooleanValue,
@@ -861,16 +1002,26 @@ export const relations = {
   MediaLoop,
   MediaMuted,
   MediaPreload,
+  NamespacePolicy,
+  NavigationMode,
   Orientation,
   ParamValuetype,
+  PrefixedSource,
+  ProcessContents,
   QmdFeedbackTypeValue,
   QmdInteractionTypeValue,
   QmdScoringModeValue,
   RoundingMode,
+  SchemaNamespace,
+  SchemaSet,
+  SectionVariableTarget,
   Shape,
   ShowHide,
   StatsOperatorName,
+  StructureHolder,
+  SubmissionMode,
   SuppressTtsMode,
+  TestFeedbackAccess,
   TextDirection,
   TextFormat,
   ToleranceMode,
@@ -878,6 +1029,10 @@ export const relations = {
   TrackDefaultValue,
   TrackKind,
   XIncludeParseValue,
+  XlinkActuateValue,
+  XlinkShowValue,
+  XlinkTypeValue,
+  XmlSpace,
   XsBoolean,
   YesNo,
 };
@@ -1106,6 +1261,46 @@ export type MediaControlsHandle = (typeof MediaControls.handles)[number];
  * A handle of `TrackDefaultValue`.
  */
 export type TrackDefaultValueHandle = (typeof TrackDefaultValue.handles)[number];
+
+/**
+ * A handle of `NamespacePolicy`.
+ */
+export type NamespacePolicyHandle = (typeof NamespacePolicy.handles)[number];
+
+/**
+ * A handle of `ProcessContents`.
+ */
+export type ProcessContentsHandle = (typeof ProcessContents.handles)[number];
+
+/**
+ * A handle of `SchemaNamespace`.
+ */
+export type SchemaNamespaceHandle = (typeof SchemaNamespace.handles)[number];
+
+/**
+ * A handle of `SchemaSet`.
+ */
+export type SchemaSetHandle = (typeof SchemaSet.handles)[number];
+
+/**
+ * A handle of `XlinkTypeValue`.
+ */
+export type XlinkTypeValueHandle = (typeof XlinkTypeValue.handles)[number];
+
+/**
+ * A handle of `XlinkShowValue`.
+ */
+export type XlinkShowValueHandle = (typeof XlinkShowValue.handles)[number];
+
+/**
+ * A handle of `XlinkActuateValue`.
+ */
+export type XlinkActuateValueHandle = (typeof XlinkActuateValue.handles)[number];
+
+/**
+ * A handle of `XmlSpace`.
+ */
+export type XmlSpaceHandle = (typeof XmlSpace.handles)[number];
 
 /**
  * A handle of `MathmlBooleanValue`.

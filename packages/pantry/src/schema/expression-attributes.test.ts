@@ -13,6 +13,7 @@ import * as item from "#pantry/schema/item.ts";
 import * as node from "#pantry/schema/node.ts";
 import * as pkg from "#pantry/schema/package.ts";
 import * as processing from "#pantry/schema/processing.ts";
+import * as testStructure from "#pantry/schema/test/structure.ts";
 import * as value from "#pantry/schema/value.ts";
 
 /**
@@ -217,7 +218,9 @@ const probe = () =>
       ...declaration.relations,
       ...value.relations,
       ...item.relations,
+      ...rosters.relations,
       ...processing.relations,
+      ...testStructure.relations,
       ...expression.relations,
       ...expressionAttributes.relations,
     },
@@ -229,6 +232,7 @@ const probe = () =>
       ...value.rules,
       ...item.rules,
       ...processing.rules,
+      ...testStructure.rules,
       ...expression.rules,
       ...expressionAttributes.rules,
     ],

@@ -75,7 +75,8 @@ export const decodeStoredFloat = Schema.decodeOption(FloatFromJson);
  *
  * An integer is exact at any size. Its encoded form is its decimal digits, which `parseLexical`
  * reads to the same value, so a value decoded from a record is one the parser could have read. A
- * float is an xs:double. Its encoded form is a JSON number when it is finite and not negative zero,
+ * point is two such integers, x then y, each encoded as its decimal digits. A float is an
+ * xs:double. Its encoded form is a JSON number when it is finite and not negative zero,
  * and otherwise `"INF"`, `"-INF"`, `"NaN"` or `"-0"`, so `JSON.stringify` keeps every float.
  */
 export const SingleSchema = Schema.Union([
@@ -84,6 +85,10 @@ export const SingleSchema = Schema.Union([
   Schema.Struct({ baseType: Schema.Literal("integer"), value: Schema.BigIntFromString }),
   Schema.Struct({ baseType: Schema.Literal("float"), value: FloatFromJson }),
   Schema.Struct({ baseType: Schema.Literal("string"), value: Schema.String }),
+  Schema.Struct({
+    baseType: Schema.Literal("point"),
+    value: Schema.Tuple([Schema.BigIntFromString, Schema.BigIntFromString]),
+  }),
   Schema.Struct({
     baseType: Schema.Literal("pair"),
     value: Schema.Tuple([IdentifierText, IdentifierText]),

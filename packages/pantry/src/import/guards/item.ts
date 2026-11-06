@@ -7,8 +7,9 @@
 import type { AnyRelation, Uuid } from "@bjornpagen/grizzle";
 import { Effect, Option, Predicate, Schema } from "effect";
 import { standardTemplate } from "#pantry/import/item.ts";
-import { collapse, replace, Rows, valueText } from "#pantry/import/tree.ts";
-import type { WhiteSpace } from "#pantry/import/tree.ts";
+import { Rows, valueText } from "#pantry/import/tree.ts";
+import { collapse, replace } from "#pantry/import/whitespace.ts";
+import type { WhiteSpace } from "#pantry/import/whitespace.ts";
 import { spelledText } from "#pantry/schema/attribute-homes.ts";
 import {
   Declaration,
@@ -162,7 +163,7 @@ const indexOf = (rows: Rows): Index => ({
   children: Map.groupBy(Rows.of(rows, Edge).toSorted(byPosition), (edge) => edge.parent),
   itemTrees: new Set(
     Rows.of(rows, Document)
-      .filter((document) => document.root === "item")
+      .filter((document) => document.root === "item" || document.root === "test")
       .map((document) => document.id),
   ),
   nodes: new Map(Rows.of(rows, Node).map((node) => [node.id, node])),
@@ -947,15 +948,16 @@ const ordering = (index: Index): Finding => {
 };
 
 /**
- * `body-empty`: every `qti-item-body` has at least one element child (spec 3.6).
+ * `body-empty`: every `qti-item-body` and `qti-stimulus-body` has at least one element child
+ * (spec 3.6, S-R11).
  */
 const bodyEmpty = (index: Index): Finding => {
   for (const [id, node] of index.nodes) {
     if (
-      node.kind === "qti-item-body" &&
+      (node.kind === "qti-item-body" || node.kind === "qti-stimulus-body") &&
       !(index.children.get(id) ?? []).some((edge) => elementKinds.has(edge.childKind))
     ) {
-      return refuse("body-empty", `The qti-item-body ${id} has no element child.`);
+      return refuse("body-empty", `The ${node.kind} ${id} has no element child.`);
     }
   }
 

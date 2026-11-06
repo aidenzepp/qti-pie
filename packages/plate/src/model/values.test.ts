@@ -259,6 +259,72 @@ describe("parseLexical", () => {
   );
 });
 
+describe("point values", () => {
+  it.effect("reads two integers separated by whitespace as an exact point", () =>
+    Effect.gen(function* pointRead() {
+      assert.deepStrictEqual(yield* Effect.fromResult(parseLexical("point", "102 113")), {
+        baseType: "point",
+        value: [102n, 113n],
+      });
+      assert.deepStrictEqual(
+        yield* Effect.fromResult(parseElementText("point", " 102  113 ")),
+        Option.some<Single>({ baseType: "point", value: [102n, 113n] }),
+      );
+      assert.deepStrictEqual(
+        yield* Effect.fromResult(parseElementText("point", "\n\t9007199254740993\r\n-12\t")),
+        Option.some<Single>({ baseType: "point", value: [2n ** 53n + 1n, -12n] }),
+      );
+    }),
+  );
+
+  it.effect("reads every point value of the corpus's point items", () =>
+    Effect.gen(function* corpusPoints() {
+      const cases: readonly (readonly [string, bigint, bigint])[] = [
+        ["118 184", 118n, 184n],
+        ["150 235", 150n, 235n],
+        ["96 114", 96n, 114n],
+        ["93 111", 93n, 111n],
+        ["216 90", 216n, 90n],
+        ["102 113", 102n, 113n],
+      ];
+      for (const [text, x, y] of cases) {
+        assert.deepStrictEqual(
+          yield* Effect.fromResult(parseElementText("point", text)),
+          Option.some<Single>({ baseType: "point", value: [x, y] }),
+          text,
+        );
+      }
+    }),
+  );
+
+  it.effect("refuses a non-integer coordinate, one coordinate, words, three and outer space", () =>
+    Effect.gen(function* pointsRefused() {
+      for (const lexical of ["1.5 2", "102", "a b", "1 2 3", " 102 113", "102,113", ""]) {
+        const error = yield* Effect.flip(Effect.fromResult(parseLexical("point", lexical)));
+        assert.strictEqual(error._tag, "InvalidValue", JSON.stringify(lexical));
+        assert.strictEqual(error.baseType, "point");
+        assert.strictEqual(error.lexical, lexical);
+      }
+      const trimmed = yield* Effect.flip(Effect.fromResult(parseElementText("point", " 1 2 3 ")));
+      assert.strictEqual(trimmed.lexical, "1 2 3");
+    }),
+  );
+
+  it.effect("round-trips a point through format as two runs of decimal digits", () =>
+    Effect.gen(function* pointRoundTrip() {
+      for (const [lexical, written] of [
+        ["102 113", "102 113"],
+        ["+0102\t\n-0", "102 0"],
+        [`1${"0".repeat(30)} -7`, `1${"0".repeat(30)} -7`],
+      ] as const) {
+        const single = yield* Effect.fromResult(parseLexical("point", lexical));
+        assert.strictEqual(format(single), written, lexical);
+        assert.deepStrictEqual(yield* Effect.fromResult(parseLexical("point", written)), single);
+      }
+    }),
+  );
+});
+
 describe("format", () => {
   it.effect("writes every value the parser accepts, one case per base type", () =>
     Effect.gen(function* formatIsTotal() {
@@ -272,6 +338,7 @@ describe("format", () => {
         ["string", "a b", "a b"],
         ["pair", "A B", "A B"],
         ["directedPair", "B A", "B A"],
+        ["point", "-3 +07", "-3 7"],
         ["uri", "https://example.org/a b", "https://example.org/a b"],
       ];
       for (const [baseType, lexical, written] of cases) {
@@ -298,13 +365,14 @@ describe("isNcName", () => {
 });
 
 describe("isModelled", () => {
-  it("holds every base type but point, duration and file", () => {
+  it("holds every base type but duration and file", () => {
     const modelled = [
       "identifier",
       "boolean",
       "integer",
       "float",
       "string",
+      "point",
       "pair",
       "directedPair",
       "uri",
@@ -312,7 +380,7 @@ describe("isModelled", () => {
     for (const baseType of modelled) {
       assert.isTrue(isModelled(baseType), baseType);
     }
-    for (const baseType of ["point", "duration", "file", "record"]) {
+    for (const baseType of ["duration", "file", "record"]) {
       assert.isFalse(isModelled(baseType), baseType);
     }
   });
@@ -339,6 +407,27 @@ describe("match", () => {
     assert.isTrue(match(pair("pair", "A", "B"), pair("pair", "B", "A")));
     assert.isFalse(match(pair("directedPair", "A", "B"), pair("directedPair", "B", "A")));
     assert.isTrue(match(pair("directedPair", "A", "B"), pair("directedPair", "A", "B")));
+  });
+
+  it("holds two points equal only when both coordinates are", () => {
+    const point = (x: bigint, y: bigint): Value =>
+      value("point", "single", [{ baseType: "point", value: [x, y] }]);
+    assert.isTrue(match(point(102n, 113n), point(102n, 113n)));
+    assert.isFalse(match(point(102n, 113n), point(113n, 102n)));
+    assert.isFalse(match(point(102n, 113n), point(102n, 114n)));
+    assert.isFalse(match(point(102n, 113n), point(101n, 113n)));
+    assert.isTrue(
+      match(
+        value("point", "multiple", [
+          { baseType: "point", value: [1n, 2n] },
+          { baseType: "point", value: [3n, 4n] },
+        ]),
+        value("point", "multiple", [
+          { baseType: "point", value: [3n, 4n] },
+          { baseType: "point", value: [1n, 2n] },
+        ]),
+      ),
+    );
   });
 
   it("is false when either value is NULL", () => {

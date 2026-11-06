@@ -51,15 +51,17 @@ const expressions: ReadonlySet<string> = new Set(expressionKinds);
 
 /**
  * The kinds that are elements: the registries' generic kinds (text, comments and the like) have no
- * local name.
+ * local name, and `foreign`, the element of wildcard content that no registry names, has none
+ * either but is an element all the same.
  */
-const elements: ReadonlySet<string> = new Set(
-  vocabularies.flatMap((vocabulary) =>
+const elements: ReadonlySet<string> = new Set([
+  "foreign",
+  ...vocabularies.flatMap((vocabulary) =>
     Object.entries<{ readonly local: string }>(vocabulary.registry)
       .filter(([, row]) => row.local !== "")
       .map(([kind]) => kind),
   ),
-);
+]);
 
 /**
  * The six rules a `qti-template-processing` holds.

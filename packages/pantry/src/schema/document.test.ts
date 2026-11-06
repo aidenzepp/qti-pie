@@ -134,6 +134,7 @@ describe("document", () => {
         "DocumentIdentifier",
         "ContextDeclarationId",
         "DocumentTitle",
+        "DocumentXmlId",
         "HtmlId",
         "IdHolder",
         "ItemBodyId",
@@ -146,6 +147,7 @@ describe("document", () => {
       "itemBody",
       "printedVariable",
       "contextDeclaration",
+      "xmlId",
     ]);
   });
 

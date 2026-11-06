@@ -286,8 +286,26 @@ const simpleItemName: ProcessingEdit = {
 };
 
 /**
+ * The edits that give a package the file `response.xml`'s `xi:include` names:
+ * `include/shared-rules.xml` written at the package root as `shared-rules.xml`, and listed as a
+ * `file` of `choice.xml`'s resource (R6: a referenced in-package file is described in the
+ * manifest). The `xi:fallback` does not lift that rule. The manifest's lines end `\r\n`, as
+ * `simple`'s do.
+ */
+const sharedRulesEdits: readonly ProcessingEdit[] = [
+  { _tag: "replaceFile", fromFile: "include/shared-rules.xml", path: "shared-rules.xml" },
+  {
+    _tag: "replaceText",
+    file: "imsmanifest.xml",
+    replacement: '<file href="images/sign.png"/>\r\n            <file href="shared-rules.xml"/>',
+    search: '<file href="images/sign.png"/>',
+  },
+];
+
+/**
  * `processing-item`'s edits: `simple` with `choice.xml`'s processing replaced by `response.xml`'s
- * rules, and the declarations and the `xi` namespace those rules need added.
+ * rules, the declarations and the `xi` namespace those rules need added, and the file their
+ * `xi:include` names ({@link sharedRulesEdits}).
  */
 const processingItemEdits: readonly ProcessingEdit[] = [
   {
@@ -299,6 +317,7 @@ const processingItemEdits: readonly ProcessingEdit[] = [
   },
   { _tag: "addDeclarations", file: "choice.xml", fromFile: "valid/response.xml" },
   { _tag: "replaceProcessing", file: "choice.xml", withFile: "valid/response.xml" },
+  ...sharedRulesEdits,
 ];
 
 /**
@@ -346,7 +365,8 @@ const largeProgramItemEdits: readonly ProcessingEdit[] = largeProgramItems.flatM
  * Define a derived package by name.
  *
  * - `processing-item`: `simple` with `choice.xml`'s processing replaced by `response.xml`'s rules,
- *   and the declarations and the `xi` namespace those rules need added; the body kinds are
+ *   and the declarations and the `xi` namespace those rules need added, and `shared-rules.xml` (the
+ *   file the rules' `xi:include` names) written and listed in the manifest; the body kinds are
  *   unchanged.
  * - `template-item`: `simple` with the declarations, template processing and response processing of
  *   `template.xml` and `response-mapped.xml` added. `RESPONSE` keeps `simple`'s identifier type and
@@ -354,16 +374,16 @@ const largeProgramItemEdits: readonly ProcessingEdit[] = largeProgramItems.flatM
  *   written to a new integer response `TOTAL` instead.
  * - `rptemplates`: `simple` plus the five template documents of the corpus under `rptemplates/`, each
  *   listed as an `imsqti_rptemplate_xmlv3p0` resource.
- * - `large-program`: `processing-item`'s item, `rptemplates`' five template documents and two more
- *   items of `ccPackage` in one package, so its import writes facts to the relations of all. It
- *   exists to be a valid package whose single-transaction import program is larger than the
- *   1,048,576 SQL bytes grizzle's compiler once refused above (pinned `ee3b5fc`), imported and
- *   round-tripped by `import/package.large.db.test.ts`.
- * - `padded-reference`: `response.xml` with `figures=" COUNT "` on a `qti-equal-rounded`, refused
- *   under `attribute-lexical` (decision 123).
+ * - `large-program`: `processing-item`'s item and `shared-rules.xml`, `rptemplates`' five template
+ *   documents and two more items of `ccPackage` in one package, so its import writes facts to the
+ *   relations of all. It exists to be a valid package whose single-transaction import program is
+ *   larger than the 1,048,576 SQL bytes grizzle's compiler once refused above (pinned `ee3b5fc`),
+ *   imported and round-tripped by `import/package.large.db.test.ts`.
+ * - `padded-reference`: `response.xml` with `figures=" COUNT "` on a `qti-equal-rounded`, and
+ *   `shared-rules.xml` written and listed, refused under `attribute-lexical` (decision 123).
  * - `padded-literal`: `response.xml` with an identifier `qti-base-value` written on its own line
- *   between indentation, as the corpus's six are; admitted with its literal trimmed (decision
- *   157).
+ *   between indentation, as the corpus's six are, and `shared-rules.xml` written and listed;
+ *   admitted with its literal trimmed (decision 157).
  * - Every other name: `simple` with `choice.xml` replaced by the document of that name.
  *
  * @param name - One of {@link processingFixtureNames}.
@@ -425,6 +445,7 @@ export const specOfProcessing = (name: ProcessingFixtureName): ProcessingFixture
       edits: [
         responseItem,
         simpleItemName,
+        ...sharedRulesEdits,
         {
           _tag: "replaceText",
           file: "choice.xml",
@@ -442,6 +463,7 @@ export const specOfProcessing = (name: ProcessingFixtureName): ProcessingFixture
       edits: [
         responseItem,
         simpleItemName,
+        ...sharedRulesEdits,
         {
           _tag: "replaceText",
           file: "choice.xml",

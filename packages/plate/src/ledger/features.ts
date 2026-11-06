@@ -279,7 +279,7 @@ export interface Exclusion {
   readonly reason: string;
 
   /**
-   * The document and section that settle the reason.
+   * What settles the reason, in words a reader of the public repository can follow.
    */
   readonly source: string;
 }
@@ -295,5 +295,5 @@ export const exclusions: readonly Exclusion[] = ["Q-31", "Q-32"].map((id) => ({
   id,
   reason: "accepted; the launch of a custom interaction is a goal non-goal",
   source:
-    "docs/goals/renderer/GOAL.md, Non-goals: custom interactions (Q-31 proprietary, Q-32 LTI) are accepted, not launched",
+    "a scope decision: plate accepts custom interactions (Q-31 proprietary, Q-32 LTI) and does not launch them",
 }));

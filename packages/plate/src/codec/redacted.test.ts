@@ -76,6 +76,7 @@ const declaration = (
   baseType: ResponseDeclaration["baseType"],
   cardinality: Value["cardinality"],
 ): ResponseDeclaration => ({
+  areaMapping: Option.none(),
   baseType,
   cardinality,
   correct: Option.none(),
@@ -121,9 +122,9 @@ const choice: ChoiceInteraction = {
   ariaLabelledby: Option.none(),
   cardinality: "multiple",
   choices: [
-    { content: [words("2")], identifier: "TWO" },
-    { content: [words("3")], identifier: "THREE" },
-    { content: [words("4")], identifier: "FOUR" },
+    { content: [words("2")], fixed: false, identifier: "TWO" },
+    { content: [words("3")], fixed: false, identifier: "THREE" },
+    { content: [words("4")], fixed: false, identifier: "FOUR" },
   ],
   class: "",
   kind: "choice",
@@ -146,7 +147,7 @@ const choice: ChoiceInteraction = {
 };
 
 /**
- * A Text Entry for an integer, with an `expected-length`, a placeholder and a pattern-mask
+ * A Text Entry for an integer, with an `expected-length`, a placeholder, a `pattern-mask` and its
  * message.
  */
 const year: TextEntryInteraction = {
@@ -158,6 +159,7 @@ const year: TextEntryInteraction = {
   expectedLength: Option.some(4n),
   kind: "text-entry",
   path: "qti-assessment-item/qti-item-body/p/qti-text-entry-interaction",
+  patternMask: Option.some("[0-9]{4}"),
   patternMaskMessage: Option.some("Write the year in four digits."),
   placeholder: Option.some("YYYY"),
   response: "YEAR",
@@ -171,16 +173,32 @@ const essay: ExtendedTextInteraction = {
   ariaLabelledby: Option.none(),
   base: 10,
   baseType: "string",
+  cardinality: "single",
   class: "",
   expectedLength: Option.none(),
   expectedLines: Option.some(12n),
   format: "plain",
   kind: "extended-text",
+  maxStrings: Option.none(),
+  minStrings: 0n,
   path: "qti-assessment-item/qti-item-body/qti-extended-text-interaction",
+  patternMask: Option.none(),
   patternMaskMessage: Option.none(),
   placeholder: Option.none(),
   prompt: Option.some([words("Describe the water cycle.")]),
   response: "ESSAY",
+};
+
+/**
+ * An Extended Text bound to an ordered response, with counts past 2^63-1, which no reading bounds.
+ */
+const stages: ExtendedTextInteraction = {
+  ...essay,
+  cardinality: "ordered",
+  maxStrings: Option.some(18_446_744_073_709_551_616n),
+  minStrings: 2n,
+  prompt: Option.some([words("Name the stages in order.")]),
+  response: "STAGES",
 };
 
 /**
@@ -222,6 +240,16 @@ const essayItem = itemOf(
 );
 
 /**
+ * The ordered Extended Text item.
+ */
+const stagesItem = itemOf(
+  "stages",
+  Option.none(),
+  [stages],
+  [declaration("STAGES", "string", "ordered")],
+);
+
+/**
  * An item whose body holds an element with an attribute, text and an unsupported part shown as a
  * notice.
  */
@@ -260,6 +288,7 @@ const items: readonly (readonly [string, Item])[] = [
   ["Choice", choiceItem],
   ["Text Entry", yearItem],
   ["Extended Text", essayItem],
+  ["ordered Extended Text", stagesItem],
   ["element, text and notice", noticeItem],
 ];
 
@@ -322,6 +351,88 @@ const nestedDivs = (levels: number): Uint8Array =>
     `<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="deep" title="deep" adaptive="false" time-dependent="false"><qti-item-body>${"<div>".repeat(levels)}deep${"</div>".repeat(levels)}</qti-item-body></qti-assessment-item>`,
   );
 
+/**
+ * A node of the body in the JSON form.
+ */
+type BodyNodeJson = RedactedJson["body"][number];
+
+/**
+ * The JSON form `encodeRedacted` writes for an accepted item's redaction.
+ *
+ * @param item The item, accepted through the test seam.
+ * @returns The JSON form, before any JSON text.
+ */
+const jsonOf = (item: Item): RedactedJson =>
+  Result.getOrThrow(encodeRedacted(redact(acceptForTest(item))));
+
+/**
+ * A Text Entry for the response `YEAR` in the JSON form, which the edits below place where QTI's
+ * schema admits no interaction.
+ */
+const yearJson: BodyNodeJson = {
+  base: 10,
+  baseType: "integer",
+  class: "",
+  kind: "text-entry",
+  path: "qti-assessment-item/qti-item-body/p/qti-text-entry-interaction",
+  response: "YEAR",
+};
+
+/**
+ * Construct an HTML element of the body in the JSON form, with no attributes.
+ *
+ * @param tag The element's name.
+ * @param children Its children.
+ * @returns The element.
+ */
+const elementJson = (tag: string, children: readonly BodyNodeJson[]): BodyNodeJson => ({
+  attributes: [],
+  children,
+  kind: "element",
+  path: `qti-assessment-item/qti-item-body/${tag}`,
+  tag,
+});
+
+/**
+ * The JSON form of the Choice item with its first choice's content replaced.
+ *
+ * @param content The content the first choice, `TWO`, holds instead of its text.
+ * @returns The edited JSON form.
+ */
+const withFirstChoice = (content: readonly BodyNodeJson[]): RedactedJson => {
+  const json = jsonOf(choiceItem);
+
+  return {
+    ...json,
+    body: json.body.map((node) =>
+      node.kind === "choice"
+        ? {
+            ...node,
+            choices: node.choices.map((simple, index) =>
+              index === 0 ? { ...simple, content } : simple,
+            ),
+          }
+        : node,
+    ),
+  };
+};
+
+/**
+ * One chain of `span`s in the JSON form, each the only child of the one around it.
+ *
+ * @param spans How many `span`s the chain holds.
+ * @param innermost The children of the innermost `span`.
+ * @returns The outermost `span`.
+ */
+const spanChain = (spans: number, innermost: readonly BodyNodeJson[]): BodyNodeJson => {
+  let node = elementJson("span", innermost);
+  for (let span = 1; span < spans; span += 1) {
+    node = elementJson("span", [node]);
+  }
+
+  return node;
+};
+
 describe("the Schema and the model", () => {
   it("agree on the body nodes and the redacted fields", () => {
     assert.isTrue(bodyPinned);
@@ -369,7 +480,146 @@ describe("encodeRedacted and decodeRedacted", () => {
     assert.notInclude(choiceText, '"ariaLabelledby":');
     assert.notInclude(choiceText, '"max":');
     assert.notInclude(wireText(yearItem), '"lang":');
+    assert.include(wireText(stagesItem), '"maxStrings":"18446744073709551616"');
+    assert.include(wireText(stagesItem), '"minStrings":"2"');
+    assert.notInclude(wireText(essayItem), '"maxStrings":');
   });
+});
+
+/**
+ * An item document whose body holds one text interaction bound to a string `RESPONSE`.
+ *
+ * @param body The body's markup.
+ * @param cardinality The response's cardinality, `single` by default.
+ * @returns The document's bytes.
+ */
+const textItemBytes = (body: string, cardinality = "single"): Uint8Array =>
+  new TextEncoder().encode(
+    `<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="text" title="Text" adaptive="false" time-dependent="false"><qti-response-declaration identifier="RESPONSE" cardinality="${cardinality}" base-type="string"/><qti-item-body>${body}</qti-item-body></qti-assessment-item>`,
+  );
+
+/**
+ * Open an item document, assert it is accepted naming exactly the unsupported features given, and
+ * assert its redaction round-trips through JSON text to an equal `Redacted` that renders the same
+ * HTML.
+ *
+ * @param name The case, which a failure names.
+ * @param bytes The document's bytes.
+ * @param unsupported The features the verdict must name, in order; none for `accepted`.
+ * @returns Nothing; each check is an assertion.
+ */
+const acceptedAndRoundTripped = Effect.fnUntraced(function* acceptedAndRoundTripped(
+  name: string,
+  bytes: Uint8Array,
+  unsupported: readonly string[],
+) {
+  const verdict = yield* open("items/text.xml", bytes);
+  const accepted =
+    verdict.verdict === "accepted" || verdict.verdict === "accepted-with-unsupported"
+      ? verdict.accepted
+      : assert.fail(`${name} is ${verdict.verdict}`);
+
+  assert.strictEqual(
+    verdict.verdict,
+    unsupported.length === 0 ? "accepted" : "accepted-with-unsupported",
+  );
+  assert.deepStrictEqual(
+    accepted.unsupported.map((entry) => entry.feature),
+    [...unsupported],
+  );
+
+  const redacted = redact(accepted);
+  // oxlint-disable-next-line unicorn/prefer-structured-clone -- The test proves the item survives JSON text, the form a host sends; `structuredClone` would keep the bigints and Options JSON drops.
+  const handedOver: unknown = JSON.parse(
+    JSON.stringify(Result.getOrThrow(encodeRedacted(redacted))),
+  );
+  const decoded = Result.getOrThrow(decodeRedacted(handedOver));
+  const configuration = yield* defaults;
+
+  assert.deepStrictEqual(decoded, redacted);
+  assert.strictEqual(
+    Result.getOrThrow(render(decoded, configuration, { instance })).html,
+    Result.getOrThrow(render(redacted, configuration, { instance })).html,
+  );
+});
+
+describe('the verdict and the codec on pattern-mask and format="xhtml"', () => {
+  const documents = [
+    [
+      '[Q-20] a Text Entry with pattern-mask="[0-9]+"',
+      '<p>Code: <qti-text-entry-interaction response-identifier="RESPONSE" pattern-mask="[0-9]+"/></p>',
+      [],
+    ],
+    [
+      '[Q-20] a Text Entry whose pattern-mask="[0-9" the translator refuses',
+      '<p>Code: <qti-text-entry-interaction response-identifier="RESPONSE" pattern-mask="[0-9"/></p>',
+      ["pattern-mask"],
+    ],
+    [
+      '[Q-5] an Extended Text with format="xhtml"',
+      '<qti-extended-text-interaction response-identifier="RESPONSE" format="xhtml"/>',
+      [],
+    ],
+  ] as const;
+
+  for (const [name, body, unsupported] of documents) {
+    it.effect(
+      `${name}: is accepted, naming only ${JSON.stringify(unsupported)} unsupported, and round-trips through JSON text`,
+      () => acceptedAndRoundTripped(name, textItemBytes(body), unsupported),
+    );
+  }
+});
+
+describe("the verdict and the codec on shuffle and fixed", () => {
+  it.effect(
+    '[Q-2] a shuffled Choice with fixed="true" and unmarked choices: is accepted, naming nothing unsupported, and round-trips fixed through JSON text',
+    () =>
+      Effect.gen(function* shuffledRoundTrip() {
+        const bytes = new TextEncoder().encode(
+          '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="shuffled" title="Shuffled" adaptive="false" time-dependent="false"><qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier"/><qti-item-body><qti-choice-interaction response-identifier="RESPONSE" shuffle="true"><qti-simple-choice identifier="A">Ant</qti-simple-choice><qti-simple-choice identifier="B" fixed="true">Bee</qti-simple-choice><qti-simple-choice identifier="C">Cat</qti-simple-choice></qti-choice-interaction></qti-item-body></qti-assessment-item>',
+        );
+
+        yield* acceptedAndRoundTripped("a shuffled Choice", bytes, []);
+
+        const verdict = yield* open("items/shuffled.xml", bytes);
+        const accepted =
+          verdict.verdict === "accepted" ? verdict.accepted : assert.fail(verdict.verdict);
+        const text = JSON.stringify(Result.getOrThrow(encodeRedacted(redact(accepted))));
+
+        assert.include(text, '"fixed":true,"identifier":"B"');
+        assert.include(text, '"fixed":false,"identifier":"A"');
+        assert.include(text, '"shuffle":true');
+      }),
+  );
+});
+
+describe("the verdict and the codec on Extended Text containers", () => {
+  const documents = [
+    ['max-strings="3"', []],
+    ['max-strings="1000000000000"', []],
+    ['min-strings="100" max-strings="200"', []],
+    ['max-strings="0"', []],
+    ['min-strings="101" max-strings="200"', ["min-strings>100"]],
+    ['min-strings="1000000000000" max-strings="1000000000000"', ["min-strings>100"]],
+    ['max-strings="5" min-strings="101"', ["min-strings>100"]],
+  ] as const;
+
+  for (const [counts, unsupported] of documents) {
+    const name = `[Q-5] an ordered Extended Text with ${counts}`;
+
+    it.effect(
+      `${name}: is accepted, naming only ${JSON.stringify(unsupported)} unsupported, and round-trips through JSON text`,
+      () =>
+        acceptedAndRoundTripped(
+          name,
+          textItemBytes(
+            `<qti-extended-text-interaction response-identifier="RESPONSE" ${counts}/>`,
+            "ordered",
+          ),
+          unsupported,
+        ),
+    );
+  }
 });
 
 describe("decodeRedacted", () => {
@@ -501,6 +751,87 @@ describe("decodeRedacted on a live object", () => {
         assert.strictEqual(error._tag, "InvalidRedacted");
         assert.strictEqual(error.stage, "decode");
         assert.include(error.issue, "the host's getter");
+      }),
+  );
+});
+
+describe("decodeRedacted on an interaction render cannot emit", () => {
+  const choiceJson = jsonOf(choiceItem);
+  const essayJson = jsonOf(essayItem);
+  /**
+   * Each edit of the JSON form that places the Text Entry where QTI's schema admits no
+   * interaction, with the response of the interaction whose content holds it.
+   */
+  const misplaced: readonly (readonly [string, RedactedJson, string])[] = [
+    [
+      "a choice's content, two elements down",
+      withFirstChoice([elementJson("p", [elementJson("span", [yearJson])])]),
+      "RESPONSE",
+    ],
+    [
+      "the Choice's Prompt",
+      {
+        ...choiceJson,
+        body: choiceJson.body.map((node) =>
+          node.kind === "choice"
+            ? { ...node, prompt: [elementJson("p", [{ kind: "text", text: "In " }, yearJson])] }
+            : node,
+        ),
+      },
+      "RESPONSE",
+    ],
+    [
+      "an Extended Text's Prompt",
+      {
+        ...essayJson,
+        body: essayJson.body.map((node) =>
+          node.kind === "extended-text"
+            ? { ...node, prompt: [{ kind: "text", text: "Since " }, yearJson] }
+            : node,
+        ),
+      },
+      "ESSAY",
+    ],
+  ];
+
+  for (const [place, json, owner] of misplaced) {
+    it.effect(
+      `refuses a Text Entry in ${place}: InvalidRedacted at stage decode naming it and its place`,
+      () =>
+        Effect.gen(function* refusesMisplacedInteraction() {
+          // oxlint-disable-next-line unicorn/prefer-structured-clone -- The test proves the refusal on JSON text, the form a host sends.
+          const handedOver: unknown = JSON.parse(JSON.stringify(json));
+          const error = yield* failureOf(decodeRedacted(handedOver));
+
+          assert.strictEqual(error._tag, "InvalidRedacted");
+          assert.strictEqual(error.stage, "decode");
+          assert.include(error.issue, "text-entry");
+          assert.include(error.issue, '"YEAR"');
+          assert.include(error.issue, JSON.stringify(owner));
+        }),
+    );
+  }
+
+  it.effect("control: decodes the unedited Choice JSON, and render of it succeeds", () =>
+    Effect.gen(function* decodesUnedited() {
+      const configuration = yield* defaults;
+      const decoded = Result.getOrThrow(decodeRedacted(choiceJson));
+
+      assert.isTrue(Result.isSuccess(render(decoded, configuration, { instance })));
+    }),
+  );
+
+  it.effect(
+    "decodes a chain of 497 spans nesting 1,000 levels in a choice's content, and refuses it with a Text Entry in the innermost span",
+    () =>
+      Effect.gen(function* walksDeepContent() {
+        const error = yield* failureOf(
+          decodeRedacted(withFirstChoice([spanChain(497, [yearJson])])),
+        );
+
+        assert.isTrue(Result.isSuccess(decodeRedacted(withFirstChoice([spanChain(497, [])]))));
+        assert.strictEqual(error.stage, "decode");
+        assert.include(error.issue, '"YEAR"');
       }),
   );
 });

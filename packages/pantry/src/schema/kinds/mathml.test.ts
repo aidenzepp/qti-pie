@@ -92,7 +92,7 @@ describe("the MathML admission rows", () => {
   it("holds two host rows per inventory entry naming m3:math", () => {
     const rows = admission.filter((row) => row.child === "m:math" && !isMathmlKind(row.parent));
 
-    assert.strictEqual(hosts.length, 63);
+    assert.strictEqual(hosts.length, 66);
     assert.strictEqual(rows.length, 2 * hosts.length);
     for (const host of hosts) {
       for (const version of versions) {
@@ -103,7 +103,7 @@ describe("the MathML admission rows", () => {
 
   it("holds 16,458 rows under MathML parents", () => {
     assert.strictEqual(admission.filter((row) => isMathmlKind(row.parent)).length, 16_458);
-    assert.strictEqual(admission.length, 16_584);
+    assert.strictEqual(admission.length, 16_590);
   });
 
   it("is the same for both versions", () => {
