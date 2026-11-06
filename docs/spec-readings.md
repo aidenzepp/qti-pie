@@ -128,10 +128,29 @@ against it. A reading that is not an information-model-over-XSD case says which 
    ancestors, and the Schematron's text is not copied. This follows the intent that the information model's prose states
    for each rule and sets the Schematron's text aside, because a rule that never fires or always fails is a defect, not
    a requirement. (2026-11-04.)
-   The Schematron's two ARIA role rules (no `role` on `source`; `h1`'s `role` limited to `heading`, `tab` or
-   `presentation`) are not followed: the operator ruled on 2026-11-05 that attributes follow the XSD exactly, and those
-   rules encode HTML's ARIA conformance prose, which QTI's XSD admits and does not restate.
+   The Schematron's two ARIA role rules bind, as its extension-attribute lists do (reading 90). The ASI binding says "5.
+   The Schematron Rules. This Section is NORMATIVE" (`bind.txt` lines 431722 to 431724), and that its section 5.3, The
+   Explicit Rule Definitions, is "the set of schematron rules used to enforce the features of the Information Model that
+   are otherwise not enforced in the XSD" (lines 432272 to 432274). Its first rule set, `RULE_SET_ARIA_ROLES_1`
+   (section 5.3.1, embedded in both ASI XSDs: 3.0.0 line 21700, 3.0.1 line 21870), states two rules, and each is
+   stricter than the XSD, so it is the rule (readings 16 and 17):
+   - RULE ARIA ROLE 1a: "The 'source' tag must not have an ARIA role attribute" (`count(@role)=0`). The XSD declares an
+     optional `role` on `source`. A `source` that carries one is refused under `attribute-admission`: the extension
+     lists cover `source` in both versions, so reading 90 leaves it no open name in no namespace that could admit it;
+   - RULE ARIA ROLE 1b: "The 'h1' tag may have an ARIA role value of 'heading' or 'tab' or 'presentation' only". The XSD
+     lists 74 ARIA roles for `h1`'s `role`, as for every other element's. An `h1`'s `role` other than those three is
+     refused under `attribute-lexical`, compared as written, as the rule's test and the XSD's `preserve` compare it.
+     `h2` to `h6` keep every role the XSD lists.
+
+   Both rules hold by the element's name, so an `h1` or a `source` that an `xsi:type` governs is held to them too
+   (reading 84). Main enforced both, as `AriaRoleH1` and `AriaRoleNotSource` at 2b276d76. These rules were set aside on
+   2026-11-05, under the ruling that attributes follow the XSD exactly. The operator's ruling of 2026-11-06, to take
+   Aiden's review of PR #46, withdrew that ruling wherever a normative source is stricter than the XSD, and Aiden ruled
+   on 2026-11-06 that both rules come back, normative where the binding's Schematron states them. No corpus package
+   carries a `role` on `source` or on `h1`, so no verdict moves. (Aiden's ruling of 2026-11-06, under the operator's
+   ruling of that day; from RV seat X.)
    The Schematron's extension-attribute lists bind, read by their intent as reading 90 states.
+
 10. **`aria-keyshorts` and `aria-keyshortcuts` are both accepted on empty elements.** The XSD, the information model's
     attribute table and the Schematron's allow-lists all name the attribute `aria-keyshorts` on the empty element
     families, a misspelling of ARIA's `aria-keyshortcuts`, which the information model's own description uses. A
@@ -1985,3 +2004,65 @@ against it. A reading that is not an information-model-over-XSD case says which 
      only be formatted in the e, E, f, g, G, r or R styles" (section 7.30) is advice and is not read. (Decided
      2026-11-06 by RV seat G, on the review of PR #46, under the operator's standing ruling of 2026-11-05 that the spec
      wins; at most one conversion is the operator's decision of 2026-11-06 on item L4.)
+
+<!-- Readings 133 and 134 are reserved. -->
+
+135. **A MIME type is RFC 2045's type and subtype: two tokens joined by a slash.** The information model types eight
+     characteristics `MimeType` (the `type` of `a`, `object`, `param`, `source` and `qti-stylesheet`, and the
+     `mime-type` of `qti-file-href`, `qti-calculator-info` and `qti-digital-material`) and the upload interaction's
+     `type` `MimeTypeList`, a list of them (sections 5.165.1 and 9.1.3), nine attributes in all. It defines the type as
+     "The mime type (type and subtype), as defined by [RFC 2045]" (section 7.25), and says of `a`'s and `source`'s
+     `type` "The value must be a valid MIME type" and "If specified, its value must be a valid MIME type" (sections
+     5.1.2 and 5.135.2). RFC 2045 writes the type `type "/" subtype`, each a `token`, "1*<any (US-ASCII) CHAR except
+     SPACE, CTLs, or tspecials>", the tspecials being `(`, `)`, `<`, `>`, `@`, `,`, `;`, `:`, `\`, `"`, `/`, `[`, `]`,
+     `?` and `=` (section 5.1). The XSD types them `MimeTypeDType`, an `xs:normalizedString` whose pattern, the same as
+     the information model's `pattern` for MimeType (section 7.25.1), takes any Basic Latin character but the tspecials
+     on either side of one slash, and so admits a space and the control character `U+007F`. This follows the information
+     model and RFC 2045 and sets the XSD aside where it admits more, the information model being the stricter source
+     (readings 16 and 17): a value meets both patterns, so it is exactly RFC 2045's two tokens and the slash. So
+     `image/png`, `IMAGE/PNG`, `image/svg+xml`, `application/vnd.ms-excel`, `x-world/x-vrml` and `*/*` are admitted, and
+     ` image/png`, `image/png `, `image /png`, `image/ png`, `a b/c`, a tab or a line break, which the type's `replace`
+     makes a space, `image/png` followed by `U+007F`, `image`, `/png`, `image/` and `a/b/c` are refused under
+     `attribute-lexical`. The value is the type itself, not a Content-Type header field, so the header's whitespace and
+     comments between tokens (RFC 2045, section 5.1, after RFC 822's structured fields) have no place in it. A parameter
+     is no part of "type and subtype", and the XSD refuses its `;` and `=` already, so `text/html;charset=utf-8` is
+     refused as it was. Each item of the upload interaction's list is read the same way, the list's `collapse`
+     separating its items, so `type=" image/png  text/plain "` is admitted and `type="image/png a(b)/c"` is refused.
+     Main at 2b276d76 read these attributes as `^[^/ \t\r\n]{1,127}/[^ \t\r\n]{1,255}$` in place of the XSD's pattern:
+     the same refusal of whitespace, but it admitted `a/b/c`, `é/x` and `text/html;charset=utf-8`, which the XSD
+     refuses, and bounded the lengths, which no source does. RFC 2045's names are not bounded, so neither are these.
+
+     This reading's stated limit is registration. RFC 2045's type is one it lists (`text`, `image`, `audio`, `video`,
+     `application`, `message`, `multipart`), an `X-` name, or "An extension token defined by a standards-track RFC and
+     registered with IANA", and its subtype is registered with IANA or an `X-` name. So `foo/bar` is a well-formed
+     type that is not a valid one, and it is admitted. The cause is that IANA's media type registry is a dated external
+     dataset that no pinned source holds. What would lift it is a closed relation of a pinned registry's types and
+     subtypes, with each value split at its slash, as reading 129's limit would be lifted for language tags. A
+     foreign element whose `xsi:type` names `MimeTypeDType` is judged by XML Schema alone (reading 60): this reading
+     reads the information model's characteristics, not the type wherever an instance names it. No corpus package
+     carries a MIME type this refuses, so no verdict moves. This restores the rule that the ruling of 2026-11-05 that
+     attributes follow the XSD (reading 9) had removed; the operator's ruling of 2026-11-06 overrules that ruling
+     wherever the information model is stricter. (Decided 2026-11-06 by RV seat X, on the review of PR #46, under the
+     operator's standing ruling of 2026-11-05 that the spec wins.)
+
+136. **A `default` shape carries `coords`, as every shape does, and they are a `CoordsDType`.** The information model
+     says of the Coords type "(e) default: no coordinates should be given" (section 7.9, and the Inside class's
+     `coords`, section 5.75.2), and of the shape "The
+     default shape refers to the entire area of the associated image" and "A value of a shape is always accompanied by
+     coordinates" (section 8.29, ShapeEnum). It gives `coords` the multiplicity [1] on every class that has a shape:
+     AssociableHotspot, HotspotChoice, Inside and AreaMapEntry (sections 5.7.6, 5.67.5, 5.75.2 and 7.4.2). The XSD
+     declares `coords` required on `qti-associable-hotspot`, `qti-hotspot-choice`, `qti-inside` and
+     `qti-area-map-entry`, and types it `CoordsDType`, whose pattern admits three, four, or an even number of six or
+     more non-negative integers or percentages, whatever the shape. The sentence for `default` is a "should", and the
+     information model says that "SHOULD/SHOULD NOT/RECOMMENDED statements constitute a best practice; ignoring a best
+     practice does not violate conformance" (section 1.3). The multiplicity, the ShapeEnum sentence and the XSD are
+     requirements, and all three require coordinates. Read as a requirement, the "should" would contradict them and
+     leave no valid `default` area, since the XSD refuses an element without `coords` and the pattern refuses an empty
+     value. So this follows the XSD and the information model's requirements, and reads the "should" as the best
+     practice it states: a `default` hotspot, hotspot choice, inside test or area map entry carries `coords`, a
+     `CoordsDType`, and one without `coords` is refused under `required-attribute`, as on main (`CoordsDefault` at
+     2b276d76 holds the `CoordsDType` pattern). What a `default` area's coordinates mean is reading 59's: they are
+     ignored, and the area is the whole image. `qti-media-interaction`'s `coords`, which no shape reads, stays
+     optional, as the XSD declares it. This is no departure from the XSD, so the attribute grammar states nothing
+     for it. (Decided 2026-11-06 by RV seat X, on the review of PR #46, under the operator's standing ruling of
+     2026-11-05 that the spec wins.)

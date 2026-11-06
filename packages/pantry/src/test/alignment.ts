@@ -156,7 +156,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     9,
     {
       owner:
-        "the Schematron the ASI XSDs embed, each rule to its law (docs/research/unowned-readings.md §9), its extension-attribute lists to reading 90's AL1 rows; mastery-range, string-identifier-distinct and reading 23 in W5",
+        "the Schematron the ASI XSDs embed, each rule to its law (docs/research/unowned-readings.md §9), its extension-attribute lists to reading 90's AL1 rows, and `RULE_SET_ARIA_ROLES_1` to AL1 (`headingRole`, `h1`'s `role` heading, tab or presentation; `readingRefusals`, no `role` on `source`, `src/grammar/attributes.ts`); mastery-range, string-identifier-distinct and reading 23 in W5",
       status: "P",
     },
   ],
@@ -683,6 +683,22 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     },
   ],
   [132, { owner: "AL1 (`printfFormat` on `qti-printed-variable`'s `format`)", status: "G" }],
+  [
+    135,
+    {
+      owner:
+        "AL1 (`mediaType` through `mediaTypeReadings`, `src/grammar/attributes.ts`: every MimeTypeDType attribute, and each item of the upload interaction's list, RFC 2045's two tokens and a slash); IANA registration is the stated limit",
+      status: "G",
+    },
+  ],
+  [
+    136,
+    {
+      owner:
+        "AL3 (the XSD's `use=\"required\"` on the four shaped kinds' `coords`) and AL1 (`CoordsDType`), with no reading of its own in the grammar",
+      status: "G",
+    },
+  ],
 ]);
 
 /**
@@ -751,6 +767,7 @@ const readingAdmissions: ReadonlyMap<string, number> = new Map([
  */
 const readingDepartures: ReadonlyMap<string, number> = new Map([
   ["attribute:type bdo dir", 123],
+  ["attribute:type h1 role", 9],
   ["attribute:type qti-match-table-entry target-value", 8],
   ["attribute:type xi:include parse", 85],
   ...readingRefusals.map(({ kind, name, reading }): readonly [string, number] => [
@@ -969,6 +986,11 @@ const indexOf = (grammar: ComposedGrammar): Index => {
     children.set(key, (children.get(key) ?? new Set()).add(row.child));
   }
 
+  // The content models whose automata state a row, every model but that of no model.
+  const stated = new Set(
+    [...grammar.content.follow.rows, ...grammar.content.last.rows].map(({ model }) => model),
+  );
+
   return {
     admitted: new Map(
       grammar.attributes.admission.rows.map((row) => [
@@ -977,9 +999,9 @@ const indexOf = (grammar: ComposedGrammar): Index => {
       ]),
     ),
     automata: new Set(
-      [...grammar.content.follow.rows, ...grammar.content.last.rows].map(
-        (row) => `${row.version} ${row.parent}`,
-      ),
+      grammar.content.contentModelOf.rows
+        .filter(({ model }) => stated.has(model))
+        .map((row) => `${row.version} ${row.parent}`),
     ),
     children,
     counted: new Map(
