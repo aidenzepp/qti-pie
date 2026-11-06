@@ -957,8 +957,13 @@ export const redactItem = (item: Item): Redacted =>
   });
 
 /**
- * How one response travels through a host's form: its identifier, its binding under the entry name
- * `render` gives its Controls, and the options `decode` reads its entries with.
+ * How one response travels through a host's form: its identifier, its binding, and the options
+ * `decode` reads its entries with.
+ *
+ * The binding's `name` is the entry name `render` gives the response's Controls by default,
+ * `entryName(instance, identifier)`. {@link postings} does not see `render`'s `names` option, so a
+ * host that passes `names` to `render` must decode each response under the name it passed there,
+ * not under the binding's `name`.
  */
 export interface Posting {
   readonly binding: Binding;

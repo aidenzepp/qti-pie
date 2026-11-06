@@ -32,8 +32,8 @@ points are unstable until M3.
   are the navigation API. `renderNavigation` writes the navigation parts as plain buttons.
 - `encodeSession` and `decodeSession` write a test session as a `StoredTestSession` and check one
   handed back.
-- `restore` gives an item's values back from its `StoredRecord`, and `solution` gives its correct
-  responses.
+- `restore(document, record)` gives an item's values back from its `StoredRecord`, and `solution`
+  gives its correct responses.
 - `render`'s `mode` option shows an item in `review` or `solution`, and `renderStatus` takes the
   headings `review`, `solution`, `partSubmitted` and `testFinished`.
 - `results` writes a Results Reporting document for an item or a test session.
@@ -50,3 +50,29 @@ points are unstable until M3.
 - A `StoredRecord` carries `version: 1`. plate refuses a record that M1's `score` wrote, since it
   names no version.
 - A Text Entry's and an Extended Text's controls carry `autocomplete="off"` in every mode.
+- `decode` refuses posted text that holds a character XML 1.0 cannot carry, such as U+0000 or
+  U+FFFE, with `Malformed` and the reason `character`. A stored record or session with a string or
+  URI value that holds such a character is refused when plate reads it back.
+
+### Changed during M2
+
+A host built on an earlier commit of M2 sees these changes.
+
+- `advance` ignores the responses a step carries when the current item is closed, and still carries
+  out the step's intent. A closed item keeps the responses it closed with, which `itemView` shows
+  and `results` reports.
+- Under `allow-skipping="false"`, only the responses that `postings` lists count as answering an
+  item. An item with none of them is never refused as `skipping-not-allowed`.
+- An accepted package's `files` leaves out the document of every QTI resource: items, tests,
+  sections, stimuli, outcome declarations, response processing, response-processing templates and
+  fragments. Every file it holds is one a host may serve.
+- `restore` takes the item as well as its record, `restore(document, record)`. It refuses with
+  `InvalidRecord` a record whose responses or outcomes do not fit the item's declarations.
+  `results` refuses such a record too: with `InvalidRecord` for an item, and with `InvalidSession`
+  for an item of a test session.
+- `results` refuses a context with a `sourceId` that holds a character XML 1.0 cannot carry, with
+  `InvalidResultContext`.
+- `startTest` resolves a test's item hrefs as `openPackage` does. A test now starts when its
+  package's location holds a percent escape such as `%41` or a `./` segment, or when its
+  directory's name holds a percent escape. Before, `startTest` refused each with
+  `TestNotDeliverable` and the reason `item-mismatch`.
