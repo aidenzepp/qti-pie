@@ -3,10 +3,17 @@
  * `qti-integer-modulus`, `qti-integer-to-float`, `qti-gcd` and `qti-lcm`.
  *
  * Every integer is an exact `bigint` (reading 45), so each kind but `qti-integer-to-float`
- * computes exactly at any size; `qti-integer-to-float` makes its float through the one conversion,
- * `toFloat`, which gives an integer beyond the largest finite float that float, of its sign. A NULL
- * operand gives the NULL of the kind's type, before any other rule: a divisor of 0 gives NULL, and
- * a NULL beside a zero operand of `qti-lcm` gives NULL, not 0.
+ * computes exactly; `qti-integer-to-float` makes its float through the one conversion, `toFloat`,
+ * which gives an integer beyond the largest finite float that float, of its sign. A NULL operand
+ * gives the NULL of the kind's type, before any other rule: a divisor of 0 gives NULL, and a NULL
+ * beside a zero operand of `qti-lcm` gives NULL, not 0.
+ *
+ * `qti-lcm` is the one kind here that can grow past its operands, so its integer is held to
+ * `integerBitBound` (`#plate/engine/numbers.ts`, the operator's ruling `afb7e648`): one of more
+ * than 1,000,000 bits is the integer NULL. `qti-integer-divide`, `qti-integer-modulus` and
+ * `qti-gcd` cannot grow past their operands, a quotient, a remainder and a common divisor being no
+ * larger in magnitude than the dividend, the divisor and each operand that is not 0, so they are
+ * not held to it and stay exact at any size their operands have.
  *
  * It value-imports only engine leaves, `#plate/model/values.ts` and `effect`'s `Option` and
  * `Result`, and reads the evaluator's types from `#plate/engine/evaluate.ts` as types, so the
@@ -17,7 +24,7 @@
 import { Option, Result } from "effect";
 import type { Evaluate, Evaluator, FamilyTable, Scope } from "#plate/engine/evaluate.ts";
 import type { EngineFailure } from "#plate/engine/failures.ts";
-import { toFloat } from "#plate/engine/numbers.ts";
+import { boundedProduct, toFloat } from "#plate/engine/numbers.ts";
 import type { Expression } from "#plate/model/expression.ts";
 import { nullOf } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
@@ -259,9 +266,38 @@ const evaluateGcd: Evaluator<"gcd"> = (expression, scope, evaluate) =>
   );
 
 /**
+ * Give the least common multiple of integers that are not 0, by their magnitudes, held to the
+ * bound without building a multiple far past it: each partial multiple is the one before divided
+ * by its common divisor with the next integer, times that integer, through `boundedProduct`, so
+ * the first past the bound gives none. Each partial multiple divides the whole one, so the first
+ * past the bound means the whole is past it. The first integer's magnitude alone is held to the
+ * bound too, for the multiple of one operand is computed, not written.
+ *
+ * @param integers The integers, none of them 0.
+ * @returns The least common multiple, or none when it has more than 1,000,000 bits.
+ */
+const leastCommonMultiple = (integers: readonly bigint[]): Option.Option<bigint> => {
+  let multiple: Option.Option<bigint> = Option.some(1n);
+  for (const integer of integers) {
+    if (Option.isNone(multiple)) {
+      return multiple;
+    }
+
+    const factor = magnitudeOf(integer);
+    multiple = boundedProduct(
+      multiple.value / greatestCommonDivisor(multiple.value, factor),
+      factor,
+    );
+  }
+
+  return multiple;
+};
+
+/**
  * Give the value of a `qti-lcm`: a single integer, the least common multiple of every integer its
  * operands hold, a container's members each counted, by their magnitudes (9.20). It is 0 when any
- * integer is 0, lcm(0, n) = 0. NULL when any operand is NULL, a zero beside it included.
+ * integer is 0, lcm(0, n) = 0, whatever the others' size. NULL when any operand is NULL, a zero
+ * beside it included, and for a multiple of more than 1,000,000 bits.
  *
  * @param expression The `qti-lcm`.
  * @param scope The item and the variables of the attempt.
@@ -273,19 +309,13 @@ const evaluateLcm: Evaluator<"lcm"> = (expression, scope, evaluate) =>
   Result.map(aggregateOf(expression.operands, scope, evaluate), (held) =>
     Option.match(held, {
       onNone: unsetInteger,
-      onSome: (integers) => {
-        let multiple = 1n;
-        for (const integer of integers) {
-          if (integer === 0n) {
-            return integerValue(0n);
-          }
-
-          const factor = magnitudeOf(integer);
-          multiple = (multiple / greatestCommonDivisor(multiple, factor)) * factor;
-        }
-
-        return integerValue(multiple);
-      },
+      onSome: (integers) =>
+        integers.includes(0n)
+          ? integerValue(0n)
+          : Option.match(leastCommonMultiple(integers), {
+              onNone: unsetInteger,
+              onSome: integerValue,
+            }),
     }),
   );
 

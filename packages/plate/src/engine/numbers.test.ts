@@ -1,5 +1,14 @@
 import { assert, describe, it } from "@effect/vitest";
-import { toFloat } from "#plate/engine/numbers.ts";
+import { Option } from "effect";
+import {
+  bitLengthOf,
+  boundedInteger,
+  boundedProduct,
+  containerSizeBound,
+  integerBitBound,
+  toFloat,
+  withinContainerBound,
+} from "#plate/engine/numbers.ts";
 
 /**
  * The largest finite float, `Number.MAX_VALUE`, as an exact integer: 2^1024 − 2^971.
@@ -29,5 +38,57 @@ describe("the engine's one integer-to-float conversion", () => {
     assert.strictEqual(toFloat(2n ** 53n + 3n), 2 ** 53 + 4);
     assert.strictEqual(toFloat(-7n), -7);
     assert.isTrue(Object.is(toFloat(0n), 0), "the integer 0 is the float +0");
+  });
+});
+
+describe("the engine's bounds on what it computes (operator ruling afb7e648)", () => {
+  it("[I-9a] the bounds are 1,000,000 bits and 1,000,000 values", () => {
+    assert.strictEqual(integerBitBound, 1_000_000);
+    assert.strictEqual(containerSizeBound, 1_000_000);
+  });
+
+  it("[I-9a] bitLengthOf counts the binary digits of an integer's magnitude", () => {
+    assert.strictEqual(bitLengthOf(0n), 0);
+    assert.strictEqual(bitLengthOf(1n), 1);
+    assert.strictEqual(bitLengthOf(-1n), 1);
+    assert.strictEqual(bitLengthOf(15n), 4);
+    assert.strictEqual(bitLengthOf(16n), 5);
+    assert.strictEqual(bitLengthOf(-(2n ** 64n) + 1n), 64);
+    assert.strictEqual(bitLengthOf(2n ** 999_999n), 1_000_000);
+    assert.strictEqual(bitLengthOf(2n ** 1_000_000n - 1n), 1_000_000);
+    assert.strictEqual(bitLengthOf(-(2n ** 1_000_000n)), 1_000_001);
+  });
+
+  it("[I-9a] boundedInteger keeps an integer of exactly 1,000,000 bits and gives none for one of 1,000,001", () => {
+    assert.deepStrictEqual(
+      boundedInteger(2n ** 1_000_000n - 1n),
+      Option.some(2n ** 1_000_000n - 1n),
+    );
+    assert.deepStrictEqual(boundedInteger(-(2n ** 999_999n)), Option.some(-(2n ** 999_999n)));
+    assert.deepStrictEqual(boundedInteger(2n ** 1_000_000n), Option.none());
+    assert.deepStrictEqual(boundedInteger(-(2n ** 1_000_000n)), Option.none());
+  });
+
+  it("[I-9a] boundedProduct keeps a product of exactly 1,000,000 bits and gives none for one of 1,000,001, and 0 for a product with 0 whatever the other's size", () => {
+    assert.deepStrictEqual(
+      boundedProduct(2n ** 500_000n, 2n ** 499_999n),
+      Option.some(2n ** 999_999n),
+      "operands of 500,001 and 500,000 bits, a product of 1,000,000",
+    );
+    assert.deepStrictEqual(
+      boundedProduct(3n * 2n ** 499_998n, 3n * 2n ** 499_999n),
+      Option.none(),
+      "operands of 500,000 and 500,001 bits, a product of 1,000,001",
+    );
+    assert.deepStrictEqual(boundedProduct(2n ** 500_000n, -(2n ** 500_000n)), Option.none());
+    assert.deepStrictEqual(boundedProduct(2n ** 3_000_000n, 0n), Option.some(0n));
+    assert.deepStrictEqual(boundedProduct(0n, -(2n ** 3_000_000n)), Option.some(0n));
+  });
+
+  it("[I-9a] withinContainerBound holds a container of 1,000,000 values and not one of 1,000,001", () => {
+    assert.isTrue(withinContainerBound(0n));
+    assert.isTrue(withinContainerBound(1_000_000n));
+    assert.isFalse(withinContainerBound(1_000_001n));
+    assert.isFalse(withinContainerBound(2_147_483_647n * 2_147_483_647n));
   });
 });

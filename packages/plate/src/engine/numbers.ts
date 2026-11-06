@@ -1,8 +1,9 @@
 /**
  * The engine's numbers, a leaf the evaluator and the expression families share: the one conversion
  * from an integer to a float ({@link toFloat}), the one number a single numeric value holds
- * ({@link numberOf}), exact equality of two numbers ({@link sameNumber}), and the single boolean a
- * test gives ({@link booleanOf}).
+ * ({@link numberOf}), exact equality of two numbers ({@link sameNumber}), the single boolean a
+ * test gives ({@link booleanOf}), and the bounds on what the engine computes
+ * ({@link integerBitBound}, {@link containerSizeBound}).
  *
  * Integers are exact `bigint`s (reading 45) and floats are 64-bit doubles, never infinite when made
  * from an integer. An integer and a float compare exactly, never through a lossy conversion. The
@@ -107,3 +108,76 @@ export const sameNumber = (left: NumberSingle, right: NumberSingle): boolean => 
     ? integerIsFloat(right.value, left.value)
     : left.value === right.value;
 };
+
+/**
+ * The most bits an integer the engine computes may have: 1,000,000 (the operator's ruling
+ * `afb7e648`, option B). An integer is unbounded (reading 45), so an item whose rules square an
+ * outcome rule after rule would double its size each time and hang scoring; a computed integer
+ * past this bound is NULL instead, as other impossible results are. An integer as written (a
+ * literal, a declared default, a stored value) is never held to it.
+ */
+export const integerBitBound = 1_000_000;
+
+/**
+ * The most values a container the engine computes may hold: 1,000,000, the principle of the
+ * operator's ruling `afb7e648` applied to containers. A computed container past it is NULL instead,
+ * so `qti-repeat` with a `number-repeats` of 2147483647 cannot hang scoring. A container as written
+ * or stored is never held to it.
+ */
+export const containerSizeBound = 1_000_000;
+
+/**
+ * Give the number of bits an integer has: the binary digits of its magnitude, so 0 has none, 1 has
+ * one and 2^999999 has 1,000,000, and an integer and its negative have the same. It reads the
+ * hexadecimal digits, which `bigint` writes in time linear in its size.
+ *
+ * @param integer The integer.
+ * @returns Its bit length.
+ */
+export const bitLengthOf = (integer: bigint): number => {
+  if (integer === 0n) {
+    return 0;
+  }
+
+  const digits = (integer < 0n ? -integer : integer).toString(16);
+
+  return (digits.length - 1) * 4 + 32 - Math.clz32(Number.parseInt(digits.charAt(0), 16));
+};
+
+/**
+ * Give an integer the engine computed when it is within {@link integerBitBound}.
+ *
+ * @param integer The computed integer.
+ * @returns The integer, or none when it has more than 1,000,000 bits, for the kind's NULL.
+ */
+export const boundedInteger = (integer: bigint): Option.Option<bigint> =>
+  bitLengthOf(integer) <= integerBitBound ? Option.some(integer) : Option.none();
+
+/**
+ * Give the product of two integers when it is within {@link integerBitBound}, without computing a
+ * product that must be past it: a product of two integers that are not 0, of `a` and `b` bits, has
+ * `a + b` or `a + b − 1` bits, so one whose operands' bits sum to more than the bound plus one is
+ * none before any multiplication, and any other is computed, at most one bit past the bound, and
+ * checked exactly. A product with 0 is 0, whatever the other's size.
+ *
+ * @param left One integer.
+ * @param right The other.
+ * @returns The product, or none when it has more than 1,000,000 bits.
+ */
+export const boundedProduct = (left: bigint, right: bigint): Option.Option<bigint> => {
+  if (left === 0n || right === 0n) {
+    return Option.some(0n);
+  }
+
+  return bitLengthOf(left) + bitLengthOf(right) > integerBitBound + 1
+    ? Option.none()
+    : boundedInteger(left * right);
+};
+
+/**
+ * Report whether a container the engine computes, of a size, is within {@link containerSizeBound}.
+ *
+ * @param size How many values it holds, or would hold if it were built.
+ * @returns Whether it holds at most 1,000,000 values.
+ */
+export const withinContainerBound = (size: bigint): boolean => size <= BigInt(containerSizeBound);
