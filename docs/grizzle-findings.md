@@ -1653,6 +1653,9 @@ messages, but nothing raises either one.
   `GoverningOf` keyed as it is.
 - **Classification.** A documented limit, met by the model's coordinates: grizzle behaves as its README states, so
   nothing is filed.
+- **Status.** A post-tier follow-up, by the coordinator's ruling of 2026-11-06: "GoverningOf densify: not now". It is
+  a schema change to `Node`, the write path and the folds, made right before the first database tier on the new pin,
+  so it waits until that tier is green and is then scheduled.
 
 ## `@grizzle/testing`'s `matching` builds every class before it refuses an unbounded repetition (performance, lane JAN)
 
