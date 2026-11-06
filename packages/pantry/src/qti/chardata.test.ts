@@ -3,10 +3,12 @@ import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { drawn, exhaust, explore } from "@grizzle/testing/explore";
 import { required, requiredInSpace } from "@grizzle/testing/features";
-import { array, element, int } from "@grizzle/testing/gen";
+import { array, element, int, map } from "@grizzle/testing/gen";
 import type { Gen } from "@grizzle/testing/gen";
 import { notesOnly } from "@grizzle/testing/sense";
 import { completeShrink } from "@grizzle/testing/shrink";
+import { keep, swarm } from "@grizzle/testing/swarm";
+import type { Swarm } from "@grizzle/testing/swarm";
 import { searched } from "@grizzle/testing/vitest";
 import { Effect, Formatter, Option, Result } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
@@ -53,6 +55,7 @@ import { Node, nodeTree } from "#pantry/qti/node.ts";
 import { caseHang, featuresOf, idOf, searchTimeout, xdmDocument } from "#pantry/test/gen/xdm.ts";
 import type { XdmFeature } from "#pantry/test/gen/xdm.ts";
 import { lawNames } from "#pantry/test/oracle.ts";
+import { isUriReference } from "#pantry/test/uri-reference.ts";
 import { mathmlNamespace, namespaceClassOf } from "#pantry/vocab/namespaces.ts";
 
 /**
@@ -1048,5 +1051,401 @@ describe("qti/chardata.ts", () => {
 
         assert.strictEqual(exhausted.cases, orderingCases.length);
       }),
+  );
+});
+
+/**
+ * One named namespace name: what it is, the text, and whether it is an RFC 3986 `URI-reference`.
+ */
+type NamedUri = readonly [name: string, uri: string, admitted: boolean];
+
+/**
+ * A namespace name `NamespaceUri`'s pattern must judge as the specification does, by name: each
+ * input, what it is, and whether it is an RFC 3986 `URI-reference`, read off Appendix A by hand.
+ * The oracle's recogniser is held to the same list, so neither side is judged by the other alone.
+ */
+const namedUris: readonly [NamedUri, ...NamedUri[]] = [
+  ["the empty string, an unprefixed undeclaration's value", "", true],
+  ["a URN", "urn:x:y", true],
+  ["an http URI with a query and a fragment", "http://a/b?c#d", true],
+  ["a relative path, deprecated by §2.2 and still a URI reference", "a/b", true],
+  ["an IPv6 loopback", "http://[::1]/", true],
+  ["the QTI 3 ASI namespace", "http://www.imsglobal.org/xsd/imsqtiasi_v3p0", true],
+  ["an unclosed IP literal", "http://[bad", false],
+  ["a space", "a b", false],
+  ["a percent sign with no two hex digits after it", "%zz", false],
+  ["a port that is not digits", "http://h:x/", false],
+  ["IPvFuture, its v a capital (RFC 5234 §2.3)", "http://[V1.x]/", true],
+  ["IPvFuture with nothing after its dot", "http://[v1.]", false],
+  ["an IPv4-mapped IPv6 address", "http://[::ffff:1.2.3.4]", true],
+  ["eight IPv6 groups", "http://[1:2:3:4:5:6:7:8]", true],
+  ["nine IPv6 groups", "http://[1:2:3:4:5:6:7:8:9]", false],
+  ["seven groups after ::", "http://[::1:2:3:4:5:6:7]", true],
+  ["eight groups after ::", "http://[::1:2:3:4:5:6:7:8]", false],
+  ["two ::", "http://[1::2::3]", false],
+  ["a five-digit group", "http://[12345::]", false],
+  ["an IPv4 address in brackets", "http://[1.2.3.4]", false],
+  [
+    "a zone identifier, which RFC 6874 adds and RFC 3986 does not",
+    "http://[fe80::1%25eth0]",
+    false,
+  ],
+  ["an octet past 255, a reg-name", "http://1.2.3.256/", true],
+  ["a colon in a relative reference's first segment", ":a", false],
+  ["a scheme and nothing more", "a:", true],
+  ["a scheme that starts with a digit", "1a:b", false],
+  ["a dot segment before a colon", "./a:b", true],
+  ["an empty fragment", "#", true],
+  ["an empty query", "?", true],
+  ["two fragments", "http://h#a#b", false],
+  ["a second @", "http://u@@h", false],
+  ["userinfo of colons", "//a:b:c@h", true],
+  ["an empty host and an empty port", "//:", true],
+  ["a bracket in a path", "http://h/[", false],
+  ["a character beyond ASCII, as an IRI holds", "http://\u{4F8B}.jp/", false],
+  ["leading whitespace, which attribute-value normalization keeps", " urn:x", false],
+  ["a tab", "urn:\tx", false],
+  ["a lowercase percent-encoding", "urn:%7e", true],
+];
+
+/**
+ * The characters the namespace character box draws: a letter, a digit, and every delimiter whose
+ * place the grammar fixes, with a space, which no URI reference holds.
+ */
+const uriCharacters = ["a", "1", ".", ":", "/", "?", "#", "%", "@", "[", "]", " "] as const;
+
+/**
+ * The pieces the IP literal box draws, each a run of an IPv6, IPv4 or IPvFuture address, or a
+ * character none of them holds.
+ */
+const ipPieces = ["1:1:1:", "1:", "1", "::", ":", "1.2.3.4", ".", "v1.x", "g"] as const;
+
+/**
+ * The features a swarm weighs in one namespace name: each part of `URI-reference`, each kind of
+ * host, a percent-encoding, a mutation that edits the result, and a case drawn by name.
+ */
+const uriFeatures = [
+  "scheme",
+  "authority",
+  "userinfo",
+  "ipv6",
+  "ipvFuture",
+  "ipv4",
+  "port",
+  "path",
+  "query",
+  "fragment",
+  "percent",
+  "mutation",
+  "named",
+] as const;
+
+/**
+ * A feature of {@link uriFeatures}.
+ */
+type UriFeature = (typeof uriFeatures)[number];
+
+/**
+ * The characters a mutation writes: the delimiters, the hex letters' neighbours, a space, a tab
+ * and a character beyond ASCII.
+ */
+const hostile = [
+  " ",
+  "%",
+  "[",
+  "]",
+  "#",
+  "?",
+  ":",
+  "@",
+  "/",
+  ".",
+  "v",
+  "V",
+  "g",
+  "\t",
+  "\u{E9}",
+] as const;
+
+/**
+ * Draw one character of `pchar`, or under the swarm's `percent` a percent-encoding, whole or cut.
+ *
+ * @param on - The case's swarm.
+ * @returns The generator.
+ */
+const pcharOf =
+  (on: Swarm<UriFeature>): Gen<string> =>
+  (source) =>
+    source.draw(keep(on, "percent"))
+      ? source.draw(element(["%41", "%7e", "%2", "%G0"] as const))
+      : source.draw(
+          element([
+            "a",
+            "Z",
+            "0",
+            "-",
+            ".",
+            "_",
+            "~",
+            "!",
+            "$",
+            "&",
+            "'",
+            "(",
+            ")",
+            "*",
+            "+",
+            ",",
+            ";",
+            "=",
+            ":",
+            "@",
+          ] as const),
+        );
+
+/**
+ * Draw one IPv6 address of 0 to 9 groups, with or without a `::` at a drawn place and an IPv4
+ * tail, so both the grammar's nine forms and their near misses appear.
+ *
+ * @returns The generator.
+ */
+const ipv6Of: Gen<string> = (source) => {
+  const groups = source.draw(
+    array(element(["1", "ab", "ffff", "12345"] as const), { max: 9, min: 0 }),
+  );
+  const elision = source.draw(int(-1, groups.length));
+  const tail = source.draw(element(["", "1.2.3.4", "1.2.3"] as const));
+  const written = [...groups, ...(tail === "" ? [] : [tail])];
+
+  return elision < 0
+    ? written.join(":")
+    : `${written.slice(0, elision).join(":")}::${written.slice(elision).join(":")}`;
+};
+
+/**
+ * Draw a namespace name under a swarm: a URI reference built from Appendix A's parts the swarm
+ * keeps, or a named case, then perhaps edited by a mutation, so the search crosses the boundary
+ * between the language and its neighbours from both sides.
+ *
+ * @param on - The case's swarm.
+ * @returns The generator.
+ */
+const uriOf =
+  (on: Swarm<UriFeature>): Gen<string> =>
+  (source) => {
+    const segment = (): string => source.draw(array(pcharOf(on), { max: 3, min: 0 })).join("");
+    const host = (): string => {
+      if (source.draw(keep(on, "ipv6"))) {
+        return `[${source.draw(ipv6Of)}]`;
+      }
+
+      if (source.draw(keep(on, "ipvFuture"))) {
+        return `[${source.draw(element(["v1.", "V1f.", "v."] as const))}${segment()}]`;
+      }
+
+      return source.draw(keep(on, "ipv4"))
+        ? source.draw(array(int(0, 300), { max: 5, min: 3 })).join(".")
+        : segment();
+    };
+    const built = source.draw(keep(on, "named"))
+      ? source.draw(element(namedUris))[1]
+      : [
+          source.draw(keep(on, "scheme"))
+            ? `${source.draw(element(["urn", "http", "a+b.c-d", "1x", ""] as const))}:`
+            : "",
+          source.draw(keep(on, "authority"))
+            ? `//${source.draw(keep(on, "userinfo")) ? `${segment()}@` : ""}${host()}${source.draw(keep(on, "port")) ? `:${source.draw(element(["", "80", "8x"] as const))}` : ""}`
+            : "",
+          source.draw(keep(on, "path"))
+            ? source.draw(array(map(int(0, 0), segment), { max: 3, min: 1 })).join("/")
+            : "",
+          source.draw(keep(on, "query")) ? `?${segment()}` : "",
+          source.draw(keep(on, "fragment")) ? `#${segment()}` : "",
+        ].join("");
+    const edits = source.draw(keep(on, "mutation")) ? source.draw(int(1, 2)) : 0;
+    let text = built;
+    for (let edit = 0; edit < edits; edit += 1) {
+      const at = source.draw(int(0, text.length));
+      const kind = source.draw(element(["insert", "replace", "delete"] as const));
+      const written = kind === "delete" ? "" : source.draw(element(hostile));
+      text = `${text.slice(0, at)}${written}${text.slice(kind === "insert" ? at : at + 1)}`;
+    }
+
+    return text;
+  };
+
+/**
+ * A situation the namespace name search must reach.
+ */
+type UriSituation =
+  | "admitted"
+  | "refused"
+  | "IPv6 admitted"
+  | "IPv6 refused"
+  | "IPvFuture admitted"
+  | "mutated and admitted"
+  | "mutated and refused";
+
+describe("qti/chardata.ts, a namespace name is an RFC 3986 URI reference (reading 131)", () => {
+  it("judges each named input as RFC 3986's grammar does, the pattern and the oracle's recogniser alike", () => {
+    // Oracle: the specification as a checker, RFC 3986 Appendix A read by hand for each input
+    // (Namespaces in XML 1.0 §3: "either a URI reference … or an empty string").
+    for (const [name, uri, admitted] of namedUris) {
+      assert.strictEqual(patternOf(Namespace.fields.uri).test(uri), admitted, name);
+      assert.strictEqual(isUriReference(uri), admitted, `the recogniser: ${name}`);
+    }
+  });
+
+  it.effect(
+    "admits exactly the URI references among every text of at most 4 characters over a letter, a digit, a space and the delimiters",
+    (ctx) =>
+      // Oracle: a second implementation, the law oracle's recogniser of RFC 3986 Appendix A
+      // (`#pantry/test/uri-reference.ts`), a grammar run as ABNF reads it, not a regular
+      // expression.
+      // Bound: every text of 0 to 4 characters over 12, 22,621.
+      Effect.gen(function* uriCharacterBox() {
+        const limit = [0, 1, 2, 3, 4].reduce(
+          (sum, length) => sum + uriCharacters.length ** length,
+          0,
+        );
+        const pattern = patternOf(Namespace.fields.uri);
+        const exhausted = yield* searched(
+          ctx,
+          exhaust(
+            {
+              box: "every text of at most 4 characters over a, 1, ., :, /, ?, #, %, @, [, ] and space",
+              caseHang,
+              coverage: requiredInSpace<"admitted" | "refused">(["admitted", "refused"]),
+              generator: array(element(uriCharacters), { max: 4, min: 0 }),
+              limit,
+              literal: Formatter.format,
+              oracle: {
+                kind: "second-implementation",
+                name: "the law oracle's recogniser of RFC 3986 Appendix A",
+              },
+              suite: "qti/chardata-namespace-characters",
+            },
+            (characters, c) =>
+              Effect.sync(() => {
+                const uri = characters.join("");
+                const admitted = isUriReference(uri);
+                c.note(admitted ? "admitted" : "refused");
+
+                assert.strictEqual(pattern.test(uri), admitted, JSON.stringify(uri));
+              }),
+          ),
+        );
+
+        assert.strictEqual(exhausted.cases, limit);
+      }),
+    { timeout: boxTimeout },
+  );
+
+  it.effect(
+    "admits exactly the URI references among every IP literal of at most 4 pieces of IPv6, IPv4 and IPvFuture addresses",
+    (ctx) =>
+      // Oracle: a second implementation, the law oracle's recogniser of RFC 3986 Appendix A.
+      // Bound: every `//[…]` of 0 to 4 pieces over 9, 7,381.
+      Effect.gen(function* ipLiteralBox() {
+        const limit = [0, 1, 2, 3, 4].reduce((sum, length) => sum + ipPieces.length ** length, 0);
+        const pattern = patternOf(Namespace.fields.uri);
+        const exhausted = yield* searched(
+          ctx,
+          exhaust(
+            {
+              box: "every //[…] of at most 4 pieces over 1:1:1:, 1:, 1, ::, :, 1.2.3.4, ., v1.x and g",
+              caseHang,
+              coverage: requiredInSpace<"admitted" | "refused">(["admitted", "refused"]),
+              generator: array(element(ipPieces), { max: 4, min: 0 }),
+              limit,
+              literal: Formatter.format,
+              oracle: {
+                kind: "second-implementation",
+                name: "the law oracle's recogniser of RFC 3986 Appendix A",
+              },
+              suite: "qti/chardata-namespace-ip-literals",
+            },
+            (pieces, c) =>
+              Effect.sync(() => {
+                const uri = `//[${pieces.join("")}]`;
+                const admitted = isUriReference(uri);
+                c.note(admitted ? "admitted" : "refused");
+
+                assert.strictEqual(pattern.test(uri), admitted, uri);
+              }),
+          ),
+        );
+
+        assert.strictEqual(exhausted.cases, limit);
+      }),
+    { timeout: boxTimeout },
+  );
+
+  it.effect(
+    "admits exactly the URI references among namespace names drawn by a swarm over Appendix A's parts, near misses and named cases",
+    (ctx) =>
+      // Oracle: a second implementation, the law oracle's recogniser of RFC 3986 Appendix A.
+      // Bound: the generator's own bounds, 3 characters a segment, 9 IPv6 groups, 2 edits, 1,000
+      // runs.
+      searched(
+        ctx,
+        explore(
+          {
+            caseHang,
+            concurrency: 1,
+            coverage: required<UriSituation>(
+              [
+                "admitted",
+                "refused",
+                "IPv6 admitted",
+                "IPv6 refused",
+                "IPvFuture admitted",
+                "mutated and admitted",
+                "mutated and refused",
+              ],
+              { cases: 600, sense: notesOnly },
+            ),
+            draw: drawn((source) => {
+              const on = source.draw(swarm(uriFeatures));
+
+              return { swarm: on, uri: source.draw(uriOf(on)) };
+            }),
+            kept: [],
+            literal: Formatter.format,
+            oracle: {
+              kind: "second-implementation",
+              name: "the law oracle's recogniser of RFC 3986 Appendix A",
+            },
+            runs: 1000,
+            shrink: completeShrink,
+            steerEvery: 16,
+            suite: "qti/chardata-namespace-swarm",
+          },
+          ({ swarm: on, uri }, c) =>
+            Effect.sync(() => {
+              const admitted = isUriReference(uri);
+              const verdict = admitted ? "admitted" : "refused";
+              c.note(verdict);
+              if (on.ipv6 !== undefined && uri.includes("[")) {
+                c.note(admitted ? "IPv6 admitted" : "IPv6 refused");
+              }
+
+              if (admitted && /\[[Vv]/u.test(uri)) {
+                c.note("IPvFuture admitted");
+              }
+
+              if (on.mutation !== undefined) {
+                c.note(`mutated and ${verdict}`);
+              }
+
+              assert.strictEqual(
+                patternOf(Namespace.fields.uri).test(uri),
+                admitted,
+                JSON.stringify(uri),
+              );
+            }),
+        ),
+      ),
+    { timeout: searchTimeout },
   );
 });

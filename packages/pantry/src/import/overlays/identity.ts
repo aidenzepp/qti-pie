@@ -25,7 +25,7 @@ import {
   ValueIdentity,
 } from "#pantry/grammar/install.ts";
 import { collapse, lowerAscii } from "#pantry/import/overlays/metadata.ts";
-import { hrefPiecesOf } from "#pantry/import/overlays/package.ts";
+import { resourcePathsOf } from "#pantry/import/overlays/package.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { AttributeRow, FlatRows, NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
@@ -201,9 +201,16 @@ const namingTypes: ReadonlyMap<string, ResourceTypeHandle> = new Map(
 const resourceMetadata = "cp:metadata.resource";
 
 /**
- * The kind of an item document's root, the one element whose own `label` asks for no tool.
+ * The kind of an item document's root, whose own `label` asks for no tool but in a QTI 3.0.1
+ * document ({@link labelledRootVersion}).
  */
 const itemRoot = "qti-assessment-item";
+
+/**
+ * The schema version whose item root's own `label` is a `LabelUse` (spec reading 128, 3.0.1's
+ * §4.1.3), as `#pantry/qti/identity.ts` selects it.
+ */
+const labelledRootVersion = "3.0.1";
 
 /**
  * Write the key text of a projection's row.
@@ -457,7 +464,11 @@ const attributeRowsOf = (
       documentLangs.set(headingKey([document, lexical]), { document, lang: lexical });
     }
 
-    if (element !== undefined && name === "label" && element.kind !== itemRoot) {
+    if (
+      element !== undefined &&
+      name === "label" &&
+      (element.kind !== itemRoot || element.version === labelledRootVersion)
+    ) {
       labels.set(node, { document, node, rootKind });
     }
   }
@@ -530,6 +541,8 @@ const lomRowsOf = (
   const lomSets = new Map<string, Addition<typeof ResourceLomLanguageSet>>();
   const named = new Map<string, Addition<typeof GeneralNamed>>();
   const objects = new Map<string, Addition<typeof GeneralObject>>();
+  // Each resource's href resolved as its `ResourceHref` is, read only for a manifest's records.
+  let resourcePaths: ReadonlyMap<NodeId, string> | undefined;
 
   for (const node of tree.rows.nodes) {
     const text = tree.values.get(node.id) ?? "";
@@ -550,8 +563,12 @@ const lomRowsOf = (
       href === undefined ? undefined : namingTypes.get(tree.valueOf(owner.parent, "type") ?? "");
     named.set(node.id, { general: node.id, named: naming ?? "none", record: parent.id });
     if (href !== undefined && naming !== undefined) {
+      resourcePaths ??= resourcePathsOf(tree.rows);
       objects.set(node.id, {
-        document: Option.getOrElse(ids.documentAt(hrefPiecesOf(href).path), () => tree.document),
+        document: Option.getOrElse(
+          ids.documentAt(resourcePaths.get(owner.parent) ?? ""),
+          () => tree.document,
+        ),
         general: node.id,
         record: parent.id,
       });

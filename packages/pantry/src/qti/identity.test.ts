@@ -201,13 +201,15 @@ const asi = "http://www.imsglobal.org/xsd/imsqtiasi_v3p0";
 
 /**
  * One choice of the label box: whether the item's root carries `tool-name`, `tool-version` and a
- * `label` of its own, and whether a paragraph of its body carries one.
+ * `label` of its own, whether a paragraph of its body carries one, and the schema version its
+ * manifest names.
  */
 interface LabelCase {
   readonly bodyLabel: boolean;
   readonly rootLabel: boolean;
   readonly toolName: boolean;
   readonly toolVersion: boolean;
+  readonly version: "3.0.0" | "3.0.1";
 }
 
 /**
@@ -218,6 +220,7 @@ const labelCases: Gen<LabelCase> = (source) => ({
   rootLabel: source.draw(boolean),
   toolName: source.draw(boolean),
   toolVersion: source.draw(boolean),
+  version: source.draw(element(["3.0.0", "3.0.1"] as const)),
 });
 
 /**
@@ -235,7 +238,7 @@ const labelPackage = (drawn: LabelCase): readonly PackageFile[] => {
     drawn.rootLabel ? 'label="root"' : "",
   ].join(" ");
   const files = {
-    "imsmanifest.xml": `<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" identifier="M"><metadata><schema>QTI Package</schema><schemaversion>3.0.1</schemaversion></metadata><organizations/><resources><resource identifier="R" type="imsqti_item_xmlv3p0" href="item.xml"><file href="item.xml"/></resource></resources></manifest>`,
+    "imsmanifest.xml": `<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" identifier="M"><metadata><schema>QTI Package</schema><schemaversion>${drawn.version}</schemaversion></metadata><organizations/><resources><resource identifier="R" type="imsqti_item_xmlv3p0" href="item.xml"><file href="item.xml"/></resource></resources></manifest>`,
     "item.xml": `<qti-assessment-item ${root}><qti-item-body><p${drawn.bodyLabel ? ' label="x"' : ""}>Hi</p></qti-item-body></qti-assessment-item>`,
   };
 
@@ -247,38 +250,48 @@ const labelPackage = (drawn: LabelCase): readonly PackageFile[] => {
 };
 
 /**
- * A situation the label box must reach: each way the law holds or breaks.
+ * A situation the label box must reach: each way the law holds or breaks, and each version's
+ * root label with no tool named.
  */
-type LabelSituation = "unlabelled" | "root label only" | "named tool" | "unnamed tool";
+type LabelSituation =
+  | "unlabelled"
+  | "root label only"
+  | "named tool"
+  | "unnamed tool"
+  | "3.0.0 root label, unnamed tool"
+  | "3.0.1 root label, unnamed tool";
 
 describe("test/oracle.ts, Label tools", { timeout: buildTimeout }, () => {
   it.effect(
-    "breaks once, at the labelled paragraph, exactly when an item's body uses a label and its root lacks tool-name or tool-version",
+    "breaks once at each labelled element, the paragraph in either version and the root in 3.0.1, exactly when its root lacks tool-name or tool-version",
     (ctx) =>
       // Oracle: the specification as a checker, the information model's label characteristic
       // (§5.16.5: "If an item uses labels then values for the associated toolName and toolVersion
-      // characteristics must also be provided"), which the item root's own label (§4.1.3) does not
-      // state.
+      // characteristics must also be provided") in both versions, and the item's own label in
+      // 3.0.1 alone (3.0.1 §4.1.3 says the same of it; 3.0.0 §4.1.3 calls it "A human readable
+      // label" and asks for nothing; spec reading 128).
       // Bound: every item of one labelled or unlabelled paragraph, with or without a root label,
-      // tool-name and tool-version, 16.
+      // tool-name and tool-version, under each version, 32.
       searched(
         ctx,
         exhaust(
           {
-            box: "every item of one paragraph, each of its body label, root label, tool-name and tool-version present or absent",
+            box: "every item of one paragraph, each of its body label, root label, tool-name and tool-version present or absent, in 3.0.0 or 3.0.1",
             caseHang: Duration.seconds(30),
             coverage: requiredInSpace<LabelSituation>([
               "unlabelled",
               "root label only",
               "named tool",
               "unnamed tool",
+              "3.0.0 root label, unnamed tool",
+              "3.0.1 root label, unnamed tool",
             ]),
             generator: labelCases,
-            limit: 20,
+            limit: 40,
             literal: (drawn) => JSON.stringify(drawn),
             oracle: {
               kind: "specification",
-              name: "the information model's label characteristic, §5.16.5",
+              name: "the information model's label characteristic, §5.16.5, and 3.0.1's §4.1.3",
             },
             suite: "test/oracle-label-tools",
           },
@@ -293,6 +306,9 @@ describe("test/oracle.ts, Label tools", { timeout: buildTimeout }, () => {
                 return named ? "named tool" : "unnamed tool";
               };
               c.note(situation());
+              if (drawn.rootLabel && !named) {
+                c.note(`${drawn.version} root label, unnamed tool`);
+              }
 
               const judgment = yield* judge(labelPackage(drawn), grammar, laws);
               const breaches =
@@ -301,8 +317,17 @@ describe("test/oracle.ts, Label tools", { timeout: buildTimeout }, () => {
                   : assert.fail(`the codec refused the package: ${judgment.rule}`);
 
               assert.deepStrictEqual(
-                breaches.map(({ document, keys }) => `${document} ${keys["kind"] ?? ""}`),
-                drawn.bodyLabel && !named ? ["item.xml p"] : [],
+                breaches
+                  .map(({ document, keys }) => `${document} ${keys["kind"] ?? ""}`)
+                  .toSorted(),
+                named
+                  ? []
+                  : [
+                      ...(drawn.rootLabel && drawn.version === "3.0.1"
+                        ? ["item.xml qti-assessment-item"]
+                        : []),
+                      ...(drawn.bodyLabel ? ["item.xml p"] : []),
+                    ].toSorted(),
                 JSON.stringify(drawn),
               );
             }),
@@ -503,13 +528,20 @@ interface DocumentLangCase {
 }
 
 /**
+ * The LOM languages a general category of the Document lang box lists: `en`, `fr`, `EN` (`en` in
+ * another case) and ` en ` (`en` padded, an `xs:string` whose spaces are part of its value, so no
+ * language tag: spec reading 134).
+ */
+const lomLanguages = ["en", "fr", "EN", " en "] as const;
+
+/**
  * Every choice of the Document lang box: no `xml:lang`, `en`, ` EN` (`en` padded and in another
  * case) or the empty one; an `href` or none; and at most 2 general categories, each listing at most
- * one of `en` and `fr`.
+ * one of {@link lomLanguages}.
  */
 const documentLangCases: Gen<DocumentLangCase> = (source) => ({
   generals: source.draw(
-    array(array(element(["en", "fr"]), { max: 1, min: 0 }), { max: 2, min: 0 }),
+    array(array(element(lomLanguages), { max: 1, min: 0 }), { max: 2, min: 0 }),
   ),
   href: source.draw(boolean),
   rootLang: source.draw(
@@ -518,18 +550,28 @@ const documentLangCases: Gen<DocumentLangCase> = (source) => ({
 });
 
 /**
- * Read a language tag as BCP 47 compares it: its form collapsed (XML Schema Part 2, §4.3.6), then
- * its ASCII capitals as small letters (RFC 5646 §2.1.1).
+ * Read a language tag as BCP 47 compares it: its ASCII capitals as small letters (RFC 5646
+ * §2.1.1), a tag's subtags being ASCII (§2.1).
+ *
+ * @param tag - The tag as written.
+ * @returns The folded tag.
+ */
+const foldedTag = (tag: string): string => tag.replaceAll(/[A-Z]/gu, (c) => c.toLowerCase());
+
+/**
+ * Read an `xml:lang` form as BCP 47 compares it: its form collapsed (an `xs:language`'s whiteSpace,
+ * XML Schema Part 2, §4.3.6), then folded ({@link foldedTag}).
  *
  * @param form - The form as written.
  * @returns The tag the form names.
  */
 const tagOf = (form: string): string =>
-  form
-    .replaceAll(/[\t\n\r ]+/gu, " ")
-    .replace(/^ /u, "")
-    .replace(/ $/u, "")
-    .replaceAll(/[A-Z]/gu, (c) => c.toLowerCase());
+  foldedTag(
+    form
+      .replaceAll(/[\t\n\r ]+/gu, " ")
+      .replace(/^ /u, "")
+      .replace(/ $/u, ""),
+  );
 
 /**
  * A situation the Document lang box must reach: each way R26 holds or breaks.
@@ -539,7 +581,9 @@ type DocumentLangSituation =
   | "missing from a category"
   | "no general category"
   | "named by no href"
-  | "no language stated";
+  | "no language stated"
+  | "listed in another case"
+  | "listed padded";
 
 describe("test/oracle.ts, Document lang (R26)", { timeout: buildTimeout }, () => {
   it.effect(
@@ -550,14 +594,15 @@ describe("test/oracle.ts, Document lang (R26)", { timeout: buildTimeout }, () =>
       // assessmentItem, test or object bank and its 'bodyElements'"), over a resource that names
       // its item by href (reading 93), an xml:lang by its collapsed value, the empty one stating
       // none (XML 1.0 §2.12), compared with each listed language as a tag, without regard to case
-      // (RFC 5646 §2.1.1).
+      // (RFC 5646 §2.1.1); a LOM language is an xs:string, read as written, so one with spaces
+      // around it is no tag ("Whitespace is not permitted in a language tag", §2.1; reading 134).
       // Bound: every item root xml:lang of 4, href or none, and at most 2 categories of at most
-      // one of en and fr, 104.
+      // one of en, fr, EN and padded en, 248.
       searched(
         ctx,
         exhaust(
           {
-            box: "every item xml:lang of none, en, padded EN and empty, named by href or not, beside at most 2 general categories of at most one of en and fr",
+            box: "every item xml:lang of none, en, padded EN and empty, named by href or not, beside at most 2 general categories of at most one of en, fr, EN and padded en",
             caseHang: Duration.seconds(30),
             coverage: requiredInSpace<DocumentLangSituation>([
               "listed by every category",
@@ -565,9 +610,11 @@ describe("test/oracle.ts, Document lang (R26)", { timeout: buildTimeout }, () =>
               "no general category",
               "named by no href",
               "no language stated",
+              "listed in another case",
+              "listed padded",
             ]),
             generator: documentLangCases,
-            limit: 200,
+            limit: 300,
             literal: (drawn) => JSON.stringify(drawn),
             oracle: { kind: "specification", name: "QTI 3.0 Metadata §2.7.1.3, Language" },
             suite: "test/oracle-document-lang",
@@ -588,7 +635,7 @@ describe("test/oracle.ts, Document lang (R26)", { timeout: buildTimeout }, () =>
               const breaks =
                 drawn.href &&
                 stated !== "" &&
-                drawn.generals.some((langs) => !langs.map(tagOf).includes(stated));
+                drawn.generals.some((langs) => !langs.map(foldedTag).includes(stated));
               const situation = (): DocumentLangSituation => {
                 if (!drawn.href) {
                   return "named by no href";
@@ -605,6 +652,16 @@ describe("test/oracle.ts, Document lang (R26)", { timeout: buildTimeout }, () =>
                 return breaks ? "missing from a category" : "listed by every category";
               };
               c.note(situation());
+              if (drawn.href && stated === "en") {
+                const listed = new Set(drawn.generals.flat());
+                if (listed.has("EN") && Option.contains(drawn.rootLang, "en")) {
+                  c.note("listed in another case");
+                }
+
+                if (listed.has(" en ")) {
+                  c.note("listed padded");
+                }
+              }
 
               const judgment = yield* judge(files, grammar, laws);
               const breaches =
@@ -624,33 +681,61 @@ describe("test/oracle.ts, Document lang (R26)", { timeout: buildTimeout }, () =>
 });
 
 /**
- * One choice of the SSML box: the first `speak`'s `startmark` and its marks named `m`, whether a
- * second `speak` defines `m` too, and where the `lexicon` the first `speak`'s `lookup` names is.
+ * One choice of the SSML box: the first `speak`'s `startmark` and the names of its marks, whether a
+ * second `speak` defines `a b` too, and where the `lexicon` the first `speak`'s `lookup` names is.
+ * A name is written as XML writes it, so `&#9;` is a tab in its lexical form, which attribute-value
+ * normalization would otherwise make a space.
  */
 interface SsmlLawCase {
   readonly lookup: "none" | "own" | "other";
-  readonly marks: number;
   readonly markElsewhere: boolean;
+  readonly marks: readonly string[];
   readonly startmark: Option.Option<string>;
 }
 
 /**
- * Every choice of the SSML box.
+ * The names the SSML box writes: one `xsd:token`, `a b`, in three lexical forms, an inner run and
+ * outer whitespace with a tab among them, and another name, `ab`.
+ */
+const markNames = ["a b", "a  b", " a&#9;b ", "ab"] as const;
+
+/**
+ * Every choice of the SSML box: a `startmark` of none or one of {@link markNames}, and at most 2
+ * marks over the two inner forms of `a b` and `ab`.
  */
 const ssmlLawCases: Gen<SsmlLawCase> = (source) => ({
   lookup: source.draw(element(["none", "own", "other"] as const)),
   markElsewhere: source.draw(boolean),
-  marks: source.draw(element([0, 1, 2])),
-  startmark: source.draw(element([Option.none(), Option.some("m"), Option.some(" m")])),
+  marks: source.draw(array(element(["a b", "a  b", "ab"] as const), { max: 2, min: 0 })),
+  startmark: source.draw(
+    element([Option.none(), ...markNames.map((name) => Option.some<string>(name))]),
+  ),
 });
 
 /**
- * A situation the SSML box must reach: each way the two laws hold or break.
+ * Read a mark name as SSML compares it: its value, the lexical form collapsed (`xsd:token`'s
+ * whiteSpace, XML Schema Part 2 §4.3.6), `&#9;` read as the tab it writes.
+ *
+ * @param written - The name as the box writes it.
+ * @returns Its value.
+ */
+const markValueOf = (written: string): string =>
+  written
+    .replaceAll("&#9;", "\t")
+    .replaceAll(/[\t\n\r ]+/gu, " ")
+    .replace(/^ /u, "")
+    .replace(/ $/u, "");
+
+/**
+ * A situation the SSML box must reach: each way the two laws hold or break, a trim that names its
+ * mark in another lexical form, and a fragment that defines one name in two forms.
  */
 type SsmlLawSituation =
   | "trim to a mark defined once"
   | "trim to a mark defined twice"
   | "trim to a mark of another speak"
+  | "trim to a mark written otherwise"
+  | "one name in two forms"
   | "lookup in its own speak"
   | "lookup across speaks";
 
@@ -659,57 +744,79 @@ describe(
   { timeout: buildTimeout },
   () => {
     it.effect(
-      "breaks SSML trim mark exactly where a startmark names a mark its own speak defines other than once, and SSML lexicon reference exactly where a lookup's lexicon is in another speak",
+      "breaks SSML trim mark exactly where a startmark names a mark its own speak defines other than once, names compared collapsed, and SSML lexicon reference exactly where a lookup's lexicon is in another speak",
       (ctx) =>
         // Oracle: the specification as a checker, SSML 1.1 §3.1.1.1 ("Only markers defined once in
         // the document, i.e. that are unique, are permitted as the value of either startmark or
         // endmark") and §3.1.5.1 ("The scope of this name is the current SSML document"), read
         // under spec reading 3: "the document" is each speak fragment, a name compared by its
-        // value, collapsed (an xs:token's whiteSpace, SSML 1.1 §3.3.2).
-        // Bound: every first speak of 3 startmarks and at most 2 marks, beside a second speak that
-        // defines the mark or not, with a lookup in neither, to its own lexicon or the other
-        // speak's, 54.
+        // value, collapsed (`mark@name`, `startmark` and `endmark` are `xsd:token`s, SSML 1.1
+        // §3.3.2, whose whiteSpace is collapse, XML Schema Part 2 §4.3.6), so `a  b` and `a b` are
+        // one name.
+        // Bound: every first speak of 5 startmarks, at most 2 marks over 3 names and 3 lookups,
+        // beside a second speak that defines `a b` or not, 390.
         searched(
           ctx,
           exhaust(
             {
-              box: "every two speaks: the first of 3 startmarks, at most 2 marks and 3 lookups, the second defining the mark or not",
+              box: "every two speaks: the first of 5 startmarks, at most 2 marks over a b, a  b and ab, and 3 lookups, the second defining a b or not",
               caseHang: Duration.seconds(30),
               coverage: requiredInSpace<SsmlLawSituation>([
                 "trim to a mark defined once",
                 "trim to a mark defined twice",
                 "trim to a mark of another speak",
+                "trim to a mark written otherwise",
+                "one name in two forms",
                 "lookup in its own speak",
                 "lookup across speaks",
               ]),
               generator: ssmlLawCases,
-              limit: 100,
+              limit: 400,
               literal: (drawn) => JSON.stringify(drawn),
-              oracle: { kind: "specification", name: "SSML 1.1 §3.1.1.1 and §3.1.5.1, reading 3" },
+              oracle: {
+                kind: "specification",
+                name: "SSML 1.1 §3.1.1.1, §3.1.5.1 and §3.3.2, reading 3",
+              },
               suite: "test/oracle-ssml-fragment",
             },
             (drawn: SsmlLawCase, c) =>
               Effect.gen(function* ssmlLaws() {
                 const lexicon = `<ssml:lexicon uri="a.pls" xml:id="L"/>`;
-                const first = `<ssml:speak version="1.1" xml:lang="en"${Option.match(drawn.startmark, { onNone: () => "", onSome: (mark) => ` startmark="${mark}"` })}>${drawn.lookup === "own" ? lexicon : ""}${`<ssml:mark name="m"/>`.repeat(drawn.marks)}${drawn.lookup === "none" ? "" : `<ssml:lookup ref="L">x</ssml:lookup>`}</ssml:speak>`;
-                const second = `<ssml:speak version="1.1" xml:lang="en">${drawn.lookup === "other" ? lexicon : ""}${drawn.markElsewhere ? `<ssml:mark name="m"/>` : ""}</ssml:speak>`;
+                const first = `<ssml:speak version="1.1" xml:lang="en"${Option.match(drawn.startmark, { onNone: () => "", onSome: (mark) => ` startmark="${mark}"` })}>${drawn.lookup === "own" ? lexicon : ""}${drawn.marks.map((name) => `<ssml:mark name="${name}"/>`).join("")}${drawn.lookup === "none" ? "" : `<ssml:lookup ref="L">x</ssml:lookup>`}</ssml:speak>`;
+                const second = `<ssml:speak version="1.1" xml:lang="en">${drawn.lookup === "other" ? lexicon : ""}${drawn.markElsewhere ? `<ssml:mark name="a b"/>` : ""}</ssml:speak>`;
                 const files = packageOf({
                   "a.pls": "<lexicon/>",
                   "imsmanifest.xml": `<manifest xmlns="${cp}" identifier="M"><metadata><schema>QTI Package</schema><schemaversion>3.0.1</schemaversion></metadata><organizations/><resources><resource identifier="R" type="imsqti_item_xmlv3p0" href="item.xml"><file href="item.xml"/><file href="a.pls"/></resource></resources></manifest>`,
                   "item.xml": `<qti-assessment-item xmlns="${asi}" xmlns:ssml="http://www.w3.org/2001/10/synthesis" identifier="item" title="Item" time-dependent="false"><qti-item-body><p>${first}${second}</p></qti-item-body></qti-assessment-item>`,
                 });
-                const trimBreaks = Option.isSome(drawn.startmark) && drawn.marks !== 1;
+                const named = drawn.startmark.pipe(Option.map(markValueOf));
+                const defined = Option.match(named, {
+                  onNone: () => 0,
+                  onSome: (mark) => drawn.marks.filter((name) => markValueOf(name) === mark).length,
+                });
+                const trimBreaks = Option.isSome(named) && defined !== 1;
 
-                if (Option.isSome(drawn.startmark)) {
-                  if (drawn.marks === 0 && drawn.markElsewhere) {
+                if (Option.isSome(named)) {
+                  if (defined === 0 && drawn.markElsewhere && named.value === "a b") {
                     c.note("trim to a mark of another speak");
                   } else {
                     c.note(
-                      drawn.marks === 1
+                      defined === 1
                         ? "trim to a mark defined once"
                         : "trim to a mark defined twice",
                     );
                   }
+
+                  if (
+                    defined === 1 &&
+                    !drawn.marks.includes(Option.getOrElse(drawn.startmark, () => ""))
+                  ) {
+                    c.note("trim to a mark written otherwise");
+                  }
+                }
+
+                if (drawn.marks.includes("a b") && drawn.marks.includes("a  b")) {
+                  c.note("one name in two forms");
                 }
 
                 if (drawn.lookup !== "none") {

@@ -31,9 +31,15 @@ import type {
 import { idOf, searchTimeout } from "#pantry/test/gen/xdm.ts";
 
 /**
- * The version every case is written in.
+ * The version every case is written in, but the content box's, which draws its own.
  */
 const version = "3.0.1";
+
+/**
+ * The schema versions the content box draws: a 3.0.1 item root's own `label` is a `LabelUse`, and
+ * a 3.0.0 one's is not (spec reading 128).
+ */
+const versions = ["3.0.0", "3.0.1"] as const;
 
 /**
  * Collapse a text as XML Schema's whiteSpace `collapse` does: each run of tabs, line feeds,
@@ -144,9 +150,13 @@ const elementOf = (
  * Write a document around its root element.
  *
  * @param root - The root.
+ * @param written - The schema version it is written in, {@link version} by default.
  * @returns The document, with no declaration, doctype, prolog or epilog.
  */
-const documentOf = (root: XdmClosedElement<Composed>): XdmDocument<Composed> => ({
+const documentOf = (
+  root: XdmClosedElement<Composed>,
+  written: (typeof versions)[number] = version,
+): XdmDocument<Composed> => ({
   _tag: "document",
   charset: "UTF-8",
   declaration: Option.none(),
@@ -155,7 +165,7 @@ const documentOf = (root: XdmClosedElement<Composed>): XdmDocument<Composed> => 
   exportCharset: "UTF-8",
   prolog: [],
   root,
-  version,
+  version: written,
 });
 
 /**
@@ -198,13 +208,15 @@ interface ContentChoice {
 }
 
 /**
- * A content case: its root's kind, `xml:lang` and label, and its `div` children's choices.
+ * A content case: its root's kind, `xml:lang` and label, its `div` children's choices, and the
+ * schema version it is written in.
  */
 interface ContentCase {
   readonly children: readonly ContentChoice[];
   readonly rootKind: "qti-assessment-item" | "qti-assessment-stimulus";
   readonly rootLabel: boolean;
   readonly rootLang: Option.Option<string>;
+  readonly version: (typeof versions)[number];
 }
 
 /**
@@ -222,7 +234,7 @@ const attributesOf = (choice: ContentChoice): readonly XdmAttribute<Composed>[] 
 /**
  * Every content case: an item or a stimulus whose root carries no `xml:lang`, `en` or ` en`, and a
  * label or none, holding at most 2 `div`s, each with no `xml:lang`, `en` or `fr`, no ID or one of
- * {@link writtenIds}, and a label or none.
+ * {@link writtenIds}, and a label or none, in each of {@link versions}.
  */
 const contentCases: Gen<ContentCase> = (source) => ({
   children: source.draw(
@@ -238,6 +250,7 @@ const contentCases: Gen<ContentCase> = (source) => ({
   rootKind: source.draw(element(["qti-assessment-item", "qti-assessment-stimulus"] as const)),
   rootLabel: source.draw(element([false, true])),
   rootLang: source.draw(element([Option.none(), Option.some("en"), Option.some(" en")])),
+  version: source.draw(element(versions)),
 });
 
 /**
@@ -248,7 +261,9 @@ type ContentSituation =
   | "padded id"
   | "one id value twice"
   | "labelled item content"
-  | "labelled stimulus root";
+  | "labelled stimulus root"
+  | "labelled 3.0.0 item root"
+  | "labelled 3.0.1 item root";
 
 /**
  * Write a sorted list of a keyed set's members, failing on a repeat.
@@ -267,17 +282,19 @@ describe(
   { timeout: searchTimeout },
   () => {
     it.effect(
-      "gives each xml:lang form once per document, one XmlLang, DocumentId and LabelUse row per element that carries one, and each ID split around its value",
+      "gives each xml:lang form once per document, one XmlLang, DocumentId and LabelUse row per element that carries one, a 3.0.0 item root's own label none, and each ID split around its value",
       (ctx) =>
         // Oracle: the case's own model read as keyed sets: the forms it wrote, each once
         // (sets ruling 2), and the elements it wrote each on, numbered in document order (the root
-        // node 1, its k-th div node k + 2).
-        // Bound: every item or stimulus over the root's and at most 2 divs' choices above, 4,116.
+        // node 1, its k-th div node k + 2); a label every element's but a 3.0.0 item root's (QTI
+        // 3.0.1 §4.1.3 asks the item's own label for tools, 3.0.0's §4.1.3 does not; reading 128).
+        // Bound: every item or stimulus over the root's and at most 2 divs' choices above, in each
+        // of 2 versions, 8,232.
         searched(
           ctx,
           exhaust(
             {
-              box: "every item or stimulus whose root and at most 2 divs each carry a choice of xml:lang, ID and label",
+              box: "every item or stimulus, in 3.0.0 or 3.0.1, whose root and at most 2 divs each carry a choice of xml:lang, ID and label",
               caseHang: Duration.seconds(10),
               coverage: requiredInSpace<ContentSituation>([
                 "repeated xml:lang",
@@ -285,9 +302,11 @@ describe(
                 "one id value twice",
                 "labelled item content",
                 "labelled stimulus root",
+                "labelled 3.0.0 item root",
+                "labelled 3.0.1 item root",
               ]),
               generator: contentCases,
-              limit: 5000,
+              limit: 9000,
               literal: (drawn) => JSON.stringify(drawn),
               oracle: { kind: "specification", name: "the case's model, read as keyed sets" },
               suite: "import/identity-content-rows",
@@ -299,7 +318,7 @@ describe(
                   attributesOf({ id: Option.none(), label: drawn.rootLabel, lang: drawn.rootLang }),
                   drawn.children.map((choice) => elementOf("div", attributesOf(choice), [])),
                 );
-                const rows = rowsOf(documentOf(root), ids);
+                const rows = rowsOf(documentOf(root, drawn.version), ids);
                 const placed = [
                   {
                     choice: { id: Option.none(), label: drawn.rootLabel, lang: drawn.rootLang },
@@ -318,7 +337,12 @@ describe(
                 );
                 const labelled = placed.filter(
                   ({ choice, root: isRoot }) =>
-                    choice.label && !(isRoot && drawn.rootKind === "qti-assessment-item"),
+                    choice.label &&
+                    !(
+                      isRoot &&
+                      drawn.rootKind === "qti-assessment-item" &&
+                      drawn.version === "3.0.0"
+                    ),
                 );
 
                 if (new Set(langs).size < langs.length) {
@@ -343,6 +367,10 @@ describe(
 
                 if (drawn.rootKind === "qti-assessment-stimulus" && drawn.rootLabel) {
                   c.note("labelled stimulus root");
+                }
+
+                if (drawn.rootKind === "qti-assessment-item" && drawn.rootLabel) {
+                  c.note(`labelled ${drawn.version} item root`);
                 }
 
                 assert.deepStrictEqual(
@@ -428,10 +456,11 @@ describe(
 );
 
 /**
- * The texts a LOM language is written with: `en`, `EN`, the same tag in another case, `fr`, or
- * none, an empty element.
+ * The texts a LOM language is written with: `en`, `EN`, the same tag in another case, `fr`, none,
+ * an empty element, or ` en `, which a LOM `CharacterString`, an `xs:string`, holds as written, so
+ * its tag keeps its spaces (spec reading 134).
  */
-const lomTexts = ["en", "EN", "fr", ""] as const;
+const lomTexts = ["en", "EN", "fr", "", " en "] as const;
 
 /**
  * A LOM case: each general category's languages, and the educational category's one language or
@@ -469,6 +498,7 @@ type LomSituation =
   | "repeated language"
   | "one language in two cases"
   | "empty language"
+  | "padded language"
   | "two categories"
   | "educational";
 
@@ -478,24 +508,26 @@ describe("import/overlays/identity.ts, a LOM record's rows", { timeout: searchTi
     (ctx) =>
       // Oracle: the case's own model read as keyed sets, each node numbered in document order:
       // the record node 1, then each category and, after it, each language and its text node; a
-      // tag read without regard to case (RFC 5646 §2.1.1).
-      // Bound: every record of 1 or 2 general categories of at most 2 languages over en, EN, fr
-      // and empty, with an educational language or none, 924.
+      // tag read without regard to case (RFC 5646 §2.1.1), and as written otherwise, a LOM
+      // language being an xs:string (the loose binding's CharacterString; reading 134).
+      // Bound: every record of 1 or 2 general categories of at most 2 languages over en, EN, fr,
+      // empty and padded en, with an educational language or none, 1,984.
       searched(
         ctx,
         exhaust(
           {
-            box: "every record of 1 or 2 general categories of at most 2 languages over en, EN, fr and empty, beside an educational language or none",
+            box: "every record of 1 or 2 general categories of at most 2 languages over en, EN, fr, empty and padded en, beside an educational language or none",
             caseHang: Duration.seconds(10),
             coverage: requiredInSpace<LomSituation>([
               "repeated language",
               "one language in two cases",
               "empty language",
+              "padded language",
               "two categories",
               "educational",
             ]),
             generator: lomCases,
-            limit: 1000,
+            limit: 2100,
             literal: (drawn) => JSON.stringify(drawn),
             oracle: { kind: "specification", name: "the case's model, read as keyed sets" },
             suite: "import/identity-lom-rows",
@@ -539,6 +571,10 @@ describe("import/overlays/identity.ts, a LOM record's rows", { timeout: searchTi
 
               if (drawn.generals.some((texts) => texts.includes(""))) {
                 c.note("empty language");
+              }
+
+              if (drawn.generals.some((texts) => texts.includes(" en "))) {
+                c.note("padded language");
               }
 
               if (drawn.generals.length === 2) {

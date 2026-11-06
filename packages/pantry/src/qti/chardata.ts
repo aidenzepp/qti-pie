@@ -291,12 +291,94 @@ export const EntryPath = str.regex("^[^/].{0,255}.{0,255}.{0,137}$", "su");
 export const NamespacePrefix = str.regex(`^(?:[${ncStart}][${ncChar}]{0,255})?$`);
 
 /**
- * A namespace declaration's value as read, after attribute-value normalization: any `Char`s, empty
- * only where a default declaration undeclares the default namespace.
+ * RFC 3986's `unreserved` as the body of a class: `ALPHA / DIGIT / "-" / "." / "_" / "~"`.
+ *
+ * @see {@link https://www.rfc-editor.org/rfc/rfc3986#appendix-A | RFC 3986, Appendix A}
+ */
+const uriUnreserved = "A-Za-z0-9\\-._~";
+
+/**
+ * RFC 3986's `sub-delims` as the body of a class.
+ */
+const uriSubDelims = "!$&'()*+,;=";
+
+/**
+ * RFC 3986's `pct-encoded`: `"%" HEXDIG HEXDIG`, a hex digit of either case (RFC 5234 §2.3 reads
+ * ABNF's quoted `"A"` to `"F"` without regard to case).
+ */
+const uriPctEncoded = "%[0-9A-Fa-f]{2}";
+
+/**
+ * RFC 3986's `pchar`: `unreserved / pct-encoded / sub-delims / ":" / "@"`.
+ */
+const uriPchar = `(?:[${uriUnreserved}${uriSubDelims}:@]|${uriPctEncoded})`;
+
+/**
+ * RFC 3986's `dec-octet`, 0 to 255 with no leading zero.
+ */
+const uriDecOctet = "(?:[0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])";
+
+/**
+ * RFC 3986's `h16`, one to four hex digits.
+ */
+const uriH16 = "[0-9A-Fa-f]{1,4}";
+
+/**
+ * RFC 3986's `ls32`: `( h16 ":" h16 ) / IPv4address`.
+ */
+const uriLs32 = `(?:${uriH16}:${uriH16}|${uriDecOctet}\\.${uriDecOctet}\\.${uriDecOctet}\\.${uriDecOctet})`;
+
+/**
+ * RFC 3986's `IPv6address`, its nine alternatives in the Appendix's order.
+ */
+const uriIpv6 = `(?:(?:${uriH16}:){6}${uriLs32}|::(?:${uriH16}:){5}${uriLs32}|(?:${uriH16})?::(?:${uriH16}:){4}${uriLs32}|(?:(?:${uriH16}:){0,1}${uriH16})?::(?:${uriH16}:){3}${uriLs32}|(?:(?:${uriH16}:){0,2}${uriH16})?::(?:${uriH16}:){2}${uriLs32}|(?:(?:${uriH16}:){0,3}${uriH16})?::${uriH16}:${uriLs32}|(?:(?:${uriH16}:){0,4}${uriH16})?::${uriLs32}|(?:(?:${uriH16}:){0,5}${uriH16})?::${uriH16}|(?:(?:${uriH16}:){0,6}${uriH16})?::)`;
+
+/**
+ * RFC 3986's `host`: an `IP-literal` (`"[" ( IPv6address / IPvFuture ) "]"`, the `"v"` of
+ * `IPvFuture` of either case) or a `reg-name`. Its third alternative, `IPv4address`, is left out
+ * because every one is a `reg-name` too, of digits and `.`, so the language is the same.
+ */
+const uriHost = `(?:\\[(?:${uriIpv6}|[Vv][0-9A-Fa-f]+\\.[${uriUnreserved}${uriSubDelims}:]+)\\]|(?:[${uriUnreserved}${uriSubDelims}]|${uriPctEncoded})*)`;
+
+/**
+ * RFC 3986's `"//" authority path-abempty`, the branch `hier-part` and `relative-part` share:
+ * `[ userinfo "@" ] host [ ":" port ]`, then `*( "/" segment )`.
+ */
+const uriNetworkPath = `//(?:(?:[${uriUnreserved}${uriSubDelims}:]|${uriPctEncoded})*@)?${uriHost}(?::[0-9]*)?(?:/${uriPchar}*)*`;
+
+/**
+ * RFC 3986's `path-absolute`: `"/" [ segment-nz *( "/" segment ) ]`.
+ */
+const uriPathAbsolute = `/(?:${uriPchar}+(?:/${uriPchar}*)*)?`;
+
+/**
+ * RFC 3986's `URI-reference`, `URI / relative-ref`, unanchored: a `URI`'s `scheme ":" hier-part`
+ * or a `relative-ref`'s `relative-part`, each path's empty alternative its group's `?`, then the
+ * `[ "?" query ] [ "#" fragment ]` both end with. A `relative-part`'s `path-noscheme` begins with
+ * a `segment-nz-nc`, a segment with no `:`, so no relative reference reads as a scheme.
+ */
+const uriReference = `(?:[A-Za-z][A-Za-z0-9+\\-.]*:(?:${uriNetworkPath}|${uriPathAbsolute}|${uriPchar}+(?:/${uriPchar}*)*)?|(?:${uriNetworkPath}|${uriPathAbsolute}|(?:[${uriUnreserved}${uriSubDelims}@]|${uriPctEncoded})+(?:/${uriPchar}*)*)?)(?:\\?(?:${uriPchar}|[/?])*)?(?:#(?:${uriPchar}|[/?])*)?`;
+
+/**
+ * A namespace declaration's value as read, after attribute-value normalization: an RFC 3986
+ * `URI-reference` (spec reading 131), which Namespaces in XML 1.0 (Third Edition) asks of it
+ * ("The attribute's normalized value MUST be either a URI reference — the namespace name
+ * identifying the namespace — or an empty string", §3; "An XML namespace is identified by a URI
+ * reference [RFC3986]", §2.1). The empty string is one, a `relative-ref` of an empty path; the
+ * reader admits it only where an unprefixed declaration undeclares the default namespace. A
+ * relative reference is deprecated (§2.2), not refused. Its characters are US-ASCII, so a space,
+ * a `%` with no two hex digits after it and any character beyond ASCII are refused, as is an IP
+ * literal that is no IPv6 or IPvFuture address and a port that is not digits. The foreign names'
+ * namespaces (`ForeignNamespace`, the open names' `uri`) come from these declarations, so they
+ * need no pattern of their own. `chardata.test.ts` judges the pattern against the law oracle's own
+ * recogniser of Appendix A's grammar (`#pantry/test/uri-reference.ts`).
  *
  * Exported for `src/import/refusal.ts`, which names its pattern law.
+ *
+ * @see {@link https://www.w3.org/TR/xml-names/#ns-decl | Namespaces in XML 1.0, §3 Declaring Namespaces}
+ * @see {@link https://www.rfc-editor.org/rfc/rfc3986#section-4.1 | RFC 3986, §4.1 URI Reference}
  */
-export const NamespaceUri = str.regex(`^[${xmlChar}]*$`);
+export const NamespaceUri = str.regex(`^${uriReference}$`);
 
 /**
  * A foreign element's namespace name, empty for none, at most `namespaceCodePoints` `Char`s
