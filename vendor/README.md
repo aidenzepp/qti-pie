@@ -3,7 +3,7 @@
 The three [grizzle](https://github.com/bjornpagen/grizzle) tarballs `@qti-pie/pantry` depends on.
 
 grizzle is not on npm yet. These tarballs come from `pnpm pack` on an export of the repository at trunk commit
-`48256f8d61484d18aea2023f2d6fb54d07d46abf`, so each package installs as the npm release will.
+`4016b692ffd1493d72b752fc5ad85cc37df0fc95`, so each package installs as the npm release will.
 
 grizzle is Bjorn Pagen's. Its repository licenses it under 0BSD (`LICENSE`: "Permission to use, copy, modify,
 and/or distribute this software for any purpose with or without fee is hereby granted"), and the tarballs are
@@ -11,9 +11,9 @@ redistributed here under that license, with the author's agreement. The rest of 
 
 | Tarball                                      | Package                      | Source                          |
 | -------------------------------------------- | ---------------------------- | ------------------------------- |
-| `bjornpagen-grizzle-1.0.0-beta.0.tgz`        | `@bjornpagen/grizzle`        | `packages/grizzle` at `48256f8` |
-| `bjornpagen-grizzle-engine-1.0.0-beta.0.tgz` | `@bjornpagen/grizzle-engine` | `packages/engine` at `48256f8`  |
-| `grizzle-testing-0.0.0.tgz`                  | `@grizzle/testing`           | `packages/testing` at `48256f8` |
+| `bjornpagen-grizzle-1.0.0-beta.0.tgz`        | `@bjornpagen/grizzle`        | `packages/grizzle` at `4016b69` |
+| `bjornpagen-grizzle-engine-1.0.0-beta.0.tgz` | `@bjornpagen/grizzle-engine` | `packages/engine` at `4016b69`  |
+| `grizzle-testing-0.0.0.tgz`                  | `@grizzle/testing`           | `packages/testing` at `4016b69` |
 
 `packages/pantry` depends on the grizzle tarball by path, and on the testing tarball by path as a devDependency. The
 grizzle tarball depends on the engine by version, and `pnpm-workspace.yaml` overrides that version to the engine
@@ -22,8 +22,12 @@ tarball.
 `@grizzle/testing` is grizzle's choice-stream testing library, and the one pantry's tests use. It is private and has no
 `version`, which `pnpm pack` requires, so the packed manifest carries `"version": "0.0.0"`, the version grizzle gives
 its other private package, `@grizzle/devtools`; every other file is the commit's. It ships TypeScript source, and Vitest
-transforms it. Its dependencies are grizzle's catalog versions at pack time. They match the workspace's, except
-`oxlint`, which `pnpm-workspace.yaml` holds to the copy Vite+ pins, so the workspace keeps one.
+transforms it. Its dependencies are grizzle's catalog versions at pack time, and they match the workspace's. One of them
+is `typescript` 7.1.0-beta, whose native API (`typescript/sync`) its mutation tester typechecks with. The workspace's
+`vite` override makes the tarball's `vite` Vite+'s core, which takes `typescript` as an optional peer, so the tarball's
+copy would give Vite+'s core, and Vitest with it, a second instance beside the workspace's, and a test file would load
+another Vitest than the one running it. So `pnpm-workspace.yaml` points that peer at the same 7.1.0-beta, and the
+workspace holds one TypeScript. The grizzle tarball takes `pg` as a peer, which pnpm installs (`autoInstallPeers`).
 
 ## Refresh
 
@@ -41,11 +45,24 @@ pnpm install --frozen-lockfile --ignore-scripts
 cd && rm -rf ~/.cache/gr8des/grizzle-<commit>
 ```
 
-At `48256f8` this reproduces the three tarballs here byte for byte. Skip `npm pkg set` once
+At `4016b69` this reproduces the three tarballs here byte for byte. Skip `npm pkg set` once
 `packages/testing/package.json` has a version of its own. Then remove any tarball a new name replaces and point
 `packages/pantry/package.json` and `pnpm-workspace.yaml` at the new names, run `pnpm install --force` in this
-repository, check that `pnpm why <package> -r` still finds one version of `effect`, `vite`, `vitest`, `@effect/vitest`
-and `oxlint`, and update the commit hash above.
+repository, check that `pnpm why <package> -r` still finds one version, and one instance, of `effect`, `vite`, `vitest`,
+`@effect/vitest`, `oxlint` and `typescript`, and update the commit hash above.
+
+## Mutation runs
+
+`@grizzle/testing` ships the mutation tester as the bin `grizzle-mutate`. From a package directory:
+
+```bash
+pnpm exec grizzle-mutate --package . --file <source> --test <test file> [--workers N] [--sample N] [--seed N]
+```
+
+Each `--file` is mutated and each `--test` is a Vitest filter. The tester writes nothing to the tree: it typechecks
+each mutant in process against the package's `tsconfig.json` and runs the package's Vitest config in process. It
+refuses to start unless the unmutated package typechecks with no error at all. `--list` prints the mutants and runs
+nothing. The run is a measurement, never a gate: it reports killed, survived, timed out and invalid.
 
 ## When grizzle is published
 
