@@ -6,7 +6,7 @@ import type { PlatformError } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import type { Uuid } from "@bjornpagen/grizzle";
 import type { Rule } from "#pantry/import/refusal.ts";
-import { mathmlGroups } from "#pantry/test/mathml-blocks.ts";
+import { annotationXmlBlock, mathmlGroups } from "#pantry/test/mathml-blocks.ts";
 import type { MathmlBlock, MathmlGroup } from "#pantry/test/mathml-blocks.ts";
 
 /**
@@ -482,11 +482,30 @@ const generatedMathmlNames = [
 ] as const;
 
 /**
- * The names of the 40 MathML negatives of phase 6 (spec 4.11's negatives table), in the table's
- * order: each a cut positive, `math-mathml`, with one `ReplaceText` that inserts the block the
- * negative's name says, so nothing else is refused first. Twelve are refused at commit and the
- * database judges them; the other 28 are refused by `readRows` (the importer's refusals and the
- * guards').
+ * The names of the nine MathML positives J6 admits (spec 4.9's list, with decisions 214, 217 and
+ * 218): the content of `m:annotation-xml` and a foreign attribute on a MathML kind. Seven are
+ * `math-mathml` with one `ReplaceText` that inserts the block the name says, one is a cut of
+ * `SineRule-001.xml` (a printed variable inside a formula inside a custom operator, decision
+ * 218's form) and one is p6-18's `annotationXmlBlock` in a base item.
+ */
+const mathmlAnnotationNames = [
+  "math-annotation-xml-html",
+  "math-annotation-xml-kind",
+  "math-annotation-xml-printed-variable",
+  "math-annotation-xml-qti-deep",
+  "math-annotation-xml-qti-direct",
+  "math-annotation-xml-qti-root",
+  "math-annotation-xml-semantics",
+  "math-custom-operator-printed-variable",
+  "math-foreign-attribute",
+] as const;
+
+/**
+ * The names of the 47 MathML negatives of phase 6 (spec 4.11's negatives table, then the seven of
+ * J6, spec 4.9's list), in the table's order: each a cut positive, `math-mathml`, with one
+ * `ReplaceText` that inserts the block the negative's name says, so nothing else is refused first.
+ * Fourteen are refused at commit and the database judges them; the other 33 are refused by
+ * `readRows` (the importer's refusals and the guards').
  */
 const mathmlNegativeNames = [
   "math-in-blockquote",
@@ -529,13 +548,22 @@ const mathmlNegativeNames = [
   "math-bind-no-bvar",
   "math-position-plus",
   "math-rowspan-plus",
+  "math-annotation-xml-math",
+  "math-annotation-xml-annotation",
+  "math-annotation-xml-sep",
+  "math-annotation-xml-unknown",
+  "math-annotation-xml-nested-math",
+  "math-annotation-xml-nested-interaction",
+  "math-annotation-xml-gap",
 ] as const;
 
 /**
- * The 12 MathML negatives the database refuses at commit, each with the rule that refuses it (spec
- * 4.11's negatives table, "refused by: commit"): `admission` for the five edges outside MathML's
- * content models, `attribute-lexical` for the three pattern laws, `uri-syntax`, `document-key` and
- * `idref-target` for the one each. `readRows` passes eleven of them, so the database judges those
+ * The 14 MathML negatives the database refuses at commit, each with the rule that refuses it (spec
+ * 4.11's negatives table, "refused by: commit", then J6's two): `admission` for the five edges
+ * outside MathML's content models and the two MathML elements `m:annotation-xml` does not admit
+ * (`m:annotation` and `m:sep`, each a typed global with a kind but no row there),
+ * `attribute-lexical` for the three pattern laws, `uri-syntax`, `document-key` and `idref-target`
+ * for the one each. `readRows` passes thirteen of them, so the database judges those
  * (the leased round trip, p6-40). `math-printed-variable` is the exception: `readRows`'s MathML
  * guard refuses it first under `union-count`, because `m:mrow`'s model names no
  * `qti-printed-variable`, so the database never sees it from an import (decision 133's firing
@@ -557,6 +585,8 @@ export const mathmlCommitNegatives: readonly (readonly [
   ["math-bad-href", "uri-syntax"],
   ["math-duplicate-id", "document-key"],
   ["math-xref-dangling", "idref-target"],
+  ["math-annotation-xml-annotation", "admission"],
+  ["math-annotation-xml-sep", "admission"],
 ];
 
 /**
@@ -568,8 +598,8 @@ export const mathmlCommitNegatives: readonly (readonly [
  * the packaging phase's metadata and content cuts with their negatives, and the 11 positive
  * fixtures of phase 5's tests, sections and stimuli ({@link testNames}), and its 63 negatives
  * ({@link negativeNames}), the ten wildcard fixtures of {@link wildcardNames}, the 12 cut MathML
- * positives of {@link mathmlNames}, the 18 generated ones of {@link generatedMathmlNames} and the 40
- * negatives of {@link mathmlNegativeNames}.
+ * positives of {@link mathmlNames}, the 18 generated ones of {@link generatedMathmlNames}, the nine
+ * of J6 ({@link mathmlAnnotationNames}) and the 47 negatives of {@link mathmlNegativeNames}.
  */
 export const fixtureNames = [
   "simple",
@@ -658,6 +688,7 @@ export const fixtureNames = [
   ...wildcardNames,
   ...mathmlNames,
   ...generatedMathmlNames,
+  ...mathmlAnnotationNames,
   ...mathmlNegativeNames,
 ] as const;
 
@@ -4690,16 +4721,15 @@ const generatedMathmlSpecs: Record<(typeof generatedMathmlNames)[number], Fixtur
 };
 
 /**
- * The spec of one MathML negative: `math-mathml`'s cut with `block` inserted first in its prompt,
- * the one edit that makes the negative (`math-mathml`'s prompt is a MathML host, so the host is
- * not what is refused unless the block says so).
+ * The spec of a fixture that is `math-mathml`'s cut with `block` inserted first in its prompt, the
+ * one edit that makes it (`math-mathml`'s prompt is a MathML host, in a choice interaction).
  *
- * @param name - One of {@link mathmlNegativeNames}.
+ * @param name - The fixture's name.
  * @param block - The XML the edit inserts after `<qti-prompt>`, in the `m` prefix the item
  *   declares.
  * @returns The spec.
  */
-const mathmlNegative = (name: (typeof mathmlNegativeNames)[number], block: string): FixtureSpec => {
+const mathmlInPrompt = (name: string, block: string): FixtureSpec => {
   const base = mathmlSpecs["math-mathml"];
 
   return {
@@ -4710,9 +4740,117 @@ const mathmlNegative = (name: (typeof mathmlNegativeNames)[number], block: strin
 };
 
 /**
+ * The spec of one MathML negative: `math-mathml`'s cut with `block` inserted first in its prompt,
+ * the one edit that makes the negative (`math-mathml`'s prompt is a MathML host, so the host is
+ * not what is refused unless the block says so).
+ *
+ * @param name - One of {@link mathmlNegativeNames}.
+ * @param block - The XML the edit inserts after `<qti-prompt>`, in the `m` prefix the item
+ *   declares.
+ * @returns The spec.
+ */
+const mathmlNegative = (name: (typeof mathmlNegativeNames)[number], block: string): FixtureSpec =>
+  mathmlInPrompt(name, block);
+
+/**
+ * A formula whose `m:semantics` holds an `m:mi` and an `m:annotation-xml` with `content` inside it:
+ * the one place J6 admits more than MathML (spec 4.9).
+ *
+ * @param content - The XML inside the annotation.
+ * @returns The `m:math` element's text, in the `m` prefix the base items declare.
+ */
+const annotationOf = (content: string): string =>
+  `<m:math><m:semantics><m:mi>x</m:mi><m:annotation-xml encoding="application/xhtml+xml">${content}</m:annotation-xml></m:semantics></m:math>`;
+
+/**
+ * The SVG namespace, declared where a J6 positive puts an SVG element inside an annotation.
+ */
+const svgNamespace = "http://www.w3.org/2000/svg";
+
+/**
+ * The specs of {@link mathmlAnnotationNames}, by name.
+ *
+ * - `math-annotation-xml-html` puts a `div` under `m:annotation-xml`, and
+ *   `math-annotation-xml-semantics` an `m:semantics` of an `m:mi` and an `m:annotation`.
+ * - `math-foreign-attribute` is an `xlink:href` on an `m:mi`.
+ * - `math-annotation-xml-printed-variable` is `m:annotation-xml > div > qti-printed-variable`, and
+ *   `math-custom-operator-printed-variable` the same under a `qti-custom-operator`, through an
+ *   `m:math` (decision 218: decision 110 admits only `m:math` from MathML there).
+ * - `math-annotation-xml-qti-direct`, `-qti-deep` and `-qti-root` put a `qti-printed-variable`, a
+ *   `qti-prompt` inside an `svg:g` and a `qti-assessment-item` in the annotation, which are foreign
+ *   content (decisions 217 and 218).
+ * - `math-annotation-xml-kind` is p6-18's `annotationXmlBlock` in `math-inline-choice`'s item.
+ */
+const mathmlAnnotationSpecs: Record<(typeof mathmlAnnotationNames)[number], FixtureSpec> = {
+  "math-annotation-xml-html": mathmlInPrompt(
+    "math-annotation-xml-html",
+    annotationOf("<div>text</div>"),
+  ),
+  "math-annotation-xml-kind": generatedItem(
+    mathmlSpecs["math-inline-choice"],
+    "inline_choice_math.xml",
+    { blocks: [annotationXmlBlock], name: "math-annotation-xml-kind", version: "3.0.0" },
+  ),
+  "math-annotation-xml-printed-variable": mathmlInPrompt(
+    "math-annotation-xml-printed-variable",
+    annotationOf('<div><qti-printed-variable identifier="SCORE"/></div>'),
+  ),
+  "math-annotation-xml-qti-deep": mathmlInPrompt(
+    "math-annotation-xml-qti-deep",
+    annotationOf(`<svg:g xmlns:svg="${svgNamespace}"><qti-prompt>text</qti-prompt></svg:g>`),
+  ),
+  "math-annotation-xml-qti-direct": mathmlInPrompt(
+    "math-annotation-xml-qti-direct",
+    annotationOf('<qti-printed-variable identifier="SCORE"/>'),
+  ),
+  "math-annotation-xml-qti-root": mathmlInPrompt(
+    "math-annotation-xml-qti-root",
+    annotationOf("<qti-assessment-item/>"),
+  ),
+  "math-annotation-xml-semantics": mathmlInPrompt(
+    "math-annotation-xml-semantics",
+    annotationOf(
+      '<m:semantics><m:mi>y</m:mi><m:annotation encoding="text/plain">y</m:annotation></m:semantics>',
+    ),
+  ),
+  "math-custom-operator-printed-variable": overOperator("math-custom-operator-printed-variable", [
+    afterOperand(annotationOf('<div><qti-printed-variable identifier="SCORE"/></div>')),
+  ]),
+  "math-foreign-attribute": mathmlInPrompt(
+    "math-foreign-attribute",
+    `<m:math><m:mi xmlns:xlink="${xlinkNamespace}" xlink:href="https://example.org/a">x</m:mi></m:math>`,
+  ),
+};
+
+/**
  * The specs of {@link mathmlNegativeNames}, by name.
  */
 const mathmlNegativeSpecs: Record<(typeof mathmlNegativeNames)[number], FixtureSpec> = {
+  "math-annotation-xml-annotation": mathmlNegative(
+    "math-annotation-xml-annotation",
+    annotationOf('<m:annotation encoding="text/plain">y</m:annotation>'),
+  ),
+  "math-annotation-xml-gap": mathmlNegative(
+    "math-annotation-xml-gap",
+    annotationOf('<div><p><qti-gap identifier="G"/></p></div>'),
+  ),
+  "math-annotation-xml-math": mathmlNegative(
+    "math-annotation-xml-math",
+    annotationOf("<m:math><m:mi>y</m:mi></m:math>"),
+  ),
+  "math-annotation-xml-nested-interaction": mathmlNegative(
+    "math-annotation-xml-nested-interaction",
+    annotationOf('<div><qti-text-entry-interaction response-identifier="RESPONSE"/></div>'),
+  ),
+  "math-annotation-xml-nested-math": mathmlNegative(
+    "math-annotation-xml-nested-math",
+    annotationOf("<div><m:math><m:mi>y</m:mi></m:math></div>"),
+  ),
+  "math-annotation-xml-sep": mathmlNegative("math-annotation-xml-sep", annotationOf("<m:sep/>")),
+  "math-annotation-xml-unknown": mathmlNegative(
+    "math-annotation-xml-unknown",
+    annotationOf("<m:notanelement/>"),
+  ),
   "math-apply-binary-one": mathmlNegative(
     "math-apply-binary-one",
     "<m:math><m:apply><m:divide/><m:cn>1</m:cn></m:apply></m:math>",
@@ -4917,6 +5055,7 @@ const specs: Record<FixtureName, FixtureSpec> = {
   ...wildcardSpecs,
   ...mathmlSpecs,
   ...generatedMathmlSpecs,
+  ...mathmlAnnotationSpecs,
   ...mathmlNegativeSpecs,
   "bad-identifier-value": {
     edits: [

@@ -61,9 +61,27 @@ const generated = [
 ] as const satisfies readonly FixtureName[];
 
 /**
- * Every MathML positive: the 12 cut ones, then the 18 generated ones.
+ * The eight J6 positives that `readRows` reads (spec 4.9's list): the content of `m:annotation-xml`
+ * and a foreign attribute on a MathML kind. `math-annotation-xml-semantics` is left out until
+ * `readRows` reads it: `m:semantics` is no global element of the MathML schema, so the landed
+ * classification stores it under `m:annotation-xml` as foreign and refuses it
+ * (`src/test/fixtures.mathml.test.ts` pins that refusal).
  */
-const positives: readonly FixtureName[] = [...cut, ...generated];
+const annotation = [
+  "math-annotation-xml-html",
+  "math-annotation-xml-kind",
+  "math-annotation-xml-printed-variable",
+  "math-annotation-xml-qti-deep",
+  "math-annotation-xml-qti-direct",
+  "math-annotation-xml-qti-root",
+  "math-custom-operator-printed-variable",
+  "math-foreign-attribute",
+] as const satisfies readonly FixtureName[];
+
+/**
+ * Every MathML positive: the 12 cut ones, the 18 generated ones, then the eight of J6.
+ */
+const positives: readonly FixtureName[] = [...cut, ...generated, ...annotation];
 
 /**
  * The commit negatives `readRows` refuses itself, with the rule it names: the MathML guard fires

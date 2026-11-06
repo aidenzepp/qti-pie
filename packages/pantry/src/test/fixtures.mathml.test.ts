@@ -8,9 +8,10 @@ import type { Rule } from "#pantry/import/refusal.ts";
 import { Rows } from "#pantry/import/tree.ts";
 import { AttributeIdref } from "#pantry/schema/attributes.ts";
 import { HtmlId } from "#pantry/schema/document.ts";
+import { ForeignAttribute, ForeignElement } from "#pantry/schema/foreign.ts";
 import { arms } from "#pantry/schema/mathml/arms.ts";
 import { familyRelation } from "#pantry/schema/mathml/attributes.ts";
-import { Node } from "#pantry/schema/node.ts";
+import { Edge, Node } from "#pantry/schema/node.ts";
 import {
   examplesTarball,
   fixtureNames,
@@ -18,7 +19,7 @@ import {
   mathmlCommitNegatives,
 } from "#pantry/test/fixtures.ts";
 import type { FixtureName } from "#pantry/test/fixtures.ts";
-import { mathmlGroups } from "#pantry/test/mathml-blocks.ts";
+import { annotationXmlBlock, mathmlGroups } from "#pantry/test/mathml-blocks.ts";
 import type { MathmlGroup } from "#pantry/test/mathml-blocks.ts";
 
 /**
@@ -213,7 +214,12 @@ const importNegatives = [
 ] as const satisfies readonly (readonly [FixtureName, Rule])[];
 
 /**
- * The 22 MathML negatives the guards refuse, each with its rule, in the order of spec 4.11's table.
+ * The 27 MathML negatives the guards refuse, each with its rule, in the order of spec 4.11's table,
+ * then J6's five: `-unknown` by the exclusion row's wildcard guard, `-nested-math` and `-math` (a
+ * formula inside a formula, decision 309's nested case) by the `math` ancestry ban, and
+ * `-nested-interaction` and `-gap` by p6-mar-4's guard, which re-walks each annotation with the
+ * formula's ancestry. The last two are that guard's end-to-end test through `itemRows`: p6-mar-4's
+ * own tests hand-build rows.
  */
 const guardNegatives = [
   ["math-mfrac-three", "union-count"],
@@ -238,6 +244,11 @@ const guardNegatives = [
   ["math-share-dangling", "document-key"],
   ["math-share-cycle", "document-key"],
   ["math-bind-no-bvar", "union-count"],
+  ["math-annotation-xml-unknown", "wildcard-namespace"],
+  ["math-annotation-xml-nested-math", "ancestry-ban"],
+  ["math-annotation-xml-math", "ancestry-ban"],
+  ["math-annotation-xml-nested-interaction", "ancestry-ban"],
+  ["math-annotation-xml-gap", "ancestry-ban"],
 ] as const satisfies readonly (readonly [FixtureName, Rule])[];
 
 /**
@@ -273,7 +284,7 @@ const ruleOf = (name: FixtureName) =>
 layer(NodeServices.layer, { excludeTestServices: true })(
   "test/fixtures.ts MathML negatives",
   (it) => {
-    it.effect("registers the 40 negatives under distinct names", () =>
+    it.effect("registers the 47 negatives under distinct names", () =>
       Effect.sync(() => {
         const names = [
           ...importNegatives.map(([name]) => name),
@@ -282,9 +293,9 @@ layer(NodeServices.layer, { excludeTestServices: true })(
         ];
 
         assert.strictEqual(importNegatives.length, 6);
-        assert.strictEqual(guardNegatives.length, 22);
-        assert.strictEqual(mathmlCommitNegatives.length, 12);
-        assert.strictEqual(new Set(names).size, 40);
+        assert.strictEqual(guardNegatives.length, 27);
+        assert.strictEqual(mathmlCommitNegatives.length, 14);
+        assert.strictEqual(new Set(names).size, 47);
 
         for (const name of names) {
           assert.include(fixtureNames, name);
@@ -323,5 +334,218 @@ layer(NodeServices.layer, { excludeTestServices: true })(
           }),
       );
     }
+  },
+);
+
+/**
+ * The nine J6 positives, with what each one's rows hold: `chain`, a path of node kinds from the
+ * first kind down through `Edge` rows (each kind the child of the one before), and for the
+ * annotation's foreign content `foreign`, the `local` name of a `ForeignElement` row and the kind
+ * of its parent. `math-annotation-xml-kind` is p6-18's `annotationXmlBlock`, checked as the
+ * generated groups are.
+ */
+const annotationPositives = [
+  { chain: ["m:annotation-xml", "div"], name: "math-annotation-xml-html" },
+  {
+    chain: ["m:annotation-xml", "div", "qti-printed-variable"],
+    name: "math-annotation-xml-printed-variable",
+  },
+  {
+    chain: [
+      "qti-custom-operator",
+      "m:math",
+      "m:semantics",
+      "m:annotation-xml",
+      "div",
+      "qti-printed-variable",
+    ],
+    name: "math-custom-operator-printed-variable",
+  },
+  {
+    chain: ["m:annotation-xml", "foreign"],
+    foreign: ["qti-printed-variable", "m:annotation-xml"],
+    name: "math-annotation-xml-qti-direct",
+  },
+  {
+    chain: ["m:annotation-xml", "foreign", "foreign"],
+    foreign: ["qti-prompt", "foreign"],
+    name: "math-annotation-xml-qti-deep",
+  },
+  {
+    chain: ["m:annotation-xml", "foreign"],
+    foreign: ["qti-assessment-item", "m:annotation-xml"],
+    name: "math-annotation-xml-qti-root",
+  },
+] as const satisfies readonly {
+  readonly chain: readonly string[];
+  readonly foreign?: readonly [string, string];
+  readonly name: FixtureName;
+}[];
+
+/**
+ * The J6 positives that are not in {@link annotationPositives}: the foreign attribute, the kind
+ * block and `math-annotation-xml-semantics`, which `readRows` refuses today (see
+ * {@link semanticsRefusal}).
+ */
+const otherAnnotationPositives = [
+  "math-foreign-attribute",
+  "math-annotation-xml-kind",
+  "math-annotation-xml-semantics",
+] as const satisfies readonly FixtureName[];
+
+/**
+ * The rule `readRows` refuses `math-annotation-xml-semantics` under today, a defect of the landed
+ * classification and not a rule of the spec: `m:semantics` is no global element of the MathML
+ * schema (the XSD declares it only inside groups), so `classifyElement` (`import/wildcard.ts`)
+ * finds neither an explicit particle nor a typed global for it under `m:annotation-xml` and stores
+ * it as `foreign`, which the exclusion row then refuses. Spec 4.9 admits it as the `m:semantics`
+ * kind (J6's `Admission(m:annotation-xml, m:semantics)` rows exist). This case pins the measured
+ * refusal; the fix flips it to the positive's `readRows` success.
+ */
+const semanticsRefusal: Rule = "wildcard-namespace";
+
+/**
+ * Whether the rows hold a path of nodes whose kinds are `chain`, each the child of the one before.
+ *
+ * @param rows - The package's rows.
+ * @param chain - The node kinds, outermost first.
+ * @returns True when some `Edge` path has exactly those kinds.
+ */
+const holdsChain = (rows: Rows, chain: readonly string[]): boolean => {
+  const edges = Rows.of(rows, Edge);
+  const [first, ...rest] = chain;
+  const below = (parents: ReadonlySet<string>, kinds: readonly string[]): boolean => {
+    const [kind, ...others] = kinds;
+
+    if (kind === undefined) {
+      return true;
+    }
+
+    const children = new Set(
+      edges
+        .filter((edge) => parents.has(edge.parent) && edge.childKind === kind)
+        .map((e) => e.child),
+    );
+
+    return children.size > 0 && below(children, others);
+  };
+
+  return below(
+    new Set(Rows.of(rows, Node).flatMap((node) => (node.kind === first ? [node.id] : []))),
+    rest,
+  );
+};
+
+layer(NodeServices.layer, { excludeTestServices: true })(
+  "test/fixtures.ts J6 MathML positives",
+  (it) => {
+    it.effect("registers the nine under distinct names", () =>
+      Effect.sync(() => {
+        const names = [...annotationPositives.map(({ name }) => name), ...otherAnnotationPositives];
+
+        assert.strictEqual(new Set(names).size, 9);
+        assert.strictEqual(names.length, 9);
+
+        for (const name of names) {
+          assert.include(fixtureNames, name);
+        }
+      }),
+    );
+
+    for (const { chain, name, ...rest } of annotationPositives) {
+      const foreign = "foreign" in rest ? rest.foreign : undefined;
+
+      it.effect.skipIf(!tarballPresent)(
+        `${name} is read, and its rows hold ${chain.join(" > ")} (skipped without the examples tarball)`,
+        () =>
+          Effect.gen(function* readsAnnotation() {
+            const dir = yield* materialize(name);
+            const result = yield* Effect.result(readRows(dir));
+
+            if (Result.isFailure(result)) {
+              assert.fail(`${name} was refused: ${result.failure.message}`);
+            }
+
+            const { rows } = result.success;
+
+            assert.isTrue(holdsChain(rows, chain), `${name} holds no ${chain.join(" > ")} path`);
+
+            if (foreign !== undefined) {
+              const [local, parentKind] = foreign;
+
+              assert.isTrue(
+                Rows.of(rows, ForeignElement).some(
+                  (element) => element.local === local && element.parentKind === parentKind,
+                ),
+                `${name} holds no foreign ${local} under ${parentKind}`,
+              );
+            }
+          }),
+      );
+    }
+
+    it.effect.skipIf(!tarballPresent)(
+      "math-foreign-attribute is read, and its rows hold the xlink:href as a foreign attribute of m:mi (skipped without the examples tarball)",
+      () =>
+        Effect.gen(function* readsForeignAttribute() {
+          const dir = yield* materialize("math-foreign-attribute");
+          const result = yield* Effect.result(readRows(dir));
+
+          if (Result.isFailure(result)) {
+            assert.fail(`math-foreign-attribute was refused: ${result.failure.message}`);
+          }
+
+          assert.isTrue(
+            Rows.of(result.success.rows, ForeignAttribute).some(
+              (attribute) =>
+                attribute.kind === "m:mi" &&
+                attribute.local === "href" &&
+                attribute.prefix === "xlink",
+            ),
+          );
+        }),
+    );
+
+    it.effect.skipIf(!tarballPresent)(
+      `math-annotation-xml-semantics is refused by readRows under ${semanticsRefusal} today, where spec 4.9 reads it (skipped without the examples tarball)`,
+      () =>
+        Effect.gen(function* refusedToday() {
+          assert.deepStrictEqual(
+            yield* ruleOf("math-annotation-xml-semantics"),
+            Option.some(semanticsRefusal),
+          );
+        }),
+    );
+
+    it.effect.skipIf(!tarballPresent)(
+      "math-annotation-xml-kind is read, and its rows hold the kinds and pairs annotationXmlBlock declares (skipped without the examples tarball)",
+      () =>
+        Effect.gen(function* readsKindBlock() {
+          const group: MathmlGroup = {
+            blocks: [annotationXmlBlock],
+            name: "math-annotation-xml-kind",
+            version: "3.0.0",
+          };
+          const dir = yield* materialize("math-annotation-xml-kind");
+          const result = yield* Effect.result(readRows(dir));
+
+          if (Result.isFailure(result)) {
+            assert.fail(`math-annotation-xml-kind was refused: ${result.failure.message}`);
+          }
+
+          const kinds = new Set<string>(
+            Rows.of(result.success.rows, Node).map((node) => node.kind),
+          );
+          const pairs = pairsOf(result.success.rows);
+
+          for (const kind of declaredKinds(group)) {
+            assert.isTrue(kinds.has(kind), `math-annotation-xml-kind holds no ${kind} node`);
+          }
+
+          for (const pair of declaredPairs(group)) {
+            assert.isTrue(pairs.has(pair), `math-annotation-xml-kind holds no ${pair} row`);
+          }
+        }),
+    );
   },
 );
