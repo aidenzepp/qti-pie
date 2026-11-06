@@ -37,8 +37,10 @@ points are unstable until M3.
 - `render`'s `mode` option shows an item in `review` or `solution`, and `renderStatus` takes the
   headings `review`, `solution`, `partSubmitted` and `testFinished`.
 - `results` writes a Results Reporting document for an item or a test session.
-- `postings` gives a host each response's binding and the options `decode` takes, so `decode` reads
-  a posted Text Entry in the base its binding declares, not always in base 10.
+- `postings` lists each response that an interaction binds, with the response's binding and the
+  options `decode` takes, so `decode` reads a posted Text Entry in the base its binding declares,
+  not always in base 10. A response that no interaction binds has no posting, and keeps the value
+  its record holds.
 - `@qti-pie/plate/styles.css` is an entry point.
 
 ### Changed since M1
