@@ -13,9 +13,12 @@
  * The bans are the missing `AncestryStep` rows:
  *
  * - An interaction kind at any set holding `int`, `choice`, `htx`, `rubric`, `tmpl` or `modal`;
- * - `qti-gap` at a set without `gap`;
+ * - `qti-gap` at a set without `gap`, unless the set holds an absorbing flag (`math`: the flags of
+ *   the QTI content beneath an `m:annotation-xml` are not tracked, so the import guard judges it);
  * - `qti-rubric-block` at a set holding `rubric`;
  * - `qti-hottext` at a set holding `htx` (a hottext under a prompt or a choice is admitted);
+ * - `m:math` at a set holding `math` (MathML E M2: a math element holds no other math element); no
+ *   `qti-` kind is banned at `math`, the XSD's lax `m:annotation-xml` wildcard admits them;
  * - At a set holding `testfb`, every interaction kind, every template kind and both rubric block
  *   kinds (reading 25: a test's rubric and feedback hold no interactions or templates, and no
  *   nested rubric); `qti-printed-variable` and `qti-feedback-inline` stay admitted.
@@ -39,6 +42,7 @@ export const FLAGS = [
   "choice",
   "htx",
   "testfb",
+  "math",
 ] as const;
 
 /**
@@ -108,6 +112,7 @@ export const KindEnters: KindEnterTable = Object.fromEntries(
         ]),
         ...entering("modal", ["qti-modal-feedback"]),
         ...entering("testfb", ["qti-rubric-block.test", "qti-test-feedback"]),
+        ...entering("math", ["m:math"]),
         ...entering("fb", [
           "qti-feedback-block",
           "qti-feedback-block.template",
@@ -127,6 +132,13 @@ export const KindEnters: KindEnterTable = Object.fromEntries(
  */
 export const handleOf = (flags: readonly Flag[]): string =>
   FLAGS.filter((flag) => flags.includes(flag)).join(".") || "root";
+
+/**
+ * The absorbing flags in precedence order. A node that holds or enters an absorbing flag hands its
+ * children exactly that flag: the first of these the set holds or the kind enters, whatever else
+ * the kind enters. `math` is the only one here; phase 9, landing second, puts `card` first.
+ */
+export const absorbing: readonly Flag[] = ["math"];
 
 const interactions: ReadonlySet<string> = new Set(interactionKinds);
 
@@ -154,8 +166,12 @@ export const banned = (flagSet: readonly Flag[], kind: string): boolean => {
     return (["int", "choice", "htx", "rubric", "tmpl", "modal"] as const).some(has);
   }
 
+  if (kind === "m:math") {
+    return has("math");
+  }
+
   if (kind === "qti-gap") {
-    return !has("gap");
+    return !absorbing.some(has) && !has("gap");
   }
 
   if (kind === "qti-rubric-block") {
@@ -168,14 +184,6 @@ export const banned = (flagSet: readonly Flag[], kind: string): boolean => {
 
   return false;
 };
-
-/**
- * The absorbing flags in precedence order. A node that holds or enters an absorbing flag hands its
- * children exactly that flag: the first of these the set holds or the kind enters, whatever else
- * the kind enters. None is absorbing here; a later phase appends its flag (the MathML phase
- * appends `math`), and phase 9, landing second, puts `card` first.
- */
-export const absorbing: readonly Flag[] = [];
 
 /**
  * The flag set a node of `kind` at `flagSet` hands its children: the first absorbing flag the set
@@ -237,9 +245,9 @@ export const reachable = (
 };
 
 /**
- * The 60 reachable ancestries over the kinds files' `Admission` rows (M0, M1 and the test kinds),
- * by size and then `FLAGS` order, as `reachable(admission, KindEnters)` printed them. The count
- * stays under 64.
+ * The 61 reachable ancestries over the kinds files' `Admission` rows (M0, M1, MathML and the test
+ * kinds), by size and then `FLAGS` order, as `reachable(admission, KindEnters)` printed them. The
+ * count stays under 64.
  */
 export const ancestryHandles = [
   "root",
@@ -250,6 +258,7 @@ export const ancestryHandles = [
   "int",
   "htx",
   "testfb",
+  "math",
   "fb.modal",
   "fb.rubric",
   "fb.tmpl",
