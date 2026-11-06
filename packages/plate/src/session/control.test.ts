@@ -6,7 +6,7 @@ import { attr, doc, el } from "#plate/document/source.ts";
 import type { SourceAttribute, SourceChild, SourceElement } from "#plate/document/source.ts";
 import { buildTest } from "#plate/model/test.ts";
 import type { Test } from "#plate/model/test.ts";
-import { itemConfiguration, sessionControl } from "#plate/session/control.ts";
+import { itemConfiguration, sessionControl, sessionControls } from "#plate/session/control.ts";
 import type { SessionControl } from "#plate/session/control.ts";
 
 /**
@@ -217,6 +217,43 @@ describe("sessionControl", () => {
         })),
         Option.some({ _tag: "UnknownItemRef", ref: "sectionB", test: "control" }),
       );
+    }),
+  );
+});
+
+describe("sessionControls", () => {
+  it.effect(
+    "gives every item ref what sessionControl gives it, across parts and nested sections",
+    () =>
+      Effect.gen(function* everyRef() {
+        const test = yield* testOf(
+          part("first", "individual", [
+            control(attr("show-feedback", "true")),
+            section("outer", [
+              control(attr("max-attempts", "3")),
+              itemRef("a", [control(attr("allow-review", "false"))]),
+              section("inner", [control(attr("show-solution", "true")), itemRef("b")]),
+              itemRef("c"),
+            ]),
+          ]),
+          part("second", "simultaneous", [
+            section("plain", [itemRef("d", [control(attr("max-attempts", "-1"))]), itemRef("e")]),
+          ]),
+        );
+        const refs = ["a", "b", "c", "d", "e"];
+
+        assert.deepStrictEqual(
+          [...sessionControls(test).entries()],
+          refs.map((ref) => [ref, Option.getOrUndefined(resolved(test, ref))]),
+        );
+      }),
+  );
+
+  it.effect("has no entry for an identifier the test does not hold", () =>
+    Effect.gen(function* unknownRef() {
+      const test = yield* rtest09;
+
+      assert.isFalse(sessionControls(test).has("sectionB"));
     }),
   );
 });

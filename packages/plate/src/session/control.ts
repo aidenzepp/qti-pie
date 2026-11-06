@@ -2,9 +2,10 @@
  * Item session control in a test: each `qti-item-session-control` attribute resolved for one item
  * ref, and the configuration an item is rendered and scored under there.
  *
- * {@link sessionControl} reads the attributes the test model holds as written and resolves them;
- * {@link itemConfiguration} writes the result into the host's configuration, turning
- * `max-attempts` into the attempt limit the session counts against. Both are pure.
+ * {@link sessionControl} reads the attributes the test model holds as written and resolves them for
+ * one ref, and {@link sessionControls} for every ref in one walk; {@link itemConfiguration} writes
+ * the result into the host's configuration, turning `max-attempts` into the attempt limit the
+ * session counts against. All three are pure.
  *
  * @module
  */
@@ -127,6 +128,31 @@ const flag = (
   );
 
 /**
+ * Resolve the item session control of an item ref from the controls that govern it.
+ *
+ * @param controls The ref's controls, nearest first: its own, each enclosing section's innermost
+ *   first, then its part's.
+ * @param submission The submission mode of the ref's part.
+ * @returns The ref's session control.
+ */
+const resolvedControl = (
+  controls: readonly ControlAttributes[],
+  submission: SubmissionMode,
+): SessionControl => ({
+  allowComment: flag(controls, "allowComment"),
+  allowReview: flag(controls, "allowReview"),
+  allowSkipping: flag(controls, "allowSkipping"),
+  maxAttempts: Option.getOrElse(
+    nearest(controls, (control) => control.maxAttempts),
+    () => unsetAttempts,
+  ),
+  showFeedback: flag(controls, "showFeedback"),
+  showSolution: flag(controls, "showSolution"),
+  submission,
+  validateResponses: flag(controls, "validateResponses"),
+});
+
+/**
  * Resolve the item session control in force for one item ref.
  *
  * Each attribute comes from the nearest element that sets it: the item ref, each enclosing section
@@ -154,20 +180,46 @@ export const sessionControl = (
   );
 
   return Result.fromOption(found, () => new UnknownItemRef({ ref, test: test.identifier })).pipe(
-    Result.map(({ controls, submission }): SessionControl => ({
-      allowComment: flag(controls, "allowComment"),
-      allowReview: flag(controls, "allowReview"),
-      allowSkipping: flag(controls, "allowSkipping"),
-      maxAttempts: Option.getOrElse(
-        nearest(controls, (control) => control.maxAttempts),
-        () => unsetAttempts,
-      ),
-      showFeedback: flag(controls, "showFeedback"),
-      showSolution: flag(controls, "showSolution"),
-      submission,
-      validateResponses: flag(controls, "validateResponses"),
-    })),
+    Result.map(({ controls, submission }) => resolvedControl(controls, submission)),
   );
+};
+
+/**
+ * Resolve the item session control of every item ref of a test, keyed by the ref's identifier.
+ *
+ * Each entry is what {@link sessionControl} gives for its identifier, found in one walk of the
+ * test's parts, sections and item refs in document order, where an identifier keeps its first ref,
+ * as {@link sessionControl} finds it. A read of every item, such as a navigation or a closed test's
+ * summary, looks each item up here: resolving each ref with {@link sessionControl} walks the test
+ * up to that ref again, which grows with the square of the item count.
+ *
+ * @example
+ *   sessionControls(test).get(session.items[0].ref); // the first item's control, if the test holds it
+ *
+ * @param test The test, as `buildTest` read it.
+ * @returns Each item ref's session control, by identifier; an identifier the test does not hold
+ *   has no entry.
+ */
+export const sessionControls = (test: Test): ReadonlyMap<string, SessionControl> => {
+  const resolved = new Map<string, SessionControl>();
+  const walk = (
+    children: readonly SectionChild[],
+    enclosing: readonly ControlAttributes[],
+    submission: SubmissionMode,
+  ): void => {
+    for (const child of children) {
+      if (child.kind !== "item-ref") {
+        walk(child.children, [child.control, ...enclosing], submission);
+      } else if (!resolved.has(child.identifier)) {
+        resolved.set(child.identifier, resolvedControl([child.control, ...enclosing], submission));
+      }
+    }
+  };
+  for (const part of test.parts) {
+    walk(part.children, [part.control], part.submission);
+  }
+
+  return resolved;
 };
 
 /**

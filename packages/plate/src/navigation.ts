@@ -25,7 +25,7 @@ import type { Options } from "#plate/render.ts";
 import type { UnknownItemRef } from "#plate/session/control.ts";
 import { allowedIntents } from "#plate/session/intents.ts";
 import type { Intent, SessionItem, TestSession } from "#plate/session/session.ts";
-import { current, itemView, readingBase } from "#plate/session/start.ts";
+import { current, itemViews, readingBase } from "#plate/session/start.ts";
 import type { ItemNotInSession } from "#plate/session/start.ts";
 import type { AcceptedTest } from "#plate/validate/verdict.ts";
 import type { NavigationMode, SubmissionMode } from "#plate/vocabulary.ts";
@@ -225,18 +225,17 @@ export const navigationState = (
             submission: shownNow.submission,
           }
         : closedShown(test.test, session);
-    const items = yield* Result.all(
-      shown.items.map((item) =>
-        Result.map(
-          itemView(test, session, readingBase, item.sequenceIndex),
-          (view): NavigationItem => ({
-            current: shown.open && item.sequenceIndex === shown.position,
-            sequenceIndex: item.sequenceIndex,
-            state: stateOf(item, view.disabled),
-          }),
-        ),
-      ),
+    const views = yield* itemViews(
+      test,
+      session,
+      readingBase,
+      shown.items.map((item) => item.sequenceIndex),
     );
+    const items = Arr.zipWith(shown.items, views, (item, view): NavigationItem => ({
+      current: shown.open && item.sequenceIndex === shown.position,
+      sequenceIndex: item.sequenceIndex,
+      state: stateOf(item, view.disabled),
+    }));
 
     return {
       allowed,

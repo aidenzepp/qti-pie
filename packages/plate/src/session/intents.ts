@@ -3,19 +3,20 @@
  * `#plate/session/advance.ts` accepts, so a host offers those and a navigation part takes its
  * disabled state from them.
  *
- * The list is read from the test and the session alone: the moves through `moveTarget`, the
- * decision `move` itself makes, and the submissions from the current item's view, whose part modes
- * and closed state are what the submissions check. So the two agree without this module calling a
- * submission. It is pure and keeps nothing between calls. This is a browser module: it imports
- * neither `advance.ts` nor `submit.ts`, which reach `score`, and value-imports from `effect` only
+ * The list is read from the test and the session alone: the moves through `moveTargets`, the
+ * decision `move` itself makes, read once for all of them, and the submissions from the current
+ * item's view, whose part modes and closed state are what the submissions check. So the two agree
+ * without this module calling a submission, and the list takes time in proportion to the items. It
+ * is pure and keeps nothing between calls. This is a browser module: it imports neither
+ * `advance.ts` nor `submit.ts`, which reach `score`, and value-imports from `effect` only
  * `Result`.
  *
  * @module
  */
 import { Result } from "effect";
 import type { UnknownItemRef } from "#plate/session/control.ts";
-import { moveTarget } from "#plate/session/navigate.ts";
-import type { MoveIntent } from "#plate/session/navigate.ts";
+import { moveTargets } from "#plate/session/navigate.ts";
+import type { MoveIntent, MoveRefused } from "#plate/session/navigate.ts";
 import type { Intent, TestSession } from "#plate/session/session.ts";
 import { current, readingBase } from "#plate/session/start.ts";
 import type { ItemNotInSession, ItemView } from "#plate/session/start.ts";
@@ -24,34 +25,22 @@ import type { AcceptedTest } from "#plate/validate/verdict.ts";
 /**
  * Say whether `advance` takes a move from where a session stands.
  *
- * A move `moveTarget` gives a target for is taken. In a linear, individual part two refusals of
+ * A move `moveTargets` gives a target for is taken. In a linear, individual part two refusals of
  * `next` are taken too: `unsubmitted`, since `advance` submits the item first, and `end-of-part`,
  * since `next` on the part's last item ends the part.
  *
- * @param test The test.
- * @param session The session, open.
  * @param view The current item's view.
- * @param intent The move.
- * @returns Whether the move is taken; the failure of `moveTarget` when the session does not fit
- *   the test.
+ * @param target Where the move goes, or why it is refused, as `moveTargets` decides it.
+ * @returns Whether the move is taken.
  */
-const takesMove = (
-  test: AcceptedTest,
-  session: TestSession,
-  view: ItemView,
-  intent: MoveIntent,
-): Result.Result<boolean, ItemNotInSession | UnknownItemRef> =>
-  Result.orElse(
-    Result.map(moveTarget(test, session, intent), () => true),
-    (failure): Result.Result<boolean, ItemNotInSession | UnknownItemRef> =>
-      failure._tag === "MoveRefused"
-        ? Result.succeed(
-            view.navigation === "linear" &&
-              view.submission === "individual" &&
-              (failure.rule === "unsubmitted" || failure.rule === "end-of-part"),
-          )
-        : Result.fail(failure),
-  );
+const takesMove = (view: ItemView, target: Result.Result<number, MoveRefused>): boolean =>
+  Result.match(target, {
+    onFailure: (refused) =>
+      view.navigation === "linear" &&
+      view.submission === "individual" &&
+      (refused.rule === "unsubmitted" || refused.rule === "end-of-part"),
+    onSuccess: () => true,
+  });
 
 /**
  * List the intents a test session takes now: exactly those `advance` accepts, given responses that
@@ -104,12 +93,8 @@ export const allowedIntents = (
         : []),
     ];
 
-    return Result.map(
-      Result.all(
-        moves.map((intent) =>
-          Result.map(takesMove(test, session, shown, intent), (taken) => (taken ? [intent] : [])),
-        ),
-      ),
-      (taken): readonly Intent[] => [...taken.flat(), ...submissions],
-    );
+    return Result.map(moveTargets(test, session), (decide): readonly Intent[] => [
+      ...moves.filter((intent) => takesMove(shown, decide(intent))),
+      ...submissions,
+    ]);
   });

@@ -6,8 +6,9 @@
  * reopens: leaving a part is its end, which a submission carries out. In a linear part the
  * candidate only moves forward, one item at a time. In a nonlinear part they move to any item of
  * the part, and leaving an item keeps its attempt open. `go` to the current item saves and stays in
- * every mode. Every function is pure and keeps nothing between calls. This is a browser module: it
- * value-imports from `effect` only `Option`, `Array`, `Data` and `Result`.
+ * every mode. Every function is pure and keeps nothing between calls. A read of many moves, as
+ * `allowedIntents` makes, decides them through {@link moveTargets}, which reads the test once. This
+ * is a browser module: it value-imports from `effect` only `Option`, `Array`, `Data` and `Result`.
  *
  * @module
  */
@@ -131,6 +132,10 @@ interface Standing {
    */
   readonly items: readonly SessionItem[];
   /**
+   * The sequence indices of {@link Standing.items}, so a `go` finds its target without a search.
+   */
+  readonly sequenceIndices: ReadonlySet<number>;
+  /**
    * The current item's index among {@link Standing.items}.
    */
   readonly offset: number;
@@ -168,7 +173,13 @@ const standingOf = (
       const refs = new Set(refIdentifiersIn(part.children));
       const items = session.items.filter((candidate) => refs.has(candidate.ref));
 
-      return { item, items, offset: items.indexOf(item), part };
+      return {
+        item,
+        items,
+        offset: items.indexOf(item),
+        part,
+        sequenceIndices: new Set(items.map((candidate) => candidate.sequenceIndex)),
+      };
     },
   );
 };
@@ -195,14 +206,14 @@ const originOf = ({ item, items, part }: Standing): MoveOrigin => ({
  * @returns The target's sequence index, or the refusing rule.
  */
 const goTarget = (
-  { item, items, part }: Standing,
+  { item, part, sequenceIndices }: Standing,
   sequenceIndex: number,
 ): Result.Result<number, MoveRule> => {
   if (sequenceIndex === item.sequenceIndex) {
     return Result.succeed(sequenceIndex);
   }
 
-  if (!items.some((candidate) => candidate.sequenceIndex === sequenceIndex)) {
+  if (!sequenceIndices.has(sequenceIndex)) {
     return Result.fail("out-of-range");
   }
 
@@ -254,11 +265,54 @@ const targetOf = (standing: Standing, intent: MoveIntent): Result.Result<number,
 };
 
 /**
+ * Read where a test session stands once, and give the function that says where each move would
+ * take it from there, without moving it: the sequence index of the item {@link move} would make
+ * current, or why it refuses the move.
+ *
+ * {@link moveTarget} decides one move through this, and a list of the moves allowed now decides
+ * each of its moves through one call of it: asking {@link moveTarget} for each would read the test
+ * and the session again for every move, which grows with the square of the item count.
+ *
+ * @example
+ *   Result.map(moveTargets(test, session), (decide) => decide({ kind: "next" }));
+ *   // Result.succeed(Result.succeed(2)) from item 1 of a part of three
+ *
+ * @param test The test the session was started from.
+ * @param session The session.
+ * @returns The function that decides a move, failing with {@link MoveRefused} when the test's
+ *   rules forbid it now and, once the test has closed, for every move; {@link ItemNotInSession} for
+ *   an open session whose position is past its items; {@link UnknownItemRef} when the test holds
+ *   no item ref the current item names.
+ */
+export const moveTargets = (
+  test: AcceptedTest,
+  session: TestSession,
+): Result.Result<
+  (intent: MoveIntent) => Result.Result<number, MoveRefused>,
+  ItemNotInSession | UnknownItemRef
+> => {
+  if (session.status === "closed") {
+    return Result.succeed((intent) =>
+      Result.fail(new MoveRefused({ from: Option.none(), intent, rule: "test-closed" })),
+    );
+  }
+
+  return Result.map(
+    standingOf(test.test, session),
+    (standing) => (intent) =>
+      Result.mapError(
+        targetOf(standing, intent),
+        (rule) => new MoveRefused({ from: Option.some(originOf(standing)), intent, rule }),
+      ),
+  );
+};
+
+/**
  * Say where a move would take a test session, without moving it: the sequence index of the item
  * {@link move} would make current, or why it refuses the move.
  *
- * {@link move} decides through this, so the two always agree, and a host or a list of the moves
- * allowed now can ask it without the items or a time.
+ * {@link move} decides through this, and this through {@link moveTargets}, so the move, this and a
+ * list of the moves allowed now always agree, and a host can ask it without the items or a time.
  *
  * @example
  *   moveTarget(test, session, { kind: "next" }); // Result.succeed(2) from item 1 of a part of three
@@ -275,18 +329,8 @@ export const moveTarget = (
   test: AcceptedTest,
   session: TestSession,
   intent: MoveIntent,
-): Result.Result<number, ItemNotInSession | MoveRefused | UnknownItemRef> => {
-  if (session.status === "closed") {
-    return Result.fail(new MoveRefused({ from: Option.none(), intent, rule: "test-closed" }));
-  }
-
-  return Result.flatMap(standingOf(test.test, session), (standing) =>
-    Result.mapError(
-      targetOf(standing, intent),
-      (rule) => new MoveRefused({ from: Option.some(originOf(standing)), intent, rule }),
-    ),
-  );
-};
+): Result.Result<number, ItemNotInSession | MoveRefused | UnknownItemRef> =>
+  Result.flatMap(moveTargets(test, session), (decide) => decide(intent));
 
 /**
  * Move a test session with `next`, `previous` or `go`.
