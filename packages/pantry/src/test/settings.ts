@@ -132,3 +132,22 @@ export const cutItemRenderTestTimeoutMs = 10_000;
  * here, never to make a run pass.
  */
 export const seedSqlProcessTestTimeoutMs = 10_000;
+
+/**
+ * The timeout, in milliseconds, for each test that calls `printSeed([])`, which spawns
+ * `scripts/seed-sql.ts` and prints the whole seed (about 4.4 MB of SQL).
+ *
+ * `seedSqlProcessTestTimeoutMs` measures a spawn that prints a small part, and vitest's 5 s
+ * default was exceeded by the full print in most free-project runs while other seats ran suites.
+ * Measured on 2026-11-04 at `5d49713`, from `packages/pantry`, with one process that calls
+ * `printSeed([])` the way the tests do: three serial runs alone took 3022, 4445 and 3567 ms at a
+ * one-minute load average of 86.1 before and 86.9 after, and three batches of 13 concurrent runs
+ * (vitest's default worker count on 14 CPUs, `availableParallelism() - 1`) took 5243, 5135, 4956,
+ * 5009, 4911, 5050, 4668, 4896, 5025, 5045, 5042, 5197 and 4921 ms at 86.3 before and 87.5 after
+ * (batch 1), 4983, 4394, 4634, 4821, 5026, 4735, 4856, 4888, 4802, 5108, 4715, 4750 and 5053 ms at
+ * 87.5 before and 90.9 after (batch 2), and 6305, 5843, 5676, 5802, 5366, 6228, 5773, 5537, 6325,
+ * 6266, 6264, 5969 and 6163 ms at 90.9 before and 93.7 after (batch 3). The concurrent maximum is
+ * 6325 ms. The budget is the larger of twice the concurrent maximum (12.7 s) and 10 s, rounded up
+ * to the next second. Raise it only on a new measurement recorded here, never to make a run pass.
+ */
+export const seedPrintTestTimeoutMs = 13_000;

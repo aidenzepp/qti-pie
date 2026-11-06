@@ -172,7 +172,8 @@ export const NodeXmlLang = relation(
 );
 
 /**
- * The `label` of a node that is not an item root, whose `label` is `AssessmentItemLabel`'s.
+ * The `label` of a node that is not an item or stimulus root, whose `label` is
+ * `AssessmentItemLabel`'s.
  */
 export const NodeLabel = relation(
   "NodeLabel",
@@ -1046,7 +1047,9 @@ export const rules = [
   contained(on(NodeLabel, "node", "tree", "rootKind"), on(Node, "id", "tree", "rootKind")),
   contained(on(NodeLabel, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
   check("NodeLabelAttribute", NodeLabel, (row) => row.eq(row.attribute, "label")),
-  check("NodeLabelNotRoot", NodeLabel, (row) => row.ne(row.kind, "qti-assessment-item")),
+  check("NodeLabelNotRoot", NodeLabel, (row) =>
+    row.and(row.ne(row.kind, "qti-assessment-item"), row.ne(row.kind, "qti-assessment-stimulus")),
+  ),
   contained(on(NodeDir, "node", "kind"), on(Node, "id", "kind")),
   contained(on(NodeDir, "kind", "attribute"), on(AttributeAdmission, "kind", "attribute")),
   check("NodeDirAttribute", NodeDir, (row) => row.eq(row.attribute, "dir")),

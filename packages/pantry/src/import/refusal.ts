@@ -13,6 +13,8 @@ import type { ContentGuardRefusal } from "#pantry/import/guards/content.ts";
 import type { ItemGuardRefusal } from "#pantry/import/guards/item.ts";
 import type { ManifestGuardRefusal } from "#pantry/import/guards/manifest.ts";
 import type { ProcessingGuardRefusal } from "#pantry/import/guards/processing.ts";
+import type { ReferenceGuardRefusal } from "#pantry/import/guards/reference.ts";
+import type { TestGuardRefusal } from "#pantry/import/guards/test.ts";
 import type { GuardRefusal } from "#pantry/import/guards/tree.ts";
 import type { UsageGuardRefusal } from "#pantry/import/guards/usage.ts";
 import type { NotQti3 } from "#pantry/import/manifest.ts";
@@ -168,6 +170,34 @@ export const ImportRule = Schema.Literals([
   "record-unnamed",
   "entry-kind",
   "zip-format",
+  "structure-count",
+  "section-empty",
+  "structure-identifier",
+  "reach-copy",
+  "section-ref-cycle",
+  "section-ref-target",
+  "item-ref-target",
+  "stimulus-ref-target",
+  "stimulus-ref-key",
+  "resolution-copy",
+  "document-reference",
+  "selection-bounds",
+  "selection-required",
+  "branch-target",
+  "branch-forward",
+  "variable-mapping-source",
+  "variable-mapping-target",
+  "template-default-target",
+  "prefixed-ref",
+  "prefixed-root",
+  "prefixed-copy",
+  "item-duration",
+  "section-identifier-target",
+  "section-root-copy",
+  "include-xpointer",
+  "include-parse",
+  "section-variable-ref",
+  "section-copy",
   "P1",
   "P2",
   "P3",
@@ -321,6 +351,7 @@ const keyRules = new Map<string, Rule>([
   ["Edge.(child)", "edge-parent"],
   ["InteractionBinding.(document,responseIdentifier)", "binding-key"],
   ["ItemBody.(item)", "body-single"],
+  ["ItemStimulusRef.(document,identifier)", "stimulus-ref-key"],
   ["LomGeneral.(lom)", "lom-general-single"],
   ["LomGeneralTitle.(lom)", "lom-title-single"],
   ["LomObjectIdentifier.(lom)", "lom-identifier"],
@@ -341,15 +372,19 @@ const keyRules = new Map<string, Rule>([
   ["ResponseIfArm.(condition)", "P4"],
   ["ResponseProcessingItem.(item)", "processing-single"],
   ["RuleOperand.(child)", "P3"],
+  ["Selection.(section)", "structure-count"],
   ["SimpleChoice.(interaction,identifier)", "choice-key"],
   ["TemplateElseArm.(condition)", "P4"],
   ["TemplateIfArm.(condition)", "P4"],
   ["TemplateProcessing.(item)", "P17"],
+  ["TestIdentifier.(scope,identifier)", "structure-identifier"],
+  ["TestReach.(test,identifier)", "structure-identifier"],
   ["TypedDeclaration.(document,identifier)", "declaration-key"],
   ["StringBinding.(document,identifier)", "string-binding"],
   ["ResourceLomGeneral.(package,resource)", "document-lang"],
   ["ResourceLomLanguageSet.(package,resource,value)", "document-lang"],
   ["ValueSet.(declaration,role)", "value-set-role"],
+  ["VariableMapping.(itemRef,target)", "variable-mapping-target"],
 ]);
 
 const keyRule = (relation: string, fields: readonly string[]): Rule | undefined => {
@@ -388,8 +423,10 @@ const checkRules = new Map<string, Rule>([
   ["AriaRoleNotSource", "aria-role"],
   ["AssociableHotspotBounds", "choice-bounds"],
   ["AssociateBounds", "choice-bounds"],
+  ["AssessmentItemLabelRoot", "label-tool"],
   ["BdoDirNotAuto", "bdo-dir"],
   ["BindingMax", "binding-max"],
+  ["BranchTargetKind", "branch-target"],
   ["BuiltInRefKind", "P9"],
   ["ChoiceBounds", "choice-bounds"],
   ["ChoiceTemplateRefType", "template-ref"],
@@ -410,8 +447,14 @@ const checkRules = new Map<string, Rule>([
   ["HottextChoiceBounds", "choice-bounds"],
   ["IndexNRefZero", "P32"],
   ["IndexPositive", "P11"],
+  ["ItemInstancePositive", "value-lexical"],
+  ["ItemInstanceVariableRoot", "prefixed-root"],
+  ["ItemRefLtiType", "item-ref-target"],
+  ["ItemToolRoot", "attribute-admission"],
+  ["ItemVariableRoot", "prefixed-root"],
   ["LomLearningResourceType", "lom-learning-resource-type"],
   ["MatchBounds", "choice-bounds"],
+  ["MaxAttemptsInt", "attribute-lexical"],
   ["MediaPlays", "choice-bounds"],
   ["NoDefaultHotspotInGraphicGapMatch", "hotspot-default"],
   ["NodeLabelNotRoot", "attribute-admission"],
@@ -419,14 +462,29 @@ const checkRules = new Map<string, Rule>([
   ["OrderMinChoicesPositive", "attribute-lexical"],
   ["OutcomeMinMaxKind", "outcome-minmax-kind"],
   ["PositionObjectChoiceBounds", "choice-bounds"],
+  ["PrefixedBuiltInName", "prefixed-ref"],
+  ["PrefixedVariableSourceKind", "prefixed-ref"],
   ["PrintedVariableRefKind", "printed-variable-ref"],
   ["PrintedVariableVarRefType", "printed-variable-ref"],
   ["ProcessingRoot", "processing-root"],
   ["RepeatInt", "P6"],
   ["RepeatNumberRepeatsRefZero", "P32"],
+  ["RequiredChildRequired", "selection-required"],
   ["ReservedOutcomeTypes", "reserved-type"],
   ["RoundToFigures", "P10"],
   ["RoundToFiguresRefZero", "P32"],
+  ["SectionDurationRoot", "prefixed-root"],
+  ["SectionDurationTargetHolder", "prefixed-ref"],
+  ["SectionDurationTargetKind", "prefixed-ref"],
+  ["SectionFeedbackOutcomeRefType", "feedback-ref"],
+  ["SectionIdentifierTargetHolderKind", "section-identifier-target"],
+  ["SectionPrintedVariableRefKind", "printed-variable-ref"],
+  ["SectionPrintedVariableVarRefType", "printed-variable-ref"],
+  ["SectionVariableDeclaredKind", "P8"],
+  ["SectionVariableReferrer", "section-variable-ref"],
+  ["SectionVariableRoot", "section-variable-ref"],
+  ["SelectionBoundedWithoutReplacement", "selection-bounds"],
+  ["SelectionSelectInt", "attribute-lexical"],
   ["RuleOperandKind", "P3"],
   ["SelectPointChoiceBounds", "choice-bounds"],
   ["SimpleAssociableChoiceBounds", "choice-bounds"],
@@ -435,6 +493,7 @@ const checkRules = new Map<string, Rule>([
   ["TemplateParameterRoot", "P13"],
   ["VariableWeightInTest", "P12"],
   ["VariantNotSelf", "variant-target"],
+  ["XIncludeParseXml", "include-parse"],
 ]);
 
 /**
@@ -457,6 +516,7 @@ const checkRuleByForm = (relation: string, name: string): Rule | undefined => {
  */
 const capacityRules = new Map<string, Rule>([
   ["AreaMapEntry<Coords", "coords-owner"],
+  ["AssessmentSection<StructureChild", "section-empty"],
   ["AssociableHotspot<Coords", "coords-owner"],
   ["ChoiceInteraction<SimpleChoice", "choice-present"],
   ["ColgroupSpan<Edge", "colgroup-span"],
@@ -487,16 +547,25 @@ const capacityRules = new Map<string, Rule>([
   ["ResourceLomTitled<LomGeneralTitle", "lom-title-single"],
   ["ResourceLomTitled<LomObjectTitle", "lom-title"],
   ["RoundTo<RoundToFiguresRef", "P32"],
+  ["Selection<RequiredChild", "selection-required"],
+  ["SelectionBounded<StructureChild", "selection-bounds"],
   ["Table<Edge", "table-parts"],
+  ["TestPart<StructureChild", "structure-count"],
   ["TypedValueSet<DeclaredValue", "value-single"],
   ["ValueSet<DeclaredValue", "value-present"],
+  ["XInclude<XIncludeXpointer", "include-xpointer"],
 ]);
 
 /**
  * The rule of a capacity. A capacity is named by the relation it bounds and the one that fills it;
- * the two `Picture` capacities fill from the same `Edge` and differ by the child kind they select.
+ * the two `Picture` capacities fill from the same `Edge` and differ by the child kind they select,
+ * whether or not they also select the parent kind `picture`.
  */
 const capacityRule = (target: LawSide, from: LawSide): Rule | undefined => {
+  if (target.relation === "StimulusBody") {
+    return "attribute-admission";
+  }
+
   if (target.relation === "Picture" && from.relation === "Edge") {
     if (selects(from, "childKind", "img")) {
       return "picture-img";
@@ -509,9 +578,159 @@ const capacityRule = (target: LawSide, from: LawSide): Rule | undefined => {
 };
 
 /**
+ * The containments of the phase-5 test layer, each rule beside the `from>to` pairs it names. A
+ * statement the spec's 4.16 gives no name is filed under the closest (decision 177):
+ *
+ * - A holder's copy of its document into `Node`, and the containments between a holder and its
+ *   `TestIdentifier`, are `structure-identifier`; a stimulus reference's own copy is
+ *   `stimulus-ref-key`;
+ * - `StructureChild` and the `Edge` rows it counts, and a `Selection`'s own, are `structure-count`;
+ * - A branch rule's owner statements are `branch-target`, and a weight's link to its edge `P12`;
+ * - A `TestDocument` row's containments are the reach, `reach-copy`;
+ * - The root checks of the prefixed arms are `prefixed-root` and E18's `section-variable-ref`; an
+ *   arm's containment into `VariableRef` keeps the `ref-exists` form every arm has.
+ */
+const testContainedEntries: readonly (readonly [Rule, readonly string[]])[] = [
+  ["P12", ["Weight>Edge"]],
+  ["P8", ["SectionVariableDeclared>Declaration", "SectionVariableDeclared>SectionVariableRef"]],
+  ["attribute-admission", ["ItemTool>AssessmentItem", "ItemTool>Tree", "StimulusBody>Node"]],
+  [
+    "branch-target",
+    [
+      "BranchRule>AssessmentSection",
+      "BranchRule>Edge",
+      "BranchRule>ItemRef",
+      "BranchRule>TestPart",
+      "BranchRuleTarget>BranchRule",
+      "BranchRuleTarget>TestIdentifier",
+    ],
+  ],
+  [
+    "item-ref-target",
+    ["ItemRef>ItemRefResolution", "ItemRefDocument>Document", "ItemRefLti>Resource"],
+  ],
+  ["label-tool", ["AssessmentItemLabel>Tree"]],
+  [
+    "prefixed-ref",
+    [
+      "ItemInstanceVariableRef>PrefixedVariableSource",
+      "ItemVariableRef>PrefixedVariableSource",
+      "PrefixedBuiltIn>PrefixedVariableSource",
+      "PrefixedDeclared>Declaration",
+      "PrefixedDeclared>PrefixedVariableSource",
+      "PrefixedMapped>PrefixedVariableSource",
+      "PrefixedMapped>VariableMapping",
+      "PrefixedVariableSource>ItemInstanceVariableRef",
+      "PrefixedVariableSource>ItemRefDocument",
+      "PrefixedVariableSource>ItemVariableRef",
+      "PrefixedVariableSource>TestDocument",
+      "PrefixedVariableSource>TestReach",
+      "PrefixedVariableSource>VariableRef",
+      "SectionDurationRef>SectionDurationTarget",
+      "SectionDurationTarget>SectionDurationRef",
+      "SectionDurationTarget>TestDocument",
+      "SectionDurationTarget>TestReach",
+      "SectionDurationTarget>VariableRef",
+    ],
+  ],
+  [
+    "prefixed-root",
+    ["ItemInstanceVariableRef>Document", "ItemVariableRef>Document", "SectionDurationRef>Document"],
+  ],
+  ["reach-copy", ["TestDocument>Document"]],
+  [
+    "section-identifier-target",
+    [
+      "SectionIdentifierTarget>ExpressionSectionIdentifier",
+      "SectionIdentifierTarget>Node",
+      "SectionIdentifierTarget>TestDocument",
+      "SectionIdentifierTarget>TestReach",
+    ],
+  ],
+  ["section-ref-target", ["SectionRef>SectionRefResolution", "SectionRefResolution>Document"]],
+  [
+    "section-variable-ref",
+    [
+      "SectionVariableRef>Document",
+      "SectionVariableRef>Node",
+      "SectionVariableResolution>SectionVariableRef",
+      "SectionVariableResolution>TestDocument",
+    ],
+  ],
+  ["selection-bounds", ["Selection>SelectionBounded", "SelectionBounded>Selection"]],
+  [
+    "selection-required",
+    ["AssessmentSection>RequiredChild", "ItemRef>RequiredChild", "RequiredChild>StructureChild"],
+  ],
+  ["stimulus-ref-key", ["ItemStimulusRef>Node"]],
+  [
+    "stimulus-ref-target",
+    ["ItemStimulusRef>StimulusRefResolution", "StimulusRefResolution>Document"],
+  ],
+  [
+    "structure-count",
+    ["Edge>StructureChild", "Selection>AssessmentSection", "Selection>Edge", "StructureChild>Edge"],
+  ],
+  [
+    "structure-identifier",
+    [
+      "AssessmentSection>Node",
+      "AssessmentSection>TestIdentifier",
+      "ItemRef>Node",
+      "ItemRef>TestIdentifier",
+      "SectionRef>Node",
+      "SectionRef>TestIdentifier",
+      "TestIdentifier>AssessmentSection",
+      "TestIdentifier>ItemRef",
+      "TestIdentifier>SectionRef",
+      "TestIdentifier>TestPart",
+      "TestPart>Node",
+      "TestPart>TestIdentifier",
+      "TestReach>TestIdentifier",
+    ],
+  ],
+  [
+    "template-default-target",
+    ["TemplateDefault>Declaration", "TemplateDefault>Edge", "TemplateDefault>ItemRefDocument"],
+  ],
+  ["value-lexical", ["ItemInstanceSpelling>ItemInstanceVariableRef"]],
+  [
+    "variable-mapping-source",
+    ["VariableMapping>Declaration", "VariableMapping>Edge", "VariableMapping>ItemRefDocument"],
+  ],
+];
+
+/**
+ * The relations of the test layer's optional attribute values and defaulted markers: a containment
+ * that leaves one of them states that its host carries the attribute, `attribute-admission`.
+ */
+const attributeValueHosts: ReadonlySet<string> = new Set([
+  "DeclaredAllowComment",
+  "DeclaredAllowLateSubmission",
+  "DeclaredAllowReview",
+  "DeclaredAllowSkipping",
+  "DeclaredOrderingShuffle",
+  "DeclaredShowFeedback",
+  "DeclaredShowSolution",
+  "DeclaredValidateResponses",
+  "DeclaredWithReplacement",
+  "ItemRefCategory",
+  "ItemSessionMaxAttempts",
+  "ItemStimulusRefTitle",
+  "TestFeedbackTitle",
+  "TestPartTitle",
+  "TestRubricBlockUse",
+  "TimeLimitMax",
+  "TimeLimitMin",
+]);
+
+/**
  * The rule of a containment, by the relation it leaves and the one it enters, as `from>to`.
  */
 const containedRules = new Map<string, Rule>([
+  ...testContainedEntries.flatMap(([rule, pairs]) =>
+    pairs.map((pair): [string, Rule] => [pair, rule]),
+  ),
   ["AssessmentItemLabel>ItemToolBoth", "label-tool"],
   ["AttributeIdref>DocumentId", "idref-target"],
   ["AttributeIdref>Node", "idref-target"],
@@ -551,6 +770,9 @@ const referenceRules = new Map<string, Rule>([
   ["FeedbackOutcomeRef", "feedback-ref"],
   ["PrintedVariableRef", "printed-variable-ref"],
   ["PrintedVariableVarRef", "printed-variable-ref"],
+  ["SectionFeedbackOutcomeRef", "feedback-ref"],
+  ["SectionPrintedVariableRef", "printed-variable-ref"],
+  ["SectionPrintedVariableVarRef", "printed-variable-ref"],
   ["StringBinding", "string-binding"],
   ["TemplateContentRef", "template-ref"],
 ]);
@@ -764,6 +986,25 @@ const entryContainedRule = (to: LawSide): Rule | undefined => {
     : undefined;
 };
 
+/**
+ * The rule of a containment that leaves `AttributeFileReference`: its path into the package's
+ * entries, its document and its node's copy of that document state that an in-package reference
+ * names a file the package holds (R6), `file-exists`, the form `Document>PackageEntry` has. Its
+ * node and attribute containments are the attribute's own (`copyContainedRule`). That a described
+ * file is a `File` is a guard, not a containment (`document-reference`).
+ */
+const fileReferenceRule = (from: LawSide, to: LawSide): Rule | undefined => {
+  if (from.relation !== "AttributeFileReference") {
+    return undefined;
+  }
+
+  return to.relation === "PackageEntry" ||
+    to.relation === "Document" ||
+    (to.relation === "Node" && fieldsAre(to, "id", "tree"))
+    ? "file-exists"
+    : undefined;
+};
+
 const containedRule = (from: LawSide, to: LawSide): Rule | undefined => {
   if (from.relation === "LomObjectIdentifier") {
     return "lom-identifier";
@@ -776,6 +1017,8 @@ const containedRule = (from: LawSide, to: LawSide): Rule | undefined => {
   const rule =
     copyLeaves.get(from.relation) ??
     schemaVersionCopyRule(from) ??
+    fileReferenceRule(from, to) ??
+    (attributeValueHosts.has(from.relation) ? "attribute-admission" : undefined) ??
     containedRules.get(`${from.relation}>${to.relation}`) ??
     referenceRules.get(from.relation) ??
     selectedContainedRule(from, to) ??
@@ -931,12 +1174,17 @@ const phaseKeyRule = (relation: string, fields: readonly string[]): Rule | undef
 /**
  * The rule of a capacity by the relation that fills it, for the relations this phase added: the
  * `Edge` rows of a LOM category selected on `parentKind` and `childKind` (R30), a CSM or usage
- * relation, a variant's metadata. An `Edge` capacity selected on `childKind` alone is a content
- * capacity (`capacityRule`).
+ * relation, a variant's metadata. An `Edge` capacity on a `Picture` is a content capacity
+ * (`capacityRule`) even when it selects `parentKind` too, as does one selected on `childKind`
+ * alone.
  */
-const phaseCapacityRule = (from: LawSide): Rule | undefined => {
+const phaseCapacityRule = (target: LawSide, from: LawSide): Rule | undefined => {
   if (from.relation === "Edge") {
-    return selects(from, "childKind") && selects(from, "parentKind") ? "lom-capacity" : undefined;
+    return target.relation !== "Picture" &&
+      selects(from, "childKind") &&
+      selects(from, "parentKind")
+      ? "lom-capacity"
+      : undefined;
   }
 
   if (from.relation.startsWith("Csm")) {
@@ -1053,6 +1301,60 @@ const armSides = (law: Extract<ImportLaw, { kind: "alternativesArm" }>): [LawSid
 ];
 
 /**
+ * The owners whose child counts the test layer bounds with a capacity filled from `Edge` rows
+ * selected on a parent and a child kind (4.15 row 3). The same form bounds a LOM category
+ * (`phaseCapacityRule`), told apart by the owner.
+ */
+const structureOwners: ReadonlySet<string> = new Set([
+  "AdaptiveSelection",
+  "AssessmentSection",
+  "AssessmentStimulus",
+  "AssessmentTest",
+  "ItemRef",
+  "TestFeedback",
+  "TestPart",
+  "TestRubricBlock",
+]);
+
+const structureCapacityRule = (target: LawSide, from: LawSide): Rule | undefined =>
+  from.relation === "Edge" && structureOwners.has(target.relation) ? "structure-count" : undefined;
+
+/**
+ * The rule of each `alternatives` the test layer states, by the parent it discriminates: the
+ * parent's own statement and one law per arm state the same rule.
+ */
+const testAlternativeRules = new Map<string, Rule>([
+  ["BranchRule", "branch-target"],
+  ["ItemRefResolution", "item-ref-target"],
+  ["PrefixedVariableSource", "prefixed-ref"],
+  ["SectionVariableResolution", "section-variable-ref"],
+]);
+
+/**
+ * The rule of each arm the test layer adds to `VariableRef`. The other arms of that `alternatives`
+ * are an earlier phase's.
+ */
+const variableRefArmRules = new Map<string, Rule>([
+  ["ItemInstanceVariableRef", "prefixed-ref"],
+  ["ItemVariableRef", "prefixed-ref"],
+  ["SectionDurationRef", "prefixed-ref"],
+  ["SectionVariableRef", "section-variable-ref"],
+]);
+
+/**
+ * The thin arms of E18's `SectionVariableResolution`, each mirrored with the hub row it stands
+ * for: that mirror is `section-variable-ref`, whichever half of it the engine reports.
+ */
+const sectionVariableThinArms: ReadonlySet<string> = new Set([
+  "SectionVariableDuration",
+  "SectionVariablePrefixed",
+]);
+
+const testArmRule = (law: Extract<ImportLaw, { kind: "alternativesArm" }>): Rule | undefined =>
+  testAlternativeRules.get(law.relation) ??
+  (law.relation === "VariableRef" ? variableRefArmRules.get(law.arm) : undefined);
+
+/**
  * The rule of a law over the relations this phase added, or nothing when the law is an earlier
  * phase's (those rows follow). Every `Node` kind with an arm has its own `mirrors` law, so a
  * `qmd:qtiMetadata` that lacks its host arm breaks that handle's law, which the containments and
@@ -1064,7 +1366,7 @@ const phaseRule = (law: ImportLaw): Rule | undefined => {
   }
 
   if (law.kind === "capacity") {
-    return phaseCapacityRule(law.from);
+    return structureCapacityRule(law.target, law.from) ?? phaseCapacityRule(law.target, law.from);
   }
 
   if (law.kind === "contained" || law.kind === "mirrors") {
@@ -1072,10 +1374,15 @@ const phaseRule = (law: ImportLaw): Rule | undefined => {
   }
 
   if (law.kind === "alternativesArm") {
-    return phaseSidesRule(...armSides(law));
+    return testArmRule(law) ?? phaseSidesRule(...armSides(law));
   }
 
   if (law.kind === "alternatives") {
+    const testRule = testAlternativeRules.get(law.relation);
+    if (testRule !== undefined) {
+      return testRule;
+    }
+
     if (law.relation === "ManifestId") {
       return "manifest-id-holder";
     }
@@ -1131,8 +1438,10 @@ const writtenContractRules: readonly (readonly [Rule, readonly string[]])[] = [
       "RectCoords",
       "ShapeCoords",
       "ShowHideIdentifier",
+      "SliderBound",
       "StringCount",
       "TableSpan",
+      "TimeLimitSeconds",
       "TrackLanguage",
     ],
   ],
@@ -1144,6 +1453,7 @@ const writtenContractRules: readonly (readonly [Rule, readonly string[]])[] = [
   [
     "uri-syntax",
     [
+      "AdaptiveRefHref",
       "CaseItemUri",
       "CitationUri",
       "CustomOperatorDefinitionUri",
@@ -1151,10 +1461,13 @@ const writtenContractRules: readonly (readonly [Rule, readonly string[]])[] = [
       "EmbedSourceUri",
       "GlossaryUri",
       "HyperlinkUri",
+      "ItemRefHref",
       "LongDescriptionUri",
       "LongInterpretationUri",
       "NamespaceUri",
+      "SectionRefHref",
       "StatisticContextUri",
+      "StimulusRefHref",
       "StylesheetUri",
       "TemplateLocationUri",
       "TemplateUri",
@@ -1177,6 +1490,7 @@ const writtenContractRules: readonly (readonly [Rule, readonly string[]])[] = [
   [
     "value-lexical",
     [
+      "AdaptiveRefIdentifier",
       "ChoiceIdentifier",
       "CustomOperatorClassName",
       "FileMediaType",
@@ -1184,14 +1498,17 @@ const writtenContractRules: readonly (readonly [Rule, readonly string[]])[] = [
       "LomToken",
       "LomVocabularySource",
       "LomVocabularyValue",
+      "MappedVariableName",
       "NamespacePrefix",
       "OutcomeScaleValue",
       "PiTarget",
       "RecordFieldIdentifier",
-      "SectionReference",
+      "StimulusRefIdentifier",
       "TemplateParameterName",
+      "TestStructureIdentifier",
       "VariableReference",
       "WeightReference",
+      "WeightValue",
       "XmlEntityName",
     ],
   ],
@@ -1279,6 +1596,13 @@ const recognized = (law: ImportLaw): Mapped | undefined => {
   }
 
   if (law.kind === "mirrors") {
+    if (
+      sectionVariableThinArms.has(law.from.relation) ||
+      sectionVariableThinArms.has(law.to.relation)
+    ) {
+      return named("section-variable-ref");
+    }
+
     const between = new Set([law.from.relation, law.to.relation]);
 
     if (conditionMirrors.has(law.from.relation) || conditionMirrors.has(law.to.relation)) {
@@ -1417,6 +1741,8 @@ export type ReadRefusal =
   | ProcessingGuardRefusal
   | ProcessingRefused
   | ReaderRefusal
+  | ReferenceGuardRefusal
+  | TestGuardRefusal
   | UnmodeledVocabulary
   | UsageGuardRefusal
   | WellFormednessError
@@ -1458,6 +1784,8 @@ export const ruleOfError = (e: ContentGuardRefusal | ReadRefusal): ImportRefused
       ProcessingRefused: (g) => new ImportRefused({ detail: g.detail, rule: g.rule }),
       ReaderRefusal: (g) =>
         new ImportRefused({ detail: `${g.rule}: ${g.detail}`, rule: "reader-refusal" }),
+      ReferenceGuardRefusal: (g) => new ImportRefused({ detail: g.detail, rule: g.rule }),
+      TestGuardRefusal: (g) => new ImportRefused({ detail: g.detail, rule: g.rule }),
       UnmodeledVocabulary: (g) =>
         new ImportRefused({
           detail: `${g.kind} ${g.name}${g.parent._tag === "Some" ? ` in ${g.parent.value}` : ""} has no model yet`,

@@ -2,6 +2,7 @@ import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { ConfigProvider, Effect, FileSystem } from "effect";
+import { readXml } from "@qti-pie/crust/read.ts";
 import { inject } from "vitest";
 import {
   FIXTURES_VERSION,
@@ -11,10 +12,16 @@ import {
   materialize,
   materializeCorpus,
   materializePackage,
+  materializeSpec,
+  negativeNames,
   specOf,
   transformHash,
 } from "#pantry/test/fixtures.ts";
 import type { Edit, FixtureName, FixtureSpec } from "#pantry/test/fixtures.ts";
+import { readRows } from "#pantry/import/package.ts";
+import { Rows } from "#pantry/import/tree.ts";
+import { AttributeFileReference } from "#pantry/schema/reference.ts";
+import { PackageEntry } from "#pantry/schema/package.ts";
 import { settings as hostSettings } from "#pantry/test/settings.ts";
 
 /**
@@ -150,6 +157,275 @@ const baseSpec: FixtureSpec = { edits: [], member: "dir/one.zip", name: "one" };
  * An edit list entry; its content only has to differ from the empty list.
  */
 const someEdit: Edit = { _tag: "ReplaceText", file: "choice.xml", replacement: "b", search: "a" };
+
+/**
+ * The resources of a manifest, read with plain patterns: each resource's identifier, type and
+ * `href`, and the `href` of every `file` it lists.
+ *
+ * @param manifest - A manifest's text.
+ * @returns One entry per resource, in document order.
+ */
+const resourcesOf = (manifest: string) =>
+  [...manifest.matchAll(/<resource\b(?<attrs>[^>]*)>(?<body>[\s\S]*?)<\/resource>/gu)].map(
+    (match) => {
+      const attribute = (name: string) =>
+        new RegExp(`\\s${name}="(?<value>[^"]*)"`, "u").exec(match.groups?.["attrs"] ?? "")
+          ?.groups?.["value"] ?? "";
+
+      return {
+        files: [...(match.groups?.["body"] ?? "").matchAll(/<file href="(?<href>[^"]*)"/gu)].map(
+          (file) => file.groups?.["href"] ?? "",
+        ),
+        href: attribute("href"),
+        identifier: attribute("identifier"),
+        type: attribute("type"),
+      };
+    },
+  );
+
+/**
+ * The `href` of each item ref of a test document, as written.
+ *
+ * @param test - A test document's text.
+ * @returns The hrefs, in document order.
+ */
+const itemHrefsOf = (test: string): string[] =>
+  [...test.matchAll(/<qti-assessment-item-ref\b[^>]*\shref="(?<href>[^"]*)"/gu)].map(
+    (match) => match.groups?.["href"] ?? "",
+  );
+
+/**
+ * Every path a materialized package holds, files only.
+ *
+ * @param dir - The package directory.
+ * @returns The file paths, relative to `dir`.
+ */
+const filesOf = Effect.fn("filesOf")(function* filesOf(dir: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const entries = yield* fs.readDirectory(dir, { recursive: true });
+  const files: string[] = [];
+
+  for (const entry of entries) {
+    if ((yield* fs.stat(`${dir}/${entry}`)).type === "File") {
+      files.push(entry);
+    }
+  }
+
+  return files.toSorted();
+});
+
+/**
+ * Phase 5's eleven positive fixtures with the `schemaversion` each package's manifest declares.
+ */
+const positiveVersions: readonly (readonly [FixtureName, "3.0.0" | "3.0.1"])[] = [
+  ["stimulus-301", "3.0.1"],
+  ["stimulus-shared", "3.0.0"],
+  ["test-adaptive", "3.0.0"],
+  ["test-content", "3.0.0"],
+  ["test-include", "3.0.0"],
+  ["test-linear", "3.0.0"],
+  ["test-lti", "3.0.1"],
+  ["test-mapping", "3.0.0"],
+  ["test-section-ref", "3.0.0"],
+  ["test-selection", "3.0.0"],
+  ["test-template-default", "3.0.0"],
+];
+
+/**
+ * The namespace of every QTI document of either version.
+ */
+const qtiNamespace = "http://www.imsglobal.org/xsd/imsqtiasi_v3p0";
+
+/**
+ * The 63 negative fixtures of phase 5, as a literal: the spec's 4.15 last column, less the corpus
+ * packages and `stimulus-300-data` (phase 8's), plus `prefixed-ambiguous` (decision 189).
+ */
+const expectedNegativeNames = [
+  "branch-backward",
+  "branch-exit-misspelled",
+  "branch-into-ref",
+  "branch-part-to-item",
+  "branch-replacement-target",
+  "branch-unknown-target",
+  "duration-of-item-ref",
+  "feedback-outcome-float",
+  "feedback-template",
+  "include-text",
+  "include-xpointer",
+  "instance-spelling-canonical",
+  "item-duration-in-item",
+  "item-duration-not-timed",
+  "item-in-section",
+  "item-prefixed",
+  "item-ref-missing",
+  "item-ref-to-stimulus",
+  "mapping-target-twice",
+  "mapping-undeclared",
+  "navigation-misspelled",
+  "part-no-section",
+  "part-order",
+  "precondition-number-correct",
+  "prefixed-ambiguous",
+  "prefixed-undeclared-variable",
+  "prefixed-unknown-ref",
+  "rubric-empty-view",
+  "rubric-in-rubric",
+  "rubric-interaction",
+  "rubric-no-body",
+  "rubric-printed-undeclared",
+  "section-adaptive-and-selection",
+  "section-empty",
+  "section-feedback-undeclared",
+  "section-identifier-unknown",
+  "section-prefixed-unresolved",
+  "section-printed-undeclared",
+  "section-ref-cycle",
+  "section-ref-identifier-clash",
+  "section-ref-to-item",
+  "section-two-isc",
+  "section-unprefixed-undeclared",
+  "section-variable-in-test",
+  "select-not-integer",
+  "select-over",
+  "select-under-required",
+  "stimulus-300-attributes",
+  "stimulus-300-include",
+  "stimulus-body-empty",
+  "stimulus-missing-image",
+  "stimulus-ref-duplicate",
+  "stimulus-ref-to-item",
+  "stimulus-typed-test",
+  "template-default-type",
+  "template-default-undeclared",
+  "test-declares-duration",
+  "test-duplicate-identifier",
+  "test-identifier-mismatch",
+  "test-lang-no-lom",
+  "test-no-part",
+  "test-title-mismatch",
+  "test-undeclared-variable",
+] as const;
+
+/**
+ * For each non-direct negative that adds text, a file of its package and the text its breach put
+ * there.
+ */
+const negativeBreaches: readonly (readonly [FixtureName, string, string])[] = [
+  ["branch-backward", "rtest13.xml", 'target="item034"'],
+  ["branch-exit-misspelled", "rtest13.xml", 'target="EXIT_TESTS"'],
+  ["branch-into-ref", "rtest01.xml", 'target="shared"'],
+  ["branch-part-to-item", "rtest13.xml", 'target="item653"'],
+  ["branch-replacement-target", "rtest12.xml", 'target="item063"'],
+  ["branch-unknown-target", "rtest13.xml", 'target="NOPE"'],
+  ["feedback-outcome-float", "assessment.xml", 'identifier="PROGRESS"'],
+  ["feedback-template", "assessment.xml", "<qti-template-inline"],
+  ["include-text", "rtest01.xml", 'parse="text"'],
+  ["include-xpointer", "rtest01.xml", 'xpointer="element(/1)"'],
+  ["item-in-section", "rtest13.xml", '<qti-assessment-item identifier="inline"'],
+  ["item-ref-missing", "rtest13.xml", 'href="missing.xml"'],
+  ["item-ref-to-stimulus", "stimulus-test.xml", 'href="passages/unbelievableNight.xml"'],
+  ["mapping-target-twice", "rtest26.xml", 'source-identifier="NOTB" target-identifier="SCORE"'],
+  ["mapping-undeclared", "rtest26.xml", 'source-identifier="NOPE"'],
+  ["navigation-misspelled", "rtest13.xml", 'navigation-mode="Linear"'],
+  ["part-no-section", "rtest13.xml", 'identifier="RTEST-13-B" navigation-mode="linear"'],
+  ["precondition-number-correct", "rtest13.xml", "<qti-number-correct/>"],
+  ["prefixed-ambiguous", "rtest26.xml", 'source-identifier="K.SCORE"'],
+  ["prefixed-undeclared-variable", "rtest26.xml", '<qti-variable identifier="I.NOPE"/>'],
+  ["prefixed-unknown-ref", "rtest26.xml", '<qti-variable identifier="NOPE.SCORE"/>'],
+  ["rubric-empty-view", "assessment.xml", 'view=""'],
+  ["rubric-in-rubric", "assessment.xml", "<p>Nested</p>"],
+  ["rubric-interaction", "assessment.xml", "<qti-text-entry-interaction"],
+  ["rubric-printed-undeclared", "assessment.xml", '<qti-printed-variable identifier="NOPE"/>'],
+  ["section-adaptive-and-selection", "adaptive-test.xml", '<qti-selection select="1"/>'],
+  ["section-empty", "rtest13.xml", 'identifier="bare"'],
+  ["section-identifier-unknown", "rtest26.xml", 'section-identifier="NOPE"'],
+  ["section-prefixed-unresolved", "test-b.xml", 'identifier="RENAMED"'],
+  ["section-ref-cycle", "sections/shared.xml", 'href="shared.xml"'],
+  [
+    "section-ref-identifier-clash",
+    "sections/shared.xml",
+    '<qti-assessment-item-ref identifier="ITEMREF"',
+  ],
+  ["section-ref-to-item", "rtest01.xml", 'href="items/i2.xml"'],
+  ["section-two-isc", "rtest13.xml", 'max-attempts="3"'],
+  ["select-not-integer", "rtest12.xml", 'select="2.5"'],
+  ["select-over", "rtest12.xml", 'select="9"'],
+  [
+    "select-under-required",
+    "rtest12.xml",
+    'identifier="item434" href="item434.xml" required="true"',
+  ],
+  ["stimulus-300-attributes", "passages/unbelievableNight.xml", '<qti-stimulus-body class="x">'],
+  ["stimulus-300-include", "passages/unbelievableNight.xml", "<xi:include"],
+  [
+    "stimulus-body-empty",
+    "passages/unbelievableNight.xml",
+    "<qti-stimulus-body> </qti-stimulus-body>",
+  ],
+  ["stimulus-ref-to-item", "exemplar06.xml", 'href="exemplar04.xml"'],
+  ["stimulus-typed-test", "imsmanifest.xml", 'identifier="Stimulus1" type="imsqti_test_xmlv3p0"'],
+  ["template-default-type", "template-default-test.xml", 'base-type="string">fast'],
+  ["template-default-undeclared", "template-default-test.xml", 'template-identifier="NOPE"'],
+  ["test-declares-duration", "rtest13.xml", 'identifier="duration"'],
+  ["test-duplicate-identifier", "rtest13.xml", 'identifier="sectionA" href="item160.xml"'],
+  ["test-identifier-mismatch", "imsmanifest.xml", "<imsmd:entry>OTHER-TEST</imsmd:entry>"],
+  ["test-title-mismatch", "imsmanifest.xml", "Another Test</imsmd:string>"],
+  ["test-undeclared-variable", "rtest13.xml", '<qti-variable identifier="NOPE"/>'],
+];
+
+/**
+ * For each negative that removes text, a file of its package and the text its breach took out.
+ */
+const negativeRemovals: readonly (readonly [FixtureName, string, string])[] = [
+  ["rubric-no-body", "assessment.xml", "<p>Test instructions</p>"],
+  ["section-feedback-undeclared", "test-b.xml", 'identifier="FLAG"'],
+  ["section-printed-undeclared", "test-b.xml", 'identifier="COUNT"'],
+  ["section-unprefixed-undeclared", "test-b.xml", 'identifier="SCORE"'],
+  [
+    "test-lang-no-lom",
+    "imsmanifest.xml",
+    "<imsmd:general>\n                        <imsmd:language>",
+  ],
+];
+
+/**
+ * The paths a manifest lists as `file`s, each once.
+ *
+ * @param manifest - A manifest's text.
+ * @returns The listed paths, sorted.
+ */
+const listedFilesOf = (manifest: string): string[] =>
+  [
+    ...new Set(
+      [...manifest.matchAll(/<file href="(?<href>[^"]*)"/gu)].map(
+        (match) => match.groups?.["href"] ?? "",
+      ),
+    ),
+  ].toSorted();
+
+/**
+ * BegGuide's test, cut with the documents it reaches.
+ */
+const begGuideCut: FixtureSpec = {
+  edits: [{ _tag: "cutTest", schemaversion: "3.0.1", test: "BGtest.xml" }],
+  member: "QTI3_BeginnersGuide_Examples/BegGuide_March2025.zip",
+  name: "cut-test-begguide",
+};
+
+/**
+ * The corpus's loose `rtest13.xml`, packaged with one generated stub item per item `href`.
+ */
+const looseRtest13: FixtureSpec = {
+  edits: [
+    {
+      _tag: "looseTest",
+      schemaversion: "3.0.0",
+      test: "qtiv3-examples/tests/rtest13.xml",
+    },
+  ],
+  member: "qtiv3-examples/tests/rtest13.xml",
+  name: "loose-test-rtest13",
+};
 
 layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts", (it) => {
   it.effect("the globalSetup provides the base set before the file's own first materialize", () =>
@@ -401,6 +677,88 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts", (it
     ),
   );
 
+  it.effect("the variants' Spanish image resolves to a file the package holds", () =>
+    inFreshRoot(() =>
+      Effect.gen(function* variantImages() {
+        for (const name of [
+          "variant",
+          "variant-padded",
+          "variant-no-resource",
+          "variant-no-metadata",
+        ] as const) {
+          const { rows } = yield* readRows(yield* materialize(name));
+          const references = Rows.of(rows, AttributeFileReference);
+          const entries = Rows.of(rows, PackageEntry);
+
+          assert.isAtLeast(references.length, 1, `${name}: file references`);
+
+          for (const reference of references) {
+            assert.isTrue(
+              entries.some(
+                (entry) => entry.package === reference.package && entry.path === reference.path,
+              ),
+              `${name}: ${reference.path} is a package entry`,
+            );
+          }
+        }
+      }),
+    ),
+  );
+
+  it.effect("the media fixtures' referenced files are entries of their package", () =>
+    inFreshRoot(() =>
+      Effect.gen(function* mediaFiles() {
+        for (const name of ["html-audio", "html-param", "controls-3-0-0"] as const) {
+          const { rows } = yield* readRows(yield* materialize(name));
+          const references = Rows.of(rows, AttributeFileReference);
+          const entries = Rows.of(rows, PackageEntry);
+
+          assert.isAtLeast(references.length, 1, `${name}: file references`);
+
+          for (const reference of references) {
+            assert.isTrue(
+              entries.some(
+                (entry) => entry.package === reference.package && entry.path === reference.path,
+              ),
+              `${name}: ${reference.path} is a package entry`,
+            );
+          }
+        }
+      }),
+    ),
+  );
+
+  it.effect("cut-drawing keeps the file its srcset names, and its references resolve", () =>
+    inFreshRoot(() =>
+      Effect.gen(function* cutDrawing() {
+        const fs = yield* FileSystem.FileSystem;
+        const dir = yield* materialize("cut-drawing");
+
+        assert.isTrue(yield* fs.exists(`${dir}/items/images/anglePQR.svg`), "anglePQR.svg kept");
+        assert.include(
+          yield* fs.readFileString(`${dir}/imsmanifest.xml`),
+          "items/images/anglePQR.svg",
+          "manifest lists anglePQR.svg",
+        );
+
+        const { rows } = yield* readRows(dir);
+        const references = Rows.of(rows, AttributeFileReference);
+        const entries = Rows.of(rows, PackageEntry);
+
+        assert.isAtLeast(references.length, 1, "file references");
+
+        for (const reference of references) {
+          assert.isTrue(
+            entries.some(
+              (entry) => entry.package === reference.package && entry.path === reference.path,
+            ),
+            `${reference.path} is a package entry`,
+          );
+        }
+      }),
+    ),
+  );
+
   it.effect("doctype declares a general entity and an ATTLIST default and uses the entity", () =>
     inFreshRoot(() =>
       Effect.gen(function* doctypeVariant() {
@@ -544,5 +902,360 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts", (it
           assert.strictEqual(choice[14], "    <qti-item-body>");
         }),
       ),
+  );
+  it.effect(
+    "cutTest keeps the test, its six items and the four media files, each listed once",
+    () =>
+      inFreshRoot(() =>
+        Effect.gen(function* cutTestPackage() {
+          const fs = yield* FileSystem.FileSystem;
+          const dir = yield* materializeSpec(begGuideCut);
+          const manifest = yield* fs.readFileString(`${dir}/imsmanifest.xml`);
+          const test = yield* fs.readFileString(`${dir}/BGtest.xml`);
+          const resources = resourcesOf(manifest);
+          const files = yield* filesOf(dir);
+          const listed = resources.flatMap((resource) => resource.files);
+
+          assert.deepStrictEqual(
+            resources.map((resource) => [resource.type, resource.href]),
+            [
+              ["imsqti_test_xmlv3p0", "BGtest.xml"],
+              ["imsqti_item_xmlv3p0", "items/firstexample.xml"],
+              ["imsqti_item_xmlv3p0", "items/BG007.xml"],
+              ["imsqti_item_xmlv3p0", "items/BG008.xml"],
+              ["imsqti_item_xmlv3p0", "items/BG009.xml"],
+              ["imsqti_item_xmlv3p0", "items/BG010.xml"],
+              ["imsqti_item_xmlv3p0", "items/BG011.xml"],
+            ],
+          );
+          assert.strictEqual(new Set(resources.map((resource) => resource.identifier)).size, 7);
+          assert.include(manifest, "<schemaversion>3.0.1</schemaversion>");
+
+          for (const href of itemHrefsOf(test)) {
+            assert.include(files, href);
+          }
+
+          assert.deepStrictEqual(
+            resources.find((resource) => resource.href === "items/BG011.xml")?.files.toSorted(),
+            [
+              "items/BG011.xml",
+              "items/resources/crow_movie.mp4",
+              "items/resources/crow_movie.ogg",
+              "items/resources/crows.jpg",
+              "items/resources/subtitles_en.vtt",
+            ],
+          );
+          assert.deepStrictEqual(
+            files.filter((file) => file !== "imsmanifest.xml"),
+            [...new Set(listed)].toSorted(),
+          );
+          assert.deepStrictEqual(
+            files.toSorted(),
+            [...new Set(listed), "imsmanifest.xml"].toSorted(),
+          );
+          assert.notInclude(files, "items/BG007.xml.bak");
+        }),
+      ),
+  );
+
+  it.effect("looseTest packages rtest13 with one stub per item href declaring its variables", () =>
+    inFreshRoot(() =>
+      Effect.gen(function* looseTestPackage() {
+        const fs = yield* FileSystem.FileSystem;
+        const dir = yield* materializeSpec(looseRtest13);
+        const manifest = yield* fs.readFileString(`${dir}/imsmanifest.xml`);
+        const test = yield* fs.readFileString(`${dir}/rtest13.xml`);
+        const resources = resourcesOf(manifest);
+        const files = yield* filesOf(dir);
+        const hrefs = itemHrefsOf(test);
+
+        assert.strictEqual(hrefs.length, 6);
+        assert.deepStrictEqual(
+          resources.map((resource) => [resource.type, resource.href]),
+          [
+            ["imsqti_test_xmlv3p0", "rtest13.xml"],
+            ...hrefs.map((href) => ["imsqti_item_xmlv3p0", href]),
+          ],
+        );
+
+        for (const href of hrefs) {
+          assert.include(files, href);
+        }
+
+        assert.deepStrictEqual(
+          files,
+          [...resources.flatMap((resource) => resource.files), "imsmanifest.xml"]
+            .filter((file, at, all) => all.indexOf(file) === at)
+            .toSorted(),
+        );
+
+        const stub = yield* fs.readFileString(`${dir}/item034.xml`);
+
+        assert.include(stub, 'identifier="item034"');
+        assert.match(
+          stub,
+          /<qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier"/u,
+        );
+        assert.match(
+          stub,
+          /<qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/u,
+        );
+        assert.notInclude(stub, "sign.png");
+        assert.notInclude(stub, 'identifier="xml"');
+      }),
+    ),
+  );
+  it.effect(
+    "each positive fixture of phase 5 lists every packaged file and holds QTI documents that parse",
+    () =>
+      inFreshRoot(() =>
+        Effect.gen(function* positiveFixtures() {
+          const fs = yield* FileSystem.FileSystem;
+
+          for (const [name, version] of positiveVersions) {
+            const dir = yield* materialize(name);
+            const files = yield* filesOf(dir);
+            const manifest = yield* fs.readFileString(`${dir}/imsmanifest.xml`);
+
+            assert.include(manifest, `<schemaversion>${version}</schemaversion>`, name);
+            assert.deepStrictEqual(
+              files.filter((file) => file !== "imsmanifest.xml"),
+              listedFilesOf(manifest),
+              name,
+            );
+
+            for (const file of files) {
+              const isDocument =
+                file.endsWith(".xml") &&
+                file !== "imsmanifest.xml" &&
+                !file.startsWith("adaptive/") &&
+                !file.startsWith("links/");
+
+              if (isDocument) {
+                const document = yield* readXml(yield* fs.readFile(`${dir}/${file}`));
+
+                assert.strictEqual(document.root.namespace, qtiNamespace, `${name}/${file}`);
+              }
+            }
+          }
+        }),
+      ),
+    120_000,
+  );
+
+  it.effect("test-mapping's stubs: I is time-dependent with A.B, J declares no K.SCORE", () =>
+    inFreshRoot(() =>
+      Effect.gen(function* mappingStubs() {
+        const fs = yield* FileSystem.FileSystem;
+        const dir = yield* materialize("test-mapping");
+        const test = yield* fs.readFileString(`${dir}/rtest26.xml`);
+        const timed = yield* fs.readFileString(`${dir}/itemI.xml`);
+        const shared = yield* fs.readFileString(`${dir}/itemJ.xml`);
+
+        for (const identifier of ["J", "J.K"]) {
+          assert.include(
+            test,
+            `<qti-assessment-item-ref identifier="${identifier}" href="itemJ.xml"/>`,
+          );
+        }
+
+        assert.include(test, '<qti-variable identifier="J.K.SCORE"/>');
+        assert.include(timed, 'time-dependent="true"');
+        assert.include(timed, '<qti-variable identifier="duration"/>');
+        assert.include(timed, 'identifier="A.B" cardinality="single" base-type="float"');
+        assert.include(shared, 'time-dependent="false"');
+        assert.include(shared, 'identifier="SCORE" cardinality="single" base-type="float"');
+        assert.notInclude(shared, 'identifier="K.SCORE"');
+        assert.notInclude(shared, 'identifier="K"');
+      }),
+    ),
+  );
+
+  it.effect(
+    "test-section-ref has two tests reaching one section document and one that none reaches",
+    () =>
+      inFreshRoot(() =>
+        Effect.gen(function* sectionRefs() {
+          const fs = yield* FileSystem.FileSystem;
+          const dir = yield* materialize("test-section-ref");
+          const first = yield* fs.readFileString(`${dir}/rtest01.xml`);
+          const second = yield* fs.readFileString(`${dir}/test-b.xml`);
+          const manifest = yield* fs.readFileString(`${dir}/imsmanifest.xml`);
+          const types = [...manifest.matchAll(/type="(?<type>[^"]*)"/gu)].map(
+            (match) => match.groups?.["type"],
+          );
+
+          for (const test of [first, second]) {
+            assert.include(test, 'href="sections/shared.xml"');
+            assert.notInclude(test, "lonely");
+          }
+
+          assert.strictEqual(types.filter((type) => type === "imsqti_test_xmlv3p0").length, 2);
+          assert.strictEqual(types.filter((type) => type === "imsqti_section_xmlv3p0").length, 2);
+          assert.include(first, 'identifier="I2.SCORE"');
+          assert.notInclude(second, 'identifier="I2.SCORE"');
+          assert.include(second, '<qti-assessment-item-ref identifier="I2"');
+        }),
+      ),
+  );
+
+  it.effect("the 63 negative names are the spec's list, each in the fixture table", () =>
+    Effect.sync(() => {
+      assert.deepStrictEqual([...negativeNames], [...expectedNegativeNames]);
+      assert.strictEqual(new Set(negativeNames).size, 63);
+      assert.includeMembers([...fixtureNames], [...negativeNames]);
+
+      for (const name of negativeNames) {
+        assert.notInclude(
+          positiveVersions.map(([positive]) => positive),
+          name,
+        );
+      }
+    }),
+  );
+
+  it.effect("only the four direct negatives carry a positive's edits unchanged", () =>
+    Effect.sync(() => {
+      const unchanged = negativeNames.filter((name) =>
+        positiveVersions.some(
+          ([positive]) =>
+            JSON.stringify(specOf(positive).edits) === JSON.stringify(specOf(name).edits) &&
+            specOf(positive).member === specOf(name).member,
+        ),
+      );
+
+      assert.deepStrictEqual(
+        [...unchanged],
+        [
+          "duration-of-item-ref",
+          "instance-spelling-canonical",
+          "item-prefixed",
+          "section-variable-in-test",
+        ],
+      );
+    }),
+  );
+
+  it.effect(
+    "each negative fixture materializes, lists every packaged file and holds QTI documents that parse",
+    () =>
+      inFreshRoot(() =>
+        Effect.gen(function* negativeFixtures() {
+          const fs = yield* FileSystem.FileSystem;
+
+          for (const name of negativeNames) {
+            const dir = yield* materialize(name);
+            const files = yield* filesOf(dir);
+            const manifest = yield* fs.readFileString(`${dir}/imsmanifest.xml`);
+
+            assert.deepStrictEqual(
+              files.filter((file) => file !== "imsmanifest.xml"),
+              listedFilesOf(manifest),
+              name,
+            );
+
+            for (const file of files) {
+              const isDocument =
+                file.endsWith(".xml") &&
+                file !== "imsmanifest.xml" &&
+                !file.startsWith("adaptive/");
+
+              if (isDocument) {
+                const document = yield* readXml(yield* fs.readFile(`${dir}/${file}`));
+
+                assert.strictEqual(document.root.namespace, qtiNamespace, `${name}/${file}`);
+              }
+            }
+          }
+        }),
+      ),
+    180_000,
+  );
+
+  it.effect(
+    "each negative holds its breach in the file the spec's edit names",
+    () =>
+      inFreshRoot(() =>
+        Effect.gen(function* breachesPresent() {
+          const fs = yield* FileSystem.FileSystem;
+
+          for (const [name, file, needle] of negativeBreaches) {
+            const dir = yield* materialize(name);
+
+            assert.include(yield* fs.readFileString(`${dir}/${file}`), needle, `${name}: ${file}`);
+          }
+
+          for (const [name, file, needle] of negativeRemovals) {
+            const dir = yield* materialize(name);
+
+            assert.notInclude(
+              yield* fs.readFileString(`${dir}/${file}`),
+              needle,
+              `${name}: ${file}`,
+            );
+          }
+
+          const twice = yield* fs.readFileString(
+            `${yield* materialize("stimulus-ref-duplicate")}/exemplar06.xml`,
+          );
+          const part = yield* fs.readFileString(`${yield* materialize("part-order")}/rtest13.xml`);
+          const images = yield* filesOf(yield* materialize("stimulus-missing-image"));
+          const noPart = yield* fs.readFileString(
+            `${yield* materialize("test-no-part")}/rtest13.xml`,
+          );
+
+          assert.strictEqual(
+            twice.split('<qti-assessment-stimulus-ref identifier="Stimulus1"').length,
+            3,
+          );
+          assert.isAbove(
+            part.indexOf('<qti-item-session-control show-feedback="true"'),
+            part.indexOf('<qti-assessment-section identifier="sectionA"'),
+          );
+          assert.notInclude(images, "passages/images/apip_VE_IP_05_croc.png");
+          assert.notInclude(images, "passages/images/apip_VE_IP_05_flamingos.png");
+          assert.notInclude(noPart, "<qti-test-part");
+        }),
+      ),
+    180_000,
+  );
+
+  it.effect(
+    "test-mapping's hand-written stubs: J untimed and naming duration, I untimed",
+    () =>
+      inFreshRoot(() =>
+        Effect.gen(function* handStubs() {
+          const fs = yield* FileSystem.FileSystem;
+          const inItem = yield* fs.readFileString(
+            `${yield* materialize("item-duration-in-item")}/itemJ.xml`,
+          );
+          const notTimed = yield* fs.readFileString(
+            `${yield* materialize("item-duration-not-timed")}/itemI.xml`,
+          );
+          const ambiguous = yield* fs.readFileString(
+            `${yield* materialize("prefixed-ambiguous")}/itemJ.xml`,
+          );
+
+          assert.include(inItem, 'time-dependent="false"');
+          assert.include(inItem, '<qti-variable identifier="duration"/>');
+          assert.include(notTimed, 'time-dependent="false"');
+          assert.notInclude(notTimed, '<qti-variable identifier="duration"/>');
+          assert.include(ambiguous, 'identifier="K.SCORE" cardinality="single" base-type="float"');
+          assert.include(ambiguous, 'identifier="SCORE" cardinality="single" base-type="float"');
+        }),
+      ),
+    60_000,
+  );
+
+  it.effect("extmeta's record keeps the two xml:lang attributes the published file carries", () =>
+    inFreshRoot(() =>
+      Effect.gen(function* externalRecordLang() {
+        const fs = yield* FileSystem.FileSystem;
+        const record = yield* fs.readFileString(`${yield* materialize("extmeta")}/meta/choice.xml`);
+
+        assert.include(record, '<string xml:lang="en">jacs</string>');
+        assert.include(record, '<string xml:lang="en">Mathematics</string>');
+      }),
+    ),
   );
 });

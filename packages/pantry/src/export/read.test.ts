@@ -9,7 +9,7 @@ import { readTree, treesOf } from "#pantry/export/read.ts";
 import { renderTree } from "#pantry/export/render.ts";
 import { itemRows } from "#pantry/import/item.ts";
 import { manifestRows } from "#pantry/import/manifest.ts";
-import { importPackage } from "#pantry/import/package.ts";
+import { importPackage, readRows } from "#pantry/import/package.ts";
 import { Rows } from "#pantry/import/tree.ts";
 import { listPackage } from "#pantry/package/read.ts";
 import { ResourceLomGeneral } from "#pantry/schema/lang.ts";
@@ -209,8 +209,8 @@ describe.skipIf(!hasLease)(
       ] as const) {
         it.effect(`${name}: the read-back holds the importer's facts, one for one`, () =>
           Effect.gen(function* sameFacts() {
-            const { dir } = yield* importFixture(name);
-            const imported = (yield* importFixture(name)).rows;
+            const dir = yield* materialize(name);
+            const imported = (yield* readRows(dir)).rows;
             const packageId = yield* importPackage(dir);
             const read = new Map<AnyRelation, readonly object[]>();
             for (const tree of yield* treesOf(packageId)) {

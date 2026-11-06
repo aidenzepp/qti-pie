@@ -432,14 +432,61 @@ const media = (
 ];
 
 /**
+ * A value written as several parts joined by dots, each part a source of its own.
+ *
+ * @param parts - The parts in order.
+ * @returns The source of the joined value, none when any column part is absent.
+ */
+const dotted =
+  (...parts: readonly Source[]): Source =>
+  (index) => {
+    const readers = parts.map((part) => part(index));
+
+    return (id) => {
+      const values = readers.map((read) => read(id));
+
+      return values.every((value) => value !== undefined) ? values.join(".") : undefined;
+    };
+  };
+
+/**
+ * A fixed text as a part of a {@link dotted} value.
+ */
+const text =
+  (value: string): Source =>
+  () =>
+  () =>
+    value;
+
+/**
+ * The instance of an `ItemInstanceVariableRef` as the source wrote it: the `ItemInstanceSpelling`
+ * row's text where the spelling is not canonical, else the number.
+ */
+const instanceSpelled: Source = (index) => {
+  const spelling = column(R.ItemInstanceSpelling, "value", "ref")(index);
+  const number = arm(R.ItemInstanceVariableRef, "instance")(index);
+
+  return (id) => spelling(id) ?? number(id);
+};
+
+/**
  * The `identifier` of a node that refers to a declaration: the `identifier` of its declared
  * reference, of its template-parameter reference, or the name of its built-in, whichever row the
- * node has.
+ * node has; or, in a test, the prefixed form `PREFIX.VAR`, `PREFIX.N.VAR` or `PREFIX.duration`
+ * written from its columns, or a section document's reference as written.
  */
 const referenced: Source = first(
   arm(R.DeclaredRef, "identifier"),
   arm(R.TemplateParameterRef, "identifier"),
   arm(R.BuiltInRef, "name"),
+  dotted(arm(R.ItemVariableRef, "prefix"), arm(R.ItemVariableRef, "variable")),
+  dotted(
+    arm(R.ItemInstanceVariableRef, "prefix"),
+    instanceSpelled,
+    arm(R.ItemInstanceVariableRef, "variable"),
+  ),
+  dotted(arm(R.SectionDurationRef, "prefix"), text("duration")),
+  arm(R.SectionVariableRef, "identifier"),
 );
 
 /**
@@ -560,6 +607,14 @@ export const ownAttributes = {
     ["type", optional(R.ParamType)],
   ],
   q: [["cite", optional(R.QCite)]],
+  "qti-adaptive-engine-ref": [
+    identifierOf(R.AdaptiveEngineRef),
+    ["href", arm(R.AdaptiveEngineRef, "href")],
+  ],
+  "qti-adaptive-settings-ref": [
+    identifierOf(R.AdaptiveSettingsRef),
+    ["href", arm(R.AdaptiveSettingsRef, "href")],
+  ],
   "qti-any-n": [
     ["min", arm(R.AnyN, "min")],
     ["max", arm(R.AnyN, "max")],
@@ -594,6 +649,60 @@ export const ownAttributes = {
     ["adaptive", marked(R.DeclaredAdaptive, arm(R.AssessmentItem, "adaptive"))],
     ["time-dependent", arm(R.AssessmentItem, "timeDependent")],
   ],
+  "qti-assessment-item-ref": [
+    identifierOf(R.ItemRef),
+    ["href", arm(R.ItemRef, "href")],
+    ["required", marked(R.DeclaredItemRefRequired, arm(R.ItemRef, "required"))],
+    ["fixed", marked(R.DeclaredItemRefFixed, arm(R.ItemRef, "fixed"))],
+    ["category", optional(R.ItemRefCategory)],
+  ],
+  "qti-assessment-section": [
+    identifierOf(R.AssessmentSection),
+    ["title", arm(R.AssessmentSection, "title")],
+    ["visible", arm(R.AssessmentSection, "visible")],
+    ["required", marked(R.DeclaredSectionRequired, arm(R.AssessmentSection, "required"))],
+    ["fixed", marked(R.DeclaredSectionFixed, arm(R.AssessmentSection, "fixed"))],
+    [
+      "keep-together",
+      marked(R.DeclaredSectionKeepTogether, arm(R.AssessmentSection, "keepTogether")),
+    ],
+  ],
+  "qti-assessment-section-ref": [identifierOf(R.SectionRef), ["href", arm(R.SectionRef, "href")]],
+  "qti-assessment-stimulus": [
+    ["identifier", column(R.DocumentIdentifier, "value", "document")],
+    ["title", column(R.DocumentTitle, "value", "document")],
+    [
+      "tool-name",
+      first(column(R.ItemToolBoth, "toolName", "tree"), column(R.ItemToolName, "toolName", "tree")),
+    ],
+    [
+      "tool-version",
+      first(
+        column(R.ItemToolBoth, "toolVersion", "tree"),
+        column(R.ItemToolVersion, "toolVersion", "tree"),
+      ),
+    ],
+  ],
+  "qti-assessment-stimulus-ref": [
+    identifierOf(R.ItemStimulusRef),
+    ["href", arm(R.ItemStimulusRef, "href")],
+    ["title", optional(R.ItemStimulusRefTitle)],
+  ],
+  "qti-assessment-test": [
+    ["identifier", column(R.DocumentIdentifier, "value", "document")],
+    ["title", column(R.DocumentTitle, "value", "document")],
+    [
+      "tool-name",
+      first(column(R.ItemToolBoth, "toolName", "tree"), column(R.ItemToolName, "toolName", "tree")),
+    ],
+    [
+      "tool-version",
+      first(
+        column(R.ItemToolBoth, "toolVersion", "tree"),
+        column(R.ItemToolVersion, "toolVersion", "tree"),
+      ),
+    ],
+  ],
   "qti-associable-hotspot": [
     identifierOf(R.AssociableHotspot),
     ["template-identifier", choiceTemplate],
@@ -621,6 +730,15 @@ export const ownAttributes = {
     ],
   ],
   "qti-base-value": [["base-type", arm(R.Literal, "baseType")]],
+  "qti-branch-rule": [
+    [
+      "target",
+      first(
+        column(R.BranchRuleExit, "exit", "rule"),
+        column(R.BranchRuleTarget, "identifier", "rule"),
+      ),
+    ],
+  ],
   "qti-choice-interaction": [
     responseIdentifierOf(R.ChoiceInteraction),
     ["shuffle", marked(R.DeclaredShuffle, arm(R.ChoiceInteraction, "shuffle"))],
@@ -829,6 +947,18 @@ export const ownAttributes = {
     ],
     ["target-value", byBaseType(interpolationTargets, "id", "targetValue")],
   ],
+  "qti-item-session-control": [
+    ["max-attempts", optional(R.ItemSessionMaxAttempts)],
+    ["show-feedback", marked(R.DeclaredShowFeedback, arm(R.ItemSessionControl, "showFeedback"))],
+    ["allow-review", marked(R.DeclaredAllowReview, arm(R.ItemSessionControl, "allowReview"))],
+    ["show-solution", marked(R.DeclaredShowSolution, arm(R.ItemSessionControl, "showSolution"))],
+    ["allow-comment", marked(R.DeclaredAllowComment, arm(R.ItemSessionControl, "allowComment"))],
+    ["allow-skipping", marked(R.DeclaredAllowSkipping, arm(R.ItemSessionControl, "allowSkipping"))],
+    [
+      "validate-responses",
+      marked(R.DeclaredValidateResponses, arm(R.ItemSessionControl, "validateResponses")),
+    ],
+  ],
   "qti-lookup-outcome-value": referring,
   "qti-map-entry": [
     ["map-key", byBaseType(mapKeys, "id", "mapKey")],
@@ -872,6 +1002,7 @@ export const ownAttributes = {
     ["loop", marked(R.DeclaredMediaLoop, arm(R.MediaInteraction, "loop"))],
     ["coords", optional(R.MediaCoords)],
   ],
+  "qti-metadata-ref": [identifierOf(R.MetadataRef), ["href", arm(R.MetadataRef, "href")]],
   "qti-modal-feedback": [
     ["outcome-identifier", arm(R.ModalFeedback, "outcomeIdentifier")],
     ["show-hide", arm(R.ModalFeedback, "showHide")],
@@ -893,6 +1024,7 @@ export const ownAttributes = {
     ["data-max-selections-message", optional(R.OrderMaxSelectionsMessage)],
     ["data-choices-container-width", optional(R.OrderChoicesContainerWidth)],
   ],
+  "qti-ordering": [["shuffle", marked(R.DeclaredOrderingShuffle, arm(R.Ordering, "shuffle"))]],
   "qti-outcome-declaration": [
     ...declared,
     ["view", column(R.DeclarationView, "value", "declaration")],
@@ -960,6 +1092,10 @@ export const ownAttributes = {
     ["use", arm(R.RubricBlock, "use")],
     ["view", arm(R.RubricBlock, "view")],
   ],
+  "qti-rubric-block.test": [
+    ["use", optional(R.TestRubricBlockUse)],
+    ["view", arm(R.TestRubricBlock, "view")],
+  ],
   "qti-select-point-interaction": [
     responseIdentifierOf(R.SelectPointInteraction),
     [
@@ -970,6 +1106,10 @@ export const ownAttributes = {
       "max-choices",
       marked(R.DeclaredSelectPointMaxChoices, arm(R.SelectPointInteraction, "maxChoicesN")),
     ],
+  ],
+  "qti-selection": [
+    ["select", arm(R.Selection, "select")],
+    ["with-replacement", marked(R.DeclaredWithReplacement, arm(R.Selection, "withReplacement"))],
   ],
   "qti-set-correct-response": referring,
   "qti-set-default-value": referring,
@@ -1030,11 +1170,25 @@ export const ownAttributes = {
       marked(R.DeclaredMathVariable, arm(R.TemplateDeclarationArm, "mathVariable")),
     ],
   ],
+  "qti-template-default": [["template-identifier", arm(R.TemplateDefault, "templateIdentifier")]],
   "qti-template-inline": templating(R.TemplateInline, R.DeclaredTemplateInlineShowHide),
   "qti-template-inline.rubric": templating(
     R.RubricTemplateInline,
     R.DeclaredRubricTemplateInlineShowHide,
   ),
+  "qti-test-feedback": [
+    ["access", arm(R.TestFeedback, "access")],
+    identifierOf(R.TestFeedback),
+    ["outcome-identifier", arm(R.TestFeedback, "outcomeIdentifier")],
+    ["show-hide", arm(R.TestFeedback, "showHide")],
+    ["title", optional(R.TestFeedbackTitle)],
+  ],
+  "qti-test-part": [
+    identifierOf(R.TestPart),
+    ["navigation-mode", arm(R.TestPart, "navigationMode")],
+    ["submission-mode", arm(R.TestPart, "submissionMode")],
+    ["title", optional(R.TestPartTitle)],
+  ],
   "qti-test-variables": [
     ["variable-identifier", arm(R.TestVariables, "variableIdentifier")],
     ["base-type", optional(R.TestVariablesBaseType)],
@@ -1051,10 +1205,19 @@ export const ownAttributes = {
     ["format", optional(R.TextEntryFormat)],
     ["data-patternmask-message", optional(R.TextEntryPatternmaskMessage)],
   ],
+  "qti-time-limits": [
+    ["min-time", optional(R.TimeLimitMin)],
+    ["max-time", optional(R.TimeLimitMax)],
+    [
+      "allow-late-submission",
+      marked(R.DeclaredAllowLateSubmission, arm(R.TimeLimits, "allowLateSubmission")),
+    ],
+  ],
   "qti-upload-interaction": [
     responseIdentifierOf(R.UploadInteraction),
     ["type", optional(R.UploadType)],
   ],
+  "qti-usagedata-ref": [identifierOf(R.UsageDataRef), ["href", arm(R.UsageDataRef, "href")]],
   "qti-value": [
     ["field-identifier", arm(R.RecordField, "fieldIdentifier")],
     ["base-type", recordValueBaseType],
@@ -1062,6 +1225,14 @@ export const ownAttributes = {
   "qti-variable": [
     ["identifier", referenced],
     ["weight-identifier", optional(R.VariableWeightIdentifier)],
+  ],
+  "qti-variable-mapping": [
+    ["source-identifier", arm(R.VariableMapping, "source")],
+    ["target-identifier", arm(R.VariableMapping, "target")],
+  ],
+  "qti-weight": [
+    ["identifier", arm(R.Weight, "identifier")],
+    ["value", arm(R.Weight, "value")],
   ],
   source: [
     ["src", sourceSrc],

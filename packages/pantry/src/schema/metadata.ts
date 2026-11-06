@@ -1572,6 +1572,10 @@ export const rules = [
     from: on(LomObjectIdentifier, "lom"),
     within: within(1n, 1n),
   }),
+  capacity(on(select(ResourceLomIdentified, { type: "imsqti_test_xmlv3p0" }), "lom"), {
+    from: on(LomObjectIdentifier, "lom"),
+    within: within(1n, 1n),
+  }),
   key(ResourceLomTitled, ["lom"]),
   contained(
     on(ResourceLomTitled, "lom", "package", "resource", "type"),
@@ -1599,6 +1603,10 @@ export const rules = [
     on(DocumentTitle, "package", "resource", "collapsed"),
   ),
   capacity(on(select(ResourceLomTitled, { type: "imsqti_item_xmlv3p0" }), "lom"), {
+    from: on(LomObjectTitle, "lom"),
+    within: within(1n, 1n),
+  }),
+  capacity(on(select(ResourceLomTitled, { type: "imsqti_test_xmlv3p0" }), "lom"), {
     from: on(LomObjectTitle, "lom"),
     within: within(1n, 1n),
   }),

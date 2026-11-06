@@ -182,7 +182,7 @@ const order = Effect.fn("import.order")(function* order(
       maxChoicesN: choices.maxN,
       minChoicesN: choices.minN,
       responseIdentifier: choices.responseIdentifier,
-      rootKind: "item",
+      rootKind: ctx.rootKind,
       shuffle: shuffleHandle,
     },
   ]);
@@ -246,7 +246,7 @@ const graphicOrder = Effect.fn("import.graphicOrder")(function* graphicOrder(
       maxChoicesN: choices.maxN,
       minChoicesN: choices.minN,
       responseIdentifier: choices.responseIdentifier,
-      rootKind: "item",
+      rootKind: ctx.rootKind,
     },
   ]);
   built = Rows.add(

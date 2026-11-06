@@ -3,12 +3,14 @@
  * `lom:lom`. The file a `resourcemetadata/xml` resource names is {@link recordFile}'s, in
  * `record.ts`.
  *
- * The record is a tree, so {@link treeRows} writes its nodes; the arm rows of its LOM and of the
- * curriculum standards sets it holds come from the builders the manifest module exports. The
- * record is outside the object identifier and title rows of an item resource.
+ * The record is a tree, so {@link treeRows} writes its nodes and `attributeRows` its shared
+ * attributes (`xml:lang` on a `lom:string` today); the arm rows of its LOM and of the curriculum
+ * standards sets it holds come from the builders the manifest module exports. The record is outside
+ * the object identifier and title rows of an item resource.
  */
 import type { AnyRelation, Fact, Uuid } from "@bjornpagen/grizzle";
 import { Effect } from "effect";
+import { attributeRows } from "#pantry/import/attributes.ts";
 import { csmSetRows, lomSubtreeRows } from "#pantry/import/manifest.ts";
 import { elementChildren, qmdLeafRows } from "#pantry/import/leaf.ts";
 import type { ImportRefused } from "#pantry/import/refusal.ts";
@@ -34,8 +36,9 @@ export interface ExternalInput {
 }
 
 /**
- * Write the rows of an external metadata record: its tree, its `Document` row, its record of LOM
- * and the rows of the QTI metadata and curriculum standards sets it holds.
+ * Write the rows of an external metadata record: its tree, its `Document` row, its record of LOM,
+ * the record's shared attributes (`attributeRows`) and the rows of the QTI metadata and curriculum
+ * standards sets it holds.
  *
  * The record has no identifier and no title row of the document, and none of the resource's own
  * `ResourceLomIdentified` and `ResourceLomTitled`.
@@ -44,7 +47,8 @@ export interface ExternalInput {
  * @param input - Where its package lists it.
  * @param rows - The rows so far.
  * @returns The rows with this record's added and the node index of its tree;
- *   `UnmodeledVocabulary` for any element or attribute the registries do not model.
+ *   `UnmodeledVocabulary` for any element or attribute the registries do not model; `ImportRefused`
+ *   under `attribute-lexical` for a closed shared-attribute value outside its roster.
  */
 export const externalRows = Effect.fn("import.externalRows")(function* externalRows(
   doc: XmlDocument,
@@ -65,8 +69,9 @@ export const externalRows = Effect.fn("import.externalRows")(function* externalR
     rows,
   );
   const { nodes } = tree;
-  const positions = new Map(Rows.of(tree.rows, Edge).map((edge) => [edge.child, edge.position]));
-  let built = Rows.add(tree.rows, Document, [
+  const attributed = yield* attributeRows(doc.root, nodes, documentId, tree.rows);
+  const positions = new Map(Rows.of(attributed, Edge).map((edge) => [edge.child, edge.position]));
+  let built = Rows.add(attributed, Document, [
     {
       id: documentId,
       package: input.package,

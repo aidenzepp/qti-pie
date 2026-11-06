@@ -29,7 +29,7 @@ import {
 import { Orientation, XsBoolean } from "#pantry/schema/content/rosters.ts";
 import { InteractionBinding } from "#pantry/schema/interaction.ts";
 import { Node, RootKind } from "#pantry/schema/node.ts";
-import { MediaRectCoords } from "#pantry/schema/contracts.ts";
+import { MediaRectCoords, SliderBound } from "#pantry/schema/contracts.ts";
 import * as patterns from "#pantry/schema/patterns.ts";
 
 /**
@@ -45,7 +45,6 @@ const ncName = str.regex(patterns.ncName);
 /**
  * An `xs:double` that is zero or greater.
  */
-const nonNegativeDouble = str.regex(patterns.nonNegativeDouble);
 
 /**
  * An `xs:double` that is greater than zero.
@@ -100,11 +99,11 @@ export const SliderInteraction = relation(
   "SliderInteraction",
   {
     id: uuid,
-    lowerBound: nonNegativeDouble,
+    lowerBound: SliderBound,
     responseIdentifier: ncName,
     rootKind: closedId(RootKind),
     stepLabel: closedId(XsBoolean),
-    upperBound: nonNegativeDouble,
+    upperBound: SliderBound,
   },
   ["id"],
 );

@@ -8,6 +8,7 @@
  */
 import {
   alternatives,
+  check,
   closedId,
   contained,
   key,
@@ -42,13 +43,14 @@ export const AssessmentItem = relation(
 );
 
 /**
- * The `label` of an item root, a replace-class string, at the schema version of its tree. It is
- * not a `NodeLabel` row: the root's label is an item-level value of its own.
+ * The `label` of an item or stimulus root, a replace-class string, at the schema version of its
+ * tree. It is not a `NodeLabel` row: the root's label is a root-level value of its own.
  */
 export const AssessmentItemLabel = relation(
   "AssessmentItemLabel",
   {
     node: uuid,
+    root: closedId(node.RootKind),
     tree: uuid,
     value: str.regex(patterns.xsNormalizedString, patterns.xsNormalizedStringFlags),
     version: closedId(node.SchemaVersion),
@@ -57,10 +59,15 @@ export const AssessmentItemLabel = relation(
 );
 
 /**
- * The `tool-name` and `tool-version` an item root declares, by which of the two it wrote: one row
- * per item tree, with the arm that holds the written values.
+ * The `tool-name` and `tool-version` a root declares, by which of the two it wrote: one row per
+ * tree, with the root kind (an item, a test or a stimulus) and the arm that holds the written
+ * values.
  */
-export const ItemTool = relation("ItemTool", { shape: closedId(ToolShape), tree: uuid }, ["tree"]);
+export const ItemTool = relation(
+  "ItemTool",
+  { root: closedId(node.RootKind), shape: closedId(ToolShape), tree: uuid },
+  ["tree"],
+);
 
 /**
  * An item root that wrote both `tool-name` and `tool-version`.
@@ -138,14 +145,22 @@ export const rules = [
     on(AssessmentItemLabel, "node", "tree", "version"),
     on(node.Node, "id", "tree", "version"),
   ),
-  contained(on(ItemTool, "tree"), on(AssessmentItem, "tree")),
+  contained(on(AssessmentItemLabel, "tree", "root"), on(node.Tree, "id", "root")),
+  contained(on(ItemTool, "tree", "root"), on(node.Tree, "id", "root")),
+  check("AssessmentItemLabelRoot", AssessmentItemLabel, (row) =>
+    row.or(row.eq(row.root, "item"), row.eq(row.root, "stimulus")),
+  ),
+  check("ItemToolRoot", ItemTool, (row) =>
+    row.or(row.eq(row.root, "item"), row.eq(row.root, "test"), row.eq(row.root, "stimulus")),
+  ),
+  contained(on(select(ItemTool, { root: "item" }), "tree"), on(AssessmentItem, "tree")),
   alternatives(ItemTool, "shape", ToolShape, {
     both: ItemToolBoth,
     nameOnly: ItemToolName,
     versionOnly: ItemToolVersion,
   }),
   contained(
-    on(select(AssessmentItemLabel, { version: "3.0.1" }), "tree"),
+    on(select(AssessmentItemLabel, { root: "item", version: "3.0.1" }), "tree"),
     on(ItemToolBoth, "tree"),
   ),
   contained(on(DeclaredAdaptive, "node"), on(AssessmentItem, "id")),

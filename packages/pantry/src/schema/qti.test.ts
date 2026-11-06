@@ -24,6 +24,7 @@ import { operatorArity, operatorArityMax } from "#pantry/schema/seed/operator-ar
 import { recordBindingFit } from "#pantry/schema/seed/record-binding-fit.ts";
 import { resourceTypes } from "#pantry/schema/seed/resource-types.ts";
 import { rootOfType } from "#pantry/schema/seed/root-of-type.ts";
+import * as testProcessing from "#pantry/schema/test/processing.ts";
 import { seedSqlProcessTestTimeoutMs } from "#pantry/test/settings.ts";
 
 /**
@@ -177,6 +178,13 @@ describe("qti", () => {
       AuthorApp.roles.author === undefined ? [] : Object.keys(AuthorApp.roles),
       ["author"],
     );
+  });
+
+  it("composes every statement of the test layer's processing rules", () => {
+    assert.isAbove(testProcessing.rules.length, 0);
+    for (const statement of testProcessing.rules) {
+      assert.isTrue(Qti.statements.includes(statement));
+    }
   });
 
   it("reports the relation and field counts", () => {

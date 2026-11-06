@@ -126,46 +126,49 @@ describe("metadata", () => {
     }
   });
 
-  it("holds the item capacities: one object identifier and one object title per item resource", () => {
-    const capacities = metadata.rules.flatMap((rule) => (rule.kind === "capacity" ? [rule] : []));
-    const selectedOn = (
-      target:
-        | typeof metadata.relations.ResourceLomIdentified
-        | typeof metadata.relations.ResourceLomTitled,
-      from:
-        | typeof metadata.relations.LomObjectIdentifier
-        | typeof metadata.relations.LomObjectTitle,
-    ) =>
-      capacities.filter((rule) => {
-        const source: unknown = rule.target.source;
+  it.each(["imsqti_item_xmlv3p0", "imsqti_test_xmlv3p0"])(
+    "holds the %s capacities: one object identifier and one object title per resource of the type",
+    (type) => {
+      const capacities = metadata.rules.flatMap((rule) => (rule.kind === "capacity" ? [rule] : []));
+      const selectedOn = (
+        target:
+          | typeof metadata.relations.ResourceLomIdentified
+          | typeof metadata.relations.ResourceLomTitled,
+        from:
+          | typeof metadata.relations.LomObjectIdentifier
+          | typeof metadata.relations.LomObjectTitle,
+      ) =>
+        capacities.filter((rule) => {
+          const source: unknown = rule.target.source;
 
-        const within: unknown = Predicate.hasProperty(rule, "desc") ? rule.desc : undefined;
+          const within: unknown = Predicate.hasProperty(rule, "desc") ? rule.desc : undefined;
 
-        return (
-          Predicate.hasProperty(source, "relation") &&
-          source.relation === target &&
-          Predicate.hasProperty(source, "bindings") &&
-          Predicate.hasProperty(source.bindings, "type") &&
-          source.bindings.type === "imsqti_item_xmlv3p0" &&
-          Object.keys(source.bindings).length === 1 &&
-          rule.from.source === from &&
-          Predicate.hasProperty(within, "within") &&
-          Predicate.hasProperty(within.within, "low") &&
-          within.within.low === 1n &&
-          Predicate.hasProperty(within.within, "high") &&
-          within.within.high === 1n
-        );
-      });
-    assert.strictEqual(
-      selectedOn(metadata.relations.ResourceLomIdentified, metadata.relations.LomObjectIdentifier)
-        .length,
-      1,
-    );
-    assert.strictEqual(
-      selectedOn(metadata.relations.ResourceLomTitled, metadata.relations.LomObjectTitle).length,
-      1,
-    );
-  });
+          return (
+            Predicate.hasProperty(source, "relation") &&
+            source.relation === target &&
+            Predicate.hasProperty(source, "bindings") &&
+            Predicate.hasProperty(source.bindings, "type") &&
+            source.bindings.type === type &&
+            Object.keys(source.bindings).length === 1 &&
+            rule.from.source === from &&
+            Predicate.hasProperty(within, "within") &&
+            Predicate.hasProperty(within.within, "low") &&
+            within.within.low === 1n &&
+            Predicate.hasProperty(within.within, "high") &&
+            within.within.high === 1n
+          );
+        });
+      assert.strictEqual(
+        selectedOn(metadata.relations.ResourceLomIdentified, metadata.relations.LomObjectIdentifier)
+          .length,
+        1,
+      );
+      assert.strictEqual(
+        selectedOn(metadata.relations.ResourceLomTitled, metadata.relations.LomObjectTitle).length,
+        1,
+      );
+    },
+  );
 
   it("gives every element of the spec's 3.5 metadata inventory a handle, a registry row and an arm", () => {
     const inventory = [
