@@ -8,23 +8,26 @@
  * responses that pass the item's checks, so a host can offer those and post any of them. Every
  * function is pure: time is the `now` the host passes, and nothing is kept between calls.
  *
- * This is a boundary module, not a browser module: it calls the submissions, which call `score`,
- * and `score` reads and writes the stored record through its Schema codec.
+ * This is a boundary module, not a browser module: it checks a step's responses with the value
+ * Schema, and it calls the submissions, which call `score`, and `score` reads and writes the stored
+ * record through its Schema codec.
  *
  * @module
  */
-import { Data, Option, Result } from "effect";
+import { Data, Option, Result, Schema } from "effect";
 import { encodeRecord } from "#plate/codec/record.ts";
 import type { InvalidRecord } from "#plate/codec/record.ts";
+import { ValueSchema } from "#plate/codec/values.ts";
 import type { Configuration } from "#plate/configuration.ts";
 import type { EngineFailure } from "#plate/engine/evaluate.ts";
+import type { Value } from "#plate/model/values.ts";
 import type { ValidationMessage } from "#plate/payload.ts";
-import { score } from "#plate/score.ts";
+import { fitting, score } from "#plate/score.ts";
 import type { InvalidResponses, RecordMismatch, ResponsesRefused } from "#plate/score.ts";
 import type { UnknownItemRef } from "#plate/session/control.ts";
 import { move, requestOf } from "#plate/session/navigate.ts";
 import type { MoveRefused, MoveRule, MoveStep } from "#plate/session/navigate.ts";
-import type { Intent, Step, TestSession } from "#plate/session/session.ts";
+import type { Intent, Responses, SessionItem, Step, TestSession } from "#plate/session/session.ts";
 import { ItemNotInSession, current } from "#plate/session/start.ts";
 import type { InvalidTime, TestNotDeliverable } from "#plate/session/start.ts";
 import { deliveredItem, endPart, submitItem, submitPart } from "#plate/session/submit.ts";
@@ -123,20 +126,47 @@ export class IntentRefused extends Data.TaggedError("IntentRefused")<{
 }
 
 /**
+ * The failure of {@link advance} for a step whose responses do not fit the current item: a response
+ * the item does not score, one that is not a value, or one of another base type or cardinality than
+ * its declaration. A host-caused error, returned through a `Result`.
+ *
+ * `response` is the first such response's identifier, `issue` what is wrong with it, and
+ * `sequenceIndex` the current item's. `decode` gives only responses that fit, so a host meets this
+ * when it builds or changes values itself. The step is refused before any transition records it,
+ * so the session keeps what it held, the item's saved responses included.
+ */
+export class StepResponseMisfit extends Data.TaggedError("StepResponseMisfit")<{
+  readonly issue: string;
+  readonly response: string;
+  readonly sequenceIndex: number;
+}> {
+  /**
+   * The response, what is wrong with it, and what to post instead.
+   */
+  override get message(): string {
+    const name = JSON.stringify(this.response);
+
+    return `The step's response ${name} does not fit item ${this.sequenceIndex}, so the step is refused and nothing it carried is saved: ${this.issue}. Post each response as decode gives it from the item's form, a value of its declaration's base type and cardinality, or leave ${name} out of the step.`;
+  }
+}
+
+/**
  * Why {@link advance} may fail.
  *
  * {@link IntentRefused} is the test's rules refusing the intent, a `submit-part` whose `score`
  * refuses an item's responses and a `next` in a linear, simultaneous part whose item's responses
  * `score` would refuse among them (`responses-invalid`, naming the item).
  *
- * `ResponsesRefused` is `score` refusing the responses `submit-item`, or a `next` that submits
- * first, processes on the current item; `InvalidResponses` is `score` refusing a response that does
- * not fit its declaration; and `EngineFailure` is an item's processing failing. The rest pass
- * through from the moves and the submissions for what a host passes that does not fit:
- * `InvalidTime` for an invalid `now`, `ItemNotInSession` and `UnknownItemRef` for a session that is
- * not the test's, `TestNotDeliverable` for items that lack the one an intent reaches or hold
- * another document's, and `InvalidRecord` and `RecordMismatch` for an item record `score` cannot
- * take.
+ * {@link StepResponseMisfit} is a step whose responses do not fit the current item's declarations,
+ * refused before anything is saved. `ResponsesRefused` is `score` refusing the responses
+ * `submit-item`, or a `next` that submits first, processes on the current item; `InvalidResponses`
+ * is `score` refusing a response an item held before the step that does not fit its declaration,
+ * which only a session the host changed holds; and `EngineFailure` is an item's processing
+ * failing. The rest pass through from the moves and the submissions for what a host passes that
+ * does not fit: `InvalidTime` for an invalid `now`, `ItemNotInSession` and `UnknownItemRef` for a
+ * session that is not the test's, `TestNotDeliverable` for items that lack the one an intent
+ * reaches or hold another document's, and `InvalidRecord` and `RecordMismatch` for an item record
+ * `score` cannot take.
  */
 export type AdvanceFailure =
   | EngineFailure
@@ -147,6 +177,7 @@ export type AdvanceFailure =
   | ItemNotInSession
   | RecordMismatch
   | ResponsesRefused
+  | StepResponseMisfit
   | TestNotDeliverable
   | UnknownItemRef;
 
@@ -358,23 +389,161 @@ const moved = (
   );
 
 /**
+ * Say what is wrong with one response a step carries, as the current item declares it.
+ *
+ * The response must be a value, as the value Schema checks one, then fit the item's declarations
+ * as `fitting` checks a record's responses: a response the item scores, of its declaration's base
+ * type and cardinality. `fitting` reads a whole record, so it is handed the current record with
+ * this response as its only response and no outcomes, and judges nothing else.
+ *
+ * @param accepted The current item.
+ * @param entry The current session item.
+ * @param identifier The response's identifier.
+ * @param value The value the step carries for it.
+ * @returns The issue, in words that name the response, or none when it fits.
+ */
+const responseMisfit = (
+  accepted: Accepted,
+  entry: SessionItem,
+  identifier: string,
+  value: Value,
+): Option.Option<string> =>
+  Result.match(Schema.encodeResult(ValueSchema)(value), {
+    onFailure: (error) =>
+      Option.some(
+        `its response ${JSON.stringify(identifier)} is not a value: ${error.message.replaceAll(/\s*\n\s*/gu, " ")}`,
+      ),
+    onSuccess: () =>
+      Option.map(
+        Result.getFailure(
+          fitting(accepted.item, {
+            ...entry.record,
+            outcomes: {},
+            responses: { [identifier]: value },
+          }),
+        ),
+        ({ issue }) => issue,
+      ),
+  });
+
+/**
+ * Check that the responses a step carries fit the current item's declarations, before any
+ * transition records them.
+ *
+ * A step that carries no responses, as one for a closed item does once {@link advance} has left
+ * them out, has nothing to check, and needs no item. Otherwise the current item is looked up among
+ * the items, as a submission looks it up.
+ *
+ * @param items The test's items, keyed by item ref identifier.
+ * @param session The session, whose current item takes the responses.
+ * @param step The step as it will be carried out.
+ * @returns The step; {@link StepResponseMisfit} for the first response that does not fit;
+ *   `ItemNotInSession` for a session whose position is past its items; `TestNotDeliverable` when
+ *   the items lack the current item or hold another document's.
+ */
+const fittingStep = (
+  items: ReadonlyMap<string, Accepted>,
+  session: TestSession,
+  step: Step,
+): Result.Result<Step, ItemNotInSession | StepResponseMisfit | TestNotDeliverable> =>
+  Result.gen(function* checkStep() {
+    const responses: Responses = step.responses ?? {};
+    const entries = Object.entries(responses);
+    if (entries.length === 0) {
+      return step;
+    }
+
+    const entry = yield* Result.fromOption(
+      Option.fromUndefinedOr(session.items[session.position]),
+      () =>
+        new ItemNotInSession({ count: session.items.length, sequenceIndex: session.position + 1 }),
+    );
+    const accepted = yield* deliveredItem(items, session, entry);
+    for (const [identifier, value] of entries) {
+      const issue = responseMisfit(accepted, entry, identifier, value);
+      if (Option.isSome(issue)) {
+        return yield* Result.fail(
+          new StepResponseMisfit({
+            issue: issue.value,
+            response: identifier,
+            sequenceIndex: entry.sequenceIndex,
+          }),
+        );
+      }
+    }
+
+    return step;
+  });
+
+/**
+ * Carry out a step's intent through the transition that owns it, which saves the step first.
+ *
+ * @param advancing What the call works with.
+ * @param session The session.
+ * @param step The step: its responses checked, or left out when the current item is closed.
+ * @param sequenceIndex The current item's sequence index, which an `end-part` refusal names.
+ * @returns The session after the intent, or an {@link AdvanceFailure}.
+ */
+const carriedOut = (
+  advancing: Advancing,
+  session: TestSession,
+  step: Step,
+  sequenceIndex: number,
+): Result.Result<TestSession, AdvanceFailure> => {
+  const { intent } = step;
+  const context = { now: advancing.now };
+  switch (intent.kind) {
+    case "go":
+    case "next":
+    case "previous": {
+      return moved(advancing, session, { ...step, intent });
+    }
+    case "submit-item": {
+      return submitted(advancing, session, step);
+    }
+    case "submit-part": {
+      return asIntent(intent, submitPart(advancing.test, advancing.items, session, step, context));
+    }
+    case "end-part": {
+      return advancing.linearIndividual
+        ? Result.fail(
+            new IntentRefused({
+              intent,
+              messages: [],
+              refusal: Option.none(),
+              rule: "linear-jump",
+              sequenceIndex: Option.some(sequenceIndex),
+            }),
+          )
+        : asIntent(intent, endPart(advancing.test, advancing.items, session, step, context));
+    }
+    default: {
+      return intent satisfies never;
+    }
+  }
+};
+
+/**
  * Carry out what one request asks of a test session: move, submit the current item or part, or end
  * the current part, after saving the responses it posts on the current item while that item is
  * open.
  *
  * Each intent goes to the transition that owns it, which saves the step first. When the current
- * item is closed (its view is `disabled`), the step goes on with its intent alone: the responses
- * it carries are ignored, nothing is refused for them, and the item keeps the values it closed
- * with, which `itemView` shows and `results` reports. So a host may post a closed item's form as
- * rendered, whose disabled controls post nothing, or pass whatever it decoded. In a linear part
- * with individual submission, `next` from an item with no processed attempt submits it first and
- * then moves, and `next` on the part's last item ends the part; `end-part` is not offered there
- * and is refused (`linear-jump`). In a linear part with simultaneous submission, `next` is refused
- * (`responses-invalid`) when `score` would refuse the responses of the item it leaves, which the
- * candidate cannot return to before `submit-part` processes it. A refused intent returns no
- * session, so nothing it carried is saved. `allowedIntents` lists exactly the intents this accepts
- * now, given responses that pass the item's `allow-skipping`, `validate-responses` and `score`'s
- * own checks.
+ * item is closed (its view is `disabled`), the step goes on with its intent alone: the responses it
+ * carries are ignored, nothing is refused for them, and the item keeps the values it closed with,
+ * which `itemView` shows and `results` reports. So a host may post a closed item's form as
+ * rendered, whose disabled controls post nothing, or pass whatever it decoded. On an open item,
+ * each response the step carries must first fit the item's declarations, as a value of a response
+ * the item scores, of its declaration's base type and cardinality; a step holding one that does not
+ * is refused with {@link StepResponseMisfit} before its intent is tried, and nothing is saved. In a
+ * linear part with individual submission, `next` from an item with no processed attempt submits it
+ * first and then moves, and `next` on the part's last item ends the part; `end-part` is not offered
+ * there and is refused (`linear-jump`). In a linear part with simultaneous submission, `next` is
+ * refused (`responses-invalid`) when `score` would refuse the responses of the item it leaves,
+ * which the candidate cannot return to before `submit-part` processes it. A refused intent returns
+ * no session, so nothing it carried is saved. `allowedIntents` lists exactly the intents this
+ * accepts now, given responses that pass the item's `allow-skipping`, `validate-responses` and
+ * `score`'s own checks.
  *
  * @example
  *   advance(test, items, session, { intent: { kind: "next" }, responses }, configuration, {
@@ -384,13 +553,15 @@ const moved = (
  * @param test The test the session was started from.
  * @param items The test's items, keyed by item ref identifier, as `startTest` took them.
  * @param session The session.
- * @param step The intent, and the responses posted with it, which are saved only on an open item.
+ * @param step The intent, and the responses posted with it, which are checked and saved only on an
+ *   open item.
  * @param configuration The host's configuration, whose locale a submission's messages take.
  * @param context The transition.
  * @param context.now When it happens.
- * @returns The session after the intent; {@link IntentRefused} when the test's rules forbid it now;
- *   another {@link AdvanceFailure} when `score` refuses the responses or the host's arguments do
- *   not fit.
+ * @returns The session after the intent; {@link StepResponseMisfit} when a response the step
+ *   carries does not fit the current item; {@link IntentRefused} when the test's rules forbid it
+ *   now; another {@link AdvanceFailure} when `score` refuses the responses or the host's arguments
+ *   do not fit.
  */
 export const advance = (
   test: AcceptedTest,
@@ -421,35 +592,10 @@ export const advance = (
         now: context.now,
         test,
       };
-      switch (intent.kind) {
-        case "go":
-        case "next":
-        case "previous": {
-          return moved(advancing, session, { ...carried, intent });
-        }
-        case "submit-item": {
-          return submitted(advancing, session, carried);
-        }
-        case "submit-part": {
-          return asIntent(intent, submitPart(test, items, session, carried, context));
-        }
-        case "end-part": {
-          return advancing.linearIndividual
-            ? Result.fail(
-                new IntentRefused({
-                  intent,
-                  messages: [],
-                  refusal: Option.none(),
-                  rule: "linear-jump",
-                  sequenceIndex: Option.some(shown.sequenceIndex),
-                }),
-              )
-            : asIntent(intent, endPart(test, items, session, carried, context));
-        }
-        default: {
-          return intent satisfies never;
-        }
-      }
+
+      return Result.flatMap(fittingStep(items, session, carried), (checked) =>
+        carriedOut(advancing, session, checked, shown.sequenceIndex),
+      );
     },
   );
 };

@@ -7,7 +7,8 @@
  * attempts and its effective attempt limit; `answeredStatus` from its values, its declarations
  * and `checkResponses`. Every value is written in the lexical form `#plate/results/values.ts`
  * fixes, and no `correctResponse` is written. A result names its item's or test's outcomes, so a
- * page that writes one holds the candidate's scores.
+ * page that writes one holds the candidate's scores. A test result resolves every item's session
+ * control in one walk of the test, so it takes time linear in the test's item refs.
  *
  * @module
  */
@@ -32,7 +33,8 @@ import { checkResponses } from "#plate/responses.ts";
 import { resultValue, resultValues } from "#plate/results/values.ts";
 import type { ResultSingle } from "#plate/results/values.ts";
 import { fitting, RecordMismatch } from "#plate/score.ts";
-import { itemConfiguration, sessionControl } from "#plate/session/control.ts";
+import { itemConfiguration, sessionControls } from "#plate/session/control.ts";
+import type { SessionControl } from "#plate/session/control.ts";
 import type { SessionItem, TestSession } from "#plate/session/session.ts";
 import type { Accepted, AcceptedTest } from "#plate/validate/verdict.ts";
 import type { AnsweredStatus, SessionStatus, TestMark } from "#plate/vocabulary.ts";
@@ -706,13 +708,19 @@ const choiceSequences = (
   );
 
 /**
- * Find the item a session item delivers, and check that its record is that item's and fits it.
+ * Find the item a session item delivers, and check that its record is that item's and that its
+ * record and its saved responses fit it.
+ *
+ * The values reported for a response are the saved ones over the record's, so both must be
+ * values the item declares, as `fitting` checks a record: a response the item scores, of its
+ * declaration's base type and cardinality.
  *
  * @param items The items the session was started with, by item ref identifier.
  * @param entry The session item.
  * @returns The item; {@link ResultItemMissing} when `items` has none for its ref;
  *   {@link RecordMismatch} when its record names another item or document; or
- *   {@link InvalidSession} when its record does not fit the item's declarations (`fitting`).
+ *   {@link InvalidSession} naming the session item when its record, then its saved responses, do
+ *   not fit the item's declarations (`fitting`).
  */
 const deliveredItem = (
   items: ReadonlyMap<string, Accepted>,
@@ -724,15 +732,28 @@ const deliveredItem = (
       () => new ResultItemMissing({ document: entry.record.document, ref: entry.ref }),
     );
     yield* belonging(document, entry.record);
-    yield* Result.mapError(
+
+    const place = `its item ${String(entry.sequenceIndex)}, of the item ref ${JSON.stringify(entry.ref)}`;
+    const record = yield* Result.mapError(
       fitting(document.item, entry.record),
       ({ issue }) =>
         new InvalidSession({
-          issue: `the record of its item ${String(entry.sequenceIndex)}, of the item ref ${JSON.stringify(entry.ref)}, does not fit the item: ${issue}`,
+          issue: `the record of ${place} does not fit the item: ${issue}`,
           stage: "decode",
           version: Option.some(storedVersion),
         }),
     );
+    if (Option.isSome(entry.saved)) {
+      yield* Result.mapError(
+        fitting(document.item, { ...record, responses: entry.saved.value }),
+        ({ issue }) =>
+          new InvalidSession({
+            issue: `the responses saved on ${place} do not fit the item: ${issue}`,
+            stage: "decode",
+            version: Option.some(storedVersion),
+          }),
+      );
+    }
 
     return document;
   });
@@ -748,6 +769,8 @@ const deliveredItem = (
  * instance `<session instance>.<sequenceIndex>`.
  *
  * @param test The test.
+ * @param controls The session control of each of the test's item refs, by identifier, as
+ *   `sessionControls` resolves them once for the whole result.
  * @param items The items the session was started with.
  * @param session The session.
  * @param entry The session item.
@@ -755,13 +778,14 @@ const deliveredItem = (
  */
 const sessionItemReport = (
   test: AcceptedTest,
+  controls: ReadonlyMap<string, SessionControl>,
   items: ReadonlyMap<string, Accepted>,
   session: TestSession,
   entry: SessionItem,
 ): Result.Result<ItemReport, InvalidSession | RecordMismatch | ResultItemMissing> =>
   Result.gen(function* reportItem() {
-    const control = yield* Result.mapError(
-      sessionControl(test.test, entry.ref),
+    const control = yield* Result.fromOption(
+      Option.fromUndefinedOr(controls.get(entry.ref)),
       () =>
         new InvalidSession({
           issue: `its item ${String(entry.sequenceIndex)} names the item ref ${JSON.stringify(entry.ref)}, which the test ${JSON.stringify(test.test.identifier)} does not hold`,
@@ -812,7 +836,9 @@ const sessionItemReport = (
  * The test result holds the built-in `duration`, from the session's start to its last change in
  * seconds, of base type duration (reading 29). The test's own outcomes are written at their
  * starting values only when it has no outcome processing, which M2 does not run, so no default
- * reads as a score. Then one item result per session item, in sequence order.
+ * reads as a score. Then one item result per session item, in sequence order. Every item ref's
+ * session control is resolved in one walk of the test (`sessionControls`), since resolving each
+ * item's alone walks the test up to its ref again, which grows with the square of the item count.
  *
  * @param input The test, its items, the stored session and the context.
  * @returns The document's text, or the failure of its context, its session or an item.
@@ -826,9 +852,12 @@ const testResults = (
   Result.gen(function* writeTest() {
     const context = yield* contextElement(input.context);
     const session = yield* timed(yield* decodeSession(input.session, input.test));
+    const controls = sessionControls(input.test.test);
     const reports: Element[] = [];
     for (const entry of session.items) {
-      reports.push(itemResult(yield* sessionItemReport(input.test, input.items, session, entry)));
+      reports.push(
+        itemResult(yield* sessionItemReport(input.test, controls, input.items, session, entry)),
+      );
     }
 
     const { test } = input.test;
@@ -871,7 +900,8 @@ const testResults = (
  * @returns The document's text; {@link InvalidResultContext} for a context or datestamp the
  *   Results XSD cannot hold; {@link InvalidRecord}, {@link InvalidSession} or
  *   {@link SessionMismatch} for a stored record or session this renderer did not write, or one of
- *   another test, a record that does not fit its item's declarations included;
+ *   another test, a record or a session item's saved responses that do not fit its item's
+ *   declarations included;
  *   {@link RecordMismatch} for a record of another item than the one it is reported for; or
  *   {@link ResultItemMissing} when the items lack a session item's item.
  */
