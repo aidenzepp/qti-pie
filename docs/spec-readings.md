@@ -1910,9 +1910,9 @@ against it. A reading that is not an information-model-over-XSD case says which 
      (sections 5.15.3 to 5.21.3), and the same of the deprecated `language` rows, which are `xml:lang` (sections 5.15.4
      to 5.21.4, and 7.30.3); of the item's and the stimulus's `language`, their `xml:lang`, "Natural language
      identifiers as defined by [BCP 47]" (sections 4.1.4 and 4.3.4); and of a track's `srclang` "The value must be a
-     valid ]BCP 47] language tag" (section 5.163.3). The XSD types `lang` and `srclang` as `xs:normalizedString`, which
-     admits any value, and `xml.xsd` types `xml:lang` as a union of `xs:language`, whose pattern is RFC 3066's (XML
-     Schema Part 2, section 3.3.3), and the empty string. Each is read as its stricter source states it:
+     valid ]BCP 47] [sic] language tag" (section 5.163.3). The XSD types `lang` and `srclang` as `xs:normalizedString`,
+     which admits any value, and `xml.xsd` types `xml:lang` as a union of `xs:language`, whose pattern is RFC 3066's
+     (XML Schema Part 2, section 3.3.3), and the empty string. Each is read as its stricter source states it:
      - `xml:lang`, on every element, the document layer's included, is a tag or empty (XML 1.0, section 2.12), its
        whitespace collapsed as `xs:language` collapses it. Under a `skip` wildcard, as MathML's are, no declaration
        types it, and XML 1.0's sentence, a rule of XML itself, still holds: the value as written is a tag or empty;
