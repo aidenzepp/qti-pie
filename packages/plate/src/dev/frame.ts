@@ -60,6 +60,37 @@ export const assetHeaders = {
 } as const satisfies Readonly<Record<string, string>>;
 
 /**
+ * The media types the playground serves an item's files with, by lower-case extension: `/assets/*`
+ * and a package's files route both serve by it, and refuse any other file.
+ *
+ * The list holds what an item body embeds: images, audio, video, text tracks, stylesheets and
+ * HTML package documents. XML is absent on purpose, because an item document holds its correct
+ * responses and mappings, which redaction keeps off the page.
+ */
+export const assetTypes: ReadonlyMap<string, string> = new Map([
+  [".avif", "image/avif"],
+  [".css", "text/css; charset=utf-8"],
+  [".gif", "image/gif"],
+  [".htm", "text/html; charset=utf-8"],
+  [".html", "text/html; charset=utf-8"],
+  [".jpeg", "image/jpeg"],
+  [".jpg", "image/jpeg"],
+  [".m4a", "audio/mp4"],
+  [".m4v", "video/mp4"],
+  [".mp3", "audio/mpeg"],
+  [".mp4", "video/mp4"],
+  [".oga", "audio/ogg"],
+  [".ogg", "audio/ogg"],
+  [".ogv", "video/ogg"],
+  [".png", "image/png"],
+  [".svg", "image/svg+xml"],
+  [".vtt", "text/vtt; charset=utf-8"],
+  [".wav", "audio/wav"],
+  [".webm", "video/webm"],
+  [".webp", "image/webp"],
+]);
+
+/**
  * What the theme box last stored: the accepted theme and the dark flag, `emptyTheme` and off at
  * start.
  */

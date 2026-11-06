@@ -22,12 +22,12 @@ import type { ValidationMessage } from "#plate/payload.ts";
 import { score } from "#plate/score.ts";
 import type { InvalidResponses, RecordMismatch, ResponsesRefused } from "#plate/score.ts";
 import type { UnknownItemRef } from "#plate/session/control.ts";
-import { move } from "#plate/session/navigate.ts";
+import { move, requestOf } from "#plate/session/navigate.ts";
 import type { MoveRefused, MoveRule, MoveStep } from "#plate/session/navigate.ts";
-import type { Intent, SessionItem, Step, TestSession } from "#plate/session/session.ts";
-import { ItemNotInSession, TestNotDeliverable, current } from "#plate/session/start.ts";
-import type { InvalidTime } from "#plate/session/start.ts";
-import { endPart, submitItem, submitPart } from "#plate/session/submit.ts";
+import type { Intent, Step, TestSession } from "#plate/session/session.ts";
+import { ItemNotInSession, current } from "#plate/session/start.ts";
+import type { InvalidTime, TestNotDeliverable } from "#plate/session/start.ts";
+import { deliveredItem, endPart, submitItem, submitPart } from "#plate/session/submit.ts";
 import type { SubmissionFailure, SubmissionRefused } from "#plate/session/submit.ts";
 import type { Accepted, AcceptedTest } from "#plate/validate/verdict.ts";
 
@@ -67,15 +67,6 @@ export type IntentRule =
   | "start-of-part"
   | "test-closed"
   | "wrong-submission-mode";
-
-/**
- * Name an intent as a candidate's request.
- *
- * @param intent The intent.
- * @returns Its kind, or for `go`, `go to item <n>`.
- */
-const requestOf = (intent: Intent): string =>
-  intent.kind === "go" ? `go to item ${intent.sequenceIndex}` : intent.kind;
 
 /**
  * The failure of {@link advance} for an intent the test's rules forbid now.
@@ -259,37 +250,6 @@ const submitted = (
       now: advancing.now,
     }),
   );
-
-/**
- * Find the accepted item the host passed for a session item, and check it is the item its record
- * belongs to, as the part's submission does.
- *
- * @param items The accepted items, keyed by item ref identifier.
- * @param session The session.
- * @param item The session item.
- * @returns The accepted item, or {@link TestNotDeliverable}: `item-missing` when the items have no
- *   entry for its ref, `item-mismatch` when its entry is the item of another document.
- */
-const deliveredItem = (
-  items: ReadonlyMap<string, Accepted>,
-  session: TestSession,
-  item: SessionItem,
-): Result.Result<Accepted, TestNotDeliverable> => {
-  const accepted = items.get(item.ref);
-  const expected = item.record.document;
-
-  return accepted !== undefined && accepted.document === expected
-    ? Result.succeed(accepted)
-    : Result.fail(
-        new TestNotDeliverable({
-          expected,
-          found: Option.map(Option.fromUndefinedOr(accepted), (entry) => entry.document),
-          reason: accepted === undefined ? "item-missing" : "item-mismatch",
-          ref: item.ref,
-          test: session.test,
-        }),
-      );
-};
 
 /**
  * Check the item a `next` left in a linear, simultaneous part the way `submit-part` will process

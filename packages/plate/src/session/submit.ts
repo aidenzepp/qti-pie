@@ -20,7 +20,8 @@ import type { InvalidRecord } from "#plate/codec/record.ts";
 import type { Configuration } from "#plate/configuration.ts";
 import type { EngineFailure } from "#plate/engine/evaluate.ts";
 import type { Item } from "#plate/model/item.ts";
-import type { SectionChild, Test, TestPart } from "#plate/model/test.ts";
+import { refIdentifiersIn } from "#plate/model/item-refs.ts";
+import type { Test, TestPart } from "#plate/model/test.ts";
 import { isNull, match } from "#plate/model/values.ts";
 import type { ValidationMessage } from "#plate/payload.ts";
 import { checkResponses } from "#plate/responses.ts";
@@ -34,6 +35,7 @@ import {
   itemView,
   present,
   recordStep,
+  withItem,
 } from "#plate/session/start.ts";
 import type { InvalidTime } from "#plate/session/start.ts";
 import type { Accepted, AcceptedTest } from "#plate/validate/verdict.ts";
@@ -163,18 +165,6 @@ export type PartEndFailure =
 export type SubmissionFailure = PartEndFailure | ScoreFailure;
 
 /**
- * List the item refs' identifiers among some section children, nested sections' included, in
- * document order.
- *
- * @param children The children.
- * @returns Their item refs' identifiers.
- */
-const refsOf = (children: readonly SectionChild[]): readonly string[] =>
-  children.flatMap((child) =>
-    child.kind === "item-ref" ? [child.identifier] : refsOf(child.children),
-  );
-
-/**
  * Find the test part that holds an item ref, with its index among the test's parts.
  *
  * @param test The test.
@@ -187,7 +177,7 @@ const partHolding = (
 ): Result.Result<{ readonly index: number; readonly part: TestPart }, UnknownItemRef> =>
   Result.fromOption(
     Arr.findFirst(test.parts, (part, index) =>
-      refsOf(part.children).includes(ref) ? Option.some({ index, part }) : Option.none(),
+      refIdentifiersIn(part.children).includes(ref) ? Option.some({ index, part }) : Option.none(),
     ),
     () => new UnknownItemRef({ ref, test: test.identifier }),
   );
@@ -243,7 +233,7 @@ const currentItem = (
  * @returns The accepted item, or {@link TestNotDeliverable}: `item-missing` when the items have no
  *   entry for its ref, `item-mismatch` when its entry is the item of another document.
  */
-const deliveredItem = (
+export const deliveredItem = (
   items: ReadonlyMap<string, Accepted>,
   session: TestSession,
   item: SessionItem,
@@ -318,17 +308,6 @@ const skipped = (item: Item, values: Responses): boolean => {
     })
   );
 };
-
-/**
- * Replace one item of a session.
- *
- * @param session The session.
- * @param index The item's index in `session.items`.
- * @param item The item to put there.
- * @returns The session's items with `item` at `index`.
- */
-const withItem = (session: TestSession, index: number, item: SessionItem): readonly SessionItem[] =>
-  session.items.map((existing, position) => (position === index ? item : existing));
 
 /**
  * Process one attempt of a session item: run `score` over its record, encoded to the form `score`
@@ -411,7 +390,7 @@ const partEnded = (
 ): Result.Result<TestSession, PartEndFailure> => {
   const next = Arr.findFirst(test.parts, (part, index) =>
     index > ending
-      ? Option.map(Arr.head(refsOf(part.children)), (ref) => ({ index, ref }))
+      ? Option.map(Arr.head(refIdentifiersIn(part.children)), (ref) => ({ index, ref }))
       : Option.none(),
   );
   const reached = Option.match(next, {
@@ -567,7 +546,7 @@ export const submitPart = (
       );
     }
 
-    const members = new Set(refsOf(part.children));
+    const members = new Set(refIdentifiersIn(part.children));
     const after = yield* Result.all(
       saved.items.map((entry) =>
         members.has(entry.ref) && entry.presented

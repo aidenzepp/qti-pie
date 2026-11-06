@@ -49,7 +49,7 @@ export interface ValidationMessage {
 }
 
 /**
- * The state a render shows an item in, which its Root's `data-mode` names (spec §4.4).
+ * The state a render shows an item in, which its Root's `data-mode` names.
  *
  * `answering` lets the candidate change each response. `review` and `solution` show the values the
  * author passes and let the candidate change none: `review` shows a recorded attempt, and
@@ -242,7 +242,7 @@ export interface UnnamedPosition {
 }
 
 /**
- * How a text control is named (§4.8, Q10).
+ * How a text control is named.
  *
  * `ariaLabel` is the author's, as written. `ariaLabelledby` holds the ids of the author's that an
  * element of the item carries, unscoped ({@link resolvedLabelledby}), none when none is carried.
@@ -350,7 +350,7 @@ export type PayloadNode = ElementPayload | InteractionPayload | NoticePayload | 
  *
  * `lang` is the item's `xml:lang`, else the view's locale. `finished` is the view's: the author
  * disabled every control. `mode` is the view's, the state the Root's and each interaction Root's
- * `data-mode` name (spec §4.4). `notices` names the unsupported features the body shows as
+ * `data-mode` name. `notices` names the unsupported features the body shows as
  * notices.
  */
 export interface Payload {

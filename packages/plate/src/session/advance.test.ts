@@ -15,7 +15,7 @@ import { acceptedItem } from "#plate/validate/verdict.ts";
 import type { Accepted, AcceptedTest } from "#plate/validate/verdict.ts";
 
 /**
- * The rules spec §4.1 lists for `IntentRefused`, and no other.
+ * The rules an `IntentRefused` may carry, and no other.
  */
 const listedRules: readonly IntentRule[] = [
   "attempts-exhausted",
@@ -311,8 +311,8 @@ const stepLimit = 4;
 /**
  * Walk every session a delivery reaches in at most {@link stepLimit} accepted steps, and at each,
  * post every candidate intent with {@link answer}: `advance` must accept exactly the intents
- * `allowedIntents` lists, and refuse every other one with an `IntentRefused` whose rule spec §4.1
- * lists.
+ * `allowedIntents` lists, and refuse every other one with an `IntentRefused` whose rule
+ * {@link listedRules} holds.
  *
  * @param given The test and its items.
  * @param configuration The host's configuration.

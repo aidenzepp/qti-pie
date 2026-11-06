@@ -1,5 +1,5 @@
 /**
- * The dev playground's read-only views of a test session (spec P4-26): an item in review at
+ * The dev playground's read-only views of a test session: an item in review at
  * `/sessions/<sid>/review/<n>`, an item with its correct responses at
  * `/sessions/<sid>/solution/<n>`, the session's Results Reporting document at
  * `/sessions/<sid>/results.xml`, and the closed test's summary page, which links them.
@@ -22,18 +22,18 @@
  * @module
  */
 import { Effect, Option, Result } from "effect";
-import { decodeSession } from "#plate/codec/session.ts";
 import type { Configuration } from "#plate/configuration.ts";
 import { page, slot } from "#plate/dev/frame.ts";
 import type { Page } from "#plate/dev/frame.ts";
-import { packageAssetBase, packageIds } from "#plate/dev/packages.ts";
-import type { PackageCache, PackageEntry, PackagesFailure } from "#plate/dev/packages.ts";
-import type { SessionEntry, SessionStore } from "#plate/dev/store.ts";
+import { packageAssetBase } from "#plate/dev/packages.ts";
+import type { PackageCache, PackagesFailure } from "#plate/dev/packages.ts";
+import { failurePage, notePage, sessionHref, sittingOf } from "#plate/dev/sitting.ts";
+import type { Sitting } from "#plate/dev/sitting.ts";
+import type { SessionStore } from "#plate/dev/store.ts";
 import { h, text } from "#plate/emit/node.ts";
 import type { Element, Node } from "#plate/emit/node.ts";
 import { message, numeral } from "#plate/messages.ts";
 import { isNull } from "#plate/model/values.ts";
-import type { PackageTest } from "#plate/package/open.ts";
 import { redact, render, renderStatus } from "#plate/render.ts";
 import { results } from "#plate/results/results.ts";
 import type { TestSession } from "#plate/session/session.ts";
@@ -65,18 +65,6 @@ type ShownMode = "review" | "solution";
 type Target =
   | { readonly id: string; readonly kind: "item"; readonly mode: ShownMode; readonly n: string }
   | { readonly id: string; readonly kind: "results" };
-
-/**
- * One stored session with everything its pages read: its id, its package, its test with the items
- * it was started with, and the session decoded against that test.
- */
-interface Sitting {
-  readonly entry: SessionEntry;
-  readonly id: string;
-  readonly package: PackageEntry;
-  readonly session: TestSession;
-  readonly test: PackageTest;
-}
 
 /**
  * The headers of the results document: an XML download that no cache keeps and no browser sniffs
@@ -127,34 +115,6 @@ const targetOf = (pathname: string): Option.Option<Target> => {
 export const reviewPath = (pathname: string): boolean => Option.isSome(targetOf(pathname));
 
 /**
- * Give the path of a session's page, its id percent-encoded as one segment.
- *
- * @param id The session id.
- * @returns `/sessions/<sid>`.
- */
-const sessionHref = (id: string): string => `/sessions/${encodeURIComponent(id)}`;
-
-/**
- * The link at the end of every page that says one thing.
- */
-const home: Element = h("p", {}, [
-  h("a", { href: "/packages" }, [text("All packages")]),
-  text(" · "),
-  h("a", { href: "/" }, [text("All documents")]),
-]);
-
-/**
- * Construct a page that says one thing: a 404, a refused method or a developer error.
- *
- * @param status The status code.
- * @param title The page's title and heading.
- * @param said What the page says, a developer error's message included.
- * @returns The page.
- */
-const notePage = (status: number, title: string, said: string): Page =>
-  page(status, "en", title, [h("h1", {}, [text(title)]), h("p", {}, [text(said)]), home]);
-
-/**
  * Construct the 404 page every refused review path answers with: an unknown session, an item the
  * session lacks, and an item its session control does not show in the asked mode.
  *
@@ -162,102 +122,6 @@ const notePage = (status: number, title: string, said: string): Page =>
  */
 const notFound = (): Page =>
   notePage(404, "Not found", "No session, or no view of its item, is at this address.");
-
-/**
- * Construct the page of a developer error: a failure the playground's own code or state caused,
- * reported with its message.
- *
- * @param error The failure.
- * @returns The 500 page.
- */
-const failurePage = (error: { readonly message: string }): Page =>
-  notePage(500, "Playground error", error.message);
-
-/**
- * Find the package at a location among the playground's packages, opening only the package whose
- * id that location gives.
- *
- * A package's id is its directory's name without `.zip.d`, or its whole location when another
- * package shares that name ({@link packageIds}), so the package is one of the two ids tried, and
- * the one whose location matches.
- *
- * @param packages The packages.
- * @param location The package's location, as `openPackage` names it.
- * @returns The package, or none when no package is at the location.
- */
-const packageAt = Effect.fnUntraced(function* packageAt(
-  packages: PackageCache,
-  location: string,
-): Effect.fn.Return<Option.Option<PackageEntry>, PackagesFailure> {
-  for (const id of new Set([...packageIds([location]), location])) {
-    const found = yield* packages.packageOf(id);
-    if (Option.isSome(found) && found.value.location === location) {
-      return found;
-    }
-  }
-
-  return Option.none();
-});
-
-/**
- * Read a stored session with its package and test: the entry the store holds under the id, the
- * package at its location, the test at its href in that package, and the session decoded against
- * that test.
- *
- * An id the store does not hold is a 404. A package, test or session that does not fit the entry
- * is the playground's own fault, a developer error.
- *
- * @param playground The playground.
- * @param encoded The session id, as the request wrote it.
- * @returns The sitting, or the page that answers instead.
- */
-const sittingOf = Effect.fn("playground.review.sitting")(function* sittingOf(
-  playground: ReviewPlayground,
-  encoded: string,
-): Effect.fn.Return<Result.Result<Sitting, Page>, PackagesFailure> {
-  const decoded = Result.try(() => decodeURIComponent(encoded));
-  const held = Result.isSuccess(decoded) ? playground.sessions.get(decoded.success) : Option.none();
-  if (Result.isFailure(decoded) || Option.isNone(held)) {
-    return Result.fail(notFound());
-  }
-
-  const id = decoded.success;
-  const entry = held.value;
-  const found = yield* packageAt(playground.packages, entry.packageLocation);
-  if (Option.isNone(found)) {
-    return Result.fail(
-      failurePage({
-        message: `Session ${id} names the package at ${entry.packageLocation}, which is not among the playground's packages. Start the session again from its package's page.`,
-      }),
-    );
-  }
-
-  const { verdict } = found.value;
-  const test =
-    verdict.verdict === "accepted" || verdict.verdict === "accepted-with-unsupported"
-      ? Option.fromUndefinedOr(
-          verdict.accepted.tests.get(`${entry.packageLocation}/${entry.testHref}`),
-        )
-      : Option.none();
-  if (Option.isNone(test)) {
-    return Result.fail(
-      failurePage({
-        message: `Session ${id} names the test ${entry.testHref}, which the package at ${entry.packageLocation} does not hold as an accepted test (the package is ${verdict.verdict}). Start the session again from its package's page.`,
-      }),
-    );
-  }
-
-  return Result.mapBoth(decodeSession(entry.session, test.value.test), {
-    onFailure: failurePage,
-    onSuccess: (session): Sitting => ({
-      entry,
-      id,
-      package: found.value,
-      session,
-      test: test.value,
-    }),
-  });
-});
 
 /**
  * Give the title a page of a session's item carries: `{state}: Item n of N, {test title}`.
@@ -432,7 +296,8 @@ export const routeReview = (
 
   const asked = target.value;
 
-  return sittingOf(playground, asked.id).pipe(
+  return sittingOf(playground, asked.id, notFound()).pipe(
+    Effect.withSpan("playground.review.sitting"),
     Effect.map((sitting) =>
       Result.match(sitting, {
         onFailure: (answered): Page | Response => answered,

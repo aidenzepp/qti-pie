@@ -2,11 +2,11 @@
  * Choice (Q-2), the discovery interaction: its parts, its connect function and its response
  * validation, the module shape Text Entry and Extended Text copy.
  *
- * {@link renderChoice} emits the structure of spec §4.3: a native `fieldset` Root, the Prompt, and a
+ * {@link renderChoice} emits this structure: a native `fieldset` Root, the Prompt, and a
  * `ul` of Choices, each `li > [Control, Label > [Indicator, …choice content]]`. The connect
  * function computes every attribute of every part once, and `applyPart` places each one, through
  * the embedder's replacement when there is one (ruling `fb4fe744` S1, S2). The Controls are native
- * radios or checkboxes, so the browser's own keyboard map applies (§4.8): the radios form one
+ * radios or checkboxes, so the browser's own keyboard map applies: the radios form one
  * native group by their shared `name`. The Prompt and each choice's content go through the body's
  * {@link emitNodes}, so they get the body's id scoping, heading shift, URLs and Notices.
  *
@@ -200,7 +200,7 @@ const connect = (
  * Write every `label` element in a node of a choice's emitted content, at any depth, as a `span`
  * with the same children and the same attributes, `for` dropped.
  *
- * Spec §4.3: a `label` never nests a `label`. The XSD admits `label` in `qti-simple-choice`, and a
+ * A `label` never nests a `label`. The XSD admits `label` in `qti-simple-choice`, and a
  * choice's content sits inside its Label part, a `label` by default, which already labels the
  * choice's Control; so an authored `label` there is written as a `span`, and loses `for`, which is
  * not an attribute of `span`. A subtree that holds no `label` is kept by identity.
@@ -230,7 +230,7 @@ const labelAsSpan = (node: Node): Node => {
 };
 
 /**
- * Render a Choice as spec §4.3 structures it: a `fieldset` Root holding the Prompt, when there is
+ * Render a Choice: a `fieldset` Root holding the Prompt, when there is
  * one, then a `ul` of Choices, each `li > [Control, Label > [Indicator, …choice content]]`.
  *
  * The Prompt's markup is picked from its emitted content (rule `efed9867`): a Prompt of phrasing

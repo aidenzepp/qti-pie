@@ -2,11 +2,11 @@
  * Text Entry (Q-20): its parts, its connect function and its response validation, on the module
  * shape of Choice.
  *
- * {@link renderTextEntry} emits the structure of spec §4.3: a `qti-text-entry-interaction` Root, a
+ * {@link renderTextEntry} emits this structure: a `qti-text-entry-interaction` Root, a
  * phrasing container that stands inside the author's sentence, holding one native text `input`, the
  * Control. The connect function computes every attribute of both parts once, and `applyPart` places
  * each one, through the embedder's replacement when there is one (ruling `fb4fe744` S1, S2). The
- * Control is a native text input, so the browser's own keyboard map applies (§4.8), and Enter
+ * Control is a native text input, so the browser's own keyboard map applies, and Enter
  * submits the author's form by implicit submission. In review and solution the Control is
  * `readonly`, so it shows its value, stays a tab stop and posts that value with the form, but takes
  * no input; it is `disabled` only when the author finished the item.
@@ -144,7 +144,7 @@ const connect = (interaction: TextEntryPayload, payload: Payload, locale: Locale
 });
 
 /**
- * Render a Text Entry as spec §4.3 structures it: a `qti-text-entry-interaction` Root holding one
+ * Render a Text Entry: a `qti-text-entry-interaction` Root holding one
  * text `input` Control.
  *
  * Each part goes through `applyPart` with its replacement from `state.parts`, so every swap holds

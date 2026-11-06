@@ -1,5 +1,5 @@
 /**
- * The dev playground's test sessions (spec P4-25): a package page's Start button posts to
+ * The dev playground's test sessions: a package page's Start button posts to
  * `/packages/<id>/tests`, which starts a session of that test and stores it, and each session has
  * one page, `/sessions/<sid>`, which shows the current item in the playground's own form and takes
  * the form's posts.
@@ -24,7 +24,7 @@
  * One URL per session: the browser's Back re-requests it and shows the item the stored session
  * makes current, so only the test's own Previous moves back. Every page carries the frame's
  * headers, which say `no-store`, and the form carries `autocomplete="off"`, so a browser restores
- * no Choice control's checked state over what the store holds (spec §4.7).
+ * no Choice control's checked state over what the store holds.
  *
  * The route returns the frame's {@link Page} for every HTML answer, so the playground's handler
  * writes it with the stylesheets, the theme box and the page headers, and a `Response` only for a
@@ -35,30 +35,30 @@
  * @module
  */
 import { DateTime, Effect, Option, Result } from "effect";
-import { decodeSession, encodeSession } from "#plate/codec/session.ts";
+import { encodeSession } from "#plate/codec/session.ts";
 import type { InvalidSession } from "#plate/codec/session.ts";
 import type { Configuration } from "#plate/configuration.ts";
 import { page, pageHeaders, slot } from "#plate/dev/frame.ts";
 import type { Page } from "#plate/dev/frame.ts";
-import { packageAssetBase, packageIds, testField } from "#plate/dev/packages.ts";
-import type { PackageCache, PackageEntry, PackagesFailure } from "#plate/dev/packages.ts";
+import { packageAssetBase, testField, testIn } from "#plate/dev/packages.ts";
+import type { PackageCache, PackagesFailure } from "#plate/dev/packages.ts";
+import { entriesOf, postOf, valuesOf } from "#plate/dev/post.ts";
+import type { Post } from "#plate/dev/post.ts";
+import { failurePage, home, notePage, sessionHref, sittingOf } from "#plate/dev/sitting.ts";
+import type { Sitting } from "#plate/dev/sitting.ts";
 import { summaryPage } from "#plate/dev/review-page.ts";
 import { newSessionId } from "#plate/dev/store.ts";
-import type { SessionEntry, SessionStore } from "#plate/dev/store.ts";
+import type { SessionStore } from "#plate/dev/store.ts";
 import type { StatusInput } from "#plate/emit/item.ts";
 import { h, text, when } from "#plate/emit/node.ts";
 import type { Attributes, Element, Node } from "#plate/emit/node.ts";
 import { scopedId } from "#plate/emit/parts.ts";
 import type { PartOf, PartOverrides } from "#plate/emit/parts.ts";
-import { decode, entryName, isPosted, Malformed, partition } from "#plate/form/encoding.ts";
-import type { Binding, DecodeOptions, Entry } from "#plate/form/encoding.ts";
+import type { Entry } from "#plate/form/encoding.ts";
 import { decodeIntent, encodeIntent, intentName } from "#plate/form/intent.ts";
 import { message, numeral } from "#plate/messages.ts";
-import { interactionsIn } from "#plate/model/interactions.ts";
-import type { Value } from "#plate/model/values.ts";
 import { navigationState, renderNavigation } from "#plate/navigation.ts";
 import type { NavigationState } from "#plate/navigation.ts";
-import type { PackageTest } from "#plate/package/open.ts";
 import type { ValidationMessage } from "#plate/payload.ts";
 import { redact, render, renderStatus } from "#plate/render.ts";
 import type { Options } from "#plate/render.ts";
@@ -67,7 +67,7 @@ import { advance } from "#plate/session/advance.ts";
 import type { AdvanceFailure, IntentRefused } from "#plate/session/advance.ts";
 import type { UnknownItemRef } from "#plate/session/control.ts";
 import { allowedIntents } from "#plate/session/intents.ts";
-import type { Intent, Responses, Step, TestSession } from "#plate/session/session.ts";
+import type { Intent, Step } from "#plate/session/session.ts";
 import { current, startTest } from "#plate/session/start.ts";
 import type { ItemNotInSession, ItemView } from "#plate/session/start.ts";
 import type { Accepted } from "#plate/validate/verdict.ts";
@@ -96,18 +96,6 @@ type Target =
   | { readonly id: string; readonly kind: "start" };
 
 /**
- * One stored session with everything its page reads: its id, its store entry, its package, its
- * test with the items it was started with, and the session decoded against that test.
- */
-interface Sitting {
-  readonly entry: SessionEntry;
-  readonly id: string;
-  readonly package: PackageEntry;
-  readonly session: TestSession;
-  readonly test: PackageTest;
-}
-
-/**
  * What one session page shows of its item besides the item: the state its title names, the Status
  * part's input when the page answers a refused post or follows a part's end, and `render`'s view
  * options.
@@ -123,26 +111,6 @@ interface Shown {
  * confirm page, and only the confirm page's Confirm carries it out.
  */
 type PartIntent = Extract<Intent, { readonly kind: "end-part" | "submit-part" }>;
-
-/**
- * How one response travels through the session form: its identifier, its binding under the item
- * instance's entry name, and the number base its Controls post in.
- */
-interface Posting {
-  readonly binding: Binding;
-  readonly options: DecodeOptions;
-  readonly response: string;
-}
-
-/**
- * What one post carries for the current item: each posted response decoded, the strings posted
- * for each, and the responses whose entries do not decode.
- */
-interface Post {
-  readonly decoded: Readonly<Record<string, Malformed | Value>>;
-  readonly malformed: ReadonlySet<string>;
-  readonly posted: Readonly<Record<string, readonly string[]>>;
-}
 
 /**
  * The navigation parts that are buttons: each is swapped for the playground's submit button.
@@ -215,14 +183,6 @@ const targetOf = (pathname: string): Option.Option<Target> => {
 export const sessionPath = (pathname: string): boolean => Option.isSome(targetOf(pathname));
 
 /**
- * Give the path of a session's page, its id percent-encoded as one segment.
- *
- * @param id The session id.
- * @returns `/sessions/<sid>`.
- */
-const sessionHref = (id: string): string => `/sessions/${encodeURIComponent(id)}`;
-
-/**
  * Give the path of a session's confirm page.
  *
  * @param id The session id.
@@ -249,42 +209,12 @@ const seeOther = (location: string): Response =>
 const seeSession = (id: string): Response => seeOther(sessionHref(id));
 
 /**
- * The links at the end of every session page.
- */
-const home: Element = h("p", {}, [
-  h("a", { href: "/packages" }, [text("All packages")]),
-  text(" · "),
-  h("a", { href: "/" }, [text("All documents")]),
-]);
-
-/**
- * Construct a page that says one thing: a 404, a refused method or post, or a developer error.
- *
- * @param status The status code.
- * @param title The page's title and heading.
- * @param said What the page says, a developer error's message included.
- * @returns The page.
- */
-const notePage = (status: number, title: string, said: string): Page =>
-  page(status, "en", title, [h("h1", {}, [text(title)]), h("p", {}, [text(said)]), home]);
-
-/**
  * Construct the 404 page every refused session path answers with.
  *
  * @returns The 404 page.
  */
 const notFound = (): Page =>
   notePage(404, "Not found", "No package test, or no session, is at this address.");
-
-/**
- * Construct the page of a developer error: a failure the playground's own code or state caused,
- * reported with its message.
- *
- * @param error The failure.
- * @returns The 500 page.
- */
-const failurePage = (error: { readonly message: string }): Page =>
-  notePage(500, "Playground error", error.message);
 
 /**
  * Construct the page a post whose body is not a form answers with.
@@ -308,25 +238,6 @@ const noIntent = (instance: string): Page =>
   );
 
 /**
- * Read a post's body as form entries.
- *
- * @param request The post.
- * @returns The entries in posted order, or none when the body is not a form.
- */
-const entriesOf = Effect.fnUntraced(function* entriesOf(
-  request: Request,
-): Effect.fn.Return<Option.Option<readonly Entry[]>> {
-  const form = yield* Effect.result(
-    // oxlint-disable-next-line typescript/no-deprecated -- The deprecation warns against parsing an untrusted server's multipart response; this is a post to the playground's own form, read on 127.0.0.1, and scripts/serve.ts caps its body at 1 MiB before the handler sees it.
-    Effect.tryPromise(() => request.formData()),
-  );
-
-  return Result.isFailure(form)
-    ? Option.none()
-    : Option.some(Array.from(form.success, ([name, value]): Entry => [name, value]));
-});
-
-/**
  * Read the one text value posted under a name.
  *
  * @param entries The posted entries.
@@ -337,102 +248,6 @@ const fieldOf = (entries: readonly Entry[], name: string): Option.Option<string>
   Option.flatMap(Option.fromUndefinedOr(entries.find(([entry]) => entry === name)), ([, value]) =>
     value instanceof Blob ? Option.none() : Option.some(value),
   );
-
-/**
- * Find the package at a location among the playground's packages, opening only the package whose
- * id that location gives.
- *
- * A package's id is its directory's name without `.zip.d`, or its whole location when another
- * package shares that name ({@link packageIds}), so the package is one of the two ids tried, and
- * the one whose location matches.
- *
- * @param packages The packages.
- * @param location The package's location, as `openPackage` names it.
- * @returns The package, or none when no package is at the location.
- */
-const packageAt = Effect.fnUntraced(function* packageAt(
-  packages: PackageCache,
-  location: string,
-): Effect.fn.Return<Option.Option<PackageEntry>, PackagesFailure> {
-  for (const id of new Set([...packageIds([location]), location])) {
-    const found = yield* packages.packageOf(id);
-    if (Option.isSome(found) && found.value.location === location) {
-      return found;
-    }
-  }
-
-  return Option.none();
-});
-
-/**
- * Give the test at a path in a package.
- *
- * @param entry The package.
- * @param href The test's path from the package's root.
- * @returns The test with its items, or none when the package is not accepted or holds no test
- *   there.
- */
-const testIn = (entry: PackageEntry, href: string): Option.Option<PackageTest> => {
-  const { verdict } = entry;
-
-  return verdict.verdict === "accepted" || verdict.verdict === "accepted-with-unsupported"
-    ? Option.fromUndefinedOr(verdict.accepted.tests.get(`${entry.location}/${href}`))
-    : Option.none();
-};
-
-/**
- * Read a stored session with its package and test: the entry the store holds under the id, the
- * package at its location, the test at its href in that package, and the session decoded against
- * that test.
- *
- * An id the store does not hold is a 404. A package, test or session that does not fit the entry
- * is the playground's own fault, a developer error.
- *
- * @param playground The playground.
- * @param encoded The session id, as the request wrote it.
- * @returns The sitting, or the page that answers instead.
- */
-const sittingOf = Effect.fnUntraced(function* sittingOf(
-  playground: SessionPlayground,
-  encoded: string,
-): Effect.fn.Return<Result.Result<Sitting, Page>, PackagesFailure> {
-  const decoded = Result.try(() => decodeURIComponent(encoded));
-  const held = Result.isSuccess(decoded) ? playground.sessions.get(decoded.success) : Option.none();
-  if (Result.isFailure(decoded) || Option.isNone(held)) {
-    return Result.fail(notFound());
-  }
-
-  const id = decoded.success;
-  const entry = held.value;
-  const found = yield* packageAt(playground.packages, entry.packageLocation);
-  if (Option.isNone(found)) {
-    return Result.fail(
-      failurePage({
-        message: `Session ${id} names the package at ${entry.packageLocation}, which is not among the playground's packages. Start the session again from its package's page.`,
-      }),
-    );
-  }
-
-  const test = testIn(found.value, entry.testHref);
-  if (Option.isNone(test)) {
-    return Result.fail(
-      failurePage({
-        message: `Session ${id} names the test ${entry.testHref}, which the package at ${entry.packageLocation} does not hold as an accepted test (the package is ${found.value.verdict.verdict}). Start the session again from its package's page.`,
-      }),
-    );
-  }
-
-  return Result.mapBoth(decodeSession(entry.session, test.value.test), {
-    onFailure: failurePage,
-    onSuccess: (session): Sitting => ({
-      entry,
-      id,
-      package: found.value,
-      session,
-      test: test.value,
-    }),
-  });
-});
 
 /**
  * Give the accepted item a session item delivers.
@@ -447,9 +262,9 @@ const itemOf = (sitting: Sitting, ref: string): Result.Result<Accepted, { messag
   }));
 
 /**
- * Construct the playground's replacement for every navigation button: its own submit button,
- * named for the session's intent and posting the intent the button is handed (spec §4.10's
- * recipe). The swap keeps everything plate computed, `disabled` and `aria-current` included.
+ * Construct the playground's replacement for every navigation button: its own submit button, named
+ * for the session's intent and posting the intent the button is handed. The swap keeps everything
+ * plate computed, `disabled` and `aria-current` included.
  *
  * @param instance The session's instance, the store's id.
  * @returns The part overrides.
@@ -505,7 +320,7 @@ const saveButton = (state: NavigationState, view: ItemView, instance: string): E
 };
 
 /**
- * Give the title a session page carries: `{state}: Item n of N, {test title}` (spec §4.11).
+ * Give the title a session page carries: `{state}: Item n of N, {test title}`.
  *
  * @param view The current item, whose configuration gives the locale.
  * @param state The page's state.
@@ -600,100 +415,11 @@ const itemPage = (sitting: Sitting, view: ItemView, shown: Shown): Page => {
 };
 
 /**
- * Collect the postings of an item's interactions in document order, one per response: the
- * response's declared base type and cardinality under the entry name `render` gives its Controls
- * for the instance, and the number base a Text Entry or an Extended Text posts in, 10 for a
- * Choice.
- *
- * A response with no declaration, or of a base type no interaction posts, is left out, so the
- * post carries nothing for it and the item shows its record's value.
- *
- * @param document The accepted item.
- * @param instance The item instance.
- * @returns The postings.
- */
-const postingsOf = (document: Accepted, instance: string): readonly Posting[] => {
-  const seen = new Set<string>();
-
-  return interactionsIn(document.item.body).flatMap((interaction): readonly Posting[] => {
-    const { response } = interaction;
-    const declaration = document.item.responses.get(response);
-    if (seen.has(response) || declaration === undefined || !isPosted(declaration.baseType)) {
-      return [];
-    }
-
-    seen.add(response);
-
-    return [
-      {
-        binding: {
-          baseType: declaration.baseType,
-          cardinality: declaration.cardinality,
-          name: entryName(instance, response),
-        },
-        options: { base: interaction.kind === "choice" ? 10 : interaction.base },
-        response,
-      },
-    ];
-  });
-};
-
-/**
- * Read what a post carries for the current item: its own entries, partitioned by the item's
- * instance, each response decoded through the item's bindings, with the strings posted for it.
- *
- * @param document The accepted item.
- * @param instance The item instance.
- * @param entries The posted entries.
- * @returns The post.
- */
-const postOf = (document: Accepted, instance: string, entries: readonly Entry[]): Post => {
-  const { own } = partition(entries, instance);
-  const postings = postingsOf(document, instance);
-  const decoded = Object.fromEntries(
-    postings.map(({ binding, options, response }) => [
-      response,
-      Result.merge(decode(own, binding, options)),
-    ]),
-  );
-
-  return {
-    decoded,
-    malformed: new Set(
-      Object.entries(decoded).flatMap(([response, value]) =>
-        value instanceof Malformed ? [response] : [],
-      ),
-    ),
-    posted: Object.fromEntries(
-      postings.map(({ binding, response }) => [
-        response,
-        own.flatMap(([name, value]) =>
-          name !== binding.name || value instanceof Blob ? [] : [value],
-        ),
-      ]),
-    ),
-  };
-};
-
-/**
- * Give the values a post carries that decode.
- *
- * @param post The post.
- * @returns Each decoded value, by response.
- */
-const valuesOf = (post: Post): Responses =>
-  Object.fromEntries(
-    Object.entries(post.decoded).flatMap(([response, value]) =>
-      value instanceof Malformed ? [] : [[response, value] as const],
-    ),
-  );
-
-/**
  * Compose the page of a post refused for its responses: the Status part headed "Not accepted"
  * with the messages, first in reading order and without `autofocus`, and the item with the
  * strings posted, or its saved values when the refused post carried none, and its invalid
- * Controls, the first of which takes the page's one `autofocus` (spec §4.11, phase 3's
- * `refusedPage`).
+ * Controls, the first of which takes the page's one `autofocus`, as the item page's
+ * `refusedPage` does.
  *
  * @param sitting The session and its test.
  * @param view The current item.
@@ -750,7 +476,7 @@ const refusalText = (configuration: Configuration, refusal: IntentRefused): stri
  * Compose the page of an intent refused for a reason that concerns no single Control, such as
  * `skipping-not-allowed` or `end-of-part`: the item, with the values the post carried, and the
  * Status part headed "Not accepted" holding the refusal's message, with `autofocus`, the page's
- * one (spec §4.11).
+ * one.
  *
  * A refused intent changes nothing, so the post's values are not saved; they stay in the item's
  * Controls, so the next post carries them again. A closed item posts nothing, so it shows the
@@ -923,7 +649,7 @@ const startSession = Effect.fn("playground.session.start")(function* startSessio
  * After a confirmed part's end, the item, the next part's first, comes with the Status part
  * headed "Part submitted" with `autofocus`, the page's one: the form the browser posted named the
  * Status region of an item of the part that ended, which this page does not hold, so the region's
- * `autofocus` is what focuses it (spec §4.11).
+ * `autofocus` is what focuses it.
  *
  * @param playground The playground.
  * @param sitting The session and its test.
@@ -1380,7 +1106,7 @@ export const routeSessions = (
       : postSession(playground, request, found);
   };
 
-  return sittingOf(playground, id).pipe(
+  return sittingOf(playground, id, notFound()).pipe(
     Effect.flatMap((sitting) =>
       Result.match(sitting, {
         onFailure: (answered) => Effect.succeed<Page | Response>(answered),

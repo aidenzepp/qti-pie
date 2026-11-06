@@ -1,21 +1,20 @@
 /**
  * The session-page helpers (`#plate/test/session-page.ts`) in Chromium and WebKit, with JavaScript
- * off (spec §4.15), witnessed on the first page of the M2 fixture's test session.
+ * off, witnessed on the first page of the M2 fixture's test session.
  *
  * Expected values come from the code the playground runs: the HTML the session page answered,
  * whose parts are found through the part table and named by `nameOf`, and `encodeIntent`.
  */
 import { assert } from "@effect/vitest";
 import { Effect, Option } from "effect";
-import type { Element } from "#plate/emit/node.ts";
-import { partForSlot, rowFor } from "#plate/emit/parts.ts";
+import { rowFor } from "#plate/emit/parts.ts";
 import { encodeIntent } from "#plate/form/intent.ts";
 import { attribute, nameOf } from "#plate/test/accessibility.ts";
 import { Playground, eachEngine, withPage } from "#plate/test/browsers.ts";
 import { count, elementsOf, treeOf } from "#plate/test/playground-page.ts";
 import {
+  answeredNavigation,
   fixturePlaygroundLayer,
-  navigationButtonParts,
   navigationOf,
   positionOf,
   startFixtureSession,
@@ -28,43 +27,6 @@ import type { NavigationButton, NavigationButtonPart } from "#plate/test/session
  * one button per item: items 1 to 3 (P2, linear, holds items 4 and 5).
  */
 const partOne = [1, 2, 3] as const;
-
-/**
- * Find the navigation button part an element's `data-slot` marker names, through the part table.
- *
- * @param element The element.
- * @returns The part, or none when the element is no navigation button.
- */
-const buttonPartOf = (element: Element): Option.Option<NavigationButtonPart> =>
-  Option.flatMap(partForSlot(attribute(element, "data-slot") ?? ""), (named) =>
-    named.interaction === "test-navigation"
-      ? Option.fromUndefinedOr(navigationButtonParts.find((part) => part === named.part))
-      : Option.none(),
-  );
-
-/**
- * Read the navigation buttons of the HTML a session page answered, as {@link navigationOf} reads
- * them from the browser.
- *
- * @param tree The page's tree.
- * @returns Each button's part, `nameOf` name, `disabled`, `data-intent` and `aria-current`, in
- *   document order.
- */
-const answeredNavigation = (tree: Element): readonly NavigationButton[] =>
-  elementsOf([tree]).flatMap((element) =>
-    Option.match(buttonPartOf(element), {
-      onNone: () => [],
-      onSome: (part) => [
-        {
-          ariaCurrent: Option.fromUndefinedOr(attribute(element, "aria-current")),
-          dataIntent: Option.fromUndefinedOr(attribute(element, "data-intent")),
-          disabled: attribute(element, "disabled") !== undefined,
-          name: nameOf(element, tree),
-          part,
-        },
-      ],
-    }),
-  );
 
 /**
  * Find the one button of a navigation part.

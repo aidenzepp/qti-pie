@@ -398,36 +398,38 @@ const namedBy = (proofs: readonly ProofFile[]) =>
   proofs.map((proof) => [proof.file, proof.kind === "sweep" ? "sweep" : proof.documents]);
 
 describe("ledger/report.ts", () => {
-  it.effect("the decoder reads each test's file, full name and state, and nothing else", () =>
-    Effect.gen(function* decodeFixture() {
-      const results = yield* decodeReport(reportText, root);
+  it.effect(
+    "the decoder reads each test's file, full name, ancestor titles and state, and nothing else",
+    () =>
+      Effect.gen(function* decodeFixture() {
+        const results = yield* decodeReport(reportText, root);
 
-      assert.lengthOf(results, 13);
-      assert.deepStrictEqual(results[0], {
-        ancestorTitles: [],
-        file: "src/validate/open.test.ts",
-        fullName: "validate/open.ts [Q-2] a Choice item is accepted",
-        state: "passed",
-      });
-      assert.deepStrictEqual(
-        results.map((result) => result.state),
-        [
-          "passed",
-          "passed",
-          "passed",
-          "passed",
-          "failed",
-          "skipped",
-          "passed",
-          "passed",
-          "passed",
-          "passed",
-          "passed",
-          "passed",
-          "passed",
-        ],
-      );
-    }),
+        assert.lengthOf(results, 13);
+        assert.deepStrictEqual(results[0], {
+          ancestorTitles: [],
+          file: "src/validate/open.test.ts",
+          fullName: "validate/open.ts [Q-2] a Choice item is accepted",
+          state: "passed",
+        });
+        assert.deepStrictEqual(
+          results.map((result) => result.state),
+          [
+            "passed",
+            "passed",
+            "passed",
+            "passed",
+            "failed",
+            "skipped",
+            "passed",
+            "passed",
+            "passed",
+            "passed",
+            "passed",
+            "passed",
+            "passed",
+          ],
+        );
+      }),
   );
 
   it.effect("the decoder refuses a test file outside the package directory", () =>

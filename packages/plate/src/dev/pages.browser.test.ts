@@ -1,5 +1,5 @@
 /**
- * The walk's pages in Chromium and WebKit, with JavaScript off (spec §4.9 item 4): the listing at
+ * The walk's pages in Chromium and WebKit, with JavaScript off: the listing at
  * `/`, `CAT/test.xml`'s refusal, the hotspot item's notice, the theme box with `.dark`,
  * `/verdicts` and `/ledger`.
  *

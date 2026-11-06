@@ -3,9 +3,10 @@ import { Effect, Option, Result } from "effect";
 import type { Array as Arr } from "effect";
 import { readCorpusFile } from "#plate/document/corpus.ts";
 import { readSource } from "#plate/document/read.ts";
-import { manifestNamespace, readManifest } from "#plate/package/manifest.ts";
+import { readManifest } from "#plate/package/manifest.ts";
 import type { Manifest, ManifestResource } from "#plate/package/manifest.ts";
 import type { Refusal, RefusalRule } from "#plate/validate/refusal.ts";
+import { manifestNamespace } from "#plate/vocabulary.ts";
 
 /**
  * A manifest's reading: the manifest, or every refusal of it.
@@ -128,8 +129,8 @@ const resourceOf = (manifest: Manifest, identifier: string): ManifestResource =>
 };
 
 /**
- * The extracted corpus manifests spec §3.2's xmllint baseline names: the four xmllint fails
- * against the profile their version names, and two it validates.
+ * Six extracted corpus manifests whose xmllint result is known: four that xmllint fails against
+ * the profile their version names, and two it validates.
  */
 const baseline = {
   begGuide: "QTI3_BeginnersGuide_Examples/BegGuide_March2025.zip.d/imsmanifest.xml",

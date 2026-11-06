@@ -335,8 +335,8 @@ const pageHtml = (content: string, form: boolean): string =>
 
 /**
  * Check a page against the static accessibility rules, as every page state is checked: `checkTree`
- * finds nothing, the navigation swapped for submit buttons included (spec §4.11's focus order:
- * after the item's controls, Previous, the items, Next, Submit, End).
+ * finds nothing, the navigation swapped for submit buttons included (the focus order: after the
+ * item's controls, Previous, the items, Next, Submit, End).
  *
  * @param html The page's HTML.
  * @param state The page state, for the failure's message.

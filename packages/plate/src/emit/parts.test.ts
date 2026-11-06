@@ -35,7 +35,7 @@ import { render, renderStatus } from "#plate/render.ts";
 import { parseHtml } from "#plate/test/round-trip.ts";
 
 /**
- * The spec's part table (§4.3), one entry per row: interaction, part, `data-slot` marker and
+ * The part table, one entry per row: interaction, part, `data-slot` marker and
  * default element. The markers are the operator's ruling (rule `0e767b8d`): a Root carries its
  * component's name, and every other part `<component>-<part>` in kebab case.
  */
@@ -74,7 +74,7 @@ const specRows = [
 ] as const;
 
 /**
- * The navigation parts, in spec §4.10's order: the Root, the five buttons, the item list and its
+ * The navigation parts, in their order: the Root, the five buttons, the item list and its
  * items.
  */
 const navigationParts = [
@@ -562,7 +562,7 @@ const instance = "merged-0";
 
 /**
  * The attributes a part carries that its row's `merged` column leaves out: the `data-slot` marker
- * and the Root state of spec §4.4.
+ * and the Root state (`data-mode`, `data-disabled`).
  */
 const markerAndState: ReadonlySet<string> = new Set(["data-disabled", "data-mode", "data-slot"]);
 

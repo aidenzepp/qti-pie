@@ -89,7 +89,7 @@ const textInteractions = ["qti-text-entry-interaction", "qti-extended-text-inter
 const declarations = ["qti-response-declaration", "qti-outcome-declaration"] as const;
 
 /**
- * The response-processing elements of the engine (spec §4.12): the ten elements it evaluates and
+ * The response-processing elements of the engine: the ten elements it evaluates and
  * the three branches of `qti-response-condition`. `qti-equal` runs in its default `exact`
  * tolerance mode only; one in `absolute` or `relative` mode is a mark keyed
  * `tolerance-mode="<mode>"`.
@@ -175,7 +175,7 @@ export interface FeatureRule {
 }
 
 /**
- * The phase-1 "renders" set of spec §4.5, which the model builder, the verdict and the emitter
+ * The phase-1 "renders" set, which the model builder, the verdict and the emitter
  * read.
  */
 export interface Renders {
@@ -221,19 +221,7 @@ export interface Renders {
 }
 
 /**
- * The least value a count attribute reading 46 names may hold, -2^63, the low end of the signed
- * 64-bit range a `count-range` refusal names.
- */
-export const leastCount = -9_223_372_036_854_775_808n;
-
-/**
- * The greatest value a count attribute reading 46 names may hold, 2^63-1: such a count holds a
- * signed 64-bit value, read exactly, and a greater one is refused (operator ruling D, 2026-11-04).
- */
-export const greatestCount = 9_223_372_036_854_775_807n;
-
-/**
- * What phase 1 renders, reads, shows a notice for and marks, as data (spec §4.5).
+ * What phase 1 renders, reads, shows a notice for and marks, as data.
  *
  * The emitter and the model builder read the same lists, so an element is rendered exactly when
  * the verdict does not name it unsupported.
@@ -557,6 +545,13 @@ export type SubmissionMode = (typeof submissionModes)[number];
 export const cpVersions = ["3.0.0", "3.0.1"] as const;
 
 /**
+ * The namespace of a QTI 3.0 package's manifest, under both content packaging profiles. A root in
+ * any other namespace, such as the plain IMS CP namespace of a QTI 2 package, is
+ * `not-qti3-package`.
+ */
+export const manifestNamespace = "http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1";
+
+/**
  * A Content Packaging profile version a manifest may name.
  */
 export type CpVersion = (typeof cpVersions)[number];
@@ -658,13 +653,31 @@ export const sessionControlDefaults = {
 } as const;
 
 /**
+ * The views an outcome is reported to, the XSD's `ViewEnumDType`: an outcome declaration's `view`
+ * lists some of them, and the results report writes them back.
+ */
+export const outcomeViews = [
+  "author",
+  "candidate",
+  "proctor",
+  "scorer",
+  "testConstructor",
+  "tutor",
+] as const;
+
+/**
+ * One of {@link outcomeViews}.
+ */
+export type OutcomeView = (typeof outcomeViews)[number];
+
+/**
  * The item session statuses M2's engine gives an item, as Results Reporting's `sessionStatus`
  * spells them (`rr-bind.txt:4069-4079`): `initial` before its first attempt, `pendingSubmission`
  * while an attempt has started and its responses are unprocessed, and `final` once a submission
  * closes it.
  *
  * Results Reporting's other two, `pendingResponseProcessing` and `pendingExternalScoring`, are
- * outside the set: M2's engine gives neither (spec §4.5).
+ * outside the set: M2's engine gives neither.
  */
 export const sessionStatuses = ["initial", "pendingSubmission", "final"] as const;
 
@@ -686,7 +699,7 @@ export const answeredStatuses = ["notpresented", "presented", "attempted", "answ
 export type AnsweredStatus = (typeof answeredStatuses)[number];
 
 /**
- * The keys of the test features M2 accepts and does not deliver (spec §4.6): each is a mark on the
+ * The keys of the test features M2 accepts and does not deliver: each is a mark on the
  * verdict at its path, never a notice, and the delivered sequence ignores it.
  *
  * An element feature is keyed by its QTI name. `qti-adaptive-selection` is selection, which M3

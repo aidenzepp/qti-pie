@@ -1,8 +1,10 @@
 /**
  * The adapter from the shared XML reader to the renderer's source view.
  *
- * This is the only module that imports `@qti-pie/crust`: the reader's tree and errors stay here,
- * and everything after it walks a {@link SourceDocument} or holds a {@link Refusal}.
+ * This is the only module that imports `@qti-pie/crust/read.ts`: the reader's tree and errors stay
+ * here, and everything after it walks a {@link SourceDocument} or holds a {@link Refusal}.
+ * `write.ts` is its counterpart for the shared writer, and a module that builds a tree to write
+ * imports crust's tree types only.
  *
  * @module
  */

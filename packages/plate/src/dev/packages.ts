@@ -1,6 +1,6 @@
 /**
  * The dev playground's packages: the package listing at `/packages`, each package's page at
- * `/packages/<id>`, and its files at `/packages/<id>/files/<path>` (spec P4-24, §4.3).
+ * `/packages/<id>`, and its files at `/packages/<id>/files/<path>`.
  *
  * The packages are every `*.zip.d` directory under the corpus root, the zips of the example corpus
  * as phase 1's extraction unpacked them, then the repository's M2 fixture package, `fixtures/m2/`.
@@ -22,15 +22,16 @@
 /* oxlint-disable unicorn/throw-new-error -- `Schema.TaggedError<Self>()` is a class factory that is called once and extended, never thrown. */
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
-import { Duration, Effect, Exit, Option, Result, Schema } from "effect";
+import { Effect, Option, Result, Schema } from "effect";
 import type { Config } from "effect";
-import { assetHeaders, page } from "#plate/dev/frame.ts";
+import { assetHeaders, assetTypes, page } from "#plate/dev/frame.ts";
 import type { Page } from "#plate/dev/frame.ts";
+import { keptOnSuccess } from "#plate/dev/listing.ts";
 import { corpusRoot } from "#plate/document/corpus.ts";
 import { h, text } from "#plate/emit/node.ts";
 import type { Element, Node } from "#plate/emit/node.ts";
 import { openPackage } from "#plate/package/open.ts";
-import type { PackageResource, PackageVerdict } from "#plate/package/open.ts";
+import type { PackageResource, PackageTest, PackageVerdict } from "#plate/package/open.ts";
 import { describeRefusal } from "#plate/validate/verdict.ts";
 
 /**
@@ -135,37 +136,6 @@ const fixtureRoot = path.resolve(import.meta.dirname, "..", "..", "fixtures", "m
  * package's root, the test document's `href` in the manifest.
  */
 export const testField = "test";
-
-/**
- * The media types the files route serves, by lower-case extension; any other file is refused.
- *
- * It is the table `/assets/*` serves by (`assetTypes` in `#plate/dev/page.ts`): what an item body
- * embeds, images, audio, video, text tracks, stylesheets and HTML package documents. XML is absent
- * on purpose, because an item document holds its correct responses and mappings, which redaction
- * keeps off the page.
- */
-const fileTypes: ReadonlyMap<string, string> = new Map([
-  [".avif", "image/avif"],
-  [".css", "text/css; charset=utf-8"],
-  [".gif", "image/gif"],
-  [".htm", "text/html; charset=utf-8"],
-  [".html", "text/html; charset=utf-8"],
-  [".jpeg", "image/jpeg"],
-  [".jpg", "image/jpeg"],
-  [".m4a", "audio/mp4"],
-  [".m4v", "video/mp4"],
-  [".mp3", "audio/mpeg"],
-  [".mp4", "video/mp4"],
-  [".oga", "audio/ogg"],
-  [".ogg", "audio/ogg"],
-  [".ogv", "video/ogg"],
-  [".png", "image/png"],
-  [".svg", "image/svg+xml"],
-  [".vtt", "text/vtt; charset=utf-8"],
-  [".wav", "audio/wav"],
-  [".webm", "video/webm"],
-  [".webp", "image/webp"],
-]);
 
 /**
  * Give the message of a failed file-system call.
@@ -289,7 +259,7 @@ const packageSources: Effect.Effect<readonly PackageSource[], PackagesFailure> =
     const entries = yield* Effect.tryPromise({
       catch: (cause) =>
         new PackageUnreadable({
-          detail: `${causeText(cause)}; extract the 1EdTech QTI 3 examples once (phase 1 spec §10.2), or set PLATE_CORPUS_DIR to the directory that holds them`,
+          detail: `${causeText(cause)}; extract the 1EdTech QTI 3 examples once under ~/.cache/gr8des/qti3-examples, each nested zip into the X.zip.d/ folder beside it, or set PLATE_CORPUS_DIR to the directory that holds them`,
           path: corpus,
         }),
       try: () => readdir(corpus, { recursive: true, withFileTypes: true }),
@@ -310,15 +280,6 @@ const packageSources: Effect.Effect<readonly PackageSource[], PackagesFailure> =
     }));
   },
 ).pipe(Effect.withSpan("packages.packageSources"));
-
-/**
- * Keep an effect's result for the cache's life when it succeeds, and none of a failure.
- *
- * @param effect The effect.
- * @returns The effect that runs it once while it succeeds.
- */
-const keptOnSuccess = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<Effect.Effect<A, E>> =>
-  Effect.cachedWithTTL(effect, (exit) => (Exit.isSuccess(exit) ? Duration.infinity : 0));
 
 /**
  * Construct a package cache over the corpus root and the fixture package.
@@ -362,6 +323,48 @@ export const packageCache = (opener: PackageOpener = openDirectory): Effect.Effe
       packages: table.pipe(Effect.flatMap((packages) => Effect.all([...packages.values()]))),
     })),
   );
+
+/**
+ * Find the package at a location among the playground's packages, opening only the package whose
+ * id that location gives.
+ *
+ * A package's id is its directory's name without `.zip.d`, or its whole location when another
+ * package shares that name ({@link packageIds}), so the package is one of the two ids tried, and
+ * the one whose location matches.
+ *
+ * @param packages The packages.
+ * @param location The package's location, as `openPackage` names it.
+ * @returns The package, or none when no package is at the location.
+ */
+export const packageAt = Effect.fnUntraced(function* packageAt(
+  packages: PackageCache,
+  location: string,
+): Effect.fn.Return<Option.Option<PackageEntry>, PackagesFailure> {
+  for (const id of new Set([...packageIds([location]), location])) {
+    const found = yield* packages.packageOf(id);
+    if (Option.isSome(found) && found.value.location === location) {
+      return found;
+    }
+  }
+
+  return Option.none();
+});
+
+/**
+ * Give the test at a path in a package.
+ *
+ * @param entry The package.
+ * @param href The test's path from the package's root.
+ * @returns The test with its items, or none when the package is not accepted or holds no test
+ *   there.
+ */
+export const testIn = (entry: PackageEntry, href: string): Option.Option<PackageTest> => {
+  const { verdict } = entry;
+
+  return verdict.verdict === "accepted" || verdict.verdict === "accepted-with-unsupported"
+    ? Option.fromUndefinedOr(verdict.accepted.tests.get(`${entry.location}/${href}`))
+    : Option.none();
+};
 
 /**
  * Give the path of a package's page, its id percent-encoded as one segment.
@@ -621,7 +624,7 @@ const serveFile = (
   file: string,
 ): Effect.Effect<Page | Response, PackageUnreadable> => {
   const { verdict } = entry;
-  const type = fileTypes.get(path.posix.extname(file).toLowerCase());
+  const type = assetTypes.get(path.posix.extname(file).toLowerCase());
   if (
     (verdict.verdict !== "accepted" && verdict.verdict !== "accepted-with-unsupported") ||
     !verdict.accepted.files.has(file) ||

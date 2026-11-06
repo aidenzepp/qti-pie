@@ -765,8 +765,10 @@ describe("ledger/view.ts", () => {
 
   it("shows each not-observed entry as recorded, its owner kept, while the ledger holds no browser run", () => {
     const text = ledgerText(fixture);
+    const headers = byTag(tableCaptioned(ledgerHtml(fixture), "Session records"), "th");
 
     assert.notInclude(text, "Replaced by");
+    assert.notInclude(headers.map(textOf), "Replaced by");
     assert.include(
       text,
       "Control: did-not-run; Result: not-observed; Date: 2026-11-06; Owner: operator\n",

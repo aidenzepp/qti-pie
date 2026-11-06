@@ -742,6 +742,42 @@ const replacedCell = (replaced: Replaced | undefined): Element =>
   );
 
 /**
+ * Construct the records' table: a row per record, its reader the row header. The Replaced by
+ * column is shown only when a browser run replaced at least one record.
+ *
+ * @param ledger The ledger, whose records are not empty.
+ * @param replacement The browser run that replaces every entry a sitting did not observe, if any.
+ * @returns The `table`.
+ */
+const recordsTable = (ledger: Ledger, replacement: Replacement | undefined): Element => {
+  const rows = ledger.records.map((record) => ({
+    record,
+    replaced: replacedOf(record, replacement),
+  }));
+  const showsReplaced = rows.some(({ replaced }) => replaced !== undefined);
+
+  return h("table", {}, [
+    ...tableHead(
+      recordsCaption,
+      showsReplaced ? recordColumns : recordColumns.filter((column) => column !== "Replaced by"),
+    ),
+    h(
+      "tbody",
+      {},
+      rows.map(({ record, replaced }) => {
+        const [reader = "", ...rest] = recordCells(record, replaced !== undefined);
+
+        return h("tr", {}, [
+          h("th", { scope: "row" }, [text(reader)]),
+          ...rest.map(cell),
+          ...(showsReplaced ? [replacedCell(replaced)] : []),
+        ]);
+      }),
+    ),
+  ]);
+};
+
+/**
  * Give an engine's browser-run cells, in {@link runColumns}' order: OD-14 (e)'s result in the
  * engine beside how its parts ended; WebKit's note is the sentence that it stands in for Safari,
  * and Chromium's is empty.
@@ -957,25 +993,7 @@ export const ledgerHtml = (
           ),
         ]),
     h("h2", {}, [text("Records")]),
-    ledger.records.length === 0
-      ? h("p", {}, [text(noRecords)])
-      : h("table", {}, [
-          ...tableHead(recordsCaption, recordColumns),
-          h(
-            "tbody",
-            {},
-            ledger.records.map((record) => {
-              const replaced = replacedOf(record, replacement);
-              const [reader = "", ...rest] = recordCells(record, replaced !== undefined);
-
-              return h("tr", {}, [
-                h("th", { scope: "row" }, [text(reader)]),
-                ...rest.map(cell),
-                replacedCell(replaced),
-              ]);
-            }),
-          ),
-        ]),
+    ledger.records.length === 0 ? h("p", {}, [text(noRecords)]) : recordsTable(ledger, replacement),
     h("h3", {}, [text(notesHeading)]),
     notes.length === 0
       ? h("p", {}, [text(noNotes)])

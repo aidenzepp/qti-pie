@@ -16,11 +16,13 @@ import { Effect, Option } from "effect";
 import type { Layer } from "effect";
 import type { ListenFailed } from "#plate/dev/listen.ts";
 import { packageHref, testField } from "#plate/dev/packages.ts";
-import { rowFor, scopedId } from "#plate/emit/parts.ts";
+import type { Element } from "#plate/emit/node.ts";
+import { partForSlot, rowFor, scopedId } from "#plate/emit/parts.ts";
 import type { PartOf } from "#plate/emit/parts.ts";
+import { attribute, nameOf } from "#plate/test/accessibility.ts";
 import { playgroundLayer } from "#plate/test/browsers.ts";
 import type { Playground, ReservedPort } from "#plate/test/browsers.ts";
-import { count, snapshotOf } from "#plate/test/playground-page.ts";
+import { count, elementsOf, snapshotOf, treeOf } from "#plate/test/playground-page.ts";
 
 /**
  * The dev playground with `createHandler`'s default settings: its packages are every `*.zip.d`
@@ -98,6 +100,68 @@ const follow = Effect.fn("follow")(function* follow(
   );
 
   assert.strictEqual(response.status(), 200, what);
+});
+
+/**
+ * The page an act led to: the method, path and query of the request that answered it, and the
+ * HTML of that answer, as text and as a tree.
+ */
+export interface Arrival {
+  readonly html: string;
+  readonly method: string;
+  readonly path: string;
+  readonly search: string;
+  readonly tree: Element;
+}
+
+/**
+ * Act on a page and wait for the page the act leads to: the answer to the main frame's navigation
+ * that `shown` picks, and the load of the document it answers with.
+ *
+ * A post's 303 is a step towards the page, never the page, so it is passed over: a post answered
+ * in place, as a refused post is, arrives at the post's own answer, and one answered with a 303
+ * arrives at the `GET` it leads to, which may be the URL the page already showed. The wait is on
+ * the answer, not on a change of URL, for that reason.
+ *
+ * @param page The page.
+ * @param act The key press or click that leaves the current page.
+ * @param shown Whether a request is the one whose answer the page shows, by its method and URL;
+ *   any request but a 303's when absent.
+ * @returns The answering request's method, path and query, and the answer's HTML and tree, once
+ *   the page has loaded; the test fails unless that answer is a 200.
+ */
+export const arrive = Effect.fn("arrive")(function* arrive(
+  page: Page,
+  act: () => Promise<void>,
+  shown: (method: string, url: URL) => boolean = () => true,
+) {
+  const [answer] = yield* Effect.promise(() =>
+    Promise.all([
+      page.waitForResponse(
+        (each) =>
+          each.request().isNavigationRequest() &&
+          each.request().frame() === page.mainFrame() &&
+          each.status() !== 303 &&
+          shown(each.request().method(), new URL(each.url())),
+      ),
+      page.waitForEvent("load"),
+      act(),
+    ]),
+  );
+  const url = new URL(answer.url());
+  const method = answer.request().method();
+
+  assert.strictEqual(answer.status(), 200, `${method} ${url.pathname}${url.search}`);
+
+  const html = yield* Effect.promise(() => answer.text());
+
+  return {
+    html,
+    method,
+    path: url.pathname,
+    search: url.search,
+    tree: treeOf(html),
+  } satisfies Arrival;
 });
 
 /**
@@ -199,6 +263,43 @@ export interface NavigationButton {
    */
   readonly part: NavigationButtonPart;
 }
+
+/**
+ * Find the navigation button part an element's `data-slot` marker names, through the part table.
+ *
+ * @param element The element.
+ * @returns The part, or none when the element is no navigation button.
+ */
+export const buttonPartOf = (element: Element): Option.Option<NavigationButtonPart> =>
+  Option.flatMap(partForSlot(attribute(element, "data-slot") ?? ""), (named) =>
+    named.interaction === "test-navigation"
+      ? Option.fromUndefinedOr(navigationButtonParts.find((part) => part === named.part))
+      : Option.none(),
+  );
+
+/**
+ * Read the navigation buttons of the HTML a session page answered, as {@link navigationOf} reads
+ * them from the browser.
+ *
+ * @param tree The page's tree.
+ * @returns Each button's part, `nameOf` name, `disabled`, `data-intent` and `aria-current`, in
+ *   document order.
+ */
+export const answeredNavigation = (tree: Element): readonly NavigationButton[] =>
+  elementsOf([tree]).flatMap((element) =>
+    Option.match(buttonPartOf(element), {
+      onNone: () => [],
+      onSome: (part) => [
+        {
+          ariaCurrent: Option.fromUndefinedOr(attribute(element, "aria-current")),
+          dataIntent: Option.fromUndefinedOr(attribute(element, "data-intent")),
+          disabled: attribute(element, "disabled") !== undefined,
+          name: nameOf(element, tree),
+          part,
+        },
+      ],
+    }),
+  );
 
 /**
  * Read an attribute of the element a locator matches.

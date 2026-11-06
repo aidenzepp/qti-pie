@@ -1,13 +1,13 @@
 /**
  * The accessibility tree of the M2 fixture's read-only views in Chromium and WebKit, with
- * JavaScript off (spec P4-37, §4.15): an item in review and in solution, and the closed test's
+ * JavaScript off: an item in review and in solution, and the closed test's
  * summary with its view links and its results link.
  *
  * Each test sits the fixture's test as a candidate does, by mouse and typing: P1's items answered
  * and P1 submitted through its confirm page, and for the tests that read P2 or the summary, P2
  * answered and submitted too. Playwright's computed tree is read in both engines and Chromium's own
  * tree in Chromium; `readonly`, which no computed tree carries, is read in Chromium's own tree and
- * in the DOM (spec §4.15).
+ * in the DOM.
  *
  * Expected values come from the code: the HTML each page answered gives the names, a Control's and
  * a region's through `nameOf` and a link's through `textOf`, its content; `solution` gives the
@@ -45,6 +45,7 @@ import {
   treesRead,
 } from "#plate/test/playground-page.ts";
 import {
+  arrive,
   fixturePlaygroundLayer,
   navigationOf,
   positionOf,
@@ -222,40 +223,6 @@ const viewPath = (sessionPath: string, mode: ShownMode, sequenceIndex: number): 
   `${sessionPath}/${mode}/${String(sequenceIndex)}`;
 
 /**
- * Act on the page and wait for the page the act leads to, which may be at the URL the page is
- * already at: a post answered by a 303 back to the session page lands where it started.
- *
- * @param page The page.
- * @param act The click that leaves the current page.
- * @param arrives Whether a URL is the page the act leads to, after any redirect.
- * @returns The HTML the page answered, as a tree, once that page has loaded; the test fails unless
- *   it answered 200.
- */
-const arrive = Effect.fn("arrive")(function* arrive(
-  page: Page,
-  act: () => Promise<void>,
-  arrives: (url: URL) => boolean,
-) {
-  const [answer] = yield* Effect.promise(() =>
-    Promise.all([
-      page.waitForResponse(
-        (answered) => answered.request().method() === "GET" && arrives(new URL(answered.url())),
-      ),
-      page.waitForEvent("framenavigated", {
-        predicate: (frame) => frame === page.mainFrame() && arrives(new URL(frame.url())),
-      }),
-      act(),
-    ]),
-  );
-
-  yield* Effect.promise(() => page.waitForLoadState("load"));
-
-  assert.strictEqual(answer.status(), 200, new URL(answer.url()).pathname);
-
-  return treeOf(yield* Effect.promise(() => answer.text()));
-});
-
-/**
  * Open a page of the playground and read the HTML it answered.
  *
  * @param page The page.
@@ -338,7 +305,7 @@ const sitPart = Effect.fn("sitPart")(function* sitPart(
   sessionPath: string,
   items: readonly number[],
 ) {
-  const onSession = (url: URL) => url.pathname === sessionPath;
+  const onSession = (method: string, url: URL) => method === "GET" && url.pathname === sessionPath;
 
   for (const [index, sequenceIndex] of items.entries()) {
     assert.strictEqual(yield* positionOf(page), sequenceIndex, "the session shows the item");
@@ -352,14 +319,16 @@ const sitPart = Effect.fn("sitPart")(function* sitPart(
   yield* arrive(
     page,
     yield* navigate(page, "submit"),
-    (url) => url.pathname === `${sessionPath}/confirm`,
+    (method, url) => method === "GET" && url.pathname === `${sessionPath}/confirm`,
   );
 
-  return yield* arrive(
+  const landed = yield* arrive(
     page,
     () => page.getByRole("button", { exact: true, name: message("en", "confirm") }).click(),
     onSession,
   );
+
+  return landed.tree;
 });
 
 /**

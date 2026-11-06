@@ -25,6 +25,7 @@
  */
 import { Data, Option, Result } from "effect";
 import type { Array as Arr } from "effect";
+import { resolveInside, schemePrefix, withoutQuery } from "#plate/document/href.ts";
 import { attributePath, walk, xmlNamespace } from "#plate/document/source.ts";
 import type {
   SourceAttribute,
@@ -37,15 +38,8 @@ import { Refusal } from "#plate/validate/refusal.ts";
 import type { RefusalRule } from "#plate/validate/refusal.ts";
 import { checkStructure, governingTables } from "#plate/validate/structure.ts";
 import type { ChildOccurrence, ContentTable, Occurrences, Tables } from "#plate/validate/xsd.ts";
-import { cpVersions } from "#plate/vocabulary.ts";
+import { cpVersions, manifestNamespace } from "#plate/vocabulary.ts";
 import type { CpVersion } from "#plate/vocabulary.ts";
-
-/**
- * The namespace of a QTI 3.0 package's manifest, under both content packaging profiles. A root in
- * any other namespace, such as the plain IMS CP namespace of a QTI 2 package, is
- * `not-qti3-package`.
- */
-export const manifestNamespace = "http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1";
 
 /**
  * One `href` a manifest writes, on a `resource` or a `file`, with the package path it names.
@@ -133,43 +127,14 @@ type Target =
 const packageRoot: Target = { kind: "inside", segments: [""] };
 
 /**
- * A scheme followed by its colon at the start of a URI reference, which makes the reference an
- * absolute URI (RFC 3986, section 3.1).
- *
- * @see https://www.rfc-editor.org/rfc/rfc3986#section-3.1
- */
-const schemePrefix = /^[A-Za-z][\d+.A-Za-z-]*:/u;
-
-/**
- * Take the part of a URI reference before its query and fragment.
- *
- * @param reference The reference.
- * @returns Its scheme, authority and path, whichever it has.
- */
-const withoutQuery = (reference: string): string => reference.split(/[#?]/u, 1)[0] ?? "";
-
-/**
- * Decode a path segment's percent escapes, leaving a segment whose escapes are malformed as it is
- * written.
- *
- * @param segment The segment.
- * @returns The segment decoded.
- */
-const decodeSegment = (segment: string): string =>
-  Result.getOrElse(
-    Result.try(() => decodeURIComponent(segment)),
-    () => segment,
-  );
-
-/**
  * Resolve a URI reference against a base target, as RFC 3986 section 5.2 merges a relative path
  * with its base and removes its dot segments.
  *
  * An absolute URI is its own target whatever its base, and a relative reference under an absolute
  * base is the absolute URI the URL parser resolves it to, or, when the parser refuses it, the base
- * and the reference joined, which no other reference shares. A reference that starts with `/` names
- * a path from a host's root, and a `..` that climbs above the package's root leaves the package:
- * both are outside, where RFC 3986 would drop the extra `..`.
+ * and the reference joined, which no other reference shares. A relative reference under a path
+ * inside the package resolves through {@link resolveInside}, and is outside when it names no path
+ * inside.
  *
  * @param base The target the reference is resolved against.
  * @param reference The reference as written.
@@ -191,31 +156,10 @@ const resolve = (base: Target, reference: string): Target => {
     return base;
   }
 
-  const path = withoutQuery(reference);
-  if (path.startsWith("/")) {
-    return { kind: "outside" };
-  }
-
-  const segments = base.segments.slice(0, -1);
-  const written = path.split("/").map(decodeSegment);
-  for (const [index, segment] of written.entries()) {
-    const last = index === written.length - 1;
-    if (segment === "..") {
-      if (segments.length === 0) {
-        return { kind: "outside" };
-      }
-
-      segments.pop();
-    }
-
-    if (segment !== "." && segment !== "..") {
-      segments.push(segment);
-    } else if (last) {
-      segments.push("");
-    }
-  }
-
-  return { kind: "inside", segments };
+  return Option.match(resolveInside(base.segments, reference), {
+    onNone: (): Target => ({ kind: "outside" }),
+    onSome: (segments): Target => ({ kind: "inside", segments }),
+  });
 };
 
 /**

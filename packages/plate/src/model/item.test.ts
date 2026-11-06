@@ -145,7 +145,7 @@ const setScore = (value: string): SourceElement =>
   );
 
 /**
- * `match_correct`'s rules as `ea422814` §5.1 quotes the template, written inline.
+ * `match_correct`'s rules as the template's text gives them, written inline.
  *
  * @returns The inline processing element.
  */

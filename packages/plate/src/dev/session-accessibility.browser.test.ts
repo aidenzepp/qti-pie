@@ -1,6 +1,6 @@
 /**
  * The accessibility tree of M2's session pages while a candidate answers, in Chromium and WebKit
- * with JavaScript off (spec §4.15): the test navigation, the Status region after a refused answer
+ * with JavaScript off: the test navigation, the Status region after a refused answer
  * and after a part submit, and the confirm page.
  *
  * Every assertion reads Playwright's computed tree in both engines, and Chromium's own tree in
@@ -14,7 +14,7 @@ import { assert } from "@effect/vitest";
 import { Effect, Option } from "effect";
 import type { Locator, Page } from "playwright-core";
 import type { Element } from "#plate/emit/node.ts";
-import { partForSlot, rowFor } from "#plate/emit/parts.ts";
+import { rowFor } from "#plate/emit/parts.ts";
 import { encodeIntent } from "#plate/form/intent.ts";
 import { message, numeral } from "#plate/messages.ts";
 import { attribute, inputType, nameOf, textOf } from "#plate/test/accessibility.ts";
@@ -45,15 +45,16 @@ import {
 } from "#plate/test/playground-page.ts";
 import type { SnapshotNode } from "#plate/test/playground-page.ts";
 import {
+  answeredNavigation,
+  arrive,
   fixturePlaygroundLayer,
-  navigationButtonParts,
   navigationOf,
   positionOf,
   startFixtureSession,
   startPackageSession,
   statusOf,
 } from "#plate/test/session-page.ts";
-import type { NavigationButton, NavigationButtonPart } from "#plate/test/session-page.ts";
+import type { NavigationButton } from "#plate/test/session-page.ts";
 
 /**
  * The corpus package the refusal is posted in, and its test's path from the package's root.
@@ -114,89 +115,6 @@ const onlyElement = (
 
   return element;
 };
-
-/**
- * Find the navigation button part an element's `data-slot` marker names, through the part table.
- *
- * @param element The element.
- * @returns The part, or none when the element is no navigation button.
- */
-const buttonPartOf = (element: Element): Option.Option<NavigationButtonPart> =>
-  Option.flatMap(partForSlot(attribute(element, "data-slot") ?? ""), (named) =>
-    named.interaction === "test-navigation"
-      ? Option.fromUndefinedOr(navigationButtonParts.find((part) => part === named.part))
-      : Option.none(),
-  );
-
-/**
- * Read the navigation buttons of the HTML a session page answered, as `navigationOf` reads them
- * from the browser.
- *
- * @param tree The page's tree.
- * @returns Each button's part, `nameOf` name, `disabled`, `data-intent` and `aria-current`, in
- *   document order.
- */
-const answeredNavigation = (tree: Element): readonly NavigationButton[] =>
-  elementsOf([tree]).flatMap((element) =>
-    Option.match(buttonPartOf(element), {
-      onNone: () => [],
-      onSome: (part) => [
-        {
-          ariaCurrent: Option.fromUndefinedOr(attribute(element, "aria-current")),
-          dataIntent: Option.fromUndefinedOr(attribute(element, "data-intent")),
-          disabled: attribute(element, "disabled") !== undefined,
-          name: nameOf(element, tree),
-          part,
-        },
-      ],
-    }),
-  );
-
-/**
- * The page a press of a form's button led to: the method and the path of the request that
- * answered it, and the tree of that answer's HTML.
- */
-interface Arrival {
-  readonly method: string;
-  readonly path: string;
-  readonly search: string;
-  readonly tree: Element;
-}
-
-/**
- * Press a button that posts the page's form, and read the page the post leads to: the answer to
- * the post itself when it answers in place, as a refused post does, or the page its 303 leads to.
- *
- * @param page The page.
- * @param button The button.
- * @returns The answering request's method, path and query, and the answer's tree, once the page
- *   has loaded; the test fails unless that answer is a 200.
- */
-const arrive = Effect.fn("arrive")(function* arrive(page: Page, button: Locator) {
-  const [response] = yield* Effect.promise(() =>
-    Promise.all([
-      page.waitForResponse(
-        (answer) =>
-          answer.request().isNavigationRequest() &&
-          answer.request().frame() === page.mainFrame() &&
-          answer.status() !== 303,
-      ),
-      page.waitForEvent("load"),
-      button.click(),
-    ]),
-  );
-  const url = new URL(response.url());
-  const method = response.request().method();
-
-  assert.strictEqual(response.status(), 200, `${method} ${url.pathname}${url.search}`);
-
-  return {
-    method,
-    path: url.pathname,
-    search: url.search,
-    tree: treeOf(yield* Effect.promise(() => response.text())),
-  } satisfies Arrival;
-});
 
 /**
  * Read the page a session page answers now, through a `GET` of its URL outside the browser; a
@@ -477,9 +395,8 @@ eachEngine((it, name) => {
             const { origin } = yield* Playground;
             const sessionPath = yield* startFixtureSession(page, origin);
             const last = partOne.items.at(-1) ?? assert.fail("P1 holds an item");
-            const moved = yield* arrive(
-              page,
-              navigationButton(page, encodeIntent({ kind: "go", sequenceIndex: last })),
+            const moved = yield* arrive(page, () =>
+              navigationButton(page, encodeIntent({ kind: "go", sequenceIndex: last })).click(),
             );
 
             assert.deepStrictEqual([moved.method, moved.path], ["GET", sessionPath]);
@@ -516,12 +433,11 @@ eachEngine((it, name) => {
               begGuide.id,
               begGuide.test,
             );
-            const reached = yield* arrive(
-              page,
+            const reached = yield* arrive(page, () =>
               navigationButton(
                 page,
                 encodeIntent({ kind: "go", sequenceIndex: bg008.sequenceIndex }),
-              ),
+              ).click(),
             );
 
             assert.deepStrictEqual([reached.method, reached.path], ["GET", sessionPath]);
@@ -544,7 +460,7 @@ eachEngine((it, name) => {
             const submit = page
               .getByRole("navigation", { exact: true, name: message("en", "testNavigation") })
               .getByRole("button", { exact: true, name: message("en", "submitAnswer") });
-            const refused = yield* arrive(page, submit);
+            const refused = yield* arrive(page, () => submit.click());
             const atMost = message("en", "atMost", { n: numeral("en", bg008.maxChoices) });
 
             assert.deepStrictEqual(
@@ -630,9 +546,8 @@ eachEngine((it, name) => {
           Effect.gen(function* partSubmitted() {
             const { origin } = yield* Playground;
             const sessionPath = yield* startFixtureSession(page, origin);
-            const confirming = yield* arrive(
-              page,
-              navigationButton(page, encodeIntent({ kind: "submit-part" })),
+            const confirming = yield* arrive(page, () =>
+              navigationButton(page, encodeIntent({ kind: "submit-part" })).click(),
             );
 
             assert.deepStrictEqual(
@@ -640,9 +555,8 @@ eachEngine((it, name) => {
               ["GET", `${sessionPath}/confirm`],
             );
 
-            const submitted = yield* arrive(
-              page,
-              page.getByRole("button", { exact: true, name: message("en", "confirm") }),
+            const submitted = yield* arrive(page, () =>
+              page.getByRole("button", { exact: true, name: message("en", "confirm") }).click(),
             );
 
             assert.deepStrictEqual(
@@ -668,9 +582,8 @@ eachEngine((it, name) => {
             const testTitle = textOf(
               onlyElement(yield* answeredNow(page), (element) => element.tag === "h1", "h1"),
             );
-            const confirming = yield* arrive(
-              page,
-              navigationButton(page, encodeIntent({ kind: "submit-part" })),
+            const confirming = yield* arrive(page, () =>
+              navigationButton(page, encodeIntent({ kind: "submit-part" })).click(),
             );
             const answered = confirming.tree;
             const title = textOf(onlyElement(answered, (element) => element.tag === "h1", "h1"));

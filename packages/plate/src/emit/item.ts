@@ -1,6 +1,5 @@
 /**
- * The item chrome the library emits (spec §4.3's item rows, §4.4, §4.7's first list): the item Root
- * around the emitted body, and the Status part.
+ * The item chrome the library emits: the item Root around the emitted body, and the Status part.
  *
  * The library emits parts, not a page: the Root holds the body and nothing else, and the Status
  * part decides no placement and no focus, so the form, its submit control, where the Status part
@@ -85,7 +84,7 @@ export const emitItem = (
   );
 
 /**
- * The data the results box shows (spec §4.1): the instance, the state its heading names, and what
+ * The data the results box shows: the instance, the state its heading names, and what
  * the region shows under the heading.
  *
  * Each heading names one state, in the text `messages.ts` keys it by:
@@ -192,7 +191,7 @@ const statusDetail = (
  * heading, `tabindex="-1"`, and `autofocus` only when `input.autofocus` is true. Each Message `li`
  * carries the id {@link identifyMessages} gives its message, the id the payload writes into each
  * Control's `aria-describedby`, so the two agree. It places the region nowhere and moves no focus:
- * both are the author's composition (spec §4.7).
+ * both are the author's composition.
  *
  * @example
  *   Result.map(emitStatus({ heading: "scored", instance: "i1", score: "1" }, state), toHtml);

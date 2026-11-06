@@ -9,7 +9,7 @@
  * `#plate/dev/listing.ts`, keeps the `Accepted` item and the stored record on the server, and
  * sends only the HTML of `render(redact(…))` inside its own native form. A post is partitioned and
  * decoded on the server, checked with `checkResponses`, scored with `score`, and answered with the
- * page after a submit that spec §4.7 sets: the Status part first, one `autofocus`, and a title that
+ * page after a submit: the Status part first, one `autofocus`, and a title that
  * names the state. Every page is built through `h` and `toHtml`, so document text is escaped, and
  * every response carries the content-security headers of rule `723e580c`. It also serves plate's
  * stylesheet, its own sheet and the host CSS of the theme its theme box last accepted, which it
@@ -47,12 +47,19 @@ import {
 } from "effect";
 import { decodeSession } from "#plate/codec/session.ts";
 import { decodeStoredFloat } from "#plate/codec/values.ts";
-import { assetHeaders, page, pageHeaders, pageHtml, slot } from "#plate/dev/frame.ts";
+import { assetHeaders, assetTypes, page, pageHeaders, pageHtml, slot } from "#plate/dev/frame.ts";
 import type { Appearance, Page } from "#plate/dev/frame.ts";
 import { groupVerdicts, verdictCache } from "#plate/dev/listing.ts";
 import type { OpenFailure, VerdictCache, VerdictGroup } from "#plate/dev/listing.ts";
-import { packageCache, packageHref, packageIds, routePackages } from "#plate/dev/packages.ts";
-import type { PackageCache, PackageEntry, PackagesFailure } from "#plate/dev/packages.ts";
+import {
+  packageAt,
+  packageCache,
+  packageHref,
+  routePackages,
+  testIn,
+} from "#plate/dev/packages.ts";
+import type { PackageCache, PackagesFailure } from "#plate/dev/packages.ts";
+import { entriesOf, postOf, valuesOf } from "#plate/dev/post.ts";
 import { reviewPath, routeReview } from "#plate/dev/review-page.ts";
 import type { ReviewPlayground } from "#plate/dev/review-page.ts";
 import { sessionStore } from "#plate/dev/store.ts";
@@ -65,15 +72,10 @@ import type { CorpusFileUnreadable, CorpusMissing } from "#plate/document/corpus
 import { readCorpusFile } from "#plate/document/corpus.ts";
 import { text } from "#plate/emit/node.ts";
 import { scopedId } from "#plate/emit/parts.ts";
-import { isPosted } from "#plate/form/encoding.ts";
 import {
   checkResponses,
   configure,
-  decode,
-  entryName,
   h,
-  Malformed,
-  partition,
   redact,
   render,
   renderStatus,
@@ -82,11 +84,8 @@ import {
 } from "#plate/index.ts";
 import type {
   Accepted,
-  Binding,
   Configuration,
-  DecodeOptions,
   Element,
-  Entry,
   InvalidConfiguration,
   Options,
   StatusInput,
@@ -100,7 +99,6 @@ import { ledgerDirectory } from "#plate/ledger/directory.ts";
 import { Ledger } from "#plate/ledger/report.ts";
 import { ledgerHtml, verdictTable } from "#plate/ledger/view.ts";
 import { message, numeral } from "#plate/messages.ts";
-import type { BodyNode } from "#plate/model/item.ts";
 import type { PackageTest } from "#plate/package/open.ts";
 import { current } from "#plate/session/start.ts";
 import { acceptedItem, describeRefusal } from "#plate/validate/verdict.ts";
@@ -136,8 +134,8 @@ export interface PlaygroundSettings {
 const sessionLimit = 100;
 
 /**
- * The item the plain-HTML host serves at {@link hostMount}: BG007, read from the corpus cache
- * (spec §4.12), never from a committed copy (rule `3ad87993`).
+ * The item the plain-HTML host serves at {@link hostMount}: BG007, read from the corpus cache,
+ * never from a committed copy (rule `3ad87993`).
  */
 const hostItem = "QTI3_BPIG_Examples/items/BG007.xml";
 
@@ -156,36 +154,6 @@ const packageSuffix = ".zip.d";
  * The id of the index's region of test sessions in progress.
  */
 const inProgressId = "sessions-in-progress";
-
-/**
- * The media types `/assets/*` serves, by lower-case extension; any other file is refused.
- *
- * The list holds what an item body embeds: images, audio, video, text tracks, stylesheets and
- * HTML package documents. XML is absent on purpose, because an item document holds its correct
- * responses and mappings, which redaction keeps off the page.
- */
-const assetTypes: ReadonlyMap<string, string> = new Map([
-  [".avif", "image/avif"],
-  [".css", "text/css; charset=utf-8"],
-  [".gif", "image/gif"],
-  [".htm", "text/html; charset=utf-8"],
-  [".html", "text/html; charset=utf-8"],
-  [".jpeg", "image/jpeg"],
-  [".jpg", "image/jpeg"],
-  [".m4a", "audio/mp4"],
-  [".m4v", "video/mp4"],
-  [".mp3", "audio/mpeg"],
-  [".mp4", "video/mp4"],
-  [".oga", "audio/ogg"],
-  [".ogg", "audio/ogg"],
-  [".ogv", "video/ogg"],
-  [".png", "image/png"],
-  [".svg", "image/svg+xml"],
-  [".vtt", "text/vtt; charset=utf-8"],
-  [".wav", "audio/wav"],
-  [".webm", "video/webm"],
-  [".webp", "image/webp"],
-]);
 
 /**
  * The type of every stylesheet the playground serves.
@@ -284,17 +252,6 @@ interface Session {
 }
 
 /**
- * The playground's store of test sessions, which also gives the ids it holds, so the index can
- * resume each session.
- */
-interface ListedStore extends SessionStore {
-  /**
-   * The ids the store holds, in the order their sessions were started.
-   */
-  readonly ids: () => readonly string[];
-}
-
-/**
  * The failure of building the plain-HTML host: BG007 or the corpus cannot be read, or the host's
  * configuration does not decode.
  */
@@ -311,7 +268,7 @@ interface Playground {
   readonly host: Effect.Effect<HtmlHost, HostFailure>;
   readonly packages: PackageCache;
   readonly sessions: Map<string, Session>;
-  readonly tests: ListedStore;
+  readonly tests: SessionStore;
   readonly verdicts: VerdictCache;
 }
 
@@ -337,16 +294,6 @@ interface ItemView {
   readonly options: Pick<Options, "messages" | "posted" | "values">;
   readonly state: PageState;
   readonly status: Option.Option<StatusInput>;
-}
-
-/**
- * How one response travels through the playground's form: its identifier, its binding and the
- * number base of a Text Entry.
- */
-interface Posting {
-  readonly binding: Binding;
-  readonly options: DecodeOptions;
-  readonly response: string;
 }
 
 /**
@@ -476,34 +423,6 @@ const inOpenPackage = (playground: Playground, corpusPath: string): boolean =>
 
     return directory === "." || corpusPath.startsWith(`${directory}/`);
   });
-
-/**
- * Construct an empty store of test sessions over `sessionStore`, which keeps the bound and evicts
- * the oldest; this one also remembers the ids it was given, forgetting each the store evicted.
- *
- * @returns The store.
- */
-const listedStore = (): ListedStore => {
-  const store = sessionStore();
-  const held = new Set<string>();
-
-  return {
-    get: (id) => store.get(id),
-    ids: () => [...held],
-    set: (id, entry) => {
-      store.set(id, entry);
-      held.add(id);
-      for (const kept of held) {
-        if (Option.isNone(store.get(kept))) {
-          held.delete(kept);
-        }
-      }
-    },
-    get size() {
-      return store.size;
-    },
-  };
-};
 
 /**
  * Keep a session, evicting the oldest past {@link sessionLimit}.
@@ -814,83 +733,6 @@ const itemPage = (
 };
 
 /**
- * Collect the response each interaction of body nodes binds, in document order, inside elements,
- * Prompts and choices, each with the number base its Controls post in: a Text Entry's or an
- * Extended Text's `base`, and 10 for a Choice.
- *
- * @param nodes The body nodes.
- * @returns Each interaction's response identifier and base.
- */
-const responsesIn = (nodes: readonly BodyNode[]): readonly (readonly [string, number])[] =>
-  nodes.flatMap((node): readonly (readonly [string, number])[] => {
-    switch (node.kind) {
-      case "element": {
-        return responsesIn(node.children);
-      }
-      case "choice": {
-        return [
-          [node.response, 10],
-          ...responsesIn(Option.getOrElse(node.prompt, () => [])),
-          ...node.choices.flatMap((choice) => responsesIn(choice.content)),
-        ];
-      }
-      case "extended-text": {
-        return [
-          [node.response, node.base],
-          ...responsesIn(Option.getOrElse(node.prompt, () => [])),
-        ];
-      }
-      case "text-entry": {
-        return [[node.response, node.base]];
-      }
-      case "text":
-      case "unsupported": {
-        return [];
-      }
-      default: {
-        return node satisfies never;
-      }
-    }
-  });
-
-/**
- * Collect the postings of an item's interactions in document order, one per response: the
- * response's declared base type and cardinality under the entry name `render` gives its
- * Controls, and a Text Entry's base.
- *
- * A response with no declaration, or of a base type no phase-1 interaction posts, is left out, so
- * `checkResponses` treats it as NULL and `score` keeps its value.
- *
- * @param accepted The accepted document.
- * @param instance The instance token.
- * @returns The postings.
- */
-const postingsOf = (accepted: Accepted, instance: string): readonly Posting[] => {
-  const seen = new Set<string>();
-
-  return responsesIn(accepted.item.body).flatMap(([response, base]): readonly Posting[] => {
-    const declaration = accepted.item.responses.get(response);
-    if (seen.has(response) || declaration === undefined || !isPosted(declaration.baseType)) {
-      return [];
-    }
-
-    seen.add(response);
-
-    return [
-      {
-        binding: {
-          baseType: declaration.baseType,
-          cardinality: declaration.cardinality,
-          name: entryName(instance, response),
-        },
-        options: { base },
-        response,
-      },
-    ];
-  });
-};
-
-/**
  * Write the score a stored record holds, as the candidate reads it in the locale.
  *
  * @param accepted The accepted document.
@@ -1024,30 +866,6 @@ const routeFailure = (error: RouteFailure): Page =>
   error._tag === "CorpusFileUnreadable" ? notFound() : failurePage(error);
 
 /**
- * Find the package at a location among the playground's packages, opening it alone.
- *
- * A package's id is its directory's name unless another package's directory has the same name,
- * when it is its whole location (`packageIds`), so the location is tried under both.
- *
- * @param packages The packages.
- * @param location The package's location.
- * @returns The package, or none when no package is at the location.
- */
-const packageAt = Effect.fnUntraced(function* packageAt(
-  packages: PackageCache,
-  location: string,
-): Effect.fn.Return<Option.Option<PackageEntry>, PackagesFailure> {
-  for (const id of new Set([...packageIds([location]), location])) {
-    const found = yield* packages.packageOf(id);
-    if (Option.isSome(found) && found.value.location === location) {
-      return found;
-    }
-  }
-
-  return Option.none();
-});
-
-/**
  * Give the id of the package whose directory holds a member of the document set: the innermost
  * `*.zip.d` directory on its path.
  *
@@ -1072,22 +890,6 @@ const packageOfMember = Effect.fnUntraced(function* packageOfMember(
 
   return found.pipe(Option.map(({ id }) => id));
 });
-
-/**
- * Give the test at a path in a package.
- *
- * @param found The package.
- * @param href The test's path from the package's root.
- * @returns The test with its items, or none when the package is not accepted or holds no test
- *   there.
- */
-const testIn = (found: PackageEntry, href: string): Option.Option<PackageTest> => {
-  const { verdict } = found;
-
-  return verdict.verdict === "accepted" || verdict.verdict === "accepted-with-unsupported"
-    ? Option.fromUndefinedOr(verdict.accepted.tests.get(`${found.location}/${href}`))
-    : Option.none();
-};
 
 /**
  * Give a stored test session's Resume link, named "Resume: {test}, Item n of N" for its current
@@ -1271,11 +1073,8 @@ const submit = Effect.fn("playground.submit")(function* submit(
     return scoredPage(opened, configuration, session.last.value);
   }
 
-  const form = yield* Effect.result(
-    // oxlint-disable-next-line typescript/no-deprecated -- The deprecation warns against parsing an untrusted server's multipart response; this is a post to the playground's own form, read on 127.0.0.1, and scripts/serve.ts caps its body at 1 MiB before the handler sees it.
-    Effect.tryPromise(() => request.formData()),
-  );
-  if (Result.isFailure(form)) {
+  const entries = yield* entriesOf(request);
+  if (Option.isNone(entries)) {
     return notePage(
       400,
       "Not a form post",
@@ -1283,35 +1082,14 @@ const submit = Effect.fn("playground.submit")(function* submit(
     );
   }
 
-  const { own } = partition(
-    Array.from(form.success, ([name, value]): Entry => [name, value]),
-    target.instance,
-  );
-  const postings = postingsOf(session.accepted, target.instance);
-  const decoded = Object.fromEntries(
-    postings.map(({ binding, options, response }) => [
-      response,
-      Result.merge(decode(own, binding, options)),
-    ]),
-  );
-  const posted = Object.fromEntries(
-    postings.map(({ binding, response }) => [
-      response,
-      own.flatMap(([name, value]) =>
-        name !== binding.name || value instanceof Blob ? [] : [value],
-      ),
-    ]),
-  );
-  const messages = checkResponses(session.accepted, decoded, configuration);
+  const post = postOf(session.accepted, target.instance, entries.value);
+  const { posted } = post;
+  const messages = checkResponses(session.accepted, post.decoded, configuration);
   if (messages.length > 0) {
     return refusedPage(opened, configuration, messages, posted);
   }
 
-  const values = Object.fromEntries(
-    Object.entries(decoded).flatMap(([response, value]) =>
-      value instanceof Malformed ? [] : [[response, value] as const],
-    ),
-  );
+  const values = valuesOf(post);
 
   return Result.match(score(session.accepted, values, Option.getOrUndefined(session.record)), {
     onFailure: (error) =>
@@ -1826,7 +1604,7 @@ export const createHandler = (settings: PlaygroundSettings = {}): Handler => {
     ),
     packages: settings.packages ?? Effect.runSync(packageCache()),
     sessions: new Map(),
-    tests: listedStore(),
+    tests: sessionStore(),
     verdicts: settings.verdicts ?? Effect.runSync(verdictCache()),
   };
   /**

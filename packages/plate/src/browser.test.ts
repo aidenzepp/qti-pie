@@ -48,12 +48,14 @@ const roots = [
 const notRoots = {
   "src/configuration.ts": "value-imports Schema, Config and Effect to read the configuration",
   "src/control-cap.ts": "reached from the roots, so the scan checks it",
+  "src/count-range.ts":
+    "the count range the model builder, the structural walk and decodeRedacted read, kept apart from vocabulary.ts so decodeRedacted loads none of its tables",
   "src/index.ts": "the public entry, which re-exports the Schema side beside the browser modules",
   "src/messages.ts": "reached from the roots, so the scan checks it",
   "src/restore.ts": "the Schema side: decodes the stored record through Schema",
   "src/score.ts": "value-imports Schema to decode and encode the stored record",
   "src/vocabulary.ts":
-    "the tables the validators and the model builder read; the roots import its types only, and control-cap.ts holds the one value they need",
+    "the tables the validators and the model builder read; reached from the roots through session/control.ts's sessionControlDefaults, so the scan checks it",
 } satisfies Readonly<Record<string, string>>;
 
 /**

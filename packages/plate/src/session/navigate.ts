@@ -12,7 +12,8 @@
  * @module
  */
 import { Array as Arr, Data, Option, Result } from "effect";
-import type { SectionChild, Test, TestPart } from "#plate/model/test.ts";
+import { refIdentifiersIn } from "#plate/model/item-refs.ts";
+import type { Test, TestPart } from "#plate/model/test.ts";
 import { UnknownItemRef } from "#plate/session/control.ts";
 import type { Intent, SessionItem, Step, TestSession } from "#plate/session/session.ts";
 import { ItemNotInSession, present, recordStep } from "#plate/session/start.ts";
@@ -65,12 +66,12 @@ export interface MoveOrigin {
 }
 
 /**
- * Name an intent as a candidate's request.
+ * Name an intent as a candidate's request, as a refusal's message names it.
  *
  * @param intent The intent.
- * @returns `next`, `previous`, or `go to item <n>`.
+ * @returns Its kind, or for `go`, `go to item <n>`.
  */
-const requestOf = (intent: MoveIntent): string =>
+export const requestOf = (intent: Intent): string =>
   intent.kind === "go" ? `go to item ${intent.sequenceIndex}` : intent.kind;
 
 /**
@@ -117,17 +118,6 @@ export class MoveRefused extends Data.TaggedError("MoveRefused")<{
 }
 
 /**
- * List the identifiers of the item refs among some section children, nested sections' included.
- *
- * @param children The children.
- * @returns Their item refs' identifiers.
- */
-const refsOf = (children: readonly SectionChild[]): readonly string[] =>
-  children.flatMap((child) =>
-    child.kind === "item-ref" ? [child.identifier] : refsOf(child.children),
-  );
-
-/**
  * The current item of an open session, with its part and the part's items.
  */
 interface Standing {
@@ -171,11 +161,11 @@ const standingOf = (
 
   return Result.map(
     Result.fromOption(
-      Arr.findFirst(test.parts, (part) => refsOf(part.children).includes(item.ref)),
+      Arr.findFirst(test.parts, (part) => refIdentifiersIn(part.children).includes(item.ref)),
       () => new UnknownItemRef({ ref: item.ref, test: test.identifier }),
     ),
     (part) => {
-      const refs = new Set(refsOf(part.children));
+      const refs = new Set(refIdentifiersIn(part.children));
       const items = session.items.filter((candidate) => refs.has(candidate.ref));
 
       return { item, items, offset: items.indexOf(item), part };

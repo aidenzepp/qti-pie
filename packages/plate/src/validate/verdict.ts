@@ -1,7 +1,7 @@
 /**
- * The verdict on a document (spec §4.5), the one gate between a source and an item a host may
+ * The verdict on a document, the one gate between a source and an item a host may
  * redact, score or render, or a test it may deliver, and the sentences that word a refusal for the
- * host and the author (spec §4.6).
+ * host and the author.
  *
  * {@link check} refuses a root outside QTI's namespace, then runs the structural validator, the
  * item prose rules and the test prose rules together, then leaves unchecked what it cannot judge.
@@ -52,6 +52,7 @@ import {
 } from "#plate/validate/structure.ts";
 import { checkTestRules } from "#plate/validate/test-rules.ts";
 import type { ContentTable, Tables } from "#plate/validate/xsd.ts";
+import { cpVersions, manifestNamespace } from "#plate/vocabulary.ts";
 import type { TestMark } from "#plate/vocabulary.ts";
 
 /**
@@ -135,7 +136,7 @@ const acceptTest = Brand.nominal<AcceptedTest>();
 
 /**
  * What M2 holds of a section or a stimulus document it accepts: valid, and delivered alone by no
- * stage before M3 (spec §4.2).
+ * stage before M3.
  */
 export interface RootSummary {
   /**
@@ -221,7 +222,7 @@ type AcceptedByKind =
  * - `accepted-with-unsupported`: valid, with features plate does not render or deliver, each named.
  * - `accepted`: valid, and plate renders or delivers all of it.
  *
- * Every arm carries `kind` (spec §4.2): an accepting verdict's is `item`, `test`, `section` or
+ * Every arm carries `kind`: an accepting verdict's is `item`, `test`, `section` or
  * `stimulus`, and `accepted` is the {@link Accepted}, {@link AcceptedTest},
  * {@link AcceptedSection} or {@link AcceptedStimulus} to match, so `kind` narrows it. `unchecked`
  * and `refused` carry the root's kind, `"none"` when it is none of the six. Read an accepted item
@@ -916,8 +917,8 @@ const checkUndelivered = (source: SourceDocument, kind: "section" | "stimulus"):
  *    `refused`. Otherwise it is `accepted-with-unsupported` when anything is unsupported, the
  *    builder's `variable:<identifier>` marks included, and `accepted` when nothing is.
  * 5. A test: the test model is built. A refusal of the builder makes the document `refused`; otherwise
- *    it is `accepted-with-unsupported` when the test holds a feature M2 marks (spec §4.6) and
- *    `accepted` when it holds none.
+ *    it is `accepted-with-unsupported` when the test holds a feature M2 marks and `accepted` when
+ *    it holds none.
  * 6. A section or a stimulus is `accepted-with-unsupported`, marked `root:qti-assessment-section` or
  *    `root:qti-assessment-stimulus`.
  *
@@ -1166,7 +1167,7 @@ const sentence = (refusal: Refusal, wrong: string, change: string): string =>
   `${opening(refusal)} ${wrong} Rule ${code(refusal.rule)}. To make it valid: ${change}.`;
 
 /**
- * Write a refusal of a file that is not a QTI document, in spec §4.6's shape.
+ * Write a refusal of a file that is not a QTI document.
  *
  * @param refusal The refusal.
  * @param wrong What is wrong, one sentence.
@@ -1440,7 +1441,7 @@ const wordings = {
 
     return sentence(
       refusal,
-      `The manifest's root ${code(named(refusal).element)} is ${where}, not QTI 3.0's content packaging namespace ${code("http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1")}.`,
+      `The manifest's root ${code(named(refusal).element)} is ${where}, not QTI 3.0's content packaging namespace ${code(manifestNamespace)}.`,
       "give the package a QTI 3.0 manifest, whose root is in that namespace",
     );
   },
@@ -1495,7 +1496,7 @@ const wordings = {
   },
   "package-profile": (refusal) => {
     const field = code("schemaversion");
-    const accepted = `${code("3.0.0")} or ${code("3.0.1")}`;
+    const accepted = cpVersions.map((version) => code(version)).join(" or ");
     const found = Option.match(optionalFact(refusal, "schemaversion"), {
       onNone: () => `The manifest gives no ${field}`,
       onSome: (version) => `The manifest's ${field} is ${code(version)}`,
