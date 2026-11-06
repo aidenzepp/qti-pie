@@ -14,14 +14,16 @@ import type { ClassOwner } from "#plate/vocabulary.ts";
 
 /**
  * The markers the stylesheet's rules are read against, from the part table: the item Root, the
- * Choice parts, the text Controls, the results box and the Notice.
+ * Choice parts, the text Controls, the results box, the Notice and the navigation's item button.
  */
 const marker = {
   choice: rowFor("choice-interaction", "choice").slot,
+  choiceRoot: rowFor("choice-interaction", "root").slot,
   control: rowFor("choice-interaction", "control").slot,
   extendedTextControl: rowFor("extended-text-interaction", "control").slot,
   indicator: rowFor("choice-interaction", "indicator").slot,
   item: rowFor("item", "root").slot,
+  itemButton: rowFor("test-navigation", "itemButton").slot,
   message: rowFor("item", "message").slot,
   notice: rowFor("item", "notice").slot,
   prompt: rowFor("choice-interaction", "prompt").slot,
@@ -61,14 +63,17 @@ const themeLine = "/* == theme: plate's default theme, on the part markers == */
 /**
  * The only attribute names a selector may test (spec §4.2; `data-disabled` by the Mind's ruling
  * on handle `66ece1f9`, for the disabled state; `data-orientation`, the authored orientation on the
- * Choice Root, from P2-04).
+ * Choice Root, from P2-04; from P4-21, `aria-current`, which the current item's button carries, and
+ * `readonly`, which a text Control carries in review and solution).
  */
 const attributeNames: ReadonlySet<string> = new Set([
+  "aria-current",
   "aria-invalid",
   "data-disabled",
   "data-mode",
   "data-orientation",
   "data-slot",
+  "readonly",
   "type",
 ]);
 
@@ -174,6 +179,23 @@ const counterStyles: ReadonlySet<string> = new Set([
 const hiddenControlClass = "qti-input-control-hidden";
 
 /**
+ * The properties that mark a part by its shape, weight or line, which forced colours keep and a
+ * reader who cannot tell colours apart still sees, unlike a colour, a background or an opacity.
+ */
+const markProperties: ReadonlySet<string> = new Set([
+  "border-style",
+  "border-width",
+  "font-style",
+  "font-weight",
+  "text-decoration-line",
+]);
+
+/**
+ * The modes in which the candidate changes no response, which a Root names in `data-mode`.
+ */
+const readingModes = ["review", "solution"] as const;
+
+/**
  * A quoted string in CSS text, double or single, with its escapes.
  */
 const quotedStrings = /"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/gu;
@@ -200,6 +222,32 @@ const subjectCompounds = (selector: string): readonly Compound[] => {
 };
 
 /**
+ * Tell whether a compound tests an attribute for one value.
+ *
+ * @param compound One compound.
+ * @param name The attribute's name.
+ * @param value The value.
+ * @returns Whether the compound holds `[<name>="<value>"]`.
+ */
+const holdsEquals = (compound: Compound, name: string, value: string): boolean =>
+  compound.attributes.some(
+    (test) =>
+      test.name === name &&
+      Option.contains(test.operator, "=") &&
+      Option.contains(test.value, value),
+  );
+
+/**
+ * Tell whether a compound tests an attribute's presence.
+ *
+ * @param compound One compound.
+ * @param name The attribute's name.
+ * @returns Whether the compound holds `[<name>]`.
+ */
+const holdsPresence = (compound: Compound, name: string): boolean =>
+  compound.attributes.some((test) => test.name === name && Option.isNone(test.operator));
+
+/**
  * Tell whether a compound tests for a part's marker.
  *
  * @param compound One compound.
@@ -207,12 +255,7 @@ const subjectCompounds = (selector: string): readonly Compound[] => {
  * @returns Whether the compound holds `[data-slot="<slot>"]`.
  */
 const holdsSlot = (compound: Compound, slot: string): boolean =>
-  compound.attributes.some(
-    (test) =>
-      test.name === "data-slot" &&
-      Option.contains(test.operator, "=") &&
-      Option.contains(test.value, slot),
-  );
+  holdsEquals(compound, "data-slot", slot);
 
 /**
  * Tell whether a compound holds a pseudo-class.
@@ -230,13 +273,7 @@ const holdsPseudoClass = (compound: Compound, name: string): boolean =>
  * @param compound One compound.
  * @returns Whether the compound holds `[aria-invalid="true"]`.
  */
-const holdsInvalid = (compound: Compound): boolean =>
-  compound.attributes.some(
-    (test) =>
-      test.name === "aria-invalid" &&
-      Option.contains(test.operator, "=") &&
-      Option.contains(test.value, "true"),
-  );
+const holdsInvalid = (compound: Compound): boolean => holdsEquals(compound, "aria-invalid", "true");
 
 /**
  * Read the selectors of every `:has()` a selector holds, at any depth.
@@ -409,8 +446,8 @@ const strayReferences = (sheet: Sheet): readonly string[] =>
 
 /**
  * Find the names a selector may not use, at any depth: a marker no part carries, an attribute
- * outside the five, a type outside the four, a class that is not a `qti-*` vocabulary class (so
- * never `dark`), and `:root`.
+ * outside {@link attributeNames}, a type outside the four, a class that is not a `qti-*` vocabulary
+ * class (so never `dark`), and `:root`.
  *
  * @param sheet The scanned sheet.
  * @returns Each offending name, as `<kind> <name>`.
@@ -686,6 +723,125 @@ const typedNavigationSelectors = (sheet: Sheet): readonly string[] =>
         all.some((compound) => compound.attributes.some((test) => test.name === "type"))
       );
     });
+
+/**
+ * Read how the sheet marks the current item's button other than by colour: the properties of
+ * {@link markProperties} declared by a rule whose subject compound holds the item button's marker
+ * and `[aria-current="step"]`.
+ *
+ * @param sheet The scanned sheet.
+ * @returns Each such property, once per declaration, in sheet order; empty when only colour marks
+ *   the current item.
+ */
+const currentMarks = (sheet: Sheet): readonly string[] =>
+  sheet.rules
+    .filter((rule) =>
+      rule.selectors.some((selector) =>
+        subjectCompounds(selector).some(
+          (compound) =>
+            holdsSlot(compound, marker.itemButton) && holdsEquals(compound, "aria-current", "step"),
+        ),
+      ),
+    )
+    .flatMap((rule) => rule.declarations)
+    .map((declaration) => declaration.property)
+    .filter((property) => markProperties.has(property));
+
+/**
+ * Find the selectors that set an outline on a part outside its focus: a subject compound holds the
+ * part's marker but not `:focus-visible`, in a rule that declares an `outline` property. Such a
+ * rule weighs what the focus rule weighs, so placed after it, it would take the focus ring away.
+ *
+ * @param sheet The scanned sheet.
+ * @param slots The parts' markers.
+ * @returns Each offending selector.
+ */
+const strayOutlines = (sheet: Sheet, slots: readonly string[]): readonly string[] =>
+  sheet.rules
+    .filter((rule) =>
+      rule.declarations.some((declaration) => declaration.property.startsWith("outline")),
+    )
+    .flatMap((rule) => rule.selectors)
+    .filter((selector) =>
+      subjectCompounds(selector).some(
+        (compound) =>
+          slots.some((slot) => holdsSlot(compound, slot)) &&
+          !holdsPseudoClass(compound, "focus-visible"),
+      ),
+    );
+
+/**
+ * Tell whether a compound tests a Root for a mode the author did not disable: it holds
+ * `[data-mode="<mode>"]` and a `:not()` of `[data-disabled]`.
+ *
+ * @param compound One compound.
+ * @param mode The mode.
+ * @returns Whether the compound holds both.
+ */
+const holdsUndisabledMode = (compound: Compound, mode: string): boolean =>
+  holdsEquals(compound, "data-mode", mode) &&
+  compound.pseudoClasses.some(
+    (pseudoClass) =>
+      pseudoClass.name === "not" &&
+      pseudoClass.selectors.some((selector) =>
+        compoundsDeep(selector).some((inner) => holdsPresence(inner, "data-disabled")),
+      ),
+  );
+
+/**
+ * Find the modes in which a Choice row whose Control is disabled stays dimmed: no rule after the
+ * last that dims the row (one reaching it that declares an `opacity` other than `1`) reaches the
+ * row under a Choice Root in that mode, the author not having disabled it, and declares `opacity:
+ * 1`.
+ *
+ * @param sheet The scanned sheet.
+ * @returns Each such mode of {@link readingModes}.
+ */
+const dimmedModes = (sheet: Sheet): readonly string[] => {
+  const lastDim = sheet.rules.findLastIndex(
+    (rule) =>
+      reaches(rule, marker.choice) &&
+      Option.exists(declared(rule, "opacity"), (value) => value !== "1"),
+  );
+
+  return readingModes.filter(
+    (mode) =>
+      !sheet.rules.some(
+        (rule, index) =>
+          index > lastDim &&
+          reaches(rule, marker.choice) &&
+          declares(rule, "opacity", "1") &&
+          holdsAnywhere(
+            rule,
+            (compound) =>
+              holdsSlot(compound, marker.choiceRoot) && holdsUndisabledMode(compound, mode),
+          ),
+      ),
+  );
+};
+
+/**
+ * Find the Controls no rule gives a readonly look: no rule whose subject compound holds the
+ * Control's marker and `[readonly]` sets its surface to a token without dimming it.
+ *
+ * @param sheet The scanned sheet.
+ * @param slots The Controls' markers.
+ * @returns Each marker left without a readonly look.
+ */
+const unreadonlyControls = (sheet: Sheet, slots: readonly string[]): readonly string[] =>
+  slots.filter(
+    (slot) =>
+      !sheet.rules.some(
+        (rule) =>
+          Option.isSome(tokenFallback(rule, "background-color")) &&
+          Option.isNone(declared(rule, "opacity")) &&
+          rule.selectors.some((selector) =>
+            subjectCompounds(selector).some(
+              (compound) => holdsSlot(compound, slot) && holdsPresence(compound, "readonly"),
+            ),
+          ),
+      ),
+  );
 
 /**
  * Find the rules that give the Status region the refused look, `--destructive`, without keying it
@@ -1053,7 +1209,7 @@ layer(Stylesheet.layer)("styles.css", (test) => {
   );
 
   test.effect(
-    "keys only on part markers, the five attributes, the four types and qti-* classes; never html, body, .dark or :root",
+    "keys only on part markers, the listed attributes, the four types and qti-* classes; never html, body, .dark or :root",
     () =>
       Effect.gen(function* names() {
         const { sheet } = yield* Stylesheet;
@@ -1262,6 +1418,44 @@ layer(Stylesheet.layer)("styles.css", (test) => {
       const { sheet } = yield* Stylesheet;
 
       assert.deepStrictEqual(undimmedParts(sheet, navigationButtons), []);
+    }),
+  );
+
+  test.effect(
+    "marks the current item's button by its border or weight, never by colour alone",
+    () =>
+      Effect.gen(function* currentItem() {
+        const { sheet } = yield* Stylesheet;
+
+        assert.isNotEmpty(currentMarks(sheet));
+      }),
+  );
+
+  test.effect(
+    "keeps the focus ring on every navigation button and text Control: only a :focus-visible rule sets an outline",
+    () =>
+      Effect.gen(function* focusHeld() {
+        const { sheet } = yield* Stylesheet;
+
+        assert.deepStrictEqual(strayOutlines(sheet, [...navigationButtons, ...textControls]), []);
+      }),
+  );
+
+  test.effect(
+    "[Q-2] shows a Choice row at full strength in review and solution, unless the author disabled the Root",
+    () =>
+      Effect.gen(function* readingChoice() {
+        const { sheet } = yield* Stylesheet;
+
+        assert.deepStrictEqual(dimmedModes(sheet), []);
+      }),
+  );
+
+  test.effect("[Q-20] [Q-5] gives a readonly text Control a surface of its own, undimmed", () =>
+    Effect.gen(function* readonlyControls() {
+      const { sheet } = yield* Stylesheet;
+
+      assert.deepStrictEqual(unreadonlyControls(sheet, textControls), []);
     }),
   );
 
@@ -1493,6 +1687,32 @@ describe("styles.css predicates, on negative controls", () => {
 
         assert.deepStrictEqual(typedNavigationSelectors(sheet), [typed]);
       }),
+  );
+
+  it.effect(
+    "a current item marked by its border colour alone gives no mark, and by width one",
+    () =>
+      Effect.gen(function* currentColour() {
+        const current = `:where([data-slot="${marker.itemButton}"][aria-current="step"])`;
+        const colour = "border-color: var(--primary, oklch(0.205 0 0));";
+        const coloured = yield* scanSheet(`${current} {\n  ${colour}\n}\n`);
+        const widened = yield* scanSheet(`${current} {\n  border-width: 2px;\n  ${colour}\n}\n`);
+
+        assert.deepStrictEqual(currentMarks(coloured), []);
+        assert.deepStrictEqual(currentMarks(widened), ["border-width"]);
+      }),
+  );
+
+  it.effect("an outline set outside :focus-visible is reported, and inside it is not", () =>
+    Effect.gen(function* outlineOutsideFocus() {
+      const stray = `:where([data-slot="${marker.itemButton}"][aria-current="step"])`;
+      const focused = `:where([data-slot="${marker.itemButton}"]:focus-visible)`;
+      const sheet = yield* scanSheet(
+        `${focused} {\n  outline-width: 3px;\n}\n\n${stray} {\n  outline-width: 0;\n}\n`,
+      );
+
+      assert.deepStrictEqual(strayOutlines(sheet, navigationButtons), [stray]);
+    }),
   );
 
   it.effect("a refused look on the Status region alone is reported, and on its :has() is not", () =>

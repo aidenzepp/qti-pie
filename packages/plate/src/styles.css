@@ -587,6 +587,20 @@
   opacity: 0.5;
 }
 
+/*
+ * A Choice row in review or solution: at full strength, after the rule above. Its Control is
+ * disabled there only because the answer it shows cannot change, as a text Control is readonly
+ * there; a Root the author disabled, which carries data-disabled, stays dimmed in every mode.
+ */
+:where(
+  [data-slot="choice-interaction"][data-mode="review"]:not([data-disabled])
+    [data-slot="choice-interaction-choice"],
+  [data-slot="choice-interaction"][data-mode="solution"]:not([data-disabled])
+    [data-slot="choice-interaction-choice"]
+) {
+  opacity: 1;
+}
+
 /* Focus on a Choice row, by its Control: shadcn's 3px ring at half strength. */
 :where(
   [data-slot="choice-interaction-choice"]:has(
@@ -720,6 +734,18 @@
   opacity: 0.5;
 }
 
+/*
+ * A readonly text Control, as review and solution show one: the muted surface, at full strength,
+ * since its text is the answer shown. It stays a tab stop, so it keeps the focus ring below.
+ */
+:where(
+  [data-slot="text-entry-interaction-control"][readonly],
+  [data-slot="extended-text-interaction-control"][readonly]
+) {
+  background-color: var(--muted, oklch(0.97 0 0));
+  color: var(--card-foreground, oklch(0.145 0 0));
+}
+
 /* Focus on a text Control: the same ring as a Choice row's. */
 :where(
   [data-slot="text-entry-interaction-control"]:focus-visible,
@@ -830,6 +856,18 @@
   font: inherit;
   background-color: var(--card, oklch(1 0 0));
   color: var(--card-foreground, oklch(0.145 0 0));
+}
+
+/*
+ * The current item's button: a 2px border in --primary and bold text, so its place shows by width
+ * and weight, not by colour alone (WCAG 1.4.1), forced colours included. The padding gives back
+ * the border's extra pixel. It sets no outline, so the focus ring below holds on it.
+ */
+:where([data-slot="test-navigation-item-button"][aria-current="step"]) {
+  padding: calc(0.25rem - 1px) calc(0.75rem - 1px);
+  border-width: 2px;
+  border-color: var(--primary, oklch(0.205 0 0));
+  font-weight: 600;
 }
 
 /* A navigation button under the pointer, unless it is disabled: a Choice row's hover look. */
