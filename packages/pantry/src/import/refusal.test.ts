@@ -128,6 +128,13 @@ const assertMapped = (law: ImportLaw, rule: string): void => {
 };
 
 describe("the rules of the canonical wave's new laws", () => {
+  it("keys ForeignAttribute(node,prefix,local) wildcard-attribute", () => {
+    assertMapped(
+      { fields: ["node", "prefix", "local"], kind: "primaryKey", relation: "ForeignAttribute" },
+      "wildcard-attribute",
+    );
+  });
+
   it("keys AttributeSpelling attribute-lexical, as AttributeLexical is", () => {
     const spelling: ImportLaw = {
       fields: ["node", "attribute"],
@@ -337,6 +344,9 @@ const writtenRules = {
     "TemplateLocationUri",
     "TemplateUri",
     "XIncludeUri",
+    "XlinkArcroleUri",
+    "XlinkHrefUri",
+    "XlinkRoleUri",
     "XmlBaseUri",
   ],
   "usage-lexical": [
@@ -368,7 +378,9 @@ const writtenRules = {
     "VariableReference",
     "WeightReference",
     "WeightValue",
+    "XlinkLabelName",
     "XmlEntityName",
+    "XmlLocalName",
   ],
 } satisfies Record<string, readonly string[]>;
 
@@ -441,11 +453,11 @@ const makeEveryContract = (): readonly string[] => {
 const everyContract: readonly string[] = makeEveryContract();
 
 describe("the rules of a contract", () => {
-  it("names 146 contracts, each in the expected table once", () => {
+  it("names 151 contracts, each in the expected table once", () => {
     const names = everyContract;
 
-    assert.strictEqual(names.length, 146);
-    assert.strictEqual(expectedRules.size, 146);
+    assert.strictEqual(names.length, 151);
+    assert.strictEqual(expectedRules.size, 151);
     assert.deepStrictEqual([...expectedRules.keys()].toSorted(), names.toSorted());
   });
 

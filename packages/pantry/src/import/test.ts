@@ -25,7 +25,6 @@ import type { ItemInput } from "#pantry/import/item.ts";
 import { requiredAttribute } from "#pantry/import/required.ts";
 import {
   closedOf,
-  collapse,
   ItemRefusal,
   kindOf,
   Rows,
@@ -36,6 +35,7 @@ import {
   withParents,
 } from "#pantry/import/tree.ts";
 import type { IndexedNode, NodeIndex } from "#pantry/import/tree.ts";
+import { collapse } from "#pantry/import/whitespace.ts";
 import {
   BranchExit,
   NavigationMode,

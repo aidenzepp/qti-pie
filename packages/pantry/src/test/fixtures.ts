@@ -408,6 +408,25 @@ export const negativeNames = [
 ] as const;
 
 /**
+ * The names of the ten wildcard fixtures of phase 11 (spec W12): foreign content under the lax
+ * hosts of `qti-custom-operator`, `xi:include`, `xi:fallback` and LOM, the four refusals, and
+ * `test-selection-foreign`, a test with an extension element and an `xml:lang` on the strict
+ * attribute hosts `qti-selection` and `qti-ordering`.
+ */
+const wildcardNames = [
+  "cut-custom-operator",
+  "operator-foreign-content",
+  "fallback-3-0-1",
+  "lom-wildcard",
+  "operator-foreign-first",
+  "nested-root-in-foreign",
+  "unqualified-on-operator",
+  "strict-file-foreign",
+  "qti-ns-under-operator",
+  "test-selection-foreign",
+] as const;
+
+/**
  * The names `materialize` accepts: `simple`, its seven variants and the eleven hand-edited
  * packages, each the same package with the edits of its row in the spec table, `sharedMedia`, the
  * examples' shared-media package unedited, `quoted-q`, phase 2's hand-broken package,
@@ -501,6 +520,7 @@ export const fixtureNames = [
   "usage3-feb-30",
   "usage3-bad-context",
   "usage3-bad-name",
+  ...wildcardNames,
 ] as const;
 
 /**
@@ -2510,7 +2530,7 @@ const testLinearEdits: readonly Edit[] = [
  * `select="+2"` on another, a `fixed` item ref, and a third section with `keep-together="true"`.
  * Sections A and B leave `keep-together` to its default.
  */
-const testSelectionEdits: readonly Edit[] = [
+const testSelectionTextEdits: readonly Edit[] = [
   replaceIn(
     "rtest12.xml",
     '<qti-selection select="2"/>\n            <qti-ordering shuffle="false"/>',
@@ -2538,12 +2558,21 @@ const testSelectionEdits: readonly Edit[] = [
       "    </qti-test-part>",
     ].join("\n"),
   ),
-  {
-    _tag: "looseTest",
-    schemaversion: "3.0.0",
-    test: "qtiv3-examples/tests/rtest12.xml",
-  },
 ];
+
+/**
+ * The edit that stubs the items `rtest12.xml` names, after the text edits.
+ */
+const testSelectionLoose: Edit = {
+  _tag: "looseTest",
+  schemaversion: "3.0.0",
+  test: "qtiv3-examples/tests/rtest12.xml",
+};
+
+/**
+ * The edits of `test-selection`.
+ */
+const testSelectionEdits: readonly Edit[] = [...testSelectionTextEdits, testSelectionLoose];
 
 /**
  * The extra outcome declarations of `test-mapping`, one for each prefixed source it names.
@@ -2933,6 +2962,160 @@ const testContentEdits: readonly Edit[] = [
     "imsmanifest.xml",
     '<file href="assessment.xml"/>',
     '<file href="assessment.xml"/>\n            <file href="styles/test.css"/>',
+  ),
+];
+
+/**
+ * The mathassess namespace `SineRule-001.xml` declares as `ma`, which the wildcard fixtures use as
+ * their foreign namespace.
+ */
+const mathassessNamespace = "http://mathassess.qtitools.org/xsd/mathassess";
+
+/**
+ * The XInclude namespace, declared where a wildcard fixture uses `xi`.
+ */
+const xincludeNamespace = "http://www.w3.org/2001/XInclude";
+
+/**
+ * The XLink namespace, declared where a wildcard fixture uses `xlink`.
+ */
+const xlinkNamespace = "http://www.w3.org/1999/xlink";
+
+/**
+ * The item of `BBQsTest` that the operator fixtures are cut from: a `qti-custom-operator` with one
+ * `qti-base-value` operand, in its template processing.
+ */
+const sineRuleItem = "id-bd44a757f562/SineRule-001.xml";
+
+/**
+ * The start tag of `sineRuleItem`'s one `qti-custom-operator`, without its closing `>`.
+ */
+const customOperatorStart =
+  '<qti-custom-operator class="org.qtitools.mathassess.CasProcess" ma:syntax="text/x-maxima" ma:returnType="float"';
+
+/**
+ * The text that opens the operator's one operand, and the text that ends it, which the foreign
+ * content goes before and after.
+ */
+const operandStart = '<qti-base-value base-type="string"><![CDATA[';
+
+const operandEnd = "]]></qti-base-value>";
+
+/**
+ * Build the spec of a fixture cut from `sineRuleItem`: `edits` of the item, then the cut.
+ *
+ * @param name - The fixture's name.
+ * @param edits - The edits of `sineRuleItem`.
+ * @returns The spec.
+ */
+const overOperator = (name: string, edits: readonly Edit[]): FixtureSpec => {
+  const cut = cutItem(name, "BBQsTest", sineRuleItem, "3.0.0");
+
+  return { ...cut, edits: [...edits, ...cut.edits] };
+};
+
+/**
+ * Build the edit that adds `text` after the operator's operand.
+ *
+ * @param text - The content that follows the operand inside the operator.
+ * @returns The edit as plain data.
+ */
+const afterOperand = (text: string): Edit => replaceIn(sineRuleItem, operandEnd, operandEnd + text);
+
+/**
+ * Build the `ma:extension` that `operator-foreign-content` puts after the operand: foreign and
+ * unqualified attributes, the four `xml:` attributes (one the XSD does not declare), and children
+ * in no namespace, in the QTI namespace and in XInclude.
+ *
+ * @param inside - Further content, at the end of the extension.
+ * @returns The element's text.
+ */
+const extension = (inside: string): string =>
+  `<ma:extension ma:k="v" plain="1" xml:lang="en" xml:space="preserve" xml:id="x1" xml:foo="1">text<ma:inner/><p>para</p><qti-prompt>lax</qti-prompt><xi:include xmlns:xi="${xincludeNamespace}" href="inner.xml"/>${inside}</ma:extension>`;
+
+/**
+ * The `xi:include` that follows the extension: its fallback holds a QTI paragraph and an element
+ * of no namespace.
+ */
+const includeWithFallback = `<xi:include xmlns:xi="${xincludeNamespace}" href="part.xml"><xi:fallback><p>fallback</p><foo xmlns="">local</foo></xi:fallback></xi:include>`;
+
+/**
+ * The edits of `operator-foreign-content`, and of `nested-root-in-foreign` with `inside` in the
+ * extension. The two `xi:include` targets, `inner.xml` and `part.xml`, are added as package
+ * entries beside `sineRuleItem` (decision 285): the reference census records every in-package
+ * `xi:include/@href`, and the importer stores an include as written and never resolves it. File
+ * edits apply before text edits and the cut, and the cut keeps every file its `href` scan finds.
+ *
+ * @param inside - Content at the end of the extension.
+ * @returns The edits of `sineRuleItem`.
+ */
+const operatorForeignEdits = (inside: string): readonly Edit[] => [
+  { _tag: "addFile", path: "id-bd44a757f562/inner.xml", source: { text: "<inner/>" } },
+  { _tag: "addFile", path: "id-bd44a757f562/part.xml", source: { text: "<part/>" } },
+  replaceIn(sineRuleItem, `${customOperatorStart}>`, `${customOperatorStart} xml:foo="1">`),
+  afterOperand(extension(inside) + includeWithFallback),
+];
+
+/**
+ * The item `fallback-3-0-1` is cut from, the one `html-<element>` fixtures use.
+ */
+const fallbackItem = bgChoiceItem;
+
+/**
+ * The response processing of {@link fallbackItem}, a template reference with no content.
+ */
+const fallbackResponseProcessing =
+  '<qti-response-processing template="https://purl.imsglobal.org/spec/qti/v3p0/rptemplates/match_correct"/>';
+
+/**
+ * The edits of `fallback-3-0-1`: an `xi:include` with a fallback in the item body, and a response
+ * condition testing a custom operator, with a foreign element after its operand, in the response
+ * processing. The include's target, `items/part.xml`, is a package entry added beside the item
+ * (decision 285): the reference census records every in-package `xi:include/@href`, and the
+ * importer stores an include as written and never resolves it.
+ */
+const fallbackEdits: readonly Edit[] = [
+  { _tag: "addFile", path: "items/part.xml", source: { text: "<part/>" } },
+  replaceIn(
+    fallbackItem,
+    bgChoiceQuestion,
+    `${bgChoiceQuestion}<xi:include xmlns:xi="${xincludeNamespace}" href="part.xml"><xi:fallback><p>fallback</p><ma:inner xmlns:ma="${mathassessNamespace}"/></xi:fallback></xi:include>`,
+  ),
+  replaceIn(
+    fallbackItem,
+    fallbackResponseProcessing,
+    `${fallbackResponseProcessing.slice(0, -2)}><qti-response-condition><qti-response-if><qti-custom-operator class="org.example.Test"><qti-base-value base-type="boolean">true</qti-base-value><ma:extension xmlns:ma="${mathassessNamespace}" ma:k="v"/></qti-custom-operator></qti-response-if></qti-response-condition></qti-response-processing>`,
+  ),
+];
+
+/**
+ * The `ma:ext` that `lom-wildcard` adds to the manifest's `general`: a foreign attribute, the
+ * four `xml:` attributes the schema reads, the ten XLink attributes and one it does not declare.
+ */
+const lomExtension =
+  '<ma:ext ma:k="v" xml:id="m1" xml:space="preserve" xlink:type="simple" xlink:href="https://example.org/a" xlink:role="https://example.org/r" xlink:arcrole="https://example.org/ar" xlink:title=" t " xlink:show="new" xlink:actuate="onLoad" xlink:label="a" xlink:from="a" xlink:to="b" xlink:foo="1"/>';
+
+/**
+ * The edits of `lom-wildcard`, over `extmeta`'s: the extension in the manifest's `general`, a
+ * foreign attribute and an `xlink:href` on its `lom`, and two extensions with a duplicate `xml:id`
+ * and a bad `xml:space` in a `general` of the record.
+ */
+const lomWildcardEdits: readonly Edit[] = [
+  ...extmetaEdits,
+  replaceIn(
+    "imsmanifest.xml",
+    `<imsmd:lom>${CRLF}            <imsmd:general>`,
+    `<imsmd:lom xmlns:ma="${mathassessNamespace}" xmlns:xlink="${xlinkNamespace}" ma:k="v" xlink:href="https://example.org/lom">${CRLF}            <imsmd:general>`,
+  ),
+  replaceIn(
+    "imsmanifest.xml",
+    `${CRLF}            </imsmd:general>${CRLF}            <imsmd:lifeCycle>`,
+    `${CRLF}                ${lomExtension}${CRLF}            </imsmd:general>${CRLF}            <imsmd:lifeCycle>`,
+  ),
+  replaceIn(
+    "meta/choice.xml",
+    "    <educational>\n",
+    `    <general xmlns:ma="${mathassessNamespace}"><ma:ext xml:id="r1" xml:space="bogus"/><ma:ext xml:id="r1"/></general>\n    <educational>\n`,
   ),
 ];
 
@@ -3946,6 +4129,79 @@ const negativeSpecs: Record<(typeof negativeNames)[number], FixtureSpec> = {
 };
 
 /**
+ * The edits of `test-selection-foreign`, over `test-selection`'s text edits: an `xml:lang` and one
+ * `ma:ext` child, with its namespace declaration, on the first section's `qti-selection` and on
+ * section C's `qti-ordering`. Both are strict attribute hosts (3.3 strict/a and strict/d): the
+ * `xml:lang` is typed, the extension element foreign.
+ */
+const testSelectionForeignEdits: readonly Edit[] = [
+  ...testSelectionTextEdits,
+  replaceIn(
+    "rtest12.xml",
+    '<qti-selection select="2" with-replacement="true"/>',
+    `<qti-selection select="2" with-replacement="true" xml:lang="en"><ma:ext xmlns:ma="${mathassessNamespace}"/></qti-selection>`,
+  ),
+  replaceIn(
+    "rtest12.xml",
+    '<qti-ordering shuffle="false"/>\n            <qti-assessment-item-ref identifier="item901"',
+    `<qti-ordering shuffle="false" xml:lang="en"><ma:ext xmlns:ma="${mathassessNamespace}"/></qti-ordering>\n            <qti-assessment-item-ref identifier="item901"`,
+  ),
+  testSelectionLoose,
+];
+
+/**
+ * The ten wildcard fixtures of phase 11 (spec W12), keyed by name.
+ *
+ * - `cut-custom-operator` is `SineRule-001.xml` unedited, a `qti-custom-operator` in its template
+ *   processing.
+ * - `operator-foreign-content` adds `xml:foo` to the operator and an `ma:extension` and an
+ *   `xi:include` with a fallback after its operand. `nested-root-in-foreign` holds a
+ *   `qti-response-processing` inside the extension.
+ * - `fallback-3-0-1` is a 3.0.1 item with an `xi:include` fallback in its body and a custom operator
+ *   with a foreign element in its response processing.
+ * - Every `xi:include` target in these fixtures (`inner.xml` and `part.xml` beside
+ *   `SineRule-001.xml`, `items/part.xml`) is a package entry (decision 285): the importer stores an
+ *   include as written and never resolves it, and the reference census needs the target to exist.
+ * - `lom-wildcard` is `extmeta` with foreign content and XLink attributes in LOM.
+ * - The refusals: `operator-foreign-first` puts the foreign element before the operand,
+ *   `unqualified-on-operator` an unqualified attribute on the operator, `strict-file-foreign` a
+ *   foreign element in a file's `metadata`, and `qti-ns-under-operator` a `qti-foo` after the
+ *   operand.
+ */
+const wildcardSpecs: Record<(typeof wildcardNames)[number], FixtureSpec> = {
+  "cut-custom-operator": overOperator("cut-custom-operator", []),
+  "fallback-3-0-1": {
+    ...cutItem("fallback-3-0-1", "BPIG_22April", fallbackItem, "3.0.1"),
+    edits: [...fallbackEdits, { _tag: "cut", item: fallbackItem, schemaversion: "3.0.1" }],
+  },
+  "lom-wildcard": overSimple("lom-wildcard", lomWildcardEdits),
+  "nested-root-in-foreign": overOperator(
+    "nested-root-in-foreign",
+    operatorForeignEdits("<qti-response-processing/>"),
+  ),
+  "operator-foreign-content": overOperator("operator-foreign-content", operatorForeignEdits("")),
+  "operator-foreign-first": overOperator("operator-foreign-first", [
+    replaceIn(sineRuleItem, operandStart, `<ma:first/>${operandStart}`),
+  ]),
+  "qti-ns-under-operator": overOperator("qti-ns-under-operator", [afterOperand("<qti-foo/>")]),
+  "strict-file-foreign": overSimple("strict-file-foreign", [
+    replaceIn(
+      "imsmanifest.xml",
+      '<file href="images/sign.png"/>',
+      `<file href="images/sign.png"><metadata><ma:ext xmlns:ma="${mathassessNamespace}"/></metadata></file>`,
+    ),
+  ]),
+  "test-selection-foreign": {
+    edits: testSelectionForeignEdits,
+    member: `${testsDirectory}/rtest12.xml`,
+    name: "test-selection-foreign",
+  },
+  "unqualified-on-operator": overOperator("unqualified-on-operator", [
+    replaceIn(sineRuleItem, `${customOperatorStart}>`, `${customOperatorStart} foo="x">`),
+  ]),
+};
+
+/**
  * The spec table: one row per {@link FixtureName}, so adding a name without its row does not
  * compile.
  *
@@ -3996,6 +4252,7 @@ const specs: Record<FixtureName, FixtureSpec> = {
   ...copySpecs,
   ...testSpecs,
   ...negativeSpecs,
+  ...wildcardSpecs,
   "bad-identifier-value": {
     edits: [
       replaceIn("choice.xml", "<qti-value>ChoiceA</qti-value>", "<qti-value>Choice A</qti-value>"),

@@ -7,8 +7,9 @@
 import type { AnyRelation, Uuid } from "@bjornpagen/grizzle";
 import { Effect, Option, Predicate, Schema } from "effect";
 import { standardTemplate } from "#pantry/import/item.ts";
-import { collapse, replace, Rows, valueText } from "#pantry/import/tree.ts";
-import type { WhiteSpace } from "#pantry/import/tree.ts";
+import { Rows, valueText } from "#pantry/import/tree.ts";
+import { collapse, replace } from "#pantry/import/whitespace.ts";
+import type { WhiteSpace } from "#pantry/import/whitespace.ts";
 import { spelledText } from "#pantry/schema/attribute-homes.ts";
 import {
   Declaration,

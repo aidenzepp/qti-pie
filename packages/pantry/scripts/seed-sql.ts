@@ -12,8 +12,9 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import nodePath from "node:path";
 import { parseArgs } from "node:util";
+import { SchemaNamespace, SchemaSet } from "#pantry/schema/content/rosters.ts";
 import type { AdmissionRow } from "#pantry/schema/kinds/generic.ts";
-import { AttributeName, Ancestry, NodeKind } from "#pantry/schema/node.ts";
+import { AttributeName, Ancestry, NodeKind, RootKind } from "#pantry/schema/node.ts";
 import { admission, ancestryStep, attributeAdmission } from "#pantry/schema/seed/admission.ts";
 import { mappableBaseType } from "#pantry/schema/seed/mappable-base-type.ts";
 import { recordBindingFit } from "#pantry/schema/seed/record-binding-fit.ts";
@@ -26,6 +27,17 @@ import {
 } from "#pantry/schema/seed/operator-arity.ts";
 import { resourceTypes } from "#pantry/schema/seed/resource-types.ts";
 import { rootOfType } from "#pantry/schema/seed/root-of-type.ts";
+import type { GlobalRow, HostNamespaceRow, WildcardHostRow } from "#pantry/schema/seed/wildcard.ts";
+import {
+  attributeExclusion,
+  attributeWildcard,
+  globalAttribute,
+  globalElement,
+  namespaces,
+  rootSchemaSet,
+  wildcardExclusion,
+  wildcardHost,
+} from "#pantry/schema/seed/wildcard.ts";
 
 const SCHEMA = "qti";
 
@@ -125,6 +137,74 @@ const attributeRank = orderOf(AttributeName.handles);
 
 const ancestryRank = orderOf(Ancestry.handles);
 
+const rootRank = orderOf(RootKind.handles);
+
+const setRank = orderOf(SchemaSet.handles);
+
+const namespaceRank = orderOf(SchemaNamespace.handles);
+
+/**
+ * The roster handle of a seeded namespace URI: `absent` for none, else the prefix `namespaces`
+ * gives it.
+ */
+const namespaceHandle = (uri: string): string => {
+  if (uri === "") {
+    return "absent";
+  }
+
+  const found = Object.entries(namespaces).find(([, value]) => value === uri);
+  if (found === undefined) {
+    throw new Error(`a seed row names the namespace "${uri}", which its roster does not declare`);
+  }
+
+  return found[0];
+};
+
+const hostRows = (rows: readonly WildcardHostRow[]): readonly WildcardHostRow[] =>
+  rows.toSorted((a, b) => kindRank(a.host) - kindRank(b.host));
+
+const exclusionRows = (rows: readonly HostNamespaceRow[]): readonly HostNamespaceRow[] =>
+  rows.toSorted(
+    (a, b) =>
+      kindRank(a.host) - kindRank(b.host) ||
+      namespaceRank(namespaceHandle(a.namespace)) - namespaceRank(namespaceHandle(b.namespace)),
+  );
+
+const globalRows = (rows: readonly GlobalRow[]): readonly GlobalRow[] =>
+  rows.toSorted(
+    (a, b) =>
+      setRank(a.set) - setRank(b.set) ||
+      namespaceRank(namespaceHandle(a.namespace)) - namespaceRank(namespaceHandle(b.namespace)) ||
+      a.local.localeCompare(b.local),
+  );
+
+/**
+ * The columns of the two host tables.
+ */
+const hostColumns: readonly Column<WildcardHostRow>[] = [
+  handle("host", "node_kind", (row) => row.host),
+  handle("policy", "namespace_policy", (row) => row.policy),
+  handle("process", "process_contents", (row) => row.process),
+  handle("target", "schema_namespace", (row) => namespaceHandle(row.target)),
+];
+
+/**
+ * The columns of the two exclusion tables.
+ */
+const exclusionColumns: readonly Column<HostNamespaceRow>[] = [
+  handle("host", "node_kind", (row) => row.host),
+  handle("namespace", "schema_namespace", (row) => namespaceHandle(row.namespace)),
+];
+
+/**
+ * The columns of the two global declaration tables.
+ */
+const globalColumns: readonly Column<GlobalRow>[] = [
+  text("local", (row) => row.local),
+  handle("namespace", "schema_namespace", (row) => namespaceHandle(row.namespace)),
+  handle("set", "schema_set", (row) => row.set),
+];
+
 const bindingFitRows = bindingFit.toSorted(
   (a, b) =>
     a.interactionKind.localeCompare(b.interactionKind) ||
@@ -223,6 +303,51 @@ const tables: readonly Rendered[] = [
     declared: "OperatorArityUnbounded",
     name: "operator_arity_unbounded",
     rows: operatorArityUnbounded,
+  }),
+  renderTable<WildcardHostRow>({
+    columns: hostColumns,
+    declared: "WildcardHost",
+    name: "wildcard_host",
+    rows: hostRows(wildcardHost),
+  }),
+  renderTable<WildcardHostRow>({
+    columns: hostColumns,
+    declared: "AttributeWildcard",
+    name: "attribute_wildcard",
+    rows: hostRows(attributeWildcard),
+  }),
+  renderTable<HostNamespaceRow>({
+    columns: exclusionColumns,
+    declared: "WildcardExclusion",
+    name: "wildcard_exclusion",
+    rows: exclusionRows(wildcardExclusion),
+  }),
+  renderTable<HostNamespaceRow>({
+    columns: exclusionColumns,
+    declared: "AttributeExclusion",
+    name: "attribute_exclusion",
+    rows: exclusionRows(attributeExclusion),
+  }),
+  renderTable<GlobalRow>({
+    columns: globalColumns,
+    declared: "GlobalElement",
+    name: "global_element",
+    rows: globalRows(globalElement),
+  }),
+  renderTable<GlobalRow>({
+    columns: globalColumns,
+    declared: "GlobalAttribute",
+    name: "global_attribute",
+    rows: globalRows(globalAttribute),
+  }),
+  renderTable<(typeof rootSchemaSet)[number]>({
+    columns: [
+      handle("root", "root_kind", (row) => row.root),
+      handle("set", "schema_set", (row) => row.set),
+    ],
+    declared: "RootSchemaSet",
+    name: "root_schema_set",
+    rows: rootSchemaSet.toSorted((a, b) => rootRank(a.root) - rootRank(b.root)),
   }),
 ];
 

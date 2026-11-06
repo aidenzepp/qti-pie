@@ -9,17 +9,17 @@ import { contentOf, elementChildren } from "#pantry/import/leaf.ts";
 import { NotQti3 } from "#pantry/import/manifest.ts";
 import {
   closedOf,
-  collapse,
   kindOf,
-  replace,
   Rows,
   treeRows,
   typedAttribute,
   UnmodeledVocabulary,
   valueText,
 } from "#pantry/import/tree.ts";
+import { collapse, replace } from "#pantry/import/whitespace.ts";
+import type { WhiteSpace } from "#pantry/import/whitespace.ts";
 import { ImportRefused } from "#pantry/import/refusal.ts";
-import type { NodeIndex, WhiteSpace } from "#pantry/import/tree.ts";
+import type { NodeIndex } from "#pantry/import/tree.ts";
 import {
   GlossaryUri,
   ManifestIdentifier,

@@ -331,5 +331,6 @@ export const rules = [
     itemBody: document.ItemBodyId,
     printedVariable: document.PrintedVariableId,
     responseDeclaration: ResponseDeclarationId,
+    xmlId: document.DocumentXmlId,
   }),
 ] as const;

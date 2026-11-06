@@ -162,6 +162,18 @@ const derived = [
 ];
 
 /**
+ * The five contracts the wildcard phase writes out beside the 146 above (the foreign element's
+ * local name and the four `xlink:` names). Sorted.
+ */
+const wildcard = [
+  "XlinkArcroleUri",
+  "XlinkHrefUri",
+  "XlinkLabelName",
+  "XlinkRoleUri",
+  "XmlLocalName",
+] as const;
+
+/**
  * A contract as the tests read it: its name.
  */
 interface Named {
@@ -205,12 +217,12 @@ describe("schema/contracts", () => {
     );
   });
 
-  it("makes exactly the 146 contracts the dry run and phase 5 derived", () => {
+  it("makes the 151 contracts the dry run and phase 5 derived (146) and the wildcard phase adds (five)", () => {
     const { arms, written } = everyName();
 
-    assert.strictEqual(written.length, 82);
+    assert.strictEqual(written.length, 87);
     assert.strictEqual(arms.length, 64);
-    assert.deepStrictEqual([...written, ...arms].toSorted(), derived);
+    assert.deepStrictEqual([...written, ...arms].toSorted(), [...derived, ...wildcard].toSorted());
   });
 
   it("makes the eleven contracts of phase 5 over their base patterns", () => {

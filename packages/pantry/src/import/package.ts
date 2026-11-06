@@ -288,7 +288,7 @@ export const documentRows = Effect.fn("import.documentRows")(function* documentR
 /**
  * Read the package at `dir` into rows and judge them, without the database: the manifest's, then
  * every document it lists, each built by {@link documentRows}, then the tree, manifest, item,
- * content, processing and usage guards.
+ * content, processing, usage and wildcard guards.
  */
 export const readRows = Effect.fn("import.readRows")(function* readRows(dir: string) {
   const entries = yield* listPackage(dir);
@@ -349,8 +349,8 @@ export const changeSetOf = (rows: Rows) => {
  * Import the package at `dir`.
  *
  * Reads `imsmanifest.xml` and every QTI document it lists, judges the rows with the tree, manifest,
- * item, content, processing and usage guards, and applies them in one `ChangeSet` through the
- * author role. `Db.open` and `db.apply` are retried on a transient refusal and on nothing else.
+ * item, content, processing, usage and wildcard guards, and applies them in one `ChangeSet` through
+ * the author role. `Db.open` and `db.apply` are retried on a transient refusal and on nothing else.
  * When the commit's outcome is unknown the package row is read back by its id: present, the import
  * was accepted; absent, the error is the answer.
  *

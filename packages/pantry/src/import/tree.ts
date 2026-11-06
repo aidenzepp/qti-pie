@@ -6,17 +6,20 @@
  * whose bindings do not hold together, the walk that pairs every element with its parent, and the
  * whitespace helpers every typed attribute passes through.
  *
- * {@link treeRows} also walks the root and writes every tree's node, edge, generic-arm, namespace
- * and attribute-reference rows; the kind-specific arms and typed attribute columns belong to the
- * modules that read the {@link NodeIndex} it returns.
+ * {@link treeRows} also walks the root and writes every tree's node, edge, generic-arm, namespace,
+ * attribute-reference and foreign rows; the kind-specific arms and typed attribute columns belong
+ * to the modules that read the {@link NodeIndex} it returns.
  */
 import type { AnyRelation, Fact, Uuid } from "@bjornpagen/grizzle";
-import { Effect, Option, Schema } from "effect";
+import { Effect, Option, Result, Schema } from "effect";
 import { ImportRefused } from "#pantry/import/refusal.ts";
+import { collapse, replace } from "#pantry/import/whitespace.ts";
+import type { WhiteSpace } from "#pantry/import/whitespace.ts";
 import type { Rule } from "#pantry/import/refusal.ts";
 import type { BaseType } from "#pantry/schema/declaration.ts";
 import { YesNo } from "#pantry/schema/content/rosters.ts";
 import type { YesNoHandle } from "#pantry/schema/content/rosters.ts";
+import { ForeignAttribute, ForeignElement } from "#pantry/schema/foreign.ts";
 import type { RegistryRow } from "#pantry/schema/kinds/generic.ts";
 import {
   Ancestry,
@@ -29,6 +32,7 @@ import {
   NamespaceDeclaration,
   Node,
   NodeKind,
+  NoNamespaceSchemaLocation,
   Pi,
   SchemaLocation,
   TextNode,
@@ -42,6 +46,9 @@ import {
   TreeXmlVersion,
   vocabularies,
   Ws,
+  XsiNil,
+  XsiType,
+  XsiTypeAttribute,
 } from "#pantry/schema/node.ts";
 import type {
   AncestryHandle,
@@ -55,14 +62,28 @@ import {
   NamespaceUri,
   PiTarget,
   XmlEntityName,
+  XmlLocalName,
 } from "#pantry/schema/contracts.ts";
 import * as patterns from "#pantry/schema/patterns.ts";
 import { FLAGS, handleOf, KindEnters } from "#pantry/schema/seed/ancestry.ts";
 import type { Flag } from "#pantry/schema/seed/ancestry.ts";
+import { foreignRows, schemaSetOf } from "#pantry/import/foreign.ts";
+import { classifyAttribute, classifyElement, scopeOf } from "#pantry/import/wildcard.ts";
+import type { Scope } from "#pantry/import/wildcard.ts";
+import { judgeTree } from "#pantry/import/xsi.ts";
+import type { NodeXsi, ProcessMode } from "#pantry/import/xsi.ts";
+import { wildcardHost } from "#pantry/schema/seed/wildcard.ts";
 import { exportCharset } from "@qti-pie/crust/charset.ts";
-import type { Child, Element, Misc, XmlDocument } from "@qti-pie/crust/tree.ts";
+import type { Attribute, Child, Element, Misc, XmlDocument } from "@qti-pie/crust/tree.ts";
 
 type BaseTypeHandle = (typeof BaseType.handles)[number];
+
+/**
+ * The process of each element wildcard host, by kind.
+ */
+const hostProcess: ReadonlyMap<string, ProcessMode> = new Map(
+  wildcardHost.map((row) => [row.host, row.process]),
+);
 
 /**
  * The rows an import has built so far, by relation.
@@ -183,30 +204,6 @@ export const withParents = (
     child.kind === "element" ? withParents(child, Option.some(element)) : [],
   ),
 ];
-
-/**
- * How an attribute's lexical value becomes its typed value: kept, with its tab, line feed and
- * carriage return characters turned to spaces, or collapsed like an `xs:token`.
- */
-export type WhiteSpace = "preserve" | "replace" | "collapse";
-
-/**
- * Turn each tab, line feed and carriage return into a space.
- *
- * @param s - The lexical value.
- * @returns The value with every such character replaced by one space.
- */
-export const replace = (s: string): string => s.replaceAll(/[\t\n\r]/gu, " ");
-
-/**
- * Apply the `xs:token` whitespace collapse: replace, then remove leading and trailing spaces, then
- * make each run of spaces one space.
- *
- * @param s - The lexical value.
- * @returns The collapsed value.
- */
-export const collapse = (s: string): string =>
-  replace(s).replaceAll(/ +/gu, " ").replaceAll(/^ | $/gu, "");
 
 /**
  * The value a typed `qti-value` holds for the element text `text` of base type `baseType`.
@@ -393,8 +390,6 @@ export const spelledInteger = (
 
 const xmlnsNamespace = "http://www.w3.org/2000/xmlns/";
 
-const xmlNamespace = "http://www.w3.org/XML/1998/namespace";
-
 const xsiNamespace = "http://www.w3.org/2001/XMLSchema-instance";
 
 /**
@@ -486,18 +481,63 @@ export const kindOf = (
 };
 
 /**
- * The first element or attribute of `element`'s subtree that no registry models, in document order.
- * An attribute in the XML namespace is modeled when its kind's registry lists its prefixed name
- * (`xml:lang`, `xml:base`); any other `xml:` name is not.
+ * The kind an element is under a parent of kind `parent`: `kindOf`'s answer, or inside wildcard
+ * content the classification of `wildcard.ts`.
+ */
+const classified = (
+  scope: Scope,
+  element: Element,
+  parent: Option.Option<NodeKindHandle>,
+): Option.Option<NodeKindHandle> =>
+  classifyElement(scope, element, parent, kindOf(element, parent));
+
+/**
+ * Whether an attribute of an element is passed over by the unmodeled-vocabulary check because a
+ * derived `xsi:type` may add it.
+ */
+type AttributePass = (element: Element, attribute: Attribute) => boolean;
+
+/**
+ * The attributes the judgment says each element's `xsi:type` adds, by element: the ones the
+ * unmodeled-vocabulary check passes over.
+ */
+const addedPass =
+  (judged: ReadonlyMap<Element, NodeXsi>): AttributePass =>
+  (element, attribute) =>
+    (judged.get(element)?.added ?? []).some(
+      (added) => added.namespace === attribute.namespace && added.local === attribute.local,
+    );
+
+/**
+ * What the check passes over once the judgment has refused the tree: the judgment returns no added
+ * attributes then, so every attribute of an element that carries `xsi:type` stays for the
+ * judgment's refusal to name, which the caller raises when nothing else in the tree is unmodeled.
+ */
+const typedPass: AttributePass = (element) =>
+  element.attributes.some(
+    (attribute) => attribute.namespace === xsiNamespace && attribute.local === "type",
+  );
+
+/**
+ * The first element or attribute of `element`'s subtree that no registry models and no wildcard
+ * admits, in document order. An attribute in the XML namespace is modeled when its kind's registry
+ * lists its prefixed name (`xml:lang`, `xml:base`); inside wildcard content an attribute is
+ * classified by `wildcard.ts`. The four attributes XML Schema declares in the `xsi` namespace pass
+ * on every element: `xsi:schemaLocation` is stored as written, the other three are judged by
+ * `xsi.ts` once the walk has indexed the tree.
  * An element whose ancestry no `Ancestry` handle names is refused as an element: it sits inside a
  * combination of flags the model cannot hold.
+ * An attribute `passes` names is not refused: the judgment of `xsi.ts` says a derived `xsi:type`
+ * adds it, and `XsiTypeAttribute` stores it.
  */
 const firstUnmodeled = (
+  scope: Scope,
   element: Element,
   parent: Option.Option<{ readonly kind: NodeKindHandle; readonly name: string }>,
   flags: readonly Flag[],
+  passes: AttributePass,
 ): Option.Option<UnmodeledVocabulary> => {
-  const kind = kindOf(element, parent.pipe(Option.map((above) => above.kind)));
+  const kind = classified(scope, element, parent.pipe(Option.map((above) => above.kind)));
   if (Option.isNone(kind) || Option.isNone(ancestryOf(flags))) {
     return Option.some(
       new UnmodeledVocabulary({
@@ -509,13 +549,11 @@ const firstUnmodeled = (
   }
 
   const own = new Set(rowsByHandle.get(kind.value)?.attributes);
-  const stray = element.attributes.find(
-    (attribute) =>
-      attribute.namespace !== xmlnsNamespace &&
-      !(attribute.namespace === xsiNamespace && attribute.local === "schemaLocation") &&
-      !(attribute.namespace === "" && own.has(attribute.local)) &&
-      !(attribute.namespace === xmlNamespace && own.has(`xml:${attribute.local}`)),
-  );
+  const stray = element.attributes.find((attribute) => {
+    const judged = classifyAttribute(scope, attribute, kind.value, own);
+
+    return judged === "stray" && !passes(element, attribute);
+  });
   if (stray !== undefined) {
     return Option.some(
       new UnmodeledVocabulary({
@@ -530,7 +568,7 @@ const firstUnmodeled = (
   const inside = enteredBy(flags, kind.value);
   for (const child of element.children) {
     if (child.kind === "element") {
-      const found = firstUnmodeled(child, here, inside);
+      const found = firstUnmodeled(scope, child, here, inside, passes);
       if (Option.isSome(found)) {
         return found;
       }
@@ -551,9 +589,12 @@ interface Walked {
   readonly namespaces: Fact<typeof NamespaceDeclaration>[];
   readonly nodes: Fact<typeof Node>[];
   readonly pis: Fact<typeof Pi>[];
+  readonly noNamespaceSchemaLocations: Fact<typeof NoNamespaceSchemaLocation>[];
   readonly schemaLocations: Fact<typeof SchemaLocation>[];
   readonly texts: Fact<typeof TextNode>[];
   readonly whitespace: Fact<typeof Ws>[];
+  readonly xsiNils: Fact<typeof XsiNil>[];
+  readonly xsiTypes: Fact<typeof XsiType>[];
 }
 
 const nonWhitespace = /[^ \t\r\n]/u;
@@ -565,12 +606,38 @@ const isWhitespaceRun = (value: string): value is Fact<typeof Ws>["value"] =>
   /^[ \t\r\n]+$/u.test(value);
 
 /**
+ * Keep the row of one attribute in the `xsi` namespace, as written, when it is one of the four XML
+ * Schema declares; any other name is the wildcard classification's.
+ */
+const collectXsi = (
+  walked: Walked,
+  attribute: Attribute,
+  node: Uuid,
+  kind: NodeKindHandle,
+): void => {
+  const written = { node, prefix: NamespacePrefix(attribute.prefix), value: attribute.value };
+
+  if (attribute.local === "schemaLocation") {
+    walked.schemaLocations.push(written);
+  } else if (attribute.local === "noNamespaceSchemaLocation") {
+    walked.noNamespaceSchemaLocations.push(written);
+  } else if (attribute.local === "type") {
+    walked.xsiTypes.push(written);
+  } else if (attribute.local === "nil") {
+    walked.xsiNils.push({ ...written, kind });
+  }
+};
+
+/**
  * Write the rows of one child of an element, or of the root, and for an element everything under it
  * in document order.
  *
- * The caller has checked the whole tree against the registries, so every element has a kind; one
- * that does not is a bug in that check, and is skipped here along with its subtree rather than
- * given a row.
+ * The caller has checked the whole tree against the registries and the wildcards, so every element
+ * has a kind; one that does not is a bug in that check, and is skipped here along with its subtree
+ * rather than given a row. An element inside wildcard content that no registry names is a `foreign`
+ * node: it gets the `Node` and `Edge` rows every element gets, under its prefix as written and its
+ * parent's ancestry, since `foreign` enters no flag, and stays in the node index for the modules
+ * that write its arm.
  */
 const walk = (
   child: Child,
@@ -582,6 +649,7 @@ const walk = (
   }>,
   position: number,
   input: TreeInput,
+  scope: Scope,
   walked: Walked,
   index: Map<Element, IndexedNode>,
 ): void => {
@@ -601,7 +669,7 @@ const walk = (
   let prefix = "";
 
   if (child.kind === "element") {
-    const found = kindOf(child, parent.pipe(Option.map((above) => above.kind)));
+    const found = classified(scope, child, parent.pipe(Option.map((above) => above.kind)));
     if (Option.isNone(found)) {
       return;
     }
@@ -661,12 +729,8 @@ const walk = (
         uri: NamespaceUri(attribute.value),
       });
       declared += 1;
-    } else if (attribute.namespace === xsiNamespace && attribute.local === "schemaLocation") {
-      walked.schemaLocations.push({
-        node: id,
-        prefix: NamespacePrefix(attribute.prefix),
-        value: attribute.value,
-      });
+    } else if (attribute.namespace === xsiNamespace) {
+      collectXsi(walked, attribute, id, kind);
     }
 
     for (const reference of attribute.references) {
@@ -681,9 +745,95 @@ const walk = (
 
   const here = Option.some({ ancestry, flags: enteredBy(flags, kind), id, kind });
   for (const [childPosition, grandchild] of child.children.entries()) {
-    walk(grandchild, here, childPosition, input, walked, index);
+    walk(grandchild, here, childPosition, input, scope, walked, index);
   }
 };
+
+/**
+ * The process mode of each element of a tree, as `xsi.ts` reads it: the mode of the nearest
+ * wildcard host above the element, `none` outside wildcard content. Every child of a host is
+ * taken as its wildcard content, one an explicit particle of the host included; the mode matters
+ * to the judgment only for an element with no declared type and for `skip`, and a particle has a
+ * declared type.
+ */
+const modesOf = (root: Element, nodes: NodeIndex): ReadonlyMap<Element, ProcessMode> => {
+  const modes = new Map<Element, ProcessMode>();
+  const visit = (element: Element, mode: ProcessMode): void => {
+    modes.set(element, mode);
+
+    const inside =
+      mode === "none" ? (hostProcess.get(nodes.get(element)?.kind ?? "") ?? "none") : mode;
+    for (const child of element.children) {
+      if (child.kind === "element") {
+        visit(child, inside);
+      }
+    }
+  };
+  visit(root, "none");
+
+  return modes;
+};
+
+/**
+ * Judge the `xsi:type`, `xsi:nil` and `xsi:noNamespaceSchemaLocation` of every element of the tree
+ * the walk indexed (`xsi.ts`'s `judgeTree`): what each element writes, or the first refusal. A root
+ * kind no schema set names has nothing to judge against and passes with nothing written.
+ */
+const xsiJudgment = (
+  root: Element,
+  input: TreeInput,
+  nodes: NodeIndex,
+): Result.Result<ReadonlyMap<Element, NodeXsi>, ImportRefused> => {
+  const set = schemaSetOf(input.root);
+  if (Option.isNone(set)) {
+    return Result.succeed(new Map());
+  }
+
+  const modes = modesOf(root, nodes);
+
+  return judgeTree(
+    root,
+    set.value,
+    input.version,
+    (element) => nodes.get(element)?.kind ?? "foreign",
+    (element) => modes.get(element) ?? "none",
+  );
+};
+
+/**
+ * The `XsiTypeAttribute` rows of the attributes the judgment says derived `xsi:type`s add, as
+ * written. An added attribute the wildcard classification calls foreign is `foreignRows`' and gets
+ * no row here, so no attribute is stored twice.
+ */
+const xsiTypeAttributeRows = (
+  judged: ReadonlyMap<Element, NodeXsi>,
+  nodes: NodeIndex,
+  scope: Scope,
+): Fact<typeof XsiTypeAttribute>[] =>
+  [...judged].flatMap(([element, { added }]) => {
+    const node = nodes.get(element);
+    if (node === undefined) {
+      return [];
+    }
+
+    const own = new Set(rowsByHandle.get(node.kind)?.attributes);
+
+    return element.attributes
+      .filter(
+        (attribute) =>
+          added.some(
+            (one) => one.namespace === attribute.namespace && one.local === attribute.local,
+          ) && classifyAttribute(scope, attribute, node.kind, own) !== "foreign",
+      )
+      .map((attribute) => ({
+        kind: node.kind,
+        local: XmlLocalName(attribute.local),
+        namespace: NamespaceUri(attribute.namespace),
+        node: node.id,
+        prefix: attribute.prefix,
+        value: attribute.value,
+      }));
+  });
 
 const xmlVersion = new RegExp(patterns.xmlVersion, "u");
 
@@ -714,17 +864,45 @@ const miscRow = (item: Misc): { kind: "comment" | "pi"; text: string } =>
  * @param input - What the caller decides about the tree.
  * @param rows - The rows so far.
  * @returns The rows with this tree's added, and the node index holding every element; the node,
- *   edge and generic-arm rows, `TreeRoot`, the namespace declarations, the `xsi:schemaLocation` and
- *   the attribute entity references are among them; `UnmodeledVocabulary` for the first element or
- *   attribute no registry names, `ImportRefused` for a `standalone` that is neither `yes` nor `no`.
- *   The XML-namespace names a kind's registry lists are modeled; their rows are `attributeRows`'s.
+ *   edge and generic-arm rows, `TreeRoot`, the namespace declarations, the `xsi:schemaLocation`,
+ *   the attribute entity references and the `ForeignElement` and `ForeignAttribute` rows
+ *   ({@link foreignRows}, written once here for every tree) are among them; `UnmodeledVocabulary`
+ *   for the first element or attribute no registry names, `ImportRefused` for a `standalone` that
+ *   is neither `yes` nor `no`. The XML-namespace names a kind's registry lists are modeled; their
+ *   rows are `attributeRows`'s.
  */
 export const treeRows = Effect.fn("import.treeRows")(function* treeRows(
   doc: XmlDocument,
   input: TreeInput,
   rows: Rows,
 ): Effect.fn.Return<{ rows: Rows; nodes: NodeIndex }, ImportRefused | UnmodeledVocabulary> {
-  const refusal = firstUnmodeled(doc.root, Option.none(), []);
+  const scope = scopeOf(input.root, input.version);
+  const walked: Walked = {
+    attributeReferences: [],
+    comments: [],
+    edges: [],
+    entityReferences: [],
+    namespaces: [],
+    noNamespaceSchemaLocations: [],
+    nodes: [],
+    pis: [],
+    schemaLocations: [],
+    texts: [],
+    whitespace: [],
+    xsiNils: [],
+    xsiTypes: [],
+  };
+  const nodes = new Map<Element, IndexedNode>();
+  walk(doc.root, Option.none(), 0, input, scope, walked, nodes);
+
+  const judgment = xsiJudgment(doc.root, input, nodes);
+  const refusal = firstUnmodeled(
+    scope,
+    doc.root,
+    Option.none(),
+    [],
+    Result.isSuccess(judgment) ? addedPass(judgment.success) : typedPass,
+  );
   if (Option.isSome(refusal)) {
     return yield* refusal.value;
   }
@@ -790,20 +968,9 @@ export const treeRows = Effect.fn("import.treeRows")(function* treeRows(
     exported === input.charset ? [] : [{ label: exported, tree: id }],
   );
 
-  const walked: Walked = {
-    attributeReferences: [],
-    comments: [],
-    edges: [],
-    entityReferences: [],
-    namespaces: [],
-    nodes: [],
-    pis: [],
-    schemaLocations: [],
-    texts: [],
-    whitespace: [],
-  };
-  const nodes = new Map<Element, IndexedNode>();
-  walk(doc.root, Option.none(), 0, input, walked, nodes);
+  if (Result.isFailure(judgment)) {
+    return yield* judgment.failure;
+  }
 
   const rootNode = nodes.get(doc.root);
 
@@ -821,7 +988,26 @@ export const treeRows = Effect.fn("import.treeRows")(function* treeRows(
   );
   const withNamespaces = Rows.add(withRoot, NamespaceDeclaration, walked.namespaces);
   const withSchemaLocations = Rows.add(withNamespaces, SchemaLocation, walked.schemaLocations);
-  const built = Rows.add(withSchemaLocations, AttributeEntityReference, walked.attributeReferences);
+  const withNoNamespace = Rows.add(
+    withSchemaLocations,
+    NoNamespaceSchemaLocation,
+    walked.noNamespaceSchemaLocations,
+  );
+  const withXsiTypes = Rows.add(withNoNamespace, XsiType, walked.xsiTypes);
+  const withXsiNils = Rows.add(withXsiTypes, XsiNil, walked.xsiNils);
+  const withXsiTypeAttributes = Rows.add(
+    withXsiNils,
+    XsiTypeAttribute,
+    xsiTypeAttributeRows(judgment.success, nodes, scope),
+  );
+  const withReferences = Rows.add(
+    withXsiTypeAttributes,
+    AttributeEntityReference,
+    walked.attributeReferences,
+  );
+  const foreign = foreignRows(doc.root, nodes, input);
+  const withForeignElements = Rows.add(withReferences, ForeignElement, foreign.elements);
+  const built = Rows.add(withForeignElements, ForeignAttribute, foreign.attributes);
 
   return { nodes, rows: built };
 });

@@ -2,7 +2,7 @@ import { assert, describe, it } from "@effect/vitest";
 import * as xi from "#pantry/schema/kinds/xi.ts";
 import * as asi from "#pantry/schema/kinds/asi.ts";
 import { NodeKind } from "#pantry/schema/node.ts";
-import { admission } from "#pantry/schema/seed/admission.ts";
+import { explicitAdmission } from "#pantry/schema/seed/admission.ts";
 
 /**
  * The hosts of `xi:include` in the 3.0.0 ASI XSD, as handles: the elements of the types that
@@ -180,7 +180,7 @@ const pinned = { "3.0.0": hosts300, "3.0.1": hosts301 } as const;
  * The parents of every composed row that admits `xi:include` in a version, sorted.
  */
 const hostsOf = (version: "3.0.0" | "3.0.1"): readonly string[] =>
-  admission
+  explicitAdmission
     .filter((row) => row.version === version && row.child === "xi:include")
     .map((row) => row.parent)
     .toSorted();

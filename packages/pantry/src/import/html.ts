@@ -23,7 +23,8 @@ import {
   UnmodeledVocabulary,
   withParents,
 } from "#pantry/import/tree.ts";
-import type { IndexedNode, ItemRefusal, NodeIndex, WhiteSpace } from "#pantry/import/tree.ts";
+import type { IndexedNode, ItemRefusal, NodeIndex } from "#pantry/import/tree.ts";
+import type { WhiteSpace } from "#pantry/import/whitespace.ts";
 import {
   CellAlign,
   CellScope,

@@ -94,6 +94,10 @@ layer(NodeServices.layer, { excludeTestServices: true })(
       "padded-identifier-value",
       "sharedMedia",
       "end-attempt",
+      "operator-foreign-content",
+      "fallback-3-0-1",
+      "lom-wildcard",
+      "nested-root-in-foreign",
       ...fixtureNames.filter((name) => name.startsWith("cut-")),
     ];
     for (const name of clean) {
@@ -148,6 +152,30 @@ layer(NodeServices.layer, { excludeTestServices: true })(
       suite.effect(`keeps ${name} under ${rules.join(" or ")}`, () =>
         Effect.gen(function* keepsBroken() {
           yield* readAcceptedOrUnder(yield* fixture(name), name, rules);
+        }),
+      );
+    }
+
+    const refused: readonly (readonly [FixtureName, Rule])[] = [
+      ["operator-foreign-first", "P30"],
+      ["unqualified-on-operator", "unmodeled-vocabulary"],
+      ["strict-file-foreign", "unmodeled-vocabulary"],
+    ];
+    for (const [name, rule] of refused) {
+      suite.effect(`refuses ${name} under ${rule}`, () =>
+        Effect.gen(function* refusesWildcard() {
+          const result = yield* readResult(yield* fixture(name));
+
+          if (Result.isSuccess(result)) {
+            assert.fail(`${name} was admitted`);
+          }
+
+          const { failure } = result;
+          if (failure._tag === "PlatformError") {
+            assert.fail(`${name} failed with the platform's error: ${failure.message}`);
+          }
+
+          assert.strictEqual(ruleOfError(failure).rule, rule, `${name}: ${failure.message}`);
         }),
       );
     }

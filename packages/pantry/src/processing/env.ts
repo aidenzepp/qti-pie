@@ -1,4 +1,4 @@
-import { collapse } from "#pantry/import/tree.ts";
+import { collapse } from "#pantry/import/whitespace.ts";
 import { prefixedReadings } from "#pantry/processing/prefixed.ts";
 import type { PrefixedForm } from "#pantry/processing/prefixed.ts";
 import type { BaseTypeOrAny, Cardinality, EffectiveType } from "#pantry/processing/types.ts";

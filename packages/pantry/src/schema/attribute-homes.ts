@@ -1354,6 +1354,17 @@ export const shared: readonly Own[] = [
   ["label", first(optional(R.NodeLabel), optional(R.AssessmentItemLabel))],
   ["dir", optional(R.NodeDir)],
   ["xml:base", optional(R.NodeXmlBase)],
+  ["xml:space", optional(R.NodeXmlSpace)],
+  ["xlink:type", optional(R.XlinkType)],
+  ["xlink:href", optional(R.XlinkHref)],
+  ["xlink:role", optional(R.XlinkRole)],
+  ["xlink:arcrole", optional(R.XlinkArcrole)],
+  ["xlink:title", optional(R.XlinkTitle)],
+  ["xlink:show", optional(R.XlinkShow)],
+  ["xlink:actuate", optional(R.XlinkActuate)],
+  ["xlink:label", optional(R.XlinkLabel)],
+  ["xlink:from", optional(R.XlinkFrom)],
+  ["xlink:to", optional(R.XlinkTo)],
   ["data-qti-suppress-tts", optional(R.NodeSuppressTts)],
   ["data-catalog-idref", optional(R.NodeCatalogIdref)],
   [
@@ -1364,6 +1375,7 @@ export const shared: readonly Own[] = [
       column(R.PrintedVariableId, "id", "node"),
     ),
   ],
+  ["xml:id", first(column(R.DocumentXmlId, "id", "node"), column(R.ManifestXmlId, "id", "node"))],
   ...aria,
   ...IdrefAttribute.handles.map((name): Own => [name, tokens(name)]),
 ];
@@ -1398,6 +1410,57 @@ export const indexOf = (rows: RowSet): Index => {
       return found;
     },
   };
+};
+
+/**
+ * One attribute of a node that no kind declares, as the `ForeignAttribute` relation holds it: its
+ * expanded name, the prefix it was written under and its value as written.
+ */
+export interface ForeignValue {
+  readonly local: string;
+  readonly namespace: string;
+  readonly prefix: string;
+  readonly value: string;
+}
+
+/**
+ * The by-node reader of `ForeignAttribute`, the one relation whose attribute names are data: each
+ * node's foreign attributes, in the order the rows hold them.
+ *
+ * @param index - The index of the rows to read, from {@link indexOf}.
+ * @returns A function from node to its foreign attributes, none for a node that has none.
+ */
+export const foreignAttributesOf = (index: Index): ((id: Uuid) => readonly ForeignValue[]) => {
+  const owned = index.many(R.ForeignAttribute, "node");
+
+  return (id) =>
+    (owned.get(id) ?? []).map((fact): ForeignValue => ({
+      local: textOf(fact, "local") ?? "",
+      namespace: textOf(fact, "namespace") ?? "",
+      prefix: textOf(fact, "prefix") ?? "",
+      value: textOf(fact, "value") ?? "",
+    }));
+};
+
+/**
+ * The by-node reader of `XsiTypeAttribute`, the second relation whose attribute names are data:
+ * each node's attributes that its derived `xsi:type` adds, as {@link foreignAttributesOf} gives a
+ * node's foreign ones, in the order the rows hold them.
+ *
+ * @param index - The index of the rows to read, from {@link indexOf}.
+ * @returns A function from node to the attributes its `xsi:type` adds, none for a node that has
+ *   none.
+ */
+export const xsiTypeAttributesOf = (index: Index): ((id: Uuid) => readonly ForeignValue[]) => {
+  const owned = index.many(R.XsiTypeAttribute, "node");
+
+  return (id) =>
+    (owned.get(id) ?? []).map((fact): ForeignValue => ({
+      local: textOf(fact, "local") ?? "",
+      namespace: textOf(fact, "namespace") ?? "",
+      prefix: textOf(fact, "prefix") ?? "",
+      value: textOf(fact, "value") ?? "",
+    }));
 };
 
 /**
