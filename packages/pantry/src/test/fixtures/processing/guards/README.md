@@ -1,6 +1,6 @@
 # Guard fixtures
 
-Four hand-written items, each derived from `../valid/response.xml` or `../valid/template.xml`. Each is well-formed; `padded-processing.xml` is valid QTI, the other three break one processing rule (`docs/goals/qti/phase-3.md` 4.10). `p3-23` and `p3-25` assert over them.
+Four hand-written items, each derived from `../valid/response.xml` or `../valid/template.xml`. Each is well-formed; `padded-processing.xml` is valid QTI, the other three break one processing rule (`docs/goals/qti/phase-3.md` 4.10), each a law of the document layer now: P5 is AL3, P28 N7's `Last`, P30 N5's `Follow`. `../verdicts.tsv` records each rule; the expression laws accept all four.
 
 | File                            | What it holds                                                                                                                     | Expected                                                               |
 | ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |

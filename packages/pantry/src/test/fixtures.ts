@@ -431,10 +431,11 @@ const wildcardNames = [
  * packages, each the same package with the edits of its row in the spec table, `sharedMedia`, the
  * examples' shared-media package unedited, `quoted-q`, phase 2's hand-broken package,
  * `end-attempt`, phase 2's hand-written positive, the 19 cut items of {@link cutNames}, the 40
- * hand-written HTML positives of {@link htmlElements}, the 14 XML copies of {@link copyNames}, and
- * the packaging phase's metadata and content cuts with their negatives, and the 11 positive
- * fixtures of phase 5's tests, sections and stimuli ({@link testNames}), and its 63 negatives
- * ({@link negativeNames}).
+ * hand-written HTML positives of {@link htmlElements}, the 14 XML copies of {@link copyNames}, the
+ * packaging phase's metadata and content cuts with their negatives, the 11 positive fixtures of
+ * phase 5's tests, sections and stimuli ({@link testNames}) and its 63 negatives
+ * ({@link negativeNames}), the ten wildcard fixtures of {@link wildcardNames}, and `rtest01`, the
+ * examples' included fragment in place (spec reading 110), with one negative per include law.
  */
 export const fixtureNames = [
   "simple",
@@ -507,6 +508,17 @@ export const fixtureNames = [
   "bytes-webcontent-item",
   "resproc",
   "resproc-webcontent",
+  "rtest01",
+  "rtest01-include-root",
+  "rtest01-include-target",
+  "rtest01-fragment-identifier",
+  "rtest01-fragment-context",
+  "rtest01-cycle",
+  "rtest01-hottext-key",
+  "rtest01-choice-variable",
+  "rtest01-template-reference",
+  "rtest01-fragment-lang",
+  "rtest01-rule-variable",
   "usage3",
   "usage3-typed",
   "usage3-padded",
@@ -1194,7 +1206,8 @@ const csmSet = (
   );
 
 /**
- * The set under the manifest `metadata`, which `csm` adds after the manifest `lom` (line 47).
+ * The set under the manifest `metadata`, which `csm` adds between `schemaversion` and the manifest
+ * `lom` (lines 11 and 12).
  */
 const manifestCsmSet: Lines = csmSet(
   ' resourceLabel="Package (QTI 3.0)"',
@@ -1203,25 +1216,30 @@ const manifestCsmSet: Lines = csmSet(
 );
 
 /**
- * The set under the resource `metadata`, which `csm` adds after the resource `lom` (line 91).
+ * The set under the resource `metadata`, which `csm` adds between `qtiMetadata` and the resource
+ * `lom` (lines 58 and 59).
  */
 const resourceCsmSet: Lines = csmSet(' resourcePartId="choice"', "resource", csmGuids.resource);
 
 /**
- * The edits of `csm`: the declaration and one set under each `metadata`, each after its `lom`. The
- * manifest `metadata` closes at column 4 and the resource's at column 12.
+ * The edits of `csm`: the declaration and one set under each `metadata`, each just before its
+ * `lom`. That is where the content-packaging XSD's sequences put it: `schema`, `schemaversion`, the
+ * set, `lom` in the manifest's (`imsqtiv3p0_imscpv1p2_v1p0.xsd` lines 324 to 345) and
+ * `qtiMetadata`, the set, `lom` in a resource's (lines 441 to 443). `CASEWithOutcome.zip`'s
+ * manifest writes them in the same order. The children of the manifest `metadata` sit at column 8,
+ * and the resource's at 16.
  */
 const csmEdits: readonly Edit[] = [
   declareCsmd,
   replaceIn(
     "imsmanifest.xml",
-    `</imsmd:lom>${CRLF}    </metadata>`,
-    `</imsmd:lom>${CRLF}${atColumn(8, manifestCsmSet)}${CRLF}    </metadata>`,
+    `</schemaversion>${CRLF}        <imsmd:lom>`,
+    `</schemaversion>${CRLF}${atColumn(8, manifestCsmSet)}${CRLF}        <imsmd:lom>`,
   ),
   replaceIn(
     "imsmanifest.xml",
-    `</imsmd:lom>${CRLF}            </metadata>`,
-    `</imsmd:lom>${CRLF}${atColumn(16, resourceCsmSet)}${CRLF}            </metadata>`,
+    `</imsqti:qtiMetadata>${CRLF}                <imsmd:lom>`,
+    `</imsqti:qtiMetadata>${CRLF}${atColumn(16, resourceCsmSet)}${CRLF}                <imsmd:lom>`,
   ),
 ];
 
@@ -2015,6 +2033,105 @@ const bytesFileEdits = (resources: readonly BytesResource[]): readonly Edit[] =>
 const bytesWithoutWebcontent: readonly BytesResource[] = bytesResources.filter(
   (resource) => resource.type !== "webcontent",
 );
+
+/**
+ * The directory of the `rtest01` fixtures, beside `simple`'s item: the three set items of the
+ * examples' `tests` folder and the fragment they include, the implementation guide's own example of
+ * the `imsqti_fragment_xmlv3p0` resource type (§6.2, "Example tests/rtest01-set01").
+ */
+const rtest01Directory = "rtest01";
+
+/**
+ * The resources of `rtest01`: the three set items, loose members of the tarball, and their shared
+ * fragment, each at its own name under {@link rtest01Directory}.
+ */
+const rtest01Resources: readonly BytesResource[] = [
+  ...(["01", "02", "03"] as const).map((set): BytesResource => ({
+    href: `${rtest01Directory}/rtest01-set${set}.xml`,
+    identifier: `r-rtest01-set${set}`,
+    source: { member: `qtiv3-examples/tests/rtest01-set${set}.xml` },
+    type: "imsqti_item_xmlv3p0",
+  })),
+  {
+    href: `${rtest01Directory}/rtest01-fragment.xml`,
+    identifier: "r-rtest01-fragment",
+    source: { member: fragmentMember },
+    type: "imsqti_fragment_xmlv3p0",
+  },
+];
+
+/**
+ * The include each `rtest01` set item writes, as written.
+ */
+const rtest01Include = '<xi:include href="rtest01-fragment.xml" parse="xml"/>';
+
+/**
+ * A fragment of hottexts alone, which `rtest01-fragment-context` places inside two items'
+ * interactions (spec reading 110's limit).
+ */
+const rtest01Words: BytesResource = {
+  href: `${rtest01Directory}/rtest01-words.xml`,
+  identifier: "r-rtest01-words",
+  source: {
+    text: '<?xml version="1.0" encoding="UTF-8"?>\n<p xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0">The <qti-hottext identifier="W1">quick</qti-hottext> fox.</p>\n',
+  },
+  type: "imsqti_fragment_xmlv3p0",
+};
+
+/**
+ * A response rule fragment that sets an outcome no `rtest01` set item declares, which
+ * `rtest01-rule-variable` includes in an item's response processing (spec reading 110).
+ */
+const rtest01Rules: BytesResource = {
+  href: `${rtest01Directory}/rtest01-rules.xml`,
+  identifier: "r-rtest01-rules",
+  source: {
+    text: '<?xml version="1.0" encoding="UTF-8"?>\n<qti-response-condition xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-response-if><qti-is-null><qti-variable identifier="RESPONSE"/></qti-is-null><qti-set-outcome-value identifier="NOPE"><qti-base-value base-type="float">0</qti-base-value></qti-set-outcome-value></qti-response-if></qti-response-condition>\n',
+  },
+  type: "imsqti_fragment_xmlv3p0",
+};
+
+/**
+ * Build the edits of an `rtest01` fixture: `simple` with the set items and their fragment, and the
+ * resources and edits a variant adds.
+ *
+ * @param resources - The resources beside `rtest01`'s own.
+ * @param edits - The edits of the added files.
+ * @returns The edits as plain data.
+ */
+const rtest01Edits = (
+  resources: readonly BytesResource[],
+  edits: readonly Edit[],
+): readonly Edit[] => [
+  bytesManifestEdit([...rtest01Resources, ...resources]),
+  ...bytesFileEdits([...rtest01Resources, ...resources]),
+  ...edits,
+];
+
+/**
+ * Write the edit that replaces the include of one `rtest01` set item.
+ *
+ * @param set - The set item, `01` to `03`.
+ * @param replacement - The text in its place.
+ * @returns The edit as plain data.
+ */
+const rtest01IncludeAs = (set: "01" | "02" | "03", replacement: string): Edit =>
+  replaceIn(`${rtest01Directory}/rtest01-set${set}.xml`, rtest01Include, replacement);
+
+/**
+ * The outcome declaration each `rtest01` set item writes, as written.
+ */
+const rtest01Score =
+  '<qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/>';
+
+/**
+ * Write the edit that adds a declaration before the outcome declaration of `rtest01-set01`.
+ *
+ * @param declaration - The declaration, before the outcome's.
+ * @returns The edit as plain data.
+ */
+const rtest01DeclaringFirst = (declaration: string): Edit =>
+  replaceIn(`${rtest01Directory}/rtest01-set01.xml`, rtest01Score, `${declaration}${rtest01Score}`);
 
 /**
  * The response processing template `resproc` packages, as a file of `maxfiles.zip`.
@@ -4340,8 +4457,8 @@ const specs: Record<FixtureName, FixtureSpec> = {
     ...csmEdits,
     replaceIn(
       "imsmanifest.xml",
-      `</csmd:curriculumStandardsMetadataSet>${CRLF}            </metadata>`,
-      `</csmd:curriculumStandardsMetadataSet>${CRLF}${atColumn(16, csmSet(' resourcePartId="choice-b"', "resource", csmGuids.second))}${CRLF}            </metadata>`,
+      `</csmd:curriculumStandardsMetadataSet>${CRLF}                <imsmd:lom>`,
+      `</csmd:curriculumStandardsMetadataSet>${CRLF}${atColumn(16, csmSet(' resourcePartId="choice-b"', "resource", csmGuids.second))}${CRLF}                <imsmd:lom>`,
     ),
   ]),
   doctype: {
@@ -4564,6 +4681,116 @@ const specs: Record<FixtureName, FixtureSpec> = {
   },
   resproc: overSimple("resproc", resprocEdits("imsqti_resprocessing_xmlv3p0")),
   "resproc-webcontent": overSimple("resproc-webcontent", resprocEdits("webcontent")),
+  rtest01: overSimple("rtest01", rtest01Edits([], [])),
+  "rtest01-choice-variable": overSimple(
+    "rtest01-choice-variable",
+    rtest01Edits(
+      [],
+      [
+        rtest01DeclaringFirst(
+          '<qti-outcome-declaration identifier="A1" cardinality="single" base-type="float"/>',
+        ),
+      ],
+    ),
+  ),
+  "rtest01-cycle": overSimple(
+    "rtest01-cycle",
+    rtest01Edits(
+      [],
+      [
+        replaceIn(
+          `${rtest01Directory}/rtest01-fragment.xml`,
+          "<qti-hottext-interaction",
+          '<xi:include href="rtest01-fragment.xml"/><qti-hottext-interaction',
+        ),
+      ],
+    ),
+  ),
+  "rtest01-fragment-context": overSimple(
+    "rtest01-fragment-context",
+    rtest01Edits(
+      [rtest01Words],
+      (["01", "02"] as const).map((set) =>
+        rtest01IncludeAs(
+          set,
+          '<qti-hottext-interaction response-identifier="RESPONSE" max-choices="1"><xi:include href="rtest01-words.xml"/></qti-hottext-interaction>',
+        ),
+      ),
+    ),
+  ),
+  "rtest01-fragment-identifier": overSimple(
+    "rtest01-fragment-identifier",
+    rtest01Edits(
+      [],
+      [rtest01IncludeAs("01", '<xi:include href="rtest01-fragment.xml#hottext" parse="xml"/>')],
+    ),
+  ),
+  "rtest01-fragment-lang": overSimple(
+    "rtest01-fragment-lang",
+    rtest01Edits(
+      [],
+      [
+        replaceIn(
+          "imsmanifest.xml",
+          `<file href="${rtest01Directory}/rtest01-set01.xml"/>`,
+          `<metadata><lom xmlns="http://ltsc.ieee.org/xsd/LOM"><general><language>en</language></general></lom></metadata><file href="${rtest01Directory}/rtest01-set01.xml"/>`,
+        ),
+        replaceIn(`${rtest01Directory}/rtest01-fragment.xml`, "<div ", '<div xml:lang="fr" '),
+      ],
+    ),
+  ),
+  "rtest01-hottext-key": overSimple(
+    "rtest01-hottext-key",
+    rtest01Edits(
+      [],
+      [
+        rtest01DeclaringFirst(
+          '<qti-response-declaration identifier="OTHER" cardinality="single" base-type="identifier"/>',
+        ),
+        rtest01IncludeAs(
+          "01",
+          `<qti-hottext-interaction response-identifier="OTHER" max-choices="1"><p><qti-hottext identifier="A1">a</qti-hottext></p></qti-hottext-interaction>${rtest01Include}`,
+        ),
+      ],
+    ),
+  ),
+  "rtest01-include-root": overSimple(
+    "rtest01-include-root",
+    rtest01Edits([], [rtest01IncludeAs("01", `<p>Read: ${rtest01Include}</p>`)]),
+  ),
+  "rtest01-include-target": overSimple(
+    "rtest01-include-target",
+    rtest01Edits(
+      [],
+      [rtest01IncludeAs("01", '<xi:include href="rtest01-missing.xml" parse="xml"/>')],
+    ),
+  ),
+  "rtest01-rule-variable": overSimple(
+    "rtest01-rule-variable",
+    rtest01Edits(
+      [rtest01Rules],
+      [
+        replaceIn(
+          `${rtest01Directory}/rtest01-set01.xml`,
+          '<qti-response-processing template=""/>',
+          '<qti-response-processing><xi:include href="rtest01-rules.xml"/></qti-response-processing>',
+        ),
+      ],
+    ),
+  ),
+  "rtest01-template-reference": overSimple(
+    "rtest01-template-reference",
+    rtest01Edits(
+      [],
+      [
+        replaceIn(
+          `${rtest01Directory}/rtest01-fragment.xml`,
+          "</qti-hottext-interaction>",
+          '</qti-hottext-interaction><p><qti-template-inline template-identifier="NONE" identifier="x" show-hide="show">t</qti-template-inline></p>',
+        ),
+      ],
+    ),
+  ),
   sharedMedia: { edits: [], member: sharedMediaMember, name: "sharedMedia" },
   simple: { edits: [], member: simpleMember, name: "simple" },
   "title-mismatch": {

@@ -1,0 +1,38 @@
+file	processing	rule	kind	path	source
+broken/p20-float-into-integer-outcome.xml	response	P20	qti-set-outcome-value	/0	checker
+broken/p21-sum-as-condition.xml	response	P21	qti-response-if	/0/0	checker
+broken/p22-lookup-without-table.xml	response	P22	qti-lookup-outcome-value	/0	checker
+broken/p22-string-into-lookup.xml	response	P22	qti-lookup-outcome-value	/0	checker
+broken/p23-and-string-operand.xml	response	P23	qti-and	/0/0	checker
+broken/p23-contains-singles.xml	response	P23	qti-contains	/0/0	checker
+broken/p23-divide-multiple.xml	response	P23	qti-divide	/0/0	checker
+broken/p23-duration-lt-integers.xml	response	P23	qti-duration-lt	/0/0	checker
+broken/p23-field-value-single.xml	response	P23	qti-field-value	/0/0/0	checker
+broken/p23-gcd-floats.xml	response	P23	qti-gcd	/0/0	checker
+broken/p23-gt-strings.xml	response	P23	qti-gt	/0/0	checker
+broken/p23-index-single.xml	response	P23	qti-index	/0/0	checker
+broken/p23-inside-integer.xml	response	P23	qti-inside	/0/0	checker
+broken/p23-integer-divide-floats.xml	response	P23	qti-integer-divide	/0/0	checker
+broken/p23-match-duration-pair.xml	response	P23	qti-match	/0/0	checker
+broken/p23-member-multiple-first.xml	response	P23	qti-member	/0/0	checker
+broken/p23-multiple-two-base-types.xml	response	P23	qti-multiple	/0/0	checker
+broken/p23-stats-operator-single.xml	response	P23	qti-stats-operator	/0/0	checker
+broken/p23-substring-integers.xml	response	P23	qti-substring	/0/0	checker
+broken/p23-sum-record.xml	response	P23	qti-sum	/0/0	checker
+broken/p24-figures-float-variable.xml	response	P24	qti-equal-rounded	/0/0	checker
+broken/p25-number-correct-in-response.xml	response	P25	qti-number-correct	/0/0	checker
+broken/p25-number-correct-in-template.xml	template	P25	qti-number-correct	/0/0	checker
+broken/p26-template-reads-context.xml	template	accepted			checker
+broken/p26-template-reads-response.xml	template	P26	qti-variable	/0/0	checker
+broken/p27-map-response-unmapped.xml	response	P27	qti-map-response	/0/0	checker
+broken/p29-test-variables-weight-integer.xml	outcome	P29	qti-test-variables	/0/0/0	checker
+broken/p49-custom-operator-unresolved.xml	response	accepted			checker
+broken/undeclared-reference.xml	response	P8	qti-variable	/0/0	checker
+guards/else-before-if.xml	response	P30	qti-response-condition		guard
+guards/empty-template-processing.xml	template	P28	qti-template-processing		guard
+guards/missing-identifier.xml	response	P5	qti-correct		guard
+guards/padded-processing.xml	response	accepted			guard
+valid/outcome.xml	outcome	accepted			checker
+valid/response-mapped.xml	response	accepted			checker
+valid/response.xml	response	accepted			checker
+valid/template.xml	template	accepted			checker

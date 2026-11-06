@@ -85,7 +85,7 @@ const byCodeUnit = (a: string, b: string): number => {
  * `file`, every line ended by a line feed.
  *
  * The layout is the committed file's, so the two compare line by line, but a rule may be one of
- * the oracle's own (`child-set`, `derived`, `selection-bound`), which no rule of today's roster
+ * the oracle's own (`child-set`, `derived`, `selection-bounds`), which no rule of today's roster
  * names, so the text is written here rather than by `renderVerdicts`.
  *
  * @param rows - The predictions.

@@ -44,9 +44,10 @@ import type { Ancestry } from "#pantry/grammar/ancestry.ts";
 import type { ComposedGrammar, Kind } from "#pantry/grammar/compose.ts";
 import { foreignKinds, isForeignKind, openClasses, schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { ForeignKind } from "#pantry/grammar/kinds.ts";
+import { expandedNameOf, typeHandle } from "#pantry/grammar/xsi.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import type { FoldedNode, FoldedRows } from "#pantry/model/folds.ts";
-import { flatten, none } from "#pantry/model/xdm.ts";
+import { closedName, flatten, handlePrefixes, handlePrefixOf, none } from "#pantry/model/xdm.ts";
 import type { LawName } from "#pantry/test/oracle.ts";
 import type {
   ClosedName,
@@ -69,6 +70,7 @@ import {
   asiNamespace,
   mathmlNamespace,
   namespaceClassOf,
+  xlinkNamespace,
   xmlNamespace,
   xsiNamespace,
   xsNamespace,
@@ -127,6 +129,7 @@ export const xdmFeatures = [
   "repeatedOpenClass",
   "namespace",
   "doctype",
+  "boundPrefix",
 ] as const;
 
 /**
@@ -719,20 +722,15 @@ const unknownType: Typing = { governs: none, name: { local: "NoSuchType", namesp
 /**
  * Read a governing type's handle back as the name an `xsi:type` writes it with.
  *
- * @param governs - The type's `TypeName` handle, `{namespace}local`.
- * @returns The typing, none for a type in no namespace, whose QName would need the default
- *   namespace undeclared.
+ * @param governs - The type's `TypeName` handle (`typeHandle`).
+ * @returns The typing, none for no named type and for a type in no namespace, whose QName would
+ *   need the default namespace undeclared.
  */
-const typingOf = (governs: string): Option.Option<Typing> => {
-  const close = governs.indexOf("}");
-
-  return governs.startsWith("{") && close > 1
-    ? Option.some({
-        governs,
-        name: { local: governs.slice(close + 1), namespace: governs.slice(1, close) },
-      })
-    : Option.none();
-};
+const typingOf = (governs: string): Option.Option<Typing> =>
+  expandedNameOf(governs).pipe(
+    Option.filter(({ namespace }) => namespace !== ""),
+    Option.map((name) => ({ governs, name })),
+  );
 
 /**
  * Key an element's attributes by its governor where one governs it, else by its kind.
@@ -782,7 +780,9 @@ const governingOf = (grammar: ComposedGrammar): Index["governing"] => {
   for (const version of grammar.kinds.versions.handles) {
     for (const kind of Object.values(foreignKinds)) {
       const key = keyOf(version, kind);
-      for (const typing of Option.toArray(typingOf(`{${xsNamespace}}anyType`))) {
+      for (const typing of Option.toArray(
+        typingOf(typeHandle({ local: "anyType", namespace: xsNamespace })),
+      )) {
         pushAt(named, key, typing);
       }
 
@@ -791,7 +791,10 @@ const governingOf = (grammar: ComposedGrammar): Index["governing"] => {
   }
 
   for (const { governs, kind, version } of grammar.attributes.governor.rows) {
-    if (isForeignKind(kind) && governs.startsWith(`{${xsNamespace}}`)) {
+    if (
+      isForeignKind(kind) &&
+      Option.exists(expandedNameOf(governs), ({ namespace }) => namespace === xsNamespace)
+    ) {
       for (const typing of Option.toArray(typingOf(governs))) {
         pushAt(named, keyOf(version, kind), typing);
       }
@@ -816,6 +819,49 @@ const governingOf = (grammar: ComposedGrammar): Index["governing"] => {
  * The prefix a drawn `xsi:type` writes its type's namespace with, which no other drawn name uses.
  */
 const typePrefix = "xsitype";
+
+/**
+ * The prefix a closed name in XML Schema's instance namespace or in XLink's is written with where
+ * the swarm keeps `boundPrefix`, in place of its handle's own: one per namespace, which no other
+ * drawn name uses, so it never rebinds one. A document may bind any prefix to either namespace, so
+ * `zs:nil` is the handle `xsi:nil` (spec reading 47).
+ */
+const boundPrefixes: ReadonlyMap<string, string> = new Map([
+  [xsiNamespace, "zs"],
+  [xlinkNamespace, "xl"],
+]);
+
+/**
+ * Draw the closed name of a handle, with the prefix it is written with, and the declaration that
+ * prefix needs: none for a name in no namespace or in the XML namespace, whose prefix `xml` is
+ * bound by definition; for any other, its handle's own prefix or, where the swarm keeps
+ * `boundPrefix`, {@link boundPrefixes}'.
+ *
+ * @param handle - The handle.
+ * @param context - The case.
+ * @param needed - The prefixed namespaces the element needs declared, appended to.
+ * @returns A generator of the name.
+ */
+const closedNameOf =
+  (
+    handle: ClosedName<Composed>,
+    context: Context,
+    needed: XdmNamespace[],
+  ): Gen<XdmAttribute<Composed>["name"]> =>
+  (source) => {
+    const spelled = handlePrefixOf(handle);
+    const uri = handlePrefixes.find(({ prefix }) => prefix === spelled)?.namespace;
+    if (uri === undefined || uri === xmlNamespace) {
+      return closedName(handle);
+    }
+
+    const other = boundPrefixes.get(uri);
+    const prefix =
+      other !== undefined && source.draw(keep(context.swarm, "boundPrefix")) ? other : spelled;
+    needed.push({ prefix, uri });
+
+    return closedName(handle, prefix);
+  };
 
 /**
  * Whether a closed handle is XML Schema's `xsi:type`, which the layer admits on every element.
@@ -1261,26 +1307,16 @@ const attributesOf =
     for (const [{ name }, handle] of Option.toArray(
       Option.zipWith(typed, xsiType, (typing, admittedName) => [typing, admittedName] as const),
     )) {
-      needed.push(
-        { prefix: "xsi", uri: xsiNamespace },
-        { prefix: typePrefix, uri: name.namespace },
-      );
-      drawn.push({
-        lexical: `${typePrefix}:${name.local}`,
-        name: { _tag: "closed", handle },
-        references: [],
-      });
+      const typeName = source.draw(closedNameOf(handle, context, needed));
+      needed.push({ prefix: typePrefix, uri: name.namespace });
+      drawn.push({ lexical: `${typePrefix}:${name.local}`, name: typeName, references: [] });
     }
 
     if (keeping) {
       const chosen = source.draw(shuffled(closed, { max: Math.min(bound, closed.length), min: 0 }));
       for (const handle of chosen) {
-        if (handle.startsWith("xsi:")) {
-          needed.push({ prefix: "xsi", uri: xsiNamespace });
-        }
-
         drawn.push({
-          name: { _tag: "closed", handle },
+          name: source.draw(closedNameOf(handle, context, needed)),
           ...source.draw(lexicalOf(context.references)),
         });
       }
@@ -2019,8 +2055,9 @@ export const xdmDocument = (
 
 /**
  * The features a generated tree holds: each kind of node it holds, and closed attributes, open
- * names, two open names of one class on one element, and namespace declarations where it holds
- * any. A test notes them, so a search's coverage is stated in the generator's own terms.
+ * names, two open names of one class on one element, namespace declarations, and a closed name
+ * written under a prefix other than its handle's, where it holds any. A test notes them, so a
+ * search's coverage is stated in the generator's own terms.
  *
  * @param document - The tree.
  * @returns Its features, each once.
@@ -2045,6 +2082,9 @@ export const featuresOf = (document: XdmDocument<Composed>): ReadonlySet<XdmFeat
 
         for (const { name } of node.attributes) {
           found.add(name._tag === "closed" ? "attribute" : "openName");
+          if (name._tag === "closed" && name.prefix !== handlePrefixOf(name.handle)) {
+            found.add("boundPrefix");
+          }
         }
 
         const classes = node.attributes.flatMap(({ name }) =>
@@ -2385,7 +2425,7 @@ export const lawOf = {
   startTaken: "T1 document order",
   wrongAttributeClass: "Foreign attribute class",
   wrongClass: "Foreign element class",
-  wrongSize: "T6 non-empty and leaf",
+  wrongSize: "T6 nonempty and leaf",
 } as const satisfies Readonly<Record<InvalidVariant, LawName>>;
 
 /**

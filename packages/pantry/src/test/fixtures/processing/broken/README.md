@@ -1,6 +1,6 @@
 # Broken processing fixtures
 
-One hand-broken tree per checker rule (`docs/goals/qti/phase-3.md` 4.10, M3-17), 29 files. Each is well-formed XML, written by hand in the shape of a valid fixture (`../valid/`) and broken in exactly one way; every other kind in it is valid, so the named rule is the first and only one to fire. No corpus bytes are copied. The checker's tests assert each refusal by rule id.
+One hand-broken tree per checker rule (`docs/goals/qti/phase-3.md` 4.10, M3-17), 29 files. Each is well-formed XML, written by hand in the shape of a valid fixture (`../valid/`) and broken in exactly one way; every other kind in it is valid, so the named rule is the first and only one to fire. No corpus bytes are copied. The old processing checker's verdict on each, run once before its deletion (Q5.10), is frozen in `../verdicts.tsv`; `src/import/overlays/expressions.test.ts` holds the expression laws to it.
 
 The 26 item trees share one declaration block, differing only in processing: `RESPONSE` (identifier single, no mapping), outcomes `SCORE` (float), `COUNT` (integer), `FLAG` (boolean), `NOTE` (string), `PICK` (identifier), `BAG` (identifier multiple), `NUMS` (float multiple), `TAKEN` (duration) and `REC` (record). The two P22 files add what they need to that block. The four template files are `template.xml`'s item with `CTX`, `RESPONSE`, `N` and `M` (all integer single); `p29-...` is `outcome.xml`'s bare root.
 

@@ -106,7 +106,7 @@ export const PROCESSING_FIXTURES_VERSION = "1" as const;
  * An edit of a derived package, as plain data so it is part of the package's hash.
  *
  * Paths name files inside the package; `file`, `withFile` and `fromFile` of the hand-written
- * documents are relative to `src/processing/fixtures/`.
+ * documents are relative to `src/test/fixtures/processing/`.
  *
  * - `replaceProcessing` replaces the `qti-response-processing` element of the package's `file` with
  *   the one of the hand-written `withFile`.
@@ -226,8 +226,8 @@ const guardNames = [
 
 /**
  * The packages M3 derives: the two round-trip packages, the template-item package, one package per
- * broken and guard document, the padded reference the importer refuses and the padded literal it
- * admits, and the large program.
+ * broken and guard document, and the padded reference the importer refuses and the padded literal
+ * it admits.
  */
 export const processingFixtureNames = [
   "processing-item",
@@ -237,7 +237,6 @@ export const processingFixtureNames = [
   ...guardNames,
   "padded-reference",
   "padded-literal",
-  "large-program",
 ] as const;
 
 /**
@@ -338,30 +337,6 @@ const templateResourceEdits: readonly ProcessingEdit[] = templateFiles.flatMap(
 );
 
 /**
- * The item documents of `ccPackage` that the large program adds, each a path inside the package:
- * the one text-entry item and the one extended-text item, whose interactions write to relations
- * that `processing-item` and the template documents leave empty. Their relations carry the import
- * program from 1,011,442 to 1,048,611 SQL bytes on `ee3b5fc`.
- */
-const largeProgramItems = ["testitems/QUE_102011.xml", "testitems/QUE_102016.xml"] as const;
-
-/**
- * The edits that copy each of {@link largeProgramItems} in and list it as an
- * `imsqti_item_xmlv3p0` resource.
- */
-const largeProgramItemEdits: readonly ProcessingEdit[] = largeProgramItems.flatMap(
-  (fromPath): readonly ProcessingEdit[] => [
-    { _tag: "addFile", fromPath, fromPkg: "ccPackage", path: fromPath },
-    {
-      _tag: "addResource",
-      href: fromPath,
-      identifier: `item-${path.basename(fromPath, ".xml")}`,
-      type: "imsqti_item_xmlv3p0",
-    },
-  ],
-);
-
-/**
  * Define a derived package by name.
  *
  * - `processing-item`: `simple` with `choice.xml`'s processing replaced by `response.xml`'s rules,
@@ -374,11 +349,6 @@ const largeProgramItemEdits: readonly ProcessingEdit[] = largeProgramItems.flatM
  *   written to a new integer response `TOTAL` instead.
  * - `rptemplates`: `simple` plus the five template documents of the corpus under `rptemplates/`, each
  *   listed as an `imsqti_rptemplate_xmlv3p0` resource.
- * - `large-program`: `processing-item`'s item and `shared-rules.xml`, `rptemplates`' five template
- *   documents and two more items of `ccPackage` in one package, so its import writes facts to the
- *   relations of all. It exists to be a valid package whose single-transaction import program is
- *   larger than the 1,048,576 SQL bytes grizzle's compiler once refused above (pinned `ee3b5fc`),
- *   imported and round-tripped by `import/package.large.db.test.ts`.
  * - `padded-reference`: `response.xml` with `figures=" COUNT "` on a `qti-equal-rounded`, and
  *   `shared-rules.xml` written and listed, refused under `attribute-lexical` (decision 123).
  * - `padded-literal`: `response.xml` with an identifier `qti-base-value` written on its own line
@@ -429,14 +399,6 @@ export const specOfProcessing = (name: ProcessingFixtureName): ProcessingFixture
 
   if (name === "rptemplates") {
     return { base: "simple", edits: templateResourceEdits, name };
-  }
-
-  if (name === "large-program") {
-    return {
-      base: "simple",
-      edits: [...processingItemEdits, ...templateResourceEdits, ...largeProgramItemEdits],
-      name,
-    };
   }
 
   if (name === "padded-reference") {
@@ -495,9 +457,9 @@ const fixturesRoot = Config.NonEmptyString("GR8DES_QTI_FIXTURES").pipe(
 );
 
 /**
- * The directory of the hand-written documents, `src/processing/fixtures/`.
+ * The directory of the hand-written documents, `src/test/fixtures/processing/`.
  */
-const handWrittenRoot = path.resolve(import.meta.dirname, "fixtures");
+const handWrittenRoot = path.resolve(import.meta.dirname, "fixtures", "processing");
 
 /**
  * Build the failure of an edit that does not apply.

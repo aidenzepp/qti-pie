@@ -273,7 +273,7 @@ export const refusalOf = {
   "attribute-outside": "OutsideCodeSpace",
   "kind-outside": "OutsideCodeSpace",
   "repeated-bound": "KeyCollision",
-  "repeated-built-in": "RepeatedValue",
+  "repeated-built-in": "KeyCollision",
   "repeated-count": "KeyCollision",
   "repeated-declaration": "RepeatedValue",
   "repeated-part": "KeyCollision",
@@ -338,10 +338,15 @@ const facetGen =
         names: source.draw(namesGen(declarations)),
         spelling: source.draw(element(spellings)),
       }));
+    const rooted = toyKinds.flatMap((root) => toyVariables.map((variable) => ({ root, variable })));
     const builtIns = Arr.isReadonlyArrayNonEmpty(declarations)
-      ? source
-          .draw(shuffled(toyVariables, { max: 2, min: floor }))
-          .map((variable) => ({ declaration: source.draw(element(declarations)), variable }))
+      ? source.draw(shuffled(rooted, { max: 3, min: floor })).map(({ root, variable }) => ({
+          baseType: source.draw(element(["float", "none"])),
+          cardinality: source.draw(element(["single", "record"])),
+          declaration: source.draw(element(declarations)),
+          root,
+          variable,
+        }))
       : [];
 
     return {
@@ -356,6 +361,7 @@ const facetGen =
         .draw(shuffled(toyKinds, { max: 2, min: floor }))
         .map((kind) => ({ choice: source.draw(element(toyKinds)), kind })),
       declarations,
+      fileReferences: [],
       references,
       sectionParts: source.draw(shuffled(toyKinds, { max: 3, min: floor })),
     };
@@ -388,6 +394,7 @@ const split =
       choiceBounds: Arr.getUnsafe(choiceBounds, side),
       choiceCounts: Arr.getUnsafe(choiceCounts, side),
       declarations: Arr.getUnsafe(declarations, side),
+      fileReferences: [],
       references: Arr.getUnsafe(references, side),
       sectionParts: Arr.getUnsafe(sectionParts, side),
     }));
@@ -466,7 +473,19 @@ const withFault =
       case "target-outside": {
         return source.draw(
           element<ReferenceFacet>([
-            { ...facet, builtIns: [...facet.builtIns, { declaration: outside, variable: "v9" }] },
+            {
+              ...facet,
+              builtIns: [
+                ...facet.builtIns,
+                {
+                  baseType: "float",
+                  cardinality: "single",
+                  declaration: outside,
+                  root: "k0",
+                  variable: "v9",
+                },
+              ],
+            },
             {
               ...facet,
               references: [

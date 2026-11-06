@@ -443,7 +443,7 @@ const overlayCases: readonly LawCase[] = [
     },
     law: "Selection bound",
     name: "a section selecting more than it holds",
-    rule: "selection-bound",
+    rule: "selection-bounds",
   },
 ];
 
@@ -1349,7 +1349,6 @@ describe("the foreign namespace classes, every class against every URI", () => {
               {
                 attribute: target?.id ?? rows.document.node,
                 local: "a",
-                prefix: uri === "" ? "" : "p",
                 uri,
               },
             ],
@@ -1399,7 +1398,7 @@ describe("the tree laws, on the named corruptions of trees.md §7", () => {
         "T3 first child",
         "T4 next sibling",
         "T5 last child",
-        "T6 non-empty and leaf",
+        "T6 nonempty and leaf",
       ]) {
         assert.notInclude(lawsBroken(rows), law, "the folded tree breaks no tree law");
       }
@@ -1413,7 +1412,7 @@ describe("the tree laws, on the named corruptions of trees.md §7", () => {
       );
       assert.include(lawsBroken(named.secondRoot), "T2 root", "secondRoot");
       assert.include(lawsBroken(named.startTaken), "T1 document order", "startTaken");
-      assert.include(lawsBroken(named.wrongSize), "T6 non-empty and leaf", "wrongSize");
+      assert.include(lawsBroken(named.wrongSize), "T6 nonempty and leaf", "wrongSize");
     }),
   );
 });
@@ -1930,7 +1929,7 @@ const unownedValid: readonly {
   {
     files: withSpeech([
       "",
-      `<ssml:lexicon uri="a.pls" xml:id="L"/><ssml:lookup ref="L">y</ssml:lookup>`,
+      `<ssml:lexicon uri="https://example.org/lexicon.pls" xml:id="L"/><ssml:lookup ref="L">y</ssml:lookup>`,
     ]),
     name: "reading 3: lookup naming its fragment's lexicon",
   },
@@ -2086,7 +2085,7 @@ const unownedBroken: readonly LawCase[] = [
   },
   {
     files: withSpeech(
-      ["", `<ssml:lexicon uri="a.pls" xml:id="L"/>x`],
+      ["", `<ssml:lexicon uri="https://example.org/lexicon.pls" xml:id="L"/>x`],
       ["", `<ssml:lookup ref="L">y</ssml:lookup>`],
     ),
     law: "SSML lexicon reference",
@@ -2862,5 +2861,617 @@ describe("the laws readings 18, 65, 76 and 83 state, over generated packages", (
           shown(plain),
         );
       }),
+  );
+});
+
+/**
+ * One case of the package hrefs' box: the item resource's `href`, an extra file the web content
+ * resource lists beside `a.png`, and the web content resource's dependency, if any.
+ */
+interface HrefCase {
+  readonly dependency: "R" | "W" | undefined;
+  readonly file: string;
+  readonly href: string;
+}
+
+/**
+ * The package hrefs' box: an item href plain, with launch parameters, with a fragment or with a
+ * dot segment; an extra file listed twice, absent, percent-encoded, external by a scheme or by a
+ * leading `/`, or with a dot segment; and no dependency, one on the item, or one on itself.
+ */
+const hrefCases: Gen<HrefCase> = (source) => ({
+  dependency: source.draw(element(["R", "W", undefined] as const)),
+  file: source.draw(
+    element([
+      "a.png",
+      "missing.png",
+      "a%20b.png",
+      "http://x.org/a.png",
+      "/a.png",
+      "img/./a.png",
+    ] as const),
+  ),
+  href: source.draw(element(["item.xml", "item.xml?x=1", "item.xml#f", "./item.xml"] as const)),
+});
+
+/**
+ * Write a package hrefs' case: the item resource `R` at its href, listing `item.xml`, and a web
+ * content resource `W` listing `a.png` and the case's file, with its dependency.
+ *
+ * @param input - The case.
+ * @returns The package.
+ */
+const hrefPackage = (input: HrefCase) => ({
+  "a.png": "png",
+  "imsmanifest.xml": manifestOf(
+    `<resource identifier="R" type="imsqti_item_xmlv3p0" href="${input.href}"><file href="item.xml"/></resource><resource identifier="W" type="webcontent"><file href="a.png"/><file href="${input.file}"/>${input.dependency === undefined ? "" : `<dependency identifierref="${input.dependency}"/>`}</resource>`,
+  ),
+  "item.xml": item,
+});
+
+/**
+ * The breaches of each package law a case's reading names, counted by hand from the sources:
+ * CP 1.2 §6.6.2 and reading 94 (an href's launch parameters and fragment are not its path, and a
+ * path with a dot segment or a percent-encoding is outside the form, refused under "Href form"; a
+ * scheme or a leading `/` is external), InterchangePackage (b) (a listed in-package file is an
+ * entry) and §6.11.5 B ii (a dependency names a sibling, never its own resource).
+ *
+ * @param input - The case.
+ * @returns Each law's expected count.
+ */
+const hrefExpected = (input: HrefCase) => ({
+  "File exists": input.file === "missing.png" ? 1 : 0,
+  "Href form":
+    (input.href === "./item.xml" ? 1 : 0) +
+    (input.file === "a%20b.png" || input.file === "img/./a.png" ? 1 : 0),
+  "Href listed": input.href === "./item.xml" ? 1 : 0,
+  "Self dependency": input.dependency === "W" ? 1 : 0,
+});
+
+describe("the package hrefs reading 94 and IMS Content Packaging 1.2 state, over generated packages", () => {
+  it.effect(
+    "Href form, File exists, Href listed and Self dependency: a package breaks each exactly as its sources count",
+    (ctx) =>
+      // Oracle: the specification as a checker, each law's count read off the case by hand from
+      // CP 1.2 §6.6.2, InterchangePackage (b), §6.11.5 B ii and reading 94 (`hrefExpected`).
+      // Bound: every case of 4 item hrefs, 6 extra files and 3 dependencies, 72.
+      searched(
+        ctx,
+        exhaust(
+          {
+            box: "every case of 4 item hrefs, 6 extra files and 3 dependencies",
+            caseHang: lawCaseHang,
+            coverage: requiredInSpace<"held" | "params" | "outside" | "missing" | "self">([
+              "held",
+              "params",
+              "outside",
+              "missing",
+              "self",
+            ]),
+            generator: hrefCases,
+            limit: 100,
+            literal: Formatter.format,
+            oracle: {
+              kind: "specification",
+              name: "CP 1.2 §6.6.2, InterchangePackage (b), §6.11.5 B ii and reading 94, by hand",
+            },
+            suite: "oracle/package-hrefs-reading-94",
+          },
+          (input, c) =>
+            Effect.gen(function* hrefLaws() {
+              const expected = hrefExpected(input);
+              const breaches = breachesOf(yield* judged(hrefPackage(input)));
+
+              c.note(Object.values(expected).every((count) => count === 0) ? "held" : "outside");
+              if (input.href.includes("?") || input.href.includes("#")) {
+                c.note("params");
+              }
+
+              if (expected["File exists"] === 1) {
+                c.note("missing");
+              }
+
+              if (expected["Self dependency"] === 1) {
+                c.note("self");
+              }
+
+              for (const [law, count] of Object.entries(expected)) {
+                const found = breaches.filter((breach) => breach.law === law);
+
+                assert.strictEqual(found.length, count, `${law}\n${shown(breaches)}`);
+              }
+            }),
+        ),
+      ),
+    120_000,
+  );
+});
+
+/**
+ * One case of the references' box: the item's path, whether the paragraph that holds its one `img`
+ * holds an `xml:base`, and the `img`'s `src`.
+ */
+interface ReferenceCase {
+  readonly base: boolean;
+  readonly path: "item.xml" | "items/item.xml";
+  readonly src: string;
+}
+
+/**
+ * The references' box: an item at the root or below it, with or without an `xml:base` on its
+ * paragraph, whose `img`
+ * names `a.png` plainly, padded or with a media fragment, a file no entry holds, a dot segment, an
+ * external URI, or its own document by a fragment.
+ */
+const referenceCases: Gen<ReferenceCase> = (source) => ({
+  base: source.draw(boolean),
+  path: source.draw(element(["item.xml", "items/item.xml"] as const)),
+  src: source.draw(
+    element([
+      "a.png",
+      " a.png ",
+      "a.png#t=1",
+      "missing.png",
+      "../a.png",
+      "http://x.org/a.png",
+      "#top",
+    ] as const),
+  ),
+});
+
+/**
+ * Write a references' case: the item at its path, listed with `a.png` and `items/a.png`, both
+ * entries, so every file the case names that the package holds is listed.
+ *
+ * @param input - The case.
+ * @returns The package.
+ */
+const referencePackage = (input: ReferenceCase) => ({
+  "a.png": "png",
+  "imsmanifest.xml": manifestOf(
+    `<resource identifier="R" type="imsqti_item_xmlv3p0" href="${input.path}"><file href="${input.path}"/><file href="a.png"/><file href="items/a.png"/></resource>`,
+  ),
+  "items/a.png": "png",
+  [input.path]: `<qti-assessment-item xmlns="${asi}" identifier="item" title="Item" time-dependent="false"><qti-item-body><p${input.base ? ' xml:base="x/"' : ""}><img src="${input.src}" alt="a"/></p></qti-item-body></qti-assessment-item>`,
+});
+
+/**
+ * Each law's count over a references' case, read off by hand from InterchangePackage (d) and
+ * readings 94 and 95: `../a.png` names `a.png` from `items/` (RFC 3986 §5.2.4's removal of a
+ * leading dot segment) and climbs above the package root from the root, refused under "Href form";
+ * an `xml:base` beside a reference the representation resolves is refused under it too;
+ * `missing.png` resolves to no entry ("File exists"); every other value resolves to an entry or is
+ * external or the document itself.
+ *
+ * @param input - The case.
+ * @returns Each law's expected count.
+ */
+const referenceExpected = (input: ReferenceCase) => {
+  const resolves = !["http://x.org/a.png", "#top"].includes(input.src);
+  const climbsAbove = input.src === "../a.png" && input.path === "item.xml";
+
+  return {
+    "File exists": input.src === "missing.png" ? 1 : 0,
+    "Href form": (climbsAbove ? 1 : 0) + (input.base && resolves ? 1 : 0),
+  };
+};
+
+describe("the references reading 95's census names, over generated packages", () => {
+  it.effect(
+    "File exists and Href form: a document's references break each exactly as InterchangePackage (d) and readings 94 and 95 count",
+    (ctx) =>
+      // Oracle: the specification as a checker, each law's count read off the case by hand
+      // (`referenceExpected`), over `img@src`, a uri attribute of the grammar's census.
+      // Bound: every case of 2 item paths, 2 bases and 7 values, 28.
+      searched(
+        ctx,
+        exhaust(
+          {
+            box: "every case of 2 item paths, 2 bases and 7 values",
+            caseHang: lawCaseHang,
+            coverage: requiredInSpace<"held" | "missing" | "outside" | "base">([
+              "held",
+              "missing",
+              "outside",
+              "base",
+            ]),
+            generator: referenceCases,
+            limit: 40,
+            literal: Formatter.format,
+            oracle: {
+              kind: "specification",
+              name: "InterchangePackage (d) and readings 94 and 95, by hand",
+            },
+            suite: "oracle/references-reading-95",
+          },
+          (input, c) =>
+            Effect.gen(function* referenceLaws() {
+              const expected = referenceExpected(input);
+              const breaches = breachesOf(yield* judged(referencePackage(input)));
+
+              c.note(expected["File exists"] + expected["Href form"] === 0 ? "held" : "outside");
+              if (expected["File exists"] === 1) {
+                c.note("missing");
+              }
+
+              if (input.base && expected["Href form"] > 0) {
+                c.note("base");
+              }
+
+              for (const [law, count] of Object.entries(expected)) {
+                const found = breaches.filter((breach) => breach.law === law);
+
+                assert.strictEqual(found.length, count, `${law}\n${shown(breaches)}`);
+              }
+            }),
+        ),
+      ),
+    120_000,
+  );
+});
+
+/**
+ * The hrefs the stimulus ref box writes: the stimulus document, a listed file that is no document,
+ * a file no entry holds, and an external URI.
+ */
+const stimulusHrefs = ["s.xml", "a.png", "missing.xml", "http://x.org/s.xml"] as const;
+
+/**
+ * Write a stimulus ref case: an item that refers to a stimulus by the case's href, beside the
+ * stimulus `s.xml` and the file `a.png`, both listed.
+ *
+ * @param href - The stimulus ref's href.
+ * @returns The package.
+ */
+const stimulusPackage = (href: string) => ({
+  "a.png": "png",
+  "imsmanifest.xml": manifestOf(
+    `<resource identifier="R" type="imsqti_item_xmlv3p0" href="item.xml"><file href="item.xml"/><file href="a.png"/></resource><resource identifier="S" type="imsqti_stimulus_xmlv3p0" href="s.xml"><file href="s.xml"/></resource>`,
+  ),
+  "item.xml": `<qti-assessment-item xmlns="${asi}" identifier="item" title="Item" time-dependent="false"><qti-assessment-stimulus-ref identifier="st" href="${href}"/><qti-item-body><p>Read it.</p></qti-item-body></qti-assessment-item>`,
+  "s.xml": `<qti-assessment-stimulus xmlns="${asi}" identifier="s" title="Stimulus"><qti-stimulus-body><p>A stimulus.</p></qti-stimulus-body></qti-assessment-stimulus>`,
+});
+
+describe("the stimulus refs the UP audit's B5 resolves, over generated packages", () => {
+  it.effect(
+    "Stimulus ref target: a stimulus ref breaks it exactly when its href resolves in the package to no stimulus document",
+    (ctx) =>
+      // Oracle: the specification as a checker, the information model §7.6 (info.txt:67012,
+      // :67066) read by hand: `s.xml` is the stimulus; `a.png` is a listed file of no stimulus;
+      // `missing.xml` names no entry, so File exists breaks too; an external href is not resolved.
+      // Bound: every one of the 4 hrefs.
+      searched(
+        ctx,
+        exhaust(
+          {
+            box: "every one of s.xml, a.png, missing.xml and an http: URI",
+            caseHang: lawCaseHang,
+            coverage: requiredInSpace<"held" | "broken">(["held", "broken"]),
+            generator: (source) => source.draw(element(stimulusHrefs)),
+            limit: 10,
+            literal: Formatter.format,
+            oracle: { kind: "specification", name: "the information model §7.6, by hand" },
+            suite: "oracle/stimulus-ref-target",
+          },
+          (href, c) =>
+            Effect.gen(function* stimulusTarget() {
+              const breaches = breachesOf(yield* judged(stimulusPackage(href)));
+              const expected = {
+                "File exists": href === "missing.xml" ? 1 : 0,
+                "Stimulus ref target": href === "a.png" || href === "missing.xml" ? 1 : 0,
+              };
+
+              c.note(expected["Stimulus ref target"] === 0 ? "held" : "broken");
+              for (const [law, count] of Object.entries(expected)) {
+                const found = breaches.filter((breach) => breach.law === law);
+
+                assert.strictEqual(found.length, count, `${law}\n${shown(breaches)}`);
+              }
+            }),
+        ),
+      ),
+    120_000,
+  );
+});
+
+/**
+ * The fragments the in-place differential includes, each its own document's text: a division
+ * holding a hottext interaction (the corpus's `rtest01-fragment.xml`, cut down), a text entry
+ * interaction alone, a paragraph holding a gap, a plain paragraph and a response rule.
+ */
+const inPlaceFragments = {
+  gap: `<p xmlns="${asi}">a <qti-gap identifier="G1"/> b</p>`,
+  hottext: `<div xmlns="${asi}"><qti-hottext-interaction response-identifier="RESPONSE" max-choices="1"><p><qti-hottext identifier="H1">a</qti-hottext></p></qti-hottext-interaction></div>`,
+  rule: `<qti-response-condition xmlns="${asi}"><qti-response-if><qti-is-null><qti-variable identifier="RESPONSE"/></qti-is-null><qti-set-outcome-value identifier="SCORE"><qti-base-value base-type="float">0</qti-base-value></qti-set-outcome-value></qti-response-if></qti-response-condition>`,
+  text: `<p xmlns="${asi}">plain text</p>`,
+  textEntry: `<qti-text-entry-interaction xmlns="${asi}" response-identifier="TEXT"/>`,
+} as const;
+
+/**
+ * The places the differential includes each fragment at, each an item body with `{}` where the
+ * include stands: the body itself, a simple choice's flow, a gap match's text and a paragraph.
+ */
+const inPlacePositions = {
+  body: "{}",
+  choice: `<qti-choice-interaction response-identifier="CHOICE" max-choices="1"><qti-simple-choice identifier="A">a {}</qti-simple-choice><qti-simple-choice identifier="B">b</qti-simple-choice></qti-choice-interaction>`,
+  gapMatch: `<qti-gap-match-interaction response-identifier="RESPONSE" max-associations="1"><qti-gap-text identifier="W" match-max="1">w</qti-gap-text><p>x</p>{}</qti-gap-match-interaction>`,
+  paragraph: "<p>see {}</p>",
+} as const;
+
+/**
+ * Write an item whose body is a position with `{}` replaced, declaring the responses every
+ * fragment and position binds.
+ *
+ * @param body - The body's content.
+ * @param responseBase - The base type of `RESPONSE`.
+ * @returns The item's text.
+ */
+const inPlaceItem = (body: string, responseBase: string): string =>
+  `<qti-assessment-item xmlns="${asi}" xmlns:xi="http://www.w3.org/2001/XInclude" identifier="I" title="Item" time-dependent="false"><qti-response-declaration identifier="RESPONSE" cardinality="${responseBase === "directedPair" ? "multiple" : "single"}" base-type="${responseBase}"/><qti-response-declaration identifier="TEXT" cardinality="single" base-type="string"/><qti-response-declaration identifier="CHOICE" cardinality="single" base-type="identifier"/><qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/><qti-item-body>${body}</qti-item-body></qti-assessment-item>`;
+
+/**
+ * Every fragment at every position, the differential's cases.
+ */
+const inPlaceCases = (() => {
+  const fragments = [
+    "gap",
+    "hottext",
+    "rule",
+    "text",
+    "textEntry",
+  ] as const satisfies readonly (keyof typeof inPlaceFragments)[];
+  const positions = [
+    "body",
+    "choice",
+    "gapMatch",
+    "paragraph",
+  ] as const satisfies readonly (keyof typeof inPlacePositions)[];
+  const [first, ...rest] = fragments.flatMap((fragment) =>
+    positions.map((position) => ({ fragment, position })),
+  );
+  if (first === undefined) {
+    throw new Error("The in-place tables are empty; they name five fragments and four positions.");
+  }
+
+  return [first, ...rest] as const;
+})();
+
+/**
+ * Read the laws a judgment names, or its codec refusal's rule.
+ *
+ * @param judgment - The judgment.
+ * @returns The laws.
+ */
+const lawsOfJudgment = (judgment: Judgment): ReadonlySet<string> =>
+  judgment._tag === "Judged"
+    ? new Set(judgment.breaches.map(({ law }) => law))
+    : new Set([`codec ${judgment.rule}`]);
+
+/**
+ * Write a hottext interaction bound to `RESPONSE` holding an include.
+ *
+ * @param include - The include, as written.
+ * @returns The interaction.
+ */
+const interaction = (include: string): string =>
+  `<qti-hottext-interaction response-identifier="RESPONSE" max-choices="1">${include}</qti-hottext-interaction>`;
+
+/**
+ * The resource of an included fragment, `f.xml`.
+ */
+const fragmentResource = resourceOf("F", "imsqti_fragment_xmlv3p0", "f.xml");
+
+describe("reading 110: an included fragment judged in place", () => {
+  it.effect(
+    "the item that includes a fragment breaks exactly the laws its merged document breaks, and Include root exactly where the merged document's root is out of place",
+    (ctx) =>
+      searched(
+        ctx,
+        exhaust(
+          {
+            box: "every fragment of 5 at every position of 4",
+            caseHang: lawCaseHang,
+            coverage: requiredInSpace<"accepted" | "broken in place" | "out of place">([
+              "accepted",
+              "broken in place",
+              "out of place",
+            ]),
+            generator: (source) => source.draw(element(inPlaceCases)),
+            limit: 20,
+            literal: Formatter.format,
+            oracle: {
+              kind: "second-implementation",
+              name: "the merged document, spliced as text (XInclude's result infoset), judged alone",
+            },
+            suite: "oracle/in-place",
+          },
+          ({ fragment, position }, c) =>
+            Effect.gen(function* inPlaceCase() {
+              const text = inPlaceFragments[fragment];
+              const body = inPlacePositions[position];
+              const responseBase = position === "gapMatch" ? "directedPair" : "identifier";
+              const included = yield* judged({
+                "f.xml": text,
+                "imsmanifest.xml": manifestOf(`${itemResource}${fragmentResource}`),
+                "item.xml": inPlaceItem(
+                  body.replace("{}", '<xi:include href="f.xml"/>'),
+                  responseBase,
+                ),
+              });
+              const merged = yield* judged({
+                "imsmanifest.xml": manifestOf(itemResource),
+                "item.xml": inPlaceItem(body.replace("{}", text), responseBase),
+              });
+              const placed = lawsOfJudgment(included);
+              const whole = lawsOfJudgment(merged);
+
+              if (placed.has("Include root")) {
+                c.note("out of place");
+                // The merged document's root stands where its parent admits it nowhere: the codec
+                // or N5 refuses it there.
+                assert.isTrue(
+                  [...whole].some(
+                    (law) =>
+                      law.startsWith("codec") || law === "N5 admitted" || law === "N5 Follow",
+                  ),
+                  `${fragment} at ${position}: ${[...whole].join(", ")}`,
+                );
+              } else {
+                c.note(placed.size === 0 ? "accepted" : "broken in place");
+                assert.deepStrictEqual(placed, whole, `${fragment} at ${position}`);
+              }
+            }),
+        ),
+      ),
+    120_000,
+  );
+
+  it.effect(
+    "names each include law by its own variant: no listed target, a fragment identifier, two interactions, a chain back to itself, a fragment's hottext that repeats its item's or names its item's variable, and a fragment's template and feedback references its item does not declare, a fragment's language its item's record does not list, and a rule fragment's variable its item does not declare",
+    (ctx) =>
+      searched(
+        ctx,
+        exhaust(
+          {
+            box: "the eleven named variants and the valid package beside them",
+            caseHang: lawCaseHang,
+            coverage: requiredInSpace<"held" | "broken">(["held", "broken"]),
+            generator: (source) =>
+              source.draw(
+                element([
+                  "valid",
+                  "missing",
+                  "external",
+                  "fragment identifier",
+                  "two interactions",
+                  "cycle",
+                  "hottext key",
+                  "choice variable",
+                  "template reference",
+                  "feedback reference",
+                  "fragment language",
+                  "rule variable",
+                ] as const),
+              ),
+            limit: 12,
+            literal: Formatter.format,
+            oracle: {
+              kind: "specification",
+              name: "readings 76, 96, 108 and 110 (XInclude 1.0 §3.1, information model §2.12 and §5.132.1, the metadata binding §2.7.1.3), by hand",
+            },
+            suite: "oracle/include-laws",
+          },
+          (variant, c) =>
+            Effect.gen(function* includeLaws() {
+              const hottexts = `<p xmlns="${asi}"><qti-hottext identifier="H1">a</qti-hottext></p>`;
+              const packages = {
+                "choice variable": {
+                  "f.xml": hottexts.replace('identifier="H1"', 'identifier="SCORE"'),
+                  "imsmanifest.xml": manifestOf(`${itemResource}${fragmentResource}`),
+                  "item.xml": inPlaceItem(interaction('<xi:include href="f.xml"/>'), "identifier"),
+                },
+                cycle: {
+                  "f.xml": `<div xmlns="${asi}" xmlns:xi="http://www.w3.org/2001/XInclude"><xi:include href="f.xml"/></div>`,
+                  "imsmanifest.xml": manifestOf(`${itemResource}${fragmentResource}`),
+                  "item.xml": inPlaceItem('<xi:include href="f.xml"/>', "identifier"),
+                },
+                external: {
+                  "imsmanifest.xml": manifestOf(itemResource),
+                  "item.xml": inPlaceItem(
+                    '<xi:include href="https://example.org/f.xml"/>',
+                    "identifier",
+                  ),
+                },
+                "feedback reference": {
+                  "f.xml": `<p xmlns="${asi}"><qti-feedback-inline outcome-identifier="NONE" identifier="x" show-hide="show">f</qti-feedback-inline></p>`,
+                  "imsmanifest.xml": manifestOf(`${itemResource}${fragmentResource}`),
+                  "item.xml": inPlaceItem('<xi:include href="f.xml"/>', "identifier"),
+                },
+                "fragment identifier": {
+                  "f.xml": hottexts,
+                  "imsmanifest.xml": manifestOf(`${itemResource}${fragmentResource}`),
+                  "item.xml": inPlaceItem(
+                    interaction('<xi:include href="f.xml?a=1#x"/>'),
+                    "identifier",
+                  ),
+                },
+                "fragment language": {
+                  "f.xml": `<p xmlns="${asi}" xml:lang="fr">texte</p>`,
+                  "imsmanifest.xml": manifestOf(
+                    `${itemResource.replace(
+                      "<file",
+                      '<metadata><lom xmlns="http://ltsc.ieee.org/xsd/LOM"><general><language>en</language></general></lom></metadata><file',
+                    )}${fragmentResource}`,
+                  ),
+                  "item.xml": inPlaceItem('<xi:include href="f.xml"/>', "identifier"),
+                },
+                "hottext key": {
+                  "f.xml": hottexts,
+                  "imsmanifest.xml": manifestOf(`${itemResource}${fragmentResource}`),
+                  "item.xml": inPlaceItem(
+                    interaction(
+                      '<p><qti-hottext identifier="H1">b</qti-hottext></p><xi:include href="f.xml"/>',
+                    ),
+                    "identifier",
+                  ),
+                },
+                missing: {
+                  "imsmanifest.xml": manifestOf(itemResource),
+                  "item.xml": inPlaceItem('<xi:include href="f.xml"/>', "identifier"),
+                },
+                "rule variable": {
+                  "f.xml": `<qti-response-condition xmlns="${asi}"><qti-response-if><qti-is-null><qti-variable identifier="RESPONSE"/></qti-is-null><qti-set-outcome-value identifier="NOPE"><qti-base-value base-type="float">0</qti-base-value></qti-set-outcome-value></qti-response-if></qti-response-condition>`,
+                  "imsmanifest.xml": manifestOf(`${itemResource}${fragmentResource}`),
+                  "item.xml": inPlaceItem("<p>x</p>", "identifier").replace(
+                    "</qti-item-body>",
+                    '</qti-item-body><qti-response-processing><xi:include href="f.xml"/></qti-response-processing>',
+                  ),
+                },
+                "template reference": {
+                  "f.xml": `<p xmlns="${asi}"><qti-template-inline template-identifier="NONE" identifier="x" show-hide="show">t</qti-template-inline></p>`,
+                  "imsmanifest.xml": manifestOf(`${itemResource}${fragmentResource}`),
+                  "item.xml": inPlaceItem('<xi:include href="f.xml"/>', "identifier"),
+                },
+                "two interactions": {
+                  "f.xml": hottexts,
+                  "imsmanifest.xml": manifestOf(`${itemResource}${fragmentResource}`),
+                  "item.xml": inPlaceItem(
+                    `${interaction('<xi:include href="f.xml"/>')}${interaction('<xi:include href="f.xml"/>').replace("RESPONSE", "TEXT")}`,
+                    "identifier",
+                  ),
+                },
+                valid: {
+                  "f.xml": hottexts,
+                  "imsmanifest.xml": manifestOf(`${itemResource}${fragmentResource}`),
+                  "item.xml": inPlaceItem(interaction('<xi:include href="f.xml"/>'), "identifier"),
+                },
+              };
+              const expected: Readonly<Record<typeof variant, LawName | undefined>> = {
+                "choice variable": "Choice not variable",
+                cycle: "Inclusion cycle",
+                external: "Include target",
+                "feedback reference": "Feedback reference",
+                "fragment identifier": "Include fragment identifier",
+                "fragment language": "Document lang",
+                "hottext key": "Choice identifier key",
+                missing: "Include target",
+                "rule variable": "Variable declared",
+                "template reference": "Template reference",
+                "two interactions": "Fragment context",
+                valid: undefined,
+              };
+              const breaches = breachesOf(yield* judged(packages[variant]));
+              const law = expected[variant];
+              c.note(law === undefined ? "held" : "broken");
+
+              if (law === undefined) {
+                assert.lengthOf(breaches, 0, shown(breaches));
+              } else {
+                assert.isAbove(ofLaw(breaches, law).length, 0, `${variant}\n${shown(breaches)}`);
+              }
+            }),
+        ),
+      ),
+    120_000,
   );
 });
