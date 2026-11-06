@@ -6,7 +6,7 @@ import type { PartRow, TagClass } from "#plate/emit/parts.ts";
 
 /**
  * The ways a replacement part function can break the swap invariant, one per refusal of I2, I3, the
- * list joint rule, the legend joint rule and the select joint rule.
+ * list joint rule, the legend joint rule and the handed-content rule (`select-content`).
  *
  * @see {@link PartSwapRefused}
  */
@@ -39,7 +39,7 @@ const remedies = {
   "list-item": "Swap Choices too, or return an <li> from the Choice replacement.",
   "root-not-allowed": "Return an element the part may become as the replacement's root.",
   "select-content":
-    "Place the nodes the part function receives directly under the returned root, in the order given, wrapping none and adding nothing beside them; restyle an option through its marker.",
+    "Place the nodes the part function receives directly under the returned root, in the order given, wrapping none and adding nothing beside them; restyle an option or a textarea through its marker.",
 } satisfies { readonly [C in SwapCause]: string };
 
 /**
@@ -65,8 +65,9 @@ const controlRemedy = (interaction: string): string =>
  * change. It is returned through a `Result`, never thrown.
  *
  * Beside I2 and I3 it holds three joint rules: the list rule (`list-item`), the legend rule
- * (`legend-first`) and the select rule (`select-content`), under which a `select` or `option`
- * part's replacement holds exactly the nodes handed to it.
+ * (`legend-first`) and the handed-content rule (`select-content`), under which a `select`,
+ * `option` or `textarea` part's replacement holds exactly the nodes handed to it. The cause keeps
+ * the name it had when the rule held only the `select` and its options.
  */
 export class PartSwapRefused extends Data.TaggedError("PartSwapRefused")<{
   readonly cause: SwapCause;
@@ -300,25 +301,49 @@ const checkLegendFirst = (root: Element, children: readonly Node[]): Breach | un
 
 /**
  * The tag classes whose replacement holds exactly the nodes handed to it, as its own children in
- * order, under the select joint rule: a `select` holds only `option`s and an `option` only text,
- * and a host supplies none of an item's data.
+ * order, under the handed-content rule: a `select` holds only the item's `option`s, an `option`
+ * only its text, and a `textarea` only the restored answer, since a textarea's text is the value
+ * it posts. A host supplies none of an item's data and none of the candidate's answer.
  */
-const holdsHandedOnly: ReadonlySet<TagClass> = new Set(["option", "select"]);
+const holdsHandedOnly: ReadonlySet<TagClass> = new Set(["option", "select", "textarea"]);
 
 /**
- * Check the select joint rule on a replacement's root: its children are the nodes handed to it, by
- * identity, in order, none wrapped (in an `optgroup`, a `div` or a `span`) and nothing beside them.
+ * Say where a root's child at fault sits against the nodes handed to the replacement.
  *
- * I3 has already kept the root a `select` or an `option`, and I2 has placed every handed node below
- * it; this rule adds that each sits directly under the root and that the root holds nothing else,
- * so the `select` holds only the item's options and each `option` only its text.
+ * @param children The nodes the emitter handed over.
+ * @param index The child's position under the returned root, from 0.
+ * @returns The handed child it stands in for, or that it stands beside them, or that none were
+ *   handed.
+ */
+const placementOf = (children: readonly Node[], index: number): string => {
+  if (index < children.length) {
+    return `where ${childAt(children, index)}, belongs`;
+  }
+
+  if (children.length === 0) {
+    return "though it was handed no nodes";
+  }
+
+  return `beside the ${children.length} ${children.length === 1 ? "node" : "nodes"} it was handed`;
+};
+
+/**
+ * Check the handed-content rule on a replacement's root: its children are the nodes handed to it,
+ * by identity, in order, none wrapped (in an `optgroup`, a `div` or a `span`) and nothing beside
+ * them.
+ *
+ * I3 has already kept the root a `select`, an `option` or a `textarea`, and I2 has placed every
+ * handed node below it; this rule adds that each sits directly under the root and that the root
+ * holds nothing else, so the `select` holds only the item's options, each `option` only its text,
+ * and the `textarea` only the restored answer, or nothing when none is restored.
  *
  * @param root The replacement's root.
- * @param children The nodes the emitter handed over: the Placeholder and the Options, or an
- *   option's text.
+ * @param children The nodes the emitter handed over: the Placeholder and the Options, an option's
+ *   text, or the restored answer's text (none when nothing is restored).
  * @returns The breach naming the root's first child at fault, or undefined when the root holds
  *   exactly the handed nodes.
  * @see https://html.spec.whatwg.org/multipage/form-elements.html#the-select-element
+ * @see https://html.spec.whatwg.org/multipage/form-elements.html#the-textarea-element
  */
 const checkHandedOnly = (root: Element, children: readonly Node[]): Breach | undefined => {
   const count = Math.max(root.children.length, children.length);
@@ -339,15 +364,9 @@ const checkHandedOnly = (root: Element, children: readonly Node[]): Breach | und
     };
   }
 
-  const nodes = children.length === 1 ? "node" : "nodes";
-  const where =
-    index < children.length
-      ? `where ${childAt(children, index)}, belongs`
-      : `beside the ${children.length} ${nodes} it was handed`;
-
   return {
     cause: "select-content",
-    detail: `the returned ${describeNode(root)} holds ${describeNode(held)} as its child ${index + 1}, ${where}`,
+    detail: `the returned ${describeNode(root)} holds ${describeNode(held)} as its child ${index + 1}, ${placementOf(children, index)}`,
   };
 };
 
@@ -414,8 +433,11 @@ const overDefaults = (defaults: PartRow["defaults"], attrs: Attributes): Attribu
 /**
  * The state attributes: the names whose presence is what a control posts, shows chosen or lets
  * the candidate change. Where a row's `merged` list names one, it is plate's whether plate writes
- * it or leaves it off, so a replacement can neither pre-answer a control nor take a choice or the
- * Placeholder away.
+ * it or leaves it off, so a replacement cannot set that state on the part's own element: it neither
+ * pre-answers a control nor takes a choice or the Placeholder away there. The rule covers a
+ * control's own element, not its ancestors: a host that disables controls through a container (a
+ * `fieldset disabled`, an `inert` subtree) does so as the owner of everything around them, and
+ * `render`'s `disabled` option is the supported way to disable every control.
  *
  * `hidden` is merged only on the Inline Choice Option and Placeholder, where hiding an option
  * would take it from the candidate as `disabled` does.
@@ -472,9 +494,11 @@ const without = (attrs: Attributes, names: ReadonlySet<string>): Attributes =>
  * defaulted one, an `aria-describedby` plate writes only when invalid) stands. Absence is a prop
  * for the state attributes: a root attribute that names one of {@link stateAttributes} the row
  * merges is dropped when the props leave it off, so plate's unchecked radio, unselected option,
- * editable field and enabled button stay so. A Label whose root is not a `label` carries no `for`,
- * from the props or its own. Names are compared in ASCII lower case, so a root attribute spelled
- * `NAME` or `SELECTED` gives way to the props' or is dropped, rather than standing beside them.
+ * editable field and enabled button stay so on their own elements; disabling them through an
+ * ancestor is the host's ({@link stateAttributes}). A Label whose root is not a `label` carries no
+ * `for`, from the props or its own. Names are compared in ASCII lower case, so a root attribute
+ * spelled `NAME` or `SELECTED` gives way to the props' or is dropped, rather than standing beside
+ * them.
  *
  * @param root The replacement's root.
  * @param props The attributes the part carries.
@@ -568,8 +592,8 @@ const refuse = (row: PartRow, breach: Breach): PartSwapRefused =>
 
 /**
  * Construct a swapped part's root: the replacement's, checked against I3, I2, for a legend owner
- * the legend joint rule, and for a `select` or `option` part the select joint rule, with I1 applied
- * over the row's defaults.
+ * the legend joint rule, and for a `select`, `option` or `textarea` part the handed-content rule,
+ * with I1 applied over the row's defaults.
  *
  * @param row The part's row.
  * @param props The attributes the part's connect function computed.
@@ -607,11 +631,12 @@ const swapIn = (
  * override a default but never a prop, nor set a state attribute the row merges and the props leave
  * off (`checked`, `selected`, `disabled`, `readonly`, an Option's `hidden`), and a Label whose root
  * is not a `label` carries no `for`. A legend owner (the Choice Root under the `legend` markup)
- * must keep the legend Prompt its first element child; the fast path holds it as handed. A `select`
- * or `option` part (the Inline Choice Control, Placeholder and Option) must hold exactly the nodes
- * handed to it, directly and in order, wrapping none and adding nothing beside them; the fast path
- * holds them as handed. A list owner (Choices) also applies the list joint rule on either path.
- * Every breach is a {@link PartSwapRefused} (I4), returned as the `Result`'s failure.
+ * must keep the legend Prompt its first element child; the fast path holds it as handed. A
+ * `select`, `option` or `textarea` part (the Inline Choice Control, Placeholder and Option, and the
+ * Extended Text Control) must hold exactly the nodes handed to it, directly and in order, wrapping
+ * none and adding nothing beside them; the fast path holds them as handed. A list owner (Choices)
+ * also applies the list joint rule on either path. Every breach is a {@link PartSwapRefused} (I4),
+ * returned as the `Result`'s failure.
  *
  * @example
  *   Result.map(applyPart(rowFor("item", "root"), props, body), toHtml);

@@ -98,9 +98,15 @@ and both of its entry points are unstable until M3.
   both were written, and the browser read the replacement's.
 - A replacement can no longer set a state plate leaves off: its `checked`, `selected`, `disabled`,
   `readonly`, `name`, `value` or `type`, in any case, is dropped on a part whose state plate
-  computes, as are `disabled` and `hidden` on an Inline Choice option, so a replacement neither
-  pre-answers a control nor takes a choice away. A Label replacement that is not a `label` carries
+  computes, as are `disabled` and `hidden` on an Inline Choice option. So a replacement cannot set
+  a control's own state or content. Disabling controls through an ancestor, such as a container
+  swapped to a `fieldset disabled` or marked `inert`, is the host's; `render`'s `disabled` option
+  is the supported way to disable every control. A Label replacement that is not a `label` carries
   no `for`, and still names the control through its id. Before, both were written.
+- `PartSwapRefused` refuses with `select-content` a replacement for an Extended Text's `control`
+  whose `textarea` holds anything beside the restored answer, or anything at all when no answer is
+  restored, since a textarea posts its text. Before, host text beside the answer was accepted and
+  posted as the candidate's.
 - `decode` refuses posted text that holds a character XML 1.0 cannot carry, such as U+0000 or
   U+FFFE, with `Malformed` and the reason `character`. A stored record or session with a string or
   URI value that holds such a character is refused when plate reads it back.

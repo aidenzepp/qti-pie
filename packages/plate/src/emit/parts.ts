@@ -448,12 +448,14 @@ const admits = {
  * The five navigation buttons are plain buttons (rule `9af3809b`): each defaults `type` to
  * `button`, and no navigation row merges `type`, `name`, `value` or a `form*` attribute, so a
  * host's replacement may give a button its own submit semantics while every attribute plate
- * computes still stands. Each merges `disabled`, so a replacement cannot disable a button plate
- * leaves enabled.
+ * computes still stands. Each merges `disabled`, so a button's replacement cannot disable the
+ * button plate leaves enabled; disabling it through an ancestor, such as a `fieldset disabled`, is
+ * the host's.
  *
  * The Inline Choice Option and Placeholder merge `disabled` and `hidden`, which plate never writes
- * on them, so plate owns their absence: every choice, and the way back to no answer, stays
- * choosable whatever a replacement writes.
+ * on them, so plate owns their absence: a replacement cannot disable or hide a choice, or the way
+ * back to no answer, on the option's own element; disabling the select through an ancestor, such
+ * as a `fieldset disabled`, is the host's.
  */
 const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
   {
