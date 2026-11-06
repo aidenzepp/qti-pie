@@ -1286,3 +1286,232 @@ HEAD on 2026-11-06. At each pin two exports of the commit packed the three tarba
 - **W5's open row** (`scalar/regex/admit.ts:121` at `46b2fc3`) was unchanged at `99b6217`, and `64f0427` fixes it by
   its commit: the regex IR carries each node's path profiles, so `matchPattern` and `analyzeText` refuse exactly the
   empty languages. Not re-run here: qti-pie states no pattern with a mid-pattern anchor.
+
+## R87: three writes `grizzle generate` accepts and the write compiler refuses (grizzle `64f0427`)
+
+`grizzle generate`, `grizzle check` and `grizzle migrate` accepted the `Qti` schema. On the migrated schema every import
+then failed before any SQL with `ExecutionFailure`, because the write's compile refused it. Each refusal depends on the
+schema alone, never on a package's rows, so no import could compile at any rows-first pin: all three refusals are in
+grizzle since `941ebfe`, so `4016b69`, `99b6217` and `64f0427` all carry them.
+
+The causes are traced at the vendored commit `64f0427a629ffde66c6d73d5b4ca596fe14001b7`. The files are unchanged at
+the grizzle clone's `HEAD` `40963d6`: `git log 64f0427..HEAD -- packages/engine/src/write/frontend/compile.ts
+packages/engine/src/write/family/` is empty.
+
+Each reproduction needs nothing of qti-pie and lives in `~/.cache/gr8des/integration/grizzle-repros/<name>/`.
+
+- `pack/` holds the vendored tarballs, sha256 equal to `vendor/`.
+- `case.ts` and `control.ts` hold the two schemas, with one grizzle config per variant.
+- `apply.ts` runs `db.apply`'s compile with no database: the adapter's `apply/compile.ts` `writeEntry`, that is
+  `compileWrite` under `firstCodebook`.
+- `run.sh` prints, for case and control, `grizzle generate` and `grizzle check` of the schema alone, then `node
+  apply.ts`, then `grizzle generate` with the same write declared in the login's workload. `run.out` keeps that
+  output verbatim, with each exit code.
+
+Status of all three: reported to the grizzle session on 2026-11-06 with these reproductions. grizzle is fixing 1 and 3
+in lane W-fill, which moves every schema-only write refusal to compile time, and 2 in its nesting fix. None is filed as
+a GitHub issue by qti-pie.
+
+### 1. An owner-axis copy of a column the owner fills after its members (grizzle defect)
+
+- **Reproduction:** `~/.cache/gr8des/integration/grizzle-repros/leaving-copy/`.
+- **Case:** a tree `T`, the family `counted(on(M, "owner"), fin(T, "members"))`, and the containment
+  `contained(on(M, "owner", "ownerEnd"), on(T, "id", "end"))`, where `ownerEnd: accumulated(natural, 0n)`.
+  - `grizzle generate` exits 0, and `grizzle check` prints `Repro: ok`.
+  - `ChangeSet.empty(W).insert(T, []).insert(M, [])` is refused with `UnsupportedOperation at ChangeSet.insert:
+    M.ownerEnd copies T's end along the owner axis of T.members, a column its owner fills only after its members`.
+  - `grizzle generate` with that write in a workload prints `grizzle: refused at stage generate (schema Repro): a
+    login's workload does not compile: …` and exits 1.
+- **Control:** the same schema copying `start` compiles and generates.
+- **Cause:** `filler` in `packages/engine/src/write/family/fold.ts:1059-1072` refuses an `owner` or `ownerCopy` rule
+  whose source is a leaving column.
+  - A tree's `end` is leaving, as is any column that reads one (`:618-650`). The header states the rule at `:26-31`.
+  - The filler is built over every family of the law model, so it refuses whichever nested insert of the schema
+    builds it first.
+  - It is built only when a ChangeSet's nested insert builds its nesting: `nesting.ts:186`, reached from
+    `write/frontend/compile.ts:791-801`. The schema's own compile never builds it.
+- **Docs:** README's "How a field is written" (`README.md:1350-1367`), "Families" (`:1507-1561`) and "Limits"
+  (`:2458`) never say that an owner-axis copy may not read the owner's `end`, a fold's end or a last-axis copy.
+- **Classification:** a grizzle defect. The refusal is a property of the schema alone, yet the schema compiles,
+  generates and migrates, and the README does not state it.
+- **qti-pie:** `BranchResolution.instanceEnd` copied `Instance.end`. No law read the copy, so it is gone
+  (`src/qti/tests.ts`, `1f01419d`). No workaround remains.
+
+### 2. A tree that owns an ordered family (grizzle defect)
+
+- **Reproduction:** `~/.cache/gr8des/integration/grizzle-repros/tree-ordered-nesting/`.
+- **Case:** a tree `T`, and the family `ordered(on(A, "node", "at"), fin(T, "attrs"))`.
+  - generate and check pass.
+  - `ChangeSet.empty(W).insert(T, [])` is refused with `UnsupportedOperation at ChangeSet.insert: a nested write
+    reaches the family T.attrs twice, at depths 1 and 2: families that nest each other have no order to write their
+    rows in`.
+  - generate with that write in a workload is refused the same way.
+- **Controls:** the tree alone compiles and generates, and so does the same ordered family on an owner that is no
+  tree.
+- **Cause:** the walk in `nestingOf`, `packages/engine/src/write/family/nesting.ts:139-172`.
+  - For the tree's own family, the walk pushes the tree's relation again at `depth + 1` (`:167-171`).
+  - At that depth it meets the relation's other sequences a second time. Only the tree family itself is skipped
+    (`:146`), so every other sequence the tree's relation owns is refused at `:151`.
+- **Docs:** README "Families" nests the members of an ordered family or a tree "at any depth", and nothing forbids a
+  tree's relation from owning an ordered family.
+- **Classification:** a grizzle defect.
+- **qti-pie:** `Node` (`nodeTree`) owns `Node.attributes` and `Node.namespaces`, both ordered, so every import is
+  refused at `insert Node`.
+  - No workaround is taken. Making either family counted would change the model, which is the operator's call.
+  - grizzle's nesting fix closes it.
+
+### 3. A key over a field PostgreSQL generates (grizzle defect, schema-only refusal at write time)
+
+- **Reproduction:** `~/.cache/gr8des/integration/grizzle-repros/generated-unique-key/`.
+- **Case:** `relation.generated("R", { id, text }, ["id"], (r) => ({ value: generated(pg.integer, Compute.cast(r.text,
+  pg.integer)) }))`, with `key(on(R, "value"))`.
+  - generate and check pass.
+  - `ChangeSet.empty(W).insert(R, [])` is refused with `an addition to R whose unique objects read caller-written
+    fields alone; one over (value) reads value, which PostgreSQL generates and no fact carries`.
+- **Control:** `value` written by the caller and proved by `check(…, r.eq(r.value, Compute.cast(r.text,
+  pg.integer)))`, under the same key, compiles and generates.
+- **Cause:** `refuseGeneratedUnique` in `packages/engine/src/write/frontend/compile.ts:508-528`, called for every
+  addition at `:1291-1293`.
+- **Docs:** the README says only that a primary key holds no generated field (`README.md:1367`). It says nothing of
+  another key over one.
+- **Classification:** a grizzle defect of the same kind as 1, a schema-only refusal first reached at a write.
+- **qti-pie:** `key(on(MapKeyFloat, "mapping", "value"))` was over the generated cast.
+  - **Workaround:** the host writes `value` (`floatValueOf` in `src/import/overlays/mapping.ts`), and `E1_derived`
+    holds it to the same cast (`src/qti/mapping.ts`, `e255b860`). The key therefore judges the same values.
+  - `floatValueOf` is held to IEEE 754 roundTiesToEven of the key's exact value, computed in BigInt arithmetic, over
+    2,000 keys (`src/import/overlays/mapping.test.ts`).
+  - The workaround stays until grizzle admits such a key or refuses it at compile.
+
+### The guard qti-pie keeps
+
+`grizzle generate` and every `DbLayer` startup compile each program of a login's workload with the same front end as
+`db.apply`. Declaring the import's write program in `AuthorApp`'s workload therefore makes a schema whose writes
+cannot compile fail at generate, check and startup, never at the first import. That program is `changeSetOf` with no
+rows, `importWork` in `src/qti/logins.ts`.
+
+- The patch is `work/rv/r87/workload-guard.patch`. It holds `logins.ts`, the `schema.test.ts` assertion, and three new
+  test files: `src/qti/logins.test.ts`, `src/test/gen/assembly.compile.test.ts` and `src/test/gen/assembly.db.test.ts`.
+- It lands with the pin that fixes 2. Until then generate refuses with 2's text.
+
+### Not grizzle's: the law oracle raises no reading-87 breach
+
+`src/test/oracle.ts` names `Branch target` and `Branch forward` in its rule table, its sources, its order and its
+messages, but nothing raises either one.
+
+- So `oracleVerdict` accepts every package reading 87 refuses. The generator's `p1[s1(i1)] p1=>p1` is one such
+  package: the import writes its resolution, and `Branch_forward` refuses that resolution.
+- 28 more of the table's 133 laws have no producer: no `breach("<law>"` and no `law: "<law>"` in the file.
+  `Structure identifier`, `Test name key`, `Section parts`, `Selection required`, `Item ref target` and `Variable
+  mapping target` are among them.
+- `src/test/gen/assembly.test.ts` judges reading 87 by its own model instead, held against the import's rows under the
+  laws restated on the host.
+
+## N3: `workload()` and `login()` re-encode whole descriptions (open at `64f0427`, fix in progress)
+
+- **Found by:** our CPU profile of `grizzle check` over `Qti` at `64f0427`
+  (`~/.cache/gr8des/integration/prof/CPU.20261106.133120.71117.0.001.cpuprofile`, summarised by `analyze.py` beside
+  it). Of its 320.0 s, these are inclusive times: `descText` 31.0 s, `levelOf` 26.5 s and `levelSchema` 26.6 s,
+  `workload` 14.7 s, and `login`'s `admitLogin` 4.8 s, of which `sameDesc` is 4.4 s. Evaluating `src/qti/logins.ts`,
+  the module that calls `workload` and `login`, takes 19.5 s. An earlier profile of importing `src/import/package.ts`
+  (`~/.cache/gr8des/rvp/prof/CPU.20261106.125400.50691.0.001.cpuprofile`, at load average 42) puts 57 s of its 139 s
+  in `logins.ts`: 32.7 s in `workload` → `levelSchema` → `descText` and 24.4 s in `login` → `admitLogin` →
+  `sameDesc`. That is most of why `src/import/package.ts` takes about 8.6 s to import, against 4.8 s on `main`, as
+  Aiden's review of PR #46 measured.
+- **Cause**, at `64f0427` and unchanged at grizzle `main` `40963d6` (`origin/main` on 2026-11-06;
+  `git log 64f0427..40963d6` over the five files below is empty):
+  - `workload(R, programs)` checks each program's schema with `levelSchema`
+    (`packages/engine/src/program/workload/value.ts:133`). For a program over a role, checked against that role,
+    `levelOf` compares the two role descriptions by the `descText` of each (`packages/engine/src/program/schema.ts:211`
+    to `215`), with no identity test. So each program encodes the role's whole description twice. A role's
+    description holds its base schema (`packages/engine/src/ir/desc.ts:935`), and that includes every closed
+    relation's rows (`:903`). A program over a schema goes through `isLevelOf` instead
+    (`packages/engine/src/schema/levels.ts:45` to `66`), which tests identity first (`:49` to `53`).
+  - `login(base, name, roles)` admits each role with `sameDesc(desc.base, baseDesc)`
+    (`packages/engine/src/schema/world.ts:554`). `sameDesc` is `orThrow(descText(a)) === orThrow(descText(b))` (`:168`),
+    so each role costs two encodes of the whole schema, even when the two arguments are the same object. Role
+    admission calls it too (`:264` and `:265`).
+  - `descText` is `encode(desc, identityOptions)` (`packages/engine/src/ir/desc.ts:2116` and `2117`), with no memo, so
+    every call walks the whole description again.
+- **Reproduction** (Node 26, the `64f0427` tarballs and nothing of qti-pie): `n` relations, a role holding them whole,
+  a workload of `k` queries over the role and a login. The control is the same `k` queries in a workload over the
+  schema itself.
+
+  ```ts
+  import { login, pg, query, relation, role, schema, uuid, v, workload } from "@bjornpagen/grizzle";
+
+  const [n, k] = process.argv.slice(2).map(Number);
+  const relations = Object.fromEntries(
+    Array.from({ length: n }, (_, i) => [
+      `R${String(i)}`,
+      relation(
+        `R${String(i)}`,
+        { a: pg.integer, b: pg.bigint, c: pg.integer, d: pg.boolean, id: uuid },
+        ["id"],
+      ),
+    ]),
+  );
+  const S = schema("Repro", relations, []);
+  const R = role(S, "reader", relations);
+  const R0 = relations["R0"];
+  const over = (base) =>
+    Object.fromEntries(
+      Array.from({ length: k }, (_, i) => [
+        `q${String(i)}`,
+        query(base).rule((r) => {
+          const { a, id } = v(R0, "row");
+          return r
+            .match(R0, { a, id })
+            .where(r.eq(id, r.param("id", uuid)))
+            .find({ a, id });
+        }),
+      ]),
+    );
+  const time = (label, f) => {
+    const t0 = performance.now();
+    const out = f();
+    console.log(`${label}: ${(performance.now() - t0).toFixed(0)} ms`);
+    return out;
+  };
+  const roleQueries = over(R);
+  const schemaQueries = over(S);
+  const w = time(`n=${n} k=${k} workload(role)`, () => workload(R, roleQueries));
+  time(`n=${n} k=${k} workload(schema), control`, () => workload(S, schemaQueries));
+  time(`n=${n} k=${k} login(schema, [role])`, () => login(S, "app", [R], { workload: [w] }));
+  ```
+
+  `node repro.ts <n> <k>` for `n` of 50 and 150 and `k` of 1, 10 and 40, at load average 80. The output is verbatim:
+
+  ```text
+  n=50 k=1 workload(role): 97 ms
+  n=50 k=1 workload(schema), control: 1 ms
+  n=50 k=1 login(schema, [role]): 135 ms
+  n=50 k=10 workload(role): 485 ms
+  n=50 k=10 workload(schema), control: 2 ms
+  n=50 k=10 login(schema, [role]): 263 ms
+  n=50 k=40 workload(role): 1088 ms
+  n=50 k=40 workload(schema), control: 2 ms
+  n=50 k=40 login(schema, [role]): 22 ms
+  n=150 k=1 workload(role): 77 ms
+  n=150 k=1 workload(schema), control: 0 ms
+  n=150 k=1 login(schema, [role]): 231 ms
+  n=150 k=10 workload(role): 567 ms
+  n=150 k=10 workload(schema), control: 2 ms
+  n=150 k=10 login(schema, [role]): 351 ms
+  n=150 k=40 workload(role): 2561 ms
+  n=150 k=40 workload(schema), control: 1 ms
+  n=150 k=40 login(schema, [role]): 337 ms
+  ```
+
+  A workload over the role grows with the number of programs times the schema's size. The control stays near 0 ms,
+  because `isLevelOf`'s identity test answers before any encode. `Qti`'s 65 closed relations make each encode far
+  larger than these plain relations do. That is why the profiles above spend tens of seconds where this
+  reproduction spends milliseconds.
+
+- **Classification:** a grizzle performance defect. Neither the README nor the agent guide states a cost for
+  `workload` or `login`. Row 64 is the same family: role descriptions re-encoded on every `ChangeSet.insert`,
+  recorded as fixed upstream on 2026-11-05.
+- **Status:** open at `64f0427`, fix in progress. It was reported to the grizzle session on 2026-11-06 with the
+  profile, and grizzle's lane PERF is fixing it. On PERF's measurement at 150 relations, `DbLayer.make` falls from
+  43.7 s to 8.0 s, and `grizzle migrate`'s time before it connects falls from 70.3 s to 0.93 s. It is not filed by
+  qti-pie. qti-pie takes no workaround: building `AuthorApp` lazily would only move the cost to the first database
+  use.
