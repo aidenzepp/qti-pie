@@ -65,7 +65,7 @@ import {
   XmlLocalName,
 } from "#pantry/schema/contracts.ts";
 import * as patterns from "#pantry/schema/patterns.ts";
-import { FLAGS, handleOf, KindEnters } from "#pantry/schema/seed/ancestry.ts";
+import { handleOf, KindEnters, stepOf } from "#pantry/schema/seed/ancestry.ts";
 import type { Flag } from "#pantry/schema/seed/ancestry.ts";
 import { foreignRows, schemaSetOf } from "#pantry/import/foreign.ts";
 import { classifyAttribute, classifyElement, scopeOf } from "#pantry/import/wildcard.ts";
@@ -417,11 +417,11 @@ const ancestryOf = (flags: readonly Flag[]): Option.Option<AncestryHandle> =>
   Option.fromNullishOr(Ancestry.handles.find((handle) => handle === handleOf(flags)));
 
 /**
- * The flags in force under an element of `kind` that sits inside `flags`: those it sits inside and
- * the ones its kind enters.
+ * The flags in force under an element of `kind` that sits inside `flags`: the seed's step
+ * (`stepOf`), so an absorbing flag the element holds or enters is the only one.
  */
 const enteredBy = (flags: readonly Flag[], kind: NodeKindHandle): readonly Flag[] =>
-  FLAGS.filter((flag) => flags.includes(flag) || (KindEnters[kind] ?? []).includes(flag));
+  stepOf(flags, kind, KindEnters);
 
 /**
  * The parent kinds, beside a dotted handle's registry `parent`, under which its element name also

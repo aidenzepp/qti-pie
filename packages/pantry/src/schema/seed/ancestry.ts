@@ -7,7 +7,9 @@
  * An ancestry is the set of flags a node sits inside, named by its flags joined with `.` in
  * `FLAGS` order, `root` for the empty set. `reachable` computes the sets by closure over the
  * `Admission` rows: a tree starts at each kind no row admits as a child, at the empty set; a node
- * of kind `k` at set `S` that is not banned yields each child kind at `S` plus `KindEnters[k]`.
+ * of kind `k` at set `S` that is not banned yields each child kind at `S` plus `KindEnters[k]`,
+ * except that an absorbing flag the set holds or the kind enters (`absorbing`) is the only flag
+ * its children hold.
  * The bans are the missing `AncestryStep` rows:
  *
  * - An interaction kind at any set holding `int`, `choice`, `htx`, `rubric`, `tmpl` or `modal`;
@@ -168,14 +170,31 @@ export const banned = (flagSet: readonly Flag[], kind: string): boolean => {
 };
 
 /**
- * The flag set a node of `kind` at `flagSet` hands its children.
+ * The absorbing flags in precedence order. A node that holds or enters an absorbing flag hands its
+ * children exactly that flag: the first of these the set holds or the kind enters, whatever else
+ * the kind enters. None is absorbing here; a later phase appends its flag (the MathML phase
+ * appends `math`), and phase 9, landing second, puts `card` first.
  */
-const stepOf = (
+export const absorbing: readonly Flag[] = [];
+
+/**
+ * The flag set a node of `kind` at `flagSet` hands its children: the first absorbing flag the set
+ * holds or the kind enters alone, otherwise the flags the set holds and the kind enters. The walk
+ * (`import/tree.ts`) calls this too, so the seed and the walk state one rule.
+ */
+export const stepOf = (
   flagSet: readonly Flag[],
   kind: string,
   kindEnters: KindEnterTable,
-): readonly Flag[] =>
-  FLAGS.filter((flag) => flagSet.includes(flag) || (kindEnters[kind] ?? []).includes(flag));
+  absorbs: readonly Flag[] = absorbing,
+): readonly Flag[] => {
+  const entered = kindEnters[kind] ?? [];
+  const absorbed = absorbs.find((flag) => flagSet.includes(flag) || entered.includes(flag));
+
+  return absorbed === undefined
+    ? FLAGS.filter((flag) => flagSet.includes(flag) || entered.includes(flag))
+    : [absorbed];
+};
 
 /**
  * The reachable flag sets, by size and then `FLAGS` order, as the closure from `root` over the

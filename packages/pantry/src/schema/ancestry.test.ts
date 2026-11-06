@@ -9,7 +9,9 @@ import * as html from "#pantry/schema/kinds/html.ts";
 import * as lom from "#pantry/schema/kinds/lom.ts";
 import * as qmd from "#pantry/schema/kinds/qmd.ts";
 import * as test from "#pantry/schema/kinds/test.ts";
+import type { Flag, KindEnterTable } from "#pantry/schema/seed/ancestry.ts";
 import {
+  absorbing,
   ancestryHandles,
   banned,
   ancestryStepRows,
@@ -19,6 +21,7 @@ import {
   interactionKinds,
   KindEnters,
   reachable,
+  stepOf,
 } from "#pantry/schema/seed/ancestry.ts";
 
 /**
@@ -127,6 +130,63 @@ describe("seed/ancestry", () => {
       appended.map((row) => [row.ancestry, row.next]),
       ancestryHandles.map((handle) => [handle, handle]),
     );
+  });
+
+  it("hands no absorbing flag today, so every step is the union", () => {
+    assert.deepStrictEqual([...absorbing], []);
+    assert.deepStrictEqual(stepOf(["fb"], "qti-choice-interaction", KindEnters), ["fb", "int"]);
+    assert.deepStrictEqual(stepOf(["int"], "qti-prompt", KindEnters), ["int", "choice"]);
+    assert.deepStrictEqual(stepOf([], "p", KindEnters), []);
+  });
+
+  describe("an absorbing flag", () => {
+    // A test-local absorbing `tmpl` over the real flags: a kind that enters it, or a set that holds
+    // it, hands its children `tmpl` and nothing else.
+    const enters: KindEnterTable = { ...KindEnters, "qti-absorber": ["tmpl"] };
+    const absorbs: readonly Flag[] = ["tmpl"];
+
+    it("is the only flag handed on by a kind that enters it, whatever else the kind enters", () => {
+      assert.deepStrictEqual(
+        stepOf(
+          ["fb", "int"],
+          "qti-absorber",
+          { ...enters, "qti-absorber": ["tmpl", "htx"] },
+          absorbs,
+        ),
+        ["tmpl"],
+      );
+      assert.deepStrictEqual(stepOf([], "qti-absorber", enters, absorbs), ["tmpl"]);
+    });
+
+    it("stays the only flag beneath it, a kind that enters another flag included", () => {
+      assert.deepStrictEqual(stepOf(["tmpl"], "qti-choice-interaction", enters, absorbs), ["tmpl"]);
+      assert.deepStrictEqual(stepOf(["tmpl"], "qti-prompt", enters, absorbs), ["tmpl"]);
+      assert.deepStrictEqual(stepOf(["tmpl"], "p", enters, absorbs), ["tmpl"]);
+    });
+
+    it("keeps the union where no absorbing flag is held or entered", () => {
+      assert.deepStrictEqual(stepOf(["fb"], "qti-choice-interaction", enters, absorbs), [
+        "fb",
+        "int",
+      ]);
+      assert.deepStrictEqual(stepOf([], "p", enters, absorbs), []);
+    });
+
+    it("lets the first absorbing flag in order win, held or entered", () => {
+      const order: readonly Flag[] = ["tmpl", "modal"];
+      const both: KindEnterTable = { ...enters, "qti-absorber": ["tmpl"], "qti-other": ["modal"] };
+      // Both entered: the first in `order`, not in `FLAGS` order (`modal` precedes `tmpl` there).
+      assert.deepStrictEqual(
+        stepOf([], "qti-absorber", { ...both, "qti-absorber": ["modal", "tmpl"] }, order),
+        ["tmpl"],
+      );
+      // One held, the other entered: the held one still wins when it is first in `order`.
+      assert.deepStrictEqual(stepOf(["tmpl"], "qti-other", both, order), ["tmpl"]);
+      // The first in order is entered, the later one held: the entered one wins.
+      assert.deepStrictEqual(stepOf(["modal"], "qti-absorber", both, order), ["tmpl"]);
+      // Reversed order flips the winner.
+      assert.deepStrictEqual(stepOf(["tmpl"], "qti-other", both, ["modal", "tmpl"]), ["modal"]);
+    });
   });
 
   it("flags the feedback handles", () => {
