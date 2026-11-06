@@ -6,12 +6,13 @@
 
 Render QTI 3.0 items and tests for candidates, on the server and in the browser.
 
-plate is a library of parts and pure functions. `open` checks a QTI 3.0 item, `render` writes it as
-HTML with native form controls, and `score` scores the responses that come back. It renders choice,
-text entry and extended text interactions, and `open`'s verdict names each feature that plate does
-not render. plate has no form, submit control, submission flow or attempt limit. The host page owns
-those. plate reads XML through [crust](../crust/README.md), never depends on pantry, and is
-pre-release.
+plate is a library of parts and pure functions. `open` checks a QTI 3.0 document, `render` writes
+an item as HTML with native form controls, and `score` scores the responses that come back.
+`openPackage` checks a content package, and a test session takes a candidate through a test's
+items. plate renders choice, text entry and extended text interactions, and each verdict names
+the features that plate does not render. plate has no form, submit control, submission flow or
+store. The host page owns those. plate reads XML through [crust](../crust/README.md), never
+depends on pantry, and is pre-release.
 
 ## Install
 
@@ -22,7 +23,15 @@ plate is a private workspace package of [qti-pie](../../README.md). In a sibling
 "dependencies": { "@qti-pie/plate": "workspace:*", "effect": "4.1.2" }
 ```
 
-Then run `pnpm install` from the repository root.
+Then run `pnpm install` from the repository root. The package has two entry points:
+
+| Entry point | Gives | Stability |
+| --- | --- | --- |
+| `@qti-pie/plate` | Every function, type and error in [`src/index.ts`](src/index.ts) | Unstable until M3 |
+| `@qti-pie/plate/styles.css` | The default theme, [`src/styles.css`](src/styles.css) | Unstable until M3 |
+
+Until M3, plate's next milestone, any name or signature can change in any commit. The
+[changelog](CHANGELOG.md) records each change a host can see.
 
 ## Start
 
@@ -30,13 +39,14 @@ On the server, open an item and render it:
 
 ```ts
 import { readFile } from "node:fs/promises";
-import { Effect, Result } from "effect";
-import { configure, open, redact, render } from "@qti-pie/plate";
+import { Effect, Option, Result } from "effect";
+import { acceptedItem, configure, open, redact, render } from "@qti-pie/plate";
 
 const verdict = await Effect.runPromise(open("item.xml", await readFile("item.xml")));
-if (verdict.verdict === "accepted" || verdict.verdict === "accepted-with-unsupported") {
+const accepted = acceptedItem(verdict);
+if (Option.isSome(accepted)) {
   const configuration = await Effect.runPromise(configure({}));
-  const rendered = render(redact(verdict.accepted), configuration);
+  const rendered = render(redact(accepted.value), configuration);
   if (Result.isSuccess(rendered)) console.log(rendered.success.html);
 }
 ```
@@ -44,11 +54,51 @@ if (verdict.verdict === "accepted" || verdict.verdict === "accepted-with-unsuppo
 Put that HTML inside your own form. When the form posts back, `partition` and `decode` read its
 entries and `score` scores them. The [playground](#playground) does the whole round trip.
 
+A test arrives in a content package. Unzip the package into `files`, each file's bytes by its path
+from the package's root. Then open it, start a session on one of its tests, and render the test's
+first item:
+
+```ts
+import { Effect, Result } from "effect";
+import {
+  configure,
+  encodeSession,
+  itemView,
+  openPackage,
+  redact,
+  render,
+  startTest,
+} from "@qti-pie/plate";
+
+const verdict = await Effect.runPromise(openPackage("package", files));
+if (verdict.verdict === "accepted" || verdict.verdict === "accepted-with-unsupported") {
+  const configuration = await Effect.runPromise(configure({}));
+  for (const { items, test } of verdict.accepted.tests.values()) {
+    const sitting = Result.gen(function* start() {
+      const instance = `s-${crypto.randomUUID()}`;
+      const session = yield* startTest(test, items, configuration, { instance, now: new Date() });
+      const shown = yield* itemView(test, session, configuration, 1);
+      const item = yield* render(redact(items.get(shown.ref)!), shown.configuration, {
+        instance: shown.instance,
+        values: shown.values,
+      });
+
+      return { html: item.html, stored: yield* encodeSession(session) };
+    });
+    if (Result.isSuccess(sitting)) console.log(sitting.success.html);
+  }
+}
+```
+
+Store `stored`, and hand it to `decodeSession` on the next request. [Navigation](#navigation)
+moves the session on.
+
 ## Functions
 
 | Function | Does |
 | --- | --- |
-| `open` | Reads and checks an item's bytes, and returns a verdict |
+| `open` | Reads and checks a document's bytes, and returns a verdict |
+| `acceptedItem` | Reads the accepted item out of a verdict |
 | `configure` | Decodes the host's settings into a `Configuration` |
 | `redact` | Copies an accepted item without its correct responses and response processing |
 | `render` | Writes an item as HTML |
@@ -56,11 +106,217 @@ entries and `score` scores them. The [playground](#playground) does the whole ro
 | `partition`, `decode` | Turn a posted form's entries into responses |
 | `checkResponses` | Validates responses without scoring them |
 | `score` | Scores responses and returns the record the host stores |
+| `restore` | Gives an item's values back from its stored record |
+| `solution` | Gives an item's correct responses |
+| `openPackage` | Reads and checks a content package's files, and returns a verdict on the package |
+| `itemRefs` | Lists a test's item refs in document order |
+| `startTest` | Starts a test session |
+| `current`, `itemView` | Give what a session shows now, and what any of its items renders with |
+| `permits` | Says whether an item of a session may be shown in review or solution |
+| `navigationState`, `allowedIntents`, `advance` | Give the session's navigation, list the intents it takes now, and carry one out |
+| `renderNavigation` | Writes the navigation parts as HTML |
+| `intentName`, `encodeIntent`, `decodeIntent` | Name, write and read the form entry an intent posts under |
+| `encodeSession`, `decodeSession` | Write a session as the record the host stores, and check one handed back |
+| `results` | Writes a Results Reporting document for an item or a test session |
 
-`open` and `configure` return Effects. Every other function is plain and returns its value, or a
-`Result` when it can fail. `render`'s `parts` option swaps a part for the host's own markup, built
-with `h`. A host that builds its own Status part reads the fields `StatusInput` documents.
+`open`, `openPackage` and `configure` return Effects. Every other function is plain and returns
+its value, or a `Result` when it can fail. `render`'s `parts` option swaps a part for the host's
+own markup, built with `h`, and its `mode` option shows an item in `review` or `solution`. A host
+that builds its own Status part reads the fields `StatusInput` documents.
 [`src/index.ts`](src/index.ts) lists every export, and the TSDoc on each name is its reference.
+
+## Navigation
+
+`navigationState`, `allowedIntents`, `advance` and the intent helpers `intentName`,
+`encodeIntent` and `decodeIntent` are the navigation API. All six are pure functions.
+`navigationState` gives the current test part's modes, the candidate's position, the state of
+each item in the part and the intents the session takes now. `advance` carries out one intent, or
+refuses it with `IntentRefused`.
+
+`renderNavigation` writes plate's navigation parts from that data. Every button it writes is
+`type="button"`, with no name, value, form attribute or other submit semantics, so a click does
+what the host decides. A button is disabled when the session does not take its intent, and it
+carries that intent in `data-intent`.
+
+An intent posts under `intentName(instance)`, where `instance` is the session's. When that
+instance is a bare UUID, `partition` calls the intent's entry foreign, so read the intent with
+`decodeIntent` before you refuse foreign entries.
+
+### A script-free native form post
+
+Swap each button for your own submit button, named for the session and valued with its
+`data-intent`:
+
+```ts
+import { Result } from "effect";
+import { h, intentName, navigationState, renderNavigation } from "@qti-pie/plate";
+import type { Attributes, Node } from "@qti-pie/plate";
+
+const submitting = (props: Attributes, children: readonly Node[]) =>
+  h(
+    "button",
+    { name: intentName(session.instance), type: "submit", value: props["data-intent"] ?? "" },
+    children,
+  );
+const navigation = Result.flatMap(navigationState(test, session), (state) =>
+  renderNavigation(state, configuration, {
+    parts: {
+      "test-navigation": {
+        end: submitting,
+        itemButton: submitting,
+        next: submitting,
+        previous: submitting,
+        submit: submitting,
+      },
+    },
+  }),
+);
+```
+
+Put that HTML in the item's `<form method="post">`. The [plain server
+action](#a-plain-server-action) reads the post.
+
+### React Hook Form
+
+React Hook Form does not register plate's controls, and its submit handler does not see which
+button was pressed. So build the buttons from `navigationState`, give each one a handler that
+carries its intent, and send the form's entries with that intent written in. `post` sends them to
+your server, which hands them to the [plain server action](#a-plain-server-action), and `label`
+gives your own words for an intent:
+
+```tsx
+import { useRef } from "react";
+import { useForm } from "react-hook-form";
+import { encodeIntent, intentName } from "@qti-pie/plate";
+import type { Intent, NavigationState } from "@qti-pie/plate";
+
+type Props = {
+  html: string;
+  instance: string;
+  post: (entries: FormData) => Promise<void>;
+  state: NavigationState;
+};
+
+export function TestForm({ html, instance, post, state }: Props) {
+  const form = useRef<HTMLFormElement>(null);
+  const { handleSubmit } = useForm();
+  const send = (intent: Intent) =>
+    handleSubmit(() => {
+      const entries = new FormData(form.current!);
+      entries.set(intentName(instance), encodeIntent(intent));
+      return post(entries);
+    });
+
+  return (
+    <form ref={form} autoComplete="off">
+      <div dangerouslySetInnerHTML={{ __html: html }} />
+      {state.allowed.map((intent) => (
+        <button key={encodeIntent(intent)} type="button" onClick={send(intent)}>
+          {label(intent)}
+        </button>
+      ))}
+    </form>
+  );
+}
+```
+
+### TanStack Form
+
+The same component, with the intent passed as TanStack Form's submit meta. The form keeps its
+`ref`, here `element`, and each button's `onClick` is `() => form.handleSubmit({ intent })`:
+
+```tsx
+import { useRef } from "react";
+import { useForm } from "@tanstack/react-form";
+import { encodeIntent, intentName } from "@qti-pie/plate";
+import type { Intent } from "@qti-pie/plate";
+
+const element = useRef<HTMLFormElement>(null);
+const form = useForm({
+  onSubmitMeta: { intent: { kind: "next" } as Intent },
+  onSubmit: ({ meta }) => {
+    const entries = new FormData(element.current!);
+    entries.set(intentName(instance), encodeIntent(meta.intent));
+    return post(entries);
+  },
+});
+```
+
+### A plain server action
+
+Every recipe ends in this function. Your POST route or server action calls it with the posted
+entries, such as `[...formData]`, and the session it stored. The function decodes the current
+item's responses, carries out the posted intent, and returns the session to store:
+
+```ts
+import { Result } from "effect";
+import {
+  advance,
+  current,
+  decode,
+  decodeIntent,
+  decodeSession,
+  encodeSession,
+  entryName,
+  isPosted,
+  partition,
+  redact,
+} from "@qti-pie/plate";
+import type { Accepted, AcceptedTest, Configuration, Entry, Value } from "@qti-pie/plate";
+
+export const step = (
+  test: AcceptedTest,
+  items: ReadonlyMap<string, Accepted>,
+  stored: unknown,
+  entries: readonly Entry[],
+  configuration: Configuration,
+) =>
+  Result.gen(function* stepSession() {
+    const session = yield* decodeSession(stored, test);
+    const intent = yield* Result.fromOption(
+      decodeIntent(entries, session.instance),
+      () => "The post names no intent.",
+    );
+    const shown = yield* current(test, session, configuration);
+    const responses: Record<string, Value> = {};
+    if (shown.kind === "item") {
+      const { own } = partition(entries, shown.instance);
+      for (const { baseType, cardinality, identifier } of redact(items.get(shown.ref)!).responses) {
+        if (isPosted(baseType)) {
+          const name = entryName(shown.instance, identifier);
+          responses[identifier] = yield* decode(own, { baseType, cardinality, name });
+        }
+      }
+    }
+
+    const now = new Date();
+    const next = yield* advance(test, items, session, { intent, responses }, configuration, { now });
+
+    return yield* encodeSession(next);
+  });
+```
+
+## Records
+
+The host stores two records as JSON and hands each back on the next request. plate writes both,
+reads both back, and refuses any it could not have written.
+
+| Record | Holds | Written by | Read by |
+| --- | --- | --- | --- |
+| `StoredRecord`, `version: 1` | One item's attempts, responses and outcomes | `score` | `score`, `restore`, `results` |
+| `StoredTestSession`, `version: 1` | A test session, with its items' records and saved responses, its position and its parts | `encodeSession` | `decodeSession`, `results` |
+
+plate reads only version 1, and refuses a record of another version with `InvalidRecord` or
+`InvalidSession`. A change to either form is a changelog entry. The TSDoc on each type documents
+its fields.
+
+`restore` gives an item's values back from its `StoredRecord`. In a test, `itemView` gives them.
+
+## Results
+
+`results` writes a Results Reporting `assessmentResult` document as XML text, for one item's
+`StoredRecord` or for a whole `StoredTestSession`. The document holds no correct response, but
+`results` reads the accepted items, so call it on the server.
 
 ## Interactions
 
@@ -92,22 +348,63 @@ The server keeps what `open` accepted, correct responses included. The browser g
 that `render` makes from `redact`'s copy, and the server scores the post. plate does not enforce
 this split. A host that sends the accepted item to the browser sends what `redact` removes.
 
-- `open` runs on Node, not in a browser.
+- `open` and `openPackage` run on Node, not in a browser.
 - An accepted item is not JSON, so a stateless server opens the bytes again for each request. To
   send the redacted item itself, write it with `encodeRedacted` and read it with `decodeRedacted`.
-- Each item on a page needs its own instance token, `render`'s `instance` option. `render` draws a
-  UUID when you pass none. Two tokens where one extends the other after a `.` or `-`, such as `a`
-  and `a.b`, can collide.
-- A package's documents are live documents. Serve its assets from another origin or under the CSP
-  `sandbox` directive, and refuse an asset path that leaves the package once it is percent-decoded.
+- A page that holds a `TestSession` holds every item's outcomes, scores included. A page that
+  calls `solution`, `results` or `advance` holds the accepted items, correct responses included.
+  Keep the session and those calls on the server.
+- Each item on a page needs its own instance token, `render`'s `instance` option, so that every
+  form entry name on the page is unique. `render` draws a UUID when you pass none. Two tokens where
+  one extends the other after a `.` or `-`, such as `a` and `a.b`, can collide.
+- A form that holds a Choice carries `autocomplete="off"`, and its pages send `Cache-Control: no-store`.
+  HTML does not allow the attribute on a radio or a checkbox, and without both, the browser can
+  show a choice that plate did not render.
+- Render a restored item with the instance and the configuration you first rendered it with. Its
+  record does not say which they were, and a shuffled Choice's order depends on both.
+- A package's documents are live documents. Serve only the files the accepted package lists in
+  `files`, from another origin or under the CSP `sandbox` directive, and refuse an asset path that
+  leaves the package once it is percent-decoded.
+
+## Hosts
+
+A host composes these functions with its own page, form, routes and store.
+
+[`src/hosts/html.ts`](src/hosts/html.ts) is a plain-HTML host, written as a Fetch handler. It
+serves one item inside its own `<form method="post">` and submit button, on a page that links
+plate's sheet, and scores a post with `partition`, `decode`, `checkResponses` and `score`. It uses
+only what `@qti-pie/plate` exports.
+
+In Astro, render on an on-demand page and put the HTML in with `set:html`:
+
+```astro
+---
+import { readFile } from "node:fs/promises";
+import { Effect, Option, Result } from "effect";
+import { acceptedItem, configure, open, redact, render } from "@qti-pie/plate";
+
+export const prerender = false;
+
+const verdict = await Effect.runPromise(open("item.xml", await readFile("item.xml")));
+const configuration = await Effect.runPromise(configure({}));
+const item = Option.getOrThrow(acceptedItem(verdict));
+const { html } = Result.getOrThrow(render(redact(item), configuration, { instance: "q1" }));
+---
+<form method="POST" autocomplete="off">
+  <Fragment set:html={html} />
+  <button type="submit">Submit</button>
+</form>
+```
+
+On a `POST`, read `await Astro.request.formData()` and score it as the plain-HTML host does.
 
 ## Styling
 
-[`src/styles.css`](src/styles.css) is plate's default theme. The `exports` map does not list it, so
-serve the file and link it from the page. It reads shadcn's token names, so a shadcn theme carries
-over, and its opening comment lists them. The host's theme sets the tokens at `:root` and `.dark`.
-The page's surface and font are the host's. A host that skips the sheet copies its
-`[data-slot="item"]` rule, which keeps authored content inside the item.
+[`src/styles.css`](src/styles.css) is plate's default theme. Resolve `@qti-pie/plate/styles.css`
+through the `exports` map, serve the file, and link it from the page. It reads shadcn's token
+names, so a shadcn theme carries over, and its opening comment lists them. The host's theme sets
+the tokens at `:root` and `.dark`. The page's surface and font are the host's. A host that skips
+the sheet copies its `[data-slot="item"]` rule, which keeps authored content inside the item.
 
 ## Playground
 
