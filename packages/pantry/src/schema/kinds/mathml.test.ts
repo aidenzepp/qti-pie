@@ -11,7 +11,7 @@ import {
   kinds,
   registry,
 } from "#pantry/schema/kinds/mathml.ts";
-import { attributeTuples } from "#pantry/schema/node.ts";
+import { attributeTuples, vocabularies } from "#pantry/schema/node.ts";
 
 const entries = Object.values(mathmlInventory);
 
@@ -39,7 +39,11 @@ describe("the MathML kinds file", () => {
   });
 
   it("declares exactly the leaf names no earlier vocabulary has, once each", () => {
-    const have = new Set<string>(attributeTuples.flat());
+    const before = attributeTuples.slice(
+      0,
+      vocabularies.findIndex((vocabulary) => vocabulary.kinds === kinds),
+    );
+    const have = new Set<string>(before.flat());
     const wanted = [
       ...new Set(entries.flatMap((entry) => entry.attributes.map((attribute) => attribute.name))),
     ].filter((name) => !have.has(name));

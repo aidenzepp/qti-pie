@@ -15,6 +15,7 @@ import type { TreeInput } from "#pantry/import/tree.ts";
 import { classifyAttribute, isForeignAttribute, scopeOf } from "#pantry/import/wildcard.ts";
 import type { AttributeClass } from "#pantry/import/wildcard.ts";
 import type { NodeKindHandle, RootKindHandle } from "#pantry/schema/node.ts";
+import { admission } from "#pantry/schema/seed/admission.ts";
 
 const namespaces = {
   asi: "http://www.imsglobal.org/xsd/imsqtiasi_v3p0",
@@ -191,17 +192,27 @@ describe("import/tree.ts wildcard element classification", () => {
     }),
   );
 
-  it.effect("lax/13: MathML with no kind on this base is refused by name", () =>
-    Effect.gen(function* lax13() {
-      const refusal = yield* refusalOf(
-        operatorItem(`${operand}<ma:foo><m:mi>x</m:mi></ma:foo>`),
-        "item",
-      );
+  it.effect(
+    "lax/13: MathML with a kind is walked as that kind, and the database refuses its place",
+    () =>
+      Effect.gen(function* lax13() {
+        const walked = yield* walkedOf(
+          operatorItem(`${operand}<ma:foo><m:mi>x</m:mi></ma:foo>`),
+          "item",
+        );
 
-      assert.strictEqual(refusal.kind, "element");
-      assert.strictEqual(refusal.name, "m:mi");
-      assert.deepStrictEqual(refusal.parent, Option.some("ma:foo"));
-    }),
+        assert.strictEqual(named(walked, "ma:foo").kind, "foreign");
+        assert.strictEqual(named(walked, "m:mi").kind, "m:mi");
+
+        for (const version of ["3.0.0", "3.0.1"]) {
+          const children = admission
+            .filter((row) => row.parent === "foreign" && row.version === version)
+            .map((row) => row.child);
+
+          assert.include(children, "m:math");
+          assert.notInclude(children, "m:mi");
+        }
+      }),
   );
 
   it.effect("a MathML name that no global declares is foreign", () =>

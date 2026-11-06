@@ -35,10 +35,11 @@ describe("the MathML arms", () => {
     assert.strictEqual(relations.MathmlSemanticsCi, arms["m:semantics.ci"]);
   });
 
-  it("keeps each table name under 63 bytes and off Qti's relations", () => {
-    for (const name of Object.keys(relations)) {
+  it("keeps each table name under 63 bytes and makes each arm one of Qti's relations", () => {
+    const composed = new Map<string, unknown>(Object.entries(Qti.relations));
+    for (const [name, arm] of Object.entries(relations)) {
       assert.isBelow(new TextEncoder().encode(name.toLowerCase()).length, 64);
-      assert.isFalse(name in Qti.relations, name);
+      assert.strictEqual(composed.get(name), arm, name);
     }
   });
 

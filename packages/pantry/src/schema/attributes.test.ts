@@ -13,6 +13,7 @@ import * as cp from "#pantry/schema/kinds/cp.ts";
 import * as generic from "#pantry/schema/kinds/generic.ts";
 import * as html from "#pantry/schema/kinds/html.ts";
 import * as lom from "#pantry/schema/kinds/lom.ts";
+import * as mathml from "#pantry/schema/kinds/mathml.ts";
 import * as qmd from "#pantry/schema/kinds/qmd.ts";
 import * as test from "#pantry/schema/kinds/test.ts";
 import * as node from "#pantry/schema/node.ts";
@@ -27,6 +28,7 @@ const registries = [
   qmd.registry,
   generic.registry,
   test.registry,
+  mathml.registry,
 ];
 
 const rows = attributeAdmissionRows(registries);
