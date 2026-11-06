@@ -5,6 +5,7 @@ import { Config, Effect, FileSystem, Match, Option, Schema, Stream } from "effec
 import type { PlatformError } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import type { Uuid } from "@bjornpagen/grizzle";
+import type { Rule } from "#pantry/import/refusal.ts";
 import { mathmlGroups } from "#pantry/test/mathml-blocks.ts";
 import type { MathmlBlock, MathmlGroup } from "#pantry/test/mathml-blocks.ts";
 
@@ -481,6 +482,84 @@ const generatedMathmlNames = [
 ] as const;
 
 /**
+ * The names of the 40 MathML negatives of phase 6 (spec 4.11's negatives table), in the table's
+ * order: each a cut positive, `math-mathml`, with one `ReplaceText` that inserts the block the
+ * negative's name says, so nothing else is refused first. Twelve are refused at commit and the
+ * database judges them; the other 28 are refused by `readRows` (the importer's refusals and the
+ * guards').
+ */
+const mathmlNegativeNames = [
+  "math-in-blockquote",
+  "math-mi-in-p",
+  "math-text-in-mfrac",
+  "math-space-in-mspace",
+  "math-printed-variable",
+  "math-mfrac-three",
+  "math-semantics-order",
+  "math-prescripts-twice",
+  "math-display-center",
+  "math-bad-color",
+  "math-bad-href",
+  "math-display-on-mi",
+  "math-maction-bare",
+  "math-duplicate-id",
+  "math-unnamespaced",
+  "math-data-attribute",
+  "math-xref-dangling",
+  "math-apply-binary-one",
+  "math-apply-unary-two",
+  "math-apply-selector-bare",
+  "math-partialdiff-one",
+  "math-qualifier-order",
+  "math-logbase-on-sin",
+  "math-bvar-two-ci",
+  "math-bvar-two-degree",
+  "math-piecewise-two-otherwise",
+  "math-mscarries-last",
+  "math-maligngroup-placement",
+  "math-maligngroup-first",
+  "math-maction-selection",
+  "math-mglyph-bare",
+  "math-condition-no-bvar",
+  "math-cn-rational-one",
+  "math-share-dangling",
+  "math-share-cycle",
+  "math-cn-base",
+  "math-interval-closure",
+  "math-bind-no-bvar",
+  "math-position-plus",
+  "math-rowspan-plus",
+] as const;
+
+/**
+ * The 12 MathML negatives the database refuses at commit, each with the rule that refuses it (spec
+ * 4.11's negatives table, "refused by: commit"): `admission` for the five edges outside MathML's
+ * content models, `attribute-lexical` for the three pattern laws, `uri-syntax`, `document-key` and
+ * `idref-target` for the one each. `readRows` passes eleven of them, so the database judges those
+ * (the leased round trip, p6-40). `math-printed-variable` is the exception: `readRows`'s MathML
+ * guard refuses it first under `union-count`, because `m:mrow`'s model names no
+ * `qti-printed-variable`, so the database never sees it from an import (decision 133's firing
+ * order).
+ */
+export const mathmlCommitNegatives: readonly (readonly [
+  (typeof mathmlNegativeNames)[number],
+  Rule,
+])[] = [
+  ["math-in-blockquote", "admission"],
+  ["math-mi-in-p", "admission"],
+  ["math-text-in-mfrac", "admission"],
+  ["math-space-in-mspace", "admission"],
+  ["math-printed-variable", "admission"],
+  ["math-bad-color", "attribute-lexical"],
+  ["math-cn-base", "attribute-lexical"],
+  ["math-position-plus", "attribute-lexical"],
+  ["math-rowspan-plus", "attribute-lexical"],
+  ["math-bad-href", "uri-syntax"],
+  ["math-duplicate-id", "document-key"],
+  ["math-xref-dangling", "idref-target"],
+];
+
+/**
  * The names `materialize` accepts: `simple`, its seven variants and the eleven hand-edited
  * packages, each the same package with the edits of its row in the spec table, `sharedMedia`, the
  * examples' shared-media package unedited, `quoted-q`, phase 2's hand-broken package,
@@ -489,7 +568,8 @@ const generatedMathmlNames = [
  * the packaging phase's metadata and content cuts with their negatives, and the 11 positive
  * fixtures of phase 5's tests, sections and stimuli ({@link testNames}), and its 63 negatives
  * ({@link negativeNames}), the ten wildcard fixtures of {@link wildcardNames}, the 12 cut MathML
- * positives of {@link mathmlNames} and the 18 generated ones of {@link generatedMathmlNames}.
+ * positives of {@link mathmlNames}, the 18 generated ones of {@link generatedMathmlNames} and the 40
+ * negatives of {@link mathmlNegativeNames}.
  */
 export const fixtureNames = [
   "simple",
@@ -578,6 +658,7 @@ export const fixtureNames = [
   ...wildcardNames,
   ...mathmlNames,
   ...generatedMathmlNames,
+  ...mathmlNegativeNames,
 ] as const;
 
 /**
@@ -4609,6 +4690,180 @@ const generatedMathmlSpecs: Record<(typeof generatedMathmlNames)[number], Fixtur
 };
 
 /**
+ * The spec of one MathML negative: `math-mathml`'s cut with `block` inserted first in its prompt,
+ * the one edit that makes the negative (`math-mathml`'s prompt is a MathML host, so the host is
+ * not what is refused unless the block says so).
+ *
+ * @param name - One of {@link mathmlNegativeNames}.
+ * @param block - The XML the edit inserts after `<qti-prompt>`, in the `m` prefix the item
+ *   declares.
+ * @returns The spec.
+ */
+const mathmlNegative = (name: (typeof mathmlNegativeNames)[number], block: string): FixtureSpec => {
+  const base = mathmlSpecs["math-mathml"];
+
+  return {
+    edits: [replaceIn("items/MathML.xml", "<qti-prompt>", `<qti-prompt>${block}`), ...base.edits],
+    member: base.member,
+    name,
+  };
+};
+
+/**
+ * The specs of {@link mathmlNegativeNames}, by name.
+ */
+const mathmlNegativeSpecs: Record<(typeof mathmlNegativeNames)[number], FixtureSpec> = {
+  "math-apply-binary-one": mathmlNegative(
+    "math-apply-binary-one",
+    "<m:math><m:apply><m:divide/><m:cn>1</m:cn></m:apply></m:math>",
+  ),
+  "math-apply-selector-bare": mathmlNegative(
+    "math-apply-selector-bare",
+    "<m:math><m:apply><m:selector/></m:apply></m:math>",
+  ),
+  "math-apply-unary-two": mathmlNegative(
+    "math-apply-unary-two",
+    "<m:math><m:apply><m:sin/><m:ci>x</m:ci><m:ci>y</m:ci></m:apply></m:math>",
+  ),
+  "math-bad-color": mathmlNegative(
+    "math-bad-color",
+    '<m:math><m:mi mathcolor="notacolor">x</m:mi></m:math>',
+  ),
+  "math-bad-href": mathmlNegative("math-bad-href", '<m:math><m:mi href="%zz">x</m:mi></m:math>'),
+  "math-bind-no-bvar": mathmlNegative(
+    "math-bind-no-bvar",
+    "<m:math><m:bind><m:forall/><m:ci>x</m:ci></m:bind></m:math>",
+  ),
+  "math-bvar-two-ci": mathmlNegative(
+    "math-bvar-two-ci",
+    "<m:math><m:apply><m:int/><m:bvar><m:ci>x</m:ci><m:ci>y</m:ci></m:bvar><m:ci>f</m:ci></m:apply></m:math>",
+  ),
+  "math-bvar-two-degree": mathmlNegative(
+    "math-bvar-two-degree",
+    "<m:math><m:apply><m:diff/><m:bvar><m:ci>x</m:ci><m:degree><m:cn>2</m:cn></m:degree><m:degree><m:cn>3</m:cn></m:degree></m:bvar><m:ci>f</m:ci></m:apply></m:math>",
+  ),
+  "math-cn-base": mathmlNegative("math-cn-base", '<m:math><m:cn base="abc">1</m:cn></m:math>'),
+  "math-cn-rational-one": mathmlNegative(
+    "math-cn-rational-one",
+    '<m:math><m:cn type="rational">12</m:cn></m:math>',
+  ),
+  "math-condition-no-bvar": mathmlNegative(
+    "math-condition-no-bvar",
+    "<m:math><m:apply><m:sum/><m:condition><m:apply><m:gt/><m:ci>x</m:ci><m:cn>0</m:cn></m:apply></m:condition><m:ci>x</m:ci></m:apply></m:math>",
+  ),
+  "math-data-attribute": mathmlNegative(
+    "math-data-attribute",
+    '<m:math><m:mi data-foo="x">x</m:mi></m:math>',
+  ),
+  "math-display-center": mathmlNegative(
+    "math-display-center",
+    '<m:math display="center"><m:mi>x</m:mi></m:math>',
+  ),
+  "math-display-on-mi": mathmlNegative(
+    "math-display-on-mi",
+    '<m:math><m:mi display="block">x</m:mi></m:math>',
+  ),
+  "math-duplicate-id": mathmlNegative(
+    "math-duplicate-id",
+    '<div id="dup"/><m:math id="dup"><m:mi>x</m:mi></m:math>',
+  ),
+  "math-in-blockquote": mathmlNegative(
+    "math-in-blockquote",
+    "<blockquote><m:math><m:mi>x</m:mi></m:math></blockquote>",
+  ),
+  "math-interval-closure": mathmlNegative(
+    "math-interval-closure",
+    '<m:math><m:interval closure="half"><m:cn>1</m:cn><m:cn>2</m:cn></m:interval></m:math>',
+  ),
+  "math-logbase-on-sin": mathmlNegative(
+    "math-logbase-on-sin",
+    "<m:math><m:apply><m:sin/><m:logbase><m:cn>2</m:cn></m:logbase><m:ci>x</m:ci></m:apply></m:math>",
+  ),
+  "math-maction-bare": mathmlNegative(
+    "math-maction-bare",
+    "<m:math><m:maction><m:mi>x</m:mi></m:maction></m:math>",
+  ),
+  "math-maction-selection": mathmlNegative(
+    "math-maction-selection",
+    '<m:math><m:maction actiontype="toggle" selection="3"><m:mi>a</m:mi><m:mi>b</m:mi></m:maction></m:math>',
+  ),
+  "math-maligngroup-first": mathmlNegative(
+    "math-maligngroup-first",
+    "<m:math><m:mtable><m:mtr><m:mtd><m:mi>a</m:mi><m:maligngroup/><m:mi>b</m:mi></m:mtd></m:mtr></m:mtable></m:math>",
+  ),
+  "math-maligngroup-placement": mathmlNegative(
+    "math-maligngroup-placement",
+    "<m:math><m:mtable><m:mtr><m:mtd><m:mfrac><m:mrow><m:maligngroup/><m:mi>a</m:mi></m:mrow><m:mi>b</m:mi></m:mfrac></m:mtd></m:mtr></m:mtable></m:math>",
+  ),
+  "math-mfrac-three": mathmlNegative(
+    "math-mfrac-three",
+    "<m:math><m:mfrac><m:mi>a</m:mi><m:mi>b</m:mi><m:mi>c</m:mi></m:mfrac></m:math>",
+  ),
+  "math-mglyph-bare": mathmlNegative(
+    "math-mglyph-bare",
+    "<m:math><m:mi><m:mglyph/></m:mi></m:math>",
+  ),
+  "math-mi-in-p": mathmlNegative("math-mi-in-p", "<p><m:mi>x</m:mi></p>"),
+  "math-mscarries-last": mathmlNegative(
+    "math-mscarries-last",
+    "<m:math><m:mstack><m:mn>1</m:mn><m:mscarries/></m:mstack></m:math>",
+  ),
+  "math-partialdiff-one": mathmlNegative(
+    "math-partialdiff-one",
+    "<m:math><m:apply><m:partialdiff/><m:ci>f</m:ci></m:apply></m:math>",
+  ),
+  "math-piecewise-two-otherwise": mathmlNegative(
+    "math-piecewise-two-otherwise",
+    "<m:math><m:piecewise><m:otherwise><m:ci>a</m:ci></m:otherwise><m:otherwise><m:ci>b</m:ci></m:otherwise></m:piecewise></m:math>",
+  ),
+  "math-position-plus": mathmlNegative(
+    "math-position-plus",
+    '<m:math><m:mstack><m:msrow position="+1"><m:mn>1</m:mn></m:msrow></m:mstack></m:math>',
+  ),
+  "math-prescripts-twice": mathmlNegative(
+    "math-prescripts-twice",
+    "<m:math><m:mmultiscripts><m:mi>x</m:mi><m:mprescripts/><m:mi>a</m:mi><m:mi>b</m:mi><m:mprescripts/><m:mi>c</m:mi><m:mi>d</m:mi></m:mmultiscripts></m:math>",
+  ),
+  "math-printed-variable": mathmlNegative(
+    "math-printed-variable",
+    '<m:math><m:mrow><qti-printed-variable identifier="SCORE"/></m:mrow></m:math>',
+  ),
+  "math-qualifier-order": mathmlNegative(
+    "math-qualifier-order",
+    "<m:math><m:apply><m:int/><m:bvar><m:ci>x</m:ci></m:bvar><m:condition><m:apply><m:gt/><m:ci>x</m:ci><m:cn>0</m:cn></m:apply></m:condition><m:lowlimit><m:cn>0</m:cn></m:lowlimit><m:ci>f</m:ci></m:apply></m:math>",
+  ),
+  "math-rowspan-plus": mathmlNegative(
+    "math-rowspan-plus",
+    '<m:math><m:mtable><m:mtr><m:mtd rowspan="+2"><m:mi>x</m:mi></m:mtd></m:mtr></m:mtable></m:math>',
+  ),
+  "math-semantics-order": mathmlNegative(
+    "math-semantics-order",
+    '<m:math><m:semantics><m:annotation encoding="text/plain">x</m:annotation><m:mi>x</m:mi></m:semantics></m:math>',
+  ),
+  "math-share-cycle": mathmlNegative(
+    "math-share-cycle",
+    '<m:math><m:apply id="a"><m:plus/><m:share src="#a"/><m:cn>1</m:cn></m:apply></m:math>',
+  ),
+  "math-share-dangling": mathmlNegative(
+    "math-share-dangling",
+    '<m:math><m:share src="#nowhere"/></m:math>',
+  ),
+  "math-space-in-mspace": mathmlNegative(
+    "math-space-in-mspace",
+    "<m:math><m:mspace> </m:mspace></m:math>",
+  ),
+  "math-text-in-mfrac": mathmlNegative(
+    "math-text-in-mfrac",
+    "<m:math><m:mfrac>text<m:mi>a</m:mi><m:mi>b</m:mi></m:mfrac></m:math>",
+  ),
+  "math-unnamespaced": mathmlNegative("math-unnamespaced", "<math><mi>x</mi></math>"),
+  "math-xref-dangling": mathmlNegative(
+    "math-xref-dangling",
+    '<m:math><m:mi xref="nowhere">x</m:mi></m:math>',
+  ),
+};
+
+/**
  * The spec table: one row per {@link FixtureName}, so adding a name without its row does not
  * compile.
  *
@@ -4662,6 +4917,7 @@ const specs: Record<FixtureName, FixtureSpec> = {
   ...wildcardSpecs,
   ...mathmlSpecs,
   ...generatedMathmlSpecs,
+  ...mathmlNegativeSpecs,
   "bad-identifier-value": {
     edits: [
       replaceIn("choice.xml", "<qti-value>ChoiceA</qti-value>", "<qti-value>Choice A</qti-value>"),
