@@ -221,18 +221,6 @@ export interface Renders {
 }
 
 /**
- * The least value a count attribute reading 46 names may hold, -2^63, the low end of the signed
- * 64-bit range a `count-range` refusal names.
- */
-export const leastCount = -9_223_372_036_854_775_808n;
-
-/**
- * The greatest value a count attribute reading 46 names may hold, 2^63-1: such a count holds a
- * signed 64-bit value, read exactly, and a greater one is refused (operator ruling D, 2026-11-04).
- */
-export const greatestCount = 9_223_372_036_854_775_807n;
-
-/**
  * What phase 1 renders, reads, shows a notice for and marks, as data (spec §4.5).
  *
  * The emitter and the model builder read the same lists, so an element is rendered exactly when

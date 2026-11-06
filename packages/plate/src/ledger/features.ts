@@ -7,7 +7,7 @@
  * which {@link features} loads. The test proves the committed file is what the generator reads
  * today.
  *
- * The test-tag convention (spec §4.11): a test that proves an Appendix A feature carries the
+ * The test-tag convention: a test that proves an Appendix A feature carries the
  * feature's ID in its title as one or more `[<ID>]` tokens before the description, for example
  * `it.effect("[Q-2] [I-9b] the correct choice scores 1", …)`. An ID matches
  * `[QITSAPM]-[0-9]+[a-z]?`. An untagged test proves nothing for the ledger, and a test of
@@ -288,8 +288,8 @@ export interface Exclusion {
  * The excluded rows: the two custom interactions, Q-31 (proprietary) and Q-32 (LTI), which the
  * renderer accepts and shows the unsupported notice for but never launches.
  *
- * The goal's non-goals settle it, so the reasons count as operator-approved under the goal's
- * approval, G0 (campaign §5.10).
+ * Launching a custom interaction is outside plate's scope, a decision the operator approved with
+ * the renderer's goal, so each reason counts as operator-approved.
  */
 export const exclusions: readonly Exclusion[] = ["Q-31", "Q-32"].map((id) => ({
   id,

@@ -10,6 +10,7 @@
  * @module
  */
 import { Array as Arr, Data, Effect, Option, Result, pipe } from "effect";
+import { greatestCount, leastCount } from "#plate/count-range.ts";
 import { attributePath, qtiNamespace, walk, xmlNamespace } from "#plate/document/source.ts";
 import type {
   SourceAttribute,
@@ -27,9 +28,7 @@ import {
   areaShapes,
   baseTypes,
   cardinalities,
-  greatestCount,
   interactionNames,
-  leastCount,
   renders,
   templateName,
 } from "#plate/vocabulary.ts";

@@ -289,7 +289,7 @@ const packageSources: Effect.Effect<readonly PackageSource[], PackagesFailure> =
     const entries = yield* Effect.tryPromise({
       catch: (cause) =>
         new PackageUnreadable({
-          detail: `${causeText(cause)}; extract the 1EdTech QTI 3 examples once (phase 1 spec §10.2), or set PLATE_CORPUS_DIR to the directory that holds them`,
+          detail: `${causeText(cause)}; extract the 1EdTech QTI 3 examples once under ~/.cache/gr8des/qti3-examples, each nested zip into the X.zip.d/ folder beside it, or set PLATE_CORPUS_DIR to the directory that holds them`,
           path: corpus,
         }),
       try: () => readdir(corpus, { recursive: true, withFileTypes: true }),

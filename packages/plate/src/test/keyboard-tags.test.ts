@@ -123,13 +123,26 @@ const walks: ReadonlyMap<string, readonly string[]> = new Map([
 /* oxlint-enable eslint/no-template-curly-in-string */
 
 /**
+ * Write a pattern for text whose parentheses balance, nested to a depth.
+ *
+ * @param depth How deep the parentheses may nest.
+ * @returns The pattern's source, which matches no unbalanced `(` or `)`.
+ */
+const balanced = (depth: number): string =>
+  depth === 0 ? "[^()]*" : String.raw`(?:[^()]|\(${balanced(depth - 1)}\))*`;
+
+/**
  * A test's title: the string literal that opens a `describe(…)`, `it(…)` or `test(…)` call, or an
  * `.effect(…)` call on the `it` an `it.layer(…)` scope hands its callback (`walk.effect(…)` in a
- * browser test), modifiers included. A `describe` title counts because the ledger reads the token
- * in a test's full name, which holds the titles of the `describe` blocks around it.
+ * browser test), modifiers included. A curried `.each(table)(…)` call gives the title of its second
+ * call, its table's parentheses nested up to eight deep. A `describe` title counts because the
+ * ledger reads the token in a test's full name, which holds the titles of the `describe` blocks
+ * around it.
  */
-const titlePattern =
-  /\b(?:describe|it|test|[a-z][A-Za-z]*(?=\.effect\b))(?:\.[A-Za-z]+)*\(\s*(?<quote>["'`])(?<title>(?:\\.|(?!\k<quote>)[^\\])*)\k<quote>/gu;
+const titlePattern = new RegExp(
+  String.raw`\b(?:describe|it|test|[a-z][A-Za-z]*(?=\.effect\b))(?:\.[A-Za-z]+)*(?:(?<=\.each)\(${balanced(8)}\))?\(\s*(?<quote>["'\x60])(?<title>(?:\\.|(?!\k<quote>)[^\\])*)\k<quote>`,
+  "gu",
+);
 
 /**
  * The package directory, `packages/plate`.

@@ -33,6 +33,7 @@
  * @module
  */
 import { Option, Result } from "effect";
+import { greatestCount, leastCount } from "#plate/count-range.ts";
 import {
   attributePath,
   qtiNamespace,
@@ -58,7 +59,6 @@ import {
 import { Refusal } from "#plate/validate/refusal.ts";
 import type { RefusalRule } from "#plate/validate/refusal.ts";
 import { patternEquivalents } from "#plate/validate/xsd.ts";
-import { greatestCount, leastCount } from "#plate/vocabulary.ts";
 import type {
   AttributeType,
   BuiltinName,

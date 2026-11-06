@@ -343,7 +343,7 @@ const packageFiles = Effect.fnUntraced(function* packageFiles(
   const entries = yield* Effect.tryPromise({
     catch: (cause) =>
       new CorpusFileUnreadable({
-        detail: `${cause instanceof Error ? cause.message : String(cause)}; extract the corpus's zips (phase 1 spec §10.2) so each has its X.zip.d/ folder`,
+        detail: `${cause instanceof Error ? cause.message : String(cause)}; extract each of the corpus's zips into the X.zip.d/ folder beside it`,
         path: directory,
       }),
     try: () => readdir(folder, { recursive: true, withFileTypes: true }),
@@ -416,7 +416,7 @@ export const corpusZips: Effect.Effect<
   const entries = yield* Effect.tryPromise({
     catch: (cause) =>
       new CorpusFileUnreadable({
-        detail: `${cause instanceof Error ? cause.message : String(cause)}; extract the corpus (phase 1 spec §10.2) or set PLATE_CORPUS_DIR to it`,
+        detail: `${cause instanceof Error ? cause.message : String(cause)}; extract the 1EdTech QTI 3 examples under ~/.cache/gr8des/qti3-examples, or set PLATE_CORPUS_DIR to the directory that holds them`,
         path: ".",
       }),
     try: () => readdir(root, { recursive: true, withFileTypes: true }),
