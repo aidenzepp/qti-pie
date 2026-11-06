@@ -20,7 +20,8 @@ import { controlCap, exceedsControlCap } from "#plate/control-cap.ts";
 import { scopedId } from "#plate/emit/parts.ts";
 import type { Resolved } from "#plate/emit/parts.ts";
 import { shuffleOrder } from "#plate/engine/random.ts";
-import { entryName } from "#plate/form/encoding.ts";
+import { entryName, isPosted } from "#plate/form/encoding.ts";
+import type { Binding, DecodeOptions } from "#plate/form/encoding.ts";
 import { authorsLabel, resolvedLabelledby } from "#plate/interactions/name.ts";
 import type { Locale } from "#plate/messages.ts";
 import { interactionsIn } from "#plate/model/interactions.ts";
@@ -955,6 +956,60 @@ export const redactItem = (item: Item): Redacted =>
     })),
     title: item.title,
   });
+
+/**
+ * How one response travels through a host's form: its identifier, its binding under the entry name
+ * `render` gives its Controls, and the options `decode` reads its entries with.
+ */
+export interface Posting {
+  readonly binding: Binding;
+  readonly identifier: string;
+  /**
+   * The number base its integer is written in: the `base` of the first Text Entry or Extended
+   * Text, in document order, that binds the response, and 10 when none does.
+   */
+  readonly options: DecodeOptions;
+}
+
+/**
+ * Give the postings of a redacted item in one instance: one for each response a phase-1
+ * interaction can post, in the order of the item's `responses`, so a host decodes each from its
+ * form with the base its interaction declares instead of assuming base 10.
+ *
+ * It reads only a {@link Redacted}, so a host needs no type of the item's body to decode a post.
+ *
+ * @example
+ *   const values = postings(redact(accepted), instance).map(({ binding, options }) =>
+ *     decode(entries, binding, options),
+ *   );
+ *
+ * @param redacted The item, through `redact`.
+ * @param instance The instance token the render used, one `checkInstance` passes.
+ * @returns The postings: a response of a base type no phase-1 interaction posts has none.
+ */
+export const postings = (redacted: Redacted, instance: string): readonly Posting[] => {
+  const interactions = interactionsIn(redacted.body);
+
+  return redacted.responses.flatMap(({ baseType, cardinality, identifier }): readonly Posting[] => {
+    if (!isPosted(baseType)) {
+      return [];
+    }
+
+    const typed = Arr.findFirst(
+      interactions,
+      (interaction): interaction is ExtendedTextInteraction | TextEntryInteraction =>
+        interaction.kind !== "choice" && interaction.response === identifier,
+    );
+
+    return [
+      {
+        binding: { baseType, cardinality, name: entryName(instance, identifier) },
+        identifier,
+        options: { base: Option.match(typed, { onNone: () => 10, onSome: ({ base }) => base }) },
+      },
+    ];
+  });
+};
 
 /**
  * Compute the payload of one render: the allowlist of what the emitter may know about a redacted

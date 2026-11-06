@@ -17,10 +17,9 @@ import {
   checkResponses,
   configure,
   decode,
-  entryName,
-  isPosted,
   open,
   partition,
+  postings,
   redact,
   render,
   renderStatus,
@@ -212,11 +211,7 @@ const scoreText = (
  */
 const itemHost = (accepted: Accepted, configuration: Configuration): HtmlHost => {
   const redacted = redact(accepted);
-  const bindings = redacted.responses.flatMap(({ baseType, cardinality, identifier }) =>
-    isPosted(baseType)
-      ? [{ binding: { baseType, cardinality, name: entryName(instance, identifier) }, identifier }]
-      : [],
-  );
+  const bindings = postings(redacted, instance);
 
   /**
    * Construct the page around the item: the Status part when a post gave one, then the host's
@@ -252,8 +247,8 @@ const itemHost = (accepted: Accepted, configuration: Configuration): HtmlHost =>
   };
 
   /**
-   * Score a form post: decode each response the item posts, check them, then score them, and
-   * answer with the page after the submit.
+   * Score a form post: decode each response the item posts, an integer in the base its
+   * interaction declares, check them, then score them, and answer with the page after the submit.
    *
    * @param body The post's form-urlencoded body.
    * @returns The page: refused, with the post's strings and messages, or scored.
@@ -261,9 +256,9 @@ const itemHost = (accepted: Accepted, configuration: Configuration): HtmlHost =>
   const submitted = (body: string): Response => {
     const entries = Array.from(new URLSearchParams(body), ([name, value]): Entry => [name, value]);
     const { own } = partition(entries, instance);
-    const decoded = bindings.map(({ binding, identifier }) => ({
+    const decoded = bindings.map(({ binding, identifier, options }) => ({
       identifier,
-      result: decode(own, binding),
+      result: decode(own, binding, options),
     }));
     const posted = Object.fromEntries(
       bindings.map(({ binding, identifier }) => [

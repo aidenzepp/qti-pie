@@ -12,13 +12,14 @@ import type {
   TextEntryInteraction,
 } from "#plate/model/item.ts";
 import type { Value } from "#plate/model/values.ts";
-import { choiceOrder, identifyMessages, payload, redactItem } from "#plate/payload.ts";
+import { choiceOrder, identifyMessages, payload, postings, redactItem } from "#plate/payload.ts";
 import type {
   ChoicePayload,
   ExtendedTextPayload,
   InteractionPayload,
   Payload,
   PayloadNode,
+  Posting,
   Redacted,
   TextEntryPayload,
   View,
@@ -1365,5 +1366,66 @@ describe("choiceOrder", () => {
         assert.deepStrictEqual(choiceOrder(ordered, seed, token), ["P0", "P1", "P2", "P3", "P4"]);
       }
     }
+  });
+});
+
+/**
+ * Construct the posting of a single response with the entry name `render` gives it here.
+ *
+ * @param identifier The response's identifier.
+ * @param baseType Its declared base type.
+ * @param base The number base its entries are read in.
+ * @returns The posting.
+ */
+const postingOf = (
+  identifier: string,
+  baseType: Posting["binding"]["baseType"],
+  base: number,
+): Posting => ({
+  binding: { baseType, cardinality: "single", name: entryName(instance, identifier) },
+  identifier,
+  options: { base },
+});
+
+describe("postings", () => {
+  it("gives each posted response its binding and its first text interaction's base, in declaration order", () => {
+    const bound: Item = {
+      ...item,
+      body: [
+        choice,
+        { ...textEntry("FIRST"), base: 16 },
+        {
+          attributes: [],
+          children: [{ ...textEntry("FIRST"), base: 2 }],
+          kind: "element",
+          path: "qti-assessment-item/qti-item-body/p",
+          tag: "p",
+        },
+        { ...essay, base: 8 },
+      ],
+      responses: new Map([
+        ...item.responses,
+        [
+          "POINT",
+          {
+            areaMapping: Option.none(),
+            baseType: "point",
+            cardinality: "single",
+            correct: Option.none(),
+            defaultValue: Option.none(),
+            identifier: "POINT",
+            mapping: Option.none(),
+          },
+        ],
+      ]),
+    };
+
+    assert.deepStrictEqual(postings(redactItem(bound), instance), [
+      postingOf("CAPITAL", "identifier", 10),
+      postingOf("FIRST", "string", 16),
+      postingOf("SECOND", "string", 10),
+      postingOf("NAMED", "string", 10),
+      postingOf("ESSAY", "string", 8),
+    ]);
   });
 });
