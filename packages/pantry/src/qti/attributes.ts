@@ -565,7 +565,13 @@ export const attributeLaws = [
   ),
   check("E1_derived", Idref, (i) =>
     i.and(
-      i.eq(i.piece, Compute.concat(Compute.concat(i.before, i.token), i.after)),
+      i.eq(
+        i.piece,
+        Compute.concat(
+          Compute.concat(Compute.base(i.before), Compute.base(i.token)),
+          Compute.base(i.after),
+        ),
+      ),
       Compute.matches(i.token, nonSpacePattern),
       i.or(i.eq(i.at, 0n), i.ne(i.before, "")),
     ),

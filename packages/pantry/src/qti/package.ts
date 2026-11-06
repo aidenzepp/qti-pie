@@ -705,7 +705,13 @@ export const packageLaws = [
     r.and(
       r.eq(
         r.lexical,
-        Compute.concat(Compute.concat(Compute.concat(r.lead, r.target), r.params), r.trail),
+        Compute.concat(
+          Compute.concat(
+            Compute.concat(Compute.base(r.lead), Compute.base(r.target)),
+            Compute.base(r.params),
+          ),
+          Compute.base(r.trail),
+        ),
       ),
       Compute.matches(r.target, hrefPathPattern),
       r.or(r.not(Compute.matches(r.target, externalHrefPattern)), r.eq(r.scope, "external")),
