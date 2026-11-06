@@ -73,7 +73,7 @@ const closedNameOf = (name: Name): Option.Option<ClosedName<Composed>> =>
 
 /**
  * Read the composed grammar as shred reads a grammar: its kind resolution, the `AttributeName`
- * roster's closed handles, `Order`'s key set as the children each kind admits,
+ * roster's closed handles, `Admission`'s key set as the children each kind admits,
  * `AttributeAdmission`, `StrictlyHeld` with `HeldRootsUnder`'s patterns, each compiled once, and
  * the `TypeName` roster with each kind's declared type.
  *

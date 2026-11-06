@@ -1,13 +1,15 @@
 /**
  * The content-model IR: one derived reading of every kind's content model, per schema version,
- * that the grammar projects into admission, `Order`'s ranks, the child-set occurrence laws and
- * operator arity (review R12). The deriver writes it as a generated leaf; nothing restates it.
+ * that the grammar projects into admission, each model's Glushkov automaton, the child-set
+ * occurrence laws and operator arity (review R12). The deriver writes it as a generated leaf;
+ * nothing restates it.
  *
  * A model is the XSD's own: its `{content type}` (XML Schema 1.0 Part 1, 3.4.1) and, for element
  * content, the particle tree its content particles make, with each particle's own occurrence
  * bounds. Nothing is flattened, multiplied or merged here: a projection reads the structure it
- * needs, so `Order` reads the sequences and choices, the occurrence laws read the bounds, and
- * admission reads the element particles' kinds and the wildcards.
+ * needs, so the automaton (`automatonOf` of `src/vocab/sequencing.ts`) reads the compositors and
+ * whether each particle may be absent or repeat, the occurrence laws read the bounds, and admission
+ * reads the element particles' kinds and the wildcards.
  *
  * Reading rules, which the deriver applies to every vocabulary:
  *
