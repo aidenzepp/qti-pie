@@ -3,6 +3,7 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterAll, assert, beforeAll, describe, it } from "@effect/vitest";
 import { ConfigProvider, Console, Effect } from "effect";
+import type { CacheTag } from "#plate/test/caches.ts";
 import { cacheTags, caches } from "#plate/test/caches.ts";
 
 /**
@@ -62,6 +63,38 @@ const under =
     effect.pipe(Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown(env))));
 
 /**
+ * Make every cache's path exist under `home`, as an empty directory or an empty file.
+ *
+ * @param home The home folder.
+ * @returns An effect that creates the paths; running it again changes nothing.
+ */
+const fill = (home: string) =>
+  Effect.gen(function* fillHome() {
+    const paths = yield* Effect.all(caches.map((cache) => cache.path)).pipe(under({ HOME: home }));
+
+    yield* Effect.sync(() => {
+      for (const [index, at] of paths.entries()) {
+        if (fileTags.has(caches[index]?.tag ?? "")) {
+          mkdirSync(path.dirname(at), { recursive: true });
+          writeFileSync(at, "");
+        } else {
+          mkdirSync(at, { recursive: true });
+        }
+      }
+    });
+  });
+
+/**
+ * A tag's `skip`, or `"absent"` when the tag has no `skip` key, so an assertion tells a missing
+ * key from one that holds a value.
+ *
+ * @param tag The tag.
+ * @returns `"absent"`, or the value of the tag's own `skip` key.
+ */
+const skipOf = (tag: CacheTag): CacheTag["skip"] | "absent" =>
+  Object.hasOwn(tag, "skip") ? tag.skip : "absent";
+
+/**
  * Run {@link cacheTags} with a provider over `env` and a console that keeps its error lines.
  *
  * @param env The settings the provider holds.
@@ -105,8 +138,8 @@ describe("test/caches.ts", () => {
         tagOrder,
       );
       assert.deepStrictEqual(
-        tags.map((tag) => tag.skip),
-        tagOrder.map(() => true),
+        tags.map(skipOf),
+        tagOrder.map(() => true as const),
       );
 
       for (const [index, tag] of tags.entries()) {
@@ -130,7 +163,7 @@ describe("test/caches.ts", () => {
     }),
   );
 
-  it.effect("PLATE_REQUIRE_CACHES=1 skips no tag, and says the tests will fail", () =>
+  it.effect("PLATE_REQUIRE_CACHES=1 gives no tag a skip key, and says the tests will fail", () =>
     Effect.gen(function* requiredRuns() {
       const { lines, tags } = yield* tagsUnder({ HOME: emptyHome, PLATE_REQUIRE_CACHES: "1" });
 
@@ -139,8 +172,8 @@ describe("test/caches.ts", () => {
         tagOrder,
       );
       assert.deepStrictEqual(
-        tags.map((tag) => tag.skip),
-        tagOrder.map(() => false),
+        tags.map(skipOf),
+        tagOrder.map(() => "absent" as const),
       );
       assert.lengthOf(lines, tagOrder.length);
 
@@ -150,35 +183,24 @@ describe("test/caches.ts", () => {
     }),
   );
 
-  it.effect("a home where every cache's path exists skips no tag and prints nothing", () =>
-    Effect.gen(function* fullHomeRuns() {
-      const paths = yield* Effect.all(caches.map((cache) => cache.path)).pipe(
-        under({ HOME: fullHome }),
-      );
+  it.effect(
+    "a home where every cache's path exists gives no tag a skip key and prints nothing",
+    () =>
+      Effect.gen(function* fullHomeRuns() {
+        yield* fill(fullHome);
 
-      yield* Effect.sync(() => {
-        for (const [index, at] of paths.entries()) {
-          if (fileTags.has(caches[index]?.tag ?? "")) {
-            mkdirSync(path.dirname(at), { recursive: true });
-            writeFileSync(at, "");
-          } else {
-            mkdirSync(at, { recursive: true });
-          }
-        }
-      });
+        const { lines, tags } = yield* tagsUnder({ HOME: fullHome });
 
-      const { lines, tags } = yield* tagsUnder({ HOME: fullHome });
-
-      assert.deepStrictEqual(
-        tags.map((tag) => tag.name),
-        tagOrder,
-      );
-      assert.deepStrictEqual(
-        tags.map((tag) => tag.skip),
-        tagOrder.map(() => false),
-      );
-      assert.deepStrictEqual(lines, []);
-    }),
+        assert.deepStrictEqual(
+          tags.map((tag) => tag.name),
+          tagOrder,
+        );
+        assert.deepStrictEqual(
+          tags.map(skipOf),
+          tagOrder.map(() => "absent" as const),
+        );
+        assert.deepStrictEqual(lines, []);
+      }),
   );
 
   it.effect("PLATE_CORPUS_DIR naming an existing folder runs only the corpus tag", () =>
@@ -189,10 +211,30 @@ describe("test/caches.ts", () => {
       });
 
       assert.deepStrictEqual(
-        tags.map((tag) => [tag.name, tag.skip]),
-        tagOrder.map((name) => [name, name !== "corpus"]),
+        tags.map((tag) => [tag.name, skipOf(tag)] as const),
+        tagOrder.map((name) => [name, name === "corpus" ? "absent" : true] as const),
       );
       assert.lengthOf(lines, tagOrder.length - 1);
+    }),
+  );
+
+  it.effect("a missing cache's skip survives the merge of a test's two tags in either order", () =>
+    Effect.gen(function* mergedSkip() {
+      yield* fill(fullHome);
+
+      const { tags } = yield* tagsUnder({
+        HOME: fullHome,
+        PLATE_CORPUS_DIR: path.join(scratch, "no-corpus"),
+      });
+      const corpus = tags.find((tag) => tag.name === "corpus");
+      const xsd = tags.find((tag) => tag.name === "qti-xsd");
+
+      assert.isDefined(corpus);
+      assert.isDefined(xsd);
+      // vitest 5.0.1 merges a test's tag definitions in the order the test lists them, each
+      // over the last (Object.assign, dist/chunks/run.C5UmxDPh.js:2611-2620).
+      assert.strictEqual({ ...corpus, ...xsd }.skip, true);
+      assert.strictEqual({ ...xsd, ...corpus }.skip, true);
     }),
   );
 

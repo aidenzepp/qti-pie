@@ -140,13 +140,18 @@ export const requireCaches: Config.Config<boolean> = Config.Boolean("PLATE_REQUI
 
 /**
  * One cache's test tag, structurally vitest's `TestTagDefinition`, declared here so this module
- * imports nothing from vitest. `skip` is true when the cache is missing and
- * {@link requireCaches} is false; `description` is what `vp test --list-tags` prints for it.
+ * imports nothing from vitest. `description` is what `vp test --list-tags` prints for it.
  */
 export interface CacheTag {
   readonly description: string;
   readonly name: string;
-  readonly skip: boolean;
+  /**
+   * Present, and true, only when the cache is missing and {@link requireCaches} is false.
+   * Otherwise the key is absent rather than false: vitest merges the definitions of a test's
+   * tags in order with `Object.assign`, so a later tag's `skip: false` would undo an earlier
+   * tag's skip, and a test tagged with two caches would run with one of them missing.
+   */
+  readonly skip?: true;
 }
 
 /**
@@ -156,7 +161,8 @@ export interface CacheTag {
  *
  * @param cache The cache.
  * @param required Whether a missing cache fails its tests rather than skipping them.
- * @returns The cache's tag; a `ConfigError` when its path cannot be resolved.
+ * @returns The cache's tag, with `skip` only when it skips; a `ConfigError` when its path cannot
+ *   be resolved.
  */
 const tagOf = Effect.fnUntraced(function* tagOf(cache: Cache, required: boolean) {
   const at = yield* cache.path;
@@ -171,11 +177,13 @@ const tagOf = Effect.fnUntraced(function* tagOf(cache: Cache, required: boolean)
     );
   }
 
-  return {
-    description: `Needs ${cache.what} at ${at}: ${repair}.`,
-    name: cache.tag,
-    skip: missing && !required,
-  };
+  const description = `Needs ${cache.what} at ${at}: ${repair}.`;
+  const tag: CacheTag =
+    missing && !required
+      ? { description, name: cache.tag, skip: true }
+      : { description, name: cache.tag };
+
+  return tag;
 });
 
 /**
