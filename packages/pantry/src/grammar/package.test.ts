@@ -1,4 +1,3 @@
-import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, FileSystem, Formatter, Option, Result } from "effect";
@@ -18,6 +17,7 @@ import { schemaVersions } from "#pantry/grammar/kinds.ts";
 import { packageGrammar } from "#pantry/grammar/package.ts";
 import { checkCache, xsdDirectory } from "#pantry/vocab/derive/sources.ts";
 import { loadXsd, XsdOracleLayer } from "#pantry/test/gen/grammar.ts";
+import { scratchDirectory } from "#pantry/test/scratch.ts";
 import { writeXsdOracle } from "#pantry/test/xsd-catalog.ts";
 import { OracleLayer, xmllintValidate } from "#pantry/xml/oracle.ts";
 
@@ -258,7 +258,7 @@ describe.skipIf(!cached)("ResourceTypeOf against xmllint", () => {
       Effect.gen(function* againstXmllint() {
         const fs = yield* FileSystem.FileSystem;
         const { resourceTypeOf } = yield* relations;
-        const directory = path.resolve(import.meta.dirname, "..", "..", "work", "resource-types");
+        const directory = yield* scratchDirectory("resource-types-");
         const oracle = yield* writeXsdOracle(directory);
         const cache = yield* xsdDirectory;
         const disagreements: string[] = [];
@@ -295,7 +295,7 @@ describe.skipIf(!cached)("ResourceTypeOf against xmllint", () => {
           ),
         );
         assert.deepStrictEqual(disagreements, []);
-      }).pipe(Effect.provide(OracleLayer), Effect.provide(XsdOracleLayer)),
+      }).pipe(Effect.scoped, Effect.provide(OracleLayer), Effect.provide(XsdOracleLayer)),
     120_000,
   );
 });

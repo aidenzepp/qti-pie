@@ -50,7 +50,8 @@ import { noType } from "#pantry/grammar/xsi.ts";
 import { loadXsd, XsdOracleLayer, xsdContents } from "#pantry/test/gen/grammar.ts";
 import { checkCache, xsdDirectory } from "#pantry/vocab/derive/sources.ts";
 import type { SourcePath } from "#pantry/vocab/derive/sources.ts";
-import { writeXsdOracle, xsdOracleDirectory } from "#pantry/test/xsd-catalog.ts";
+import { scratchDirectory } from "#pantry/test/scratch.ts";
+import { writeXsdOracle } from "#pantry/test/xsd-catalog.ts";
 import {
   attributeDeclarations,
   attributeWildcards,
@@ -2046,7 +2047,7 @@ describe.skipIf(!cached)("The document layer", () => {
     () =>
       Effect.gen(function* lomXmlLangIsValid() {
         const fs = yield* FileSystem.FileSystem;
-        const directory = `${xsdOracleDirectory}/attribute-layer`;
+        const directory = yield* scratchDirectory("attribute-layer-");
         const oracle = yield* writeXsdOracle(directory);
         yield* fs.writeFileString(`${directory}/lom-xml-lang.xml`, lomWithXmlLang);
 
@@ -2063,7 +2064,7 @@ describe.skipIf(!cached)("The document layer", () => {
             attributes.admission.lookup({ kind: "lom:string", name: "xml:lang", version: "3.0.1" }),
           ),
         );
-      }).pipe(Effect.provide(OracleLayer), Effect.provide(XsdOracleLayer)),
+      }).pipe(Effect.scoped, Effect.provide(OracleLayer), Effect.provide(XsdOracleLayer)),
     300_000,
   );
 });

@@ -48,6 +48,7 @@ import {
   xsiNamespace,
 } from "#pantry/vocab/namespaces.ts";
 import { XsdOracleLayer } from "#pantry/test/gen/grammar.ts";
+import { scratchDirectory } from "#pantry/test/scratch.ts";
 import { writeXsdOracle } from "#pantry/test/xsd-catalog.ts";
 import { xsdDirectory } from "#pantry/vocab/derive/sources.ts";
 import {
@@ -1192,7 +1193,7 @@ describe("a foreign element's governing type (spec readings 60 and 83)", () => {
       // Bound: the 34 arms under qti-selection's lax wildcard in the 2 versions, exhausted.
       Effect.gen(function* laxBox() {
         const fs = yield* FileSystem.FileSystem;
-        const directory = path.resolve(import.meta.dirname, "..", "..", "work", "lax-wildcard");
+        const directory = yield* scratchDirectory("lax-wildcard-");
         const oracle = yield* writeXsdOracle(directory);
         const cache = yield* xsdDirectory;
         const disagreements: string[] = [];
@@ -1255,7 +1256,7 @@ describe("a foreign element's governing type (spec readings 60 and 83)", () => {
 
         assert.strictEqual(compared, 2 * laxArms.length);
         assert.deepStrictEqual(disagreements, []);
-      }).pipe(Effect.provide(OracleLayer), Effect.provide(XsdOracleLayer)),
+      }).pipe(Effect.scoped, Effect.provide(OracleLayer), Effect.provide(XsdOracleLayer)),
     120_000,
   );
 });
@@ -1431,7 +1432,7 @@ describe("an element under its governing type (spec reading 84)", () => {
       // Bound: the 5 cases in the 2 versions.
       Effect.gen(function* briefCases() {
         const fs = yield* FileSystem.FileSystem;
-        const directory = path.resolve(import.meta.dirname, "..", "..", "work", "governed-type");
+        const directory = yield* scratchDirectory("governed-type-");
         const oracle = yield* writeXsdOracle(directory);
         const cache = yield* xsdDirectory;
         const cases = [
@@ -1508,7 +1509,7 @@ describe("an element under its governing type (spec reading 84)", () => {
         }
 
         assert.deepStrictEqual(disagreements, []);
-      }).pipe(Effect.provide(OracleLayer), Effect.provide(XsdOracleLayer)),
+      }).pipe(Effect.scoped, Effect.provide(OracleLayer), Effect.provide(XsdOracleLayer)),
     120_000,
   );
 
@@ -1526,7 +1527,7 @@ describe("an element under its governing type (spec reading 84)", () => {
       // xsi:type, each declared name in no namespace alone, and 3 names other governors declare.
       Effect.gen(function* governedBox() {
         const fs = yield* FileSystem.FileSystem;
-        const directory = path.resolve(import.meta.dirname, "..", "..", "work", "governed-box");
+        const directory = yield* scratchDirectory("governed-box-");
         const oracle = yield* writeXsdOracle(directory);
         const cache = yield* xsdDirectory;
         const covered = coveredBy(grammar.kinds);
@@ -1636,7 +1637,7 @@ describe("an element under its governing type (spec reading 84)", () => {
 
         assert.isAbove(governors, 0);
         assert.deepStrictEqual(disagreements, []);
-      }).pipe(Effect.provide(OracleLayer), Effect.provide(XsdOracleLayer)),
+      }).pipe(Effect.scoped, Effect.provide(OracleLayer), Effect.provide(XsdOracleLayer)),
     300_000,
   );
 });
@@ -1764,7 +1765,7 @@ describe("a strict wildcard's undeclared element (spec reading 81)", () => {
       // Bound: the 7 arms under the 2 wildcards in the 2 versions, 28 documents, exhausted.
       Effect.gen(function* strictBox() {
         const fs = yield* FileSystem.FileSystem;
-        const directory = path.resolve(import.meta.dirname, "..", "..", "work", "strict-wildcard");
+        const directory = yield* scratchDirectory("strict-wildcard-");
         const oracle = yield* writeXsdOracle(directory);
         const cache = yield* xsdDirectory;
         const disagreements: string[] = [];
@@ -1820,7 +1821,7 @@ describe("a strict wildcard's undeclared element (spec reading 81)", () => {
 
         assert.strictEqual(compared, 28);
         assert.deepStrictEqual(disagreements, []);
-      }).pipe(Effect.provide(OracleLayer), Effect.provide(XsdOracleLayer)),
+      }).pipe(Effect.scoped, Effect.provide(OracleLayer), Effect.provide(XsdOracleLayer)),
     120_000,
   );
 });
@@ -1918,7 +1919,7 @@ describe("a reading 6 root under a strict wildcard (C13)", () => {
       // Bound: the 2 roots under the 3 wildcards in the 2 versions, 12 documents, exhausted.
       Effect.gen(function* heldRoots() {
         const fs = yield* FileSystem.FileSystem;
-        const directory = path.resolve(import.meta.dirname, "..", "..", "work", "held-root");
+        const directory = yield* scratchDirectory("held-root-");
         const oracle = yield* writeXsdOracle(directory);
         const cache = yield* xsdDirectory;
         const disagreements: string[] = [];
@@ -1987,7 +1988,7 @@ describe("a reading 6 root under a strict wildcard (C13)", () => {
         assert.strictEqual(compared, 12);
         assert.strictEqual(accepted, 2);
         assert.deepStrictEqual(disagreements, []);
-      }).pipe(Effect.provide(OracleLayer), Effect.provide(XsdOracleLayer)),
+      }).pipe(Effect.scoped, Effect.provide(OracleLayer), Effect.provide(XsdOracleLayer)),
     120_000,
   );
 });

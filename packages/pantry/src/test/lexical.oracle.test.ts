@@ -22,7 +22,7 @@
  * or the test fails; a record no disagreement matches fails too.
  *
  * Gated on the XSD cache. Each run writes a folder of its own, `work/xsd-lexical-*`
- * (`#pantry/test/scratch-directory.ts`), removed when the run ends: the batches, `probes.tsv`
+ * (`#pantry/test/scratch.ts`), removed when the run ends: the batches, `probes.tsv`
  * (every probe) and `differences.tsv` (every disagreement, with the record that classifies it). A
  * fixed folder let two runs at once remove each other's batches under xmllint.
  */
@@ -42,7 +42,7 @@ import { openClasses, schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import { loadXsd, nameKey, xsdContents } from "#pantry/test/gen/grammar.ts";
 import type { XsdName } from "#pantry/test/gen/grammar.ts";
-import { scratchDirectory } from "#pantry/test/scratch-directory.ts";
+import { scratchDirectory } from "#pantry/test/scratch.ts";
 import { driverImports, driverNamespace, writeXsdOracle } from "#pantry/test/xsd-catalog.ts";
 import type { ProbeDeclaration, XsdOracle } from "#pantry/test/xsd-catalog.ts";
 import { checkCache } from "#pantry/vocab/derive/sources.ts";

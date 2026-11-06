@@ -1225,15 +1225,6 @@ const modelOf: ReadonlyMap<string, string> = new Map(
 );
 
 /**
- * Each family's shared model, by `version parent`, read from `SharedModelOf`'s rows directly.
- */
-const sharedModelOf: ReadonlyMap<string, string> = new Map(
-  grammar.content.sharedModelOf.rows.map(
-    ({ model, parent, version }) => [`${version} ${parent}`, model] as const,
-  ),
-);
-
-/**
  * Every state of every family whose content model `Follow` or `Last` holds, keyed once each: the
  * model's states, read in each family of it.
  */
@@ -1284,52 +1275,38 @@ const followed: ReadonlyMap<string, ReadonlySet<string>> = (() => {
 })();
 
 /**
- * Add a kind to the kinds at a key.
- *
- * @param kinds - The kinds by key, added to.
- * @param at - The key.
- * @param kind - The kind.
+ * The kinds at each position of each family, read from the rows directly, keyed `version parent
+ * position`: those `Admission` gives the position, and those `Symbol` gives it in the family's
+ * shared model (`SharedModelOf`), each family's read once here so that no case reads a relation.
  */
-const addKind = (kinds: Map<string, Set<string>>, at: string, kind: string): void => {
-  kinds.set(at, new Set([...(kinds.get(at) ?? []), kind]));
-};
-
-/**
- * The kinds one position names, read from `Admission`'s rows directly, keyed `version parent
- * position`, and the kinds several name, from `Symbol`'s, keyed `shared-model position`.
- */
-const positionKinds: {
-  readonly admitted: ReadonlyMap<string, ReadonlySet<string>>;
-  readonly shared: ReadonlyMap<string, ReadonlySet<string>>;
-} = (() => {
-  const admitted = new Map<string, Set<string>>();
+const positionKinds: ReadonlyMap<string, ReadonlySet<string>> = (() => {
+  const kinds = new Map<string, Set<string>>();
+  const add = (at: string, kind: string): void => {
+    kinds.set(at, (kinds.get(at) ?? new Set()).add(kind));
+  };
   for (const { child, parent, position, version } of grammar.admission.rows) {
-    addKind(admitted, `${version} ${parent} ${position}`, child);
+    add(`${version} ${parent} ${position}`, child);
   }
 
-  const shared = new Map<string, Set<string>>();
-  for (const { kind, model, position } of grammar.content.symbol.rows) {
-    addKind(shared, `${model} ${position}`, kind);
+  const symbols = Map.groupBy(grammar.content.symbol.rows, ({ model }) => model);
+  for (const { model, parent, version } of grammar.content.sharedModelOf.rows) {
+    for (const { kind, position } of symbols.get(model) ?? []) {
+      add(`${version} ${parent} ${position}`, kind);
+    }
   }
 
-  return { admitted, shared };
+  return kinds;
 })();
 
 /**
- * Read the kinds at a position of a family's model: those its `Admission` gives the position and
- * those its shared model's `Symbol` does.
+ * Read the kinds at a position of a family's model.
  *
  * @param state - The family.
  * @param position - The position.
  * @returns The kinds, as a set.
  */
 const kindsAt = (state: ModelState, position: string): ReadonlySet<string> =>
-  new Set([
-    ...(positionKinds.admitted.get(`${state.version} ${state.parent} ${position}`) ?? []),
-    ...(positionKinds.shared.get(
-      `${sharedModelOf.get(`${state.version} ${state.parent}`) ?? ""} ${position}`,
-    ) ?? []),
-  ]);
+  positionKinds.get(`${state.version} ${state.parent} ${position}`) ?? new Set();
 
 describe("the explanation of a content-order refusal", () => {
   const follow = statedNamed("N5 Follow");

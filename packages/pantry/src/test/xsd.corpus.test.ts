@@ -17,9 +17,11 @@
  * at the reader's, the codec's or a fold's first refusal, so what `xmllint` says beyond it is
  * counted as masked rather than as a difference.
  *
- * Gated on `GR8DES_CORPUS=1` and on the XSD cache. It writes, under `work/xsd-corpus/`:
- * `files/` (the documents), `agreement.tsv` (one row per document and version) and
- * `differences.tsv` (one row per difference, with the record that classifies it).
+ * Gated on `GR8DES_CORPUS=1` and on the XSD cache. It writes, under a folder of the run's own,
+ * `work/xsd-corpus-*` (`#pantry/test/scratch.ts`), removed after the file's last test: `files/`
+ * (the documents), `agreement.tsv` (one row per document and version) and `differences.tsv` (one
+ * row per difference, with the record that classifies it). Each folder this file writes is the
+ * run's own, so two runs at once never remove each other's documents under xmllint.
  */
 import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
@@ -50,6 +52,7 @@ import { materializeCorpus } from "#pantry/test/fixtures.ts";
 import { xdmDocument } from "#pantry/test/gen/xdm.ts";
 import { documentBreaches, explain, lawsOf, ruleOf } from "#pantry/test/oracle.ts";
 import type { Laws } from "#pantry/test/oracle.ts";
+import { fileScratchDirectory } from "#pantry/test/scratch.ts";
 import { settings } from "#pantry/test/settings.ts";
 import {
   classOfLaw,
@@ -57,7 +60,6 @@ import {
   driverFor,
   schemaSetOf,
   writeXsdOracle,
-  xsdOracleDirectory,
 } from "#pantry/test/xsd-catalog.ts";
 import type {
   Comparison,
@@ -74,9 +76,15 @@ import { OracleLayer, xmllintValidate } from "#pantry/xml/oracle.ts";
 import type { XsdVerdict } from "#pantry/xml/oracle.ts";
 
 /**
- * The folder this test writes to, `packages/pantry/work/xsd-corpus`.
+ * The folder the corpus comparison writes to, `packages/pantry/work/xsd-corpus-*`, the run's own.
  */
-const outputRoot = path.resolve(import.meta.dirname, "..", "..", "work", "xsd-corpus");
+const outputRoot = fileScratchDirectory("xsd-corpus-");
+
+/**
+ * The folder the oracle's driver schemas and catalog are written to, `work/xsd-oracle-*`, the
+ * run's own.
+ */
+const oracleRoot = fileScratchDirectory("xsd-oracle-");
 
 /**
  * The timeout, in milliseconds, for the one test: two `xmllint` runs over every corpus document
@@ -1288,7 +1296,7 @@ describe.skipIf(!settings.corpusRequested || !cached)("xsd.corpus.test.ts, the c
           yield* fs.remove(outputRoot, { force: true, recursive: true });
 
           const documents = yield* corpusDocuments();
-          const oracle = yield* writeXsdOracle(xsdOracleDirectory);
+          const oracle = yield* writeXsdOracle(oracleRoot);
           const judged: Judged[] = [];
 
           for (const version of schemaVersions) {
@@ -1410,9 +1418,10 @@ describe.skipIf(!settings.corpusRequested || !cached)("xsd.corpus.test.ts, the c
 });
 
 /**
- * The folder the differential property writes to, `packages/pantry/work/xsd-generated`.
+ * The folder the differential property writes to, `packages/pantry/work/xsd-generated-*`, the
+ * run's own.
  */
-const generatedRoot = path.resolve(import.meta.dirname, "..", "..", "work", "xsd-generated");
+const generatedRoot = fileScratchDirectory("xsd-generated-");
 
 /**
  * The number of generated documents one run judges: each run draws its own (its stream rotates
@@ -1835,7 +1844,7 @@ describe.skipIf(!cached)("xsd.corpus.test.ts, generated documents", () => {
               }),
             ),
           );
-          const oracle = yield* writeXsdOracle(xsdOracleDirectory);
+          const oracle = yield* writeXsdOracle(oracleRoot);
           const lines: string[] = [];
           const unrecorded: string[] = [];
           const matched: (Recorded | undefined)[] = [];
@@ -1933,7 +1942,7 @@ describe.skipIf(!cached)("xsd.corpus.test.ts, generated documents", () => {
               .join(""),
           );
           yield* Console.log(
-            `xsd.generated: TEST_SEED=${String(run.seed)}, ${String(cases.length)} cases drawn (stream pantry/xsd-differential), ${String(cases.length - judgeable.length)} left out for unexpanded entity references, ${String(judgeable.length)} judged; ${String(unrecorded.length)} unrecorded differences; libxml2 ${String(libxml2Count(matched))}; lax xsi:type (reading 60) ${String(matched.filter((match) => match === laxXsiType).length)}; nested roots (reading 6) ${String(matched.filter((match) => match === nestedRoot || match === nestedRootLaw).length)}; fragment roots (reading 114) ${String(matched.filter((match) => match === fragmentRoot).length)}; outside the schema set (reading 81) ${String(matched.filter((match) => match === outsideSet).length)}; qti-ordering's slot (reading 61) ${String(matched.filter((match) => match === orderingSlot).length)}; the documents are under work/xsd-generated/`,
+            `xsd.generated: TEST_SEED=${String(run.seed)}, ${String(cases.length)} cases drawn (stream pantry/xsd-differential), ${String(cases.length - judgeable.length)} left out for unexpanded entity references, ${String(judgeable.length)} judged; ${String(unrecorded.length)} unrecorded differences; libxml2 ${String(libxml2Count(matched))}; lax xsi:type (reading 60) ${String(matched.filter((match) => match === laxXsiType).length)}; nested roots (reading 6) ${String(matched.filter((match) => match === nestedRoot || match === nestedRootLaw).length)}; fragment roots (reading 114) ${String(matched.filter((match) => match === fragmentRoot).length)}; outside the schema set (reading 81) ${String(matched.filter((match) => match === outsideSet).length)}; qti-ordering's slot (reading 61) ${String(matched.filter((match) => match === orderingSlot).length)}; the documents are under ${generatedRoot} while the file runs`,
           );
 
           assert.deepStrictEqual(
@@ -1955,9 +1964,9 @@ describe.skipIf(!cached)("xsd.corpus.test.ts, generated documents", () => {
 const controlTimeoutMs = 60_000;
 
 /**
- * The folder the libxml2 control writes to, `packages/pantry/work/xsd-control`.
+ * The folder the libxml2 control writes to, `packages/pantry/work/xsd-control-*`, the run's own.
  */
-const controlRoot = path.resolve(import.meta.dirname, "..", "..", "work", "xsd-control");
+const controlRoot = fileScratchDirectory("xsd-control-");
 
 /**
  * An item with the given companion materials and item-body content, every attribute it needs.
@@ -2060,7 +2069,7 @@ const controlled = Effect.fn("test.controlled")(function* controlled(
     yield* fs.writeFile(file, bytes);
   }
 
-  const oracle = yield* writeXsdOracle(xsdOracleDirectory);
+  const oracle = yield* writeXsdOracle(oracleRoot);
   const verdicts = yield* validated(oracle, "3.0.0", written);
 
   return yield* Effect.forEach(
@@ -2127,7 +2136,7 @@ describe.skipIf(!cached)(
               yield* fs.writeFileString(`${controlRoot}/${name}.xml`, text);
             }
 
-            const oracle = yield* writeXsdOracle(xsdOracleDirectory);
+            const oracle = yield* writeXsdOracle(oracleRoot);
             const verdicts = yield* xmllintValidate({
               catalog: oracle.catalog,
               paths: files,

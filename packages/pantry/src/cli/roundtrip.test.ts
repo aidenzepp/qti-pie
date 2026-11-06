@@ -8,16 +8,16 @@ import { successEnvelope } from "#pantry/cli/output.ts";
 import { RoundtripData } from "#pantry/cli/roundtrip.ts";
 import { exitCodeOf } from "#pantry/cli/run.ts";
 import { captureCli, packageCopy, preloadEngine } from "#pantry/test/cli.ts";
-import { makeScratch, scratchEnv } from "#pantry/test/scratch.ts";
+import { fileScratchDirectory, makeScratch, scratchEnv } from "#pantry/test/scratch.ts";
 import { cliProcessTestTimeoutMs, engineLoadHookTimeoutMs } from "#pantry/test/settings.ts";
 
 const fixtures = inject("fixtures");
 
 /**
- * The folder the run's home and cluster state live under, `packages/pantry/work/cli-roundtrip`. No
- * other test file writes there.
+ * The folder the run's home and cluster state live under, `packages/pantry/work/cli-roundtrip-*`,
+ * the run's own.
  */
-const root = path.resolve(import.meta.dirname, "..", "..", "work", "cli-roundtrip");
+const root = fileScratchDirectory("cli-roundtrip-");
 
 /**
  * The environment of a run: a scratch home and a cluster state folder that is empty, so the import

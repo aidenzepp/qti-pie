@@ -19,7 +19,6 @@
  * The xmllint tests are gated on both caches, `~/.cache/gr8des/qti3/xsd/` and
  * `~/.cache/gr8des/mathml3-rng/`. They write `work/mathml-rng/`.
  */
-import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it } from "@effect/vitest";
 import { exhaust } from "@grizzle/testing/explore";
@@ -70,6 +69,7 @@ import {
   semanticsContexp,
 } from "#pantry/test/gen/relaxng.ts";
 import type { MathClasses } from "#pantry/test/gen/relaxng.ts";
+import { fileScratchDirectory } from "#pantry/test/scratch.ts";
 
 /**
  * The composed grammar of production, failing the test that reads it when a generator refuses.
@@ -90,9 +90,10 @@ const relaxNgDirectory = Config.NonEmptyString("HOME").pipe(
 );
 
 /**
- * The folder the xmllint tests write their instances to, `packages/pantry/work/mathml-rng`.
+ * The folder the xmllint tests write their instances to, `packages/pantry/work/mathml-rng-*`, the
+ * run's own, so two runs at once never remove each other's batches under xmllint.
  */
-const outputRoot = path.resolve(import.meta.dirname, "..", "..", "work", "mathml-rng");
+const outputRoot = fileScratchDirectory("mathml-rng-");
 
 /**
  * Whether both caches hold what the xmllint tests read: the MathML 3 RelaxNG and the pinned MathML

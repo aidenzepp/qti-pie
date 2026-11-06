@@ -4,7 +4,7 @@
  * other fields and one code point more does not, and every key of the composed `Qti` that holds a
  * text holds it at its kind's one bound and is representable.
  */
-import { keyTextBytes, natural, str, uuid } from "@bjornpagen/grizzle";
+import { keyTextBytes, natural, uuid } from "@bjornpagen/grizzle";
 import type { FieldBase } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Option, Predicate, Result, Schema } from "effect";
@@ -16,7 +16,6 @@ import {
   keyTextPattern,
   localNameCodePoints,
   namespaceCodePoints,
-  namespaceText,
   namespaceTextPattern,
   widestTextKey,
 } from "#pantry/qti/limits.ts";
@@ -228,6 +227,12 @@ const descriptors: ReadonlyMap<string, ReadonlyMap<string, FieldBase>> = new Map
 );
 
 /**
+ * The most bytes UTF-8 takes for one code point (RFC 3629, §3), the bytes grizzle counts a
+ * pattern's character at.
+ */
+const utf8MaxBytes = 4;
+
+/**
  * Measure a key by grizzle's rule: the bytes a text could still hold beside all of its fields.
  *
  * @param fields - The key's fields.
@@ -315,37 +320,20 @@ describe("qti/limits.ts", () => {
     assert.isFalse(language.test("a".repeat(keyTextCodePoints + 1)));
   });
 
-  it("bounds a key text and a namespace name by the most grizzle's keyTextBytes holds beside their widest keys, one code point more refused", () => {
+  it("bounds a key text and a namespace name by the most code points whose UTF-8 form fits what grizzle's keyTextBytes leaves beside their widest keys", () => {
     // Oracle: grizzle's own rule (`keyTextBytes`, public/text.ts of the vendored engine), the
-    // measure the schema's compilation refuses an entry by: each bound's text fits beside its
-    // widest key's other fields, and the text of one code point more does not. The key text's
-    // widest key, the tree's predecessor axis, holds NULL-able hidden columns, whose 8-byte null
-    // bitmap `keyTextBytes` does not count, so its text fits where a byte is left (limits.ts).
+    // measure the schema's compilation refuses an entry by, over the bytes UTF-8 takes at most for
+    // a code point (RFC 3629, §3), as grizzle counts a pattern's character: each bound's text fits
+    // in the bytes left beside its widest key's other fields, and one code point more does not.
     // Bound: the key text beside `widestTextKey`, and the namespace name beside a uuid and a local
     // name, `OpenAttributeName(node, uri, local)`.
-    assert.isAtLeast(
-      Result.getOrElse(roomBeside([...widestTextKey, keyText]), () => -1),
-      1,
-    );
-    assert.strictEqual(
-      Result.getOrElse(
-        roomBeside([...widestTextKey, str.regex("^.{0,255}.{0,255}.{0,137}$", "su")]),
-        () => -1,
-      ),
-      0,
-    );
-    assert.strictEqual(keyTextCodePoints, 646);
-    assert.strictEqual(boundedTextPattern(647), "^.{0,255}.{0,255}.{0,137}$");
+    const keyRoom = Result.getOrElse(roomBeside(widestTextKey), () => -1);
+    const namespaceRoom = Result.getOrElse(roomBeside([uuid, OpenLocal]), () => -1);
 
-    assert.isTrue(Result.isSuccess(roomBeside([uuid, OpenLocal, namespaceText])));
-    assert.match(
-      Result.getOrElse(
-        Result.flip(roomBeside([uuid, OpenLocal, str.regex("^.{0,255}.{0,155}$", "su")])),
-        () => "",
-      ),
-      /UnrepresentableKey/u,
-    );
-    assert.strictEqual(boundedTextPattern(namespaceCodePoints + 1), "^.{0,255}.{0,155}$");
+    assert.isAtMost(utf8MaxBytes * keyTextCodePoints, keyRoom);
+    assert.isAbove(utf8MaxBytes * (keyTextCodePoints + 1), keyRoom);
+    assert.isAtMost(utf8MaxBytes * namespaceCodePoints, namespaceRoom);
+    assert.isAbove(utf8MaxBytes * (namespaceCodePoints + 1), namespaceRoom);
     assert.strictEqual(localNameCodePoints, 255);
   });
 
@@ -400,12 +388,18 @@ describe("qti/limits.ts", () => {
       }
 
       assert.isFalse(held.includes(undefined), `${where}: every term a field of its relation`);
-      assert.isTrue(
-        Result.isSuccess(
-          roomBeside([
-            ...held.flatMap((field) => (field === undefined ? [] : [field])),
-            ...Array.from({ length: hidden }, () => natural),
-          ]),
+
+      // One text is measured against the bytes left beside the key's other fields, the rest of
+      // its texts included as fields, as keyTextBytes reads "the other fields of a key".
+      const last = named.findLastIndex((field) => field?.sql === "text");
+      const others = held.flatMap((field, at) =>
+        field === undefined || at === last ? [] : [field],
+      );
+      assert.isAtMost(
+        utf8MaxBytes * (textBound(named[last] ?? { sql: "text" }) ?? 0),
+        Result.getOrElse(
+          roomBeside([...others, ...Array.from({ length: hidden }, () => natural)]),
+          () => -1,
         ),
         `${where}: grizzle represents its entry`,
       );

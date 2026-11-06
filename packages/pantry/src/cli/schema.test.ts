@@ -4,6 +4,7 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect, Exit, Schema } from "effect";
 import { captureCli, spawnCli } from "#pantry/test/cli.ts";
+import { fileScratchDirectory } from "#pantry/test/scratch.ts";
 
 /**
  * The package folder, `packages/pantry`, where `schema/` and `scripts/` are.
@@ -11,12 +12,17 @@ import { captureCli, spawnCli } from "#pantry/test/cli.ts";
 const packageRoot = path.resolve(import.meta.dirname, "..", "..");
 
 /**
+ * The folder the run's home and cluster state are named under, `work/cli-schema-*`, the run's own.
+ */
+const scratch = fileScratchDirectory("cli-schema-");
+
+/**
  * The environment of a run. `schema` reads no configuration, so the database points at nothing.
  */
 const env = {
   GR8DES_PG_PORT: "1",
-  GRIZZLE_PG_STATE: path.join(packageRoot, "work", "cli-schema", "state"),
-  HOME: path.join(packageRoot, "work", "cli-schema", "home"),
+  GRIZZLE_PG_STATE: path.join(scratch, "state"),
+  HOME: path.join(scratch, "home"),
 } as const;
 
 /**

@@ -15,7 +15,6 @@ import { BaseType, Cardinality, Declares, interactionKinds } from "#pantry/gramm
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
-import { keyTextCodePoints } from "#pantry/qti/limits.ts";
 import {
   floatKeyPattern,
   integerKeyPattern,
@@ -180,21 +179,6 @@ type IntegerParts = Pick<
  * @returns It without its leading and trailing spaces, tabs and line ends.
  */
 const trimmed = (text: string): string => text.replaceAll(/^[\t\n\r ]+|[\t\n\r ]+$/gu, "");
-
-/**
- * Count a text's code points, the unit `keyText` bounds.
- *
- * @param text - The text.
- * @returns Its code points.
- */
-const codePointsOf = (text: string): number => {
-  let count = 0;
-  for (let at = 0; at < text.length; at += (text.codePointAt(at) ?? 0) > 0xff_ff ? 2 : 1) {
-    count += 1;
-  }
-
-  return count;
-};
 
 /**
  * Whether a text is a run of zeros, the language of `MapKeyInteger.zeros`.
@@ -503,10 +487,11 @@ const nearestOf = (
  * the database refuses it.
  *
  * A map entry with no `map-key` has no `MapKey` row, and AL3 refuses the element. A key past the
- * key-text bound has its `MapKey` row and no typed row, so the key-text bound alone refuses it, and
- * a key its base type's typed form does not hold has no typed row, as the typed relations' mirrors
- * select. A table entry, and a table with a `default-value`, has its `LookupValue` row, its base
- * type its table's declaration's.
+ * key-text bound keeps its `MapKey` row and its typed row, whose `keyText` fields alone refuse it
+ * (their parts' types bound no length), so it is refused under "Key text bound" only; and a key its
+ * base type's typed form does not hold has no typed row, as the typed relations' mirrors select. A
+ * table entry, and a table with a `default-value`, has its `LookupValue` row, its base type its
+ * table's declaration's.
  *
  * @param doc - The document's tree, as shred gives it.
  * @param ids - The ids its rows are written under.
@@ -598,9 +583,7 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: MappingIds): MappingRows
     const { baseType } = declarationOf(mapping);
     mapKeys.set(node.id, { ...tupleOf(node), baseType, key, mapping: node.parent });
 
-    if (codePointsOf(key) <= keyTextCodePoints) {
-      addTypedKey(typed, baseType, { key, mapping: node.parent, node: node.id });
-    }
+    addTypedKey(typed, baseType, { key, mapping: node.parent, node: node.id });
   }
 
   return {

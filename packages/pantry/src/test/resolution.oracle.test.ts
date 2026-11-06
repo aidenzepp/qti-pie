@@ -527,7 +527,9 @@ describe("import/overlays/package.ts resolveIn against test/resolution.ts", () =
                 c.note(drawnCase.name);
               }
 
-              judged(drawnCase.input, (situation) => c.note(situation));
+              judged(drawnCase.input, (situation) => {
+                c.note(situation);
+              });
             }),
         ),
       ),
@@ -564,7 +566,11 @@ describe("import/overlays/package.ts resolveIn against test/resolution.ts", () =
             suite: "pantry/import/href-resolution-small",
           },
           (input: HrefCase, c) =>
-            Effect.sync(() => judged(input, (situation) => c.note(situation))),
+            Effect.sync(() => {
+              judged(input, (situation) => {
+                c.note(situation);
+              });
+            }),
         ),
       ),
     300_000,

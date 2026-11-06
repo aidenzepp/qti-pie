@@ -4,12 +4,13 @@ import { assert, layer } from "@effect/vitest";
 import { ConfigProvider, Effect, FileSystem } from "effect";
 import { withAuthorApp } from "#pantry/cli/engine.ts";
 import { ClusterConfigError } from "#pantry/db/connection.ts";
+import { fileScratchDirectory } from "#pantry/test/scratch.ts";
 
 /**
  * The folder this file's empty `HOME` and `GRIZZLE_PG_STATE` folders are made in,
- * `packages/pantry/work/cli-engine`. No other test file writes there.
+ * `packages/pantry/work/cli-engine-*`, the run's own.
  */
-const scratch = path.resolve(import.meta.dirname, "..", "..", "work", "cli-engine");
+const scratch = fileScratchDirectory("cli-engine-");
 
 layer(NodeServices.layer, { excludeTestServices: true })("withAuthorApp", (it) => {
   it.effect("fails on the cluster's settings before it loads the engine module", () =>

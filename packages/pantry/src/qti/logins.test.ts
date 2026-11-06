@@ -10,14 +10,8 @@
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Cause, ConfigProvider, Effect, Exit, FileSystem } from "effect";
-import { fileURLToPath } from "node:url";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
-
-/**
- * The folder this file's `HOME` and `GRIZZLE_PG_STATE` folders are made in, under the package's
- * git-ignored `work/`.
- */
-const scratch = fileURLToPath(new URL("../../work/logins-compile/", import.meta.url));
+import { scratchDirectory } from "#pantry/test/scratch.ts";
 
 /**
  * The CA the layer is given. grizzle reads it as PEM text when the layer is built and hands it to
@@ -41,8 +35,11 @@ layer(NodeServices.layer)("qti/logins.ts, compiled as the layer compiles it", (i
       // Bound: the one login, its one role and its four programs; residual none.
       Effect.gen(function* layerBuilds() {
         const fs = yield* FileSystem.FileSystem;
-        const home = `${scratch}home`;
-        const state = `${scratch}state`;
+        // A folder of this run's own, so a concurrent run of the suite never rewrites the CA this
+        // one reads.
+        const scratch = yield* scratchDirectory("logins-compile-");
+        const home = `${scratch}/home`;
+        const state = `${scratch}/state`;
         yield* fs.makeDirectory(`${state}/tls`, { recursive: true });
         yield* fs.makeDirectory(home, { recursive: true });
         yield* fs.writeFileString(`${state}/tls/ca.crt`, unusedCa);
@@ -61,7 +58,7 @@ layer(NodeServices.layer)("qti/logins.ts, compiled as the layer compiles it", (i
         );
 
         assert.isTrue(Exit.isSuccess(exit), Exit.isFailure(exit) ? Cause.pretty(exit.cause) : "");
-      }),
+      }).pipe(Effect.scoped),
     { timeout: buildTimeoutMs },
   );
 });

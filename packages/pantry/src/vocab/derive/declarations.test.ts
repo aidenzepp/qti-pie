@@ -46,6 +46,13 @@ import { attributeDeclarations, attributeWildcards } from "#pantry/vocab/invento
 import { contentModels } from "#pantry/vocab/inventory/models.ts";
 import { vocabularies } from "#pantry/vocab/inventory/vocabularies.ts";
 import { xmlNamespace } from "#pantry/vocab/namespaces.ts";
+import { fileScratchDirectory } from "#pantry/test/scratch.ts";
+
+/**
+ * The folder the xmllint probes are written to, `work/vocab-attributes-oracle-*`, the run's own, so
+ * two runs at once never rewrite each other's driver under xmllint.
+ */
+const oracleRoot = fileScratchDirectory("vocab-attributes-oracle-");
 
 /**
  * The package folder, `packages/pantry`, which the committed leaves and `vp fmt` are relative to.
@@ -281,7 +288,7 @@ const judgeVersion = Effect.fn("test.judgeAttributes")(function* judgeVersion(
   }
 
   const errors = yield* validate(
-    `${packageRoot}/work/vocab-attributes-oracle/${version}`,
+    `${oracleRoot}/${version}`,
     driver,
     posed.map(({ probe }) => probe),
   );

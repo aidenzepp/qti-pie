@@ -9,7 +9,8 @@
  * - **The verdict is the schema's.** Generated packages carry key texts of generated lengths in 1-,
  *   2-, 3- and 4-byte scripts around the bound the schema's type admits. The oracle refuses one
  *   under "Key text bound" exactly where the import's rows hold a text `keyText` does not admit,
- *   and every field it names is one of those rows' fields.
+ *   every field it names is one of those rows' fields, and every rule the database would refuse it
+ *   under is one the oracle names: one cause, one rule, `key-text-bound` at both seats.
  */
 import type { LawSide } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
@@ -26,14 +27,14 @@ import { searched } from "@grizzle/testing/vitest";
 import { Array as Arr, Duration, Effect, Formatter, Option, pipe, Predicate, Schema } from "effect";
 import { grammar } from "#pantry/grammar/install.ts";
 import { readProgram, rowCountsOf } from "#pantry/import/program.ts";
-import { lawIdentity, statedLaws } from "#pantry/import/refusal.ts";
+import { lawIdentity, lawRules, statedLaws } from "#pantry/import/refusal.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { keyTextPattern } from "#pantry/qti/limits.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { keyCopies, keyTextFields } from "#pantry/test/key-copies.ts";
-import { judge, lawsOf } from "#pantry/test/oracle.ts";
+import { judge, lawsOf, ruleOf } from "#pantry/test/oracle.ts";
 
 /**
  * The oracle's tables over the installed grammar, built once.
@@ -443,7 +444,7 @@ const packageOf = (sketch: Sketch): ReadonlyMap<string, Uint8Array> => {
     <qti-correct-response><qti-value>${at("choice identifier", "A")}</qti-value></qti-correct-response>
     <qti-mapping default-value="0"><qti-map-entry map-key="${at("map key", "A")}" mapped-value="1"/></qti-mapping>
   </qti-response-declaration>
-  <qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="string"><qti-default-value><qti-value>${at("string value", "none")}</qti-value></qti-default-value></qti-outcome-declaration>
+  <qti-outcome-declaration identifier="NOTE" cardinality="single" base-type="string"><qti-default-value><qti-value>${at("string value", "none")}</qti-value></qti-default-value></qti-outcome-declaration>
   <qti-item-body>
     <p id="${at("p id", "intro")}" xml:lang="${at("xml:lang", "en")}" data-note="${at("free attribute", "note")}">${at("free text", "Pick one.")}</p>
     <p aria-describedby="${at("idref", "hint")}"><span id="${at("idref", "hint")}">Hint</span></p>
@@ -637,6 +638,32 @@ const leftOut = (
   );
 
 /**
+ * The rules the database refuses a package's import under for its key texts, read from its rows:
+ * `key-text-bound` where a written `keyText` field holds a text past the bound, which the type's
+ * own check refuses, and for a copy left out of a relation, the rule of each containment the law
+ * table states into that relation, which then finds no row.
+ *
+ * @param refused - The fields the import's rows hold past the bound, and each relation it leaves a
+ *   copy out of, as `Relation.*`.
+ * @returns The rules.
+ */
+const databaseRules = (refused: ReadonlySet<string>): ReadonlySet<string> =>
+  new Set(
+    [...refused].flatMap((held) => {
+      const [relation = "", field = ""] = held.split(".");
+      if (field !== "*") {
+        return ["key-text-bound"];
+      }
+
+      return statedLaws.flatMap(([law]) =>
+        law.kind === "contained" && law.to.relation === relation
+          ? Option.toArray(Option.fromUndefinedOr(lawRules.get(lawIdentity(law))))
+          : [],
+      );
+    }),
+  );
+
+/**
  * Count the rows the import writes for the package with every place short, by relation: the twin
  * every case's rows are compared with.
  */
@@ -649,7 +676,8 @@ const shortTwin = Effect.gen(function* shortTwin() {
 /**
  * Judge one generated package both ways: the oracle's "Key text bound" breaches against the
  * database's refusal of the same texts as the import's rows give it, a `keyText` field written past
- * what the schema's type admits, or a copy left out of a relation its containment reads.
+ * what the schema's type admits, or a copy left out of a relation its containment reads; and the
+ * rule each would refuse it under ({@link databaseRules}) against the rules the oracle names.
  *
  * @param sketch - The package.
  * @param short - The rows its short twin writes, counted by relation ({@link shortTwin}).
@@ -702,6 +730,14 @@ const judged = (
       );
     }
 
+    const oracleRules = new Set<string>(breaches.map(({ law }) => ruleOf(law)));
+    for (const rule of databaseRules(refused)) {
+      assert.isTrue(
+        oracleRules.has(rule),
+        `${literal}: the database refuses it under ${rule}, and the oracle under ${[...oracleRules].join(", ") || "none"}`,
+      );
+    }
+
     if (breaches.some(({ law }) => law !== "Key text bound")) {
       note("another law broken too");
     }
@@ -748,7 +784,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
   "the oracle's key-text verdict",
   (test) => {
     test.effect(
-      "refuses each package of the box under Key text bound exactly where its import's rows hold a text keyText does not admit",
+      "refuses each package of the box under Key text bound exactly where its import's rows hold a text keyText does not admit, under the rule the database names",
       (ctx) =>
         // Oracle: a differential, the import's rows (readProgram, every overlay's copy and every
         // concat fold's end) under the schema's own keyText type, against the oracle's breaches.
@@ -793,7 +829,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
     );
 
     test.effect(
-      "refuses each swarmed package under Key text bound exactly where its import's rows hold a text keyText does not admit",
+      "refuses each swarmed package under Key text bound exactly where its import's rows hold a text keyText does not admit, under the rule the database names",
       (ctx) =>
         // Oracle: as the box's. Bound: each case under its own swarm of the 13 places and 4 scripts,
         // each place at 1, one short of the edge, the edge, one past it or twice it; 60 runs.

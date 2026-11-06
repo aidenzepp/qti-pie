@@ -1,6 +1,6 @@
 # grizzle findings
 
-Defects and limits found while building `packages/pantry` on grizzle `1.0.0-beta.0` (`65203c4`), and re-checked at grizzle trunk `a1d5af1` (`a1d5af193cee117ab481f5897edd41101ff5d679`). The vendored commit is now trunk `a2ff5eb` (`a2ff5eb494af2e0f89024c1e90f3a19d7cbee6b3`), `main`'s HEAD when it was pinned (see "The final pin" below); `f66c05b` was the pin before it, `64f0427` and `99b6217` the two before that, and `4016b69`, `48256f8` and `ee3b5fc` the three before those. Each finding is triaged against grizzle's source at that commit and classified as a limit or a defect (our own misuse is fixed here and not recorded); a defect carries its cause as `file:line` anchors and a reproduction that needs nothing of this repository, and a workaround is recorded beside the cause, never as a close.
+Defects and limits found while building `packages/pantry` on grizzle `1.0.0-beta.0` (`65203c4`), and re-checked at grizzle trunk `a1d5af1` (`a1d5af193cee117ab481f5897edd41101ff5d679`). The vendored commit is now trunk `fce1088` (`fce10882b08165ebb44125fc0c9ddac6572c6495`), `main`'s HEAD when it was pinned (see "The final pin" below); `a2ff5eb` and `f66c05b` were the two pins before it, `64f0427` and `99b6217` the two before those, and `4016b69`, `48256f8` and `ee3b5fc` the three before them. Each finding is triaged against grizzle's source at that commit and classified as a limit or a defect (our own misuse is fixed here and not recorded); a defect carries its cause as `file:line` anchors and a reproduction that needs nothing of this repository, and a workaround is recorded beside the cause, never as a close.
 
 | Finding                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | Kind        | Status                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | Cause (grizzle 65203c4)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | Reproduction                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | Workaround                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Met in                                                                                                                                                                                                   |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -1185,24 +1185,29 @@ limits the README does not yet state, recorded as limits.
   itself, 1.6 s and 63 MB). qti-pie now builds it only where it opens a database (PS); whether the description can be
   built lazily is grizzle's question.
 
-## The final pin (grizzle `99b6217`, then `64f0427`, `f66c05b` and `a2ff5eb`)
+## The final pin (grizzle `99b6217`, then `64f0427`, `f66c05b`, `a2ff5eb` and `fce1088`)
 
-qti-pie was pinned to grizzle trunk `99b6217` (`99b621761896c5537f4d24d5ba4f23b9eb97bf15`), the tip that carries the
-pg tier's fix wave, and then to `64f0427` (`64f0427a629ffde66c6d73d5b4ca596fe14001b7`), which fixes the defect below.
-The findings were triaged against `99b6217`'s source and re-checked at trunk `7c58b10`
+qti-pie was pinned to grizzle trunk `99b6217` (`99b621761896c5537f4d24d5ba4f23b9eb97bf15`), the tip that carries the pg
+tier's fix wave, and then to `64f0427` (`64f0427a629ffde66c6d73d5b4ca596fe14001b7`), which fixes the defect below. The
+findings were triaged against `99b6217`'s source and re-checked at trunk `7c58b10`
 (`7c58b1045e47ed9282cebd1ecadc9b68c64765b0`), which changes only grizzle's `TODO.md`, and then at `64f0427`, `main`'s
 HEAD on 2026-11-06. At each pin two exports of the commit packed the three tarballs to the same bytes
 (`vendor/README.md`); between the two, only the engine's tarball changed. On 2026-11-06 qti-pie moved to `f66c05b`
 (`f66c05b71bb016247163520f29d69de516968c2c`), which grants a role what its writes evaluate through casts and domains,
 writes a tree that owns an ordered family, decides schema-only write refusals when the schema compiles, adds
 `Compute.octetLength` and the public `keyTextBytes(fields)`, and cuts startup to one compile per installation. Two
-exports of it packed identical tarballs, and its testing tarball and its skill are byte-identical to `64f0427`'s.
-Then qti-pie moved to `a2ff5eb` (`a2ff5eb494af2e0f89024c1e90f3a19d7cbee6b3`, its repin `b9dcadbb`), where hex is the
-only closed-relation form (the rows form and the `{ pack }` option are deleted, and a set is rounded to whole hex
-digits), closed relations are admitted once, a take's order is fixed at the root, and a contract's facts are its
-declared `proves`. pantry deleted its seven `{ pack: "hex" }` arguments (`src/grammar/install.ts`) and needed no
-`proves`. Two exports packed identical tarballs; the testing tarball is unchanged, and the shipped skill changed, its
-closed-relation constant now always one hex literal.
+exports of it packed identical tarballs, and its testing tarball and its skill are byte-identical to `64f0427`'s. Then
+qti-pie moved to `a2ff5eb` (`a2ff5eb494af2e0f89024c1e90f3a19d7cbee6b3`, its repin `b9dcadbb`), where hex is the only
+closed-relation form (the rows form and the `{ pack }` option are deleted, and a set is rounded to whole hex digits),
+closed relations are admitted once, a take's order is fixed at the root, and a contract's facts are its declared
+`proves`. pantry deleted its seven `{ pack: "hex" }` arguments (`src/grammar/install.ts`) and needed no `proves`. Two
+exports packed identical tarballs; the testing tarball is unchanged, and the shipped skill changed, its closed-relation
+constant now always one hex literal. Then it moved to `fce1088` (`fce10882b08165ebb44125fc0c9ddac6572c6495`, its repin
+`8439df91`), where a key's text budget counts the null bitmap: every B-tree entry is sized from the data offset after
+one (the engine's `src/schema/representability.ts:793`). Two exports packed identical tarballs, and the testing tarball
+and the skill are unchanged. The `Qti` schema does not yet compile at this pin, for a containment's reverse index that
+refuses an unbounded source column, which grizzle's lane K fixed in `4b155e8` ("A containment's reverse index refuses a
+source column of no byte bound", below).
 
 ### What the pin resolves for qti-pie
 
@@ -1310,13 +1315,13 @@ closed-relation constant now always one hex literal.
 - **Classification:** our misuse, a re-spelled bound. The fix is to hold `keyText` to grizzle's public
   `keyTextBytes(fields)`, which lane S-ORACLE's interim bound in `src/qti/limits.ts` does (`e0fcddbf`, "bound keyText by
   grizzle's own keyTextBytes, 646 code points"). `keyTextBytes` alone still leaves this axis 8 bytes over, by the null
-  bitmap of its NULL-able hidden columns (the next entry), so the tree holds `keyTextCodePoints` at 646, an interim
-  until grizzle's fix (`fce1088`). The octet contract was to follow at grizzle `a2ff5eb`: there the bound would be N =
-  2,587 bytes, the largest for which `keyTextBytes([...widestTextKey, keyText])` still leaves a byte, with no `proves`
-  needed, because `a2ff5eb`'s bound analysis reads `octetLength` off the predicate. A containment cannot copy a text
-  into a contract field, though (the entry after next), so the contract is set aside. Instead `keyText` becomes
-  `str.bytes(keyTextBytes(...))` once grizzle beta.1's byte refinement lands, a flip of `src/qti/limits.ts` alone; until
-  then it stays the 646-code-point pattern.
+  bitmap of its NULL-able hidden columns (the next entry), so the tree holds `keyTextCodePoints` at 646. At grizzle's
+  fix, `fce1088`, 646 is exactly what `keyTextBytes(widestTextKey)`, 2,587 bytes, leaves room for. The octet contract
+  was to follow at grizzle `a2ff5eb`: there the bound would be N = 2,587 bytes, the largest for which
+  `keyTextBytes([...widestTextKey, keyText])` still leaves a byte, with no `proves` needed, because `a2ff5eb`'s bound
+  analysis reads `octetLength` off the predicate. A containment cannot copy a text into a contract field, though (the
+  entry after next), so the contract is set aside. Instead `keyText` becomes `str.bytes(keyTextBytes(...))` once grizzle
+  beta.1's byte refinement lands, a flip of `src/qti/limits.ts` alone; until then it stays the 646-code-point pattern.
 
 ### `keyTextBytes` leaves out a tree axis's null bitmap (grizzle defect, open at `f66c05b`, fixed in `fce1088`)
 
@@ -1335,7 +1340,10 @@ closed-relation constant now always one hex literal.
 - **Workaround in this repo.** `src/qti/limits.ts` `keyTextCodePoints` is 646 (`e0fcddbf`), the most for which
   `keyTextBytes` still leaves a byte. The further text it sizes costs 7 bytes (header and worst padding), and the bitmap
   costs 8, so the key text fits exactly where a byte is left. `limits.test.ts` holds 646 to leave a byte and 647 to
-  leave none. The 646 is an interim: with grizzle's fix, `fce1088`, the bound goes back to `keyTextBytes` directly.
+  leave none. With grizzle's fix, `fce1088`, the bound is exactly what `keyTextBytes` leaves, measured over a key's
+  other fields as its contract reads: `keyTextBytes(widestTextKey)` is 2,587 bytes, so 646 code points fit (2,584
+  bytes) and 647 do not, and `keyTextBytes([uuid, OpenLocal])` is 1,638 bytes, so `namespaceText`'s 409 fits and 410
+  does not (lane N2, at the repin `8439df91`). 646 and 409 are exact, so the interim is the bound.
 - **Classification:** a grizzle defect, confirmed by the grizzle session and fixed before beta.1, in `fce1088`; nothing
   to file. The grizzle session took it in its lane K: `keyTextBytes(fields)` will promise the worst case over every
   index grizzle plans over those fields, the null bitmap and hidden columns included, under a generated test that holds
@@ -1343,8 +1351,8 @@ closed-relation constant now always one hex literal.
 - **Fixed in `fce1088` (`fce10882b08165ebb44125fc0c9ddac6572c6495`),** pushed to grizzle `main` with its gate green, and
   checked at `fce1088`, which `git ls-remote` showed as `origin/main` on 2026-11-06: "keyTextBytes leaves room for an
   index tuple's null bitmap, so a text at its result fits every index planned over its fields, a key over a selection
-  and a family's axis included" (its message). qti-pie repins to it (lane N2). The 646 interim stays, and reading 133
-  with it, until lane S-ORACLE measures the edge on the new pin.
+  and a family's axis included" (its message). qti-pie repinned to it in `8439df91` (lane N2), and N2 measured the edge
+  there: the bound is exactly what `keyTextBytes` leaves, so 646 and 409 stand, and reading 133's numbers with them.
 
 ### A text contract can't be the target of a copy (a limit; accepted for grizzle beta.1 as `str.bytes(N)`)
 
@@ -1368,6 +1376,86 @@ closed-relation constant now always one hex literal.
   plain and pattern-refined text in containments, and N comes from `keyTextBytes(fields)`. The reproduction above
   becomes one of grizzle's kept cases. Nothing to file. Until it lands, `keyText` stays the 646-code-point pattern held
   to `keyTextBytes` (`e0fcddbf`).
+
+### A containment's reverse index refuses a source column of no byte bound (defect, fixed in `4b155e8`)
+
+At grizzle `f66c05b` and every pin after it, `a2ff5eb` and `fce1088` among them, the Qti schema does not compile. The
+first refusal comes from the reverse B-tree index that grizzle plans over a containment's source columns:
+
+```
+grizzle: refused at stage generate (schema Qti): the schema does not compile: UnrepresentableKey at contained
+Attribute(node, name, lexical, document, kind) selected in Reference(node, name, lexical, document, kind) at
+Attribute.contained (…/src/qti/package.ts:699:3): the index of Attribute over the columns the containment … references
+from: field lexical …
+```
+
+When that law is set aside, the next is `src/qti/metadata.ts:892`, the containment of `stringLanguageAttributes`'s
+`lexical` into `LomStringLanguage.language`. Both read `Attribute.lexical`, typed `Lexical = str.regex(charsPattern)`
+(`src/qti/attributes.ts:148`, field at `:213`). That is an attribute's lexical form as written, which no pattern
+bounds. The target columns are bounded: `Reference.lexical` is `keyText`. So the containment's foreign key and the
+target's UNIQUE are both representable, and only the source's index is refused.
+
+- **Checked at:** grizzle `fce1088` (`fce10882b08165ebb44125fc0c9ddac6572c6495`, the pin at qti-pie HEAD `018fe65b`), in
+  the clone at `~/Documents/grizzle`. `fce1088` is its newest `main`, at 17:11 on 2026-11-06.
+- **Cause:** `#scalarContainment`, `packages/engine/src/laws/model/plan.ts:1027-1074` at `fce1088`.
+  - It plans the containment's foreign key and the target's UNIQUE (`#targetUnique`, `:1081-1100`).
+  - Then it plans a `ReverseIndex` over every source column (`sourceColumns`, `:1063-1072`), whose entry it proves by
+    `plannedEntry` (`:184-203`).
+  - `plannedEntry` refuses a column whose datum has no byte bound with `UnrepresentableKey { kind: "unboundedText" }`
+    (`:196-198`; the sentence is `core/causes.ts:338`).
+  - The PERIOD coverage's reverse index takes the same entry and the same refusal (`plan.ts:1229-1238`).
+  - The entry check on the reverse index is new at `f66c05b`. At `64f0427` the index carried no `plannedEntry`
+    (`git show 64f0427:…/plan.ts` has no `references from` entry), and the reproduction's case generates there.
+- **Reproduction:** `~/.cache/gr8des/integration/grizzle-repros/reverse-index/`. It needs nothing of qti-pie: `pack/`
+  holds the tarballs packed from `fce1088`, byte-identical to qti-pie's `vendor/` (sha256 `b0be260a…` and
+  `61a5da98…`). `run.sh` runs `grizzle generate` and `grizzle check` on three schemas. Its output is in `run.out`,
+  verbatim:
+  - **case:** `Attr { id: uuid, value: str.regex("^[a-z]*$") }` and `Ref { id: uuid, value: str.regex("^[a-z]{0,64}$")
+    }`, with `contained(on(Attr, "id", "value"), on(Ref, "id", "value"))`. It is refused at generate and at check:
+    `UnrepresentableKey at contained Attr(id, value) in Ref(id, value) at Attr.contained (…/case.ts:9:50): the index of
+    Attr over the columns the containment of Attr(id, value) in Ref(id, value) references from: field value is text
+    whose pattern proves no byte bound; a bounded anchored pattern, or a contract bounding its charLength or
+    octetLength, does` (exit 1 each).
+  - **control:** the same containment with `Attr.value` bounded as `Ref.value` is, `str.regex("^[a-z]{0,64}$")`. It
+    generates, and check prints `Repro: ok (1 migration, snapshot d25ded70…)` (exit 0).
+  - **bounded-prefix control:** the unbounded column with the containment over `id` alone. It generates and checks
+    (exit 0).
+  - The same case at `64f0427` generates (exit 0).
+- **Classification:** a grizzle defect, an overreach of the D3 fix. The ruling, from the grizzle session (grizzle-c5)
+  in its reply to the Mind at 17:15 on 2026-11-06:
+  - an index's width never refuses a containment;
+  - the reverse B-tree goes over the longest leading run of bounded source columns that fits one entry;
+  - with no such run, the index is a hash index on one column;
+  - PERIOD coverage gets the same rule, and the GiST bound is fixed;
+  - only the target's UNIQUE can refuse.
+- **Status:** fixed in `4b155e8` (`4b155e8a88860a5cac544f38fe664f33d43a0a98`), grizzle's lane K, pushed to grizzle
+  `main` with its gate green before beta.1, so nothing is filed. `git ls-remote` showed it as grizzle `origin/main` on
+  2026-11-06. By grizzle-c5's report of the fix:
+  - the reverse B-tree goes over the longest leading run of referencing columns whose entry fits, else it is a hash
+    index on one column;
+  - PERIOD coverage follows the same rule, with the GiST page as its bound;
+  - only the referenced UNIQUE must be bounded.
+
+  The commit's message is a copy of `fce1088`'s and does not describe this change, so it is not quoted here; grizzle
+  was asked to correct the record going forward.
+
+  Lane R87 packed tarballs from a scratch export of `4b155e8` (sha256 `c47013f1…` for grizzle, `92d16745…` for the
+  engine) and re-ran the reproduction, its output verbatim in `run-4b155e8.out`:
+  - **case:** `grizzle generate` exits 0, and `grizzle check` prints `Repro: ok (1 migration, snapshot 2c4ee745…)` and
+    exits 0. The draft has the foreign key from `Attr(id, value)` to `Ref(id, value)` and `Ref`'s UNIQUE `(id, value)`,
+    and no index over the unbounded `Attr.value`;
+  - **control** (bounded source): `Repro: ok (1 migration, snapshot d25ded70…)`, exit 0, the same snapshot as at
+    `fce1088`;
+  - **bounded-prefix control:** `Repro: ok (1 migration, snapshot 2071c499…)`, exit 0, also unchanged.
+
+  So the case generates and checks at `4b155e8`, and both controls stay ok. qti-pie takes the fix at lane N2's repin
+  B, and `Qti` generating at HEAD is recorded here when it lands.
+
+- **qti-pie:** no workaround. `Attribute.lexical` stays unbounded, as an attribute's lexical form is. Until the fix is
+  pinned:
+  - no snapshot can be generated at HEAD and no layer builds;
+  - the workload guard's two free tests (`src/qti/logins.test.ts` and `src/test/gen/assembly.compile.test.ts`,
+    `bbe5f4ca` and `d11c39f1`) are red, with `schema Qti is not the one snapshot.json records`.
 
 ## A role lacked EXECUTE on what its CHECKs cast to (grizzle defect, fixed in `f66c05b`)
 
@@ -1654,6 +1742,9 @@ messages, but nothing raises either one.
   `GoverningOf` keyed as it is.
 - **Classification.** A documented limit, met by the model's coordinates: grizzle behaves as its README states, so
   nothing is filed.
+- **Status.** A post-tier follow-up, by the coordinator's ruling of 2026-11-06: "GoverningOf densify: not now". It is
+  a schema change to `Node`, the write path and the folds, made right before the first database tier on the new pin,
+  so it waits until that tier is green and is then scheduled.
 
 ## `@grizzle/testing`'s `matching` builds every class before it refuses an unbounded repetition (performance, lane JAN)
 

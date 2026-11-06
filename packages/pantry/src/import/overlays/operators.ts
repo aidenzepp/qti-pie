@@ -16,7 +16,6 @@ import { collapse } from "#pantry/import/overlays/metadata.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
-import { keyTextPattern } from "#pantry/qti/limits.ts";
 import { roundingKinds } from "#pantry/qti/operators.ts";
 import type { Rounding, Tolerance, ToleranceToken } from "#pantry/qti/operators.ts";
 
@@ -54,12 +53,6 @@ export interface OperatorRows {
   readonly Rounding: ReadonlyMap<string, Addition<typeof Rounding>>;
   readonly Tolerance: ReadonlyMap<string, ToleranceRow>;
 }
-
-/**
- * `keyText`'s language: a copied text outside it has no overlay field that holds it, and its
- * copy's foreign key refuses it beside the schema's one limit law.
- */
-const keyTextForm = new RegExp(keyTextPattern, "su");
 
 /**
  * The lexical form of a `figures` that is an integer the representation reads: `xs:integer`'s,
@@ -175,11 +168,12 @@ const nearestOf = (
 /**
  * Build a document's operator rows.
  *
- * Each rounding operator has its `Rounding` row: its `figures` as written where that is within
- * `keyText`, else empty, which the copy's foreign key then refuses; its `rounding-mode` where it
- * writes one within `keyText`, else `significantFigures` on a `qti-equal-rounded` and empty on a
- * `qti-round-to`. Each `qti-equal` that writes `tolerance` within `keyText` has its
- * {@link ToleranceRow}. A document with no such element gives no row.
+ * Each rounding operator has its `Rounding` row: its `figures` as written, else empty, which the
+ * copy's foreign key then refuses; its `rounding-mode` where it writes one, else
+ * `significantFigures` on a `qti-equal-rounded` and empty on a `qti-round-to`. Each `qti-equal`
+ * that writes `tolerance` has its {@link ToleranceRow}. A text past `keyText`'s bound keeps its
+ * row, which `keyText` refuses under "Key text bound". A document with no such element gives no
+ * row.
  *
  * @param doc - The document's tree, as shred gives it.
  * @param ids - The ids its rows are written under, and its context.
@@ -196,16 +190,13 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: OperatorIds): OperatorRo
   }
 
   const lexicals = new Map(rows.attributes.map((row) => [`${row.node} ${row.name}`, row.lexical]));
-  const keyedOf = (node: NodeRow<Composed>, name: string): string | undefined => {
-    const lexical = lexicals.get(`${node.id} ${name}`);
-
-    return lexical !== undefined && keyTextForm.test(lexical) ? lexical : undefined;
-  };
+  const valueOf = (node: NodeRow<Composed>, name: string): string | undefined =>
+    lexicals.get(`${node.id} ${name}`);
   const nearest = nearestOf(rows.nodes, ids.context?.nearest);
 
   for (const node of operators) {
     if (node.kind === "qti-equal") {
-      const lexical = keyedOf(node, "tolerance");
+      const lexical = valueOf(node, "tolerance");
       if (lexical !== undefined) {
         tolerances.set(node.id, { lexical, node: node.id, tokens: tolerancePiecesOf(lexical) });
       }
@@ -213,8 +204,8 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: OperatorIds): OperatorRo
       continue;
     }
 
-    const figuresLexical = keyedOf(node, "figures") ?? "";
-    const mode = keyedOf(node, "rounding-mode");
+    const figuresLexical = valueOf(node, "figures") ?? "";
+    const mode = valueOf(node, "rounding-mode");
     rounding.set(node.id, {
       ...figuresOf(figuresLexical),
       document,

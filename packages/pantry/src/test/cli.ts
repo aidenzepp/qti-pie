@@ -17,6 +17,7 @@ import type { Command } from "effect/cli";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { cli } from "#pantry/cli.ts";
 import { runCli } from "#pantry/cli/run.ts";
+import { fileScratchDirectory } from "#pantry/test/scratch.ts";
 
 /**
  * The package folder, `packages/pantry`: where the program runs by default and where `work/` is.
@@ -24,9 +25,10 @@ import { runCli } from "#pantry/cli/run.ts";
 const packageRoot = path.resolve(import.meta.dirname, "..", "..");
 
 /**
- * The folder that holds every copy `packageCopy` makes.
+ * The folder that holds every copy `packageCopy` makes, `work/cli-copies-*`, the run's own, so two
+ * runs at once never replace each other's copy of a package mid-test.
  */
-const copiesRoot = path.join(packageRoot, "work", "cli-copies");
+const copiesRoot = fileScratchDirectory("cli-copies-");
 
 /**
  * A check of a printed line against the committed JSON Schema `schema/<name>.json`, read as a
@@ -171,8 +173,8 @@ export const spawnCli = Effect.fn("test.cli.spawnCli")(function* spawnCli(
 });
 
 /**
- * Copy the package folder `source` to `packages/pantry/work/cli-copies/<label>`, replacing any
- * earlier copy, so a test that exports or rewrites a package works on a folder of its own.
+ * Copy the package folder `source` to `<label>` in the run's copies folder, replacing any earlier
+ * copy, so a test that exports or rewrites a package works on a folder of its own.
  *
  * @param source - The package folder to copy.
  * @param label - The copy's name; it starts `copy-` and appears in one test file only.

@@ -186,6 +186,7 @@ const isResolvedPath = (candidate: string): boolean =>
 const isOneCandidate = (candidate: string): boolean => {
   const inner = candidate.trim();
 
+  // oxlint-disable-next-line typescript/no-misused-spread -- a comma, a space and a tab are single BMP code points, so testing code points finds each.
   return ![...inner].some((c) => c === "," || c === " " || c === "\t");
 };
 

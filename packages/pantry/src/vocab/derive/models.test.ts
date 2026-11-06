@@ -64,6 +64,7 @@ import type {
 } from "#pantry/vocab/inventory/types.ts";
 import { xincludeNamespace, xsNamespace } from "#pantry/vocab/namespaces.ts";
 import { vocabularies } from "#pantry/vocab/inventory/vocabularies.ts";
+import { fileScratchDirectory } from "#pantry/test/scratch.ts";
 
 /**
  * The key of an expanded name: `{namespace}local`.
@@ -72,6 +73,12 @@ import { vocabularies } from "#pantry/vocab/inventory/vocabularies.ts";
  * @returns The key.
  */
 const keyOf = ({ local, namespace }: ExpandedName): string => `{${namespace}}${local}`;
+
+/**
+ * The folder the xmllint probes are written to, `work/vocab-models-oracle-*`, the run's own, so two
+ * runs at once never rewrite each other's driver under xmllint.
+ */
+const oracleRoot = fileScratchDirectory("vocab-models-oracle-");
 
 /**
  * The package folder, `packages/pantry`, which the committed leaf and `vp fmt` are relative to.
@@ -267,7 +274,7 @@ const judgeVersion = Effect.fn("test.judgeVersion")(function* judgeVersion(versi
   }
 
   const errors = yield* validate(
-    `${packageRoot}/work/vocab-models-oracle/${version}`,
+    `${oracleRoot}/${version}`,
     driver,
     posed.map(({ probe }) => probe),
   );

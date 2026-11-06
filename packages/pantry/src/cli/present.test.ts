@@ -17,13 +17,14 @@ import { RoundtripData } from "#pantry/cli/roundtrip.ts";
 import { exitCodeOf } from "#pantry/cli/run.ts";
 import { cliProcessTestTimeoutMs, engineLoadHookTimeoutMs } from "#pantry/test/settings.ts";
 import { captureCli, matchesCommitted, preloadEngine } from "#pantry/test/cli.ts";
+import { fileScratchDirectory } from "#pantry/test/scratch.ts";
 
 const fixtures = inject("fixtures");
 
 /**
- * The scratch folders of this file, under the package's git-ignored `work/`.
+ * The scratch folders of this file, under `work/cli-present-*`, the run's own.
  */
-const scratch = path.resolve(import.meta.dirname, "..", "..", "work", "cli-present");
+const scratch = fileScratchDirectory("cli-present-");
 
 /**
  * One line of standard error, decoded as the error object a reader parses.
