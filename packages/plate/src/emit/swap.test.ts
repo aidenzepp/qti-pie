@@ -677,6 +677,75 @@ describe("applyPart, the select joint rule", () => {
   );
 
   it.effect(
+    "[Q-12] refuses a Control replacement that makes the select multiple, in any case",
+    () =>
+      Effect.gen(function* selectMultiple() {
+        const variants: readonly Attributes[] = [{ multiple: true }, { MULTIPLE: "multiple" }];
+        for (const multiple of variants) {
+          const error = yield* refusedAt(selectRow, selectProps, options, (props, children) =>
+            h("select", { ...props, ...multiple }, children),
+          );
+          assert.strictEqual(error._tag, "PartSwapRefused");
+          assert.strictEqual(error.cause, "root-not-allowed");
+          assert.strictEqual(error.interaction, "inline-choice-interaction");
+          assert.strictEqual(error.part, "control");
+        }
+      }),
+  );
+
+  it.effect("[Q-12] refuses a Control replacement that sizes the select as a list box", () =>
+    Effect.gen(function* selectSized() {
+      const error = yield* refusedAt(selectRow, selectProps, options, (props, children) =>
+        h("select", { ...props, size: "4" }, children),
+      );
+      assert.strictEqual(error.cause, "root-not-allowed");
+      assert.strictEqual(error.part, "control");
+    }),
+  );
+
+  it.effect("[Q-12] accepts a Control replacement whose select is sized 1, a drop-down", () =>
+    Effect.gen(function* selectSizedOne() {
+      const result = yield* Effect.fromResult(
+        applyPart(selectRow, selectProps, options, (_props, children) =>
+          h("select", { size: "1" }, children),
+        ),
+      );
+      assert.strictEqual(result.tag, "select");
+      assert.strictEqual(result.attrs["size"], "1");
+      assert.strictEqual(result.attrs["name"], "RESPONSE");
+    }),
+  );
+
+  it.effect("[Q-12] refuses an Option or Placeholder replacement that carries a label", () =>
+    Effect.gen(function* optionLabelled() {
+      for (const part of ["option", "placeholder"] as const) {
+        const row = rowFor("inline-choice-interaction", part);
+        const error = yield* refusedAt(row, optionProps, optionText, (props, children) =>
+          h("option", { ...props, label: "host text" }, children),
+        );
+        assert.strictEqual(error._tag, "PartSwapRefused");
+        assert.strictEqual(error.cause, "root-not-allowed");
+        assert.strictEqual(error.interaction, "inline-choice-interaction");
+        assert.strictEqual(error.part, part);
+      }
+    }),
+  );
+
+  it.effect("[Q-12] accepts an Option replacement that adds a class, and keeps its text", () =>
+    Effect.gen(function* optionClassed() {
+      const result = yield* Effect.fromResult(
+        applyPart(optionRow, optionProps, optionText, (props, children) =>
+          h("option", { ...props, class: "host" }, children),
+        ),
+      );
+      assert.strictEqual(result.tag, "option");
+      assert.strictEqual(result.attrs["class"], "host");
+      assert.strictEqual(result.attrs["value"], "A");
+      assert.deepStrictEqual(result.children, optionText);
+    }),
+  );
+
+  it.effect(
     "[Q-12] accepts a Control replacement whose select holds the handed options unwrapped, and writes the props over it",
     () =>
       Effect.gen(function* selectKeepsOptions() {

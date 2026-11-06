@@ -124,10 +124,11 @@ const mayBecome = {
   li: "an <li>",
   list: "a <ul>, <ol> or <menu>",
   "native-input": 'an <input>, whose "type" the interaction writes',
-  option: "an <option>",
+  option: 'an <option> with no "label", so it shows the text it holds',
   "phrasing-container": "a phrasing container such as <span>, or a custom element",
   prompt: "a <p>, or a flow or phrasing container such as <div> or <span>",
-  select: "a <select>",
+  select:
+    'a <select> with no "multiple" and no "size" other than 1, a drop-down that posts one entry',
   "text-input": 'an <input> of type "text"',
   textarea: "a <textarea>",
 } satisfies { readonly [C in TagClass]: string };

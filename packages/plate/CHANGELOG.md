@@ -19,6 +19,9 @@ and both of its entry points are unstable until M3.
 - `PartSwapRefused` has a new cause, `select-content`. It refuses a replacement for `control`,
   `placeholder` or `option` whose root does not hold exactly the nodes the part function receives,
   directly under it and in the order given.
+- A replacement for `control` may not return a `select` that is `multiple` or has a `size` other
+  than 1, and one for `placeholder` or `option` may not return an `option` with a `label`.
+  `PartSwapRefused` refuses either with the cause `root-not-allowed`.
 - `checkResponses` and `score` judge an Inline Choice's response. For an identifier that names none
   of its choices, `checkResponses` gives a message and `score` returns `ResponsesRefused`. Before,
   both took any identifier.
