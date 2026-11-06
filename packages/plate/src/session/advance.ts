@@ -76,6 +76,7 @@ export type IntentRule =
  * none once the test has closed. `messages` holds what the item's interactions say about the
  * responses for `responses-invalid`, ready for `render`'s `messages` option with the instance of
  * the item `sequenceIndex` names, and is empty for every other rule.
+ *
  * `refusal` is the move's or the submission's own refusal, with what it knows of the place, such as
  * the part's first and last items; it is none for the three refusals `advance` makes itself:
  * `test-closed`, `end-part` in a linear, individual part, and `next` in a linear, simultaneous part
@@ -127,6 +128,7 @@ export class IntentRefused extends Data.TaggedError("IntentRefused")<{
  * {@link IntentRefused} is the test's rules refusing the intent, a `submit-part` whose `score`
  * refuses an item's responses and a `next` in a linear, simultaneous part whose item's responses
  * `score` would refuse among them (`responses-invalid`, naming the item).
+ *
  * `ResponsesRefused` is `score` refusing the responses `submit-item`, or a `next` that submits
  * first, processes on the current item; `InvalidResponses` is `score` refusing a response that does
  * not fit its declaration; and `EngineFailure` is an item's processing failing. The rest pass

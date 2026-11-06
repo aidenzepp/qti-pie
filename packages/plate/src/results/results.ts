@@ -48,6 +48,12 @@ const resultNamespace = "http://www.imsglobal.org/xsd/imsqti_result_v3p0";
  *
  * The Results XSD types `sourcedId` and each `identifier` as an NCName, so a bare UUID, which
  * starts with a digit more often than not, does not fit; `s-` followed by a UUID does.
+ *
+ * Each `sourceId` must be an absolute URI, one `URL.canParse` reads without a base. That is
+ * stricter than the XSD, whose `xs:anyURI` admits a relative reference
+ * (`imsqti_resultv3p0_v1p0.xsd:603`): Results Reporting describes `sourceID` as a unique
+ * identifier of the system that added the session identifier (`rr-bind.txt:3548`), and a relative
+ * reference does not name a system on its own.
  */
 export interface ResultContext {
   readonly sessions?: readonly { readonly identifier: string; readonly sourceId: string }[];
@@ -380,7 +386,7 @@ const attemptsOf = (presented: boolean, processed: number, limit: number): Attem
 /**
  * Give a response's answered status by Results Reporting 2.7.1's criteria.
  *
- * @param declaration The response's declared default, if any.
+ * @param declaredDefault The response's declared default, if any.
  * @param value The value reported.
  * @param presented Whether the candidate was shown the item.
  * @param invalid Whether the item's interaction refuses the value, on any limit of either tier.
@@ -388,7 +394,7 @@ const attemptsOf = (presented: boolean, processed: number, limit: number): Attem
  *   which is skipping it; `attempted` for a value the interaction refuses; else `answered`.
  */
 const answeredStatusOf = (
-  declaration: Option.Option<Value>,
+  declaredDefault: Option.Option<Value>,
   value: Value,
   presented: boolean,
   invalid: boolean,
@@ -397,7 +403,7 @@ const answeredStatusOf = (
     return "notpresented";
   }
 
-  if (isNull(value) || Option.exists(declaration, (fallback) => match(value, fallback))) {
+  if (isNull(value) || Option.exists(declaredDefault, (fallback) => match(value, fallback))) {
     return "presented";
   }
 
@@ -450,10 +456,7 @@ const itemResult = (report: ItemReport): Element => {
     "itemResult",
     [
       attribute("identifier", report.identifier),
-      ...Option.match(report.sequenceIndex, {
-        onNone: () => [],
-        onSome: (index) => [attribute("sequenceIndex", String(index))],
-      }),
+      ...optional("sequenceIndex", report.sequenceIndex.pipe(Option.map(String))),
       attribute("datestamp", report.datestamp),
       attribute("sessionStatus", report.session.status),
     ],
@@ -479,7 +482,8 @@ const itemResult = (report: ItemReport): Element => {
  * Check the result context and write its element.
  *
  * @param context The host's context.
- * @returns The `context`, or {@link InvalidResultContext} for the first input that does not fit.
+ * @returns The `context` element, or {@link InvalidResultContext} for the first input that does not
+ *   fit.
  */
 const contextElement = (context: ResultContext): Result.Result<Element, InvalidResultContext> =>
   Result.gen(function* checkContext() {

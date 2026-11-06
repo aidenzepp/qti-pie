@@ -146,8 +146,8 @@ type ScoreFailure =
   | ResponsesRefused;
 
 /**
- * Why a part's end may fail: a stored session that does not fit the test or the items passed, or
- * an invalid `now`.
+ * Why {@link endPart}, or the end of a part, may fail: a refusal, a stored session that does not
+ * fit the test or the items passed, or an invalid `now`.
  */
 export type PartEndFailure =
   | InvalidTime
@@ -379,7 +379,8 @@ const processedInPart = (
  * @param session The session, its step already saved.
  * @param ending The index of the part that ends, among the test's parts.
  * @param now The time of the transition.
- * @returns The session after the part's end, or a failure of `present`.
+ * @returns The session after the part's end; {@link UnknownItemRef} when the session holds no item
+ *   for the next part's first item ref; or a failure of `present`.
  */
 const partEnded = (
   test: Test,

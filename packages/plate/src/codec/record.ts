@@ -68,6 +68,10 @@ const Versioned = Schema.Struct({ version: Schema.OptionFromOptionalKey(Schema.U
 
 /**
  * Read a stored form's `version`.
+ *
+ * @param input The stored form, as the host handed it back.
+ * @returns The form's `version`, itself none when the form names none; none when `input` is not
+ *   an object.
  */
 const readVersioned = Schema.decodeUnknownOption(Versioned);
 

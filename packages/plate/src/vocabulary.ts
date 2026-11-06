@@ -89,10 +89,9 @@ const textInteractions = ["qti-text-entry-interaction", "qti-extended-text-inter
 const declarations = ["qti-response-declaration", "qti-outcome-declaration"] as const;
 
 /**
- * The response-processing elements of the engine: the ten elements it evaluates and
- * the three branches of `qti-response-condition`. `qti-equal` runs in its default `exact`
- * tolerance mode only; one in `absolute` or `relative` mode is a mark keyed
- * `tolerance-mode="<mode>"`.
+ * The response-processing elements of the engine: the ten elements it evaluates and the three
+ * branches of `qti-response-condition`. `qti-equal` runs in its default `exact` tolerance mode
+ * only; one in `absolute` or `relative` mode is a mark keyed `tolerance-mode="<mode>"`.
  *
  * An inline `qti-response-processing` that uses only these becomes a rule tree; one that uses any
  * other element is a mark keyed by that element's name.
@@ -175,8 +174,7 @@ export interface FeatureRule {
 }
 
 /**
- * The phase-1 "renders" set, which the model builder, the verdict and the emitter
- * read.
+ * The phase-1 "renders" set, which the model builder, the verdict and the emitter read.
  */
 export interface Renders {
   /**
@@ -545,16 +543,16 @@ export type SubmissionMode = (typeof submissionModes)[number];
 export const cpVersions = ["3.0.0", "3.0.1"] as const;
 
 /**
+ * A Content Packaging profile version a manifest may name.
+ */
+export type CpVersion = (typeof cpVersions)[number];
+
+/**
  * The namespace of a QTI 3.0 package's manifest, under both content packaging profiles. A root in
  * any other namespace, such as the plain IMS CP namespace of a QTI 2 package, is
  * `not-qti3-package`.
  */
 export const manifestNamespace = "http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1";
-
-/**
- * A Content Packaging profile version a manifest may name.
- */
-export type CpVersion = (typeof cpVersions)[number];
 
 /**
  * The resource types each profile version admits on a manifest's `resource`, as its XSD's `type`
@@ -637,20 +635,10 @@ export const resourceRoots = [
 ] as const satisfies readonly (readonly [ResourceType, string])[];
 
 /**
- * The XSD defaults of the six boolean attributes of `qti-item-session-control`, as its attributes
- * spell them (`imsqti_asiv3p0_v1p0.xsd:34079-34084`, `imsqti_asiv3p0p1_v1p0.xsd:34313-34318`).
- *
- * The seventh, `max-attempts`, has no XSD default and so no entry: an item none of its enclosing
- * elements limits has one attempt when it is not adaptive.
+ * The XSD defaults of the six boolean attributes of `qti-item-session-control`, re-exported from
+ * the module that owns them so a browser module can read them without loading these tables.
  */
-export const sessionControlDefaults = {
-  "allow-comment": false,
-  "allow-review": true,
-  "allow-skipping": true,
-  "show-feedback": false,
-  "show-solution": false,
-  "validate-responses": false,
-} as const;
+export { sessionControlDefaults } from "#plate/session/control-defaults.ts";
 
 /**
  * The views an outcome is reported to, the XSD's `ViewEnumDType`: an outcome declaration's `view`
