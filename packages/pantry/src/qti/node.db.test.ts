@@ -54,7 +54,7 @@ import { shred, versionOf } from "#pantry/model/shred.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
 import { readPackage } from "#pantry/package/read.ts";
-import { copiedTextKinds, Node, universalDomains } from "#pantry/qti/node.ts";
+import { copiedTextKinds, copiedUnder, Node, universalDomains } from "#pantry/qti/node.ts";
 import { materializeCorpus } from "#pantry/test/fixtures.ts";
 import { idOf } from "#pantry/test/gen/xdm.ts";
 import { documentBreaches, lawsOf, nodeLawNames } from "#pantry/test/oracle.ts";
@@ -539,7 +539,9 @@ const barredAt = new Map(
 /**
  * Decide whether a member's characters make its parent's string value, as `node.ts`'s fold steps
  * it: its parent's text is checked (its domain is no universal one), its parent is one of
- * `copiedTextKinds`, or it is a title string's child (`copiedTitleText`).
+ * `copiedTextKinds`, or an overlay copies its parent's text by its parent's and grandparent's kinds
+ * together, a title string's or a vocabulary term's (`copiedUnder`, the host mirror of
+ * `copiedTitleText` and `copiedVocabularyText` that the import's walk reads too).
  *
  * @param member - The member's folded row.
  * @param parent - Its parent's folded row.
@@ -557,7 +559,7 @@ const inStringValue = (
   return (
     (domain !== undefined && !universal.has(domain)) ||
     copiedKinds.has(member.parentKind) ||
-    (member.parentKind === "lom:string" && parent?.parentKind === "lom:title")
+    copiedUnder(member.parentKind, parent?.parentKind ?? "document")
   );
 };
 
@@ -566,7 +568,8 @@ const inStringValue = (
  * fields from the host's fold, ‹n› and ‹ps› from the parent, and each fold's running values as
  * `node.ts`'s folds step them. `parentParentKind` is accumulated, so the host never writes it: the
  * direct writer fills it as grizzle's owner-axis copy does, the parent's `parentKind`, the root's
- * own, and steps a title string's children (`copiedTitleText`) as the fold does.
+ * own, and steps the children whose text an overlay copies by two kinds (`copiedUnder`) as the fold
+ * does.
  *
  * @param rows - The document's folded rows.
  * @returns Each node's row, in document order.
@@ -1406,6 +1409,11 @@ describe.skipIf(!hasLease)("qti/node.db.test.ts, on the lease", () => {
           // a generated id column of Node; reading 127: Quotation's). The list is the foreign keys
           // a scratch `grizzle generate` drafted on `qti.node` on 2026-11-06 (grizzle `64f0427`),
           // with review wave 1's readings in place.
+          // RETAKE AT Z (lane N2): the second list below is that draft's, not the regenerated
+          // _init's. Replace it with the catalog's list from the regenerated database, the target
+          // of each foreign key of `qti.node` into another table (`SELECT confrelid::regclass FROM
+          // pg_constraint WHERE conrelid = 'qti.node'::regclass AND contype = 'f'`), once per key,
+          // and check each new target against the slice that put its law on Node.
           // Bound: every constraint of Node's table.
           Effect.gen(function* census() {
             const client = yield* loginSession;
