@@ -362,15 +362,54 @@ const classTokens = (value: string | true | undefined): readonly string[] =>
   value === undefined || value === true ? [] : splitTokens(value);
 
 /**
+ * Lower-case an attribute name's ASCII letters, as the HTML tokenizer does and nothing more.
+ *
+ * @param name The attribute's name as the tree spells it.
+ * @returns `name` with A to Z lowered.
+ * @see https://html.spec.whatwg.org/multipage/parsing.html#attribute-name-state
+ */
+const asciiLower = (name: string): string =>
+  name.replaceAll(/[A-Z]/gu, (letter) => letter.toLowerCase());
+
+/**
+ * Lay sets of attributes over one another, each later set winning, with names compared in ASCII
+ * lower case, so exactly one attribute of each name survives.
+ *
+ * The HTML parser keeps the first of two attributes whose names match that way and drops the
+ * rest, so a replacement's `NAME` written beside plate's `name` would otherwise post under the
+ * replacement's name. Within one set the first spelling of a name wins, as the parser reads it and
+ * as the tag classes read it; across sets a later set's attribute takes the earlier one's place,
+ * under the later set's spelling.
+ *
+ * @param layers The sets, lowest precedence first.
+ * @returns One attribute of each name, in the order each name first appears.
+ */
+const overlay = (...layers: readonly Attributes[]): Attributes => {
+  const named = new Map<string, readonly [string, string | true]>();
+  for (const layer of layers) {
+    const seen = new Set<string>();
+    for (const [name, value] of Object.entries(layer)) {
+      const key = asciiLower(name);
+      if (!seen.has(key)) {
+        seen.add(key);
+        named.set(key, [name, value]);
+      }
+    }
+  }
+
+  return Object.fromEntries(named.values());
+};
+
+/**
  * Write a row's defaults under the attributes set over them, those attributes winning a conflict.
  *
  * @param defaults The row's defaulted attributes.
  * @param attrs The attributes written over the defaults.
  * @returns `attrs` itself when the row has no defaults, so the fast path keeps the props by
- *   identity; otherwise a copy holding the defaults and then `attrs`.
+ *   identity; otherwise the defaults overlaid by `attrs`, names compared in ASCII lower case.
  */
 const overDefaults = (defaults: PartRow["defaults"], attrs: Attributes): Attributes =>
-  Object.keys(defaults).length === 0 ? attrs : { ...defaults, ...attrs };
+  Object.keys(defaults).length === 0 ? attrs : overlay(defaults, attrs);
 
 /**
  * Apply I1: write every attribute of `props` onto the replacement's root, `props` winning a
@@ -378,39 +417,41 @@ const overDefaults = (defaults: PartRow["defaults"], attrs: Attributes): Attribu
  *
  * Every attribute the connect function computes is in `props`, so "required" means everything in
  * `props`; whatever else the root carries (`data-*`, `title`, further classes, a `type` over a
- * defaulted one) stands.
+ * defaulted one) stands. Names are compared in ASCII lower case, so a root attribute spelled
+ * `NAME` gives way to the props' `name` rather than standing beside it.
  *
  * @param root The replacement's root.
  * @param props The attributes the part carries.
  * @param defaults The row's defaulted attributes, which the root's own attributes override.
- * @returns A copy of `root` with the defaults, then its own attributes, then the props, and the
- *   same children: `class` holds the props' tokens and then the root's, each once, and is absent
- *   when neither side has one.
+ * @returns A copy of `root` with the defaults, then its own attributes, then the props, one
+ *   attribute of each name, and the same children: `class` holds the props' tokens and then the
+ *   root's (its `class` in any case), each once, and is absent when neither side has one.
  */
 const mergeRequired = (
   root: Element,
   props: Attributes,
   defaults: PartRow["defaults"],
 ): Element => {
-  const merged = overDefaults(defaults, { ...root.attrs, ...props });
-  if (props["class"] === undefined && root.attrs["class"] === undefined) {
+  const merged = overlay(defaults, root.attrs, props);
+  const rootClass = attributeOf(root.attrs, "class");
+  if (props["class"] === undefined && rootClass === undefined) {
     return h(root.tag, merged, root.children);
   }
 
-  const tokens = new Set([...classTokens(props["class"]), ...classTokens(root.attrs["class"])]);
+  const tokens = new Set([...classTokens(props["class"]), ...classTokens(rootClass)]);
 
-  return h(root.tag, { ...merged, class: [...tokens].join(" ") }, root.children);
+  return h(root.tag, overlay(merged, { class: [...tokens].join(" ") }), root.children);
 };
 
 /**
- * Write a role onto a node, when it is an element.
+ * Write a role onto a node, when it is an element, over a `role` it names in any case.
  *
  * @param node The node.
  * @param role The role's value.
- * @returns A copy of the element with `role` set, or the text node unchanged.
+ * @returns A copy of the element with one `role`, set to `role`, or the text node unchanged.
  */
 const withRole = (node: Node, role: string): Node =>
-  node.kind === "element" ? h(node.tag, { ...node.attrs, role }, node.children) : node;
+  node.kind === "element" ? h(node.tag, overlay(node.attrs, { role }), node.children) : node;
 
 /**
  * Copy an element's subtree with `role="listitem"` written onto each handed node, wherever the
@@ -455,10 +496,10 @@ const checkListItems = (list: Element, children: readonly Node[]): Breach | unde
  *
  * @param owner The list owner's root, after I1.
  * @param children The nodes the emitter handed over, the Choice roots.
- * @returns A copy of `owner` with the list roles written.
+ * @returns A copy of `owner` with the list roles written over any `role` named in another case.
  */
 const withListRoles = (owner: Element, children: readonly Node[]): Element =>
-  h(owner.tag, { ...owner.attrs, role: "list" }, markListItems(owner, new Set(children)));
+  h(owner.tag, overlay(owner.attrs, { role: "list" }), markListItems(owner, new Set(children)));
 
 /**
  * Construct the refusal of a breach at a part.
