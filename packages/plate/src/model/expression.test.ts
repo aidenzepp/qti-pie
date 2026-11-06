@@ -17,17 +17,17 @@ import {
   isUnlanded,
   stringOrRefOf,
 } from "#plate/model/expression.ts";
-import { arithmeticRules } from "#plate/model/expressions/arithmetic.ts";
-import { comparisonRules } from "#plate/model/expressions/comparison.ts";
-import { containersRules } from "#plate/model/expressions/containers.ts";
-import { functionsRules } from "#plate/model/expressions/functions.ts";
-import { integersRules } from "#plate/model/expressions/integers.ts";
-import { logicRules } from "#plate/model/expressions/logic.ts";
-import { kindRules } from "#plate/model/expressions/read.ts";
-import { referencesRules } from "#plate/model/expressions/references.ts";
-import { roundingRules } from "#plate/model/expressions/rounding.ts";
-import { testRules } from "#plate/model/expressions/test.ts";
-import { textRules } from "#plate/model/expressions/text.ts";
+import { arithmeticReaders, arithmeticRules } from "#plate/model/expressions/arithmetic.ts";
+import { comparisonReaders, comparisonRules } from "#plate/model/expressions/comparison.ts";
+import { containersReaders, containersRules } from "#plate/model/expressions/containers.ts";
+import { functionsReaders, functionsRules } from "#plate/model/expressions/functions.ts";
+import { integersReaders, integersRules } from "#plate/model/expressions/integers.ts";
+import { logicReaders, logicRules } from "#plate/model/expressions/logic.ts";
+import { kindReaders, kindRules, landedKinds } from "#plate/model/expressions/read.ts";
+import { referencesReaders, referencesRules } from "#plate/model/expressions/references.ts";
+import { roundingReaders, roundingRules } from "#plate/model/expressions/rounding.ts";
+import { testReaders, testRules } from "#plate/model/expressions/test.ts";
+import { textReaders, textRules } from "#plate/model/expressions/text.ts";
 import { tables } from "#plate/validate/tables.ts";
 
 /**
@@ -45,6 +45,33 @@ const modelFamilies = {
   test: testRules,
   text: textRules,
 };
+
+/**
+ * The ten families' reader specs, by family.
+ */
+const readerFamilies = {
+  arithmetic: arithmeticReaders,
+  comparison: comparisonReaders,
+  containers: containersReaders,
+  functions: functionsReaders,
+  integers: integersReaders,
+  logic: logicReaders,
+  references: referencesReaders,
+  rounding: roundingReaders,
+  test: testReaders,
+  text: textReaders,
+};
+
+/**
+ * Give each family's kinds, sorted, by family.
+ *
+ * @param families Each family's name and table.
+ * @returns Each family's kinds.
+ */
+const kindsByFamily = (
+  families: readonly (readonly [string, object])[],
+): Readonly<Record<string, readonly string[]>> =>
+  Object.fromEntries(families.map(([family, table]) => [family, Object.keys(table).toSorted()]));
 
 /**
  * The ten families' evaluator entries, by family.
@@ -170,6 +197,17 @@ describe("the expression families", () => {
     assert.deepStrictEqual(Object.fromEntries(kindCounts(Object.values(modelFamilies))), once);
   });
 
+  it("hold each of the 64 kinds in exactly one model family, with one reader spec", () => {
+    assert.deepStrictEqual(Object.fromEntries(kindCounts(Object.values(readerFamilies))), once);
+  });
+
+  it("place each kind's reader spec in the family of its rule", () => {
+    assert.deepStrictEqual(
+      kindsByFamily(Object.entries(readerFamilies)),
+      kindsByFamily(Object.entries(modelFamilies)),
+    );
+  });
+
   it("hold each of the 64 kinds in exactly one engine family, with one evaluator entry", () => {
     assert.deepStrictEqual(Object.fromEntries(kindCounts(Object.values(engineFamilies))), once);
   });
@@ -283,6 +321,39 @@ describe("kindRules", () => {
         match: { baseType: "boolean", cardinality: "single" },
         undeclared: { baseType: "unknown", cardinality: "unknown" },
       },
+    );
+  });
+});
+
+describe("kindReaders", () => {
+  it("reads M1's eight kinds, base-value and equal by their custom readers, and stubs every other kind", () => {
+    const tags = Object.fromEntries(
+      expressionKinds.flatMap((kind) => {
+        const tag = kindReaders[kind]._tag;
+
+        return tag === "unlanded" ? [] : [[kind, tag]];
+      }),
+    );
+
+    assert.deepStrictEqual(tags, {
+      "base-value": "custom",
+      correct: "generic",
+      equal: "custom",
+      "is-null": "generic",
+      "map-response": "generic",
+      "map-response-point": "generic",
+      match: "generic",
+      variable: "generic",
+    });
+    assert.deepStrictEqual<readonly string[]>(landedKinds, Object.keys(tags));
+  });
+
+  it("stubs a kind's reader exactly when its rule is the unlanded rule", () => {
+    assert.deepStrictEqual(
+      expressionKinds.filter(
+        (kind) => (kindReaders[kind]._tag === "unlanded") !== isUnlanded(kindRules[kind]),
+      ),
+      [],
     );
   });
 });
