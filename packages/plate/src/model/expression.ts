@@ -541,8 +541,12 @@ export interface Branch {
 }
 
 /**
- * A response rule of phase 1's engine subset: a `qti-response-condition` with its branches in
- * order and its `qti-response-else`, or a `qti-set-outcome-value`.
+ * A response rule: a `qti-response-condition` with its branches in order and its
+ * `qti-response-else`, a `qti-set-outcome-value`, a `qti-lookup-outcome-value`, or a
+ * `qti-exit-response`.
+ *
+ * A `qti-response-processing-fragment` has no rule of its own: the reader puts its rules in its
+ * place, so a fragment runs as if its rules were written where it stands.
  */
 export type Rule =
   | {
@@ -550,7 +554,24 @@ export type Rule =
       readonly kind: "condition";
       readonly otherwise: Option.Option<readonly Rule[]>;
     }
-  | { readonly expression: Expression; readonly identifier: string; readonly kind: "set-outcome" };
+  | { readonly expression: Expression; readonly identifier: string; readonly kind: "set-outcome" }
+  | {
+      /**
+       * The expression whose value the target outcome's lookup table maps.
+       */
+      readonly expression: Expression;
+      /**
+       * The outcome whose table maps the value and which takes the result.
+       */
+      readonly identifier: string;
+      readonly kind: "lookup-outcome";
+    }
+  | {
+      /**
+       * Ends response processing; what the rules before it set stays.
+       */
+      readonly kind: "exit";
+    };
 
 /**
  * The type of an expression as the kind rules give it: a base type and a cardinality.

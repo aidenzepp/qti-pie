@@ -32,9 +32,12 @@ import { referencesEvaluators } from "#plate/engine/expressions/references.ts";
 import { roundingEvaluators } from "#plate/engine/expressions/rounding.ts";
 import { testEvaluators } from "#plate/engine/expressions/test.ts";
 import { textEvaluators } from "#plate/engine/expressions/text.ts";
+import { numberOf, sameNumber } from "#plate/engine/numbers.ts";
+import type { NumberSingle } from "#plate/engine/numbers.ts";
 import type { ExpressionKind } from "#plate/model/expression.ts";
-import type { Expression, Item, Rule } from "#plate/model/item.ts";
-import type { Value } from "#plate/model/values.ts";
+import type { Expression, Item, LookupTable, Rule } from "#plate/model/item.ts";
+import { isNull, nullOf } from "#plate/model/values.ts";
+import type { Single, Value } from "#plate/model/values.ts";
 
 export {
   OutcomeMismatchError,
@@ -242,16 +245,20 @@ export const evaluateExpression = (
 ): Result.Result<Value, EngineFailure> => evaluate(expression, { item, variables });
 
 /**
- * Set an outcome, as `qti-set-outcome-value` does.
+ * Set an outcome, as `qti-set-outcome-value` and `qti-lookup-outcome-value` do.
+ *
+ * A NULL is stored as the outcome's own NULL, of its base type and cardinality, whatever type the
+ * NULL came with (spec §4.5): NULL is the absence of a value, so it has no type to differ from the
+ * outcome's.
  *
  * @param item The item, whose declaration gives the outcome's type.
  * @param variables The variables before the rule.
  * @param identifier The outcome's identifier.
- * @param value The expression's value.
+ * @param value The value to set.
  * @returns The variables with the outcome set and everything else as it was; or an
  *   {@link UnknownIdentifierError} when the item declares no modelled outcome by that name, or an
- *   {@link OutcomeMismatchError} when the value's base type or cardinality differs from the
- *   outcome's.
+ *   {@link OutcomeMismatchError} when the value is not NULL and its base type or cardinality
+ *   differs from the outcome's.
  */
 const setOutcome = (
   item: Item,
@@ -264,6 +271,12 @@ const setOutcome = (
       Option.fromUndefinedOr(item.outcomes.get(identifier)),
       () => new UnknownIdentifierError({ holder: "item", identifier, role: "outcome" }),
     );
+    if (isNull(value)) {
+      const typed = nullOf(declaration.baseType, declaration.cardinality);
+
+      return { ...variables, outcomes: { ...variables.outcomes, [identifier]: typed } };
+    }
+
     if (value.baseType !== declaration.baseType || value.cardinality !== declaration.cardinality) {
       return yield* Result.fail(
         new OutcomeMismatchError({
@@ -305,47 +318,161 @@ const chosenRules = (
   });
 
 /**
+ * Report whether a number is at or above an interpolation entry's `source-value`, the equal case
+ * counting only when the entry includes its boundary. An integer and a float compare exactly: `>`
+ * between a `bigint` and a `number` loses nothing, and equality is {@link sameNumber}'s.
+ *
+ * @param number The looked-up number.
+ * @param bound The entry's `source-value`.
+ * @param includeBoundary The entry's `include-boundary`.
+ * @returns Whether the entry maps the number.
+ */
+const reaches = (number: NumberSingle, bound: number, includeBoundary: boolean): boolean =>
+  number.value > bound ||
+  (includeBoundary && sameNumber(number, { baseType: "float", value: bound }));
+
+/**
+ * Map a value through a lookup table, as `qti-lookup-outcome-value` does: a match table by the
+ * first entry whose `source-value` is the value exactly, an interpolation table by the first entry
+ * whose `source-value` the value is at or above ({@link reaches}).
+ *
+ * A NULL, or a value no entry maps, gives the table's `default-value`, else nothing; the outcome's
+ * own `qti-default-value` is not used (9.12). The validator holds a match table's value to a single
+ * integer and an interpolation table's to a single integer or float (reading 28), so a value of
+ * another type maps through no entry.
+ *
+ * @param table The outcome's lookup table.
+ * @param value The expression's value.
+ * @returns The entry's or the table's value, or none.
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#Data_LookupOutcomeValue
+ */
+const lookUp = (table: LookupTable, value: Value): Option.Option<Single> => {
+  const mapped = Option.flatMap(numberOf(value), (source): Option.Option<Single> => {
+    const entry =
+      table.kind === "match"
+        ? table.entries.find(
+            (each) => source.baseType === "integer" && each.sourceValue === source.value,
+          )
+        : table.entries.find((each) => reaches(source, each.sourceValue, each.includeBoundary));
+
+    return Option.map(Option.fromUndefinedOr(entry), (found) => found.targetValue);
+  });
+
+  return Option.orElse(mapped, () => table.defaultValue);
+};
+
+/**
+ * Give the value a `qti-lookup-outcome-value` sets its outcome to: the single its outcome's lookup
+ * table maps the value to ({@link lookUp}), else NULL.
+ *
+ * An outcome with no lookup table maps every value to NULL; the validator refuses a lookup of one
+ * (`template-requirements`), so no checked item reaches it. An outcome the item does not declare
+ * maps to NULL too, and {@link setOutcome} then fails it.
+ *
+ * @param item The item, whose outcome declaration holds the table.
+ * @param identifier The outcome's identifier.
+ * @param value The expression's value.
+ * @returns The value to set.
+ */
+const lookedUp = (item: Item, identifier: string, value: Value): Value => {
+  const target = Option.fromUndefinedOr(item.outcomes.get(identifier)).pipe(
+    Option.flatMap((declared) => declared.lookupTable),
+    Option.flatMap((table) => lookUp(table, value)),
+  );
+
+  return Option.match(target, {
+    onNone: () => nullOf(value.baseType, value.cardinality),
+    onSome: (single): Value => ({
+      baseType: single.baseType,
+      cardinality: "single",
+      values: [single],
+    }),
+  });
+};
+
+/**
+ * The variables after a run of rules, and whether a `qti-exit-response` ended it.
+ */
+interface Run {
+  readonly exited: boolean;
+  readonly variables: Variables;
+}
+
+/**
  * Run one response rule.
  *
  * A condition runs the rules of its first branch whose condition is true, else its `otherwise`,
- * else nothing; the conditions after the chosen branch are not evaluated.
+ * else nothing; the conditions after the chosen branch are not evaluated. A set gives its
+ * outcome the expression's value, a lookup the value its outcome's table maps the expression's
+ * value to ({@link lookedUp}), and an exit ends the run, at any depth.
  *
  * @param rule The rule.
  * @param item The item.
  * @param variables The variables before the rule.
- * @returns The variables after it, or the first failure of the rule.
+ * @returns The variables after it with whether it exited, or the first failure of the rule.
  */
-const runRule = (
-  rule: Rule,
-  item: Item,
-  variables: Variables,
-): Result.Result<Variables, EngineFailure> =>
+const runRule = (rule: Rule, item: Item, variables: Variables): Result.Result<Run, EngineFailure> =>
   Result.gen(function* runOneRule() {
-    if (rule.kind === "set-outcome") {
-      const value = yield* evaluateExpression(rule.expression, item, variables);
-
-      return yield* setOutcome(item, variables, rule.identifier, value);
+    if (rule.kind === "exit") {
+      return { exited: true, variables };
     }
 
-    const then = yield* chosenRules(rule, item, variables);
+    if (rule.kind === "condition") {
+      const then = yield* chosenRules(rule, item, variables);
 
-    // oxlint-disable-next-line eslint/no-use-before-define -- `runRule` and `runRules` are mutually recursive, as conditions nest; the call runs only after both are defined.
-    return yield* runRules(then, item, variables);
+      // oxlint-disable-next-line eslint/no-use-before-define -- `runRule` and `runSequence` are mutually recursive, as conditions nest; the call runs only after both are defined.
+      return yield* runSequence(then, item, variables);
+    }
+
+    const value = yield* evaluateExpression(rule.expression, item, variables);
+    const set = rule.kind === "set-outcome" ? value : lookedUp(item, rule.identifier, value);
+
+    return { exited: false, variables: yield* setOutcome(item, variables, rule.identifier, set) };
   });
 
 /**
- * Run response rules in order, each seeing the variables the rules before it left.
+ * Run response rules in order until one exits, each seeing the variables the rules before it left.
+ *
+ * @param rules The rules.
+ * @param item The item.
+ * @param variables The variables before the rules run.
+ * @returns The variables after the last rule run with whether an exit ended the run, or the first
+ *   failure.
+ */
+const runSequence = (
+  rules: readonly Rule[],
+  item: Item,
+  variables: Variables,
+): Result.Result<Run, EngineFailure> =>
+  Result.gen(function* runInOrder() {
+    let current = variables;
+    for (const rule of rules) {
+      const run = yield* runRule(rule, item, current);
+      if (run.exited) {
+        return run;
+      }
+
+      current = run.variables;
+    }
+
+    return { exited: false, variables: current };
+  });
+
+/**
+ * Run response rules in order, each seeing the variables the rules before it left. A
+ * `qti-exit-response` ends the run, nested or not: the rules after it do not run, and what the
+ * rules before it set stays.
  *
  * Only outcomes change; the responses are returned as given.
  *
  * @param rules The rules, as the item model built them.
  * @param item The item they belong to.
  * @param variables The variables before the rules run.
- * @returns The variables after the last rule; or the first failure, after which no rule runs: an
- *   {@link UnknownIdentifierError} when a rule names an identifier the item or the variables do not
- *   hold in the role the rule reads it in, an {@link OutcomeMismatchError} when a rule sets an
- *   outcome to a value of another type, or an {@link UnmappedResponseError} when a rule maps a
- *   response that has no mapping.
+ * @returns The variables after the last rule run; or the first failure, after which no rule runs:
+ *   an {@link UnknownIdentifierError} when a rule names an identifier the item or the variables do
+ *   not hold in the role the rule reads it in, an {@link OutcomeMismatchError} when a rule sets an
+ *   outcome to a value of another type that is not NULL, or an {@link UnmappedResponseError} when
+ *   a rule maps a response that has no mapping.
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#Root_ResponseProcessing
  */
 export const runRules = (
@@ -353,11 +480,4 @@ export const runRules = (
   item: Item,
   variables: Variables,
 ): Result.Result<Variables, EngineFailure> =>
-  Result.gen(function* runInOrder() {
-    let current = variables;
-    for (const rule of rules) {
-      current = yield* runRule(rule, item, current);
-    }
-
-    return current;
-  });
+  Result.map(runSequence(rules, item, variables), (run) => run.variables);

@@ -116,13 +116,16 @@ const textSafeElements = [
 const declarations = ["qti-response-declaration", "qti-outcome-declaration"] as const;
 
 /**
- * The response rules of the engine: `qti-response-condition` with its three branches, and
- * `qti-set-outcome-value`. The expression kinds the engine runs are not listed here: they are the
- * registry's landed kinds (`landedKinds` in `#plate/model/expressions/read.ts`), which the item
- * model reads, so a family lands a kind with no edit here.
+ * The response rules of the engine: `qti-response-condition` with its three branches,
+ * `qti-set-outcome-value`, `qti-lookup-outcome-value`, `qti-exit-response`, and
+ * `qti-response-processing-fragment`, whose rules run in its place. The expression kinds the engine
+ * runs are not listed here: they are the registry's landed kinds (`landedKinds` in
+ * `#plate/model/expressions/read.ts`), which the item model reads, so a family lands a kind with no
+ * edit here.
  *
  * An inline `qti-response-processing` that uses only these rules and landed expression kinds
- * becomes a rule tree; one that uses any other element is a mark keyed by that element's name.
+ * becomes a rule tree; one that uses any other element is a mark keyed by that element's name, and
+ * an XInclude `include` the mark `xi:include`, as it is never fetched.
  */
 const engine = [
   "qti-response-condition",
@@ -130,6 +133,9 @@ const engine = [
   "qti-response-else-if",
   "qti-response-else",
   "qti-set-outcome-value",
+  "qti-lookup-outcome-value",
+  "qti-exit-response",
+  "qti-response-processing-fragment",
 ] as const;
 
 /**
@@ -235,8 +241,8 @@ export interface Renders {
    * `elements` is a mark keyed by its own name, response processing by a template URI outside the
    * built-ins is a mark keyed `template="<uri>"`, inline response processing with an element
    * outside `engine` and the registry's landed expression kinds is a mark keyed by that element's
-   * name, and a `qti-equal` outside its `exact` tolerance mode is a mark keyed
-   * `tolerance-mode="<mode>"`.
+   * name (an XInclude `include` there is keyed `xi:include`), and a `qti-equal` outside its `exact`
+   * tolerance mode is a mark keyed `tolerance-mode="<mode>"`.
    */
   readonly marks: readonly FeatureRule[];
   /**

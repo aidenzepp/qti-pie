@@ -152,23 +152,25 @@ const expressionValuesOf = (expression: Expression): readonly Single[] =>
 
 /**
  * Collect every value the `qti-base-value` expressions of a run of response rules hold, at any
- * depth.
+ * depth: a lookup's expression as a set's, and nothing of an exit.
  *
  * @param rules The rules, the item's response processing or a branch of it.
  * @returns The base values' single values, in document order.
  */
 const baseValuesOf = (rules: readonly Rule[]): readonly Single[] =>
-  rules.flatMap((rule) =>
-    rule.kind === "condition"
-      ? [
-          ...rule.branches.flatMap((branch) => [
-            ...expressionValuesOf(branch.when),
-            ...baseValuesOf(branch.then),
-          ]),
-          ...baseValuesOf(Option.getOrElse(rule.otherwise, () => [])),
-        ]
-      : expressionValuesOf(rule.expression),
-  );
+  rules.flatMap((rule) => {
+    if (rule.kind === "condition") {
+      return [
+        ...rule.branches.flatMap((branch) => [
+          ...expressionValuesOf(branch.when),
+          ...baseValuesOf(branch.then),
+        ]),
+        ...baseValuesOf(Option.getOrElse(rule.otherwise, () => [])),
+      ];
+    }
+
+    return rule.kind === "exit" ? [] : expressionValuesOf(rule.expression);
+  });
 
 /**
  * List the values an item holds that its page must not see, before any is judged a secret: the
