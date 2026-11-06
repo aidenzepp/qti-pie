@@ -45,6 +45,7 @@ import {
   treesRead,
 } from "#plate/test/playground-page.ts";
 import {
+  arrive,
   fixturePlaygroundLayer,
   navigationOf,
   positionOf,
@@ -222,40 +223,6 @@ const viewPath = (sessionPath: string, mode: ShownMode, sequenceIndex: number): 
   `${sessionPath}/${mode}/${String(sequenceIndex)}`;
 
 /**
- * Act on the page and wait for the page the act leads to, which may be at the URL the page is
- * already at: a post answered by a 303 back to the session page lands where it started.
- *
- * @param page The page.
- * @param act The click that leaves the current page.
- * @param arrives Whether a URL is the page the act leads to, after any redirect.
- * @returns The HTML the page answered, as a tree, once that page has loaded; the test fails unless
- *   it answered 200.
- */
-const arrive = Effect.fn("arrive")(function* arrive(
-  page: Page,
-  act: () => Promise<void>,
-  arrives: (url: URL) => boolean,
-) {
-  const [answer] = yield* Effect.promise(() =>
-    Promise.all([
-      page.waitForResponse(
-        (answered) => answered.request().method() === "GET" && arrives(new URL(answered.url())),
-      ),
-      page.waitForEvent("framenavigated", {
-        predicate: (frame) => frame === page.mainFrame() && arrives(new URL(frame.url())),
-      }),
-      act(),
-    ]),
-  );
-
-  yield* Effect.promise(() => page.waitForLoadState("load"));
-
-  assert.strictEqual(answer.status(), 200, new URL(answer.url()).pathname);
-
-  return treeOf(yield* Effect.promise(() => answer.text()));
-});
-
-/**
  * Open a page of the playground and read the HTML it answered.
  *
  * @param page The page.
@@ -338,7 +305,7 @@ const sitPart = Effect.fn("sitPart")(function* sitPart(
   sessionPath: string,
   items: readonly number[],
 ) {
-  const onSession = (url: URL) => url.pathname === sessionPath;
+  const onSession = (method: string, url: URL) => method === "GET" && url.pathname === sessionPath;
 
   for (const [index, sequenceIndex] of items.entries()) {
     assert.strictEqual(yield* positionOf(page), sequenceIndex, "the session shows the item");
@@ -352,14 +319,16 @@ const sitPart = Effect.fn("sitPart")(function* sitPart(
   yield* arrive(
     page,
     yield* navigate(page, "submit"),
-    (url) => url.pathname === `${sessionPath}/confirm`,
+    (method, url) => method === "GET" && url.pathname === `${sessionPath}/confirm`,
   );
 
-  return yield* arrive(
+  const landed = yield* arrive(
     page,
     () => page.getByRole("button", { exact: true, name: message("en", "confirm") }).click(),
     onSession,
   );
+
+  return landed.tree;
 });
 
 /**

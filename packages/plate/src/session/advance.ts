@@ -26,7 +26,7 @@ import { move } from "#plate/session/navigate.ts";
 import type { MoveRefused, MoveRule, MoveStep } from "#plate/session/navigate.ts";
 import type { Intent, Step, TestSession } from "#plate/session/session.ts";
 import { ItemNotInSession, current } from "#plate/session/start.ts";
-import type { InvalidTime , TestNotDeliverable} from "#plate/session/start.ts";
+import type { InvalidTime, TestNotDeliverable } from "#plate/session/start.ts";
 import { deliveredItem, endPart, submitItem, submitPart } from "#plate/session/submit.ts";
 import type { SubmissionFailure, SubmissionRefused } from "#plate/session/submit.ts";
 import type { Accepted, AcceptedTest } from "#plate/validate/verdict.ts";

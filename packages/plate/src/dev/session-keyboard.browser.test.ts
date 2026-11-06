@@ -29,6 +29,7 @@ import {
   treeOf,
 } from "#plate/test/playground-page.ts";
 import {
+  arrive,
   fixturePlaygroundLayer,
   navigationOf,
   positionOf,
@@ -247,71 +248,39 @@ const browserStops = Effect.fn("browserStops")(function* browserStops(
 });
 
 /**
- * Act on a page and wait for the page the act leads to: the document a `GET` loads after any
- * redirect, a post's 303 included.
- *
- * @param page The page.
- * @param act The key press or click that leaves the current page.
- * @param arrives Whether a URL is the page the act leads to.
- * @param what The page, for a failure message.
- * @returns The arrived page's tree, once it has loaded; the test fails unless it answered 200.
- */
-const arrive = Effect.fn("arrive")(function* arrive(
-  page: Page,
-  act: () => Promise<void>,
-  arrives: (url: URL) => boolean,
-  what: string,
-) {
-  const [response] = yield* Effect.promise(() =>
-    Promise.all([
-      page.waitForResponse(
-        (answer) =>
-          answer.request().method() === "GET" &&
-          answer.request().isNavigationRequest() &&
-          arrives(new URL(answer.url())),
-      ),
-      page.waitForEvent("load"),
-      act(),
-    ]),
-  );
-
-  assert.strictEqual(response.status(), 200, what);
-
-  return treeOf(yield* Effect.promise(() => response.text()));
-});
-
-/**
- * Whether a URL is a session's page with no query: where a move, Save and Return lead.
+ * Whether a request is the `GET` of a session's page with no query: where a move, Save and Return
+ * lead.
  *
  * @param sessionPath The session page's path.
- * @returns The predicate.
+ * @returns The predicate, over a request's method and URL.
  */
 const atSession =
   (sessionPath: string) =>
-  (url: URL): boolean =>
-    url.pathname === sessionPath && url.search === "";
+  (method: string, url: URL): boolean =>
+    method === "GET" && url.pathname === sessionPath && url.search === "";
 
 /**
- * Whether a URL is a session's confirm page.
+ * Whether a request is the `GET` of a session's confirm page.
  *
  * @param sessionPath The session page's path.
- * @returns The predicate.
+ * @returns The predicate, over a request's method and URL.
  */
 const atConfirm =
   (sessionPath: string) =>
-  (url: URL): boolean =>
-    url.pathname === `${sessionPath}/confirm`;
+  (method: string, url: URL): boolean =>
+    method === "GET" && url.pathname === `${sessionPath}/confirm`;
 
 /**
- * Whether a URL is the session page a confirmed part submit leads to, which asks for the Status
- * that says the part is submitted.
+ * Whether a request is the `GET` of the session page a confirmed part submit leads to, which asks
+ * for the Status that says the part is submitted.
  *
  * @param sessionPath The session page's path.
- * @returns The predicate.
+ * @returns The predicate, over a request's method and URL.
  */
 const atPartSubmitted =
   (sessionPath: string) =>
-  (url: URL): boolean =>
+  (method: string, url: URL): boolean =>
+    method === "GET" &&
     url.pathname === sessionPath &&
     url.searchParams.get(partSubmittedNotice.name) === partSubmittedNotice.value;
 
@@ -360,20 +329,17 @@ const submitPartOne = Effect.fn("submitPartOne")(function* submitPartOne(
     page,
     () => slotted(page, "test-navigation", "next").click(),
     atSession(sessionPath),
-    "item 2",
   );
   yield* Effect.promise(() => slotted(page, "text-entry-interaction", "control").fill(typed));
   yield* arrive(
     page,
     () => slotted(page, "test-navigation", "submit").click(),
     atConfirm(sessionPath),
-    "the confirm page",
   );
   yield* arrive(
     page,
     () => confirmPageButton(page, "confirm").click(),
     atPartSubmitted(sessionPath),
-    "P2's first item",
   );
 
   assert.strictEqual(yield* positionOf(page), partTwoFirst);
@@ -461,12 +427,7 @@ eachEngine((it) => {
 
             yield* tabUntil(page, key, slotted(page, "test-navigation", "next"), boundOf(tree));
 
-            const second = yield* arrive(
-              page,
-              pressing(page, "Enter"),
-              atSession(sessionPath),
-              "item 2",
-            );
+            const second = yield* arrive(page, pressing(page, "Enter"), atSession(sessionPath));
 
             assert.strictEqual(yield* positionOf(page), 2, "Enter on Next moves to item 2");
 
@@ -474,9 +435,9 @@ eachEngine((it) => {
               page,
               key,
               slotted(page, "test-navigation", "previous"),
-              boundOf(second),
+              boundOf(second.tree),
             );
-            yield* arrive(page, pressing(page, "Space"), atSession(sessionPath), "item 1");
+            yield* arrive(page, pressing(page, "Space"), atSession(sessionPath));
 
             assert.strictEqual(yield* positionOf(page), 1, "Space on Previous moves to item 1");
           }),
@@ -494,41 +455,21 @@ eachEngine((it) => {
 
             yield* tabUntil(page, key, submitPart, boundOf(tree));
 
-            const confirming = yield* arrive(
-              page,
-              pressing(page, "Enter"),
-              atConfirm(sessionPath),
-              "the confirm page",
-            );
+            const confirming = yield* arrive(page, pressing(page, "Enter"), atConfirm(sessionPath));
 
-            yield* tabUntil(page, key, confirmPageButton(page, "return"), boundOf(confirming));
+            yield* tabUntil(page, key, confirmPageButton(page, "return"), boundOf(confirming.tree));
 
-            const returned = yield* arrive(
-              page,
-              pressing(page, "Enter"),
-              atSession(sessionPath),
-              "item 1 after Return",
-            );
+            const returned = yield* arrive(page, pressing(page, "Enter"), atSession(sessionPath));
 
             assert.strictEqual(yield* positionOf(page), 1, "Return goes back to item 1");
             assert.isTrue(Option.isNone(yield* statusOf(page)), "Return shows no Status");
 
-            yield* tabUntil(page, key, submitPart, boundOf(returned));
+            yield* tabUntil(page, key, submitPart, boundOf(returned.tree));
 
-            const again = yield* arrive(
-              page,
-              pressing(page, "Enter"),
-              atConfirm(sessionPath),
-              "the confirm page again",
-            );
+            const again = yield* arrive(page, pressing(page, "Enter"), atConfirm(sessionPath));
 
-            yield* tabUntil(page, key, confirmPageButton(page, "confirm"), boundOf(again));
-            yield* arrive(
-              page,
-              pressing(page, "Enter"),
-              atPartSubmitted(sessionPath),
-              "P2's first item",
-            );
+            yield* tabUntil(page, key, confirmPageButton(page, "confirm"), boundOf(again.tree));
+            yield* arrive(page, pressing(page, "Enter"), atPartSubmitted(sessionPath));
 
             assert.strictEqual(yield* positionOf(page), partTwoFirst, "Confirm submits P1");
             assert.deepStrictEqual(
@@ -620,28 +561,18 @@ eachEngine((it) => {
 
             yield* tabUntil(page, key, next, boundOf(tree));
 
-            const second = yield* arrive(
-              page,
-              pressing(page, "Enter"),
-              atSession(sessionPath),
-              "item 2",
-            );
+            const second = yield* arrive(page, pressing(page, "Enter"), atSession(sessionPath));
 
             yield* tabUntil(
               page,
               key,
               slotted(page, "text-entry-interaction", "control"),
-              boundOf(second),
+              boundOf(second.tree),
             );
             yield* Effect.promise(() => page.keyboard.type("Seven"));
-            yield* tabUntil(page, key, next, boundOf(second));
+            yield* tabUntil(page, key, next, boundOf(second.tree));
 
-            const third = yield* arrive(
-              page,
-              pressing(page, "Enter"),
-              atSession(sessionPath),
-              "item 3",
-            );
+            const third = yield* arrive(page, pressing(page, "Enter"), atSession(sessionPath));
             const boxes = yield* Effect.promise(() => choiceControls.all());
 
             assert.isAbove(boxes.length, 2, "item 3 shows its checkboxes");
@@ -649,21 +580,21 @@ eachEngine((it) => {
             const ticked = boxes.map((_, index) => index < 2);
             for (const [index, box] of boxes.entries()) {
               if (ticked[index] === true) {
-                yield* tabUntil(page, key, box, boundOf(third));
+                yield* tabUntil(page, key, box, boundOf(third.tree));
                 yield* press(page, "Space");
               }
             }
 
             assert.deepStrictEqual(yield* checkedStates(choiceControls), ticked);
 
-            yield* tabUntil(page, key, slotted(page, "test-navigation", "submit"), boundOf(third));
-
-            const confirming = yield* arrive(
+            yield* tabUntil(
               page,
-              pressing(page, "Enter"),
-              atConfirm(sessionPath),
-              "the confirm page",
+              key,
+              slotted(page, "test-navigation", "submit"),
+              boundOf(third.tree),
             );
+
+            const confirming = yield* arrive(page, pressing(page, "Enter"), atConfirm(sessionPath));
 
             assert.deepStrictEqual(
               yield* Effect.promise(() => page.getByRole("listitem").allTextContents()),
@@ -675,13 +606,13 @@ eachEngine((it) => {
               ),
             );
 
-            yield* tabUntil(page, key, confirmPageButton(page, "confirm"), boundOf(confirming));
-            yield* arrive(
+            yield* tabUntil(
               page,
-              pressing(page, "Enter"),
-              atPartSubmitted(sessionPath),
-              "P2's first item",
+              key,
+              confirmPageButton(page, "confirm"),
+              boundOf(confirming.tree),
             );
+            yield* arrive(page, pressing(page, "Enter"), atPartSubmitted(sessionPath));
 
             assert.strictEqual(yield* positionOf(page), partTwoFirst);
             assert.deepStrictEqual(

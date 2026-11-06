@@ -31,6 +31,7 @@ import {
   treeOf,
 } from "#plate/test/playground-page.ts";
 import {
+  arrive,
   fixturePlaygroundLayer,
   navigationOf,
   positionOf,
@@ -116,35 +117,6 @@ const itemRoot = slotSelector(rowFor("item", "root").slot);
 const statusRegion = slotSelector(rowFor("item", "status").slot);
 
 /**
- * Act, then wait for the page the act leads to: the answer to the request `shown` names, which
- * must be a 200, and the load of the document it answers with.
- *
- * @param page The page.
- * @param act The click that leaves the current page.
- * @param shown Whether a request is the one whose answer the page shows: its method and its URL.
- * @param what The page, for a failure message.
- * @returns The answer, once its document has loaded.
- */
-const arrive = Effect.fn("arrive")(function* arrive(
-  page: Page,
-  act: () => Promise<void>,
-  shown: (method: string, url: URL) => boolean,
-  what: string,
-) {
-  const [answer] = yield* Effect.promise(() =>
-    Promise.all([
-      page.waitForResponse((each) => shown(each.request().method(), new URL(each.url()))),
-      page.waitForEvent("load"),
-      act(),
-    ]),
-  );
-
-  assert.strictEqual(answer.status(), 200, what);
-
-  return answer;
-});
-
-/**
  * Wait for the GET of one path.
  *
  * @param pathname The path.
@@ -173,7 +145,7 @@ const step = Effect.fn("step")(function* step(
 
   assert.strictEqual(yield* count(button), 1, `the navigation holds one ${part} button`);
 
-  yield* arrive(page, () => button.click(), getOf(sessionPath), `${part} to ${sessionPath}`);
+  yield* arrive(page, () => button.click(), getOf(sessionPath));
 });
 
 /**
@@ -188,7 +160,7 @@ const submitPart = Effect.fn("submitPart")(function* submitPart(page: Page, sess
 
   assert.strictEqual(yield* count(button), 1, "the navigation holds one Submit part button");
 
-  yield* arrive(page, () => button.click(), getOf(`${sessionPath}/confirm`), "the confirm page");
+  yield* arrive(page, () => button.click(), getOf(`${sessionPath}/confirm`));
 });
 
 /**
@@ -209,7 +181,7 @@ const confirmBy = Effect.fn("confirmBy")(function* confirmBy(
 
   assert.strictEqual(yield* count(button), 1, `the confirm page holds one ${label} button`);
 
-  yield* arrive(page, () => button.click(), getOf(sessionPath), `${label} to ${sessionPath}`);
+  yield* arrive(page, () => button.click(), getOf(sessionPath));
 });
 
 /**
@@ -454,12 +426,7 @@ const openView = Effect.fn("openView")(function* openView(
 
   assert.strictEqual(yield* count(link), 1, `the summary links item ${String(n)}'s ${mode}`);
 
-  yield* arrive(
-    page,
-    () => link.click(),
-    getOf(`${sessionPath}/${mode}/${String(n)}`),
-    `item ${String(n)}'s ${mode}`,
-  );
+  yield* arrive(page, () => link.click(), getOf(`${sessionPath}/${mode}/${String(n)}`));
 });
 
 /**
@@ -711,14 +678,9 @@ eachEngine((it) => {
               page,
               () => page.getByRole("button", { exact: true, name: nameOf(submit, tree) }).click(),
               (method, url) => method === "POST" && url.pathname === hostPath,
-              "the host's answer",
             );
 
-            assert.notInclude(
-              (yield* bodyOf(answered)).toLowerCase(),
-              "<script",
-              "the host's answer",
-            );
+            assert.notInclude(answered.html.toLowerCase(), "<script", "the host's answer");
 
             const status = yield* statusOf(page);
 
