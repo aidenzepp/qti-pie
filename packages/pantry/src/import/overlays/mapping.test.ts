@@ -8,14 +8,17 @@
  */
 import { lexicalForm, pg } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
-import { exhaust } from "@grizzle/testing/explore";
-import { requiredInSpace } from "@grizzle/testing/features";
-import { array, element } from "@grizzle/testing/gen";
+import { drawn, exhaust, explore } from "@grizzle/testing/explore";
+import { required, requiredInSpace } from "@grizzle/testing/features";
+import { array, element, int } from "@grizzle/testing/gen";
 import type { Gen } from "@grizzle/testing/gen";
+import { notesOnly } from "@grizzle/testing/sense";
+import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Option } from "effect";
-import { integerValueOf, rowsOf } from "#pantry/import/overlays/mapping.ts";
+import { floatValueOf, integerValueOf, rowsOf } from "#pantry/import/overlays/mapping.ts";
 import type { MappingIds } from "#pantry/import/overlays/mapping.ts";
+import { floatKeyPattern } from "#pantry/qti/mapping.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { closedName } from "#pantry/model/xdm.ts";
 import type {
@@ -637,6 +640,169 @@ describe("import/overlays/mapping.ts, lookup values", { timeout: searchTimeout }
                   ).keys(),
                 ],
                 [ids.idOf(3)],
+              );
+            }),
+        ),
+      ),
+  );
+});
+
+/**
+ * The number of bits of a positive integer.
+ *
+ * @param n - The integer.
+ * @returns Its bit length.
+ */
+const bitLength = (n: bigint): number => n.toString(2).length;
+
+/**
+ * Read a decimal of grizzle's double form as the nearest double, ties to even, in exact integer
+ * arithmetic: IEEE 754's roundTiesToEven of the decimal's value, which PostgreSQL's `strtod`
+ * computes, written as a second implementation that shares nothing with JavaScript's `Number`.
+ *
+ * @param key - A key of {@link floatKeyPattern} that names no infinity and no NaN.
+ * @returns Its double.
+ */
+const exactDouble = (key: string): number => {
+  const groups =
+    /^(?<sign>[+-]?)(?<whole>[0-9]*)(?:\.(?<fraction>[0-9]*))?(?:[eE](?<exponent>[+-]?[0-9]+))?$/u.exec(
+      key,
+    )?.groups;
+  const negative = groups?.["sign"] === "-";
+  const fraction = groups?.["fraction"] ?? "";
+  const digits = `${groups?.["whole"] ?? ""}${fraction}`.replace(/^0+/u, "");
+  const scale = Number(groups?.["exponent"] ?? "0") - fraction.length;
+  if (digits === "") {
+    return negative ? -0 : 0;
+  }
+
+  const numerator = BigInt(digits) * (scale >= 0 ? 10n ** BigInt(scale) : 1n);
+  const denominator = scale >= 0 ? 1n : 10n ** BigInt(-scale);
+  let exponent = Math.max(bitLength(numerator) - bitLength(denominator) - 53, -1074);
+  const quotientAt = (at: number) =>
+    at >= 0
+      ? { d: denominator * 2n ** BigInt(at), n: numerator }
+      : { d: denominator, n: numerator * 2n ** BigInt(-at) };
+  while (exponent > -1074 && quotientAt(exponent).n < quotientAt(exponent).d * 2n ** 52n) {
+    exponent -= 1;
+  }
+
+  while (quotientAt(exponent).n >= quotientAt(exponent).d * 2n ** 53n) {
+    exponent += 1;
+  }
+
+  const { d, n } = quotientAt(exponent);
+  let mantissa = n / d;
+  const twice = (n - mantissa * d) * 2n;
+  if (twice > d || (twice === d && mantissa % 2n === 1n)) {
+    mantissa += 1n;
+  }
+
+  const magnitude = Number(mantissa) * 2 ** exponent;
+
+  return negative ? -magnitude : magnitude;
+};
+
+/**
+ * Decimals of grizzle's double form where a rounding other than to the nearest, ties to even,
+ * shows: 2^53 + 1, 2^53 + 3 and 2^54 + 2, each exactly halfway between two doubles; the form's
+ * largest decimal; and two subnormals, the form's least positive decimal among them.
+ */
+const halfwayKeys = [
+  "900719925474099.3e1",
+  "900719925474099.5e1",
+  "180143985094819.86e2",
+  "999999999999999.999999999999999e293",
+  ".000000000000022e-293",
+  ".000000000000001e-293",
+] as const;
+
+/**
+ * A float key in grizzle's double form: an optional sign, up to 15 significant digits before the
+ * point and up to 15 after it, each with a few padding zeros, and an optional exponent of at most
+ * 293; one of the kept halfway decimals; or one of the three names.
+ */
+const floatKeys: Gen<string> = (source) => {
+  const digitsOf = (count: number) =>
+    Array.from({ length: count }, () => String(source.draw(int(0, 9)))).join("");
+  const form = source.draw(element(["decimal", "halfway", "INF", "-INF", "NaN"] as const));
+  if (form === "halfway") {
+    return source.draw(element(halfwayKeys));
+  }
+
+  if (form !== "decimal") {
+    return form;
+  }
+
+  const sign = source.draw(element(["", "+", "-"] as const));
+  const padding = "0".repeat(source.draw(int(0, 2)));
+  const wholeCount = source.draw(int(0, 15));
+  const whole =
+    wholeCount === 0 ? "0" : `${String(source.draw(int(1, 9)))}${digitsOf(wholeCount - 1)}`;
+  const fractionCount = source.draw(int(0, 15));
+  const fraction =
+    fractionCount === 0
+      ? source.draw(element(["", "."] as const))
+      : `.${digitsOf(fractionCount)}${fractionCount === 15 ? "0".repeat(source.draw(int(0, 2))) : ""}`;
+  const exponent = source.draw(element([false, true] as const))
+    ? `${source.draw(element(["e", "E"] as const))}${source.draw(element(["", "+", "-"] as const))}${String(source.draw(int(0, 293)))}`
+    : "";
+
+  return `${sign}${padding}${whole}${fraction}${exponent}`;
+};
+
+describe("import/overlays/mapping.ts, a float key's double", { timeout: searchTimeout }, () => {
+  it.effect(
+    "reads every float key of grizzle's form as the double nearest its decimal, ties to even, as PostgreSQL's cast does",
+    (ctx) =>
+      // Oracle: a second implementation, IEEE 754 roundTiesToEven of the key's exact rational
+      // value in BigInt arithmetic, with subnormals; the three names by IEEE 754's infinities and
+      // NaN. Bound: 2,000 keys of up to 15 digits on each side of the point and exponents up to
+      // 293, among them the halfway decimals.
+      searched(
+        ctx,
+        explore(
+          {
+            caseHang: Duration.seconds(10),
+            concurrency: 1,
+            coverage: required<"decimal" | "named" | "subnormal">(["decimal", "named"], {
+              cases: 200,
+              sense: notesOnly,
+            }),
+            draw: drawn(floatKeys),
+            kept: [],
+            literal: JSON.stringify,
+            oracle: { kind: "second-implementation", name: "roundTiesToEven in BigInt arithmetic" },
+            runs: 2000,
+            shrink: completeShrink,
+            steerEvery: 16,
+            suite: "pantry/import/overlays-mapping-float",
+          },
+          (key, c) =>
+            Effect.sync(() => {
+              assert.match(key, new RegExp(floatKeyPattern, "u"));
+              if (key === "INF" || key === "-INF" || key === "NaN") {
+                c.note("named");
+                assert.isTrue(
+                  Object.is(
+                    floatValueOf(key),
+                    {
+                      "-INF": Number.NEGATIVE_INFINITY,
+                      INF: Number.POSITIVE_INFINITY,
+                      NaN: Number.NaN,
+                    }[key],
+                  ),
+                  key,
+                );
+
+                return;
+              }
+
+              const exact = exactDouble(key);
+              c.note(exact !== 0 && Math.abs(exact) < 2 ** -1022 ? "subnormal" : "decimal");
+              assert.isTrue(
+                Object.is(floatValueOf(key), exact),
+                `${key}: ${String(floatValueOf(key))} against ${String(exact)}`,
               );
             }),
         ),
