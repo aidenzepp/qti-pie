@@ -1204,8 +1204,9 @@ exports packed identical tarballs; the testing tarball is unchanged, and the shi
 constant now always one hex literal. Then it moved to `fce1088` (`fce10882b08165ebb44125fc0c9ddac6572c6495`, its repin
 `8439df91`), where a key's text budget counts the null bitmap: every B-tree entry is sized from the data offset after
 one (the engine's `src/schema/representability.ts:793`). Two exports packed identical tarballs, and the testing tarball
-and the skill are unchanged. The `Qti` schema does not yet compile at this pin, for a reverse-index refusal grizzle
-fixes in its next commit (the repin's message).
+and the skill are unchanged. The `Qti` schema does not yet compile at this pin, for a containment's reverse index that
+refuses an unbounded source column, which grizzle's lane K is fixing ("A containment's reverse index refuses a source
+column of no byte bound", below).
 
 ### What the pin resolves for qti-pie
 
@@ -1374,6 +1375,65 @@ fixes in its next commit (the repin's message).
   plain and pattern-refined text in containments, and N comes from `keyTextBytes(fields)`. The reproduction above
   becomes one of grizzle's kept cases. Nothing to file. Until it lands, `keyText` stays the 646-code-point pattern held
   to `keyTextBytes` (`e0fcddbf`).
+
+### A containment's reverse index refuses a source column of no byte bound (defect, fix in progress in grizzle's lane K)
+
+At grizzle `f66c05b` and every pin after it, `a2ff5eb` and `fce1088` among them, the Qti schema does not compile. The
+first refusal comes from the reverse B-tree index that grizzle plans over a containment's source columns:
+
+```
+grizzle: refused at stage generate (schema Qti): the schema does not compile: UnrepresentableKey at contained
+Attribute(node, name, lexical, document, kind) selected in Reference(node, name, lexical, document, kind) at
+Attribute.contained (…/src/qti/package.ts:699:3): the index of Attribute over the columns the containment … references
+from: field lexical …
+```
+
+When that law is set aside, the next is `src/qti/metadata.ts:892`, the containment of `stringLanguageAttributes`'s
+`lexical` into `LomStringLanguage.language`. Both read `Attribute.lexical`, typed `Lexical = str.regex(charsPattern)`
+(`src/qti/attributes.ts:148`, field at `:213`). That is an attribute's lexical form as written, which no pattern
+bounds. The target columns are bounded: `Reference.lexical` is `keyText`. So the containment's foreign key and the
+target's UNIQUE are both representable, and only the source's index is refused.
+
+- **Checked at:** grizzle `fce1088` (`fce10882b08165ebb44125fc0c9ddac6572c6495`, the pin at qti-pie HEAD `018fe65b`), in
+  the clone at `~/Documents/grizzle`. `fce1088` is its newest `main`, at 17:11 on 2026-11-06.
+- **Cause:** `#scalarContainment`, `packages/engine/src/laws/model/plan.ts:1027-1074` at `fce1088`.
+  - It plans the containment's foreign key and the target's UNIQUE (`#targetUnique`, `:1081-1100`).
+  - Then it plans a `ReverseIndex` over every source column (`sourceColumns`, `:1063-1072`), whose entry it proves by
+    `plannedEntry` (`:184-203`).
+  - `plannedEntry` refuses a column whose datum has no byte bound with `UnrepresentableKey { kind: "unboundedText" }`
+    (`:196-198`; the sentence is `core/causes.ts:338`).
+  - The PERIOD coverage's reverse index takes the same entry and the same refusal (`plan.ts:1229-1238`).
+  - The entry check on the reverse index is new at `f66c05b`. At `64f0427` the index carried no `plannedEntry`
+    (`git show 64f0427:…/plan.ts` has no `references from` entry), and the reproduction's case generates there.
+- **Reproduction:** `~/.cache/gr8des/integration/grizzle-repros/reverse-index/`. It needs nothing of qti-pie: `pack/`
+  holds the tarballs packed from `fce1088`, byte-identical to qti-pie's `vendor/` (sha256 `b0be260a…` and
+  `61a5da98…`). `run.sh` runs `grizzle generate` and `grizzle check` on three schemas. Its output is in `run.out`,
+  verbatim:
+  - **case:** `Attr { id: uuid, value: str.regex("^[a-z]*$") }` and `Ref { id: uuid, value: str.regex("^[a-z]{0,64}$")
+    }`, with `contained(on(Attr, "id", "value"), on(Ref, "id", "value"))`. It is refused at generate and at check:
+    `UnrepresentableKey at contained Attr(id, value) in Ref(id, value) at Attr.contained (…/case.ts:9:50): the index of
+    Attr over the columns the containment of Attr(id, value) in Ref(id, value) references from: field value is text
+    whose pattern proves no byte bound; a bounded anchored pattern, or a contract bounding its charLength or
+    octetLength, does` (exit 1 each).
+  - **control:** the same containment with `Attr.value` bounded as `Ref.value` is, `str.regex("^[a-z]{0,64}$")`. It
+    generates, and check prints `Repro: ok (1 migration, snapshot d25ded70…)` (exit 0).
+  - **bounded-prefix control:** the unbounded column with the containment over `id` alone. It generates and checks
+    (exit 0).
+  - The same case at `64f0427` generates (exit 0).
+- **Classification:** a grizzle defect, an overreach of the D3 fix. The ruling, from the grizzle session (grizzle-c5)
+  in its reply to the Mind at 17:15 on 2026-11-06:
+  - an index's width never refuses a containment;
+  - the reverse B-tree goes over the longest leading run of bounded source columns that fits one entry;
+  - with no such run, the index is a hash index on one column;
+  - PERIOD coverage gets the same rule, and the GiST bound is fixed;
+  - only the target's UNIQUE can refuse.
+- **Status:** grizzle's lane K is fixing it before beta.1, so nothing is filed. The fixing hash is pending; N2's
+  repin B records it.
+- **qti-pie:** no workaround. `Attribute.lexical` stays unbounded, as an attribute's lexical form is. Until the fix is
+  pinned:
+  - no snapshot can be generated at HEAD and no layer builds;
+  - the workload guard's two free tests (`src/qti/logins.test.ts` and `src/test/gen/assembly.compile.test.ts`,
+    `bbe5f4ca` and `d11c39f1`) are red, with `schema Qti is not the one snapshot.json records`.
 
 ## A role lacked EXECUTE on what its CHECKs cast to (grizzle defect, fixed in `f66c05b`)
 
