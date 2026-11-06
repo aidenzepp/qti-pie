@@ -762,6 +762,35 @@ describe("package/open.ts", () => {
         }),
     );
 
+    it.effect(
+      "files leaves out every file a QTI resource with an absolute href lists, a local document and an image among them, while a QTI resource with a package href keeps the files it lists besides its document",
+      () =>
+        Effect.gen(function* absoluteHref() {
+          const remote = "https://example.org/items/r.xml";
+          const verdict = yield* openPackage(
+            location,
+            packageOf({
+              [manifestFile]: manifestXml(
+                `<resource identifier="R" type="imsqti_item_xmlv3p0" href="${remote}"><file href="${remote}"/><file href="items/r.xml"/><file href="items/r.png"/></resource>`,
+                '<resource identifier="A" type="imsqti_item_xmlv3p0" href="items/a.xml"><file href="items/a.xml"/><file href="items/a.png"/></resource>',
+              ),
+              "items/a.png": "PNG",
+              "items/a.xml": itemXml("a", "SCORE"),
+              "items/r.png": "PNG",
+              "items/r.xml": itemXml("r", "SCORE"),
+            }),
+          );
+          const accepted = acceptedOf(verdict);
+
+          assert.isTrue(Option.isNone(resourceOf(verdict, "R").path));
+          assert.deepStrictEqual(
+            [...accepted.items.keys()],
+            [fileLocation(location, "items/a.xml")],
+          );
+          assert.deepStrictEqual([...accepted.files], ["items/a.png"]);
+        }),
+    );
+
     it.effect("refuses a hand-built map holding ../x as package-path-outside", () =>
       Effect.gen(function* outside() {
         const verdict = yield* openPackage(

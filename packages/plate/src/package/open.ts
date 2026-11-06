@@ -91,18 +91,20 @@ export interface PackageContents {
    * The files a host may serve from the package, by their paths from its root: every file the
    * manifest lists by a path inside the package, except what each resource of a QTI type (an item,
    * a test, a section, a stimulus, outcome declarations, response processing, a response-processing
-   * template and a fragment) withholds. Such a resource with an `href` withholds its document, the
-   * file its `href` names; one without an `href` withholds every file it lists, since nothing tells
-   * which of them is its document. The manifest is here only when a resource lists it.
+   * template and a fragment) withholds. Such a resource whose `href` names a file inside the
+   * package withholds that file, its document; one without an `href`, or with an absolute one
+   * (reading 35), withholds every file it lists, since nothing tells which of them is its document.
+   * The manifest is here only when a resource lists it.
    *
    * A QTI document holds what a candidate must not read, an item's correct responses and mappings
    * and the base values of response processing among them, whatever its file is named, so it is
    * left out by the resource that names it, not by its extension; a host reads those documents
    * through the package and serves only what `render` writes. A QTI document listed only by a
-   * resource of another type, or as a further file of a QTI resource with an `href`, stays: no
-   * resource names it as a QTI document, and plate reads no other file to find one. What stays is
-   * otherwise what an item embeds, its images, media, stylesheets and package documents, which a
-   * host serves as live documents (from another origin or under the CSP `sandbox` directive).
+   * resource of another type, or as a further file of a QTI resource whose `href` names a file
+   * inside the package, stays: no resource names it as a QTI document, and plate reads no other
+   * file to find one. What stays is otherwise what an item embeds, its images, media, stylesheets
+   * and package documents, which a host serves as live documents (from another origin or under the
+   * CSP `sandbox` directive).
    */
   readonly files: ReadonlySet<string>;
   /**
@@ -374,17 +376,17 @@ const documentPath = (resource: ManifestResource): Option.Option<string> =>
 
 /**
  * Give the paths of the files a resource of a QTI type withholds from `files`: the document its
- * `href` names, or, when it has no `href`, every file it lists, since nothing tells which of them
- * is its document. A resource with an absolute `href` withholds nothing: its document is outside
- * the package (reading 35).
+ * `href` names inside the package, or, when it has no `href` or an absolute one (reading 35),
+ * every file it lists, since nothing tells which of them is its document.
  *
  * @param resource The resource, of a QTI type.
  * @returns The withheld paths.
  */
 const withheldFiles = (resource: ManifestResource): readonly string[] =>
-  Option.isNone(resource.href)
-    ? resource.files.flatMap((file) => Option.toArray(file.path))
-    : Option.toArray(documentPath(resource));
+  Option.match(documentPath(resource), {
+    onNone: () => resource.files.flatMap((file) => Option.toArray(file.path)),
+    onSome: (path) => [path],
+  });
 
 /**
  * Resolve a reference a document makes against the document's own path through
