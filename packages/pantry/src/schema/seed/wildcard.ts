@@ -111,11 +111,13 @@ const locals = (
 ): readonly GlobalRow[] => names.map((local) => ({ local, namespace, set }));
 
 /**
- * The element wildcard hosts: 42 kinds the model has whose type carries an `xs:any`, then
+ * The element wildcard hosts: 44 kinds the model has whose type carries an `xs:any`, then
  * `foreign`, which admits any namespace and judges none of it.
  */
 export const wildcardHost: readonly WildcardHostRow[] = [
   { host: "qti-custom-operator", policy: "other", process: "lax", target: namespaces.asi },
+  { host: "qti-selection", policy: "other", process: "lax", target: namespaces.asi },
+  { host: "qti-ordering", policy: "other", process: "lax", target: namespaces.asi },
   { host: "cp:metadata.file", policy: "other", process: "strict", target: namespaces.cp },
   { host: "lom:lom", policy: "other", process: "lax", target: namespaces.lom },
   { host: "lom:general", policy: "other", process: "lax", target: namespaces.lom },
@@ -168,7 +170,7 @@ export const wildcardHost: readonly WildcardHostRow[] = [
 /**
  * The attribute wildcard hosts: 65 kinds the model has whose type carries a lax
  * `xs:anyAttribute`, then `foreign`. The strict attribute wildcards of the selection and ordering
- * classes, and the skipped ones of MathML, are other units'.
+ * classes are `strictAttributeHosts`, and the skipped ones of MathML are another unit's.
  */
 export const attributeWildcard: readonly WildcardHostRow[] = [
   { host: "qti-custom-operator", policy: "other", process: "lax", target: namespaces.asi },
@@ -255,10 +257,18 @@ export const attributeWildcard: readonly WildcardHostRow[] = [
  * the MathML namespace, the last block: the MathML Recommendation, not any XSD, excludes `m:*`
  * from foreign content (reading 2, decision 110), and a MathML element with a kind is never
  * stored as `foreign`.
+ *
+ * `qti-ordering` holds no row for the ASI namespace: the information model (Table 5.98.3) lets its
+ * extension elements reuse QTI ASI tags, and the information model wins over the XSD's `##other`
+ * (decision 305). `qti-selection`'s extension slot (Table 5.129.4) says "must be new tags", so it
+ * keeps the row.
  */
 export const wildcardExclusion: readonly HostNamespaceRow[] = [
   { host: "qti-custom-operator", namespace: namespaces.asi },
   { host: "qti-custom-operator", namespace: "" },
+  { host: "qti-selection", namespace: namespaces.asi },
+  { host: "qti-selection", namespace: "" },
+  { host: "qti-ordering", namespace: "" },
   { host: "cp:metadata.file", namespace: namespaces.cp },
   { host: "cp:metadata.file", namespace: "" },
   { host: "lom:lom", namespace: namespaces.lom },
@@ -340,6 +350,8 @@ export const wildcardExclusion: readonly HostNamespaceRow[] = [
   { host: "xi:include", namespace: namespaces.xi },
   { host: "xi:fallback", namespace: namespaces.xi },
   { host: "qti-custom-operator", namespace: namespaces.mathml },
+  { host: "qti-selection", namespace: namespaces.mathml },
+  { host: "qti-ordering", namespace: namespaces.mathml },
   { host: "cp:metadata.file", namespace: namespaces.mathml },
   { host: "lom:lom", namespace: namespaces.mathml },
   { host: "lom:general", namespace: namespaces.mathml },
@@ -985,6 +997,14 @@ export const rootSchemaSet: readonly RootSchemaSetRow[] = [
 ];
 
 /**
+ * The kinds whose `##other` attribute wildcard is `strict`: `qti-selection` and `qti-ordering`.
+ * They type the declared global attributes of their set and admit no foreign attribute, so they
+ * get the typed `xml:` rows of `wildcardAttributeAdmission` and no `attributeWildcard` row
+ * (spec 4.5).
+ */
+export const strictAttributeHosts: readonly NodeKindHandle[] = ["qti-selection", "qti-ordering"];
+
+/**
  * The schema sets an attribute wildcard host can appear in: `qti-custom-operator` only in the ASI
  * documents, the `lom:` hosts in a LOM document and in a manifest's embedded LOM, `xi:include` and
  * `xi:fallback` in the ASI documents and in the foreign content of a manifest, and `foreign` in all
@@ -1041,22 +1061,26 @@ const typedNames: readonly {
  * every host that can appear in a manifest: the `lom:` hosts, `xi:include`, `xi:fallback` and
  * `foreign`. `qti-custom-operator` appears only in the ASI documents, where `xlink` is no declared
  * name, so it holds the four `xml` rows alone and a qualified name its policy refuses (`asi:foo`)
- * stays refused. The `xsi` names get no row (R1-7), whatever set declares them.
+ * stays refused. The `strictAttributeHosts` get the same rows by the same filter: they have no
+ * `attributeExclusion` row, so each holds the four `xml` rows of the ASI set. The `xsi` names get
+ * no row (R1-7), whatever set declares them.
  */
-export const wildcardAttributeAdmission: readonly WildcardAttributeAdmissionRow[] =
-  attributeWildcard.flatMap(({ host }) => {
-    const refused = new Set(
-      attributeExclusion.filter((row) => row.host === host).map((row) => row.namespace),
-    );
-    const sets = setsOf(host);
+export const wildcardAttributeAdmission: readonly WildcardAttributeAdmissionRow[] = [
+  ...attributeWildcard.map(({ host }) => host),
+  ...strictAttributeHosts,
+].flatMap((host) => {
+  const refused = new Set(
+    attributeExclusion.filter((row) => row.host === host).map((row) => row.namespace),
+  );
+  const sets = setsOf(host);
 
-    return typedNames
-      .filter(
-        ({ local, namespace }) =>
-          !refused.has(namespace) &&
-          globalAttribute.some(
-            (row) => row.namespace === namespace && row.local === local && sets.includes(row.set),
-          ),
-      )
-      .map(({ attribute }) => ({ attribute, kind: host }));
-  });
+  return typedNames
+    .filter(
+      ({ local, namespace }) =>
+        !refused.has(namespace) &&
+        globalAttribute.some(
+          (row) => row.namespace === namespace && row.local === local && sets.includes(row.set),
+        ),
+    )
+    .map(({ attribute }) => ({ attribute, kind: host }));
+});

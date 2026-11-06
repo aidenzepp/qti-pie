@@ -7,7 +7,7 @@ import { expressionKinds } from "#pantry/schema/kinds/asi.ts";
 import * as test from "#pantry/schema/kinds/test.ts";
 import * as node from "#pantry/schema/node.ts";
 import { nodeArms } from "#pantry/schema/qti.ts";
-import { admission, registries } from "#pantry/schema/seed/admission.ts";
+import { explicitAdmission, registries } from "#pantry/schema/seed/admission.ts";
 
 const namespace = "http://www.imsglobal.org/xsd/imsqtiasi_v3p0";
 
@@ -299,7 +299,7 @@ const expected: Readonly<Record<(typeof handles)[number], readonly string[]>> = 
 };
 
 const childrenOf = (version: string, parent: string): readonly string[] =>
-  admission
+  explicitAdmission
     .filter((row) => row.version === version && row.parent === parent)
     .map((row) => row.child)
     .toSorted();

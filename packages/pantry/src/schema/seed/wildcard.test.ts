@@ -44,6 +44,11 @@ const home = Effect.runSync(Config.String("HOME").pipe(Config.withDefault("")));
  */
 const cacheDirectory = `${home}/.cache/gr8des/qti3/xsd`;
 
+/**
+ * The QTI 3.0 information model document in the same cache.
+ */
+const informationModel = `${home}/.cache/gr8des/qti3/qti3-info.html`;
+
 const XS = "http://www.w3.org/2001/XMLSchema";
 
 const XMLNS = "http://www.w3.org/2000/xmlns/";
@@ -91,8 +96,6 @@ const rootSets = {
  * comparison then requires the row. A host on the list has no row until then.
  */
 const pendingHosts: readonly (readonly [string, string, string])[] = [
-  ["http://www.imsglobal.org/xsd/imsqtiasi_v3p0", "qti-selection", "J5"],
-  ["http://www.imsglobal.org/xsd/imsqtiasi_v3p0", "qti-ordering", "J5"],
   ["http://www.imsglobal.org/xsd/imsqtiasi_v3p0", "qti-companion-materials-info", "J9"],
   ["http://www.imsglobal.org/xsd/imsqtiasi_v3p0", "qti-custom-interaction", "J10"],
   ["http://www.imsglobal.org/xsd/imsqtiasi_v3p0", "template", "J10"],
@@ -898,7 +901,8 @@ const derivedElementRows = () =>
 /**
  * The attribute wildcard rows the documents give the kinds the model has: the lax attribute
  * wildcards that are not on the pending-join list. A strict or skipped attribute wildcard is
- * always a pending join's (strict attribute hosts get typed `xml:` rows and no row here).
+ * a pending join's or a strict attribute host's (`seed.strictAttributeHosts`), which gets typed
+ * `xml:` rows and no row here.
  *
  * @returns The rows.
  */
@@ -909,9 +913,10 @@ const derivedAttributeRows = () =>
     }
 
     if (host.attributes.process !== "lax") {
-      assert.isDefined(
-        pendingOf(host),
-        `${host.namespace}:${host.local} has a ${host.attributes.process} attribute wildcard and no pending join`,
+      assert.isTrue(
+        pendingOf(host) !== undefined ||
+          (host.kind !== undefined && seed.strictAttributeHosts.includes(host.kind)),
+        `${host.namespace}:${host.local} has a ${host.attributes.process} attribute wildcard and is neither a pending join nor a strict attribute host`,
       );
     }
 
@@ -957,6 +962,19 @@ const sameRows = (label: string, actual: readonly string[], expected: readonly s
 
 const hostKey = (row: seed.WildcardHostRow) =>
   [row.host, row.policy, row.process, row.target].join("|");
+
+/**
+ * The exclusions the XSD's `##other` makes and the information model lifts (decision 305: the
+ * information model wins over the XSD, and what the standard does not ban is not refused). The
+ * Ordering class's `extensions` attribute (Table 5.98.3) says its child tags "may be new tags and
+ * reused QTI ASI tags", so `qti-ordering` does not exclude the ASI namespace. The Selection class's
+ * (Table 5.129.4) says its child tags "must be new tags i.e. not reused QTI ASI tags", so
+ * `qti-selection` keeps the exclusion.
+ */
+const informationModelAccepts: readonly string[] = [`qti-ordering|${seed.namespaces.asi}`];
+
+const excluded = (host: string, namespace: string) =>
+  seed.wildcardExclusion.some((row) => row.host === host && row.namespace === namespace);
 
 const pairKey = (row: seed.HostNamespaceRow) => `${row.host}|${row.namespace}`;
 
@@ -1294,9 +1312,9 @@ describe.skipIf(!existsSync(cacheDirectory))(
 
     it("wildcardExclusion is the policy rules of 4.3, and the MathML Recommendation's rows named apart", () => {
       const hostRows = [...derivedElementRows(), foreignRow];
-      const fromXsd = hostRows.flatMap((row) =>
-        excludedBy(row).map((namespace) => `${row.host}|${namespace}`),
-      );
+      const fromXsd = hostRows
+        .flatMap((row) => excludedBy(row).map((namespace) => `${row.host}|${namespace}`))
+        .filter((row) => !informationModelAccepts.includes(row));
       const fromRecommendation = hostRows
         .filter((row) => row.target !== MATHML)
         .map((row) => `${row.host}|${MATHML}`);
@@ -1313,6 +1331,38 @@ describe.skipIf(!existsSync(cacheDirectory))(
         fromRecommendation,
       );
     });
+
+    it("qti-ordering accepts QTI-named extension elements and qti-selection refuses them, by the information model", () => {
+      assert.isFalse(excluded("qti-ordering", seed.namespaces.asi));
+      assert.isTrue(excluded("qti-ordering", ""));
+      assert.isTrue(excluded("qti-ordering", seed.namespaces.mathml));
+      assert.isTrue(excluded("qti-selection", seed.namespaces.asi));
+      assert.isTrue(excluded("qti-selection", ""));
+      assert.isTrue(excluded("qti-selection", seed.namespaces.mathml));
+      assert.deepStrictEqual(informationModelAccepts, [`qti-ordering|${seed.namespaces.asi}`]);
+    });
+
+    it.skipIf(!existsSync(informationModel))(
+      "the information model's wording for the Ordering and Selection extension slots",
+      () => {
+        const text = readFileSync(informationModel, "utf-8")
+          .replaceAll(/<(?<tag>script|style)[\s\S]*?<\/\k<tag>>/gu, "")
+          .replaceAll(/<[^>]+>/gu, " ")
+          .replaceAll(/\s+/gu, " ");
+        const slot = (name: string) => {
+          const start = text.lastIndexOf(
+            `Description of the "extensions" attribute for the "${name}" class`,
+          );
+
+          assert.isTrue(start !== -1, `${name}'s extensions table is in the information model`);
+
+          return text.slice(start, start + 700);
+        };
+
+        assert.include(slot("Ordering"), "may be new tags and reused QTI ASI tags");
+        assert.include(slot("Selection"), "must be new tags i.e. not reused QTI ASI tags");
+      },
+    );
 
     it("attributeExclusion is xmlns for every attribute wildcard host, and no namespace and the target for other", () => {
       const hostRows = [...derivedAttributeRows(), foreignRow];
@@ -1352,7 +1402,11 @@ describe.skipIf(!existsSync(cacheDirectory))(
         refused.set(row.host, new Set([...(refused.get(row.host) ?? []), row.namespace]));
       }
 
-      const kinds = [...derivedAttributeRows().map((row) => row.host), "foreign"];
+      const kinds = [
+        ...derivedAttributeRows().map((row) => row.host),
+        ...seed.strictAttributeHosts,
+        "foreign",
+      ];
       const expected = kinds.flatMap((kind) => [
         ...new Set(
           setsOf(kind).flatMap((set) =>
@@ -1388,6 +1442,32 @@ describe.skipIf(!existsSync(cacheDirectory))(
       assert.isFalse(
         seed.wildcardAttributeAdmission.some((row) => row.attribute.startsWith("xsi:")),
       );
+    });
+
+    it("strictAttributeHosts is every derived strict attribute wildcard host the model has, with the four xml rows and no wildcard row", () => {
+      const strict = derived()
+        .hosts.filter((host) => host.attributes?.process === "strict" && host.kind !== undefined)
+        .map((host) => host.kind ?? "");
+
+      sameRows("strictAttributeHosts", [...seed.strictAttributeHosts], strict);
+
+      for (const kind of seed.strictAttributeHosts) {
+        assert.isFalse(
+          seed.attributeWildcard.some((row) => row.host === kind),
+          `${kind} has an attributeWildcard row`,
+        );
+        assert.isFalse(
+          seed.attributeExclusion.some((row) => row.host === kind),
+          `${kind} has an attributeExclusion row`,
+        );
+        assert.deepStrictEqual(
+          seed.wildcardAttributeAdmission
+            .filter((row) => row.kind === kind)
+            .map((row) => row.attribute)
+            .toSorted(),
+          ["xml:base", "xml:id", "xml:lang", "xml:space"],
+        );
+      }
     });
 
     it("globalElement is each set's declared elements less the opaque globals", () => {
