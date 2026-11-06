@@ -787,7 +787,7 @@ describe("ledger/report.ts", () => {
       const built = yield* fixtureLedger;
 
       assert.deepStrictEqual(built.headlines, {
-        advanced: { covered: 1, excluded: 0, limited: 0, "unsupported-with-notice": 29 },
+        advanced: { covered: 1, excluded: 0, limited: 1, "unsupported-with-notice": 28 },
         basic: { covered: 6, excluded: 0, limited: 1, "unsupported-with-notice": 11 },
         elective: { covered: 0, excluded: 2, limited: 0, "unsupported-with-notice": 88 },
         elevated: { covered: 0, excluded: 0, limited: 0, "unsupported-with-notice": 12 },
