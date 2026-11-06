@@ -20,6 +20,8 @@ import type {
   BodyNode,
   ChoiceInteraction,
   ExtendedTextInteraction,
+  Interaction,
+  SimpleChoice,
   TextEntryInteraction,
 } from "#plate/model/item.ts";
 import { modelledBaseTypes, modelledCardinalities } from "#plate/model/values.ts";
@@ -83,6 +85,26 @@ interface ChoiceInteractionJson {
 }
 
 /**
+ * An Inline Choice in the JSON form: `minChoices` as decimal digits, and each `Option` an optional
+ * key, its Label among them.
+ */
+interface InlineChoiceInteractionJson {
+  readonly ariaLabel?: string;
+  readonly ariaLabelledby?: string;
+  readonly choices: readonly SimpleChoiceJson[];
+  readonly class: string;
+  readonly kind: "inline-choice";
+  readonly label?: readonly BodyNodeJson[];
+  readonly messages: { readonly min?: string };
+  readonly minChoices: string;
+  readonly path: string;
+  readonly placeholder?: string;
+  readonly required: boolean;
+  readonly response: string;
+  readonly shuffle: boolean;
+}
+
+/**
  * A Text Entry in the JSON form: `expectedLength` as decimal digits, and each `Option` an optional
  * key.
  */
@@ -132,13 +154,14 @@ type BodyNodeJson =
   | BodyElementJson
   | BodyTextJson
   | ChoiceInteractionJson
+  | InlineChoiceInteractionJson
   | TextEntryInteractionJson
   | ExtendedTextInteractionJson
   | UnsupportedJson;
 
 /**
- * The body's recursive reference: an element's children, a Prompt and a choice's content are body
- * nodes again.
+ * The body's recursive reference: an element's children, a Prompt, a Label and a choice's content
+ * are body nodes again.
  */
 const BodyNodes = Schema.Array(
   // oxlint-disable-next-line eslint/no-use-before-define -- the body is recursive; the suspended reference is read only after `BodyNodeSchema` is defined.
@@ -171,6 +194,14 @@ const Count = Schema.BigIntFromString.check(Schema.isGreaterThanOrEqualToBigInt(
 const OptionalCount = Schema.OptionFromOptionalKey(Count);
 
 /**
+ * The choices of a Choice or an Inline Choice, each with its content, `fixed` and identifier, in
+ * document order.
+ */
+const Choices = Schema.Array(
+  Schema.Struct({ content: BodyNodes, fixed: Schema.Boolean, identifier: Schema.String }),
+);
+
+/**
  * The fields a Text Entry and an Extended Text share, as `TextEntryInteraction` declares them.
  */
 const textControlFields = {
@@ -188,8 +219,8 @@ const textControlFields = {
 };
 
 /**
- * The Schema of one body node, a union over the six kinds of `BodyNode`, every field included; its
- * type is {@link BodyNode} and its encoded form {@link BodyNodeJson}.
+ * The Schema of one body node, a union over the seven kinds of `BodyNode`, every field included;
+ * its type is {@link BodyNode} and its encoded form {@link BodyNodeJson}.
  */
 const BodyNodeSchema = Schema.Union([
   Schema.Struct({
@@ -204,9 +235,7 @@ const BodyNodeSchema = Schema.Union([
     ariaLabel: OptionalText,
     ariaLabelledby: OptionalText,
     cardinality: Schema.Literals(["multiple", "single"]),
-    choices: Schema.Array(
-      Schema.Struct({ content: BodyNodes, fixed: Schema.Boolean, identifier: Schema.String }),
-    ),
+    choices: Choices,
     class: Schema.String,
     kind: Schema.Literal("choice"),
     maxChoices: ChoiceCount,
@@ -215,6 +244,21 @@ const BodyNodeSchema = Schema.Union([
     orientation: OptionalText,
     path: Schema.String,
     prompt: Schema.OptionFromOptionalKey(BodyNodes),
+    response: Schema.String,
+    shuffle: Schema.Boolean,
+  }),
+  Schema.Struct({
+    ariaLabel: OptionalText,
+    ariaLabelledby: OptionalText,
+    choices: Choices,
+    class: Schema.String,
+    kind: Schema.Literal("inline-choice"),
+    label: Schema.OptionFromOptionalKey(BodyNodes),
+    messages: Schema.Struct({ min: OptionalText }),
+    minChoices: ChoiceCount,
+    path: Schema.String,
+    placeholder: OptionalText,
+    required: Schema.Boolean,
     response: Schema.String,
     shuffle: Schema.Boolean,
   }),
@@ -235,6 +279,14 @@ const BodyNodeSchema = Schema.Union([
     path: Schema.String,
   }),
 ]);
+
+/**
+ * A body node as the members of {@link BodyNodeSchema} type it, read from the union itself. The
+ * codec's test pins it to `BodyNode` both ways, so `tsc` refuses a model kind or field the union
+ * lacks; the suspended {@link BodyNodes} cannot serve, because its annotation declares its type
+ * `BodyNode`. `#plate/index.ts` does not export it.
+ */
+export type SchemaBodyNode = typeof BodyNodeSchema.Type;
 
 /**
  * The Schema of a redacted item's fields; its type is {@link RedactedFields}, and its encoded form
@@ -368,7 +420,7 @@ const nestsTooDeep = (input: unknown): boolean => {
 
 /**
  * A body node waiting to be walked, with the content it sits in when QTI's schema admits no
- * interaction there, a Prompt or a choice's content, and none elsewhere.
+ * interaction there, a Prompt, a Label or a choice's content, and none elsewhere.
  */
 interface PendingNode {
   readonly node: BodyNode;
@@ -376,9 +428,68 @@ interface PendingNode {
 }
 
 /**
+ * Content an interaction holds where QTI's schema admits no interaction, with the words that name
+ * where it sits.
+ */
+interface Region {
+  readonly nodes: readonly BodyNode[];
+  readonly within: string;
+}
+
+/**
+ * The content each choice of a Choice or an Inline Choice holds, in document order.
+ *
+ * @param choices The interaction's choices.
+ * @param owner The words that name the interaction.
+ * @returns One region per choice.
+ */
+const choiceRegions = (choices: readonly SimpleChoice[], owner: string): readonly Region[] =>
+  choices.map((simple) => ({
+    nodes: simple.content,
+    within: `the content of the choice ${JSON.stringify(simple.identifier)} of ${owner}`,
+  }));
+
+/**
+ * The content an interaction holds where QTI's schema admits no interaction, in document order: a
+ * Choice's Prompt then its choices' content, an Extended Text's Prompt, an Inline Choice's Label
+ * then its choices' content, and nothing of a Text Entry's.
+ *
+ * @param interaction The interaction.
+ * @returns Its regions, first in the document first.
+ */
+const regionsOf = (interaction: Interaction): readonly Region[] => {
+  const owner = `the ${interaction.kind} interaction for the response ${JSON.stringify(interaction.response)}`;
+  const named = (nodes: Option.Option<readonly BodyNode[]>, part: string): readonly Region[] =>
+    Option.match(nodes, {
+      onNone: () => [],
+      onSome: (content) => [{ nodes: content, within: `the ${part} of ${owner}` }],
+    });
+
+  switch (interaction.kind) {
+    case "choice": {
+      return [...named(interaction.prompt, "Prompt"), ...choiceRegions(interaction.choices, owner)];
+    }
+    case "extended-text": {
+      return named(interaction.prompt, "Prompt");
+    }
+    case "inline-choice": {
+      return [...named(interaction.label, "Label"), ...choiceRegions(interaction.choices, owner)];
+    }
+    case "text-entry": {
+      return [];
+    }
+    default: {
+      return interaction satisfies never;
+    }
+  }
+};
+
+/**
  * Find the first interaction, in document order, that the body holds inside a Choice's Prompt or a
- * choice's content, or inside an Extended Text's Prompt: content where QTI's schema admits no
- * interaction, and where `render` throws `NestedInteractionDefect` on one.
+ * choice's content, inside an Extended Text's Prompt, or inside an Inline Choice's Label or the
+ * content of one of its choices: content where QTI's schema admits no interaction, and where
+ * `render` throws `NestedInteractionDefect` on one, or, in an Inline Choice's choice, writes no
+ * text for it.
  *
  * It walks with a list of pending nodes rather than by recursion, as {@link nestsTooDeep} does, so
  * no body the depth bound lets through can overflow the stack.
@@ -398,33 +509,32 @@ const misplacedInteraction = (body: readonly BodyNode[]): Option.Option<string> 
   for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
     const { node, within } = next;
 
-    if (node.kind === "element") {
-      enqueue(node.children, within);
-    } else if (
-      node.kind === "choice" ||
-      node.kind === "extended-text" ||
-      node.kind === "text-entry"
-    ) {
-      if (Option.isSome(within)) {
-        return Option.some(
-          `a ${node.kind} interaction for the response ${JSON.stringify(node.response)} sits inside ${within.value}, where QTI's schema admits no interaction and render cannot emit one`,
-        );
+    switch (node.kind) {
+      case "element": {
+        enqueue(node.children, within);
+        break;
       }
-
-      const owner = `the ${node.kind} interaction for the response ${JSON.stringify(node.response)}`;
-      if (node.kind === "choice") {
-        for (const simple of node.choices.toReversed()) {
-          enqueue(
-            simple.content,
-            Option.some(
-              `the content of the choice ${JSON.stringify(simple.identifier)} of ${owner}`,
-            ),
+      case "text":
+      case "unsupported": {
+        break;
+      }
+      case "choice":
+      case "extended-text":
+      case "inline-choice":
+      case "text-entry": {
+        if (Option.isSome(within)) {
+          return Option.some(
+            `a ${node.kind} interaction for the response ${JSON.stringify(node.response)} sits inside ${within.value}, where QTI's schema admits no interaction and render cannot emit one`,
           );
         }
-      }
 
-      if (node.kind !== "text-entry" && Option.isSome(node.prompt)) {
-        enqueue(node.prompt.value, Option.some(`the Prompt of ${owner}`));
+        for (const region of regionsOf(node).toReversed()) {
+          enqueue(region.nodes, Option.some(region.within));
+        }
+        break;
+      }
+      default: {
+        return node satisfies never;
       }
     }
   }
@@ -467,11 +577,11 @@ const decodeJson = (input: unknown): Result.Result<Redacted, InvalidRedacted> =>
  *
  * It checks the JSON's shape, every field against {@link RedactedSchema}, and one rule of the
  * body's content: no interaction stands, at any depth, inside a Choice's Prompt or a choice's
- * content or inside an Extended Text's Prompt, where QTI's schema admits none and `render` cannot
- * emit one, so `render` never meets such an interaction in a `Redacted` it returns. It checks the
- * item against no other rule of QTI's, so a host trusts redacted JSON only as far as the item it
- * came from; the emitter still keeps only the HTML subset's elements and attributes, and the URLs
- * `url.ts` keeps.
+ * content, inside an Extended Text's Prompt, or inside an Inline Choice's Label or a choice's
+ * content, where QTI's schema admits none and `render` cannot emit one, so `render` never meets
+ * such an interaction in a `Redacted` it returns. It checks the item against no other rule of
+ * QTI's, so a host trusts redacted JSON only as far as the item it came from; the emitter still
+ * keeps only the HTML subset's elements and attributes, and the URLs `url.ts` keeps.
  *
  * @param input The JSON form as the host handed it over: the {@link RedactedJson}
  *   {@link encodeRedacted} wrote, after any JSON round trip. A count written as a JSON number is
