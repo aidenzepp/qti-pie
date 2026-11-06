@@ -17,6 +17,7 @@ import type { ReferenceGuardRefusal } from "#pantry/import/guards/reference.ts";
 import type { TestGuardRefusal } from "#pantry/import/guards/test.ts";
 import type { GuardRefusal } from "#pantry/import/guards/tree.ts";
 import type { UsageGuardRefusal } from "#pantry/import/guards/usage.ts";
+import type { WildcardGuardRefusal } from "#pantry/import/guards/wildcard.ts";
 import type { NotQti3 } from "#pantry/import/manifest.ts";
 import type { ProcessingRefused } from "#pantry/import/processing.ts";
 import type { ExternalRefusal } from "#pantry/import/record.ts";
@@ -76,6 +77,9 @@ export const ImportRule = Schema.Literals([
   "resource-file-present",
   "lom-general-single",
   "lom-title-single",
+  // lom-identifier and lom-title are backed by normative text (decision 307; reading 62): the
+  // ASI Information Model 4.1.1 and 4.4.1 (identifier) and 4.1.2 (title), "MUST be the same", and
+  // the metadata binding 2.7.1.1 (#Gen1) and 2.7.1.2 (#Gen2).
   "lom-identifier",
   "lom-title",
   "qti-metadata-single",
@@ -230,6 +234,11 @@ export const ImportRule = Schema.Literals([
   "ref-exists",
   "condition-edge",
   "outcome-minmax-kind",
+  "wildcard-namespace",
+  "wildcard-declared",
+  "wildcard-attribute",
+  "xsi-type",
+  "xsi-nil",
 ]);
 
 /**
@@ -349,6 +358,7 @@ const keyRules = new Map<string, Rule>([
   ["DocumentIdentifier.(package,resource)", "root-identifier"],
   ["DocumentTitle.(package,resource)", "root-title"],
   ["Edge.(child)", "edge-parent"],
+  ["ForeignAttribute.(node,prefix,local)", "wildcard-attribute"],
   ["InteractionBinding.(document,responseIdentifier)", "binding-key"],
   ["ItemBody.(item)", "body-single"],
   ["ItemStimulusRef.(document,identifier)", "stimulus-ref-key"],
@@ -436,6 +446,8 @@ const checkRules = new Map<string, Rule>([
   ["EqualRoundedFigures", "P10"],
   ["EqualRoundedFiguresRefZero", "P32"],
   ["FeedbackOutcomeRefType", "feedback-ref"],
+  ["ForeignAttributePrefix", "wildcard-attribute"],
+  ["ForeignUnqualifiedUnprefixed", "wildcard-attribute"],
   ["GapImgBounds", "choice-bounds"],
   ["GapMatchBounds", "choice-bounds"],
   ["GapTextBounds", "choice-bounds"],
@@ -494,6 +506,8 @@ const checkRules = new Map<string, Rule>([
   ["VariableWeightInTest", "P12"],
   ["VariantNotSelf", "variant-target"],
   ["XIncludeParseXml", "include-parse"],
+  ["XsiNilUndeclared", "xsi-nil"],
+  ["XsiTypeAttributePrefix", "xsi-type"],
 ]);
 
 /**
@@ -743,6 +757,7 @@ const containedRules = new Map<string, Rule>([
   ["Edge>AncestryStep", "ancestry-step"],
   ["File>PackageEntry", "file-exists"],
   ["FileContent>PackageEntry", "file-exists"],
+  ["ForeignAttribute>AttributeWildcard", "wildcard-attribute"],
   ["HeadersTarget>AttributeIdref", "idref-copy"],
   ["HeadersTarget>HtmlId", "idref-target"],
   ["HtmlId>Node", "document-key"],
@@ -759,6 +774,7 @@ const containedRules = new Map<string, Rule>([
   ["Source>SourceSrcset", "source-srcset"],
   ["Track>TrackSrclang", "track-srclang"],
   ["TypedBinding>BindingFit", "binding-fit"],
+  ["XsiTypeAttribute>XsiType", "xsi-type"],
 ]);
 
 /**
@@ -1006,6 +1022,8 @@ const fileReferenceRule = (from: LawSide, to: LawSide): Rule | undefined => {
 };
 
 const containedRule = (from: LawSide, to: LawSide): Rule | undefined => {
+  // The next two rules enforce "MUST be the same" (ASI Information Model 4.1.1, 4.4.1 and 4.1.2;
+  // metadata binding 2.7.1.1 #Gen1 and 2.7.1.2 #Gen2; decision 307, reading 62).
   if (from.relation === "LomObjectIdentifier") {
     return "lom-identifier";
   }
@@ -1472,6 +1490,9 @@ const writtenContractRules: readonly (readonly [Rule, readonly string[]])[] = [
       "TemplateLocationUri",
       "TemplateUri",
       "XIncludeUri",
+      "XlinkArcroleUri",
+      "XlinkHrefUri",
+      "XlinkRoleUri",
       "XmlBaseUri",
     ],
   ],
@@ -1509,7 +1530,9 @@ const writtenContractRules: readonly (readonly [Rule, readonly string[]])[] = [
       "VariableReference",
       "WeightReference",
       "WeightValue",
+      "XlinkLabelName",
       "XmlEntityName",
+      "XmlLocalName",
     ],
   ],
 ];
@@ -1746,6 +1769,7 @@ export type ReadRefusal =
   | UnmodeledVocabulary
   | UsageGuardRefusal
   | WellFormednessError
+  | WildcardGuardRefusal
   | ZipRefusal;
 
 /**
@@ -1797,6 +1821,7 @@ export const ruleOfError = (e: ContentGuardRefusal | ReadRefusal): ImportRefused
           detail: `${g.message} at line ${g.line}, column ${g.column}`,
           rule: "well-formedness",
         }),
+      WildcardGuardRefusal: (g) => new ImportRefused({ detail: g.detail, rule: g.rule }),
       ZipRefusal: (g) => new ImportRefused({ detail: `${g.entry}: ${g.feature}`, rule: g.rule }),
     }),
   );

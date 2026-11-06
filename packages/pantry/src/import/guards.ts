@@ -1,6 +1,6 @@
 /**
- * The import's guards, run as one: the tree, manifest, item, content, reference, test, processing
- * and usage checks a built `Rows` must pass before anything is written.
+ * The import's guards, run as one: the tree, manifest, item, content, reference, test, processing,
+ * usage and wildcard checks a built `Rows` must pass before anything is written.
  *
  * @module
  */
@@ -19,19 +19,22 @@ import { testGuards } from "#pantry/import/guards/test.ts";
 import type { TestGuardRefusal } from "#pantry/import/guards/test.ts";
 import { processingGuards } from "#pantry/import/guards/processing.ts";
 import type { ProcessingGuardRefusal } from "#pantry/import/guards/processing.ts";
+import { wildcardGuards } from "#pantry/import/guards/wildcard.ts";
+import type { WildcardGuardRefusal } from "#pantry/import/guards/wildcard.ts";
 import { treeGuards } from "#pantry/import/guards/tree.ts";
 import type { GuardRefusal } from "#pantry/import/guards/tree.ts";
 import type { Rows } from "#pantry/import/tree.ts";
 import type { Entry } from "#pantry/package/read.ts";
 
 /**
- * Run the tree, manifest, item, content, reference, test, processing and usage guards in that order
- * over the rows an import built.
+ * Run the tree, manifest, item, content, reference, test, processing, usage and wildcard guards in
+ * that order over the rows an import built. The wildcard guard runs last, so every other refusal
+ * still comes first.
  *
  * @param rows - The rows the import built.
  * @param entries - The package's entries, as `listPackage` returns them.
  * @returns Nothing when every guard passes; fails with the first refusal, in the order tree,
- *   manifest, item, content, reference, test, processing, usage.
+ *   manifest, item, content, reference, test, processing, usage, wildcard.
  */
 export const guards = Effect.fn("guards")(function* guards(
   rows: Rows,
@@ -46,6 +49,7 @@ export const guards = Effect.fn("guards")(function* guards(
   | TestGuardRefusal
   | ProcessingGuardRefusal
   | UsageGuardRefusal
+  | WildcardGuardRefusal
 > {
   yield* treeGuards(rows);
   yield* manifestGuards(rows, entries);
@@ -55,4 +59,5 @@ export const guards = Effect.fn("guards")(function* guards(
   yield* testGuards(rows);
   yield* processingGuards(rows);
   yield* usageGuards(rows);
+  yield* wildcardGuards(rows);
 });

@@ -14,7 +14,8 @@ import { Effect, Option, Schema } from "effect";
 import type { Uuid } from "@bjornpagen/grizzle";
 import type { ImportRefused, Rule } from "#pantry/import/refusal.ts";
 import { closedOf, Rows, spelledInteger, typedAttribute, valueText } from "#pantry/import/tree.ts";
-import type { NodeIndex, UnmodeledVocabulary, WhiteSpace } from "#pantry/import/tree.ts";
+import type { NodeIndex, UnmodeledVocabulary } from "#pantry/import/tree.ts";
+import type { WhiteSpace } from "#pantry/import/whitespace.ts";
 import type {
   AttributeValue,
   IncludeNode,
@@ -282,6 +283,7 @@ const detailOf = (
 interface ExpressionLike {
   readonly attributes: ReadonlyMap<string, AttributeValue>;
   readonly element: Element;
+  readonly includes: readonly IncludeNode[];
   readonly kind: RuleOrExpressionKind;
   readonly operands: readonly ExpressionLike[];
   readonly position: Position;
@@ -316,6 +318,17 @@ interface Flat {
 const nothing: Flat = { expressions: [], includes: [], ordered: [], rules: [] };
 
 /**
+ * An include and the includes inside its foreign children, in document order.
+ *
+ * @param node - The include.
+ * @returns The include first, then the ones it holds.
+ */
+const flattenInclude = (node: IncludeNode): readonly IncludeNode[] => [
+  node,
+  ...node.includes.flatMap(flattenInclude),
+];
+
+/**
  * Flatten an expression and its operands, in document order.
  *
  * @param node - The expression at the top of the subtree.
@@ -326,7 +339,10 @@ const flattenExpression = (node: ExpressionLike): Flat => {
 
   return {
     expressions: [node, ...inner.flatMap((found) => found.expressions)],
-    includes: [],
+    includes: [
+      ...node.includes.flatMap(flattenInclude),
+      ...inner.flatMap((found) => found.includes),
+    ],
     ordered: [node, ...inner.flatMap((found) => found.ordered)],
     rules: [],
   };
@@ -341,7 +357,7 @@ const flattenExpression = (node: ExpressionLike): Flat => {
  */
 const flattenRule = (node: IncludeNode | RuleLike): Flat => {
   if (node.kind === "xi:include") {
-    return { ...nothing, includes: [node] };
+    return { ...nothing, includes: flattenInclude(node) };
   }
 
   const own = Option.match(node.expression, { onNone: () => nothing, onSome: flattenExpression });
@@ -349,7 +365,7 @@ const flattenRule = (node: IncludeNode | RuleLike): Flat => {
 
   return {
     expressions: [...own.expressions, ...nested.flatMap((found) => found.expressions)],
-    includes: nested.flatMap((found) => found.includes),
+    includes: [...own.includes, ...nested.flatMap((found) => found.includes)],
     ordered: [node, ...own.ordered, ...nested.flatMap((found) => found.ordered)],
     rules: [node, ...nested.flatMap((found) => found.rules)],
   };
@@ -1750,14 +1766,14 @@ const ruleRows = (
  * `Fallback` of its `xi:fallback` child. The include is stored as written and never resolved.
  *
  * @param rows - The rows so far.
- * @param input - The processing input.
+ * @param nodes - The tree's node index, which names the fallback's node.
  * @param node - The include.
  * @param entry - The node it became.
  * @returns The rows with the include's added.
  */
 const includeRows = Effect.fn("import.processing.includeRows")(function* includeRows(
   rows: Rows,
-  input: ProcessingInput,
+  nodes: NodeIndex,
   node: IncludeNode,
   entry: NodeEntry,
 ): Effect.fn.Return<Rows, ImportRefused> {
@@ -1796,7 +1812,7 @@ const includeRows = Effect.fn("import.processing.includeRows")(function* include
     built,
     ruleSchema.Fallback,
     Option.toArray(node.fallback).flatMap((element) => {
-      const fallback = input.nodes.get(element);
+      const fallback = nodes.get(element);
 
       return fallback === undefined ? [] : [{ id: fallback.id }];
     }),
@@ -1905,7 +1921,7 @@ export const processingRows = Effect.fn("import.processingRows")(function* proce
 
   for (const node of tree.includes) {
     const entry = input.nodes.get(node.element);
-    built = entry === undefined ? built : yield* includeRows(built, input, node, entry);
+    built = entry === undefined ? built : yield* includeRows(built, input.nodes, node, entry);
   }
 
   const root = input.nodes.get(input.root);

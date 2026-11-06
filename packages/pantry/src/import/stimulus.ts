@@ -20,7 +20,6 @@ import type { ImportRefused } from "#pantry/import/refusal.ts";
 import { attributeReader, unboundInteractionRows } from "#pantry/import/interactions.ts";
 import { requiredAttribute } from "#pantry/import/required.ts";
 import {
-  collapse,
   ItemRefusal,
   kindOf,
   Rows,
@@ -29,6 +28,7 @@ import {
   withParents,
 } from "#pantry/import/tree.ts";
 import type { NodeIndex } from "#pantry/import/tree.ts";
+import { collapse } from "#pantry/import/whitespace.ts";
 import { ManifestIdentifier, PackagePath } from "#pantry/schema/contracts.ts";
 import { Document, DocumentIdentifier, DocumentTitle } from "#pantry/schema/document.ts";
 import { AssessmentItemLabel } from "#pantry/schema/item.ts";

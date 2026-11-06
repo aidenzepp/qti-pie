@@ -20,14 +20,13 @@ import { requiredAttribute } from "#pantry/import/required.ts";
 import type { DeclaredVariable, NodeRef } from "#pantry/import/interactions.ts";
 import {
   closedOf,
-  collapse,
   ItemRefusal,
-  replace,
   Rows,
   typedAttribute,
   valueText,
   withParents,
 } from "#pantry/import/tree.ts";
+import { collapse, replace } from "#pantry/import/whitespace.ts";
 import type { NodeIndex, UnmodeledVocabulary } from "#pantry/import/tree.ts";
 import {
   BaseType,

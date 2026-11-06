@@ -137,7 +137,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
 const cutNames = fixtureNames.filter((name) => name.startsWith("cut-"));
 
 layer(NodeServices.layer, { excludeTestServices: true })(
-  "export/render.ts on the 19 cut items, no database",
+  "export/render.ts on the 20 cut items, no database",
   (it) => {
     it.effect(
       "every cut item and its minimal manifest render to the oracle's canonical bytes",
@@ -146,7 +146,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
           const failures: string[] = [];
           let files = 0;
 
-          assert.strictEqual(cutNames.length, 19);
+          assert.strictEqual(cutNames.length, 20);
 
           for (const name of cutNames) {
             const outcome = yield* Effect.result(

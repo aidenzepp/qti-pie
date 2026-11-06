@@ -19,6 +19,8 @@ import * as expression from "#pantry/schema/expression.ts";
 import * as expressionAttributes from "#pantry/schema/expression-attributes.ts";
 import * as document from "#pantry/schema/document.ts";
 import * as feedback from "#pantry/schema/feedback.ts";
+import * as foreignAttributes from "#pantry/schema/foreign-attributes.ts";
+import * as foreign from "#pantry/schema/foreign.ts";
 import * as html from "#pantry/schema/html.ts";
 import * as htmlMedia from "#pantry/schema/html/media.ts";
 import * as htmlStructure from "#pantry/schema/html/structure.ts";
@@ -52,6 +54,7 @@ import * as testRules from "#pantry/schema/test/rules.ts";
 import * as testStructure from "#pantry/schema/test/structure.ts";
 import * as usage from "#pantry/schema/usage.ts";
 import * as value from "#pantry/schema/value.ts";
+import * as xlink from "#pantry/schema/xlink.ts";
 
 /**
  * The arm of each `NodeKind` handle, one relation per handle.
@@ -86,6 +89,7 @@ export const nodeArms = {
   ...textInteraction.arms,
   ...other.arms,
   ...feedback.arms,
+  ...foreign.arms,
   ...template.arms,
   ...rubric.arms,
   ...mapping.arms,
@@ -129,6 +133,9 @@ export const Qti = schema(
     ...textInteraction.relations,
     ...other.relations,
     ...feedback.relations,
+    ...foreign.relations,
+    ...foreignAttributes.relations,
+    ...xlink.relations,
     ...template.relations,
     ...rubric.relations,
     ...mapping.relations,
@@ -176,6 +183,9 @@ export const Qti = schema(
     ...textInteraction.rules,
     ...other.rules,
     ...feedback.rules,
+    ...foreign.rules,
+    ...foreignAttributes.rules,
+    ...xlink.rules,
     ...template.rules,
     ...rubric.rules,
     ...mapping.rules,

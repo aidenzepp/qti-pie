@@ -36,12 +36,14 @@ import * as lom from "#pantry/schema/kinds/lom.ts";
 import * as qmd from "#pantry/schema/kinds/qmd.ts";
 import * as ud from "#pantry/schema/kinds/ud.ts";
 import * as test from "#pantry/schema/kinds/test.ts";
+import * as foreign from "#pantry/schema/kinds/foreign.ts";
 import * as xi from "#pantry/schema/kinds/xi.ts";
 import {
   NamespacePrefix,
   NamespaceUri,
   PiTarget,
   XmlEntityName,
+  XmlLocalName,
 } from "#pantry/schema/contracts.ts";
 import * as patterns from "#pantry/schema/patterns.ts";
 import { ancestryHandles } from "#pantry/schema/seed/ancestry.ts";
@@ -65,6 +67,7 @@ export const vocabularies = [
   ud,
   xi,
   test,
+  foreign,
 ] as const;
 
 /**
@@ -84,6 +87,7 @@ export const kindTuples = [
   ud.kinds,
   xi.kinds,
   test.kinds,
+  foreign.kinds,
 ] as const;
 
 /**
@@ -102,6 +106,7 @@ export const attributeTuples = [
   ud.attributes,
   xi.attributes,
   test.attributes,
+  foreign.attributes,
 ] as const;
 
 const schemaVersions = ["3.0.0", "3.0.1"] as const satisfies readonly SchemaVersionHandle[];
@@ -157,6 +162,7 @@ export const NodeKind = closed("NodeKind", [
   ...ud.kinds,
   ...xi.kinds,
   ...test.kinds,
+  ...foreign.kinds,
 ]);
 
 /**
@@ -179,6 +185,7 @@ export const AttributeName = closed("AttributeName", [
   ...ud.attributes,
   ...xi.attributes,
   ...test.attributes,
+  ...foreign.attributes,
 ]);
 
 /**
@@ -379,6 +386,67 @@ export const SchemaLocation = relation(
 );
 
 /**
+ * An element's `xsi:type`, as written, and the prefix it was written under. The importer judges
+ * the QName before it writes the row.
+ */
+export const XsiType = relation(
+  "XsiType",
+  {
+    node: uuid,
+    prefix: NamespacePrefix,
+    value: str.regex(patterns.wildcard, patterns.wildcardFlags),
+  },
+  ["node"],
+);
+
+/**
+ * An element's `xsi:nil`, as written, the prefix it was written under and the element's kind. No
+ * declaration in QTI's schemas is nillable, so it stands only on an element no kind declares.
+ */
+export const XsiNil = relation(
+  "XsiNil",
+  {
+    kind: closedId(NodeKind),
+    node: uuid,
+    prefix: NamespacePrefix,
+    value: str.regex(patterns.wildcard, patterns.wildcardFlags),
+  },
+  ["node"],
+);
+
+/**
+ * An element's `xsi:noNamespaceSchemaLocation`, verbatim, and the prefix it was written under.
+ */
+export const NoNamespaceSchemaLocation = relation(
+  "NoNamespaceSchemaLocation",
+  {
+    node: uuid,
+    prefix: NamespacePrefix,
+    value: str.regex(patterns.xsNormalizedString, patterns.xsNormalizedStringFlags),
+  },
+  ["node"],
+);
+
+/**
+ * An attribute an element carries because its `xsi:type` names a type derived from its declared
+ * type that declares the attribute or admits it by an attribute wildcard: its kind, its expanded
+ * name, the prefix it is written with (empty when unprefixed) and its value as written. The key is
+ * the node's one attribute per qualified name; one per expanded name is the XML reader's.
+ */
+export const XsiTypeAttribute = relation(
+  "XsiTypeAttribute",
+  {
+    kind: closedId(NodeKind),
+    local: XmlLocalName,
+    namespace: NamespaceUri,
+    node: uuid,
+    prefix: str.regex(patterns.ncNameOrEmpty),
+    value: str.regex(patterns.wildcard, patterns.wildcardFlags),
+  },
+  ["node", "prefix", "local"],
+);
+
+/**
  * An entity reference inside an attribute value, by the attribute's qualified name and the offset
  * at which the reference stood.
  */
@@ -486,6 +554,7 @@ export const relations = {
   EntityReference,
   MiscKind,
   NamespaceDeclaration,
+  NoNamespaceSchemaLocation,
   Node,
   NodeKind,
   Pi,
@@ -504,6 +573,9 @@ export const relations = {
   TreeXmlStandalone,
   TreeXmlVersion,
   Ws,
+  XsiNil,
+  XsiType,
+  XsiTypeAttribute,
 };
 
 /**
@@ -542,6 +614,18 @@ export const rules = [
   ),
   contained(on(NamespaceDeclaration, "node"), on(Node, "id")),
   contained(on(SchemaLocation, "node"), on(Node, "id")),
+  contained(on(XsiType, "node"), on(Node, "id")),
+  contained(on(NoNamespaceSchemaLocation, "node"), on(Node, "id")),
+  contained(on(XsiNil, "node", "kind"), on(Node, "id", "kind")),
+  check("XsiNilUndeclared", XsiNil, (row) => row.eq(row.kind, "foreign")),
+  contained(on(XsiTypeAttribute, "node", "kind"), on(Node, "id", "kind")),
+  contained(on(XsiTypeAttribute, "node"), on(XsiType, "node")),
+  check("XsiTypeAttributePrefix", XsiTypeAttribute, (row) =>
+    row.or(
+      row.and(row.eq(row.namespace, ""), row.eq(row.prefix, "")),
+      row.and(row.ne(row.namespace, ""), row.ne(row.prefix, "")),
+    ),
+  ),
   contained(on(AttributeEntityReference, "node"), on(Node, "id")),
   contained(on(AttributeLexical, "node", "kind"), on(Node, "id", "kind")),
   contained(on(AttributeSpelling, "node", "kind"), on(Node, "id", "kind")),

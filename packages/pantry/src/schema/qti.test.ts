@@ -24,6 +24,16 @@ import { operatorArity, operatorArityMax } from "#pantry/schema/seed/operator-ar
 import { recordBindingFit } from "#pantry/schema/seed/record-binding-fit.ts";
 import { resourceTypes } from "#pantry/schema/seed/resource-types.ts";
 import { rootOfType } from "#pantry/schema/seed/root-of-type.ts";
+import {
+  attributeExclusion,
+  attributeWildcard,
+  globalAttribute,
+  globalElement,
+  rootSchemaSet,
+  wildcardAttributeAdmission,
+  wildcardExclusion,
+  wildcardHost,
+} from "#pantry/schema/seed/wildcard.ts";
 import * as testProcessing from "#pantry/schema/test/processing.ts";
 import { seedSqlProcessTestTimeoutMs } from "#pantry/test/settings.ts";
 
@@ -288,7 +298,14 @@ describe("qti", () => {
         .filter((row) => row.kind === handle)
         .map((row) => row.attribute)
         .toSorted();
-      const declared = [...new Set(registry.get(handle)?.attributes)].toSorted();
+      const declared = [
+        ...new Set([
+          ...(registry.get(handle)?.attributes ?? []),
+          ...wildcardAttributeAdmission
+            .filter((row) => row.kind === handle)
+            .map((row) => row.attribute),
+        ]),
+      ].toSorted();
       assert.deepStrictEqual(admitted, declared, handle);
     }
   });
@@ -372,6 +389,39 @@ describe("qti", () => {
       assert.strictEqual(
         lines.length,
         expected.reduce((total, [, rows]) => total + Math.ceil(rows / 1000), 0),
+      );
+    },
+    seedSqlProcessTestTimeoutMs,
+  );
+
+  it(
+    "prints the seven wildcard tables, their namespaces as roster handles",
+    () => {
+      const lines = printed([
+        "--only",
+        "WildcardHost,AttributeWildcard,WildcardExclusion,AttributeExclusion,GlobalElement,GlobalAttribute,RootSchemaSet",
+      ]);
+      const expected = [
+        ["wildcard_host", wildcardHost.length],
+        ["attribute_wildcard", attributeWildcard.length],
+        ["wildcard_exclusion", wildcardExclusion.length],
+        ["attribute_exclusion", attributeExclusion.length],
+        ["global_element", globalElement.length],
+        ["global_attribute", globalAttribute.length],
+        ["root_schema_set", rootSchemaSet.length],
+      ] as const;
+      for (const [table, rows] of expected) {
+        assert.strictEqual(rowsOf(lines, table).length, rows);
+      }
+      for (const [table] of expected.filter(([name]) => name !== "root_schema_set")) {
+        for (const row of rowsOf(lines, table)) {
+          assert.notInclude(row, "'http");
+        }
+      }
+      assert.isTrue(
+        rowsOf(lines, "wildcard_exclusion").some((row) =>
+          row.includes(`'absent'::"qti"."schema_namespace"`),
+        ),
       );
     },
     seedSqlProcessTestTimeoutMs,

@@ -81,7 +81,7 @@ describe("includeRows", () => {
     }),
   );
 
-  it.effect("collapses parse and refuses a value outside its roster", () =>
+  it.effect("collapses parse and refuses a value outside its roster under P6", () =>
     Effect.gen(function* parseValues() {
       const { nodes, rows } = yield* included(item('<p><xi:include href="f" parse="text "/></p>'));
       assert.deepStrictEqual(Rows.of(rows, rule.XIncludeParse), [
@@ -92,7 +92,7 @@ describe("includeRows", () => {
         included(item('<p><xi:include href="f" parse="bogus"/></p>')),
       );
       assert.strictEqual(refused._tag, "ImportRefused");
-      assert.strictEqual(refused._tag === "ImportRefused" ? refused.rule : "", "attribute-lexical");
+      assert.strictEqual(refused._tag === "ImportRefused" ? refused.rule : "", "P6");
     }),
   );
 

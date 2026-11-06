@@ -6,8 +6,9 @@
  */
 import type { AnyRelation, Uuid } from "@bjornpagen/grizzle";
 import { Effect, Option, Predicate, Schema } from "effect";
-import { collapse, replace, Rows } from "#pantry/import/tree.ts";
-import type { WhiteSpace } from "#pantry/import/tree.ts";
+import { Rows } from "#pantry/import/tree.ts";
+import { collapse, replace } from "#pantry/import/whitespace.ts";
+import type { WhiteSpace } from "#pantry/import/whitespace.ts";
 import type { Entry } from "#pantry/package/read.ts";
 import { Document } from "#pantry/schema/document.ts";
 import * as drd from "#pantry/schema/kinds/drd.ts";

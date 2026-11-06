@@ -11,8 +11,9 @@
  */
 import type { AnyRelation, Fact, Uuid } from "@bjornpagen/grizzle";
 import { Effect, Option, Schema } from "effect";
-import { collapse, replace, Rows } from "#pantry/import/tree.ts";
-import type { WhiteSpace } from "#pantry/import/tree.ts";
+import { Rows } from "#pantry/import/tree.ts";
+import { collapse, replace } from "#pantry/import/whitespace.ts";
+import type { WhiteSpace } from "#pantry/import/whitespace.ts";
 import { IdrefAttribute } from "#pantry/schema/content/rosters.ts";
 import { entryOf } from "#pantry/schema/content/xsd-inventory.ts";
 import { spelledText, typedValues } from "#pantry/schema/attribute-homes.ts";
@@ -799,7 +800,9 @@ const replaceClass = (rows: Rows): Finding => {
 };
 
 /**
- * The whitespace class of the families when the inventory names no class for the kind.
+ * The whitespace class of the families when the inventory names no class for the kind: the same
+ * twelve names as `import/attributes.ts` reads (`xml:space`, `xml:id` and the ten `xlink:` names),
+ * so `lexicalCopy` checks the typed copy of each instead of skipping a name with no class.
  */
 const familyClass: ReadonlyMap<string, WhiteSpace> = new Map([
   ["class", "collapse"],
@@ -809,8 +812,20 @@ const familyClass: ReadonlyMap<string, WhiteSpace> = new Map([
   ["id", "collapse"],
   ["label", "replace"],
   ["lang", "replace"],
+  ["xlink:actuate", "collapse"],
+  ["xlink:arcrole", "collapse"],
+  ["xlink:from", "collapse"],
+  ["xlink:href", "collapse"],
+  ["xlink:label", "collapse"],
+  ["xlink:role", "collapse"],
+  ["xlink:show", "collapse"],
+  ["xlink:title", "preserve"],
+  ["xlink:to", "collapse"],
+  ["xlink:type", "collapse"],
   ["xml:base", "collapse"],
+  ["xml:id", "collapse"],
   ["xml:lang", "collapse"],
+  ["xml:space", "collapse"],
 ]);
 
 /**

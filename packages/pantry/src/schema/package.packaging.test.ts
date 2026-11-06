@@ -221,10 +221,13 @@ const manifestIdArms = [
 ] as const;
 
 describe("package ManifestId", () => {
-  it("holds the roster, the relation and the three arms in the module's relations", () => {
+  it("holds the roster, the relation and the arms in the module's relations", () => {
     assert.strictEqual(pkg.relations.ManifestIdHolder, pkg.ManifestIdHolder);
     assert.strictEqual(pkg.relations.ManifestId, pkg.ManifestId);
-    assert.deepStrictEqual([...pkg.ManifestIdHolder.handles], ["manifest", "resource", "variant"]);
+    assert.deepStrictEqual(
+      [...pkg.ManifestIdHolder.handles],
+      ["manifest", "resource", "variant", "xmlId"],
+    );
     for (const [, arm] of manifestIdArms) {
       assert.isTrue(Object.values(pkg.relations).includes(arm));
       assert.deepStrictEqual([...arm.primaryKey], ["package", "id"]);
@@ -244,7 +247,7 @@ describe("package ManifestId", () => {
     );
   });
 
-  it("names its three arms by holder in one alternatives statement", () => {
+  it("names its four arms by holder in one alternatives statement", () => {
     const [rule, ...rest] = alternativesOf().filter(
       (candidate) => candidate.parent === pkg.ManifestId,
     );
@@ -257,6 +260,7 @@ describe("package ManifestId", () => {
         ["manifest", pkg.ManifestIdOfManifest],
         ["resource", pkg.ManifestIdOfResource],
         ["variant", pkg.ManifestIdOfVariant],
+        ["xmlId", pkg.ManifestXmlId],
       ],
     );
   });

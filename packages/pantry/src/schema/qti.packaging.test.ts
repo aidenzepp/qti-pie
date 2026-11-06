@@ -57,10 +57,43 @@ const folderEnding = (suffix: string): string => {
 
 /**
  * The `01-seed.sql` of the one `seed` migration folder, which holds the seed rows of the first
- * history. The `seed_tests` folder is excluded by its name: `_seed` does not end `_seed_tests`.
+ * history. Any `_seed_<word>` folder is excluded by its name: `_seed` does not end
+ * `_seed_wildcard`.
  */
 const committedSeed = (): string =>
   readFileSync(path.join(folderEnding("_seed"), "01-seed.sql"), "utf-8");
+
+/**
+ * Names a seed migration folder: `<timestamp>_seed` or `<timestamp>_seed_<word>`, so a folder a
+ * later phase adds (`_seed_tests`, `_seed_wildcard`) is read without a further edit.
+ */
+const seedFolder = /^\d+_seed(?:_[a-z]+)?$/u;
+
+/**
+ * The `01-seed.sql` of every seed migration folder (one whose name matches `seedFolder`), in
+ * folder order.
+ */
+const seedFiles = (): string[] =>
+  readdirSync(migrations, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && seedFolder.test(entry.name))
+    .map((entry) => readFileSync(path.join(migrations, entry.name, "01-seed.sql"), "utf-8"));
+
+/**
+ * Every row an INSERT statement of the SQL holds, one string per row (the statement's head and the
+ * row's tuple), so batching and comments do not matter.
+ */
+const insertRows = (sql: string): string[] =>
+  sql
+    .split("\n")
+    .filter((line) => line.startsWith("INSERT INTO "))
+    .flatMap((line) => {
+      const values = line.indexOf(" VALUES (") + " VALUES (".length;
+
+      return line
+        .slice(values, -2)
+        .split("), (")
+        .map((tuple) => `${line.slice(0, values)}${tuple})`);
+    });
 
 /**
  * The tuples one table's INSERT statements hold, as strings.
@@ -145,15 +178,12 @@ describe("qti packaging composition", () => {
   });
 
   it(
-    "holds exactly the full seed the recipe prints, split between the seed folder and seed_tests",
+    "holds exactly the full seed the recipe prints, split among the seed folders",
     () => {
-      const seedTests = folderEnding("_seed_tests");
+      const committed = seedFiles().flatMap(insertRows);
 
-      assert.strictEqual(committedSeed(), printSeed(["--minus", seedTests]));
-      assert.strictEqual(
-        readFileSync(path.join(seedTests, "01-seed.sql"), "utf-8"),
-        printSeed(["--minus", folderEnding("_seed")]),
-      );
+      assert.strictEqual(new Set(committed).size, committed.length);
+      assert.deepStrictEqual(committed.toSorted(), insertRows(printSeed([])).toSorted());
     },
     seedPrintTestTimeoutMs,
   );

@@ -12,7 +12,8 @@ import type { Uuid } from "@bjornpagen/grizzle";
 import { Effect, identity, Option } from "effect";
 import type { ImportRefused } from "#pantry/import/refusal.ts";
 import { closedOf, Rows, typedAttribute, withParents } from "#pantry/import/tree.ts";
-import type { NodeIndex, WhiteSpace } from "#pantry/import/tree.ts";
+import type { NodeIndex } from "#pantry/import/tree.ts";
+import type { WhiteSpace } from "#pantry/import/whitespace.ts";
 import { XIncludeUri } from "#pantry/schema/contracts.ts";
 import type { AttributeNameHandle, NodeKindHandle } from "#pantry/schema/node.ts";
 import * as ruleSchema from "#pantry/schema/rule.ts";
@@ -83,12 +84,9 @@ const oneInclude = (
     const parseHandle = yield* Option.match(parse, {
       onNone: () => Effect.succeed(Option.none<(typeof XIncludeParseValue.handles)[number]>()),
       onSome: (value) =>
-        closedOf(
-          XIncludeParseValue.handles,
-          value,
-          "attribute-lexical",
-          "the parse attribute of xi:include",
-        ).pipe(Effect.map(Option.some)),
+        closedOf(XIncludeParseValue.handles, value, "P6", "the parse attribute of xi:include").pipe(
+          Effect.map(Option.some),
+        ),
     });
     const own = (value: Option.Option<string>) =>
       Option.toArray(value).map((text) => ({ node: entry.id, value: text }));
@@ -124,7 +122,8 @@ const oneInclude = (
  * @param nodes - The node index of the tree.
  * @param rows - The rows so far.
  * @returns The rows with each include's `XInclude`, attribute and `Fallback` rows added, or an
- *   `ImportRefused` under `attribute-lexical` for a `parse` outside its roster.
+ *   `ImportRefused` under `P6`, the closed table's rule for the column, for a `parse` outside its
+ *   roster.
  */
 export const includeRows = Effect.fn("import.includeRows")(function* includeRows(
   root: Element,

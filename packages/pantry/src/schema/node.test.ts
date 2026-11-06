@@ -58,6 +58,7 @@ describe("node", () => {
       "EntityReference",
       "MiscKind",
       "NamespaceDeclaration",
+      "NoNamespaceSchemaLocation",
       "Node",
       "NodeKind",
       "Pi",
@@ -76,6 +77,9 @@ describe("node", () => {
       "TreeXmlStandalone",
       "TreeXmlVersion",
       "Ws",
+      "XsiNil",
+      "XsiType",
+      "XsiTypeAttribute",
     ]);
     assert.strictEqual(probe.statements.length, node.rules.length);
   });
@@ -203,6 +207,112 @@ describe("node", () => {
     // @ts-expect-error a widened roster is not a nonempty tuple of literals (TS2345)
     const loose = closed("Loose", [...plain]);
     assert.deepStrictEqual([...loose.handles], ["loose"]);
+  });
+});
+
+type Rule = (typeof node.rules)[number];
+
+type Source =
+  | { readonly name: string }
+  | {
+      readonly bindings: Readonly<Record<string, string>>;
+      readonly relation: { readonly name: string };
+    };
+
+/**
+ * One side of a statement written out: the relation, the handles a `select` fixes, and the fields.
+ */
+const sideOf = ({
+  fields,
+  source,
+}: {
+  readonly fields: readonly string[];
+  readonly source: Source;
+}): string => {
+  if ("relation" in source) {
+    const bound = Object.entries(source.bindings).map(([key, value]) => `${key}=${value}`);
+
+    return `${source.relation.name}{${bound.join(",")}}(${fields.join(",")})`;
+  }
+
+  return `${source.name}(${fields.join(",")})`;
+};
+
+/**
+ * One statement written out by its law kind and its sides, or by its check's name and relation:
+ * never a message.
+ */
+const stated = (rule: Rule): string => {
+  if (rule.kind === "contained") {
+    return `contained ${sideOf(rule.left)} in ${sideOf(rule.right)}`;
+  }
+
+  if (rule.kind === "check") {
+    return `check ${rule.name} on ${rule.relation.name}`;
+  }
+
+  return rule.kind;
+};
+
+describe("the xsi relations", () => {
+  const { NoNamespaceSchemaLocation, XsiNil, XsiType, XsiTypeAttribute } = node.relations;
+  const statements = node.rules.map(stated);
+
+  it("gives XsiType a node, the prefix it was written under and its value, keyed by the node", () => {
+    assert.deepStrictEqual(Object.keys(XsiType.fields), ["node", "prefix", "value"]);
+    assert.deepStrictEqual([...XsiType.primaryKey], ["node"]);
+    assert.strictEqual(XsiType.fields.prefix.name, contracts.NamespacePrefix.name);
+  });
+
+  it("gives XsiNil a kind beside its node, prefix and value, keyed by the node", () => {
+    assert.deepStrictEqual(Object.keys(XsiNil.fields), ["kind", "node", "prefix", "value"]);
+    assert.deepStrictEqual([...XsiNil.primaryKey], ["node"]);
+    assert.strictEqual(XsiNil.fields.prefix.name, contracts.NamespacePrefix.name);
+  });
+
+  it("gives NoNamespaceSchemaLocation a node, prefix and value, keyed by the node", () => {
+    assert.deepStrictEqual(Object.keys(NoNamespaceSchemaLocation.fields), [
+      "node",
+      "prefix",
+      "value",
+    ]);
+    assert.deepStrictEqual([...NoNamespaceSchemaLocation.primaryKey], ["node"]);
+    assert.strictEqual(
+      NoNamespaceSchemaLocation.fields.prefix.name,
+      contracts.NamespacePrefix.name,
+    );
+  });
+
+  it("gives XsiTypeAttribute the fields of ForeignAttribute's name and value, keyed by node, prefix and local", () => {
+    assert.deepStrictEqual(Object.keys(XsiTypeAttribute.fields), [
+      "kind",
+      "local",
+      "namespace",
+      "node",
+      "prefix",
+      "value",
+    ]);
+    assert.deepStrictEqual([...XsiTypeAttribute.primaryKey], ["node", "prefix", "local"]);
+    assert.strictEqual(XsiTypeAttribute.fields.local.name, contracts.XmlLocalName.name);
+    assert.strictEqual(XsiTypeAttribute.fields.namespace.name, contracts.NamespaceUri.name);
+  });
+
+  it("states the containments into Node and the xsi:type owner, and the two checks", () => {
+    assert.includeMembers(statements, [
+      "contained XsiType(node) in Node(id)",
+      "contained NoNamespaceSchemaLocation(node) in Node(id)",
+      "contained XsiNil(node,kind) in Node(id,kind)",
+      "check XsiNilUndeclared on XsiNil",
+      "contained XsiTypeAttribute(node,kind) in Node(id,kind)",
+      "contained XsiTypeAttribute(node) in XsiType(node)",
+      "check XsiTypeAttributePrefix on XsiTypeAttribute",
+    ]);
+  });
+
+  it("states each of the seven once", () => {
+    const xsi = statements.filter((line) => /Xsi|NoNamespace/u.test(line));
+    assert.strictEqual(xsi.length, 7);
+    assert.strictEqual(new Set(xsi).size, 7);
   });
 });
 
