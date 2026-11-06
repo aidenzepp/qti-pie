@@ -27,8 +27,14 @@
 import { Array, Option, Result } from "effect";
 import type { Evaluate, Evaluator, FamilyTable, Scope } from "#plate/engine/evaluate.ts";
 import type { EngineFailure } from "#plate/engine/failures.ts";
-import { boundedInteger, boundedProduct, numberOf, toFloat } from "#plate/engine/numbers.ts";
-import type { NumberSingle } from "#plate/engine/numbers.ts";
+import {
+  boundedInteger,
+  boundedTimes,
+  emptyProduct,
+  numberOf,
+  toFloat,
+} from "#plate/engine/numbers.ts";
+import type { NumberSingle, PartialProduct } from "#plate/engine/numbers.ts";
 import type { Expression } from "#plate/model/expression.ts";
 import { isNull, nullOf } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
@@ -194,10 +200,13 @@ const combined = (values: readonly Value[], step: Step): Value =>
 
 /**
  * Give the product of integers, held to the bound without building a product far past it: 0 when
- * any is 0, whatever the others' size; else each partial product through `boundedProduct`, none at
- * the first past the bound. With no 0, each partial product's magnitude is at least the one before
- * it, so the first past the bound means the whole product is past it. The first integer alone is
- * held to the bound too, for a product of one operand is computed, not written.
+ * any is 0, whatever the others' size; else the product `boundedTimes` builds from the empty
+ * product, one integer at a time, none at the first partial product past the bound. Each integer
+ * is measured once and the range of each partial product's bit length is carried, so no partial
+ * product is measured unless its factors' bit lengths cannot decide it. With no 0, each partial
+ * product's magnitude is at least the one before it, so the first past the bound means the whole
+ * product is past it. The first integer alone is held to the bound too, for a product of one
+ * operand is computed, not written.
  *
  * @param values The integers.
  * @returns The product, or none when it has more than 1,000,000 bits.
@@ -207,17 +216,17 @@ const productOf = (values: Array.NonEmptyReadonlyArray<bigint>): Option.Option<b
     return Option.some(0n);
   }
 
-  const [first, ...rest] = values;
-  let held = boundedInteger(first);
-  for (const next of rest) {
-    if (Option.isNone(held)) {
-      return held;
+  let held: PartialProduct = emptyProduct;
+  for (const next of values) {
+    const product = boundedTimes(held, next);
+    if (Option.isNone(product)) {
+      return Option.none();
     }
 
-    held = boundedProduct(held.value, next);
+    held = product.value;
   }
 
-  return held;
+  return Option.some(held.integer);
 };
 
 /**

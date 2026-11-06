@@ -162,6 +162,49 @@ describe("the evaluator's bounds on a crafted item's processing (operator ruling
   );
 
   it.effect(
+    '[I-9a] qti-repeat with number-repeats="1000000" over a product of two literals near 500,000 bits evaluates the product once: it finishes quickly and holds 1,000,000 equal values',
+    () =>
+      Effect.gen(function* repeatsCostly() {
+        const left = 2n ** 499_999n + 1n;
+        const right = 2n ** 499_999n + 3n;
+        const repeated = yield* runFor(
+          processingItem(
+            [outcomeDeclaration("OUT", "integer", "ordered")],
+            [
+              setOutcomeElement(
+                "OUT",
+                repeatElement(
+                  "1000000",
+                  expressionElement(
+                    "product",
+                    [],
+                    [
+                      baseValueElement("integer", left.toString()),
+                      baseValueElement("integer", right.toString()),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          "OUT",
+        );
+
+        assert.isBelow(repeated.elapsed, quickly);
+        assertKindType(repeated.value, "repeat", [singleInteger]);
+
+        const { values } = repeated.value;
+        const [first] = values;
+        assert.deepStrictEqual(first, { baseType: "integer", value: left * right });
+        assert.strictEqual(values.length, 1_000_000);
+        assert.isTrue(
+          values.every((single) => single === first),
+          "every value is the one value the product gave, so it was evaluated once",
+        );
+      }),
+  );
+
+  it.effect(
     "[I-9a] qti-repeat whose operand gives no value gives the ordered NULL quickly, however many passes it asks for, nested too",
     () =>
       Effect.gen(function* repeatsNothing() {
