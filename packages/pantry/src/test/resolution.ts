@@ -59,6 +59,7 @@ const xmlSpace: ReadonlySet<string> = new Set([" ", "\t", "\n", "\r"]);
  * @returns The value.
  */
 export const oracleValueOf = (lexical: string, whiteSpace: OracleWhiteSpace): string => {
+  // oxlint-disable-next-line typescript/no-misused-spread -- XML Schema's whitespace step reads a value character by character (Part 2, 4.3.6), its code points, which spreading the string yields.
   const characters = [...lexical];
   if (whiteSpace === "collapse") {
     const words: string[] = [];
@@ -177,6 +178,7 @@ const relativeOf = (value: string): Relative => {
  * @returns The limit, or none.
  */
 const limitOfPath = (path: string): OracleLimit | undefined => {
+  // oxlint-disable-next-line typescript/no-misused-spread -- RFC 3986 reads a reference character by character, so a percent sign and its two digits are three code points, which spreading the string yields.
   const characters = [...path];
   for (const [at, c] of characters.entries()) {
     if (c === "%" && !(isHex(characters[at + 1] ?? "") && isHex(characters[at + 2] ?? ""))) {
@@ -388,6 +390,7 @@ const decodedOf = (
   segment: string,
 ): { readonly limit: OracleLimit } | { readonly name: string } => {
   const octets: number[] = [];
+  // oxlint-disable-next-line typescript/no-misused-spread -- a segment is decoded character by character (RFC 3986, 2.1), each code point or one percent-encoded octet, which spreading the string yields.
   const characters = [...segment];
   for (let at = 0; at < characters.length; at += 1) {
     const c = characters[at] ?? "";
@@ -531,6 +534,7 @@ export const resolveAttribute = (input: {
 
   return input.srcset &&
     resolution.scope !== "external" &&
+    // oxlint-disable-next-line typescript/no-misused-spread -- a comma and the XML space characters are single BMP code points, so testing code points finds each.
     [...value].some((c) => c === "," || xmlSpace.has(c))
     ? { limit: "srcset", scope: "unresolved" }
     : resolution;
