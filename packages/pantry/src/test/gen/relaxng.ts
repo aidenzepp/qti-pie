@@ -42,10 +42,55 @@ export type Recognizer = (children: readonly string[], classes: MathClasses) => 
 export const semanticsContexp = "m:semantics.contexp";
 
 /**
- * The tokens of `DomainQ = (domainofapplication|condition|interval|(lowlimit,uplimit?))*`
- * (`mathml3-content.rnc` line 41).
+ * The qualifiers' places in the order MathML 3 §4.3.3 fixes: "In all cases, if more than one
+ * qualifier is present, they appear in the order bvar, lowlimit, uplimit, interval, condition,
+ * domainofapplication, degree, momentabout, logbase." The RelaxNG's `DomainQ =
+ * (domainofapplication|condition|interval|(lowlimit,uplimit?))*` (`mathml3-content.rnc` line 41)
+ * and `Qualifier = DomainQ|degree|momentabout|logbase` (line 47) leave the order free, so this is
+ * the one layer of the qualifiers that is not the RelaxNG alone. `lowlimit` and `uplimit` share a
+ * place, the `(lowlimit, uplimit?)` group, an `uplimit` right after a `lowlimit`.
  */
-const domainTokens: ReadonlySet<string> = new Set([
+const qualifierPlace: ReadonlyMap<string, number> = new Map([
+  ["m:lowlimit", 1],
+  ["m:uplimit", 1],
+  ["m:interval", 2],
+  ["m:condition", 3],
+  ["m:domainofapplication", 4],
+  ["m:degree", 5],
+  ["m:momentabout", 6],
+  ["m:logbase", 7],
+]);
+
+/**
+ * Whether a run is qualifiers in the Recommendation's order: each kind one of the `allowed`, the
+ * places never falling, each `uplimit` right after a `lowlimit`, and, when no `bvar` precedes the
+ * run, no `condition` (§4.3.3.2, "condition qualifiers always contain instances of the bound
+ * variable, and thus require a preceding bvar").
+ *
+ * @param run - The run, after the family's `bvar` run.
+ * @param allowed - The qualifier kinds the pattern names.
+ * @param bound - Whether a `bvar` precedes the run.
+ * @returns Whether the run is one.
+ */
+const ordered = (run: readonly string[], allowed: ReadonlySet<string>, bound: boolean): boolean =>
+  run.every((kind, at) => {
+    const place = qualifierPlace.get(kind);
+    const before = at === 0 ? 0 : (qualifierPlace.get(run[at - 1] ?? "") ?? 0);
+
+    return (
+      place !== undefined &&
+      allowed.has(kind) &&
+      place >= before &&
+      (kind !== "m:uplimit" || run[at - 1] === "m:lowlimit") &&
+      (kind !== "m:condition" || bound)
+    );
+  });
+
+/**
+ * The qualifier kinds of `DomainQ` (line 41), and of `Qualifier` (line 47) with `degree`,
+ * `momentabout` and `logbase`.
+ */
+const domainKinds: ReadonlySet<string> = new Set([
   "m:domainofapplication",
   "m:condition",
   "m:interval",
@@ -53,28 +98,12 @@ const domainTokens: ReadonlySet<string> = new Set([
   "m:uplimit",
 ]);
 
-/**
- * The tokens of `Qualifier = DomainQ|degree|momentabout|logbase` (line 47), repeated.
- */
-const qualifierTokens: ReadonlySet<string> = new Set([
-  ...domainTokens,
+const qualifierKinds: ReadonlySet<string> = new Set([
+  ...domainKinds,
   "m:degree",
   "m:momentabout",
   "m:logbase",
 ]);
-
-/**
- * Whether a run is a repetition of a qualifier pattern: each token one of the pattern's, and each
- * `uplimit` right after a `lowlimit`, the `(lowlimit, uplimit?)` group.
- *
- * @param run - The run.
- * @param tokens - The pattern's tokens.
- * @returns Whether the run is one.
- */
-const repeats = (run: readonly string[], tokens: ReadonlySet<string>): boolean =>
-  run.every(
-    (kind, at) => tokens.has(kind) && (kind !== "m:uplimit" || run[at - 1] === "m:lowlimit"),
-  );
 
 /**
  * The length of a family's leading `bvar*` (`BvarQ`, `mathml3-strict-content.rnc` line 38).
@@ -89,28 +118,37 @@ const boundCount = (children: readonly string[]): number => {
 };
 
 /**
- * Whether a family is `qualifiers, ContExp*` for some split: a qualifier run, then content
- * expressions, an `interval` free to fall on either side.
+ * Whether a family is `qualifiers, ContExp*` for some split: a qualifier run in the
+ * Recommendation's order, then content expressions, an `interval` free to fall on either side.
  *
- * @param children - The family.
- * @param tokens - The qualifier pattern's tokens.
+ * @param children - The family, after the leading content expression if the pattern has one.
+ * @param allowed - The qualifier kinds the pattern names.
  * @param classes - The classes.
+ * @param binding - Whether the family's `bvar` run may be empty: a `bind`'s may not.
  * @returns Whether some split matches.
  */
 const qualifiedThenArguments = (
   children: readonly string[],
-  tokens: ReadonlySet<string>,
+  allowed: ReadonlySet<string>,
   classes: MathClasses,
-): boolean =>
-  Array.from({ length: children.length + 1 }, (_, split) => split).some(
-    (split) =>
-      repeats(children.slice(0, split), tokens) &&
-      children.slice(split).every((kind) => classes.content.has(kind)),
+  binding: "optional" | "required",
+): boolean => {
+  const bound = boundCount(children);
+  const rest = children.slice(bound);
+
+  return (
+    (binding === "optional" || bound > 0) &&
+    Array.from({ length: rest.length + 1 }, (_, split) => split).some(
+      (split) =>
+        ordered(rest.slice(0, split), allowed, bound > 0) &&
+        rest.slice(split).every((kind) => classes.content.has(kind)),
+    )
   );
+};
 
 /**
  * `apply.content = ContExp+ | (ContExp, BvarQ, Qualifier*, ContExp*)` (`mathml3-content.rnc` line
- * 29), and `bind.content`, the same (line 31).
+ * 29), the qualifiers in the Recommendation's order and a `condition` only after a `bvar`.
  *
  * @param children - The family.
  * @param classes - The classes.
@@ -122,8 +160,25 @@ const applyContent: Recognizer = (children, classes) => {
   return (
     operator !== undefined &&
     classes.content.has(operator) &&
-    (rest.every((kind) => classes.content.has(kind)) ||
-      qualifiedThenArguments(rest.slice(boundCount(rest)), qualifierTokens, classes))
+    qualifiedThenArguments(rest, qualifierKinds, classes, "optional")
+  );
+};
+
+/**
+ * `bind.content`, the same (line 31), with the non-empty list of `bvar` elements §4.2.6.1 asks
+ * for: "This is followed by a non-empty list of bvar elements".
+ *
+ * @param children - The family.
+ * @param classes - The classes.
+ * @returns Whether the RelaxNG accepts it.
+ */
+const bindContent: Recognizer = (children, classes) => {
+  const [operator, ...rest] = children;
+
+  return (
+    operator !== undefined &&
+    classes.content.has(operator) &&
+    qualifiedThenArguments(rest, qualifierKinds, classes, "required")
   );
 };
 
@@ -136,7 +191,7 @@ const applyContent: Recognizer = (children, classes) => {
  * @returns Whether the RelaxNG accepts it.
  */
 const constructorContent: Recognizer = (children, classes) =>
-  qualifiedThenArguments(children.slice(boundCount(children)), domainTokens, classes);
+  qualifiedThenArguments(children, domainKinds, classes, "optional");
 
 /**
  * `lambda = element lambda {CommonAtt, DefEncAtt, BvarQ, DomainQ, ContExp}` (line 103).
@@ -148,11 +203,12 @@ const constructorContent: Recognizer = (children, classes) =>
 const lambdaContent: Recognizer = (children, classes) => {
   const body = children.at(-1);
   const before = children.slice(0, -1);
+  const bound = boundCount(before);
 
   return (
     body !== undefined &&
     classes.content.has(body) &&
-    repeats(before.slice(boundCount(before)), domainTokens)
+    ordered(before.slice(bound), domainKinds, bound > 0)
   );
 };
 
@@ -226,7 +282,7 @@ export const relaxNgModels: ReadonlyMap<string, Recognizer> = new Map<string, Re
       children.filter((kind) => kind === "m:otherwise").length <= 1,
   ],
   ["m:apply", applyContent],
-  ["m:bind", applyContent],
+  ["m:bind", bindContent],
   ["m:lambda", lambdaContent],
   ["m:mstack", stackContent(0)],
   ["m:mlongdiv", stackContent(3)],
