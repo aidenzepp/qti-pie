@@ -1575,7 +1575,7 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
     foldOf(
       children,
       "concat",
-      sideOf("Node", "parent", "chars", "charsWas", "charsAfter"),
+      sideOf("Node", "parent", "stringPiece", "charsWas", "charsAfter"),
       sideOf("Node", "id", "stringValue"),
     ),
     "E1 derived",
