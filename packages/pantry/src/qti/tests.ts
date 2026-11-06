@@ -669,8 +669,15 @@ export const AssembledName = relation(
  *   `viaStart`, `viaEnd` and `viaSiteStart`; and `common`, the nearest element holding the source
  *   and the target in the target's document, and `branch`, its child that holds the target, each
  *   with the fields the ordering law reads (both the target where the law needs neither);
- * - **accumulated** along {@link resolutionFamily}'s owner axis: `assembly`, `document`,
- *   `instanceStart` and `instanceEnd`, the instance's.
+ * - **accumulated** along {@link resolutionFamily}'s owner axis: `assembly`, `document` and
+ *   `instanceStart`, the instance's.
+ *
+ * The instance's `end` is not copied. {@link instanceTree} draws it on leaving the instance, after
+ * the instance's members, so grizzle's write filler refuses an owner-axis copy of it, and with it
+ * every ChangeSet of the schema (`docs/grizzle-findings.md`, R87). The law needs only the start:
+ * a pre-order interval `[start, end)` holds an instance exactly when it holds the instance's
+ * `start`, so `Branch_target` places the rule's instance inside the target's instance and inside
+ * `via` by `instanceStart` alone.
  */
 export const BranchResolution = relation(
   "BranchResolution",
@@ -690,7 +697,6 @@ export const BranchResolution = relation(
     commonStart: natural,
     document: accumulated(uuid, nilUuid),
     instance: uuid,
-    instanceEnd: accumulated(natural, 0n),
     instanceStart: accumulated(natural, 0n),
     owner: uuid,
     ownerEnd: natural,
@@ -1770,8 +1776,8 @@ export const branchLaws = [
   contained(on(testInstances, "document", "rules"), on(TestDocument, "node", "rules")),
   resolutionFamily,
   contained(
-    on(BranchResolution, "instance", "assembly", "document", "instanceEnd", "instanceStart"),
-    on(Instance, "id", "assembly", "document", "end", "start"),
+    on(BranchResolution, "instance", "assembly", "document", "instanceStart"),
+    on(Instance, "id", "assembly", "document", "start"),
   ),
   contained(
     on(BranchResolution, "document", "rule", "target"),
