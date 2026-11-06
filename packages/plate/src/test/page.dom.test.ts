@@ -22,6 +22,13 @@ import { toHtml } from "#plate/emit/serialise.ts";
  */
 const written = "<p>a &amp; &lt;b&gt;</p>";
 
+/**
+ * The ports no browser run holds, as `reservedPorts` in `src/test/browsers.ts` lists them, written
+ * as `location.port` reads them. This file runs in a page, so it cannot load that harness, which
+ * imports Node built-ins and `playwright-core`.
+ */
+const reservedPorts: readonly string[] = ["5190", "5191", "5192", "5433", "5435"];
+
 describe(server.browser, () => {
   it("has the DOM that Node lacks", () => {
     assert.instanceOf(document.createElement("template"), HTMLTemplateElement);
@@ -44,6 +51,6 @@ describe(server.browser, () => {
 
   it("is served from 127.0.0.1 off the reserved ports", () => {
     assert.strictEqual(location.hostname, "127.0.0.1");
-    assert.notInclude(["5190", "5191", "5192", "5433", "5435"], location.port);
+    assert.notInclude(reservedPorts, location.port);
   });
 });

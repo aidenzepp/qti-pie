@@ -29,22 +29,52 @@ const sessionExclusions = {
 } satisfies Readonly<Record<string, string>>;
 
 /**
+ * Whether a path is a DOM-program module: a module that runs in a page (`*.dom.ts`).
+ *
+ * @param path A path under the package.
+ * @returns True for the suffix.
+ */
+const isDomModule = (path: string): boolean => path.endsWith(".dom.ts");
+
+/**
  * Whether a path is in the DOM program: a module that runs in a page (`*.dom.ts`) or a test that
  * runs inside one (`*.dom.test.ts`).
  *
  * @param path A path under the package.
  * @returns True for either suffix.
  */
-const inDomProgram = (path: string): boolean =>
-  path.endsWith(".dom.ts") || path.endsWith(".dom.test.ts");
+const inDomProgram = (path: string): boolean => isDomModule(path) || path.endsWith(".dom.test.ts");
 
 /**
- * Select the browser modules the scan starts from among some paths: every DOM-program module
- * (`*.dom.ts`) under `src/`, wherever it sits, since each runs in a page; every non-test module
- * under `src/emit/`, `src/interactions/`, `src/engine/`, `src/session/` (but for
- * {@link sessionExclusions}) and `src/form/`; `src/payload.ts` (the OD-6 ruling, rule
- * `e2bd87f2`), `src/render.ts`, `src/responses.ts`, and `src/solution.ts` and `src/navigation.ts`
- * once the paths hold them.
+ * The folders whose non-test modules are browser modules, but for {@link sessionExclusions}.
+ */
+const browserFolders = [
+  "src/emit/",
+  "src/interactions/",
+  "src/engine/",
+  "src/session/",
+  "src/form/",
+] as const;
+
+/**
+ * Whether a non-test module is a root by where it sits: a DOM-program module anywhere under
+ * `src/`, since each runs in a page, or a module in one of the {@link browserFolders} that
+ * {@link sessionExclusions} does not name.
+ *
+ * @param path A path under the package.
+ * @returns True when its place makes it a root.
+ */
+const isRootByPlace = (path: string): boolean =>
+  isDomModule(path)
+    ? path.startsWith("src/")
+    : browserFolders.some((folder) => path.startsWith(folder)) &&
+      !Object.hasOwn(sessionExclusions, path);
+
+/**
+ * Select the browser modules the scan starts from among some paths: every non-test module that is
+ * a root by place ({@link isRootByPlace}); `src/payload.ts` (the OD-6 ruling, rule `e2bd87f2`),
+ * `src/render.ts`, `src/responses.ts`, and `src/solution.ts` and `src/navigation.ts` once the
+ * paths hold them.
  *
  * An in-page test (`*.dom.test.ts`) is not a root: like a Node test it may import any of `effect`
  * and `@effect/vitest`, and no test reaches a bundle.
@@ -53,15 +83,7 @@ const inDomProgram = (path: string): boolean =>
  * @returns The roots: the matching paths in the order given, then the top-level files.
  */
 const selectRoots = (paths: readonly string[]): readonly string[] => [
-  ...paths.filter(
-    (path) =>
-      !path.endsWith(".test.ts") &&
-      ((path.startsWith("src/") && path.endsWith(".dom.ts")) ||
-        (["src/emit/", "src/interactions/", "src/engine/", "src/session/", "src/form/"].some(
-          (directory) => path.startsWith(directory),
-        ) &&
-          !Object.hasOwn(sessionExclusions, path))),
-  ),
+  ...paths.filter((path) => !path.endsWith(".test.ts") && isRootByPlace(path)),
   "src/payload.ts",
   "src/render.ts",
   "src/responses.ts",
@@ -158,7 +180,7 @@ const domImports = (sources: ReadonlyMap<string, string>): readonly DomImport[] 
     inDomProgram(module)
       ? []
       : readImports(source).imports.flatMap(({ line, specifier }) =>
-          (resolvePlate(specifier) ?? "").endsWith(".dom.ts") ? [{ line, module, specifier }] : [],
+          isDomModule(resolvePlate(specifier) ?? "") ? [{ line, module, specifier }] : [],
         ),
   );
 
