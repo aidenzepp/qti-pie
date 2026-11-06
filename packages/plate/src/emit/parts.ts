@@ -453,8 +453,9 @@ const admits = {
  * the host's.
  *
  * The Inline Choice Option and Placeholder merge `disabled` and `hidden`, which plate never writes
- * on them, so plate owns their absence: every choice, and the way back to no answer, stays
- * choosable whatever a replacement writes.
+ * on them, so plate owns their absence: a replacement cannot disable or hide a choice, or the way
+ * back to no answer, on the option's own element; disabling the select through an ancestor, such
+ * as a `fieldset disabled`, is the host's.
  */
 const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
   {
