@@ -30,24 +30,30 @@ const confText = confBytes.pipe(Effect.map((bytes) => new TextDecoder().decode(b
 const familyCounts = { A: 58, I: 22, M: 10, P: 13, Q: 23, S: 10, T: 14 } as const;
 
 describe("ledger/features.ts", () => {
-  it.effect("the committed file has the 150 rows the generator reads from conf.txt", () =>
-    Effect.gen(function* regenerateNoDiff() {
-      const generated = generateFeatures(yield* confText);
+  it.effect(
+    "the committed file has the 150 rows the generator reads from conf.txt",
+    () =>
+      Effect.gen(function* regenerateNoDiff() {
+        const generated = generateFeatures(yield* confText);
 
-      assert.lengthOf(features, 150);
-      assert.deepStrictEqual(features, generated);
-    }),
+        assert.lengthOf(features, 150);
+        assert.deepStrictEqual(features, generated);
+      }),
+    { tags: ["conformance-text"] },
   );
 
-  it.effect("conf.txt is the conformance text the file was generated from", () =>
-    Effect.gen(function* confDigest() {
-      const bytes = yield* confBytes;
+  it.effect(
+    "conf.txt is the conformance text the file was generated from",
+    () =>
+      Effect.gen(function* confDigest() {
+        const bytes = yield* confBytes;
 
-      assert.strictEqual(
-        createHash("sha256").update(bytes).digest("hex"),
-        "5400bd7d41a3a35f0e265422366b383f661cd5abc6b13357315df5d86e905a80",
-      );
-    }),
+        assert.strictEqual(
+          createHash("sha256").update(bytes).digest("hex"),
+          "5400bd7d41a3a35f0e265422366b383f661cd5abc6b13357315df5d86e905a80",
+        );
+      }),
+    { tags: ["conformance-text"] },
   );
 
   it("each family has the goal's count of rows", () => {

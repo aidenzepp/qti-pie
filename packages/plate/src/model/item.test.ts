@@ -28,6 +28,7 @@ import type {
 } from "#plate/model/item.ts";
 import { fresh } from "#plate/model/record.ts";
 import type { Value } from "#plate/model/values.ts";
+import { rptemplatesDirectory } from "#plate/test/caches.ts";
 import { float, integer } from "#plate/test/fixtures.ts";
 import { checkRules } from "#plate/validate/rules.ts";
 import { tables } from "#plate/validate/tables.ts";
@@ -583,8 +584,8 @@ class UnreadableTemplateError extends Data.TaggedError("UnreadableTemplateError"
  */
 const templateRules = (name: string) =>
   Effect.gen(function* readTemplateRules() {
-    const file = yield* Config.String("HOME").pipe(
-      Config.map((home) => `${home}/.cache/gr8des/qti3/rptemplates/${name}.xml`),
+    const file = yield* rptemplatesDirectory.pipe(
+      Config.map((directory) => `${directory}/${name}.xml`),
     );
     const bytes = yield* Effect.tryPromise({
       catch: () => new UnreadableTemplateError({ path: file }),
@@ -1027,17 +1028,20 @@ describe("buildItem", () => {
 
   /* oxlint-enable anti-slop/no-shape-in-symbol-names */
 
-  it.effect("resolves map_response_point to the rules of its file, read from the cache", () =>
-    Effect.gen(function* resolvesMapResponsePoint() {
-      const rules = yield* templateRules("map_response_point");
-      const inline = yield* buildItem(pointItem(el("qti-response-processing", [], rules)));
-      const built = yield* buildItem(pointItem(template("map_response_point")));
+  it.effect(
+    "resolves map_response_point to the rules of its file, read from the cache",
+    () =>
+      Effect.gen(function* resolvesMapResponsePoint() {
+        const rules = yield* templateRules("map_response_point");
+        const inline = yield* buildItem(pointItem(el("qti-response-processing", [], rules)));
+        const built = yield* buildItem(pointItem(template("map_response_point")));
 
-      assert.deepStrictEqual(built.processing, Option.some(mapResponsePoint));
-      assert.deepStrictEqual(inline.processing, built.processing);
-      assert.deepStrictEqual(built.unsupported, []);
-      assert.deepStrictEqual(inline.unsupported, []);
-    }),
+        assert.deepStrictEqual(built.processing, Option.some(mapResponsePoint));
+        assert.deepStrictEqual(inline.processing, built.processing);
+        assert.deepStrictEqual(built.unsupported, []);
+        assert.deepStrictEqual(inline.unsupported, []);
+      }),
+    { tags: ["rptemplates"] },
   );
 
   it.effect("fails naming the path when a template file is missing under HOME", () =>
@@ -1139,6 +1143,7 @@ describe("buildItem", () => {
 
         assert.deepStrictEqual(cc2MatchInline.processing, matchInline.processing);
       }),
+    { tags: ["rptemplates"] },
   );
 
   it.effect("[I-9b] CC2_match scores as match_correct", () =>
