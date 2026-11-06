@@ -8,8 +8,9 @@
  * checked by each test at run time. vitest's `strictTags` (on by default) refuses a tag the run
  * does not declare.
  *
- * Test support: `vite.config.ts` declares {@link cacheTags} as the unit run's tags, and this
- * module's own test imports it; nothing else does. Nothing here fetches or writes a cache.
+ * Test support: `vite.config.ts` declares {@link cacheTags} as the unit run's tags, and a test that
+ * reads the response-processing templates or XML Schema Part 2 imports that cache's reader from
+ * here. Nothing here fetches or writes a cache.
  *
  * @module
  * @see https://vitest.dev/guide/test-tags
@@ -29,6 +30,14 @@ import { xsdDirectory } from "#plate/test/xsd.ts";
  */
 export const rptemplatesDirectory: Config.Config<string> = Config.String("HOME").pipe(
   Config.map((home) => path.join(home, ".cache", "gr8des", "qti3", "rptemplates")),
+);
+
+/**
+ * Where XML Schema Part 2: Datatypes Second Edition is cached, {@link xsdPart2CachePath} under
+ * `HOME`, as the one HTML file of the Recommendation.
+ */
+export const xsdPart2Path: Config.Config<string> = Config.String("HOME").pipe(
+  Config.map((home) => path.join(home, xsdPart2CachePath)),
 );
 
 /**
@@ -105,7 +114,7 @@ export const caches: readonly Cache[] = [
   {
     fetch:
       "fetch https://www.w3.org/TR/2004/REC-xmlschema-2-20041028/ there as xmlschema-2-20041028.html",
-    path: Config.String("HOME").pipe(Config.map((home) => path.join(home, xsdPart2CachePath))),
+    path: xsdPart2Path,
     tag: "xsd-datatypes",
     variable: "HOME",
     what: "XML Schema Part 2: Datatypes Second Edition",
@@ -157,7 +166,7 @@ const tagOf = Effect.fnUntraced(function* tagOf(cache: Cache, required: boolean)
   if (missing) {
     yield* Console.error(
       required
-        ? `plate: the tests tagged ${cache.tag} will fail, because PLATE_REQUIRE_CACHES is set: they need ${cache.what}, and ${at} is missing. To run them, ${repair}.`
+        ? `plate: the tests tagged ${cache.tag} will fail, because PLATE_REQUIRE_CACHES is set: they need ${cache.what}, and ${at} is missing. To make them pass, ${repair}.`
         : `plate: the tests tagged ${cache.tag} are skipped: they need ${cache.what}, and ${at} is missing. To run them, ${repair}. Set PLATE_REQUIRE_CACHES=1 to make them fail instead.`,
     );
   }
