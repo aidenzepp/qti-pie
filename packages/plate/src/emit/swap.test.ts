@@ -560,3 +560,141 @@ describe("applyPart, the Choice Prompt's two markups", () => {
     }),
   );
 });
+
+/**
+ * Swap a part and give its refusal, failing the test when the swap is accepted.
+ *
+ * @param row The part's row.
+ * @param props The attributes the part carries.
+ * @param children The nodes the emitter hands over.
+ * @param replacement The embedder's part function.
+ * @returns The refusal.
+ */
+const refusedAt = (
+  row: PartRow,
+  props: Attributes,
+  children: readonly Node[],
+  replacement: (props: Attributes, children: readonly Node[]) => Element,
+) => Effect.flip(Effect.fromResult(applyPart(row, props, children, replacement)));
+
+describe("applyPart, the select joint rule", () => {
+  /**
+   * The Inline Choice Control's row, of tag class `select`.
+   */
+  const selectRow = rowFor("inline-choice-interaction", "control");
+
+  /**
+   * The Inline Choice Option's row, of tag class `option`.
+   */
+  const optionRow = rowFor("inline-choice-interaction", "option");
+
+  /**
+   * The Inline Choice Control's attributes, as its connect function computes them.
+   */
+  const selectProps: Attributes = {
+    "aria-label": "Answer",
+    autocomplete: "off",
+    "data-slot": selectRow.slot,
+    id: "i1-RESPONSE-control-0",
+    name: "RESPONSE",
+  };
+
+  /**
+   * An Option's attributes, as the connect function computes them for an unselected choice.
+   */
+  const optionProps: Attributes = { "data-slot": optionRow.slot, value: "A" };
+
+  /**
+   * The Placeholder and two Options, as the emitter hands them to the Control.
+   */
+  const options = [
+    h(
+      "option",
+      { "data-slot": rowFor("inline-choice-interaction", "placeholder").slot, value: "" },
+      [text("Select an answer")],
+    ),
+    h("option", optionProps, [text("Apple")]),
+    h("option", { "data-slot": optionRow.slot, value: "B" }, [text("Pear")]),
+  ];
+
+  /**
+   * An Option's text, as the emitter hands it to the Option.
+   */
+  const optionText = [text("Apple")];
+
+  it.effect("[Q-12] refuses a Control replacement that wraps the options in an optgroup", () =>
+    Effect.gen(function* selectWrapsOptions() {
+      const error = yield* refusedAt(selectRow, selectProps, options, (props, children) =>
+        h("select", props, [h("optgroup", { label: "Fruit" }, children)]),
+      );
+      assert.strictEqual(error._tag, "PartSwapRefused");
+      assert.strictEqual(error.cause, "select-content");
+      assert.strictEqual(error.interaction, "inline-choice-interaction");
+      assert.strictEqual(error.part, "control");
+    }),
+  );
+
+  it.effect("[Q-12] refuses a Control replacement that adds an option beside the handed ones", () =>
+    Effect.gen(function* selectAddsOption() {
+      const error = yield* refusedAt(selectRow, selectProps, options, (props, children) =>
+        h("select", props, [...children, h("option", { value: "C" }, [text("Plum")])]),
+      );
+      assert.strictEqual(error.cause, "select-content");
+      assert.strictEqual(error.part, "control");
+    }),
+  );
+
+  it.effect("[Q-12] refuses an Option replacement that wraps its text in a span", () =>
+    Effect.gen(function* optionWrapsText() {
+      const error = yield* refusedAt(optionRow, optionProps, optionText, (props, children) =>
+        h("option", props, [h("span", { class: "fruit" }, children)]),
+      );
+      assert.strictEqual(error._tag, "PartSwapRefused");
+      assert.strictEqual(error.cause, "select-content");
+      assert.strictEqual(error.interaction, "inline-choice-interaction");
+      assert.strictEqual(error.part, "option");
+    }),
+  );
+
+  it.effect("[Q-12] refuses an Option replacement that adds an element beside its text", () =>
+    Effect.gen(function* optionAddsElement() {
+      const error = yield* refusedAt(optionRow, optionProps, optionText, (props, children) =>
+        h("option", props, [...children, h("b", {}, [text("!")])]),
+      );
+      assert.strictEqual(error.cause, "select-content");
+      assert.strictEqual(error.part, "option");
+    }),
+  );
+
+  it.effect("[Q-12] refuses an Option replacement that adds a text node beside its text", () =>
+    Effect.gen(function* optionAddsText() {
+      const error = yield* refusedAt(optionRow, optionProps, optionText, (props, children) =>
+        h("option", props, [...children, text(" (ripe)")]),
+      );
+      assert.strictEqual(error.cause, "select-content");
+      assert.strictEqual(error.part, "option");
+    }),
+  );
+
+  it.effect(
+    "[Q-12] accepts a Control replacement whose select holds the handed options unwrapped, and writes the props over it",
+    () =>
+      Effect.gen(function* selectKeepsOptions() {
+        const result = yield* Effect.fromResult(
+          applyPart(selectRow, selectProps, options, (_props, children) =>
+            h("select", { class: "host", id: "theirs", name: "theirs" }, children),
+          ),
+        );
+        assert.strictEqual(result.tag, "select");
+        assert.strictEqual(result.attrs["id"], "i1-RESPONSE-control-0");
+        assert.strictEqual(result.attrs["name"], "RESPONSE");
+        assert.strictEqual(result.attrs["autocomplete"], "off");
+        assert.strictEqual(result.attrs["aria-label"], "Answer");
+        assert.strictEqual(result.attrs["class"], "host");
+        assert.strictEqual(result.children.length, options.length);
+        for (const [index, child] of result.children.entries()) {
+          assert.strictEqual(child, options[index]);
+        }
+      }),
+  );
+});
