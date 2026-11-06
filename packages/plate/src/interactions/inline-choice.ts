@@ -112,6 +112,7 @@ const textIn = (nodes: readonly PayloadNode[]): string =>
         case "notice":
         case "choice":
         case "extended-text":
+        case "inline-choice":
         case "text-entry": {
           return "";
         }
