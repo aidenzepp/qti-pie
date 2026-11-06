@@ -1321,3 +1321,70 @@ describe("XLink's global attributes (C30)", () => {
     hookTimeoutMs,
   );
 });
+
+/**
+ * The class `openClassOf` gives an attribute named `zz` in a namespace, on an element of a kind.
+ *
+ * @param kind - The element's kind.
+ * @param namespace - The attribute's namespace, `""` for none.
+ * @param own - The kind's own namespace.
+ * @returns The class's handle.
+ */
+const mathmlAttributeClass = (kind: string, namespace: string, own: string): string =>
+  Result.getOrThrow(
+    openClassOf(
+      {
+        local: "zz",
+        namespace,
+        prefix: namespace === "" ? "" : "p",
+        qname: namespace === "" ? "zz" : "p:zz",
+      },
+      { foreign: isForeignKind(kind), local: kind, namespace: own },
+    ),
+  )._tag;
+
+describe("MathML's attribute wildcards", () => {
+  it.effect(
+    "admit an attribute of a foreign namespace and none in MathML's own namespace or in none, on every (version, kind) of the inventory's `m:` wildcards",
+    () =>
+      // Oracle: the inventory's attribute wildcards, each `##other` with `skip` processing (J6's
+      // `math-foreign-attribute`): `##other` admits a namespace that is neither the kind's own
+      // (MathML's) nor absent, so `xlink:href` on `m:mi` stands and `m:zz` and `zz` do not.
+      // Bound: the `m:` wildcards read from the inventory here, never a pinned count.
+      Effect.gen(function* mathmlAttributeWildcards() {
+        const grammar = yield* Effect.fromResult(composed());
+        const wildcards = attributeWildcards.filter(({ kind }) => kind.startsWith("m:"));
+        const wrong = wildcards.flatMap(({ kind, namespace, versions }) => {
+          const own = Option.match(grammar.kinds.elementName.lookup({ kind }), {
+            onNone: () => "",
+            onSome: (name) => name.namespace,
+          });
+          const cases = [
+            ["foreign", foreignNamespace, true],
+            ["own", own, false],
+            ["absent", "", false],
+          ] as const;
+
+          return versions.flatMap((version) =>
+            cases.flatMap(([label, space, expected]) => {
+              const name = mathmlAttributeClass(kind, space, own);
+              const read = Option.isSome(
+                grammar.attributes.admission.lookup({ kind, name, version }),
+              );
+
+              return read === expected
+                ? []
+                : [
+                    `${version} ${kind} (${namespace}): an undeclared attribute in the ${label} namespace (${name}) is ${read ? "admitted" : "refused"}, not ${expected ? "admitted" : "refused"}`,
+                  ];
+            }),
+          );
+        });
+
+        assert.isAbove(wildcards.length, 0);
+        assert.isTrue(wildcards.every(({ namespace }) => namespace === "##other"));
+        assert.strictEqual(wrong.join("\n"), "");
+      }),
+    hookTimeoutMs,
+  );
+});
