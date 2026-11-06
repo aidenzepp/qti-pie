@@ -62,7 +62,38 @@ that needs one asks the operator first.
    - each operator's argument count under `apply`, by its class (MathML 3 §4.1.5, §4.3.4.5 and §4.3.4.6), for an
      `apply` that holds no qualifier but its operator's own. `moment` is left out, because the Recommendation's own
      example (§4.4.8.6) applies it to five arguments.
-     Every other difference between the Recommendation's prose and the MathML XSD is decision D12's ruled gap.
+
+   The Recommendation's prose rules this package does not check are these, each a recorded limit (reading 91), with
+   its cause and what would lift it:
+   - a `cn`'s text by its `type`, each of whose values "implies that the content be of a certain form" (§4.2.1.2,
+     §4.2.1.3): the form depends on `type`, on `base` and on the `sep`s between the number's parts, and no law reads
+     an element's text against another attribute's value. A domain per `type` over `cn`'s text, as the MathML port
+     brings main's, would lift it;
+   - `share`'s target and its acyclicity, "An element may not dominate itself" (§4.2.7.2): its `src` is an
+     `xs:anyURI`, checked as one, that no law resolves to the `id` it names (§4.2.7.1). Resolving a same-document
+     `src` against the document's IDs, as Idref target resolves an IDREF, would lift the first, and a walk of the
+     resolved references the second;
+   - `indenttarget` and `xref` naming an element (§2.1.5.1's `idref`, "an identifier referring to another element
+     within the document"; §3.2.5.2.3, "it must appear before being referenced"): the RelaxNG types both `text` and
+     the XSD leaves them untyped. Reading them as `xs:IDREF` would put them under Idref target;
+   - `maction`'s selected sub-expression, "If the value specified is out of range, it is an error" (§3.7.1.1): its
+     `selection` against its number of children is a comparison no law states, as the choice bounds compare a count;
+   - an `mscarries` as the last child of an `mstack` or an `mlongdiv`, "an error" (§3.6.5.1): both schemas repeat
+     those children in any order, and a content-model edit would state it;
+   - the cells a `rowspan` or `columnspan` covers, which "must be omitted" (§3.5.4.2): a count of a row's cells
+     against the spans above it, which no law states;
+   - a space inside an `mpadded` length, "Formally, spaces are not allowed within these values" (§3.3.6.2), where
+     both schemas' `mpadded-length` admits one: a notation reading, as §2.1.5.1's above, would lift it;
+   - `mglyph`'s `src` and `alt`, "required for correct usage in MathML 3" though "not enforced by the schema due to
+     the deprecated usage" (§3.2.1.2.2): the deprecated `fontfamily` and `index` form leaves them out;
+   - the rules that turn on what an expression means: a `sum`'s or a `product`'s last argument "must be a function"
+     where no bound variable is given (§4.4.6.1, §4.4.6.2), the coordinate names of `divergence`, `grad`, `curl` and
+     `laplacian` "must be provided as bound variables" where the functions are defined implicitly (§4.4.4.4 to
+     §4.4.4.7), and `definitionURL` and `cd` naming a definition (§4.2.3). No structural law reads a meaning.
+
+   Every other normative sentence of chapters 2 to 4 is one of the laws above, the content models and value domains of
+   the XSD under this reading's edits, or binds a processor rather than a document (§2.3). (Listed 2026-11-06 by
+   RV seat I, on the review of PR #46, under the operator's standing ruling of 2026-11-05 that the spec wins.)
 
 ## Scope of names and references
 
@@ -72,6 +103,11 @@ that needs one asks the operator first.
    fragment to a mark or lexicon in another does not resolve. (2026-11-03.)
    A `mark` name may repeat within a fragment. Only a `startmark` or `endmark` must name a mark defined once in its
    fragment (SSML 1.1, §3.1.1.1).
+   A name is an `xsd:token` (`mark`'s `name`, `speak`'s `startmark` and `endmark`, SSML 1.1 §3.3.2 and
+   `synthesis-nonamespace.xsd`), whose whiteSpace is `collapse` (XML Schema Part 2, §4.3.6), so names are compared by
+   their collapsed value: `startmark="a  b"` names `<mark name="a b"/>`, and two marks named `a b` and `a  b` define
+   one name twice. (Names compared collapsed, decided 2026-11-06 by RV seat I, on the review of PR #46, under the
+   operator's standing ruling of 2026-11-05 that the spec wins.)
 4. **Prefixed variable references** (`ITEMREF.N.VAR`) are valid in a test's pre-conditions and branch rules as well as
    in its outcome processing, as QTI's information model and 1EdTech's own examples use them. (2026-11-03.)
 5. **A section document** may hold prefixed references and `section-identifier`. They resolve once for each test that
@@ -1975,9 +2011,22 @@ against it. A reading that is not an information-model-over-XSD case says which 
      `q` is judged by its own neighbours and content. This binds pantry and plate alike. This is not a case of
      documents in conflict. (Decided 2026-11-06 by RV seat Q, on the review of PR #46, under the operator's standing
      ruling of 2026-11-05 that the spec wins.)
-
-<!-- Reading 128 is reserved. -->
-
+128. **A QTI 3.0.1 item's own `label` asks for the tool that labelled it, as a body element's `label` does in both
+     versions.** The 3.0.1 information model says of the item's `label` "The label characteristic provides authoring
+     systems with a mechanism for labelling elements of the content model with application specific data. If an item
+     uses labels then values for the associated toolName and toolVersion attributes must also be provided" (section
+     4.1.3, https://www.imsglobal.org/sites/default/files/spec/qti/v3/info/imsqti_asi_v3p0p1_infomodel_v1p0.html). The
+     3.0 information model says of the same characteristic only "A human readable label that can be used to describe
+     the Item" (section 4.1.3), and both versions say of each body element's `label` "If an item uses labels then
+     values for the associated toolName and toolVersion characteristics must also be provided" (sections 5.15.5 to
+     5.21.5 and 5.79.4). So an item whose body carries a `label`, in either version, or whose root carries one in a
+     3.0.1 document, carries both `tool-name` and `tool-version` on its root, and is refused under `label-tool`
+     otherwise; a 3.0.0 item root's own `label` asks for nothing. A document's version is the `schemaversion` its
+     manifest names (reading 67). The stimulus's `label` states no such sentence in either version ("A human readable
+     label that can be used to describe the Stimulus", section 4.3.3), and the sentence binds an item, so no stimulus,
+     section or test is asked for tools. This binds pantry and plate alike. This is not a case of documents in
+     conflict: each version's text is read for its own documents. (Decided 2026-11-06 by RV seat I, on the review of
+     PR #46, under the operator's standing ruling of 2026-11-05 that the spec wins.)
 129. **`xml:lang`, `lang` and a track's `srclang` hold BCP 47 language tags, well-formed as RFC 5646 defines them.**
      XML 1.0 says of `xml:lang` "The values of the attribute are language identifiers as defined by [IETF BCP 47], Tags
      for the Identification of Languages; in addition, the empty string may be specified" (section 2.12). The
@@ -2038,9 +2087,27 @@ against it. A reading that is not an information-model-over-XSD case says which 
      `child-set`: `Counted` holds each cap as at most one child at the capped element's position, and in the database a
      key over each family's children at a capped position holds it. (Decided 2026-11-06 by RV seat K, on the review of
      PR #46, under the operator's standing ruling of 2026-11-05 that the spec wins.)
-
-<!-- Reading 131 is reserved. -->
-
+131. **A namespace declaration's value is an RFC 3986 URI reference, or empty.** Namespaces in XML 1.0 (Third Edition)
+     says "The attribute's normalized value MUST be either a URI reference — the namespace name identifying the
+     namespace — or an empty string" (section 3), and "An XML namespace is identified by a URI reference [RFC3986]"
+     (section 2.1). The URI reference is RFC 3986's `URI-reference` (section 4.1, Appendix A), which this package
+     reads off Appendix A's grammar, and not reading 71's `xs:anyURI`, the RFC 2396 language that binds only values of
+     that type. A relative reference is one: "The use of relative URI references, including same-document references,
+     in namespace declarations is deprecated" (section 2.2), and a deprecated form is still valid, so `a/b` is
+     admitted. The empty string is one, a `relative-ref` of an empty path, and stands only where the reader admits it,
+     where an unprefixed declaration undeclares the default namespace. The value is the attribute's normalized value
+     (section 2.3), so a space the document writes is kept and refused, as are a `%` that two hex digits do not follow,
+     a character beyond US-ASCII, an IP literal that is no IPv6 or IPvFuture address, and a port of anything but
+     digits: `xmlns:x="http://[bad"`, `"a b"`, `"%zz"` and `"http://h:x/"` are refused under `namespace-name`, and
+     `"urn:x:y"`, `"http://a/b?c#d"`, `"http://[::1]/"` and `"http://[V1.x]/"` are admitted (RFC 5234 section 2.3
+     reads ABNF's quoted `"v"` without regard to case). Section 8 says a processor "is not REQUIRED to check that
+     namespace names are URI references", which frees a processor and leaves the document's constraint standing.
+     libxml2 2.9.13's `xmllint` reports `namespace error : xmlns:x: 'http://[bad' is not a valid URI` for each of the
+     four refused names above, says nothing of `a/b`, and exits 0 for all five: it warns where this reading refuses,
+     so its verdict is not this reading's. A foreign element's or attribute's namespace comes from a
+     declaration, so each holds a name this law has judged. This binds pantry and plate alike. This is not a case of
+     documents in conflict. (Decided 2026-11-06 by RV seat I, on the review of PR #46, under the operator's standing
+     ruling of 2026-11-05 that the spec wins.)
 132. **A printed variable's `format` is a printf format string of at most one conversion, over the information
      model's conversion codes.** The information model says "The syntax of the format attribute is based on the format
      conversion specifiers defined in the C programming language [ISO 9899] for use with printf and related functions.
@@ -2061,8 +2128,25 @@ against it. A reading that is not an information-model-over-XSD case says which 
      2026-11-06 by RV seat G, on the review of PR #46, under the operator's standing ruling of 2026-11-05 that the spec
      wins; at most one conversion is the operator's decision of 2026-11-06 on item L4.)
 
-<!-- Readings 133 and 134 are reserved. -->
+<!-- Reading 133 is reserved. -->
 
+134. **An item's or a test's languages are listed by its records' general categories, compared as language tags.** The
+     QTI 3.0 Metadata binding says "There must be one value for each of the languages referred to by the language
+     attributes on the associated assessmentItem, test or object bank and its 'bodyElements'" (section 2.7.1.3,
+     normative by its section 1.2), and RFC 5646 says "At all times, language tags and their subtags, including private
+     use and extensions, are to be treated as case insensitive" (section 2.1.1) and "Whitespace is not permitted in a
+     language tag" (section 2.1). `xml:lang` is an `xs:language`, whose whiteSpace is `collapse` (XML Schema Part 2,
+     section 3.3.3; `xml.xsd`), so it is compared by its value, its form collapsed, its ASCII letters folded to small
+     ones. A LOM `language` is a `CharacterString`, an `xs:string` whose whitespace is preserved (the loose binding,
+     `imsmd_loose_v1p3p2.xsd`, `general/language`), so it is compared as written, its ASCII letters folded. So
+     `xml:lang="en-GB"` is listed by `en-gb`, `EN` by `en`, and `" en "` by `en`; and a LOM `language` with spaces
+     around it is no tag and lists no language, so `<imsmd:language> en </imsmd:language>` does not list the `en` an
+     `xml:lang` states, and the item is refused under `document-lang`. An empty `xml:lang` states no language (XML 1.0,
+     section 2.12) and asks for no listing; one of whitespace alone is no value of its type and is refused by reading
+     129 before this reading reads it. Each general category of each record that names the document (reading 93) lists
+     every language its item or test, and the item's body elements, state; a document no such category describes is not
+     judged. This binds pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-06 by RV
+     seat I, on the review of PR #46, under the operator's standing ruling of 2026-11-05 that the spec wins.)
 135. **A MIME type is RFC 2045's type and subtype: two tokens joined by a slash.** The information model types eight
      characteristics `MimeType` (the `type` of `a`, `object`, `param`, `source` and `qti-stylesheet`, and the
      `mime-type` of `qti-file-href`, `qti-calculator-info` and `qti-digital-material`) and the upload interaction's

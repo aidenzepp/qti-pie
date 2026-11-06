@@ -10,7 +10,8 @@
  * The contract, the operator's completion criterion for exact alignment:
  *
  * - No rule is contradicted (`X`): a rule the grammar breaks is either aligned or recorded as a spec
- *   reading (`reading`) or a ruled gap (`R`: D12 and reading 50), never left;
+ *   reading (`reading`) or a ruled gap (`R`: reading 2's recorded MathML limits and reading 50),
+ *   never left;
  * - The census holds every spec reading the readings file states, and no other;
  * - The unowned count (`U`, XSD-invalid content accepted with no owner) is a ratchet: the goal is
  *   zero, and the number recorded here only goes down, recorded anew each time it moves.

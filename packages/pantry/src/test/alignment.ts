@@ -34,11 +34,11 @@
  *   it after the operator's rulings.
  *
  * A status is `G` (the grammar states the rule), `reading` (it departs from the XSD by a recorded
- * spec reading), `R` (a ruled gap: D12 and reading 50), `P` (a named slice owns it and nothing
- * states it yet), `RG` (a representation gap the operator has not ruled), `U` (nothing owns it:
- * XSD-invalid content is accepted) or `X` (contradicted: the grammar refuses XSD-valid content, or
- * states a rule with no reading behind it). The value domains' lexical spaces beyond their
- * enumerations are `lexical.oracle.test.ts`'s, against `xmllint`.
+ * spec reading), `R` (a ruled gap: reading 2's recorded MathML limits and reading 50), `P` (a named
+ * slice owns it and nothing states it yet), `RG` (a representation gap the operator has not ruled),
+ * `U` (nothing owns it: XSD-invalid content is accepted) or `X` (contradicted: the grammar refuses
+ * XSD-valid content, or states a rule with no reading behind it). The value domains' lexical spaces
+ * beyond their enumerations are `lexical.oracle.test.ts`'s, against `xmllint`.
  */
 import { Option } from "effect";
 import { readingRefusals, readingSpellings, readingUses } from "#pantry/grammar/attributes.ts";
@@ -110,10 +110,10 @@ interface ReadingEntry {
 /**
  * Every spec reading's status and owner. Reading 14 is restated to follow the XSD (the text-entry
  * references are IDREFs), so the Idref family owns it; D4 is closed by the Glushkov ruling, so the
- * ruled gaps are D12 (reading 2's unknown rest) and reading 50; reading 60, restated, checks a
- * simple `xsi:type`'s text and leaves a complex one reading 50's. Readings 51 to 55, 58, 59, 65,
- * 66, 68, 69 and 70 bind plate, which delivers, scores and reports; pantry's part is to store the
- * values they read as written, which the codec does.
+ * ruled gaps are reading 2's recorded MathML limits (reading 91) and reading 50; reading 60,
+ * restated, checks a simple `xsi:type`'s text and leaves a complex one reading 50's. Readings 51 to
+ * 55, 58, 59, 65, 66, 68, 69 and 70 bind plate, which delivers, scores and reports; pantry's part
+ * is to store the values they read as written, which the codec does.
  */
 export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, ReadingEntry>([
   [1, { owner: "every law", status: "meta" }],
@@ -121,7 +121,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     2,
     {
       owner:
-        "the automaton's restated models (`m:bvar`, `m:piecewise`, the `interval` qualifier's eight, `m:annotation-xml`, `m:lambda`'s ending), `m:semantics.contexp` beside `m:ci`, MathML's root (`roots`), the `math` ancestry flag, the notation domains (`mathmlNotationReadings`, `number` among them, and `cnBaseReadings` for `m:cn`'s `base`) and the MathML arity law; the MathML foreign element law (QS); D12 for the Recommendation's other prose",
+        "the automaton's restated models (`m:bvar`, `m:piecewise`, the `interval` qualifier's eight, `m:annotation-xml`, `m:lambda`'s ending), `m:semantics.contexp` beside `m:ci`, MathML's root (`roots`), the `math` ancestry flag, the notation domains (`mathmlNotationReadings`, `number` among them, and `cnBaseReadings` for `m:cn`'s `base`) and the MathML arity law; the MathML foreign element law (QS); the Recommendation's other prose rules, the nine recorded limits the reading lists (reading 91)",
       status: "R",
     },
   ],
@@ -129,8 +129,8 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     3,
     {
       owner:
-        "the oracle's SSML lexicon reference and SSML trim mark; the `fragment` copy on Node and the SSML overlay (W5)",
-      status: "P",
+        "identity.ts's SSML overlay (`SsmlAttribute`, its `value` the lexical form collapsed; `SsmlScope`, `FragmentValue`, `ssmlTrimMark`, `ssmlLexiconReference`); the oracle's SSML lexicon reference and SSML trim mark, names compared collapsed",
+      status: "G",
     },
   ],
   [
@@ -691,6 +691,14 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     },
   ],
   [
+    128,
+    {
+      owner:
+        "identity.ts's Label tools (`labelAttributes` keeps a 3.0.1 item root's own label as a `LabelUse`; `itemLabels` contained in `toolNames` and `toolVersions`); the oracle's Label tools",
+      status: "G",
+    },
+  ],
+  [
     129,
     {
       owner:
@@ -706,7 +714,23 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
       status: "G",
     },
   ],
+  [
+    131,
+    {
+      owner:
+        "chardata.ts `NamespaceUri`, RFC 3986's URI-reference over `Namespace.uri` (law Namespace name, rule `namespace-name`); the oracle's Namespace name over its own Appendix A recogniser (`#pantry/test/uri-reference.ts`)",
+      status: "G",
+    },
+  ],
   [132, { owner: "AL1 (`printfFormat` on `qti-printed-variable`'s `format`)", status: "G" }],
+  [
+    134,
+    {
+      owner:
+        "R26 `document-lang` (identity.ts `GeneralLang`'s `value`, `lowerAscii(collapse(lang))`, and `LomLanguage`'s `tag`, `lowerAscii(lang)`; `documentLang`); the oracle's Document lang",
+      status: "G",
+    },
+  ],
   [
     135,
     {
