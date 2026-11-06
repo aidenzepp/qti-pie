@@ -51,8 +51,9 @@ if (Option.isSome(accepted)) {
 }
 ```
 
-Put that HTML inside your own form. When the form posts back, `partition` and `decode` read its
-entries and `score` scores them. The [playground](#playground) does the whole round trip.
+Put that HTML inside your own form. When the form posts back, `partition` picks out the item's
+entries, and `decode` reads each response that `postings` lists, in the base its interaction
+declares. `score` scores the responses. The [playground](#playground) does the whole round trip.
 
 A test arrives in a content package. Unzip the package into `files`, each file's bytes by its path
 from the package's root. Then open it, start a session on one of its tests, and render the test's
@@ -103,7 +104,7 @@ moves the session on.
 | `redact` | Copies an accepted item without its correct responses and response processing |
 | `render` | Writes an item as HTML |
 | `renderStatus` | Writes the Status part, which shows the result after a submit |
-| `partition`, `decode` | Turn a posted form's entries into responses |
+| `partition`, `postings`, `decode` | Turn a posted form's entries into responses |
 | `checkResponses` | Validates responses without scoring them |
 | `score` | Scores responses and returns the record the host stores |
 | `restore` | Gives an item's values back from its stored record |
@@ -131,7 +132,9 @@ that builds its own Status part reads the fields `StatusInput` documents.
 `encodeIntent` and `decodeIntent` are the navigation API. All six are pure functions.
 `navigationState` gives the current test part's modes, the candidate's position, the state of
 each item in the part and the intents the session takes now. `advance` carries out one intent, or
-refuses it with `IntentRefused`.
+refuses it with `IntentRefused`. When the current item is closed, `advance` ignores the responses
+that come with the intent and still carries out the intent, so a host can post a closed item's
+form as rendered. `current` and `itemView` mark a closed item as `disabled`.
 
 `renderNavigation` writes plate's navigation parts from that data. Every button it writes is
 `type="button"`, with no name, value, form attribute or other submit semantics, so a click does
@@ -296,8 +299,12 @@ export const step = (
 
 ## Records
 
-The host stores two records as JSON and hands each back on the next request. plate writes both,
-reads both back, and refuses any it could not have written.
+The host stores two records as JSON and hands each back on the next request. plate writes both.
+Each function that reads one back checks that it has version 1, that each field has its type, and
+that each value is well formed. `restore` also checks that each response and outcome in an item's
+record fits the item's declarations, as `results` does. `decodeSession` also checks that the
+session names the test you pass it and that test's document. It does not check the session's items
+against the test's item refs, so keep the stored session where only your server can change it.
 
 | Record | Holds | Written by | Read by |
 | --- | --- | --- | --- |
@@ -308,7 +315,8 @@ plate reads only version 1, and refuses a record of another version with `Invali
 `InvalidSession`. A change to either form is a changelog entry. The TSDoc on each type documents
 its fields.
 
-`restore` gives an item's values back from its `StoredRecord`. In a test, `itemView` gives them.
+`restore(document, record)` gives an item's values back from its `StoredRecord`. In a test,
+`itemView` gives them.
 
 ## Results
 
@@ -360,8 +368,10 @@ this split. A host that sends the accepted item to the browser sends what `redac
   show a choice that plate did not render.
 - Render a restored item with the instance and the configuration you first rendered it with. Its
   record does not say which they were, and a shuffled Choice's order depends on both.
-- A package's documents are live documents. Serve only the files the accepted package lists in
-  `files`, from another origin or under the CSP `sandbox` directive, and refuse an asset path that
+- An accepted package's `files` holds only the files a host may serve. It leaves out the manifest
+  and the document of every QTI resource, such as an item, a test or its response processing,
+  because those can hold correct responses. Serve only the files it holds, from another origin or
+  under the CSP `sandbox` directive, since some are live documents. Refuse an asset path that
   leaves the package once it is percent-decoded.
 
 ## Hosts
@@ -381,10 +391,12 @@ page that links plate's sheet and sends `Cache-Control: no-store`. It scores a p
 `partition`, `postings`, `decode`, `checkResponses` and `score`, and uses only what
 `@qti-pie/plate` exports.
 
-In Astro, render on an on-demand page and put the HTML in with `set:html`:
+In Astro, render on an on-demand page, import plate's stylesheet so that Astro links it, and put
+the HTML in with `set:html`:
 
 ```astro
 ---
+import "@qti-pie/plate/styles.css";
 import { readFile } from "node:fs/promises";
 import { Effect, Option, Result } from "effect";
 import { acceptedItem, configure, open, redact, render } from "@qti-pie/plate";

@@ -463,6 +463,47 @@ describe("README.md", () => {
     );
   });
 
+  it("names postings where Start and the Functions table say how a post is decoded", () => {
+    const rows = sectionOf("## Functions")
+      .split("\n")
+      .filter((line) => line.startsWith("| `"));
+
+    assert.include(sectionOf("## Start"), "`postings`");
+    assert.isTrue(
+      rows.some((row) => row.includes("`postings`") && row.includes("`decode`")),
+      "a row of the Functions table names postings beside decode",
+    );
+  });
+
+  it("imports plate's stylesheet in the Astro snippet, so Astro links it", () => {
+    const [snippet, ...others] = codeBlocks(sectionOf("## Hosts")).filter(
+      ({ lang }) => lang === "astro",
+    );
+    assert.lengthOf(others, 0, "Hosts holds one Astro snippet");
+
+    const specifiers = readImports(
+      scriptOf(snippet ?? assert.fail("Hosts holds no Astro snippet")),
+    ).imports.map(({ specifier }) => specifier);
+
+    assert.include(specifiers, `${packageName}/styles.css`);
+  });
+
+  it("says in Navigation that advance ignores the responses a step carries for a closed item", () => {
+    const paragraphs = sectionOf("## Navigation")
+      .split(/\n{2,}/u)
+      .map((paragraph) => paragraph.replaceAll("\n", " "));
+
+    assert.isTrue(
+      paragraphs.some(
+        (paragraph) =>
+          paragraph.includes("`advance`") &&
+          paragraph.includes("closed") &&
+          paragraph.includes("ignores"),
+      ),
+      "a paragraph of Navigation says advance ignores a closed item's responses",
+    );
+  });
+
   it.effect("runs the plain server action on a base-16 Text Entry, which scores ff as 255", () =>
     Effect.gen(function* runsServerAction() {
       const step = yield* serverAction();
