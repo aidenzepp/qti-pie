@@ -205,11 +205,11 @@ export interface FeatureRule {
 }
 
 /**
- * The phase-1 "renders" set, which the model builder, the verdict and the emitter read.
+ * The "renders" set, which the model builder, the verdict and the emitter read.
  */
 export interface Renders {
   /**
-   * The interactions phase 1 renders, each with the binding it renders with.
+   * The interactions plate renders, each with the binding it renders with.
    */
   readonly bindings: {
     readonly "qti-choice-interaction": BindingRule;
@@ -438,18 +438,20 @@ export const templateName = (uri: string): Option.Option<TemplateName> => {
 };
 
 /**
- * The owners of the QTI shared vocabulary classes M1 knows (I-19): the three interactions it
+ * The owners of the QTI shared vocabulary classes plate knows (I-19): the four interactions it
  * renders, and the item body, which carries the general utility classes.
  */
 export type ClassOwner =
   | "choice-interaction"
   | "text-entry-interaction"
   | "extended-text-interaction"
+  | "inline-choice-interaction"
   | "body";
 
 /**
  * The two vertical-writing classes, which each interaction owner holds (`vocab.txt:4802-4840` for
- * Choice, `:4961` for Text Entry, `:5171` for Extended Text).
+ * Choice, `:4961` for Text Entry, `:5171` for Extended Text, `:5818-5822` for Inline Choice, whose
+ * section names only `-rl` and which holds `-lr` as every interaction owner does).
  */
 const writingClasses = [
   "qti-writing-orientation-vertical-rl",
@@ -457,7 +459,7 @@ const writingClasses = [
 ] as const;
 
 /**
- * The vocabulary classes M1's stylesheet gives a presentation, by owner.
+ * The vocabulary classes plate's stylesheet gives a presentation, by owner.
  *
  * The inventory is closed: a `qti-*` class outside it has no rule. It holds no alias for the
  * corpus misspelling `qti-label-suffix-period`, and not `qti-keyword-emphasis` (M4). The rest of
@@ -512,6 +514,30 @@ export const styledClasses: Readonly<Record<ClassOwner, readonly string[]>> = {
     ...writingClasses,
   ],
   /**
+   * Inline Choice's selection widths and vertical writing: the summary table,
+   * `vocab.txt:4110-4141`, with section 1.2.7.1, `:5711`, and section 1.2.7.3, `:5818`. Each
+   * width's number is its class name's; section 1.2.7.1's line for `qti-input-width-35` says 40
+   * characters, a typo.
+   */
+  "inline-choice-interaction": [
+    "qti-input-width-1",
+    "qti-input-width-2",
+    "qti-input-width-3",
+    "qti-input-width-4",
+    "qti-input-width-6",
+    "qti-input-width-10",
+    "qti-input-width-15",
+    "qti-input-width-20",
+    "qti-input-width-25",
+    "qti-input-width-30",
+    "qti-input-width-35",
+    "qti-input-width-40",
+    "qti-input-width-45",
+    "qti-input-width-50",
+    "qti-input-width-72",
+    ...writingClasses,
+  ],
+  /**
    * Text Entry's input widths and vertical writing: the summary table, `vocab.txt:4063-4095`, with
    * section 1.2.2.1, `:4847`, and section 1.2.2.3, `:4961`.
    */
@@ -553,6 +579,10 @@ export const behaviourClasses: Readonly<Record<ClassOwner, readonly string[]>> =
    * 1.2.3.2.
    */
   "extended-text-interaction": ["qti-counter-up", "qti-counter-down"],
+  /**
+   * None: Inline Choice's vocabulary is all presentational.
+   */
+  "inline-choice-interaction": [],
   /**
    * None: Text Entry's vocabulary is all presentational.
    */
