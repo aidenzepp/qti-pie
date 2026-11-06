@@ -15,6 +15,7 @@ interface PartsOf {
     | "prompt"
     | "root";
   "extended-text-interaction": "control" | "prompt" | "root";
+  "inline-choice-interaction": "control" | "label" | "option" | "placeholder" | "root";
   item: "message" | "messages" | "notice" | "root" | "status" | "statusHeading";
   "test-navigation":
     | "end"
@@ -58,13 +59,16 @@ export type Position = "flow" | "phrasing";
  *
  * - `flow-container`, `phrasing-container`: any element of that container class.
  * - `prompt`: a flow or phrasing container, or `p`, so the prompt is valid in any parent.
- * - `li`, `textarea`, `fieldset`, `legend`, `button`: that element only.
+ * - `li`, `textarea`, `fieldset`, `legend`, `button`, `select`, `option`: that element only.
  * - `heading`: `h1` to `h6`. `list`: `ul`, `ol` or `menu`.
  * - `choice-list`: `ul`, `ol` or a flow container; a swap to a flow container adds the list roles.
  * - `choice-item`: `li`, or a flow container under a Choices that is not a list.
  * - `native-input`: an `input`, whose `type` I1 writes back, so the native control stays the one the
  *   interaction computed.
  * - `text-input`: an `input` of type `text`, written or by default.
+ * - `inline-label`: a `label`, or a phrasing container, so a Label stays phrasing content inside the
+ *   author's sentence. `label` is no phrasing container, and a `div` or `p` there would close the
+ *   author's `p` in the HTML parser.
  * - `any`: any element.
  */
 export type TagClass =
@@ -75,12 +79,15 @@ export type TagClass =
   | "fieldset"
   | "flow-container"
   | "heading"
+  | "inline-label"
   | "legend"
   | "li"
   | "list"
   | "native-input"
+  | "option"
   | "phrasing-container"
   | "prompt"
+  | "select"
   | "text-input"
   | "textarea";
 
@@ -376,12 +383,15 @@ const admits = {
   fieldset: ({ tag }) => tag === "fieldset",
   "flow-container": ({ tag }) => isFlowContainer(tag),
   heading: ({ tag }) => headings.has(tag),
+  "inline-label": ({ tag }) => tag === "label" || isPhrasingContainer(tag),
   legend: ({ tag }) => tag === "legend",
   li: ({ tag }) => tag === "li",
   list: ({ tag }) => lists.has(tag),
   "native-input": ({ tag }) => tag === "input",
+  option: ({ tag }) => tag === "option",
   "phrasing-container": ({ tag }) => isPhrasingContainer(tag),
   prompt: ({ tag }) => tag === "p" || isFlowContainer(tag),
+  select: ({ tag }) => tag === "select",
   "text-input": ({ attrs, tag }) => tag === "input" && isTextType(attrs["type"]),
   textarea: ({ tag }) => tag === "textarea",
 } satisfies { readonly [C in TagClass]: (element: Element) => boolean };
@@ -557,6 +567,61 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
     ],
     part: "control",
     tagClass: "text-input",
+  },
+  {
+    defaults: {},
+    element: "qti-inline-choice-interaction",
+    interaction: "inline-choice-interaction",
+    listOwner: false,
+    merged: ["class"],
+    part: "root",
+    tagClass: "phrasing-container",
+  },
+  {
+    defaults: {},
+    element: "label",
+    interaction: "inline-choice-interaction",
+    listOwner: false,
+    merged: ["id", "for"],
+    part: "label",
+    tagClass: "inline-label",
+  },
+  {
+    defaults: {},
+    element: "select",
+    interaction: "inline-choice-interaction",
+    listOwner: false,
+    merged: [
+      "id",
+      "name",
+      "autocomplete",
+      "disabled",
+      "aria-label",
+      "aria-labelledby",
+      "aria-invalid",
+      "aria-describedby",
+      "autofocus",
+    ],
+    part: "control",
+    tagClass: "select",
+  },
+  {
+    defaults: {},
+    element: "option",
+    interaction: "inline-choice-interaction",
+    listOwner: false,
+    merged: ["value", "selected"],
+    part: "placeholder",
+    tagClass: "option",
+  },
+  {
+    defaults: {},
+    element: "option",
+    interaction: "inline-choice-interaction",
+    listOwner: false,
+    merged: ["value", "selected"],
+    part: "option",
+    tagClass: "option",
   },
   {
     defaults: {},
