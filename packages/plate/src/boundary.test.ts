@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs";
 import { assert, describe, it } from "@effect/vitest";
 import { Schema } from "effect";
 import * as plate from "#plate/index.ts";
+import { PartlessTestDefect } from "#plate/navigation.ts";
+import { acceptPackageForTest } from "#plate/package/open.ts";
 import { brandRedacted } from "#plate/payload.ts";
 import {
   missingModule,
@@ -11,7 +13,12 @@ import {
   unreadable,
   valueClosure,
 } from "#plate/test/imports.ts";
-import { acceptForTest } from "#plate/validate/verdict.ts";
+import {
+  acceptForTest,
+  acceptSectionForTest,
+  acceptStimulusForTest,
+  acceptTestForTest,
+} from "#plate/validate/verdict.ts";
 
 /**
  * Why an import crosses the core boundary: it loads a forbidden specifier, it loads a `#plate/`
@@ -243,11 +250,17 @@ describe("the core, from src/index.ts", () => {
     );
   });
 
-  it("exports neither acceptForTest nor brandRedacted, under any name (ledger security note)", () => {
-    // The seams that make an `Accepted` and a `Redacted` without `check` or `redact`.
+  it("exports no test seam, brand constructor or defect, under any name (ledger security note)", () => {
+    // The seams that make an accepted root, an `AcceptedPackage` or a `Redacted` without `check`,
+    // `openPackage` or `redact`, and the defect no accepted test can raise.
     const seams: ReadonlyMap<string, unknown> = new Map<string, unknown>([
       ["acceptForTest", acceptForTest],
+      ["acceptPackageForTest", acceptPackageForTest],
+      ["acceptSectionForTest", acceptSectionForTest],
+      ["acceptStimulusForTest", acceptStimulusForTest],
+      ["acceptTestForTest", acceptTestForTest],
       ["brandRedacted", brandRedacted],
+      ["PartlessTestDefect", PartlessTestDefect],
     ]);
     const values = new Set(seams.values());
     const exported = Object.entries(plate);

@@ -9,7 +9,8 @@
     "#scripts/*": "./scripts/*"
   },
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./styles.css": "./src/styles.css"
   },
   "scripts": {
     "browsers": "PLAYWRIGHT_BROWSERS_PATH=\"$HOME/.cache/gr8des/ms-playwright\" playwright-core install --only-shell chromium webkit",
