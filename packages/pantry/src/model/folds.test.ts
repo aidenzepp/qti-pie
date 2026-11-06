@@ -11,6 +11,7 @@ import { rowOf } from "#pantry/grammar/ancestry.ts";
 import { admissionOf } from "#pantry/grammar/attributes.ts";
 import type { Ancestry } from "#pantry/grammar/ancestry.ts";
 import { composed } from "#pantry/grammar/compose.ts";
+import { contentFollows } from "#pantry/grammar/content.ts";
 import { isForeignKind, openClasses } from "#pantry/grammar/kinds.ts";
 import type { Kind } from "#pantry/grammar/compose.ts";
 import { foldGrammarOf } from "#pantry/model/composed.ts";
@@ -337,14 +338,12 @@ describe("fold over generated trees", { timeout: searchTimeout }, () => {
                 version: node.version,
               });
               const followed = shared.filter((to) =>
-                Option.isSome(
-                  grammar.content.follow.lookup({
-                    from: String(was),
-                    parent: node.kind,
-                    to: String(to),
-                    version: node.version,
-                  }),
-                ),
+                contentFollows(grammar.content, {
+                  from: String(was),
+                  parent: node.kind,
+                  to: String(to),
+                  version: node.version,
+                }),
               );
               // Character data leaves the state as it was; a kind several positions name takes the
               // one position `Follow` allows, and no state where none or several are allowed.

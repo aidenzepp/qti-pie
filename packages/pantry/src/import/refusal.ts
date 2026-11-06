@@ -36,6 +36,7 @@ import {
 } from "effect";
 import type { ReaderRefusal, WellFormednessError } from "@qti-pie/crust/errors.ts";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
+import { contentModelOf, noSharedModel } from "#pantry/grammar/content.ts";
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import type { NotQti3, UnmodeledVocabulary } from "#pantry/model/shred.ts";
@@ -143,6 +144,8 @@ import {
   LomObjectTitle,
   LomRecord,
   LomResource,
+  LomResourceType,
+  LomResourceTypeSource,
   LomString,
   LomStringLanguage,
   LomTitle,
@@ -155,13 +158,11 @@ import {
 } from "#pantry/qti/metadata.ts";
 import { Chars, EndCharacter, prefixPattern } from "#pantry/qti/node.ts";
 import {
-  DocumentDirectory,
   EntryContent,
   HrefParams,
   PackageName,
   Reference,
   ReferencePath,
-  XmlBase,
 } from "#pantry/qti/package.ts";
 import { quotationLaws } from "#pantry/qti/quotation.ts";
 import {
@@ -236,6 +237,8 @@ export const precedence = [
   // O4, expressions.
   "P2",
   "P8",
+  "P10",
+  "P36",
   "prefixed-ref",
   "variable-kind",
   "P20",
@@ -254,6 +257,7 @@ export const precedence = [
   "map-key-unique",
   "lom-identifier",
   "lom-title",
+  "lom-learning-resource-type",
   "calendar",
   "selection-bounds",
   "selection-required",
@@ -303,6 +307,7 @@ export const precedence = [
   "key-text-bound",
   "href-form",
   "fragment-context",
+  "namespace-name",
   "well-formedness",
   "unmodeled-vocabulary",
   "derived",
@@ -327,11 +332,11 @@ const codecRules = [
 /**
  * The rules that name a stated limit of the representation, never a law of the specification:
  * `key-text-bound` is the bound on a text a key holds (`src/qti/limits.ts` `keyText`), which
- * grizzle's representability rule derives from PostgreSQL's `BTMaxItemSize`, and `href-form` the
- * form of an href the model resolves (`limits.ts` `resolvedHref`, Q5.13), and `fragment-context`
- * the one context an included fragment's rows are judged in (reading 117, `tests.ts`
- * `Fragment_context`): a fragment two includes place in different interactions would need two
- * rows per node.
+ * grizzle's representability rule derives from PostgreSQL's `BTMaxItemSize`, and `href-form` an
+ * href the importer reads no name from (reading 102, `overlays/package.ts` `Limit`), and
+ * `fragment-context` the one context an included fragment's rows are judged in (reading 117,
+ * `tests.ts` `Fragment_context`): a fragment two includes place in different interactions would
+ * need two rows per node.
  *
  * A value over the bound is valid QTI the model cannot key, so its verdict says so by its rule.
  * The import meets it as the bound's pattern law: grizzle's encoder and its family fill check a
@@ -391,7 +396,7 @@ export const lawTable = {
   "AL1 admission": {
     rule: "attribute-admission",
     source:
-      "the XSDs' attribute declarations and wildcards as AttributeAdmission (fin.md D2); reading 13 for data-*, reading 47 for xsi:",
+      "the XSDs' attribute declarations and wildcards as AttributeAdmission (fin.md D2); reading 13 for data-*, reading 47 for xsi:; and the declarations readings refuse (attributes.ts readingRefusals): 9 (role on source, the Schematron's RULE ARIA ROLE 1a) and 85 (xi:include's xpointer)",
   },
   "AL1 owner": {
     rule: "attribute-admission",
@@ -574,6 +579,11 @@ export const lawTable = {
     source:
       "plan §1.6: the package's entries in listing order, an ordered family under Package at entries, one entry per path; the record the model is rebuilt from",
   },
+  "Equal tolerance": {
+    rule: "P36",
+    source:
+      "reading 121: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_Equal.Attr_tolerance (§5.46.2: 'If the tolerance mode is absolute or relative then the tolerance must be specified. The tolerance consists of two positive numbers, t0 and t1, that define the lower and upper bounds. If only one value is given it is used for both') and #DataModel_ToleranceList (§9.1.5: 'a space separated list of either strings (must not contain a space) or numbers'): a qti-equal whose tolerance-mode is absolute or relative writes tolerance, every tolerance holds one or two values, and each value in xs:double's lexical space is above 0, a string naming a variable read at run time (operators.ts Tolerance, toleranceRequired, Equal_tolerance)",
+  },
   "Feedback outcome type": {
     rule: "feedback-ref",
     source:
@@ -587,7 +597,7 @@ export const lawTable = {
   "File exists": {
     rule: "file-exists",
     source:
-      "imscp_infov1p2pd2.txt:409 and :411 (IMS Content Packaging 1.2, InterchangePackage (b): 'Any file described in the Manifest using a URI that resolves to a location within the InterchangePackage shall be included in the InterchangePackage'; (d): 'When a file contained in an InterchangePackage references another file using a URI that resolves to a location within the InterchangePackage, the referenced file shall be described in the InterchangePackage's Manifest'): a cp:file's href in the resolvedHref form is an entry's path, an external one left out (reading 35), and so is each reference a document resolves (package.ts ReferencePath)",
+      "imscp_infov1p2pd2.txt:409 and :411 (IMS Content Packaging 1.2, InterchangePackage (b): 'Any file described in the Manifest using a URI that resolves to a location within the InterchangePackage shall be included in the InterchangePackage'; (d): 'When a file contained in an InterchangePackage references another file using a URI that resolves to a location within the InterchangePackage, the referenced file shall be described in the InterchangePackage's Manifest'): a cp:file's href that resolves in the package names an entry, an external one left out (reading 35), and so does each reference a document resolves in the package (readings 102 and 103, package.ts ReferencePath)",
   },
   "File listed": {
     rule: "file-listed",
@@ -621,12 +631,12 @@ export const lawTable = {
   "Href form": {
     rule: "href-form",
     source:
-      "src/qti/limits.ts resolvedHref and reading 102: an href is its path and its params, a query or fragment that names no other file; a path this representation resolves is a relative path of plain segments, which names the entry at its document's directory followed by it (RFC 3986 §5.2); a dot segment, a percent-encoding, a backslash or whitespace in that path, a srcset of more than one candidate, and an xml:base in a document holding a resolved reference (or on a cp:manifest, cp:resources or cp:resource) take a resolution no relation states, so they are refused: a stated limit of the representation, not a law of the specification. A path with a scheme or a leading / is external, admitted and never resolved where a cp:file or a content reference holds it (reading 35), and refused where a law needs the href to name an entry",
+      "reading 102 (overlays/package.ts Limit): every href is resolved before its row is written, its value read by its whitespace class, its path merged with the xml:base in scope or its document's path, its dot segments removed and each segment percent-decoded (RFC 3986 §2.1, §5.2 and §6.2.2.2); a path with a scheme, a leading /, a climb above the package root or an external base is external (reading 35), admitted and never resolved where a cp:file or a content reference holds it, and refused where a law needs the href to name an entry; an empty path names its own document (§4.4). What stays refused is a stated limit of the representation, not a law of the specification: a % that starts no percent-encoding, octets that spell no UTF-8, a segment that decodes to / or U+0000, a backslash, a tab, line feed or carriage return a preserving type keeps, a : in the first segment of a path with no scheme, and a srcset of more than one candidate or with a descriptor",
   },
   "Href listed": {
     rule: "href-listed",
     source:
-      "imscp_infov1p2pd2.txt:770 (IMS Content Packaging 1.2, §6.6.2: 'A file reference declared in a Resource{ Href } shall have an associated declaration in a File object in the same Resource'): a resource href's path is the href of one of its files, its launch parameters aside (reading 102)",
+      "imscp_infov1p2pd2.txt:770 (IMS Content Packaging 1.2, §6.6.2: 'A file reference declared in a Resource{ Href } shall have an associated declaration in a File object in the same Resource'): a resource href names the file one of its own files names, compared by resolved path in the package and as written outside it, its launch parameters aside (reading 102)",
   },
   "Idref target": {
     rule: "idref-target",
@@ -668,10 +678,15 @@ export const lawTable = {
     source:
       "src/qti/limits.ts: a text a key, a containment or a family's hidden columns hold takes its kind's one bound, the least every key of the kind leaves it under grizzle's representability rule, derived from PostgreSQL's BTMaxItemSize (nbtree.h): a key text (keyText) at most keyTextCodePoints code points, a namespace name (namespaceText) at most namespaceCodePoints, a local name at most localNameCodePoints; a stated limit of the representation, not a law of the specification",
   },
+  "LOM learning resource type": {
+    rule: "lom-learning-resource-type",
+    source:
+      "reading 122: https://www.imsglobal.org/sites/default/files/spec/qti/v3/md-bind/index.html (QTI 3.0 Metadata §2.7.5.1, Learning Resource Type: 'the LOM-defined values self assessment and exam are forbidden', normative by its §1.2): a learningResourceType of the LOM vocabulary holds neither, its term the LOM vocabulary's where its source is LOMv1.0, empty, or not written, which the loose binding defaults to LOMv1.0 (imsmd_loose_v1p3p2.xsd:1288); a term of another source is another vocabulary's, which the loose binding does not enforce (§3.6), and is not refused; source and value compared collapsed (metadata.ts LomResourceType, LomResourceTypeSource)",
+  },
   "Label tools": {
     rule: "label-tool",
     source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_BaseSequence.Attr_label (§5.16.5, and §5.15.5, §5.17.5 to §5.21.5 and §5.79.4: 'If an item uses labels then values for the associated toolName and toolVersion characteristics must also be provided'); the item root's own label (§4.1.3) states none, and the sentence binds an item, not a stimulus or a test",
+      "https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_BaseSequence.Attr_label (§5.16.5, and §5.15.5, §5.17.5 to §5.21.5 and §5.79.4: 'If an item uses labels then values for the associated toolName and toolVersion characteristics must also be provided'), of a body element's label in both versions; reading 128: https://www.imsglobal.org/sites/default/files/spec/qti/v3/info/imsqti_asi_v3p0p1_infomodel_v1p0.html (QTI 3.0.1 §4.1.3, the item's label: 'If an item uses labels then values for the associated toolName and toolVersion attributes must also be provided'; ~/.cache/gr8des/qti301/info301.txt:11490) of a 3.0.1 item root's own label, where 3.0.0's §4.1.3 ('A human readable label that can be used to describe the Item', ~/.cache/gr8des/anyuri-specs/qti/info.txt:10162) states none; the version is the manifest's schemaversion (reading 67), and the sentence binds an item, not a stimulus or a test",
   },
   "Literal lexical": {
     rule: "attribute-lexical",
@@ -832,6 +847,11 @@ export const lawTable = {
     rule: "reachability",
     source: "Namespaces in XML 1.0 §3, declarations in source order (fin.md §5.2)",
   },
+  "Namespace name": {
+    rule: "namespace-name",
+    source:
+      "reading 131: https://www.w3.org/TR/xml-names/#ns-decl (Namespaces in XML 1.0 (Third Edition) §3: 'The attribute's normalized value MUST be either a URI reference — the namespace name identifying the namespace — or an empty string'; §2.1: 'An XML namespace is identified by a URI reference [RFC3986]'; a relative reference is deprecated, §2.2, not refused; §8 lets a processor leave it unchecked, which leaves the document's constraint standing): a namespace declaration's normalized value is RFC 3986's URI-reference (https://www.rfc-editor.org/rfc/rfc3986#appendix-A), the empty one a relative-ref of an empty path (chardata.ts NamespaceUri)",
+  },
   "Node key": {
     rule: "reachability",
     source: "trees.md §1, the tree relation's key, id",
@@ -898,7 +918,7 @@ export const lawTable = {
   "Reference overlay": {
     rule: "reachability",
     source:
-      "IMS Content Packaging 1.2 (b) and (d), and reading 102 (HP): each document's directory (DocumentDirectory), its xml:base attributes (XmlBase) and its references (Reference, ReferencePath) are a document's row or an attribute's copy, keyed by its node, each reference resolved against its document's directory",
+      "IMS Content Packaging 1.2 (b) and (d), and readings 102 and 103: each document's references (Reference) are an attribute's copy keyed by its node and name, and each the importer resolves in the package has its ReferencePath, in its document's package",
   },
   "Reference type": {
     rule: "P24",
@@ -918,6 +938,11 @@ export const lawTable = {
   RootOfType: {
     rule: "root-type-reverse",
     source: "QTI 3 packaging: the document root of each resource type (package.ts)",
+  },
+  "Rounding figures": {
+    rule: "P10",
+    source:
+      "reading 119: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_EqualRounded.Attr_figures (§5.47.2: 'If roundingMode= 'significantFigures', the value of figures must be a non-zero positive integer. If roundingMode='decimalPlaces', the value of figures must be an integer greater than or equal to zero') and #DataCharacteristic_RoundTo.Attr_figures (§5.119.2, the same of rounding-mode), under the EqualRounded default significantFigures (§5.47.1): a figures whose collapsed form is an integer is at least 1 under significantFigures and at least 0 under decimalPlaces, a variable's name read at run time (operators.ts Rounding, Rounding_figures)",
   },
   "SSML lexicon reference": {
     rule: "ssml-fragment",
@@ -1146,7 +1171,7 @@ export const lawTable = {
   "value domain": {
     rule: "attribute-lexical",
     source:
-      "XML Schema Part 2, each attribute's simple type compiled with its whiteSpace and residual facets (domains.ts); readings 7, 45, 46, 56 and 71; and the readings that hold a type to its stricter source (attributes.ts specReadings): 2 (MathML's number without a plus, and cn's base a positive integer), 120 (qti-index's n at least 1), 123 (bdo's dir without auto), 124 and 125 (a media URL non-empty), 129 (xml:lang, lang and srclang BCP 47 language tags) and 132 (a printed variable's format a printf format string of at most one conversion)",
+      "XML Schema Part 2, each attribute's simple type compiled with its whiteSpace and residual facets (domains.ts); readings 7, 45, 46, 56 and 71; and the readings that hold a type to its stricter source (attributes.ts specReadings): 2 (MathML's number without a plus, and cn's base a positive integer), 9 (h1's role heading, tab or presentation, the Schematron's RULE ARIA ROLE 1b), 120 (qti-index's n at least 1), 123 (bdo's dir without auto), 124 and 125 (a media URL non-empty), 129 (xml:lang, lang and srclang BCP 47 language tags), 132 (a printed variable's format a printf format string of at most one conversion) and 135 (a MIME type RFC 2045's two tokens and a slash)",
   },
   "ws arm": {
     rule: "text-copy",
@@ -1408,6 +1433,8 @@ const testKeyNames: ReadonlyMap<string, LawName> = new Map<string, LawName>([
  *     (`packageNameOf`), at the file systems' 255;
  *   - An unbounded XML production (`Char*`, a comment, an instruction, a doctype, an encoding name, a
  *     version number, an NCName) is "XML production", which crust refuses before any row exists;
+ *   - A namespace declaration's value is "Namespace name": an RFC 3986 URI reference (reading 131),
+ *     which crust does not check, so the domain is the law;
  *   - The whitespace around an IDREF token and an entry's base64 bytes are the host's own split and
  *     encoding, "E1 derived".
  * - **Node** (`node.ts`): the tree; the parent copy on its owner axis, which the oracle checks as
@@ -1435,7 +1462,7 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
     [PackageName, "Key text bound"],
     [Chars, "XML production"],
     [Lexical, "XML production"],
-    [NamespaceUri, "XML production"],
+    [NamespaceUri, "Namespace name"],
     [CommentText, "XML production"],
     [PiTarget, "XML production"],
     [PiData, "XML production"],
@@ -1702,11 +1729,14 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
     "RootOfType",
   ],
   [
-    containedIn(sideOf("Entry", "package", "path"), sideOf("FileHref", "package", "href")),
+    containedIn(sideOf("Entry", "package", "path"), sideOf("FileHref", "package", "path")),
     "File listed",
   ],
   [
-    containedIn(sideOf("ResourceHref", "node", "path"), sideOf("ResourceFile", "resource", "href")),
+    containedIn(
+      sideOf("ResourceHref", "node", "scope", "path"),
+      sideOf("ResourceFile", "resource", "scope", "path"),
+    ),
     "Href listed",
   ],
   [
@@ -1806,13 +1836,17 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
     ),
     "RootOfType",
   ],
-  [familyOf("counted", sideOf("FileHref", "package", "href"), "FileHref", "files"), "File listed"],
-  [primaryKeyOf("FileHref", "package", "href"), "File listed"],
   [
-    familyOf("counted", sideOf("ResourceFile", "resource", "href"), "ResourceFile", "files"),
+    familyOf("counted", sideOf("File", "package", "scope", "path"), "FileHref", "files"),
+    "File listed",
+  ],
+  [primaryKeyOf("FileHref", "package", "scope", "path"), "File listed"],
+  [keyOver(sideOf("FileHref", "package", "path")), "File listed"],
+  [
+    familyOf("counted", sideOf("File", "resource", "scope", "path"), "ResourceFile", "files"),
     "Href listed",
   ],
-  [primaryKeyOf("ResourceFile", "resource", "href"), "Href listed"],
+  [primaryKeyOf("ResourceFile", "resource", "scope", "path"), "Href listed"],
   [keyOver(sideOf("IdBinding", "document", "id")), "DocumentId key"],
   [
     familyOf("counted", sideOf("DocumentId", "document", "id", "owner"), "IdBinding", "carriers"),
@@ -2177,6 +2211,37 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
     containedIn(sideOf("HeaderToken", "table", "token"), sideOf("TableHeader", "table", "id")),
     "Table headers",
   ],
+  [primaryKeyOf("Rounding", "node"), "E1 derived"],
+  [primaryKeyOf("Tolerance", "node"), "E1 derived"],
+  [primaryKeyOf("ToleranceToken", "node", "at"), "E1 derived"],
+  ...(
+    [
+      [
+        sideOf("Rounding", "node", "document", "kind", "start", "nearest", "version", "parent"),
+        sideOf("Node", "id", "document", "kind", "start", "nearest", "version", "parent"),
+      ],
+      [sideOf("Node", "id"), sideOf("Rounding", "node")],
+      [sideOf("Attribute", "node", "lexical"), sideOf("Rounding", "node", "figuresLexical")],
+      [sideOf("Attribute", "node", "lexical"), sideOf("Rounding", "node", "mode")],
+      [sideOf("Rounding", "node"), sideOf("Attribute", "node")],
+      [sideOf("Attribute", "node", "lexical"), sideOf("Tolerance", "node", "lexical")],
+      [sideOf("Tolerance", "node"), sideOf("Attribute", "node")],
+    ] as const
+  ).map(([from, to]) => [containedIn(from, to), "E1 derived"] as const),
+  [
+    familyOf("ordered", sideOf("ToleranceToken", "node", "at"), "Tolerance", "tokens"),
+    "E1 derived",
+  ],
+  [
+    foldOf(
+      { count: "tokens", owner: "Tolerance" },
+      "concat",
+      sideOf("ToleranceToken", "node", "piece", "piecesWas", "piecesAfter"),
+      sideOf("Tolerance", "node", "tokenText"),
+    ),
+    "E1 derived",
+  ],
+  [containedIn(sideOf("Attribute", "node"), sideOf("Tolerance", "node")), "Equal tolerance"],
   [keyOver(sideOf("Declaration", "document", "identifier")), "Declaration key"],
   ...(["Declaration", "ValueSet", "Value", "RecordField", "OutcomeRange"] as const).map(
     (overlay) => [primaryKeyOf(overlay, "node"), "Declaration overlay"] as const,
@@ -2480,6 +2545,10 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
     "LomObjectTitle",
   ],
   [containedIn(sideOf("LomTitle", "record"), sideOf("LomObjectTitle", "record")), "LomObjectTitle"],
+  [
+    containedIn(sideOf("LomResourceType", "node"), sideOf("LomResourceTypeSource", "node")),
+    "LOM learning resource type",
+  ],
   ...[
     AssessmentObject,
     LomEntry,
@@ -2489,6 +2558,8 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
     LomObjectTitle,
     LomRecord,
     LomResource,
+    LomResourceType,
+    LomResourceTypeSource,
     LomString,
     LomStringLanguage,
     LomTitle,
@@ -2879,7 +2950,7 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
       ] as const,
   ),
   [
-    containedIn(sideOf("File", "package", "href"), sideOf("Entry", "package", "path")),
+    containedIn(sideOf("File", "package", "path"), sideOf("Entry", "package", "path")),
     "File exists",
   ],
   [
@@ -2888,29 +2959,16 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
   ],
   [
     containedIn(
-      sideOf("DocumentDirectory", "node", "package", "path"),
-      sideOf("Document", "node", "package", "path"),
+      sideOf("ReferencePath", "document", "package"),
+      sideOf("Document", "node", "package"),
     ),
     "Reference overlay",
   ],
-  [
-    familyOf("counted", sideOf("XmlBase", "document"), "DocumentDirectory", "bases"),
-    "Reference overlay",
-  ],
-  [
-    familyOf("counted", sideOf("ReferencePath", "document"), "DocumentDirectory", "references"),
-    "Reference overlay",
-  ],
-  [
-    containedIn(sideOf("Attribute", "node", "document"), sideOf("XmlBase", "node", "document")),
-    "Reference overlay",
-  ],
-  [containedIn(sideOf("XmlBase", "node"), sideOf("Attribute", "node")), "Reference overlay"],
   ...mirrored(
-    sideOf("Reference", "node", "name", "document", "kind", "target"),
-    sideOf("ReferencePath", "node", "name", "document", "kind", "target"),
+    sideOf("Reference", "node", "name", "document", "kind"),
+    sideOf("ReferencePath", "node", "name", "document", "kind"),
   ).map((law) => [law, "Reference overlay"] as const),
-  [keyOver(sideOf("ReferencePath", "node", "name")), "Reference overlay"],
+  [keyOver(sideOf("Reference", "node", "name")), "Reference overlay"],
   [keyOver(sideOf("ReferencePath", "node")), "Reference overlay"],
   [
     containedIn(
@@ -2928,14 +2986,7 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
   // Each holds because an element holds one attribute of a name (XML 1.0 §3.1, Unique Att Spec),
   // so only an importer defect reaches one, and the one name all three report is E1 derived.
   [keyOver(sideOf("Attribute", "node", "name")), "E1 derived"],
-  [
-    containedIn(
-      sideOf("ReferencePath", "document", "package", "directory"),
-      sideOf("DocumentDirectory", "node", "package", "directory"),
-    ),
-    "Reference overlay",
-  ],
-  ...[DocumentDirectory, XmlBase, Reference, ReferencePath].map(
+  ...[Reference, ReferencePath].map(
     ({ name, primaryKey }) =>
       [
         { fields: primaryKey, kind: "primaryKey", relation: name } satisfies Law,
@@ -3259,18 +3310,20 @@ const contentOrderLaws: Readonly<
 };
 
 /**
- * The content grammar as an explanation reads it: `Follow`'s successors, `Last`'s ends and the
- * kinds at each position, each keyed `version parent position`.
+ * The content grammar as an explanation reads it, keyed as the grammar is: `Follow`'s successors
+ * by `model position`, `Last`'s ends by model, the kinds one position names by `version parent
+ * position` (`Admission`) and the kinds several name by `shared-model position` (`Symbol`).
  */
 interface ContentIndex {
   readonly ends: ReadonlyMap<string, readonly string[]>;
   readonly kinds: ReadonlyMap<string, readonly string[]>;
   readonly next: ReadonlyMap<string, readonly string[]>;
+  readonly shared: ReadonlyMap<string, readonly string[]>;
 }
 
 /**
- * Each content grammar's index, built on its first explanation: `Follow` holds about 1.2 million
- * rows, which one explanation never scans again.
+ * Each content grammar's index, built on its first explanation, which no later explanation scans
+ * the rows for again.
  */
 const contentIndexes = new WeakMap<RefusalConstants, ContentIndex>();
 
@@ -3319,24 +3372,19 @@ const contentIndexOf = (constants: RefusalConstants): ContentIndex => {
 
   const { admission, content } = constants;
   const index: ContentIndex = {
-    ends: grouped(
-      content.last.rows.map(
-        ({ parent, position, version }) => [`${version} ${parent}`, position] as const,
-      ),
-    ),
-    kinds: grouped([
-      ...admission.rows.map(
+    ends: grouped(content.last.rows.map(({ model, position }) => [model, position] as const)),
+    kinds: grouped(
+      admission.rows.map(
         ({ child, parent, position, version }) =>
           [positionKey(version, parent, position), child] as const,
       ),
-      ...content.symbol.rows.map(
-        ({ kind, parent, position, version }) =>
-          [positionKey(version, parent, position), kind] as const,
-      ),
-    ]),
+    ),
     next: grouped(
-      content.follow.rows.map(
-        ({ from, parent, to, version }) => [positionKey(version, parent, from), to] as const,
+      content.follow.rows.map(({ from, model, to }) => [`${model} ${from}`, to] as const),
+    ),
+    shared: grouped(
+      content.symbol.rows.map(
+        ({ kind, model, position }) => [`${model} ${position}`, kind] as const,
       ),
     ),
   };
@@ -3405,14 +3453,22 @@ const brokenStateOf = (law: LawName, witness: RefusalWitness): Option.Option<Bro
 const allowedAfter = (broken: BrokenState, constants: RefusalConstants): readonly Allowed[] => {
   const index = contentIndexOf(constants);
   const { parent, state, version } = broken;
+  const model = Option.getOrElse(contentModelOf(constants.content, { parent, version }), () => "");
+  const shared = Option.match(constants.content.sharedModelOf.lookup({ parent, version }), {
+    onNone: () => noSharedModel,
+    onSome: (row) => row.model,
+  });
 
-  return Arr.sort(index.next.get(positionKey(version, parent, state)) ?? [], byPosition).map(
-    (position) => ({
-      kinds: index.kinds.get(positionKey(version, parent, position)) ?? [],
-      position,
-      source: Option.map(constants.content.sourceOf({ parent, position, version }), sourceText),
-    }),
-  );
+  return Arr.sort(index.next.get(`${model} ${state}`) ?? [], byPosition).map((position) => ({
+    kinds: [
+      ...new Set([
+        ...(index.kinds.get(positionKey(version, parent, position)) ?? []),
+        ...(index.shared.get(`${shared} ${position}`) ?? []),
+      ]),
+    ],
+    position,
+    source: Option.map(constants.content.sourceOf({ parent, position, version }), sourceText),
+  }));
 };
 
 /**
@@ -3450,7 +3506,10 @@ const brokenStateText = (
 ): string => {
   const { kind, parent, state, version } = broken;
   if (broken.law === "N7 Last") {
-    const ends = contentIndexOf(constants).ends.get(`${version} ${parent}`) ?? [];
+    const ends = Option.match(contentModelOf(constants.content, { parent, version }), {
+      onNone: () => [],
+      onSome: (model) => contentIndexOf(constants).ends.get(model) ?? [],
+    });
 
     return `${parent}'s children end in state ${state} of its content model in ${version}, which ends only in ${Arr.sort(ends, byPosition).join(", ") || "no state"}; after state ${state} it needs one of ${allowedText(allowed)}`;
   }

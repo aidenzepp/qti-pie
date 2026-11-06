@@ -40,9 +40,10 @@
  *   `document-lang`; the HTML element laws `source-srcset`, `source-src` and `track-srclang`
  *   (readings 124 and 125); O2 `declaration-key`; O3 `binding-declared`, `binding-fit` with
  *   `record-binding-fit`, `choice-bounds`, `choice-identifier-distinct` (reading 104), and the
- *   feedback, template and printed-variable references; O4 arity (`P2`) and undeclared references
- *   (`P8`); O5 `mapping-base-type`; O6 `lom-identifier` and a usage value's base type (reading
- *   105); O7 a selection's bound.
+ *   feedback, template and printed-variable references; O4 arity (`P2`), undeclared references
+ *   (`P8`), a rounding operator's `figures` (`P10`, reading 119) and an equality's `tolerance`
+ *   (`P36`, reading 121); O5 `mapping-base-type`; O6 `lom-identifier`, a usage value's base type
+ *   (reading 105) and `lom-learning-resource-type` (reading 122); O7 a selection's bound.
  *
  * The overlays' other laws have no statement yet beyond the rule each replaces, and the oracle
  * leaves them to their W5 slices: `lang-set-copy`, the reserved declarations, `mastery-range`, the
@@ -67,7 +68,13 @@ import {
 import type { ValueDomain } from "#pantry/grammar/attributes.ts";
 import { typedCardinalities } from "#pantry/grammar/compose.ts";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
-import { contentEnds, contentStep } from "#pantry/grammar/content.ts";
+import {
+  contentEnds,
+  contentFollows,
+  contentModelOf,
+  contentStep,
+  noSharedModel,
+} from "#pantry/grammar/content.ts";
 import { mathArities, mathQualifiers } from "#pantry/grammar/expression.ts";
 import { compile, patternFlags } from "#pantry/grammar/domains.ts";
 import type { ValueFacet } from "#pantry/grammar/domains.ts";
@@ -104,13 +111,22 @@ import type {
 import type { PackageFile } from "#pantry/package/read.ts";
 import { builtinDomainOf } from "#pantry/vocab/derive/domains.ts";
 import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
+import { keyTextCodePoints, localNameCodePoints, namespaceCodePoints } from "#pantry/qti/limits.ts";
+import { keyCopies } from "#pantry/test/key-copies.ts";
+import type { DocumentRows, KeyCopy } from "#pantry/test/key-copies.ts";
+import { isUriReference } from "#pantry/test/uri-reference.ts";
 import {
-  keyTextCodePoints,
-  localNameCodePoints,
-  namespaceCodePoints,
-  resolvedHref,
-} from "#pantry/qti/limits.ts";
+  addedExplainers,
+  addedLawNames,
+  addedLawRules,
+  addedLawSources,
+  addedRules,
+  lawDocumentBreaches,
+  lawPackageBreaches,
+} from "#pantry/test/oracle-laws.ts";
 import { mathmlNamespace, xsNamespace } from "#pantry/vocab/namespaces.ts";
+import { comparedPath, oracleValueOf, resolveAttribute } from "#pantry/test/resolution.ts";
+import type { OracleResolution, OracleWhiteSpace } from "#pantry/test/resolution.ts";
 import { typeAvailable } from "#pantry/vocab/open.ts";
 
 /**
@@ -166,6 +182,7 @@ export const oracleRules = [
   "key-text-bound",
   "label-tool",
   "lom-identifier",
+  "lom-learning-resource-type",
   "lom-title",
   "lookup-cardinality",
   "manifest-id-space",
@@ -174,9 +191,11 @@ export const oracleRules = [
   "mapping-base-type",
   "mastery-range",
   "math-arity",
+  "namespace-name",
   "not-qti3",
   "ordering",
   "owner-copy",
+  "P10",
   "P2",
   "P20",
   "P21",
@@ -188,6 +207,7 @@ export const oracleRules = [
   "P27",
   "P28",
   "P29",
+  "P36",
   "P8",
   "prefixed-ref",
   "printed-variable-ref",
@@ -227,6 +247,7 @@ export const oracleRules = [
   "well-formedness",
   "xsi-type",
   "zip-format",
+  ...addedRules,
 ] as const;
 
 /**
@@ -343,6 +364,7 @@ const lawRules = {
   "Document lang": "document-lang",
   "DocumentId key": "document-key",
   "E1 derived": "derived",
+  "Equal tolerance": "P36",
   "Feedback outcome type": "feedback-ref",
   "Feedback reference": "feedback-ref",
   "File exists": "file-exists",
@@ -362,6 +384,7 @@ const lawRules = {
   "Item duration": "item-duration",
   "Item ref target": "item-ref-target",
   "Key text bound": "key-text-bound",
+  "LOM learning resource type": "lom-learning-resource-type",
   "Label tools": "label-tool",
   "Literal lexical": "attribute-lexical",
   LomObjectIdentifier: "lom-identifier",
@@ -393,6 +416,7 @@ const lawRules = {
   "N7 last slot": "union-count",
   "N8 nearest": "owner-copy",
   "Namespace family": "reachability",
+  "Namespace name": "namespace-name",
   "Node key": "reachability",
   "One base": "P23",
   OpenElementName: "unmodeled-vocabulary",
@@ -409,6 +433,7 @@ const lawRules = {
   "Reserved type": "reserved-type",
   ResourceTypeOf: "resource-type",
   RootOfType: "root-type-reverse",
+  "Rounding figures": "P10",
   "SSML lexicon reference": "ssml-fragment",
   "SSML trim mark": "ssml-fragment",
   "Section identifier target": "section-identifier-target",
@@ -455,6 +480,7 @@ const lawRules = {
   "text arm": "text-copy",
   "value domain": "attribute-lexical",
   "ws arm": "text-copy",
+  ...addedLawRules,
 } as const satisfies Readonly<Record<LawName, OracleRule>>;
 
 /**
@@ -464,7 +490,7 @@ const lawRules = {
  */
 export const lawSources = {
   "AL1 admission":
-    "the XSDs' attribute declarations and wildcards as AttributeAdmission (fin.md D2); reading 13 for data-*, reading 47 for xsi:",
+    "the XSDs' attribute declarations and wildcards as AttributeAdmission (fin.md D2); reading 13 for data-*, reading 47 for xsi:; and the declarations readings refuse (attributes.ts readingRefusals): 9 (role on source, the Schematron's RULE ARIA ROLE 1a) and 85 (xi:include's xpointer)",
   "AL1 owner": "fin.md §16, the attribute family's owner copy (kind, version, document)",
   "AL2 count": "fin.md §16, the attribute family's count",
   "AL2 distinct":
@@ -523,12 +549,14 @@ export const lawSources = {
     "XML Schema Part 1, Validation Rule: Validation Root (the ID/IDREF table): no id's [binding] has more than one member, an attribute's binding its element, an ID-typed element text's its parent (§3.15.5; reading 101; identity.ts IdBinding); reading 14; reading 74: a context declaration's identifier, a UniqueIdentifier (https://www.imsglobal.org/spec/qti/v3p0/info#RootCharacteristic_ContextDeclaration.Attr_identifier, §5.34.1), is one of the document's IDs, though the XSD types it an IdentifierDType",
   "E1 derived":
     "fin.md §17, E1: the fields closed relations determine, and the string value (folds.ts)",
+  "Equal tolerance":
+    "reading 121: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_Equal.Attr_tolerance (§5.46.2: 'If the tolerance mode is absolute or relative then the tolerance must be specified. The tolerance consists of two positive numbers, t0 and t1, that define the lower and upper bounds. If only one value is given it is used for both') and #DataModel_ToleranceList (§9.1.5: 'a space separated list of either strings (must not contain a space) or numbers'): a qti-equal whose tolerance-mode is absolute or relative writes tolerance, every tolerance holds one or two values, and each value in xs:double's lexical space is above 0, a string naming a variable read at run time (operators.ts Tolerance, toleranceRequired, Equal_tolerance)",
   "Feedback outcome type":
     "reading 77: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_FeedbackBlock.Attr_outcome-identifier (§5.49.1, and §5.52.1, §5.93.1, §5.148.1, §5.157.2: 'The identifier of an outcome variable that must have a base-type of identifier and be of either single or multiple cardinality'); the built-in completionStatus is 'a single identifier' (§2.2.2.3)",
   "Feedback reference":
     "reading 77: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_FeedbackBlock.Attr_outcome-identifier (§5.49.1, and §5.52.1, §5.93.1, §5.148.1, §5.157.2: 'The identifier of an outcome variable that must have a base-type of identifier and be of either single or multiple cardinality'), the built-in completionStatus among them (§2.2.2.3: 'a single identifier'); the outcome's base type and cardinality are Feedback outcome type's (references.ts ContentReference)",
   "File exists":
-    "imscp_infov1p2pd2.txt:409 and :411 (IMS Content Packaging 1.2, InterchangePackage (b): 'Any file described in the Manifest using a URI that resolves to a location within the InterchangePackage shall be included in the InterchangePackage'; (d): 'When a file contained in an InterchangePackage references another file using a URI that resolves to a location within the InterchangePackage, the referenced file shall be described in the InterchangePackage's Manifest'): a cp:file's href in the resolvedHref form is an entry's path, an external one left out (reading 35), and so is each reference a document resolves (package.ts ReferencePath)",
+    "imscp_infov1p2pd2.txt:409 and :411 (IMS Content Packaging 1.2, InterchangePackage (b): 'Any file described in the Manifest using a URI that resolves to a location within the InterchangePackage shall be included in the InterchangePackage'; (d): 'When a file contained in an InterchangePackage references another file using a URI that resolves to a location within the InterchangePackage, the referenced file shall be described in the InterchangePackage's Manifest'): a cp:file's href that resolves in the package names an entry, an external one left out (reading 35), and so does each reference a document resolves in the package (readings 102 and 103, package.ts ReferencePath)",
   "File listed": "IMS Content Packaging 1.2 and QTI packaging: every file is described; reading 33",
   "Foreign attribute class":
     "XML Schema 1.0 Part 1 §3.10.4 (Wildcard allows Namespace Name), with Namespaces in XML 1.0 §2 for the absent namespace: an open attribute's class agrees with its stored namespace against its element's",
@@ -541,9 +569,9 @@ export const lawSources = {
   "Graphic gap match default hotspot":
     "reading 80: https://www.imsglobal.org/spec/qti/v3p0/info#DataAttribute_GraphicGapMatchInteraction_qti-associable-hotspot (§5.60.9: 'The default hotspot must not be defined')",
   "Href form":
-    "src/qti/limits.ts resolvedHref and reading 102: an href is its path and its params, a query or fragment that names no other file; a path this representation resolves is a relative path of plain segments, which names the entry at its document's directory followed by it (RFC 3986 §5.2); a dot segment, a percent-encoding, a backslash or whitespace in that path, a srcset of more than one candidate, and an xml:base in a document holding a resolved reference (or on a cp:manifest, cp:resources or cp:resource) take a resolution no relation states, so they are refused: a stated limit of the representation, not a law of the specification. A path with a scheme or a leading / is external, admitted and never resolved where a cp:file or a content reference holds it (reading 35), and refused where a law needs the href to name an entry",
+    "reading 102 (overlays/package.ts Limit): every href is resolved before its row is written, its value read by its whitespace class, its path merged with the xml:base in scope or its document's path, its dot segments removed and each segment percent-decoded (RFC 3986 §2.1, §5.2 and §6.2.2.2); a path with a scheme, a leading /, a climb above the package root or an external base is external (reading 35), admitted and never resolved where a cp:file or a content reference holds it, and refused where a law needs the href to name an entry; an empty path names its own document (§4.4). What stays refused is a stated limit of the representation, not a law of the specification: a % that starts no percent-encoding, octets that spell no UTF-8, a segment that decodes to / or U+0000, a backslash, a tab, line feed or carriage return a preserving type keeps, a : in the first segment of a path with no scheme, and a srcset of more than one candidate or with a descriptor",
   "Href listed":
-    "imscp_infov1p2pd2.txt:770 (IMS Content Packaging 1.2, §6.6.2: 'A file reference declared in a Resource{ Href } shall have an associated declaration in a File object in the same Resource'): a resource href's path is the href of one of its files, its launch parameters aside (reading 102)",
+    "imscp_infov1p2pd2.txt:770 (IMS Content Packaging 1.2, §6.6.2: 'A file reference declared in a Resource{ Href } shall have an associated declaration in a File object in the same Resource'): a resource href names the file one of its own files names, compared by resolved path in the package and as written outside it, its launch parameters aside (reading 102)",
   "Idref target":
     "XML Schema Part 1, Validation Rule: Validation Root (the ID/IDREF table): an IDREF names an ID of its document, an attribute's tokens and an IDREF- or IDREFS-typed element text's alike (§3.15.5; reading 101); reading 14",
   "Include fragment identifier":
@@ -560,8 +588,10 @@ export const lawSources = {
     "the UP audit's B2: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_AssessmentItemRef.Attr_href (§5.6.5: 'The URI used to refer to the item's file (e.g., elsewhere in the same content package)', info.txt:14764): an item ref's href names a document of the package, and that document's root is an item (tests.ts ItemRefTarget)",
   "Key text bound":
     "src/qti/limits.ts: a text a key, a containment or a family's hidden columns hold takes its kind's one bound, the least every key of the kind leaves it under grizzle's representability rule, derived from PostgreSQL's BTMaxItemSize (nbtree.h): a key text (keyText) at most keyTextCodePoints code points, a namespace name (namespaceText) at most namespaceCodePoints, a local name at most localNameCodePoints; a stated limit of the representation, not a law of the specification",
+  "LOM learning resource type":
+    "reading 122: https://www.imsglobal.org/sites/default/files/spec/qti/v3/md-bind/index.html (QTI 3.0 Metadata §2.7.5.1, Learning Resource Type: 'the LOM-defined values self assessment and exam are forbidden', normative by its §1.2): a learningResourceType of the LOM vocabulary holds neither, its term the LOM vocabulary's where its source is LOMv1.0, empty, or not written, which the loose binding defaults to LOMv1.0 (imsmd_loose_v1p3p2.xsd:1288); a term of another source is another vocabulary's, which the loose binding does not enforce (§3.6), and is not refused; source and value compared collapsed (metadata.ts LomResourceType, LomResourceTypeSource)",
   "Label tools":
-    "https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_BaseSequence.Attr_label (§5.16.5, and §5.15.5, §5.17.5 to §5.21.5 and §5.79.4: 'If an item uses labels then values for the associated toolName and toolVersion characteristics must also be provided'); the item root's own label (§4.1.3) states none, and the sentence binds an item, not a stimulus or a test",
+    "https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_BaseSequence.Attr_label (§5.16.5, and §5.15.5, §5.17.5 to §5.21.5 and §5.79.4: 'If an item uses labels then values for the associated toolName and toolVersion characteristics must also be provided'), of a body element's label in both versions; reading 128: https://www.imsglobal.org/sites/default/files/spec/qti/v3/info/imsqti_asi_v3p0p1_infomodel_v1p0.html (QTI 3.0.1 §4.1.3, the item's label: 'If an item uses labels then values for the associated toolName and toolVersion attributes must also be provided'; ~/.cache/gr8des/qti301/info301.txt:11490) of a 3.0.1 item root's own label, where 3.0.0's §4.1.3 ('A human readable label that can be used to describe the Item', ~/.cache/gr8des/anyuri-specs/qti/info.txt:10162) states none; the version is the manifest's schemaversion (reading 67), and the sentence binds an item, not a stimulus or a test",
   "Literal lexical":
     "https://www.imsglobal.org/spec/qti/v3p0/info#Data_BaseType (§8.13, BaseTypeEnum, each base type's value set): a qti-base-value's text is a lexical form of its base-type, the same language as Typed value's (expression-types.ts BaseTypePattern; readings 7, 34, 45 and 71)",
   LomObjectIdentifier:
@@ -612,6 +642,8 @@ export const lawSources = {
   "N7 last slot": "fin.md §5.2, the last-slot copy",
   "N8 nearest": "plan-qti-pie N8, the nearest interaction (fin.md §15, rule 3)",
   "Namespace family": "Namespaces in XML 1.0 §3, declarations in source order (fin.md §5.2)",
+  "Namespace name":
+    "reading 131: https://www.w3.org/TR/xml-names/#ns-decl (Namespaces in XML 1.0 (Third Edition) §3: 'The attribute's normalized value MUST be either a URI reference — the namespace name identifying the namespace — or an empty string'; §2.1: 'An XML namespace is identified by a URI reference [RFC3986]'; a relative reference is deprecated, §2.2, not refused; §8 lets a processor leave it unchecked, which leaves the document's constraint standing): a namespace declaration's normalized value is RFC 3986's URI-reference (https://www.rfc-editor.org/rfc/rfc3986#appendix-A), the empty one a relative-ref of an empty path (chardata.ts NamespaceUri)",
   "Node key": "trees.md §1, the tree relation's key, id",
   "One base":
     "https://www.imsglobal.org/spec/qti/v3p0/info#Expr3 (§2.11.3: Multiple, Ordered and Repeat take sub-expressions 'of the same base-type'; Match, Member, Delete and Contains compare two values 'of the same base-type', and Match and Contains 'of the same cardinality'), a type no declaration says aside (reading 4) (expressions.ts One_base; the old checker's P23)",
@@ -641,6 +673,8 @@ export const lawSources = {
   ResourceTypeOf:
     "QTI 3 packaging: the resource types each schema version admits (package.ts); reading 33",
   RootOfType: "QTI 3 packaging: the document root of each resource type (package.ts)",
+  "Rounding figures":
+    "reading 119: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_EqualRounded.Attr_figures (§5.47.2: 'If roundingMode= 'significantFigures', the value of figures must be a non-zero positive integer. If roundingMode='decimalPlaces', the value of figures must be an integer greater than or equal to zero') and #DataCharacteristic_RoundTo.Attr_figures (§5.119.2, the same of rounding-mode), under the EqualRounded default significantFigures (§5.47.1): a figures whose collapsed form is an integer is at least 1 under significantFigures and at least 0 under decimalPlaces, a variable's name read at run time (operators.ts Rounding, Rounding_figures)",
   "SSML lexicon reference":
     "reading 3: https://www.w3.org/TR/speech-synthesis11/#S3.1.5.2 (SSML 1.1 §3.1.5.2: 'The ref attribute specifies a name that references a lexicon document as assigned by the xml:id attribute of the lexicon element') and #S3.1.5.1 (§3.1.5.1: 'The scope of this name is the current SSML document'), the document being the lookup's nearest speak (identity.ts ssmlLexiconReference, through SsmlScope)",
   "SSML trim mark":
@@ -719,8 +753,9 @@ export const lawSources = {
   "pi arm": "the XDM processing instructions as rows (plan §1.4)",
   "text arm": "the XDM text nodes as rows (plan §1.4)",
   "value domain":
-    "XML Schema Part 2, each attribute's simple type compiled with its whiteSpace and residual facets (domains.ts); readings 7, 45, 46, 56 and 71; and the readings that hold a type to its stricter source (attributes.ts specReadings): 2 (MathML's number without a plus, and cn's base a positive integer), 120 (qti-index's n at least 1), 123 (bdo's dir without auto), 124 and 125 (a media URL non-empty), 129 (xml:lang, lang and srclang BCP 47 language tags) and 132 (a printed variable's format a printf format string of at most one conversion)",
+    "XML Schema Part 2, each attribute's simple type compiled with its whiteSpace and residual facets (domains.ts); readings 7, 45, 46, 56 and 71; and the readings that hold a type to its stricter source (attributes.ts specReadings): 2 (MathML's number without a plus, and cn's base a positive integer), 9 (h1's role heading, tab or presentation, the Schematron's RULE ARIA ROLE 1b), 120 (qti-index's n at least 1), 123 (bdo's dir without auto), 124 and 125 (a media URL non-empty), 129 (xml:lang, lang and srclang BCP 47 language tags), 132 (a printed variable's format a printf format string of at most one conversion) and 135 (a MIME type RFC 2045's two tokens and a slash)",
   "ws arm": "the XDM whitespace nodes as rows (plan §1.4)",
+  ...addedLawSources,
 } as const satisfies Readonly<Record<LawName, string>>;
 
 /**
@@ -1244,6 +1279,8 @@ export const lawsOf = (grammar: ComposedGrammar): Laws => {
   const counted = Map.groupBy(grammar.content.counted.rows, (row) =>
     kindKey(row.version, row.parent),
   );
+  // The content models a family may end in: every model but that of the families no model holds.
+  const ending = new Set(grammar.content.last.rows.map(({ model }) => model));
 
   return {
     counted: (version, kind) =>
@@ -1272,7 +1309,9 @@ export const lawsOf = (grammar: ComposedGrammar): Laws => {
     ),
     kinds: new Set(grammar.kinds.nodeKind.handles),
     modeled: new Set(
-      grammar.content.last.rows.map(({ parent, version }) => kindKey(version, parent)),
+      grammar.content.contentModelOf.rows
+        .filter(({ model }) => ending.has(model))
+        .map(({ parent, version }) => kindKey(version, parent)),
     ),
     open: byKind(
       (version, kind, governs) =>
@@ -1370,6 +1409,7 @@ export const otherLawNames = [
   "OpenElementName canonical",
   "TextDomain",
   "Key text bound",
+  "Namespace name",
   "DocumentId key",
   "Label tools",
   "Table headers",
@@ -1405,6 +1445,8 @@ export const otherLawNames = [
   "Weighted base",
   "Literal lexical",
   "Item duration",
+  "Rounding figures",
+  "Equal tolerance",
   "MappableBaseType",
   "AreaMapping base type",
   "Lookup table cardinality",
@@ -1428,6 +1470,7 @@ export const otherLawNames = [
   "Self dependency",
   "LomObjectIdentifier",
   "LomObjectTitle",
+  "LOM learning resource type",
   "Usage typed value",
   "Document lang",
   "Inclusion cycle",
@@ -1452,6 +1495,7 @@ export const otherLawNames = [
   "Template default type",
   "Variable mapping source",
   "Variable kind",
+  ...addedLawNames,
 ] as const;
 
 /**
@@ -2789,9 +2833,15 @@ const prefixAgrees = ({ name, prefix }: { readonly name: string; readonly prefix
  * open class, whose many names share one position. An attribute with no cell has no domain and no
  * position, so AL1 refuses it and nothing derives from it.
  *
+ * An element's breaches are listed law by law, in the order an attribute's laws are evaluated, and
+ * each law's in attribute order, so an element's first breach, whose rule {@link verdictOf} names,
+ * is a function of its attributes as a set, the same in whatever order the element writes them
+ * (spec reading 137): one attribute's `value domain` comes before another's `Idref target` on one
+ * element, whichever of the two is written first.
+ *
  * @param view - The document.
  * @param laws - The grammar's tables.
- * @returns The breaches, in attribute order.
+ * @returns The breaches, element by element, each element's law by law.
  */
 const attributeBreaches = (view: View, laws: Laws): readonly Breach[] => {
   const ids = new Set(idsOf(view, laws).map(({ id }) => id));
@@ -2800,7 +2850,7 @@ const attributeBreaches = (view: View, laws: Laws): readonly Breach[] => {
     const node = view.byId.get(owner);
     const at = pathOf(view, owner);
 
-    return owned.flatMap((attribute, slot): readonly Breach[] => {
+    const found = owned.map((attribute, slot): readonly (readonly Breach[])[] => {
       const breach = (law: LawName, keys: Keys = {}): Breach => ({
         document: view.path,
         keys: {
@@ -2824,11 +2874,9 @@ const attributeBreaches = (view: View, laws: Laws): readonly Breach[] => {
         .difference(laws.open(attribute.version, attribute.kind, attribute.governs));
 
       return [
-        ...(Option.isSome(admitted) ? [] : [breach("AL1 admission")]),
-        ...(prefixAgrees(attribute)
-          ? []
-          : [breach("Attribute prefix", { prefix: attribute.prefix })]),
-        ...(ownerCopied(attribute, node)
+        Option.isSome(admitted) ? [] : [breach("AL1 admission")],
+        prefixAgrees(attribute) ? [] : [breach("Attribute prefix", { prefix: attribute.prefix })],
+        ownerCopied(attribute, node)
           ? []
           : [
               breach("AL1 owner", {
@@ -2836,16 +2884,14 @@ const attributeBreaches = (view: View, laws: Laws): readonly Breach[] => {
                 ownerKind: node?.kind ?? "",
                 ownerVersion: node?.version ?? "",
               }),
-            ]),
-        ...(repeated.size === 0
+            ],
+        repeated.size === 0
           ? []
-          : [
-              breach("AL2 distinct", { attrsWas: spaced(attribute.attrsWas), position: spaced(x) }),
-            ]),
-        ...(attribute.at > 0n || attribute.attrsWas.size === 0
+          : [breach("AL2 distinct", { attrsWas: spaced(attribute.attrsWas), position: spaced(x) })],
+        attribute.at > 0n || attribute.attrsWas.size === 0
           ? []
-          : [breach("N5 first slot", { attrsWas: spaced(attribute.attrsWas) })]),
-        ...(attributeFolded(attribute, slot, before, x) && Option.isSome(admitted)
+          : [breach("N5 first slot", { attrsWas: spaced(attribute.attrsWas) })],
+        attributeFolded(attribute, slot, before, x) && Option.isSome(admitted)
           ? []
           : [
               breach("AL2 fold", {
@@ -2853,31 +2899,33 @@ const attributeBreaches = (view: View, laws: Laws): readonly Breach[] => {
                 attrsWas: spaced(attribute.attrsWas),
                 predecessorAttrs: spaced(before?.derived.attrs ?? new Set()),
               }),
-            ]),
-        ...Option.match(compiled, {
-          onNone: () => [],
-          onSome: (held) => [
-            ...(inDomain(held, lexical) ? [] : [breach("value domain", { lexical })]),
-            ...(isIdref(held.domain)
-              ? tokensOf(lexical)
-                  .filter((token) => !ids.has(token))
-                  .map((token) => breach("Idref target", { token }))
-              : []),
-          ],
-        }),
+            ],
+        Option.exists(compiled, (held) => !inDomain(held, lexical))
+          ? [breach("value domain", { lexical })]
+          : [],
+        Option.exists(compiled, (held) => isIdref(held.domain))
+          ? tokensOf(lexical)
+              .filter((token) => !ids.has(token))
+              .map((token) => breach("Idref target", { token }))
+          : [],
       ];
     });
+
+    return (found[0] ?? []).flatMap((_, law) => found.flatMap((held) => held[law] ?? []));
   });
 };
 
 /**
- * Count a text's code points, as PostgreSQL counts a text's characters: a pair of surrogates is
- * one, and no grapheme cluster is joined, so `Intl.Segmenter` would count otherwise.
+ * Measure a text against a key's bound, in the one unit every bound of {@link keyTexts} is stated
+ * in: its code points, as PostgreSQL counts a text's characters and as `keyText`'s pattern bounds
+ * it (`#pantry/qti/limits.ts`). A pair of surrogates is one, and no grapheme cluster is joined, so
+ * `Intl.Segmenter` would count otherwise. Stating a bound in bytes changes this function and the
+ * bounds, nothing else.
  *
  * @param value - The text.
- * @returns Its code points.
+ * @returns Its length in the bounds' unit.
  */
-const codePointsOf = (value: string): number => {
+const keyTextLength = (value: string): number => {
   let count = 0;
   for (let at = 0; at < value.length; at += (value.codePointAt(at) ?? 0) > 0xff_ff ? 2 : 1) {
     count += 1;
@@ -2887,45 +2935,111 @@ const codePointsOf = (value: string): number => {
 };
 
 /**
- * Whether a text is past the most code points a key text holds (`keyText`): a value the schema
- * copies into a key, a containment or a family's hidden columns refused by its type's pattern
- * before any law of the specification reads it.
+ * Whether a text is past the most a key text holds (`keyText`): a value the schema copies into a
+ * key, a containment or a family's hidden columns refused by its type before any law of the
+ * specification reads it.
  *
  * @param value - The text.
- * @returns Whether it holds more than `keyTextCodePoints` code points.
+ * @returns Whether its length is past `keyTextCodePoints`.
  */
-const overKeyText = (value: string): boolean => codePointsOf(value) > keyTextCodePoints;
+const overKeyText = (value: string): boolean => keyTextLength(value) > keyTextCodePoints;
 
 /**
- * The attributes the overlays copy into a key text (`#pantry/qti/package.ts`, the manifest's, and
- * `#pantry/qti/mapping.ts`, a map entry's key): each by its element's kind and its name, with the
- * overlay field that holds it.
+ * Read the characters a node row holds, `Node.chars`: a text or whitespace node's, an entity
+ * reference's `&name;`, as its `E1_derived` check states them, and empty for every other node.
+ *
+ * @param view - The node's document.
+ * @param node - The node.
+ * @returns Its characters.
  */
-const manifestCopies: ReadonlyMap<string, string> = new Map([
-  ["cp:dependency identifierref", "Dependency.ref"],
-  ["cp:file href", "File.href"],
-  ["cp:manifest identifier", "ManifestId.identifier"],
-  ["cp:resource href", "ResourceHref.href"],
-  ["cp:resource identifier", "Resource.identifier"],
-  ["cp:resource type", "Resource.typeLexical"],
-  ["qti-map-entry map-key", "MapKey.key"],
-]);
+const charsOf = (view: View, node: FoldedNode<Composed>): string => {
+  if (node.kind === "text" || node.kind === "ws") {
+    return view.textOf.get(node.id) ?? "";
+  }
+
+  const entity = node.kind === "entityRef" ? view.entityOf.get(node.id) : undefined;
+
+  return entity === undefined ? "" : `&${entity};`;
+};
+
+/**
+ * Read the fields of a node row a key copy's selection or check reads
+ * (`#pantry/test/key-copies.ts` `nodeFields`), its parent's from the parent's row: a root's parent
+ * is the document node, which governs no type and is its own parent's kind.
+ *
+ * @param view - The node's document.
+ * @param node - The node.
+ * @returns Its fields.
+ */
+const nodeFieldsOf = (view: View, node: FoldedNode<Composed>): DocumentRows["Node"] => {
+  const parent = view.byId.get(node.parent);
+
+  return {
+    chars: charsOf(view, node),
+    governs: node.governs,
+    kind: node.kind,
+    parentGoverns: parent?.governs ?? noType,
+    parentKind: node.parentKind,
+    parentParentKind: parent?.parentKind ?? "document",
+    start: node.start,
+    stringValue: node.stringValue,
+    version: node.version,
+  };
+};
+
+/**
+ * Collect the texts one copy of the schema holds of a document (`#pantry/test/key-copies.ts`
+ * `keyCopies`): each attribute or node its selection or check holds, by the field it reads, and for
+ * a fold each owner of a member its step selects, by the owner's end.
+ *
+ * @param copy - The copy.
+ * @param rows - The document's attributes and nodes, each with the fields a copy reads.
+ * @param rows.attributes - Each attribute's node and fields.
+ * @param rows.children - Each node's children's fields, by the node's id.
+ * @param rows.nodes - Each node's id and fields.
+ * @returns The texts, each with its node, in document order.
+ */
+const copiedTexts = (
+  copy: KeyCopy,
+  rows: {
+    readonly attributes: readonly {
+      readonly fields: DocumentRows["Attribute"];
+      readonly node: NodeId;
+    }[];
+    readonly children: ReadonlyMap<NodeId, readonly DocumentRows["Node"][]>;
+    readonly nodes: readonly { readonly fields: DocumentRows["Node"]; readonly node: NodeId }[];
+  },
+): readonly { readonly node: NodeId; readonly value: string }[] => {
+  if (copy.source === "Attribute") {
+    return rows.attributes
+      .filter(({ fields }) => copy.holds(fields))
+      .map(({ fields, node }) => ({ node, value: String(fields[copy.reads]) }));
+  }
+
+  return rows.nodes
+    .filter(({ fields, node }) =>
+      copy.by === "fold"
+        ? (rows.children.get(node) ?? []).some((child) => copy.holds(child))
+        : copy.holds(fields),
+    )
+    .map(({ fields, node }) => ({ node, value: String(fields[copy.reads]) }));
+};
 
 /**
  * Collect the texts of a document the schema holds in a key, each with the field that holds it, its
- * node, and the one bound of its kind (`#pantry/qti/limits.ts`): as key texts (`keyText`), a
- * checked element's string value, its fold's running value at the end (`Node.stringValue`); an
- * IDREF or IDREFS attribute's lexical form, its tokens' concatenation (`Attribute.idrefText`); each
- * attribute a manifest overlay copies; and the document's path (`Document.path`); as namespace
- * names (`namespaceText`), an open attribute's namespace and its element's
+ * node, and the one bound of its kind (`#pantry/qti/limits.ts`): as key texts (`keyText`), every
+ * text a copy of the schema writes into a `keyText` field (`#pantry/test/key-copies.ts`
+ * `keyCopies`, read from the schema's statements: an ID's, an IDREF's, a manifest's, a
+ * declaration's and every other attribute a containment or a check copies, and the string value of
+ * each element whose text is checked or copied), and the document's path (`Document.path`); as
+ * namespace names (`namespaceText`), an open attribute's namespace and its element's
  * (`OpenAttributeName.uri`, `OpenAttributeName.elementNamespace`) and a foreign element's
  * (`OpenElementName.namespace`); and as a local name, an open attribute's
- * (`OpenAttributeName.local`). An overlay that copies an attribute into a key text adds its values
- * here.
+ * (`OpenAttributeName.local`).
  *
  * @param view - The document.
  * @param laws - The grammar's tables.
- * @returns The texts, in document order.
+ * @returns The texts, in the copies' order and document order within each.
  */
 const keyTexts = (
   view: View,
@@ -2937,61 +3051,55 @@ const keyTexts = (
   readonly value: string;
 }[] => {
   const nodeOfAttribute = new Map(view.rows.attributes.map(({ id, node }) => [id, node]));
+  const nodes = view.rows.nodes.map((node) => ({
+    fields: nodeFieldsOf(view, node),
+    node: node.id,
+  }));
+  const fieldsOf = new Map(nodes.map(({ fields, node }) => [node, fields]));
+  const rows = {
+    attributes: view.rows.attributes.map((attribute) => ({
+      fields: {
+        governs: attribute.governs,
+        kind: attribute.kind,
+        lexical: attribute.lexical,
+        name: attribute.name,
+        version: attribute.version,
+      },
+      node: attribute.node,
+    })),
+    children: new Map(
+      [...view.childrenOf].map(([parent, children]) => [
+        parent,
+        children.flatMap(({ id }) => Option.toArray(Option.fromNullishOr(fieldsOf.get(id)))),
+      ]),
+    ),
+    nodes,
+  };
 
   return [
     { bound: keyTextCodePoints, field: "Document.path", value: view.path },
-    ...view.rows.nodes.flatMap((node) =>
-      Option.isSome(checkedTextOf(laws, node))
-        ? [
-            {
-              bound: keyTextCodePoints,
-              field: "Node.stringValue",
-              node: node.id,
-              value: node.stringValue,
-            },
-          ]
+    ...keyCopies.flatMap((copy) =>
+      copiedTexts(copy, rows).map(({ node, value }) => ({
+        bound: keyTextCodePoints,
+        field: copy.field,
+        node,
+        value,
+      })),
+    ),
+    ...view.rows.attributes.flatMap((attribute) =>
+      isOpenClass(attribute.name)
+        ? Option.toArray(
+            Option.flatMap(Option.fromNullishOr(view.byId.get(attribute.node)), (node) =>
+              namespaceOf(view, laws.grammar, node),
+            ),
+          ).map((value) => ({
+            bound: namespaceCodePoints,
+            field: "OpenAttributeName.elementNamespace",
+            node: attribute.node,
+            value,
+          }))
         : [],
     ),
-    ...view.rows.attributes.flatMap((attribute) => {
-      const copied = manifestCopies.get(
-        `${view.byId.get(attribute.node)?.kind ?? ""} ${attribute.name}`,
-      );
-
-      return [
-        ...(Option.exists(compiledOf(laws, attribute), ({ domain }) => isIdref(domain))
-          ? [
-              {
-                bound: keyTextCodePoints,
-                field: "Attribute.idrefText",
-                node: attribute.node,
-                value: attribute.lexical,
-              },
-            ]
-          : []),
-        ...(copied === undefined
-          ? []
-          : [
-              {
-                bound: keyTextCodePoints,
-                field: copied,
-                node: attribute.node,
-                value: attribute.lexical,
-              },
-            ]),
-        ...(isOpenClass(attribute.name)
-          ? Option.toArray(
-              Option.flatMap(Option.fromNullishOr(view.byId.get(attribute.node)), (node) =>
-                namespaceOf(view, laws.grammar, node),
-              ),
-            ).map((value) => ({
-              bound: namespaceCodePoints,
-              field: "OpenAttributeName.elementNamespace",
-              node: attribute.node,
-              value,
-            }))
-          : []),
-      ];
-    }),
     ...view.rows.openNames.flatMap(({ attribute, local, uri }) => {
       const node = nodeOfAttribute.get(attribute);
 
@@ -3181,14 +3289,21 @@ const wholeBreaches = (view: View, laws: Laws): readonly Breach[] => {
         : [],
     ),
     ...keyTexts(view, laws)
-      .filter(({ bound, value }) => codePointsOf(value) > bound)
+      .filter(({ bound, value }) => keyTextLength(value) > bound)
       .map(({ bound, field: held, node, value }) =>
         breach("Key text bound", {
           bound: String(bound),
-          codePoints: String(codePointsOf(value)),
+          codePoints: String(keyTextLength(value)),
           field: held,
           node: node === undefined ? "" : pathOf(view, node),
         }),
+      ),
+    // Reading 131: a namespace declaration's normalized value is an RFC 3986 URI reference
+    // (Namespaces in XML 1.0 §3, §2.1), judged by the oracle's own reading of Appendix A's grammar.
+    ...rows.namespaces
+      .filter(({ uri }) => !isUriReference(uri))
+      .map(({ at, node, prefix, uri }) =>
+        breach("Namespace name", { at: String(at), node: pathOf(view, node), prefix, uri }),
       ),
   ];
 };
@@ -3630,6 +3745,68 @@ const quotationMarks: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * The least `figures` each rounding mode admits (reading 119; info §5.47.2 and §5.119.2): a
+ * "non-zero positive integer" under `significantFigures`, "an integer greater than or equal to
+ * zero" under `decimalPlaces`.
+ */
+const roundingLeast: ReadonlyMap<string, bigint> = new Map([
+  ["decimalPlaces", 0n],
+  ["significantFigures", 1n],
+]);
+
+/**
+ * Read a collapsed `figures` as an integer: an `xs:integer` within the signed 64-bit range spec
+ * reading 46 holds it to; anything else names a variable, or breaks the value domain.
+ *
+ * @param form - The collapsed form.
+ * @returns The integer, or none for a form that is no such integer.
+ */
+const figuresInteger = (form: string): Option.Option<bigint> =>
+  Option.filter(
+    Option.liftPredicate(form, (value) => xsIntegerForm.test(value)).pipe(Option.map(BigInt)),
+    (value) => value >= -(2n ** 63n) && value < 2n ** 63n,
+  );
+
+/**
+ * Read a tolerance value's sign as reading 121 does: a value in `xs:double`'s lexical space is a
+ * number, positive where its mantissa has no minus and a digit other than 0, or it is `INF`; any
+ * other value is a string, which names a variable read at run time.
+ *
+ * @param value - The value, one item of the list.
+ * @returns `positive`, `not positive` for `NaN`, `-INF` and every zero or negative, or `string`.
+ * @see {@link https://www.w3.org/TR/xmlschema-2/#double | XML Schema Part 2, 3.2.5 double}
+ */
+const toleranceSignOf = (value: string): "not positive" | "positive" | "string" => {
+  if (value === "INF") {
+    return "positive";
+  }
+
+  if (value === "-INF" || value === "NaN") {
+    return "not positive";
+  }
+
+  const mantissa = xsDoubleForm.exec(value)?.groups?.["mantissa"];
+  if (mantissa === undefined) {
+    return "string";
+  }
+
+  return !mantissa.startsWith("-") && /[1-9]/u.test(mantissa) ? "positive" : "not positive";
+};
+
+/**
+ * The learning resource types reading 122 forbids of the LOM vocabulary, as their values collapse:
+ * "the LOM-defined values self assessment and exam are forbidden" (QTI 3.0 Metadata §2.7.5.1).
+ */
+const lomForbidden: ReadonlySet<string> = new Set(["exam", "self assessment"]);
+
+/**
+ * The sources, collapsed, of the LOM vocabulary's terms (reading 122): LOMv1.0, and the empty
+ * source, which the loose binding's default="LOMv1.0" fills (imsmd_loose_v1p3p2.xsd:1288). A term
+ * that writes no source reads as the empty one.
+ */
+const lomVocabulary: ReadonlySet<string> = new Set(["", "LOMv1.0"]);
+
+/**
  * The overlay laws of §1.7 over one node: O3's bindings, choice bounds and
  * content references, O4's arity and undeclared references, O5's mapping base type and O7's
  * selection bound.
@@ -3708,6 +3885,30 @@ const overlayLaws: readonly ((
             : [{ keys: { baseType, text }, law: "Usage typed value" }];
         })
       : [],
+  (node, { view }) => {
+    // Reading 122: "the LOM-defined values self assessment and exam are forbidden" (QTI 3.0
+    // Metadata §2.7.5.1), of a term of the LOM vocabulary: its source LOMv1.0, or empty, which
+    // the loose binding's default="LOMv1.0" fills, or not written; both compared collapsed. The
+    // first value and the first source stand for the type, as the binding caps each at one (N7).
+    if (node.kind !== "lom:learningResourceType") {
+      return [];
+    }
+
+    const terms = view.childrenOf.get(node.id) ?? [];
+    const value = terms.find(({ kind }) => kind === "lom:value");
+    const source = terms.find(({ kind }) => kind === "lom:source");
+    const term = value === undefined ? "" : collapsed(stringValueOf(view, value));
+    const vocabulary = source === undefined ? "" : collapsed(stringValueOf(view, source));
+
+    return value !== undefined && lomForbidden.has(term) && lomVocabulary.has(vocabulary)
+      ? [
+          {
+            keys: { source: source === undefined ? "" : vocabulary, value: term },
+            law: "LOM learning resource type",
+          },
+        ]
+      : [];
+  },
   (node, overlay) => {
     const { grammar } = overlay.laws;
     const record = Option.isSome(grammar.recordBindingFit.lookup({ kind: node.kind }));
@@ -3940,6 +4141,56 @@ const overlayLaws: readonly ((
       Option.toArray,
     );
   },
+  (node, overlay) => {
+    // Reading 119: "If roundingMode= 'significantFigures', the value of figures must be a
+    // non-zero positive integer. If roundingMode='decimalPlaces', the value of figures must be an
+    // integer greater than or equal to zero" (info §5.47.2, §5.119.2), the mode written or
+    // EqualRounded's default (§5.47.1); a variable's name is read at run time.
+    if (node.kind !== "qti-equal-rounded" && node.kind !== "qti-round-to") {
+      return [];
+    }
+
+    const mode = Option.getOrElse(valueOf(overlay.view, node.id, "rounding-mode"), () =>
+      node.kind === "qti-equal-rounded" ? "significantFigures" : "",
+    );
+    const least = roundingLeast.get(mode);
+
+    return Option.toArray(Option.flatMap(collapsedOf(overlay, node, "figures"), figuresInteger))
+      .filter((figures) => least !== undefined && figures < least)
+      .map((figures): Finding => ({
+        keys: { figures: String(figures), least: String(least ?? 0n), mode },
+        law: "Rounding figures",
+      }));
+  },
+  (node, overlay) => {
+    // Reading 121: "If the tolerance mode is absolute or relative then the tolerance must be
+    // specified. The tolerance consists of two positive numbers, t0 and t1, ... If only one value
+    // is given it is used for both" (info §5.46.2), each value a number where it is in
+    // xs:double's lexical space and else a string naming a variable (§9.1.5).
+    if (node.kind !== "qti-equal") {
+      return [];
+    }
+
+    const mode = Option.getOrElse(valueOf(overlay.view, node.id, "tolerance-mode"), () => "exact");
+    const tolerance = valueOf(overlay.view, node.id, "tolerance");
+    if (Option.isNone(tolerance)) {
+      return mode === "absolute" || mode === "relative"
+        ? [{ keys: { count: "", mode, unsigned: "" }, law: "Equal tolerance" }]
+        : [];
+    }
+
+    const values = tolerance.value.split(/[\t\n\r ]+/u).filter((value) => value !== "");
+    const unsigned = values.filter((value) => toleranceSignOf(value) === "not positive");
+
+    return values.length >= 1 && values.length <= 2 && unsigned.length === 0
+      ? []
+      : [
+          {
+            keys: { count: String(values.length), mode, unsigned: unsigned.join(" ") },
+            law: "Equal tolerance",
+          },
+        ];
+  },
   (node, overlay) =>
     Option.all([
       valueOf(overlay.view, node.id, "aria-valuemin"),
@@ -4061,7 +4312,8 @@ const overlayBreaches = (view: View, laws: Laws): readonly Breach[] => {
   });
   const ids = Map.groupBy(idsOf(view, laws), ({ id }) => id);
   // Label tools: "If an item uses labels then values for the associated toolName and toolVersion
-  // characteristics must also be provided", of every label but the item root's own.
+  // characteristics must also be provided", of every label but a 3.0.0 item root's own (reading
+  // 128: 3.0.1's §4.1.3 says it of the item's own label, 3.0.0's does not).
   const missingTools =
     overlay.isItem && root !== undefined
       ? ["tool-name", "tool-version"].filter((name) => Option.isNone(valueOf(view, root.id, name)))
@@ -4070,7 +4322,8 @@ const overlayBreaches = (view: View, laws: Laws): readonly Breach[] => {
     missingTools.length === 0
       ? []
       : view.members.filter(
-          ({ id }) => id !== root?.id && Option.isSome(valueOf(view, id, "label")),
+          ({ id, version }) =>
+            (id !== root?.id || version === "3.0.1") && Option.isSome(valueOf(view, id, "label")),
         );
   // Reading 92: "Each response variable declared may be bound to one and only one interaction",
   // so in an item no two of the interactions Binding declared reads name one response.
@@ -4203,6 +4456,7 @@ export const documentBreaches = (
     ...attributeBreaches(view, laws),
     ...wholeBreaches(view, laws),
     ...overlayBreaches(view, laws),
+    ...lawDocumentBreaches(path, rows, laws.grammar),
   ];
 };
 
@@ -4233,11 +4487,21 @@ interface Listed {
 }
 
 /**
- * A resource of a manifest as the package laws read it: its node, identifier, type and href, and
- * its files' hrefs, each href as written, since the database compares them so.
+ * An href resolved as the package laws read it (readings 102 and 103): its resolution by the
+ * oracle's own resolver (`#pantry/test/resolution.ts`), and the path it is compared by, the entry
+ * path in the package and its path as read otherwise.
+ */
+interface ResolvedHref {
+  readonly path: string;
+  readonly resolution: OracleResolution;
+}
+
+/**
+ * A resource of a manifest as the package laws read it: its node, identifier, type and href, its
+ * href resolved, and its files' hrefs resolved.
  */
 interface ResourceOf {
-  readonly files: readonly string[];
+  readonly files: readonly ResolvedHref[];
   /**
    * The `ResourceType` handle its `type` spells, none for a type no version admits.
    */
@@ -4246,21 +4510,81 @@ interface ResourceOf {
   readonly identifier: string;
   readonly node: FoldedNode<Composed>;
   /**
-   * Its href's path, the href before its first `?` or `#` (reading 102): the file it names, its
-   * launch parameters aside.
+   * Its href resolved (reading 102: its launch parameters name no other file), none for a resource
+   * with no href.
    */
-  readonly path: Option.Option<string>;
+  readonly resolved: Option.Option<ResolvedHref>;
   readonly type: string;
 }
 
 /**
- * Read an href's path: the href before its first `?` or `#`, where its query or fragment starts
- * (RFC 3986, §3.3), the piece a file's href is compared with (reading 102).
+ * Read the `xml:base` values in scope at a node, outermost first: its ancestors' and its own (an
+ * element's other attributes resolve against its own `xml:base`).
  *
- * @param href - The href, as written.
- * @returns Its path.
+ * @param view - The document.
+ * @param node - The node.
+ * @returns The bases, the root's first.
  */
-const hrefPathOf = (href: string): string => /^[^?#]*/u.exec(href)?.[0] ?? "";
+const basesAt = (view: View, node: NodeId): readonly string[] =>
+  chainFrom(view, view.byId.get(node))
+    .toReversed()
+    .flatMap(({ id }) => Option.toArray(valueOf(view, id, "xml:base")));
+
+/**
+ * Each declared attribute's whitespace class, by `version kind name`, a union's read as
+ * `preserve`: what an href's value is read under before it resolves.
+ */
+const hrefWhiteSpaces: ReadonlyMap<string, OracleWhiteSpace> = new Map(
+  attributeDeclarations.flatMap(({ kind, name, type, versions }) =>
+    versions.map(
+      (version) =>
+        [
+          `${version} ${kind} ${name}`,
+          type.whiteSpace === "union" ? "preserve" : type.whiteSpace,
+        ] as const,
+    ),
+  ),
+);
+
+/**
+ * Resolve an attribute of a node as an href (readings 102 and 103), with the `xml:base` values in
+ * scope at the node, by the oracle's own resolver.
+ *
+ * @param view - The node's document.
+ * @param node - The node.
+ * @param lexical - The attribute's lexical form.
+ * @param read - How the value is read: its type's whitespace class, an `xs:anyURI`'s `collapse`
+ *   unless given, and whether it is a `srcset`.
+ * @param read.whiteSpace - The class.
+ * @param read.srcset - Whether the attribute is a `srcset`.
+ * @returns The href resolved.
+ */
+const resolvedAt = (
+  view: View,
+  node: NodeId,
+  lexical: string,
+  read: { readonly srcset?: boolean; readonly whiteSpace?: OracleWhiteSpace } = {},
+): ResolvedHref => {
+  const whiteSpace = read.whiteSpace ?? "collapse";
+  const resolution = resolveAttribute({
+    bases: basesAt(view, node),
+    document: view.path,
+    lexical,
+    srcset: read.srcset ?? false,
+    whiteSpace,
+  });
+
+  return { path: comparedPath(resolution, oracleValueOf(lexical, whiteSpace)), resolution };
+};
+
+/**
+ * The entry path an href resolves to in the package, none for one outside it.
+ *
+ * @param resolved - The href resolved.
+ * @returns Its entry path.
+ */
+const entryPathAt = ({ resolution }: ResolvedHref): Option.Option<string> =>
+  resolution.scope === "entry" ? Option.some(resolution.path) : Option.none();
 
 /**
  * List a manifest's resources.
@@ -4280,19 +4604,25 @@ const resourcesOf = (manifest: View, grammar: ComposedGrammar): readonly Resourc
       return {
         files: (manifest.childrenOf.get(node.id) ?? [])
           .filter(({ kind }) => kind === "cp:file")
-          .flatMap(({ id }) => Option.toArray(valueOf(manifest, id, "href"))),
+          .flatMap(({ id }) =>
+            Option.toArray(valueOf(manifest, id, "href")).map((lexical) =>
+              resolvedAt(manifest, id, lexical),
+            ),
+          ),
         handle: Option.liftPredicate(type, (value) => grammar.package.resourceType.has(value)),
         href,
         identifier: collapsed(Option.getOrElse(valueOf(manifest, node.id, "identifier"), () => "")),
         node,
-        path: href.pipe(Option.map(hrefPathOf)),
+        resolved: href.pipe(Option.map((lexical) => resolvedAt(manifest, node.id, lexical))),
         type,
       };
     });
 
 /**
  * Name the documents a manifest lists: each resource whose type `RootOfType` maps to a root kind,
- * through its `href`'s path (readings 93 and 102). A resource with no `href` names no document.
+ * through the entry path its `href` resolves to (readings 93 and 102). A resource with no `href`
+ * names no document, and one whose `href` resolves outside the package names none either, which
+ * "Document entry" refuses ({@link packageBreaches}).
  *
  * @param resources - The manifest's resources.
  * @param grammar - The composed grammar.
@@ -4308,7 +4638,10 @@ const documentsOf = (
     );
 
     return listsDocuments
-      ? Option.toArray(resource.path).map((at) => ({ path: at, resource }))
+      ? Option.toArray(Option.flatMap(resource.resolved, entryPathAt)).map((at) => ({
+          path: at,
+          resource,
+        }))
       : [];
   });
 
@@ -4377,18 +4710,6 @@ const merges = (
   (node.kind !== "xi:include" || includeParentsOf(grammar).has(node.parentKind));
 
 /**
- * Normalize a package path as a URL path, so a path and an href that names it compare equal: the
- * `href` is resolved against the path of the document that holds it, its fragment and query
- * dropped, as XInclude and a section ref read it.
- *
- * @param href - The href, or the path itself.
- * @param base - The path it is relative to.
- * @returns The path, with no leading `/`.
- */
-const packagePath = (href: string, base: string): string =>
-  new URL(href, new URL(base, "pkg:/")).pathname.replace(/^\//u, "");
-
-/**
  * Find the inclusion cycles among a package's documents (reading 85): each chain of section refs
  * and includes, in any mix, that leads from a listed document back to it, over the documents the
  * manifest lists. Each cycle is found once, from its least path, and two refs of one document that
@@ -4406,13 +4727,15 @@ const inclusionCycles = (
   const edges = new Map<string, readonly string[]>();
   for (const { folded, path } of documents) {
     for (const view of Result.isSuccess(folded) ? [folded.success] : []) {
-      const from = packagePath(path, "");
-      edges.set(from, [
-        ...(edges.get(from) ?? []),
+      edges.set(path, [
+        ...(edges.get(path) ?? []),
         ...view.members
           .filter((member) => merges(grammar, member))
-          .flatMap(({ id }) => Option.toArray(valueOf(view, id, "href")))
-          .map((href) => packagePath(collapsed(href), path)),
+          .flatMap(({ id }) =>
+            Option.toArray(valueOf(view, id, "href")).flatMap((href) =>
+              Option.toArray(entryPathAt(resolvedAt(view, id, href))),
+            ),
+          ),
       ]);
     }
   }
@@ -4446,80 +4769,26 @@ const inclusionCycles = (
 const lomNamed: ReadonlySet<string> = new Set([itemType, "imsqti_test_xmlv3p0"]);
 
 /**
- * The paths the representation resolves (`#pantry/qti/limits.ts` `resolvedHref`), as the database
- * reads the pattern.
- */
-const resolvedPath = new RegExp(resolvedHref, "u");
-
-/**
- * An external href, restated from `#pantry/qti/package.ts` `externalHrefPattern` (reading 102): a
- * scheme, or a leading `/`, which names no package entry.
- */
-const externalPath = /^(?:[A-Za-z][A-Za-z0-9+.-]*:|\/)/u;
-
-/**
- * Whether a path is one the representation reads: in the form it resolves, or external.
- *
- * @param path - The path.
- * @returns Whether it is either.
- */
-const inForm = (path: string): boolean => resolvedPath.test(path) || externalPath.test(path);
-
-/**
- * Read a reference's target, the path it names (reading 102): its value with the XML whitespace
- * around it set aside, up to its first `?` or `#`.
+ * Whether a `srcset` is one image candidate, its URL alone between any outer whitespace (reading
+ * 102, `#pantry/qti/package.ts` `srcsetCandidatePattern`): no comma, and no whitespace between
+ * its first and last characters that are not whitespace.
  *
  * @param lexical - The attribute's lexical form.
- * @returns Its target.
+ * @returns Whether it is.
  */
-const referenceTargetOf = (lexical: string): string =>
-  hrefPathOf(lexical.replace(/^[\t\n\r ]+/u, "").replace(/[\t\n\r ]+$/u, ""));
+const oneCandidate = (lexical: string): boolean => {
+  const inner = lexical.replace(/^[\t\n\r ]+/u, "").replace(/[\t\n\r ]+$/u, "");
 
-/**
- * The most `../` segments the representation resolves a reference by, restated from
- * `#pantry/qti/package.ts` `DotDepth` (reading 102).
- */
-const dotDepthMax = 8;
-
-/**
- * Resolve a reference's target against its document's directory as reading 102 reads it, restated
- * from RFC 3986's dot-segment removal (§5.2.4) for leading dot segments: each leading `./` is
- * dropped and each leading `../` removes the directory's last segment, and the rest must be a path
- * in the `resolvedHref` form.
- *
- * @param directory - The document's directory, empty at the root and ending with `/` below it.
- * @param target - The reference's target.
- * @returns The path it names, and whether it climbs above the package root or by more than
- *   {@link dotDepthMax} (refused under "Href form"); none for a target outside the form.
- */
-const resolutionOf = (
-  directory: string,
-  target: string,
-): { readonly climbs: boolean; readonly path: string } | undefined => {
-  const segments = target.split("/");
-  const lead = segments.findIndex((segment) => segment !== "." && segment !== "..");
-  const leading = lead === -1 ? segments : segments.slice(0, lead);
-  const rest = segments.slice(leading.length).join("/");
-  if (!resolvedPath.test(rest)) {
-    return undefined;
-  }
-
-  const climb = leading.filter((segment) => segment === "..").length;
-  const kept = directory.split("/").slice(0, -1);
-
-  return {
-    climbs: climb > kept.length || climb > dotDepthMax,
-    path: [...kept.slice(0, Math.max(0, kept.length - climb)), rest].join("/"),
-  };
+  return !/[,\t\n\r ]/u.test(inner);
 };
 
 /**
  * Evaluate R6 and the reference half of the stated limit over each listed document (readings 102
- * and 95): every attribute of the grammar's reference census is read as its target; a target
- * outside the form, neither external nor empty, and a `srcset` of more than one candidate, breaks
- * "Href form"; a document that holds an `xml:base` and a target in the form breaks it at each
- * base; and each target in the form, resolved against the document's directory, is an entry
- * ("File exists", IMS Content Packaging 1.2, InterchangePackage (d)).
+ * and 103): every attribute of the grammar's reference census is resolved with the `xml:base`
+ * values in scope ({@link resolvedAt}); one the representation reads no name from, and a `srcset`
+ * of more than one candidate or with a descriptor, breaks "Href form"; and each that resolves in
+ * the package names an entry ("File exists", IMS Content Packaging 1.2, InterchangePackage (d)), a
+ * stimulus ref's a stimulus.
  *
  * @param documents - The documents the manifest lists, read.
  * @param entries - The package's entry paths.
@@ -4539,7 +4808,6 @@ const referenceBreaches = (
     }
 
     const view = folded.success;
-    const directory = path.slice(0, path.lastIndexOf("/") + 1);
     const breach = (law: LawName, keys: Keys): Breach => ({
       document: path,
       keys: { node: "", ...keys },
@@ -4557,39 +4825,35 @@ const referenceBreaches = (
           form,
           lexical,
           member,
-          resolution: resolutionOf(directory, referenceTargetOf(lexical)),
-          target: referenceTargetOf(lexical),
+          resolution: resolvedAt(view, member.id, lexical, {
+            srcset: form === "srcset",
+            whiteSpace: hrefWhiteSpaces.get(`${member.version} ${member.kind} ${name}`),
+          }).resolution,
         })),
       ),
-    );
-    const resolved = references.filter(({ resolution }) => resolution !== undefined);
-    const bases = view.members.filter((member) =>
-      Option.isSome(valueOf(view, member.id, "xml:base")),
     );
 
     return [
       ...references
         .filter(
-          ({ form, lexical, resolution, target }) =>
-            (resolution === undefined && !externalPath.test(target) && target !== "") ||
-            resolution?.climbs === true ||
-            (form === "srcset" && lexical.includes(",")),
+          ({ form, lexical, resolution }) =>
+            resolution.scope === "unresolved" || (form === "srcset" && !oneCandidate(lexical)),
         )
-        .map(({ lexical, member }) =>
-          breach("Href form", { href: lexical, node: pathOf(view, member.id) }),
+        .map(({ lexical, member, resolution }) =>
+          breach("Href form", {
+            href: lexical,
+            limit: resolution.scope === "unresolved" ? resolution.limit : "srcset",
+            node: pathOf(view, member.id),
+          }),
         ),
-      ...(resolved.length === 0
-        ? []
-        : bases.map((member) => breach("Href form", { base: pathOf(view, member.id) }))),
-      ...resolved.flatMap(({ member, resolution }) =>
-        resolution === undefined || resolution.climbs || entries.has(resolution.path)
+      ...references.flatMap(({ member, resolution }) =>
+        resolution.scope !== "entry" || entries.has(resolution.path)
           ? []
           : [breach("File exists", { from: pathOf(view, member.id), path: resolution.path })],
       ),
-      ...resolved.flatMap(({ member, resolution }) =>
+      ...references.flatMap(({ member, resolution }) =>
         member.kind !== "qti-assessment-stimulus-ref" ||
-        resolution === undefined ||
-        resolution.climbs ||
+        resolution.scope !== "entry" ||
         rootKinds.get(resolution.path) === "qti-assessment-stimulus"
           ? []
           : [
@@ -4604,9 +4868,9 @@ const referenceBreaches = (
 };
 
 /**
- * Each family's automaton as the include-root law compares positions in it: the positions that
- * follow each position, the positions each follows, and the positions a family may end on, by
- * `version parent position`.
+ * Each content model's automaton as the include-root law compares positions in it: the positions
+ * that follow each position, the positions each follows, and the positions a family of the model
+ * may end on, by `model position`.
  */
 interface Automata {
   readonly ends: ReadonlySet<string>;
@@ -4620,7 +4884,7 @@ interface Automata {
 const automataCache = new WeakMap<ComposedGrammar, Automata>();
 
 /**
- * Read every family's automaton off the composed grammar's `Follow` and `Last`.
+ * Read every content model's automaton off the composed grammar's `Follow` and `Last`.
  *
  * @param grammar - The composed grammar.
  * @returns The automata.
@@ -4633,18 +4897,14 @@ const automataOf = (grammar: ComposedGrammar): Automata => {
 
   const { rows } = grammar.content.follow;
   const automata: Automata = {
-    ends: new Set(
-      grammar.content.last.rows.map(
-        ({ parent, position, version }) => `${version} ${parent} ${position}`,
-      ),
-    ),
+    ends: new Set(grammar.content.last.rows.map(({ model, position }) => `${model} ${position}`)),
     follows: new Map(
-      [...Map.groupBy(rows, ({ from, parent, version }) => `${version} ${parent} ${from}`)].map(
+      [...Map.groupBy(rows, ({ from, model }) => `${model} ${from}`)].map(
         ([at, to]) => [at, to.map((row) => row.to).toSorted()] as const,
       ),
     ),
     precedes: new Map(
-      [...Map.groupBy(rows, ({ parent, to, version }) => `${version} ${parent} ${to}`)].map(
+      [...Map.groupBy(rows, ({ model, to }) => `${model} ${to}`)].map(
         ([at, from]) => [at, from.map((row) => row.from).toSorted()] as const,
       ),
     ),
@@ -4678,13 +4938,13 @@ const positionsUnder = (grammar: ComposedGrammar, key: ChildKey): readonly strin
  * include's place by every family the include is accepted in.
  *
  * @param grammar - The composed grammar.
- * @param family - The family, `version parent`.
+ * @param model - The family's content model.
  * @param position - The position.
  * @returns The signature.
  */
-const signatureOf = (grammar: ComposedGrammar, family: string, position: string): string => {
+const signatureOf = (grammar: ComposedGrammar, model: string, position: string): string => {
   const { ends, follows, precedes } = automataOf(grammar);
-  const at = `${family} ${position}`;
+  const at = `${model} ${position}`;
 
   return `${(follows.get(at) ?? []).join(",")} | ${(precedes.get(at) ?? []).join(",")} | ${String(ends.has(at))}`;
 };
@@ -4706,17 +4966,17 @@ const standsFor = (
   parent: string,
   root: string,
 ): boolean => {
-  const family = `${version} ${parent}`;
+  const model = Option.getOrElse(contentModelOf(grammar.content, { parent, version }), () => "");
   const own = new Set(
     positionsUnder(grammar, { child: "xi:include", parent, version }).map((position) =>
-      signatureOf(grammar, family, position),
+      signatureOf(grammar, model, position),
     ),
   );
 
   return (
     root !== "xi:include" &&
     positionsUnder(grammar, { child: root, parent, version }).some((position) =>
-      own.has(signatureOf(grammar, family, position)),
+      own.has(signatureOf(grammar, model, position)),
     )
   );
 };
@@ -4750,16 +5010,13 @@ const sitesOf = (documents: readonly Listed[], grammar: ComposedGrammar): readon
     }
 
     const view = document.folded.success;
-    const directory = document.path.slice(0, document.path.lastIndexOf("/") + 1);
 
     return view.members
       .filter((member) => merges(grammar, member))
       .map((node): SiteOf => {
         const href = valueOf(view, node.id, "href");
         const path = href.pipe(
-          Option.flatMap((lexical) =>
-            Option.fromNullishOr(resolutionOf(directory, referenceTargetOf(lexical))?.path),
-          ),
+          Option.flatMap((lexical) => entryPathAt(resolvedAt(view, node.id, lexical))),
         );
 
         return {
@@ -4986,8 +5243,9 @@ const splicedElement = <E extends XdmClosedElement<Composed>>(
   element: E,
   path: string,
   chain: readonly string[],
+  above: readonly string[] = [],
 ): E => {
-  const directory = path.slice(0, path.lastIndexOf("/") + 1);
+  const bases = [...above, ...Option.toArray(closedValueOf(element, "xml:base"))];
   const spliceChild = (child: XdmChild<Composed>, parent: string): XdmChild<Composed> => {
     if (child._tag !== "element") {
       return "children" in child
@@ -4996,11 +5254,21 @@ const splicedElement = <E extends XdmClosedElement<Composed>>(
     }
 
     if (child.kind === "xi:include" && splices(grammar, parent)) {
-      const href = child.attributes.find(
-        ({ name }) => name._tag === "closed" && name.handle === "href",
-      )?.lexical;
-      const resolved =
-        href === undefined ? undefined : resolutionOf(directory, referenceTargetOf(href))?.path;
+      const href = closedValueOf(child, "href");
+      const resolution = Option.map(href, (value) =>
+        resolveAttribute({
+          bases: [...bases, ...Option.toArray(closedValueOf(child, "xml:base"))],
+          document: path,
+          lexical: value,
+          srcset: false,
+          whiteSpace: "collapse",
+        }),
+      );
+      const resolved = Option.getOrUndefined(
+        Option.flatMap(resolution, (at) =>
+          at.scope === "entry" ? Option.some(at.path) : Option.none(),
+        ),
+      );
       const target = resolved === undefined ? undefined : byPath.get(resolved);
       if (
         target !== undefined &&
@@ -5014,7 +5282,7 @@ const splicedElement = <E extends XdmClosedElement<Composed>>(
       }
     }
 
-    return splicedElement(grammar, byPath, child, path, chain);
+    return splicedElement(grammar, byPath, child, path, chain, bases);
   };
 
   return {
@@ -5024,13 +5292,20 @@ const splicedElement = <E extends XdmClosedElement<Composed>>(
 };
 
 /**
- * The manifest elements whose `xml:base` scopes a `cp:file`'s href (CP 1.2's Base class).
+ * Read a closed attribute of a written element, by its handle.
+ *
+ * @param element - The element, as shred gives it.
+ * @param handle - The attribute's handle.
+ * @returns Its lexical form, or none.
  */
-const manifestBaseKinds: ReadonlySet<string> = new Set([
-  "cp:manifest",
-  "cp:resources",
-  "cp:resource",
-]);
+const closedValueOf = (
+  element: XdmClosedElement<Composed>,
+  handle: string,
+): Option.Option<string> =>
+  Option.fromNullishOr(
+    element.attributes.find(({ name }) => name._tag === "closed" && name.handle === handle)
+      ?.lexical,
+  );
 
 /**
  * Collect the documents a merged document is written in (spec reading 117): the listed documents
@@ -5181,13 +5456,23 @@ const packageBreaches = (
     law,
   });
   const resources = resourcesOf(manifest, grammar);
-  const listedFiles = new Set(resources.flatMap(({ files }) => files));
+  const listedFiles = new Set(
+    resources.flatMap(({ files }) => files.flatMap((file) => Option.toArray(entryPathAt(file)))),
+  );
   const entryPaths = new Set(input.files.map(({ path }) => path));
   const fileNodes = manifest.members.flatMap((member) =>
     member.kind === "cp:file"
-      ? Option.toArray(valueOf(manifest, member.id, "href")).map((href) => ({ href, member }))
+      ? Option.toArray(valueOf(manifest, member.id, "href")).map((href) => ({
+          href,
+          member,
+          resolved: resolvedAt(manifest, member.id, href),
+        }))
       : [],
   );
+  const documentTyped = (resource: ResourceOf): boolean =>
+    Option.exists(resource.handle, (type) =>
+      grammar.package.rootOfType.rows.some((row) => row.type === type),
+    );
   const manifestNode = manifest.members.find(({ kind }) => kind === "cp:manifest");
   const manifestId = Option.fromNullishOr(manifestNode).pipe(
     Option.flatMap(({ id }) => valueOf(manifest, id, "identifier")),
@@ -5196,11 +5481,13 @@ const packageBreaches = (
 
   return [
     ...fileNodes
-      .filter(({ href }) => !inForm(href))
+      .filter(({ resolved }) => resolved.resolution.scope === "unresolved")
       .map(({ href, member }) => breach("Href form", { href, node: pathOf(manifest, member.id) })),
     ...resources.flatMap((resource) =>
       Option.toArray(resource.href)
-        .filter((href) => !inForm(hrefPathOf(href)))
+        .filter(() =>
+          Option.exists(resource.resolved, ({ resolution }) => resolution.scope === "unresolved"),
+        )
         .map((href) =>
           breach("Href form", {
             href,
@@ -5209,13 +5496,6 @@ const packageBreaches = (
           }),
         ),
     ),
-    ...manifest.members
-      .filter(
-        (member) =>
-          manifestBaseKinds.has(member.kind) &&
-          Option.isSome(valueOf(manifest, member.id, "xml:base")),
-      )
-      .map((member) => breach("Href form", { base: pathOf(manifest, member.id) })),
     ...resources.flatMap((resource) =>
       Option.exists(resource.handle, (type) =>
         Option.isSome(
@@ -5250,10 +5530,18 @@ const packageBreaches = (
       .map(({ path }) => breach("File listed", { path })),
     ...resources.flatMap((resource) =>
       Option.toArray(resource.href)
-        .filter((href) => !resource.files.includes(hrefPathOf(href)))
+        .filter(() =>
+          Option.exists(
+            resource.resolved,
+            (own) =>
+              !resource.files.some(
+                (file) => file.resolution.scope === own.resolution.scope && file.path === own.path,
+              ),
+          ),
+        )
         .map((href) =>
           breach("Href listed", {
-            files: spaced(resource.files),
+            files: spaced(resource.files.map(({ path }) => path)),
             href,
             identifier: resource.identifier,
             node: pathOf(manifest, resource.node.id),
@@ -5261,11 +5549,16 @@ const packageBreaches = (
         ),
     ),
     ...input.missing.map((path) => breach("Document entry", { path })),
-    ...fileNodes
-      .filter(({ href }) => resolvedPath.test(href) && !entryPaths.has(href))
-      .map(({ href, member }) =>
-        breach("File exists", { from: pathOf(manifest, member.id), path: href }),
-      ),
+    ...resources
+      .filter(documentTyped)
+      .flatMap((resource) => Option.toArray(resource.resolved))
+      .filter(({ resolution }) => resolution.scope !== "entry")
+      .map(({ path }) => breach("Document entry", { path })),
+    ...fileNodes.flatMap(({ member, resolved }) =>
+      Option.toArray(entryPathAt(resolved))
+        .filter((path) => !entryPaths.has(path))
+        .map((path) => breach("File exists", { from: pathOf(manifest, member.id), path })),
+    ),
     ...inclusionCycles(input.documents, grammar).map((chain) =>
       breach("Inclusion cycle", { chain: spaced(chain), path: chain[0] ?? "" }),
     ),
@@ -5674,6 +5967,24 @@ export const judge = Effect.fn("oracle.judge")(function* judge(
         ...packageBreaches({ documents, files, manifest: view, missing }, laws),
         ...documentBreaches(view.path, view.rows, laws),
         ...inPlaceBreaches(documents, grammar, foldGrammar, laws),
+        ...lawPackageBreaches(
+          {
+            documents: documents.flatMap((listed) =>
+              Result.isSuccess(listed.folded)
+                ? [
+                    {
+                      path: listed.path,
+                      resourceType: listed.resource.type,
+                      rows: listed.folded.success.rows,
+                    },
+                  ]
+                : [],
+            ),
+            entries: files.map(({ path }) => path),
+            manifest: { path: view.path, rows: view.rows },
+          },
+          grammar,
+        ),
       ],
       documents: [view.path, ...documents.map(({ path }) => path)],
     }),
@@ -5719,11 +6030,15 @@ const kindsAt = (
         (row) => row.version === version && row.parent === parent && row.position === position,
       )
       .map(({ child }) => child),
-    ...grammar.content.symbol.rows
-      .filter(
-        (row) => row.version === version && row.parent === parent && row.position === position,
-      )
-      .map(({ kind }) => kind),
+    ...Option.match(grammar.content.sharedModelOf.lookup({ parent, version }), {
+      onNone: () => [],
+      onSome: ({ model }) =>
+        model === noSharedModel
+          ? []
+          : grammar.content.symbol.rows
+              .filter((row) => row.model === model && row.position === position)
+              .map(({ kind }) => kind),
+    }),
   ]),
 ];
 
@@ -5943,6 +6258,14 @@ const explainers: Readonly<Record<LawName, Explainer>> = {
     `a second element purports the id ${field(keys, "id")}, which ${field(keys, "first")} already holds`,
   "E1 derived": (keys) =>
     `holds state ${field(keys, "state")}, ${field(keys, "elements")} elements, ancestry ${inBraces(membersOf(keys["ancestry"]))}, string value ${JSON.stringify(field(keys, "stringValue"))} and first and last characters ${JSON.stringify(field(keys, "first"))} and ${JSON.stringify(field(keys, "last"))}, where the closed relations, its children and its own characters derive state ${field(keys, "derivedState")}, ${field(keys, "derivedElements")} elements, ancestry ${inBraces(membersOf(keys["derivedAncestry"]))}, ${JSON.stringify(field(keys, "derivedStringValue"))} and ${JSON.stringify(field(keys, "derivedFirst"))} and ${JSON.stringify(field(keys, "derivedLast"))}`,
+  "Equal tolerance": (keys) => {
+    const unsigned = membersOf(keys["unsigned"]);
+    const count = field(keys, "count");
+
+    return count === ""
+      ? `the qti-equal compares in ${field(keys, "mode")} mode and writes no tolerance, where an absolute or relative comparison names its bounds`
+      : `the qti-equal's tolerance holds ${count} values${unsigned.length === 0 ? "" : `, of which ${inBraces(unsigned)} are numbers not above 0`}, where a tolerance is one or two values, each number among them above 0`;
+  },
   "Feedback outcome type": (keys) =>
     `${field(keys, "kind")} names the outcome ${field(keys, "identifier")}, of base type ${JSON.stringify(field(keys, "baseType"))} and cardinality ${JSON.stringify(field(keys, "cardinality"))}, where a feedback outcome is an identifier of single or multiple cardinality`,
   "Feedback reference": (keys, grammar) => referenceExplained(keys, grammar),
@@ -5962,9 +6285,7 @@ const explainers: Readonly<Record<LawName, Explainer>> = {
   "Graphic gap match default hotspot": () =>
     "a qti-associable-hotspot of a qti-graphic-gap-match-interaction has shape default, where that interaction defines no default hotspot",
   "Href form": (keys) =>
-    keys["base"] === undefined
-      ? `the href ${field(keys, "href")} is no plain relative path, which the representation resolves to an entry (#pantry/qti/limits.ts resolvedHref), a limit of the representation`
-      : `the xml:base on ${field(keys, "base")} would change what the document's hrefs name, and the representation resolves no base (#pantry/qti/limits.ts resolvedHref), a limit of the representation`,
+    `the href ${field(keys, "href")} names no file the representation can read a name from${keys["limit"] === undefined ? "" : ` (${field(keys, "limit")})`}, a limit of the representation (#pantry/import/overlays/package.ts Limit)`,
   "Href listed": (keys) =>
     `${field(keys, "identifier")}'s href ${field(keys, "href")} names a path that is the href of none of its files ${inBraces(membersOf(keys["files"]))}`,
   "Idref target": (keys) =>
@@ -5985,6 +6306,8 @@ const explainers: Readonly<Record<LawName, Explainer>> = {
     `the item ref ${field(keys, "node")} names ${field(keys, "path")}, which is no item document of the package`,
   "Key text bound": (keys) =>
     `its ${field(keys, "field")} holds ${field(keys, "codePoints")} code points, past the ${field(keys, "bound")} a key holds of its kind (#pantry/qti/limits.ts), a limit of the representation`,
+  "LOM learning resource type": (keys) =>
+    `a learningResourceType of the LOM vocabulary (its source ${field(keys, "source") === "" ? "empty or not written, so the binding's default LOMv1.0" : JSON.stringify(field(keys, "source"))}) holds ${JSON.stringify(field(keys, "value"))}, which QTI 3.0 Metadata §2.7.5.1 forbids`,
   "Label tools": (keys) =>
     `${field(keys, "kind")} carries a label, so the item's root must carry tool-name and tool-version, and it lacks ${inBraces(membersOf(keys["missing"]))}`,
   "Literal lexical": (keys) =>
@@ -6043,7 +6366,7 @@ const explainers: Readonly<Record<LawName, Explainer>> = {
     }
 
     const next = grammar.content.positions.handles.filter((to) =>
-      Option.isSome(grammar.content.follow.lookup({ from: was, parent, to, version })),
+      contentFollows(grammar.content, { from: was, parent, to, version }),
     );
 
     return `${field(keys, "kind")} follows state ${was}, after which ${parent}'s content model in ${version} admits ${inBraces(
@@ -6096,12 +6419,19 @@ const explainers: Readonly<Record<LawName, Explainer>> = {
       .join("; "),
   "N7 Last": (keys, grammar) =>
     `${field(keys, "kind")} holds ${inBraces(membersOf(keys["children"]))} and ends in state ${field(keys, "childState")}; its content model in ${field(keys, "version")} ends in ${inBraces(
-      grammar.content.last.rows
-        .filter(
-          ({ parent, version }) =>
-            parent === field(keys, "kind") && version === field(keys, "version"),
-        )
-        .map(({ position }) => position),
+      Option.match(
+        contentModelOf(grammar.content, {
+          parent: field(keys, "kind"),
+          version: field(keys, "version"),
+        }),
+        {
+          onNone: () => [],
+          onSome: (model) =>
+            grammar.content.last.rows
+              .filter((row) => row.model === model)
+              .map(({ position }) => position),
+        },
+      ),
     )}`,
   "N7 barred by": (keys, grammar) =>
     Option.match(
@@ -6124,6 +6454,8 @@ const explainers: Readonly<Record<LawName, Explainer>> = {
     }`,
   "Namespace family": (keys) =>
     `namespaces ${field(keys, "namespaces")} over ${field(keys, "declarations")} declarations`,
+  "Namespace name": (keys) =>
+    `${field(keys, "node")} binds ${field(keys, "prefix") === "" ? "the default namespace" : `the prefix ${field(keys, "prefix")}`} to ${JSON.stringify(field(keys, "uri"))}, which is no RFC 3986 URI reference`,
   "Node key": (keys) => `a second row holds the id ${field(keys, "id")}`,
   "One base": (keys) =>
     `the operands of ${field(keys, "kind")} are of base types ${field(keys, "bases")} or cardinalities ${field(keys, "cardinalities")}, which it takes of one`,
@@ -6158,6 +6490,8 @@ const explainers: Readonly<Record<LawName, Explainer>> = {
     )}`,
   RootOfType: (keys, grammar) =>
     `${field(keys, "path")} has root ${field(keys, "rootKind")} and is listed as ${field(keys, "type")}, which lists ${rootsExplained(grammar, field(keys, "type"))}`,
+  "Rounding figures": (keys) =>
+    `${field(keys, "kind")} rounds to ${field(keys, "figures")} figures under ${field(keys, "mode")}, where that mode rounds to at least ${field(keys, "least")}`,
   "SSML lexicon reference": (keys) =>
     field(keys, "fragment") === ""
       ? `ssml:lookup names the lexicon ${field(keys, "ref")} outside every ssml:speak`
@@ -6294,6 +6628,7 @@ const explainers: Readonly<Record<LawName, Explainer>> = {
       field(keys, "lexical"),
     )}`,
   "ws arm": (keys) => armExplained("ws", keys),
+  ...addedExplainers,
 };
 
 /**

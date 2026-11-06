@@ -17,7 +17,6 @@ import {
   BarredOf,
   BaseType,
   BaseTypeLexical,
-  BaseTypeSelf,
   BindingFit,
   BoundZero,
   BuiltIn,
@@ -25,7 +24,6 @@ import {
   Capped,
   Cardinality,
   CardinalityLexical,
-  CardinalitySelf,
   ChildGrammar,
   ChoiceBound,
   ChoiceCount,
@@ -61,8 +59,6 @@ import {
   ReferenceForm,
   ReferenceSpelling,
   Required,
-  ReservedTarget,
-  ReservedTargetLexical,
   ResourceType,
   ResourceTypeLexical,
   ResourceTypeOf,
@@ -165,14 +161,13 @@ import {
   VariableRef,
 } from "#pantry/qti/expressions.ts";
 import { Node, nodeLaws } from "#pantry/qti/node.ts";
+import { operatorLaws, operatorRelations } from "#pantry/qti/operators.ts";
 import {
   Dependency,
-  DocumentDirectory,
-  DotDepth,
-  DotSegments,
   Entry,
   File,
   FileHref,
+  HrefScope,
   ManifestId,
   NamedHref,
   Package,
@@ -182,7 +177,6 @@ import {
   Resource,
   ResourceFile,
   ResourceHref,
-  XmlBase,
 } from "#pantry/qti/package.ts";
 import { quotationLaws, quotationRelations } from "#pantry/qti/quotation.ts";
 import { testLaws, testRelations } from "#pantry/qti/tests.ts";
@@ -208,7 +202,6 @@ const grammarRosters = {
   Position,
   ReferenceForm,
   ReferenceSpelling,
-  ReservedTarget,
   ResourceType,
   SchemaVersion,
   SharedModel,
@@ -227,12 +220,10 @@ const grammarRelations = {
   Banned,
   BarredOf,
   BaseTypeLexical,
-  BaseTypeSelf,
   BindingFit,
   BuiltInVariable,
   Capped,
   CardinalityLexical,
-  CardinalitySelf,
   ChildGrammar,
   ChoiceBound,
   ChoiceCount,
@@ -257,7 +248,6 @@ const grammarRelations = {
   RecordBindingFit,
   ReferenceAttribute,
   Required,
-  ReservedTargetLexical,
   ResourceTypeLexical,
   ResourceTypeOf,
   RootOfType,
@@ -301,17 +291,15 @@ const attributeRelations = { Attribute, AttributeEntity, Idref, OpenAttributeNam
 
 /**
  * `package.ts`'s relations: the package, its entries, the manifest's resources, files and
- * dependencies, the hrefs that tie them, and each document's directory, `xml:base` attributes and
- * references with the entries they resolve to, read under the dot segments' roster and patterns.
+ * dependencies, the hrefs that tie them, and each document's references with the entries they
+ * resolve to, each href's outcome read under the `HrefScope` roster.
  */
 const packageRelations = {
   Dependency,
-  DocumentDirectory,
-  DotDepth,
-  DotSegments,
   Entry,
   File,
   FileHref,
+  HrefScope,
   ManifestId,
   NamedHref,
   Package,
@@ -320,7 +308,6 @@ const packageRelations = {
   Resource,
   ResourceFile,
   ResourceHref,
-  XmlBase,
 };
 
 /**
@@ -411,6 +398,7 @@ export const Qti = schema(
     ...metadataRelations,
     ...htmlRelations,
     ...quotationRelations,
+    ...operatorRelations,
   },
   [
     ...nodeLaws,
@@ -426,5 +414,6 @@ export const Qti = schema(
     ...metadataLaws,
     ...htmlLaws,
     ...quotationLaws,
+    ...operatorLaws,
   ],
 );

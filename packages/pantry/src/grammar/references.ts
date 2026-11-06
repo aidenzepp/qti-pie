@@ -121,22 +121,6 @@ export interface ChoiceCountRow {
 }
 
 /**
- * The targets a branch rule names that are no identifier of the test, each spelled exactly, in code
- * order: the `ReservedTarget` roster's handles. "The following values are reserved and have special
- * meaning when used as a target identifier: EXIT_SECTION jumps over all the remaining children of
- * the current section to the item (or section) immediately following it; EXIT_TESTPART finishes the
- * current test-part immediately and EXIT_TEST finishes the entire assessment-test immediately"
- * (information model §5.23.1, BranchRule `target`, `info.txt` line 20610; the UP audit's A25). A
- * target of any other spelling names an identifier.
- */
-export const reservedTargets = ["EXIT_SECTION", "EXIT_TESTPART", "EXIT_TEST"] as const;
-
-/**
- * A `ReservedTarget` handle.
- */
-export type ReservedTarget = (typeof reservedTargets)[number];
-
-/**
  * How a file reference's value names the files it references, in code order: the `ReferenceForm`
  * roster's handles. A `uri` value is one URI reference; a `srcset` value is HTML's list of image
  * candidate strings, each candidate's URL one reference (HTML, "srcset attributes").
@@ -985,10 +969,6 @@ export interface References {
    */
   readonly referenceForm: Roster<ReferenceForm>;
   /**
-   * The `ReservedTarget` roster, {@link reservedTargets}.
-   */
-  readonly reservedTarget: Roster<ReservedTarget>;
-  /**
    * The `ReferenceSpelling` roster, {@link spellings}.
    */
   readonly spelling: Roster<Spelling>;
@@ -1115,7 +1095,6 @@ export const references = (input: {
           ),
       }),
       referenceForm,
-      reservedTarget: yield* roster("ReservedTarget", reservedTargets),
       sectionPart: yield* closed({
         key: [kind],
         name: "SectionPart",

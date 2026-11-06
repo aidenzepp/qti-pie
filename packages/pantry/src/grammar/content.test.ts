@@ -12,7 +12,7 @@ import { Array as Arr, Duration, Effect, FileSystem, Formatter, Option, Result }
 import { int8Max } from "#pantry/grammar/closed.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
-import { contentEnds, contentStep } from "#pantry/grammar/content.ts";
+import { contentEnds, contentModelOf, contentStep } from "#pantry/grammar/content.ts";
 import { fragmentRoots } from "#pantry/grammar/facets.ts";
 import { foreignKinds, isForeignKind, schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
@@ -1529,16 +1529,35 @@ describe.skipIf(!cached)("the content grammar's sources", () => {
           yield* check("Admission", row.version, admission.sourceOf(row));
         }
 
-        for (const row of content.follow.rows) {
-          yield* check("Follow", row.version, content.follow.sourceOf(row));
-        }
-
-        for (const row of content.last.rows) {
-          yield* check("Last", row.version, content.last.sourceOf(row));
-        }
-
-        for (const row of content.symbol.rows) {
-          yield* check("Symbol", row.version, content.symbol.sourceOf(row));
+        // A model's rows are its families', each family's sourced to its own particles: every
+        // position a family's model names in `Follow`, `Last` or `Symbol`.
+        const followed = Map.groupBy(content.follow.rows, ({ model }) => model);
+        const ended = Map.groupBy(content.last.rows, ({ model }) => model);
+        const shared = Map.groupBy(content.symbol.rows, ({ model }) => model);
+        const sharedOf = new Map(
+          content.sharedModelOf.rows.map(({ model, parent, version }) => [
+            `${version} ${parent}`,
+            model,
+          ]),
+        );
+        for (const { model, parent, version } of content.contentModelOf.rows) {
+          const named = [
+            ["Follow", new Set((followed.get(model) ?? []).map(({ to }) => to))],
+            ["Last", new Set((ended.get(model) ?? []).map(({ position }) => position))],
+            [
+              "Symbol",
+              new Set(
+                (shared.get(sharedOf.get(`${version} ${parent}`) ?? "") ?? []).map(
+                  ({ position }) => position,
+                ),
+              ),
+            ],
+          ] as const;
+          for (const [relation, positions] of named) {
+            for (const position of positions) {
+              yield* check(relation, version, content.sourceOf({ parent, position, version }));
+            }
+          }
         }
 
         for (const row of content.counted.rows) {
@@ -1840,37 +1859,54 @@ describe("the installed automata", () => {
       // lawfully, would make an admitted kind a dead letter, which a content model never states.
       Effect.gen(function* trim() {
         const { admission, content } = yield* grammar;
+        // Each model's automaton, which every family of it reads (`ContentModelOf`).
         const families = new Map<
           string,
           { readonly ends: Set<string>; readonly edges: Map<string, Set<string>> }
         >();
-        const familyOf = (version: string, parent: string) => {
-          const key = `${version} ${parent}`;
-          const held = families.get(key) ?? {
+        const familyOf = (model: string) => {
+          const held = families.get(model) ?? {
             edges: new Map<string, Set<string>>(),
             ends: new Set<string>(),
           };
-          families.set(key, held);
+          families.set(model, held);
 
           return held;
         };
-        for (const { from, parent, to, version } of content.follow.rows) {
-          const { edges } = familyOf(version, parent);
+        for (const { from, model, to } of content.follow.rows) {
+          const { edges } = familyOf(model);
           edges.set(from, (edges.get(from) ?? new Set()).add(to));
         }
 
-        for (const { parent, position, version } of content.last.rows) {
-          familyOf(version, parent).ends.add(position);
+        for (const { model, position } of content.last.rows) {
+          familyOf(model).ends.add(position);
         }
 
+        const modelOf = new Map(
+          content.contentModelOf.rows.map(({ model, parent, version }) => [
+            `${version} ${parent}`,
+            model,
+          ]),
+        );
+        const sharedAt = Map.groupBy(content.symbol.rows, ({ model }) => model);
         const named = [
-          ...content.follow.rows.flatMap(({ from, parent, to, version }) => [
-            { parent, position: from, version },
-            { parent, position: to, version },
+          ...content.follow.rows.flatMap(({ from, model, to }) => [
+            { model, position: from },
+            { model, position: to },
           ]),
           ...content.last.rows,
-          ...admission.rows.filter(({ position }) => position !== "0"),
-          ...content.symbol.rows,
+          ...admission.rows
+            .filter(({ position }) => position !== "0")
+            .map(({ parent, position, version }) => ({
+              model: modelOf.get(`${version} ${parent}`) ?? "",
+              position,
+            })),
+          ...content.sharedModelOf.rows.flatMap(({ model: shared, parent, version }) =>
+            (sharedAt.get(shared) ?? []).map(({ position }) => ({
+              model: modelOf.get(`${version} ${parent}`) ?? "",
+              position,
+            })),
+          ),
         ];
         const dead: string[] = [];
         const reachedOf = new Map<string, ReadonlySet<string>>();
@@ -1901,8 +1937,7 @@ describe("the installed automata", () => {
           endingOf.set(key, ending);
         }
 
-        for (const { parent, position, version } of named) {
-          const key = `${version} ${parent}`;
+        for (const { model: key, position } of named) {
           if (
             !(reachedOf.get(key)?.has(position) ?? false) ||
             !(endingOf.get(key)?.has(position) ?? false)
@@ -2126,12 +2161,16 @@ const automatonRowsOf = (
   parent: string,
 ): readonly string[] =>
   [
-    ...composedGrammar.content.follow.rows
-      .filter((row) => row.version === version && row.parent === parent)
-      .map(({ from, to }) => `follow ${from} ${to}`),
-    ...composedGrammar.content.last.rows
-      .filter((row) => row.version === version && row.parent === parent)
-      .map(({ position }) => `last ${position}`),
+    ...Option.toArray(contentModelOf(composedGrammar.content, { parent, version })).flatMap(
+      (model) => [
+        ...composedGrammar.content.follow.rows
+          .filter((row) => row.model === model)
+          .map(({ from, to }) => `follow ${from} ${to}`),
+        ...composedGrammar.content.last.rows
+          .filter((row) => row.model === model)
+          .map(({ position }) => `last ${position}`),
+      ],
+    ),
     ...composedGrammar.admission.rows
       .filter((row) => row.version === version && row.parent === parent)
       .map(({ child, position }) => `admits ${child} at ${position}`),

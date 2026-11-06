@@ -1,41 +1,18 @@
 import { assert, describe, it } from "@effect/vitest";
 import { exhaust } from "@grizzle/testing/explore";
-import { noCoverage, requiredInSpace } from "@grizzle/testing/features";
+import { noCoverage } from "@grizzle/testing/features";
 import { int } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
-import {
-  Array as Arr,
-  Duration,
-  Effect,
-  Formatter,
-  Option,
-  Predicate,
-  Result,
-  Schema,
-} from "effect";
+import { Array as Arr, Duration, Effect, Formatter, Option, Predicate, Schema } from "effect";
 import { openDomain } from "#pantry/grammar/attributes.ts";
-import {
-  closedWithin,
-  dependentField,
-  idField,
-  roster,
-  valueField,
-} from "#pantry/grammar/closed.ts";
-import type { AnyField, AnyKeyField } from "#pantry/grammar/closed.ts";
 import * as install from "#pantry/grammar/install.ts";
-import { foreignKinds, openClasses } from "#pantry/grammar/kinds.ts";
+import { foreignKinds } from "#pantry/grammar/kinds.ts";
 import { noType } from "#pantry/grammar/xsi.ts";
 
 /**
  * The composed grammar, the generators' rows every declaration is compared with.
  */
 const { grammar } = install;
-
-/**
- * The most bits one constant holds: PostgreSQL's longest bit string, `VARBITMAXLEN` = INT_MAX − 7
- * (19rc1, `src/include/utils/varbit.h:83`), grizzle's `constantMaxBits` (README, "Limits").
- */
-const constantMaxBits = 2_147_483_640;
 
 /**
  * The most UTF-8 bytes a roster handle holds: a PostgreSQL `name`, NAMEDATALEN − 1 (README, "Tables
@@ -75,18 +52,11 @@ type Row = typeof RowSchema.Type;
 const rowsOf = Schema.decodeUnknownSync(Schema.Array(RowSchema));
 
 /**
- * A grizzle field descriptor as the size and layout laws read it: a closed id carries its roster,
- * and a slot its fin, its owner's key and rows and its count field.
+ * A grizzle field descriptor as these laws read it: a closed id carries its roster.
  */
 const Descriptor = Schema.Struct({
   roster: Schema.optional(
     Schema.Struct({ handles: Schema.Array(Schema.String), name: Schema.String }),
-  ),
-  slots: Schema.optional(
-    Schema.Struct({
-      count: Schema.String,
-      owner: Schema.Struct({ key: Schema.Array(Schema.String), rows: Schema.Array(RowSchema) }),
-    }),
   ),
 });
 
@@ -225,6 +195,29 @@ const comparisons: readonly Comparison[] = [
     name: "ChildGrammar",
   },
   { expected: () => grammar.content.strictlyHeld.rows, name: "StrictlyHeld" },
+  // The content grammar is keyed by automaton where it is generated, so each relation is its
+  // generator's rows one to one, and nothing regroups families into models here.
+  { expected: () => grammar.content.contentModelOf.rows, name: "ContentModelOf" },
+  {
+    expected: () =>
+      grammar.content.modelPositions.rows.map(({ model, positions }) => ({
+        model,
+        positions: BigInt(positions),
+      })),
+    name: "ModelPositions",
+  },
+  { expected: () => grammar.content.follow.rows, name: "Follow" },
+  { expected: () => grammar.content.last.rows, name: "Last" },
+  { expected: () => grammar.content.sharedModelOf.rows, name: "SharedModelOf" },
+  {
+    expected: () =>
+      grammar.content.sharedModelPositions.rows.map(({ model, positions }) => ({
+        model,
+        positions: BigInt(positions),
+      })),
+    name: "SharedPositions",
+  },
+  { expected: () => grammar.content.symbol.rows, name: "Symbol" },
   { expected: () => grammar.ancestry.enters.rows, name: "Enters" },
   { expected: () => grammar.ancestry.banned.rows, name: "Banned" },
   { expected: () => grammar.ancestry.needs.rows, name: "Needs" },
@@ -355,93 +348,7 @@ const comparisons: readonly Comparison[] = [
     expected: () => grammar.package.resourceType.handles.map((code) => ({ code, lexical: code })),
     name: "ResourceTypeLexical",
   },
-  {
-    expected: () =>
-      grammar.references.reservedTarget.handles.map((code) => ({ code, lexical: code })),
-    name: "ReservedTargetLexical",
-  },
 ];
-
-/**
- * Index rows by a key's text, each row spelled by some of its fields: a relation's rows per model,
- * or a generator's per family, as one set of texts per key.
- *
- * @param rows - The rows.
- * @param by - The fields whose values name a row's group.
- * @param fields - The fields that spell a row within its group.
- * @returns Each group's rows' texts, by the group's text.
- */
-const indexed = (
-  rows: readonly Row[],
-  by: readonly string[],
-  fields: readonly string[],
-): ReadonlyMap<string, ReadonlySet<string>> => {
-  const groups = new Map<string, Set<string>>();
-  for (const row of rows) {
-    const at = tupleText(by.map((field) => row[field]));
-    const group = groups.get(at) ?? new Set<string>();
-    group.add(tupleText(fields.map((field) => row[field])));
-    groups.set(at, group);
-  }
-
-  return groups;
-};
-
-/**
- * Index an installed relation's rows by model, each spelled by its other key fields.
- *
- * @param name - The relation, keyed by `model` first.
- * @returns Each model's rows' texts, by the model's text.
- */
-const byModel = (name: string): ReadonlyMap<string, ReadonlySet<string>> => {
-  const relation = relationNamed(name);
-
-  return indexed(
-    relation.rows,
-    ["model"],
-    relation.key.filter((field) => field !== "model"),
-  );
-};
-
-/**
- * Index a generator's rows by family, (version, parent), each spelled by the given fields.
- *
- * @param rows - The generator's rows.
- * @param fields - The fields beside the family, in the installed key's order.
- * @returns Each family's rows' texts, by the family's text.
- */
-const byFamily = (
-  rows: readonly object[],
-  fields: readonly string[],
-): ReadonlyMap<string, ReadonlySet<string>> => indexed(rowsOf(rows), ["version", "parent"], fields);
-
-/**
- * Read a total function of (version, parent) at every family: `ContentModelOf` or `SharedModelOf`.
- *
- * @param name - The relation's name.
- * @returns Each family's model's text, by the family's text.
- */
-const modelsByFamily = (name: string): ReadonlyMap<string, string> =>
-  new Map(
-    relationNamed(name).rows.map((row) => [
-      tupleText([row["version"], row["parent"]]),
-      tupleText([row["model"]]),
-    ]),
-  );
-
-/**
- * A model's count of positions, `ModelPositions` or `SharedPositions`, by the model's text.
- *
- * @param name - The count relation's name.
- * @returns Each model's count.
- */
-const countsByModel = (name: string): ReadonlyMap<string, Value | undefined> =>
-  new Map(relationNamed(name).rows.map((row) => [tupleText([row["model"]]), row["positions"]]));
-
-/**
- * The empty set of row texts: a group no row is in.
- */
-const noRows: ReadonlySet<string> = new Set();
 
 /**
  * Whether a generator states at most one row per (version, parent) family.
@@ -464,30 +371,6 @@ const oncePerFamily = (
  */
 const handlesOf = (name: string): readonly string[] =>
   Option.getOrThrow(Arr.findFirst(rosters, (held) => held.name === name)).handles;
-
-/**
- * The content grammar as both sides state it, indexed once: each family's model, each model's and
- * each family's `Follow` and `Last` rows, and each model's positions.
- */
-const content = {
-  familyFollow: byFamily(grammar.content.follow.rows, ["from", "to"]),
-  familyLast: byFamily(grammar.content.last.rows, ["position"]),
-  follow: byModel("Follow"),
-  last: byModel("Last"),
-  models: modelsByFamily("ContentModelOf"),
-  positions: countsByModel("ModelPositions"),
-};
-
-/**
- * `Symbol` as both sides state it, indexed once: each family's shared model, each model's and each
- * family's rows, and each model's positions.
- */
-const shared = {
-  family: byFamily(grammar.content.symbol.rows, ["kind", "position"]),
-  models: modelsByFamily("SharedModelOf"),
-  positions: countsByModel("SharedPositions"),
-  symbol: byModel("Symbol"),
-};
 
 /**
  * How long each exhaustive search of every relation or family may run: about ten times what each
@@ -532,94 +415,6 @@ describe("the installed relations", () => {
                 keyedSet(`${name}'s generator`, relation.key, stated),
                 name,
               );
-            }),
-        ),
-      ),
-    searchTimeout,
-  );
-
-  it.effect(
-    "give every content family its own automaton: the model's Follow, Last and positions are the family's",
-    (ctx) =>
-      searched(
-        ctx,
-        exhaust(
-          {
-            box: "every (version, parent) family, 2 × 644",
-            caseHang,
-            coverage: requiredInSpace<"empty" | "follows" | "no model">([
-              "empty",
-              "follows",
-              "no model",
-            ]),
-            generator: int(0, families.length - 1),
-            limit: families.length,
-            literal: Formatter.format,
-            oracle: {
-              kind: "second-implementation",
-              name: "the family's generated Follow and Last",
-            },
-            suite: "grammar/install/content-models",
-          },
-          (index, c) =>
-            Effect.sync(() => {
-              const family = Arr.getUnsafe(families, index);
-              const at = tupleText([family.version, family.parent]);
-              const model = content.models.get(at) ?? "";
-              const follow = content.familyFollow.get(at) ?? noRows;
-              const last = content.familyLast.get(at) ?? noRows;
-              if (follow.size > 0) {
-                c.note("follows");
-              } else {
-                c.note(last.size > 0 ? "empty" : "no model");
-              }
-
-              assert.deepStrictEqual(content.follow.get(model) ?? noRows, follow, at);
-              assert.deepStrictEqual(content.last.get(model) ?? noRows, last, at);
-              assert.strictEqual(
-                content.positions.get(model),
-                BigInt(grammar.content.follow.key[2].sizeOf(family)),
-                at,
-              );
-            }),
-        ),
-      ),
-    searchTimeout,
-  );
-
-  it.effect(
-    "key Symbol by shared model: each family's (kind, position) rows are exactly its dependent Symbol's",
-    (ctx) =>
-      searched(
-        ctx,
-        exhaust(
-          {
-            box: "every (version, parent) family, 2 × 644",
-            caseHang,
-            coverage: requiredInSpace<"shared" | "unshared">(["shared", "unshared"]),
-            generator: int(0, families.length - 1),
-            limit: families.length,
-            literal: Formatter.format,
-            oracle: { kind: "second-implementation", name: "the family's generated Symbol" },
-            suite: "grammar/install/symbol",
-          },
-          (index, c) =>
-            Effect.sync(() => {
-              const family = Arr.getUnsafe(families, index);
-              const at = tupleText([family.version, family.parent]);
-              const model = shared.models.get(at) ?? "";
-              const symbol = shared.family.get(at) ?? noRows;
-              c.note(symbol.size > 0 ? "shared" : "unshared");
-
-              assert.deepStrictEqual(shared.symbol.get(model) ?? noRows, symbol, at);
-              assert.strictEqual(model === textOf("none"), symbol.size === 0, at);
-              if (symbol.size > 0) {
-                assert.strictEqual(
-                  shared.positions.get(model),
-                  BigInt(grammar.content.symbol.key[3].sizeOf(family)),
-                  at,
-                );
-              }
             }),
         ),
       ),
@@ -708,8 +503,6 @@ describe("the diagonals", () => {
     { field: "position", name: "PositionSelf" },
     { field: "slot", name: "SlotSelf" },
     { field: "name", name: "AttributeNameSelf" },
-    { field: "baseType", name: "BaseTypeSelf" },
-    { field: "cardinality", name: "CardinalitySelf" },
   ]) {
     it.effect(
       `give ${name}.row(c) exactly {c}, every code exhausted`,
@@ -772,6 +565,8 @@ describe("the rosters", () => {
       ...grammar.attributes.identity.payload[0].roster.handles,
       "none",
     ]);
+    assert.deepStrictEqual(handlesOf("ContentModel"), grammar.content.models.handles);
+    assert.deepStrictEqual(handlesOf("SharedModel"), grammar.content.sharedModels.handles);
     assert.strictEqual(handlesOf("SharedModel")[0], "none");
     // Spec reading 118's include model is a model of its own, and names the ignored elements'
     // wildcards at two positions.
@@ -810,7 +605,6 @@ describe("the rosters", () => {
       new Set(grammar.kinds.interaction.rows.map(({ kind }) => kind)),
     );
     assert.lengthOf(install.interactionKinds, 22);
-    assert.deepStrictEqual(new Set(install.openClasses), new Set(openClasses));
     assert.deepStrictEqual(
       new Set(install.openElementClasses),
       new Set(Object.values(foreignKinds)),
@@ -820,204 +614,4 @@ describe("the rosters", () => {
       new Set(grammar.package.rootOfType.rows.map(({ type }) => type)),
     );
   });
-});
-
-/**
- * A constant's shape: its cells, one per point of its key's space, and the bits per cell.
- */
-interface Layout {
-  readonly cells: number;
-  readonly width: number;
-}
-
-/**
- * Count the codes a payload field holds: its roster's, or the distinct values its rows hold, at
- * least one, since PostgreSQL has no `bit(0)`.
- *
- * @param relation - The relation.
- * @param field - A payload field.
- * @returns The field's code count.
- */
-const codesOf = (relation: Installed, field: string): number => {
-  const roster_ = relation.fields[field]?.roster;
-
-  return roster_ === undefined
-    ? Math.max(1, new Set(relation.rows.map((row) => textOf(row[field]))).size)
-    : roster_.handles.length;
-};
-
-/**
- * Lay out a relation's constant as fin.md §17 does from grizzle's declaration: one cell per point
- * of the key's space, the product of its closed ids' codes, or, where the key holds slots, each
- * owner's block at its own counts after the blocks before it; and w = ⌈log₂(1 + |payload space|)⌉
- * bits a cell.
- *
- * @param relation - The installed relation.
- * @returns Its layout.
- */
-const declaredLayout = (relation: Installed): Layout => {
-  const sizeOf = (field: string) => relation.fields[field]?.roster?.handles.length ?? 0;
-  let points = 1;
-  for (const field of Object.keys(relation.fields)) {
-    if (!relation.key.includes(field)) {
-      points *= codesOf(relation, field);
-    }
-  }
-
-  const width = points.toString(2).length;
-  const fin = relation.key
-    .map((field) => relation.fields[field]?.slots)
-    .find((slots) => slots !== undefined);
-  if (fin === undefined) {
-    let cells = 1;
-    for (const field of relation.key) {
-      cells *= sizeOf(field);
-    }
-
-    return { cells, width };
-  }
-
-  const counts = new Map(
-    fin.owner.rows.map((row) => [
-      fin.owner.key.map((field) => textOf(row[field])).join(" "),
-      Number(row[fin.count]),
-    ]),
-  );
-  let owners: readonly (readonly string[])[] = [[]];
-  for (const field of relation.key.slice(0, fin.owner.key.length)) {
-    const handles = relation.fields[field]?.roster?.handles ?? [];
-    owners = owners.flatMap((owner) => handles.map((handle) => [...owner, handle]));
-  }
-
-  let cells = 0;
-  for (const owner of owners) {
-    const count = counts.get(owner.map((handle) => textOf(handle)).join(" ")) ?? 0;
-    let block = 1;
-    for (const field of relation.key.slice(fin.owner.key.length)) {
-      block *= relation.fields[field]?.slots === undefined ? sizeOf(field) : count;
-    }
-
-    cells += block;
-  }
-
-  return { cells, width };
-};
-
-/**
- * Restate an installed relation in `closed.ts`, the generators' own encoder: closed ids over
- * rosters of the same handles, a slot as a dependent `fin` sized by its owner's count, and an
- * open-typed field over its column's values, each spelled as its text.
- *
- * @param relation - The installed relation.
- * @returns Its `closed.ts` twin, or why `closed.ts` refuses its rows.
- */
-const twinOf = (relation: Installed) => {
-  const rosterOf = (field: string) =>
-    Result.getOrThrow(
-      roster(`${relation.name}.${field}`, relation.fields[field]?.roster?.handles ?? []),
-    );
-  const key = relation.key.map((field): AnyKeyField => {
-    const fin = relation.fields[field]?.slots;
-    if (fin === undefined) {
-      return idField(field, rosterOf(field));
-    }
-
-    const counts = new Map(
-      fin.owner.rows.map((row) => [
-        fin.owner.key.map((held) => textOf(row[held])).join(" "),
-        Number(row[fin.count]),
-      ]),
-    );
-
-    return dependentField(
-      field,
-      rosterOf(field),
-      (prefix) =>
-        counts.get(
-          relation.key
-            .slice(0, fin.owner.key.length)
-            .map((held) => textOf(prefix[held]))
-            .join(" "),
-        ) ?? 0,
-    );
-  });
-  const open = new Set(
-    Object.keys(relation.fields).filter((field) => relation.fields[field]?.roster === undefined),
-  );
-  const payload = Object.keys(relation.fields)
-    .filter((field) => !relation.key.includes(field))
-    .map((field): AnyField =>
-      open.has(field)
-        ? valueField(
-            field,
-            relation.rows.map((row) => textOf(row[field])),
-          )
-        : idField(field, rosterOf(field)),
-    );
-
-  return closedWithin(constantMaxBits)({
-    key,
-    name: relation.name,
-    payload,
-    rows: relation.rows.map((row) =>
-      Object.fromEntries(
-        Object.keys(relation.fields).map((field) => {
-          const value = row[field];
-
-          return [field, open.has(field) ? textOf(value) : String(value)] as const;
-        }),
-      ),
-    ),
-  });
-};
-
-describe("the constants", () => {
-  it.effect(
-    "lay out each relation as fin.md §17 does, cells × width within one bit string, its key closed ids and its rows one per key",
-    (ctx) =>
-      searched(
-        ctx,
-        exhaust(
-          {
-            box: "every installed relation",
-            caseHang,
-            coverage: requiredInSpace<"product" | "slots">(["product", "slots"]),
-            generator: int(0, installed.length - 1),
-            limit: installed.length,
-            literal: Formatter.format,
-            oracle: { kind: "second-implementation", name: "closed.ts's layout of the same rows" },
-            suite: "grammar/install/layout",
-          },
-          (index, c) =>
-            Effect.sync(() => {
-              const relation = Arr.getUnsafe(installed, index);
-              c.note(
-                relation.key.some((field) => relation.fields[field]?.slots !== undefined)
-                  ? "slots"
-                  : "product",
-              );
-
-              assert.isTrue(
-                relation.key.every((field) => relation.fields[field]?.roster !== undefined),
-                `${relation.name}'s key holds a field that is no closed id`,
-              );
-              keyedSet(relation.name, relation.key, relation.rows);
-
-              const { cells, width } = declaredLayout(relation);
-              const twin = twinOf(relation);
-              assert.isTrue(Result.isSuccess(twin), relation.name);
-              if (Result.isSuccess(twin)) {
-                assert.deepStrictEqual(
-                  { cells, width },
-                  { cells: twin.success.cells, width: twin.success.width },
-                  relation.name,
-                );
-              }
-
-              assert.isAtMost(cells * width, constantMaxBits, relation.name);
-            }),
-        ),
-      ),
-    searchTimeout,
-  );
 });

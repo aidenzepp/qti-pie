@@ -4,11 +4,12 @@
  * built by construction, and the named ways to corrupt a valid tree's rows.
  *
  * A generated tree is valid by construction against the laws the model's own code reads: every
- * child is a kind its parent admits in the tree's version (`Admission`), each family is in an order
- * `Order`'s intervals admit (no child follows a state past its `hi`), every attribute is admitted
- * on its element's kind under its closed name or its open class (`AttributeAdmission`), and a
- * foreign element sits only under a parent that admits its namespace class, under a name of that
- * class no kind that parent admits takes. It is also a tree a reader can give back: every prefix is
+ * child is a kind its parent admits in the tree's version (`Admission`), each family's children
+ * are a word of its content model's Glushkov automaton (each step a position `Follow` admits from
+ * the state before it, ending in a `Last` state), every attribute is admitted on its element's kind
+ * under its closed name or its open class (`AttributeAdmission`), and a foreign element sits only
+ * under a parent that admits its namespace class, under a name of that class no kind that parent
+ * admits takes. It is also a tree a reader can give back: every prefix is
  * bound where it is used, no two runs of character data are adjacent, a doctype with an external
  * subset precedes every unexpanded entity reference, and no name repeats on one element. Laws the
  * model does not read (ancestry bans, child sets, required attributes, value domains) are left to
@@ -430,7 +431,8 @@ const pushAt = <K, T>(map: Map<K, T[]>, key: K, value: T): void => {
 
 /**
  * Gather each (version, parent)'s content automaton from the grammar's `Follow`, `Last` and
- * `Symbol`.
+ * `Symbol`: each model's and each shared model's maps read once, and each family's automaton over
+ * its model's, with finishing costs of its own.
  *
  * @param grammar - The composed grammar.
  * @returns The automata, by (version, parent), each with no finishing costs yet.
@@ -439,43 +441,52 @@ const automataOf = (grammar: ComposedGrammar): ReadonlyMap<string, Automaton> =>
   const follow = new Map<string, Map<number, Set<number>>>();
   const into = new Map<string, Map<number, number[]>>();
   for (const row of grammar.content.follow.rows) {
-    const key = keyOf(row.version, row.parent);
     const from = Number(row.from);
     const to = Number(row.to);
-    const own = follow.get(key) ?? new Map<number, Set<number>>();
-    follow.set(key, own);
+    const own = follow.get(row.model) ?? new Map<number, Set<number>>();
+    follow.set(row.model, own);
     own.set(from, (own.get(from) ?? new Set()).add(to));
 
-    const back = into.get(key) ?? new Map<number, number[]>();
-    into.set(key, back);
+    const back = into.get(row.model) ?? new Map<number, number[]>();
+    into.set(row.model, back);
     pushAt(back, to, from);
   }
 
   const last = new Map<string, Set<number>>();
   for (const row of grammar.content.last.rows) {
-    const key = keyOf(row.version, row.parent);
-    last.set(key, (last.get(key) ?? new Set()).add(Number(row.position)));
+    last.set(row.model, (last.get(row.model) ?? new Set()).add(Number(row.position)));
   }
 
   const shared = new Map<string, Map<string, number[]>>();
   for (const row of grammar.content.symbol.rows) {
-    const key = keyOf(row.version, row.parent);
-    const own = shared.get(key) ?? new Map<string, number[]>();
-    shared.set(key, own);
+    const own = shared.get(row.model) ?? new Map<string, number[]>();
+    shared.set(row.model, own);
     pushAt(own, row.kind, Number(row.position));
   }
 
+  const sharedOf = new Map(
+    grammar.content.sharedModelOf.rows.map(
+      (row) => [keyOf(row.version, row.parent), row.model] as const,
+    ),
+  );
+
   return new Map(
-    [...new Set([...follow.keys(), ...last.keys()])].map((key) => [
-      key,
-      {
-        finish: new Map(),
-        follow: follow.get(key) ?? new Map(),
-        into: into.get(key) ?? new Map(),
-        last: last.get(key) ?? new Set(),
-        shared: shared.get(key) ?? new Map(),
-      },
-    ]),
+    grammar.content.contentModelOf.rows
+      .filter(({ model }) => follow.has(model) || last.has(model))
+      .map(({ model, parent, version }) => {
+        const key = keyOf(version, parent);
+
+        return [
+          key,
+          {
+            finish: new Map(),
+            follow: follow.get(model) ?? new Map(),
+            into: into.get(model) ?? new Map(),
+            last: last.get(model) ?? new Set(),
+            shared: shared.get(sharedOf.get(key) ?? "") ?? new Map(),
+          },
+        ] as const;
+      }),
   );
 };
 

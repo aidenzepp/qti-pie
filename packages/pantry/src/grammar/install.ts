@@ -15,13 +15,14 @@
  * bit-string literal under its row count and digest, which `grizzle check` decodes, rather than a
  * line per row (README, "Closed relations").
  *
+ * `Follow` and `Last` are keyed by their automaton ({@link ContentModel}), and `Symbol` by its
+ * shared model ({@link SharedModel}), as the content grammar generates them (`content.ts`): a
+ * family reads its model through {@link ContentModelOf} or {@link SharedModelOf}, so each is stated
+ * one to one.
+ *
  * Where grizzle's surface differs from the generators' shapes, the declaration restates the
  * relation and says why:
  *
- * - `Follow` and `Last` are keyed by their automaton ({@link ContentModel}), and `Symbol` by its
- *   shared model ({@link SharedModel}), rather than by (version, parent): 114 automata stand for
- *   the 1,288 families, and 23 parents share a kind between positions, each the same in both
- *   versions. A family reads its model through {@link ContentModelOf} or {@link SharedModelOf}.
  * - A generator's dependent `fin` coordinate is a slot, `slot(closedId(Position), fin(O, n))`, over a
  *   count relation O over the model ({@link ModelPositions}, {@link SharedPositions}), so each
  *   model's block holds its own positions and no other's (README, "Closed relations").
@@ -39,8 +40,8 @@ import { openDomain } from "#pantry/grammar/attributes.ts";
 import type { Roster as GeneratedRoster } from "#pantry/grammar/closed.ts";
 import { int8Max } from "#pantry/grammar/closed.ts";
 import { composed } from "#pantry/grammar/compose.ts";
-import type { ComposedGrammar, Kind, Name } from "#pantry/grammar/compose.ts";
-import { foreignKinds, openClasses as openNameClasses } from "#pantry/grammar/kinds.ts";
+import type { ComposedGrammar, Kind } from "#pantry/grammar/compose.ts";
+import { foreignKinds } from "#pantry/grammar/kinds.ts";
 import { vocabularyNamespacesPattern } from "#pantry/grammar/names.ts";
 import type { SchemaVersion as Version } from "#pantry/grammar/kinds.ts";
 
@@ -141,12 +142,6 @@ export const nonElementKinds = [
 export const interactionKinds: readonly Kind[] = grammar.kinds.interaction.rows.map(({ kind }) =>
   memberOf(grammar.kinds.nodeKind, kind),
 );
-
-/**
- * The open attribute classes, the `AttributeName` handles that name no one attribute: `data-*`,
- * `foreign`, `no-namespace` and `own-namespace` (D2).
- */
-export const openClasses = openNameClasses satisfies readonly Name[];
 
 /**
  * The element classes, the `NodeKind` handles of a foreign element by its namespace's class:
@@ -343,16 +338,6 @@ export const ReferenceForm = closed(
 );
 
 /**
- * The `ReservedTarget` roster: the targets a branch rule names that are no identifier,
- * `EXIT_SECTION`, `EXIT_TESTPART` and `EXIT_TEST` (information model §5.23.1, the UP audit's A25),
- * each spelled as its lexical form ({@link ReservedTargetLexical}).
- */
-export const ReservedTarget = closed(
-  "ReservedTarget",
-  nonEmpty("ReservedTarget", grammar.references.reservedTarget.handles),
-);
-
-/**
  * The `BoundZero` roster: what a most of 0 means on a kind's choice bound.
  */
 export const BoundZero = closed(
@@ -361,184 +346,22 @@ export const BoundZero = closed(
 );
 
 /**
- * Content models read off the families they hold: each model in first-family order with its first
- * family, `<version> <parent>`, and its position count, its start 0 included, and the model of each
- * (version, parent) family that has one, by `<version> <parent>`.
- */
-interface Models {
-  readonly models: readonly {
-    readonly first: string;
-    readonly handle: string;
-    readonly positions: number;
-  }[];
-  readonly of: ReadonlyMap<string, string>;
-}
-
-/**
- * Read the (version, parent) families as models: two families are one model exactly when their
- * signatures are equal (rule 0: identical facts are one fact). A model is named by its first
- * family's parent kind, or by `<version> <parent>` where an earlier model took that name, so every
- * handle is a kind's or a family's and at most 63 bytes.
- *
- * @param signatureOf - A family's signature and position count, none for a family no model holds.
- * @returns The models and each family's, families read in (version, parent) code order.
- */
-const modelsOf = (
-  signatureOf: (
-    version: Version,
-    parent: Kind,
-  ) => Option.Option<{ readonly positions: number; readonly signature: string }>,
-): Models => {
-  const models: { readonly first: string; readonly handle: string; readonly positions: number }[] =
-    [];
-  const bySignature = new Map<string, string>();
-  const named = new Set<string>();
-  const of = new Map<string, string>();
-  for (const version of grammar.kinds.versions.handles) {
-    for (const parent of grammar.kinds.nodeKind.handles) {
-      const family = `${version} ${parent}`;
-      for (const { positions, signature } of Option.toArray(signatureOf(version, parent))) {
-        const known = bySignature.get(signature);
-        const handle = known ?? (named.has(parent) ? family : parent);
-        if (known === undefined) {
-          bySignature.set(signature, handle);
-          named.add(handle);
-          models.push({ first: family, handle, positions });
-        }
-
-        of.set(family, handle);
-      }
-    }
-  }
-
-  return { models, of };
-};
-
-/**
- * Group a content relation's rows by family, `<version> <parent>`.
- *
- * @param rows - The rows.
- * @returns Each family's rows.
- */
-const byFamily = <R extends { readonly parent: string; readonly version: string }>(
-  rows: readonly R[],
-): ReadonlyMap<string, readonly R[]> =>
-  Map.groupBy(rows, ({ parent, version }) => `${version} ${parent}`);
-
-/**
- * The content grammar's `Follow`, `Last` and `Symbol` rows, each family's by `<version> <parent>`.
- */
-const familyRows = {
-  follow: byFamily(grammar.content.follow.rows),
-  last: byFamily(grammar.content.last.rows),
-  symbol: byFamily(grammar.content.symbol.rows),
-};
-
-/**
- * The content models `Follow` and `Last` are keyed by: every family's automaton, its position
- * count, the pairs `Follow` holds and the positions `Last` holds, so 114 automata stand for the
- * 1,288 (version, parent) families, and a family with no model of its own is the automaton of one
- * position that nothing follows and nothing ends at.
- */
-const contentModels = ((): Models => {
-  const { follow: follows, last: lasts } = familyRows;
-
-  return modelsOf((version, parent) => {
-    const family = `${version} ${parent}`;
-    const positions = grammar.content.follow.key[2].sizeOf({ parent, version });
-
-    return Option.some({
-      positions,
-      signature: [
-        String(positions),
-        (follows.get(family) ?? [])
-          .map(({ from, to }) => `${from}>${to}`)
-          .toSorted()
-          .join(" "),
-        (lasts.get(family) ?? [])
-          .map(({ position }) => position)
-          .toSorted()
-          .join(" "),
-      ].join("|"),
-    });
-  });
-})();
-
-/**
- * The shared content models `Symbol` is keyed by: a parent's, where every version gives it the same
- * shared positions and position count, else the parent's in each version. A family whose kinds each
- * name one position has no shared model.
- */
-const sharedModels = ((): Models => {
-  const blocks = familyRows.symbol;
-
-  return modelsOf((version, parent) =>
-    Option.map(
-      Option.filter(
-        Option.fromNullishOr(blocks.get(`${version} ${parent}`)),
-        Arr.isReadonlyArrayNonEmpty,
-      ),
-      (rows) => {
-        const positions = grammar.content.symbol.key[3].sizeOf({ parent, version });
-
-        return {
-          positions,
-          signature: [
-            parent,
-            String(positions),
-            ...rows.map(({ kind, position }) => `${kind}:${position}`).toSorted(),
-          ].join(" "),
-        };
-      },
-    ),
-  );
-})();
-
-/**
- * The handle of the model no shared kind is in: `SharedModelOf`'s value for a family whose kinds
- * each name one position, or none.
- */
-const noSharedModel = none;
-
-/**
  * The `ContentModel` roster: every distinct content automaton, named by its first family's parent
- * kind, `Follow` and `Last` keyed by it.
+ * kind, `Follow` and `Last` keyed by it (the content grammar's own key, `content.ts`).
  */
 export const ContentModel = closed(
   "ContentModel",
-  nonEmpty(
-    "ContentModel",
-    contentModels.models.map(({ handle }) => handle),
-  ),
+  nonEmpty("ContentModel", grammar.content.models.handles),
 );
 
 /**
  * The `SharedModel` roster: `none`, then each content model in which a kind names several positions
  * (C4), named by its parent kind.
  */
-export const SharedModel = closed("SharedModel", [
-  noSharedModel,
-  ...sharedModels.models.map(({ handle }) => handle),
-]);
-
-/**
- * The model of a family, `ContentModelOf`'s row.
- *
- * @param version - The family's version.
- * @param parent - The family's parent kind.
- * @returns Its model's handle.
- * @throws {Error} When the family has none, which {@link contentModels} gives every family.
- */
-const contentModelOf = (version: string, parent: string): string => {
-  const model = contentModels.of.get(`${version} ${parent}`);
-  if (model === undefined) {
-    throw new Error(
-      `The content models give ${parent} in ${version} no model, and every (version, parent) family has one. Correct the content model reader.`,
-    );
-  }
-
-  return model;
-};
+export const SharedModel = closed(
+  "SharedModel",
+  nonEmpty("SharedModel", grammar.content.sharedModels.handles),
+);
 
 /**
  * `ContentModelOf`: (version, parent) → model, total, the automaton a parent's children follow in
@@ -548,13 +371,11 @@ export const ContentModelOf = closed.relation(
   "ContentModelOf",
   { model: closedId(ContentModel), parent: closedId(NodeKind), version: closedId(SchemaVersion) },
   ["version", "parent"],
-  grammar.kinds.versions.handles.flatMap((version) =>
-    grammar.kinds.nodeKind.handles.map((parent) => ({
-      model: contentModelOf(version, parent),
-      parent,
-      version,
-    })),
-  ),
+  grammar.content.contentModelOf.rows.map(({ model, parent, version }) => ({
+    model,
+    parent: memberOf(grammar.kinds.nodeKind, parent),
+    version,
+  })),
 );
 
 // The count relations a slot's fin reads.
@@ -568,8 +389,8 @@ export const ModelPositions = closed.relation(
   "ModelPositions",
   { model: closedId(ContentModel), positions: natural },
   ["model"],
-  contentModels.models.map(({ handle, positions }) => ({
-    model: handle,
+  grammar.content.modelPositions.rows.map(({ model, positions }) => ({
+    model,
     positions: BigInt(positions),
   })),
 );
@@ -582,8 +403,8 @@ export const SharedPositions = closed.relation(
   "SharedPositions",
   { model: closedId(SharedModel), positions: natural },
   ["model"],
-  sharedModels.models.map(({ handle, positions }) => ({
-    model: handle,
+  grammar.content.sharedModelPositions.rows.map(({ model, positions }) => ({
+    model,
     positions: BigInt(positions),
   })),
 );
@@ -624,24 +445,6 @@ export const ChildGrammar = closed.relation(
 );
 
 /**
- * State each model's rows once, from its first family's: every family of a model states the same
- * rows, a model being their signature, so the others' are the same facts (rule 0).
- *
- * @param models - The models.
- * @param rows - Each family's rows.
- * @param rowOf - A family row as the model's row.
- * @returns The models' rows.
- */
-const modelRows = <R, M>(
-  models: Models,
-  rows: ReadonlyMap<string, readonly R[]>,
-  rowOf: (row: R, model: string) => M,
-): readonly M[] =>
-  models.models.flatMap(({ first, handle }) =>
-    (rows.get(first) ?? []).map((row) => rowOf(row, handle)),
-  );
-
-/**
  * `Follow`: the set of (model, from, to) where a child at position `to` may follow one at `from`,
  * `from` 0 the start, in the content model's automaton.
  */
@@ -649,7 +452,7 @@ export const Follow = closed.relation(
   "Follow",
   { from: familyPosition, model: closedId(ContentModel), to: familyPosition },
   ["model", "from", "to"],
-  modelRows(contentModels, familyRows.follow, ({ from, to }, model) => ({ from, model, to })),
+  grammar.content.follow.rows.map(({ from, model, to }) => ({ from, model, to })),
   { pack: "hex" },
 );
 
@@ -661,7 +464,7 @@ export const Last = closed.relation(
   "Last",
   { model: closedId(ContentModel), position: familyPosition },
   ["model", "position"],
-  modelRows(contentModels, familyRows.last, ({ position }, model) => ({ model, position })),
+  grammar.content.last.rows.map(({ model, position }) => ({ model, position })),
   { pack: "hex" },
 );
 
@@ -673,13 +476,11 @@ export const SharedModelOf = closed.relation(
   "SharedModelOf",
   { model: closedId(SharedModel), parent: closedId(NodeKind), version: closedId(SchemaVersion) },
   ["version", "parent"],
-  grammar.kinds.versions.handles.flatMap((version) =>
-    grammar.kinds.nodeKind.handles.map((parent) => ({
-      model: sharedModels.of.get(`${version} ${parent}`) ?? noSharedModel,
-      parent,
-      version,
-    })),
-  ),
+  grammar.content.sharedModelOf.rows.map(({ model, parent, version }) => ({
+    model,
+    parent: memberOf(grammar.kinds.nodeKind, parent),
+    version,
+  })),
 );
 
 /**
@@ -691,7 +492,7 @@ export const Symbol = closed.relation(
   "Symbol",
   { kind: closedId(NodeKind), model: closedId(SharedModel), position: modelPosition },
   ["model", "kind", "position"],
-  modelRows(sharedModels, familyRows.symbol, ({ kind, position }, model) => ({
+  grammar.content.symbol.rows.map(({ kind, model, position }) => ({
     kind: memberOf(grammar.kinds.nodeKind, kind),
     model,
     position,
@@ -1310,28 +1111,6 @@ export const ReferenceAttribute = closed.relation(
 // Expressions and interactions (O3 to O5).
 
 /**
- * `BaseTypeSelf`: the diagonal of `BaseType`, so `BaseTypeSelf.row(b)` is the singleton {b} (C6),
- * an operand's one-handle set of base types.
- */
-export const BaseTypeSelf = closed.relation(
-  "BaseTypeSelf",
-  { baseType: closedId(BaseType), self: closedId(BaseType) },
-  ["baseType", "self"],
-  BaseType.handles.map((baseType) => ({ baseType, self: baseType })),
-);
-
-/**
- * `CardinalitySelf`: the diagonal of `Cardinality`, so `CardinalitySelf.row(c)` is the singleton
- * {c} (C6), an operand's one-handle set of cardinalities.
- */
-export const CardinalitySelf = closed.relation(
-  "CardinalitySelf",
-  { cardinality: closedId(Cardinality), self: closedId(Cardinality) },
-  ["cardinality", "self"],
-  Cardinality.handles.map((cardinality) => ({ cardinality, self: cardinality })),
-);
-
-/**
  * `OperatorArity`: kind → (min, max), the fewest and the most operands an expression kind admits,
  * `int8Max` for no upper bound.
  */
@@ -1629,24 +1408,6 @@ export const ResourceTypeLexical = closed.relation(
     .filter((code) => code !== noResourceType)
     .map((code) => ({ code, lexical: code })),
 );
-
-/**
- * `ReservedTargetLexical`: code → lexical, each reserved branch target's lexical form, which proves
- * an overlay's written code: `eq(ReservedTargetLexical.at("lexical", code), target)`. A target is
- * spelled exactly, so `in(target, reservedTargets)` reads the same set as text.
- */
-export const ReservedTargetLexical = closed.relation(
-  "ReservedTargetLexical",
-  { code: closedId(ReservedTarget), lexical: anyText },
-  ["code"],
-  ReservedTarget.handles.map((code) => ({ code, lexical: code })),
-);
-
-/**
- * The reserved branch targets' lexical forms, the list `Compute.in` reads a written target against:
- * a target in it names an exit, any other an identifier of the test.
- */
-export const reservedTargets: readonly string[] = ReservedTarget.handles;
 
 /**
  * The resource types whose files are documents: the types of `RootOfType`'s rows, once each, so a

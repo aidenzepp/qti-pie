@@ -921,6 +921,7 @@ describe("the law table", () => {
             new Set([
               "LomObjectIdentifier",
               "LomObjectTitle",
+              "LOM learning resource type",
               "Node key",
               "DocumentId key",
               "Binding declared",
@@ -1215,19 +1216,46 @@ interface ModelState {
 }
 
 /**
- * Every state of every content model `Follow` or `Last` holds, keyed once each.
+ * Each family's content model, by `version parent`, read from `ContentModelOf`'s rows directly.
+ */
+const modelOf: ReadonlyMap<string, string> = new Map(
+  grammar.content.contentModelOf.rows.map(
+    ({ model, parent, version }) => [`${version} ${parent}`, model] as const,
+  ),
+);
+
+/**
+ * Each family's shared model, by `version parent`, read from `SharedModelOf`'s rows directly.
+ */
+const sharedModelOf: ReadonlyMap<string, string> = new Map(
+  grammar.content.sharedModelOf.rows.map(
+    ({ model, parent, version }) => [`${version} ${parent}`, model] as const,
+  ),
+);
+
+/**
+ * Every state of every family whose content model `Follow` or `Last` holds, keyed once each: the
+ * model's states, read in each family of it.
  */
 const modelStates: Arr.NonEmptyReadonlyArray<ModelState> = (() => {
-  const states = new Map<string, ModelState>();
-  for (const { from, parent, version } of grammar.content.follow.rows) {
-    states.set(`${version} ${parent} ${from}`, { parent, state: from, version });
+  const states = new Map<string, Set<string>>();
+  const add = (model: string, state: string): void => {
+    states.set(model, (states.get(model) ?? new Set()).add(state));
+  };
+  for (const { from, model } of grammar.content.follow.rows) {
+    add(model, from);
   }
 
-  for (const { parent, position, version } of grammar.content.last.rows) {
-    states.set(`${version} ${parent} ${position}`, { parent, state: position, version });
+  for (const { model, position } of grammar.content.last.rows) {
+    add(model, position);
   }
 
-  return nonEmpty("the content models' states", [...states.values()]);
+  return nonEmpty(
+    "the content models' states",
+    grammar.content.contentModelOf.rows.flatMap(({ model, parent, version }) =>
+      [...(states.get(model) ?? [])].map((state) => ({ parent, state, version })),
+    ),
+  );
 })();
 
 /**
@@ -1242,12 +1270,13 @@ const models: Arr.NonEmptyReadonlyArray<Arr.NonEmptyReadonlyArray<ModelState>> =
 );
 
 /**
- * The positions `Follow` holds after each state, read from its rows directly.
+ * The positions `Follow` holds after each state of each model, read from its rows directly, keyed
+ * `model state`.
  */
 const followed: ReadonlyMap<string, ReadonlySet<string>> = (() => {
   const next = new Map<string, Set<string>>();
-  for (const { from, parent, to, version } of grammar.content.follow.rows) {
-    const at = `${version} ${parent} ${from}`;
+  for (const { from, model, to } of grammar.content.follow.rows) {
+    const at = `${model} ${from}`;
     next.set(at, new Set([...(next.get(at) ?? []), to]));
   }
 
@@ -1255,35 +1284,44 @@ const followed: ReadonlyMap<string, ReadonlySet<string>> = (() => {
 })();
 
 /**
- * The kinds at each position of each model, read from `Admission`'s and `Symbol`'s rows directly,
- * keyed `version parent position`.
+ * The kinds one position names, read from `Admission`'s rows directly, keyed `version parent
+ * position`, and the kinds several name, from `Symbol`'s, keyed `shared-model position`.
  */
-const positionKinds: ReadonlyMap<string, ReadonlySet<string>> = (() => {
-  const kinds = new Map<string, Set<string>>();
-  const add = (version: string, parent: string, position: string, kind: string): void => {
-    const at = `${version} ${parent} ${position}`;
+const positionKinds: {
+  readonly admitted: ReadonlyMap<string, ReadonlySet<string>>;
+  readonly shared: ReadonlyMap<string, ReadonlySet<string>>;
+} = (() => {
+  const add = (kinds: Map<string, Set<string>>, at: string, kind: string): void => {
     kinds.set(at, new Set([...(kinds.get(at) ?? []), kind]));
   };
+  const admitted = new Map<string, Set<string>>();
   for (const { child, parent, position, version } of grammar.admission.rows) {
-    add(version, parent, position, child);
+    add(admitted, `${version} ${parent} ${position}`, child);
   }
 
-  for (const { kind, parent, position, version } of grammar.content.symbol.rows) {
-    add(version, parent, position, kind);
+  const shared = new Map<string, Set<string>>();
+  for (const { kind, model, position } of grammar.content.symbol.rows) {
+    add(shared, `${model} ${position}`, kind);
   }
 
-  return kinds;
+  return { admitted, shared };
 })();
 
 /**
- * Read the kinds at a position of a model.
+ * Read the kinds at a position of a family's model: those its `Admission` gives the position and
+ * those its shared model's `Symbol` does.
  *
- * @param state - The model.
+ * @param state - The family.
  * @param position - The position.
  * @returns The kinds, as a set.
  */
 const kindsAt = (state: ModelState, position: string): ReadonlySet<string> =>
-  positionKinds.get(`${state.version} ${state.parent} ${position}`) ?? new Set();
+  new Set([
+    ...(positionKinds.admitted.get(`${state.version} ${state.parent} ${position}`) ?? []),
+    ...(positionKinds.shared.get(
+      `${sharedModelOf.get(`${state.version} ${state.parent}`) ?? ""} ${position}`,
+    ) ?? []),
+  ]);
 
 describe("the explanation of a content-order refusal", () => {
   const follow = statedNamed("N5 Follow");
@@ -1311,7 +1349,9 @@ describe("the explanation of a content-order refusal", () => {
           (states, c) =>
             Effect.sync(() => {
               for (const state of states) {
-                const expected = followed.get(`${state.version} ${state.parent} ${state.state}`);
+                const expected = followed.get(
+                  `${modelOf.get(`${state.version} ${state.parent}`) ?? ""} ${state.state}`,
+                );
                 c.note(expected === undefined ? "allows nothing" : "allows next");
 
                 const rows = [

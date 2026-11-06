@@ -7,14 +7,15 @@
  * particle numbering); 0 is the start. A child's `Admission` row carries its position: the one
  * position its kind names, or 0 where its kind names none (character data, which carries its
  * predecessor's state) or several (a shared kind, whose position the state decides through
- * `Symbol`). The law reads one bit, `Follow(version, parent, was, position)`, with `was` the
- * predecessor's position (0 for the first child), and the last child reads `Last(version, parent,
- * state)`. Under Unique Particle Attribution the automaton enforces order, required particles,
- * at-most-once and exclusive choice; a bound of 2…n, which a position automaton relaxes, is a count
- * law, `Counted(version, parent, position) → (min, max)`. So is a reading's cap, a particle of at
- * most one that an enclosing group repeats, which the automaton reads per repeat and the reading
- * reads as the family's total: `Counted` holds it as `(0, 1)` (spec reading 130, the loose LOM
- * binding's Schematron).
+ * `Symbol`). The law reads one bit, `Follow(model, was, position)`, with `model` the family's
+ * `ContentModelOf(version, parent)` and `was` the predecessor's position (0 for the first child),
+ * and the last child reads `Last(model, state)`: the relations are keyed by automaton, each
+ * distinct automaton stated once, however many families share it. Under Unique Particle Attribution
+ * the automaton enforces order, required particles, at-most-once and exclusive choice; a bound of
+ * 2…n, which a position automaton relaxes, is a count law, `Counted(version, parent, position) →
+ * (min, max)`. So is a reading's cap, a particle of at most one that an enclosing group repeats,
+ * which the automaton reads per repeat and the reading reads as the family's total: `Counted` holds
+ * it as `(0, 1)` (spec reading 130, the loose LOM binding's Schematron).
  *
  * A group's bound of 2…n the automaton relaxes too, to `1..n` (`automatonOf` links a repeatable
  * group's last positions to its first, whatever its bounds), and no position carries it, so
@@ -41,10 +42,12 @@ import {
   dependentField,
   fin,
   idField,
+  roster,
   sourced,
   valueField,
 } from "#pantry/grammar/closed.ts";
 import type {
+  Closed,
   ClosedRelationError,
   DependentField,
   IdField,
@@ -148,9 +151,27 @@ type PositionKey = readonly [
 ];
 
 /**
+ * The key of a relation per (version, parent) family.
+ */
+type FamilyKey = readonly [IdField<"version", SchemaVersion>, IdField<"parent", string>];
+
+/**
  * The content grammar's relations, and the host's view of each automaton.
+ *
+ * `Follow`, `Last` and `Symbol` are keyed by the automaton, not by the (version, parent) family:
+ * two families whose automata have the same positions, `Follow` and `Last` are one content model
+ * (rule 0: identical facts are one fact), and a family reads its model through `ContentModelOf`;
+ * `Symbol` is keyed likewise by its shared model, through `SharedModelOf`. Where a family's row
+ * comes from is the family's, not the model's, so {@link ContentGrammar.sourceOf} answers it by
+ * family and position.
  */
 export interface ContentGrammar {
+  /**
+   * `ContentModelOf`: (version, parent) → model, total, the automaton the family's children
+   * follow; a family no content model holds reads the model of one position that nothing follows
+   * and nothing ends at.
+   */
+  readonly contentModelOf: Closed<FamilyKey, readonly [IdField<"model", string>]>;
   /**
    * `Counted`: the positions whose count is a law beside the automaton, with their bounds, each
    * sourced to the particle whose bound it is, or to the reading that caps it at one.
@@ -160,27 +181,57 @@ export interface ContentGrammar {
     readonly [ValueField<"min", number>, ValueField<"max", number>]
   >;
   /**
-   * `Follow`: (version, parent, from, to) where a child at position `to` may follow one at `from`,
-   * `from` 0 the start, each sourced to the particle at `to`.
+   * `Follow`: (model, from, to) where a child at position `to` may follow one at `from`, `from` 0
+   * the start, in the content model's automaton.
    */
-  readonly follow: Sourced<
-    readonly [
-      IdField<"version", SchemaVersion>,
-      IdField<"parent", string>,
-      DependentField<"from">,
-      DependentField<"to">,
-    ],
+  readonly follow: Closed<
+    readonly [IdField<"model", string>, DependentField<"from">, DependentField<"to">],
     readonly []
   >;
   /**
-   * `Last`: (version, parent, at) where a family may end at position `at`, 0 when it may be empty,
-   * each sourced to the particle at `at`, or to the model at 0.
+   * `Last`: (model, at) where a family of the model may end at position `at`, 0 when it may be
+   * empty.
    */
-  readonly last: Sourced<PositionKey, readonly []>;
+  readonly last: Closed<
+    readonly [IdField<"model", string>, DependentField<"position">],
+    readonly []
+  >;
+  /**
+   * `ModelPositions`: model → positions, each content model's position count, its start 0
+   * included, `Follow`'s and `Last`'s dependent sizes.
+   */
+  readonly modelPositions: Closed<
+    readonly [IdField<"model", string>],
+    readonly [ValueField<"positions", number>]
+  >;
+  /**
+   * The `ContentModel` roster: every distinct automaton, in the code order of its first family,
+   * each named by that family's parent kind, or by `<version> <parent>` where an earlier model took
+   * that name.
+   */
+  readonly models: Roster<string>;
   /**
    * The `Position` roster: 0, the start, then 1 to the widest model's last position.
    */
   readonly positions: Roster<string>;
+  /**
+   * `SharedModelOf`: (version, parent) → shared model, total, {@link noSharedModel} for a family
+   * whose kinds each name one position.
+   */
+  readonly sharedModelOf: Closed<FamilyKey, readonly [IdField<"model", string>]>;
+  /**
+   * `SharedPositions`: shared model → positions, each shared model's position count, its start 0
+   * included, `Symbol`'s dependent size; {@link noSharedModel} has none, so no block.
+   */
+  readonly sharedModelPositions: Closed<
+    readonly [IdField<"model", string>],
+    readonly [ValueField<"positions", number>]
+  >;
+  /**
+   * The `SharedModel` roster: {@link noSharedModel}, then every distinct shared model in the code
+   * order of its first family, each named as {@link ContentGrammar.models} names a model.
+   */
+  readonly sharedModels: Roster<string>;
   /**
    * Read `Symbol`'s row of a kind: the positions a family's model names it at, where several
    * positions name it and the state decides; none for a kind one position names, or none does.
@@ -207,16 +258,11 @@ export interface ContentGrammar {
     readonly version: SchemaVersion;
   }) => Option.Option<Source>;
   /**
-   * `Symbol`: (version, parent, kind, position) for the kinds several positions of a model name,
-   * whose position the state decides, each sourced to the particle at the position.
+   * `Symbol`: (shared model, kind, position) for the kinds several positions of a model name, whose
+   * position the state decides.
    */
-  readonly symbol: Sourced<
-    readonly [
-      IdField<"version", SchemaVersion>,
-      IdField<"parent", string>,
-      IdField<"kind", string>,
-      DependentField<"position">,
-    ],
+  readonly symbol: Closed<
+    readonly [IdField<"model", string>, IdField<"kind", string>, DependentField<"position">],
     readonly []
   >;
   /**
@@ -742,6 +788,101 @@ interface Installed {
 }
 
 /**
+ * The handle of the shared model no shared kind is in: `SharedModelOf`'s value for a family whose
+ * kinds each name one position.
+ */
+export const noSharedModel = "none";
+
+/**
+ * Every (version, parent) family, in code order: the rosters' product, version first.
+ *
+ * @param rosters - The versions and the kinds.
+ * @param rosters.versions - The `SchemaVersion` roster.
+ * @param rosters.kinds - The `NodeKind` roster.
+ * @returns The families.
+ */
+const familiesOf = (rosters: {
+  readonly kinds: Roster<string>;
+  readonly versions: Roster<SchemaVersion>;
+}): readonly { readonly parent: string; readonly version: SchemaVersion }[] =>
+  rosters.versions.handles.flatMap((version) =>
+    rosters.kinds.handles.map((parent) => ({ parent, version })),
+  );
+
+/**
+ * Write what makes two automata one content model: the position count, start included, the pairs
+ * `Follow` holds and the positions `Last` holds, each list sorted, so two automata of one language
+ * built apart write the same text exactly when they state the same rows.
+ *
+ * @param automaton - The automaton.
+ * @returns Its signature.
+ */
+const signatureOf = (automaton: Automaton): string =>
+  [
+    String(automaton.positions.length + 1),
+    [
+      ...[...automaton.first].map((to) => `0>${String(to)}`),
+      ...automaton.follow.flatMap((next, index) =>
+        [...next].map((to) => `${String(index + 1)}>${String(to)}`),
+      ),
+    ]
+      .toSorted()
+      .join(" "),
+    [...(automaton.nullable ? [0] : []), ...automaton.last].map(String).toSorted().join(" "),
+  ].join("|");
+
+/**
+ * Models read off the families they hold: each model with its handle and its first family's
+ * value, in first-family order, and the handle of each family a model holds, by
+ * `<version> <parent>`.
+ */
+interface Models<V> {
+  readonly handles: readonly string[];
+  readonly models: readonly { readonly handle: string; readonly value: V }[];
+  readonly of: ReadonlyMap<string, string>;
+}
+
+/**
+ * Read the (version, parent) families as models: two families are one model exactly when their
+ * signatures are equal (rule 0: identical facts are one fact), and the model states its first
+ * family's rows, which every family of it states alike. A model is named by its first family's
+ * parent kind, or by `<version> <parent>` where an earlier model took that name, so every handle is
+ * a kind's or a family's and at most 63 bytes.
+ *
+ * @param rosters - The versions and the kinds, whose product the families are.
+ * @param rosters.versions - The `SchemaVersion` roster.
+ * @param rosters.kinds - The `NodeKind` roster.
+ * @param read - A family's signature and the value its model states, none for a family no model
+ *   holds; read once per family, by `<version> <parent>`.
+ * @returns The models and each family's, families read in (version, parent) code order.
+ */
+const modelsOf = <V>(
+  rosters: { readonly kinds: Roster<string>; readonly versions: Roster<SchemaVersion> },
+  read: (family: string) => Option.Option<{ readonly signature: string; readonly value: V }>,
+): Models<V> => {
+  const models: { readonly handle: string; readonly value: V }[] = [];
+  const bySignature = new Map<string, string>();
+  const named = new Set<string>();
+  const of = new Map<string, string>();
+  for (const { parent, version } of familiesOf(rosters)) {
+    const family = `${version} ${parent}`;
+    for (const { signature, value } of Option.toArray(read(family))) {
+      const known = bySignature.get(signature);
+      const handle = known ?? (named.has(parent) ? family : parent);
+      if (known === undefined) {
+        bySignature.set(signature, handle);
+        named.add(handle);
+        models.push({ handle, value });
+      }
+
+      of.set(family, handle);
+    }
+  }
+
+  return { handles: models.map(({ handle }) => handle), models, of };
+};
+
+/**
  * Install the automata of content models, and project their admitted triples with each child's
  * position (plan R12, U4).
  *
@@ -924,6 +1065,9 @@ export const contentOf = (input: {
     const positions = fin("Position", widest + 1);
     const version = idField("version", input.versions);
     const parent = idField("parent", input.kinds);
+    const byFamily = new Map<string, Installed>(
+      installed.map((entry) => [`${entry.version} ${entry.parent}`, entry]),
+    );
     const sizes = new Map(
       installed.map(({ automaton, parent: held, version: in_ }) => [
         `${in_} ${held}`,
@@ -933,18 +1077,66 @@ export const contentOf = (input: {
     // A family's positions are 0, its start, then its model's own: the dependent sum Σ (P + 1).
     const sizeOf = (prefix: Readonly<Record<string, string>>) => sizes.get(familyOf(prefix)) ?? 1;
     const position = dependentField("position", positions, sizeOf);
-    // `Symbol` holds rows only where a kind names several positions, so a family whose kinds each
-    // name one has an empty block.
-    const sharing = new Set(
-      installed.flatMap(({ parent: held, symbols, version: in_ }) =>
-        [...symbols.values()].some((numbers) => new Set(numbers).size > 1)
-          ? [`${in_} ${held}`]
-          : [],
+    // Each family's kinds that several positions of its model name, with those positions.
+    const sharedOf = (entry: Installed) =>
+      [...entry.symbols].flatMap(([kind, numbers]) => {
+        const distinct = [...new Set(numbers)].toSorted((left, right) => left - right);
+
+        return distinct.length > 1 ? [{ kind, numbers: distinct }] : [];
+      });
+    // The models, read once per family in (version, parent) code order: a family's automaton is its
+    // model's whenever an earlier family's has the same positions, `Follow` and `Last`. A model's
+    // versions share its automaton, so each is signed once.
+    const signatures = new Map<Automaton, string>();
+    const signed = (automaton: Automaton): string => {
+      const known = signatures.get(automaton) ?? signatureOf(automaton);
+      signatures.set(automaton, known);
+
+      return known;
+    };
+    const contentModels = modelsOf(input, (held) =>
+      Option.some(
+        Option.match(Option.fromNullishOr(byFamily.get(held)), {
+          // The family of no model: one position, which nothing follows and nothing ends at.
+          onNone: () => ({ signature: "1||", value: undefined }),
+          onSome: (entry) => ({ signature: signed(entry.automaton), value: entry.automaton }),
+        }),
       ),
     );
-    const sharedPosition = dependentField("position", positions, (prefix) =>
-      sharing.has(familyOf(prefix)) ? sizeOf(prefix) : 0,
+    const sharedModels = modelsOf(input, (held) =>
+      Option.flatMap(Option.fromNullishOr(byFamily.get(held)), (entry) => {
+        const shared = sharedOf(entry);
+
+        return shared.length === 0
+          ? Option.none()
+          : Option.some({
+              signature: [
+                entry.parent,
+                String(entry.automaton.positions.length + 1),
+                ...shared
+                  .flatMap(({ kind, numbers }) => numbers.map((number) => `${kind}:${number}`))
+                  .toSorted(),
+              ].join(" "),
+              value: { positions: entry.automaton.positions.length + 1, shared },
+            });
+      }),
     );
+    const model = idField("model", yield* roster("ContentModel", contentModels.handles));
+    const sharedModel = idField(
+      "model",
+      yield* roster("SharedModel", [noSharedModel, ...sharedModels.handles]),
+    );
+    const modelSizes = new Map(
+      contentModels.models.map(({ handle, value }) => [
+        handle,
+        value === undefined ? 1 : value.positions.length + 1,
+      ]),
+    );
+    const sharedSizes = new Map(
+      sharedModels.models.map(({ handle, value }) => [handle, value.positions]),
+    );
+    const modelPosition = <const Name extends string>(name: Name) =>
+      dependentField(name, positions, (prefix) => modelSizes.get(prefix["model"] ?? "") ?? 0);
     const admitted = installed.flatMap(({ data, parent: held, symbols, version: in_ }) => [
       ...[...symbols].map(([child, numbers]) => {
         const [only, ...rest] = new Set(numbers);
@@ -988,15 +1180,14 @@ export const contentOf = (input: {
         ),
       ),
     );
-    const sourcesOf = new Map(
-      installed.map(({ parent: held, sources, version: in_ }) => [`${in_} ${held}`, sources]),
-    );
     const sourceOf = (key: {
       readonly parent: string;
       readonly position: string;
       readonly version: SchemaVersion;
     }): Option.Option<Source> =>
-      Option.fromNullishOr(sourcesOf.get(`${key.version} ${key.parent}`)?.[Number(key.position)]);
+      Option.fromNullishOr(
+        byFamily.get(`${key.version} ${key.parent}`)?.sources[Number(key.position)],
+      );
     // Every row a relation states is at a position of its family's model, so a row with none is a
     // defect here.
     const sourceAt = (key: {
@@ -1011,27 +1202,48 @@ export const contentOf = (input: {
             `The content grammar states position ${key.position} of ${key.parent} in ${key.version}, which its model has not.`,
           ),
       );
-    // `Symbol`'s rows by family and kind: the kinds several positions of a model name.
-    const shared = new Map(
-      installed.flatMap(({ parent: held, symbols, version: in_ }) =>
-        [...symbols].flatMap(([kind, numbers]) => {
-          const distinct = [...new Set(numbers)].toSorted((left, right) => left - right);
-
-          return distinct.length > 1
-            ? [
-                [
-                  `${in_} ${held} ${kind}`,
-                  { kind, numbers: distinct, parent: held, version: in_ },
-                ] as const,
-              ]
-            : [];
-        }),
+    const symbol = yield* closed({
+      key: [
+        sharedModel,
+        idField("kind", input.kinds),
+        dependentField(
+          "position",
+          positions,
+          (prefix) => sharedSizes.get(prefix["model"] ?? "") ?? 0,
+        ),
+      ],
+      name: "Symbol",
+      payload: [],
+      rows: sharedModels.models.flatMap(({ handle, value }) =>
+        value.shared.flatMap(({ kind, numbers }) =>
+          numbers.map((number) => ({ kind, model: handle, position: String(number) })),
+        ),
       ),
-    );
+    });
+    const sharedModelOf = yield* closed({
+      key: [version, parent],
+      name: "SharedModelOf",
+      payload: [sharedModel],
+      rows: familiesOf(input).map((held) => ({
+        ...held,
+        model: sharedModels.of.get(`${held.version} ${held.parent}`) ?? noSharedModel,
+      })),
+    });
+    // `Symbol`'s positions by shared model and kind, for the host's step.
+    const sharedAt = Map.groupBy(symbol.rows, (row) => `${row.model} ${row.kind}`);
 
     return {
       admitted,
       content: {
+        contentModelOf: yield* closed({
+          key: [version, parent],
+          name: "ContentModelOf",
+          payload: [model],
+          rows: familiesOf(input).map((held) => ({
+            ...held,
+            model: contentModels.of.get(`${held.version} ${held.parent}`) ?? "",
+          })),
+        }),
         counted: sourced(
           yield* closed({
             key: [version, parent, position],
@@ -1050,55 +1262,63 @@ export const contentOf = (input: {
           }),
           (row) => capSources.get(`${row.version} ${row.parent} ${row.position}`) ?? sourceAt(row),
         ),
-        follow: sourced(
-          yield* closed({
-            key: [
-              version,
-              parent,
-              dependentField("from", positions, sizeOf),
-              dependentField("to", positions, sizeOf),
-            ],
-            name: "Follow",
-            payload: [],
-            rows: installed.flatMap(({ automaton, parent: held, version: in_ }) => [
-              ...[...automaton.first].map((to) => ({
-                from: "0",
-                parent: held,
-                to: String(to),
-                version: in_,
-              })),
-              ...automaton.follow.flatMap((next, index) =>
-                [...next].map((to) => ({
-                  from: String(index + 1),
-                  parent: held,
-                  to: String(to),
-                  version: in_,
-                })),
-              ),
-            ]),
-          }),
-          ({ parent: held, to, version: in_ }) =>
-            sourceAt({ parent: held, position: to, version: in_ }),
-        ),
-        last: sourced(
-          yield* closed({
-            key: [version, parent, position],
-            name: "Last",
-            payload: [],
-            rows: installed.flatMap(({ automaton, parent: held, version: in_ }) => [
-              ...(automaton.nullable ? [{ parent: held, position: "0", version: in_ }] : []),
-              ...[...automaton.last].map((number) => ({
-                parent: held,
-                position: String(number),
-                version: in_,
-              })),
-            ]),
-          }),
-          sourceAt,
-        ),
+        follow: yield* closed({
+          key: [model, modelPosition("from"), modelPosition("to")],
+          name: "Follow",
+          payload: [],
+          rows: contentModels.models.flatMap(({ handle, value }) =>
+            value === undefined
+              ? []
+              : [
+                  ...[...value.first].map((to) => ({ from: "0", model: handle, to: String(to) })),
+                  ...value.follow.flatMap((next, index) =>
+                    [...next].map((to) => ({
+                      from: String(index + 1),
+                      model: handle,
+                      to: String(to),
+                    })),
+                  ),
+                ],
+          ),
+        }),
+        last: yield* closed({
+          key: [model, modelPosition("position")],
+          name: "Last",
+          payload: [],
+          rows: contentModels.models.flatMap(({ handle, value }) =>
+            value === undefined
+              ? []
+              : [
+                  ...(value.nullable ? [{ model: handle, position: "0" }] : []),
+                  ...[...value.last].map((number) => ({
+                    model: handle,
+                    position: String(number),
+                  })),
+                ],
+          ),
+        }),
+        modelPositions: yield* closed({
+          key: [model],
+          name: "ModelPositions",
+          payload: [valueField("positions", modelSizes.values())],
+          rows: [...modelSizes].map(([handle, size]) => ({ model: handle, positions: size })),
+        }),
+        models: model.roster,
         positions,
+        sharedModelOf,
+        sharedModelPositions: yield* closed({
+          key: [sharedModel],
+          name: "SharedPositions",
+          payload: [valueField("positions", sharedSizes.values())],
+          rows: [...sharedSizes].map(([handle, size]) => ({ model: handle, positions: size })),
+        }),
+        sharedModels: sharedModel.roster,
         sharedPositions: ({ kind, parent: held, version: in_ }) =>
-          shared.get(`${in_} ${held} ${kind}`)?.numbers ?? [],
+          Option.match(sharedModelOf.lookup({ parent: held, version: in_ }), {
+            onNone: () => [],
+            onSome: ({ model: shared }) =>
+              (sharedAt.get(`${shared} ${kind}`) ?? []).map((row) => Number(row.position)),
+          }),
         sourceOf,
         strictlyHeld: sourced(
           yield* closed({
@@ -1120,25 +1340,49 @@ export const contentOf = (input: {
               version: in_,
             }),
         ),
-        symbol: sourced(
-          yield* closed({
-            key: [version, parent, idField("kind", input.kinds), sharedPosition],
-            name: "Symbol",
-            payload: [],
-            rows: [...shared.values()].flatMap(({ kind, numbers, parent: held, version: in_ }) =>
-              numbers.map((number) => ({
-                kind,
-                parent: held,
-                position: String(number),
-                version: in_,
-              })),
-            ),
-          }),
-          sourceAt,
-        ),
+        symbol,
       },
     };
   });
+
+/**
+ * Read a family's content model: `ContentModelOf`'s cell.
+ *
+ * @param content - The content grammar.
+ * @param key - The family.
+ * @param key.version - The version.
+ * @param key.parent - The parent's kind.
+ * @returns The model's handle, or none for a family outside the rosters.
+ */
+export const contentModelOf = (
+  content: ContentGrammar,
+  key: { readonly parent: string; readonly version: string },
+): Option.Option<string> => Option.map(content.contentModelOf.lookup(key), ({ model }) => model);
+
+/**
+ * Whether a child at one position may follow one at another in a family: `Follow`'s cell under the
+ * family's model.
+ *
+ * @param content - The content grammar.
+ * @param key - The family and the two positions.
+ * @param key.version - The version.
+ * @param key.parent - The parent's kind.
+ * @param key.from - The predecessor's position, 0 for the start.
+ * @param key.to - The child's position.
+ * @returns Whether `Follow` holds the pair.
+ */
+export const contentFollows = (
+  content: ContentGrammar,
+  key: {
+    readonly from: string;
+    readonly parent: string;
+    readonly to: string;
+    readonly version: string;
+  },
+): boolean =>
+  Option.exists(contentModelOf(content, key), (model) =>
+    Option.isSome(content.follow.lookup({ from: key.from, model, to: key.to })),
+  );
 
 /**
  * Step a family's automaton by one child, as `Node`'s position derives (the host's evaluation of
@@ -1167,16 +1411,22 @@ export const contentStep = (
   key: { readonly child: string; readonly parent: string; readonly version: SchemaVersion },
   was: number,
 ): Option.Option<number> => {
-  const { parent, version } = key;
+  const model = contentModelOf(content, key);
   const follows = (to: number) =>
-    Option.isSome(content.follow.lookup({ from: String(was), parent, to: String(to), version }));
+    Option.exists(model, (held) =>
+      Option.isSome(content.follow.lookup({ from: String(was), model: held, to: String(to) })),
+    );
 
   return Option.flatMap(positionOf(key), (position) => {
     if (position !== 0) {
       return Option.liftPredicate(position, follows);
     }
 
-    const shared = content.sharedPositions({ kind: key.child, parent, version });
+    const shared = content.sharedPositions({
+      kind: key.child,
+      parent: key.parent,
+      version: key.version,
+    });
     if (shared.length === 0) {
       return Option.some(was);
     }
@@ -1188,7 +1438,7 @@ export const contentStep = (
 };
 
 /**
- * Whether a family may end in a state: `Last`'s cell.
+ * Whether a family may end in a state: `Last`'s cell under the family's model.
  *
  * @param content - The content grammar.
  * @param version - The version.
@@ -1201,4 +1451,7 @@ export const contentEnds = (
   version: SchemaVersion,
   parent: string,
   state: number,
-): boolean => Option.isSome(content.last.lookup({ parent, position: String(state), version }));
+): boolean =>
+  Option.exists(contentModelOf(content, { parent, version }), (model) =>
+    Option.isSome(content.last.lookup({ model, position: String(state) })),
+  );
