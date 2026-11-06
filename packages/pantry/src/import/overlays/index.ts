@@ -299,10 +299,6 @@ const mergedOf = (
       "Dependency",
       parts.map(({ Dependency: rows }) => rows),
     ),
-    DocumentDirectory: unionOf(
-      "DocumentDirectory",
-      parts.map(({ DocumentDirectory: rows }) => rows),
-    ),
     DocumentGenerals: unionOf(
       "DocumentGenerals",
       parts.map(({ DocumentGenerals: rows }) => rows),
@@ -782,10 +778,6 @@ const mergedOf = (
     VariableRef: unionOf(
       "VariableRef",
       parts.map(({ VariableRef: rows }) => rows),
-    ),
-    XmlBase: unionOf(
-      "XmlBase",
-      parts.map(({ XmlBase: rows }) => rows),
     ),
     XmlLang: unionOf(
       "XmlLang",

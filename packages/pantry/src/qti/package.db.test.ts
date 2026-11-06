@@ -38,9 +38,9 @@ import { Document } from "#pantry/qti/chardata.ts";
 import { AuthorApp } from "#pantry/qti/logins.ts";
 import {
   Dependency,
-  DocumentDirectory,
   File,
   FileHref,
+  HrefScope,
   manifestPath,
   NamedHref,
   Package,
@@ -49,7 +49,6 @@ import {
   Resource,
   ResourceFile,
   ResourceHref,
-  XmlBase,
 } from "#pantry/qti/package.ts";
 import { Author } from "#pantry/qti/roles.ts";
 import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
@@ -406,14 +405,14 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
           const cases = [
             {
               changes: ChangeSet.empty(Author).insert(FileHref, [
-                { href: "a.xml", package: stray },
+                { package: stray, path: "a.xml", scope: "entry" },
               ]),
               law: checkNamed("FileHref", "File_listed"),
               name: "FileHref",
             },
             {
               changes: ChangeSet.empty(Author).insert(ResourceFile, [
-                { href: "a.xml", resource: stray },
+                { path: "a.xml", resource: stray, scope: "entry" },
               ]),
               law: checkNamed("ResourceFile", "Href_listed"),
               name: "ResourceFile",
@@ -549,18 +548,18 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
       );
 
       it.effect(
-        "refuses an href outside its form, a split that is not the href, and a dependency on its own resource, by each row check",
+        "refuses an unresolved href, a resolved path with a dot segment, a reference's scope its target refutes, and a dependency on its own resource, by each row check",
         () =>
           // Oracle: PostgreSQL, each row CHECK, judged as its row is inserted (its owners in the
           // same step, so no count is missing):
-          // - E1_derived: an href that is not `path ‖ params`, a reference that is not
-          //   `lead ‖ target ‖ params ‖ trail`, a resolved path that is not `kept ‖ rest`, a
-          //   document path that is not `directory ‖ name` (reading 102);
-          // - Href_form, the stated limit: a resource href's path and a file's href with a dot
-          //   segment or a percent-encoding, a reference target with a dot segment after a plain
-          //   one, a srcset of two candidates, a resolved target that climbs above the package
-          //   root or has a dot segment after a plain one, and a document holding an xml:base and
-          //   a resolved reference (`#pantry/qti/limits.ts` resolvedHref, DotSegments);
+          // - E1_derived: a resource href's and a file's path resolved in the package that holds a
+          //   dot segment, and a resolved reference's (resolvedPathPattern); a reference that is
+          //   not `lead ‖ target ‖ params ‖ trail`; one whose target has a scheme but whose scope
+          //   is not external; one whose target is not empty but whose scope is its own document's
+          //   (reading 102);
+          // - Href_form, the stated limit: a resource href, a file and a reference the importer
+          //   reads no name from, and a srcset of two candidates even where external;
+          // - Document_entry: a document-typed resource href outside the package;
           // - Self_dependency: a dependency whose identifierref is its own resource's identifier
           //   (CP 1.2 §6.11.5 B ii).
           // Bound: one row per case.
@@ -582,58 +581,64 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
               name: "src",
               node: stray,
               params: "",
+              scope: "entry",
               target: "a.png",
               trail: "",
             } as const;
-            const directory = {
-              directory: "items/",
-              name: "a.xml",
-              node: stray,
-              package: stray,
-              path: "items/a.xml",
-            } as const;
-            const resolved = {
-              at: 0n,
-              climb: "0",
-              directory: "items/",
-              document: stray,
-              kept: "items/",
-              kind: "img",
-              name: "src",
-              node: strayOther,
-              package: stray,
-              path: "items/a.png",
-              removed: "",
-              rest: "a.png",
-              target: "a.png",
-              ups: "",
-            } as const;
             const named = { package: stray, path: "a.xml", type: "webcontent" } as const;
-            const resourceHref = { ...named, href: "a.xml", node: stray, params: "" } as const;
+            const resourceHref = { ...named, href: "a.xml", node: stray, scope: "entry" } as const;
+            const fileOf = (path: string, scope: "entry" | "unresolved") =>
+              ChangeSet.empty(Author)
+                .insert(FileHref, [{ package: stray, path, scope }])
+                .insert(ResourceFile, [{ path, resource: stray, scope }])
+                .insert(File, [
+                  { ...tuple, href: path, kind: "cp:file", path, resource: stray, scope },
+                ]);
             const cases = [
               {
                 changes: ChangeSet.empty(Author)
-                  .insert(NamedHref, [named])
-                  .insert(ResourceHref, [{ ...resourceHref, href: "a.xml?x=1", params: "?x=2" }]),
-                law: checkNamed("ResourceHref", "E1_derived"),
-                name: "resource href not path ‖ params",
-              },
-              {
-                changes: ChangeSet.empty(Author)
-                  .insert(NamedHref, [{ ...named, path: "../a.xml" }])
-                  .insert(ResourceHref, [{ ...resourceHref, href: "../a.xml", path: "../a.xml" }]),
-                law: checkNamed("ResourceHref", "Href_form"),
-                name: "resource href path with a dot segment",
-              },
-              {
-                changes: ChangeSet.empty(Author)
-                  .insert(FileHref, [{ href: "a%20b.xml", package: stray }])
-                  .insert(ResourceFile, [{ href: "a%20b.xml", resource: stray }])
-                  .insert(File, [
-                    { ...tuple, href: "a%20b.xml", kind: "cp:file", resource: stray },
+                  .insert(NamedHref, [{ ...named, path: "b/../a.xml" }])
+                  .insert(ResourceHref, [
+                    { ...resourceHref, href: "b/../a.xml", path: "b/../a.xml" },
                   ]),
+                law: checkNamed("ResourceHref", "E1_derived"),
+                name: "resource href resolved to a path with a dot segment",
+              },
+              {
+                changes: ChangeSet.empty(Author)
+                  .insert(NamedHref, [{ ...named, path: "a%zz.xml" }])
+                  .insert(ResourceHref, [
+                    { ...resourceHref, href: "a%zz.xml", path: "a%zz.xml", scope: "unresolved" },
+                  ]),
+                law: checkNamed("ResourceHref", "Href_form"),
+                name: "resource href the importer reads no name from",
+              },
+              {
+                changes: ChangeSet.empty(Author)
+                  .insert(NamedHref, [
+                    { ...named, path: "http://x.org/a.xml", type: "imsqti_item_xmlv3p0" },
+                  ])
+                  .insert(ResourceHref, [
+                    {
+                      ...resourceHref,
+                      href: "http://x.org/a.xml",
+                      path: "http://x.org/a.xml",
+                      scope: "external",
+                      type: "imsqti_item_xmlv3p0",
+                    },
+                  ]),
+                law: checkNamed("ResourceHref", "Document_entry"),
+                name: "document-typed resource href outside the package",
+              },
+              {
+                changes: fileOf("a%zz.xml", "unresolved"),
                 law: checkNamed("File", "Href_form"),
-                name: "file href with a percent-encoding",
+                name: "file href the importer reads no name from",
+              },
+              {
+                changes: fileOf("./a.xml", "entry"),
+                law: checkNamed("File", "E1_derived"),
+                name: "file path resolved with a dot segment",
               },
               {
                 changes: ChangeSet.empty(Author).insert(Dependency, [
@@ -650,77 +655,60 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
               },
               {
                 changes: ChangeSet.empty(Author).insert(Reference, [
-                  { ...reference, lead: "", lexical: " a.png" },
+                  { ...reference, lead: "", lexical: " a.png", scope: "external" },
                 ]),
                 law: checkNamed("Reference", "E1_derived"),
                 name: "reference not lead ‖ target ‖ params ‖ trail",
               },
               {
                 changes: ChangeSet.empty(Author).insert(Reference, [
-                  { ...reference, lexical: "a/../b.png", target: "a/../b.png" },
+                  { ...reference, lexical: "http://x.org/a.png", target: "http://x.org/a.png" },
                 ]),
-                law: checkNamed("Reference", "Href_form"),
-                name: "reference target with a dot segment after a plain one",
+                law: checkNamed("Reference", "E1_derived"),
+                name: "reference with a scheme not external",
               },
               {
                 changes: ChangeSet.empty(Author).insert(Reference, [
-                  { ...reference, lexical: "a.png,b.png", name: "srcset", target: "a.png,b.png" },
+                  { ...reference, scope: "document" },
+                ]),
+                law: checkNamed("Reference", "E1_derived"),
+                name: "reference with a target naming its own document",
+              },
+              {
+                changes: ChangeSet.empty(Author).insert(Reference, [
+                  { ...reference, lexical: "a%zz.png", scope: "unresolved", target: "a%zz.png" },
                 ]),
                 law: checkNamed("Reference", "Href_form"),
-                name: "srcset of two candidates",
+                name: "reference the importer reads no name from",
               },
               {
-                changes: ChangeSet.empty(Author).insert(DocumentDirectory, [
-                  { ...directory, directory: "items", name: "/a.xml" },
+                changes: ChangeSet.empty(Author).insert(Reference, [
+                  {
+                    ...reference,
+                    lexical: "http://x.org/a.png,http://x.org/b.png",
+                    name: "srcset",
+                    scope: "external",
+                    target: "http://x.org/a.png,http://x.org/b.png",
+                  },
                 ]),
-                law: checkNamed("DocumentDirectory", "E1_derived"),
-                name: "document path not split at its last slash",
+                law: checkNamed("Reference", "Href_form"),
+                name: "srcset of two external candidates",
               },
               {
                 changes: ChangeSet.empty(Author)
-                  .insert(DocumentDirectory, [directory])
-                  .insert(ReferencePath, [{ ...resolved, path: "a.png" }]),
+                  .insert(Reference, [{ ...reference, node: strayOther }])
+                  .insert(ReferencePath, [
+                    {
+                      document: stray,
+                      kind: "img",
+                      name: "src",
+                      node: strayOther,
+                      package: stray,
+                      path: "items/../a.png",
+                    },
+                  ]),
                 law: checkNamed("ReferencePath", "E1_derived"),
-                name: "resolved path not kept ‖ rest",
-              },
-              {
-                changes: ChangeSet.empty(Author)
-                  .insert(DocumentDirectory, [directory])
-                  .insert(ReferencePath, [
-                    {
-                      ...resolved,
-                      climb: "2",
-                      kept: "",
-                      path: "a.png",
-                      removed: "items/",
-                      target: "../../a.png",
-                      ups: "../../",
-                    },
-                  ]),
-                law: checkNamed("ReferencePath", "Href_form"),
-                name: "resolved target climbing above the package root",
-              },
-              {
-                changes: ChangeSet.empty(Author)
-                  .insert(DocumentDirectory, [directory])
-                  .insert(ReferencePath, [
-                    {
-                      ...resolved,
-                      path: "items/a/../b.png",
-                      rest: "a/../b.png",
-                      target: "a/../b.png",
-                    },
-                  ]),
-                law: checkNamed("ReferencePath", "Href_form"),
-                name: "resolved target with a dot segment after a plain one",
-              },
-              {
-                changes: ChangeSet.empty(Author)
-                  .insert(DocumentDirectory, [directory])
-                  .insert(XmlBase, [{ document: stray, node: strayOther }])
-                  .insert(ReferencePath, [resolved]),
-                law: checkNamed("DocumentDirectory", "Href_form"),
-                name: "xml:base beside a resolved reference",
+                name: "resolved reference with a dot segment",
               },
             ] as const;
             for (const { changes, law, name } of cases) {
@@ -735,13 +723,13 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
         "refuses rows that name no row of the record or of a resource's files, by each containment",
         () =>
           // Oracle: PostgreSQL, each containment's foreign key, set immediate alone: 23503 on it.
-          // - href-listed: a resource href's path no file of its resource lists (CP 1.2 §6.6.2,
-          //   reading 102);
+          // - href-listed: a resource href's (scope, path) no file of its resource lists (CP 1.2
+          //   §6.6.2, reading 102);
           // - root-type-reverse: a document-typed href that is no document of its type (reading 93);
           // - entry-kind: a document-typed href, and a document, that is no entry of the record;
           // - a dependency whose identifierref names no resource of its package (CP 1.2 §6.11.5 B);
-          // - file-exists: a file whose href is in the resolvedHref form, and a resolved reference,
-          //   each naming no entry (CP 1.2 InterchangePackage (b) and (d));
+          // - file-exists: a file whose href resolves in the package, and a resolved reference, each
+          //   naming no entry (CP 1.2 InterchangePackage (b) and (d));
           // - stimulus-ref-target: a stimulus ref's resolved href naming no stimulus document
           //   (information model §7.6, the UP audit's B5).
           // Bound: one stray row per containment.
@@ -751,13 +739,14 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
               href: "item.xml",
               node: stray,
               package: stray,
-              params: "",
               path: "item.xml",
+              scope: codeOf(HrefScope.handles, "entry"),
               type: codeOf(ResourceType.handles, "imsqti_item_xmlv3p0"),
             };
             const cases = [
               {
-                comment: "foreign key ResourceHref(node, path) to ResourceFile(resource, href)",
+                comment:
+                  "foreign key ResourceHref(node, scope, path) to ResourceFile(resource, scope, path)",
                 inserts: [{ row: itemHref, view: "resource_href" }],
                 table: "resource_href",
               },
@@ -812,7 +801,9 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
                       nearest: stray,
                       node: strayOther,
                       package: stray,
+                      path: "missing.png",
                       resource: stray,
+                      scope: codeOf(HrefScope.handles, "entry"),
                       start: 4,
                       version: codeOf(SchemaVersion.handles, "3.0.1"),
                     },
@@ -826,20 +817,12 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
                 inserts: [
                   {
                     row: {
-                      at: 0,
-                      climb: 0,
-                      directory: "items/",
                       document: stray,
-                      kept: "items/",
                       kind: codeOf(NodeKind.handles, "img"),
                       name: codeOf(AttributeName.handles, "src"),
                       node: strayOther,
                       package: stray,
                       path: "items/missing.png",
-                      removed: "",
-                      rest: "missing.png",
-                      target: "missing.png",
-                      ups: "",
                     },
                     view: "reference_path",
                   },
@@ -851,20 +834,12 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
                 inserts: [
                   {
                     row: {
-                      at: 0,
-                      climb: 0,
-                      directory: "items/",
                       document: stray,
-                      kept: "items/",
                       kind: codeOf(NodeKind.handles, "qti-assessment-stimulus-ref"),
                       name: codeOf(AttributeName.handles, "href"),
                       node: strayOther,
                       package: stray,
                       path: "items/missing.png",
-                      removed: "",
-                      rest: "missing.png",
-                      target: "missing.png",
-                      ups: "",
                     },
                     view: "reference_path",
                   },

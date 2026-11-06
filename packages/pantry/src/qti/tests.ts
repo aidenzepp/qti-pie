@@ -10,9 +10,9 @@
  * section ref and item ref) and its branch rules that name a target ({@link BranchRule}). Each
  * section is a {@link Section}, the owner of its parts ({@link SectionMember}, C15's counted
  * family), with its `qti-selection` ({@link SectionSelection}) and its `qti-ordering`
- * ({@link SectionOrdering}) beside it. Each href of an item ref or a site resolves against its
- * document's directory to an entry of the package through its `ReferencePath`
- * (`#pantry/qti/package.ts` `hrefPaths`, spec readings 102 and 103).
+ * ({@link SectionOrdering}) beside it. Each href of an item ref or a site resolves, against its
+ * document's path or the `xml:base` in scope, to an entry of the package through its
+ * `ReferencePath` (`#pantry/qti/package.ts` `hrefPaths`, spec readings 102 and 103).
  *
  * **The assembled test** (RG3, reading 5). {@link Instance} is a tree: its root is a document of
  * a test or a section, and each instance has exactly one child per site of its document, the
@@ -248,8 +248,8 @@ export const truePattern = "^[\\t\\n\\r ]*(?:true|1)[\\t\\n\\r ]*$";
 
 /**
  * A document of a test or a section, keyed by its document node: its entry, its root kind, and
- * the counts of its three families. The directory its hrefs resolve in is its
- * `DocumentDirectory`'s (`#pantry/qti/package.ts`).
+ * the counts of its three families. Its hrefs resolve against its path or the `xml:base` in
+ * scope (`#pantry/qti/package.ts` `ReferencePath`).
  *
  * - **the host's:** `node`, `package`, `path` and `rootKind` (its `Document` row's);
  * - **drawn:** `sites`, `names` and `rules`, the counts of {@link siteFamily}, {@link nameFamily} and

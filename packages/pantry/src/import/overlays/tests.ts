@@ -26,7 +26,12 @@ import type { Kind } from "#pantry/grammar/compose.ts";
 import { Flag } from "#pantry/grammar/install.ts";
 import { inheritedOf, isSiteKind, ownContext } from "#pantry/import/context.ts";
 import type { DocumentContext, Inherited, ListedTarget } from "#pantry/import/context.ts";
-import { referencePiecesOf, resolvedPathOf } from "#pantry/import/overlays/package.ts";
+import {
+  directoryOf,
+  entryPathOf,
+  hrefResolverOf,
+  referencePiecesOf,
+} from "#pantry/import/overlays/package.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { FlatRows, NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
@@ -179,26 +184,6 @@ export const piecesOf = (lexical: string): Pieces => {
  * The value of an `xs:boolean` lexical form, as `TestFlag`'s `E1_derived` reads it.
  */
 const trueForm = new RegExp(truePattern, "u");
-
-/**
- * A document's path split at its last `/`.
- */
-export interface PathSplit {
-  readonly directory: string;
-  readonly name: string;
-}
-
-/**
- * Split a document's path at its last `/`.
- *
- * @param path - The path.
- * @returns Its directory, through the last `/` (empty where it has none), and its name.
- */
-export const directoryOf = (path: string): PathSplit => {
-  const cut = path.lastIndexOf("/") + 1;
-
-  return { directory: path.slice(0, cut), name: path.slice(cut) };
-};
 
 /**
  * Whether a kind is one of a list's.
@@ -649,8 +634,10 @@ export interface ResolvedHref {
  * @param view - The document.
  * @returns The hrefs, by node.
  */
-const hrefsOf = (view: View): ReadonlyMap<string, ResolvedHref> =>
-  new Map(
+const hrefsOf = (view: View): ReadonlyMap<string, ResolvedHref> => {
+  const resolve = hrefResolverOf(view.rows, view.ids.path);
+
+  return new Map(
     view.rows.nodes.flatMap((node) => {
       const written = valueOf(view, node, "href");
       // An include's href is optional in the XSD, and one with none names no document: its site
@@ -669,12 +656,13 @@ const hrefsOf = (view: View): ReadonlyMap<string, ResolvedHref> =>
             kind: node.kind,
             node: node.id,
             package: view.ids.package,
-            path: resolvedPathOf(view.directory, target) ?? `${view.directory}${target}`,
+            path: entryPathOf(resolve(node.id, lexical)) ?? `${view.directory}${target}`,
           },
         ] as const,
       ];
     }),
   );
+};
 
 /**
  * Resolve the hrefs of a test's or a section's item refs, which `ItemRefTarget` copies: each item

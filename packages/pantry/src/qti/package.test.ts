@@ -20,13 +20,14 @@ import { packageNameOf, packageRecordOf } from "#pantry/import/record.ts";
 import type { PackageRecord } from "#pantry/import/record.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
-import { resolvedHref } from "#pantry/qti/limits.ts";
 import {
   Entry,
   entryFamily,
   externalHrefPattern,
   Package,
   packageLaws,
+  resolvedPathPattern,
+  srcsetCandidatePattern,
 } from "#pantry/qti/package.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import { materialize, materializeZip } from "#pantry/test/fixtures.ts";
@@ -110,20 +111,16 @@ const sources: Gen<string> = (source) => {
 };
 
 /**
- * The letters the href box draws from: a plain letter, and each character the form reads.
+ * The letters the path box draws from: a plain letter, a dot, the separator, the characters a
+ * decoded name may hold (`%`, `:`, a space) and a comma.
  */
-const hrefLetters = ["a", ".", "/", "%", "?", "#", ":", "\\", " "] as const;
+const pathLetters = ["a", ".", "/", "%", ":", " ", ","] as const;
 
 /**
- * Every path of at most 4 of {@link hrefLetters}: the href-form box, 7,381 paths.
+ * Every path of at most 4 of {@link pathLetters}: the path box, 2,801 paths.
  */
-const hrefPaths: Gen<string> = (source) =>
-  source.draw(array(element(hrefLetters), { max: 4, min: 0 })).join("");
-
-/**
- * How the representation reads a path: in the form it resolves, external, or outside both.
- */
-type PathForm = "external" | "outside" | "plain";
+const boxPaths: Gen<string> = (source) =>
+  source.draw(array(element(pathLetters), { max: 4, min: 0 })).join("");
 
 /**
  * Whether a character is an ASCII letter, RFC 3986's `ALPHA`.
@@ -141,12 +138,6 @@ const isAlpha = (c: string): boolean => (c >= "a" && c <= "z") || (c >= "A" && c
  */
 const isSchemeChar = (c: string): boolean =>
   isAlpha(c) || (c >= "0" && c <= "9") || c === "+" || c === "-" || c === ".";
-
-/**
- * The characters no plain segment holds: `?` and `#`, which end a path (RFC 3986, §3.3); `%`,
- * which needs decoding (§2.1); and `\` and whitespace, which no URI holds unescaped.
- */
-const unplain = ["?", "#", "%", "\\", " ", "\t", "\n", "\r"] as const;
 
 /**
  * Whether a path starts with a scheme (RFC 3986, §3.1): `ALPHA *( ALPHA / DIGIT / "+" / "-" /
@@ -171,85 +162,89 @@ const hasScheme = (candidate: string): boolean => {
 };
 
 /**
- * Read a path as RFC 3986 states it, a second implementation of the form, written from the
- * grammar rather than the patterns: external when it starts with a scheme (§3.1) or with `/`
- * (§4.2, a network or absolute path); plain when it is one or more segments, each nonempty,
- * neither `.` nor `..` (§5.2.4's dot segments), holding none of {@link unplain}, and the first
- * holding no `:` (§4.2's `segment-nz-nc`).
+ * Whether a path is one RFC 3986's dot-segment removal (§5.2.4) leaves in the package, read
+ * segment by segment: empty (the root), or segments the first of them nonempty and none `.` or
+ * `..`.
  *
  * @param candidate - The path.
- * @returns Its form.
+ * @returns Whether it is.
  */
-const formOf = (candidate: string): PathForm => {
-  if (candidate.startsWith("/") || hasScheme(candidate)) {
-    return "external";
-  }
-
-  const plain = candidate
+const isResolvedPath = (candidate: string): boolean =>
+  candidate === "" ||
+  candidate
     .split("/")
-    .every(
-      (segment, at) =>
-        segment !== "" &&
-        segment !== "." &&
-        segment !== ".." &&
-        unplain.every((c) => !segment.includes(c)) &&
-        (at > 0 || !segment.includes(":")),
-    );
-
-  return plain ? "plain" : "outside";
-};
+    .every((segment, at) => segment !== "." && segment !== ".." && (at > 0 || segment !== ""));
 
 /**
- * Read a path as a set of patterns reads it: in the form when the first matches, external when
- * the second does.
+ * Whether a `srcset` is one candidate, its URL alone (the HTML Standard's image candidate string
+ * with no descriptor), read character by character: no comma, and no whitespace between its first
+ * and last characters that are not whitespace.
  *
- * @param candidate - The path.
- * @param form - The pattern of the form.
- * @param external - The pattern of an external path.
- * @returns Its form.
+ * @param candidate - The lexical form.
+ * @returns Whether it is.
  */
-const formBy = (candidate: string, form: RegExp, external: RegExp): PathForm => {
-  if (form.test(candidate)) {
-    return "plain";
-  }
+const isOneCandidate = (candidate: string): boolean => {
+  const inner = candidate.trim();
 
-  return external.test(candidate) ? "external" : "outside";
+  return ![...inner].some((c) => c === "," || c === " " || c === "\t");
 };
 
 /**
- * The patterns as `package.ts` and `limits.ts` state them, read as the database reads them
- * (ECMAScript under `u`), and three mutants of them, each a plausible slip the box must tell apart:
- * a form without its dot-segment arms, a form that lets `:` into the first segment, and an external
- * pattern without its leading `/`.
+ * The patterns as `package.ts` states them, read as the database reads them (ECMAScript under
+ * `u`), and three mutants of them, each a plausible slip the box must tell apart: a resolved path
+ * without its `..`-prefixed arm, an external pattern without its leading `/`, and a candidate
+ * pattern that admits a descriptor.
  */
 const patternSets = {
-  colonFirst: {
+  descriptor: {
+    candidate: /^[\t\n\r ]*[^,]*[\t\n\r ]*$/u,
     external: new RegExp(externalHrefPattern, "u"),
-    form: new RegExp(resolvedHref.replace("[^./?#%\\\\:", "[^./?#%\\\\"), "u"),
+    resolved: new RegExp(resolvedPathPattern, "u"),
   },
-  noDotArms: {
+  noDotDotArm: {
+    candidate: new RegExp(srcsetCandidatePattern, "u"),
     external: new RegExp(externalHrefPattern, "u"),
-    form: /^[^/?#%\\:\t\n\r ]+(?:\/[^/?#%\\\t\n\r ]+)*$/u,
+    resolved: /^(?:(?:[^/.][^/]*|\.[^./][^/]*)(?:\/(?:[^/.][^/]*|\.[^./][^/]*)?)*)?$/u,
   },
-  noSlash: { external: /^[A-Za-z][A-Za-z0-9+.-]*:/u, form: new RegExp(resolvedHref, "u") },
+  noSlash: {
+    candidate: new RegExp(srcsetCandidatePattern, "u"),
+    external: /^[A-Za-z][A-Za-z0-9+.-]*:/u,
+    resolved: new RegExp(resolvedPathPattern, "u"),
+  },
   stated: {
+    candidate: new RegExp(srcsetCandidatePattern, "u"),
     external: new RegExp(externalHrefPattern, "u"),
-    form: new RegExp(resolvedHref, "u"),
+    resolved: new RegExp(resolvedPathPattern, "u"),
   },
 } as const;
 
 /**
- * A situation the href-form box must reach: each form, each kind of path outside it, and each
- * mutant told apart.
+ * A situation the path box must reach: each verdict of each pattern, and each mutant told apart.
  */
-type HrefSituation =
-  | "colon-first killed"
+type PathSituation =
+  | "descriptor killed"
   | "dot segment"
   | "external"
-  | "no-dot-arms killed"
+  | "no-dot-dot-arm killed"
   | "no-slash killed"
-  | "outside"
-  | "plain";
+  | "one candidate"
+  | "resolved";
+
+/**
+ * Judge a path by a set of patterns: whether each admits it.
+ *
+ * @param candidate - The path.
+ * @param patterns - The patterns.
+ * @returns The three verdicts.
+ */
+const verdictsBy = (
+  candidate: string,
+  patterns: (typeof patternSets)[keyof typeof patternSets],
+): readonly boolean[] => [
+  patterns.resolved.test(candidate),
+  patterns.external.test(candidate),
+  patterns.candidate.test(candidate),
+];
 
 /**
  * A scratch schema of the record alone: `Package`, `Entry` and their family, which the record's
@@ -279,57 +274,74 @@ describe("qti/package.ts", () => {
   });
 
   it.effect(
-    "reads every path of the box in the form RFC 3986 gives it, and tells each mutant of the patterns apart",
+    "reads every path of the box as RFC 3986 and the HTML Standard state it, and tells each mutant of the patterns apart",
     (ctx) =>
-      // Oracle: the specification as a checker, RFC 3986's path grammar read segment by segment
-      // (§3.1, §3.3, §4.2 and §5.2.4, `formOf`), against the patterns the database reads
-      // (`resolvedHref` and `externalHrefPattern`, ECMAScript under `u`).
-      // Bound: every path of at most 4 of 9 letters, 7,381.
+      // Oracle: the specification as a checker, read segment by segment and character by
+      // character: RFC 3986's dot-segment removal (§5.2.4) for a resolved path, its scheme grammar
+      // (§3.1) and §4.2's network and absolute paths for an external one, and the HTML Standard's
+      // image candidate string with no descriptor for a srcset; against the patterns the database
+      // reads (`resolvedPathPattern`, `externalHrefPattern`, `srcsetCandidatePattern`).
+      // Bound: every path of at most 4 of 7 letters, 2,801.
       searched(
         ctx,
         exhaust(
           {
-            box: "every path of at most 4 of a . / % ? # : \\ and a space",
+            box: "every path of at most 4 of a . / % : space and a comma",
             caseHang: Duration.seconds(10),
-            coverage: requiredInSpace<HrefSituation>([
-              "plain",
-              "external",
-              "outside",
+            coverage: requiredInSpace<PathSituation>([
+              "resolved",
               "dot segment",
-              "colon-first killed",
-              "no-dot-arms killed",
+              "external",
+              "one candidate",
+              "no-dot-dot-arm killed",
               "no-slash killed",
+              "descriptor killed",
             ]),
-            generator: hrefPaths,
-            limit: 8000,
+            generator: boxPaths,
+            limit: 3000,
             literal: (candidate) => JSON.stringify(candidate),
-            oracle: { kind: "specification", name: "RFC 3986's path grammar, segment by segment" },
-            suite: "qti/package-href-form",
+            oracle: {
+              kind: "specification",
+              name: "RFC 3986's path grammar and the HTML Standard's image candidate, by hand",
+            },
+            suite: "qti/package-href-patterns",
           },
           (candidate: string, c) =>
             Effect.sync(() => {
-              const expected = formOf(candidate);
-              const { external, form } = patternSets.stated;
+              const expected = [
+                isResolvedPath(candidate),
+                candidate.startsWith("/") || hasScheme(candidate),
+                isOneCandidate(candidate),
+              ];
 
-              c.note(expected);
-              if (candidate.split("/").some((segment) => segment === "." || segment === "..")) {
-                c.note("dot segment");
+              c.note(expected[0] === true ? "resolved" : "dot segment");
+              if (expected[1] === true) {
+                c.note("external");
               }
 
-              assert.strictEqual(formBy(candidate, form, external), expected, candidate);
+              if (expected[2] === true) {
+                c.note("one candidate");
+              }
+
+              assert.deepStrictEqual(
+                verdictsBy(candidate, patternSets.stated),
+                expected,
+                candidate,
+              );
               for (const [mutant, killed] of [
-                ["colonFirst", "colon-first killed"],
-                ["noDotArms", "no-dot-arms killed"],
+                ["noDotDotArm", "no-dot-dot-arm killed"],
                 ["noSlash", "no-slash killed"],
+                ["descriptor", "descriptor killed"],
               ] as const) {
-                const patterns = patternSets[mutant];
-                if (formBy(candidate, patterns.form, patterns.external) !== expected) {
+                const verdicts = verdictsBy(candidate, patternSets[mutant]);
+                if (verdicts.some((verdict, at) => verdict !== expected[at])) {
                   c.note(killed);
                 }
               }
             }),
         ),
       ),
+    120_000,
   );
 
   it.effect(

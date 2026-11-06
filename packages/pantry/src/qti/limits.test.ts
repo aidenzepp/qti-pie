@@ -228,7 +228,6 @@ const kindOfField: ReadonlyMap<string, keyof typeof textKinds> = new Map<
   keyof typeof textKinds
 >([
   ["Document.path", "key text"],
-  ["DocumentDirectory.path", "key text"],
   ["Entry.path", "key text"],
   ["OpenAttributeName.local", "local name"],
   ["OpenElementName.namespace", "namespace"],

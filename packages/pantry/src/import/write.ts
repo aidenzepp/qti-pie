@@ -115,7 +115,6 @@ import { copiedTextKinds, Node, universalDomains } from "#pantry/qti/node.ts";
 import { Rounding, Tolerance } from "#pantry/qti/operators.ts";
 import {
   Dependency,
-  DocumentDirectory,
   File,
   FileHref,
   ManifestId,
@@ -126,7 +125,6 @@ import {
   Resource,
   ResourceFile,
   ResourceHref,
-  XmlBase,
 } from "#pantry/qti/package.ts";
 import { Quotation } from "#pantry/qti/quotation.ts";
 import {
@@ -1188,7 +1186,6 @@ export const changeSetOf = (author: typeof Author, inputs: PackageInputs) =>
     .insert(CountBound, [...inputs.CountBound.values()])
     .insert(Declaration, [...inputs.Declaration.values()])
     .insert(Dependency, [...inputs.Dependency.values()])
-    .insert(DocumentDirectory, [...inputs.DocumentDirectory.values()])
     .insert(DocumentGenerals, [...inputs.DocumentGenerals.values()])
     .insert(DocumentId, [...inputs.DocumentId.values()])
     .insert(DocumentLang, [...inputs.DocumentLang.values()])
@@ -1285,7 +1282,6 @@ export const changeSetOf = (author: typeof Author, inputs: PackageInputs) =>
     .insert(VarRef, [...inputs.VarRef.values()])
     .insert(VariableMapping, [...inputs.VariableMapping.values()])
     .insert(VariableRef, [...inputs.VariableRef.values()])
-    .insert(XmlBase, [...inputs.XmlBase.values()])
     .insert(XmlLang, [...inputs.XmlLang.values()])
     .insert(FragmentValue, [...inputs.FragmentValue.values()])
     .insert(SsmlAttribute, [...inputs.SsmlAttribute.values()])

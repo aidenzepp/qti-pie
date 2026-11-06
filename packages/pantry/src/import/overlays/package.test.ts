@@ -1,9 +1,11 @@
 /* oxlint-disable unicorn/text-encoding-identifier-case -- The generated documents carry the charset label crust's reader reports, `UTF-8`. */
 /**
- * The manifest's overlay rows against a second reading of the same tree: a direct walk of the XDM
- * document, numbering its nodes in document order as the tree's rows are numbered, and collecting
- * each overlay's row from its element and attributes. The walk shares no code with the builder,
- * which reads the tree's flat rows (`flatten`).
+ * The manifest's overlay rows and each document's reference rows against a second reading of the
+ * same tree: a direct walk of the XDM document, numbering its nodes in document order as the tree's
+ * rows are numbered, collecting each overlay's row from its element and attributes, and resolving
+ * each href by the law oracle's own RFC 3986 resolver (`#pantry/test/resolution.ts`) with the
+ * `xml:base` values the walk meets on its way down. The walk shares no code with the builder,
+ * which reads the tree's flat rows (`flatten`) and resolves by `resolveIn`.
  */
 import path from "node:path";
 import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node";
@@ -32,15 +34,14 @@ import {
   referenceCensus,
   referencePiecesOf,
   referenceRowsOf,
-  resolutionOf,
   rowsOf,
 } from "#pantry/import/overlays/package.ts";
 import type {
+  CensusEntry,
   DocumentIds,
   ManifestIds,
   PackageRows,
   ReferenceCensus,
-  ReferenceForm,
   ReferenceRows,
 } from "#pantry/import/overlays/package.ts";
 import { shredGrammarOf } from "#pantry/model/composed.ts";
@@ -58,8 +59,9 @@ import { readPackage } from "#pantry/package/read.ts";
 import { materialize, materializePackage } from "#pantry/test/fixtures.ts";
 import type { FixtureName, NamedPackage } from "#pantry/test/fixtures.ts";
 import { idOf } from "#pantry/test/gen/xdm.ts";
-import { resolvedHref } from "#pantry/qti/limits.ts";
-import { DotSegments, hrefParamsPattern, hrefPathPattern } from "#pantry/qti/package.ts";
+import { hrefParamsPattern, hrefPathPattern, manifestPath } from "#pantry/qti/package.ts";
+import { comparedPath, oracleValueOf, resolve, resolveAttribute } from "#pantry/test/resolution.ts";
+import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
 
 /**
  * The file system and processes the fixtures' materializer and `readPackage` need.
@@ -87,11 +89,27 @@ type Expected = { readonly [Relation in keyof PackageRows]: Map<string, object> 
 const heading = (values: readonly string[]): string => JSON.stringify(values);
 
 /**
- * Expect a resource's `href` rows: its `ResourceHref`, split at its first `?` or `#` (reading 102),
- * and the `NamedHref` of its path and type.
+ * Resolve a manifest href as the oracle does (readings 102 and 103): its value collapsed as an
+ * `xs:anyURI`, against the manifest's path and the `xml:base` values in scope.
+ *
+ * @param href - The href, as written.
+ * @param bases - The `xml:base` values in scope, outermost first.
+ * @returns Its scope and the path it is compared by.
+ */
+const manifestHrefOf = (href: string, bases: readonly string[]) => {
+  const value = oracleValueOf(href, "collapse");
+  const resolution = resolve({ bases, document: manifestPath, value });
+
+  return { path: comparedPath(resolution, value), scope: resolution.scope };
+};
+
+/**
+ * Expect a resource's `href` rows: its `ResourceHref`, resolved by the oracle, and the `NamedHref`
+ * of its compared path and type.
  *
  * @param expected - The walk's rows so far.
- * @param resource - The resource's href, node, package and type.
+ * @param resource - The resource's href, node, package and type, and the bases in scope.
+ * @param resource.bases - The `xml:base` values in scope, its own last.
  * @param resource.href - Its href.
  * @param resource.node - Its node.
  * @param resource.pkg - Its package.
@@ -100,23 +118,16 @@ const heading = (values: readonly string[]): string => JSON.stringify(values);
 const expectHref = (
   expected: Expected,
   resource: {
+    readonly bases: readonly string[];
     readonly href: string;
     readonly node: NodeId;
     readonly pkg: string;
     readonly type: string;
   },
 ): void => {
-  const { href, node, pkg, type } = resource;
-  const query = /[?#]/u.exec(href)?.index ?? href.length;
-  const at = href.slice(0, query);
-  expected.ResourceHref.set(node, {
-    href,
-    node,
-    package: pkg,
-    params: href.slice(query),
-    path: at,
-    type,
-  });
+  const { bases, href, node, pkg, type } = resource;
+  const { path: at, scope } = manifestHrefOf(href, bases);
+  expected.ResourceHref.set(node, { href, node, package: pkg, path: at, scope, type });
   expected.NamedHref.set(heading([pkg, at, type]), { package: pkg, path: at, type });
 };
 
@@ -147,7 +158,12 @@ const walk = (doc: XdmDocument<Composed>): Expected => {
   const identifiers = new Map<NodeId, string>();
   const visit = (
     child: XdmChild<Composed> | XdmDocument<Composed>["root"],
-    parent: { readonly id: NodeId; readonly kind: string; readonly nearest: NodeId },
+    parent: {
+      readonly bases: readonly string[];
+      readonly id: NodeId;
+      readonly kind: string;
+      readonly nearest: NodeId;
+    },
   ): void => {
     const id = ids.idOf(next);
     const start = BigInt(next);
@@ -164,6 +180,8 @@ const walk = (doc: XdmDocument<Composed>): Expected => {
       )?.lexical;
     const tuple = { document, kind, nearest, node: id, start, version: doc.version };
     const pkg = ids.package;
+    const ownBase = valueOf("xml:base");
+    const bases = ownBase === undefined ? parent.bases : [...parent.bases, ownBase];
 
     if (kind === "cp:manifest") {
       manifestIdentifier = valueOf("identifier") ?? "";
@@ -190,17 +208,26 @@ const walk = (doc: XdmDocument<Composed>): Expected => {
         typeLexical,
       });
       if (href !== undefined) {
-        expectHref(expected, { href, node: id, pkg, type });
+        expectHref(expected, { bases, href, node: id, pkg, type });
       }
     }
 
     const fileHref = kind === "cp:file" ? valueOf("href") : undefined;
     if (fileHref !== undefined) {
-      expected.File.set(id, { ...tuple, href: fileHref, package: pkg, resource: parent.id });
-      expected.FileHref.set(heading([pkg, fileHref]), { href: fileHref, package: pkg });
-      expected.ResourceFile.set(heading([parent.id, fileHref]), {
+      const { path: at, scope } = manifestHrefOf(fileHref, bases);
+      expected.File.set(id, {
+        ...tuple,
         href: fileHref,
+        package: pkg,
+        path: at,
         resource: parent.id,
+        scope,
+      });
+      expected.FileHref.set(heading([pkg, scope, at]), { package: pkg, path: at, scope });
+      expected.ResourceFile.set(heading([parent.id, scope, at]), {
+        path: at,
+        resource: parent.id,
+        scope,
       });
     }
 
@@ -216,13 +243,13 @@ const walk = (doc: XdmDocument<Composed>): Expected => {
     }
 
     for (const grandchild of child.children) {
-      visit(grandchild, { id, kind, nearest });
+      visit(grandchild, { bases, id, kind, nearest });
     }
   };
 
   for (const child of documentFamily(doc)) {
     if (child._tag === "element") {
-      visit(child, { id: document, kind: "document", nearest: document });
+      visit(child, { bases: [], id: document, kind: "document", nearest: document });
     } else {
       next += 1;
     }
@@ -276,13 +303,23 @@ const assertRows = (rows: PackageRows, expected: Expected, label: string): void 
  * optional href, its files and its dependencies.
  */
 interface ManifestCase {
+  readonly manifestBase: string | undefined;
   readonly resources: readonly {
+    readonly base: string | undefined;
     readonly dependencies: readonly string[];
     readonly files: readonly string[];
     readonly href: string | undefined;
     readonly type: string;
   }[];
+  readonly resourcesBase: string | undefined;
 }
+
+/**
+ * The `xml:base` values a manifest case draws for its `cp:manifest`, its `cp:resources` and each
+ * `cp:resource` (IMS Content Packaging 1.2, §6.11.1): none, a directory, one that climbs, an
+ * external one, and one under a stated limit.
+ */
+const manifestBases = [undefined, "b/", "../b/", "http://x.org/", "a%zz/"] as const;
 
 /**
  * The generated manifests: up to three resources, each of a document type, a type no document has
@@ -293,19 +330,38 @@ interface ManifestCase {
  * among them (`self-dependency`).
  */
 const manifests: Gen<ManifestCase> = (source) => ({
+  manifestBase: source.draw(element(manifestBases)),
   resources: source.draw(
     array(
       (inner) => ({
+        base: inner.draw(element(manifestBases)),
         dependencies: inner.draw(array(element(["r0", "r1", "m"] as const), { max: 2, min: 0 })),
-        files: inner.draw(array(element(["a.xml", "b/c.png"] as const), { max: 3, min: 0 })),
+        files: inner.draw(
+          array(element(["a.xml", "b/c.png", "b/c%20d.png", "b/c d.png", "./a.xml"] as const), {
+            max: 3,
+            min: 0,
+          }),
+        ),
         href: inner.draw(
-          element(["a.xml", "b/c.png", "a.xml?x=1&y=2", "b/c.png#top", "?q", undefined] as const),
+          element([
+            "a.xml",
+            "b/c.png",
+            "a.xml?x=1&y=2",
+            "b/c.png#top",
+            "?q",
+            undefined,
+            "b/../a.xml",
+            "b/c d.png",
+            "b%2Fc.png",
+            "http://x.org/a.xml",
+          ] as const),
         ),
         type: inner.draw(element(["imsqti_item_xmlv3p0", "webcontent", "bogus"] as const)),
       }),
       { max: 3, min: 0 },
     ),
   ),
+  resourcesBase: source.draw(element(manifestBases)),
 });
 
 /**
@@ -314,7 +370,10 @@ const manifests: Gen<ManifestCase> = (source) => ({
 type Situation =
   | "file-twice"
   | "href-params"
+  | "href-resolved"
+  | "manifest-base"
   | "no-href"
+  | "resource-base"
   | "self-dependency"
   | "shared-file"
   | "unknown-type";
@@ -341,6 +400,14 @@ const situationsOf = (input: ManifestCase): readonly Situation[] => {
       "self-dependency",
       input.resources.some(({ dependencies }, at) => dependencies.includes(`r${String(at)}`)),
     ],
+    [
+      "href-resolved",
+      input.resources.some(({ files: listed, href }) =>
+        [href ?? "", ...listed].some((value) => /\.\/|%| /u.test(value)),
+      ),
+    ],
+    ["manifest-base", input.manifestBase !== undefined || input.resourcesBase !== undefined],
+    ["resource-base", input.resources.some(({ base }) => base !== undefined)],
   ];
 
   return reached.flatMap(([situation, holds]) => (holds ? [situation] : []));
@@ -373,6 +440,15 @@ const elementOf = (
 });
 
 /**
+ * Write an `xml:base` as an element's attribute, none for none.
+ *
+ * @param base - The base.
+ * @returns The attribute list.
+ */
+const baseAttribute = (base: string | undefined) =>
+  base === undefined ? [] : [["xml:base", base] as const];
+
+/**
  * Write a generated manifest as the tree shred would give: a `cp:manifest` of identifier `m`
  * holding its `cp:resources`, each resource `r<n>` with its files and dependencies, whitespace
  * between them so character data shares the numbering.
@@ -382,13 +458,14 @@ const elementOf = (
  */
 const treeOf = (input: ManifestCase): XdmDocument<Composed> => {
   const ws: XdmChild<Composed> = { _tag: "ws", value: "\n" };
-  const resources = input.resources.map(({ dependencies, files, href, type }, at) =>
+  const resources = input.resources.map(({ base, dependencies, files, href, type }, at) =>
     elementOf(
       "cp:resource",
       [
         ["identifier", `r${String(at)}`],
         ["type", type],
         ...(href === undefined ? [] : [["href", href] as const]),
+        ...baseAttribute(base),
       ],
       [
         ...files.flatMap((file) => [ws, elementOf("cp:file", [["href", file]], [])]),
@@ -407,8 +484,8 @@ const treeOf = (input: ManifestCase): XdmDocument<Composed> => {
     prolog: [{ _tag: "comment", value: " manifest " }],
     root: elementOf(
       "cp:manifest",
-      [["identifier", "m"]],
-      [ws, elementOf("cp:resources", [], resources)],
+      [["identifier", "m"], ...baseAttribute(input.manifestBase)],
+      [ws, elementOf("cp:resources", baseAttribute(input.resourcesBase), resources)],
     ),
     version: "3.0.1",
   };
@@ -466,8 +543,9 @@ describe("import/overlays/package.ts", () => {
     // Oracle: a second implementation, a direct walk of the XDM document that numbers its nodes in
     // document order and reads each element's attributes, against the builder's read of the tree's
     // flat rows; the type codes against `ResourceTypeLexical`.
-    // Bound: up to 3 resources of 3 types, with or without one of 5 hrefs (3 with a query or a
-    // fragment), listing up to 3 of 2 files and up to 2 dependencies, 300 runs.
+    // Bound: up to 3 resources of 3 types, with or without one of 9 hrefs (3 with a query or a
+    // fragment, 4 that need resolving), listing up to 3 of 5 files and up to 2 dependencies,
+    // under 5 xml:base values on each of the manifest, its resources and each resource, 300 runs.
     searched(
       ctx,
       explore(
@@ -482,13 +560,19 @@ describe("import/overlays/package.ts", () => {
               "shared-file",
               "href-params",
               "self-dependency",
+              "href-resolved",
+              "manifest-base",
+              "resource-base",
             ],
             { cases: 200, sense: notesOnly },
           ),
           draw: drawn(manifests),
           kept: [],
           literal: Formatter.format,
-          oracle: { kind: "second-implementation", name: "a direct walk of the XDM tree" },
+          oracle: {
+            kind: "second-implementation",
+            name: "a direct walk of the XDM tree, its hrefs by the oracle's RFC 3986 resolver",
+          },
           runs: 300,
           shrink: completeShrink,
           steerEvery: 16,
@@ -616,14 +700,16 @@ type SplitSituation = "fragment" | "lead" | "plain" | "query" | "trail";
 
 /**
  * The census the reference rows are built over in these cases: four attributes of the grammar's
- * reference census, one of them a srcset, and none for `div@title`, which names no file.
+ * reference census, with their types' whitespace classes (`img@src` and `a@href` are
+ * `xs:anyURI`s, `source@srcset` and `video@poster` `URLDType`s), one of them a srcset, and none
+ * for `div@title`, which names no file.
  */
 const census: ReferenceCensus = (_version, kind, name) =>
-  new Map<string, ReferenceForm>([
-    ["a href", "uri"],
-    ["img src", "uri"],
-    ["source srcset", "srcset"],
-    ["video poster", "uri"],
+  new Map<string, CensusEntry>([
+    ["a href", { form: "uri", whiteSpace: "collapse" }],
+    ["img src", { form: "uri", whiteSpace: "collapse" }],
+    ["source srcset", { form: "srcset", whiteSpace: "replace" }],
+    ["video poster", { form: "uri", whiteSpace: "replace" }],
   ]).get(`${kind} ${name}`);
 
 /**
@@ -639,8 +725,9 @@ const carriers = [
 
 /**
  * The values a generated reference takes: a plain path at the root and below, a leading `../` and
- * `./`, a dot segment after a plain one, an external URI, a same-document fragment, a padded path,
- * a media fragment, a descriptor, two candidates and an empty value.
+ * `./`, a dot segment after a plain one, a climb past the root, an external URI, a same-document
+ * fragment, a padded path, a media fragment, a descriptor, two candidates, an empty value, a space
+ * and its percent-encoding, an encoded `/`, an encoded `..`, a stray `%` and a backslash.
  */
 const referenceValues = [
   "a.png",
@@ -648,6 +735,7 @@ const referenceValues = [
   "../c.png",
   "./d.png",
   "a/../b.png",
+  "../../../e.png",
   "http://x.org/d.png",
   "#top",
   " e.png ",
@@ -655,14 +743,27 @@ const referenceValues = [
   "a.png 2x",
   "a.png,b.png",
   "",
+  "my sign.png",
+  "my%20sign.png",
+  "a%2Fb.png",
+  "%2E%2E/c.png",
+  "a%zz.png",
+  "a\\b.png",
 ] as const;
 
 /**
- * One generated document: its path, whether its root holds an `xml:base`, and its elements.
+ * The `xml:base` values a generated document draws for its root and for each element: none, a
+ * directory, one that climbs, an external one, and one under a stated limit.
+ */
+const referenceBases = [undefined, "x/", "../", "http://h.org/", "x%zz/"] as const;
+
+/**
+ * One generated document: its path, its root's `xml:base`, and its elements, each with its own.
  */
 interface ReferenceCase {
-  readonly base: boolean;
+  readonly base: string | undefined;
   readonly elements: readonly {
+    readonly base: string | undefined;
     readonly carrier: (typeof carriers)[number];
     readonly value: string;
   }[];
@@ -670,14 +771,16 @@ interface ReferenceCase {
 }
 
 /**
- * The generated documents: at the root or below it, with or without an `xml:base`, holding up to
- * four elements of {@link carriers} with values of {@link referenceValues}.
+ * The generated documents: at the root or below it, with or without an `xml:base` on the root and
+ * on each element, holding up to four elements of {@link carriers} with values of
+ * {@link referenceValues}.
  */
 const referenceCases: Gen<ReferenceCase> = (source) => ({
-  base: source.draw(element([false, true] as const)),
+  base: source.draw(element(referenceBases)),
   elements: source.draw(
     array(
       (inner) => ({
+        base: inner.draw(element(referenceBases)),
         carrier: inner.draw(element(carriers)),
         value: inner.draw(element(referenceValues)),
       }),
@@ -704,56 +807,20 @@ const referenceTreeOf = (input: ReferenceCase): XdmDocument<Composed> => ({
   prolog: [],
   root: elementOf(
     "qti-assessment-item",
-    input.base ? [["xml:base", "x/"]] : [],
-    input.elements.flatMap(({ carrier: [kind, name], value }) => [
+    baseAttribute(input.base),
+    input.elements.flatMap(({ base, carrier: [kind, name], value }) => [
       { _tag: "ws", value: "\n" } as const,
-      elementOf(kind, [[name, value]], []),
+      elementOf(kind, [[name, value], ...baseAttribute(base)], []),
     ]),
   ),
   version: "3.0.1",
 });
 
 /**
- * Resolve a target as the walk reads RFC 3986 §5.2.4 for leading dot segments, segment by segment:
- * its leading `.` and `..` segments are `ups`, the rest must be in the form, each `..` removes
- * one of the directory's last segments (all of them, and the climb's depth capped at 8, where it
- * climbs above the root or further than that), and the path is what is kept followed by the rest.
- *
- * @param directory - The document's directory.
- * @param target - The target.
- * @param form - The `resolvedHref` form.
- * @returns The `ReferencePath` pieces, or null for a target outside the form.
- */
-const walkResolution = (directory: string, target: string, form: RegExp) => {
-  const segments = target.split("/");
-  const lead = segments.findIndex((segment) => segment !== "." && segment !== "..");
-  const leading = lead === -1 ? segments : segments.slice(0, lead);
-  const rest = segments.slice(leading.length).join("/");
-  if (!form.test(rest)) {
-    return null;
-  }
-
-  const climb = leading.filter((segment) => segment === "..").length;
-  const held = directory.split("/").slice(0, -1);
-  const fits = climb <= held.length && climb <= 8;
-  const kept = fits ? held.slice(0, held.length - climb).map((segment) => `${segment}/`) : [];
-
-  return {
-    climb: String(Math.min(climb, 8)),
-    kept: kept.join(""),
-    path: `${kept.join("")}${rest}`,
-    removed: fits ? directory.slice(kept.join("").length) : directory,
-    rest,
-    ups: leading.map((segment) => `${segment}/`).join(""),
-  };
-};
-
-/**
  * The reference rows a generated document implies, by a second reading: its nodes numbered in
  * document order (the document node 0, its root 1, then each whitespace node and element in turn),
- * its directory and name by Node's `path.posix`, each census attribute split by RFC 3986's
- * Appendix B, and each target the form admits (`resolvedHref`, which `qti/package.test.ts` holds to
- * RFC 3986's grammar) resolved against the directory.
+ * each census attribute split by RFC 3986's Appendix B, and each value resolved by the law
+ * oracle's own resolver with the root's and the element's `xml:base`, outermost first.
  *
  * @param input - The document.
  * @param documentIds - The ids its rows are written under.
@@ -761,78 +828,60 @@ const walkResolution = (directory: string, target: string, form: RegExp) => {
  */
 const expectedReferences = (input: ReferenceCase, documentIds: DocumentIds) => {
   const document = documentIds.idOf(0);
-  const dirname = path.posix.dirname(documentIds.path);
-  const directory = dirname === "." ? "" : `${dirname}/`;
-  const form = new RegExp(resolvedHref, "u");
   const references = new Map<string, object>();
   const paths = new Map<string, object>();
-  for (const [at, { carrier, value }] of input.elements.entries()) {
+  for (const [at, { base, carrier, value }] of input.elements.entries()) {
     const [kind, name] = carrier;
     const node = documentIds.idOf(3 + 2 * at);
-    if (census("3.0.1", kind, name) !== undefined) {
-      const pieces = appendixPieces(value);
+    const entry = census("3.0.1", kind, name);
+    if (entry !== undefined) {
+      const resolution = resolveAttribute({
+        bases: [input.base, base].flatMap((written) => (written === undefined ? [] : [written])),
+        document: documentIds.path,
+        lexical: value,
+        srcset: entry.form === "srcset",
+        whiteSpace: entry.whiteSpace,
+      });
       references.set(JSON.stringify([node, name]), {
         document,
         kind,
         lexical: value,
         name,
         node,
-        ...pieces,
+        scope: resolution.scope,
+        ...appendixPieces(value),
       });
-
-      const resolution = walkResolution(directory, pieces.target, form);
-      if (resolution !== null) {
-        paths.set(JSON.stringify([node, name, "0"]), {
-          ...resolution,
-          at: 0n,
-          directory,
+      if (resolution.scope === "entry") {
+        paths.set(JSON.stringify([node, name]), {
           document,
           kind,
           name,
           node,
           package: documentIds.package,
-          target: pieces.target,
+          path: resolution.path,
         });
       }
     }
   }
 
-  return {
-    DocumentDirectory: new Map([
-      [
-        document,
-        {
-          directory,
-          name: path.posix.basename(documentIds.path),
-          node: document,
-          package: documentIds.package,
-          path: documentIds.path,
-        },
-      ],
-    ]),
-    Reference: references,
-    ReferencePath: paths,
-    XmlBase: new Map(
-      input.base ? [[documentIds.idOf(1), { document, node: documentIds.idOf(1) }]] : [],
-    ),
-  };
+  return { Reference: references, ReferencePath: paths };
 };
 
 /**
- * A situation the reference rows' search must reach: each kind of value, and a document with an
- * `xml:base` beside a resolved reference, which "Href form" refuses.
+ * A situation the reference rows' search must reach: each scope, each kind of value, and an
+ * `xml:base` in scope of a resolved reference.
  */
 type ReferenceSituation =
   | "base beside a reference"
-  | "dot segments"
+  | "decoded"
   | "external"
   | "not in the census"
-  | "outside the form"
   | "padded"
   | "params"
   | "resolved"
   | "same document"
-  | "srcset";
+  | "srcset"
+  | "unresolved";
 
 /**
  * Name the situations one generated document reaches.
@@ -846,13 +895,14 @@ const referenceSituationsOf = (
   rows: ReferenceRows,
 ): readonly ReferenceSituation[] => {
   const references = [...rows.Reference.values()];
+  const based = input.base !== undefined || input.elements.some(({ base }) => base !== undefined);
   const reached: [ReferenceSituation, boolean][] = [
     ["resolved", rows.ReferencePath.size > 0],
-    ["base beside a reference", input.base && rows.ReferencePath.size > 0],
-    ["external", references.some(({ target }) => target.startsWith("http:"))],
-    ["same document", references.some(({ lexical }) => lexical.startsWith("#"))],
-    ["outside the form", references.some(({ target }) => target.includes("/../"))],
-    ["dot segments", [...rows.ReferencePath.values()].some(({ ups }) => ups !== "")],
+    ["base beside a reference", based && rows.ReferencePath.size > 0],
+    ["external", references.some(({ scope }) => scope === "external")],
+    ["same document", references.some(({ scope }) => scope === "document")],
+    ["unresolved", references.some(({ scope }) => scope === "unresolved")],
+    ["decoded", [...rows.ReferencePath.values()].some(({ path: at }) => at.includes(" "))],
     ["padded", references.some(({ lead, trail }) => lead !== "" || trail !== "")],
     ["params", references.some(({ params }) => params !== "")],
     ["srcset", references.some(({ name }) => name === "srcset")],
@@ -863,184 +913,38 @@ const referenceSituationsOf = (
 };
 
 /**
- * The segments the resolution box writes targets of: a plain segment, `.`, `..` and a plain
- * segment holding a dot.
- */
-const resolutionSegments = ["x", ".", "..", "y.z"] as const;
-
-/**
- * One case of the resolution box: a document's directory and a reference's target.
- */
-interface ResolutionCase {
-  readonly directory: string;
-  readonly target: string;
-}
-
-/**
- * Every target of one to four of {@link resolutionSegments} under the package root, one directory
- * and two: the resolution box, 1,020 cases.
- */
-const resolutionCases: Gen<ResolutionCase> = (source) => ({
-  directory: source.draw(element(["", "a/", "a/b/"] as const)),
-  target: source.draw(array(element(resolutionSegments), { max: 4, min: 1 })).join("/"),
-});
-
-/**
- * Read `DotSegments`' `ups` pattern at a depth, as the database reads it.
+ * Read an attribute's whitespace class from the inventory by a second walk, a union's read as
+ * `preserve`.
  *
- * @param depth - The depth.
- * @returns The pattern.
+ * @param version - The schema version.
+ * @param kind - The element's kind.
+ * @param name - The attribute's name.
+ * @returns The class, none for an undeclared attribute.
  */
-const statedUps = (depth: string): RegExp =>
-  new RegExp(DotSegments.rows.find((row) => row.depth === depth)?.ups ?? "^$.", "u");
-
-/**
- * Read `DotSegments`' `removed` pattern at a depth, as the database reads it.
- *
- * @param depth - The depth.
- * @returns The pattern.
- */
-const statedRemoved = (depth: string): RegExp =>
-  new RegExp(DotSegments.rows.find((row) => row.depth === depth)?.removed ?? "^$.", "u");
-
-/**
- * The patterns `ReferencePath`'s "Href form" reads at a depth, as `DotSegments` installs them, and
- * two mutants: the climb's segments of any depth, and the removed segments of any number.
- */
-const dotPatterns = {
-  removedAny: { removed: () => /^(?:[^/]+\/)*$/u, ups: (depth: string) => statedUps(depth) },
-  stated: {
-    removed: (depth: string) => statedRemoved(depth),
-    ups: (depth: string) => statedUps(depth),
-  },
-  upsAny: { removed: (depth: string) => statedRemoved(depth), ups: () => /^(?:\.\.?\/)*$/u },
-} as const;
-
-/**
- * Whether a `ReferencePath`'s pieces hold its "Href form" under a set of patterns: its rest in the
- * `resolvedHref` form, its `ups` and `removed` those of its climb.
- *
- * @param pieces - The pieces.
- * @param patterns - The patterns.
- * @returns Whether they hold.
- */
-const formHolds = (
-  pieces: {
-    readonly climb: string;
-    readonly removed: string;
-    readonly rest: string;
-    readonly ups: string;
-  },
-  patterns: (typeof dotPatterns)[keyof typeof dotPatterns],
-): boolean =>
-  new RegExp(resolvedHref, "u").test(pieces.rest) &&
-  patterns.ups(pieces.climb).test(pieces.ups) &&
-  patterns.removed(pieces.climb).test(pieces.removed);
-
-/**
- * A situation the resolution box must reach.
- */
-type ResolutionSituation =
-  | "above the root"
-  | "climbs"
-  | "limit"
-  | "plain"
-  | "removed-any killed"
-  | "ups-any killed";
-
-describe("import/overlays/package.ts, hrefs and references", () => {
-  it.effect(
-    "resolves every target of the box to the entry the WHATWG URL Standard names, in pieces its row checks hold, and leaves exactly the stated limit unresolved",
-    (ctx) =>
-      // Oracle: a second implementation, the WHATWG URL Standard's resolution (Node's URL) against
-      // `pkg:/r/<directory>d.xml`, the sentinel segment `r` telling a target that climbs above the
-      // package root; and the specification as a checker, ReferencePath's E1_derived and
-      // Href_form restated over the pieces with DotSegments' installed patterns, which also
-      // refuse the pieces of a climb written as no climb, and of a climb that removes too little.
-      // Bound: every target of one to four of 4 segments under 3 directories, 1,020.
-      searched(
-        ctx,
-        exhaust(
-          {
-            box: "every target of one to four of x . .. y.z under the root, a/ and a/b/",
-            caseHang: Duration.seconds(10),
-            coverage: requiredInSpace<ResolutionSituation>([
-              "plain",
-              "climbs",
-              "above the root",
-              "limit",
-              "removed-any killed",
-              "ups-any killed",
-            ]),
-            generator: resolutionCases,
-            limit: 1100,
-            literal: Formatter.format,
-            oracle: {
-              kind: "second-implementation",
-              name: "the WHATWG URL Standard's resolution, with a sentinel root",
-            },
-            suite: "import/overlays-package-resolution",
-          },
-          ({ directory, target }: ResolutionCase, c) =>
-            Effect.sync(() => {
-              const resolution = resolutionOf(directory, target);
-              const whatwg = new URL(target, `pkg:/r/${directory}d.xml`).pathname;
-              const segments = target.split("/");
-              const lead = segments.findIndex((segment) => segment !== "." && segment !== "..");
-              const rest = lead === -1 ? [] : segments.slice(lead);
-              if (
-                rest.length === 0 ||
-                rest.some((segment) => segment === "." || segment === "..")
-              ) {
-                c.note("limit");
-                assert.isUndefined(resolution, target);
-
-                return;
-              }
-
-              assert.isDefined(resolution, target);
-              if (resolution === undefined) {
-                return;
-              }
-
-              assert.strictEqual(`${resolution.ups}${resolution.rest}`, target);
-              assert.strictEqual(`${resolution.kept}${resolution.removed}`, directory);
-              assert.strictEqual(resolution.path, `${resolution.kept}${resolution.rest}`);
-              if (whatwg.startsWith("/r/")) {
-                c.note(resolution.ups === "" ? "plain" : "climbs");
-                assert.isTrue(formHolds(resolution, dotPatterns.stated), target);
-                assert.strictEqual(resolution.path, whatwg.slice("/r/".length), target);
-              } else {
-                c.note("above the root");
-                assert.isFalse(formHolds(resolution, dotPatterns.stated), target);
-              }
-
-              if (resolution.climb !== "0") {
-                const asNoClimb = { ...resolution, climb: "0", removed: "" };
-                const tooLittle = { ...resolution, removed: "" };
-
-                assert.isFalse(formHolds(asNoClimb, dotPatterns.stated), target);
-                assert.isFalse(formHolds(tooLittle, dotPatterns.stated), target);
-                if (formHolds(asNoClimb, dotPatterns.upsAny)) {
-                  c.note("ups-any killed");
-                }
-
-                if (formHolds(tooLittle, dotPatterns.removedAny)) {
-                  c.note("removed-any killed");
-                }
-              }
-            }),
-        ),
-      ),
+const declaredWhiteSpace = (version: string, kind: string, name: string) => {
+  const declaration = attributeDeclarations.find(
+    (declared) =>
+      declared.kind === kind &&
+      declared.name === name &&
+      declared.versions.some((held) => held === version),
   );
 
-  it("reads the grammar's census as ReferenceAttribute's rows hold it, and no form for an attribute outside it", () => {
+  return declaration?.type.whiteSpace === "union" ? "preserve" : declaration?.type.whiteSpace;
+};
+
+describe("import/overlays/package.ts, hrefs and references", () => {
+  it("reads the grammar's census as ReferenceAttribute's rows hold it, each with its type's whitespace class, and no form for an attribute outside it", () => {
     // Oracle: the closed relation's own rows (`ReferenceAttribute`, spec reading 103), which the
-    // database's copy into Reference selects by, against the builder's lookup.
+    // database's copy into Reference selects by, against the builder's lookup; and the attribute
+    // inventory's declarations, read by a second walk, for each one's whitespace class.
     // Bound: every row of ReferenceAttribute, and three attributes outside it.
     assert.isNotEmpty(ReferenceAttribute.rows);
     for (const { form, kind, name, version } of ReferenceAttribute.rows) {
-      assert.strictEqual(referenceCensus(version, kind, name), form, `${version} ${kind} ${name}`);
+      assert.deepStrictEqual(
+        referenceCensus(version, kind, name),
+        { form, whiteSpace: declaredWhiteSpace(version, kind, name) },
+        `${version} ${kind} ${name}`,
+      );
     }
 
     for (const [kind, name] of [
@@ -1151,10 +1055,11 @@ describe("import/overlays/package.ts, hrefs and references", () => {
   it.effect(
     "writes each document's reference rows as a second reading of its tree names them",
     (ctx) =>
-      // Oracle: a second implementation, `expectedReferences`: the nodes numbered by hand, the
-      // directory by Node's path.posix, each value split by RFC 3986's Appendix B.
-      // Bound: documents at 2 paths, with and without an xml:base, of up to 4 elements of 5 kinds
-      // with 10 values, 400 runs.
+      // Oracle: a second implementation, `expectedReferences`: the nodes numbered by hand, each
+      // value split by RFC 3986's Appendix B and resolved by the law oracle's own RFC 3986
+      // resolver with the xml:base values in scope.
+      // Bound: documents at 2 paths, under 5 xml:base values on the root and on each of up to 4
+      // elements of 5 kinds with 19 values, 400 runs.
       searched(
         ctx,
         explore(
@@ -1165,10 +1070,10 @@ describe("import/overlays/package.ts, hrefs and references", () => {
               [
                 "resolved",
                 "base beside a reference",
-                "dot segments",
+                "decoded",
                 "external",
                 "same document",
-                "outside the form",
+                "unresolved",
                 "padded",
                 "params",
                 "srcset",
@@ -1179,7 +1084,10 @@ describe("import/overlays/package.ts, hrefs and references", () => {
             draw: drawn(referenceCases),
             kept: [],
             literal: Formatter.format,
-            oracle: { kind: "second-implementation", name: "a second reading of the tree" },
+            oracle: {
+              kind: "second-implementation",
+              name: "a second reading of the tree, its values by the oracle's RFC 3986 resolver",
+            },
             runs: 400,
             shrink: completeShrink,
             steerEvery: 16,
@@ -1192,12 +1100,7 @@ describe("import/overlays/package.ts, hrefs and references", () => {
               const expected = expectedReferences(input, documentIds);
 
               c.noteAll(referenceSituationsOf(input, rows));
-              for (const relation of [
-                "DocumentDirectory",
-                "Reference",
-                "ReferencePath",
-                "XmlBase",
-              ] as const) {
+              for (const relation of ["Reference", "ReferencePath"] as const) {
                 assert.deepStrictEqual(
                   sortedEntries(rows[relation]),
                   sortedEntries(expected[relation]),

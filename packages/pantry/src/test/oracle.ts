@@ -4638,7 +4638,7 @@ const documentsOf = (
     );
 
     return listsDocuments
-      ? Option.toArray(Option.flatMap(resource.resolved, entryPathAt)).map((at) => ({
+      ? Option.toArray(resource.resolved.pipe(Option.flatMap(entryPathAt))).map((at) => ({
           path: at,
           resource,
         }))
@@ -4827,7 +4827,8 @@ const referenceBreaches = (
           member,
           resolution: resolvedAt(view, member.id, lexical, {
             srcset: form === "srcset",
-            whiteSpace: hrefWhiteSpaces.get(`${member.version} ${member.kind} ${name}`),
+            whiteSpace:
+              hrefWhiteSpaces.get(`${member.version} ${member.kind} ${name}`) ?? "collapse",
           }).resolution,
         })),
       ),
@@ -5225,6 +5226,22 @@ const inclusionBreaches = (
 };
 
 /**
+ * Read a closed attribute of a written element, by its handle.
+ *
+ * @param element - The element, as shred gives it.
+ * @param handle - The attribute's handle.
+ * @returns Its lexical form, or none.
+ */
+const closedValueOf = (
+  element: XdmClosedElement<Composed>,
+  handle: string,
+): Option.Option<string> =>
+  Option.fromNullishOr(
+    element.attributes.find(({ name }) => name._tag === "closed" && name.handle === handle)
+      ?.lexical,
+  );
+
+/**
  * Splice a document's includes in place (reading 117, XInclude's result infoset): each include the
  * information model reads outside a section whose target is listed and whose root the include may
  * stand for is replaced by its target's root element, its own includes spliced in turn, unless the
@@ -5255,18 +5272,20 @@ const splicedElement = <E extends XdmClosedElement<Composed>>(
 
     if (child.kind === "xi:include" && splices(grammar, parent)) {
       const href = closedValueOf(child, "href");
-      const resolution = Option.map(href, (value) =>
-        resolveAttribute({
-          bases: [...bases, ...Option.toArray(closedValueOf(child, "xml:base"))],
-          document: path,
-          lexical: value,
-          srcset: false,
-          whiteSpace: "collapse",
-        }),
+      const resolution = href.pipe(
+        Option.map((value) =>
+          resolveAttribute({
+            bases: [...bases, ...Option.toArray(closedValueOf(child, "xml:base"))],
+            document: path,
+            lexical: value,
+            srcset: false,
+            whiteSpace: "collapse",
+          }),
+        ),
       );
       const resolved = Option.getOrUndefined(
-        Option.flatMap(resolution, (at) =>
-          at.scope === "entry" ? Option.some(at.path) : Option.none(),
+        resolution.pipe(
+          Option.flatMap((at) => (at.scope === "entry" ? Option.some(at.path) : Option.none())),
         ),
       );
       const target = resolved === undefined ? undefined : byPath.get(resolved);
@@ -5290,22 +5309,6 @@ const splicedElement = <E extends XdmClosedElement<Composed>>(
     children: element.children.map((child) => spliceChild(child, element.kind)),
   };
 };
-
-/**
- * Read a closed attribute of a written element, by its handle.
- *
- * @param element - The element, as shred gives it.
- * @param handle - The attribute's handle.
- * @returns Its lexical form, or none.
- */
-const closedValueOf = (
-  element: XdmClosedElement<Composed>,
-  handle: string,
-): Option.Option<string> =>
-  Option.fromNullishOr(
-    element.attributes.find(({ name }) => name._tag === "closed" && name.handle === handle)
-      ?.lexical,
-  );
 
 /**
  * Collect the documents a merged document is written in (spec reading 117): the listed documents

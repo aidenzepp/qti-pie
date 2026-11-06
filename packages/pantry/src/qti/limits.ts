@@ -264,26 +264,3 @@ export const keyTextPattern = "^.{0,255}.{0,255}.{0,138}$";
  * can hold it.
  */
 export const keyText = str.regex(keyTextPattern, "su");
-
-/**
- * The hrefs this representation resolves to package entries: a relative path of plain segments,
- * which names the entry at the referring document's directory followed by the href as written
- * (RFC 3986, §5.2.2 and §5.2.3, where such a reference merges with the base's directory and its
- * dot-segment removal changes nothing). A segment is a nonempty run of characters other than `/`,
- * `?`, `#`, `%`, `\` and XML whitespace, and neither `.` nor `..`; the first segment holds no `:`,
- * which would make the href a URI with a scheme.
- *
- * It is a stated limit of the representation, never a law of QTI: every href law compares an href
- * with an entry's path exactly, by `Compute.concat`, so no relation can percent-decode a name or
- * remove a dot segment from the middle of a path. So it refuses valid input: `a%20b.xml`,
- * `a/../b.xml`, and a path that holds whitespace (`a b.xml`, which XLink's escaping admits as an
- * `xs:anyURI`) are each a valid URI reference refused under the limit's law, "Href form" (rule
- * `href-form`). It is the form of a path: a query or a fragment after it is its params, an
- * external URI is never resolved, and a document's reference may start with `./` and `../`
- * segments, which `#pantry/qti/package.ts` `ReferencePath` removes before reading the rest in this
- * form (spec reading 102).
- *
- * @see {@link https://www.rfc-editor.org/rfc/rfc3986#section-5.2 | RFC 3986, §5.2}
- */
-export const resolvedHref =
-  "^(?:[^./?#%\\\\:\\t\\n\\r ][^/?#%\\\\:\\t\\n\\r ]*|\\.[^./?#%\\\\:\\t\\n\\r ][^/?#%\\\\:\\t\\n\\r ]*|\\.\\.[^/?#%\\\\:\\t\\n\\r ]+)(?:/(?:[^./?#%\\\\\\t\\n\\r ][^/?#%\\\\\\t\\n\\r ]*|\\.[^./?#%\\\\\\t\\n\\r ][^/?#%\\\\\\t\\n\\r ]*|\\.\\.[^/?#%\\\\\\t\\n\\r ]+))*$";

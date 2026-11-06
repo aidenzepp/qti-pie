@@ -20,7 +20,7 @@ import { Option } from "effect";
 import type { Kind } from "#pantry/grammar/compose.ts";
 import { Enters, includeParentKinds, interactionKinds } from "#pantry/grammar/install.ts";
 import type { Flag } from "#pantry/grammar/install.ts";
-import { directoryOf, referencePiecesOf, resolvedPathOf } from "#pantry/import/overlays/package.ts";
+import { entryPathOf, hrefResolverOf } from "#pantry/import/overlays/package.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { NodeId, XdmDocument } from "#pantry/model/xdm.ts";
@@ -194,7 +194,8 @@ interface Read {
 /**
  * Read one listed document's sites: each section ref and each include the information model reads,
  * an include written as a site even with no href, as Q5.13's builder writes it, and each resolved
- * against the document's directory.
+ * as its `ReferencePath` is (`hrefResolverOf`: against the `xml:base` in scope or the document's
+ * path).
  *
  * @param document - The document.
  * @returns Its reading.
@@ -207,7 +208,7 @@ const readOf = ({ idOf, path, tree }: Listed): Read => {
       .filter(({ name }) => name === "href")
       .map(({ lexical, node }) => [node, lexical] as const),
   );
-  const { directory } = directoryOf(path);
+  const resolve = hrefResolverOf(rows, path);
   const written = rows.nodes.filter(
     (node) =>
       isSiteKind(node.kind, kindOf.get(node.parent) ?? "") &&
@@ -220,10 +221,7 @@ const readOf = ({ idOf, path, tree }: Listed): Read => {
     nodes: rows.nodes,
     self: rows.document.node,
     sites: written.flatMap((node): readonly SiteOf[] => {
-      const resolved = resolvedPathOf(
-        directory,
-        referencePiecesOf(hrefs.get(node.id) ?? "").target,
-      );
+      const resolved = entryPathOf(resolve(node.id, hrefs.get(node.id) ?? ""));
 
       return resolved === undefined ? [] : [{ node: node.id, path: resolved }];
     }),
