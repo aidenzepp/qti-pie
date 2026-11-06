@@ -490,3 +490,9 @@ against it. A reading that is not an information-model-over-XSD case says which 
     children included. This is not a case of documents in conflict: XML Schema decides what is valid, and only the
     text is beyond what a package here can check. (The renderer's phase-3 default, delivery spec section 5.1, applied
     in plate, narrowed to the text by XML Schema Part 1, section 3.3.4; 2026-11-05.)
+61. **An element in QTI's own namespace inside `qti-ordering`'s extension slot is valid.** The information model says
+    the slot's child tags "may be new tags and reused QTI ASI tags" (section 5.98.3, the `extensions` attribute of the
+    Ordering class), though the XSD admits only other namespaces there. Such an element is kept as the slot's extension
+    content, not read as QTI ordering. `qti-selection`'s slot is not covered: its information model text says the child
+    tags "must be new tags i.e. not reused QTI ASI tags" (section 5.129.4). (2026-11-06.)
+62. **An item's or test's identifier and title must equal those its package's LOM metadata gives it, where that metadata gives one; a package where they differ is invalid and is refused.** The information model says of the item identifier (section 4.1.1) that "the two MUST be the same", and the same of the test identifier (section 4.4.1) and the item title (section 4.1.2: "these two MUST be the same"). The metadata binding says the identifier and title "must" match the object's own (sections 2.7.1.1, #Gen1, and 2.7.1.2, #Gen2). A resource whose metadata gives no identifier or title is outside the rule. (2026-11-06.)
