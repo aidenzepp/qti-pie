@@ -52,8 +52,9 @@ interface Crossing {
  * `a9d04969` points 1 and 5, so the one `"."` entry stays callable anywhere): the dev playground,
  * the example hosts, the conformance ledger, test support, the Node-only corpus reader, every Node
  * built-in, the HTML parser the tests use, the browser drivers and the Vitest provider the browser
- * tests use, the QTI database package and grizzle. One that ends in `/` or `:` forbids every
- * specifier it begins; any other forbids itself and its subpaths.
+ * tests use, vite-plus's test subpaths (its browser provider and the in-page context), the QTI
+ * database package and grizzle. One that ends in `/` or `:` forbids every specifier it begins; any
+ * other forbids itself and its subpaths.
  */
 const forbiddenSpecifiers: readonly string[] = [
   "#plate/dev/",
@@ -66,6 +67,7 @@ const forbiddenSpecifiers: readonly string[] = [
   "playwright",
   "playwright-core",
   "@vitest/browser-playwright",
+  "vite-plus/test/",
   "@qti-pie/pantry",
   "@bjornpagen/grizzle",
 ];
@@ -170,6 +172,32 @@ describe("the core boundary's scanner", () => {
     );
   });
 
+  it("reports a core module that imports vite-plus's browser provider or its in-page context", () => {
+    assert.deepStrictEqual(
+      scan({
+        "src/a.ts": [
+          'import { playwright } from "vite-plus/test/browser-playwright";',
+          'import { server } from "vite-plus/test/browser/context";',
+          "",
+        ].join("\n"),
+      }),
+      [
+        {
+          line: 1,
+          module: "src/a.ts",
+          reason: "forbidden",
+          specifier: "vite-plus/test/browser-playwright",
+        },
+        {
+          line: 2,
+          module: "src/a.ts",
+          reason: "forbidden",
+          specifier: "vite-plus/test/browser/context",
+        },
+      ],
+    );
+  });
+
   it("forbids each listed specifier and its subpaths, and nothing else", () => {
     const forbidden = [
       "#plate/dev/serve.ts",
@@ -188,6 +216,8 @@ describe("the core boundary's scanner", () => {
       "playwright-core",
       "playwright-core/lib/server",
       "@vitest/browser-playwright",
+      "vite-plus/test/browser-playwright",
+      "vite-plus/test/browser/context",
     ];
     const allowed = [
       "effect",
@@ -243,7 +273,7 @@ const readManifest = (): typeof Manifest.Type =>
   );
 
 describe("the core, from src/index.ts", () => {
-  it("loads no dev playground, example host, ledger, test support, corpus reader, Node built-in, parse5, playwright, playwright-core, the Vitest provider, pantry or grizzle", () => {
+  it("loads no dev playground, example host, ledger, test support, corpus reader, Node built-in, parse5, playwright, playwright-core, the Vitest provider, vite-plus's test subpaths, pantry or grizzle", () => {
     assert.deepStrictEqual(crossings(modules, ["src/index.ts"]), []);
   });
 

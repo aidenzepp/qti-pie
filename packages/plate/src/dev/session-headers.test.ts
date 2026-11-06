@@ -26,8 +26,8 @@ const fixturesRoot = path.resolve(import.meta.dirname, "..", "..", "fixtures");
 const fixture = { id: "m2", test: "test.xml" } as const;
 
 /**
- * The header the operator's ruling A on D4-4 (mail `edaa3d21`) rests on: the opt-out every engine's
- * back/forward cache checks, so a browser keeps no session page to show again.
+ * The header the operator's ruling on D4-4 rests on: the opt-out every engine's back/forward cache
+ * checks, so a browser keeps no session page to show again.
  */
 const noStore = "no-store";
 

@@ -166,11 +166,12 @@ interface DomImport {
 }
 
 /**
- * List the imports of DOM-program modules (`*.dom.ts`) that modules outside the DOM program make,
- * type-only declarations and names included. The root program's `exclude` does not stop an import
- * from pulling a DOM module into it, where its DOM names then fail to type-check with no message
- * that says why. A declaration {@link readImports} cannot classify, and a dynamic `import(…)`, are
- * not seen.
+ * List the imports of DOM-program modules (`*.dom.ts`) that modules under `src/` outside the DOM
+ * program make, type-only declarations and names included. The root program's `exclude` does not
+ * stop an import from pulling a DOM module into it, where its DOM names then fail to type-check
+ * with no message that says why. Only `src/` is read: the package's `scripts/`, its top-level
+ * `hosts/` and its Vite configs are not, so an import there is refused by the root `tsc` alone. A
+ * declaration {@link readImports} cannot classify, and a dynamic `import(…)`, are not seen.
  *
  * @param sources The modules' sources, by path under the package (`src/<x>`).
  * @returns Each such import, by module in the order given and then by line.
@@ -229,7 +230,7 @@ describe("the browser modules", () => {
 });
 
 describe("the DOM program", () => {
-  it("has its modules imported by no module outside it, type-only imports included", () => {
+  it("has its modules imported by no module under src/ outside it, type-only imports included", () => {
     const offender = 'import type { Y } from "#plate/y.dom.ts";\n';
 
     assert.deepStrictEqual(domImports(modules), []);
