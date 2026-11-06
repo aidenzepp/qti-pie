@@ -138,6 +138,30 @@ const paddedBlocks = mathmlBlocks.filter((block) => block.part === "padded");
 
 const blocksFor301 = mathmlBlocks.filter((block) => block.version === "3.0.1");
 
+/**
+ * The base document a block goes in, from its site.
+ *
+ * @param block - The block.
+ * @returns The base item, test or stimulus.
+ */
+const documentOf = (block: MathmlBlock): "item" | "stimulus" | "test" => {
+  if (block.site === "test-head" || block.site === "test-tail") {
+    return "test";
+  }
+
+  return block.site === "stimulus-body" ? "stimulus" : "item";
+};
+
+/**
+ * The host a fragment's own root `m:math` sits in when the fragment is the whole body: the item
+ * body of the base item, or the stimulus body of the base stimulus.
+ *
+ * @param block - The block.
+ * @returns The element the root stands for.
+ */
+const rootHostOf = (block: MathmlBlock): string =>
+  documentOf(block) === "stimulus" ? "qti-stimulus-body" : "qti-item-body";
+
 describe("the host, presentation and content coverage blocks", () => {
   it("has unique names and a block of each part, one of them for a 3.0.1 item", () => {
     const names = [...mathmlBlocks, annotationXmlBlock].map((block) => block.name);
@@ -149,7 +173,7 @@ describe("the host, presentation and content coverage blocks", () => {
       "kind",
       "padded",
     ]);
-    assert.strictEqual(hostBlocks.length, 63);
+    assert.strictEqual(hostBlocks.length, 66);
     assert.strictEqual(presentationBlocks.length, 43);
     assert.strictEqual(kindBlocks.length, 193);
     assert.strictEqual(paddedBlocks.length, 1);
@@ -165,7 +189,7 @@ describe("the host, presentation and content coverage blocks", () => {
   });
 
   it("puts m:math under every roster host the composed inventory names", () => {
-    assert.strictEqual(hostEntries.length, 63);
+    assert.strictEqual(hostEntries.length, 66);
 
     const covered = new Set(hostBlocks.map((block) => block.handles[0]));
 
@@ -261,7 +285,7 @@ describe("the host, presentation and content coverage blocks", () => {
   );
 
   it.effect(
-    "puts each host's element directly around an m:math, the item body being the fragment's own root",
+    "puts each host's element directly around an m:math, the body of the base document being the fragment's own root",
     () =>
       Effect.gen(function* checkHosts() {
         for (const block of hostBlocks) {
@@ -269,7 +293,7 @@ describe("the host, presentation and content coverage blocks", () => {
           const root = yield* parseBlock(block);
           const parents = walk(root)
             .filter(({ element }) => isMathml(element) && element.local === "math")
-            .map(({ parent }) => (parent === root ? "qti-item-body" : parent?.local));
+            .map(({ parent }) => (parent === root ? rootHostOf(block) : parent?.local));
 
           assert.isTrue(
             entry === undefined ? false : parents.includes(entry.element),
@@ -632,7 +656,19 @@ describe("the attribute blocks, the padded block and the groups", () => {
     );
     assert.deepStrictEqual(
       mathmlGroups.filter((group) => group.version === "3.0.1").map((group) => group.name),
-      [names.at(-1)],
+      mathmlGroups
+        .filter((group) => group.blocks.some((block) => blocksFor301.includes(block)))
+        .map((group) => group.name),
+    );
+  });
+
+  it("keeps the blocks of one group in one base document: the item, the test or the stimulus", () => {
+    for (const group of mathmlGroups) {
+      assert.strictEqual(new Set(group.blocks.map(documentOf)).size, 1, group.name);
+    }
+    assert.deepStrictEqual(
+      mathmlGroups.filter((group) => group.blocks.some((block) => documentOf(block) !== "item")),
+      mathmlGroups.slice(-2),
     );
   });
 
