@@ -730,6 +730,39 @@ const mathmlNotationReadings: readonly SpecReading[] = [
 });
 
 /**
+ * `xs:IDREF`'s definition, the one `xs:IDREFS` lists: a name that is a token, whitespace collapsed.
+ */
+const idrefDomain: Domain = {
+  _tag: "atomic",
+  builtin: "IDREF",
+  facets: [{ facet: "whiteSpace", value: "collapse" }],
+  patterns: [["\\i\\c*"], ["[\\i-[:]][\\c-[:]]*"]],
+  primitive: "string",
+};
+
+/**
+ * Spec reading 2's `xref` readings: MathML 3's cross-references "are established by the use of the
+ * id and xref attributes" (§5.4.2), so an `xref` names an `id` of its document. Each MathML kind
+ * that declares it reads it as an `xs:IDREF`, not the XSD's `xs:anySimpleType`, and the law "Idref
+ * target" reads its token.
+ *
+ * @see {@link https://www.w3.org/TR/MathML3/chapter5.html#mixing.cr | MathML 3, 5.4.2 Parallel Markup via Cross-References}
+ */
+const mathmlXrefReading: SpecReading = on(
+  2,
+  [
+    ...new Set(
+      attributeDeclarations
+        .filter(({ kind, name }) => kind.startsWith("m:") && name === "xref")
+        .map(({ kind }) => kind),
+    ),
+  ],
+  "xref",
+  "xsd",
+  () => idrefDomain,
+);
+
+/**
  * A content `cn`'s `base`, which the XSD leaves untyped (`mathml3-content.xsd` line 18) and the
  * RelaxNG types `text` (`mathml3-content.rnc` line 34): spec reading 2 reads it as MathML 3 states
  * it, "a base 10 positive integer giving the value of base in which the text content of the cn is
@@ -763,8 +796,9 @@ const cnBaseReadings: readonly SpecReading[] = attributeDeclarations
  * - 2: a MathML attribute of a notation type takes the notation's pattern (MathML 3 §2.1.5.1):
  *   `length` digits only, `columnspan`, `rowspan` and `selection` digits not all zero, `position`,
  *   `shift` and `index` an optional `-` and digits, `scriptsizemultiplier` a `number` with no `+`
- *   ({@link mathmlNotationReadings}); and a content `cn`'s `base` is a positive integer
- *   ({@link cnBaseReadings}).
+ *   ({@link mathmlNotationReadings}); a content `cn`'s `base` is a positive integer
+ *   ({@link cnBaseReadings}); and every MathML kind's `xref` is an `xs:IDREF`, naming an `id` of
+ *   its document ({@link mathmlXrefReading}).
  * - 7: a typed QTI value in an attribute is exact, outer whitespace invalid: its listed attributes
  *   read no whitespace class.
  * - 8: a match table entry's `target-value` is a value of the outcome's base type, not a base-type
@@ -856,6 +890,7 @@ export const specReadings: readonly SpecReading[] = [
   })),
   ...mathmlNotationReadings,
   ...cnBaseReadings,
+  mathmlXrefReading,
   on(120, ["qti-index"], "n", "xsd", positiveIndex),
   on(123, ["bdo"], "dir", "xsd", overrideDirection),
   on(124, ["audio", "source", "video"], "src", "xsd", nonEmptyUrl),

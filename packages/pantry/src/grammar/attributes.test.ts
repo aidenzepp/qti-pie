@@ -21,6 +21,7 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, FileSystem, Option, Result } from "effect";
 import {
+  attributeCounts,
   baseTypes,
   generate,
   readDeclarations,
@@ -573,6 +574,37 @@ describe("The spec readings", () => {
     }
   });
 
+  it("read 2: every MathML kind's xref is an IDREF, so it names an id of its document", () => {
+    const declarers = attributeDeclarations.filter(
+      ({ kind, name }) => kind.startsWith("m:") && name === "xref",
+    );
+    assert.isAbove(declarers.length, 0);
+    for (const { kind, versions } of declarers) {
+      for (const version of versions) {
+        const xref = Option.getOrThrow(domainAt(version, kind, "xref"));
+
+        assert.deepStrictEqual(xref.identity, Option.some("IDREF"), `${kind}@xref`);
+        assert.isTrue(matches(xref, "a1") && matches(xref, " a1 "), `${kind}@xref`);
+        assert.isFalse(matches(xref, "a b") || matches(xref, "1a") || matches(xref, ""), kind);
+      }
+    }
+  });
+
+  it("read 2, decision 327: an mglyph's alt, src and index are each optional and attributeCounts counts none of them, so a bare mglyph is accepted", () => {
+    assert.isFalse(attributeCounts.some(({ kind }) => kind === "m:mglyph"));
+    for (const name of ["alt", "src", "index"]) {
+      const declarers = declarersOf(name).filter(({ kind }) => kind === "m:mglyph");
+      assert.isAbove(declarers.length, 0, name);
+      for (const { kind, version } of declarers) {
+        assert.strictEqual(
+          Option.getOrThrow(leafGrammar.admission.lookup({ kind, name, version })).use,
+          "optional",
+          name,
+        );
+      }
+    }
+  });
+
   it("read 46: every count, and figures, holds a signed 64-bit integer exactly", () => {
     for (const name of [
       "max-choices",
@@ -969,7 +1001,11 @@ describe("The attribute grammar's structure", () => {
 
   it("derives each domain's identity from the built-in its type restricts, and from nothing else", () => {
     for (const declared of attributeDeclarations) {
-      if (declared.name !== "variable-identifier-ref") {
+      // Readings 15 and 2 read these as other than their type: no identity, and an IDREF.
+      if (
+        declared.name !== "variable-identifier-ref" &&
+        !(declared.kind.startsWith("m:") && declared.name === "xref")
+      ) {
         for (const version of declared.versions) {
           assert.deepStrictEqual(
             Option.getOrThrow(domainAt(version, declared.kind, declared.name)).identity,
