@@ -3,11 +3,13 @@
  *
  * {@link emitBody} walks the payload's body. An HTML element renders as itself through `h`, with
  * three changes: `xml:lang` becomes `lang`; an authored `id`, and every reference to one, is scoped
- * by the item instance through {@link authoredId}; and a heading shifts so that `h1` sits at the
- * configured heading level. A `tr` the author placed directly in a `table` gains the `tbody` the
- * HTML parser would insert, so the tree survives a parse. Text becomes text, an interaction goes
- * to its render function, and each notice `check` handed in becomes the Notice part, a `span` at a
- * phrasing position and a `div` where the parent takes flow content.
+ * by the item instance through {@link authoredId}; and a heading shifts so that the item's
+ * shallowest heading sits at the configured heading level, every other heading keeping its distance
+ * from it and capped at `h6` ({@link headingOffsetOf}). A `tr` the author placed directly in a
+ * `table` gains the `tbody` the HTML parser would insert, so the tree survives a parse. Text
+ * becomes text, an interaction goes to its render function, and each notice `check` handed in
+ * becomes the Notice part, a `span` at a phrasing position and a `div` where the parent takes flow
+ * content.
  *
  * URL attributes are `url.ts`'s, and so is every decision about them: `check` has already dropped
  * each refused value, placed its notice, and written each kept value in its parsed form. The walk
@@ -25,11 +27,11 @@
  * @see {@link Payload} for what the walk reads.
  */
 import { Data, Option, Result } from "effect";
+import { itemPart } from "#plate/emit/item.ts";
 import { h, text } from "#plate/emit/node.ts";
 import type { Attributes, Element, Node } from "#plate/emit/node.ts";
 import { authoredId, authoredIdrefs, headings, positionUnder, rowFor } from "#plate/emit/parts.ts";
 import type { Position, Resolved } from "#plate/emit/parts.ts";
-import { applyPart } from "#plate/emit/swap.ts";
 import type { PartSwapRefused } from "#plate/emit/swap.ts";
 import { message } from "#plate/messages.ts";
 import type { Locale } from "#plate/messages.ts";
@@ -75,9 +77,9 @@ const nestedPlaces: Readonly<Record<NestedWithin, string>> = {
  * cause.
  *
  * It cannot occur through the library: QTI's schema admits no interaction inside a Prompt or a
- * choice's content, `check` refuses one, and `redact` copies only what `check` accepted. Only a
- * payload built by hand, or a `Redacted` decoded from JSON that never came from `redact`, can hold
- * one. It is thrown, never returned.
+ * choice's content, `check` refuses one, `redact` copies only what `check` accepted, and
+ * `decodeRedacted` refuses JSON that holds one. Only a payload built by hand can hold one. It is
+ * thrown, never returned.
  */
 export class NestedInteractionDefect extends Data.TaggedError("NestedInteractionDefect")<{
   readonly kind: InteractionPayload["kind"];
@@ -94,8 +96,7 @@ export class NestedInteractionDefect extends Data.TaggedError("NestedInteraction
 
 /**
  * Give the render function for content where QTI's schema admits no interaction, a Prompt's or a
- * choice's: meeting one is a defect, since only a payload that never came from `redact` can hold
- * one.
+ * choice's: meeting one is a defect, since only a payload built by hand can hold one.
  *
  * @param within Where the content sits.
  * @returns A render function that throws {@link NestedInteractionDefect}, naming the interaction
@@ -380,7 +381,10 @@ const blank = /^[\t\n\f\r ]*$/u;
  */
 interface Walk {
   readonly assetBase: string;
-  readonly headingLevel: number;
+  /**
+   * The amount added to an authored heading's level, from {@link headingOffsetOf}.
+   */
+  readonly headingOffset: number;
   readonly instance: string;
   readonly locale: Locale;
   readonly parts: Resolved;
@@ -397,15 +401,15 @@ interface Walk {
 }
 
 /**
- * Give the tag an authored element renders as: a heading shifted so `h1` sits at the heading level,
- * every level rising by the same amount and capped at `h6`; any other tag unchanged.
+ * Give the tag an authored element renders as: a heading shifted by the offset and capped at `h6`;
+ * any other tag unchanged.
  *
  * @param tag The authored local name.
- * @param headingLevel The configured heading level, 1 to 6.
+ * @param headingOffset The amount added to a heading's level, from {@link headingOffsetOf}.
  * @returns The tag to emit.
  */
-const tagFor = (tag: string, headingLevel: number): string =>
-  headings.has(tag) ? `h${Math.min(6, Number(tag.slice(1)) + headingLevel - 1)}` : tag;
+const tagFor = (tag: string, headingOffset: number): string =>
+  headings.has(tag) ? `h${Math.min(6, Number(tag.slice(1)) + headingOffset)}` : tag;
 
 /**
  * Scope a kept same-document reference as the id it names, so `#q1` still finds the authored
@@ -588,16 +592,14 @@ const withBodies = (children: readonly Node[]): readonly Node[] => {
  * @returns The Notice, a `span` at a phrasing position and a `div` at a flow position by default,
  *   or the refusal of its replacement.
  */
-const noticeOf = (notice: NoticePayload, walk: Walk): Result.Result<Element, PartSwapRefused> => {
-  const row = rowFor("item", "notice", { position: walk.position });
-
-  return applyPart(
-    row,
-    { "data-slot": row.slot, role: "note" },
+const noticeOf = (notice: NoticePayload, walk: Walk): Result.Result<Element, PartSwapRefused> =>
+  itemPart(
+    walk.parts,
+    "notice",
+    { role: "note" },
     [text(message(walk.locale, "notice", { feature: notice.feature }))],
-    Option.getOrUndefined(walk.parts.replacementFor("item", "notice")),
+    { position: walk.position },
   );
-};
 
 /**
  * Give the walk below an authored element: its children stand where the element's content stands.
@@ -645,7 +647,7 @@ const elementOf = (
 ): Result.Result<Element, PartSwapRefused> =>
   Result.map(nodesOf(element.children, below(walk, element.tag)), (children) =>
     h(
-      tagFor(element.tag, walk.headingLevel),
+      tagFor(element.tag, walk.headingOffset),
       attributesFor(element, declared, walk),
       element.tag === "table" ? withBodies(children) : children,
     ),
@@ -688,9 +690,110 @@ const nodeOf = (node: PayloadNode, walk: Walk): Result.Result<readonly Node[], P
 };
 
 /**
+ * Collect the levels of the headings the emitter writes among payload nodes, in document order: a
+ * heading the HTML subset keeps, below elements it keeps, and in an interaction's Prompt or choice
+ * content, which {@link emitNodes} writes with the same shift. A heading below an element outside
+ * {@link htmlSubset} is dropped with that element, so it is left out.
+ *
+ * @param nodes The payload nodes.
+ * @returns Each written heading's authored level, 1 to 6.
+ */
+const headingLevelsIn = (nodes: readonly PayloadNode[]): readonly number[] =>
+  nodes.flatMap((node): readonly number[] => {
+    switch (node.kind) {
+      case "element": {
+        if (!htmlSubset.has(node.tag)) {
+          return [];
+        }
+
+        const nested = headingLevelsIn(node.children);
+
+        return headings.has(node.tag) ? [Number(node.tag.slice(1)), ...nested] : nested;
+      }
+      case "choice": {
+        return headingLevelsIn([
+          ...Option.getOrElse(node.prompt, () => []),
+          ...node.choices.flatMap(({ content }) => content),
+        ]);
+      }
+      case "extended-text": {
+        return headingLevelsIn(Option.getOrElse(node.prompt, () => []));
+      }
+      case "notice":
+      case "text":
+      case "text-entry": {
+        return [];
+      }
+      default: {
+        // Only a payload that lost its type on the way here holds another kind.
+        node satisfies never;
+
+        return [];
+      }
+    }
+  });
+
+/**
+ * The level of each payload body's shallowest written heading, kept from the first walk over the
+ * body for every later one.
+ *
+ * One render starts a walk for the body and one for each Prompt and each choice's content, and
+ * each needs this level. Reading the whole body for each walk would make a render's time grow with
+ * the square of its choices and Prompts, so the body is read once.
+ *
+ * An entry never goes stale. It is keyed by the body array's identity, and a body never changes
+ * once built: `payload` builds a fresh body for every render, every payload field is `readonly`,
+ * and the emitter writes to none of them. So the level read from a body stays that body's level
+ * for as long as the body lives, and the weak key lets the entry go with it.
+ */
+const shallowestLevels = new WeakMap<readonly PayloadNode[], number>();
+
+/**
+ * Give the level of a body's shallowest written heading, 1 when it writes none: read from the
+ * body on the first call for it, and from {@link shallowestLevels} after.
+ *
+ * @param body The payload's body, which holds every heading the emitter writes for the item.
+ * @returns The least level {@link headingLevelsIn} gives for the body, or 1 when it gives none.
+ */
+const shallowestLevelOf = (body: readonly PayloadNode[]): number => {
+  const known = shallowestLevels.get(body);
+
+  if (known !== undefined) {
+    return known;
+  }
+
+  const levels = headingLevelsIn(body);
+  let shallowest = levels[0] ?? 1;
+
+  for (const level of levels) {
+    shallowest = Math.min(shallowest, level);
+  }
+
+  shallowestLevels.set(body, shallowest);
+
+  return shallowest;
+};
+
+/**
+ * Give the amount every authored heading of an item shifts by: the item's shallowest written
+ * heading lands at the configured heading level, and every other heading keeps its distance from
+ * it, so an item that starts at `h2` or `h3` (a delivery page owns `h1`) still starts at the
+ * heading level. An item that starts at `h1` shifts as it always did, by the heading level less
+ * one; an item with no heading has none to shift. The body is read once, however many walks of
+ * one render ask ({@link shallowestLevelOf}).
+ *
+ * @param body The payload's body, which holds every heading the emitter writes for the item.
+ * @param headingLevel The configured heading level, 1 to 6.
+ * @returns The offset {@link tagFor} adds to an authored level.
+ */
+const headingOffsetOf = (body: readonly PayloadNode[], headingLevel: number): number =>
+  headingLevel - shallowestLevelOf(body);
+
+/**
  * Start a walk over nodes that stand at a position.
  *
- * @param payload The payload, which gives the item instance key.
+ * @param payload The payload, which gives the item instance key and the body the heading offset is
+ *   read from.
  * @param state The emit state, which gives the locale, the heading level, the asset base and the
  *   part overrides.
  * @param renderInteraction The render function for an interaction among the nodes.
@@ -705,7 +808,7 @@ const walkOf = (
   position: Position,
 ): Walk => ({
   assetBase: state.assetBase,
-  headingLevel: state.headingLevel,
+  headingOffset: headingOffsetOf(payload.body, state.headingLevel),
   instance: payload.instance,
   locale: state.locale,
   parts: state.parts,

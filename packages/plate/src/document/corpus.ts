@@ -7,7 +7,7 @@
  *
  * @module
  */
-import { readFile, stat } from "node:fs/promises";
+import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { Config, Effect, Schema } from "effect";
 
@@ -87,6 +87,20 @@ export class CorpusFileUnreadable extends Schema.TaggedError<CorpusFileUnreadabl
 }
 
 /**
+ * Confirm that the corpus root is a directory.
+ *
+ * @param root The directory {@link corpusRoot} resolved.
+ * @returns Nothing; {@link CorpusMissing} when it does not exist or is not a directory.
+ */
+const requireRoot = (root: string): Effect.Effect<void, CorpusMissing> => {
+  const missing = new CorpusMissing({ command: extractionCommand, root });
+
+  return Effect.tryPromise({ catch: () => missing, try: () => stat(root) }).pipe(
+    Effect.flatMap((stats) => (stats.isDirectory() ? Effect.void : Effect.fail(missing))),
+  );
+};
+
+/**
  * Read the bytes of one corpus file, named by its path relative to {@link corpusRoot}.
  *
  * A path that resolves outside the root, `..` segments or an absolute path, fails as
@@ -115,12 +129,7 @@ export const readCorpusFile = Effect.fn("readCorpusFile")(function* readCorpusFi
     });
   }
 
-  const missing = new CorpusMissing({ command: extractionCommand, root });
-  const rootStats = yield* Effect.tryPromise({ catch: () => missing, try: () => stat(root) });
-
-  if (!rootStats.isDirectory()) {
-    return yield* missing;
-  }
+  yield* requireRoot(root);
 
   return yield* Effect.tryPromise({
     catch: (cause) =>
@@ -131,3 +140,48 @@ export const readCorpusFile = Effect.fn("readCorpusFile")(function* readCorpusFi
     try: () => readFile(file),
   });
 });
+
+/**
+ * The folder under the corpus root that holds the QTI 2.2 examples, which the document set leaves
+ * out.
+ */
+const qti2Folder = "qtiv2p2-examples";
+
+/**
+ * The corpus's document set: every regular file whose name ends in `.xml` under {@link corpusRoot},
+ * at any depth, outside the root's own `qtiv2p2-examples/` folder.
+ *
+ * Each member is a corpus-relative POSIX path, the form {@link readCorpusFile} takes, and the set
+ * is sorted in JavaScript's default string order. A nested zip's extracted copy, under `X.zip.d/`,
+ * is a member like any other file. Symbolic links are not followed, so a link is never a member. It
+ * is the one list the sweeps, the playground and the one command read.
+ *
+ * Fails with {@link CorpusMissing} when the root directory does not exist,
+ * {@link CorpusFileUnreadable} when a directory under it cannot be listed, and a `ConfigError` when
+ * neither `PLATE_CORPUS_DIR` nor `HOME` is set.
+ */
+export const corpusDocuments: Effect.Effect<
+  readonly string[],
+  CorpusMissing | CorpusFileUnreadable | Config.ConfigError
+> = Effect.gen(function* corpusDocuments() {
+  const root = yield* corpusRoot;
+
+  yield* requireRoot(root);
+
+  const entries = yield* Effect.tryPromise({
+    catch: (cause) =>
+      new CorpusFileUnreadable({
+        detail: `${cause instanceof Error ? cause.message : String(cause)}; make every directory under the corpus root ${root} readable`,
+        path: ".",
+      }),
+    try: () => readdir(root, { recursive: true, withFileTypes: true }),
+  });
+
+  return entries
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".xml"))
+    .map((entry) =>
+      path.relative(root, path.join(entry.parentPath, entry.name)).split(path.sep).join("/"),
+    )
+    .filter((member) => !member.startsWith(`${qti2Folder}/`))
+    .toSorted();
+}).pipe(Effect.withSpan("corpusDocuments"));

@@ -12,9 +12,15 @@ import type { Element } from "@qti-pie/crust/tree.ts";
  */
 
 /**
- * Which processing language a root element is written in.
+ * Which processing language a root element is written in: the three processing languages, whose
+ * roots hold statements, and `expression`, whose root (`qti-pre-condition`, `qti-branch-rule` or
+ * `qti-template-default`) holds exactly one expression.
+ *
+ * An `expression` tree has one top-level rule, the root itself as a holder at the empty position,
+ * so its attributes and its expression read like those of any other holder. Its outcome-only
+ * expressions are refused as outside outcome processing (P25).
  */
-export type Language = "response" | "outcome" | "template";
+export type Language = "response" | "outcome" | "template" | "expression";
 
 /**
  * Where a node sits in its document: the index of the node among its parent's element children,

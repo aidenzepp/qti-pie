@@ -13,6 +13,7 @@ import type { AdmissionRow, SchemaVersionHandle } from "#pantry/schema/kinds/gen
 import * as html from "#pantry/schema/kinds/html.ts";
 import * as lom from "#pantry/schema/kinds/lom.ts";
 import * as qmd from "#pantry/schema/kinds/qmd.ts";
+import * as test from "#pantry/schema/kinds/test.ts";
 import * as ud from "#pantry/schema/kinds/ud.ts";
 import * as xi from "#pantry/schema/kinds/xi.ts";
 import { NodeKind, SchemaVersion } from "#pantry/schema/node.ts";
@@ -41,6 +42,7 @@ export const registries = [
   csmd.registry,
   ud.registry,
   xi.registry,
+  test.registry,
 ];
 
 const kindOrder: ReadonlyMap<string, number> = new Map(
@@ -97,6 +99,7 @@ const kindsRows: readonly AdmissionRow[] = [
   ...csmd.admission,
   ...ud.admission,
   ...xi.admission,
+  ...test.admission,
   ...foreign.admission,
 ];
 

@@ -5,24 +5,31 @@
  * item the page may know into a {@link Redacted}, and {@link payload} copies a `Redacted` and the
  * author's {@link View} into the {@link Payload}, the only input the emitter receives. Each copies
  * every field it names one by one and never spreads a model object, so a field the model gains
- * reaches the page only when this file names it. Nothing here holds a correct response, a mapping,
- * a response or outcome default, a processing rule, the seed, a template value or feedback
- * content: what the page cannot be given, it cannot leak.
+ * reaches the page only when this file names it. Neither copy holds a correct response, a mapping,
+ * a response or outcome default, a processing rule, a template value or feedback content, and the
+ * payload holds no seed: the view's seed only orders a shuffled Choice's choices. What the page
+ * cannot be given, it cannot leak.
  *
  * @module
  * @see {@link Item} for the model it reads.
  */
 import { Array as Arr, Option } from "effect";
 import type { Brand } from "effect";
-import { scopedId, splitIdrefs } from "#plate/emit/parts.ts";
+import { controlCap, exceedsControlCap } from "#plate/control-cap.ts";
+import { scopedId } from "#plate/emit/parts.ts";
 import type { Resolved } from "#plate/emit/parts.ts";
+import { shuffleOrder } from "#plate/engine/random.ts";
 import { entryName } from "#plate/form/encoding.ts";
+import { authorsLabel, resolvedLabelledby } from "#plate/interactions/name.ts";
 import type { Locale } from "#plate/messages.ts";
+import { interactionsIn } from "#plate/model/interactions.ts";
 import type {
   BodyNode,
   ChoiceInteraction,
   ExtendedTextInteraction,
+  Interaction,
   Item,
+  SimpleChoice,
   TextEntryInteraction,
 } from "#plate/model/item.ts";
 import { format } from "#plate/model/values.ts";
@@ -40,8 +47,8 @@ export interface ValidationMessage {
 }
 
 /**
- * The author's inputs to one render: the instance, the values to show, the entry names, and the
- * messages of a post the author refused.
+ * The author's inputs to one render: the instance, the seed, the values to show, the entry names,
+ * and the messages of a post the author refused.
  *
  * The library decides no flow, so every field is the author's: each map is keyed by response
  * identifier, and a response it omits takes the default the field names. `messages` decides how
@@ -66,6 +73,11 @@ export interface View {
    */
   readonly names: ReadonlyMap<string, string>;
   readonly posted: Option.Option<ReadonlyMap<string, readonly string[]>>;
+  /**
+   * The configuration's `seed`, which keys a shuffled Choice's order with the instance and the
+   * response; keyed as the empty string when absent.
+   */
+  readonly seed?: number;
   /**
    * The value each response's controls show, such as its `defaultValue` or a value the author's
    * flow recorded; NULL when absent.
@@ -148,7 +160,7 @@ export interface ValidationPayload {
 
 /**
  * A Choice as the page may know it (Q-2): its binding, its constraints, its Prompt, its choices in
- * document order, and the identifiers to show as checked.
+ * the order they are presented, and the identifiers to show as checked.
  */
 export interface ChoicePayload extends ValidationPayload {
   /**
@@ -156,11 +168,17 @@ export interface ChoicePayload extends ValidationPayload {
    */
   readonly ariaLabel: Option.Option<string>;
   /**
-   * The author's `aria-labelledby`, the ids unscoped, which names the group when there is no
-   * Prompt.
+   * The ids of the author's `aria-labelledby` that an element of the item carries, unscoped
+   * ({@link resolvedLabelledby}), which name the group when there is no Prompt; none when the
+   * author wrote none or none of its ids is carried.
    */
   readonly ariaLabelledby: Option.Option<string>;
   readonly cardinality: "multiple" | "single";
+  /**
+   * The choices in presented order: for a Choice with `shuffle` true, the order the view's seed,
+   * the instance and the response key, each fixed choice at its document position; else document
+   * order.
+   */
   readonly choices: readonly {
     readonly content: readonly PayloadNode[];
     readonly identifier: string;
@@ -187,22 +205,35 @@ export interface ChoicePayload extends ValidationPayload {
 }
 
 /**
+ * Where a text control's first Control stands among the Controls the renderer names (Q10): `n`,
+ * from 1, among the `count` of the item.
+ */
+export interface UnnamedPosition {
+  readonly count: number;
+  readonly n: number;
+}
+
+/**
  * How a text control is named (§4.8, Q10).
  *
- * `ariaLabel` and `ariaLabelledby` are the author's, the ids unscoped. `unnamed` is set exactly
- * when the control has neither of them nor a Prompt, an `ariaLabelledby` that names no id
- * counting as none: its position `n`, from 1, among the `count` such controls of the item, in
- * document order.
+ * `ariaLabel` is the author's, as written. `ariaLabelledby` holds the ids of the author's that an
+ * element of the item carries, unscoped ({@link resolvedLabelledby}), none when none is carried.
+ * `unnamed` is set exactly when the renderer names the control's Controls: it has neither of them
+ * nor a Prompt, a blank `ariaLabel` counting as none, and it renders at least one Control. Every
+ * Control the renderer names counts once, in document order across the item, which is the order
+ * the Controls are emitted in: a Text Entry's one Control and each Control of an Extended Text. `n`
+ * is the position of the control's first Control, an Extended Text's others following at `n + 1`
+ * onwards, and `count` is how many there are.
  */
 export interface TextName {
   readonly ariaLabel: Option.Option<string>;
   readonly ariaLabelledby: Option.Option<string>;
-  readonly unnamed: Option.Option<{ readonly count: number; readonly n: number }>;
+  readonly unnamed: Option.Option<UnnamedPosition>;
 }
 
 /**
  * What a Text Entry and an Extended Text share: the binding, the integer `base`, the placeholder,
- * the entry name, the accessible name and the text to restore.
+ * the entry name and the accessible name.
  */
 export interface TextControlPayload extends ValidationPayload {
   readonly base: number;
@@ -228,11 +259,6 @@ export interface TextControlPayload extends ValidationPayload {
    * The identifier of the response it binds.
    */
   readonly response: string;
-  /**
-   * The text the control shows: the string posted when the view has messages, else the view's
-   * value written in its lexical form, an integer in `base`; empty for NULL.
-   */
-  readonly restore: string;
 }
 
 /**
@@ -241,17 +267,44 @@ export interface TextControlPayload extends ValidationPayload {
 export interface TextEntryPayload extends TextControlPayload {
   readonly expectedLength: Option.Option<bigint>;
   readonly kind: "text-entry";
+  /**
+   * The text the Control shows: the string posted when the view has messages, else the view's
+   * value written in its lexical form, an integer in `base`; empty for NULL.
+   */
+  readonly restore: string;
 }
 
 /**
  * An Extended Text as the page may know it (Q-5): a text control with `expected-lines`, a
- * `format` and a Prompt.
+ * `format`, a Prompt, its binding's cardinality, and its `n` Controls with the text each restores,
+ * or the notice that stands in their place.
  */
 export interface ExtendedTextPayload extends TextControlPayload {
+  readonly cardinality: ExtendedTextInteraction["cardinality"];
   readonly expectedLines: Option.Option<bigint>;
-  readonly format: "plain" | "preformatted";
+  readonly format: ExtendedTextInteraction["format"];
   readonly kind: "extended-text";
+  /**
+   * The number of Controls (Q9): 1 for a `single` binding; for a container, `max-strings` when it
+   * is from 1 to 10, else the greater of 10 and `min-strings`, so `max-strings="0"` and an absent
+   * one give at least 10 (reading 53). It also covers every member of the value or post it
+   * restores, up to a nonzero `max-strings`. At most 100 (Q23), and 0 when `min-strings` exceeds
+   * 100.
+   */
+  readonly n: number;
+  /**
+   * The cap's notice, `min-strings>100` (Q23): in place of the Controls when `min-strings` exceeds
+   * 100, `n` then 0, or beside the first 100 Controls when the value or post restored holds more
+   * members than they do; none otherwise.
+   */
+  readonly notice: Option.Option<NoticePayload>;
   readonly prompt: Option.Option<readonly PayloadNode[]>;
+  /**
+   * The text each Control shows, one per Control in order: the strings posted when the view has
+   * messages, else the view's values, each written as {@link TextEntryPayload.restore} writes one;
+   * empty for a Control with none.
+   */
+  readonly restores: readonly string[];
 }
 
 /**
@@ -345,11 +398,6 @@ export const brandRedacted = (fields: RedactedFields): Redacted =>
   fields as Redacted;
 
 /**
- * An interaction of the item model.
- */
-type Interaction = ChoiceInteraction | ExtendedTextInteraction | TextEntryInteraction;
-
-/**
  * What one payload build knows about the whole item while it copies one node.
  */
 interface Build {
@@ -357,6 +405,10 @@ interface Build {
    * The interaction whose first Control takes `autofocus`, if any.
    */
   readonly autofocus: Option.Option<Interaction>;
+  /**
+   * The ids the author gave the item's elements, unscoped ({@link authoredIdsIn}).
+   */
+  readonly ids: ReadonlySet<string>;
   readonly instance: string;
   readonly messages: readonly MessagePayload[];
   readonly names: View["names"];
@@ -365,37 +417,44 @@ interface Build {
    */
   readonly posted: Option.Option<ReadonlyMap<string, readonly string[]>>;
   /**
-   * The text controls with no authored name and no Prompt, in document order.
+   * The view's seed written with `String`, the empty string when the view has none.
    */
-  readonly unnamed: readonly Interaction[];
+  readonly seed: string;
+  /**
+   * Each text control the renderer names, with where its first Control stands among the Controls
+   * the renderer names ({@link TextName}).
+   */
+  readonly unnamed: ReadonlyMap<Interaction, UnnamedPosition>;
   readonly values: View["values"];
 }
 
 /**
- * Collect the interactions of body nodes in document order, inside elements, Prompts and choices.
+ * Collect the ids the author gave the elements of body nodes, in document order: the `id` of
+ * every element, below elements and in Prompts and choice content, the places {@link copyNodes}
+ * copies, so each one is an id an element of the rendered item carries.
  *
  * @param nodes The body nodes.
- * @returns The interactions.
+ * @returns The ids, unscoped.
  */
-const interactionsIn = (nodes: readonly BodyNode[]): readonly Interaction[] =>
-  nodes.flatMap((node): readonly Interaction[] => {
+const authoredIdsIn = (nodes: readonly BodyNode[]): readonly string[] =>
+  nodes.flatMap((node): readonly string[] => {
     switch (node.kind) {
       case "element": {
-        return interactionsIn(node.children);
+        return [
+          ...node.attributes.flatMap(({ name, value }) => (name === "id" ? [value] : [])),
+          ...authoredIdsIn(node.children),
+        ];
       }
       case "choice": {
         return [
-          node,
-          ...interactionsIn(Option.getOrElse(node.prompt, () => [])),
-          ...node.choices.flatMap((choice) => interactionsIn(choice.content)),
+          ...authoredIdsIn(Option.getOrElse(node.prompt, () => [])),
+          ...node.choices.flatMap((choice) => authoredIdsIn(choice.content)),
         ];
       }
       case "extended-text": {
-        return [node, ...interactionsIn(Option.getOrElse(node.prompt, () => []))];
+        return authoredIdsIn(Option.getOrElse(node.prompt, () => []));
       }
-      case "text-entry": {
-        return [node];
-      }
+      case "text-entry":
       case "text":
       case "unsupported": {
         return [];
@@ -407,16 +466,18 @@ const interactionsIn = (nodes: readonly BodyNode[]): readonly Interaction[] =>
   });
 
 /**
- * Report whether an interaction is a text control with no authored name and no Prompt (Q10). An
- * `aria-labelledby` that names no id is no authored name.
+ * Report whether an interaction is a text control with no authored name and no Prompt (Q10). A
+ * blank `aria-label` ({@link authorsLabel}) and an `aria-labelledby` none of whose ids an element
+ * of the item carries ({@link resolvedLabelledby}) are no authored names.
  *
  * @param interaction The interaction.
+ * @param ids The ids the author gave the item's elements.
  * @returns Whether the renderer must name it.
  */
-const isUnnamed = (interaction: Interaction): boolean =>
+const isUnnamed = (interaction: Interaction, ids: ReadonlySet<string>): boolean =>
   interaction.kind !== "choice" &&
-  Option.isNone(interaction.ariaLabel) &&
-  !Option.exists(interaction.ariaLabelledby, (ids) => splitIdrefs(ids).length > 0) &&
+  Option.isNone(authorsLabel(interaction)) &&
+  Option.isNone(resolvedLabelledby(interaction, ids)) &&
   (interaction.kind === "text-entry" || Option.isNone(interaction.prompt));
 
 /**
@@ -449,7 +510,7 @@ export const identifyMessages = (
  * @param response The response identifier.
  * @returns Its values, none when it is NULL or the view gives none.
  */
-const shown = (build: Build, response: string): readonly Single[] =>
+const shown = (build: Pick<Build, "values">, response: string): readonly Single[] =>
   build.values.get(response)?.values ?? [];
 
 /**
@@ -509,6 +570,33 @@ const copyNodes = (nodes: readonly BodyNode[], build: Build): readonly PayloadNo
   nodes.map((node) => copyNode(node, build));
 
 /**
+ * The separator of a shuffle key's three fields, U+001F INFORMATION SEPARATOR ONE, which no number
+ * written with `String`, checked instance token or identifier holds.
+ */
+const keySeparator = "\u001F";
+
+/**
+ * Give a Choice's choices in the order they are presented.
+ *
+ * A Choice with `shuffle` true is presented in {@link shuffleOrder}'s order under the key
+ * `<seed>\u001F<instance>\u001F<response>`: its non-fixed choices are permuted among the non-fixed
+ * positions, and each fixed choice keeps its document position. Any other Choice keeps document
+ * order. The order is presentation only: scores, records and validation read identifiers, never
+ * positions.
+ *
+ * @param interaction The Choice.
+ * @param build The build, which gives the seed and the instance.
+ * @returns The choices, in presented order.
+ */
+const presentedChoices = (interaction: ChoiceInteraction, build: Build): readonly SimpleChoice[] =>
+  interaction.shuffle
+    ? shuffleOrder(
+        [build.seed, build.instance, interaction.response].join(keySeparator),
+        interaction.choices.map((choice) => choice.fixed),
+      ).flatMap((index) => interaction.choices[index] ?? [])
+    : interaction.choices;
+
+/**
  * Copy a Choice into its payload.
  *
  * @param interaction The Choice.
@@ -519,9 +607,9 @@ const copyNodes = (nodes: readonly BodyNode[], build: Build): readonly PayloadNo
 const choicePayload = (interaction: ChoiceInteraction, build: Build): ChoicePayload => ({
   ...validationOf(interaction, build),
   ariaLabel: interaction.ariaLabel,
-  ariaLabelledby: interaction.ariaLabelledby,
+  ariaLabelledby: resolvedLabelledby(interaction, build.ids),
   cardinality: interaction.cardinality,
-  choices: interaction.choices.map((choice) => ({
+  choices: presentedChoices(interaction, build).map((choice) => ({
     content: copyNodes(choice.content, build),
     identifier: choice.identifier,
   })),
@@ -549,34 +637,188 @@ const choicePayload = (interaction: ChoiceInteraction, build: Build): ChoicePayl
 const textControlPayload = (
   interaction: ExtendedTextInteraction | TextEntryInteraction,
   build: Build,
-): TextControlPayload => {
-  const position = build.unnamed.indexOf(interaction);
+): TextControlPayload => ({
+  ...validationOf(interaction, build),
+  base: interaction.base,
+  baseType: interaction.baseType,
+  class: interaction.class,
+  formName: formNameOf(build, interaction.response),
+  name: {
+    ariaLabel: interaction.ariaLabel,
+    ariaLabelledby: resolvedLabelledby(interaction, build.ids),
+    unnamed: Option.fromNullishOr(build.unnamed.get(interaction)),
+  },
+  placeholder: interaction.placeholder,
+  response: interaction.response,
+});
+
+/**
+ * Copy a Text Entry into its payload.
+ *
+ * @param interaction The Text Entry.
+ * @param build The build.
+ * @returns Its payload; `restore` holds the posted string when the view has messages, else the
+ *   view's value in its lexical form.
+ */
+const textEntryPayload = (interaction: TextEntryInteraction, build: Build): TextEntryPayload => ({
+  ...textControlPayload(interaction, build),
+  expectedLength: interaction.expectedLength,
+  kind: "text-entry",
+  restore: Option.match(build.posted, {
+    onNone: () =>
+      Option.match(Arr.head(shown(build, interaction.response)), {
+        onNone: () => "",
+        onSome: (single) => writeIn(single, interaction.base),
+      }),
+    onSome: (posted) => posted.get(interaction.response)?.[0] ?? "",
+  }),
+});
+
+/**
+ * The number of Controls a container renders when `max-strings` does not fix it (Q9).
+ */
+const defaultControls = 10n;
+
+/**
+ * Give the larger of two counts.
+ *
+ * @param left One count.
+ * @param right The other.
+ * @returns The larger.
+ */
+const larger = (left: bigint, right: bigint): bigint => (left > right ? left : right);
+
+/**
+ * Give the smaller of two counts.
+ *
+ * @param left One count.
+ * @param right The other.
+ * @returns The smaller.
+ */
+const smaller = (left: bigint, right: bigint): bigint => (left < right ? left : right);
+
+/**
+ * How many Controls an Extended Text renders, and whether the cap's notice shows.
+ */
+interface Controls {
+  readonly n: number;
+  /**
+   * Whether the cap (Q23) holds back what the item or its value asks for: `min-strings` above
+   * 100, or a value with more members than 100 Controls hold.
+   */
+  readonly overCap: boolean;
+}
+
+/**
+ * Count the Controls an Extended Text renders.
+ *
+ * Q9 gives a container `max-strings` Controls when it is from 1 to 10, else the greater of 10 and
+ * `min-strings`; `max-strings="0"` restricts nothing (reading 53). So restoring drops no answer
+ * silently, `n` also covers each member the restored or posted value holds, up to `max-strings`
+ * when it restricts and up to the cap of 100 (Q23). Over the cap, the first 100 show beside the
+ * cap's notice; a `min-strings` above 100 leaves no Control, the notice in their place.
+ *
+ * @param interaction The Extended Text.
+ * @param members How many members the value or post to restore holds.
+ * @returns The count, from 0 to 100, and whether the cap's notice shows.
+ */
+const controlsOf = (interaction: ExtendedTextInteraction, members: number): Controls => {
+  if (exceedsControlCap(interaction.minStrings)) {
+    return { n: 0, overCap: true };
+  }
+
+  if (interaction.cardinality === "single") {
+    return { n: 1, overCap: false };
+  }
+
+  const limit = interaction.maxStrings.pipe(Option.filter((maxStrings) => maxStrings > 0n));
+  const asked = Option.getOrElse(
+    limit.pipe(Option.filter((maxStrings) => maxStrings <= defaultControls)),
+    () => larger(defaultControls, interaction.minStrings),
+  );
+  const held = Option.match(limit, {
+    onNone: () => BigInt(members),
+    onSome: (maxStrings) => smaller(BigInt(members), maxStrings),
+  });
+  const cap = controlCap.when.limit;
+
+  return { n: Number(larger(asked, smaller(held, cap))), overCap: held > cap };
+};
+
+/**
+ * Give the texts an Extended Text's Controls restore: the strings posted when the view has
+ * messages, else the view's values, each written in the control's `base`.
+ *
+ * @param interaction The Extended Text.
+ * @param build The build, which gives the posted strings and the values.
+ * @returns The texts, in order; none for NULL or an empty post.
+ */
+const entriesOf = (
+  interaction: ExtendedTextInteraction,
+  build: Pick<Build, "posted" | "values">,
+): readonly string[] =>
+  Option.match(build.posted, {
+    onNone: () =>
+      shown(build, interaction.response).map((single) => writeIn(single, interaction.base)),
+    onSome: (posted) => posted.get(interaction.response) ?? [],
+  });
+
+/**
+ * Copy an Extended Text into its payload.
+ *
+ * @param interaction The Extended Text.
+ * @param build The build.
+ * @returns Its payload: `n` Controls, each restoring the posted string or value at its place, and
+ *   the cap's notice when the cap holds back what the item or its value asks for.
+ */
+const extendedTextPayload = (
+  interaction: ExtendedTextInteraction,
+  build: Build,
+): ExtendedTextPayload => {
+  const entries = entriesOf(interaction, build);
+  const { n, overCap } = controlsOf(interaction, entries.length);
 
   return {
-    ...validationOf(interaction, build),
-    base: interaction.base,
-    baseType: interaction.baseType,
-    class: interaction.class,
-    formName: formNameOf(build, interaction.response),
-    name: {
-      ariaLabel: interaction.ariaLabel,
-      ariaLabelledby: interaction.ariaLabelledby,
-      unnamed:
-        position === -1
-          ? Option.none()
-          : Option.some({ count: build.unnamed.length, n: position + 1 }),
-    },
-    placeholder: interaction.placeholder,
-    response: interaction.response,
-    restore: Option.match(build.posted, {
-      onNone: () =>
-        Option.match(Arr.head(shown(build, interaction.response)), {
-          onNone: () => "",
-          onSome: (single) => writeIn(single, interaction.base),
-        }),
-      onSome: (posted) => posted.get(interaction.response)?.[0] ?? "",
-    }),
+    ...textControlPayload(interaction, build),
+    cardinality: interaction.cardinality,
+    expectedLines: interaction.expectedLines,
+    format: interaction.format,
+    kind: "extended-text",
+    n,
+    notice: overCap ? Option.some({ feature: controlCap.feature, kind: "notice" }) : Option.none(),
+    prompt: interaction.prompt.pipe(Option.map((prompt) => copyNodes(prompt, build))),
+    restores: Array.from({ length: n }, (_, index) => entries[index] ?? ""),
   };
+};
+
+/**
+ * Number the Controls the renderer names (Q10), in document order across the item: a Text Entry's
+ * one Control and each Control of an Extended Text, for each text control with no authored name
+ * and no Prompt. An Extended Text that renders no Control, over the cap, takes no position.
+ *
+ * @param interactions The item's interactions, in document order.
+ * @param build The build's ids, which say whether an `aria-labelledby` names an element, and its
+ *   posted strings and values, which give an Extended Text its Controls.
+ * @returns Each text control the renderer names, with where its first Control stands.
+ */
+const unnamedPositions = (
+  interactions: readonly Interaction[],
+  build: Pick<Build, "ids" | "posted" | "values">,
+): ReadonlyMap<Interaction, UnnamedPosition> => {
+  const firsts: (readonly [Interaction, number])[] = [];
+  let next = 1;
+  for (const interaction of interactions.filter((each) => isUnnamed(each, build.ids))) {
+    const controls =
+      interaction.kind === "extended-text"
+        ? controlsOf(interaction, entriesOf(interaction, build).length).n
+        : 1;
+    if (controls > 0) {
+      firsts.push([interaction, next]);
+      next += controls;
+    }
+  }
+
+  return new Map(firsts.map(([interaction, n]) => [interaction, { count: next - 1, n }]));
 };
 
 /**
@@ -606,20 +848,10 @@ const copyNode = (node: BodyNode, build: Build): PayloadNode => {
       return choicePayload(node, build);
     }
     case "text-entry": {
-      return {
-        ...textControlPayload(node, build),
-        expectedLength: node.expectedLength,
-        kind: "text-entry",
-      };
+      return textEntryPayload(node, build);
     }
     case "extended-text": {
-      return {
-        ...textControlPayload(node, build),
-        expectedLines: node.expectedLines,
-        format: node.format,
-        kind: "extended-text",
-        prompt: node.prompt.pipe(Option.map((prompt) => copyNodes(prompt, build))),
-      };
+      return extendedTextPayload(node, build);
     }
     default: {
       return node satisfies never;
@@ -658,23 +890,30 @@ export const redactItem = (item: Item): Redacted =>
  * item and the author's inputs.
  *
  * @param redacted The item, through {@link redactItem}.
- * @param view The author's inputs: the instance, values, names, messages and posted strings.
+ * @param view The author's inputs: the instance, the seed, values, names, messages and posted
+ *   strings.
  * @returns The payload. It holds no correct response, mapping, default, processing rule, seed,
- *   template value or feedback content, whatever the view.
+ *   template value or feedback content, whatever the view; the seed only orders a shuffled
+ *   Choice's choices.
  */
 export const payload = (redacted: Redacted, view: View): Payload => {
   const messages = identifyMessages(view.instance, view.messages);
   const interactions = interactionsIn(redacted.body);
+  const restoring = {
+    ids: new Set(authoredIdsIn(redacted.body)),
+    posted: messages.length > 0 ? view.posted : Option.none(),
+    values: view.values,
+  };
   const build: Build = {
+    ...restoring,
     autofocus: Arr.findFirst(interactions, (interaction) =>
       messages.some((entry) => entry.response === interaction.response),
     ),
     instance: view.instance,
     messages,
     names: view.names,
-    posted: messages.length > 0 ? view.posted : Option.none(),
-    unnamed: interactions.filter(isUnnamed),
-    values: view.values,
+    seed: view.seed === undefined ? "" : String(view.seed),
+    unnamed: unnamedPositions(interactions, restoring),
   };
 
   return {

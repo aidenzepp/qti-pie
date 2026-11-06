@@ -1,0 +1,1029 @@
+import { assert, describe, it } from "@effect/vitest";
+import { Option } from "effect";
+import { toHtml } from "#plate/emit/serialise.ts";
+import type { Element } from "#plate/emit/node.ts";
+import { h } from "#plate/emit/node.ts";
+import { browserSupport } from "#plate/ledger/browser-support.ts";
+import { claims } from "#plate/ledger/claims.ts";
+import { exclusions, families, features, levels } from "#plate/ledger/features.ts";
+import { sessionNotes } from "#plate/ledger/passes.ts";
+import type { PassRecord, SessionNote } from "#plate/ledger/passes.ts";
+import { ledger } from "#plate/ledger/report.ts";
+import type { Ledger, TestResult } from "#plate/ledger/report.ts";
+import { standsInForSafari } from "#plate/ledger/runs.ts";
+import { ledgerHtml, ledgerText, verdictLines, verdictTable } from "#plate/ledger/view.ts";
+import { checkTree, textOf } from "#plate/test/accessibility.ts";
+import { bg007Item } from "#plate/test/fixtures.ts";
+import { roundTrips } from "#plate/test/round-trip.ts";
+import { Refusal } from "#plate/validate/refusal.ts";
+import { acceptForTest, describeRefusal } from "#plate/validate/verdict.ts";
+import type { Verdict } from "#plate/validate/verdict.ts";
+
+/**
+ * The corpus document the fixture sources name.
+ */
+const bg007 = "QTI3_BPIG_Examples/items/BG007.xml";
+
+/**
+ * The fixture results: tagged passing tests across the levels, a failing one, a title holding
+ * markup, and a sweep.
+ */
+const results: readonly TestResult[] = [
+  {
+    ancestorTitles: ["validate/open.ts"],
+    file: "src/validate/open.test.ts",
+    fullName: "validate/open.ts [Q-2] a Choice item is accepted",
+    state: "passed",
+  },
+  {
+    ancestorTitles: ["interactions/choice.ts"],
+    file: "src/interactions/choice.test.ts",
+    fullName: "interactions/choice.ts [Q-2] [keyboard] a Choice completes by keyboard",
+    state: "passed",
+  },
+  {
+    ancestorTitles: ["dev/page.ts"],
+    file: "src/dev/page.test.ts",
+    fullName: "dev/page.ts [Q-2] [keyboard] BG007 completes in the playground",
+    state: "passed",
+  },
+  {
+    ancestorTitles: [],
+    file: "src/interactions/text-entry.test.ts",
+    fullName: "[Q-20] a Text Entry takes text",
+    state: "failed",
+  },
+  {
+    ancestorTitles: ["styles.css"],
+    file: "src/styles.test.ts",
+    fullName: "styles.css [I-19] the vocabulary classes apply",
+    state: "passed",
+  },
+  {
+    ancestorTitles: [],
+    file: "src/corpus.render.test.ts",
+    fullName: "[I-7] [I-8] every document renders",
+    state: "passed",
+  },
+  {
+    ancestorTitles: ["emit/body.ts"],
+    file: "src/emit/body.test.ts",
+    fullName: "emit/body.ts [A-1] <script>alert(1)</script> stays text",
+    state: "passed",
+  },
+  {
+    ancestorTitles: [],
+    file: "src/validate/structure.test.ts",
+    fullName: "[A-2a] an elevated row is checked",
+    state: "passed",
+  },
+];
+
+/**
+ * The fields every fixture record shares.
+ */
+const recorded = {
+  browser: "Safari",
+  browserVersion: "26.1",
+  item: bg007,
+  macosVersion: "27.2",
+  notes: "",
+  owner: "operator",
+  reader: "VoiceOver",
+  readerVersion: "27.2",
+} as const;
+
+/**
+ * The fixture records: a screen-reader pass with JavaScript off, a keyboard walk-through, an
+ * OD-14 (e) proof whose control ran and one whose control did not, and NVDA and JAWS unavailable.
+ */
+const records: readonly PassRecord[] = [
+  {
+    ...recorded,
+    date: "2026-11-05",
+    interactions: ["Q-2"],
+    javascript: "off",
+    kind: "screen-reader-pass",
+    result: "passed",
+  },
+  {
+    ...recorded,
+    check: "keyboard-walk-through",
+    date: "2026-11-05",
+    javascript: "on",
+    kind: "manual-check",
+    result: "passed",
+  },
+  {
+    ...recorded,
+    check: "OD-14 (e)",
+    control: "ran",
+    date: "2026-11-06",
+    javascript: "on",
+    kind: "manual-check",
+    result: "passed",
+  },
+  {
+    ...recorded,
+    check: "OD-14 (e)",
+    control: "did-not-run",
+    date: "2026-11-06",
+    javascript: "off",
+    kind: "manual-check",
+    result: "not-observed",
+  },
+  {
+    ...recorded,
+    date: "2026-11-05",
+    javascript: "on",
+    kind: "unavailable-reader",
+    reader: "NVDA",
+    readerVersion: "",
+    result: "unavailable",
+  },
+  {
+    ...recorded,
+    date: "2026-11-05",
+    javascript: "on",
+    kind: "unavailable-reader",
+    reader: "JAWS",
+    readerVersion: "",
+    result: "unavailable",
+  },
+];
+
+/**
+ * The reporter's inputs every fixture ledger shares: the real features file, exclusions and
+ * claims, beside the fixture results and sources.
+ */
+const inputs = {
+  browserRuns: [],
+  claims,
+  corpus: new Set([bg007]),
+  exclusions,
+  features,
+  results,
+  sources: new Map([["src/validate/open.test.ts", `const location = "${bg007}";`]]),
+};
+
+/**
+ * The fixture ledger, derived by the reporter from the real features file, exclusions and claims.
+ */
+const fixture = ledger({ ...inputs, records });
+
+/**
+ * The fixture ledger with one browser run: Chromium, and WebKit standing in for Safari.
+ */
+const runsLedger: Ledger = {
+  ...fixture,
+  browserRuns: [
+    {
+      date: "2026-11-05T18:57:26.239Z",
+      engine: "chromium",
+      failed: 1,
+      od14: { control: "passed", proof: "passed", result: "passed" },
+      passed: 41,
+      playwright: "1.64.1",
+      version: "156.0.8078.4",
+    },
+    {
+      date: "2026-11-05T18:57:26.239Z",
+      engine: "webkit",
+      failed: 0,
+      od14: { control: "passed", proof: "failed", result: "failed" },
+      passed: 42,
+      playwright: "1.64.1",
+      standsInFor: "Safari",
+      version: "27.2",
+    },
+  ],
+};
+
+/**
+ * The words the view gives the browser run of {@link runsLedger} beside each entry it replaced.
+ */
+const replacedLine = "  Replaced by the browser run of 2026-11-05T18:57:26.239Z (rule c8a113fd)";
+
+/**
+ * The words the view gives each engine's OD-14 (e) result in {@link runsLedger}.
+ */
+const od14Lines = [
+  "OD-14 (e) in Chromium 156.0.8078.4: passed (the control (a) passed and the proof (b) passed)",
+  "OD-14 (e) in WebKit 27.2: failed (the control (a) passed and the proof (b) failed)",
+] as const;
+
+/**
+ * The fixture records of one sitting, as the first one ran: an Extended Text pass that passed and,
+ * recorded later the same day, one that failed, and a Text Entry pass the sitting left open.
+ */
+const sitting: readonly PassRecord[] = [
+  {
+    ...recorded,
+    date: "2026-11-05",
+    interactions: ["Q-5"],
+    javascript: "on",
+    kind: "screen-reader-pass",
+    result: "passed",
+  },
+  {
+    ...recorded,
+    date: "2026-11-05",
+    interactions: ["Q-5"],
+    javascript: "on",
+    kind: "screen-reader-pass",
+    result: "failed",
+  },
+  {
+    ...recorded,
+    date: "2026-11-05",
+    interactions: ["Q-20"],
+    javascript: "on",
+    kind: "screen-reader-pass",
+    result: "not-observed",
+  },
+];
+
+/**
+ * The fixture ledger over {@link sitting}.
+ */
+const sittingLedger = ledger({ ...inputs, records: sitting });
+
+/**
+ * The fixture session notes: two sittings, the second note holding markup.
+ */
+const notes: readonly SessionNote[] = [
+  { date: "2026-11-05", owner: "operator", text: "JavaScript was left on throughout." },
+  { date: "2026-11-06", owner: "overseer", text: "<b>Step 2</b> follows." },
+];
+
+/**
+ * The lines the view gives {@link notes}, in text and in the HTML's list.
+ */
+const noteLines = [
+  "Date: 2026-11-05; Owner: operator; Note: JavaScript was left on throughout.",
+  "Date: 2026-11-06; Owner: overseer; Note: <b>Step 2</b> follows.",
+] as const;
+
+/**
+ * Every element below a node, in document order.
+ *
+ * @param node The node.
+ * @returns Its element descendants.
+ */
+const descendants = (node: Element): readonly Element[] =>
+  node.children.flatMap((child) =>
+    child.kind === "element" ? [child, ...descendants(child)] : [],
+  );
+
+/**
+ * The elements below a node with one tag.
+ *
+ * @param node The node.
+ * @param tag The tag.
+ * @returns Its descendants with that tag, in document order.
+ */
+const byTag = (node: Element, tag: string): readonly Element[] =>
+  descendants(node).filter((element) => element.tag === tag);
+
+/**
+ * The element children of a node.
+ *
+ * @param node The node.
+ * @returns Its children that are elements.
+ */
+const childElements = (node: Element): readonly Element[] =>
+  node.children.filter((child): child is Element => child.kind === "element");
+
+/**
+ * Read a table's body rows, each a map from its column header's text to its cell.
+ *
+ * @param table The table.
+ * @returns Its rows, in order.
+ */
+const rowsOf = (table: Element): readonly ReadonlyMap<string, Element>[] => {
+  const headers = byTag(byTag(table, "thead")[0] ?? h("thead", {}), "th").map(textOf);
+
+  return childElements(byTag(table, "tbody")[0] ?? h("tbody", {})).map(
+    (row) => new Map(childElements(row).map((cell, index) => [headers[index] ?? "", cell])),
+  );
+};
+
+/**
+ * Find the table with a caption.
+ *
+ * @param root The tree.
+ * @param caption The caption's text.
+ * @returns The table.
+ */
+const tableCaptioned = (root: Element, caption: string): Element => {
+  const table = byTag(root, "table").find(
+    (candidate) => textOf(childElements(candidate)[0] ?? h("caption", {})) === caption,
+  );
+  assert.isDefined(table, caption);
+
+  return table;
+};
+
+/**
+ * Read one cell of the family-table row headed by a feature ID.
+ *
+ * @param root The ledger's tree.
+ * @param id The feature ID.
+ * @param column The column header.
+ * @returns The cell.
+ */
+const cellOf = (root: Element, id: string, column: string): Element => {
+  const row = byTag(root, "table")
+    .flatMap(rowsOf)
+    .find((candidate) => textOf(candidate.get("ID") ?? h("th", {})) === id);
+  const cell = row?.get(column);
+  assert.isDefined(cell, `${id} ${column}`);
+
+  return cell;
+};
+
+/**
+ * Read one field of a row in the ledger's text: the line under the row's ID and name that starts
+ * with the field's label.
+ *
+ * @param text The ledger's text.
+ * @param id The feature ID.
+ * @param label The field's label, such as `Screen-reader pass`.
+ * @returns The field's words, `undefined` when the row has no such field.
+ */
+const rowField = (text: string, id: string, label: string): string | undefined => {
+  const lines = text.split("\n");
+  const block = lines.slice(lines.findIndex((line) => line.startsWith(`${id} `)) + 1);
+  const end = block.findIndex((line) => !line.startsWith(" "));
+  const prefix = `  ${label}: `;
+
+  return (end === -1 ? block : block.slice(0, end))
+    .find((line) => line.startsWith(prefix))
+    ?.slice(prefix.length);
+};
+
+/**
+ * Find the element that follows a heading among a tree's children.
+ *
+ * @param root The tree.
+ * @param heading The heading's text.
+ * @returns The element after it.
+ */
+const afterHeading = (root: Element, heading: string): Element => {
+  const children = childElements(root);
+  const index = children.findIndex((child) => textOf(child) === heading);
+  assert.notStrictEqual(index, -1, heading);
+
+  const next = children[index + 1];
+  assert.isDefined(next, heading);
+
+  return next;
+};
+
+/**
+ * The words the view gives each level.
+ */
+const levelWords = {
+  advanced: "Advanced",
+  basic: "Basic",
+  elective: "Elective",
+  elevated: "Elevated",
+} as const;
+
+/**
+ * The words the view gives each family.
+ */
+const familyWords = {
+  A: "Accessibility (A)",
+  I: "Items (I)",
+  M: "Metadata (M)",
+  P: "Packaging (P)",
+  Q: "Interactions (Q)",
+  S: "Sections (S)",
+  T: "Tests (T)",
+} as const;
+
+/**
+ * The family captions the fixture ledger needs, in level order and then family order.
+ */
+const expectedCaptions = levels.flatMap((level) =>
+  families
+    .filter((family) => fixture.rows.some((row) => row.level === level && row.family === family))
+    .map((family) => `${levelWords[level]}: ${familyWords[family]}`),
+);
+
+/**
+ * The headline the view gives a level.
+ *
+ * @param level The level.
+ * @returns Its counts, as the view words them.
+ */
+const headlineOf = (level: (typeof levels)[number]): string => {
+  const counts = fixture.headlines[level];
+
+  return `${String(counts.covered)} covered, ${String(counts.limited)} limited, ${String(counts.excluded)} excluded, ${String(counts["unsupported-with-notice"])} not yet supported.`;
+};
+
+describe("ledger/view.ts", () => {
+  it("groups the rows by level, then by family, in order", () => {
+    const tree = ledgerHtml(fixture);
+    const headings = byTag(tree, "h2").map(textOf);
+    const captions = byTag(tree, "caption").map(textOf);
+    const lines = ledgerText(fixture).split("\n");
+
+    assert.deepStrictEqual(
+      headings.slice(0, levels.length),
+      levels.map((level) => levelWords[level]),
+    );
+    assert.deepStrictEqual(captions.slice(0, expectedCaptions.length), expectedCaptions);
+    assert.deepStrictEqual(
+      expectedCaptions.map((caption) => lines.indexOf(caption)).toSorted((a, b) => a - b),
+      expectedCaptions.map((caption) => lines.indexOf(caption)),
+    );
+    assert.notInclude(
+      expectedCaptions.map((caption) => lines.indexOf(caption)),
+      -1,
+    );
+    assert.deepStrictEqual(
+      levels.map((level) => lines.indexOf(levelWords[level])).toSorted((a, b) => a - b),
+      levels.map((level) => lines.indexOf(levelWords[level])),
+    );
+  });
+
+  it("opens each level with its headline, its rows counted by state", () => {
+    const tree = ledgerHtml(fixture);
+    const text = ledgerText(fixture);
+
+    for (const level of levels) {
+      const heading = byTag(tree, "h2").find(
+        (candidate) => textOf(candidate) === levelWords[level],
+      );
+      assert.isDefined(heading, level);
+      assert.include(byTag(tree, "p").map(textOf), headlineOf(level));
+      assert.include(text, `${levelWords[level]}\n${headlineOf(level)}`);
+    }
+
+    assert.strictEqual(fixture.headlines.basic.covered, 4);
+    assert.strictEqual(fixture.headlines.basic.limited, 1);
+  });
+
+  it("gives every feature one row, its name beside its ID", () => {
+    const tree = ledgerHtml(fixture);
+    const text = ledgerText(fixture);
+    const rows = byTag(tree, "table").flatMap(rowsOf);
+
+    for (const row of fixture.rows) {
+      const matching = rows.filter(
+        (candidate) => textOf(candidate.get("ID") ?? h("th", {})) === row.id,
+      );
+      assert.lengthOf(matching, 1, row.id);
+      assert.strictEqual(textOf(matching[0]?.get("Feature") ?? h("td", {})), row.name);
+      assert.include(text.split("\n"), `${row.id} ${row.name}`);
+    }
+
+    assert.lengthOf(rows, 150 + records.length);
+  });
+
+  it("words each state, `unsupported-with-notice` as not yet supported with its ID kept", () => {
+    const tree = ledgerHtml(fixture);
+    const text = ledgerText(fixture);
+
+    assert.strictEqual(textOf(cellOf(tree, "Q-2", "State")), "covered");
+    assert.strictEqual(textOf(cellOf(tree, "I-19", "State")), "limited");
+    assert.strictEqual(textOf(cellOf(tree, "Q-31", "State")), "excluded");
+    assert.strictEqual(
+      textOf(cellOf(tree, "Q-20", "State")),
+      "not yet supported (unsupported-with-notice)",
+    );
+    assert.include(
+      text,
+      "Q-20 Text Entry Interaction\n  State: not yet supported (unsupported-with-notice)",
+    );
+  });
+
+  it("lists the limited rows again with their sources, under their own heading", () => {
+    const tree = ledgerHtml(fixture);
+    const text = ledgerText(fixture);
+    const [claim] = claims;
+    assert.isDefined(claim);
+
+    const heading = byTag(tree, "h2").findIndex(
+      (candidate) => textOf(candidate) === "Limited rows",
+    );
+
+    assert.isAtLeast(heading, levels.length);
+    assert.strictEqual(textOf(cellOf(tree, "I-19", "Source")), claim.source);
+    assert.include(
+      byTag(tree, "li").map(textOf),
+      `I-19 QTI Shared Interaction Vocabulary Subset: ${claim.source}`,
+    );
+    assert.include(
+      text,
+      `Limited rows\nI-19 QTI Shared Interaction Vocabulary Subset: ${claim.source}`,
+    );
+  });
+
+  it("links each proof to its test file and its fixture documents", () => {
+    const tree = ledgerHtml(fixture);
+    const text = ledgerText(fixture);
+    const hrefs = byTag(cellOf(tree, "Q-2", "Proofs"), "a").map((link) => link.attrs["href"]);
+
+    assert.include(
+      hrefs,
+      "https://github.com/aidenzepp/qti-pie/blob/main/packages/plate/src/validate/open.test.ts",
+    );
+    assert.include(
+      hrefs,
+      "https://github.com/aidenzepp/qti-pie/blob/main/packages/plate/src/dev/page.test.ts",
+    );
+    assert.include(hrefs, `/item?${new URLSearchParams([["path", bg007]]).toString()}`);
+    assert.include(textOf(cellOf(tree, "I-7", "Proofs")), "every corpus document (the sweep)");
+    assert.strictEqual(textOf(cellOf(tree, "Q-20", "Proofs")), "none");
+    assert.include(
+      text,
+      `    src/validate/open.test.ts\n      Test: validate/open.ts [Q-2] a Choice item is accepted\n      Corpus documents: ${bg007}`,
+    );
+  });
+
+  it("fills the columns, an interaction row's own included", () => {
+    const tree = ledgerHtml(fixture);
+
+    assert.strictEqual(textOf(cellOf(tree, "Q-2", "Validates")), "yes");
+    assert.strictEqual(textOf(cellOf(tree, "Q-2", "Renders")), "yes");
+    assert.strictEqual(textOf(cellOf(tree, "I-19", "Validates")), "no");
+    assert.deepStrictEqual(byTag(cellOf(tree, "Q-2", "Keyboard"), "li").map(textOf), [
+      "interactions/choice.ts [Q-2] [keyboard] a Choice completes by keyboard",
+      "dev/page.ts [Q-2] [keyboard] BG007 completes in the playground",
+    ]);
+    assert.strictEqual(
+      textOf(cellOf(tree, "Q-2", "Screen-reader pass")),
+      "passed on 2026-11-05, VoiceOver 27.2 in Safari 26.1",
+    );
+    assert.strictEqual(textOf(cellOf(tree, "Q-5", "Screen-reader pass")), "none recorded");
+    assert.strictEqual(
+      textOf(cellOf(tree, "Q-2", "Composition")),
+      "dev playground, test-built form",
+    );
+    assert.isUndefined(
+      byTag(tree, "table")
+        .flatMap(rowsOf)
+        .find((row) => textOf(row.get("ID") ?? h("th", {})) === "I-7")
+        ?.get("Keyboard"),
+    );
+  });
+
+  it("shows a failed latest screen-reader pass as failed, beside its date, reader and browser", () => {
+    const failed = "failed on 2026-11-05, VoiceOver 27.2 in Safari 26.1";
+
+    assert.strictEqual(
+      textOf(cellOf(ledgerHtml(sittingLedger), "Q-5", "Screen-reader pass")),
+      failed,
+    );
+    assert.strictEqual(rowField(ledgerText(sittingLedger), "Q-5", "Screen-reader pass"), failed);
+  });
+
+  it("shows none recorded for an interaction whose only screen-reader pass is not-observed", () => {
+    assert.strictEqual(
+      textOf(cellOf(ledgerHtml(sittingLedger), "Q-20", "Screen-reader pass")),
+      "none recorded",
+    );
+    assert.strictEqual(
+      rowField(ledgerText(sittingLedger), "Q-20", "Screen-reader pass"),
+      "none recorded",
+    );
+  });
+
+  it("lists the session notes, each with its date and owner, after the records", () => {
+    const tree = ledgerHtml(fixture, browserSupport, notes);
+    const text = ledgerText(fixture, browserSupport, notes);
+    const list = afterHeading(tree, "Session notes");
+
+    assert.deepStrictEqual(
+      childElements(tree)
+        .filter((child) => child.tag === "h3")
+        .map(textOf),
+      ["Session notes"],
+    );
+    assert.strictEqual(list.tag, "ul");
+    assert.deepStrictEqual(byTag(list, "li").map(textOf), [...noteLines]);
+    assert.include(text, `\n\nSession notes\n${noteLines.join("\n")}\n`);
+    assert.isAbove(text.indexOf("Session notes"), text.indexOf("Records\n"));
+    assert.include(toHtml(tree), "&lt;b&gt;Step 2&lt;/b&gt; follows.");
+  });
+
+  it("lists the recorded session notes when none are given, and says so when there are none", () => {
+    const sentence = "No session note has been recorded yet.";
+
+    assert.strictEqual(
+      toHtml(ledgerHtml(fixture)),
+      toHtml(ledgerHtml(fixture, browserSupport, sessionNotes)),
+    );
+    assert.strictEqual(ledgerText(fixture), ledgerText(fixture, browserSupport, sessionNotes));
+    assert.strictEqual(
+      textOf(afterHeading(ledgerHtml(fixture, browserSupport, []), "Session notes")),
+      sentence,
+    );
+    assert.include(ledgerText(fixture, browserSupport, []), `Session notes\n${sentence}\n`);
+  });
+
+  it("says no Baseline-low feature is used while the browser-support note is empty", () => {
+    const sentence =
+      "The stylesheets use no Baseline-low feature: every feature they use is Baseline widely available.";
+
+    assert.include(byTag(ledgerHtml(fixture, []), "p").map(textOf), sentence);
+    assert.include(ledgerText(fixture, []), `Browser support\n${sentence}`);
+    assert.strictEqual(toHtml(ledgerHtml(fixture)), toHtml(ledgerHtml(fixture, browserSupport)));
+  });
+
+  it("lists each browser-support row with its degrade", () => {
+    const note = {
+      degrade: "the default accent colour",
+      feature: "accent-color",
+      status: "low",
+    } as const;
+    const tree = ledgerHtml(fixture, [note]);
+    const [row] = rowsOf(
+      tableCaptioned(tree, "Features the stylesheets use below Baseline widely available"),
+    );
+
+    assert.strictEqual(textOf(row?.get("Feature") ?? h("th", {})), "accent-color");
+    assert.strictEqual(textOf(row?.get("Baseline") ?? h("td", {})), "newly available");
+    assert.strictEqual(
+      textOf(row?.get("What a browser without it shows") ?? h("td", {})),
+      "the default accent colour",
+    );
+    assert.include(
+      ledgerText(fixture, [note]),
+      "accent-color: newly available; without it, the default accent colour",
+    );
+  });
+
+  it("shows the records, each observed one with its JavaScript state, each OD-14 (e) entry with its control, NVDA and JAWS unavailable", () => {
+    const tree = ledgerHtml(fixture);
+    const text = ledgerText(fixture);
+    const rows = rowsOf(tableCaptioned(tree, "Session records"));
+
+    assert.lengthOf(rows, records.length);
+    assert.deepStrictEqual(
+      rows.map((row) => textOf(row.get("JavaScript") ?? h("td", {}))),
+      ["off", "on", "on", "", "on", "on"],
+    );
+    assert.deepStrictEqual(
+      rows.map((row) => textOf(row.get("Control") ?? h("td", {}))),
+      ["", "", "ran", "did-not-run", "", ""],
+    );
+    assert.deepStrictEqual(
+      rows
+        .slice(4)
+        .map((row) => [
+          textOf(row.get("Reader") ?? h("th", {})),
+          textOf(row.get("Result") ?? h("td", {})),
+        ]),
+      [
+        ["NVDA", "unavailable"],
+        ["JAWS", "unavailable"],
+      ],
+    );
+    assert.include(text, "Control: did-not-run");
+    assert.include(text, "Reader: NVDA; Entry: unavailable reader");
+    assert.match(text, /; JavaScript: off;/u);
+  });
+
+  it("states no environment for an entry that was not observed: no JavaScript state, browser, macOS or reader version", () => {
+    const rows = rowsOf(tableCaptioned(ledgerHtml(fixture), "Session records"));
+    const open = records.findIndex((record) => record.result === "not-observed");
+    const cells = (index: number) =>
+      ["Reader", "JavaScript", "Browser", "macOS"].map((column) =>
+        textOf(rows[index]?.get(column) ?? h("td", {})),
+      );
+
+    assert.deepStrictEqual(cells(open), ["VoiceOver", "", "", ""]);
+    assert.deepStrictEqual(cells(open - 1), ["VoiceOver 27.2", "on", "Safari 26.1", "27.2"]);
+    assert.include(
+      ledgerText(fixture).split("\n"),
+      `Reader: VoiceOver; Entry: manual check; Check: OD-14 (e); Item: ${bg007}; Control: did-not-run; Result: not-observed; Date: 2026-11-06; Owner: operator`,
+    );
+  });
+
+  it("shows each not-observed entry replaced by the latest browser run, with no owner, once the ledger holds one", () => {
+    const lines = ledgerText(runsLedger).split("\n");
+    const open = `Reader: VoiceOver; Entry: manual check; Check: OD-14 (e); Item: ${bg007}; Control: did-not-run; Result: not-observed; Date: 2026-11-06`;
+    const at = lines.indexOf(open);
+
+    assert.notStrictEqual(at, -1, "the open entry's line, with no owner");
+    assert.deepStrictEqual(lines.slice(at + 1, at + 4), [
+      replacedLine,
+      ...od14Lines.map((line) => `  ${line}`),
+    ]);
+    assert.strictEqual(lines.filter((line) => line.startsWith("  Replaced by ")).length, 1);
+    assert.isTrue(
+      lines.some(
+        (line) =>
+          line.startsWith("Reader: VoiceOver 27.2; Entry: screen-reader pass;") &&
+          line.endsWith("; Owner: operator"),
+      ),
+      "an observed entry keeps its owner",
+    );
+
+    const rows = rowsOf(tableCaptioned(ledgerHtml(runsLedger), "Session records"));
+    const replaced = rows.map((row) => row.get("Replaced by") ?? h("td", {}));
+
+    assert.deepStrictEqual(
+      rows.map((row) => textOf(row.get("Owner") ?? h("td", {}))),
+      ["operator", "operator", "operator", "", "operator", "operator"],
+    );
+    assert.deepStrictEqual(
+      replaced.map(textOf).map((words) => words === ""),
+      [true, true, true, false, true, true],
+    );
+    assert.include(
+      textOf(replaced[3] ?? h("td", {})),
+      "the browser run of 2026-11-05T18:57:26.239Z (rule c8a113fd)",
+    );
+    assert.deepStrictEqual(byTag(replaced[3] ?? h("td", {}), "li").map(textOf), [...od14Lines]);
+  });
+
+  it("names the latest of two browser runs as the replacement, and lists OD-14 (e) only beside its own entry", () => {
+    const earlier = runsLedger.browserRuns.map((run) => ({ ...run, date: "2026-11-04T09:00:00Z" }));
+    const lines = ledgerText({
+      ...sittingLedger,
+      browserRuns: [...earlier, ...runsLedger.browserRuns],
+    }).split("\n");
+    const open = lines.findIndex((line) => line.includes("Result: not-observed"));
+
+    assert.notStrictEqual(open, -1);
+    assert.notInclude(lines[open] ?? "", "Owner:");
+    assert.strictEqual(lines[open + 1], replacedLine);
+    assert.notInclude(lines[open + 2] ?? "", "OD-14 (e)");
+  });
+
+  it("shows each not-observed entry as recorded, its owner kept, while the ledger holds no browser run", () => {
+    const text = ledgerText(fixture);
+
+    assert.notInclude(text, "Replaced by");
+    assert.include(
+      text,
+      "Control: did-not-run; Result: not-observed; Date: 2026-11-06; Owner: operator\n",
+    );
+  });
+
+  it("says no session is recorded while there are no records", () => {
+    const empty = { ...fixture, records: [] };
+    const sentence = "No session has been recorded yet.";
+
+    assert.include(byTag(ledgerHtml(empty), "p").map(textOf), sentence);
+    assert.include(ledgerText(empty), `Records\n${sentence}`);
+  });
+
+  it("shows each engine's browser run with its version and counts, WebKit's note the stand-in sentence", () => {
+    const tree = ledgerHtml(runsLedger);
+    const text = ledgerText(runsLedger);
+    const rows = rowsOf(tableCaptioned(tree, "Each engine's run of the browser tests"));
+
+    assert.deepStrictEqual(
+      rows.map((row) =>
+        ["Engine", "Version", "Playwright", "Date", "Passed", "Failed", "OD-14 (e)", "Note"].map(
+          (column) => textOf(row.get(column) ?? h("td", {})),
+        ),
+      ),
+      [
+        [
+          "Chromium",
+          "156.0.8078.4",
+          "1.64.1",
+          "2026-11-05T18:57:26.239Z",
+          "41",
+          "1",
+          "passed (the control (a) passed and the proof (b) passed)",
+          "",
+        ],
+        [
+          "WebKit",
+          "27.2",
+          "1.64.1",
+          "2026-11-05T18:57:26.239Z",
+          "42",
+          "0",
+          "failed (the control (a) passed and the proof (b) failed)",
+          standsInForSafari,
+        ],
+      ],
+    );
+    assert.include(
+      text,
+      "\n\nBrowser runs\nEngine: Chromium; Version: 156.0.8078.4; Playwright: 1.64.1; Date: 2026-11-05T18:57:26.239Z; Passed: 41; Failed: 1; OD-14 (e): passed (the control (a) passed and the proof (b) passed)\n",
+    );
+    assert.include(
+      text,
+      `Engine: WebKit; Version: 27.2; Playwright: 1.64.1; Date: 2026-11-05T18:57:26.239Z; Passed: 42; Failed: 0; OD-14 (e): failed (the control (a) passed and the proof (b) failed); Note: ${standsInForSafari}\n`,
+    );
+    assert.isAbove(text.indexOf("Browser runs\n"), text.indexOf("Session notes\n"));
+    assert.isAbove(
+      childElements(tree).findIndex((child) => textOf(child) === "Browser runs"),
+      childElements(tree).findIndex((child) => textOf(child) === "Session notes"),
+    );
+  });
+
+  it("says no browser run is recorded while there is none", () => {
+    const sentence = "No browser run has been recorded.";
+
+    assert.strictEqual(textOf(afterHeading(ledgerHtml(fixture), "Browser runs")), sentence);
+    assert.include(ledgerText(fixture), `Browser runs\n${sentence}\n`);
+  });
+
+  it("round-trips and passes checkTree with browser runs", () => {
+    const tree = ledgerHtml(runsLedger);
+
+    assert.isTrue(roundTrips(tree));
+    assert.deepStrictEqual(checkTree(tree, { baseLevel: 1 }), []);
+  });
+
+  it("escapes a test title that holds markup", () => {
+    const html = toHtml(ledgerHtml(fixture));
+
+    assert.include(html, "&lt;script&gt;alert(1)&lt;/script&gt;");
+    assert.notInclude(html, "<script");
+    assert.include(ledgerText(fixture), "<script>alert(1)</script>");
+  });
+
+  it("says these tests pass over these fixtures, never conformant or certified", () => {
+    const html = toHtml(ledgerHtml(fixture));
+    const text = ledgerText(fixture);
+
+    for (const view of [html, text]) {
+      assert.include(view, "these tests pass over these fixtures");
+      assert.notMatch(view, /conformant|certified/iu);
+    }
+  });
+
+  it("round-trips and passes checkTree with a failed pass and session notes", () => {
+    const tree = ledgerHtml(sittingLedger, browserSupport, notes);
+
+    assert.isTrue(roundTrips(tree));
+    assert.deepStrictEqual(checkTree(tree, { baseLevel: 1 }), []);
+  });
+
+  it("round-trips, passes checkTree, and gives every table a caption and header cells", () => {
+    const tree = ledgerHtml(fixture);
+    const tables = byTag(tree, "table");
+
+    assert.isTrue(roundTrips(tree));
+    assert.deepStrictEqual(checkTree(tree, { baseLevel: 1 }), []);
+    assert.lengthOf(tables, expectedCaptions.length + 1);
+
+    for (const table of tables) {
+      const [caption, head, body] = childElements(table);
+      assert.strictEqual(caption?.tag, "caption");
+      assert.notStrictEqual(textOf(caption ?? h("caption", {})), "");
+      assert.strictEqual(head?.tag, "thead");
+      assert.strictEqual(body?.tag, "tbody");
+
+      const headers = byTag(head ?? h("thead", {}), "th");
+      assert.isAbove(headers.length, 0);
+      assert.isTrue(headers.every((header) => header.attrs["scope"] === "col"));
+
+      for (const row of childElements(body ?? h("tbody", {}))) {
+        const [first] = childElements(row);
+        assert.strictEqual(first?.tag, "th");
+        assert.strictEqual(first?.attrs["scope"], "row");
+      }
+    }
+  });
+});
+
+/**
+ * The fixture document paths of the verdict report.
+ */
+const paths = {
+  accepted: "items/accepted.xml",
+  refused: "items/refused.xml",
+  unchecked: "items/maths.xml",
+  unsupported: "items/gap-match.xml",
+} as const;
+
+/**
+ * A refusal of the refused fixture document.
+ */
+const refusal = new Refusal({
+  detail: { element: "qti-choice-interation", parent: "qti-item-body" },
+  document: paths.refused,
+  location: { kind: "path", path: "qti-assessment-item/qti-item-body/qti-choice-interation" },
+  readerRule: Option.none(),
+  rule: "unknown-element",
+  suggestion: Option.some("qti-choice-interaction"),
+});
+
+/**
+ * A second refusal of the refused fixture document.
+ */
+const missing = new Refusal({
+  detail: { attribute: "identifier", element: "qti-assessment-item" },
+  document: paths.refused,
+  location: { kind: "path", path: "qti-assessment-item" },
+  readerRule: Option.none(),
+  rule: "missing-attribute",
+  suggestion: Option.none(),
+});
+
+/**
+ * The fixture verdicts: refused, unchecked, accepted with an unsupported feature, and accepted.
+ */
+const verdicts: readonly Verdict[] = [
+  { document: paths.refused, refusals: [refusal, missing], verdict: "refused" },
+  {
+    document: paths.unchecked,
+    reasons: [{ path: "qti-assessment-item/qti-item-body/math", reason: "mathml" }],
+    verdict: "unchecked",
+  },
+  {
+    accepted: acceptForTest({
+      ...bg007Item,
+      document: paths.unsupported,
+      unsupported: [
+        {
+          feature: "qti-gap-match-interaction",
+          path: "qti-assessment-item/qti-item-body/qti-gap-match-interaction",
+          shown: "notice",
+        },
+      ],
+    }),
+    document: paths.unsupported,
+    verdict: "accepted-with-unsupported",
+  },
+  {
+    accepted: acceptForTest({ ...bg007Item, document: paths.accepted, unsupported: [] }),
+    document: paths.accepted,
+    verdict: "accepted",
+  },
+];
+
+describe("ledger/view.ts verdict report", () => {
+  it("gives one line per document: its path, verdict, reason and unsupported features", () => {
+    const lines = verdictLines(verdicts).split("\n");
+
+    assert.deepStrictEqual(lines, [
+      `${paths.refused} | refused | reason: unknown-element: ${describeRefusal(refusal)}; missing-attribute: ${describeRefusal(missing)} | unsupported features: none`,
+      `${paths.unchecked} | unchecked | reason: mathml at qti-assessment-item/qti-item-body/math | unsupported features: none`,
+      `${paths.unsupported} | accepted-with-unsupported | reason: none | unsupported features: qti-gap-match-interaction at qti-assessment-item/qti-item-body/qti-gap-match-interaction`,
+      `${paths.accepted} | accepted | reason: none | unsupported features: none`,
+      "",
+    ]);
+  });
+
+  it("gives a table with a caption, column headers and a row per document", () => {
+    const table = verdictTable(verdicts);
+    const rows = rowsOf(table);
+    const [caption, head] = childElements(table);
+
+    assert.strictEqual(caption?.tag, "caption");
+    assert.notStrictEqual(textOf(caption ?? h("caption", {})), "");
+    assert.deepStrictEqual(
+      byTag(head ?? h("thead", {}), "th").map((header) => [textOf(header), header.attrs["scope"]]),
+      [
+        ["Document", "col"],
+        ["Verdict", "col"],
+        ["Reason", "col"],
+        ["Unsupported features", "col"],
+      ],
+    );
+    assert.deepStrictEqual(
+      rows.map((row) => {
+        const document = row.get("Document") ?? h("th", {});
+
+        return [document.tag, document.attrs["scope"], textOf(document)];
+      }),
+      verdicts.map((verdict) => ["th", "row", verdict.document]),
+    );
+    assert.deepStrictEqual(
+      byTag(rows[0]?.get("Document") ?? h("th", {}), "a").map((link) => link.attrs["href"]),
+      [`/item?${new URLSearchParams([["path", paths.refused]]).toString()}`],
+    );
+    assert.deepStrictEqual(
+      rows.map((row) => textOf(row.get("Verdict") ?? h("td", {}))),
+      ["refused", "unchecked", "accepted-with-unsupported", "accepted"],
+    );
+    assert.deepStrictEqual(
+      byTag(rows[0]?.get("Reason") ?? h("td", {}), "li").map(textOf),
+      [
+        `unknown-element: ${describeRefusal(refusal)}`,
+        `missing-attribute: ${describeRefusal(missing)}`,
+      ].map((line) => line.replaceAll(/\s+/gu, " ").trim()),
+    );
+    assert.strictEqual(
+      textOf(rows[1]?.get("Reason") ?? h("td", {})),
+      "mathml at qti-assessment-item/qti-item-body/math",
+    );
+    assert.strictEqual(
+      textOf(rows[2]?.get("Unsupported features") ?? h("td", {})),
+      "qti-gap-match-interaction at qti-assessment-item/qti-item-body/qti-gap-match-interaction",
+    );
+    assert.strictEqual(textOf(rows[3]?.get("Reason") ?? h("td", {})), "none");
+  });
+
+  it("round-trips and passes checkTree in a page", () => {
+    const page = h("div", { lang: "en" }, [verdictTable(verdicts)]);
+
+    assert.isTrue(roundTrips(page));
+    assert.deepStrictEqual(checkTree(page, { baseLevel: 1 }), []);
+  });
+});

@@ -48,6 +48,7 @@ const choiceOf = (
   cardinality,
   choices: choices.map((identifier) => ({
     content: [{ kind: "text", text: identifier }],
+    fixed: false,
     identifier,
   })),
   class: "",
@@ -73,6 +74,7 @@ const number: TextEntryInteraction = {
   expectedLength: Option.none(),
   kind: "text-entry",
   path: "qti-assessment-item/qti-item-body/p/qti-text-entry-interaction",
+  patternMask: Option.none(),
   patternMaskMessage: Option.none(),
   placeholder: Option.none(),
   response: "NUMBER",
@@ -145,6 +147,7 @@ const item: Item = {
     [
       "RESPONSE",
       {
+        areaMapping: Option.none(),
         baseType: "identifier",
         cardinality: "single",
         correct: Option.some(identifiers("single", "A")),
@@ -156,6 +159,7 @@ const item: Item = {
     [
       "PICK",
       {
+        areaMapping: Option.none(),
         baseType: "identifier",
         cardinality: "multiple",
         correct: Option.none(),
@@ -167,6 +171,7 @@ const item: Item = {
     [
       "NUMBER",
       {
+        areaMapping: Option.none(),
         baseType: "integer",
         cardinality: "single",
         correct: Option.none(),
@@ -388,7 +393,7 @@ describe("score", () => {
               failure.problem,
               Option.isNone(failure.expected),
               failure.message.includes('"EXTRA"'),
-              failure.message.includes("point"),
+              failure.message.includes("duration"),
             ]
           : [failure._tag],
       ),

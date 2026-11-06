@@ -7,12 +7,14 @@ import * as attributes from "#pantry/schema/attributes.ts";
 import * as contracts from "#pantry/schema/contracts.ts";
 import * as document from "#pantry/schema/document.ts";
 import * as rosters from "#pantry/schema/content/rosters.ts";
+import type { RegistryRow } from "#pantry/schema/kinds/generic.ts";
 import * as asi from "#pantry/schema/kinds/asi.ts";
 import * as cp from "#pantry/schema/kinds/cp.ts";
 import * as generic from "#pantry/schema/kinds/generic.ts";
 import * as html from "#pantry/schema/kinds/html.ts";
 import * as lom from "#pantry/schema/kinds/lom.ts";
 import * as qmd from "#pantry/schema/kinds/qmd.ts";
+import * as test from "#pantry/schema/kinds/test.ts";
 import * as node from "#pantry/schema/node.ts";
 import * as pkg from "#pantry/schema/package.ts";
 import { attributeAdmissionRows } from "#pantry/schema/seed/attribute-admission.ts";
@@ -24,6 +26,7 @@ const registries = [
   cp.registry,
   qmd.registry,
   generic.registry,
+  test.registry,
 ];
 
 const rows = attributeAdmissionRows(registries);
@@ -74,6 +77,13 @@ describe("attribute-admission seed", () => {
 
   it("gives every ASI and HTML kind the attribute set of its inventory entry", () => {
     for (const entry of Object.values(inventory)) {
+      // A test kind whose heading slice has not filled its row waits: `kinds/test.test.ts`'s
+      // `awaiting` pins which. p5-19 fills the last row and deletes this skip.
+      const waiting: Readonly<Record<string, RegistryRow>> = test.registry;
+      if (waiting[entry.handle]?.attributes.length === 0) {
+        continue;
+      }
+
       const forKind = new Set(
         rows.filter((row) => row.kind === entry.handle).map((row) => row.attribute),
       );

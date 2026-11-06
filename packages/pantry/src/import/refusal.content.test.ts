@@ -101,3 +101,30 @@ describe("the content rules of a containment", () => {
     assert.isFalse(isMappedLaw(law));
   });
 });
+
+const pictureCapacity = (
+  selection: readonly { readonly field: string; readonly value: string }[],
+): ImportLaw => ({
+  from: { fields: ["parent"], relation: "Edge", selection },
+  kind: "capacity",
+  target: { fields: ["id"], relation: "Picture", selection: [] },
+});
+
+describe("the capacities of a picture", () => {
+  it("names the one-img capacity picture-img when it selects the parent kind", () => {
+    const law = pictureCapacity([
+      { field: "childKind", value: "img" },
+      { field: "parentKind", value: "picture" },
+    ]);
+
+    assert.strictEqual(ruleOfLaw(law), "picture-img");
+    assert.isTrue(isMappedLaw(law));
+  });
+
+  it("keeps the source capacity picture-source", () => {
+    const law = pictureCapacity([{ field: "childKind", value: "source" }]);
+
+    assert.strictEqual(ruleOfLaw(law), "picture-source");
+    assert.isTrue(isMappedLaw(law));
+  });
+});

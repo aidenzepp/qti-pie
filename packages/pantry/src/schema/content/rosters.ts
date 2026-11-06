@@ -548,6 +548,63 @@ export const XlinkActuateValue = closed("XlinkActuateValue", [
 export const XmlSpace = closed("XmlSpace", ["default", "preserve"]);
 
 /**
+ * The `navigation-mode` of a test part: the paths a candidate may take through it
+ * (`imsqti_asiv3p0p1_v1p0.xsd` lines 33365 to 33377).
+ */
+export const NavigationMode = closed("NavigationMode", ["linear", "nonlinear"]);
+
+/**
+ * The `submission-mode` of a test part: when responses go to response processing
+ * (`imsqti_asiv3p0p1_v1p0.xsd` lines 33379 to 33391).
+ */
+export const SubmissionMode = closed("SubmissionMode", ["individual", "simultaneous"]);
+
+/**
+ * The `access` of a test feedback: when it shows to the candidate
+ * (`imsqti_asiv3p0p1_v1p0.xsd` lines 33220 to 33231).
+ */
+export const TestFeedbackAccess = closed("TestFeedbackAccess", ["atEnd", "during"]);
+
+/**
+ * The three exit values of a branch rule `target` (INFO#DataCharacteristic_BranchRule.Attr_target).
+ */
+export const BranchExit = closed("BranchExit", ["EXIT_SECTION", "EXIT_TESTPART", "EXIT_TEST"]);
+
+/**
+ * Which a branch rule target is: an exit value or a reference to an identifier.
+ */
+export const BranchTarget = closed("BranchTarget", ["exit", "ref"]);
+
+/**
+ * Which kind of test structure node holds a child.
+ */
+export const StructureHolder = closed("StructureHolder", [
+  "part",
+  "section",
+  "sectionRef",
+  "itemRef",
+]);
+
+/**
+ * What an item reference resolves to: an item or a learning tools interoperability tool.
+ */
+export const ItemRefTarget = closed("ItemRefTarget", ["item", "lti"]);
+
+/**
+ * Where a prefixed identifier is declared: by the item, by a mapping or by the built in set.
+ */
+export const PrefixedSource = closed("PrefixedSource", ["declared", "mapped", "builtIn"]);
+
+/**
+ * What a section variable reference names: a declared variable, a prefixed one or a duration.
+ */
+export const SectionVariableTarget = closed("SectionVariableTarget", [
+  "declared",
+  "prefixed",
+  "duration",
+]);
+
+/**
  * The rosters as schema members.
  */
 export const relations = {
@@ -562,6 +619,8 @@ export const relations = {
   AriaTrueFalseUndefined,
   BooleanLiteral,
   Bound,
+  BranchExit,
+  BranchTarget,
   CellAlign,
   CellScope,
   CellValign,
@@ -569,6 +628,7 @@ export const relations = {
   CrossOrigin,
   ExternalScored,
   IdrefAttribute,
+  ItemRefTarget,
   MathConstantName,
   MathOperatorName,
   MediaAutoplay,
@@ -577,8 +637,10 @@ export const relations = {
   MediaMuted,
   MediaPreload,
   NamespacePolicy,
+  NavigationMode,
   Orientation,
   ParamValuetype,
+  PrefixedSource,
   ProcessContents,
   QmdFeedbackTypeValue,
   QmdInteractionTypeValue,
@@ -586,10 +648,14 @@ export const relations = {
   RoundingMode,
   SchemaNamespace,
   SchemaSet,
+  SectionVariableTarget,
   Shape,
   ShowHide,
   StatsOperatorName,
+  StructureHolder,
+  SubmissionMode,
   SuppressTtsMode,
+  TestFeedbackAccess,
   TextDirection,
   TextFormat,
   ToleranceMode,

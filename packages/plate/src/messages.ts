@@ -15,20 +15,28 @@ export type Locale = (typeof locales)[number];
  *
  * A `{name}` in a text is a placeholder that {@link message} fills. The status headings reuse the
  * three after-submit states (`notAccepted`, `scored`, `responseRecorded`), so a heading names a
- * state as the title does. This catalog is the source of the keys and of each key's placeholders;
- * any other locale's catalog has the same keys and placeholders.
+ * state as the title does. `atLeastStrings` and `atMostStrings` read in the plural, so at a count
+ * of 1 an Extended Text writes `atLeastOneString` or `atMostOneString`, their singular. This
+ * catalog is the source of the keys and of each key's placeholders; any other locale's catalog has
+ * the same keys and placeholders.
  */
 const en = {
   answer: "Answer",
   answerOf: "Answer {n} of {count}",
   answering: "Answering",
   atLeast: "Select at least {n}.",
+  atLeastOneString: "Enter at least 1 answer.",
+  atLeastStrings: "Enter at least {n} answers.",
   atMost: "Select at most {n}.",
+  atMostOneString: "Enter at most 1 answer.",
+  atMostStrings: "Enter at most {n} answers.",
+  choiceOf: "Choice {n} of {count}",
   malformedFile: "Enter text, not a file.",
   malformedNumber: "Enter a number.",
   malformedSingleMany: "Enter one answer.",
   notAccepted: "Not accepted",
   notice: "Not supported here: {feature}",
+  patternMismatch: "Enter an answer in the form this question asks for.",
   responseRecorded: "Response recorded",
   score: "Score: {score}",
   scored: "Scored",
@@ -55,7 +63,7 @@ type Placeholders<Text extends string> = Text extends `${string}{${infer Name}}$
  *
  * Each value is text as the candidate reads it: a number arrives already formatted for the locale,
  * and `notice`'s `feature` is the feature key in QTI's own spelling (an element name,
- * `pattern-mask`, `format="xhtml"`).
+ * `pattern-mask`, `cardinality="record"`).
  */
 export type MessageParams<Key extends MessageKey> = Readonly<
   Record<Placeholders<(typeof en)[Key]>, string>
@@ -78,6 +86,20 @@ const catalogs: Readonly<Record<Locale, Readonly<Record<MessageKey, string>>>> =
  * A `{name}` placeholder in a catalog text; its one group is the name.
  */
 const placeholder = /\{(?<name>[A-Za-z]+)\}/gu;
+
+/**
+ * Write a count or a position as a locale writes numbers: the form a number takes in
+ * {@link MessageParams}, already formatted for the locale.
+ *
+ * @example
+ *   numeral("en", 12_000n); // "12,000"
+ *
+ * @param locale The locale of the renderer's own text.
+ * @param n The number; a `bigint` is written exactly, at any size.
+ * @returns The number, formatted for `locale`.
+ */
+export const numeral = (locale: Locale, n: bigint | number): string =>
+  new Intl.NumberFormat(locale).format(n);
 
 /**
  * Write the renderer's text for a key in a locale.

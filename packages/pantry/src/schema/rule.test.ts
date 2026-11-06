@@ -2,6 +2,8 @@
 import { schema } from "@bjornpagen/grizzle";
 import type { Statement } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
+import { Predicate } from "effect";
+import { inspect } from "node:util";
 import * as contracts from "#pantry/schema/contracts.ts";
 import * as rosters from "#pantry/schema/content/rosters.ts";
 import * as declaration from "#pantry/schema/declaration.ts";
@@ -359,10 +361,81 @@ describe("rule", () => {
     );
   });
 
+  it("holds exactly the XInclude xpointer capacity: every XInclude has zero XIncludeXpointer rows", () => {
+    const capacities = ofKind("capacity");
+    assert.strictEqual(capacities.length, 1);
+
+    const [capacity] = capacities;
+    assert.strictEqual(capacity?.target.source, rule.relations.XInclude);
+    assert.deepStrictEqual([...(capacity?.target.fields ?? [])], ["id"]);
+    assert.strictEqual(capacity?.from.source, rule.relations.XIncludeXpointer);
+    assert.deepStrictEqual([...(capacity?.from.fields ?? [])], ["node"]);
+
+    const described: unknown = capacity;
+    const bounds = inspect(
+      Predicate.hasProperty(described, "desc") && Predicate.hasProperty(described.desc, "within")
+        ? described.desc.within
+        : undefined,
+      { depth: null },
+    );
+    assert.strictEqual(bounds.match(/0n/gu)?.length, 2, bounds);
+  });
+
+  it("holds XIncludeParse to the value xml, as a check on that relation", () => {
+    const checks = ofKind("check").filter((statement) => statement.name === "XIncludeParseXml");
+    assert.strictEqual(checks.length, 1);
+    assert.strictEqual(checks[0]?.relation, rule.relations.XIncludeParse);
+
+    const described: unknown = checks[0];
+    const text = inspect(Predicate.hasProperty(described, "desc") ? described.desc : undefined, {
+      depth: null,
+      maxStringLength: 100_000,
+    });
+    assert.include(text, "value");
+    assert.include(text, "xml");
+    assert.notInclude(text, "text");
+  });
+
+  it("widens RuleOperandKind to the twelve holders and the three single-expression owners", () => {
+    const checks = ofKind("check").filter((statement) => statement.name === "RuleOperandKind");
+    assert.strictEqual(checks.length, 1);
+    assert.strictEqual(checks[0]?.relation, rule.relations.RuleOperand);
+
+    const described: unknown = checks[0];
+    const text = inspect(Predicate.hasProperty(described, "desc") ? described.desc : undefined, {
+      depth: null,
+      maxStringLength: 100_000,
+    });
+    const handles = [
+      "qti-set-outcome-value",
+      "qti-lookup-outcome-value",
+      "qti-set-template-value",
+      "qti-set-default-value",
+      "qti-set-correct-response",
+      "qti-template-constraint",
+      "qti-response-if",
+      "qti-response-else-if",
+      "qti-outcome-if",
+      "qti-outcome-else-if",
+      "qti-template-if",
+      "qti-template-else-if",
+      "qti-pre-condition",
+      "qti-branch-rule",
+      "qti-template-default",
+    ];
+    for (const handle of handles) {
+      assert.include(text, `'${handle}'`, handle);
+    }
+    for (const handle of ["qti-pre-condition", "qti-branch-rule", "qti-template-default"]) {
+      assert.include(node.relations.NodeKind.handles, handle);
+    }
+    assert.strictEqual(text.match(/'qti-[a-z-]+'/gu)?.length, handles.length, text);
+  });
+
   it("holds only keys, containments, mirrors and checks, each check on this module's relations", () => {
     const statements: readonly Statement[] = rule.rules;
     for (const kind of new Set(statements.map((statement) => statement.kind))) {
-      assert.include(["check", "contained", "key", "mirrors"], kind);
+      assert.include(["capacity", "check", "contained", "key", "mirrors"], kind);
     }
     for (const statement of statements.filter((candidate) => candidate.kind === "check")) {
       assert.isTrue(
@@ -392,27 +465,98 @@ describe("kinds/xi", () => {
     ]);
   });
 
-  it("admits exactly the 16 pairs of each version, by name", () => {
+  it("admits exactly the 78 pairs of 3.0.0 and the 79 of 3.0.1, by name", () => {
     const mixed = ["comment", "entityRef", "pi", "text", "ws"];
-    const expected = [
+    const hosts = [
+      "a",
+      "abbr",
+      "acronym",
+      "address",
+      "article",
+      "aside",
+      "b",
+      "big",
+      "caption",
+      "cite",
+      "code",
+      "dd",
+      "dfn",
+      "div",
+      "dt",
+      "em",
+      "figcaption",
+      "footer",
+      "h1",
+      "h2",
+      "h3",
+      "h4",
+      "h5",
+      "h6",
+      "header",
+      "i",
+      "kbd",
+      "label",
+      "li",
+      "nav",
+      "object",
+      "p",
+      "pre",
+      "q",
+      "qti-assessment-section",
+      "qti-content-body.feedback",
+      "qti-content-body.modal",
+      "qti-content-body.rubric",
+      "qti-content-body.rubricTemplate",
+      "qti-content-body.template",
+      "qti-content-body.testFeedback",
+      "qti-content-body.testRubric",
+      "qti-feedback-inline",
+      "qti-gap-match-interaction",
+      "qti-gap-text",
+      "qti-hottext",
+      "qti-hottext-interaction",
+      "qti-inline-choice",
+      "qti-item-body",
+      "qti-label",
+      "qti-prompt",
+      "qti-simple-associable-choice",
+      "qti-simple-choice",
+      "qti-template-inline",
+      "qti-template-inline.rubric",
+      "samp",
+      "section",
+      "small",
+      "span",
+      "strong",
+      "sub",
+      "sup",
+      "td",
+      "th",
+      "tt",
+      "var",
+    ];
+    const shared = [
       "xi:include>xi:fallback",
       "xi:fallback>xi:include",
-      "qti-item-body>xi:include",
-      "qti-prompt>xi:include",
-      "qti-simple-choice>xi:include",
-      "p>xi:include",
+      ...hosts.map((host) => `${host}>xi:include`),
       ...mixed.map((child) => `xi:include>${child}`),
       ...mixed.map((child) => `xi:fallback>${child}`),
-    ].toSorted();
-    for (const version of ["3.0.0", "3.0.1"]) {
+    ];
+    const expected = {
+      "3.0.0": shared.toSorted(),
+      "3.0.1": [...shared, "qti-stimulus-body>xi:include"].toSorted(),
+    };
+    for (const version of ["3.0.0", "3.0.1"] as const) {
       const found = xi.admission
         .filter((row) => row.version === version)
         .map((row) => `${row.parent}>${row.child}`)
         .toSorted();
-      assert.deepStrictEqual(found, expected, version);
+      assert.deepStrictEqual(found, expected[version], version);
     }
-    assert.strictEqual(expected.length, 16);
-    assert.strictEqual(xi.admission.length, 32);
+    assert.strictEqual(hosts.length, 66);
+    assert.strictEqual(expected["3.0.0"].length, 78);
+    assert.strictEqual(expected["3.0.1"].length, 79);
+    assert.strictEqual(xi.admission.length, 157);
   });
 
   it("names the six XInclude attributes on xi:include", () => {

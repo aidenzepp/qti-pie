@@ -16,8 +16,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { Console, Effect, Schema } from "effect";
 import { readSource } from "#plate/document/read.ts";
-import { xsdPath } from "#plate/validate/tables.ts";
-import { generateTables, Tables } from "#plate/validate/xsd.ts";
+import { generateTables, Tables, xsdPath } from "#plate/validate/xsd.ts";
 
 /**
  * Where the generated file goes.

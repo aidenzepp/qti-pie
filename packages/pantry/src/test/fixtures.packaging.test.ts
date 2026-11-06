@@ -580,17 +580,15 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts (pack
     ),
   );
 
-  it.effect("extmeta's record is the published metadata with no xml:lang attribute", () =>
+  it.effect("extmeta's record is the published metadata, xml:lang included", () =>
     inFreshRoot(() =>
       Effect.gen(function* externalRecord() {
         const fs = yield* FileSystem.FileSystem;
         const dir = yield* materialize("extmeta");
         const record = yield* fs.readFileString(`${dir}/meta/choice.xml`);
 
-        assert.notInclude(record, "xml:lang");
-        assert.include(record, "<string>jacs</string>");
-        assert.include(record, "<string>Mathematics</string>");
-        assert.isBelow(record.length, 2726);
+        assert.include(record, '<string xml:lang="en">jacs</string>');
+        assert.include(record, '<string xml:lang="en">Mathematics</string>');
         assert.deepStrictEqual(yield* filesUnder(dir), [
           "choice.xml",
           "images/sign.png",

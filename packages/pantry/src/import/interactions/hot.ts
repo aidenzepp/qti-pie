@@ -188,7 +188,7 @@ const hottextInteraction = Effect.fn("import.hottextInteraction")(function* hott
       maxChoicesN: bounds.maxN,
       minChoicesN: bounds.minN,
       responseIdentifier: bounds.responseIdentifier,
-      rootKind: "item",
+      rootKind: ctx.rootKind,
     },
   ]);
   built = Rows.add(
@@ -231,7 +231,7 @@ const hotspotInteraction = Effect.fn("import.hotspotInteraction")(function* hots
       maxChoicesN: bounds.maxN,
       minChoicesN: bounds.minN,
       responseIdentifier: bounds.responseIdentifier,
-      rootKind: "item",
+      rootKind: ctx.rootKind,
     },
   ]);
   built = Rows.add(
@@ -273,7 +273,7 @@ const selectPoint = Effect.fn("import.selectPoint")(function* selectPoint(
       maxChoicesN: bounds.maxN,
       minChoicesN: bounds.minN,
       responseIdentifier: bounds.responseIdentifier,
-      rootKind: "item",
+      rootKind: ctx.rootKind,
     },
   ]);
 
@@ -309,7 +309,7 @@ const positionObject = Effect.fn("import.positionObject")(function* positionObje
       maxChoicesN: bounds.maxN,
       minChoicesN: bounds.minN,
       responseIdentifier: bounds.responseIdentifier,
-      rootKind: "item",
+      rootKind: ctx.rootKind,
     },
   ]);
   built = Rows.add(

@@ -9,19 +9,29 @@ import { h, text } from "#plate/emit/node.ts";
 import type { Element, Node } from "#plate/emit/node.ts";
 import { authoredId, partForSlot, resolveOverrides, rowFor, scopedId } from "#plate/emit/parts.ts";
 import type { PartOf } from "#plate/emit/parts.ts";
+import { toHtml } from "#plate/emit/serialise.ts";
 import { Malformed, decode, entryName } from "#plate/form/encoding.ts";
 import type { Entry } from "#plate/form/encoding.ts";
 import { renderChoice } from "#plate/interactions/choice.ts";
 import { renderExtendedText, validateExtendedText } from "#plate/interactions/extended-text.ts";
+import { renderTextEntry } from "#plate/interactions/text-entry.ts";
 import { message } from "#plate/messages.ts";
 import { buildItem } from "#plate/model/item.ts";
-import type { BodyNode, ExtendedTextInteraction, Item } from "#plate/model/item.ts";
+import type {
+  BodyNode,
+  ExtendedTextInteraction,
+  Item,
+  TextEntryInteraction,
+} from "#plate/model/item.ts";
 import type { Value } from "#plate/model/values.ts";
 import { payload, redactItem } from "#plate/payload.ts";
 import type { EmitState, ExtendedTextPayload, Payload, View } from "#plate/payload.ts";
+import { checkResponses } from "#plate/responses.ts";
 import { checkTree, nameOf, textOf } from "#plate/test/accessibility.ts";
 import { keyboardWalk } from "#plate/test/keyboard.ts";
 import { roundTrips } from "#plate/test/round-trip.ts";
+import { tables } from "#plate/validate/tables.ts";
+import { check } from "#plate/validate/verdict.ts";
 
 /**
  * The item instance every payload here is built for.
@@ -54,12 +64,16 @@ const essay: ExtendedTextInteraction = {
   ariaLabelledby: Option.none(),
   base: 10,
   baseType: "string",
+  cardinality: "single",
   class: "qti-height-lines-6",
   expectedLength: Option.none(),
   expectedLines: Option.some(5n),
   format: "plain",
   kind: "extended-text",
+  maxStrings: Option.none(),
+  minStrings: 0n,
   path: "qti-assessment-item/qti-item-body/qti-extended-text-interaction",
+  patternMask: Option.none(),
   patternMaskMessage: Option.none(),
   placeholder: Option.none(),
   prompt: Option.some([words("Describe your day.")]),
@@ -82,8 +96,33 @@ const bare: ExtendedTextInteraction = {
 const measure: ExtendedTextInteraction = { ...bare, baseType: "float" };
 
 /**
- * Construct an item whose body is the given Extended Texts, each bound to a single response of its
- * base type, with no response processing.
+ * The essay in the `xhtml` format, which plate presents as a plain textarea of text.
+ */
+const rich: ExtendedTextInteraction = { ...essay, format: "xhtml" };
+
+/**
+ * The `xhtml` essay with a `pattern-mask` of lower-case words and the author's message for it.
+ */
+const masked: ExtendedTextInteraction = {
+  ...rich,
+  patternMask: Option.some("[a-z ]+"),
+  patternMaskMessage: Option.some("Write in lower-case words."),
+};
+
+/**
+ * The essay bound to an `ordered` response of at most three strings, so it renders three Controls
+ * in a group its Prompt names.
+ */
+const rivers: ExtendedTextInteraction = {
+  ...essay,
+  cardinality: "ordered",
+  maxStrings: Option.some(3n),
+  prompt: Option.some([words("Name three rivers.")]),
+};
+
+/**
+ * Construct an item whose body is the given Extended Texts, each bound to a response of its base
+ * type and cardinality, with no response processing.
  *
  * @param interactions The Extended Texts, in body order.
  * @returns The item.
@@ -99,8 +138,9 @@ const itemOf = (...interactions: readonly ExtendedTextInteraction[]): Item => ({
     interactions.map((interaction) => [
       interaction.response,
       {
+        areaMapping: Option.none(),
         baseType: interaction.baseType,
-        cardinality: "single",
+        cardinality: interaction.cardinality,
         correct: Option.none(),
         defaultValue: Option.none(),
         identifier: interaction.response,
@@ -156,6 +196,38 @@ const payloadOf = (
   interactions: readonly ExtendedTextInteraction[],
   view: View = answering,
 ): Payload => payload(redactItem(itemOf(...interactions)), view);
+
+/**
+ * Construct a paragraph that carries an authored id, which an `aria-labelledby` can name.
+ *
+ * @param id The id.
+ * @param value The paragraph's text.
+ * @returns The paragraph.
+ */
+const idParagraph = (id: string, value: string): BodyNode => ({
+  attributes: [{ name: "id", value: id }],
+  children: [words(value)],
+  kind: "element",
+  path: `qti-assessment-item/qti-item-body/p[@id="${id}"]`,
+  tag: "p",
+});
+
+/**
+ * Compute the payload of an item holding the given Extended Texts, then paragraphs after them,
+ * so the Extended Texts keep their places at the start of the body.
+ *
+ * @param labels The paragraphs, such as {@link idParagraph} ones.
+ * @param interactions The Extended Texts, in body order.
+ * @returns The payload of the redacted item, for a first render.
+ */
+const payloadBeside = (
+  labels: readonly BodyNode[],
+  interactions: readonly ExtendedTextInteraction[],
+): Payload =>
+  payload(
+    redactItem({ ...itemOf(...interactions), body: [...interactions, ...labels] }),
+    answering,
+  );
 
 /**
  * Give the Extended Text payload at a position of a payload's body.
@@ -268,7 +340,7 @@ const onePart = (tree: Element, part: PartOf<"extended-text-interaction">): Elem
 
 /**
  * Decode the entries posted for an Extended Text as its caller does, under the default entry name,
- * as a single value of the interaction's base type.
+ * as a value of the interaction's base type and cardinality.
  *
  * @param interaction The Extended Text.
  * @param entries The posted entries.
@@ -282,7 +354,7 @@ const decoded = (
     Result.merge(
       decode(entries, {
         baseType: interaction.baseType,
-        cardinality: "single",
+        cardinality: interaction.cardinality,
         name: entryName(instance, interaction.response),
       }),
     ),
@@ -347,7 +419,10 @@ describe("renderExtendedText", () => {
         assert.strictEqual(labelledControl.attrs["aria-label"], "Your essay");
         assert.isUndefined(labelledControl.attrs["aria-labelledby"]);
 
-        const referenced = payloadOf([{ ...bare, ariaLabelledby: Option.some("intro hint") }]);
+        const referenced = payloadBeside(
+          [idParagraph("intro", "Your day"), idParagraph("hint", "in five lines")],
+          [{ ...bare, ariaLabelledby: Option.some("intro hint") }],
+        );
         const referencedControl = onePart(yield* render(referenced), "control");
 
         assert.strictEqual(
@@ -369,6 +444,33 @@ describe("renderExtendedText", () => {
 
         assert.isUndefined(control.attrs["aria-labelledby"]);
         assert.strictEqual(control.attrs["aria-label"], message("en", "answer"));
+      }),
+  );
+
+  it.effect(
+    "[Q-5] with no Prompt, writes no aria-label for an authored one that is empty or blank, and names the Control the renderer's way",
+    () =>
+      Effect.gen(function* blankAriaLabel() {
+        for (const label of ["", "   "]) {
+          const two = payloadOf([
+            { ...bare, ariaLabel: Option.some(label) },
+            { ...bare, response: "NOTES" },
+          ]);
+          const tree = page([yield* render(two, 0), yield* render(two, 1)], two);
+          const answers = ["1", "2"].map((n) => message("en", "answerOf", { count: "2", n }));
+
+          assert.deepStrictEqual(
+            partsIn(tree, "control").map((control) => control.attrs["aria-label"]),
+            answers,
+            JSON.stringify(label),
+          );
+          assert.deepStrictEqual(
+            partsIn(tree, "control").map((control) => nameOf(control, tree)),
+            answers,
+            JSON.stringify(label),
+          );
+          assert.deepStrictEqual(checkTree(tree, { baseLevel: 2 }), [], JSON.stringify(label));
+        }
       }),
   );
 
@@ -399,7 +501,7 @@ describe("renderExtendedText", () => {
   );
 
   it.effect(
-    "[Q-5] writes the Control's id, rows from expected-lines, placeholder and the payload's form name, the author's when given",
+    "[Q-5] [keyboard] writes the Control's id, rows from expected-lines, placeholder and the payload's form name, the author's when given",
     () =>
       Effect.gen(function* controlAttributes() {
         const control = onePart(yield* render(payloadOf([essay])), "control");
@@ -432,7 +534,7 @@ describe("renderExtendedText", () => {
   );
 
   it.effect(
-    '[Q-5] a keyboard walk in a test-built form posts multi-line text, "a\\r\\nb", which decode turns into "a\\nb"',
+    '[Q-5] [keyboard] a keyboard walk in a test-built form posts multi-line text, "a\\r\\nb", which decode turns into "a\\nb"',
     () =>
       Effect.gen(function* multiLineWalk() {
         const built = payloadOf([essay]);
@@ -462,7 +564,7 @@ describe("renderExtendedText", () => {
   );
 
   it.effect(
-    "[Q-5] holds the value's text as the textarea's only child, and a text that starts with a line feed round-trips",
+    "[Q-5] [keyboard] holds the value's text as the textarea's only child, and a text that starts with a line feed round-trips",
     () =>
       Effect.gen(function* restoredText() {
         const built = payloadOf([essay], restored("first\nsecond"));
@@ -484,6 +586,48 @@ describe("renderExtendedText", () => {
 
         const empty = onePart(yield* render(payloadOf([essay])), "control");
         assert.deepStrictEqual(empty.children, []);
+      }),
+  );
+
+  it.effect(
+    '[Q-5] [keyboard] presents format="xhtml" as a plain textarea marked data-format="xhtml", whose typed markup posts as text',
+    () =>
+      Effect.gen(function* xhtmlControl() {
+        const built = payloadOf([rich]);
+        const root = yield* render(built);
+        const tree = page([root], built);
+        const control = onePart(root, "control");
+
+        assert.strictEqual(control.tag, "textarea");
+        assert.strictEqual(control.attrs["data-format"], "xhtml");
+        assert.isUndefined(root.attrs["data-format"]);
+        assert.isUndefined(
+          onePart(yield* render(payloadOf([essay])), "control").attrs["data-format"],
+        );
+        assert.deepStrictEqual(checkTree(tree, { baseLevel: 2 }), []);
+        assert.isTrue(roundTrips(tree));
+
+        const posted = keyboardWalk(tree, ["Tab", { type: "<b>x</b>" }, "Tab", "Enter"]);
+        assert.deepStrictEqual(posted, Option.some([[name, "<b>x</b>"]]));
+        assert.deepStrictEqual(
+          yield* decoded(
+            rich,
+            Option.getOrElse(posted, () => []),
+          ),
+          {
+            baseType: "string",
+            cardinality: "single",
+            values: [{ baseType: "string", value: "<b>x</b>" }],
+          },
+        );
+
+        const again = payloadOf([rich], restored("<b>x</b>"));
+        const againRoot = yield* render(again);
+        const againControl = onePart(againRoot, "control");
+
+        assert.deepStrictEqual(againControl.children, [text("<b>x</b>")]);
+        assert.include(toHtml(againControl), "&lt;b&gt;x&lt;/b&gt;</textarea>");
+        assert.isTrue(roundTrips(page([againRoot], again)));
       }),
   );
 
@@ -529,6 +673,59 @@ describe("renderExtendedText", () => {
 });
 
 describe("validateExtendedText", () => {
+  it.effect(
+    "[Q-5] under validateResponses, checks a single entry against the pattern-mask, and the refused post comes back as escaped text",
+    () =>
+      Effect.gen(function* patternChecked() {
+        const configuration = yield* configure({ validateResponses: true });
+        const mismatch = yield* decoded(masked, [[name, "<b>x</b>"]]);
+        const messages = validateExtendedText(masked, mismatch, configuration);
+
+        assert.deepStrictEqual(messages, [{ response, text: "Write in lower-case words." }]);
+        assert.deepStrictEqual(
+          validateExtendedText(
+            { ...masked, patternMaskMessage: Option.none() },
+            mismatch,
+            configuration,
+          ),
+          [{ response, text: message("en", "patternMismatch") }],
+        );
+        assert.deepStrictEqual(validateExtendedText(masked, mismatch, yield* configure({})), []);
+        assert.deepStrictEqual(
+          validateExtendedText(
+            masked,
+            yield* decoded(masked, [[name, "a quiet day"]]),
+            configuration,
+          ),
+          [],
+        );
+        assert.deepStrictEqual(
+          validateExtendedText(masked, yield* decoded(masked, []), configuration),
+          [],
+        );
+
+        const built = payloadOf([masked], {
+          ...answering,
+          messages,
+          posted: Option.some(new Map([[response, ["<b>x</b>"]]])),
+        });
+        const root = yield* render(built);
+        const tree = page([root], built);
+        const control = onePart(root, "control");
+
+        assert.deepStrictEqual(control.children, [text("<b>x</b>")]);
+        assert.include(toHtml(control), "&lt;b&gt;x&lt;/b&gt;</textarea>");
+        assert.strictEqual(control.attrs["data-format"], "xhtml");
+        assert.strictEqual(control.attrs["aria-invalid"], "true");
+        assert.strictEqual(
+          control.attrs["aria-describedby"],
+          scopedId(instance, response, "message", 0),
+        );
+        assert.deepStrictEqual(checkTree(tree, { baseLevel: 2 }), []);
+        assert.isTrue(roundTrips(tree));
+      }),
+  );
+
   it.effect(
     "[Q-5] refuses text that is not a number for a float or an integer, with the author's message when set",
     () =>
@@ -597,6 +794,572 @@ describe("validateExtendedText", () => {
 });
 
 /**
+ * Give the accessible name of each Control of an Extended Text, in document order.
+ *
+ * @param root The Extended Text Root.
+ * @param tree The tree the Root stands in, which `aria-labelledby` resolves against.
+ * @returns The Controls' names.
+ */
+const controlNames = (root: Element, tree: Element): readonly string[] =>
+  partsIn(root, "control").map((control) => nameOf(control, tree));
+
+/**
+ * The renderer's names for the Controls of an Extended Text that holds several.
+ *
+ * @param count How many Controls it holds.
+ * @returns "Answer n of count" for each, in order.
+ */
+const answersOf = (count: number): readonly string[] =>
+  Array.from({ length: count }, (_, index) =>
+    message("en", "answerOf", { count: String(count), n: String(index + 1) }),
+  );
+
+/**
+ * Construct the entries a form posts for the first Extended Text, one per text, in order.
+ *
+ * @param texts The texts, one per Control.
+ * @returns The entries, each under the default entry name.
+ */
+const entriesOf = (...texts: readonly string[]): readonly Entry[] =>
+  texts.map((posted): Entry => [name, posted]);
+
+/**
+ * Construct an `ordered` string value.
+ *
+ * @param texts Its members, in order.
+ * @returns The value.
+ */
+const orderedOf = (...texts: readonly string[]): Value => ({
+  baseType: "string",
+  cardinality: "ordered",
+  values: texts.map((value) => ({ baseType: "string", value })),
+});
+
+/**
+ * An unnamed Text Entry bound to a single string `CITY`, which the renderer names.
+ */
+const city: TextEntryInteraction = {
+  ariaLabel: Option.none(),
+  ariaLabelledby: Option.none(),
+  base: 10,
+  baseType: "string",
+  class: "",
+  expectedLength: Option.none(),
+  kind: "text-entry",
+  path: "qti-assessment-item/qti-item-body/p/qti-text-entry-interaction",
+  patternMask: Option.none(),
+  patternMaskMessage: Option.none(),
+  placeholder: Option.none(),
+  response: "CITY",
+};
+
+/**
+ * Construct an item whose body is a paragraph holding {@link city}, then an Extended Text.
+ *
+ * @param interaction The Extended Text.
+ * @returns The item.
+ */
+const besideCity = (interaction: ExtendedTextInteraction): Item => {
+  const alone = itemOf(interaction);
+
+  return {
+    ...alone,
+    body: [
+      {
+        attributes: [],
+        children: [words("City: "), city],
+        kind: "element",
+        path: "qti-assessment-item/qti-item-body/p",
+        tag: "p",
+      },
+      interaction,
+    ],
+    responses: new Map([
+      ...alone.responses,
+      [
+        city.response,
+        {
+          areaMapping: Option.none(),
+          baseType: "string",
+          cardinality: "single",
+          correct: Option.none(),
+          defaultValue: Option.none(),
+          identifier: city.response,
+          mapping: Option.none(),
+        },
+      ],
+    ]),
+  };
+};
+
+/**
+ * Render a payload's whole body, its Text Entries and Extended Texts, and place it as {@link page}
+ * does.
+ *
+ * @param built The payload.
+ * @returns The item's root.
+ */
+const pageOf = (built: Payload): Effect.Effect<Element> =>
+  Effect.gen(function* renderPage() {
+    const state = yield* emitState;
+    const renderInteraction: RenderInteraction = (interaction) => {
+      switch (interaction.kind) {
+        case "extended-text": {
+          return renderExtendedText(interaction, built, state);
+        }
+        case "text-entry": {
+          return renderTextEntry(interaction, built, state);
+        }
+        case "choice": {
+          return assert.fail("This page renders no Choice.");
+        }
+        default: {
+          return interaction satisfies never;
+        }
+      }
+    };
+
+    return page(
+      yield* Effect.orDie(Effect.fromResult(emitBody(built, state, renderInteraction))),
+      built,
+    );
+  });
+
+describe("an Extended Text bound to a container", () => {
+  it.effect(
+    '[Q-5] renders an ordered binding with max-strings="3" as three textareas posting under one name, in a group its Prompt names, each "Answer n of 3"',
+    () =>
+      Effect.gen(function* threeControls() {
+        const built = payloadOf([rivers]);
+        const root = yield* render(built);
+        const tree = page([root], built);
+        const prompt = onePart(root, "prompt");
+        const controls = partsIn(root, "control");
+
+        assert.deepStrictEqual(root.children, [prompt, ...controls]);
+        assert.deepStrictEqual(
+          controls.map((control) => control.tag),
+          ["textarea", "textarea", "textarea"],
+        );
+        assert.deepStrictEqual(
+          controls.map((control) => control.attrs["name"]),
+          [name, name, name],
+        );
+        assert.deepStrictEqual(
+          controls.map((control) => control.attrs["id"]),
+          [0, 1, 2].map((index) => scopedId(instance, response, "control", index)),
+        );
+        assert.deepStrictEqual(
+          controls.map((control) => control.attrs["rows"]),
+          ["5", "5", "5"],
+        );
+        assert.strictEqual(root.attrs["role"], "group");
+        assert.strictEqual(root.attrs["aria-labelledby"], prompt.attrs["id"]);
+        assert.strictEqual(nameOf(root, tree), "Name three rivers.");
+        assert.deepStrictEqual(controlNames(root, tree), answersOf(3));
+        assert.deepStrictEqual(checkTree(tree, { baseLevel: 2 }), []);
+        assert.isTrue(roundTrips(tree));
+
+        const single = yield* render(payloadOf([essay]));
+        assert.isUndefined(single.attrs["role"]);
+        assert.isUndefined(single.attrs["aria-labelledby"]);
+        assert.strictEqual(
+          onePart(single, "control").attrs["id"],
+          scopedId(instance, response, "control"),
+        );
+      }),
+  );
+
+  it.effect(
+    "[Q-5] with no Prompt, names the group by the author's aria-label or aria-labelledby, else leaves it unnamed, and names each Control",
+    () =>
+      Effect.gen(function* groupNames() {
+        const unprompted: ExtendedTextInteraction = { ...rivers, prompt: Option.none() };
+
+        const labelled = payloadOf([{ ...unprompted, ariaLabel: Option.some("Rivers") }]);
+        const labelledRoot = yield* render(labelled);
+        assert.strictEqual(labelledRoot.attrs["role"], "group");
+        assert.strictEqual(labelledRoot.attrs["aria-label"], "Rivers");
+        assert.isUndefined(labelledRoot.attrs["aria-labelledby"]);
+        assert.deepStrictEqual(
+          controlNames(labelledRoot, page([labelledRoot], labelled)),
+          answersOf(3),
+        );
+
+        const referenced = yield* render(
+          payloadBeside(
+            [idParagraph("intro", "Rivers")],
+            [{ ...unprompted, ariaLabelledby: Option.some("intro") }],
+          ),
+        );
+        assert.strictEqual(referenced.attrs["aria-labelledby"], authoredId(instance, "intro"));
+        assert.isUndefined(referenced.attrs["aria-label"]);
+        for (const control of partsIn(referenced, "control")) {
+          assert.isUndefined(control.attrs["aria-labelledby"]);
+        }
+
+        const unnamed = payloadOf([unprompted]);
+        const unnamedRoot = yield* render(unnamed);
+        const tree = page([unnamedRoot], unnamed);
+        assert.strictEqual(unnamedRoot.attrs["role"], "group");
+        assert.isUndefined(unnamedRoot.attrs["aria-label"]);
+        assert.isUndefined(unnamedRoot.attrs["aria-labelledby"]);
+        assert.deepStrictEqual(controlNames(unnamedRoot, tree), answersOf(3));
+        assert.deepStrictEqual(checkTree(tree, { baseLevel: 2 }), []);
+        assert.isTrue(roundTrips(tree));
+      }),
+  );
+
+  it.effect(
+    '[Q-20] [Q-5] numbers an unnamed Text Entry and each Control of an unnamed group in one sequence, "Answer 1 of 4" to "Answer 4 of 4"',
+    () =>
+      Effect.gen(function* oneSequence() {
+        const built = payload(
+          redactItem(besideCity({ ...rivers, prompt: Option.none() })),
+          answering,
+        );
+        const tree = yield* pageOf(built);
+        const inputs = elementsIn(tree).filter((element) => element.tag === "input");
+
+        assert.deepStrictEqual(
+          [...inputs, ...partsIn(tree, "control")].map((control) => nameOf(control, tree)),
+          answersOf(4),
+        );
+        assert.deepStrictEqual(checkTree(tree, { baseLevel: 2 }), []);
+        assert.isTrue(roundTrips(tree));
+      }),
+  );
+
+  it.effect(
+    "[Q-20] [Q-5] numbers a group whose authored aria-label is empty or blank as an unnamed one, and writes no aria-label on its Root",
+    () =>
+      Effect.gen(function* blankGroupLabel() {
+        for (const label of ["", "   "]) {
+          const built = payload(
+            redactItem(
+              besideCity({ ...rivers, ariaLabel: Option.some(label), prompt: Option.none() }),
+            ),
+            answering,
+          );
+          const tree = yield* pageOf(built);
+          const inputs = elementsIn(tree).filter((element) => element.tag === "input");
+          const root = onePart(tree, "root");
+
+          assert.strictEqual(root.attrs["role"], "group");
+          assert.isUndefined(root.attrs["aria-label"], JSON.stringify(label));
+          assert.deepStrictEqual(
+            [...inputs, ...partsIn(tree, "control")].map((control) => nameOf(control, tree)),
+            answersOf(4),
+            JSON.stringify(label),
+          );
+          assert.deepStrictEqual(checkTree(tree, { baseLevel: 2 }), [], JSON.stringify(label));
+          assert.isTrue(roundTrips(tree), JSON.stringify(label));
+        }
+      }),
+  );
+
+  it.effect(
+    "[Q-5] [keyboard] a walk that fills two of the three Controls posts an ordered value of two, which restores in order",
+    () =>
+      Effect.gen(function* fillTwo() {
+        const built = payloadOf([rivers]);
+        const tree = page([yield* render(built)], built);
+        const posted = keyboardWalk(tree, [
+          "Tab",
+          { type: "Nile" },
+          "Tab",
+          "Tab",
+          { type: "Amazon" },
+          "Tab",
+          "Enter",
+        ]);
+
+        assert.deepStrictEqual(posted, Option.some(entriesOf("Nile", "", "Amazon")));
+
+        const value = yield* decoded(
+          rivers,
+          Option.getOrElse(posted, () => []),
+        );
+        assert.deepStrictEqual(value, orderedOf("Nile", "Amazon"));
+        assert.deepStrictEqual(
+          validateExtendedText(rivers, value, yield* configure({ validateResponses: true })),
+          [],
+        );
+
+        const again = payloadOf([rivers], {
+          ...answering,
+          values: new Map([[response, orderedOf("Nile", "Amazon")]]),
+        });
+        const againRoot = yield* render(again);
+        assert.deepStrictEqual(
+          partsIn(againRoot, "control").map((control) => control.children),
+          [[text("Nile")], [text("Amazon")], []],
+        );
+        assert.isTrue(roundTrips(page([againRoot], again)));
+      }),
+  );
+
+  it.effect(
+    '[Q-5] renders 10 textareas for a max-strings above 10 or of 0, 100 for min-strings="100", and for min-strings="101" the notice and none',
+    () =>
+      Effect.gen(function* controlCounts() {
+        const counted = (interaction: ExtendedTextInteraction) =>
+          Effect.map(render(payloadOf([interaction])), (root) => partsIn(root, "control").length);
+
+        assert.strictEqual(
+          yield* counted({ ...rivers, maxStrings: Option.some(1_000_000_000_000n) }),
+          10,
+        );
+        assert.strictEqual(yield* counted({ ...rivers, maxStrings: Option.some(0n) }), 10);
+
+        const hundred = payloadOf([{ ...rivers, maxStrings: Option.some(200n), minStrings: 100n }]);
+        const hundredRoot = yield* render(hundred);
+        const hundredTree = page([hundredRoot], hundred);
+        assert.lengthOf(partsIn(hundredRoot, "control"), 100);
+        assert.deepStrictEqual(controlNames(hundredRoot, hundredTree), answersOf(100));
+        assert.deepStrictEqual(checkTree(hundredTree, { baseLevel: 2 }), []);
+        assert.isTrue(roundTrips(hundredTree));
+
+        const over = payloadOf([{ ...rivers, maxStrings: Option.some(200n), minStrings: 101n }]);
+        const overRoot = yield* render(over);
+        const overTree = page([overRoot], over);
+        const notices = elementsIn(overRoot).filter(
+          (element) => element.attrs["data-slot"] === rowFor("item", "notice").slot,
+        );
+
+        assert.deepStrictEqual(partsIn(overRoot, "control"), []);
+        assert.lengthOf(notices, 1);
+        assert.include(textOf(notices[0] ?? overRoot), "min-strings>100");
+        assert.isUndefined(overRoot.attrs["role"]);
+        assert.deepStrictEqual(checkTree(overTree, { baseLevel: 2 }), []);
+        assert.isTrue(roundTrips(overTree));
+      }),
+  );
+
+  it.effect(
+    "[Q-5] with a refused post, restores each entry to its Control, marks every Control invalid and described, and autofocuses the first",
+    () =>
+      Effect.gen(function* afterRefused() {
+        const pair: ExtendedTextInteraction = { ...rivers, minStrings: 2n };
+        const configuration = yield* configure({ validateResponses: true });
+        const messages = validateExtendedText(
+          pair,
+          yield* decoded(pair, entriesOf("Nile", "", "")),
+          configuration,
+        );
+
+        assert.lengthOf(messages, 1);
+
+        const built = payloadOf([pair], {
+          ...answering,
+          messages,
+          posted: Option.some(new Map([[response, ["Nile", "", ""]]])),
+        });
+        const root = yield* render(built);
+        const tree = page([root], built);
+        const controls = partsIn(root, "control");
+
+        assert.deepStrictEqual(
+          controls.map((control) => control.children),
+          [[text("Nile")], [], []],
+        );
+        for (const control of controls) {
+          assert.strictEqual(control.attrs["aria-invalid"], "true");
+          assert.strictEqual(
+            control.attrs["aria-describedby"],
+            scopedId(instance, response, "message", 0),
+          );
+        }
+        assert.deepStrictEqual(
+          elementsIn(tree).filter((element) => element.attrs["autofocus"] !== undefined),
+          controls.slice(0, 1),
+        );
+        assert.deepStrictEqual(checkTree(tree, { baseLevel: 2 }), []);
+        assert.isTrue(roundTrips(tree));
+      }),
+  );
+
+  it.effect(
+    "[Q-5] refuses more entries than a nonzero max-strings whatever validateResponses says, and fewer than min-strings only under it",
+    () =>
+      Effect.gen(function* counts() {
+        const lenient = yield* configure({});
+        const strict = yield* configure({ validateResponses: true });
+        const four = yield* decoded(rivers, entriesOf("a", "b", "c", "d"));
+
+        for (const configuration of [lenient, strict]) {
+          assert.deepStrictEqual(validateExtendedText(rivers, four, configuration), [
+            { response, text: message("en", "atMostStrings", { n: "3" }) },
+          ]);
+        }
+        assert.deepStrictEqual(
+          validateExtendedText(rivers, yield* decoded(rivers, entriesOf("a", "b", "c")), strict),
+          [],
+        );
+
+        const pair: ExtendedTextInteraction = { ...rivers, minStrings: 2n };
+        const one = yield* decoded(pair, entriesOf("a", "", ""));
+        assert.deepStrictEqual(validateExtendedText(pair, one, strict), [
+          { response, text: message("en", "atLeastStrings", { n: "2" }) },
+        ]);
+        assert.deepStrictEqual(validateExtendedText(pair, one, lenient), []);
+
+        const atMostOne: ExtendedTextInteraction = { ...rivers, maxStrings: Option.some(1n) };
+        assert.deepStrictEqual(
+          validateExtendedText(atMostOne, yield* decoded(atMostOne, entriesOf("a", "b")), lenient),
+          [{ response, text: message("en", "atMostOneString") }],
+        );
+
+        const atLeastOne: ExtendedTextInteraction = { ...rivers, minStrings: 1n };
+        assert.deepStrictEqual(
+          validateExtendedText(
+            atLeastOne,
+            yield* decoded(atLeastOne, entriesOf("", "", "")),
+            strict,
+          ),
+          [{ response, text: message("en", "atLeastOneString") }],
+        );
+
+        const unlimited: ExtendedTextInteraction = { ...rivers, maxStrings: Option.some(0n) };
+        const many = Array.from({ length: 25 }, (_, index) => `river ${index}`);
+        assert.deepStrictEqual(
+          validateExtendedText(unlimited, yield* decoded(unlimited, entriesOf(...many)), strict),
+          [],
+        );
+      }),
+  );
+
+  it.effect(
+    "[Q-5] under validateResponses, checks the pattern-mask on each member of a container",
+    () =>
+      Effect.gen(function* eachMember() {
+        const strict = yield* configure({ validateResponses: true });
+        const lowered: ExtendedTextInteraction = {
+          ...rivers,
+          patternMask: Option.some("[a-z ]+"),
+          patternMaskMessage: Option.some("Write in lower-case words."),
+        };
+        const mixed = yield* decoded(lowered, entriesOf("nile", "Amazon"));
+
+        assert.deepStrictEqual(validateExtendedText(lowered, mixed, strict), [
+          { response, text: "Write in lower-case words." },
+        ]);
+        assert.deepStrictEqual(validateExtendedText(lowered, mixed, yield* configure({})), []);
+        assert.deepStrictEqual(
+          validateExtendedText(
+            lowered,
+            yield* decoded(lowered, entriesOf("nile", "amazon")),
+            strict,
+          ),
+          [],
+        );
+      }),
+  );
+});
+
+describe("an Extended Text whose aria-labelledby names an id no element of the item carries", () => {
+  it.effect(
+    "[Q-5] with no Prompt, writes no aria-labelledby whose ids name no element of the item, and names each Control the renderer's way",
+    () =>
+      Effect.gen(function* danglingAriaLabelledby() {
+        for (const ids of ["nope", "nope missing"]) {
+          const tree = yield* pageOf(
+            payloadOf([
+              { ...bare, ariaLabelledby: Option.some(ids) },
+              { ...bare, response: "NOTES" },
+            ]),
+          );
+          const controls = partsIn(tree, "control");
+
+          assert.deepStrictEqual(
+            controls.map((control) => control.attrs["aria-labelledby"]),
+            [undefined, undefined],
+            ids,
+          );
+          assert.deepStrictEqual(
+            controls.map((control) => control.attrs["aria-label"]),
+            [...answersOf(2)],
+            ids,
+          );
+          assert.deepStrictEqual(
+            controls.map((control) => nameOf(control, tree)),
+            answersOf(2),
+            ids,
+          );
+          assert.deepStrictEqual(checkTree(tree, { baseLevel: 2 }), [], ids);
+        }
+      }),
+  );
+
+  it.effect(
+    "[Q-5] with no Prompt, keeps the ids of the author's aria-labelledby that name an element of the item, and drops the others",
+    () =>
+      Effect.gen(function* partlyDangling() {
+        const tree = yield* pageOf(
+          payloadBeside(
+            [idParagraph("intro", "Your day")],
+            [{ ...bare, ariaLabelledby: Option.some("intro nope") }],
+          ),
+        );
+        const control = onePart(tree, "control");
+
+        assert.strictEqual(control.attrs["aria-labelledby"], authoredId(instance, "intro"));
+        assert.isUndefined(control.attrs["aria-label"]);
+        assert.strictEqual(nameOf(control, tree), "Your day");
+        assert.deepStrictEqual(checkTree(tree, { baseLevel: 2 }), []);
+      }),
+  );
+
+  it.effect(
+    "[Q-20] [Q-5] numbers a group whose aria-labelledby names no element of the item as an unnamed one, and writes no aria-labelledby on its Root",
+    () =>
+      Effect.gen(function* danglingGroup() {
+        const tree = yield* pageOf(
+          payload(
+            redactItem(
+              besideCity({ ...rivers, ariaLabelledby: Option.some("nope"), prompt: Option.none() }),
+            ),
+            answering,
+          ),
+        );
+        const inputs = elementsIn(tree).filter((element) => element.tag === "input");
+        const root = onePart(tree, "root");
+
+        assert.strictEqual(root.attrs["role"], "group");
+        assert.isUndefined(root.attrs["aria-labelledby"]);
+        assert.isUndefined(root.attrs["aria-label"]);
+        assert.deepStrictEqual(
+          [...inputs, ...partsIn(tree, "control")].map((control) => nameOf(control, tree)),
+          answersOf(4),
+        );
+        assert.deepStrictEqual(checkTree(tree, { baseLevel: 2 }), []);
+        assert.isTrue(roundTrips(tree));
+      }),
+  );
+
+  it.effect(
+    "[Q-5] with no Prompt, names a group by the ids of its aria-labelledby that name an element of the item, and drops the others",
+    () =>
+      Effect.gen(function* partlyDanglingGroup() {
+        const tree = yield* pageOf(
+          payloadBeside(
+            [idParagraph("intro", "Rivers")],
+            [{ ...rivers, ariaLabelledby: Option.some("nope intro"), prompt: Option.none() }],
+          ),
+        );
+        const root = onePart(tree, "root");
+
+        assert.strictEqual(root.attrs["role"], "group");
+        assert.strictEqual(root.attrs["aria-labelledby"], authoredId(instance, "intro"));
+        assert.strictEqual(nameOf(root, tree), "Rivers");
+        assert.deepStrictEqual(controlNames(root, tree), answersOf(3));
+        assert.deepStrictEqual(checkTree(tree, { baseLevel: 2 }), []);
+        assert.isTrue(roundTrips(tree));
+      }),
+  );
+});
+
+/**
  * Construct a `qti-simple-choice` holding only text.
  *
  * @param identifier The choice's identifier.
@@ -622,9 +1385,9 @@ const declaration = (identifier: string, baseType: string): SourceElement =>
 
 describe("an Extended Text the renderer does not support", () => {
   it.effect(
-    '[Q-5] builds format="xhtml" beside a Choice as a notice in its place, and a walk still posts the Choice',
+    '[Q-5] [keyboard] builds an Extended Text whose pattern-mask="[0-9" the translator refuses beside a Choice as a notice in its place, and a walk still posts the Choice',
     () =>
-      Effect.gen(function* xhtmlNotice() {
+      Effect.gen(function* refusedPatternNotice() {
         const item = yield* buildItem(
           doc(
             "items/mixed.xml",
@@ -649,7 +1412,7 @@ describe("an Extended Text the renderer does not support", () => {
                     ),
                     el(
                       "qti-extended-text-interaction",
-                      [attr("format", "xhtml"), attr("response-identifier", response)],
+                      [attr("pattern-mask", "[0-9"), attr("response-identifier", response)],
                       [el("qti-prompt", [], [sourceText("Describe your day.")])],
                     ),
                   ],
@@ -661,12 +1424,12 @@ describe("an Extended Text the renderer does not support", () => {
         const path = "qti-assessment-item/qti-item-body/qti-extended-text-interaction";
 
         assert.deepStrictEqual(item.body[1], {
-          feature: 'format="xhtml"',
+          feature: "pattern-mask",
           kind: "unsupported",
           path,
         });
         assert.deepStrictEqual(item.unsupported, [
-          { feature: 'format="xhtml"', path, shown: "notice" },
+          { feature: "pattern-mask", path, shown: "notice" },
         ]);
 
         const built = payload(redactItem(item), answering);
@@ -704,6 +1467,107 @@ describe("an Extended Text the renderer does not support", () => {
           Option.some([[entryName(instance, "RESPONSE"), "B"]]),
         );
         assert.deepStrictEqual(checkTree(tree, { baseLevel: 2 }), []);
+      }),
+  );
+
+  it.effect(
+    '[Q-5] judges no min-strings count for an Extended Text whose min-strings="101" renders the notice in place of its Controls, so its item can be submitted, and still checks its posted value against max-strings and the pattern-mask',
+    () =>
+      Effect.gen(function* overCapCounts() {
+        const path = "qti-assessment-item/qti-item-body/qti-extended-text-interaction";
+        const verdict = check(
+          doc(
+            "items/over-cap.xml",
+            el(
+              "qti-assessment-item",
+              [
+                attr("identifier", "over-cap"),
+                attr("time-dependent", "false"),
+                attr("title", "Over the cap"),
+              ],
+              [
+                declaration("RESPONSE", "identifier"),
+                el("qti-response-declaration", [
+                  attr("base-type", "string"),
+                  attr("cardinality", "multiple"),
+                  attr("identifier", response),
+                ]),
+                el(
+                  "qti-item-body",
+                  [],
+                  [
+                    el(
+                      "qti-choice-interaction",
+                      [attr("max-choices", "1"), attr("response-identifier", "RESPONSE")],
+                      [simpleChoice("A", "Red"), simpleChoice("B", "Green")],
+                    ),
+                    el("qti-extended-text-interaction", [
+                      attr("max-strings", "0"),
+                      attr("min-strings", "101"),
+                      attr("response-identifier", response),
+                    ]),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          tables,
+        );
+        const accepted =
+          verdict.verdict === "accepted-with-unsupported"
+            ? verdict.accepted
+            : assert.fail(`The item is ${verdict.verdict}, not accepted-with-unsupported.`);
+        const lenient = yield* configure({});
+        const strict = yield* configure({ validateResponses: true });
+
+        assert.deepStrictEqual(accepted.unsupported, [
+          { feature: "min-strings>100", path, shown: "notice" },
+        ]);
+        assert.deepStrictEqual(
+          checkResponses(
+            accepted,
+            {
+              RESPONSE: {
+                baseType: "identifier",
+                cardinality: "single",
+                values: [{ baseType: "identifier", value: "B" }],
+              },
+            },
+            strict,
+          ),
+          [],
+        );
+
+        const over: ExtendedTextInteraction = {
+          ...rivers,
+          maxStrings: Option.some(2n),
+          minStrings: 101n,
+        };
+        assert.deepStrictEqual(
+          validateExtendedText(over, yield* decoded(over, entriesOf("a", "b")), strict),
+          [],
+        );
+
+        const three = yield* decoded(over, entriesOf("a", "b", "c"));
+        for (const configuration of [lenient, strict]) {
+          assert.deepStrictEqual(validateExtendedText(over, three, configuration), [
+            { response, text: message("en", "atMostStrings", { n: "2" }) },
+          ]);
+        }
+
+        const overMasked: ExtendedTextInteraction = {
+          ...over,
+          patternMask: Option.some("[a-z ]+"),
+          patternMaskMessage: Option.some("Write in lower-case words."),
+        };
+        assert.deepStrictEqual(
+          validateExtendedText(
+            overMasked,
+            yield* decoded(overMasked, entriesOf("nile", "Amazon")),
+            strict,
+          ),
+          [{ response, text: "Write in lower-case words." }],
+        );
       }),
   );
 });

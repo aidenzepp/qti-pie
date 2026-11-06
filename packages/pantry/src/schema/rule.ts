@@ -15,6 +15,7 @@
  * XInclude stores its references as read and never resolves them.
  */
 import {
+  capacity,
   check,
   closedId,
   contained,
@@ -25,6 +26,7 @@ import {
   relation,
   str,
   uuid,
+  within,
 } from "@bjornpagen/grizzle";
 import { XIncludeParseValue } from "#pantry/schema/content/rosters.ts";
 import * as item from "#pantry/schema/item.ts";
@@ -194,7 +196,8 @@ export const Fallback = relation("Fallback", { id: uuid }, ["id"]);
 
 /**
  * The one expression a rule holds: the expression, its position under the rule, and the rule with
- * its kind, which a check names the twelve holder kinds of.
+ * its kind, which a check names the kinds of: the twelve holders and the three single-expression
+ * owners.
  */
 export const RuleOperand = relation(
   "RuleOperand",
@@ -367,6 +370,9 @@ export const rules = [
       "qti-outcome-else-if",
       "qti-template-if",
       "qti-template-else-if",
+      "qti-pre-condition",
+      "qti-branch-rule",
+      "qti-template-default",
     ]),
   ),
   contained(on(SetOutcomeValue, "id"), on(RuleOperand, "rule")),
@@ -389,6 +395,10 @@ export const rules = [
   contained(on(XIncludeHref, "node"), on(XInclude, "id")),
   contained(on(XIncludeParse, "node"), on(XInclude, "id")),
   contained(on(XIncludeXpointer, "node"), on(XInclude, "id")),
+  // QTI 3.0 forbids `xpointer` on an `xi:include` (IMS Main 2p12), so every include has none.
+  capacity(on(XInclude, "id"), { from: on(XIncludeXpointer, "node"), within: within(0n, 0n) }),
+  // An absent `parse` is XInclude's default, `xml`; a written one must be `xml` (fragments are XML).
+  check("XIncludeParseXml", XIncludeParse, (p) => p.eq(p.value, "xml")),
   contained(on(XIncludeEncoding, "node"), on(XInclude, "id")),
   contained(on(XIncludeAccept, "node"), on(XInclude, "id")),
   contained(on(XIncludeAcceptLanguage, "node"), on(XInclude, "id")),

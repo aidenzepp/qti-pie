@@ -429,10 +429,12 @@ const enteredBy = (flags: readonly Flag[], kind: NodeKindHandle): readonly Flag[
  *
  * A registry row names one parent, and the `Duration` container's `duration` child is the
  * `CharacterString` `lom:duration.string` under `lom:typicalLearningTime` as it is under
- * `lom:duration`.
+ * `lom:duration`, and a test's `qti-rubric-block.test` is the one under a test part and a section
+ * as it is under `qti-assessment-test`.
  */
 const alsoUnder: ReadonlyMap<string, readonly string[]> = new Map([
   ["lom:duration.string", ["lom:typicalLearningTime"]],
+  ["qti-rubric-block.test", ["qti-test-part", "qti-assessment-section"]],
 ]);
 
 const clark = (namespace: string, local: string): string => `{${namespace}}${local}`;

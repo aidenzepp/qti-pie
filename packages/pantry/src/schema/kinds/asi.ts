@@ -3684,18 +3684,25 @@ const typedChildren = new Map<string, string>([
 ]);
 
 /**
- * The handle a child element reference stands for under a host.
+ * The handle a child element reference stands for under a host: the vocabulary's own `element|host`
+ * map first, then the module's `typedChildren`, then the element's plain handle.
  */
-const childHandle = (element: string, host: string): string =>
-  typedChildren.get(`${element}|${host}`) ?? element;
+const childHandle = (element: string, host: string, own: ReadonlyMap<string, string>): string => {
+  const key = `${element}|${host}`;
+
+  return own.get(key) ?? typedChildren.get(key) ?? element;
+};
 
 /**
  * The admitted children of one inventory host: its element children that have a handle in the
  * inventory, then the content-type rows.
  */
-const childrenOfHost = (entry: InventoryEntry): readonly string[] => {
+const childrenOfHost = (
+  entry: InventoryEntry,
+  own: ReadonlyMap<string, string>,
+): readonly string[] => {
   const elements = entry.children
-    .map((child) => childHandle(child.name, entry.handle))
+    .map((child) => childHandle(child.name, entry.handle, own))
     .filter((handle) => Option.isSome(entryOf(handle)) && handle !== "template");
   if (entry.mixed) {
     return [...elements, "text", "ws", "entityRef", "comment", "pi"];
@@ -3713,15 +3720,18 @@ const childrenOfHost = (entry: InventoryEntry): readonly string[] => {
  * for both versions.
  *
  * @param leaf - One vocabulary's inventory leaf.
+ * @param own - The vocabulary's own multi-type children, keyed `element|host` like `typedChildren`
+ *   and consulted before it.
  * @returns One row per version, host and admitted child, without duplicates within the leaf.
  */
 export const admissionOf = (
   leaf: Readonly<Record<string, InventoryEntry>>,
+  own: ReadonlyMap<string, string> = new Map(),
 ): readonly AdmissionRow[] =>
   Object.values(leaf)
     .filter((entry) => entry.handle !== "template")
     .flatMap((entry) => {
-      const kids = [...new Set(childrenOfHost(entry))];
+      const kids = [...new Set(childrenOfHost(entry, own))];
 
       return versions.flatMap((version) =>
         kids.map((child) => ({ child, parent: entry.handle, version })),

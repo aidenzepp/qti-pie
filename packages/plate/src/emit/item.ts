@@ -14,7 +14,7 @@ import { Option, Result } from "effect";
 import { h, text, when } from "#plate/emit/node.ts";
 import type { Attributes, Element, Node } from "#plate/emit/node.ts";
 import { rowFor, scopedId } from "#plate/emit/parts.ts";
-import type { PartOf, RowContext } from "#plate/emit/parts.ts";
+import type { PartOf, Resolved, RowContext } from "#plate/emit/parts.ts";
 import { applyPart } from "#plate/emit/swap.ts";
 import type { PartSwapRefused } from "#plate/emit/swap.ts";
 import { message } from "#plate/messages.ts";
@@ -23,17 +23,19 @@ import type { EmitState, Payload, ValidationMessage } from "#plate/payload.ts";
 
 /**
  * Build one item part through its row and the embedder's replacement, if any, with its
- * `data-slot` marker beside the attributes it is given.
+ * `data-slot` marker beside the attributes it is given: the Root, the Status parts here, and the
+ * body's Notice.
  *
- * @param state The emit state, which holds the resolved part overrides.
+ * @param parts The resolved part overrides.
  * @param part The item part.
  * @param props The attributes the part carries, beside its marker.
  * @param children The nodes the part holds.
- * @param context Where the part is placed, such as the StatusHeading's level; none by default.
+ * @param context Where the part is placed, such as the StatusHeading's level or a Notice's
+ *   position; none by default.
  * @returns The part's root element, refused when a replacement breaks the swap invariant.
  */
-const itemPart = (
-  state: EmitState,
+export const itemPart = (
+  parts: Resolved,
   part: PartOf<"item">,
   props: Attributes,
   children: readonly Node[],
@@ -45,7 +47,7 @@ const itemPart = (
     row,
     { ...props, "data-slot": row.slot },
     children,
-    Option.getOrUndefined(state.parts.replacementFor("item", part)),
+    Option.getOrUndefined(parts.replacementFor("item", part)),
   );
 };
 
@@ -71,7 +73,7 @@ export const emitItem = (
   body: readonly Node[],
 ): Result.Result<Element, PartSwapRefused> =>
   itemPart(
-    state,
+    state.parts,
     "root",
     {
       "data-mode": payload.mode,
@@ -83,29 +85,52 @@ export const emitItem = (
   );
 
 /**
- * What the author passes to the Status part (spec §4.1): the instance, the after-submit state its
- * heading names, and what the region shows under the heading.
+ * The data the results box shows after a submit (spec §4.1): the instance, the after-submit state
+ * its heading names, and what the region shows under the heading.
  *
- * The region shows the score when `score` is set; else one Message per entry of `messages`, when
- * there are any; else nothing under the heading, which names the state on its own.
- * `autofocus` is the author's focus choice: the region carries `autofocus` exactly when it is true.
+ * The results box is a part plate keeps: `renderStatus` emits the Status region from this input,
+ * and the author places it and feeds it what `score` or `checkResponses` gave. The part has no
+ * submit semantics, owns no state and moves no focus. The region shows the score when `score` is
+ * set; else one Message per entry of `messages`, when there are any; else nothing under the
+ * heading, which names the state on its own.
+ *
+ * To build your own results box, read the same input and write what `renderStatus` writes: a
+ * region with the id `<instance>-status` and `role="status"`, named by its heading through
+ * `aria-labelledby`, with `tabindex="-1"`, and with `autofocus` when the author moves focus there
+ * after a submit. Each Message carries the id the Controls' `aria-describedby` already names when
+ * `render` was given the same `messages`: `<instance>-<response>-message-<n>`, where `n` counts the
+ * earlier messages for the same response from 0.
+ *
+ * A host without script can end its form's `action` with the region's id as the fragment,
+ * `#<instance>-status`, so the page that answers the post starts at the result: the browser
+ * scrolls to the region and focuses it, as the playground does. HTML then skips `autofocus`: a page
+ * whose URL's fragment names an element processes none.
+ *
+ * @see https://html.spec.whatwg.org/multipage/interaction.html#flush-autofocus-candidates
  */
 export interface StatusInput {
+  /**
+   * The author's focus choice: the region carries `autofocus` exactly when it is true.
+   */
   readonly autofocus?: boolean;
   /**
-   * The after-submit state, as `messages.ts` keys it.
+   * The after-submit state, as `messages.ts` keys it; the heading shows its text in the
+   * configuration's locale.
    */
   readonly heading: "notAccepted" | "responseRecorded" | "scored";
   /**
-   * The item instance key, which scopes the region's ids and its Messages' ids.
+   * The item instance key `render` used, which scopes the region's ids and its Messages' ids.
    */
   readonly instance: string;
   /**
-   * The messages of a refused post, in the order validation gave them.
+   * The messages of a refused post, in the order validation gave them: what `checkResponses`
+   * returns, or the `messages` of the `ResponsesRefused` that `score` fails with.
    */
   readonly messages?: readonly ValidationMessage[];
   /**
-   * The score, already written as the candidate reads it.
+   * The score, already written as the candidate reads it. The author writes it, not plate, for
+   * example from the `SCORE` outcome of the record `score` returns. The region shows it in the
+   * locale's score text, such as `Score: 1`.
    */
   readonly score?: string;
 }
@@ -132,10 +157,10 @@ const statusDetail = (
     return Result.gen(function* statusMessages() {
       const items: Element[] = [];
       for (const entry of identifyMessages(input.instance, messages)) {
-        items.push(yield* itemPart(state, "message", { id: entry.id }, [text(entry.text)]));
+        items.push(yield* itemPart(state.parts, "message", { id: entry.id }, [text(entry.text)]));
       }
 
-      return [yield* itemPart(state, "messages", {}, items)];
+      return [yield* itemPart(state.parts, "messages", {}, items)];
     });
   }
 
@@ -168,7 +193,7 @@ export const emitStatus = (
   Result.gen(function* statusRegion() {
     const headingId = scopedId(input.instance, "status", "heading");
     const heading = yield* itemPart(
-      state,
+      state.parts,
       "statusHeading",
       { id: headingId },
       [text(message(state.locale, input.heading))],
@@ -177,7 +202,7 @@ export const emitStatus = (
     const detail = yield* statusDetail(input, state);
 
     return yield* itemPart(
-      state,
+      state.parts,
       "status",
       {
         "aria-labelledby": headingId,

@@ -2,13 +2,16 @@
 import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
-import { Effect, FileSystem } from "effect";
+import { Effect, FileSystem, Option } from "effect";
 import type { AnyRelation, Fact, Uuid } from "@bjornpagen/grizzle";
 import { ProcessingGuardRefusal, processingGuards } from "#pantry/import/guards/processing.ts";
 import { itemRows } from "#pantry/import/item.ts";
 import { documentRows, readRows } from "#pantry/import/package.ts";
+import { manifestRows } from "#pantry/import/manifest.ts";
 import { ProcessingRefused, processingRows } from "#pantry/import/processing.ts";
-import type { ProcessingInput } from "#pantry/import/processing.ts";
+import type { ProcessingInput, SectionTest, StructureEntry } from "#pantry/import/processing.ts";
+import { packageStage } from "#pantry/import/reference.ts";
+import type { StagedDocument } from "#pantry/import/reference.ts";
 import { ImportRefused, ruleOfError } from "#pantry/import/refusal.ts";
 import { rptemplateRows } from "#pantry/import/rptemplate.ts";
 import { Rows, treeRows } from "#pantry/import/tree.ts";
@@ -29,6 +32,10 @@ import {
   XIncludeUri,
 } from "#pantry/schema/contracts.ts";
 import { Document, DocumentIdentifier, DocumentTitle } from "#pantry/schema/document.ts";
+import { listPackage, readEntry } from "#pantry/package/read.ts";
+import { ResourceLomGeneral } from "#pantry/schema/lang.ts";
+import { ItemRefDocument } from "#pantry/schema/reference.ts";
+import { ItemRef, TestIdentifier } from "#pantry/schema/test/structure.ts";
 import * as expression from "#pantry/schema/expression.ts";
 import * as attributed from "#pantry/schema/expression-attributes.ts";
 import { expressionKinds } from "#pantry/schema/kinds/asi.ts";
@@ -37,6 +44,8 @@ import type { NodeKindHandle, RootKindHandle } from "#pantry/schema/node.ts";
 import * as processing from "#pantry/schema/processing.ts";
 import * as ruleSchema from "#pantry/schema/rule.ts";
 import { operatorArity, operatorArityMax } from "#pantry/schema/seed/operator-arity.ts";
+import { materialize, materializeSpec, specOf, zipMembers } from "#pantry/test/fixtures.ts";
+import type { FixtureName } from "#pantry/test/fixtures.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { Element, XmlDocument } from "@qti-pie/crust/tree.ts";
 
@@ -163,12 +172,32 @@ const prepareBody = (body: string, options: Parameters<typeof prepare>[1], attri
   });
 
 /**
+ * A test environment that declares the outcomes the string-built bodies write and read, so that
+ * the tests whose subject is something else (an attribute, a literal, a row) are not refused P8.
+ * The types are `unknown`: only the declaration's existence matters to them.
+ */
+const outcomesDeclared = withDeclarations(
+  emptyEnvironment("test"),
+  ["COUNT", "LIST", "RESPONSE", "SCORE", "digits"].map((identifier): DeclarationEntry => ({
+    areaMapping: false,
+    identifier,
+    interpolationTable: false,
+    kind: "outcome",
+    mapping: false,
+    matchTable: false,
+    mathVariable: false,
+    paramVariable: false,
+    type: { baseType: "unknown", cardinality: "unknown" },
+  })),
+);
+
+/**
  * A `qti-equal-rounded` whose `figures` is the text given, prepared for the writer.
  */
 const equalRoundedOver = (figures: string) =>
   prepareBody(
     `<qti-set-outcome-value identifier="SCORE"><qti-equal-rounded rounding-mode="decimalPlaces" figures="${figures}"><qti-base-value base-type="float">1</qti-base-value><qti-base-value base-type="float">2</qti-base-value></qti-equal-rounded></qti-set-outcome-value>`,
-    { language: "response", mode: "test", rootKind: "item" },
+    { env: outcomesDeclared, language: "response", mode: "test", rootKind: "item" },
   );
 
 const itemOptions = { language: "response", mode: "item", rootKind: "item" } as const;
@@ -807,7 +836,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/processing.ts",
       ]) {
         const prepared = yield* prepareBody(
           `<qti-set-outcome-value identifier="SCORE">${body}</qti-set-outcome-value>`,
-          { language: "response", mode: "test", rootKind: "item" },
+          { env: outcomesDeclared, language: "response", mode: "test", rootKind: "item" },
         );
         const failure = yield* Effect.flip(processed(prepared));
         assert.instanceOf(failure, ImportRefused);
@@ -820,7 +849,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/processing.ts",
     Effect.gen(function* paddedReference() {
       const prepared = yield* prepareBody(
         `<qti-set-outcome-value identifier="SCORE"><qti-equal-rounded rounding-mode="decimalPlaces" figures=" COUNT "><qti-base-value base-type="float">1</qti-base-value><qti-base-value base-type="float">2</qti-base-value></qti-equal-rounded></qti-set-outcome-value>`,
-        { language: "response", mode: "test", rootKind: "item" },
+        { env: outcomesDeclared, language: "response", mode: "test", rootKind: "item" },
       );
       const failure = yield* Effect.flip(processed(prepared));
       assert.instanceOf(failure, ImportRefused);
@@ -868,7 +897,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/processing.ts",
         for (const [name, operator] of cases) {
           const prepared = yield* prepareBody(
             `<qti-set-outcome-value identifier="SCORE">${operator}</qti-set-outcome-value>`,
-            { language: "outcome", mode: "test", rootKind: "test" },
+            { env: outcomesDeclared, language: "outcome", mode: "test", rootKind: "test" },
           );
           const failure = yield* Effect.flip(processed(prepared));
           assert.instanceOf(failure, ImportRefused, name);
@@ -908,7 +937,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/processing.ts",
       for (const [name, operator] of cases) {
         const prepared = yield* prepareBody(
           `<qti-set-outcome-value identifier="SCORE">${operator}</qti-set-outcome-value>`,
-          { language: "outcome", mode: "test", rootKind: "test" },
+          { env: outcomesDeclared, language: "outcome", mode: "test", rootKind: "test" },
         );
         const failure = yield* Effect.flip(processed(prepared));
         assert.instanceOf(failure, ImportRefused, name);
@@ -936,7 +965,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/processing.ts",
       Effect.gen(function* paddedMode() {
         const prepared = yield* prepareBody(
           '<qti-set-outcome-value identifier="SCORE"><qti-equal tolerance-mode=" exact"><qti-base-value base-type="float">1</qti-base-value><qti-base-value base-type="float">2</qti-base-value></qti-equal></qti-set-outcome-value>',
-          { language: "outcome", mode: "test", rootKind: "test" },
+          { env: outcomesDeclared, language: "outcome", mode: "test", rootKind: "test" },
         );
         const failure = yield* Effect.flip(processed(prepared));
         assert.instanceOf(failure, ImportRefused);
@@ -1766,7 +1795,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/package.ts read
       for (const spelling of ["yes", "1", "TRUE"]) {
         const prepared = yield* prepareBody(
           `<qti-set-outcome-value identifier="SCORE"><qti-base-value base-type="boolean">${spelling}</qti-base-value></qti-set-outcome-value>`,
-          { language: "outcome", mode: "test", rootKind: "test" },
+          { env: outcomesDeclared, language: "outcome", mode: "test", rootKind: "test" },
         );
         const failure = yield* Effect.flip(processed(prepared));
 
@@ -1780,7 +1809,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/package.ts read
     Effect.gen(function* insideLiteral() {
       const prepared = yield* prepareBody(
         '<qti-set-outcome-value identifier="SCORE"><qti-base-value base-type="boolean">false</qti-base-value></qti-set-outcome-value>',
-        { language: "outcome", mode: "test", rootKind: "test" },
+        { env: outcomesDeclared, language: "outcome", mode: "test", rootKind: "test" },
       );
       const built = yield* processed(prepared);
 
@@ -1795,7 +1824,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/package.ts read
     Effect.gen(function* paddedBoolean() {
       const prepared = yield* prepareBody(
         '<qti-set-outcome-value identifier="SCORE"><qti-base-value base-type="boolean"> true </qti-base-value></qti-set-outcome-value>',
-        { language: "outcome", mode: "test", rootKind: "test" },
+        { env: outcomesDeclared, language: "outcome", mode: "test", rootKind: "test" },
       );
       const built = yield* processed(prepared);
 
@@ -1827,7 +1856,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/package.ts read
 
       const prepared = yield* prepareBody(
         '<qti-set-outcome-value identifier="SCORE"><qti-string-match case-sensitive="true"><qti-base-value base-type="string"> a </qti-base-value><qti-base-value base-type="string">a</qti-base-value></qti-string-match></qti-set-outcome-value>',
-        { language: "outcome", mode: "test", rootKind: "test" },
+        { env: outcomesDeclared, language: "outcome", mode: "test", rootKind: "test" },
       );
       const built = yield* processed(prepared);
 
@@ -1840,3 +1869,598 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/package.ts read
     }),
   );
 });
+
+/**
+ * The package at `name`, read to rows.
+ */
+const rowsOfFixture = (name: FixtureName) =>
+  Effect.flatMap(materialize(name), (dir) => readRows(dir));
+
+/**
+ * The package at `dir` after the package stage, without the guards: every document read and its
+ * rows built, then the stage run over them, as `readRows` does before it judges the rows. The
+ * package's own refusals past the stage (a LOM title that disagrees with the test's) are not
+ * reached.
+ */
+const stagedRows = (dir: string) =>
+  Effect.gen(function* packageStaged() {
+    const entries = yield* listPackage(dir);
+    const manifest = yield* readXml(yield* readEntry(dir, "imsmanifest.xml"));
+    const manifested = yield* manifestRows(dir, entries, manifest, Rows.empty());
+    let { rows } = manifested;
+    const documents: StagedDocument[] = [];
+    for (const document of manifested.documents) {
+      const doc = yield* readXml(yield* readEntry(dir, document.path));
+      const built = yield* documentRows(
+        {
+          doc,
+          packageId: manifested.packageId,
+          path: document.path,
+          resource: document.resource,
+          resourceLomHasGeneral: Rows.of(manifested.rows, ResourceLomGeneral).some(
+            (general) => general.resource === document.resource,
+          ),
+          resourceType: document.type,
+          version: manifested.version,
+        },
+        rows,
+      );
+      ({ rows } = built);
+      if ("nodes" in built) {
+        documents.push({ doc, nodes: built.nodes });
+      }
+    }
+
+    return yield* packageStage(rows, documents);
+  });
+
+/**
+ * The document of `rows` at `path`.
+ */
+const documentAt = (rows: Rows, at: string) =>
+  Rows.of(rows, Document).find((found) => found.path === at) ?? assert.fail(`no document at ${at}`);
+
+/**
+ * The item reference of `rows` with `identifier` in `document`.
+ */
+const itemRefOf = (rows: Rows, document: Uuid, identifier: string) =>
+  Rows.of(rows, ItemRef).find(
+    (ref) => ref.document === document && ref.identifier === identifier,
+  ) ?? assert.fail(`no item reference ${identifier}`);
+
+/**
+ * The refs of the rows of a per-test relation, sorted.
+ */
+const idsOfRefs = (rows: readonly { readonly ref: Uuid }[]) =>
+  rows.map((row) => row.ref).toSorted();
+
+/**
+ * The structure identifier of `rows` spelled `identifier`.
+ */
+const holderOf = (rows: Rows, identifier: string) =>
+  Rows.of(rows, TestIdentifier).find((found) => found.identifier === identifier) ??
+  assert.fail(`no structure identifier ${identifier}`);
+
+/**
+ * The one row of `found`.
+ */
+const onlyRow = <Row>(found: readonly Row[]): Row => {
+  assert.strictEqual(found.length, 1);
+
+  return found[0] ?? assert.fail("no row");
+};
+
+/**
+ * The edit that spells the built-in `completionStatus` where `adaptive.xml` of
+ * `test_package_minfiles` writes `completion_status` before the base value `value`, which sits
+ * under the indent `tabs` in the file's CRLF text.
+ */
+const spell = (value: string, tabs: string) =>
+  ({
+    _tag: "ReplaceText",
+    file: "example/adaptive.xml",
+    replacement: `identifier="completionStatus">\r\n${tabs}<qti-base-value base-type="identifier">${value}<`,
+    search: `identifier="completion_status">\r\n${tabs}<qti-base-value base-type="identifier">${value}<`,
+  }) as const;
+
+layer(NodeServices.layer, { excludeTestServices: true })(
+  "import/processing.ts a test document's rows",
+  (suite) => {
+    suite.effect("writes four declared item variable references over test_package_minfiles", () =>
+      Effect.gen(function* minfiles() {
+        // `adaptive.xml` sets `completion_status`, which no item declares and the built-in
+        // `completionStatus` is not, so the package's own item is refused P8 before the stage; the
+        // edits spell the built-in and leave everything the test reads as the corpus has it.
+        const dir = yield* materializeSpec({
+          edits: [spell("incomplete", "\t\t\t"), spell("completed", "\t\t\t\t\t")],
+          member: zipMembers.test_package_minfiles,
+          name: "test_package_minfiles",
+        });
+        const rows = yield* stagedRows(dir);
+        const test = documentAt(rows, "example/rtest.xml");
+        const refs = of(rows, processing.ItemVariableRef);
+
+        assert.deepStrictEqual(
+          refs.map((ref) => [ref.prefix, ref.variable, ref.root, ref.document]).toSorted(byText),
+          ["item034", "item063", "item065", "item160"].map((prefix) => [
+            prefix,
+            "SCORE",
+            "test",
+            test.id,
+          ]),
+        );
+        assert.deepStrictEqual(
+          of(rows, processing.VariableRef)
+            .filter((ref) => ref.kind === "itemVariable")
+            .map((ref) => ref.id)
+            .toSorted(),
+          refs.map((ref) => ref.id).toSorted(),
+        );
+
+        const hubs = of(rows, processing.PrefixedVariableSource);
+        assert.deepStrictEqual(idsOfRefs(hubs), refs.map((ref) => ref.id).toSorted());
+        for (const hub of hubs) {
+          const ref = refs.find((one) => one.id === hub.ref) ?? assert.fail("no arm");
+          const itemRef = itemRefOf(rows, test.id, ref.prefix);
+          const resolved = onlyRow(
+            of(rows, ItemRefDocument).filter((row) => row.itemRef === itemRef.id),
+          );
+
+          assert.strictEqual(hub.test, test.id);
+          assert.strictEqual(hub.document, test.id);
+          assert.strictEqual(hub.refKind, "itemVariable");
+          assert.strictEqual(hub.source, "declared");
+          assert.strictEqual(hub.prefix, ref.prefix);
+          assert.strictEqual(hub.itemRef, itemRef.id);
+          assert.strictEqual(hub.itemDocument, resolved.document);
+          assert.deepStrictEqual(
+            of(rows, processing.PrefixedDeclared).filter((row) => row.ref === hub.ref),
+            [{ itemDocument: resolved.document, ref: hub.ref, test: test.id, variable: "SCORE" }],
+          );
+        }
+
+        assert.deepStrictEqual(of(rows, processing.ItemInstanceVariableRef), []);
+        assert.deepStrictEqual(of(rows, processing.SectionDurationRef), []);
+        assert.deepStrictEqual(of(rows, processing.PrefixedMapped), []);
+        assert.deepStrictEqual(of(rows, processing.PrefixedBuiltIn), []);
+      }),
+    );
+
+    suite.effect("writes test-linear's pre-condition and branch rules, each with its operand", () =>
+      Effect.gen(function* linear() {
+        const { rows } = yield* rowsOfFixture("test-linear");
+        const operands = of(rows, ruleSchema.RuleOperand);
+
+        assert.deepStrictEqual(operands.map((operand) => operand.ruleKind).toSorted(), [
+          "qti-branch-rule",
+          "qti-branch-rule",
+          "qti-branch-rule",
+          "qti-branch-rule",
+          "qti-pre-condition",
+          "qti-pre-condition",
+          "qti-pre-condition",
+        ]);
+
+        const expressions = new Set(of(rows, processing.Expression).map((row) => row.id));
+        for (const operand of operands) {
+          assert.isTrue(expressions.has(operand.child));
+        }
+
+        assert.deepStrictEqual(
+          of(rows, processing.ItemVariableRef)
+            .map((ref) => `${ref.prefix}.${ref.variable}`)
+            .toSorted(),
+          [
+            "item034.RESPONSE",
+            "item034.RESPONSE",
+            "item034.SCORE",
+            "item347.RESPONSE",
+            "item347.RESPONSE",
+            "item653.SCORE",
+            "switch.RESPONSE",
+          ],
+        );
+        assert.deepStrictEqual(
+          of(rows, processing.PrefixedVariableSource).map((hub) => hub.source),
+          Array.from({ length: 7 }, () => "declared"),
+        );
+        assert.strictEqual(of(rows, processing.PrefixedDeclared).length, 7);
+      }),
+    );
+
+    suite.effect("writes test-mapping's declared, built-in and instance sources", () =>
+      Effect.gen(function* mapping() {
+        const { rows } = yield* rowsOfFixture("test-mapping");
+        const test = documentAt(rows, "rtest26.xml");
+        const items = of(rows, processing.ItemVariableRef);
+        const instances = of(rows, processing.ItemInstanceVariableRef);
+        const hubOf = (ref: Uuid) =>
+          onlyRow(of(rows, processing.PrefixedVariableSource).filter((hub) => hub.ref === ref));
+        const named = (prefix: string, variable: string) =>
+          items.find((ref) => ref.prefix === prefix && ref.variable === variable) ??
+          assert.fail(`no ${prefix}.${variable}`);
+
+        assert.deepStrictEqual(items.map((ref) => `${ref.prefix}|${ref.variable}`).toSorted(), [
+          "I|A.B",
+          "I|duration",
+          "J.K|SCORE",
+          "item160|SCORE",
+        ]);
+        assert.strictEqual(hubOf(named("item160", "SCORE").id).source, "declared");
+        assert.strictEqual(hubOf(named("J.K", "SCORE").id).source, "declared");
+
+        const nested = hubOf(named("I", "A.B").id);
+        assert.strictEqual(nested.source, "declared");
+        assert.deepStrictEqual(
+          of(rows, processing.PrefixedDeclared)
+            .filter((row) => row.ref === nested.ref)
+            .map((row) => row.variable),
+          ["A.B"],
+        );
+
+        const timed = hubOf(named("I", "duration").id);
+        assert.strictEqual(timed.source, "builtIn");
+        assert.deepStrictEqual(
+          of(rows, processing.PrefixedBuiltIn)
+            .filter((row) => row.ref === timed.ref)
+            .map((row) => row.builtIn),
+          ["duration"],
+        );
+
+        assert.deepStrictEqual(
+          instances.map((ref) => [ref.prefix, String(ref.instance), ref.variable]).toSorted(byText),
+          [
+            ["I", "2", "SCORE"],
+            ["I", "2", "SCORE"],
+          ],
+        );
+        assert.deepStrictEqual(
+          of(rows, processing.VariableRef)
+            .filter((ref) => ref.kind === "itemInstanceVariable")
+            .map((ref) => ref.id)
+            .toSorted(),
+          instances.map((ref) => ref.id).toSorted(),
+        );
+
+        const spelled = onlyRow(of(rows, processing.ItemInstanceSpelling));
+        assert.strictEqual(spelled.value, "02");
+        assert.isTrue(instances.some((ref) => ref.id === spelled.ref));
+        for (const ref of instances) {
+          assert.strictEqual(hubOf(ref.id).refKind, "itemInstanceVariable");
+          assert.strictEqual(hubOf(ref.id).source, "declared");
+        }
+
+        const duration = onlyRow(of(rows, processing.SectionDurationRef));
+        const part = holderOf(rows, "RTEST-26-A");
+        assert.strictEqual(duration.prefix, "RTEST-26-A");
+        assert.strictEqual(duration.document, test.id);
+        assert.strictEqual(part.holderKind, "part");
+
+        const target = onlyRow(of(rows, processing.SectionDurationTarget));
+        assert.strictEqual(target.document, test.id);
+        assert.strictEqual(target.holder, part.holder);
+        assert.strictEqual(target.holderKind, "part");
+        assert.strictEqual(target.prefix, "RTEST-26-A");
+        assert.strictEqual(target.ref, duration.id);
+        assert.strictEqual(target.refKind, "sectionDuration");
+        assert.strictEqual(target.test, test.id);
+        assert.deepStrictEqual(
+          of(rows, processing.VariableRef)
+            .filter((ref) => ref.kind === "sectionDuration")
+            .map((ref) => ref.id),
+          [duration.id],
+        );
+      }),
+    );
+
+    suite.effect("writes the section identifier target of a qti-test-variables", () =>
+      Effect.gen(function* sectionIdentifier() {
+        const { rows } = yield* rowsOfFixture("test-mapping");
+        const test = documentAt(rows, "rtest26.xml");
+        const written = onlyRow(of(rows, expression.ExpressionSectionIdentifier));
+        const section = holderOf(rows, "sectionA");
+
+        const target = onlyRow(of(rows, expression.SectionIdentifierTarget));
+        assert.strictEqual(target.document, test.id);
+        assert.strictEqual(target.holderKind, "section");
+        assert.strictEqual(target.identifier, "sectionA");
+        assert.strictEqual(target.node, written.node);
+        assert.strictEqual(target.test, test.id);
+        assert.strictEqual(section.holderKind, "section");
+      }),
+    );
+
+    suite.effect("writes a mapped source when the item reference maps the name", () =>
+      Effect.gen(function* mapped() {
+        const base = specOf("test-mapping");
+        const dir = yield* materializeSpec({
+          ...base,
+          edits: [
+            ...base.edits,
+            {
+              _tag: "ReplaceText",
+              file: "rtest26.xml",
+              replacement:
+                '<qti-set-outcome-value identifier="DECLARED"><qti-variable identifier="item034.SCORE"/></qti-set-outcome-value>\n    </qti-outcome-processing>',
+              search: "    </qti-outcome-processing>",
+            },
+          ],
+          name: "p5-45-mapped",
+        });
+        const { rows } = yield* readRows(dir);
+        const test = documentAt(rows, "rtest26.xml");
+        const ref = of(rows, processing.ItemVariableRef).find((row) => row.prefix === "item034");
+        const itemRef = itemRefOf(rows, test.id, "item034");
+
+        assert.strictEqual(ref?.variable, "SCORE");
+        assert.deepStrictEqual(
+          of(rows, processing.PrefixedVariableSource)
+            .filter((hub) => hub.ref === ref?.id)
+            .map((hub) => [hub.source, hub.itemRef]),
+          [["mapped", itemRef.id]],
+        );
+        assert.deepStrictEqual(
+          of(rows, processing.PrefixedMapped).filter((row) => row.ref === ref?.id),
+          [{ itemRef: itemRef.id, ref: ref?.id, test: test.id, variable: "SCORE" }],
+        );
+        assert.deepStrictEqual(
+          of(rows, processing.PrefixedDeclared).filter((row) => row.ref === ref?.id),
+          [],
+        );
+      }),
+    );
+
+    suite.effect("refuses each negative with its rule", () =>
+      Effect.gen(function* negatives() {
+        const refused = [
+          ["prefixed-unknown-ref", "prefixed-ref"],
+          ["prefixed-undeclared-variable", "prefixed-ref"],
+          ["precondition-number-correct", "P25"],
+          ["test-undeclared-variable", "P8"],
+          ["item-duration-not-timed", "item-duration"],
+          ["template-default-type", "P20"],
+        ] as const;
+        for (const [name, rule] of refused) {
+          const dir = yield* materialize(name);
+          const failure = yield* Effect.flip(readRows(dir));
+
+          assert.strictEqual(
+            failure._tag === "PlatformError" ? "PlatformError" : ruleOfError(failure).rule,
+            rule,
+            name,
+          );
+        }
+      }),
+    );
+  },
+);
+
+/**
+ * A structure entry of a section with `identifier`, as a test's reach holds it.
+ */
+const sectionHolder = (identifier: string): [string, StructureEntry] => [
+  identifier,
+  { holder: crypto.randomUUID(), holderKind: "section", itemDocument: Option.none() },
+];
+
+layer(NodeServices.layer, { excludeTestServices: true })(
+  "import/processing.ts a section document's rows",
+  (suite) => {
+    suite.effect(
+      "writes one as-written arm per reference and one resolution per reaching test",
+      () =>
+        Effect.gen(function* sectionRows() {
+          const { rows } = yield* rowsOfFixture("test-section-ref");
+          const shared = documentAt(rows, "sections/shared.xml");
+          const lonely = documentAt(rows, "sections/lonely.xml");
+          const first = documentAt(rows, "rtest01.xml").id;
+          const second = documentAt(rows, "test-b.xml").id;
+          const refs = of(rows, processing.SectionVariableRef).filter(
+            (ref) => ref.document === shared.id,
+          );
+          const refOf = (identifier: string) =>
+            refs.find((ref) => ref.identifier === identifier) ?? assert.fail(identifier);
+          const resolutions = (identifier: string) =>
+            of(rows, processing.SectionVariableResolution)
+              .filter((row) => row.ref === refOf(identifier).id)
+              .toSorted((a, b) => a.test.localeCompare(b.test));
+          const targets = (identifier: string) =>
+            resolutions(identifier).map((row) => [row.test, row.target] as const);
+          const forTests = (target: string) =>
+            [first, second].toSorted().map((test) => [test, target] as const);
+
+          assert.deepStrictEqual(refs.map((ref) => ref.identifier).toSorted(), [
+            "COUNT",
+            "I2.SCORE",
+            "ITEMREF.SCORE",
+            "PART.duration",
+            "SCORE",
+          ]);
+          for (const ref of refs) {
+            assert.strictEqual(ref.root, "section");
+            assert.deepStrictEqual(
+              of(rows, processing.VariableRef)
+                .filter((found) => found.id === ref.id)
+                .map((found) => [found.kind, found.document]),
+              [["sectionVariable", shared.id]],
+            );
+          }
+
+          const asWritten = new Set(refs.map((ref) => ref.id));
+          for (const prefixed of [
+            of(rows, processing.ItemVariableRef),
+            of(rows, processing.ItemInstanceVariableRef),
+            of(rows, processing.SectionDurationRef),
+          ]) {
+            assert.isFalse(prefixed.some((found) => asWritten.has(found.id)));
+          }
+
+          // The unprefixed `SCORE` is declared whole by both tests.
+          assert.deepStrictEqual(targets("SCORE"), forTests("declared"));
+          assert.deepStrictEqual(
+            of(rows, processing.SectionVariableDeclared)
+              .filter((row) => row.ref === refOf("SCORE").id)
+              .map((row) => [row.test, row.identifier, row.declarationKind])
+              .toSorted(byText),
+            forTests("SCORE")
+              .map(([test]) => [test, "SCORE", "outcome"])
+              .toSorted(byText),
+          );
+
+          // `I2.SCORE` is declared whole by the first test and prefixed in the second.
+          assert.deepStrictEqual(
+            resolutions("I2.SCORE")
+              .map((row) => [row.test, row.target])
+              .toSorted(byText),
+            [
+              [first, "declared"],
+              [second, "prefixed"],
+            ].toSorted(byText),
+          );
+
+          const i2 = refOf("I2.SCORE").id;
+          assert.deepStrictEqual(
+            of(rows, processing.PrefixedVariableSource)
+              .filter((hub) => hub.ref === i2)
+              .map((hub) => [hub.test, hub.prefix, hub.refKind, hub.source]),
+            [[second, "I2", "sectionVariable", "declared"]],
+          );
+
+          // `ITEMREF.SCORE` is prefixed in each test: one hub, one source and one thin row per test.
+          const itemRef = refOf("ITEMREF.SCORE").id;
+          assert.deepStrictEqual(targets("ITEMREF.SCORE"), forTests("prefixed"));
+
+          const hubs = of(rows, processing.PrefixedVariableSource)
+            .filter((hub) => hub.ref === itemRef)
+            .toSorted((a, b) => a.test.localeCompare(b.test));
+          assert.deepStrictEqual(
+            hubs.map((hub) => [hub.test, hub.document, hub.prefix, hub.refKind, hub.source]),
+            [first, second]
+              .toSorted()
+              .map((test) => [test, shared.id, "ITEMREF", "sectionVariable", "declared"]),
+          );
+          for (const hub of hubs) {
+            const holder = itemRefOf(rows, hub.test, "ITEMREF");
+            assert.strictEqual(hub.itemRef, holder.id);
+            assert.deepStrictEqual(
+              of(rows, processing.PrefixedDeclared).filter(
+                (row) => row.ref === itemRef && row.test === hub.test,
+              ),
+              [{ itemDocument: hub.itemDocument, ref: itemRef, test: hub.test, variable: "SCORE" }],
+            );
+          }
+
+          assert.deepStrictEqual(
+            idsOfRefs(of(rows, processing.SectionVariablePrefixed)),
+            [itemRef, itemRef, i2].toSorted(),
+          );
+
+          // `PART.duration` names the part's duration in each test.
+          const duration = refOf("PART.duration").id;
+          assert.deepStrictEqual(targets("PART.duration"), forTests("duration"));
+          assert.deepStrictEqual(
+            of(rows, processing.SectionVariableDuration)
+              .filter((row) => row.ref === duration)
+              .map((row) => row.test)
+              .toSorted(),
+            [first, second].toSorted(),
+          );
+          for (const target of of(rows, processing.SectionDurationTarget)) {
+            assert.strictEqual(target.ref, duration);
+            assert.strictEqual(target.refKind, "sectionVariable");
+            assert.strictEqual(target.prefix, "PART");
+            assert.strictEqual(target.holderKind, "part");
+            assert.strictEqual(target.document, shared.id);
+          }
+          assert.strictEqual(of(rows, processing.SectionDurationTarget).length, 2);
+
+          // The section no test reaches writes its arm alone.
+          const unreached = of(rows, processing.SectionVariableRef).filter(
+            (ref) => ref.document === lonely.id,
+          );
+          assert.deepStrictEqual(
+            unreached.map((ref) => ref.identifier),
+            ["ITEMREF.SCORE"],
+          );
+
+          const lonelyRef = unreached[0]?.id ?? assert.fail("no lonely reference");
+          for (const family of [
+            of(rows, processing.SectionVariableResolution),
+            of(rows, processing.SectionVariableDeclared),
+            of(rows, processing.SectionVariablePrefixed),
+            of(rows, processing.SectionVariableDuration),
+            of(rows, processing.PrefixedVariableSource),
+            of(rows, processing.SectionDurationTarget),
+          ]) {
+            assert.isFalse(family.some((row) => "ref" in row && row.ref === lonelyRef));
+          }
+        }),
+    );
+
+    suite.effect("writes a section identifier target once per reaching test, over hand rows", () =>
+      Effect.gen(function* handRows() {
+        const testOf = (name: string, held: readonly string[]): SectionTest => ({
+          env: outcomesDeclared,
+          name,
+          scope: { structure: new Map(held.map(sectionHolder)), test: crypto.randomUUID() },
+        });
+        const tests = [testOf("T1", ["sec"]), testOf("T2", ["sec", "other"]), testOf("T3", ["x"])];
+        const prepared = yield* prepareBody(
+          '<qti-set-outcome-value identifier="SCORE"><qti-sum><qti-test-variables variable-identifier="SCORE" section-identifier="sec"/></qti-sum></qti-set-outcome-value>',
+          { env: outcomesDeclared, language: "outcome", mode: "test", rootKind: "section" },
+        );
+        const rows = yield* processed({ ...prepared, input: { ...prepared.input, tests } });
+        const targets = of(rows, expression.SectionIdentifierTarget);
+
+        assert.deepStrictEqual(
+          targets.map((row) => row.test).toSorted((a, b) => a.localeCompare(b)),
+          [tests[0]?.scope.test, tests[1]?.scope.test].toSorted((a, b) =>
+            (a ?? "").localeCompare(b ?? ""),
+          ),
+        );
+        assert.deepStrictEqual(
+          targets.map((row) => [row.identifier, row.holderKind]),
+          [
+            ["sec", "section"],
+            ["sec", "section"],
+          ],
+        );
+      }),
+    );
+
+    suite.effect("refuses what the second test cannot resolve and names that test", () =>
+      Effect.gen(function* unresolved() {
+        // `section-unprefixed-undeclared` is first refused by the section's printed variable, a
+        // binding the stage judges before processing; the third case takes the printed variable
+        // out so that the pre-condition's `SCORE` is what no test declares.
+        const base = specOf("section-unprefixed-undeclared");
+        const unprinted = yield* materializeSpec({
+          ...base,
+          edits: [
+            ...base.edits,
+            {
+              _tag: "ReplaceText",
+              file: "sections/shared.xml",
+              replacement: "<p>Score</p>",
+              search: '<p>Score <qti-printed-variable identifier="SCORE" base="COUNT"/></p>',
+            },
+          ],
+          name: "p5-46-unprinted",
+        });
+        const refused = [
+          [yield* materialize("section-prefixed-unresolved"), "prefixed-ref", "TEST-B"],
+          [yield* materialize("section-unprefixed-undeclared"), "binding-declared", "test-b.xml"],
+          [unprinted, "P8", "TEST-B"],
+        ] as const;
+        for (const [dir, rule, naming] of refused) {
+          const failure = yield* Effect.flip(readRows(dir));
+          const { detail, rule: found } =
+            failure._tag === "PlatformError" ? assert.fail(dir) : ruleOfError(failure);
+
+          assert.strictEqual(found, rule, dir);
+          assert.include(detail, naming, dir);
+        }
+      }),
+    );
+  },
+);

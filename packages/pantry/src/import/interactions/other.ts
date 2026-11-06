@@ -184,7 +184,7 @@ const mediaRows = Effect.fn("import.mediaRows")(function* mediaRows(
       maxPlaysN: maximum.value,
       minPlaysN: minimum.value,
       responseIdentifier,
-      rootKind: "item",
+      rootKind: ctx.rootKind,
     },
   ]);
   built = ctx.shared.markers(
@@ -217,7 +217,7 @@ const uploadRows = Effect.fn("import.uploadRows")(function* uploadRows(
 
   let built = attributes.rows();
   built = Rows.add(built, UploadInteraction, [
-    { id: node.id, responseIdentifier, rootKind: "item" },
+    { id: node.id, responseIdentifier, rootKind: ctx.rootKind },
   ]);
   built = Rows.add(built, UploadType, valueFact(node.id, type, plain));
 
@@ -238,7 +238,7 @@ const drawingRows = Effect.fn("import.drawingRows")(function* drawingRows(
 
   let built = attributes.rows();
   built = Rows.add(built, DrawingInteraction, [
-    { id: node.id, responseIdentifier, rootKind: "item" },
+    { id: node.id, responseIdentifier, rootKind: ctx.rootKind },
   ]);
 
   return yield* bound(ctx, built, node, responseIdentifier);
@@ -298,7 +298,7 @@ const sliderRows = Effect.fn("import.sliderRows")(function* sliderRows(
       id: node.id,
       lowerBound: judgedLater(lowerBound),
       responseIdentifier,
-      rootKind: "item",
+      rootKind: ctx.rootKind,
       stepLabel: stepLabelHandle,
       upperBound: judgedLater(upperBound),
     },
@@ -344,7 +344,7 @@ const endAttemptRows = Effect.fn("import.endAttemptRows")(function* endAttemptRo
   built = typed.rows;
 
   built = Rows.add(built, EndAttemptInteraction, [
-    { id: node.id, responseIdentifier, rootKind: "item", title: typed.value },
+    { id: node.id, responseIdentifier, rootKind: ctx.rootKind, title: typed.value },
   ]);
   built = Rows.add(built, EndAttemptCountAttempt, countAttemptRows);
 
