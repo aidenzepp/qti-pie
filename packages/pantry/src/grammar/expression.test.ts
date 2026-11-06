@@ -10,7 +10,16 @@ import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Formatter, Option } from "effect";
 import { int8Max, roster } from "#pantry/grammar/closed.ts";
 import { composed } from "#pantry/grammar/compose.ts";
-import { aritiesOf, mappableBaseType } from "#pantry/grammar/expression.ts";
+import {
+  aritiesOf,
+  cnDefaultType,
+  cnForms,
+  cnPatternOf,
+  mappableBaseType,
+  mathArities,
+  mathHeadOperators,
+  mathHeadQualifiers,
+} from "#pantry/grammar/expression.ts";
 import { baseTypes } from "#pantry/grammar/attributes.ts";
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
 import { checkCache } from "#pantry/vocab/derive/sources.ts";
@@ -617,4 +626,220 @@ describe("MappableBaseType", () => {
       );
     }),
   );
+});
+
+/**
+ * Every row of `mathArities` before selector and partialdiff were added and the own qualifiers were
+ * folded into `mathHeadQualifiers`: operator, least, greatest, section, qualifiers.
+ */
+const arityRowsBefore: readonly (readonly [string, number, number, string, readonly string[]])[] = [
+  ["m:inverse", 1, 1, "4.4.1.2", []],
+  ["m:ident", 1, 1, "4.4.1.5", []],
+  ["m:domain", 1, 1, "4.4.1.6", []],
+  ["m:codomain", 1, 1, "4.4.1.7", []],
+  ["m:image", 1, 1, "4.4.1.8", []],
+  ["m:factorial", 1, 1, "4.4.2.2", []],
+  ["m:not", 1, 1, "4.4.2.16", []],
+  ["m:abs", 1, 1, "4.4.2.20", []],
+  ["m:conjugate", 1, 1, "4.4.2.21", []],
+  ["m:arg", 1, 1, "4.4.2.22", []],
+  ["m:real", 1, 1, "4.4.2.23", []],
+  ["m:imaginary", 1, 1, "4.4.2.24", []],
+  ["m:floor", 1, 1, "4.4.2.26", []],
+  ["m:ceiling", 1, 1, "4.4.2.27", []],
+  ["m:divergence", 1, 1, "4.4.4.4", []],
+  ["m:grad", 1, 1, "4.4.4.5", []],
+  ["m:curl", 1, 1, "4.4.4.6", []],
+  ["m:laplacian", 1, 1, "4.4.4.7", []],
+  ["m:card", 1, 1, "4.4.5.12", []],
+  ["m:sin", 1, 1, "4.4.7.1", []],
+  ["m:cos", 1, 1, "4.4.7.1", []],
+  ["m:tan", 1, 1, "4.4.7.1", []],
+  ["m:sec", 1, 1, "4.4.7.1", []],
+  ["m:csc", 1, 1, "4.4.7.1", []],
+  ["m:cot", 1, 1, "4.4.7.1", []],
+  ["m:arcsin", 1, 1, "4.4.7.2", []],
+  ["m:arccos", 1, 1, "4.4.7.2", []],
+  ["m:arctan", 1, 1, "4.4.7.2", []],
+  ["m:arcsec", 1, 1, "4.4.7.2", []],
+  ["m:arccsc", 1, 1, "4.4.7.2", []],
+  ["m:arccot", 1, 1, "4.4.7.2", []],
+  ["m:sinh", 1, 1, "4.4.7.3", []],
+  ["m:cosh", 1, 1, "4.4.7.3", []],
+  ["m:tanh", 1, 1, "4.4.7.3", []],
+  ["m:sech", 1, 1, "4.4.7.3", []],
+  ["m:csch", 1, 1, "4.4.7.3", []],
+  ["m:coth", 1, 1, "4.4.7.3", []],
+  ["m:arcsinh", 1, 1, "4.4.7.4", []],
+  ["m:arccosh", 1, 1, "4.4.7.4", []],
+  ["m:arctanh", 1, 1, "4.4.7.4", []],
+  ["m:arcsech", 1, 1, "4.4.7.4", []],
+  ["m:arccsch", 1, 1, "4.4.7.4", []],
+  ["m:arccoth", 1, 1, "4.4.7.4", []],
+  ["m:exp", 1, 1, "4.4.7.5", []],
+  ["m:ln", 1, 1, "4.4.7.6", []],
+  ["m:log", 1, 1, "4.4.7.7", ["m:logbase"]],
+  ["m:determinant", 1, 1, "4.4.9.4", []],
+  ["m:transpose", 1, 1, "4.4.9.5", []],
+  ["m:quotient", 2, 2, "4.4.2.1", []],
+  ["m:divide", 2, 2, "4.4.2.3", []],
+  ["m:power", 2, 2, "4.4.2.8", []],
+  ["m:rem", 2, 2, "4.4.2.9", []],
+  ["m:implies", 2, 2, "4.4.2.17", []],
+  ["m:neq", 2, 2, "4.4.3.2", []],
+  ["m:equivalent", 2, 2, "4.4.3.7", []],
+  ["m:approx", 2, 2, "4.4.3.8", []],
+  ["m:factorof", 2, 2, "4.4.3.9", []],
+  ["m:in", 2, 2, "4.4.5.5", []],
+  ["m:notin", 2, 2, "4.4.5.6", []],
+  ["m:notsubset", 2, 2, "4.4.5.9", []],
+  ["m:notprsubset", 2, 2, "4.4.5.10", []],
+  ["m:setdiff", 2, 2, "4.4.5.11", []],
+  ["m:tendsto", 2, 2, "4.4.6.4", []],
+  ["m:vectorproduct", 2, 2, "4.4.9.7", []],
+  ["m:scalarproduct", 2, 2, "4.4.9.8", []],
+  ["m:outerproduct", 2, 2, "4.4.9.9", []],
+  ["m:minus", 1, 2, "4.4.2.6", []],
+  ["m:root", 1, 2, "4.4.2.11", ["m:degree"]],
+];
+
+describe("mathArities", () => {
+  it("keeps every row it held, unchanged", () => {
+    const kept = arityRowsBefore.map(([kind]) => {
+      const row = mathArities.get(kind);
+
+      return [kind, row?.min, row?.max, row?.section, row?.qualifiers];
+    });
+
+    assert.deepStrictEqual(JSON.stringify(kept), JSON.stringify(arityRowsBefore));
+  });
+
+  it("gives selector one argument or more, with no greatest (MathML 3, 4.4.9.6)", () => {
+    const row = mathArities.get("m:selector");
+
+    assert.deepStrictEqual(
+      [row?.min, row?.max, row?.section],
+      [1, Number.POSITIVE_INFINITY, "4.4.9.6"],
+    );
+  });
+
+  it("gives partialdiff two arguments when it has no bvar (MathML 3, 4.4.4.3)", () => {
+    const row = mathArities.get("m:partialdiff");
+
+    assert.deepStrictEqual([row?.min, row?.max, row?.section], [2, 2, "4.4.4.3"]);
+  });
+});
+
+/**
+ * Whether `mathHeadQualifiers` lists a qualifier beside a head.
+ */
+const admits = (head: string, qualifier: string): boolean =>
+  mathHeadQualifiers.some((row) => row.head === head && row.qualifier === qualifier);
+
+describe("mathHeadQualifiers", () => {
+  it("lists each head's qualifier with its section (R6-head-qualifiers)", () => {
+    assert.deepStrictEqual(
+      mathHeadQualifiers
+        .map(({ head, qualifier, section }) => `${head} ${qualifier} ${section}`)
+        .toSorted((a, b) => a.localeCompare(b)),
+      [
+        "m:diff m:degree 4.4.4.2",
+        "m:log m:logbase 4.4.7.7",
+        "m:moment m:degree 4.4.8.6",
+        "m:moment m:momentabout 4.4.8.6",
+        "m:partialdiff m:degree 4.4.4.3",
+        "m:root m:degree 4.4.2.11",
+      ],
+    );
+  });
+
+  it("admits logbase beside log and not beside sin", () => {
+    assert.isTrue(admits("m:log", "m:logbase"));
+    assert.isFalse(admits("m:sin", "m:logbase"));
+  });
+
+  it("judges every operator of the arity table and every head", () => {
+    assert.isTrue([...mathArities.keys()].every((kind) => mathHeadOperators.has(kind)));
+    assert.isTrue(mathHeadQualifiers.every(({ head }) => mathHeadOperators.has(head)));
+    assert.isTrue(["m:plus", "m:forall", "m:exists"].every((kind) => mathHeadOperators.has(kind)));
+  });
+
+  it("folds into the arity table's own qualifiers", () => {
+    assert.deepStrictEqual(mathArities.get("m:log")?.qualifiers, ["m:logbase"]);
+    assert.deepStrictEqual(mathArities.get("m:root")?.qualifiers, ["m:degree"]);
+    assert.deepStrictEqual(mathArities.get("m:sin")?.qualifiers, []);
+  });
+});
+
+/**
+ * Whether a pattern, anchored as XML Schema anchors one, matches a whole text.
+ */
+const matches = (pattern: string | undefined, text: string): boolean =>
+  pattern !== undefined && new RegExp(`^(?:${pattern})$`, "u").test(text);
+
+const pattern = (form: "double" | "hexdouble" | "integer" | "real", base: number) =>
+  Option.getOrUndefined(cnPatternOf(form, base));
+
+describe("cn forms", () => {
+  it("gives each type the forms of its parts in order (R6-hexdouble, MathML 3 4.2.1)", () => {
+    assert.deepStrictEqual(
+      [...cnForms].toSorted(([a], [b]) => a.localeCompare(b)),
+      [
+        ["complex-cartesian", ["real", "real"]],
+        ["complex-polar", ["real", "real"]],
+        ["double", ["double"]],
+        ["e-notation", ["real", "integer"]],
+        ["hexdouble", ["hexdouble"]],
+        ["integer", ["integer"]],
+        ["rational", ["integer", "integer"]],
+        ["real", ["real"]],
+      ],
+    );
+    assert.strictEqual(cnForms.get("rational")?.length, 2);
+    assert.strictEqual(cnDefaultType, "real");
+  });
+
+  it("reads a hexdouble as sixteen hex digits of either case", () => {
+    const hex = pattern("hexdouble", 10);
+
+    assert.isTrue(matches(hex, "7ff8000000000000"));
+    assert.isTrue(matches(hex, "7FF800000000000a"));
+    assert.isFalse(matches(hex, "7ff8"));
+  });
+
+  it("reads an integer in the digits of its base", () => {
+    const hex = pattern("integer", 16);
+
+    assert.isTrue(matches(hex, "FF"));
+    assert.isTrue(matches(hex, "-7e"));
+    assert.isTrue(matches(hex, "+7e"));
+    assert.isFalse(matches(hex, "G1"));
+    assert.isFalse(matches(hex, ""));
+    assert.isFalse(matches(pattern("integer", 10), "a"));
+    assert.isFalse(matches(pattern("integer", 2), "2"));
+    assert.isTrue(matches(pattern("integer", 36), "Zz"));
+  });
+
+  it("reads a real with at most one point and a digit", () => {
+    const decimal = pattern("real", 10);
+
+    assert.isTrue(matches(decimal, "-1.5"));
+    assert.isTrue(matches(decimal, "1."));
+    assert.isTrue(matches(decimal, ".5"));
+    assert.isFalse(matches(decimal, "1.2.3"));
+    assert.isFalse(matches(decimal, "."));
+  });
+
+  it("reads a double as the lexical space of xs:double", () => {
+    const double = pattern("double", 10);
+
+    assert.isTrue(["1.5e-3", "INF", "-INF", "NaN", ".5"].every((text) => matches(double, text)));
+    assert.isFalse(matches(double, "inf"));
+  });
+
+  it("has no integer or real pattern for a base outside 2 to 36", () => {
+    assert.isTrue(Option.isNone(cnPatternOf("integer", 40)));
+    assert.isTrue(Option.isNone(cnPatternOf("real", 1)));
+    assert.isTrue(Option.isSome(cnPatternOf("double", 40)));
+  });
 });
