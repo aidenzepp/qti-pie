@@ -29,7 +29,7 @@
  *
  * `unshred` (`src/model/unshred.ts`) is the way back, through the inverse of the same names.
  */
-import { Effect, Option, Result, Schema } from "effect";
+import { Effect, Option, Order, Result, Schema } from "effect";
 import { exportCharset } from "@qti-pie/crust/charset.ts";
 import type { Attribute, Child, Element, Misc, XmlDocument } from "@qti-pie/crust/tree.ts";
 import { foreignKinds } from "#pantry/grammar/kinds.ts";
@@ -71,8 +71,8 @@ import { openClassOf, openClassRefusals, typeAvailable } from "#pantry/vocab/ope
  */
 export interface ShredGrammar<V extends XdmVocabulary> {
   /**
-   * Whether a kind's content admits a child of a kind: a row of the admission relation, the key set
-   * of `Order` (`src/grammar/order.ts`).
+   * Whether a kind's content admits a child of a kind: a row of the admission relation,
+   * `Admission` (`src/grammar/compose.ts`).
    *
    * Shred asks it of a parent and the kind an element's name resolves to under it, and of the
    * parent and the foreign kind of the element's namespace class: a parent that admits that class
@@ -766,25 +766,52 @@ const attributeOf = <V extends XdmVocabulary>(
 };
 
 /**
+ * The order an element's refused attributes are reported in: by namespace name, then by local name,
+ * the keys Canonical XML sorts an element's attributes by (Canonical XML 1.0, §2.2), never the
+ * order they are written in, which is not significant (XML 1.0, §3.1; spec reading 137).
+ */
+const refusalOrder = Order.mapInput(
+  Order.Array(Order.String),
+  ({ attribute }: { readonly attribute: Attribute }) => [attribute.namespace, attribute.local],
+);
+
+/**
  * Read an element's attributes, in source order, its namespace declarations left out.
+ *
+ * An element several of whose attributes have no representation is refused for the first of them
+ * in {@link refusalOrder}, so the refusal, and the rule it is named by, are a function of the
+ * element's attributes as a set, the same in whatever order the element writes them.
  *
  * @param reading - How the element is read.
  * @param governs - The element's governing type.
  * @param version - The version of its document.
  * @param grammar - The grammar.
- * @returns The attributes, or the refusal of the first that has no representation there.
+ * @returns The attributes in source order, or the refusal of the first in {@link refusalOrder}
+ *   that has no representation there.
  */
 const attributesOf = <V extends XdmVocabulary>(
   reading: Reading<V>,
   governs: string,
   version: V["version"],
   grammar: ShredGrammar<V>,
-): Result.Result<readonly XdmAttribute<V>[], UnmodeledVocabulary> =>
-  Result.all(
-    reading.element.attributes
-      .filter((attribute) => attribute.namespace !== xmlnsNamespace)
-      .map((attribute) => attributeOf(attribute, reading, governs, version, grammar)),
+): Result.Result<readonly XdmAttribute<V>[], UnmodeledVocabulary> => {
+  const written = reading.element.attributes.filter(
+    (attribute) => attribute.namespace !== xmlnsNamespace,
   );
+  const read = written.map((attribute) => ({
+    attribute,
+    outcome: attributeOf(attribute, reading, governs, version, grammar),
+  }));
+  const [refused] = read
+    .flatMap(({ attribute, outcome }) =>
+      Result.isFailure(outcome) ? [{ attribute, refusal: outcome.failure }] : [],
+    )
+    .toSorted(refusalOrder);
+
+  return refused === undefined
+    ? Result.all(read.map(({ outcome }) => outcome))
+    : Result.fail(refused.refusal);
+};
 
 /**
  * Join each stretch of an element's character data into one run, and drop the runs left empty.
