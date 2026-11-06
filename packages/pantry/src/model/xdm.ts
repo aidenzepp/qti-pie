@@ -22,16 +22,17 @@
  * A tree is written in a vocabulary's closed handles ({@link XdmVocabulary}) and holds no ids, so
  * two reads of one document are equal trees; {@link flatten} draws the ids when it writes the rows.
  * A name no handle stands for, an open attribute's or a foreign element's, is kept exactly beside
- * the handle of its class. Order is the array order of each list: children, namespaces and
- * attributes are in source order. Each element's `children`, `attributes` and `namespaces` are the
- * families `Node`'s count fields of those names count (plan §1.3), so the tree is the nested shape
- * a family write takes.
+ * the handle of its class, and every element and attribute keeps the prefix its name is written
+ * with, so the document is written back under the names it was read under (spec reading 47). Order
+ * is the array order of each list: children, namespaces and attributes are in source order. Each
+ * element's `children`, `attributes` and `namespaces` are the families `Node`'s count fields of
+ * those names count (plan §1.3), so the tree is the nested shape a family write takes.
  */
 import { Option } from "effect";
 import type { Types } from "effect";
 import type { ForeignKind, openClasses } from "#pantry/grammar/kinds.ts";
 import type { OpenName } from "#pantry/vocab/open.ts";
-import { xmlNamespace, xsiNamespace } from "#pantry/vocab/namespaces.ts";
+import { xlinkNamespace, xmlNamespace, xsiNamespace } from "#pantry/vocab/namespaces.ts";
 
 /**
  * The closed handle types a tree is written in: for each roster the grammar composes, the union of
@@ -79,21 +80,36 @@ export type OpenClass = (typeof openClasses)[number];
 
 /**
  * The `AttributeName` handles that each name exactly one attribute: every handle of the roster but
- * the open classes. A handle spells its own qualified name, as `xml:lang` and `xsi:schemaLocation`
- * do, so a closed name carries no prefix of its own.
+ * the open classes. A handle spells its expanded name, its namespace by that namespace's own prefix
+ * in {@link handlePrefixes}, as `xml:lang`, `xsi:schemaLocation` and `xlink:href` do. That prefix is
+ * the handle's, not the document's: a document may bind any prefix to XML Schema's instance
+ * namespace or to XLink's, so a closed name keeps the prefix it is written with beside its handle
+ * ({@link XdmClosedName}).
  */
 export type ClosedName<V extends XdmVocabulary> = Exclude<V["name"], OpenClass>;
 
 /**
- * The namespaces a closed handle's prefix stands for: the XML namespace's own `xml`, and `xsi` for
- * XML Schema's instance attributes. A closed handle without a prefix names an attribute in no
+ * The namespaces a closed handle's prefix stands for: the XML namespace's own `xml`, `xsi` for XML
+ * Schema's instance attributes, and `xlink` for XLink's global attributes, which the
+ * content-packaging extension imports. A closed handle without a prefix names an attribute in no
  * namespace, and no attribute in any other namespace has a closed handle. The codec spells a
  * handle and names it back through this one table.
  */
 export const handlePrefixes = [
   { namespace: xmlNamespace, prefix: "xml" },
   { namespace: xsiNamespace, prefix: "xsi" },
+  { namespace: xlinkNamespace, prefix: "xlink" },
 ] as const;
+
+/**
+ * Read the prefix a closed handle spells its namespace with: the {@link handlePrefixes} prefix it
+ * begins with, followed by its colon.
+ *
+ * @param handle - The handle.
+ * @returns The prefix, or the empty string for a handle of a name in no namespace.
+ */
+export const handlePrefixOf = (handle: string): string =>
+  handlePrefixes.find(({ prefix }) => handle.startsWith(`${prefix}:`))?.prefix ?? "";
 
 /**
  * A `VersionNum` of an XML declaration, as written.
@@ -304,7 +320,9 @@ export interface XdmAttribute<V extends XdmVocabulary> {
 
 /**
  * An attribute's name: a closed name's handle, or an open name (`OpenName` of
- * `#pantry/vocab/open.ts`), which carries what its class leaves of its exact name.
+ * `#pantry/vocab/open.ts`), which carries what its class leaves of its exact name. Each keeps the
+ * prefix the name is written with, where its namespace has one, so the attribute is written back
+ * under the name it was read under (spec reading 47).
  */
 export type XdmAttributeName<V extends XdmVocabulary> = XdmClosedName<V> | OpenName;
 
@@ -315,7 +333,56 @@ export type XdmAttributeName<V extends XdmVocabulary> = XdmClosedName<V> | OpenN
 export interface XdmClosedName<V extends XdmVocabulary> {
   readonly _tag: "closed";
   readonly handle: ClosedName<V>;
+  /**
+   * The prefix the name is written with: empty for a name in no namespace, which Namespaces in XML
+   * writes unprefixed (§6.2), and `xml` for the XML namespace's, which no other prefix is bound to
+   * (§3). An `xsi:` or `xlink:` handle's name keeps the prefix its document binds to that
+   * namespace, which need not be the handle's own: `zs:nil` is the handle `xsi:nil`, written
+   * `zs:nil`.
+   *
+   * @see {@link https://www.w3.org/TR/xml-names/#ns-qualnames | Namespaces in XML 1.0, §3 and §6.2}
+   */
+  readonly prefix: string;
 }
+
+/**
+ * Name an attribute by a closed handle, written with the prefix the handle spells unless another is
+ * given: the closed name a tree built by hand holds. It is typed by the handle, so it is the
+ * {@link XdmClosedName} of every vocabulary whose closed names hold that handle.
+ *
+ * @param handle - The handle.
+ * @param prefix - The prefix the name is written with; {@link handlePrefixOf} the handle by
+ *   default, the only prefix a name in no namespace or in the XML namespace is written with.
+ * @returns The closed name.
+ */
+export const closedName = <const Handle extends string>(
+  handle: Handle,
+  prefix: string = handlePrefixOf(handle),
+) => ({ _tag: "closed", handle, prefix }) as const;
+
+/**
+ * Read the prefix an attribute's name is written with.
+ *
+ * @param name - The name.
+ * @returns A closed name's prefix, and a namespaced open name's; the empty prefix of a `data-*` or
+ *   `no-namespace` name, which is in no namespace.
+ */
+export const attributePrefixOf = <V extends XdmVocabulary>(name: XdmAttributeName<V>): string => {
+  switch (name._tag) {
+    case "closed":
+    case "own-namespace":
+    case "foreign": {
+      return name.prefix;
+    }
+    case "data-*":
+    case "no-namespace": {
+      return "";
+    }
+    default: {
+      return name satisfies never;
+    }
+  }
+};
 
 /**
  * One unexpanded entity reference inside an attribute's lexical form.
@@ -524,8 +591,11 @@ export interface NamespaceRow {
 
 /**
  * An attribute's `Attribute` row, its id at its slot among its element's attributes: its name
- * handle, an open class's included, and its lexical form, the record (U1). Its value domain is the
- * grammar's to apply, so the row stores none.
+ * handle, an open class's included, the prefix its name is written with, and its lexical form, the
+ * record (U1). Its value domain is the grammar's to apply, so the row stores none.
+ *
+ * The prefix is every attribute's, closed or open, so it is stored once, here, and an open name's
+ * row keeps only what its class leaves of the rest of its name.
  */
 export interface AttributeRow<V extends XdmVocabulary> {
   readonly at: bigint;
@@ -533,18 +603,18 @@ export interface AttributeRow<V extends XdmVocabulary> {
   readonly lexical: string;
   readonly name: ClosedName<V> | OpenClass;
   readonly node: NodeId;
+  readonly prefix: string;
 }
 
 /**
  * The exact name of an attribute under an open class, keyed by its attribute's id: what its class
- * leaves of its name. A name in no namespace has the empty prefix and the empty namespace name; an
- * `own-namespace` or `foreign` name keeps both, its namespace stored as written whatever its
- * class, which the foreign attribute class law reads it against its element's.
+ * leaves of its name beside the prefix its attribute row keeps. A name in no namespace has the
+ * empty namespace name; an `own-namespace` or `foreign` name keeps its namespace as written
+ * whatever its class, which the foreign attribute class law reads against its element's.
  */
 export interface OpenNameRow {
   readonly attribute: AttributeId;
   readonly local: string;
-  readonly prefix: string;
   readonly uri: string;
 }
 
@@ -655,22 +725,22 @@ const declarationRow = (
   });
 
 /**
- * Write an open name as its `OpenAttributeName` row: what its class leaves of the name, the rest
- * empty.
+ * Write an open name as its `OpenAttributeName` row: what its class leaves of the name beside its
+ * prefix, the namespace name empty for a class in no namespace.
  *
  * @param name - The open name.
  * @param attribute - Its attribute's id.
- * @returns The row: the local name, and the prefix and namespace name its class keeps.
+ * @returns The row: the local name, and the namespace name its class keeps.
  */
 const openNameRowOf = (name: OpenName, attribute: AttributeId): OpenNameRow => {
   switch (name._tag) {
     case "data-*":
     case "no-namespace": {
-      return { attribute, local: name.local, prefix: "", uri: "" };
+      return { attribute, local: name.local, uri: "" };
     }
     case "own-namespace":
     case "foreign": {
-      return { attribute, local: name.local, prefix: name.prefix, uri: name.uri };
+      return { attribute, local: name.local, uri: name.uri };
     }
     default: {
       return name satisfies never;
@@ -802,10 +872,11 @@ export const flatten = <V extends XdmVocabulary>(
   for (const [index, { at, attribute, node }] of met.entries()) {
     const id = idOf(nodes.length + index);
     const { lexical, name } = attribute;
+    const prefix = attributePrefixOf(name);
     if (name._tag === "closed") {
-      attributes.push({ at, id, lexical, name: name.handle, node });
+      attributes.push({ at, id, lexical, name: name.handle, node, prefix });
     } else {
-      attributes.push({ at, id, lexical, name: name._tag, node });
+      attributes.push({ at, id, lexical, name: name._tag, node, prefix });
       openNames.push(openNameRowOf(name, id));
     }
 

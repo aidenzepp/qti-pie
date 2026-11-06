@@ -25,7 +25,9 @@
  *
  * Beside those, a node carries its family counts (`children`, `attributes`, `namespaces`) and
  * `attrs`, the end value of its attribute family (AL2), where each attribute copies its owner's
- * `kind`, `governs`, `version` and `document` and its predecessor's `attrs` as `attrsWas`.
+ * `kind`, `governs`, `version` and `document` and its predecessor's `attrs` as `attrsWas`. An
+ * open class is one position for many names, and the database's fold steps over closed names only
+ * (the W5 amendment's C9), so an open-class attribute adds nothing to `attrs`.
  *
  * A node's `state`, `ancestry` and `elements`, and an attribute's `attrs`, are fields closed
  * relations determine from the row's own fields, so PostgreSQL derives them (fin.md
@@ -59,6 +61,7 @@
 import { Option, Result, Schema } from "effect";
 import { step as enter } from "#pantry/grammar/ancestry.ts";
 import type { Ancestry, AncestrySets } from "#pantry/grammar/ancestry.ts";
+import { openClasses } from "#pantry/grammar/kinds.ts";
 import { documentFamily, flatten, none } from "#pantry/model/xdm.ts";
 import type {
   AttributeRow,
@@ -316,7 +319,8 @@ export interface FoldedAttribute<V extends XdmVocabulary> extends AttributeRow<V
    */
   readonly attrsWas: Positions;
   /**
-   * The field PostgreSQL derives, `attrsWas | {position}`; a write leaves it out.
+   * The field PostgreSQL derives, `attrsWas | {position}` for a closed name and `attrsWas` for an
+   * open class, which the fold steps over no position of (C9); a write leaves it out.
    */
   readonly derived: { readonly attrs: Positions };
   readonly document: NodeId;
@@ -670,7 +674,7 @@ export const fold = <V extends XdmVocabulary>(
                 version: head.version,
               }),
           );
-          const next = adding(attrs, position);
+          const next = openClasses.some((open) => open === name) ? attrs : adding(attrs, position);
           attributes.push({
             ...row,
             attrsWas: attrs,

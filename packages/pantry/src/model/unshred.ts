@@ -41,7 +41,7 @@ import { xmlnsNamespace } from "#pantry/vocab/namespaces.ts";
  * An attribute's name as written and as resolved: the prefix it is written with, empty when it has
  * none, beside its expanded name.
  */
-export interface QualifiedName extends ExpandedName {
+interface QualifiedName extends ExpandedName {
   readonly prefix: string;
 }
 
@@ -50,16 +50,18 @@ export interface QualifiedName extends ExpandedName {
  * resolution shred reads a document through, so a handle unshreds to the name it was read from.
  *
  * Open names need no entry: an open attribute and a foreign element carry their exact names in the
- * tree.
+ * tree. Neither entry gives a prefix: an element and an attribute keep the prefix they are written
+ * with in the tree, whatever prefix the handle spells.
  */
 export interface XdmNames<V extends XdmVocabulary> {
   /**
    * Name the attribute a closed handle stands for.
    *
-   * @param name - The handle, which spells the attribute's qualified name.
-   * @returns The prefix, local name and namespace name the attribute is written and read with.
+   * @param name - The handle, which spells the attribute's expanded name.
+   * @returns The local name and namespace name the attribute is written and read with. The
+   *   attribute's own prefix completes its qualified name.
    */
-  readonly attribute: (name: ClosedName<V>) => QualifiedName;
+  readonly attribute: (name: ClosedName<V>) => ExpandedName;
   /**
    * Name the elements of a kind.
    *
@@ -114,7 +116,7 @@ const declarationOf = ({ prefix, uri }: XdmNamespace): Attribute =>
 
 /**
  * Name an attribute: a closed handle through the vocabulary, an open name by the exact name it
- * carries.
+ * carries, each under the prefix it is written with.
  *
  * @param name - The attribute's name in the tree.
  * @param names - The vocabulary's names.
@@ -127,7 +129,7 @@ const attributeName = <V extends XdmVocabulary>(
 ): QualifiedName => {
   switch (name._tag) {
     case "closed": {
-      return names.attribute(name.handle);
+      return { ...names.attribute(name.handle), prefix: name.prefix };
     }
     case "data-*":
     case "no-namespace": {

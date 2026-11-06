@@ -18,11 +18,13 @@ import { admittedOf, governorOf, textDomainOf } from "#pantry/grammar/attributes
 import { composed, coveredBy } from "#pantry/grammar/compose.ts";
 import { patternFlags } from "#pantry/grammar/domains.ts";
 import { foreignKinds, isForeignKind, schemaVersions } from "#pantry/grammar/kinds.ts";
+import { typeHandle } from "#pantry/grammar/xsi.ts";
 import { assemble } from "#pantry/model/assemble.ts";
 import { foldGrammarOf, namesOf, shredGrammarOf } from "#pantry/model/composed.ts";
 import { fold } from "#pantry/model/folds.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { NotQti3, shred, UnmodeledVocabulary, versionOf } from "#pantry/model/shred.ts";
+import { documentBreaches, lawsOf } from "#pantry/test/oracle.ts";
 import { toXmlDocument, unshred } from "#pantry/model/unshred.ts";
 import { flatten, none } from "#pantry/model/xdm.ts";
 import type { XdmAttribute, XdmChild, XdmClosedElement, XdmDocument } from "#pantry/model/xdm.ts";
@@ -38,7 +40,9 @@ import {
 } from "#pantry/test/gen/xdm.ts";
 import type { XdmFeature } from "#pantry/test/gen/xdm.ts";
 import {
+  cpNamespace,
   mathmlNamespace,
+  xlinkNamespace,
   qti2Namespaces,
   xmlnsNamespace,
   xsiNamespace,
@@ -257,6 +261,7 @@ describe("shred and unshred", { timeout: searchTimeout }, () => {
                 "openName",
                 "namespace",
                 "doctype",
+                "boundPrefix",
                 ...situations,
               ],
               { cases: 400, sense: notesOnly },
@@ -927,7 +932,7 @@ describe("shred's governing type", () => {
                 return Result.fail("type-unresolved");
               }
 
-              const handle = `{${namespace}}${parts["local"] ?? ""}`;
+              const handle = typeHandle({ local: parts["local"] ?? "", namespace });
 
               return grammar.xsi.typeName.has(handle)
                 ? Result.succeed(handle)
@@ -979,7 +984,7 @@ describe("shred's governing type", () => {
  * @param local - The built-in's local name.
  * @returns Its `TypeName` handle.
  */
-const builtin = (local: string): string => `{${xs}}${local}`;
+const builtin = (local: string): string => typeHandle({ local, namespace: xs });
 
 /**
  * The arms of spec reading 60's `lax` box: a foreign element under `qti-selection`'s `grpLax.any`
@@ -989,7 +994,9 @@ const builtin = (local: string): string => `{${xs}}${local}`;
  * 3.1.3). `departs` marks an arm libxml2 refuses as "does not resolve to a type definition", with
  * its follow-on "The type definition is absent.", which reading 60 records against the reading
  * rather than counting it a defect: a name no schema of the document's set defines leaves the
- * element to lax assessment.
+ * element to lax assessment. `xs:NOTATION`'s value space is the notations the schema declares (XML
+ * Schema 1.0 Part 2, §3.2.19), and no pinned XSD declares one, so its arms' texts are all outside
+ * it, the empty one included (C47).
  */
 const laxArms: readonly {
   readonly arm: string;
@@ -1038,13 +1045,13 @@ const laxArms: readonly {
   {
     arm: "simple type of the set, text in its domain",
     child: '<f:x xsi:type="q:IdentifierDType">a1</f:x>',
-    governs: `{${asi}}IdentifierDType`,
+    governs: typeHandle({ local: "IdentifierDType", namespace: asi }),
     verdict: "accepted",
   },
   {
     arm: "simple type of the set, text outside its domain",
     child: '<f:x xsi:type="q:IdentifierDType">1a</f:x>',
-    governs: `{${asi}}IdentifierDType`,
+    governs: typeHandle({ local: "IdentifierDType", namespace: asi }),
     verdict: "text",
   },
   {
@@ -1099,6 +1106,12 @@ const laxArms: readonly {
       verdict: "text",
     },
   ]),
+  ...["", "a", "q:IdentifierDType"].map((text) => ({
+    arm: `xs:NOTATION, the text ${JSON.stringify(text)}`,
+    child: `<f:x xsi:type="xs:NOTATION">${text}</f:x>`,
+    governs: builtin("NOTATION"),
+    verdict: "text",
+  })),
 ];
 
 /**
@@ -1176,7 +1189,7 @@ describe("a foreign element's governing type (spec readings 60 and 74)", () => {
       // Assessment (Element), clause 1.2; Element Locally Valid (Type), clause 3.1), §3.2.4 clause
       // 1.2 and §3.15.3 as the arms' verdicts; and libxml2 over the ASI XSD as a control, with
       // reading 60's recorded departure on the arms whose xsi:type names no type of the set.
-      // Bound: the 31 arms under qti-selection's lax wildcard in the 2 versions, exhausted.
+      // Bound: the 34 arms under qti-selection's lax wildcard in the 2 versions, exhausted.
       Effect.gen(function* laxBox() {
         const fs = yield* FileSystem.FileSystem;
         const directory = path.resolve(import.meta.dirname, "..", "..", "work", "lax-wildcard");
@@ -1809,5 +1822,241 @@ describe("a strict wildcard's undeclared element (spec reading 72)", () => {
         assert.deepStrictEqual(disagreements, []);
       }).pipe(Effect.provide(OracleLayer), Effect.provide(XsdOracleLayer)),
     120_000,
+  );
+});
+
+/**
+ * The roots of spec reading 6 the box tries under each `strict` `##other` wildcard: the content
+ * package's manifest, valid against its declaration, and an item, each in a namespace of its own
+ * and written whole, so that where a wildcard finds its declaration XML Schema assesses it valid.
+ */
+const heldRootArms = [
+  {
+    arm: "cp:manifest",
+    child: (version: Composed["version"]) =>
+      `<c:manifest xmlns:c="${cpNamespace}" identifier="N"><c:metadata><c:schema>QTI Package</c:schema><c:schemaversion>${version}</c:schemaversion></c:metadata><c:organizations/><c:resources/></c:manifest>`,
+    vocabulary: "cp",
+  },
+  {
+    arm: "qti-assessment-item",
+    child: () =>
+      `<r:qti-assessment-item xmlns:r="${asi}" identifier="i" title="t" adaptive="false" time-dependent="false"/>`,
+    vocabulary: "asi",
+  },
+] as const;
+
+/**
+ * The three `strict` `##other` wildcards of the box, each with its own namespace's vocabulary, the
+ * vocabularies its documents' schema set declares globals of (spec reading 72), and its document:
+ * `qti-companion-materials-info` in an item, a file's metadata in a manifest, and
+ * `drd:accessForAllResource`'s `grpStrict.any` inside that metadata.
+ */
+const heldRootParents = [
+  {
+    document: strictParents[0].document,
+    name: strictParents[0].name,
+    own: "asi",
+    roots: strictParents[0].roots,
+    set: ["asi", "mathml", "ssml", "xi"],
+  },
+  {
+    document: strictParents[1].document,
+    name: strictParents[1].name,
+    own: "cp",
+    roots: strictParents[1].roots,
+    set: ["cp", "cpx", "csmd", "drd", "lom", "qmd"],
+  },
+  {
+    document: (child: string, version: Composed["version"]) =>
+      strictParents[1].document(
+        `<d:accessForAllResource>${child}</d:accessForAllResource>`,
+        version,
+      ),
+    name: "drd:accessForAllResource",
+    own: "drd",
+    roots: strictParents[1].roots,
+    set: ["cp", "cpx", "csmd", "drd", "lom", "qmd"],
+  },
+] as const;
+
+/**
+ * The verdict XML Schema and spec reading 6 give a root under a `strict` `##other` wildcard: in
+ * the wildcard's own namespace it is no element the wildcard allows (§3.10.4 clause 1), which shred
+ * finds under no name (`unnamed`); where the wildcard's documents' schema set declares it, the
+ * wildcard finds that declaration (§3.10.4 clause 2, §3.3.4 clause 1.1.1.3.2) and reading 6 keeps
+ * the root as foreign content, unrefused; and elsewhere it has no declaration and no `xsi:type`, so
+ * it is `strict-undeclared`.
+ *
+ * @param parent - The wildcard's parent.
+ * @param root - The root.
+ * @returns `accepted`, or the refusal's reason.
+ */
+const heldRootVerdict = (
+  parent: (typeof heldRootParents)[number],
+  root: (typeof heldRootArms)[number],
+): string => {
+  if (parent.own === root.vocabulary) {
+    return "unnamed";
+  }
+
+  return parent.set.some((held) => held === root.vocabulary) ? "accepted" : "strict-undeclared";
+};
+
+/**
+ * The grammar's tables the oracle judges a folded document by.
+ */
+const oracleLaws = lawsOf(grammar);
+
+describe("a reading 6 root under a strict wildcard (C13)", () => {
+  it.effect(
+    "keeps a root the wildcard's schema set declares as foreign content with no governing type and no Strictly held breach, refuses every other, and xmllint agrees: every root under the three strict wildcards in both versions",
+    () =>
+      // Oracle: the specification as a checker, XML Schema 1.0 Part 1 §3.10.4 clauses 1 and 2 and
+      // §3.3.4 clause 1.1.1.3.2, with reading 6 (the root is kept foreign, not refused) and reading
+      // 72's schema sets, as `heldRootVerdict`; libxml2 over each document's root XSD as a control,
+      // which assesses the found manifest against its declaration and refuses every other arm.
+      // Bound: the 2 roots under the 3 wildcards in the 2 versions, 12 documents, exhausted.
+      Effect.gen(function* heldRoots() {
+        const fs = yield* FileSystem.FileSystem;
+        const directory = path.resolve(import.meta.dirname, "..", "..", "work", "held-root");
+        const oracle = yield* writeXsdOracle(directory);
+        const cache = yield* xsdDirectory;
+        const disagreements: string[] = [];
+        let accepted = 0;
+        let compared = 0;
+        for (const parent of heldRootParents) {
+          for (const version of schemaVersions) {
+            const cases = heldRootArms.map((root) => ({
+              file: `${directory}/${parent.name.replaceAll(/\W/gu, "-")}-${version}-${root.arm}.xml`,
+              root,
+              text: parent.document(root.child(version), version),
+            }));
+            for (const { file, text } of cases) {
+              yield* fs.writeFileString(file, text);
+            }
+
+            const verdicts = yield* xmllintValidate({
+              catalog: oracle.catalog,
+              paths: cases.map(({ file }) => file),
+              schema: `${cache}/${parent.roots[version]}`,
+            });
+            for (const [at, { root, text }] of cases.entries()) {
+              compared += 1;
+              const where = `${parent.name} ${version} ${root.arm}`;
+              const expected = heldRootVerdict(parent, root);
+              const result = yield* Effect.result(reread(new TextEncoder().encode(text), version));
+              if (Result.isFailure(result)) {
+                const reason =
+                  result.failure instanceof UnmodeledVocabulary
+                    ? result.failure.reason
+                    : result.failure._tag;
+                if (reason !== expected) {
+                  disagreements.push(`${where}: shred ${reason}, the specification ${expected}`);
+                }
+              } else {
+                accepted += 1;
+                const rows = yield* Effect.orDie(
+                  Effect.fromResult(fold(result.success, idOf, foldGrammarOf(grammar))),
+                );
+                const held = rows.nodes.filter(
+                  (node) => node.kind === foreignKinds.other && node.parentKind === parent.name,
+                );
+                const breaches = documentBreaches("imsmanifest.xml", rows, oracleLaws).map(
+                  ({ law }) => law,
+                );
+                if (
+                  expected !== "accepted" ||
+                  held.length !== 1 ||
+                  held.some(({ governs }) => governs !== none) ||
+                  breaches.length > 0
+                ) {
+                  disagreements.push(
+                    `${where}: shred keeps ${String(held.length)} foreign roots there, the oracle breaks ${breaches.join(", ") || "nothing"}, the specification ${expected}`,
+                  );
+                }
+              }
+
+              const said = verdicts[at];
+              if (said?._tag !== (expected === "accepted" ? "Valid" : "Invalid")) {
+                disagreements.push(`${where}: xmllint ${Formatter.format(said)}`);
+              }
+            }
+          }
+        }
+
+        assert.strictEqual(compared, 12);
+        assert.strictEqual(accepted, 2);
+        assert.deepStrictEqual(disagreements, []);
+      }).pipe(Effect.provide(OracleLayer), Effect.provide(XsdOracleLayer)),
+    120_000,
+  );
+});
+
+/**
+ * Find the attributes of the first element of a kind in a tree, in document order.
+ *
+ * @param tree - The tree.
+ * @param kind - The element's kind.
+ * @returns Its attributes; none when the tree holds no element of the kind.
+ */
+const attributesAt = (
+  tree: XdmDocument<Composed>,
+  kind: string,
+): readonly XdmAttribute<Composed>[] => {
+  const stack: XdmChild<Composed>[] = [tree.root];
+  for (let node = stack.shift(); node !== undefined; node = stack.shift()) {
+    if (node._tag === "element" && node.kind === kind) {
+      return node.attributes;
+    }
+
+    if ("children" in node) {
+      stack.push(...node.children);
+    }
+  }
+
+  return [];
+};
+
+describe("XLink's attributes (C30, spec reading 72)", () => {
+  it.effect(
+    "reads xl:href on a kind of the content-packaging set as XLink's closed global under its written prefix, and on an ASI kind, whose set imports no XLink, as a foreign name: both versions",
+    () =>
+      // Oracle: the specification as a checker: XLink's ten globals are declared only in the
+      // schema set the content-packaging extension imports them into (`cpext/` XSDs line 10,
+      // reading 72), where a lax `##other` attribute wildcard validates the attribute against its
+      // declaration, so it is that declaration's closed handle; the ASI XSDs import no XLink, so
+      // there the same attribute has no declaration and is a foreign name (XML Schema 1.0 Part 1,
+      // §3.10.4, §3.4.4 clause 3.1).
+      // Bound: one manifest's lom:title and one item's qti-custom-operator, in the 2 versions.
+      Effect.gen(function* xlinkNames() {
+        for (const version of schemaVersions) {
+          const manifest = yield* reread(
+            new TextEncoder().encode(
+              `<manifest xmlns="${cpNamespace}" xmlns:xl="${xlinkNamespace}" xmlns:lom="http://ltsc.ieee.org/xsd/LOM" identifier="M"><metadata><schema>QTI Package</schema><schemaversion>${version}</schemaversion><lom:lom><lom:general><lom:title xl:type="simple" xl:href="a.xml"><lom:string language="en">T</lom:string></lom:title></lom:general></lom:lom></metadata><organizations/><resources/></manifest>`,
+            ),
+            version,
+          );
+          const item = yield* reread(
+            new TextEncoder().encode(
+              `<qti-assessment-item xmlns="${asi}" xmlns:xl="${xlinkNamespace}" identifier="i" title="t" adaptive="false" time-dependent="false"><qti-response-processing><qti-set-outcome-value identifier="SCORE"><qti-custom-operator xl:href="a.xml"><qti-base-value base-type="integer">1</qti-base-value></qti-custom-operator></qti-set-outcome-value></qti-response-processing></qti-assessment-item>`,
+            ),
+            version,
+          );
+
+          assert.deepStrictEqual(
+            attributesAt(manifest, "lom:title").map(({ name }) => name),
+            [
+              { _tag: "closed", handle: "xlink:type", prefix: "xl" },
+              { _tag: "closed", handle: "xlink:href", prefix: "xl" },
+            ],
+            `lom:title in ${version}`,
+          );
+          assert.deepStrictEqual(
+            attributesAt(item, "qti-custom-operator").map(({ name }) => name),
+            [{ _tag: "foreign", local: "href", prefix: "xl", uri: xlinkNamespace }],
+            `qti-custom-operator in ${version}`,
+          );
+        }
+      }),
   );
 });

@@ -14,7 +14,15 @@ import { namesOf, shredGrammarOf } from "#pantry/model/composed.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { shred } from "#pantry/model/shred.ts";
 import { toXmlDocument, unshred } from "#pantry/model/unshred.ts";
+import { attributePrefixOf } from "#pantry/model/xdm.ts";
 import type { XdmChild, XdmDocument } from "#pantry/model/xdm.ts";
+import { schemaVersions } from "#pantry/grammar/kinds.ts";
+import {
+  asiNamespace,
+  cpNamespace,
+  xlinkNamespace,
+  xsiNamespace,
+} from "#pantry/vocab/namespaces.ts";
 import {
   caseHang,
   closedElements,
@@ -106,7 +114,10 @@ const unreferencedPoints = (document: XdmDocument<Composed>): readonly number[] 
         const { local } = node._tag === "element" ? names.element(node.kind) : node.name;
         found.push(...points(local), ...points(node.prefix));
         for (const { name } of node.attributes) {
-          found.push(...points(name._tag === "closed" ? name.handle : name.local));
+          found.push(
+            ...points(name._tag === "closed" ? names.attribute(name.handle).local : name.local),
+            ...points(attributePrefixOf(name)),
+          );
         }
 
         stack.push(...node.children);
@@ -316,5 +327,53 @@ describe("unshred", { timeout: searchTimeout }, () => {
             }),
         ),
       ),
+  );
+});
+
+/**
+ * The documents spec reading 47's byte fidelity is proved on, each written as crust writes it
+ * (its namespace declarations before its attributes, no CDATA, nothing after the root element), so
+ * a round trip that keeps every prefix gives back its bytes, each with its version:
+ *
+ * - An item whose `xsi:schemaLocation` is written `zs:` on the root and `i:` below it, beside
+ *   `xml:lang`;
+ * - A test whose `qti-selection` holds a foreign element under its `lax` wildcard, with an attribute
+ *   in the element's own namespace and one in another, each under its own prefix, and an `xsi:type`
+ *   written `t:`;
+ * - A manifest whose LOM title carries XLink's `type` and `href` written `xl:` and its `title`
+ *   written `xlink:`, the closed names of XLink's globals on a kind of the content-packaging set.
+ */
+const prefixed = (version: Composed["version"]) => ({
+  item: `<?xml version="1.0" encoding="UTF-8"?>\n<qti-assessment-item xmlns="${asiNamespace}" xmlns:zs="${xsiNamespace}" zs:schemaLocation="${asiNamespace} https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_asiv3p0_v1p0.xsd" identifier="i" title="t" adaptive="false" time-dependent="false" xml:lang="en"><qti-item-body><p xmlns:i="${xsiNamespace}" i:schemaLocation="urn:a b">a</p></qti-item-body></qti-assessment-item>`,
+  manifest: `<?xml version="1.0" encoding="UTF-8"?>\n<manifest xmlns="${cpNamespace}" xmlns:xl="${xlinkNamespace}" xmlns:xlink="${xlinkNamespace}" xmlns:lom="http://ltsc.ieee.org/xsd/LOM" identifier="M"><metadata><schema>QTI Package</schema><schemaversion>${version}</schemaversion><lom:lom><lom:general><lom:title xl:type="simple" xl:href="a.xml" xlink:title="T"><lom:string language="en">T</lom:string></lom:title></lom:general></lom:lom></metadata><organizations/><resources/></manifest>`,
+  test: `<qti-assessment-test xmlns="${asiNamespace}" xmlns:f="urn:f" xmlns:g="urn:g" xmlns:t="${xsiNamespace}" identifier="t" title="t"><qti-test-part identifier="p" navigation-mode="linear" submission-mode="individual"><qti-assessment-section identifier="s" title="s" visible="true"><qti-selection select="1"><f:x f:a="1" g:b="2"><f:y t:type="f:T"/></f:x></qti-selection><qti-assessment-item-ref identifier="i" href="i.xml"/></qti-assessment-section></qti-test-part></qti-assessment-test>`,
+});
+
+describe("the attribute prefix (spec reading 47, C54)", () => {
+  it.effect(
+    "writes every fixture back byte for byte, each attribute under the prefix it was written with: xsi: under zs:, i: and t:, xlink: under xl: and xlink:, and each open name under its own",
+    () =>
+      // Oracle: a universal one, the round trip on bytes, which spec reading 47 makes the contract
+      // for a document written as crust writes it; the handle's own prefix (`xsi:`, `xlink:`) would
+      // write zs:schemaLocation as xsi:schemaLocation, with xsi bound nowhere.
+      // Bound: the 3 fixtures in the 2 versions, 6 documents, exhausted.
+      Effect.gen(function* bytes() {
+        let compared = 0;
+        for (const version of schemaVersions) {
+          for (const [name, text] of Object.entries(prefixed(version))) {
+            const read = yield* Effect.orDie(readXml(new TextEncoder().encode(text)));
+            const tree = yield* shred(read, version, shredGrammar);
+            compared += 1;
+
+            assert.strictEqual(
+              new TextDecoder().decode(yield* unshred(tree, names)),
+              text,
+              `${name} in ${version}`,
+            );
+          }
+        }
+
+        assert.strictEqual(compared, 6);
+      }),
   );
 });

@@ -568,16 +568,19 @@ const isOpenClass = (name: string): name is OpenClass => openHandles.has(name);
 
 /**
  * The builder of each open class's names: the class as the name's tag, with what the class keeps of
- * the exact name its open-name row holds. A name in no namespace has no prefix or namespace name to
- * read.
+ * the exact name its open-name row holds and the prefix its attribute row holds. A name in no
+ * namespace has no prefix or namespace name to read.
  */
 const openNameOf = {
   "data-*": ({ local }) => ({ _tag: "data-*", local }),
-  foreign: ({ local, prefix, uri }) => ({ _tag: "foreign", local, prefix, uri }),
+  foreign: ({ local, uri }, prefix) => ({ _tag: "foreign", local, prefix, uri }),
   "no-namespace": ({ local }) => ({ _tag: "no-namespace", local }),
-  "own-namespace": ({ local, prefix, uri }) => ({ _tag: "own-namespace", local, prefix, uri }),
+  "own-namespace": ({ local, uri }, prefix) => ({ _tag: "own-namespace", local, prefix, uri }),
 } as const satisfies {
-  readonly [K in OpenClass]: (row: OpenNameRow) => Extract<OpenName, { readonly _tag: K }>;
+  readonly [K in OpenClass]: (
+    row: OpenNameRow,
+    prefix: string,
+  ) => Extract<OpenName, { readonly _tag: K }>;
 };
 
 /**
@@ -596,12 +599,12 @@ const attributeOf = <V extends XdmVocabulary>(
   reached.add(row);
 
   return Result.gen(function* attribute() {
-    const { id, lexical, name } = row;
+    const { id, lexical, name, prefix } = row;
     const named: XdmAttributeName<V> = isOpenClass(name)
       ? yield* Result.map(take(reached, "openNames", index.openNames, id), (open) =>
-          openNameOf[name](open),
+          openNameOf[name](open, prefix),
         )
-      : { _tag: "closed", handle: name };
+      : { _tag: "closed", handle: name, prefix };
     const references = (index.references.get(id) ?? []).toSorted(byOffset);
     for (const reference of references) {
       reached.add(reference);

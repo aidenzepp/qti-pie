@@ -17,7 +17,7 @@ import { foldGrammarOf } from "#pantry/model/composed.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { fold } from "#pantry/model/folds.ts";
 import type { FoldedNode, FoldedRows } from "#pantry/model/folds.ts";
-import { none } from "#pantry/model/xdm.ts";
+import { closedName, none } from "#pantry/model/xdm.ts";
 import type {
   ClosedName,
   ElementKind,
@@ -283,7 +283,9 @@ describe("fold over generated trees", { timeout: searchTimeout }, () => {
     // for a kind several positions name the one of its `Symbol` positions `Follow` allows after its
     // predecessor's state, walked here from the family's start (Unique Particle Attribution makes
     // it one), or for character data its predecessor's state (0 for a first child); a family's end
-    // state as its last child's; its element count; and `attrs` as its attributes' positions.
+    // state as its last child's; its element count; and `attrs` as its closed attributes'
+    // positions, since an open class is one position for many names, which the fold steps over
+    // (the W5 amendment's C9).
     // Bound: the generator's drawn bounds.
     searched(
       ctx,
@@ -361,7 +363,11 @@ describe("fold over generated trees", { timeout: searchTimeout }, () => {
               above.flatMap(({ kind }) => [...rowOf(grammar.ancestry.enters, kind)]),
             );
             const names = rows.attributes
-              .filter((attribute) => attribute.node === node.id)
+              .filter(
+                (attribute) =>
+                  attribute.node === node.id &&
+                  !openClasses.some((open) => open === attribute.name),
+              )
               .map(({ name }) =>
                 Option.match(
                   admissionOf(grammar.attributes, {
@@ -619,7 +625,7 @@ describe("fold's refusals", { timeout: searchTimeout }, () => {
                 const edited = editElement(document, target, (held) => ({
                   ...held,
                   attributes: [
-                    { lexical: "v", name: { _tag: "closed", handle: name }, references: [] },
+                    { lexical: "v", name: closedName(name), references: [] },
                     ...held.attributes,
                   ],
                 }));
@@ -648,13 +654,20 @@ describe("fold's refusals", { timeout: searchTimeout }, () => {
 const unconstructed = {
   "AL3 required": "the required attributes, which the generator draws a subset of",
   "AL5 attribute count": "spec readings 41 and 43's attribute counts",
+  "AreaMapping base type": "a declaration's base type, a value drawn without reading",
   Arity: "an operator's arity, a count of children the content automaton relaxes",
   "Binding cardinality": "a response binding, over identifiers drawn without reading",
   "Binding declared": "a response binding, over identifiers drawn without reading",
   BindingFit: "a response binding, over identifiers drawn without reading",
   "Choice bounds": "an interaction's choice counts, values drawn without reading",
+  "Choice identifier key": "a choice's identifier, a value drawn without reading",
+  "Choice not variable":
+    "a choice's identifier against its document's declarations, values drawn without reading",
   "Context variable reference": "a reference, over identifiers drawn without reading",
+  "Declaration base type":
+    "a declaration's base type against its cardinality, values drawn without reading",
   "Declaration key": "a declaration's identifier, a value drawn without reading",
+  "Declaration not reserved": "a declaration's identifier, a value drawn without reading",
   "Document entry": "a package's law",
   "DocumentId key": "an ID's uniqueness, over values drawn without reading",
   "Feedback outcome type": "a reference, over identifiers drawn without reading",
@@ -663,16 +676,24 @@ const unconstructed = {
   "Graphic gap match default hotspot": "the default hotspot's place among its siblings",
   "Href listed": "a package's law",
   "Idref target": "an IDREF's target, over values drawn without reading",
+  "Label tools":
+    "the item root's tool-name and tool-version, attributes the generator draws a subset of",
   LomObjectIdentifier: "a package's law",
+  "Lookup table cardinality": "a declaration's cardinality, a value drawn without reading",
   "Manifest id space": "a package's law",
+  "Map key": "a mapping's keys, values drawn without reading",
   MappableBaseType: "a declaration's base type, a value drawn without reading",
+  "Mastery range": "a declaration's mastery and normal bounds, values drawn without reading",
   "MathML arity": "an operator's arity, a count of children the content automaton relaxes",
   "N6 ancestry":
     "the ancestry bans, which the generator does not read; a search of its own judges N6",
   "N7 Counted": "the counts of 2…n the content automaton relaxes",
   "N7 barred by": "the children an attribute bars",
   "Printed variable reference": "a reference, over identifiers drawn without reading",
+  "Record field key": "a record value's field identifiers, values drawn without reading",
   RecordBindingFit: "a response binding, over identifiers drawn without reading",
+  "Reserved type":
+    "a built-in variable's declared type, over identifiers and base types drawn without reading",
   ResourceTypeOf: "a package's law",
   RootOfType: "a package's law",
   "SSML lexicon reference": "a reference, over identifiers drawn without reading",
@@ -681,6 +702,11 @@ const unconstructed = {
   "Slider bounds": "a slider's bounds, values drawn without reading",
   "Template reference": "a reference, over identifiers drawn without reading",
   TextDomain: "an element's value domain, over text drawn without reading",
+  "Typed value": "a value's text against its base type, over text drawn without reading",
+  "Usage typed value":
+    "a usage value's text against its base type, over text drawn without reading",
+  "Value cardinality":
+    "a declaration's count of values against its cardinality, a count the content automaton relaxes",
   "Variable declared": "a reference, over identifiers drawn without reading",
   "default hotspot last slot": "the default hotspot's place among its siblings",
   "value domain": "an attribute's value domain, over lexical forms drawn without reading",

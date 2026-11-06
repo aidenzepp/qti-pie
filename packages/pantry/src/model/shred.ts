@@ -107,11 +107,29 @@ export interface ShredGrammar<V extends XdmVocabulary> {
   /**
    * Find the closed handle that spells an attribute's qualified name: the `AttributeName` roster.
    *
-   * @param spelling - The local name for an attribute in no namespace, `xml:` or `xsi:` before it
-   *   in the XML or XSI namespace.
+   * @param spelling - The local name for an attribute in no namespace, and `xml:`, `xsi:` or
+   *   `xlink:` before it in the XML, XSI or XLink namespace, whatever prefix the document writes.
    * @returns The handle, or none when no closed handle spells it.
    */
   readonly closedName: (spelling: string) => Option.Option<ClosedName<V>>;
+  /**
+   * Whether a parent's `strict` wildcards find the global declaration of an element that spec
+   * reading 6 keeps foreign (`foreignRoots` of `#pantry/vocab/open.ts`): a row of
+   * `HeldRootsUnder`, whose pattern matches the element's expanded name. Such an element is
+   * assessed against that declaration (XML Schema 1.0 Part 1, §3.10.4 clause 2, §3.3.4 clause
+   * 1.1.1.3.2), so it is no element the wildcard holds without one, and reading 6 keeps it as
+   * foreign content, unrefused, as under `lax` (C13).
+   *
+   * @param version - The version of the element's document.
+   * @param parent - The kind of the element's parent.
+   * @param name - The element's expanded name.
+   * @returns Whether the parent's strict wildcards hold the element by its global declaration.
+   */
+  readonly heldRoot: (
+    version: V["version"],
+    parent: ElementKind<V> | ForeignKind,
+    name: ExpandedName,
+  ) => boolean;
   /**
    * Find the type a kind declares: an element's governing type without `xsi:type`.
    *
@@ -384,7 +402,9 @@ type Reading<V extends XdmVocabulary> =
        */
       readonly parent: Element;
       /**
-       * Whether only a `strict` wildcard of the parent holds the element.
+       * Whether only a `strict` wildcard of the parent holds the element and it finds no
+       * declaration of it there: a root reading 6 keeps foreign whose declaration it finds is
+       * held laxly ({@link ShredGrammar.heldRoot}).
        */
       readonly strict: boolean;
     };
@@ -638,6 +658,10 @@ const rootReadingOf = <V extends XdmVocabulary>(
  * `anyElement` excludes MathML's own namespace, so where no MathML kind the parent admits takes its
  * name it is refused, as `mathml-foreign` (law "MathML foreign element").
  *
+ * Under a `strict` wildcard a foreign element stands only with an `xsi:type` its document's schema
+ * set resolves, unless it is one of reading 6's roots whose declaration the wildcard finds there,
+ * which stands as foreign content, as it would under `lax` (C13).
+ *
  * @param element - The element.
  * @param parent - How its parent is read.
  * @param version - The version of its document.
@@ -671,7 +695,9 @@ const childReadingOf = <V extends XdmVocabulary>(
           element,
           kind: foreign,
           parent: parent.element,
-          strict: grammar.strictlyHeld(version, parent.kind, foreign),
+          strict:
+            grammar.strictlyHeld(version, parent.kind, foreign) &&
+            !grammar.heldRoot(version, parent.kind, element),
         });
   }
 
@@ -682,7 +708,8 @@ const childReadingOf = <V extends XdmVocabulary>(
 };
 
 /**
- * Spell the qualified name an attribute's closed handle would have.
+ * Spell the qualified name an attribute's closed handle would have: its namespace by the
+ * handle's own prefix, never the one the document writes, which the closed name keeps beside it.
  *
  * @param attribute - The attribute's namespace name and local name.
  * @returns The local name in no namespace, the {@link prefixOf} prefix and the local name
@@ -723,7 +750,7 @@ const attributeOf = <V extends XdmVocabulary>(
     Option.filter((handle) => grammar.admitted(version, kind, governs, handle)),
   );
   if (Option.isSome(closed)) {
-    return Result.succeed(read({ _tag: "closed", handle: closed.value }));
+    return Result.succeed(read({ _tag: "closed", handle: closed.value, prefix: attribute.prefix }));
   }
 
   const { local, namespace } = reading.element;

@@ -11,11 +11,13 @@ import { Array as Arr, Option, Result } from "effect";
 import { admissionOf } from "#pantry/grammar/attributes.ts";
 import type { ComposedGrammar, Kind, Name } from "#pantry/grammar/compose.ts";
 import { contentStep } from "#pantry/grammar/content.ts";
+import { patternFlags } from "#pantry/grammar/domains.ts";
+import { expandedText } from "#pantry/grammar/names.ts";
 import { typeHandle } from "#pantry/grammar/xsi.ts";
 import { isForeignKind, openClasses } from "#pantry/grammar/kinds.ts";
 import type { FoldGrammar } from "#pantry/model/folds.ts";
 import type { ShredGrammar } from "#pantry/model/shred.ts";
-import type { QualifiedName, XdmNames } from "#pantry/model/unshred.ts";
+import type { XdmNames } from "#pantry/model/unshred.ts";
 import { handlePrefixes } from "#pantry/model/xdm.ts";
 import type { ClosedName, ElementKind, ExpandedName, XdmVocabulary } from "#pantry/model/xdm.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
@@ -72,29 +74,41 @@ const closedNameOf = (name: Name): Option.Option<ClosedName<Composed>> =>
 /**
  * Read the composed grammar as shred reads a grammar: its kind resolution, the `AttributeName`
  * roster's closed handles, `Order`'s key set as the children each kind admits,
- * `AttributeAdmission`, `StrictlyHeld`, and the `TypeName` roster with each kind's declared type.
+ * `AttributeAdmission`, `StrictlyHeld` with `HeldRootsUnder`'s patterns, each compiled once, and
+ * the `TypeName` roster with each kind's declared type.
  *
  * @param grammar - The composed grammar.
  * @returns The grammar shred reads documents through.
  */
-export const shredGrammarOf = (grammar: ComposedGrammar): ShredGrammar<Composed> => ({
-  admitsChild: (version, parent, child) =>
-    Option.isSome(grammar.admission.lookup({ child, parent, version })),
-  admitted: (version, kind, governs, name) =>
-    Option.isSome(admissionOf(grammar.attributes, { governs, kind, name, version })),
-  closedName: (spelling) =>
-    grammar.kinds.attributeName.has(spelling) ? closedNameOf(spelling) : Option.none(),
-  declaredType: (version, kind) => grammar.xsi.declaredType(version, kind),
-  resolve: (namespace, local, parent) =>
-    grammar.kinds.resolve(namespace, local, parent).pipe(Option.flatMap(elementKindOf)),
-  strictlyHeld: (version, parent, kind) =>
-    Option.isSome(grammar.content.strictlyHeld.lookup({ child: kind, parent, version })),
-  typeName: (name) => {
-    const handle = typeHandle(name);
+export const shredGrammarOf = (grammar: ComposedGrammar): ShredGrammar<Composed> => {
+  const heldRoots: ReadonlyMap<string, RegExp> = new Map(
+    grammar.heldRootsUnder.rows.map(({ names, parent, version }) => [
+      `${version} ${parent}`,
+      new RegExp(names, patternFlags),
+    ]),
+  );
 
-    return grammar.xsi.typeName.has(handle) ? Option.some(handle) : Option.none();
-  },
-});
+  return {
+    admitsChild: (version, parent, child) =>
+      Option.isSome(grammar.admission.lookup({ child, parent, version })),
+    admitted: (version, kind, governs, name) =>
+      Option.isSome(admissionOf(grammar.attributes, { governs, kind, name, version })),
+    closedName: (spelling) =>
+      grammar.kinds.attributeName.has(spelling) ? closedNameOf(spelling) : Option.none(),
+    declaredType: (version, kind) => grammar.xsi.declaredType(version, kind),
+    heldRoot: (version, parent, name) =>
+      heldRoots.get(`${version} ${parent}`)?.test(expandedText(name)) ?? false,
+    resolve: (namespace, local, parent) =>
+      grammar.kinds.resolve(namespace, local, parent).pipe(Option.flatMap(elementKindOf)),
+    strictlyHeld: (version, parent, kind) =>
+      Option.isSome(grammar.content.strictlyHeld.lookup({ child: kind, parent, version })),
+    typeName: (name) => {
+      const handle = typeHandle(name);
+
+      return grammar.xsi.typeName.has(handle) ? Option.some(handle) : Option.none();
+    },
+  };
+};
 
 /**
  * Read the composed grammar as the folds read a grammar: a child's state in its parent's content
@@ -135,21 +149,20 @@ export const foldGrammarOf = (grammar: ComposedGrammar): FoldGrammar<Composed> =
 /**
  * Name the attribute a closed handle spells: a handle that begins with a prefix of
  * {@link handlePrefixes} names an attribute in that prefix's namespace, and any other handle one
- * in no namespace.
+ * in no namespace. The prefix it is written with is the tree's own (`XdmClosedName.prefix`).
  *
  * @param handle - The handle.
- * @returns The prefix, local name and namespace name it is written and read with.
+ * @returns The local name and namespace name it is written and read with.
  */
-const attributeNameOf = (handle: string): QualifiedName =>
+const attributeNameOf = (handle: string): ExpandedName =>
   Option.getOrElse(
     Arr.findFirst(handlePrefixes, ({ prefix }) => handle.startsWith(`${prefix}:`)).pipe(
       Option.map(({ namespace, prefix }) => ({
         local: handle.slice(prefix.length + 1),
         namespace,
-        prefix,
       })),
     ),
-    () => ({ local: handle, namespace: "", prefix: "" }),
+    () => ({ local: handle, namespace: "" }),
   );
 
 /**
