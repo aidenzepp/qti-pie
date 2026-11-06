@@ -5,9 +5,8 @@
  *   {@link xsdContents} walks it from its global elements, giving each kind the content model and
  *   attribute uses its declaration states. It is written from XML Schema Part 1, apart from the
  *   vocabulary deriver (`src/vocab/derive/`), so the grammar's relations are checked against an
- *   independent reading: {@link precedence} is "x may come before y" in some valid content
- *   (Glushkov's position automaton, follow⁺), and {@link wordOf} draws valid child sequences by
- *   construction, which `xmllint` re-checks ({@link validateContents}).
+ *   independent reading: {@link wordOf} draws valid child sequences by construction, which
+ *   `xmllint` re-checks ({@link validateContents}).
  * - **Toy compositions** ({@link toyVocabulary}): vocabularies that compose through production's
  *   `compose`, so a generated grammar is built the production way.
  */
@@ -835,14 +834,6 @@ export const elementsOf = (
 };
 
 /**
- * A kind's content as its XSD declares it, under the parent kind it was reached under.
- */
-export interface KindContent {
-  readonly content: Content;
-  readonly kind: string;
-}
-
-/**
  * What a walk of a schema set gives: each kind's contents, by kind, and each element name no kind
  * resolves, with the parent kind it stood under.
  */
@@ -903,149 +894,6 @@ export const xsdContents = (
   return {
     contents: new Map([...contents].map(([kind, byType]) => [kind, [...byType.values()]])),
     unresolved: [...unresolved].toSorted(),
-  };
-};
-
-/**
- * What a content model says of the order of its children, over kinds.
- */
-export interface Precedence {
-  /**
-   * The kinds some valid content holds, wildcard kinds included.
-   */
-  readonly kinds: ReadonlySet<string>;
-  /**
-   * Whether some valid content holds a child of kind `earlier` before one of kind `later`.
-   *
-   * @param earlier - A kind.
-   * @param later - A kind.
-   * @returns Whether `earlier` may precede `later`.
-   */
-  readonly precedes: (earlier: string, later: string) => boolean;
-}
-
-/**
- * Compute what a content model says of its children's order: Glushkov's position automaton over
- * its particle, each element particle one position labelled by the kinds its members resolve to,
- * each wildcard one position labelled by `wildcard`. `x` may precede `y` exactly when some position
- * of `y` is reachable from some position of `x` by one or more follow steps: every position of an
- * XSD content model lies on an accepting path, so such a path extends to a valid content.
- *
- * Occurrence bounds enter only as whether a particle may be absent (min 0) and whether it may
- * repeat (max > 1), which is all "may precede" depends on.
- *
- * @param particle - The content model's particle.
- * @param kindsOf - The kinds an element particle's members resolve to, under the parent.
- * @param wildcard - The kinds a wildcard position stands for.
- * @returns The precedence relation.
- */
-export const precedence = (
-  particle: Particle,
-  kindsOf: (members: readonly Member[]) => readonly string[],
-  wildcard: readonly string[],
-): Precedence => {
-  const labels: (readonly string[])[] = [];
-  const follow: Set<number>[] = [];
-  interface Glushkov {
-    readonly first: readonly number[];
-    readonly last: readonly number[];
-    readonly nullable: boolean;
-  }
-  const link = (from: readonly number[], to: readonly number[]) => {
-    for (const at of from) {
-      for (const next of to) {
-        follow[at]?.add(next);
-      }
-    }
-  };
-  const build = (node: Particle): Glushkov => {
-    const inner = ((): Glushkov => {
-      switch (node._tag) {
-        case "element":
-        case "any": {
-          const at = labels.length;
-          labels.push(node._tag === "element" ? kindsOf(node.members) : wildcard);
-          follow.push(new Set());
-
-          return { first: [at], last: [at], nullable: false };
-        }
-        case "sequence": {
-          let acc: Glushkov = { first: [], last: [], nullable: true };
-          for (const child of node.particles) {
-            const part = build(child);
-            link(acc.last, part.first);
-            acc = {
-              first: acc.nullable ? [...acc.first, ...part.first] : acc.first,
-              last: part.nullable ? [...acc.last, ...part.last] : part.last,
-              nullable: acc.nullable && part.nullable,
-            };
-          }
-
-          return acc;
-        }
-        case "choice": {
-          const parts = node.particles.map(build);
-
-          return {
-            first: parts.flatMap(({ first }) => first),
-            last: parts.flatMap(({ last }) => last),
-            nullable: parts.length === 0 || parts.some(({ nullable }) => nullable),
-          };
-        }
-        case "all": {
-          const parts = node.particles.map(build);
-          for (const [index, part] of parts.entries()) {
-            for (const [other, next] of parts.entries()) {
-              if (index !== other) {
-                link(part.last, next.first);
-              }
-            }
-          }
-
-          return {
-            first: parts.flatMap(({ first }) => first),
-            last: parts.flatMap(({ last }) => last),
-            nullable: parts.every(({ nullable }) => nullable),
-          };
-        }
-        default: {
-          return node satisfies never;
-        }
-      }
-    })();
-    if (node.occurs.max > 1) {
-      link(inner.last, inner.first);
-    }
-
-    return { ...inner, nullable: inner.nullable || node.occurs.min === 0 };
-  };
-  build(particle);
-
-  const reach = follow.map((_, from) => {
-    const seen = new Set<number>();
-    const pending = [...(follow[from] ?? [])];
-    for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
-      if (!seen.has(next)) {
-        seen.add(next);
-        pending.push(...(follow[next] ?? []));
-      }
-    }
-
-    return seen;
-  });
-  const positionsOf = new Map<string, number[]>();
-  for (const [at, kinds] of labels.entries()) {
-    for (const kind of kinds) {
-      positionsOf.set(kind, [...(positionsOf.get(kind) ?? []), at]);
-    }
-  }
-
-  return {
-    kinds: new Set(positionsOf.keys()),
-    precedes: (earlier, later) =>
-      (positionsOf.get(earlier) ?? []).some((from) =>
-        (positionsOf.get(later) ?? []).some((to) => reach[from]?.has(to) ?? false),
-      ),
   };
 };
 
@@ -1407,17 +1255,6 @@ export const toySources = (versions: readonly [SchemaVersion, ...SchemaVersion[]
  * @returns Its facets.
  */
 export const toyFacets = (stated: Partial<Facets>): Facets => ({ ...noFacets, ...stated });
-
-/**
- * Draw a subset of a list, each item kept or left by its own decision.
- *
- * @param items - The items.
- * @returns A generator of the kept items, in order.
- */
-export const subsetOf =
-  <A>(items: readonly A[]): Gen<readonly A[]> =>
-  (source) =>
-    items.filter(() => source.choose(0, 1) === 1);
 
 /**
  * Whether a wildcard admits an element in a namespace (XML Schema Part 1 §3.10.4, the namespace

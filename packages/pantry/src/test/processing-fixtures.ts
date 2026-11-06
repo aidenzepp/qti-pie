@@ -54,15 +54,6 @@ export const corpusPackage = (
   });
 
 /**
- * One response processing template document of the corpus: the package it lives in and its
- * absolute path.
- */
-export interface TemplateDocument {
-  readonly path: string;
-  readonly pkg: "ccPackage" | "maxfiles";
-}
-
-/**
  * The five template documents of the corpus, each a package and the path inside it.
  */
 const templateFiles = [
@@ -72,26 +63,6 @@ const templateFiles = [
   ["maxfiles", "rptemplates/map_response.xml"],
   ["maxfiles", "rptemplates/match_correct.xml"],
 ] as const;
-
-/**
- * The five response processing template documents of the corpus, each declaring no variable.
- *
- * @returns Absolute paths under the two materialized package directories.
- */
-export const templateDocuments = (): Effect.Effect<
-  readonly TemplateDocument[],
-  SourceError | CorpusPackageMissing,
-  Needs
-> =>
-  Effect.gen(function* findTemplates() {
-    const found: TemplateDocument[] = [];
-
-    for (const [pkg, file] of templateFiles) {
-      found.push({ path: path.join(yield* corpusPackage(pkg), file), pkg });
-    }
-
-    return found;
-  });
 
 /**
  * The version of this module's own derivation code, one of the inputs of every derived package's

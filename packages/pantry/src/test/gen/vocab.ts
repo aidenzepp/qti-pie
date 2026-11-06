@@ -9,15 +9,8 @@
  * whose verdict the matcher decides independently of the deriver.
  */
 import { Array as Arr, Match, Option } from "effect";
-import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
-import { dataName } from "#pantry/vocab/open.ts";
 import type { ProbeWorld } from "#pantry/test/gen/xmllint.ts";
-import type {
-  ContentType,
-  NamespaceConstraint,
-  Occurs,
-  Particle,
-} from "#pantry/vocab/inventory/types.ts";
+import type { ContentType, NamespaceConstraint, Particle } from "#pantry/vocab/inventory/types.ts";
 
 /**
  * One child in a word: an element of a kind, or a foreign element in a namespace (`""` for none)
@@ -106,7 +99,8 @@ const matchesLetter = (
 
 /**
  * The positions a particle can end at, having started at one, as the XSD's particle matches a
- * word: a naive set-of-positions reading, sharing nothing with the rank projection.
+ * word: a naive set-of-positions reading, sharing nothing with the Glushkov automaton
+ * (`vocab/sequencing.ts`) it checks.
  *
  * A group repeats while a repetition reaches a new position, so an unbounded group that can match
  * nothing still ends.
@@ -652,16 +646,6 @@ export const attributeClasses = [
 export type AttributeClass = (typeof attributeClasses)[number];
 
 /**
- * One attribute a probe carries: its class, its namespace (`""` for none), its local name, and the
- * name a closed handle spells it with.
- */
-export interface CandidateAttribute {
-  readonly class: AttributeClass;
-  readonly local: string;
-  readonly namespace: string;
-}
-
-/**
  * The spellings each class of undeclared name is tried with, exhaustively: the box the admission
  * suite enumerates (testing doctrine, rule 9). The `data-` spellings sit on both sides of spec
  * reading 13's pattern.
@@ -685,31 +669,9 @@ export const spellings: Readonly<
 /**
  * Whether a spelling is one XML allows as an attribute's local name, so a probe can carry it: the
  * names with a space cannot be written, and stand for spec reading 13's refusal only through
- * {@link dataName}.
+ * `dataName` (`src/vocab/open.ts`).
  *
  * @param local - The local name.
  * @returns Whether it is an NCName the probes can write.
  */
 export const writable = (local: string): boolean => /^[\p{L}_][\p{L}\p{N}._-]*$/u.test(local);
-
-/**
- * Whether a no-namespace spelling is a valid `data-*` name, as spec reading 13 reads it.
- *
- * @param local - The local name.
- * @returns Whether it matches the reading's pattern.
- */
-export const isDataName = (local: string): boolean => dataName.test(local);
-
-/**
- * The schema versions each kind's probes are written for.
- */
-export type ProbeVersion = SchemaVersion;
-
-/**
- * Write the bounds an occurrence allows, for a failure's message.
- *
- * @param occurs - The bounds.
- * @returns `min..max`, `n` for unbounded.
- */
-export const rangeOf = (occurs: Occurs): string =>
-  `${occurs.min}..${Option.match(occurs.max, { onNone: () => "n", onSome: String })}`;

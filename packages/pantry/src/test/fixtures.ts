@@ -4,7 +4,6 @@ import path from "node:path";
 import { Config, Effect, FileSystem, Match, Option, Schema, Stream } from "effect";
 import type { PlatformError } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
-import type { Uuid } from "@bjornpagen/grizzle";
 
 /**
  * The version of this module's own extraction code, one of the four inputs of every fixture's hash.
@@ -6130,14 +6129,4 @@ export const materializeZip = (
       yield* fs.rename(`${tmp}/src/${member}`, `${tmp}/pkg/${name}.zip`);
     }),
   ).pipe(Effect.map((dir) => `${dir}/${name}.zip`));
-};
-
-/**
- * A well-formed UUID derived from a readable label, so a fixture names its nodes and declarations
- * and the rows still carry the `Uuid` the schema asks for.
- */
-export const uuidOf = (label: string): Uuid => {
-  const hex = createHash("sha1").update(label).digest("hex");
-
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
 };

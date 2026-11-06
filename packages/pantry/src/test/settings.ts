@@ -51,22 +51,6 @@ export const leaseTestTimeoutMs = 49_000;
 export const authorLayerHookTimeoutMs = 20_000;
 
 /**
- * The timeout, in milliseconds, for the `layer` hook that builds `AuthorAppLayer` beside a
- * `FixtureRowsLayer`.
- *
- * The hook builds `AuthorAppLayer` and a `FixtureRowsLayer` that reads 11 fixtures through
- * `rowsOfPackage` (`rules.packaging.test.ts`) or its own fixture set (`content-a.test.ts`), and
- * with no `timeout` option it fell to vitest's 10 s `hookTimeout`, which both files exceeded: the
- * first alone on a lease, the second under the leased full suite. Measured on 2026-11-03 at
- * `922fe9b` on a lease: five quiet runs per file had a median of 9.43 s for
- * `rules.packaging.test.ts` and 9.26 s for `content-a.test.ts`, and six concurrent runs per file
- * had a maximum of 10.50 s (`content-a.test.ts`; 10.28 s for the other) at load averages of 9 to 11.
- * The budget is the larger of twice that maximum (21 s) and 20 s, the floor being twice the
- * default. Raise it only on a new measurement recorded here, never to make a run pass.
- */
-export const fixtureRowsLayerHookTimeoutMs = 21_000;
-
-/**
  * The timeout, in milliseconds, for one test that spawns the CLI as a child process.
  *
  * Such a test pays Node's start and the module graph of `cli.ts`, not the snapshot, and vitest's
@@ -101,9 +85,7 @@ export const cliProcessTestTimeoutMs = 10_000;
  *
  * Since Q5's CLI fix (2026-11-05) `preloadEngine` imports four modules, not six, and the
  * measurements above are of the six. Q5's re-measurement of the four, batch 2, had a maximum of
- * 37.3 s at load averages of 34 to 45, which this rule turns into 75 s. The budget stays at 55 s
- * until grizzle's `textLookup` is memoized (G5, about 47% of what is left of the preload); then
- * the four-module preload is measured again, recorded here, and the budget set by this rule.
+ * 37.3 s at load averages of 34 to 45, which this rule turns into 75 s.
  *
  * After W5's cutover (2026-11-06, measured by seat Q5.18) the four modules load the new grammar
  * installation, schema and import program. Three batches of nine concurrent processes (this
@@ -124,19 +106,3 @@ export const cliProcessTestTimeoutMs = 10_000;
  * Raise it only on a new measurement recorded here, never to make a run pass.
  */
 export const engineLoadHookTimeoutMs = 97_000;
-
-/**
- * The timeout, in milliseconds, for the one test that materializes the 19 `cut-*` fixtures and
- * renders each to the oracle's bytes.
- *
- * `global-setup.ts` materializes only `simple` and four packages, so this test cuts and writes
- * the 19 items itself, and vitest's 5 s default was exceeded under load (a fresh tree timed out at
- * 5033 ms at a load average of 20.6; that figure is censored by the timeout, so the true time was
- * longer). Measured on 2026-11-02 at `d2ee380`, with no `cut-*` directory in the fixtures root:
- * three cold runs alone took 2902, 2821 and 2699 ms at load averages of 8.75, 8.37 and 8.53, and
- * six concurrent cold runs, each with its own fixtures root, took 3265, 3279, 3289, 3289, 3343 and
- * 3249 ms at a load average of 8.1. The budget is the larger of twice the maximum (3343 ms, so
- * 6.7 s) and 10 s, the floor being twice the default, rounded up to the next second.
- * Raise it only on a new measurement recorded here, never to make a run pass.
- */
-export const cutItemRenderTestTimeoutMs = 10_000;

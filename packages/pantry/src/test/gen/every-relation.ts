@@ -649,12 +649,6 @@ export const everyRelationPackage = (members: MemberCounts, bulk?: Bulk): Packag
 };
 
 /**
- * The every-relation packages, one per drawn {@link memberCounts}.
- */
-export const everyRelation: Gen<PackageEntries> = (source) =>
-  everyRelationPackage(source.draw(memberCounts));
-
-/**
  * Write a package's entries under a directory, making the directories their paths name.
  *
  * An entry whose bytes are the very array of an entry written before is a hard link to that file,
