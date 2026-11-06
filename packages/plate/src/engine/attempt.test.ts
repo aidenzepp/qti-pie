@@ -214,6 +214,64 @@ const countsAttempts = itemDocument(
 );
 
 /**
+ * An item that copies the built-in `completionStatus` into the identifier outcome `STATUS`.
+ */
+const readsCompletion = itemDocument(
+  trueFalse,
+  declaration("qti-outcome-declaration", "STATUS", "identifier"),
+  el(
+    "qti-response-processing",
+    [],
+    [
+      el(
+        "qti-set-outcome-value",
+        [attr("identifier", "STATUS")],
+        [el("qti-variable", [attr("identifier", "completionStatus")])],
+      ),
+    ],
+  ),
+);
+
+/**
+ * An item that sets the built-in `completionStatus` to `completed` when `RESPONSE` is correct and
+ * leaves it alone otherwise.
+ */
+const completesWhenCorrect = itemDocument(
+  trueFalse,
+  el(
+    "qti-response-processing",
+    [],
+    [
+      el(
+        "qti-response-condition",
+        [],
+        [
+          el(
+            "qti-response-if",
+            [],
+            [
+              el(
+                "qti-match",
+                [],
+                [
+                  el("qti-variable", [attr("identifier", "RESPONSE")]),
+                  el("qti-correct", [attr("identifier", "RESPONSE")]),
+                ],
+              ),
+              el(
+                "qti-set-outcome-value",
+                [attr("identifier", "completionStatus")],
+                [el("qti-base-value", [attr("base-type", "identifier")], [text("completed")])],
+              ),
+            ],
+          ),
+        ],
+      ),
+    ],
+  ),
+);
+
+/**
  * The instance every record here is opened under.
  */
 const instance = "q1";
@@ -261,7 +319,7 @@ describe("runAttempt", () => {
           ...record,
           attempt: "submitted",
           numAttempts: 1,
-          outcomes: { SCORE: floatValue(1) },
+          outcomes: { SCORE: floatValue(1), completionStatus: identifierValue("unknown") },
           responses: { RESPONSE: identifierValue("true") },
         });
         assert.deepStrictEqual(score(wrong), floatValue(0));
@@ -289,7 +347,7 @@ describe("runAttempt", () => {
         ...record,
         attempt: "submitted",
         numAttempts: 1,
-        outcomes: { SCORE: floatValue(0) },
+        outcomes: { SCORE: floatValue(0), completionStatus: identifierValue("unknown") },
         responses: { RESPONSE: nullOf("string", "single") },
       });
       assert.deepStrictEqual(score(mapped), floatValue(0.5));
@@ -343,7 +401,10 @@ describe("runAttempt", () => {
         runAttempt(item, scored, { RESPONSE: identifierValue("false") }),
       );
 
-      assert.deepStrictEqual(after.outcomes, { SCORE: floatValue(1) });
+      assert.deepStrictEqual(after.outcomes, {
+        SCORE: floatValue(1),
+        completionStatus: identifierValue("unknown"),
+      });
       assert.deepStrictEqual(after.responses, { RESPONSE: identifierValue("false") });
       assert.strictEqual(after.numAttempts, 1);
       assert.strictEqual(after.attempt, "submitted");
@@ -361,6 +422,47 @@ describe("runAttempt", () => {
       assert.deepStrictEqual(score(after), floatValue(0));
       assert.strictEqual(after.numAttempts, 1);
     }),
+  );
+
+  it.effect(
+    "[I-9a] sets completionStatus from not_attempted to unknown when the attempt starts, before the rules read it",
+    () =>
+      Effect.gen(function* startsUnknown() {
+        const item = yield* buildItem(readsCompletion);
+        const record = fresh(item, instance);
+
+        const after = yield* Effect.fromResult(
+          runAttempt(item, record, { RESPONSE: identifierValue("true") }),
+        );
+
+        assert.isTrue(Option.isSome(item.processing));
+        assert.deepStrictEqual(
+          record.outcomes["completionStatus"],
+          identifierValue("not_attempted"),
+        );
+        assert.deepStrictEqual(after.outcomes, {
+          STATUS: identifierValue("unknown"),
+          completionStatus: identifierValue("unknown"),
+        });
+      }),
+  );
+
+  it.effect(
+    "[I-9a] keeps the completionStatus a rule sets, completed, and starts the next attempt at unknown again",
+    () =>
+      Effect.gen(function* setsCompleted() {
+        const item = yield* buildItem(completesWhenCorrect);
+        const first = yield* Effect.fromResult(
+          runAttempt(item, fresh(item, instance), { RESPONSE: identifierValue("true") }),
+        );
+        const second = yield* Effect.fromResult(
+          runAttempt(item, first, { RESPONSE: identifierValue("false") }),
+        );
+
+        assert.isTrue(Option.isSome(item.processing));
+        assert.deepStrictEqual(first.outcomes["completionStatus"], identifierValue("completed"));
+        assert.deepStrictEqual(second.outcomes["completionStatus"], identifierValue("unknown"));
+      }),
   );
 
   it.effect("returns the evaluator's failure and leaves the record it was given unchanged", () =>

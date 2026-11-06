@@ -18,7 +18,12 @@ import type { Configuration } from "#plate/configuration.ts";
 import { runAttempt } from "#plate/engine/attempt.ts";
 import type { EngineFailure } from "#plate/engine/evaluate.ts";
 import type { Item, OutcomeDeclaration, ResponseDeclaration } from "#plate/model/item.ts";
-import { fresh } from "#plate/model/record.ts";
+import {
+  completionStatus,
+  completionStatusType,
+  fresh,
+  holdsCompletionStatus,
+} from "#plate/model/record.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
 import type { Value } from "#plate/model/values.ts";
 import type { ValidationMessage } from "#plate/payload.ts";
@@ -261,15 +266,36 @@ const responsesFitting = (
   unlessMisfit(record, firstMisfit("response", item.responses, record.responses));
 
 /**
+ * Give the type of each outcome a record of an item may hold: each outcome the item declares, and
+ * the built-in `completionStatus`, a single identifier, where the item holds it
+ * (`holdsCompletionStatus` in `#plate/model/record.ts`).
+ *
+ * @param item The item.
+ * @returns Each outcome's base type and cardinality, keyed by identifier.
+ */
+const recordOutcomes = (
+  item: Item,
+): ReadonlyMap<string, Pick<OutcomeDeclaration, "baseType" | "cardinality">> =>
+  holdsCompletionStatus(item)
+    ? new Map<string, Pick<OutcomeDeclaration, "baseType" | "cardinality">>([
+        ...item.outcomes,
+        [completionStatus, completionStatusType],
+      ])
+    : item.outcomes;
+
+/**
  * Check that a decoded record is one {@link score} could have written for the item: each response
- * it holds is one the item scores, and each outcome one the item declares, each of its
- * declaration's base type and cardinality.
+ * it holds is one the item scores, and each outcome one the item declares or the built-in
+ * `completionStatus` ({@link recordOutcomes}), each of its declaration's base type and
+ * cardinality.
  *
  * `restore` and `results` run it, so a record that does not fit is refused rather than given back
  * or written into a result. It checks the responses as `score` checks the record it is handed, and
  * the outcomes too, which `score` leaves alone because an attempt resets them; every record `score`
- * writes fits, since the engine sets only declared outcomes, each to a value of its type. A
- * declared variable the record lacks is not refused.
+ * writes fits, since the engine sets only declared outcomes and the built-in `completionStatus`,
+ * each to a value of its type. A declared variable the record lacks is not refused, nor is a
+ * record that lacks `completionStatus`, as one written before the built-in was held does: it reads
+ * as `fresh` and the attempt start it.
  *
  * @param item The item.
  * @param record The decoded record, which belongs to the item.
@@ -280,7 +306,7 @@ export const fitting = (item: Item, record: ItemRecord): Result.Result<ItemRecor
   unlessMisfit(
     record,
     Option.orElse(firstMisfit("response", item.responses, record.responses), () =>
-      firstMisfit("outcome", item.outcomes, record.outcomes),
+      firstMisfit("outcome", recordOutcomes(item), record.outcomes),
     ),
   );
 

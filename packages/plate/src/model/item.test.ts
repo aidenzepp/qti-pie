@@ -212,6 +212,20 @@ const item = (parts: {
   );
 
 /**
+ * Construct an item document whose response processing is one rule, beside the identifier outcome
+ * `STATUS`.
+ *
+ * @param rule The rule.
+ * @returns The document at `items/test.xml`.
+ */
+const statusItem = (rule: SourceElement): SourceDocument =>
+  item({
+    after: [el("qti-response-processing", [], [rule])],
+    body: [],
+    declarations: [declaration("qti-outcome-declaration", "STATUS", "identifier", "single")],
+  });
+
+/**
  * A BG007-shaped item: an identifier `RESPONSE` whose correct response is `true`, a float `SCORE`
  * with default 1, and a two-choice interaction with `max-choices="1"`.
  *
@@ -3140,49 +3154,111 @@ describe("buildItem", () => {
   );
 
   it.effect(
-    "marks inline rules that read or set the built-in duration or completionStatus, which stay unheld",
+    "[I-9a] runs inline rules that read or set the built-in completionStatus, and marks one that sets the built-in duration, which stays unheld",
     () =>
-      Effect.gen(function* marksUnheldBuiltIns() {
-        const cases = [
-          { identifier: "completionStatus", rule: "read" },
-          { identifier: "completionStatus", rule: "set" },
-          { identifier: "duration", rule: "set" },
-        ] as const;
+      Effect.gen(function* holdsCompletionStatus() {
+        const completed = el(
+          "qti-base-value",
+          [attr("base-type", "identifier")],
+          [text("completed")],
+        );
+        const reading = yield* buildItem(
+          statusItem(
+            el(
+              "qti-set-outcome-value",
+              [attr("identifier", "STATUS")],
+              [el("qti-variable", [attr("identifier", "completionStatus")])],
+            ),
+          ),
+        );
+        const setting = yield* buildItem(
+          statusItem(
+            el("qti-set-outcome-value", [attr("identifier", "completionStatus")], [completed]),
+          ),
+        );
+        const timing = yield* buildItem(
+          statusItem(el("qti-set-outcome-value", [attr("identifier", "duration")], [completed])),
+        );
 
-        for (const { identifier, rule } of cases) {
-          const ruleElement =
-            rule === "read"
-              ? el(
-                  "qti-set-outcome-value",
-                  [attr("identifier", "STATUS")],
-                  [el("qti-variable", [attr("identifier", identifier)])],
-                )
-              : el(
-                  "qti-set-outcome-value",
-                  [attr("identifier", identifier)],
-                  [el("qti-base-value", [attr("base-type", "identifier")], [text("completed")])],
-                );
+        assert.deepStrictEqual(
+          reading.processing,
+          Option.some([
+            {
+              expression: {
+                identifier: "completionStatus",
+                kind: "variable",
+                operands: [],
+                weightIdentifier: Option.none(),
+              },
+              identifier: "STATUS",
+              kind: "set-outcome",
+            },
+          ]),
+        );
+        assert.deepStrictEqual(
+          setting.processing,
+          Option.some([
+            {
+              expression: {
+                kind: "base-value",
+                operands: [],
+                value: {
+                  baseType: "identifier",
+                  cardinality: "single",
+                  values: [{ baseType: "identifier", value: "completed" }],
+                },
+              },
+              identifier: "completionStatus",
+              kind: "set-outcome",
+            },
+          ]),
+        );
+        assert.deepStrictEqual([reading.unsupported, setting.unsupported], [[], []]);
+        assert.deepStrictEqual(timing.processing, Option.none());
+        assert.deepStrictEqual(timing.unsupported, [
+          { feature: "variable:duration", path: `${root}/qti-response-processing`, shown: "mark" },
+        ]);
+      }),
+  );
+
+  it.effect(
+    "[I-9a] marks inline rules that read or set completionStatus where the item declares a variable by that name the model does not hold",
+    () =>
+      Effect.gen(function* marksDeclaredCompletionStatus() {
+        const rules = [
+          el(
+            "qti-set-outcome-value",
+            [attr("identifier", "STATUS")],
+            [el("qti-variable", [attr("identifier", "completionStatus")])],
+          ),
+          el(
+            "qti-set-outcome-value",
+            [attr("identifier", "completionStatus")],
+            [el("qti-base-value", [attr("base-type", "identifier")], [text("completed")])],
+          ),
+        ];
+
+        for (const [index, rule] of rules.entries()) {
           const built = yield* buildItem(
             item({
-              after: [el("qti-response-processing", [], [ruleElement])],
+              after: [el("qti-response-processing", [], [rule])],
               body: [],
               declarations: [
                 declaration("qti-outcome-declaration", "STATUS", "identifier", "single"),
+                el("qti-template-declaration", [
+                  attr("base-type", "identifier"),
+                  attr("cardinality", "single"),
+                  attr("identifier", "completionStatus"),
+                ]),
               ],
             }),
           );
 
-          assert.deepStrictEqual(built.processing, Option.none(), `${rule} ${identifier}`);
+          assert.deepStrictEqual(built.processing, Option.none(), `rule ${String(index)}`);
           assert.deepStrictEqual(
-            built.unsupported,
-            [
-              {
-                feature: `variable:${identifier}`,
-                path: `${root}/qti-response-processing`,
-                shown: "mark",
-              },
-            ],
-            `${rule} ${identifier}`,
+            built.unsupported.map((entry) => entry.feature),
+            ["qti-template-declaration", "variable:completionStatus"],
+            `rule ${String(index)}`,
           );
         }
       }),

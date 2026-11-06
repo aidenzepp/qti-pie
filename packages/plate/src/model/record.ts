@@ -20,8 +20,11 @@ import type { Value } from "#plate/model/values.ts";
  * `submitted` once `score` has processed one, and `numAttempts` counts the attempts processed. A
  * refused post is no state of the record: `score` returns no record for it, and a host that counts
  * refused posts keeps that count itself.
- * `responses` and `outcomes` hold every modelled variable by identifier, NULL included. `notices`
- * names the unsupported features the item shows as notices.
+ * `responses` and `outcomes` hold every modelled variable by identifier, NULL included, and
+ * `outcomes` the built-in `completionStatus` too where the item holds it
+ * ({@link holdsCompletionStatus}). A record written before the built-in was held lacks it, and
+ * reads as {@link outcomeDefaults} and the attempt start it. `notices` names the unsupported
+ * features the item shows as notices.
  */
 export interface ItemRecord {
   readonly attempt: "none" | "submitted";
@@ -59,23 +62,86 @@ export const startingValue = (outcome: OutcomeDeclaration): Value =>
   });
 
 /**
- * Give each outcome of an item its starting value, the value a non-adaptive attempt resets it to.
+ * The identifier of the built-in outcome variable `completionStatus`, a single identifier the
+ * delivery engine maintains and no outcome declaration may name. It "starts with the reserved
+ * value 'not_attempted'", "at the start of the first attempt it changes to the reserved value
+ * 'unknown'", and response processing may set it (`info.txt:8488`). `runAttempt` in
+ * `#plate/engine/attempt.ts` starts each attempt's processing with it at `unknown`.
+ *
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#IV_Outcome
+ */
+export const completionStatus = "completionStatus";
+
+/**
+ * The type of the built-in {@link completionStatus}: a single identifier.
+ */
+export const completionStatusType: Pick<OutcomeDeclaration, "baseType" | "cardinality"> = {
+  baseType: "identifier",
+  cardinality: "single",
+};
+
+/**
+ * The two values the engine gives the built-in {@link completionStatus} itself: `not_attempted`
+ * before any attempt, and `unknown` at the start of one. Response processing may set any
+ * identifier.
+ */
+export type CompletionStart = "not_attempted" | "unknown";
+
+/**
+ * Give the built-in {@link completionStatus} one of the values the engine starts it at.
+ *
+ * @param status The value.
+ * @returns It as a single identifier.
+ */
+export const completionValue = (status: CompletionStart): Value => ({
+  baseType: "identifier",
+  cardinality: "single",
+  values: [{ baseType: "identifier", value: status }],
+});
+
+/**
+ * Report whether an item holds the built-in {@link completionStatus} among its record's outcomes:
+ * unless it declares a response or an outcome of that name, which wins over the built-in as every
+ * declared variable does (`variableType` in `#plate/validate/rules.ts`).
+ *
+ * The item model decides which rules run by every declaration, a template or context declaration
+ * and an outcome it does not model included (`heldBuiltIns` in `#plate/model/item.ts`), so a rule
+ * that reads or sets `completionStatus` past such a declaration never runs; the record then holds
+ * the built-in beside it, which only a result reports.
  *
  * @param item The item.
- * @returns Each outcome at {@link startingValue}, keyed by identifier.
+ * @returns Whether its record's outcomes hold the built-in.
  */
-export const outcomeDefaults = (item: Item): ItemRecord["outcomes"] =>
-  Object.fromEntries(
+export const holdsCompletionStatus = (item: Item): boolean =>
+  !item.responses.has(completionStatus) && !item.outcomes.has(completionStatus);
+
+/**
+ * Give each outcome of an item its starting value, the value a non-adaptive attempt resets it to,
+ * and, where the item holds it ({@link holdsCompletionStatus}), the built-in
+ * {@link completionStatus} at `not_attempted`, the value it holds before any attempt; an attempt
+ * starts it at `unknown`.
+ *
+ * @param item The item.
+ * @returns Each outcome at {@link startingValue}, keyed by identifier, and the built-in.
+ */
+export const outcomeDefaults = (item: Item): ItemRecord["outcomes"] => {
+  const declared: ItemRecord["outcomes"] = Object.fromEntries(
     Array.from(item.outcomes, ([identifier, outcome]) => [identifier, startingValue(outcome)]),
   );
+
+  return holdsCompletionStatus(item)
+    ? { [completionStatus]: completionValue("not_attempted"), ...declared }
+    : declared;
+};
 
 /**
  * Start the session of an item that has not been attempted.
  *
  * @param item The item.
  * @param instance The host's name for this use of the item, which scopes its ids.
- * @returns The record: every response NULL, the outcomes at {@link outcomeDefaults}, no attempts,
- *   and the features of `item.unsupported` shown as notices.
+ * @returns The record: every response NULL, the outcomes at {@link outcomeDefaults}, the
+ *   built-in `completionStatus` `not_attempted` among them, no attempts, and the features of
+ *   `item.unsupported` shown as notices.
  */
 export const fresh = (item: Item, instance: string): ItemRecord => ({
   attempt: "none",
