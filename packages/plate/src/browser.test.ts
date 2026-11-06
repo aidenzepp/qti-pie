@@ -55,7 +55,7 @@ const notRoots = {
   "src/restore.ts": "the Schema side: decodes the stored record through Schema",
   "src/score.ts": "value-imports Schema to decode and encode the stored record",
   "src/vocabulary.ts":
-    "the tables the validators and the model builder read; reached from the roots through session/control.ts's sessionControlDefaults, so the scan checks it",
+    "the tables the validators, the model builders and the package reader read; no root reaches it, since session/control.ts reads sessionControlDefaults from session/control-defaults.ts, which vocabulary.ts re-exports",
 } satisfies Readonly<Record<string, string>>;
 
 /**
