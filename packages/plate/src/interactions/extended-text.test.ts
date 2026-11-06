@@ -962,6 +962,9 @@ const pageOf = (built: Payload): Effect.Effect<Element> =>
         case "choice": {
           return assert.fail("This page renders no Choice.");
         }
+        case "inline-choice": {
+          return assert.fail("This page renders no Inline Choice.");
+        }
         default: {
           return interaction satisfies never;
         }
@@ -1553,6 +1556,9 @@ describe("an Extended Text the renderer does not support", () => {
             }
             case "extended-text": {
               return renderExtendedText(interaction, built, state);
+            }
+            case "inline-choice": {
+              return assert.fail("This item holds no Inline Choice.");
             }
             case "text-entry": {
               return assert.fail("This item holds no Text Entry.");

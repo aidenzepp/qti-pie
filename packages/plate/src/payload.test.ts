@@ -461,12 +461,27 @@ const choiceFor = (built: Payload, response: string): ChoicePayload => {
  *
  * @param built The payload.
  * @param response The response identifier.
- * @returns The Text Entry or Extended Text payload; the test fails when it is a Choice.
+ * @returns The Text Entry or Extended Text payload; the test fails when it is a Choice or an
+ *   Inline Choice.
  */
 const textFor = (built: Payload, response: string): ExtendedTextPayload | TextEntryPayload => {
   const found = interactionFor(built, response);
 
-  return found.kind === "choice" ? assert.fail(`${response} is a Choice`) : found;
+  switch (found.kind) {
+    case "extended-text":
+    case "text-entry": {
+      return found;
+    }
+    case "choice": {
+      return assert.fail(`${response} is a Choice`);
+    }
+    case "inline-choice": {
+      return assert.fail(`${response} is an Inline Choice`);
+    }
+    default: {
+      return found satisfies never;
+    }
+  }
 };
 
 /**

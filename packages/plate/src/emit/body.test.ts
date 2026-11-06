@@ -10,12 +10,14 @@ import { toHtml } from "#plate/emit/serialise.ts";
 import { entryName } from "#plate/form/encoding.ts";
 import { renderChoice } from "#plate/interactions/choice.ts";
 import { renderExtendedText } from "#plate/interactions/extended-text.ts";
+import { renderInlineChoice } from "#plate/interactions/inline-choice.ts";
 import { message } from "#plate/messages.ts";
 import type {
   ChoicePayload,
   ElementPayload,
   EmitState,
   ExtendedTextPayload,
+  InlineChoicePayload,
   NoticePayload,
   Payload,
   PayloadNode,
@@ -131,6 +133,36 @@ const stub: RenderInteraction = (interaction) =>
         })
       : h("span", { "data-response": interaction.response }),
   );
+
+/**
+ * The render function `render` builds, dispatching each interaction to its module, so a choice's
+ * content and a Prompt go through {@link emitNodes} as they do in a render.
+ *
+ * @param payload The render's payload.
+ * @param state The render's emit state.
+ * @returns The function that renders one interaction through its module.
+ */
+const interactionsOf =
+  (payload: Payload, state: EmitState): RenderInteraction =>
+  (interaction) => {
+    switch (interaction.kind) {
+      case "choice": {
+        return renderChoice(interaction, payload, state);
+      }
+      case "extended-text": {
+        return renderExtendedText(interaction, payload, state);
+      }
+      case "inline-choice": {
+        return renderInlineChoice(interaction, payload, state);
+      }
+      case "text-entry": {
+        return stub(interaction);
+      }
+      default: {
+        return interaction satisfies never;
+      }
+    }
+  };
 
 /**
  * Emit a body at a heading level, with the stub for every interaction.
@@ -271,6 +303,32 @@ const choice: ChoicePayload = {
   prompt: Option.none(),
   response: "RESPONSE",
   restore: [],
+};
+
+/**
+ * A single Inline Choice bound to `PICK`, unnamed, with two choices, no Label and no message.
+ */
+const inlineChoice: InlineChoicePayload = {
+  autofocus: false,
+  choices: [
+    { content: [txt("red")], identifier: "R" },
+    { content: [txt("blue")], identifier: "B" },
+  ],
+  class: "",
+  editable: true,
+  formName: entryName(instance, "PICK"),
+  invalid: false,
+  kind: "inline-choice",
+  label: Option.none(),
+  messageIds: [],
+  name: {
+    ariaLabel: Option.none(),
+    ariaLabelledby: Option.none(),
+    unnamed: Option.some({ count: 1, n: 1 }),
+  },
+  placeholder: Option.none(),
+  response: "PICK",
+  restore: "",
 };
 
 /**
@@ -726,6 +784,34 @@ describe("emitBody", () => {
       ]);
     }),
   );
+
+  it.effect(
+    "[Q-12] an Inline Choice in a p renders its Root, the select inside, between its texts",
+    () =>
+      Effect.gen(function* inlineChoiceInParagraph() {
+        const state = yield* stateAt(2);
+        const payload = payloadOf([
+          el("p", {}, [txt("The sky is "), inlineChoice, txt(" today.")]),
+        ]);
+        const nodes = yield* Effect.fromResult(
+          emitBody(payload, state, interactionsOf(payload, state)),
+        );
+        const root = yield* Effect.fromResult(renderInlineChoice(inlineChoice, payload, state));
+
+        assert.deepStrictEqual(nodes, [h("p", {}, [text("The sky is "), root, text(" today.")])]);
+        assert.strictEqual(root.tag, "qti-inline-choice-interaction");
+        assert.strictEqual(
+          root.attrs["data-slot"],
+          rowFor("inline-choice-interaction", "root").slot,
+        );
+        assert.deepStrictEqual(
+          elementsIn([root])
+            .filter(({ tag }) => tag === "select")
+            .map(({ attrs }) => attrs["data-slot"]),
+          [rowFor("inline-choice-interaction", "control").slot],
+        );
+      }),
+  );
 });
 
 describe("emitBody, URLs", () => {
@@ -1088,33 +1174,6 @@ const fewerInteractions = 2000;
  * far beyond vitest's default of 5 s, and a failing check should report its ratio, not a timeout.
  */
 const growthTimeoutMs = 300_000;
-
-/**
- * The render function `render` builds, dispatching each interaction to its module, so a choice's
- * content and a Prompt go through {@link emitNodes} as they do in a render.
- *
- * @param payload The render's payload.
- * @param state The render's emit state.
- * @returns The function that renders one interaction through its module.
- */
-const interactionsOf =
-  (payload: Payload, state: EmitState): RenderInteraction =>
-  (interaction) => {
-    switch (interaction.kind) {
-      case "choice": {
-        return renderChoice(interaction, payload, state);
-      }
-      case "extended-text": {
-        return renderExtendedText(interaction, payload, state);
-      }
-      case "text-entry": {
-        return stub(interaction);
-      }
-      default: {
-        return interaction satisfies never;
-      }
-    }
-  };
 
 /**
  * A body of one single Choice with `count` choices, each a paragraph `cN`.

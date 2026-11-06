@@ -384,7 +384,11 @@ export interface ExtendedTextPayload extends TextControlPayload {
 /**
  * An interaction payload, which the emitter hands to its interaction's render function.
  */
-export type InteractionPayload = ChoicePayload | ExtendedTextPayload | TextEntryPayload;
+export type InteractionPayload =
+  | ChoicePayload
+  | ExtendedTextPayload
+  | InlineChoicePayload
+  | TextEntryPayload;
 
 /**
  * A node of the payload's body.
