@@ -571,7 +571,7 @@ describe("the rosters", () => {
     // Spec reading 118's include model is a model of its own, and names the ignored elements'
     // wildcards at two positions.
     assert.lengthOf(handlesOf("SharedModel"), 25);
-    assert.lengthOf(handlesOf("ContentModel"), 115);
+    assert.lengthOf(handlesOf("ContentModel"), 116);
   });
 
   it("spell every handle within a PostgreSQL name, every type and governor among them", () => {
