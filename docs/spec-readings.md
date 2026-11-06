@@ -2205,9 +2205,9 @@ against it. A reading that is not an information-model-over-XSD case says which 
      refuses one past a bound, because grizzle puts every text that takes part in a cross-row equality in a B-tree key,
      and PostgreSQL refuses a B-tree entry above `BTMaxItemSize`, 2,704 bytes at `BLCKSZ` 8192 (`nbtree.h`). Such a
      text is copied into a field of type `keyText` (`src/qti/limits.ts`). keyText is a pattern of at most 646 code
-     points, the most grizzle's own rule, `keyTextBytes`, leaves room for beside the widest key's other fields: the
-     tree's predecessor axis on `Node` (a uuid, five naturals and a closed id beside the string value's running text,
-     whose NULL-able hidden columns add an 8-byte null bitmap). `limits.test.ts` holds 646 to fit and 647 to be refused.
+     points, the most whose UTF-8 form, at most four bytes a code point, fits the 2,587 bytes grizzle's own rule,
+     `keyTextBytes`, leaves beside the widest key's other fields: the tree's predecessor axis on `Node`, a uuid, five
+     naturals and a closed id beside the string value's running text. `limits.test.ts` holds 646 to fit and 647 not to.
      The one bound applies evenly: every text the schema copies into a keyText field counts against it, so a
      647-character `<p id>` is refused just as a 647-character resource identifier is, by the oracle's "Key text bound"
      (rule `key-text-bound`) and by the database under the same rule: the import writes the copy's row whatever its
@@ -2216,7 +2216,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
      The law oracle reads the list of such copies from the schema's statements (`src/test/key-copies.ts`), and
      `src/test/oracle.keys.test.ts` holds its verdict to the import's rows in 1-, 2-, 3- and 4-byte scripts. A key
      text's namespace-name kin, `namespaceText`, holds at most 409 code points beside a uuid and a local name of 255,
-     and an entry path holds the key text's 646.
+     the most that fit the 1,638 bytes keyTextBytes leaves there, and an entry path holds the key text's 646.
 
      The operator's ruling is a bound in UTF-8 bytes rather than code points: about 2,587 ASCII, 1,293 two-byte, 862 CJK
      or 646 astral characters. It waits on grizzle. A text contract, the one byte bound grizzle has at `a2ff5eb`, is a
