@@ -273,19 +273,22 @@ describe("mathmlRows attributes", () => {
     }
   });
 
-  it.effect("refuses display on m:mi and xlink:href on m:mi in the walk", () =>
-    Effect.gen(function* run() {
-      for (const [attribute, name] of [
-        ['display="block"', "display"],
-        ['xlink:href="http://example.com/"', "xlink:href"],
-      ] as const) {
-        const error = failureOf(
-          yield* Effect.exit(built(`<m:math><m:mi ${attribute}>x</m:mi></m:math>`)),
+  it.effect(
+    "refuses display on m:mi in the walk and imports xlink:href on m:mi as a skip foreign attribute",
+    () =>
+      Effect.gen(function* run() {
+        const refused = failureOf(
+          yield* Effect.exit(built('<m:math><m:mi display="block">x</m:mi></m:math>')),
         );
 
-        assert.instanceOf(error, UnmodeledVocabulary);
-        assert.strictEqual(error instanceof UnmodeledVocabulary ? error.name : "", name);
-      }
-    }),
+        assert.instanceOf(refused, UnmodeledVocabulary);
+        assert.strictEqual(refused instanceof UnmodeledVocabulary ? refused.name : "", "display");
+
+        const imported = yield* Effect.exit(
+          built('<m:math><m:mi xlink:href="http://example.com/">x</m:mi></m:math>'),
+        );
+
+        assert.isTrue(Exit.isSuccess(imported));
+      }),
   );
 });
