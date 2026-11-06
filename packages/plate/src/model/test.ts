@@ -189,10 +189,11 @@ const declarationMarks: readonly FeatureRule[] = renders.marks.filter(
 );
 
 /**
- * The `qti-*` elements below an outcome declaration that the model reads. Any other is a mark keyed
- * by its name, as the item model marks it.
+ * The `qti-*` elements below an outcome declaration that the model reads: the item model's, which
+ * `renders` lists, so the two cannot drift. Any other is a mark keyed by its name, as the item
+ * model marks it.
  */
-const declarationContent: ReadonlySet<string> = new Set(["qti-default-value", "qti-value"]);
+const declarationContent: ReadonlySet<string> = new Set(renders.elements);
 
 /**
  * Read an integer written in an attribute, its outer whitespace gone, exactly.

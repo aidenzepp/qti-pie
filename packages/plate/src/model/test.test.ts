@@ -296,6 +296,7 @@ describe("buildTest", () => {
               identifier: "SCORE",
               interpretation: Option.none(),
               longInterpretation: Option.none(),
+              lookupTable: Option.none(),
               masteryValue: Option.none(),
               normalMaximum: Option.none(),
               normalMinimum: Option.none(),
@@ -492,6 +493,14 @@ describe("buildTest", () => {
 
       assert.deepStrictEqual(built.outcomes, item.outcomes);
       assert.deepStrictEqual([...built.outcomes.keys()], ["SCORE", "PASSED", "GRADE"]);
+      assert.deepStrictEqual(
+        built.outcomes.get("GRADE")?.lookupTable,
+        Option.some({
+          defaultValue: Option.some({ baseType: "identifier", value: "F" }),
+          entries: [{ sourceValue: 1n, targetValue: { baseType: "identifier", value: "A" } }],
+          kind: "match",
+        }),
+      );
       assert.deepStrictEqual<readonly UnsupportedFeature[]>(
         built.unsupported,
         item.unsupported.map((feature) => ({
@@ -501,7 +510,7 @@ describe("buildTest", () => {
       );
       assert.deepStrictEqual(
         built.unsupported.map((feature) => feature.feature),
-        ['base-type="duration"', "qti-match-table", 'cardinality="record"'],
+        ['base-type="duration"', 'cardinality="record"'],
       );
     }),
   );

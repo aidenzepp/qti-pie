@@ -2483,6 +2483,191 @@ describe("buildItem", () => {
     }),
   );
 
+  it.effect(
+    "[I-9a] reads a match table's entries and default-value into its outcome's declaration (readings 7 and 8)",
+    () =>
+      Effect.gen(function* readsMatchTable() {
+        const built = yield* buildItem(
+          item({
+            body: [],
+            declarations: [
+              declaration("qti-outcome-declaration", "GRADE", "float", "single", [
+                el(
+                  "qti-match-table",
+                  [attr("default-value", "0")],
+                  [
+                    el("qti-match-table-entry", [
+                      attr("source-value", "1"),
+                      attr("target-value", "0.5"),
+                    ]),
+                    el("qti-match-table-entry", [
+                      attr("source-value", " -2 "),
+                      attr("target-value", "1e1"),
+                    ]),
+                  ],
+                ),
+              ]),
+            ],
+          }),
+        );
+
+        assert.deepStrictEqual(
+          built.outcomes.get("GRADE")?.lookupTable,
+          Option.some({
+            defaultValue: Option.some({ baseType: "float", value: 0 }),
+            entries: [
+              { sourceValue: 1n, targetValue: { baseType: "float", value: 0.5 } },
+              { sourceValue: -2n, targetValue: { baseType: "float", value: 10 } },
+            ],
+            kind: "match",
+          }),
+        );
+      }),
+  );
+
+  it.effect(
+    "[I-9a] reads an interpolation table's include-boundary, true when absent, and no default-value as none",
+    () =>
+      Effect.gen(function* readsInterpolationTable() {
+        const built = yield* buildItem(
+          item({
+            body: [],
+            declarations: [
+              declaration("qti-outcome-declaration", "BAND", "identifier", "single", [
+                el(
+                  "qti-interpolation-table",
+                  [],
+                  [
+                    el("qti-interpolation-table-entry", [
+                      attr("source-value", "7.5"),
+                      attr("target-value", "HIGH"),
+                    ]),
+                    el("qti-interpolation-table-entry", [
+                      attr("include-boundary", "false"),
+                      attr("source-value", "2"),
+                      attr("target-value", "MID"),
+                    ]),
+                    el("qti-interpolation-table-entry", [
+                      attr("include-boundary", "true"),
+                      attr("source-value", "0"),
+                      attr("target-value", "LOW"),
+                    ]),
+                  ],
+                ),
+              ]),
+            ],
+          }),
+        );
+
+        assert.deepStrictEqual(
+          built.outcomes.get("BAND")?.lookupTable,
+          Option.some({
+            defaultValue: Option.none(),
+            entries: [
+              {
+                includeBoundary: true,
+                sourceValue: 7.5,
+                targetValue: { baseType: "identifier", value: "HIGH" },
+              },
+              {
+                includeBoundary: false,
+                sourceValue: 2,
+                targetValue: { baseType: "identifier", value: "MID" },
+              },
+              {
+                includeBoundary: true,
+                sourceValue: 0,
+                targetValue: { baseType: "identifier", value: "LOW" },
+              },
+            ],
+            kind: "interpolation",
+          }),
+        );
+      }),
+  );
+
+  it.effect(
+    "[I-9a] refuses a match table's target-value outside its outcome's base type, or padded, as value-type at the attribute (readings 7 and 8)",
+    () =>
+      Effect.gen(function* refusesTargetValue() {
+        for (const written of ["A", " 1"]) {
+          const refusal = yield* Effect.flip(
+            buildItem(
+              item({
+                body: [],
+                declarations: [
+                  declaration("qti-outcome-declaration", "LEVEL", "integer", "single", [
+                    el(
+                      "qti-match-table",
+                      [],
+                      [
+                        el("qti-match-table-entry", [
+                          attr("source-value", "1"),
+                          attr("target-value", written),
+                        ]),
+                      ],
+                    ),
+                  ]),
+                ],
+              }),
+            ),
+          );
+
+          assert.strictEqual(refusal.rule, "value-type", written);
+          assert.deepStrictEqual(refusal.location, {
+            kind: "path",
+            path: `${root}/qti-outcome-declaration/qti-match-table/qti-match-table-entry/@target-value`,
+          });
+          assert.deepStrictEqual(refusal.detail, { baseType: "integer", lexical: written });
+        }
+      }),
+  );
+
+  it.effect("[I-9a] marks nothing for an outcome declaration's lookup table, now read", () =>
+    Effect.gen(function* marksNoTable() {
+      const built = yield* buildItem(
+        item({
+          body: [],
+          declarations: [
+            declaration("qti-outcome-declaration", "GRADE", "identifier", "single", [
+              values("qti-default-value", "F"),
+              el(
+                "qti-match-table",
+                [attr("default-value", "F")],
+                [
+                  el("qti-match-table-entry", [
+                    attr("source-value", "1"),
+                    attr("target-value", "A"),
+                  ]),
+                ],
+              ),
+            ]),
+            declaration("qti-outcome-declaration", "BAND", "float", "single", [
+              el(
+                "qti-interpolation-table",
+                [attr("default-value", "0")],
+                [
+                  el("qti-interpolation-table-entry", [
+                    attr("source-value", "1"),
+                    attr("target-value", "1"),
+                  ]),
+                ],
+              ),
+            ]),
+          ],
+        }),
+      );
+
+      assert.deepStrictEqual(built.unsupported, []);
+      assert.deepStrictEqual(
+        [...built.outcomes.values()].map((outcome) =>
+          outcome.lookupTable.pipe(Option.map((table) => table.kind)),
+        ),
+        [Option.some("match"), Option.some("interpolation")],
+      );
+    }),
+  );
+
   it.effect('[Q-2] refuses max-choices="-1" as value-type, outside xs:nonNegativeInteger', () =>
     Effect.gen(function* refusesNegativeCount() {
       const refusal = yield* Effect.flip(buildItem(choiceItem([attr("max-choices", "-1")])));
