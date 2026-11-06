@@ -27,6 +27,7 @@ import type { PartOf, PartRow } from "#plate/emit/parts.ts";
 import { applyPart } from "#plate/emit/swap.ts";
 import type { PartSwapRefused } from "#plate/emit/swap.ts";
 import { Malformed } from "#plate/form/encoding.ts";
+import { labelAsSpan } from "#plate/interactions/choice.ts";
 import { givesText, textControlName } from "#plate/interactions/name.ts";
 import { message, numeral } from "#plate/messages.ts";
 import type { Locale } from "#plate/messages.ts";
@@ -251,7 +252,9 @@ const connect = (interaction: InlineChoicePayload, payload: Payload, locale: Loc
  * presented order.
  *
  * Each part goes through `applyPart` with its replacement from `state.parts`, so every swap holds
- * I1 to I4. The Label's content goes through {@link emitNodes}, as the body's does; each option
+ * I1 to I4. The Label's content goes through {@link emitNodes}, as the body's does, and then every
+ * `label` in it is written as a `span` ({@link labelAsSpan}), as Choice writes its choices'
+ * content, since the Label part is a `label` by default and a `label` never nests one; each option
  * holds one text node, its content's text.
  *
  * @param interaction The Inline Choice's payload.
@@ -289,7 +292,7 @@ export const renderInlineChoice = (
       interaction.label.pipe(
         Option.map((content) =>
           Result.flatMap(emitNodes(content, payload, state, nestedInteraction(owner)), (nodes) =>
-            applyPart(rows.label, props.label, nodes, replacement("label")),
+            applyPart(rows.label, props.label, nodes.map(labelAsSpan), replacement("label")),
           ),
         ),
       ),

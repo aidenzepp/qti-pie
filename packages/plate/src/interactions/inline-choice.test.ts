@@ -701,6 +701,37 @@ describe("renderInlineChoice", () => {
       }),
   );
 
+  it.effect(
+    "[Q-12] writes an authored label inside the qti-label as a span, so no label nests and checkTree passes",
+    () =>
+      Effect.gen(function* labelInLabel() {
+        const tree = yield* page({
+          ...labelled,
+          label: Option.some([
+            said("Fruit "),
+            {
+              attributes: [{ name: "for", value: "elsewhere" }],
+              children: [said("to buy")],
+              kind: "element",
+              tag: "label",
+            },
+          ]),
+        });
+        const label = onlyPart(tree, "label");
+        const [, inner] = label.children;
+
+        assert.deepStrictEqual(
+          elementsIn(tree).filter((element) => element.tag === "label"),
+          [label],
+        );
+        assert.strictEqual(inner?.kind === "element" ? inner.tag : undefined, "span");
+        assert.isUndefined(inner?.kind === "element" ? inner.attrs["for"] : undefined);
+        assert.strictEqual(nameOf(onlyPart(tree, "control"), tree), "Fruit to buy");
+        assert.deepStrictEqual(checkTree(tree, { baseLevel: 2 }), []);
+        assert.isTrue(roundTrips(tree));
+      }),
+  );
+
   it.effect("[Q-12] passes checkTree at base level 2, and its HTML round-trips", () =>
     Effect.gen(function* accessible() {
       for (const interaction of [

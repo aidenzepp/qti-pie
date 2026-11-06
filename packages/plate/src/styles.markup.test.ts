@@ -3,8 +3,9 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
 import { h, text } from "#plate/emit/node.ts";
 import type { Attributes, Element, Node } from "#plate/emit/node.ts";
-import { rowFor } from "#plate/emit/parts.ts";
+import { resolveOverrides, rowFor } from "#plate/emit/parts.ts";
 import type { PartOf } from "#plate/emit/parts.ts";
+import { toHtml } from "#plate/emit/serialise.ts";
 import { isPosted } from "#plate/form/encoding.ts";
 import {
   checkResponses,
@@ -25,8 +26,10 @@ import type {
   ValidationMessage,
   Verdict,
 } from "#plate/index.ts";
+import { renderInlineChoice } from "#plate/interactions/inline-choice.ts";
 import { renderNavigation } from "#plate/navigation.ts";
 import type { NavigationOptions, NavigationState } from "#plate/navigation.ts";
+import type { InlineChoicePayload, RenderMode } from "#plate/payload.ts";
 import { compounds, scanSheet } from "#plate/test/css.ts";
 import type { AttributeTest, Compound, Sheet } from "#plate/test/css.ts";
 import { parseHtml } from "#plate/test/round-trip.ts";
@@ -575,6 +578,78 @@ const navigationTrees = (configuration: Configuration, options: NavigationOption
   );
 
 /**
+ * An Inline Choice whose Label gives text and names its Control, restoring its second choice.
+ */
+const labelledInlineChoice: InlineChoicePayload = {
+  autofocus: false,
+  choices: [
+    { content: [{ kind: "text", text: "red" }], identifier: "R" },
+    { content: [{ kind: "text", text: "blue" }], identifier: "B" },
+  ],
+  class: "",
+  editable: true,
+  formName: entryName(instance, "COLOUR"),
+  invalid: false,
+  kind: "inline-choice",
+  label: Option.some([{ kind: "text", text: "Colour" }]),
+  messageIds: [],
+  name: { ariaLabel: Option.none(), ariaLabelledby: Option.none(), unnamed: Option.none() },
+  placeholder: Option.none(),
+  response: "COLOUR",
+  restore: "B",
+};
+
+/**
+ * The Inline Choice with no Label, which the renderer names, restoring nothing.
+ */
+const unnamedInlineChoice: InlineChoicePayload = {
+  ...labelledInlineChoice,
+  label: Option.none(),
+  name: { ...labelledInlineChoice.name, unnamed: Option.some({ count: 1, n: 1 }) },
+  restore: "",
+};
+
+/**
+ * Render the two Inline Choices through `renderInlineChoice`, each in answering and in review, and
+ * read each Root back from its HTML.
+ *
+ * No authored item renders an Inline Choice through `render` until it builds one (p6-05a), so this
+ * covers the Inline Choice markers until then; p6-06, which owns this file, decides whether to
+ * keep it.
+ *
+ * @param configuration The configuration, which gives the locale.
+ * @returns The Inline Choice Roots' trees.
+ */
+const inlineChoiceTrees = (configuration: Configuration) =>
+  Effect.fromResult(resolveOverrides()).pipe(
+    Effect.flatMap((parts) =>
+      Effect.fromResult(
+        Result.all(
+          (["answering", "review"] as const satisfies readonly RenderMode[]).flatMap((mode) =>
+            [labelledInlineChoice, unnamedInlineChoice].map((interaction) =>
+              renderInlineChoice(
+                { ...interaction, editable: mode === "answering" },
+                {
+                  body: [],
+                  finished: false,
+                  instance,
+                  lang: configuration.locale,
+                  messages: [],
+                  mode,
+                  notices: [],
+                  title: "Colours",
+                },
+                { assetBase: "", headingLevel: 2, locale: configuration.locale, parts },
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+    Effect.map((roots) => roots.flatMap((root) => parseHtml(toHtml(root)))),
+  );
+
+/**
  * Read and scan the stylesheet through the package's own import alias.
  */
 const readSheet = Effect.tryPromise(() =>
@@ -583,7 +658,7 @@ const readSheet = Effect.tryPromise(() =>
 
 /**
  * Render every markup the sheet styles: each authored item in every state, both Status headings,
- * and the navigation.
+ * the navigation, and the hand-built Inline Choices ({@link inlineChoiceTrees}).
  *
  * @param configuration The configuration.
  * @returns The trees, and the refused answers' messages.
@@ -604,6 +679,7 @@ const markupOf = Effect.fnUntraced(function* markupOf(configuration: Configurati
       ...renders.flatMap((entry) => entry.trees),
       ...status.flatMap((entry) => parseHtml(entry.html)),
       ...(yield* navigationTrees(configuration)),
+      ...(yield* inlineChoiceTrees(configuration)),
     ],
   };
 });

@@ -209,7 +209,7 @@ const connect = (
  * @param node A node of the choice's content as {@link emitNodes} gave it.
  * @returns The node with no `label` element at or below it.
  */
-const labelAsSpan = (node: Node): Node => {
+export const labelAsSpan = (node: Node): Node => {
   if (node.kind === "text") {
     return node;
   }
