@@ -477,6 +477,47 @@ describe("spec reading 90, through the codec", () => {
       }),
     300_000,
   );
+
+  it.effect(
+    "holds data-* to exactly the kinds whose element the extension rules cover, in each schema version (a kind per context variant of an element)",
+    () =>
+      // Oracle: `coveredElements` (the Schematron's extension rules, reading 90) read against the
+      // composed grammar's own admissions: Revision 2.1 admitted `data-*` on the extension hosts, 126
+      // elements in 3.0.0 and 127 in 3.0.1. Both sides are sets of kinds, compared as sets; a
+      // difference is the operator's open question O5, to be reported, never asserted away.
+      Effect.gen(function* hosts() {
+        const { attributes, kinds } = yield* grammar;
+        const coveredNames = new Map(
+          coveredElements.map(({ element, versions }) => [
+            `{${element.namespace}}${element.local}`,
+            new Set<string>(versions),
+          ]),
+        );
+
+        for (const version of schemaVersions) {
+          const admitting = new Set(
+            attributes.admission.rows
+              .filter((row) => row.name === "data-*" && row.version === version)
+              .map(({ kind }) => kind),
+          );
+          const listed = new Set(
+            kinds.elementName.rows
+              .filter(
+                ({ local, namespace }) =>
+                  coveredNames.get(`{${namespace}}${local}`)?.has(version) === true,
+              )
+              .map(({ kind }) => kind),
+          );
+          yield* Effect.logInfo(`${version}: admitting ${admitting.size}, covered ${listed.size}`);
+
+          assert.deepStrictEqual(
+            [...admitting].toSorted(),
+            [...listed].toSorted(),
+            `data-* hosts in ${version}`,
+          );
+        }
+      }),
+  );
 });
 
 /**
