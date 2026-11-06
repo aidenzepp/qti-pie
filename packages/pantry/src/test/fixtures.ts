@@ -218,6 +218,9 @@ const cutNames = [
 const corpusMembers = {
   BBQsTest: "qtiv3-examples/packaging/BBQsTest/BBQsTest.zip",
   BPIG_22April: "QTI3_BPIG_Examples/BPIG_22April.zip",
+  items: "qtiv3-examples/packaging/items/items.zip",
+  "shared-vocabulary-imsmanifest":
+    "qtiv3-examples/items/shared-vocabulary/shared-vocabulary-imsmanifest.zip",
 } as const;
 
 /**
@@ -427,6 +430,26 @@ const wildcardNames = [
 ] as const;
 
 /**
+ * The names of the 12 cut MathML positives of phase 6 (spec 4.11's first table): each a cut of one
+ * corpus item that carries `m:math`, `math-alttext` and `math-class` with the one vocabulary of a
+ * later phase edited out.
+ */
+const mathmlNames = [
+  "math-mathml",
+  "math-stat2",
+  "math-calc5",
+  "math-solution",
+  "math-template-block",
+  "math-alttext",
+  "math-polynomials",
+  "math-order",
+  "math-associate",
+  "math-either-or",
+  "math-inline-choice",
+  "math-class",
+] as const;
+
+/**
  * The names `materialize` accepts: `simple`, its seven variants and the eleven hand-edited
  * packages, each the same package with the edits of its row in the spec table, `sharedMedia`, the
  * examples' shared-media package unedited, `quoted-q`, phase 2's hand-broken package,
@@ -434,7 +457,8 @@ const wildcardNames = [
  * hand-written HTML positives of {@link htmlElements}, the 14 XML copies of {@link copyNames}, and
  * the packaging phase's metadata and content cuts with their negatives, and the 11 positive
  * fixtures of phase 5's tests, sections and stimuli ({@link testNames}), and its 63 negatives
- * ({@link negativeNames}).
+ * ({@link negativeNames}), the ten wildcard fixtures of {@link wildcardNames} and the 12 cut MathML
+ * positives of {@link mathmlNames}.
  */
 export const fixtureNames = [
   "simple",
@@ -521,6 +545,7 @@ export const fixtureNames = [
   "usage3-bad-context",
   "usage3-bad-name",
   ...wildcardNames,
+  ...mathmlNames,
 ] as const;
 
 /**
@@ -4202,6 +4227,113 @@ const wildcardSpecs: Record<(typeof wildcardNames)[number], FixtureSpec> = {
 };
 
 /**
+ * The item `math-alttext` is cut from, its path in `BPIG_22April`.
+ */
+const alttextItem = "items/qti3-choice-aria-mathml-catalog.xml";
+
+/**
+ * The item `math-class` is cut from, its path in `shared-vocabulary-imsmanifest`.
+ */
+const classItem = "Items/Item_QTI3_RichardTake2_01/inline_choice_qti3.xml";
+
+/**
+ * The `qti-catalog-info` of `qti3-choice-aria-mathml-catalog.xml`, the lines {@link mathmlSpecs}
+ * removes from `math-alttext` (the catalog is phase 9's, and its `data-reading-type` phase 8's).
+ */
+const alttextCatalog = [
+  "<qti-catalog-info>",
+  '    <qti-catalog id="cat01">',
+  '      <qti-card support="glossary-on-screen">',
+  "        <qti-html-content>",
+  "          <p>inspect (someone or something) in detail to determine their nature or condition</p>",
+  "        </qti-html-content>",
+  "      </qti-card>",
+  '      <qti-card support="keyword-translation">',
+  '        <qti-card-entry xml:lang="es">',
+  "          <qti-html-content>",
+  "            <p>inspeccionar, revisar, examinar</p>",
+  "          </qti-html-content>",
+  "        </qti-card-entry>",
+  "      </qti-card>",
+  "    </qti-catalog>",
+  '    <qti-catalog id="cat02">',
+  '      <qti-card support="spoken">',
+  '        <qti-card-entry data-reading-type="computer-read-aloud">',
+  "          <qti-html-content>",
+  "            <p>Two surveyors, designated Ah and Pea, stand some distance apart on",
+  "            the south bank of a river, looking at a tree, designated Tea, that is on the ",
+  "            north bank of the river. Points Ah, Pea, and Tea form a triangle.",
+  "            At points Ah and Pea, there are two parallel sight lines pointing",
+  "            North and forming angles outside of the triangle. At point Pea, ",
+  "            angle Tea Pea A is fifty-three degrees. The adjacent angle between Pea Tea",
+  "            and the northern sight line is thirty-seven degrees. At point A, angle Tea-Ah-Pea ",
+  "            is not labeled, and the adjacent angle formed between A Tea and that northern sight ",
+  "            line is thirty-two degrees. </p>",
+  "          </qti-html-content>",
+  "        </qti-card-entry>",
+  "      </qti-card>",
+  "    </qti-catalog>",
+  "  </qti-catalog-info>",
+].join("\n");
+
+/**
+ * The specs of {@link mathmlNames}, each the cut of the item spec 4.11's table names under the
+ * version it gives (`BPIG_22April` items are 3.0.1, the others 3.0.0).
+ *
+ * - `math-alttext` also has the catalog, the two `data-catalog-idref` attributes and its
+ *   `data-reading-type` removed, edits that apply before the cut.
+ * - `math-class` has the `data-prompt` of its inline choice interaction removed.
+ */
+const mathmlSpecs: Record<(typeof mathmlNames)[number], FixtureSpec> = {
+  "math-alttext": {
+    ...cutItem("math-alttext", "BPIG_22April", alttextItem, "3.0.1"),
+    edits: [
+      replaceIn(alttextItem, alttextCatalog, ""),
+      replaceIn(alttextItem, '<span data-catalog-idref="cat01">Examine</span>', "Examine"),
+      replaceIn(alttextItem, ' data-catalog-idref="cat02"', ""),
+      { _tag: "cut", item: alttextItem, schemaversion: "3.0.1" },
+    ],
+  },
+  "math-associate": cutItem(
+    "math-associate",
+    "BBQsTest",
+    "id-200e2c3f7d76/matching-associate-trigDeriv.xml",
+    "3.0.0",
+  ),
+  "math-calc5": cutItem("math-calc5", "BPIG_22April", "items/mc_calc5.xml", "3.0.1"),
+  "math-class": {
+    ...cutItem("math-class", "shared-vocabulary-imsmanifest", classItem, "3.0.0"),
+    edits: [
+      replaceIn(classItem, ' data-prompt="Select an Answer"', ""),
+      { _tag: "cut", item: classItem, schemaversion: "3.0.0" },
+    ],
+  },
+  "math-either-or": cutItem("math-either-or", "BBQsTest", "id-5c1b1e2d56bd/either-or.xml", "3.0.0"),
+  "math-inline-choice": cutItem("math-inline-choice", "items", "inline_choice_math.xml", "3.0.0"),
+  "math-mathml": cutItem("math-mathml", "BPIG_22April", "items/MathML.xml", "3.0.1"),
+  "math-order": cutItem("math-order", "BBQsTest", "id-e475c3c922f6/order-maths.xml", "3.0.0"),
+  "math-polynomials": cutItem(
+    "math-polynomials",
+    "BBQsTest",
+    "id-371b0f88774a/MultipleChoice-choice-polynomials.xml",
+    "3.0.0",
+  ),
+  "math-solution": cutItem(
+    "math-solution",
+    "BPIG_22April",
+    "items/Example03-feedbackBlock-solution.xml",
+    "3.0.1",
+  ),
+  "math-stat2": cutItem("math-stat2", "BPIG_22April", "items/stat2.xml", "3.0.1"),
+  "math-template-block": cutItem(
+    "math-template-block",
+    "BPIG_22April",
+    "items/Example04-feedbackBlock-templateBlock.xml",
+    "3.0.1",
+  ),
+};
+
+/**
  * The spec table: one row per {@link FixtureName}, so adding a name without its row does not
  * compile.
  *
@@ -4253,6 +4385,7 @@ const specs: Record<FixtureName, FixtureSpec> = {
   ...testSpecs,
   ...negativeSpecs,
   ...wildcardSpecs,
+  ...mathmlSpecs,
   "bad-identifier-value": {
     edits: [
       replaceIn("choice.xml", "<qti-value>ChoiceA</qti-value>", "<qti-value>Choice A</qti-value>"),
