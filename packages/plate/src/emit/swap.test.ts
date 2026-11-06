@@ -6,7 +6,12 @@ import type { Attributes, Element, Node } from "#plate/emit/node.ts";
 import { rowFor } from "#plate/emit/parts.ts";
 import type { PartRow } from "#plate/emit/parts.ts";
 import { applyPart } from "#plate/emit/swap.ts";
-import type { BodyNode, InlineChoiceInteraction, Item } from "#plate/model/item.ts";
+import type {
+  BodyNode,
+  ExtendedTextInteraction,
+  InlineChoiceInteraction,
+  Item,
+} from "#plate/model/item.ts";
 import { redactItem } from "#plate/payload.ts";
 import { render } from "#plate/render.ts";
 import type { Options } from "#plate/render.ts";
@@ -1376,6 +1381,208 @@ describe("render, a host replacement and the state plate leaves off", () => {
         assert.deepStrictEqual(spelledAs(span?.attrs ?? {}, "for"), []);
         assert.isDefined(span?.attrs["id"]);
         assert.strictEqual(select?.attrs["aria-labelledby"], span?.attrs["id"]);
+      }),
+  );
+});
+
+/**
+ * A plain string Extended Text with no Prompt, bound to a single string response.
+ */
+const essay: ExtendedTextInteraction = {
+  ariaLabel: Option.none(),
+  ariaLabelledby: Option.none(),
+  base: 10,
+  baseType: "string",
+  cardinality: "single",
+  class: "",
+  expectedLength: Option.none(),
+  expectedLines: Option.none(),
+  format: "plain",
+  kind: "extended-text",
+  maxStrings: Option.none(),
+  minStrings: 0n,
+  path: "qti-assessment-item/qti-item-body/qti-extended-text-interaction",
+  patternMask: Option.none(),
+  patternMaskMessage: Option.none(),
+  placeholder: Option.none(),
+  prompt: Option.none(),
+  response: "RESPONSE",
+};
+
+/**
+ * An item whose body is {@link essay}, with no response processing.
+ */
+const essayItem: Item = {
+  body: [essay],
+  document: "items/essay.xml",
+  identifier: "essay",
+  lang: Option.none(),
+  outcomes: new Map(),
+  processing: Option.none(),
+  responses: new Map([
+    [
+      essay.response,
+      {
+        areaMapping: Option.none(),
+        baseType: "string",
+        cardinality: "single",
+        correct: Option.none(),
+        defaultValue: Option.none(),
+        identifier: essay.response,
+        mapping: Option.none(),
+      },
+    ],
+  ]),
+  title: "Essay",
+  unsupported: [],
+};
+
+/**
+ * The candidate's restored answer to {@link essay}.
+ */
+const answer = "The river floods in spring.";
+
+/**
+ * The render options that restore {@link answer} to the essay.
+ */
+const answered: Options = {
+  values: {
+    [essay.response]: {
+      baseType: "string",
+      cardinality: "single",
+      values: [{ baseType: "string", value: answer }],
+    },
+  },
+};
+
+/**
+ * Render {@link essayItem}.
+ *
+ * @param options The render's options, beside its instance.
+ * @returns The render's result, success or refusal.
+ */
+const renderEssay = (options: Options) =>
+  Effect.gen(function* renderEssayItem() {
+    const configuration = yield* configure({});
+
+    return render(redactItem(essayItem), configuration, { ...options, instance });
+  });
+
+/**
+ * Give what a render of the essay came to: the refusal's tag, and for a swap refusal its cause and
+ * where, or `rendered`.
+ *
+ * @param result The render's result.
+ * @returns `rendered`, the swap refusal's facts, or another refusal's tag.
+ */
+const outcomeOf = (result: ReturnType<typeof render>) => {
+  if (Result.isSuccess(result)) {
+    return "rendered";
+  }
+
+  const { failure } = result;
+  if (failure._tag !== "PartSwapRefused") {
+    return failure._tag;
+  }
+
+  return {
+    _tag: failure._tag,
+    cause: failure.cause,
+    interaction: failure.interaction,
+    part: failure.part,
+  };
+};
+
+/**
+ * The textarea of a rendered essay, read back as a browser parses the HTML.
+ *
+ * @param result The render's result, which must be a success.
+ * @returns The one `textarea` element.
+ */
+const textareaOf = (result: ReturnType<typeof render>): Element => {
+  const html = Result.isSuccess(result) ? result.success.html : assert.fail("The render refused.");
+  const textareas = parseHtml(html)
+    .flatMap((node) => (node.kind === "element" ? elementsIn(node) : []))
+    .filter((element) => element.tag === "textarea");
+
+  return textareas.length === 1 && textareas[0] !== undefined
+    ? textareas[0]
+    : assert.fail(`The render placed ${textareas.length} textareas.`);
+};
+
+describe("render, an Extended Text Control replacement holds exactly the handed answer", () => {
+  /**
+   * The swap refusal a textarea that holds more than the handed answer earns.
+   */
+  const handedOnly = {
+    _tag: "PartSwapRefused",
+    cause: "select-content",
+    interaction: "extended-text-interaction",
+    part: "control",
+  } as const;
+
+  it.effect("refuses a textarea that adds host text beside the restored answer", () =>
+    Effect.gen(function* hostTextBesideAnswer() {
+      for (const [where, replacement] of [
+        [
+          "before",
+          (props: Attributes, children: readonly Node[]) =>
+            h("textarea", props, [text("host answer "), ...children]),
+        ],
+        [
+          "after",
+          (props: Attributes, children: readonly Node[]) =>
+            h("textarea", props, [...children, text(" host answer")]),
+        ],
+      ] as const) {
+        const result = yield* renderEssay({
+          ...answered,
+          parts: { "extended-text-interaction": { control: replacement } },
+        });
+        assert.deepStrictEqual(outcomeOf(result), handedOnly, where);
+      }
+    }),
+  );
+
+  it.effect("refuses a textarea that holds host content when nothing is restored", () =>
+    Effect.gen(function* hostContentUnanswered() {
+      for (const [what, added] of [
+        ["text", text("host answer")],
+        ["element", h("b", {}, [text("host answer")])],
+      ] as const) {
+        const result = yield* renderEssay({
+          parts: {
+            "extended-text-interaction": {
+              control: (props, children) => h("textarea", props, [added, ...children]),
+            },
+          },
+        });
+        assert.deepStrictEqual(outcomeOf(result), handedOnly, what);
+      }
+    }),
+  );
+
+  it.effect(
+    "renders a textarea that holds exactly the restored answer with the host's own attributes, posting the answer under plate's name",
+    () =>
+      Effect.gen(function* handedAnswerKept() {
+        const plain = textareaOf(yield* renderEssay(answered));
+        const swapped = textareaOf(
+          yield* renderEssay({
+            ...answered,
+            parts: {
+              "extended-text-interaction": {
+                control: adding("textarea", { "data-host": "essay", title: "Your essay" }),
+              },
+            },
+          }),
+        );
+        assert.deepStrictEqual(swapped.children, [text(answer)]);
+        assert.deepStrictEqual(swapped.children, plain.children);
+        assert.isDefined(plain.attrs["name"]);
+        assert.strictEqual(swapped.attrs["name"], plain.attrs["name"]);
+        assert.strictEqual(swapped.attrs["data-host"], "essay");
+        assert.strictEqual(swapped.attrs["title"], "Your essay");
       }),
   );
 });
