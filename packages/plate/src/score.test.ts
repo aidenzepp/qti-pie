@@ -528,6 +528,7 @@ describe("the public surface", () => {
         "ResponsesRefused",
         "ResultItemMissing",
         "SessionMismatch",
+        "StepResponseMisfit",
         "TestNotDeliverable",
         "UnknownIdentifierError",
         "UnknownItemRef",
