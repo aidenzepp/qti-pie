@@ -487,7 +487,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     102,
     {
       owner:
-        "P's resolution at import (`resolveIn`, `src/import/overlays/package.ts`): each href's `HrefScope` and resolved path on `ResourceHref`, `File` and `Reference`, their written pieces and a resolved path's lack of dot segments proved by `E1_derived` (`src/qti/package.ts`); file-listed, href-listed, Document entry and file-exists over resolved paths; the stated limit `Href_form` over the `unresolved` scope; the oracle's own RFC 3986 resolver (`src/test/resolution.ts`)",
+        "P's resolution at import (`src/import/overlays/package.ts` `resolveIn`, `baseIn`, `hrefResolverOf`; RFC 3986 §2.1 and §5.2, each value read by its whitespace class, `xml:base` and the manifest's Base resolved, dot segments removed, segments percent-decoded); `HrefScope` on `File`, `ResourceHref`, `FileHref`, `ResourceFile` and `Reference`, their resolved `path`, `Reference` `lead ‖ target ‖ params ‖ trail` and its scope's written-form implications (`E1_derived`), `resolvedPathPattern` (`E1_derived`), href-listed over (scope, path), `Document_entry` on a document-typed href, and the stated limit `Href_form` (`scope <> unresolved`, `srcsetCandidatePattern`) (`src/qti/package.ts`); the oracle's own resolver `src/test/resolution.ts` and its Href form, Href listed, Document entry and File exists",
       status: "G",
     },
   ],
@@ -495,7 +495,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     103,
     {
       owner:
-        "the census `ReferenceAttribute` (`src/grammar/references.ts`, `asiCensus`, `xiCensus`, `mathmlCensus`, `ssmlCensus`; installed by `src/grammar/install.ts`), read by HP's R6 `file-exists` over `Reference` and `ReferencePath` (`src/qti/package.ts`); each `xml:base` is the base `resolveIn` resolves every reference in its scope against, never a reference itself",
+        "the census `ReferenceAttribute` (`src/grammar/references.ts`, `asiCensus`, `xiCensus`, `mathmlCensus`, `ssmlCensus`; installed by `src/grammar/install.ts`), each value resolved by `src/import/overlays/package.ts` `referenceRowsOf` with the `xml:base` in scope (`basesOf`), read by R6 `file-exists` over `Reference` and `ReferencePath` (`src/qti/package.ts`)",
       status: "P",
     },
   ],
