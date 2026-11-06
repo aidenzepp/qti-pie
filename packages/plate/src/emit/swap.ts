@@ -6,7 +6,7 @@ import type { PartRow, TagClass } from "#plate/emit/parts.ts";
 
 /**
  * The ways a replacement part function can break the swap invariant, one per refusal of I2, I3, the
- * list joint rule and the legend joint rule.
+ * list joint rule, the legend joint rule and the select joint rule.
  *
  * @see {@link PartSwapRefused}
  */
@@ -17,6 +17,7 @@ export const swapCauses = [
   "child-reordered",
   "list-item",
   "legend-first",
+  "select-content",
 ] as const;
 
 /**
@@ -37,6 +38,8 @@ const remedies = {
     "Place the legend Prompt as the <fieldset>'s first element child, unwrapped; wrap only the nodes after it.",
   "list-item": "Swap Choices too, or return an <li> from the Choice replacement.",
   "root-not-allowed": "Return an element the part may become as the replacement's root.",
+  "select-content":
+    "Place the nodes the part function receives directly under the returned root, in the order given, wrapping none and adding nothing beside them; restyle an option through its marker.",
 } satisfies { readonly [C in SwapCause]: string };
 
 /**
@@ -60,6 +63,10 @@ const controlRemedy = (interaction: string): string =>
  * The check runs on every emit, not only in development, because a replacement is host code that
  * ships. `detail` names the returned element or the child at fault; the message adds what to
  * change. It is returned through a `Result`, never thrown.
+ *
+ * Beside I2 and I3 it holds three joint rules: the list rule (`list-item`), the legend rule
+ * (`legend-first`) and the select rule (`select-content`), under which a `select` or `option`
+ * part's replacement holds exactly the nodes handed to it.
  */
 export class PartSwapRefused extends Data.TaggedError("PartSwapRefused")<{
   readonly cause: SwapCause;
@@ -291,6 +298,59 @@ const checkLegendFirst = (root: Element, children: readonly Node[]): Breach | un
 };
 
 /**
+ * The tag classes whose replacement holds exactly the nodes handed to it, as its own children in
+ * order, under the select joint rule: a `select` holds only `option`s and an `option` only text,
+ * and a host supplies none of an item's data.
+ */
+const holdsHandedOnly: ReadonlySet<TagClass> = new Set(["option", "select"]);
+
+/**
+ * Check the select joint rule on a replacement's root: its children are the nodes handed to it, by
+ * identity, in order, none wrapped (in an `optgroup`, a `div` or a `span`) and nothing beside them.
+ *
+ * I3 has already kept the root a `select` or an `option`, and I2 has placed every handed node below
+ * it; this rule adds that each sits directly under the root and that the root holds nothing else,
+ * so the `select` holds only the item's options and each `option` only its text.
+ *
+ * @param root The replacement's root.
+ * @param children The nodes the emitter handed over: the Placeholder and the Options, or an
+ *   option's text.
+ * @returns The breach naming the root's first child at fault, or undefined when the root holds
+ *   exactly the handed nodes.
+ * @see https://html.spec.whatwg.org/multipage/form-elements.html#the-select-element
+ */
+const checkHandedOnly = (root: Element, children: readonly Node[]): Breach | undefined => {
+  const count = Math.max(root.children.length, children.length);
+  let index = 0;
+  while (index < count && root.children[index] === children[index]) {
+    index += 1;
+  }
+
+  if (index === count) {
+    return undefined;
+  }
+
+  const held = root.children[index];
+  if (held === undefined) {
+    return {
+      cause: "select-content",
+      detail: `${childAt(children, index)}, is not a child of the returned ${describeNode(root)}`,
+    };
+  }
+
+  const nodes = children.length === 1 ? "node" : "nodes";
+  const where =
+    index < children.length
+      ? `where ${childAt(children, index)}, belongs`
+      : `beside the ${children.length} ${nodes} it was handed`;
+
+  return {
+    cause: "select-content",
+    detail: `the returned ${describeNode(root)} holds ${describeNode(held)} as its child ${index + 1}, ${where}`,
+  };
+};
+
+/**
  * Split a `class` value into its tokens, at ASCII whitespace as HTML does ({@link splitTokens}).
  *
  * @param value The attribute's value, if present.
@@ -410,8 +470,9 @@ const refuse = (row: PartRow, breach: Breach): PartSwapRefused =>
   new PartSwapRefused({ ...breach, interaction: row.interaction, part: row.part });
 
 /**
- * Construct a swapped part's root: the replacement's, checked against I3, I2 and, for a legend
- * owner, the legend joint rule, with I1 applied over the row's defaults.
+ * Construct a swapped part's root: the replacement's, checked against I3, I2, for a legend owner
+ * the legend joint rule, and for a `select` or `option` part the select joint rule, with I1 applied
+ * over the row's defaults.
  *
  * @param row The part's row.
  * @param props The attributes the part's connect function computed.
@@ -430,7 +491,8 @@ const swapIn = (
   const breach =
     checkRoot(row, root) ??
     checkChildren(row, root, children) ??
-    (row.legendOwner ? checkLegendFirst(root, children) : undefined);
+    (row.legendOwner ? checkLegendFirst(root, children) : undefined) ??
+    (holdsHandedOnly.has(row.tagClass) ? checkHandedOnly(root, children) : undefined);
 
   return breach === undefined
     ? Result.succeed(mergeRequired(root, props, row.defaults))
@@ -446,9 +508,11 @@ const swapIn = (
  * root must be an element of the row's tag class (I3) and hold every handed child once, in order
  * (I2); the row's defaults go under its attributes and `props` over them (I1), so a replacement may
  * override a default but never a prop. A legend owner (the Choice Root under the `legend` markup)
- * must keep the legend Prompt its first element child; the fast path holds it as handed. A list
- * owner (Choices) also applies the list joint rule on either path. Every breach is a
- * {@link PartSwapRefused} (I4), returned as the `Result`'s failure.
+ * must keep the legend Prompt its first element child; the fast path holds it as handed. A `select`
+ * or `option` part (the Inline Choice Control, Placeholder and Option) must hold exactly the nodes
+ * handed to it, directly and in order, wrapping none and adding nothing beside them; the fast path
+ * holds them as handed. A list owner (Choices) also applies the list joint rule on either path.
+ * Every breach is a {@link PartSwapRefused} (I4), returned as the `Result`'s failure.
  *
  * @example
  *   Result.map(applyPart(rowFor("item", "root"), props, body), toHtml);
