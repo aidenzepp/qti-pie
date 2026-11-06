@@ -89,7 +89,7 @@ interface Answer {
 /**
  * Write a route's outcome as the playground's handler does: a response as it is, and a page through
  * the frame with the theme box returning to the page's own target, the flag off, and the page
- * headers.
+ * headers with the page's own headers (a 405's `Allow`) beside them.
  *
  * @param outcome The route's page or response.
  * @param target The request's path and query.
@@ -100,7 +100,7 @@ const answerOf = (outcome: Page | Response, target: string): Response =>
     ? outcome
     : new Response(
         pageHtml(outcome, { appearance: { dark: false, theme: emptyTheme }, back: target }),
-        { headers: pageHeaders, status: outcome.status },
+        { headers: { ...pageHeaders, ...outcome.headers }, status: outcome.status },
       );
 
 /**
@@ -654,7 +654,7 @@ describe("dev/packages.ts", () => {
     );
 
     it.effect(
-      "another method is 405 on the package routes, and a path beside them, an unknown id and an id that does not decode are 404",
+      "another method is 405 on the package routes, with Allow naming GET, and a path beside them, an unknown id and an id that does not decode are 404",
       () =>
         Effect.gen(function* refusals() {
           const refusedMethods = [
@@ -674,6 +674,7 @@ describe("dev/packages.ts", () => {
 
           for (const answer of refusedMethods) {
             assert.strictEqual(answer.response.status, 405);
+            assert.strictEqual(answer.response.headers.get("allow"), "GET");
           }
           for (const target of missing) {
             assert.strictEqual((yield* request(target)).response.status, 404, target);

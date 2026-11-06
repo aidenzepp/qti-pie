@@ -535,10 +535,23 @@ const back: Element = h("p", {}, [
  * @param status The status code.
  * @param title The page's title and heading.
  * @param said What the page says.
+ * @param headers The headers the page carries besides the page headers, such as a 405's `Allow`.
  * @returns The page.
  */
-const notePage = (status: number, title: string, said: string): Page =>
-  page(status, "en", title, [h("h1", {}, [text(title)]), h("p", {}, [text(said)]), back]);
+const notePage = (
+  status: number,
+  title: string,
+  said: string,
+  headers: Readonly<Record<string, string>> = {},
+): Page =>
+  page(
+    status,
+    "en",
+    title,
+    [h("h1", {}, [text(title)]), h("p", {}, [text(said)]), back],
+    [],
+    headers,
+  );
 
 /**
  * Construct the 404 page every refused package path answers with, a traversal included.
@@ -747,9 +760,9 @@ const serveFile = Effect.fnUntraced(function* serveFile(
 /**
  * Route one request under `/packages`: the listing at `/packages`, a package's page at
  * `/packages/<id>`, and a package's file at `/packages/<id>/files/<path>`, each for GET; another
- * method there is a 405, and any other path, an unknown id, an id or a path that does not decode, a
- * path that climbs, a file not in the accepted package's `files` and a file whose real path leaves
- * the package's root are 404s.
+ * method there is a 405 whose `Allow` names GET, and any other path, an unknown id, an id or a
+ * path that does not decode, a path that climbs, a file not in the accepted package's `files` and a
+ * file whose real path leaves the package's root are 404s.
  *
  * `POST /packages/<id>/tests`, which a package page's Start buttons post to, is not this route's;
  * the playground routes it to its session pages first.
@@ -782,7 +795,9 @@ export const routePackages = (
 
   if (request.method !== "GET") {
     return Effect.succeed(
-      notePage(405, "Method not allowed", `${request.method} is not taken at ${pathname}.`),
+      notePage(405, "Method not allowed", `${request.method} is not taken at ${pathname}.`, {
+        allow: "GET",
+      }),
     );
   }
 
