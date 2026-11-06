@@ -20,6 +20,7 @@ import {
   namespaces,
   opaqueGlobals,
   rootSchemaSet,
+  strictAttributeHosts,
   wildcardHost,
 } from "#pantry/schema/seed/wildcard.ts";
 
@@ -114,6 +115,12 @@ const prefixOf: ReadonlyMap<string, string> = new Map(
   Object.entries(namespaces).map(([prefix, namespace]) => [namespace, prefix]),
 );
 
+/**
+ * The kinds whose attribute wildcard is `strict`: a declared global passes, any other qualified
+ * name is refused.
+ */
+const strictHosts: ReadonlySet<string> = new Set(strictAttributeHosts);
+
 const globalAttributes: ReadonlySet<string> = new Set(
   globalAttribute.map((row) => inSet(row.set, clark(row.namespace, row.local))),
 );
@@ -178,11 +185,13 @@ export const classifyElement = (
  * How `attribute` stands on an element of `kind`.
  *
  * On a `foreign` element every attribute but a namespace declaration and the four declared `xsi`
- * names is admitted; on a kind with an attribute wildcard the registry's names are its own, an
+ * names is admitted; on a kind with a lax attribute wildcard the registry's names are its own, an
  * unqualified name beside them is a stray, and a qualified one is admitted. An admitted attribute
  * is typed when it is a global attribute of the tree's schema set and `AttributeAdmission` admits
  * it on the kind, foreign when it is no global of the set, and a stray when it is a global the kind
- * does not admit, which a foreign row could not hold. Any other kind admits its own names only.
+ * does not admit, which a foreign row could not hold. A `strictAttributeHosts` kind judges a
+ * qualified name the same way but never answers foreign: a name that is no declared global of the
+ * set is a stray (3.3 strict/b). Any other kind admits its own names only.
  *
  * @param scope - The tree's scope.
  * @param attribute - The attribute to classify.
@@ -212,7 +221,8 @@ export const classifyAttribute = (
     return "own";
   }
 
-  if (kind !== "foreign" && !attributeHosts.has(kind)) {
+  const strict = strictHosts.has(kind);
+  if (kind !== "foreign" && !attributeHosts.has(kind) && !strict) {
     return "stray";
   }
 
@@ -222,7 +232,7 @@ export const classifyAttribute = (
 
   const set = setOfRoot.get(scope.root);
   if (set === undefined || !globalAttributes.has(inSet(set, clark(namespace, local)))) {
-    return "foreign";
+    return strict ? "stray" : "foreign";
   }
 
   return typedAttributes.has(`${kind}\u0000${prefixOf.get(namespace) ?? ""}:${local}`)

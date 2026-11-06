@@ -20,9 +20,12 @@ import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 const exportRoot = `${import.meta.dirname}/../../work/export/foreign`;
 
 /**
- * The five wildcard fixtures phase 11 accepts, each with the foreign relations its import must
+ * The six wildcard fixtures phase 11 accepts, each with the foreign relations its import must
  * write. `cut-custom-operator` holds foreign attributes but no foreign element, so it writes only
- * `ForeignAttribute` rows; every other one writes both relations.
+ * `ForeignAttribute` rows; `test-selection-foreign` holds foreign elements and a typed `xml:lang`
+ * on the strict attribute hosts, so it writes only `ForeignElement` rows; every other one writes
+ * both relations. This file runs on the lease: `test-selection-foreign` first runs at p11-int-7's
+ * merge.
  */
 const accepted: readonly (readonly [
   FixtureName,
@@ -33,6 +36,7 @@ const accepted: readonly (readonly [
   ["fallback-3-0-1", { attributes: true, elements: true }],
   ["lom-wildcard", { attributes: true, elements: true }],
   ["nested-root-in-foreign", { attributes: true, elements: true }],
+  ["test-selection-foreign", { attributes: false, elements: true }],
 ];
 
 /**

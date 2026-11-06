@@ -408,8 +408,10 @@ export const negativeNames = [
 ] as const;
 
 /**
- * The names of the nine wildcard fixtures of phase 11 (spec W12): foreign content under the lax
- * hosts of `qti-custom-operator`, `xi:include`, `xi:fallback` and LOM, and the four refusals.
+ * The names of the ten wildcard fixtures of phase 11 (spec W12): foreign content under the lax
+ * hosts of `qti-custom-operator`, `xi:include`, `xi:fallback` and LOM, the four refusals, and
+ * `test-selection-foreign`, a test with an extension element and an `xml:lang` on the strict
+ * attribute hosts `qti-selection` and `qti-ordering`.
  */
 const wildcardNames = [
   "cut-custom-operator",
@@ -421,6 +423,7 @@ const wildcardNames = [
   "unqualified-on-operator",
   "strict-file-foreign",
   "qti-ns-under-operator",
+  "test-selection-foreign",
 ] as const;
 
 /**
@@ -2527,7 +2530,7 @@ const testLinearEdits: readonly Edit[] = [
  * `select="+2"` on another, a `fixed` item ref, and a third section with `keep-together="true"`.
  * Sections A and B leave `keep-together` to its default.
  */
-const testSelectionEdits: readonly Edit[] = [
+const testSelectionTextEdits: readonly Edit[] = [
   replaceIn(
     "rtest12.xml",
     '<qti-selection select="2"/>\n            <qti-ordering shuffle="false"/>',
@@ -2555,12 +2558,21 @@ const testSelectionEdits: readonly Edit[] = [
       "    </qti-test-part>",
     ].join("\n"),
   ),
-  {
-    _tag: "looseTest",
-    schemaversion: "3.0.0",
-    test: "qtiv3-examples/tests/rtest12.xml",
-  },
 ];
+
+/**
+ * The edit that stubs the items `rtest12.xml` names, after the text edits.
+ */
+const testSelectionLoose: Edit = {
+  _tag: "looseTest",
+  schemaversion: "3.0.0",
+  test: "qtiv3-examples/tests/rtest12.xml",
+};
+
+/**
+ * The edits of `test-selection`.
+ */
+const testSelectionEdits: readonly Edit[] = [...testSelectionTextEdits, testSelectionLoose];
 
 /**
  * The extra outcome declarations of `test-mapping`, one for each prefixed source it names.
@@ -4117,7 +4129,28 @@ const negativeSpecs: Record<(typeof negativeNames)[number], FixtureSpec> = {
 };
 
 /**
- * The nine wildcard fixtures of phase 11 (spec W12), keyed by name.
+ * The edits of `test-selection-foreign`, over `test-selection`'s text edits: an `xml:lang` and one
+ * `ma:ext` child, with its namespace declaration, on the first section's `qti-selection` and on
+ * section C's `qti-ordering`. Both are strict attribute hosts (3.3 strict/a and strict/d): the
+ * `xml:lang` is typed, the extension element foreign.
+ */
+const testSelectionForeignEdits: readonly Edit[] = [
+  ...testSelectionTextEdits,
+  replaceIn(
+    "rtest12.xml",
+    '<qti-selection select="2" with-replacement="true"/>',
+    `<qti-selection select="2" with-replacement="true" xml:lang="en"><ma:ext xmlns:ma="${mathassessNamespace}"/></qti-selection>`,
+  ),
+  replaceIn(
+    "rtest12.xml",
+    '<qti-ordering shuffle="false"/>\n            <qti-assessment-item-ref identifier="item901"',
+    `<qti-ordering shuffle="false" xml:lang="en"><ma:ext xmlns:ma="${mathassessNamespace}"/></qti-ordering>\n            <qti-assessment-item-ref identifier="item901"`,
+  ),
+  testSelectionLoose,
+];
+
+/**
+ * The ten wildcard fixtures of phase 11 (spec W12), keyed by name.
  *
  * - `cut-custom-operator` is `SineRule-001.xml` unedited, a `qti-custom-operator` in its template
  *   processing.
@@ -4158,6 +4191,11 @@ const wildcardSpecs: Record<(typeof wildcardNames)[number], FixtureSpec> = {
       `<file href="images/sign.png"><metadata><ma:ext xmlns:ma="${mathassessNamespace}"/></metadata></file>`,
     ),
   ]),
+  "test-selection-foreign": {
+    edits: testSelectionForeignEdits,
+    member: `${testsDirectory}/rtest12.xml`,
+    name: "test-selection-foreign",
+  },
   "unqualified-on-operator": overOperator("unqualified-on-operator", [
     replaceIn(sineRuleItem, `${customOperatorStart}>`, `${customOperatorStart} foo="x">`),
   ]),
