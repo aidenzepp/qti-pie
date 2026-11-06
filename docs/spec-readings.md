@@ -2067,35 +2067,34 @@ against it. A reading that is not an information-model-over-XSD case says which 
 
      This reading's stated limit is registration. RFC 2045's type is one it lists (`text`, `image`, `audio`, `video`,
      `application`, `message`, `multipart`), an `X-` name, or "An extension token defined by a standards-track RFC and
-     registered with IANA", and its subtype is registered with IANA or an `X-` name. So `foo/bar` is a well-formed
-     type that is not a valid one, and it is admitted. The cause is that IANA's media type registry is a dated external
+     registered with IANA", and its subtype is registered with IANA or an `X-` name. So `foo/bar` is a well-formed type
+     that is not a valid one, and it is admitted. The cause is that IANA's media type registry is a dated external
      dataset that no pinned source holds. What would lift it is a closed relation of a pinned registry's types and
-     subtypes, with each value split at its slash, as reading 129's limit would be lifted for language tags. A
-     foreign element whose `xsi:type` names `MimeTypeDType` is judged by XML Schema alone (reading 60): this reading
-     reads the information model's characteristics, not the type wherever an instance names it. No corpus package
-     carries a MIME type this refuses, so no verdict moves. This restores the rule that the ruling of 2026-11-05 that
-     attributes follow the XSD (reading 9) had removed; the operator's ruling of 2026-11-06 overrules that ruling
-     wherever the information model is stricter. (Decided 2026-11-06 by RV seat X, on the review of PR #46, under the
-     operator's standing ruling of 2026-11-05 that the spec wins.)
+     subtypes, with each value split at its slash, as reading 129's limit would be lifted for language tags. A foreign
+     element whose `xsi:type` names `MimeTypeDType` is judged by XML Schema alone (reading 60): this reading reads the
+     information model's characteristics, not the type wherever an instance names it. No corpus package carries a MIME
+     type this refuses, so no verdict moves. This restores the rule that the ruling of 2026-11-05 that attributes follow
+     the XSD (reading 9) had removed; the operator's ruling of 2026-11-06 overrules that ruling wherever the information
+     model is stricter. (Decided 2026-11-06 by RV seat X, on the review of PR #46, under the operator's standing ruling
+     of 2026-11-05 that the spec wins.)
 
 136. **A `default` shape carries `coords`, as every shape does, and they are a `CoordsDType`.** The information model
      says of the Coords type "(e) default: no coordinates should be given" (section 7.9, and the Inside class's
-     `coords`, section 5.75.2), and of the shape "The
-     default shape refers to the entire area of the associated image" and "A value of a shape is always accompanied by
-     coordinates" (section 8.29, ShapeEnum). It gives `coords` the multiplicity [1] on every class that has a shape:
-     AssociableHotspot, HotspotChoice, Inside and AreaMapEntry (sections 5.7.6, 5.67.5, 5.75.2 and 7.4.2). The XSD
-     declares `coords` required on `qti-associable-hotspot`, `qti-hotspot-choice`, `qti-inside` and
-     `qti-area-map-entry`, and types it `CoordsDType`, whose pattern admits three, four, or an even number of six or
-     more non-negative integers or percentages, whatever the shape. The sentence for `default` is a "should", and the
-     information model says that "SHOULD/SHOULD NOT/RECOMMENDED statements constitute a best practice; ignoring a best
-     practice does not violate conformance" (section 1.3). The multiplicity, the ShapeEnum sentence and the XSD are
-     requirements, and all three require coordinates. Read as a requirement, the "should" would contradict them and
-     leave no valid `default` area, since the XSD refuses an element without `coords` and the pattern refuses an empty
-     value. So this follows the XSD and the information model's requirements, and reads the "should" as the best
-     practice it states: a `default` hotspot, hotspot choice, inside test or area map entry carries `coords`, a
-     `CoordsDType`, and one without `coords` is refused under `required-attribute`, as on main (`CoordsDefault` at
-     2b276d76 holds the `CoordsDType` pattern). What a `default` area's coordinates mean is reading 59's: they are
-     ignored, and the area is the whole image. `qti-media-interaction`'s `coords`, which no shape reads, stays
-     optional, as the XSD declares it. This is no departure from the XSD, so the attribute grammar states nothing
+     `coords`, section 5.75.2), and of the shape "The default shape refers to the entire area of the associated image"
+     and "A value of a shape is always accompanied by coordinates" (section 8.29, ShapeEnum). It gives `coords` the
+     multiplicity [1] on every class that has a shape: AssociableHotspot, HotspotChoice, Inside and AreaMapEntry
+     (sections 5.7.6, 5.67.5, 5.75.2 and 7.4.2). The XSD declares `coords` required on `qti-associable-hotspot`,
+     `qti-hotspot-choice`, `qti-inside` and `qti-area-map-entry`, and types it `CoordsDType`, whose pattern admits
+     three, four, or an even number of six or more non-negative integers or percentages, whatever the shape. The
+     sentence for `default` is a "should", and the information model says that "SHOULD/SHOULD NOT/RECOMMENDED statements
+     constitute a best practice; ignoring a best practice does not violate conformance" (section 1.3). The multiplicity,
+     the ShapeEnum sentence and the XSD are requirements, and all three require coordinates. Read as a requirement, the
+     "should" would contradict them and leave no valid `default` area, since the XSD refuses an element without `coords`
+     and the pattern refuses an empty value. So this follows the XSD and the information model's requirements, and reads
+     the "should" as the best practice it states: a `default` hotspot, hotspot choice, inside test or area map entry
+     carries `coords`, a `CoordsDType`, and one without `coords` is refused under `required-attribute`, as on main
+     (`CoordsDefault` at 2b276d76 holds the `CoordsDType` pattern). What a `default` area's coordinates mean is reading
+     59's: they are ignored, and the area is the whole image. `qti-media-interaction`'s `coords`, which no shape reads,
+     stays optional, as the XSD declares it. This is no departure from the XSD, so the attribute grammar states nothing
      for it. (Decided 2026-11-06 by RV seat X, on the review of PR #46, under the operator's standing ruling of
      2026-11-05 that the spec wins.)
