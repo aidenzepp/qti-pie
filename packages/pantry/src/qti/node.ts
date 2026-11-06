@@ -118,6 +118,15 @@ export const charsPattern =
 export const Chars = str.regex(charsPattern);
 
 /**
+ * The type of a node's first or last character: one code point, or the empty string where the
+ * node holds no characters. A law can read a text's end only on the text's own row, since `chars`
+ * is unbounded and fits no key; one code point fits every key, so the ends are what a law over a
+ * node's neighbours compares (`#pantry/qti/quotation.ts`, spec reading 127). Exported for
+ * `src/import/refusal.ts`, which names its pattern law.
+ */
+export const EndCharacter = str.regex("^.?$", "su");
+
+/**
  * The nil uuid: the parent copy's start, which only the root's own value ever replaces, since the
  * owner axis holds the root to itself.
  */
@@ -132,7 +141,8 @@ const nilUuid = "00000000-0000-0000-0000-000000000000";
  * - **the host's:** `id`, `document` (the root field, on the root alone, its own id), `kind`,
  *   `version`, `governs`, `prefix`, `nearest`, `nearestKind`, `state` (its content-automaton state,
  *   from `contentStep`), `ancestry` (`parentAncestry ∪ Enters(kind)`), `chars` (a text or
- *   whitespace node's characters, an entity reference's `&name;`, empty elsewhere) and
+ *   whitespace node's characters, an entity reference's `&name;`, empty elsewhere), `first` and
+ *   `last` (the first and last code points of its `chars`, empty where `chars` is) and
  *   `stringPiece` (its `chars` where its parent's text is checked or copied, empty elsewhere: the
  *   string value fold's step);
  * - **the tree's group:** `parent`, which the nesting supplies and the root holds as its own id;
@@ -164,9 +174,11 @@ export const Node = relation(
     elements: accumulated(natural, 0n),
     elementsWas: accumulated(natural, 0n),
     end: drawn(natural),
+    first: EndCharacter,
     governs: closedId(TypeName),
     id: uuid,
     kind: closedId(NodeKind),
+    last: EndCharacter,
     lastState: accumulated(closedId(Position), "0"),
     namespaces: drawn(natural),
     nearest: uuid,
@@ -378,9 +390,11 @@ export const nodeTree = tree(on(Node, "parent", "at"), fin(Node, "children"), {
 
 /**
  * The tree's members, every row but each document's root: the member side of every containment
- * that rides one of the tree's axes.
+ * that rides one of the tree's axes, and the side an overlay names a node by its parent and slot
+ * through (`#pantry/qti/quotation.ts`). `(parent, at)` is a key of the members alone: the root is
+ * its own parent at slot 0, as its first child is, so no key over every row of `Node` holds it.
  */
-const members = select(Node, member);
+export const members = select(Node, member);
 
 /**
  * The one tuple of a node every overlay copies (C18): its id, document, kind, start, nearest
@@ -526,7 +540,9 @@ const stringValueFold = fold(
  *   each member's state to its position: the one its kind's particle names, its predecessor's for
  *   character data no particle names, or one of `Symbol`'s for a kind several particles name. An
  *   unadmitted kind reads no position and is refused.
- * - **E1:** `ancestry` is `parentAncestry ∪ Enters(kind)`, only character data has characters, and
+ * - **E1:** `ancestry` is `parentAncestry ∪ Enters(kind)`, only character data has characters,
+ *   `first` and `last` are the first and last code points of `chars` (each one code point by its
+ *   type, so `startsWith` and `endsWith` pin it), both empty exactly where `chars` is, and
  *   `stringPiece` is a member's `chars` where its parent's text is checked or copied, empty
  *   elsewhere.
  * - **N6:** no banned flag above a node, and every flag it needs.
@@ -623,6 +639,15 @@ export const nodeLaws = [
     n.and(
       n.eq(n.ancestry, Compute.union(n.parentAncestry, Enters.row(n.kind))),
       n.or(n.in(n.kind, ["text", "ws", "entityRef"]), n.eq(n.chars, "")),
+      n.or(
+        n.and(n.eq(n.chars, ""), n.eq(n.first, ""), n.eq(n.last, "")),
+        n.and(
+          n.ne(n.first, ""),
+          n.ne(n.last, ""),
+          n.eq(Compute.startsWith(n.chars, n.first), true),
+          n.eq(Compute.endsWith(n.chars, n.last), true),
+        ),
+      ),
       n.or(
         n.and(inStringValue(n), n.eq(n.stringPiece, n.chars)),
         n.and(n.not(inStringValue(n)), n.eq(n.stringPiece, "")),

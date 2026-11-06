@@ -61,6 +61,8 @@ import {
   referenceRowsOf,
 } from "#pantry/import/overlays/package.ts";
 import type { PackageRows, ReferenceRows } from "#pantry/import/overlays/package.ts";
+import { rowsOf as quotationRowsOf } from "#pantry/import/overlays/quotation.ts";
+import type { QuotationRows } from "#pantry/import/overlays/quotation.ts";
 import { assembledRowsOf, rowsOf as testRowsOf } from "#pantry/import/overlays/tests.ts";
 import type { AssembledRows, TestRows } from "#pantry/import/overlays/tests.ts";
 import type { ListedDocument, NodeIds } from "#pantry/import/write.ts";
@@ -85,6 +87,7 @@ export type OverlayRows = AssembledExpressionRows &
   PlacedIdRows &
   PlacedLanguageRows &
   PlacedVariableRows &
+  QuotationRows &
   ReferenceRows &
   SectionRows &
   TestRows;
@@ -100,6 +103,7 @@ interface DocumentRows {
   readonly mapping: MappingRows;
   readonly metadata: MetadataRows;
   readonly package: PackageRows;
+  readonly quotation: QuotationRows;
   readonly references: ReferenceRows;
   readonly tests: TestRows;
 }
@@ -127,6 +131,7 @@ const documentRowsOf = ({
   mapping: mappingRowsOf(tree, ids),
   metadata: metadataRowsOf(tree, ids),
   package: packageRowsOf(tree, ids),
+  quotation: quotationRowsOf(tree, ids),
   references: referenceRowsOf(tree, ids, referenceCensus),
   tests: testRowsOf(tree, ids),
 });
@@ -568,6 +573,10 @@ const mergedOf = (
       "ProcessingTemplate",
       parts.map(({ ProcessingTemplate: rows }) => rows),
     ),
+    Quotation: unionOf(
+      "Quotation",
+      parts.map(({ Quotation: rows }) => rows),
+    ),
     Reading: unionOf(
       "Reading",
       parts.map(({ Reading: rows }) => rows),
@@ -811,6 +820,7 @@ export const overlayRowsOf = (
       rows.mapping,
       rows.metadata,
       rows.package,
+      rows.quotation,
       rows.references,
       rows.tests,
     ]),

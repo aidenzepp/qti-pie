@@ -283,9 +283,10 @@ describe("fold over generated trees", { timeout: searchTimeout }, () => {
     // for a kind several positions name the one of its `Symbol` positions `Follow` allows after its
     // predecessor's state, walked here from the family's start (Unique Particle Attribution makes
     // it one), or for character data its predecessor's state (0 for a first child); a family's end
-    // state as its last child's; its element count; and `attrs` as its closed attributes'
+    // state as its last child's; its element count; `attrs` as its closed attributes'
     // positions, since an open class is one position for many names, which the fold steps over
-    // (the W5 amendment's C9).
+    // (the W5 amendment's C9); and `first` and `last` as the first and last code points of the
+    // node's own text, whitespace or entity row (reading 127).
     // Bound: the generator's drawn bounds.
     searched(
       ctx,
@@ -386,6 +387,8 @@ describe("fold over generated trees", { timeout: searchTimeout }, () => {
                 childState: node.childState,
                 document: node.document,
                 elementChildren: node.elementChildren,
+                first: node.first,
+                last: node.last,
                 nearest: node.nearest,
                 nearestKind: node.nearestKind,
                 parentAncestry: sorted(node.parentAncestry),
@@ -404,6 +407,8 @@ describe("fold over generated trees", { timeout: searchTimeout }, () => {
                     Option.isSome(grammar.kinds.isElement.lookup({ kind })),
                   ).length,
                 ),
+                first: Array.from(charactersOf.get(node.id) ?? "", String)[0] ?? "",
+                last: Array.from(charactersOf.get(node.id) ?? "", String).at(-1) ?? "",
                 nearest: nearest.id,
                 nearestKind: nearest.kind,
                 parentAncestry: sorted(entered),

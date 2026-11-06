@@ -666,9 +666,11 @@ const sqlRowsOf = (rows: FoldedRows<Composed>): SqlRow[] => {
       elements: String(node.derived.elements),
       elementsWas: String(node.elementsWas),
       end: String(node.end),
+      first: text(node.first),
       governs: code(TypeName, node.governs),
       id: text(node.id),
       kind: code(NodeKind, node.kind),
+      last: text(node.last),
       lastState: code(Position, String(node.childState)),
       namespaces: String(node.namespaces),
       nearest: text(node.nearest),
@@ -1167,11 +1169,12 @@ describe.skipIf(!hasLease)("qti/node.db.test.ts, on the lease", () => {
       );
 
       it.effect(
-        "refuses a shared kind's state outside Symbol or unfollowed, a junk accumulator at each fold's first slot, a wrong after, a leaked root ancestry, a wrong nearest and an xsi:type outside XsiType",
+        "refuses a shared kind's state outside Symbol or unfollowed, a junk accumulator at each fold's first slot, a wrong after, a leaked root ancestry, a wrong nearest, an end that is not its node's characters' and an xsi:type outside XsiType",
         () =>
           // Oracle: the specification as a checker: N5's Symbol and Follow (`m:mfrac`'s two `m:ci`
           // at positions 1 and 2), fin.md §4.3's first-slot pins and combine CHECKs, C10's root
-          // pin, N8 and N12, each an edit of a lawful item's rows that breaks the one law.
+          // pin, N8, E1's ends (reading 127) and N12, each an edit of a lawful item's rows that
+          // breaks the one law.
           // Bound: the two lawful items under each named edit.
           Effect.gen(function* rowLaws() {
             const client = yield* loginSession;
@@ -1289,6 +1292,18 @@ describe.skipIf(!hasLease)("qti/node.db.test.ts, on the lease", () => {
               },
               {
                 codes: ["23514"],
+                name: "a text whose first is not its first character",
+                roles: ["E1 derived"],
+                rows: edited(lawful, textLeaf, { first: text("x") }),
+              },
+              {
+                codes: ["23514"],
+                name: "an element with a last character, though it holds none",
+                roles: ["E1 derived"],
+                rows: edited(lawful, lastElement, { last: text("x") }),
+              },
+              {
+                codes: ["23514"],
                 name: "an xsi:type outside XsiType",
                 roles: ["xsi type", "other"],
                 rows: edited(lawful, lastElement, { governs: code(TypeName, "xs:anyType") }),
@@ -1360,7 +1375,10 @@ describe.skipIf(!hasLease)("qti/node.db.test.ts, on the lease", () => {
           // and the other slices' reports of the objects their laws put on Node (Q5.04: its four
           // arms, OpenElementName and the root kind; Q5.05 and Q5.04: the attribute and namespace
           // families' last axes; Q5.11: the existence mirrors of AreaMapping, MatchTable and
-          // InterpolationTable).
+          // InterpolationTable; the overlays that hold a row for each node of their kinds, each from
+          // a generated id column of Node; reading 127: Quotation's). The list is the foreign keys
+          // a scratch `grizzle generate` drafted on `qti.node` on 2026-11-06 (grizzle `64f0427`),
+          // with review wave 1's readings in place.
           // Bound: every constraint of Node's table.
           Effect.gen(function* census() {
             const client = yield* loginSession;
@@ -1387,6 +1405,32 @@ describe.skipIf(!hasLease)("qti/node.db.test.ts, on the lease", () => {
                 "qti.area_mapping",
                 "qti.interpolation_table",
                 "qti.match_table",
+                "qti.value",
+                "qti.value_set",
+                "qti.expression",
+                "qti.literal",
+                "qti.processing",
+                "qti.template_default",
+                "qti.identity_text",
+                "qti.lom_language",
+                "qti.lom_entry",
+                "qti.lom_general",
+                "qti.lom_record",
+                "qti.lom_string",
+                "qti.lom_title",
+                "qti.lom_title_string",
+                "qti.reference_path",
+                "qti.item_ref_target",
+                "qti.named",
+                "qti.section",
+                "qti.section_member",
+                "qti.section_ordering",
+                "qti.section_selection",
+                "qti.site",
+                "qti.site",
+                "qti.stimulus_ref",
+                "qti.variable_mapping",
+                "qti.quotation",
               ],
             );
 

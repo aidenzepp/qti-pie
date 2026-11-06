@@ -423,7 +423,7 @@ describe("rootInsertOf", { timeout: searchTimeout }, () => {
   );
 
   it.effect(
-    "writes each node's state, ancestry and nearest interaction, and each closed attribute's slot, as the host fold derives them",
+    "writes each node's state, ancestry, nearest interaction and characters' ends, and each closed attribute's slot, as the host fold derives them",
     (ctx) =>
       // Oracle: a second implementation, the host fold of `#pantry/model/folds.ts` (Q4.01), which
       // derives each node's state through the same content grammar by its own walk, its ancestry,
@@ -470,6 +470,7 @@ describe("rootInsertOf", { timeout: searchTimeout }, () => {
                 assert.deepStrictEqual(new Set(node.ancestry), new Set(expected.derived.ancestry));
                 assert.strictEqual(node.nearest, expected.nearest);
                 assert.strictEqual(node.nearestKind, expected.nearestKind);
+                assert.deepStrictEqual([node.first, node.last], [expected.first, expected.last]);
                 for (const attribute of node.attributes) {
                   const row = attributes.get(attribute.id);
                   if (row === undefined) {
@@ -710,9 +711,11 @@ describe("the written types", () => {
     const node = {
       ancestry: true,
       chars: true,
+      first: true,
       governs: true,
       id: true,
       kind: true,
+      last: true,
       nearest: true,
       nearestKind: true,
       prefix: true,
@@ -783,7 +786,7 @@ describe("the written types", () => {
     };
 
     assert.isTrue(Object.values(noLeak).every(Boolean));
-    assert.lengthOf(Object.keys(root), 15);
+    assert.lengthOf(Object.keys(root), 17);
     assert.lengthOf(Object.keys(attribute), 8);
     assert.lengthOf(
       [openName, idref, entity, namespace, entry].flatMap((record) => Object.keys(record)),

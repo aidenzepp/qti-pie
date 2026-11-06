@@ -651,6 +651,14 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     },
   ],
   [
+    127,
+    {
+      owner:
+        "Q's `Quotation` overlay and its `Quotation_punctuation` check (`src/qti/quotation.ts`), over `Node.first` and `Node.last`, which `E1_derived` proves (`src/qti/node.ts`); the oracle's Quotation punctuation; a `’` that closes a quote is a known under-refusal",
+      status: "G",
+    },
+  ],
+  [
     129,
     {
       owner:

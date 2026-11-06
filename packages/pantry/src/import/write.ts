@@ -17,8 +17,9 @@
  * No row carries a field grizzle draws or fills, or PostgreSQL generates: each is `Addition<R>`,
  * which omits them, nested at a sequence's count field only. The host writes the fields the
  * amendment's §C gives it, each proved by a law: a node's `state` from `contentStep` (C5, N5), its
- * `ancestry` (`E1_derived`), its nearest interaction (N8), its `chars` and `stringPiece` (E1); an
- * attribute's `slot` (AL2's step) and its IDREF pieces, which concatenate to its lexical form.
+ * `ancestry` (`E1_derived`), its nearest interaction (N8), its `chars`, `first`, `last` and
+ * `stringPiece` (E1); an attribute's `slot` (AL2's step) and its IDREF pieces, which concatenate
+ * to its lexical form.
  *
  * Ids are drawn by the number `flatten` (`#pantry/model/xdm.ts`) gives each node and attribute, so
  * the tree and every overlay builder name each node by one id ({@link NodeIds}).
@@ -47,6 +48,7 @@ import type { DocumentContext, ListedTarget } from "#pantry/import/context.ts";
 import type { PackageRecord } from "#pantry/import/record.ts";
 import type { OverlayRows } from "#pantry/import/overlays/index.ts";
 import type { Composed } from "#pantry/model/composed.ts";
+import { endsOf } from "#pantry/model/folds.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type {
   AttributeRow,
@@ -124,6 +126,7 @@ import {
   ResourceHref,
   XmlBase,
 } from "#pantry/qti/package.ts";
+import { Quotation } from "#pantry/qti/quotation.ts";
 import {
   AriaElement,
   AriaRange,
@@ -852,6 +855,7 @@ const memberOf = (
   const nearest = fromInteraction ? parent.id : parent.nearest;
   const nearestKind = fromInteraction ? parentKind : parent.nearestKind;
   const inStringValue = checksText(version, parent.kind, parent.governs) || copied.has(parent.kind);
+  const ends = endsOf(own.chars);
   const children: NodeMember[] = [];
   const member: NodeMember = {
     ancestry: Bits.of(Flag, [...ancestry]),
@@ -864,9 +868,11 @@ const memberOf = (
     ),
     chars: own.chars,
     children,
+    first: ends.first,
     governs: node.governs,
     id: node.id,
     kind,
+    last: ends.last,
     namespaces: own.namespaces.map(({ prefix, uri }) => ({ prefix, uri })),
     nearest,
     nearestKind,
@@ -908,8 +914,9 @@ const memberOf = (
  *   names the document from inside an interaction;
  * - The document node's `ancestry`, its context's, empty where no site names the document;
  * - `chars`, a text or whitespace node's characters and an entity reference's `&name;`, empty
- *   elsewhere, and `stringPiece`, its `chars` where its parent's text is checked or copied
- *   (`inStringValue` of `#pantry/qti/node.ts`), empty elsewhere;
+ *   elsewhere, `first` and `last`, the first and last code points of `chars` (`endsOf`), and
+ *   `stringPiece`, its `chars` where its parent's text is checked or copied (`inStringValue` of
+ *   `#pantry/qti/node.ts`), empty elsewhere;
  * - `governs` and `prefix`, an element's own, `none` and empty for any other node.
  *
  * The walk keeps its own stack, so a tree of any depth is written without recursion.
@@ -947,9 +954,11 @@ export const rootInsertOf = (
     chars: "",
     children: [],
     document: self,
+    first: "",
     governs: "none",
     id: self,
     kind: "document",
+    last: "",
     namespaces: [],
     nearest: context.nearest,
     nearestKind: context.nearestKind,
@@ -1232,6 +1241,7 @@ export const changeSetOf = (author: typeof Author, inputs: PackageInputs) =>
     .insert(PrintedVariableRef, [...inputs.PrintedVariableRef.values()])
     .insert(Processing, [...inputs.Processing.values()])
     .insert(ProcessingTemplate, [...inputs.ProcessingTemplate.values()])
+    .insert(Quotation, [...inputs.Quotation.values()])
     .insert(RecordField, [...inputs.RecordField.values()])
     .insert(Reference, [...inputs.Reference.values()])
     .insert(ReferencePath, [...inputs.ReferencePath.values()])

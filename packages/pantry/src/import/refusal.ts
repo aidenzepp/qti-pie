@@ -153,7 +153,7 @@ import {
   StatisticDate,
   UsageValue,
 } from "#pantry/qti/metadata.ts";
-import { Chars, prefixPattern } from "#pantry/qti/node.ts";
+import { Chars, EndCharacter, prefixPattern } from "#pantry/qti/node.ts";
 import {
   DocumentDirectory,
   EntryContent,
@@ -163,6 +163,7 @@ import {
   ReferencePath,
   XmlBase,
 } from "#pantry/qti/package.ts";
+import { quotationLaws } from "#pantry/qti/quotation.ts";
 import {
   branchLaws,
   inclusionLaws,
@@ -226,6 +227,8 @@ export const precedence = [
   "aria-value-range",
   "varref-copy",
   "adaptive-feedback",
+  // HTML content.
+  "q-punctuation",
   // O4, expressions.
   "P2",
   "P8",
@@ -863,6 +866,11 @@ export const lawTable = {
     source:
       "reading 77: https://www.imsglobal.org/spec/qti/v3p0/info#DerivedCharacteristic_PrintedVariable.Attr_identifier (§7.30.6: 'The outcome variable or template variable must have been defined. The values of response variables cannot be printed directly'), the built-in completionStatus among them (§2.2.2.3) (references.ts ContentReference)",
   },
+  "Quotation punctuation": {
+    rule: "q-punctuation",
+    source:
+      "reading 127: https://www.imsglobal.org/spec/qti/v3p0/info#Data_Q (§5.111, Q: 'Quotation punctuation (such as quotation marks) that is quoting the contents of the tag must not appear immediately before, after, or inside q tags; they will be inserted into the rendering by the user agent'; ~/.cache/gr8des/anyuri-specs/qti/info.txt:38400, and the 3.0.1 model's ~/.cache/gr8des/qti301/info301.txt:55430): a q is refused where the last character of its sibling before it, the first of its sibling after it, or the first or last character of its own content is a quotation mark, one of \" « » ‘ ‚ ‛ “ ” „ ‟ ‹ › (main's set, which leaves out the apostrophes ' and ’), each read off a text, whitespace or entity reference row, so an element, a comment or an instruction beside the q holds no punctuation (quotation.ts Quotation_punctuation)",
+  },
   "Record field key": {
     rule: "value-cardinality",
     source:
@@ -1427,6 +1435,7 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
     [Separator, "E1 derived"],
     [HrefParams, "E1 derived"],
     [EntryContent, "E1 derived"],
+    [EndCharacter, "E1 derived"],
   ]),
   [
     {
@@ -2090,6 +2099,7 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
     "E1 derived",
   ],
   [primaryKeyOf("ResourceLomLanguageSet", "general", "lang"), "E1 derived"],
+  [primaryKeyOf("Quotation", "node"), "E1 derived"],
   [primaryKeyOf("LabelUse", "node"), "Label tools"],
   [
     containedIn(sideOf("Attribute", "node", "document"), sideOf("LabelUse", "node", "document")),
@@ -3020,6 +3030,9 @@ const lawsOfStatement = (statement: Statement): readonly Law[] =>
  *   reference's one resolving reading ("Prefixed reference"), the kinds of declaration a reference
  *   may name ("Variable kind"), and the declaration and item a template default or a variable
  *   mapping's source claims ("Template default target", "Variable mapping source").
+ * - **Quotation** (`quotation.ts`, reading 127): every copy, key and containment is a restatement of
+ *   the `q`'s node, its slot and its neighbours' ends, "E1 derived"; its law is its check,
+ *   "Quotation punctuation".
  */
 export const lawGroups: readonly (readonly [readonly Statement[], LawName])[] = [
   [testOverlayLaws, "Test overlay"],
@@ -3031,6 +3044,7 @@ export const lawGroups: readonly (readonly [readonly Statement[], LawName])[] = 
   [interactionLaws, "E1 derived"],
   [mappingLaws, "Mapping overlay"],
   [expressionLaws, "E1 derived"],
+  [quotationLaws, "E1 derived"],
 ];
 
 /**

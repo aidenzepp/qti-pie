@@ -36,11 +36,11 @@ import * as install from "#pantry/grammar/install.ts";
 import type { SchemaVersion as Version } from "#pantry/grammar/kinds.ts";
 import { foldGrammarOf, shredGrammarOf } from "#pantry/model/composed.ts";
 import type { Composed } from "#pantry/model/composed.ts";
-import { fold } from "#pantry/model/folds.ts";
+import { endsOf, fold } from "#pantry/model/folds.ts";
 import type { FoldedNode, FoldedRows } from "#pantry/model/folds.ts";
 import { shred } from "#pantry/model/shred.ts";
 import type { XdmDocument } from "#pantry/model/xdm.ts";
-import { Node, nodeLaws } from "#pantry/qti/node.ts";
+import { EndCharacter, Node, nodeLaws } from "#pantry/qti/node.ts";
 import { caseHang, featuresOf, idOf, searchTimeout, xdmDocument } from "#pantry/test/gen/xdm.ts";
 import type { XdmFeature } from "#pantry/test/gen/xdm.ts";
 import { documentBreaches, lawNames, lawsOf, oracleRules, ruleOf } from "#pantry/test/oracle.ts";
@@ -176,9 +176,11 @@ const someId: Uuid = "00000000-0000-4000-8000-000000000001";
 const written = {
   ancestry: Bits.of(install.Flag, []),
   chars: "",
+  first: "",
   governs: "none",
   id: someId,
   kind: "qti-assessment-item",
+  last: "",
   nearest: someId,
   nearestKind: "document",
   prefix: "",
@@ -224,7 +226,8 @@ describe("Node's declarations", () => {
 
   it("types a write as the host's fields alone, the root field required on the root and supplied below it, and no field grizzle draws or fills", () => {
     // Oracle: the specification as a checker, the W5 contract's written fields (§C, with `ancestry`,
-    // `chars` and `stringPiece`, which the host writes and `E1_derived` proves), held by the compiler: `satisfies`
+    // `chars`, `first`, `last` and `stringPiece`, which the host writes and `E1_derived` proves,
+    // `first` and `last` by reading 127), held by the compiler: `satisfies`
     // holds the written fields to exactly this record, a member written without `document` is
     // accepted, and each refusal below is a type error. A member that carries `document` is not one:
     // grizzle checks a nested member's fields by assignability, not for excess keys (the report's
@@ -233,9 +236,11 @@ describe("Node's declarations", () => {
       ancestry: true,
       chars: true,
       document: true,
+      first: true,
       governs: true,
       id: true,
       kind: true,
+      last: true,
       nearest: true,
       nearestKind: true,
       parent: true,
@@ -261,9 +266,35 @@ describe("Node's declarations", () => {
       ChangeSet.empty(Scratch).insert(Node, [{ ...leaf, document: someId, parent: someId }]),
     ];
 
-    assert.lengthOf(Object.keys(fields), 13);
+    assert.lengthOf(Object.keys(fields), 15);
     assert.isDefined(accepted);
     assert.isFunction(refused);
+  });
+
+  it("types each end of a node's characters as at most one code point, and writes each as the first or last of its characters", () => {
+    // Oracle: the specification as a checker, reading 127's ends: `EndCharacter`'s pattern read
+    // by JavaScript's engine under grizzle's flags `su` (`.` one code point, a line end among
+    // them), and `endsOf` against `Array.from`, which splits a text into its code points.
+    // Bound: the empty text, one and two characters, a line end, a surrogate pair alone, at
+    // either end and between two letters.
+    const end = new RegExp(EndCharacter.pattern.source, EndCharacter.pattern.flags);
+    for (const held of ["", "a", "\n", "é", "😀"]) {
+      assert.isTrue(end.test(held), JSON.stringify(held));
+    }
+
+    for (const refusedText of ["ab", "\r\n", "😀a", "a😀"]) {
+      assert.isFalse(end.test(refusedText), JSON.stringify(refusedText));
+    }
+
+    for (const chars of ["", "a", "ab", "😀", "😀a", "a😀", "x😀y", "\t \n", "&e;"]) {
+      const points = Array.from(chars, String);
+
+      assert.deepStrictEqual(
+        endsOf(chars),
+        { first: points[0] ?? "", last: points.at(-1) ?? "" },
+        JSON.stringify(chars),
+      );
+    }
   });
 });
 

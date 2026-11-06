@@ -1824,7 +1824,31 @@ against it. A reading that is not an information-model-over-XSD case says which 
      under `attribute-lexical`. (Decided 2026-11-06 by RV seat G, on the review of PR #46, under the operator's standing
      ruling of 2026-11-05 that the spec wins.)
 
-<!-- Readings 126 to 128 are reserved. -->
+<!-- Reading 126 is reserved. -->
+
+127. **No quotation punctuation stands immediately before, after or inside a `q`.** The information model says of Q:
+     "Quotation punctuation (such as quotation marks) that is quoting the contents of the tag must not appear
+     immediately before, after, or inside q tags; they will be inserted into the rendering by the user agent" (section
+     5.111, https://www.imsglobal.org/spec/qti/v3p0/info#Data_Q; the 3.0.1 information model's section 5.111 says the
+     same). The 3.0.0 and 3.0.1 ASI XSDs state it only as the documentation of `QDType`, whose mixed content admits any
+     text. So a `q` is refused where any one of four characters is a quotation mark, each alone, as the sentence's "or"
+     says: the last character of its sibling before it, the first character of its sibling after it, and the first and
+     last characters of its own content. A mark inside the content but not at its start or its end does not quote the
+     contents, and is not judged. The quotation marks are the double quote `"` (U+0022), the curly and low quotes `‘`
+     `‚` `‛` `“` `”` `„` `‟`, and the guillemets `«` `»` `‹` `›`. The ASCII apostrophe (U+0027) and the right single
+     quotation mark `’` (U+2019) are left out: each is an apostrophe as often as a quote, and a possessive or an elision
+     beside a `q` (`the students’<q>…</q>`) quotes nothing, so a `’` that does close a quote around a `q` is not
+     refused, a known under-refusal; an opening `‘` is refused. A character is read only off a neighbour that holds
+     characters, a text: an element beside a `q`, or at the start or end of its content, holds none and is not judged,
+     a space between a mark and a `q` keeps the mark from being immediately beside it, and so does a comment or a
+     processing instruction between them. A predefined entity is read as its character, since the reader substitutes
+     it (XML 1.0 section 4.6), so `&quot;` beside a `q` is refused and `&apos;` is not; a reference to an entity the
+     document does not declare is read as written, `&` and `;`, since its replacement text is unknown. A `q` inside a
+     `q` is judged by its own neighbours and content. This binds pantry and plate alike. This is not a case of
+     documents in conflict. (Decided 2026-11-06 by RV seat Q, on the review of PR #46, under the operator's standing
+     ruling of 2026-11-05 that the spec wins.)
+
+<!-- Reading 128 is reserved. -->
 
 129. **`xml:lang`, `lang` and a track's `srclang` hold BCP 47 language tags, well-formed as RFC 5646 defines them.**
      XML 1.0 says of `xml:lang` "The values of the attribute are language identifiers as defined by [IETF BCP 47], Tags

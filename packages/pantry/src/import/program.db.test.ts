@@ -701,6 +701,8 @@ describe.skipIf(!hasLease)(
                 (node) => ({
                   ...node,
                   chars: " ",
+                  first: " ",
+                  last: " ",
                   stringPiece: node.stringPiece === "" ? "" : " ",
                 }),
               ),
@@ -717,6 +719,8 @@ describe.skipIf(!hasLease)(
                 (node) => ({
                   ...node,
                   chars: "x",
+                  first: "x",
+                  last: "x",
                   stringPiece: node.stringPiece === "" ? "" : "x",
                 }),
               ),
@@ -749,7 +753,7 @@ describe.skipIf(!hasLease)(
                   ...node,
                   children: node.children.map((child) =>
                     child.kind === "text"
-                      ? { ...child, chars: "3.0.x", stringPiece: "3.0.x" }
+                      ? { ...child, chars: "3.0.x", first: "3", last: "x", stringPiece: "3.0.x" }
                       : child,
                   ),
                 }),

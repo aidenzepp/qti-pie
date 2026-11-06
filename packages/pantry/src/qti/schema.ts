@@ -183,6 +183,7 @@ import {
   ResourceHref,
   XmlBase,
 } from "#pantry/qti/package.ts";
+import { quotationLaws, quotationRelations } from "#pantry/qti/quotation.ts";
 import { testLaws, testRelations } from "#pantry/qti/tests.ts";
 
 /**
@@ -407,6 +408,7 @@ export const Qti = schema(
     ...interactionRelations,
     ...expressionRelations,
     ...metadataRelations,
+    ...quotationRelations,
   },
   [
     ...nodeLaws,
@@ -420,5 +422,6 @@ export const Qti = schema(
     ...interactionLaws,
     ...expressionLaws,
     ...metadataLaws,
+    ...quotationLaws,
   ],
 );

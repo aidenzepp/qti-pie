@@ -23,7 +23,8 @@
  * which numbers the nodes in the order this one folds them, so every copy above reads the interval
  * it writes.
  *
- * Beside those, a node carries its family counts (`children`, `attributes`, `namespaces`) and
+ * Beside those, a node carries its family counts (`children`, `attributes`, `namespaces`), the
+ * first and last code points of its own characters (`first`, `last`, {@link endsOf}), and
  * `attrs`, the end value of its attribute family (AL2), where each attribute copies its owner's
  * `kind`, `governs`, `version` and `document` and its predecessor's `attrs` as `attrsWas`. An
  * open class is one position for many names, and the database's fold steps over closed names only
@@ -276,6 +277,16 @@ export interface FoldedNode<V extends XdmVocabulary> extends NodeRow<V> {
   readonly elementChildren: bigint;
   readonly elementsWas: bigint;
   /**
+   * The first code point of the node's own characters ({@link charactersOf}), empty when it holds
+   * none: `Node.first`, which `E1_derived` proves and the `q` quotation law reads (spec reading
+   * 127).
+   */
+  readonly first: string;
+  /**
+   * The last code point of the node's own characters, empty when it holds none: `Node.last`.
+   */
+  readonly last: string;
+  /**
    * The number of the node's namespace declarations.
    */
   readonly namespaces: bigint;
@@ -345,7 +356,8 @@ export interface FoldedRows<V extends XdmVocabulary> extends FlatRows<V> {
 
 /**
  * A node with its copies and its own fold, before its families are folded: every field of
- * {@link FoldedNode} but the counts, the end values and the string value its children write.
+ * {@link FoldedNode} but the counts, the end values and the string value its children write, and
+ * its own characters' first and last, which the walk reads off the node in the tree.
  */
 type Head<V extends XdmVocabulary> = Omit<
   FoldedNode<V>,
@@ -354,6 +366,8 @@ type Head<V extends XdmVocabulary> = Omit<
   | "childState"
   | "children"
   | "elementChildren"
+  | "first"
+  | "last"
   | "namespaces"
   | "stringValue"
 >;
@@ -553,6 +567,47 @@ const charactersOf = <V extends XdmVocabulary>(
 };
 
 /**
+ * The first and last characters of a node's own characters, as `Node` holds them in `first` and
+ * `last`.
+ */
+export interface Ends {
+  readonly first: string;
+  readonly last: string;
+}
+
+/**
+ * Read the first and last code points of a node's characters, `Node.chars`, each empty when the
+ * characters are, which `E1_derived` proves with `startsWith` and `endsWith`
+ * (`#pantry/qti/node.ts`).
+ *
+ * A code point past U+FFFF is two UTF-16 code units, a surrogate pair, and XML's `Char` holds no
+ * lone surrogate, so the last code point is the pair that starts two units from the end where one
+ * does, and the last unit otherwise.
+ *
+ * @param chars - The node's characters.
+ * @returns Its first and last code points.
+ */
+export const endsOf = (chars: string): Ends => {
+  const head = chars.codePointAt(0);
+  const pair = chars.codePointAt(chars.length - 2) ?? 0;
+
+  return {
+    first: head === undefined ? "" : String.fromCodePoint(head),
+    last: pair > 0xff_ff ? String.fromCodePoint(pair) : chars.slice(-1),
+  };
+};
+
+/**
+ * Write a node's own characters as `Node.chars` holds them: a child's {@link charactersOf}, and
+ * nothing for the document node.
+ *
+ * @param node - The node.
+ * @returns Its characters.
+ */
+const ownCharactersOf = <V extends XdmVocabulary>(node: Walked<V>): string =>
+  node._tag === "document" ? "" : charactersOf(node);
+
+/**
  * List a node's families in the tree: its children, its attributes and its namespace declarations.
  *
  * @param node - The node.
@@ -607,13 +662,13 @@ interface Pending<V extends XdmVocabulary> {
 }
 
 /**
- * A node the walk has met: the family it owns, its families' counts, its attributes' names and its
- * string value.
+ * A node the walk has met: the family it owns, its families' counts, its attributes' names, its
+ * string value and its own characters' ends.
  */
 interface Met<V extends XdmVocabulary> {
   readonly counts: Pick<
     FoldedNode<V>,
-    "attributes" | "attrs" | "children" | "namespaces" | "stringValue"
+    "attributes" | "attrs" | "children" | "first" | "last" | "namespaces" | "stringValue"
   >;
   readonly family: Folding<V>;
 }
@@ -693,6 +748,7 @@ export const fold = <V extends XdmVocabulary>(
             attributes: BigInt(families.attributes),
             attrs,
             children: BigInt(families.children.length),
+            ...endsOf(ownCharactersOf(node)),
             namespaces: BigInt(families.namespaces),
             stringValue: families.children.map(charactersOf).join(""),
           },

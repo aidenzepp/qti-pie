@@ -189,6 +189,7 @@ export const oracleRules = [
   "P8",
   "prefixed-ref",
   "printed-variable-ref",
+  "q-punctuation",
   "reachability",
   "reader-refusal",
   "record-binding-fit",
@@ -393,6 +394,7 @@ const lawRules = {
   "Outcome only": "P25",
   "Prefixed reference": "prefixed-ref",
   "Printed variable reference": "printed-variable-ref",
+  "Quotation punctuation": "q-punctuation",
   "Record field key": "value-cardinality",
   RecordBindingFit: "record-binding-fit",
   "Reference type": "P24",
@@ -612,6 +614,8 @@ export const lawSources = {
     "readings 48 and 88: https://www.imsglobal.org/spec/qti/v3p0/info#ExprVariable (§2.11.1.2: 'values taken from an individual item session can be looked up by prefixing the name of the item variable with the identifier assigned to the item in the qti-assessment-item-ref, separated by a period character'; under with-replacement 'a number that denotes the instance's place in the sequence of the item's instantiation is inserted between the item variable identifier and the item variable'), §2.2.2 ('The values of these durations can be refered to during outcome-processing by using the variable name duration prefixed with the identifier of the part or section followed by the period character', info.txt:9214), read over the assembled test (readings 4, 5 and 86): a test-level reference is accepted when exactly one of its readings, unsplit, split at a dot, or numbered at two dots, names a scope of the test and a variable of that scope, a numbered one only under a selection with replacement and only from 1, and none through a name two placements give (expressions.ts Reading: the key and the containment over its resolving readings, M3, and Prefixed_reference)",
   "Printed variable reference":
     "reading 77: https://www.imsglobal.org/spec/qti/v3p0/info#DerivedCharacteristic_PrintedVariable.Attr_identifier (§7.30.6: 'The outcome variable or template variable must have been defined. The values of response variables cannot be printed directly'), the built-in completionStatus among them (§2.2.2.3) (references.ts ContentReference)",
+  "Quotation punctuation":
+    "reading 127: https://www.imsglobal.org/spec/qti/v3p0/info#Data_Q (§5.111, Q: 'Quotation punctuation (such as quotation marks) that is quoting the contents of the tag must not appear immediately before, after, or inside q tags; they will be inserted into the rendering by the user agent'; ~/.cache/gr8des/anyuri-specs/qti/info.txt:38400, and the 3.0.1 model's ~/.cache/gr8des/qti301/info301.txt:55430): a q is refused where the last character of its sibling before it, the first of its sibling after it, or the first or last character of its own content is a quotation mark, one of \" « » ‘ ‚ ‛ “ ” „ ‟ ‹ › (main's set, which leaves out the apostrophes ' and ’), each read off a text, whitespace or entity reference row, so an element, a comment or an instruction beside the q holds no punctuation (quotation.ts Quotation_punctuation)",
   "Record field key":
     "https://www.imsglobal.org/spec/qti/v3p0/info#Data_Cardinality (§8.16, CardinalityEnum, record: 'a special container that contains a set of independent values each identified by its own identifier and having its own base-type'): no two fields of one record value share a field-identifier, compared collapsed",
   RecordBindingFit:
@@ -1391,6 +1395,7 @@ export const otherLawNames = [
   "Feedback outcome type",
   "Graphic gap match default hotspot",
   "Context variable reference",
+  "Quotation punctuation",
   "ResourceTypeOf",
   "RootOfType",
   "File listed",
@@ -1526,6 +1531,22 @@ const stringValueOf = (view: View, node: FoldedNode<Composed>): string =>
       return child.kind === "entityRef" ? `&${view.entityOf.get(child.id) ?? ""};` : "";
     })
     .join("");
+
+/**
+ * Read a node's own characters from its rows, as `Node.chars` holds them: a text's or whitespace's
+ * value, an entity reference as `&name;`, and nothing for any other node or for no node.
+ *
+ * @param view - The document.
+ * @param node - The node, none where no row is at the place read.
+ * @returns Its characters.
+ */
+const ownCharactersOf = (view: View, node: FoldedNode<Composed> | undefined): string => {
+  if (node?.kind === "text" || node?.kind === "ws") {
+    return view.textOf.get(node.id) ?? "";
+  }
+
+  return node?.kind === "entityRef" ? `&${view.entityOf.get(node.id) ?? ""};` : "";
+};
 
 /**
  * Read an element's namespace name: a closed kind's `ElementName` namespace, a foreign element's
@@ -1913,18 +1934,28 @@ const nodeLaws: readonly NodeLaw[] = [
     breaks: (node, view, { grammar }) => {
       const derived = derivationOf(node, grammar);
       const written = stringValueOf(view, node);
+      // Reading 127's ends: the first and last code points of the node's own characters.
+      const own = Array.from(ownCharactersOf(view, node), String);
+      const first = own[0] ?? "";
+      const last = own.at(-1) ?? "";
 
       return unless(
         sameSlot(node.derived, derived) &&
           sameSet(node.derived.ancestry, derived.ancestry) &&
-          node.stringValue === written,
+          node.stringValue === written &&
+          node.first === first &&
+          node.last === last,
         () => ({
           ancestry: spaced(node.derived.ancestry),
           derivedAncestry: spaced(derived.ancestry),
           derivedElements: String(derived.elements),
+          derivedFirst: first,
+          derivedLast: last,
           derivedState: String(derived.state),
           derivedStringValue: written,
           elements: String(node.derived.elements),
+          first: node.first,
+          last: node.last,
           state: String(node.derived.state),
           stringValue: node.stringValue,
         }),
@@ -3469,6 +3500,26 @@ const cardinalityBounds: ReadonlyMap<string, string> = new Map([
 ]);
 
 /**
+ * The quotation punctuation of reading 127, main's set: the double quote, the single and double
+ * curly and low quotes but the right single quotation mark, and the guillemets. The apostrophes
+ * `'` and `’` are left out, since a possessive or an elision beside a `q` quotes nothing.
+ */
+const quotationMarks: ReadonlySet<string> = new Set([
+  '"',
+  "«",
+  "»",
+  "‘",
+  "‚",
+  "‛",
+  "“",
+  "”",
+  "„",
+  "‟",
+  "‹",
+  "›",
+]);
+
+/**
  * The overlay laws of §1.7 over one node: O3's bindings, choice bounds and
  * content references, O4's arity and undeclared references, O5's mapping base type and O7's
  * selection bound.
@@ -3480,6 +3531,32 @@ const overlayLaws: readonly ((
   node: FoldedNode<Composed>,
   overlay: Overlay,
 ) => readonly Finding[])[] = [
+  (node, { view }) => {
+    // Reading 127: "Quotation punctuation (such as quotation marks) that is quoting the contents
+    // of the tag must not appear immediately before, after, or inside q tags" (§5.111), read at
+    // the four characters beside and inside a q, each its neighbour's own, none for a neighbour
+    // that holds no characters.
+    if (node.kind !== "q") {
+      return [];
+    }
+
+    const atSlot = (parent: NodeId, at: bigint): readonly string[] =>
+      Array.from(ownCharactersOf(view, view.bySlot.get(slotKey(parent, at))), String);
+    const positions: readonly (readonly [string, string | undefined])[] = [
+      ["before it", node.at > 0n ? atSlot(node.parent, node.at - 1n).at(-1) : undefined],
+      ["after it", atSlot(node.parent, node.at + 1n)[0]],
+      ["at its start", atSlot(node.id, 0n)[0]],
+      ["at its end", node.children > 0n ? atSlot(node.id, node.children - 1n).at(-1) : undefined],
+    ];
+
+    return positions
+      .flatMap(([position, mark]) =>
+        mark !== undefined && quotationMarks.has(mark)
+          ? [{ keys: { mark, position }, law: "Quotation punctuation" as const }]
+          : [],
+      )
+      .slice(0, 1);
+  },
   (node, overlay) =>
     // Reading 105: a usage value that names its base type holds a lexical form of it, read as
     // element content is (reading 7); one that names none is untyped text.
@@ -5726,7 +5803,7 @@ const explainers: Readonly<Record<LawName, Explainer>> = {
   "DocumentId key": (keys) =>
     `a second element purports the id ${field(keys, "id")}, which ${field(keys, "first")} already holds`,
   "E1 derived": (keys) =>
-    `holds state ${field(keys, "state")}, ${field(keys, "elements")} elements, ancestry ${inBraces(membersOf(keys["ancestry"]))} and string value ${JSON.stringify(field(keys, "stringValue"))}, where the closed relations and its children derive state ${field(keys, "derivedState")}, ${field(keys, "derivedElements")} elements, ancestry ${inBraces(membersOf(keys["derivedAncestry"]))} and ${JSON.stringify(field(keys, "derivedStringValue"))}`,
+    `holds state ${field(keys, "state")}, ${field(keys, "elements")} elements, ancestry ${inBraces(membersOf(keys["ancestry"]))}, string value ${JSON.stringify(field(keys, "stringValue"))} and first and last characters ${JSON.stringify(field(keys, "first"))} and ${JSON.stringify(field(keys, "last"))}, where the closed relations, its children and its own characters derive state ${field(keys, "derivedState")}, ${field(keys, "derivedElements")} elements, ancestry ${inBraces(membersOf(keys["derivedAncestry"]))}, ${JSON.stringify(field(keys, "derivedStringValue"))} and ${JSON.stringify(field(keys, "derivedFirst"))} and ${JSON.stringify(field(keys, "derivedLast"))}`,
   "Feedback outcome type": (keys) =>
     `${field(keys, "kind")} names the outcome ${field(keys, "identifier")}, of base type ${JSON.stringify(field(keys, "baseType"))} and cardinality ${JSON.stringify(field(keys, "cardinality"))}, where a feedback outcome is an identifier of single or multiple cardinality`,
   "Feedback reference": (keys, grammar) => referenceExplained(keys, grammar),
@@ -5920,6 +5997,8 @@ const explainers: Readonly<Record<LawName, Explainer>> = {
   "Prefixed reference": (keys) =>
     `the test ${field(keys, "assembly")} reads the reference ${field(keys, "identifier")} in ${field(keys, "resolving")} ways, ${field(keys, "readings")}, where exactly one reading may name a scope of the test and a variable of it`,
   "Printed variable reference": (keys, grammar) => referenceExplained(keys, grammar),
+  "Quotation punctuation": (keys) =>
+    `the q has the quotation mark ${JSON.stringify(field(keys, "mark"))} ${field(keys, "position")}, where the user agent draws a q's quotation marks itself`,
   "Record field key": (keys) =>
     `a second field of one record value is named ${field(keys, "identifier")}`,
   RecordBindingFit: (keys) =>
