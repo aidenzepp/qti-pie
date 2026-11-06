@@ -133,10 +133,46 @@ export const lawPackageBreaches = (
 };
 
 /**
- * The laws the schema states (`#pantry/import/refusal.ts` `lawTable`) that the oracle does not
- * judge, each with why no host predicate over a package's rows can: none of them is a rule of the
- * specification a package can break, each is a law over the rows the importer itself writes beside
- * the tree, which the host writes none of, so only an importer that writes rows its tree does not
- * give breaks one, and the database tier is its judge.
+ * The laws the schema states (`#pantry/import/refusal.ts` `lawTable`) that the oracle states as
+ * several laws of its own, each part a law of the oracle with the stated law's rule.
+ *
+ * - `N2 tree`: grizzle's tree statement over `Node` (`tree(on(Node, "parent", "at"), fin(Node,
+ *   "children"), { root: "document" })`, its key `(parent, at)`, `UNIQUE (document, start)` and its
+ *   interval checks, trees.md §2 to §4), which the oracle states as its key, its slot key and each
+ *   interval law T1 to T6.
  */
-export const hostlessLaws: Readonly<Record<string, string>> = {};
+export const statedInParts = {
+  "N2 tree": [
+    "Node key",
+    "N2 key",
+    "T1 document order",
+    "T2 root",
+    "T3 first child",
+    "T4 next sibling",
+    "T5 last child",
+    "T6 nonempty and leaf",
+  ],
+} as const satisfies Readonly<Record<string, readonly string[]>>;
+
+/**
+ * The laws the schema states that no host predicate over a package's rows can judge, each with
+ * why. None is a rule of the specification a package can break: each is a law over rows the
+ * importer writes beside the tree, copied from it, which the host writes none of. Only an importer
+ * that writes rows its tree does not give breaks one, so the database tier is its judge.
+ */
+export const hostlessLaws = {
+  "Declaration overlay":
+    "its rows (Declaration, ValueSet, Value, RecordField, OutcomeRange) are copies the importer writes of each declaration element's node, attributes and string value (plan §1.7 O2, C18); the host writes no such row, and a package's text can make no copy disagree with what it copies",
+  "Entry family":
+    "its rows are the package's entries in listing order, one per path, which the importer numbers; two entries of one path never reach a row, since the ZIP reader refuses them under zip-format (src/package/zip.ts, 'the archive holds two entries with this name')",
+  "Manifest overlay":
+    "its rows (ManifestId, Resource, ResourceHref, File, Dependency) are copies the importer writes of each manifest element's node and attributes (plan §1.6, C18); the host writes no such row, and a package's text can make no copy disagree with what it copies",
+  "Mapping overlay":
+    "its rows (Mapping, MapKey and its typed forms, AreaMapping, MatchTable, InterpolationTable) are copies the importer writes of each mapping element's node, its declaration's reference and its map key (plan §1.7 O5, C18); the host writes no such row, and a package's text can make no copy disagree with what it copies",
+  "Package key":
+    "its one row per package is keyed by the id the importer mints, which no package states, so no package text can repeat or omit it",
+  "Reference overlay":
+    "its rows (DocumentDirectory, XmlBase, Reference, ReferencePath) are each document's directory and each reference's copy, which the importer writes and resolves from the tree (CP 1.2 (b) and (d), reading 102); the host writes no such row, and the laws a package can break over its references are the oracle's Href form, File exists and Stimulus ref target",
+  "Test overlay":
+    "its rows (TestDocument, TestToken, TestFlag, Named, Section, SectionMember, SectionSelection, SectionOrdering, Site, BranchRule) are copies the importer writes of each test element's node and attributes, collapsed (plan §1.7 O7, C15, C18); the host writes no such row, and a package's text can make no copy disagree with what it copies",
+} as const satisfies Readonly<Record<string, string>>;
