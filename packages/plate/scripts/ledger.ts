@@ -58,8 +58,9 @@ const packageDirectory = path.resolve(import.meta.dirname, "..");
 
 /**
  * The folders under the package whose `*.test.ts` files the tests run, as `vite.config.ts`
- * includes them. The browser files under `src`, `*.browser.test.ts`, which `vite.browser.config.ts`
- * includes, end in `.test.ts` too, so their sources are read beside the unit files'.
+ * includes them. The browser files under `src`, the Node-driven `*.browser.test.ts` and the in-page
+ * `*.dom.test.ts`, which `vite.browser.config.ts` includes, end in `.test.ts` too, so their sources
+ * are read beside the unit files'.
  */
 const testFolders = ["scripts", "src"] as const;
 
