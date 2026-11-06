@@ -3,7 +3,7 @@
 The three [grizzle](https://github.com/bjornpagen/grizzle) tarballs `@qti-pie/pantry` depends on.
 
 grizzle is not on npm yet. These tarballs come from `pnpm pack` on an export of the repository at trunk commit
-`99b621761896c5537f4d24d5ba4f23b9eb97bf15`, so each package installs as the npm release will.
+`64f0427a629ffde66c6d73d5b4ca596fe14001b7`, so each package installs as the npm release will.
 
 grizzle is Bjorn Pagen's. Its repository licenses it under 0BSD (`LICENSE`: "Permission to use, copy, modify,
 and/or distribute this software for any purpose with or without fee is hereby granted"), and the tarballs are
@@ -11,9 +11,9 @@ redistributed here under that license, with the author's agreement. The rest of 
 
 | Tarball                                      | Package                      | Source                          |
 | -------------------------------------------- | ---------------------------- | ------------------------------- |
-| `bjornpagen-grizzle-1.0.0-beta.0.tgz`        | `@bjornpagen/grizzle`        | `packages/grizzle` at `99b6217` |
-| `bjornpagen-grizzle-engine-1.0.0-beta.0.tgz` | `@bjornpagen/grizzle-engine` | `packages/engine` at `99b6217`  |
-| `grizzle-testing-0.0.0.tgz`                  | `@grizzle/testing`           | `packages/testing` at `99b6217` |
+| `bjornpagen-grizzle-1.0.0-beta.0.tgz`        | `@bjornpagen/grizzle`        | `packages/grizzle` at `64f0427` |
+| `bjornpagen-grizzle-engine-1.0.0-beta.0.tgz` | `@bjornpagen/grizzle-engine` | `packages/engine` at `64f0427`  |
+| `grizzle-testing-0.0.0.tgz`                  | `@grizzle/testing`           | `packages/testing` at `64f0427` |
 
 `packages/pantry` depends on the grizzle tarball by path, and on the testing tarball by path as a devDependency. The
 grizzle tarball depends on the engine by version, and `pnpm-workspace.yaml` overrides that version to the engine
@@ -45,11 +45,13 @@ pnpm install --frozen-lockfile --ignore-scripts
 cd && rm -rf ~/.cache/gr8des/grizzle-<commit>
 ```
 
-At `99b6217` this reproduces the three tarballs here byte for byte. Skip `npm pkg set` once
+At `64f0427` this reproduces the three tarballs here byte for byte. Skip `npm pkg set` once
 `packages/testing/package.json` has a version of its own. Then remove any tarball a new name replaces and point
-`packages/pantry/package.json` and `pnpm-workspace.yaml` at the new names, run `pnpm install --force` in this
-repository, check that `pnpm why <package> -r` still finds one version, and one instance, of `effect`, `vite`, `vitest`,
-`@effect/vitest`, `oxlint` and `typescript`, and update the commit hash above.
+`packages/pantry/package.json` and `pnpm-workspace.yaml` at the new names, run `pnpm install --fix-lockfile --force`
+in this repository (at `64f0427`, where only the engine tarball changed, `--force` alone kept the engine's lockfile
+integrity and its installed copy at the previous pin), check that `pnpm why <package> -r` still finds one version, and
+one instance, of `effect`, `vite`, `vitest`, `@effect/vitest`, `oxlint` and `typescript`, and update the commit hash
+above.
 
 ## Mutation runs
 
