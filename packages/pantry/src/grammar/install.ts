@@ -9,11 +9,11 @@
  * is the one module under `src/grammar/` that imports grizzle (`purity.test.ts`), so the generators
  * stay pure and each schema module imports its rosters and relations from here.
  *
- * Six of them, {@link ChildGrammar}, {@link Follow}, {@link Last}, {@link Symbol},
- * {@link GoverningOf} and {@link AttributeGrammar}, declare `pack: "hex"`: a generator builds their
- * rows and the generators' tests review them, so the migration states each constant as one
- * bit-string literal under its row count and digest, which `grizzle check` decodes, rather than a
- * line per row (README, "Closed relations").
+ * Seven of them, {@link ChildGrammar}, {@link Follow}, {@link Last}, {@link Symbol},
+ * {@link GoverningOf}, {@link AttributeGrammar} and {@link AttributeSlotOf}, declare `pack: "hex"`:
+ * a generator builds their rows and the generators' tests review them, so the migration states each
+ * constant as one bit-string literal under its row count and digest, which `grizzle check` decodes,
+ * rather than a line per row (README, "Closed relations").
  *
  * `Follow` and `Last` are keyed by their automaton ({@link ContentModel}), and `Symbol` by its
  * shared model ({@link SharedModel}), as the content grammar generates them (`content.ts`): a
