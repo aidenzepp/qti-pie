@@ -1300,10 +1300,12 @@ exports of it packed identical tarballs, and its testing tarball and its skill a
   The bound was qti-pie's own arithmetic, a re-spelling of grizzle's rule, and at `f66c05b` an index entry counts
   "exact offsets and the null bitmap" (the commit's message), which that arithmetic did not.
 - **Classification:** our misuse, a re-spelled bound. The fix is to hold `keyText` to grizzle's public
-  `keyTextBytes(fields)`, which lane S-ORACLE's interim bound in `src/qti/limits.ts` does, with the octet contract to
-  follow. `keyTextBytes` alone still leaves this axis 8 bytes over, by the null bitmap of its NULL-able hidden columns
-  (the next entry), so the tree holds `keyTextCodePoints` at 646, an interim until grizzle's fix. The fixing commit
-  is recorded here when it lands.
+  `keyTextBytes(fields)`, which lane S-ORACLE's interim bound in `src/qti/limits.ts` does (`e0fcddbf`, "bound keyText
+  by grizzle's own keyTextBytes, 646 code points"). `keyTextBytes` alone still leaves this axis 8 bytes over, by the
+  null bitmap of its NULL-able hidden columns (the next entry), so the tree holds `keyTextCodePoints` at 646, an
+  interim until grizzle's fix. The octet contract follows at grizzle `a2ff5eb`: there the bound is N = 2,587 bytes,
+  the largest for which `keyTextBytes([...widestTextKey, keyText])` still leaves a byte, and it needs no `proves`,
+  because `a2ff5eb`'s bound analysis reads `octetLength` off the predicate.
 
 ### `keyTextBytes` leaves out a tree axis's null bitmap (grizzle defect, open at `f66c05b`, fixing before beta.1)
 
@@ -1319,15 +1321,15 @@ exports of it packed identical tarballs, and its testing tarball and its skill a
   NULL-able. The tree's predecessor axis carries NULL-able hidden columns: the first child has no predecessor. So its
   entry is 8 bytes past what `keyTextBytes` measured. The public doc of `keyTextBytes` (`public/text.ts`) states no NULL
   caveat, and an author can't declare a NULL-able field, so nothing in the fields passed shows the axis's bitmap.
-- **Workaround in this repo.** `src/qti/limits.ts` `keyTextCodePoints` is 646, the most for which `keyTextBytes` still
-  leaves a byte. The further text it sizes costs 7 bytes (header and worst padding), and the bitmap costs 8, so the
-  key text fits exactly where a byte is left. `limits.test.ts` holds 646 to leave a byte and 647 to leave none. The
-  646 is an interim: once grizzle's fix lands, the bound goes back to `keyTextBytes` directly.
+- **Workaround in this repo.** `src/qti/limits.ts` `keyTextCodePoints` is 646 (`e0fcddbf`), the most for which
+  `keyTextBytes` still leaves a byte. The further text it sizes costs 7 bytes (header and worst padding), and the bitmap
+  costs 8, so the key text fits exactly where a byte is left. `limits.test.ts` holds 646 to leave a byte and 647 to
+  leave none. The 646 is an interim: once grizzle's fix lands, the bound goes back to `keyTextBytes` directly.
 - **Classification:** a grizzle defect, confirmed by the grizzle session and fixing before beta.1; nothing to file.
   The grizzle session took it in its lane K: `keyTextBytes(fields)` will promise the worst case over every index
   grizzle plans over those fields, the null bitmap and hidden columns included, under a generated test that holds the
-  bound admitted and tight. The commit of qti-pie's 646 interim and grizzle's fixing commit are recorded here when
-  they land.
+  bound admitted and tight. qti-pie's 646 interim is `e0fcddbf`, and grizzle's fixing commit is recorded here when it
+  lands.
 
 ## A role lacked EXECUTE on what its CHECKs cast to (grizzle defect, fixed in `f66c05b`)
 
