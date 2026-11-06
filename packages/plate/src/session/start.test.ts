@@ -11,6 +11,7 @@ import type { TestSession } from "#plate/session/session.ts";
 import {
   current,
   itemView,
+  itemViews,
   permits,
   present,
   recordStep,
@@ -699,6 +700,49 @@ describe("itemView", () => {
       );
 
       assert.deepStrictEqual([failure.sequenceIndex, failure.count], [0, 6]);
+    }),
+  );
+});
+
+describe("itemViews", () => {
+  it.effect("gives each item's view as itemView does, in the order asked", () =>
+    Effect.gen(function* everyView() {
+      const delivery = yield* guideDelivery();
+      const configuration = yield* configure({});
+      const session = started(delivery, configuration);
+      const [first, ...rest] = session.items;
+      const attempted: TestSession = {
+        ...session,
+        items: [
+          {
+            ...(first ?? assert.fail("the session has no items")),
+            record: { ...(first ?? assert.fail("no items")).record, numAttempts: 1 },
+          },
+          ...rest,
+        ],
+      };
+      const order = [6, 1, 3, 2, 5, 4];
+
+      assert.deepStrictEqual(
+        itemViews(delivery.test, attempted, configuration, order),
+        Result.succeed(
+          order.map((sequenceIndex) => viewAt(delivery, attempted, configuration, sequenceIndex)),
+        ),
+      );
+    }),
+  );
+
+  it.effect("refuses the first sequence index the session lacks: ItemNotInSession", () =>
+    Effect.gen(function* viewsOutside() {
+      const delivery = yield* guideDelivery();
+      const configuration = yield* configure({});
+
+      const failure = failureTagged(
+        itemViews(delivery.test, started(delivery, configuration), configuration, [2, 7, 0]),
+        "ItemNotInSession",
+      );
+
+      assert.deepStrictEqual([failure.sequenceIndex, failure.count], [7, 6]);
     }),
   );
 });

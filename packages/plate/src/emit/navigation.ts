@@ -103,18 +103,26 @@ const stateWords = {
 } as const satisfies Readonly<Record<NavigationItemState, MessageKey>>;
 
 /**
+ * Give the values the intents a navigation allows post, so a button's intent is tested against
+ * them by membership: a search of `state.allowed` for each item's button grows with the square of
+ * the item count.
+ *
+ * @param state The navigation.
+ * @returns Each intent of `state.allowed` as `encodeIntent` writes it.
+ */
+const allowedValues = (state: NavigationState): ReadonlySet<string> =>
+  new Set(state.allowed.map((intent) => encodeIntent(intent)));
+
+/**
  * Tell whether a navigation allows an intent, by the value each posts, so `go` matches only `go`
  * to the same item.
  *
- * @param state The navigation.
+ * @param allowed The values the navigation's allowed intents post, from {@link allowedValues}.
  * @param intent The intent.
- * @returns Whether `state.allowed` holds `intent`.
+ * @returns Whether the navigation's allowed intents hold `intent`.
  */
-const allows = (state: NavigationState, intent: Intent): boolean => {
-  const posted = encodeIntent(intent);
-
-  return state.allowed.some((allowed) => encodeIntent(allowed) === posted);
-};
+const allows = (allowed: ReadonlySet<string>, intent: Intent): boolean =>
+  allowed.has(encodeIntent(intent));
 
 /**
  * Give the attributes a navigation button computes from its intent: `data-intent`, and `disabled`
@@ -122,11 +130,17 @@ const allows = (state: NavigationState, intent: Intent): boolean => {
  *
  * @param state The navigation.
  * @param intent The button's intent.
+ * @param allowed The values the navigation's allowed intents post, which the item list computes
+ *   once for all its buttons; computed from `state` by default.
  * @returns The button's attributes beside its marker.
  */
-const intentProps = (state: NavigationState, intent: Intent): Attributes => ({
+const intentProps = (
+  state: NavigationState,
+  intent: Intent,
+  allowed: ReadonlySet<string> = allowedValues(state),
+): Attributes => ({
   "data-intent": encodeIntent(intent),
-  ...when(!allows(state, intent), { disabled: true }),
+  ...when(!allows(allowed, intent), { disabled: true }),
 });
 
 /**
@@ -181,13 +195,14 @@ const itemList = (
   emit: NavigationEmit,
 ): Result.Result<Element, PartSwapRefused> =>
   Result.gen(function* navigationItems() {
+    const allowed = allowedValues(state);
     const entries: Element[] = [];
     for (const item of state.items) {
       const itemButton = yield* navigationPart(
         emit.parts,
         "itemButton",
         {
-          ...intentProps(state, { kind: "go", sequenceIndex: item.sequenceIndex }),
+          ...intentProps(state, { kind: "go", sequenceIndex: item.sequenceIndex }, allowed),
           ...when(item.current, { "aria-current": "step" }),
         },
         [text(itemLabel(state, emit, item))],

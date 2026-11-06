@@ -20,7 +20,7 @@ import type { Item } from "#plate/model/item.ts";
 import { fresh } from "#plate/model/record.ts";
 import { itemRefsIn } from "#plate/model/item-refs.ts";
 import type { ItemRef, Test, TestPart } from "#plate/model/test.ts";
-import { itemConfiguration, sessionControl, UnknownItemRef } from "#plate/session/control.ts";
+import { itemConfiguration, sessionControls, UnknownItemRef } from "#plate/session/control.ts";
 import type { SessionControl } from "#plate/session/control.ts";
 import type { Responses, SessionItem, Step, TestSession } from "#plate/session/session.ts";
 import type { Accepted, AcceptedTest } from "#plate/validate/verdict.ts";
@@ -234,16 +234,71 @@ const placesOf = (test: Test): readonly Place[] =>
   test.parts.flatMap((part) => itemRefsIn(part.children).map((ref) => ({ part, ref })));
 
 /**
- * Find the place of an item ref in a test.
+ * What a read of a session derives from the test once, so each item it reads is looked up instead
+ * of found by walking the test again, which would grow with the square of the item count.
+ */
+interface Index {
+  /**
+   * Each item ref's session control, by identifier.
+   */
+  readonly controls: ReadonlyMap<string, SessionControl>;
+  /**
+   * The identifiers of the session's ended parts.
+   */
+  readonly ended: ReadonlySet<string>;
+  /**
+   * Each item ref's place, by identifier.
+   */
+  readonly places: ReadonlyMap<string, Place>;
+  /**
+   * The test's identifier, which an {@link UnknownItemRef} names.
+   */
+  readonly test: string;
+}
+
+/**
+ * Derive what a read of a session looks its items up in, in one walk of the test each.
+ *
+ * An identifier keeps its first item ref in document order, as a search of the test finds it.
  *
  * @param test The test.
- * @param ref The item ref's identifier.
- * @returns The place, or {@link UnknownItemRef} when the test holds no item ref of that identifier.
+ * @param session The session.
+ * @returns The index.
  */
-const placeOf = (test: Test, ref: string): Result.Result<Place, UnknownItemRef> =>
+const indexOf = (test: Test, session: TestSession): Index => {
+  const places = new Map<string, Place>();
+  for (const place of placesOf(test)) {
+    if (!places.has(place.ref.identifier)) {
+      places.set(place.ref.identifier, place);
+    }
+  }
+
+  return {
+    controls: sessionControls(test),
+    ended: new Set(
+      session.parts.filter((part) => part.status === "ended").map((part) => part.identifier),
+    ),
+    places,
+    test: test.identifier,
+  };
+};
+
+/**
+ * Look up an item ref's entry in one of an index's maps.
+ *
+ * @param index The index.
+ * @param entries The map.
+ * @param ref The item ref's identifier.
+ * @returns The entry, or {@link UnknownItemRef} when the test holds no item ref of that identifier.
+ */
+const lookUp = <A>(
+  index: Index,
+  entries: ReadonlyMap<string, A>,
+  ref: string,
+): Result.Result<A, UnknownItemRef> =>
   Result.fromOption(
-    Arr.findFirst(placesOf(test), (place) => place.ref.identifier === ref),
-    () => new UnknownItemRef({ ref, test: test.identifier }),
+    Option.fromUndefinedOr(entries.get(ref)),
+    () => new UnknownItemRef({ ref, test: index.test }),
   );
 
 /**
@@ -728,7 +783,7 @@ interface Inspected {
  * attempt limit is above 0 and the record's `numAttempts`, the count of processed attempts, has
  * reached it.
  *
- * @param test The test.
+ * @param index The test, indexed for the session.
  * @param session The session.
  * @param configuration The host's configuration.
  * @param item The session item.
@@ -736,18 +791,16 @@ interface Inspected {
  *   names.
  */
 const inspect = (
-  test: Test,
+  index: Index,
   session: TestSession,
   configuration: Configuration,
   item: SessionItem,
 ): Result.Result<Inspected, UnknownItemRef> =>
   Result.gen(function* inspectItem() {
-    const place = yield* placeOf(test, item.ref);
-    const control = yield* sessionControl(test, item.ref);
+    const place = yield* lookUp(index, index.places, item.ref);
+    const control = yield* lookUp(index, index.controls, item.ref);
     const { seed: _hostSeed, ...withControl } = itemConfiguration(configuration, control);
-    const ended = session.parts.some(
-      (part) => part.identifier === place.part.identifier && part.status === "ended",
-    );
+    const ended = index.ended.has(place.part.identifier);
     const limit = withControl.maxAttempts;
 
     return {
@@ -777,19 +830,19 @@ const valuesOf = (item: SessionItem): Responses =>
 /**
  * Build the view of one session item.
  *
- * @param test The test.
+ * @param index The test, indexed for the session.
  * @param session The session.
  * @param configuration The host's configuration.
  * @param item The session item.
  * @returns The view, or {@link UnknownItemRef}.
  */
 const viewOf = (
-  test: Test,
+  index: Index,
   session: TestSession,
   configuration: Configuration,
   item: SessionItem,
 ): Result.Result<ItemView, UnknownItemRef> =>
-  Result.map(inspect(test, session, configuration, item), (inspected) => ({
+  Result.map(inspect(index, session, configuration, item), (inspected) => ({
     configuration: inspected.configuration,
     count: session.items.length,
     disabled: inspected.closed,
@@ -822,8 +875,54 @@ export const itemView = (
   sequenceIndex: number,
 ): Result.Result<ItemView, ItemNotInSession | UnknownItemRef> =>
   Result.flatMap(itemAt(session, sequenceIndex), ([, item]) =>
-    viewOf(test.test, session, configuration, item),
+    viewOf(indexOf(test.test, session), session, configuration, item),
   );
+
+/**
+ * Give the views of several items of a test session, as {@link itemView} gives each, reading the
+ * test once for all of them.
+ *
+ * A read of every item, such as a navigation's, takes its views here: a call of {@link itemView}
+ * per item reads the whole test and session each time, which grows with the square of the item
+ * count.
+ *
+ * @example
+ *   itemViews(test, session, configuration, [1, 2, 3]); // the views of items 1 to 3, in that order
+ *
+ * @param test The test the session was started from.
+ * @param session The session.
+ * @param configuration The host's configuration.
+ * @param sequenceIndices The items' sequence indices, each counted from 1.
+ * @returns Each item's view, in the order of `sequenceIndices`; {@link ItemNotInSession} for the
+ *   first sequence index the session lacks; {@link UnknownItemRef} when the test holds no item ref
+ *   an item names, as when the session belongs to another test.
+ */
+export const itemViews = (
+  test: AcceptedTest,
+  session: TestSession,
+  configuration: Configuration,
+  sequenceIndices: readonly number[],
+): Result.Result<readonly ItemView[], ItemNotInSession | UnknownItemRef> => {
+  const index = indexOf(test.test, session);
+  const bySequence = new Map<number, SessionItem>();
+  for (const item of session.items) {
+    if (!bySequence.has(item.sequenceIndex)) {
+      bySequence.set(item.sequenceIndex, item);
+    }
+  }
+
+  return Result.all(
+    sequenceIndices.map((sequenceIndex) =>
+      Result.flatMap(
+        Result.fromOption(
+          Option.fromUndefinedOr(bySequence.get(sequenceIndex)),
+          () => new ItemNotInSession({ count: session.items.length, sequenceIndex }),
+        ),
+        (item) => viewOf(index, session, configuration, item),
+      ),
+    ),
+  );
+};
 
 /**
  * The configuration a reader of a session passes where the test and the session alone decide what
@@ -850,17 +949,17 @@ export const readingBase: Configuration = {
 /**
  * Say what one session item may be shown in.
  *
- * @param test The test.
+ * @param index The test, indexed for the session.
  * @param session The session.
  * @param item The session item.
  * @returns Its permissions, or {@link UnknownItemRef}.
  */
 const permitsOf = (
-  test: Test,
+  index: Index,
   session: TestSession,
   item: SessionItem,
 ): Result.Result<Permits, UnknownItemRef> =>
-  Result.map(inspect(test, session, readingBase, item), ({ closed, control }) => ({
+  Result.map(inspect(index, session, readingBase, item), ({ closed, control }) => ({
     review: closed && control.allowReview,
     solution: closed && control.showSolution,
   }));
@@ -880,7 +979,9 @@ export const permits = (
   session: TestSession,
   sequenceIndex: number,
 ): Result.Result<Permits, ItemNotInSession | UnknownItemRef> =>
-  Result.flatMap(itemAt(session, sequenceIndex), ([, item]) => permitsOf(test.test, session, item));
+  Result.flatMap(itemAt(session, sequenceIndex), ([, item]) =>
+    permitsOf(indexOf(test.test, session), session, item),
+  );
 
 /**
  * Give what a test session shows now: the current item's view while the test is open, the summary
@@ -901,16 +1002,17 @@ export const current = (
   session: TestSession,
   configuration: Configuration,
 ): Result.Result<Current, ItemNotInSession | UnknownItemRef> => {
+  const index = indexOf(test.test, session);
   if (session.status === "interacting") {
     return Result.flatMap(itemAtPosition(session), ([, item]) =>
-      viewOf(test.test, session, configuration, item),
+      viewOf(index, session, configuration, item),
     );
   }
 
   return Result.map(
     Result.all(
       session.items.map((item) =>
-        Result.map(permitsOf(test.test, session, item), (granted): SummaryItem => ({
+        Result.map(permitsOf(index, session, item), (granted): SummaryItem => ({
           numAttempts: item.record.numAttempts,
           permits: granted,
           presented: item.presented,
