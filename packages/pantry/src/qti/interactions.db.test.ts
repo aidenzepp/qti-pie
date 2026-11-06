@@ -3,15 +3,22 @@
  * refused state is one the law's model refuses, named by the law it breaks, and each accepted edge
  * is one its own laws admit.
  *
- * A row whose law is a row CHECK, a containment into a closed relation (a CHECK on the row's
- * table) or a key is written through the author role (`db.apply`): PostgreSQL judges it as the row
- * is inserted, every foreign key into `Node`, `Declaration` and the other overlays being deferred,
- * so none speaks first, and the outcome is `invariant-rejected` with the expected law among its
- * `laws` (membership, since a merged native names several, C22). A row whose acceptance by its own
- * laws is the contract, and a law that is a foreign key between two stray rows, is written by a
- * direct SQL writer: the author login, `SET ROLE` to the author role, at SERIALIZABLE, every
- * constraint deferred and then the ones under test set immediate, so PostgreSQL's SQLSTATE and the
- * constraint it names are the verdict, and the transaction rolls back.
+ * A row whose law is a row CHECK, a containment into a closed relation (a CHECK on the row's table)
+ * or a key is written through the author role (`db.apply`): PostgreSQL judges it as the row is
+ * inserted, every foreign key into `Node`, `Declaration` and the other overlays being deferred, so
+ * none speaks first, and the outcome is `invariant-rejected` with the expected law among its `laws`
+ * (membership, since a merged native names several, C22). A row that is a member of an immutable
+ * owner's family is inserted with its owner in the same change, a `Choice` or a `Hottext` with its
+ * identifier's `ChoiceVariableName` and a `SectionFeedbackRef` with its placement's `SectionScope`
+ * (grizzle's README, "Families": "An immutable owner's family is fixed when the owner is
+ * inserted"), so the write compiles and the law under test is the verdict. A row whose acceptance
+ * by its own laws is the contract, and a law that is a foreign key between two stray rows, is
+ * written by a direct SQL writer (grizzle's README, "Direct SQL access"): the author login, `SET
+ * ROLE` to the author role, at SERIALIZABLE, each row inserted into its table with every column a
+ * writer fills, every constraint deferred and then the ones under test set immediate, so
+ * PostgreSQL's SQLSTATE and the constraint it names are the verdict, and the transaction rolls
+ * back. A role writes a table, never its own view of it, which it holds SELECT on alone (README,
+ * "Security model").
  *
  * The cases over a whole imported item need the importer's ChangeSet (Q5.15), and are listed in
  * Q5.09's report for the network seat's probe: a gap and a hottext owned through `nearest`, a
@@ -50,6 +57,7 @@ import {
   InteractionAttribute,
   nilUuid,
   SectionFeedbackRef,
+  SectionScope,
   Slider,
 } from "#pantry/qti/interactions.ts";
 import { AuthorApp } from "#pantry/qti/logins.ts";
@@ -254,6 +262,21 @@ const choiceOf = (
 });
 
 /**
+ * The projection row of an identifier the stray rows use, the owner of its choices', hottexts' and
+ * declarations' families, which a change inserts beside its members; its counts are the families'
+ * to draw.
+ *
+ * @param identifier - The identifier.
+ * @returns The row.
+ */
+const nameOf = (identifier: string) =>
+  ({
+    document: stray,
+    identifier,
+    rootKind: "qti-assessment-item",
+  }) satisfies Addition<typeof ChoiceVariableName>;
+
+/**
  * A stray hottext of a hottext interaction.
  *
  * @param at - The hottext's number.
@@ -333,10 +356,29 @@ const isServerError = (error: unknown): error is DatabaseError =>
   error instanceof Error && "code" in error && "constraint" in error;
 
 /**
- * A row a direct writer inserts into one of the author role's views: its columns as the view names
- * them, a closed id by its code, a boolean as itself.
+ * A row a direct writer inserts into one of `Qti`'s tables: every column it fills by name, a closed
+ * id by its code, a boolean as itself.
  */
 type SqlRow = Readonly<Record<string, string | number | boolean>>;
+
+/**
+ * Read the columns of one of `Qti`'s tables a direct writer fills: every live column PostgreSQL
+ * does not generate, a family's hidden ones among them (README, "Direct SQL access": a family's
+ * values are a direct writer's to fill).
+ *
+ * @param client - The session.
+ * @param table - The table.
+ * @returns The columns' names, none for a table the schema does not hold.
+ */
+const writtenColumnsOf = (client: Client, table: string) =>
+  rowsOf<{ readonly name: string }>(
+    client,
+    `SELECT a.attname AS name FROM pg_catalog.pg_attribute a
+      WHERE a.attrelid = pg_catalog.to_regclass($1) AND a.attnum > 0 AND NOT a.attisdropped
+        AND a.attgenerated = ''
+      ORDER BY a.attnum`,
+    [`${qtiSchema}.${table}`],
+  ).pipe(Effect.map((rows) => rows.map(({ name }) => name)));
 
 /**
  * The foreign keys from one of `Qti`'s tables into another, by constraint name, read from the
@@ -359,32 +401,41 @@ const foreignKeys = (client: Client, from: string, to: string) =>
   ).pipe(Effect.map((rows) => rows.map(({ conname }) => conname)));
 
 /**
- * Insert rows as the author role, every constraint deferred, then set the given ones immediate,
- * and roll back: the server's verdict on the rows by those constraints alone, or none when the
- * rows' own laws and those constraints accept them.
+ * Insert rows into their tables as the author role, every constraint deferred, then set the given
+ * ones immediate, and roll back: the server's verdict on the rows by those constraints alone, or
+ * none when the rows' own laws and those constraints accept them. Each row fills exactly its
+ * table's written columns, or the case fails before any statement runs.
  *
  * @param client - The session.
- * @param inserts - Each row, with the author role's view it is inserted into.
+ * @param inserts - Each row, with the table it is inserted into.
  * @param immediate - The constraints to check at once after the inserts.
  * @returns The server's error, or none when every statement succeeded; fails with any other
  *   failure.
  */
 const deferredInsert = (
   client: Client,
-  inserts: readonly { readonly row: SqlRow; readonly view: string }[],
+  inserts: readonly { readonly row: SqlRow; readonly table: string }[],
   immediate: readonly string[],
 ) =>
   Effect.gen(function* insertDeferred() {
+    for (const { row, table } of inserts) {
+      assert.sameMembers(
+        Object.keys(row),
+        yield* writtenColumnsOf(client, table),
+        `${table}: the row fills every column a direct writer fills`,
+      );
+    }
+
     yield* rowsOf(client, "BEGIN ISOLATION LEVEL SERIALIZABLE");
 
     const outcome = yield* Effect.gen(function* statements() {
       yield* rowsOf(client, `SET ROLE ${authorRole}`);
       yield* rowsOf(client, "SET CONSTRAINTS ALL DEFERRED");
-      for (const { row, view } of inserts) {
+      for (const { row, table } of inserts) {
         const columns = Object.keys(row);
         yield* rowsOf(
           client,
-          `INSERT INTO ${authorRole}.${view} (${columns.join(", ")}) VALUES (${columns
+          `INSERT INTO ${qtiSchema}.${table} (${columns.join(", ")}) VALUES (${columns
             .map((_, at) => `$${String(at + 1)}`)
             .join(", ")})`,
           Object.values(row),
@@ -423,7 +474,7 @@ const codeOf = (handles: readonly string[], handle: string): number => {
  * A count bound as a direct writer's row, every closed id by its code.
  *
  * @param fields - The row as the API writes it.
- * @returns The view's row.
+ * @returns The table's row.
  */
 const countBoundSql = (fields: Fact<typeof CountBound>) =>
   ({
@@ -449,7 +500,7 @@ const countBoundSql = (fields: Fact<typeof CountBound>) =>
  * A bound variable as a direct writer's row, every closed id by its code.
  *
  * @param fields - The row as the API writes it.
- * @returns The view's row.
+ * @returns The table's row.
  */
 const boundVariableSql = (fields: Fact<typeof BoundVariable>) =>
   ({
@@ -469,7 +520,7 @@ const boundVariableSql = (fields: Fact<typeof BoundVariable>) =>
  * A content reference as a direct writer's row, every closed id by its code.
  *
  * @param fields - The row as the API writes it.
- * @returns The view's row.
+ * @returns The table's row.
  */
 const referenceSql = (fields: Fact<typeof FeedbackRef>) =>
   ({
@@ -488,7 +539,7 @@ const referenceSql = (fields: Fact<typeof FeedbackRef>) =>
  * A hotspot as a direct writer's row, every closed id by its code.
  *
  * @param fields - The row as the API writes it.
- * @returns The view's row.
+ * @returns The table's row.
  */
 const hotspotSql = (fields: Fact<typeof Hotspot>) =>
   ({
@@ -512,7 +563,7 @@ const hotspotSql = (fields: Fact<typeof Hotspot>) =>
  *
  * @param identifier - The name it makes.
  * @param declaration - The declaration it resolves to.
- * @returns The view's row.
+ * @returns The table's row.
  */
 const indexReference = (identifier: string, declaration: Fact<typeof FeedbackRef>["declaration"]) =>
   referenceSql(
@@ -521,12 +572,12 @@ const indexReference = (identifier: string, declaration: Fact<typeof FeedbackRef
 
 /**
  * A used identifier's projection row as a direct writer's row, its counts written as the families
- * would draw them, its root kind by its code.
+ * would draw them, its root kind by its code: no assembly places it, so its placed counts are 0.
  *
  * @param identifier - The identifier.
  * @param rootKind - Its document's root kind.
  * @param counts - Its counts of choices, declarations and hottexts.
- * @returns The view's row.
+ * @returns The table's row.
  */
 const nameSql = (
   identifier: string,
@@ -543,6 +594,8 @@ const nameSql = (
     document: stray,
     hottexts: String(counts.hottexts),
     identifier,
+    placed_choices: "0",
+    placed_hottexts: "0",
     root_kind: codeOf(NodeKind.handles, rootKind),
   }) satisfies SqlRow;
 
@@ -706,7 +759,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
               const refused = Option.getOrUndefined(
                 yield* deferredInsert(
                   client,
-                  [{ row: countBoundSql(row), view: "count_bound" }],
+                  [{ row: countBoundSql(row), table: "count_bound" }],
                   [],
                 ),
               );
@@ -736,7 +789,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
                 yield* deferredInsert(
                   client,
                   [
-                    { row: boundVariableSql(boundRow(0)), view: "bound_variable" },
+                    { row: boundVariableSql(boundRow(0)), table: "bound_variable" },
                     {
                       row: countBoundSql(
                         boundOf({
@@ -748,7 +801,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
                           mostValue: most,
                         }),
                       ),
-                      view: "count_bound",
+                      table: "count_bound",
                     },
                   ],
                   keys,
@@ -789,7 +842,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
                           kind: "qti-extended-text-interaction",
                         }),
                       ),
-                      view: "bound_variable",
+                      table: "bound_variable",
                     },
                     {
                       row: countBoundSql(
@@ -806,7 +859,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
                           mostValue: written ? 2n : 0n,
                         }),
                       ),
-                      view: "count_bound",
+                      table: "count_bound",
                     },
                   ],
                   keys,
@@ -854,7 +907,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
             const client = yield* loginSession;
             for (const row of [hotspotOf(), hotspotOf({ area: "rect", elements: 1n })]) {
               const refused = Option.getOrUndefined(
-                yield* deferredInsert(client, [{ row: hotspotSql(row), view: "hotspot" }], []),
+                yield* deferredInsert(client, [{ row: hotspotSql(row), table: "hotspot" }], []),
               );
 
               assert.isUndefined(refused, refused?.message);
@@ -918,13 +971,17 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
             assert.isTrue(rejectedBy(builtIn, containedIn("FeedbackRef", "ContentReference")));
 
             const placed = yield* db.apply(
-              ChangeSet.empty(Author).insert(SectionFeedbackRef, [
-                {
-                  ...feedbackOf({ baseType: "float" }),
-                  assembly: stray,
-                  instance: strayNode(1),
-                },
-              ]),
+              ChangeSet.empty(Author)
+                .insert(SectionScope, [
+                  { assembly: stray, document: stray, instance: strayNode(1) },
+                ])
+                .insert(SectionFeedbackRef, [
+                  {
+                    ...feedbackOf({ baseType: "float" }),
+                    assembly: stray,
+                    instance: strayNode(1),
+                  },
+                ]),
               {},
             );
             assert.isTrue(
@@ -949,7 +1006,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
             const undeclared = Option.getOrUndefined(
               yield* deferredInsert(
                 client,
-                [{ row: indexReference("UNDECLARED", stray), view: "var_ref" }],
+                [{ row: indexReference("UNDECLARED", stray), table: "var_ref" }],
                 keys,
               ),
             );
@@ -959,7 +1016,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
             const builtIn = Option.getOrUndefined(
               yield* deferredInsert(
                 client,
-                [{ row: indexReference("completionStatus", nilUuid), view: "var_ref" }],
+                [{ row: indexReference("completionStatus", nilUuid), table: "var_ref" }],
                 keys,
               ),
             );
@@ -986,7 +1043,9 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
               { ...choiceOf(1, "A"), interaction: strayNode(98) },
             ]) {
               const choices = yield* db.apply(
-                ChangeSet.empty(Author).insert(Choice, [choiceOf(0, "A"), second]),
+                ChangeSet.empty(Author)
+                  .insert(ChoiceVariableName, [nameOf("A")])
+                  .insert(Choice, [choiceOf(0, "A"), second]),
                 {},
               );
               assert.isTrue(
@@ -996,19 +1055,20 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
             }
 
             const hottexts = yield* db.apply(
-              ChangeSet.empty(Author).insert(Hottext, [
-                hottextOf(0),
-                hottextOf(1, { nearest: stray, nearestKind: "document" }),
-              ]),
+              ChangeSet.empty(Author)
+                .insert(ChoiceVariableName, [nameOf("H")])
+                .insert(Hottext, [
+                  hottextOf(0),
+                  hottextOf(1, { nearest: stray, nearestKind: "document" }),
+                ]),
               {},
             );
             assert.isTrue(rejectedBy(hottexts, keyOver("Hottext", ["document", "identifier"])));
 
             const classes = yield* db.apply(
-              ChangeSet.empty(Author).insert(Choice, [
-                choiceOf(0, "A", "qti-gap"),
-                choiceOf(1, "A", "qti-gap-text"),
-              ]),
+              ChangeSet.empty(Author)
+                .insert(ChoiceVariableName, [nameOf("A")])
+                .insert(Choice, [choiceOf(0, "A", "qti-gap"), choiceOf(1, "A", "qti-gap-text")]),
               {},
             );
             assert.isFalse(
@@ -1027,12 +1087,6 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
           // declaration; a simple choice named numAttempts in an item.
           Effect.gen(function* choiceNotVariable() {
             const db = yield* Db.open(AuthorApp.roles.author, {});
-            const named = (identifier: string) =>
-              ({
-                document: stray,
-                identifier,
-                rootKind: "qti-assessment-item",
-              }) satisfies Addition<typeof ChoiceVariableName>;
             const declared = {
               baseType: "identifier",
               baseTypeLexical: "identifier",
@@ -1054,7 +1108,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
 
             const choice = yield* db.apply(
               ChangeSet.empty(Author)
-                .insert(ChoiceVariableName, [named("A")])
+                .insert(ChoiceVariableName, [nameOf("A")])
                 .insert(Choice, [choiceOf(0, "A")])
                 .insert(Declaration, [declared]),
               {},
@@ -1066,7 +1120,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
 
             const hottext = yield* db.apply(
               ChangeSet.empty(Author)
-                .insert(ChoiceVariableName, [named("A")])
+                .insert(ChoiceVariableName, [nameOf("A")])
                 .insert(Hottext, [hottextOf(0, { identifier: "A" })])
                 .insert(Declaration, [declared]),
               {},
@@ -1078,7 +1132,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
 
             const builtIn = yield* db.apply(
               ChangeSet.empty(Author)
-                .insert(ChoiceVariableName, [named("numAttempts")])
+                .insert(ChoiceVariableName, [nameOf("numAttempts")])
                 .insert(Choice, [choiceOf(0, "numAttempts")]),
               {},
             );
@@ -1133,7 +1187,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
               ],
             ] as const) {
               const refused = Option.getOrUndefined(
-                yield* deferredInsert(client, [{ row, view: "choice_variable_name" }], []),
+                yield* deferredInsert(client, [{ row, table: "choice_variable_name" }], []),
               );
 
               if (refusedBy === undefined) {
@@ -1159,7 +1213,9 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
           Effect.gen(function* derived() {
             const db = yield* Db.open(AuthorApp.roles.author, {});
             const hottext = yield* db.apply(
-              ChangeSet.empty(Author).insert(Hottext, [hottextOf(0, { nearest: stray })]),
+              ChangeSet.empty(Author)
+                .insert(ChoiceVariableName, [nameOf("H")])
+                .insert(Hottext, [hottextOf(0, { nearest: stray })]),
               {},
             );
             assert.isTrue(rejectedBy(hottext, checkNamed("Hottext", "E1_derived")));

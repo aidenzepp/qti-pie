@@ -6,10 +6,12 @@
  * A row whose own laws are row CHECKs is written through the author role (`db.apply`), and the
  * outcome is `invariant-rejected` with the expected law among its `laws` (membership, since a
  * merged native names several, C22). A row that breaks a deferred foreign key, or whose acceptance
- * by its own laws alone is the contract, is written by a direct SQL writer: the author login,
- * `SET ROLE` to the author role, at SERIALIZABLE, its foreign keys deferred and then the one under
- * test set immediate, so PostgreSQL's SQLSTATE and the constraint it names are the verdict, and the
- * transaction rolls back.
+ * by its own laws alone is the contract, is written by a direct SQL writer (grizzle's README,
+ * "Direct SQL access"): the author login, `SET ROLE` to the author role, at SERIALIZABLE, the row
+ * inserted into its table with every column a writer fills, its foreign keys deferred and then the
+ * one under test set immediate, so PostgreSQL's SQLSTATE and the constraint it names are the
+ * verdict, and the transaction rolls back. A role writes a table, never its own view of it, which
+ * it holds SELECT on alone (README, "Security model").
  *
  * Every case writes rows no stored node names, so none needs a document on the lease. The cases
  * over a stored tree (a node of an arm's kind without its arm row, a prefix declared twice on one
@@ -27,6 +29,7 @@ import { describe } from "vitest";
 import { loginConnection } from "#pantry/db/connection.ts";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import {
+  Flag,
   KindByNameUnder,
   KindNamespace,
   NodeKind,
@@ -37,6 +40,7 @@ import {
 } from "#pantry/grammar/install.ts";
 import { Document, OpenElementName, XmlStandalone } from "#pantry/qti/chardata.ts";
 import { AuthorApp } from "#pantry/qti/logins.ts";
+import { manifestPath } from "#pantry/qti/package.ts";
 import { Author } from "#pantry/qti/roles.ts";
 import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
 import { mathmlNamespace } from "#pantry/vocab/namespaces.ts";
@@ -115,10 +119,29 @@ const isServerError = (error: unknown): error is DatabaseError =>
   error instanceof Error && "code" in error && "constraint" in error;
 
 /**
- * A row a direct writer inserts into one of the author role's views: its columns as the view names
- * them, a closed id by its code.
+ * A row a direct writer inserts into one of `Qti`'s tables: every column it fills by name, a closed
+ * id by its code.
  */
 type SqlRow = Readonly<Record<string, string | number>>;
+
+/**
+ * Read the columns of one of `Qti`'s tables a direct writer fills: every live column PostgreSQL
+ * does not generate, a family's hidden ones among them (README, "Direct SQL access": a family's
+ * values are a direct writer's to fill).
+ *
+ * @param client - The session.
+ * @param table - The table.
+ * @returns The columns' names, none for a table the schema does not hold.
+ */
+const writtenColumnsOf = (client: Client, table: string) =>
+  rowsOf<{ readonly name: string }>(
+    client,
+    `SELECT a.attname AS name FROM pg_catalog.pg_attribute a
+      WHERE a.attrelid = pg_catalog.to_regclass($1) AND a.attnum > 0 AND NOT a.attisdropped
+        AND a.attgenerated = ''
+      ORDER BY a.attnum`,
+    [`${qtiSchema}.${table}`],
+  ).pipe(Effect.map((rows) => rows.map(({ name }) => name)));
 
 /**
  * The foreign keys from one of `Qti`'s tables into another, by constraint name, read from the
@@ -141,20 +164,26 @@ const foreignKeys = (client: Client, from: string, to: string) =>
   ).pipe(Effect.map((rows) => rows.map(({ conname }) => conname)));
 
 /**
- * Insert one row as the author role, every foreign key deferred, then set the given ones
- * immediate, and roll back: the server's verdict on the row by those constraints alone, or none
- * when the row's own laws and those constraints accept it.
+ * Insert one row into its table as the author role, every foreign key deferred, then set the given
+ * ones immediate, and roll back: the server's verdict on the row by those constraints alone, or
+ * none when the row's own laws and those constraints accept it.
  *
  * @param client - The session.
- * @param view - The author role's view to insert into.
- * @param row - The row.
+ * @param table - The table to insert into.
+ * @param row - The row, exactly the table's written columns; any other row fails the case before
+ *   any statement runs.
  * @param immediate - The constraints to check at once after the insert.
  * @returns The server's error, or none when every statement succeeded; fails with any other
  *   failure.
  */
-const deferredInsert = (client: Client, view: string, row: SqlRow, immediate: readonly string[]) =>
+const deferredInsert = (client: Client, table: string, row: SqlRow, immediate: readonly string[]) =>
   Effect.gen(function* insertDeferred() {
     const columns = Object.keys(row);
+    assert.sameMembers(
+      columns,
+      yield* writtenColumnsOf(client, table),
+      `${table}: the row fills every column a direct writer fills`,
+    );
     yield* rowsOf(client, "BEGIN ISOLATION LEVEL SERIALIZABLE");
 
     const outcome = yield* Effect.gen(function* statements() {
@@ -162,7 +191,7 @@ const deferredInsert = (client: Client, view: string, row: SqlRow, immediate: re
       yield* rowsOf(client, "SET CONSTRAINTS ALL DEFERRED");
       yield* rowsOf(
         client,
-        `INSERT INTO ${authorRole}.${view} (${columns.join(", ")}) VALUES (${columns
+        `INSERT INTO ${qtiSchema}.${table} (${columns.join(", ")}) VALUES (${columns
           .map((_, at) => `$${String(at + 1)}`)
           .join(", ")})`,
         Object.values(row),
@@ -202,7 +231,12 @@ const codeOf = (handles: readonly string[], handle: string): number => {
 
 /**
  * Each arm and the document row, with a row of it whose node is no stored node, and the table its
- * containment into `Node` is installed on.
+ * containment into `Node` is installed on. The document row is the manifest's, lawful on its own
+ * CHECKs: every optional field its null object (no declaration, so `none` version and standalone
+ * and the empty encoding; the `none` resource type, which only `imsmanifest.xml` bears, by
+ * `RootOfType`), no family member yet (each count 0), no site naming it (so its context is the
+ * empty set and its nearest context the document node, by `E1_derived`), and its node's copied
+ * tuple the document node's.
  */
 const arms: readonly { readonly row: SqlRow; readonly table: string }[] = [
   { row: { node: strayNode, value: "a comment" }, table: "comment" },
@@ -210,15 +244,34 @@ const arms: readonly { readonly row: SqlRow; readonly table: string }[] = [
   { row: { node: strayNode, value: "<!DOCTYPE r>" }, table: "doctype" },
   {
     row: {
+      assembled: "false",
+      bindings: 0,
       charset: "UTF-8",
+      choices: 0,
+      context: "0".repeat(Flag.handles.length),
+      context_nearest: strayNode,
+      context_nearest_kind: codeOf(NodeKind.handles, "document"),
       encoding: "",
       export_charset: "UTF-8",
+      hottexts: 0,
+      idref_targets: 0,
+      ids: 0,
+      langs: 0,
       node: strayNode,
+      node_children: 1,
+      node_document: strayNode,
+      node_governs: codeOf(TypeName.handles, "none"),
+      node_kind: codeOf(NodeKind.handles, "document"),
+      node_parent_kind: codeOf(NodeKind.handles, "document"),
+      node_start: 0,
       package: strayNode,
-      path: "item.xml",
+      path: manifestPath,
       resource_type: codeOf(ResourceType.handles, "none"),
-      root_kind: codeOf(NodeKind.handles, "qti-assessment-item"),
+      root_kind: codeOf(NodeKind.handles, "cp:manifest"),
       standalone: codeOf(XmlStandalone.handles, "none"),
+      targeted_by: 0,
+      variables: 0,
+      version: codeOf(SchemaVersion.handles, "3.0.1"),
       xml_version: "none",
     },
     table: "document",
@@ -379,7 +432,8 @@ describe.skipIf(!hasLease)("qti/chardata.db.test.ts, on the lease", () => {
         () =>
           // Oracle: PostgreSQL, the `Document` CHECK (q1.02's no-declaration rule), judged as the
           // row is inserted.
-          // Bound: each field a declaration alone writes, set without one.
+          // Bound: each field a declaration alone writes, set without one, on the manifest's row,
+          // whose `none` resource type `RootOfType` admits, so the one check under test refuses it.
           Effect.gen(function* noDeclaration() {
             const db = yield* Db.open(AuthorApp.roles.author, {});
             const base = {
@@ -397,9 +451,9 @@ describe.skipIf(!hasLease)("qti/chardata.db.test.ts, on the lease", () => {
               nodeParentKind: "document",
               nodeStart: 0n,
               package: strayNode,
-              path: "item.xml",
+              path: manifestPath,
               resourceType: "none",
-              rootKind: "qti-assessment-item",
+              rootKind: "cp:manifest",
               standalone: "none",
               version: "3.0.0",
               xmlVersion: "none",
