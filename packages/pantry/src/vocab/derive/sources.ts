@@ -165,6 +165,13 @@ export const xsdDirectory = Config.NonEmptyString("HOME").pipe(
 );
 
 /**
+ * The command that downloads every pinned XSD into {@link xsdDirectory} and checks each against its
+ * pin: `src/vocab/derive/fetch-xsds.ts`, run from anywhere in the workspace. The errors that a
+ * missing or changed cached file raises name it as their repair.
+ */
+export const fetchCommand = "pnpm --filter @qti-pie/pantry run fetch-xsds";
+
+/**
  * One pinned XSD that is not in the cache directory: its path under the directory and the URL it
  * is published at.
  */
@@ -185,7 +192,7 @@ export class XsdSourceMissing extends Schema.TaggedError<XsdSourceMissing>()("Xs
   override get message(): string {
     const files = this.missing.map(({ path, url }) => `${path} (${url})`).join(", ");
 
-    return `${this.missing.length} of the ${sourcePaths.length} pinned XSDs are not in ${this.directory}: ${files}. Download each once from its URL into that directory, keeping its path.`;
+    return `${this.missing.length} of the ${sourcePaths.length} pinned XSDs are not in ${this.directory}: ${files}. Run \`${fetchCommand}\` to download them into that directory, each checked against its pin.`;
   }
 }
 
@@ -202,7 +209,7 @@ export class XsdSourceMismatch extends Schema.TaggedError<XsdSourceMismatch>()(
    * Which file differs from its pin, by how much, and the two ways to settle it.
    */
   override get message(): string {
-    return `The cached ${this.path} has SHA-256 ${this.actual}, not the pinned ${this.expected}. Download it again from ${this.url}; if the published file itself changed, re-pin it in src/vocab/derive/sources.ts and re-run the deriver's tests.`;
+    return `The cached ${this.path} has SHA-256 ${this.actual}, not the pinned ${this.expected}. Run \`${fetchCommand}\` to download it again from ${this.url}; if the published file itself changed, re-pin it in src/vocab/derive/sources.ts and re-run the deriver's tests.`;
   }
 }
 
