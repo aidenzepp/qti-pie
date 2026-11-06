@@ -671,7 +671,7 @@ const sweepProblems = (
     });
   });
 
-describe("the scoring sweep over the corpus", () => {
+describe("the scoring sweep over the corpus", { tags: ["corpus"] }, () => {
   it.effect(
     "[I-9b] each item a built-in template scores scores its correct response at the template's maximum",
     () =>

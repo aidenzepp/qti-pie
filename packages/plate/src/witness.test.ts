@@ -526,7 +526,7 @@ describe("the M1-R witness: each feature through the composition an author build
           }
         }
       }),
-    corpusTimeoutMs,
+    { tags: ["corpus"], timeout: corpusTimeoutMs },
   );
 
   it.effect(
@@ -591,7 +591,7 @@ describe("the M1-R witness: each feature through the composition an author build
         assert.deepStrictEqual(valuesOf(record.responses, "RESPONSE2"), []);
         assert.sameMembers([...valuesOf(record.responses, "RESPONSE3")], [at(2, 0), at(2, 1)]);
       }),
-    corpusTimeoutMs,
+    { tags: ["corpus"], timeout: corpusTimeoutMs },
   );
 
   it.effect(
@@ -618,7 +618,7 @@ describe("the M1-R witness: each feature through the composition an author build
         assert.deepStrictEqual(valuesOf(record.responses, "RESPONSE"), ["ChoiceA"]);
         assert.deepStrictEqual(valuesOf(record.outcomes, "SCORE"), [1]);
       }),
-    corpusTimeoutMs,
+    { tags: ["corpus"], timeout: corpusTimeoutMs },
   );
 
   it.effect(
@@ -641,7 +641,7 @@ describe("the M1-R witness: each feature through the composition an author build
         assert.deepStrictEqual(valuesOf(record.responses, "RESPONSE"), ["true"]);
         assert.deepStrictEqual(valuesOf(record.outcomes, "SCORE"), [1]);
       }),
-    corpusTimeoutMs,
+    { tags: ["corpus"], timeout: corpusTimeoutMs },
   );
 
   it.effect(

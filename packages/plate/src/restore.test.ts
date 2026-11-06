@@ -49,7 +49,7 @@ const failureOf = (
 ): Option.Option<readonly [string, string]> =>
   Option.map(Result.getFailure(restored), (failure) => [failure._tag, failure.stage] as const);
 
-describe("restore", () => {
+describe("restore", { tags: ["corpus"] }, () => {
   it.effect("[T-14] gives back the responses of the record score returned for BG007", () =>
     Effect.gen(function* restoresScored() {
       const { accepted, stored } = yield* scored();

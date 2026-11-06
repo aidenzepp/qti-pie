@@ -444,7 +444,7 @@ describe("the allowlist sweep over the corpus", () => {
         assert.isNotEmpty(subjects, "no corpus item renders");
         assert.deepStrictEqual([...problems, ...subjects.flatMap(keyProblems)], []);
       }),
-    sweepTimeoutMs,
+    { tags: ["corpus"], timeout: sweepTimeoutMs },
   );
 
   it.effect(
@@ -463,7 +463,7 @@ describe("the allowlist sweep over the corpus", () => {
           [],
         );
       }),
-    sweepTimeoutMs,
+    { tags: ["corpus"], timeout: sweepTimeoutMs },
   );
 
   it.effect(
