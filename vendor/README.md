@@ -22,12 +22,13 @@ tarball.
 `@grizzle/testing` is grizzle's choice-stream testing library, and the one pantry's tests use. It is private and has no
 `version`, which `pnpm pack` requires, so the packed manifest carries `"version": "0.0.0"`, the version grizzle gives
 its other private package, `@grizzle/devtools`; every other file is the commit's. It ships TypeScript source, and Vitest
-transforms it. Its dependencies are grizzle's catalog versions at pack time, and they match the workspace's. One of them
-is `typescript` 7.1.0-beta, whose native API (`typescript/sync`) its mutation tester typechecks with. The workspace's
+transforms it. Its dependencies are grizzle's catalog versions at pack time, and they match the workspace's but one:
+`typescript` 7.1.0-beta, whose native API (`typescript/sync`) its mutation tester typechecks with. The workspace's
 `vite` override makes the tarball's `vite` Vite+'s core, which takes `typescript` as an optional peer, so the tarball's
 copy would give Vite+'s core, and Vitest with it, a second instance beside the workspace's, and a test file would load
-another Vitest than the one running it. So `pnpm-workspace.yaml` points that peer at the same 7.1.0-beta, and the
-workspace holds one TypeScript. The grizzle tarball takes `pg` as a peer, which pnpm installs (`autoInstallPeers`).
+another Vitest than the one running it. So `pnpm-workspace.yaml` overrides `typescript` everywhere to the root's 7.0.2,
+and the workspace holds one TypeScript. The grizzle tarball takes `pg` as a peer, which pnpm installs
+(`autoInstallPeers`).
 
 ## Refresh
 
@@ -55,7 +56,10 @@ above.
 
 ## Mutation runs
 
-`@grizzle/testing` ships the mutation tester as the bin `grizzle-mutate`. From a package directory:
+`@grizzle/testing` ships the mutation tester as the bin `grizzle-mutate`. It imports `typescript/ast`, `typescript/fs`
+and `typescript/sync`, which TypeScript 7.0.2 exports only under `./unstable/`, so under the workspace's override it
+stops at load with `ERR_PACKAGE_PATH_NOT_EXPORTED`, and nothing in this repository runs it. With a TypeScript that
+exports them, from a package directory:
 
 ```bash
 pnpm exec grizzle-mutate --package . --file <source> --test <test file> [--workers N] [--sample N] [--seed N]
