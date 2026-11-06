@@ -23,10 +23,12 @@ import {
   enumerated,
   floatAttribute,
   floatOf,
+  greatestInt,
   identifierAttribute,
   identifierOf,
   integerOf,
   isQti,
+  leastInt,
   listed,
   nameOf,
   pathOf,
@@ -176,6 +178,72 @@ export interface ResponseDeclaration {
 }
 
 /**
+ * One `qti-match-table-entry`: the integer a lookup matches and the value it then gives.
+ */
+export interface MatchTableEntry {
+  /**
+   * `source-value`, an `xs:int`, held exact as every integer is (reading 45).
+   */
+  readonly sourceValue: bigint;
+  /**
+   * `target-value`, a value of the outcome's base type (reading 8), read exactly as written
+   * (reading 7).
+   */
+  readonly targetValue: Single;
+}
+
+/**
+ * An outcome's `qti-match-table`, its entries in document order.
+ */
+export interface MatchTable {
+  /**
+   * `default-value`, a value of the outcome's base type read exactly as written (reading 7), when
+   * the table has one.
+   */
+  readonly defaultValue: Option.Option<Single>;
+  readonly entries: readonly MatchTableEntry[];
+  readonly kind: "match";
+}
+
+/**
+ * One `qti-interpolation-table-entry`: the least number a lookup maps to its value.
+ */
+export interface InterpolationTableEntry {
+  /**
+   * `include-boundary`, an `xs:boolean` that is true when absent: whether a number equal to
+   * `sourceValue` maps to this entry.
+   */
+  readonly includeBoundary: boolean;
+  /**
+   * `source-value`, a float read exactly as written (reading 7).
+   */
+  readonly sourceValue: number;
+  /**
+   * `target-value`, a value of the outcome's base type read exactly as written (reading 7).
+   */
+  readonly targetValue: Single;
+}
+
+/**
+ * An outcome's `qti-interpolation-table`, its entries in document order.
+ */
+export interface InterpolationTable {
+  /**
+   * `default-value`, a value of the outcome's base type read exactly as written (reading 7), when
+   * the table has one.
+   */
+  readonly defaultValue: Option.Option<Single>;
+  readonly entries: readonly InterpolationTableEntry[];
+  readonly kind: "interpolation";
+}
+
+/**
+ * The table a `qti-lookup-outcome-value` maps its value through: the outcome's match table or its
+ * interpolation table.
+ */
+export type LookupTable = InterpolationTable | MatchTable;
+
+/**
  * A `qti-outcome-declaration` of a modelled base type and cardinality (I-2).
  *
  * Its last six fields are the attributes Results Reporting mirrors on an `outcomeVariable`, each
@@ -199,6 +267,10 @@ export interface OutcomeDeclaration {
    * into a result, never rendered or fetched, so it does not pass through `#plate/model/url.ts`.
    */
   readonly longInterpretation: Option.Option<string>;
+  /**
+   * The `qti-match-table` or `qti-interpolation-table`, when the declaration has one.
+   */
+  readonly lookupTable: Option.Option<LookupTable>;
   /**
    * `mastery-value`, an `xs:double`.
    */
@@ -1016,6 +1088,159 @@ const outcomeReporting = (
   });
 
 /**
+ * Read a lookup table's optional `default-value` exactly as written (reading 7).
+ *
+ * @param build The build.
+ * @param table The `qti-match-table` or `qti-interpolation-table`.
+ * @param baseType The outcome's base type, which the value is read in.
+ * @returns The value, none when absent, or the refusal `value-type` at the attribute.
+ */
+const tableDefault = (
+  build: ModelWalk,
+  table: SourceElement,
+  baseType: ModelledBaseType,
+): Effect.Effect<Option.Option<Single>, Refusal> =>
+  Effect.transposeOption(
+    Option.map(attributeOf(table, "default-value"), (attribute) =>
+      typed(
+        build,
+        attributePath(pathOf(build, table), attribute),
+        parseLexical(baseType, attribute.value),
+      ),
+    ),
+  );
+
+/**
+ * Read a lookup table entry's `target-value` in its outcome's base type (reading 8), exactly as
+ * written (reading 7).
+ *
+ * @param build The build.
+ * @param entry The entry.
+ * @param baseType The outcome's base type.
+ * @returns The value, or the refusal `missing-attribute` or `value-type`.
+ */
+const targetValue = (
+  build: ModelWalk,
+  entry: SourceElement,
+  baseType: ModelledBaseType,
+): Effect.Effect<Single, Refusal> =>
+  Effect.flatMap(requiredAttribute(build, entry, "target-value"), (attribute) =>
+    typed(
+      build,
+      attributePath(pathOf(build, entry), attribute),
+      parseLexical(baseType, attribute.value),
+    ),
+  );
+
+/**
+ * Read a `qti-match-table-entry`. Its `source-value`, an `xs:int`, is read as the XSD reads it:
+ * outer whitespace goes, then the integer is held exactly and refused outside -2^31 to 2^31-1.
+ *
+ * @param build The build.
+ * @param entry The entry.
+ * @param baseType The outcome's base type.
+ * @returns The entry, or the refusal `missing-attribute` or `value-type`.
+ */
+const matchEntryOf = (
+  build: ModelWalk,
+  entry: SourceElement,
+  baseType: ModelledBaseType,
+): Effect.Effect<MatchTableEntry, Refusal> =>
+  Effect.gen(function* readMatchEntry() {
+    const source = yield* requiredAttribute(build, entry, "source-value");
+    const path = attributePath(pathOf(build, entry), source);
+    const lexical = trimXmlSpace(source.value);
+    const sourceValue = integerOf(yield* typed(build, path, parseLexical("integer", lexical)));
+    if (sourceValue < leastInt || sourceValue > greatestInt) {
+      return yield* Effect.fail(
+        refusal(build, "value-type", path, { baseType: "xs:int", lexical }),
+      );
+    }
+
+    return { sourceValue, targetValue: yield* targetValue(build, entry, baseType) };
+  });
+
+/**
+ * Read a `qti-interpolation-table-entry`. Its `source-value` is a float read exactly as written
+ * (reading 7), and its `include-boundary` is true when absent, the XSD's default.
+ *
+ * @param build The build.
+ * @param entry The entry.
+ * @param baseType The outcome's base type.
+ * @returns The entry, or the refusal `missing-attribute` or `value-type`.
+ */
+const interpolationEntryOf = (
+  build: ModelWalk,
+  entry: SourceElement,
+  baseType: ModelledBaseType,
+): Effect.Effect<InterpolationTableEntry, Refusal> =>
+  Effect.gen(function* readInterpolationEntry() {
+    const source = yield* requiredAttribute(build, entry, "source-value");
+    const sourceValue = floatOf(
+      yield* typed(
+        build,
+        attributePath(pathOf(build, entry), source),
+        parseLexical("float", source.value),
+      ),
+    );
+
+    return {
+      includeBoundary: yield* xsBoolean(build, entry, "include-boundary", true),
+      sourceValue,
+      targetValue: yield* targetValue(build, entry, baseType),
+    };
+  });
+
+/**
+ * Read an outcome declaration's lookup table, its `qti-match-table` or its
+ * `qti-interpolation-table` (the XSD admits at most one of the two), in the outcome's base type.
+ *
+ * @param build The build.
+ * @param declaration The declaration.
+ * @param baseType The outcome's base type.
+ * @returns The table, none when the declaration has none, or the refusal at its first attribute
+ *   outside its type.
+ */
+const lookupTableOf = (
+  build: ModelWalk,
+  declaration: SourceElement,
+  baseType: ModelledBaseType,
+): Effect.Effect<Option.Option<LookupTable>, Refusal> =>
+  Effect.transposeOption(
+    Option.orElse(
+      Option.map(
+        Arr.head(childrenNamed(declaration, "qti-match-table")),
+        (table): Effect.Effect<LookupTable, Refusal> =>
+          Effect.gen(function* readMatchTable() {
+            return {
+              defaultValue: yield* tableDefault(build, table, baseType),
+              entries: yield* Effect.forEach(
+                childrenNamed(table, "qti-match-table-entry"),
+                (entry) => matchEntryOf(build, entry, baseType),
+              ),
+              kind: "match" as const,
+            };
+          }),
+      ),
+      () =>
+        Option.map(
+          Arr.head(childrenNamed(declaration, "qti-interpolation-table")),
+          (table): Effect.Effect<LookupTable, Refusal> =>
+            Effect.gen(function* readInterpolationTable() {
+              return {
+                defaultValue: yield* tableDefault(build, table, baseType),
+                entries: yield* Effect.forEach(
+                  childrenNamed(table, "qti-interpolation-table-entry"),
+                  (entry) => interpolationEntryOf(build, entry, baseType),
+                ),
+                kind: "interpolation" as const,
+              };
+            }),
+        ),
+    ),
+  );
+
+/**
  * Read a `qti-outcome-declaration`, an item's or a test's: the item and the test model both read
  * one through this, so the two read them alike.
  *
@@ -1039,8 +1264,9 @@ export const outcomeDeclaration = (
       refusal(build, rule, attributePath(pathOf(build, declaration), attribute), detail),
     );
     const defaultValue = yield* optionalValue(build, declaration, "qti-default-value", read.value);
+    const lookupTable = yield* lookupTableOf(build, declaration, read.value.baseType);
 
-    return Option.some({ ...read.value, ...reporting, defaultValue });
+    return Option.some({ ...read.value, ...reporting, defaultValue, lookupTable });
   });
 
 /**

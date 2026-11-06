@@ -339,6 +339,7 @@ const score: OutcomeDeclaration = {
   identifier: "SCORE",
   interpretation: Option.none(),
   longInterpretation: Option.none(),
+  lookupTable: Option.none(),
   masteryValue: Option.none(),
   normalMaximum: Option.none(),
   normalMinimum: Option.none(),
