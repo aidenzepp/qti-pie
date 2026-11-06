@@ -1,13 +1,12 @@
 import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { assert, beforeAll, inject, layer } from "@effect/vitest";
-import { Cause, Effect, Exit, Schema } from "effect";
+import { Cause, Effect, Exit, Predicate, Schema } from "effect";
+import { kindHelp } from "#pantry/cli/errors.ts";
 import { ImportData } from "#pantry/cli/import.ts";
-import { successEnvelope } from "#pantry/cli/output.ts";
+import { ErrorObject, successEnvelope } from "#pantry/cli/output.ts";
 import { exitCodeOf } from "#pantry/cli/run.ts";
-import { ImportRefused } from "#pantry/import/refusal.ts";
-import { captureCli, preloadEngine } from "#pantry/test/cli.ts";
-import { materialize } from "#pantry/test/fixtures.ts";
+import { captureCli, matchesCommitted, preloadEngine } from "#pantry/test/cli.ts";
 import { makeScratch, scratchEnv } from "#pantry/test/scratch.ts";
 import { cliProcessTestTimeoutMs, engineLoadHookTimeoutMs } from "#pantry/test/settings.ts";
 
@@ -59,28 +58,60 @@ layer(NodeServices.layer, { excludeTestServices: true })("import --dry-run", (it
   );
 
   it.effect(
-    "refuses a package a guard refuses, as an import refusal that exits 1",
+    "refuses a package the codec refuses, naming its rule, as an import refusal that exits 1",
     () =>
+      // Oracle: the specification as a checker, the codec's rule (`not-qti3`, spec reading 80): the
+      // published PCI sample declares a schema version the roster does not hold. The dry run reaches
+      // no law of the database, so the refusal names no law and no source.
       Effect.gen(function* refused() {
         yield* makeScratch(env);
 
-        const { exit } = yield* captureCli(
-          ["import", "--dry-run", yield* materialize("quoted-q")],
-          {
-            env,
-          },
-        );
-
-        assert.isTrue(Exit.isFailure(exit));
-
+        const { exit, stderr } = yield* captureCli(["import", "--dry-run", fixtures.sample_pci], {
+          env,
+        });
         const failure = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined;
 
-        assert.instanceOf(failure, ImportRefused);
-        assert.strictEqual(
-          failure instanceof ImportRefused ? failure.rule : undefined,
-          "q-punctuation",
-        );
         assert.strictEqual(exitCodeOf(exit), 1);
+        assert.strictEqual(
+          Predicate.hasProperty(failure, "_tag") ? failure._tag : undefined,
+          "ImportRefused",
+        );
+        assert.strictEqual(
+          Predicate.hasProperty(failure, "rule") ? failure.rule : undefined,
+          "not-qti3",
+        );
+        assert.isTrue(
+          stderr.startsWith(
+            "error[import-refused]: The package was refused under the not-qti3 rule: ",
+          ),
+          stderr,
+        );
+        assert.notInclude(stderr, "  source: ");
+        assert.isTrue(stderr.endsWith(`  = help: ${kindHelp["import-refused"]}`), stderr);
+      }),
+    cliProcessTestTimeoutMs,
+  );
+
+  it.effect(
+    "--json prints the codec's refusal as one error object, its rule and no law",
+    () =>
+      Effect.gen(function* refusedJson() {
+        yield* makeScratch(env);
+
+        const { stderr, stdout } = yield* captureCli(
+          ["--json", "import", "--dry-run", fixtures.sample_pci],
+          { env },
+        );
+        const error = Schema.decodeUnknownSync(Schema.fromJsonString(ErrorObject))(stderr);
+
+        assert.strictEqual(stdout, "");
+        assert.strictEqual(stderr.split("\n").length, 1);
+        assert.isTrue(matchesCommitted("error")(stderr), stderr);
+        assert.strictEqual(error.kind, "import-refused");
+        assert.strictEqual(error.rule, "not-qti3");
+        assert.strictEqual(error.command, "import");
+        assert.notProperty(error, "laws");
+        assert.notProperty(error, "sources");
       }),
     cliProcessTestTimeoutMs,
   );
@@ -101,6 +132,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import --dry-run", (it
 
         const envelope = Schema.decodeUnknownSync(importEnvelope)(stdout);
 
+        assert.isTrue(matchesCommitted("import")(stdout), stdout);
         assert.isTrue(envelope.ok);
         assert.strictEqual(envelope.schema_version, 1);
         assert.isTrue("dry_run" in envelope.data);

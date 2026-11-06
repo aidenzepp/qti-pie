@@ -104,9 +104,26 @@ export const cliProcessTestTimeoutMs = 10_000;
  * 37.3 s at load averages of 34 to 45, which this rule turns into 75 s. The budget stays at 55 s
  * until grizzle's `textLookup` is memoized (G5, about 47% of what is left of the preload); then
  * the four-module preload is measured again, recorded here, and the budget set by this rule.
+ *
+ * After W5's cutover (2026-11-06, measured by seat Q5.18) the four modules load the new grammar
+ * installation, schema and import program. Three batches of nine concurrent processes (this
+ * machine's `availableParallelism() - 1`, 10 CPUs) took 41401 to 44313 ms at one-minute load
+ * averages of 40.7 to 43.2, 42232 to 45512 ms at 43.2 to 43.8, and 45546 to 48499 ms at 43.8 to
+ * 46.8, each process near 1 GB resident. The maximum is 48499 ms, and the rule gives 97 s. Per
+ * module, at a load near 44: `install.ts` 16.5 to 22.1 s, `import/write.ts` 8.8 s, `qti/schema.ts`
+ * 6.3 s, grizzle 3.4 s and `refusal.ts` 1.0 to 4.9 s.
+ *
+ * `import/write.ts`'s 8.8 s was not its own maps (30 ms and 3 MB, measured alone on 2026-11-06 by
+ * seat PS) but the author role it imported: `qti/schema.ts` (1.6 s, 63 MB) and `role(...)` in
+ * `qti/roles.ts` (2.0 s, 271 MB) at a load of 27. Since `changeSetOf` takes the role from its
+ * caller, the five modules `preloadEngine` imports load neither. Three batches of nine concurrent
+ * processes then took 17442 to 17694 ms at one-minute load averages of 21.5 to 23.4, 12749 to 13229
+ * ms at 22.3 to 23.4, and 11972 to 12361 ms at 21.7 to 22.3, each process 597 to 691 MB resident.
+ * The rule gives 36 s for that maximum, but at half Q5.18's load, so the budget stays at Q5.18's
+ * measurement until one is taken at a load near 44.
  * Raise it only on a new measurement recorded here, never to make a run pass.
  */
-export const engineLoadHookTimeoutMs = 55_000;
+export const engineLoadHookTimeoutMs = 97_000;
 
 /**
  * The timeout, in milliseconds, for the one test that materializes the 19 `cut-*` fixtures and
@@ -123,38 +140,3 @@ export const engineLoadHookTimeoutMs = 55_000;
  * Raise it only on a new measurement recorded here, never to make a run pass.
  */
 export const cutItemRenderTestTimeoutMs = 10_000;
-
-/**
- * The timeout, in milliseconds, for each spawn of `scripts/seed-sql.ts` that a test makes; a test
- * that spawns it more than once takes this times its number of spawns.
- *
- * Each spawn loads the whole Qti schema, which the CLI start `cliProcessTestTimeoutMs` measures
- * does not. Measured on 2026-11-03 at `a776f20`, from `packages/pantry`, with the printed seed read
- * to its end: three serial spawns alone took 642, 635 and 673 ms at a one-minute load average of
- * 20.4 before and after, and three runs of 13 concurrent spawns (vitest's default worker count on
- * 14 CPUs, `availableParallelism() - 1`) took 1640 to 1740 ms (maximum 1740 ms), 1399 to 1461 ms
- * and 1498 to 1596 ms, at load averages of 20.4, 20.4 and 20.1 before and 20.4, 20.1 and 20.1
- * after. The budget is the larger of twice the concurrent maximum (3.5 s) and 10 s, the floor being
- * twice the default, rounded up to the next second. Raise it only on a new measurement recorded
- * here, never to make a run pass.
- */
-export const seedSqlProcessTestTimeoutMs = 10_000;
-
-/**
- * The timeout, in milliseconds, for each test that calls `printSeed([])`, which spawns
- * `scripts/seed-sql.ts` and prints the whole seed (about 4.4 MB of SQL).
- *
- * `seedSqlProcessTestTimeoutMs` measures a spawn that prints a small part, and vitest's 5 s
- * default was exceeded by the full print in most free-project runs while other seats ran suites.
- * Measured on 2026-11-04 at `5d49713`, from `packages/pantry`, with one process that calls
- * `printSeed([])` the way the tests do: three serial runs alone took 3022, 4445 and 3567 ms at a
- * one-minute load average of 86.1 before and 86.9 after, and three batches of 13 concurrent runs
- * (vitest's default worker count on 14 CPUs, `availableParallelism() - 1`) took 5243, 5135, 4956,
- * 5009, 4911, 5050, 4668, 4896, 5025, 5045, 5042, 5197 and 4921 ms at 86.3 before and 87.5 after
- * (batch 1), 4983, 4394, 4634, 4821, 5026, 4735, 4856, 4888, 4802, 5108, 4715, 4750 and 5053 ms at
- * 87.5 before and 90.9 after (batch 2), and 6305, 5843, 5676, 5802, 5366, 6228, 5773, 5537, 6325,
- * 6266, 6264, 5969 and 6163 ms at 90.9 before and 93.7 after (batch 3). The concurrent maximum is
- * 6325 ms. The budget is the larger of twice the concurrent maximum (12.7 s) and 10 s, rounded up
- * to the next second. Raise it only on a new measurement recorded here, never to make a run pass.
- */
-export const seedPrintTestTimeoutMs = 13_000;

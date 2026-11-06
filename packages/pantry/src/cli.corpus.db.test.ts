@@ -5,11 +5,13 @@ import { Console, Duration, Effect, FileSystem, Layer, Option, Schema } from "ef
 import { describe } from "vitest";
 import { RoundtripData } from "#pantry/cli/roundtrip.ts";
 import { ErrorObject, successEnvelope } from "#pantry/cli/output.ts";
+import { lawFactsOf, refusalFieldsOf } from "#pantry/cli/refused.ts";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { comparePackage } from "#pantry/export/compare.ts";
 import { exportPackage } from "#pantry/export/package.ts";
 import { importPackage } from "#pantry/import/package.ts";
-import { spawnCli } from "#pantry/test/cli.ts";
+import { matchesCommitted, spawnCli } from "#pantry/test/cli.ts";
+import { oracleLocate } from "#pantry/test/locate.ts";
 import { examplesTarball, materializeCorpus } from "#pantry/test/fixtures.ts";
 import { hasLease, settings } from "#pantry/test/settings.ts";
 import { renderVerdicts, verdictsPath } from "#pantry/test/verdicts.ts";
@@ -52,6 +54,13 @@ const corpus =
 const roundtripEnvelope = Schema.fromJsonString(successEnvelope("roundtrip", RoundtripData));
 
 /**
+ * The committed schemas of the two lines a roundtrip prints: its envelope, and its error object.
+ */
+const committedRoundtrip = matchesCommitted("roundtrip");
+
+const committedError = matchesCommitted("error");
+
+/**
  * A line of standard error as an {@link ErrorObject}, or none when it is anything else.
  */
 const errorObjectOf = Schema.decodeUnknownOption(Schema.fromJsonString(ErrorObject));
@@ -91,8 +100,21 @@ const errorObjectsOf = (stderr: string) =>
   stderr.split("\n").flatMap((line) => Option.toArray(errorObjectOf(line)));
 
 /**
+ * The identities of a refusal's laws, as a sorted list: the laws are a set, so their order is no
+ * part of what the two refusals must agree on.
+ */
+const identities = (facts: readonly { readonly identity: string }[]): readonly string[] =>
+  facts.map(({ identity }) => identity).toSorted();
+
+/**
  * Run one corpus package through the importer and through the CLI, and assert the CLI lands it
  * where the importer does.
+ *
+ * The importer runs with the law oracle's locator (`oracleLocate`), so a refusal the database
+ * names no row for is located by the host, and a schema that refuses what the oracle finds
+ * unbroken dies as `LocateDisagreement`. The CLI passes none. The two runs are separate imports of
+ * one package, so they agree on the rule and on the laws the database named, and the CLI's error
+ * object carries both, read from the refusal's fields.
  */
 const judge = Effect.fn("cli.corpus.judge")(function* judge(entry: {
   readonly dir: string;
@@ -106,7 +128,10 @@ const judge = Effect.fn("cli.corpus.judge")(function* judge(entry: {
   yield* fs.remove(cwd, { force: true, recursive: true });
   yield* fs.makeDirectory(cwd, { recursive: true });
 
-  const [importTime, direct] = yield* importPackage(entry.dir).pipe(Effect.result, Effect.timed);
+  const [importTime, direct] = yield* importPackage(entry.dir, { locate: oracleLocate }).pipe(
+    Effect.result,
+    Effect.timed,
+  );
 
   if (Duration.toMillis(importTime) > tally.slowestImport.millis) {
     tally.slowestImport = { millis: Duration.toMillis(importTime), name: entry.name };
@@ -137,7 +162,15 @@ const judge = Effect.fn("cli.corpus.judge")(function* judge(entry: {
 
   const errors = errorObjectsOf(cli.stderr);
 
+  for (const line of cli.stderr.split("\n")) {
+    if (Option.isSome(errorObjectOf(line))) {
+      assert.isTrue(committedError(line), `${entry.name}: the error object's schema`);
+    }
+  }
+
   if (refusal === undefined) {
+    assert.isTrue(committedRoundtrip(cli.stdout), `${entry.name}: the envelope's committed schema`);
+
     const envelope = Schema.decodeUnknownSync(roundtripEnvelope)(cli.stdout);
     const differing = report.filter(({ outcome }) => outcome.kind === "differs").length;
 
@@ -172,6 +205,22 @@ const judge = Effect.fn("cli.corpus.judge")(function* judge(entry: {
     assert.strictEqual(errors.length, 1, `${entry.name}: one ErrorObject line on stderr`);
     assert.strictEqual(errors[0]?.kind, "import-refused", `${entry.name}: the CLI's kind`);
     assert.strictEqual(errors[0]?.rule, rule, `${entry.name}: the CLI names the importer's rule`);
+
+    const laws = yield* Option.match(refusalFieldsOf(refusal), {
+      onNone: () => Effect.succeed(Option.none()),
+      onSome: lawFactsOf,
+    });
+
+    assert.deepStrictEqual(
+      identities(errors[0]?.laws ?? []),
+      identities(Option.getOrElse(laws, () => [])),
+      `${entry.name}: the CLI names the laws the database named`,
+    );
+    assert.strictEqual(
+      errors[0]?.sources === undefined,
+      Option.isNone(laws),
+      `${entry.name}: the CLI gives sources exactly when the database refused the package`,
+    );
     verdicts.push({ file: entry.member, rule, verdict: "refused" });
     tally.refused.push({ name: entry.name, rule });
   }

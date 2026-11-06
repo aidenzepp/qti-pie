@@ -305,6 +305,7 @@ export const requireReplaceable = Effect.fn("cli.requireReplaceable")(function* 
  *
  * @param target - The directory or file being replaced.
  * @param write - Writes the new content at the path it is given.
+ * @returns What `write` returns, once its content has taken the target's place.
  */
 export const replaceWith = Effect.fn("cli.replaceWith")(function* replaceWith<A, E, R>(
   target: string,
@@ -317,15 +318,18 @@ export const replaceWith = Effect.fn("cli.replaceWith")(function* replaceWith<A,
   const name = path.basename(absolute);
 
   yield* fs.makeDirectory(folder, { recursive: true });
-  yield* Effect.acquireUseRelease(
+
+  return yield* Effect.acquireUseRelease(
     fs.makeTempDirectory({ directory: folder, prefix: `.${name}.qti-` }),
     (staging) =>
       Effect.gen(function* swap() {
         const written = path.join(staging, name);
+        const result = yield* write(written);
 
-        yield* write(written);
         yield* fs.remove(absolute, { force: true, recursive: true });
         yield* fs.rename(written, absolute);
+
+        return result;
       }),
     (staging) => fs.remove(staging, { force: true, recursive: true }).pipe(Effect.ignore),
   );

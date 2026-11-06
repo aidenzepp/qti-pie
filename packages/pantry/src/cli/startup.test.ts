@@ -15,16 +15,16 @@ const startupForbidden = [
   "#pantry/db/",
   "#pantry/import/",
   "#pantry/export/",
-  "#pantry/schema/",
+  "#pantry/qti/",
   "@bjornpagen/grizzle",
 ];
 
 /**
- * The author login, whose workload (the import program and the export queries) grizzle's builders
- * build when the module is evaluated: the dry run never needs it, and the database layer loads it
- * only once its settings resolve, so neither may reach it statically.
+ * The author login, whose workload (the export scan) grizzle's builders build when the module is
+ * evaluated: the dry run never needs it, and the database layer loads it only once its settings
+ * resolve, so neither may reach it statically.
  */
-const loginForbidden = ["#pantry/schema/logins.ts"];
+const loginForbidden = ["#pantry/qti/logins.ts"];
 
 /**
  * Read a module's text from the tree.

@@ -4,6 +4,7 @@
  */
 import { Config, Console, Effect, Option, Schema } from "effect";
 import { CliError, Flag, GlobalFlag } from "effect/cli";
+import type { RefusalWitness } from "#pantry/import/refusal.ts";
 
 /**
  * The modes `--output` names, in the order the help lists them.
@@ -151,20 +152,66 @@ export const modeOfEnvironment = Effect.gen(function* resolveEnvironmentMode() {
 }).pipe(Effect.orElseSucceed(() => Option.none<OutputMode>()));
 
 /**
+ * One law the database refused an import under, as the error object names it: its identity as
+ * grizzle reports the law, and the name and rule the law table gives it, absent for a law the table
+ * does not hold.
+ */
+export const ErrorLaw = Schema.Struct({
+  identity: Schema.String,
+  name: Schema.optionalKey(Schema.String),
+  rule: Schema.optionalKey(Schema.String),
+});
+
+/**
+ * One law of a refusal, as {@link ErrorLaw} reads it.
+ */
+export type LawFact = typeof ErrorLaw.Type;
+
+/**
+ * The kinds of witness a refusal the database gave names its row by (the kinds of
+ * `RefusalWitness` of `#pantry/import/refusal.ts`), spelled here so the command line reads them
+ * without loading the importer, and checked against that union both ways: a kind it adds or drops
+ * fails to compile here.
+ */
+const witnessKinds = {
+  key: "key",
+  row: "row",
+  unreported: "unreported",
+} as const satisfies { readonly [Kind in RefusalWitness["kind"]]: Kind };
+
+/**
+ * How a refusal the database gave names the row that broke its laws, as the error object prints
+ * it: `key` (grizzle's key witness) and `row` (a row the host located) name one in the message,
+ * and `unreported` names none, for a constraint PostgreSQL reports by its name alone.
+ */
+export const ErrorWitness = Schema.Literals(Object.values(witnessKinds));
+
+/**
  * What a failure prints under `json` and `jsonl`: one line on standard error, in the shape of the
  * success envelope's `schema_version`, `command` and `ok`, with `error` true and the failure's
- * kind, message, next step and exit code. `rule` is present only when an import was refused.
+ * kind, message, next step and exit code.
+ *
+ * - `rule` is present only when an import was refused, and `laws`, `sources` and `witness` only when
+ *   the database refused it: the laws its refusal names, where each is stated, and whether the
+ *   message names the row that broke them (`key` or `row`) or the database named none
+ *   (`unreported`).
+ * - `failure` is present only for an `internal` failure qti can name, such as an export that cannot
+ *   rebuild a stored package: the failure's tag.
  */
 export const ErrorObject = Schema.Struct({
   command: Schema.String,
   error: Schema.Literal(true),
   exit_code: Schema.Int,
+  failure: Schema.optionalKey(Schema.String),
   help: Schema.String,
   kind: Schema.String,
+  laws: Schema.optionalKey(Schema.Array(ErrorLaw)),
   message: Schema.String,
   ok: Schema.Literal(false),
   rule: Schema.optionalKey(Schema.String),
   schema_version: Schema.Literal(1),
+  sources: Schema.optionalKey(Schema.Array(Schema.String)),
+  witness: Schema.optionalKey(ErrorWitness),
 });
 
 /**

@@ -81,10 +81,18 @@ export const RoundtripData = Schema.Union([RoundtripReport, RoundtripPreview]);
 
 /**
  * Import the package in `dir`, export it to `work/export/<name of dir>/` (`<name>.zip` under
- * `--zip`), and print the comparison.
+ * `--zip`), and print how the export compares with the package the import stored.
+ *
+ * The comparison is the exporter's `compareExported`: the record the import wrote, every entry's
+ * bytes as it read them, against the entries the export of the stored package wrote, path by path,
+ * so the stored documents are scanned once. An entry is `byte-identical` when its bytes come back
+ * exactly, `canonical-equal` when an XML entry's bytes differ but its canonical forms agree, and
+ * otherwise differs, `at` saying where: `missing` for an entry the export lacks, `extra` for one
+ * only the export writes, `repeated` for a path either side holds twice, or the first differing
+ * byte.
  *
  * An export already at `work/export/<name>` needs `--yes`, which replaces it, and the old one goes
- * only once the new export is written.
+ * only once the new export is written and compared.
  *
  * Under `--dry-run` it reads and checks the package, says whether the export would be created or
  * would replace one, and writes nothing. Every refusal of the real run before its first write is
@@ -92,7 +100,8 @@ export const RoundtripData = Schema.Union([RoundtripReport, RoundtripPreview]);
  *
  * The engine loads when the handler runs, so `--help` and a usage error never pay for it, and the
  * importer and the exporter load inside the database's pool (`withAuthorApp`), so neither does a
- * run that cannot reach the database.
+ * run that cannot reach the database. The import, the export and the comparison share that one
+ * pool.
  */
 export const roundtripCommand = Command.make(
   "roundtrip",
@@ -132,22 +141,22 @@ export const roundtripCommand = Command.make(
       return;
     }
 
-    const packageId = yield* withAuthorApp(
-      () => import("#pantry/import/package.ts"),
-      ({ importPackage }) => importPackage(dir),
+    const { packageId, report } = yield* withAuthorApp(
+      () => Promise.all([import("#pantry/import/package.ts"), import("#pantry/export/package.ts")]),
+      ([{ importPackage }, { compareExported, exportPackage }]) =>
+        Effect.gen(function* roundtripOnPool() {
+          const stored = yield* importPackage(dir);
+          const compared = yield* replaceWith(exportDir, (written) =>
+            Effect.flatMap(exportPackage(stored, written), (entries) =>
+              compareExported(stored, entries),
+            ),
+          );
+
+          return { packageId: stored, report: compared };
+        }),
     );
 
-    yield* replaceWith(exportDir, (written) =>
-      withAuthorApp(
-        () => import("#pantry/export/package.ts"),
-        ({ exportPackage }) => exportPackage(packageId, written),
-      ),
-    );
-
-    const { comparePackage, renderReport } = yield* Effect.promise(
-      () => import("#pantry/export/compare.ts"),
-    );
-    const report = yield* comparePackage(dir, exportDir);
+    const { renderReport } = yield* Effect.promise(() => import("#pantry/export/compare.ts"));
     const differing = report.filter(({ outcome }) => outcome.kind === "differs").length;
 
     yield* emitSuccess(mode, {
@@ -170,7 +179,7 @@ export const roundtripCommand = Command.make(
   }),
 ).pipe(
   Command.withDescription(
-    "Import <dir>, export it to work/export/<name> (<name>.zip under --zip), and compare the two (writes the database and work/export/<name>; with --dry-run it reads and checks the package, says whether the export would be created or replaced, and writes nothing, and the database's own checks do not run). An export already at work/export/<name> is replaced only with --yes, and the old one goes once the new export is written",
+    "Import <dir>, export it to work/export/<name> (<name>.zip under --zip), and compare the export with the package the import stored (writes the database and work/export/<name>; with --dry-run it reads and checks the package, says whether the export would be created or replaced, and writes nothing, and the database's own checks do not run). An export already at work/export/<name> is replaced only with --yes, and the old one goes once the new export is written",
   ),
   Command.withExamples([
     {

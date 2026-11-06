@@ -5,12 +5,28 @@
     "command": { "type": "string" },
     "error": { "type": "boolean", "enum": [true] },
     "exit_code": { "type": "integer", "minimum": -9007199254740991, "maximum": 9007199254740991 },
+    "failure": { "type": "string" },
     "help": { "type": "string" },
     "kind": { "type": "string" },
+    "laws": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "identity": { "type": "string" },
+          "name": { "type": "string" },
+          "rule": { "type": "string" }
+        },
+        "required": ["identity"],
+        "additionalProperties": true
+      }
+    },
     "message": { "type": "string" },
     "ok": { "type": "boolean", "enum": [false] },
     "rule": { "type": "string" },
-    "schema_version": { "type": "number", "enum": [1] }
+    "schema_version": { "type": "number", "enum": [1] },
+    "sources": { "type": "array", "items": { "type": "string" } },
+    "witness": { "type": "string", "enum": ["key", "row", "unreported"] }
   },
   "required": ["command", "error", "exit_code", "help", "kind", "message", "ok", "schema_version"],
   "additionalProperties": true,

@@ -31,13 +31,18 @@ export const ImportData = Schema.Union([ImportStored, ImportPreview]);
  * Import the package in `dir`, a directory or a `.zip` file, then print its id. Under `--dry-run`
  * it reads and checks the package, prints how much it holds and stores nothing.
  *
- * A dry run does not open the database, so the database's own checks do not run: a package it
- * accepts can still be refused by the real import.
+ * A dry run is the import's own read (`previewPackage`): the package read, its documents shredded
+ * and every row built, and nothing written. It does not open the database, so the database's laws
+ * do not judge the rows: a package it accepts can still be refused by the real import.
  *
- * `importPackage` reads through `listPackage`, which reads a zip as it reads a directory. The
- * engine loads when the handler runs, so `--help` and a usage error never pay for it, and the
- * importer loads inside the database's pool (`withAuthorApp`), so neither does a run that cannot
- * reach the database.
+ * A refusal prints its rule and explanation, and, when the database gave it, where each of its laws
+ * is stated (`#pantry/cli/present.ts`). The command passes the importer no locator, so a law the
+ * database checks itself is named without the row that broke it, and the refusal says so.
+ *
+ * `importPackage` and the dry run read through `readPackage`, which reads a zip as it reads a
+ * directory. The engine loads when the handler runs, so `--help` and a usage error never pay for
+ * it, and the importer loads inside the database's pool (`withAuthorApp`), so neither does a run
+ * that cannot reach the database.
  */
 export const importCommand = Command.make(
   "import",

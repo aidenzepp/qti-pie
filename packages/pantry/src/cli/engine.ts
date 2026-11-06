@@ -7,7 +7,7 @@ import { Effect } from "effect";
  * `Effect.provide` builds `AuthorAppLayer` before the effect it wraps runs, so the cluster's
  * settings, its CA and the snapshot are read first, and a run that cannot reach the database fails
  * there, with kind `config`, before `load` runs. The importer and the exporter reach the author
- * login (`#pantry/schema/logins.ts`), whose workload grizzle builds when that module is evaluated,
+ * login (`#pantry/qti/logins.ts`), whose workload grizzle builds when that module is evaluated,
  * and the layer itself loads the login only after its settings, so a command that cannot reach the
  * database never builds the workload.
  *

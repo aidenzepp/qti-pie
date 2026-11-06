@@ -1,5 +1,17 @@
+import { readFileSync } from "node:fs";
 import path from "node:path";
-import { ConfigProvider, Console, Effect, FileSystem, Layer, Stdio, Stream } from "effect";
+import {
+  ConfigProvider,
+  Console,
+  Effect,
+  FileSystem,
+  JsonSchema,
+  Layer,
+  Schema,
+  SchemaRepresentation,
+  Stdio,
+  Stream,
+} from "effect";
 import type { Exit } from "effect";
 import type { Command } from "effect/cli";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
@@ -15,6 +27,30 @@ const packageRoot = path.resolve(import.meta.dirname, "..", "..");
  * The folder that holds every copy `packageCopy` makes.
  */
 const copiesRoot = path.join(packageRoot, "work", "cli-copies");
+
+/**
+ * A check of a printed line against the committed JSON Schema `schema/<name>.json`, read as a
+ * person's validator would read it rather than through the schema that printed the line: the
+ * file is parsed as a JSON Schema 2020-12 document and the line as plain JSON.
+ *
+ * @param name - The schema's file name under `schema/`, without `.json`: `error`, `import`,
+ *   `export` or `roundtrip`.
+ * @returns Whether a line, parsed as JSON, matches the committed schema.
+ */
+export const matchesCommitted = (name: string): ((line: string) => boolean) => {
+  const committed = Schema.is(
+    SchemaRepresentation.fromJsonSchemaDocument(
+      JsonSchema.fromSchemaDraft2020_12(
+        Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Json)))(
+          readFileSync(path.join(packageRoot, "schema", `${name}.json`), "utf-8"),
+        ),
+      ),
+    ),
+  );
+  const parse = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json));
+
+  return (line) => committed(parse(line));
+};
 
 /**
  * Load every engine module a command handler imports outside the database's pool, all at once.
@@ -34,6 +70,7 @@ export const preloadEngine = Effect.promise(() =>
     import("#pantry/db/layer.ts"),
     import("#pantry/export/compare.ts"),
     import("#pantry/import/preview.ts"),
+    import("#pantry/import/refusal.ts"),
     import("#pantry/package/read.ts"),
   ]),
 );
