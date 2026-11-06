@@ -2,16 +2,25 @@
  * A test session's navigation as data: the current part's modes, where the candidate stands, the
  * state of each item of the part, and the intents the session takes now.
  *
- * {@link navigationState} is what a host builds its navigation from, and what plate's navigation
- * parts render. It is pure and keeps nothing between calls. This is a browser module: it
- * value-imports from `effect` only `Array`, `Data`, `Option`, `pipe` and `Result`.
+ * {@link navigationState} is what a host builds its navigation from, and what
+ * {@link renderNavigation} renders as plate's navigation parts: plain buttons with no submit
+ * semantics, which a host swaps for its own to post natively (rule `9af3809b`). Both are pure and
+ * keep nothing between calls. This is a browser module: it value-imports from `effect` only
+ * `Array`, `Data`, `Option`, `pipe` and `Result`.
  *
  * @module
  */
 import { Array as Arr, Data, Option, pipe, Result } from "effect";
 import type { Configuration } from "#plate/configuration.ts";
+import { emitNavigation } from "#plate/emit/navigation.ts";
+import type { NavigationPart } from "#plate/emit/navigation.ts";
+import { resolveOverrides } from "#plate/emit/parts.ts";
+import type { UnknownPart } from "#plate/emit/parts.ts";
+import { toHtml } from "#plate/emit/serialise.ts";
+import type { PartSwapRefused } from "#plate/emit/swap.ts";
 import type { SectionChild, Test, TestPart } from "#plate/model/test.ts";
 import { isNull } from "#plate/model/values.ts";
+import type { Options } from "#plate/render.ts";
 import type { UnknownItemRef } from "#plate/session/control.ts";
 import { allowedIntents } from "#plate/session/intents.ts";
 import type { Intent, SessionItem, TestSession } from "#plate/session/session.ts";
@@ -268,4 +277,63 @@ export const navigationState = (
       position: shown.position,
       submission: shown.submission,
     };
+  });
+
+export type { NavigationPart } from "#plate/emit/navigation.ts";
+
+/**
+ * The author's inputs to one {@link renderNavigation}, each optional.
+ *
+ * `parts` replaces navigation parts through the swap invariant, keyed
+ * `parts["test-navigation"][<part>]`, as `render` takes them. `order` lists the parts the Root
+ * holds, in order, a repeat included; without it the Root holds the parts the current part's
+ * modes admit: Previous and the item list (nonlinear), Next, Submit, then End (nonlinear and
+ * individual).
+ */
+export interface NavigationOptions extends Pick<Options, "parts"> {
+  readonly order?: readonly NavigationPart[];
+}
+
+/**
+ * Render a test session's navigation as plate's navigation parts: the `test-navigation` Root and
+ * the parts it holds, as HTML.
+ *
+ * Every button is a plain button, `type="button"` with no `name`, `value`, `form*` attribute,
+ * `action` or script, so it does nothing on its own. Its `disabled` follows `state.allowed`, its
+ * `data-intent` is its intent as `encodeIntent` writes it, and its label comes from the
+ * configuration's locale, an item's naming its state in words. A host that posts natively swaps a
+ * button for its own submit button, whose `type`, `name` and `value` are the host's and whose
+ * value is the `data-intent` it is handed; everything else plate computes survives the swap. Two
+ * renders of one input are byte-equal.
+ *
+ * @example
+ *   const submitting = (props: Attributes, children: readonly Node[]) =>
+ *     h(
+ *       "button",
+ *       { name: intentName("s-1"), type: "submit", value: props["data-intent"] ?? "" },
+ *       children,
+ *     );
+ *   renderNavigation(state, configuration, { parts: { "test-navigation": { next: submitting } } });
+ *   // Result.succeed('<nav aria-label="Test navigation" …>…<button type="submit" name="s-1.intent" value="next" …>Next item</button>…</nav>')
+ *
+ * @param state The navigation, as {@link navigationState} gives it.
+ * @param configuration The configuration, which gives the locale.
+ * @param options The part overrides and the parts' order, none by default.
+ * @returns The Root's HTML, or {@link UnknownPart} for an override the part table lacks, or
+ *   {@link PartSwapRefused} for a replacement that breaks the swap invariant.
+ */
+export const renderNavigation = (
+  state: NavigationState,
+  configuration: Configuration,
+  options: NavigationOptions = {},
+): Result.Result<string, PartSwapRefused | UnknownPart> =>
+  Result.gen(function* renderNavigationParts() {
+    const parts = yield* resolveOverrides(options.parts);
+    const root = yield* emitNavigation(
+      state,
+      { locale: configuration.locale, parts },
+      options.order,
+    );
+
+    return toHtml(root);
   });
