@@ -475,6 +475,7 @@ describe("submitItem", () => {
           "attempts-exhausted",
         );
       }),
+    { tags: ["corpus"] },
   );
 
   it.effect(
@@ -527,6 +528,7 @@ describe("submitItem", () => {
 
         assert.strictEqual(itemAt(answered, 1).record.numAttempts, 1);
       }),
+    { tags: ["corpus"] },
   );
 
   it.effect(
