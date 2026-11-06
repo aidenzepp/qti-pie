@@ -223,7 +223,13 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
       status: "G",
     },
   ],
-  [45, { owner: "G5, Q5.08", status: "P" }],
+  [
+    45,
+    {
+      owner: "G5, Q5.08; a value a key holds is held to reading 133's key-text bound",
+      status: "P",
+    },
+  ],
   [46, { owner: "G5's derived `int8`", status: "P" }],
   [
     47,
@@ -423,7 +429,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     94,
     {
       owner:
-        "AL1: `xs:NCName` and the types derived from it, over XML 1.0 Second Edition's name tables (`src/grammar/domains.ts`, read from the cached specification by `domains.test.ts`, judged against xmllint by `lexical.oracle.test.ts`); the oracle's bare variable reference",
+        "AL1: `xs:NCName` and the types derived from it, over XML 1.0 Second Edition's name tables (`src/grammar/domains.ts`, read from the cached specification by `domains.test.ts`, judged against xmllint by `lexical.oracle.test.ts`); the oracle's bare variable reference; a name a key holds is held to reading 133's key-text bound",
       status: "G",
     },
   ],
@@ -723,6 +729,14 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     },
   ],
   [132, { owner: "AL1 (`printfFormat` on `qti-printed-variable`'s `format`)", status: "G" }],
+  [
+    133,
+    {
+      owner:
+        "S-ORACLE's `keyText` (`src/qti/limits.ts`: `keyTextCodePoints` 646, held to grizzle's `keyTextBytes` by `limits.test.ts`), the oracle's Key text bound (rule `key-text-bound`) over the schema's key copies (`src/test/key-copies.ts`), held to the import's rows by `src/test/oracle.keys.test.ts`; the byte bound is a stated limit until grizzle beta.1's `str.bytes(N)`",
+      status: "G",
+    },
+  ],
   [
     134,
     {
