@@ -1177,9 +1177,10 @@ against it. A reading that is not an information-model-over-XSD case says which 
     holds a QName value's prefix to a binding in scope. A binding is a fact of the element's ancestors, and the rows
     hold each element's own declarations alone (`Namespace`, keyed by element and prefix), with no relation of the
     bindings in scope at an element. So the importer refuses an `xsi:type` whose prefix nothing binds (shred's
-    `type-unresolved`, an `unmodeled-vocabulary` refusal), and nothing refuses an unbound prefix in an SSML `role`
-    item or in the text of an element an `xsi:type` of `xs:QName` governs, which is judged by QName's lexical form
-    alone. An element's or an attribute's name has no such law either: its prefix is held by the reader's namespace
+    `type-unresolved`, an `unmodeled-vocabulary` refusal), and the importer refuses an SSML `role` item whose prefix no
+    declaration in scope binds, as it refuses such an `xsi:type` (shred's `role-unresolved`, an `unmodeled-vocabulary`
+    refusal); no law over the stored rows holds either, the gap this paragraph states. Nothing refuses an unbound prefix
+    in the text of an element an `xsi:type` of `xs:QName` governs, which is judged by QName's lexical form alone. An element's or an attribute's name has no such law either: its prefix is held by the reader's namespace
     well-formedness (Namespaces in XML 1.0, section 5, "Namespace constraint: Prefix Declared"), since crust's
     reader refuses a prefix no declaration in scope binds as a `WellFormednessError` (`packages/crust/src/read.ts`,
     `saxes` reading with namespaces on), so no stored row holds one. The corpus holds no `xsi:type` and no `role`,
