@@ -12,6 +12,7 @@ import { Predicate } from "effect";
 import type { Rows as RowSet } from "#pantry/import/tree.ts";
 import * as family from "#pantry/schema/attributes.ts";
 import { IdrefAttribute } from "#pantry/schema/content/rosters.ts";
+import { isMathmlKind } from "#pantry/schema/kinds/mathml.ts";
 import type { MathmlHome } from "#pantry/schema/mathml/homes.ts";
 import { mathmlHomes } from "#pantry/schema/mathml/homes.ts";
 import { Author } from "#pantry/schema/roles.ts";
@@ -1538,7 +1539,8 @@ export const xsiTypeAttributesOf = (index: Index): ((id: Uuid) => readonly Forei
 /**
  * The readers of an element kind: each own attribute then each shared one, by name, in the order
  * {@link ownAttributes} and the shared list give them, so a reader later in the list replaces an
- * earlier one that names the same attribute.
+ * earlier one that names the same attribute. A MathML kind gets its own attributes only: the shared
+ * list would replace MathML's own `class` with the empty node-class reader.
  *
  * @param index - The index of the rows to read, from {@link indexOf}.
  * @returns A function from kind to its readers, which builds each kind's readers once.
@@ -1551,7 +1553,7 @@ export const readersFor = (
   return (kind) => {
     const found =
       readers.get(kind) ??
-      [...(ownByKind.get(kind) ?? []), ...shared].map(
+      [...(ownByKind.get(kind) ?? []), ...(isMathmlKind(kind) ? [] : shared)].map(
         ([name, source]): readonly [string, Reader] => [name, source(index)],
       );
     readers.set(kind, found);
