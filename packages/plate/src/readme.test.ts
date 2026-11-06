@@ -504,6 +504,22 @@ describe("README.md", () => {
     );
   });
 
+  it("says in Navigation that advance refuses a step whose responses do not fit with StepResponseMisfit", () => {
+    const paragraphs = sectionOf("## Navigation")
+      .split(/\n{2,}/u)
+      .map((paragraph) => paragraph.replaceAll("\n", " "));
+
+    assert.isTrue(
+      paragraphs.some(
+        (paragraph) =>
+          paragraph.includes("`advance`") &&
+          paragraph.includes("`StepResponseMisfit`") &&
+          paragraph.includes("refuses"),
+      ),
+      "a paragraph of Navigation says advance refuses a misfit step with StepResponseMisfit",
+    );
+  });
+
   it.effect("runs the plain server action on a base-16 Text Entry, which scores ff as 255", () =>
     Effect.gen(function* runsServerAction() {
       const step = yield* serverAction();

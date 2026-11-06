@@ -132,9 +132,11 @@ that builds its own Status part reads the fields `StatusInput` documents.
 `encodeIntent` and `decodeIntent` are the navigation API. All six are pure functions.
 `navigationState` gives the current test part's modes, the candidate's position, the state of
 each item in the part and the intents the session takes now. `advance` carries out one intent, or
-refuses it with `IntentRefused`. When the current item is closed, `advance` ignores the responses
-that come with the intent and still carries out the intent, so a host can post a closed item's
-form as rendered. `current` and `itemView` mark a closed item as `disabled`.
+refuses it with `IntentRefused`. When the current item is open, `advance` refuses with
+`StepResponseMisfit` a step that carries a response the item does not declare, or one that does
+not match its declaration's base type and cardinality. When the current item is closed, `advance`
+ignores the responses that come with the intent and still carries out the intent, so a host can
+post a closed item's form as rendered. `current` and `itemView` mark a closed item as `disabled`.
 
 `renderNavigation` writes plate's navigation parts from that data. Every button it writes is
 `type="button"`, with no name, value, form attribute or other submit semantics, so a click does

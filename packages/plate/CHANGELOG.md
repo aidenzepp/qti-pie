@@ -61,6 +61,10 @@ A host built on an earlier commit of M2 sees these changes.
 - `advance` ignores the responses a step carries when the current item is closed, and still carries
   out the step's intent. A closed item keeps the responses it closed with, which `itemView` shows
   and `results` reports.
+- When the current item is open, `advance` refuses with `StepResponseMisfit` a step that carries a
+  response the item does not declare, or one that does not match its declaration's base type and
+  cardinality. `results` refuses with `InvalidSession` a test session whose item holds such a saved
+  response.
 - Under `allow-skipping="false"`, only the responses that `postings` lists count as answering an
   item. An item with none of them is never refused as `skipping-not-allowed`.
 - An accepted package's `files` leaves out the document of every QTI resource: items, tests,

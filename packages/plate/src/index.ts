@@ -132,7 +132,7 @@ export { InvalidResponses, RecordMismatch, ResponsesRefused, score } from "#plat
 
 export type { AdvanceFailure } from "#plate/session/advance.ts";
 
-export { advance, IntentRefused } from "#plate/session/advance.ts";
+export { advance, IntentRefused, StepResponseMisfit } from "#plate/session/advance.ts";
 
 export { UnknownItemRef } from "#plate/session/control.ts";
 
