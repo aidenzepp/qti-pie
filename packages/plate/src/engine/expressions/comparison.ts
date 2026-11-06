@@ -277,11 +277,13 @@ const toleranceOf = (
  * Report whether a `qti-equal` in a tolerance mode holds: whether its second operand, `y`, lies in
  * the range its first, `x`, defines with `t0` and `t1`, each bound closed when its flag is true.
  *
- * The range is the information model's as written: `[x − t0, x + t1]` in `absolute` mode and
- * `[x·(1 − t0/100), x·(1 + t1/100)]` in `relative` mode, `t0` and `t1` read as percentages. So in
- * `relative` mode a negative `x` gives a lower bound above its upper bound, and the range holds no
- * value. The bounds are computed in floats from `x` through `toFloat`; `y` is compared with each
- * exactly ({@link orderOf}), and a NaN bound holds nothing.
+ * The range is `[x − t0, x + t1]` in `absolute` mode and `[x − |x|·t0/100, x + |x|·t1/100]` in
+ * `relative` mode, `t0` and `t1` read as percentages of `|x|`, `t0` below `x` and `t1` above it
+ * (Mind amendment 2, for the M3.b-1 readings). For `x ≥ 0` that is the information model's
+ * `[x·(1 − t0/100), x·(1 + t1/100)]`; as written, that range puts its lower bound above its upper
+ * for a negative `x` and holds no value. For `x = 0` the range is `{0}`. The bounds are computed in
+ * floats from `x` through `toFloat`; `y` is compared with each exactly ({@link orderOf}), and a NaN
+ * bound, such as `INF − INF` for an infinite `x` in `relative` mode, holds nothing.
  *
  * @param equal The `qti-equal`, in its `absolute` or `relative` mode.
  * @param x The first operand.
@@ -298,10 +300,12 @@ const withinTolerance = (
   [t0, t1]: readonly [number, number],
 ): boolean => {
   const first = floatOf(x);
-  const [lower, upper] =
+  const [below, above] =
     equal.toleranceMode === "relative"
-      ? [first * (1 - t0 / 100), first * (1 + t1 / 100)]
-      : [first - t0, first + t1];
+      ? [(Math.abs(first) * t0) / 100, (Math.abs(first) * t1) / 100]
+      : [t0, t1];
+  const lower = first - below;
+  const upper = first + above;
   const aboveLower = Option.exists(orderOf(y, { baseType: "float", value: lower }), (order) =>
     equal.includeLowerBound ? order >= 0 : order > 0,
   );

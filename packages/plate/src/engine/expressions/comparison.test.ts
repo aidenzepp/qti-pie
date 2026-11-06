@@ -265,10 +265,43 @@ describe("the comparison family's evaluators", () => {
     );
   });
 
-  it("[I-9a] qti-equal in relative mode reads a negative x's range as written, x·(1−t0/100) as its lower bound, so the range holds no value", () => {
+  it("[I-9a] qti-equal in relative mode with a negative x takes t0 percent of |x| below x and t1 percent above it (Mind amendment 2)", () => {
+    const ten = [literal(10)];
+
     assert.deepStrictEqual(
-      tolerated("relative", [float(-10), float(-10)], [literal(10)]),
-      truth(false),
+      [-11.5, -11, -10, -9, -8.5].map((y) => tolerated("relative", [float(-10), float(y)], ten)),
+      [false, true, true, true, false].map((held) => truth(held)),
+    );
+    assert.deepStrictEqual(
+      [-111, -110, -80, -79].map((y) =>
+        tolerated("relative", [float(-100), float(y)], [literal(10), literal(20)]),
+      ),
+      [false, true, true, false].map((held) => truth(held)),
+    );
+    assert.deepStrictEqual(
+      [
+        tolerated("relative", [float(-10), float(-11)], ten, { includeLowerBound: false }),
+        tolerated("relative", [float(-10), float(-9)], ten, { includeUpperBound: false }),
+        tolerated("relative", [integer(-10n), integer(-11n)], ten),
+      ],
+      [false, false, true].map((held) => truth(held)),
+    );
+  });
+
+  it("[I-9a] qti-equal in relative mode with x = 0 holds 0 alone, whatever its tolerance (Mind amendment 2)", () => {
+    assert.deepStrictEqual(
+      [-0.001, 0, 0.001].map((y) =>
+        tolerated("relative", [float(0), float(y)], [literal(50), literal(50)]),
+      ),
+      [false, true, false].map((held) => truth(held)),
+    );
+    assert.deepStrictEqual(
+      [
+        tolerated("relative", [integer(0n), integer(0n)], [literal(50)]),
+        tolerated("relative", [float(0), float(0)], [literal(50)], { includeLowerBound: false }),
+        tolerated("relative", [float(0), float(0)], [literal(50)], { includeUpperBound: false }),
+      ],
+      [true, false, false].map((held) => truth(held)),
     );
   });
 

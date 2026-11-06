@@ -451,6 +451,7 @@ describe("the comparison family's reader specs and kind rules", () => {
           [floatEqual("absolute", "HALF", "10", "9.25"), false],
           [floatEqual("relative", "5.0 5.0", "200", "210"), true],
           [floatEqual("relative", "ONE", "200", "202.5"), false],
+          [floatEqual("relative", "ONE", "-200", "-202"), true],
         ];
 
         for (const [expression, expected] of cases) {
