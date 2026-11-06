@@ -1,5 +1,5 @@
 /**
- * The item model: what phase 1 reads from a valid `qti-assessment-item`, typed, with every feature
+ * The item model: what plate reads from a valid `qti-assessment-item`, typed, with every feature
  * it does not render named as a notice or a mark.
  *
  * {@link buildItem} reads the declarations, the body and the response processing into one
@@ -44,7 +44,7 @@ import type {
 } from "#plate/vocabulary.ts";
 
 /**
- * A feature the item holds and phase 1 does not render, where it is, and how it is shown: a
+ * A feature the item holds and plate does not render, where it is, and how it is shown: a
  * `notice` in the body in place of its part, or a `mark` on the verdict only.
  */
 export interface UnsupportedFeature {
@@ -427,7 +427,7 @@ export interface ExtendedTextInteraction extends Omit<TextEntryInteraction, "kin
 }
 
 /**
- * A body part phase 1 does not render, shown as a notice in its place; its subtree is dropped.
+ * A body part plate does not render, shown as a notice in its place; its subtree is dropped.
  */
 export interface Unsupported {
   /**
@@ -497,13 +497,13 @@ export type Rule =
   | { readonly expression: Expression; readonly identifier: string; readonly kind: "set-outcome" };
 
 /**
- * A valid `qti-assessment-item` as phase 1 models it.
+ * A valid `qti-assessment-item` as plate models it.
  *
  * `responses` and `outcomes` hold the declarations of modelled base types and cardinalities, in
  * document order; every other declaration is a mark. `processing` is none when the item has no
- * response processing, or when phase 1 cannot run it, which `unsupported` then marks. Phase 1
- * cannot run it on an item with template processing, which phase 1 does not run and which may set a
- * value response processing reads, such as a correct response. `unsupported` lists every feature
+ * response processing, or when plate cannot run it, which `unsupported` then marks. Plate cannot
+ * run it on an item with template processing, which plate does not run and which may set a value
+ * response processing reads, such as a correct response. `unsupported` lists every feature
  * not rendered, in document order, each once per feature and path.
  */
 export interface Item {

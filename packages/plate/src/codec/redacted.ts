@@ -138,7 +138,7 @@ interface ExtendedTextInteractionJson extends Omit<TextEntryInteractionJson, "ki
 }
 
 /**
- * A body part phase 1 does not render, in the JSON form.
+ * A body part plate does not render, in the JSON form.
  */
 interface UnsupportedJson {
   readonly feature: string;

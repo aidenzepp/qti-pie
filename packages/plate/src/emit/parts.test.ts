@@ -766,8 +766,8 @@ const unnamedInlineChoice: InlineChoiceInteraction = {
 
 /**
  * Place an interaction in the body: a Text Entry stands in a sentence beside a Notice for an
- * unsupported inline part, an Inline Choice in a sentence of its own, and a Choice or an Extended
- * Text at the body's top level.
+ * inline interaction plate does not render (an End Attempt), an Inline Choice in a sentence of its
+ * own, and a Choice or an Extended Text at the body's top level.
  *
  * @param interaction The interaction.
  * @returns The body node that holds it.
@@ -781,9 +781,9 @@ const placed = (interaction: Interaction): BodyNode => {
           words("The year was "),
           interaction,
           {
-            feature: "qti-inline-choice-interaction",
+            feature: "qti-end-attempt-interaction",
             kind: "unsupported",
-            path: "qti-assessment-item/qti-item-body/p/qti-inline-choice-interaction",
+            path: "qti-assessment-item/qti-item-body/p/qti-end-attempt-interaction",
           },
         ],
         kind: "element",

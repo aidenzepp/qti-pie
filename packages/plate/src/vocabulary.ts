@@ -1,9 +1,9 @@
 /**
- * The closed value sets: the QTI vocabulary phase 1 models, renders and reads, and the test,
+ * The closed value sets: the QTI vocabulary plate models, renders and reads, and the test,
  * package and session vocabulary M2's validators and engine read, as data.
  *
  * Every set is closed: a value outside it is unsupported or invalid, never guessed at. The model
- * builder, the verdict and the emitter read these lists, so what phase 1 renders is decided once.
+ * builder, the verdict and the emitter read these lists, so what plate renders is decided once.
  *
  * The emitter consults no vocabulary class: what an element does comes from its QTI name,
  * attributes and binding alone. {@link styledClasses} lists the classes `styles.css` presents, and
@@ -192,7 +192,7 @@ export type Condition =
   | { readonly kind: "untyped" };
 
 /**
- * The rule that finds a feature phase 1 does not render: the key the verdict and its notice name
+ * The rule that finds a feature plate does not render: the key the verdict and its notice name
  * the feature by, the elements that can carry it, and the condition under which one does.
  *
  * `on` names the elements that can carry it by their QTI local name, or is `body` for every element
@@ -224,12 +224,12 @@ export interface Renders {
    */
   readonly controlNotices: readonly FeatureRule[];
   /**
-   * The `qti-*` elements phase 1 renders or reads, the engine's included. Every element in the QTI
+   * The `qti-*` elements plate renders or reads, the engine's included. Every element in the QTI
    * namespace without the `qti-` prefix is HTML and renders as itself.
    */
   readonly elements: readonly string[];
   /**
-   * The response-processing elements phase 1 evaluates.
+   * The response-processing elements the engine evaluates.
    */
   readonly engine: readonly string[];
   /**
@@ -251,7 +251,7 @@ export interface Renders {
 }
 
 /**
- * What phase 1 renders, reads, shows a notice for and marks, as data.
+ * What plate renders, reads, shows a notice for and marks, as data.
  *
  * The emitter and the model builder read the same lists, so an element is rendered exactly when
  * the verdict does not name it unsupported.

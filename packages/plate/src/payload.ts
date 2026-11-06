@@ -152,7 +152,7 @@ export interface TextPayload {
 }
 
 /**
- * A body part phase 1 does not render, which the emitter shows as the Notice part.
+ * A body part plate does not render, which the emitter shows as the Notice part.
  */
 export interface NoticePayload {
   /**
