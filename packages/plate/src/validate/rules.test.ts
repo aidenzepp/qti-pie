@@ -1,7 +1,12 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option } from "effect";
 import { attr, doc, el, entity, text } from "#plate/document/source.ts";
-import type { SourceAttribute, SourceChild, SourceElement } from "#plate/document/source.ts";
+import type {
+  SourceAttribute,
+  SourceChild,
+  SourceDocument,
+  SourceElement,
+} from "#plate/document/source.ts";
 import { growthFactor, growthLimit, growthRatio } from "#plate/test/growth.ts";
 import type { ReferenceEntry } from "#plate/model/expression.ts";
 import { checkRules, referenceRefusals } from "#plate/validate/rules.ts";
@@ -33,6 +38,21 @@ const item = (
       [...declarations, el("qti-item-body", [], body), ...after],
     ),
   );
+
+/**
+ * Make a hand-built item time dependent: its root's `time-dependent`, `false` in every
+ * {@link item}, becomes `true`, so the item has the built-in `duration` to read.
+ *
+ * @param source The item.
+ * @returns The same item, time dependent.
+ */
+const timed = (source: SourceDocument): SourceDocument =>
+  doc(source.location, {
+    ...source.root,
+    attributes: source.root.attributes.map((attribute) =>
+      attribute.local === "time-dependent" ? attr("time-dependent", "true") : attribute,
+    ),
+  });
 
 /**
  * Construct a response declaration.
@@ -404,6 +424,20 @@ const judged = (source: ReturnType<typeof item>) =>
  */
 const settingScore = (expression: SourceElement) =>
   judged(item([outcome("SCORE")], [], [processing(undefined, [setScore(expression)])]));
+
+/**
+ * Construct an item, not time dependent, whose inline processing sets one outcome to an expression.
+ *
+ * @param declarations The item's declarations.
+ * @param target The identifier of the outcome the processing sets.
+ * @param expression The expression.
+ * @returns The item.
+ */
+const settingOutcome = (
+  declarations: readonly SourceElement[],
+  target: string,
+  expression: SourceElement,
+) => item(declarations, [], [processing(undefined, [setOutcome(target, expression)])]);
 
 /**
  * Check an item whose inline processing sets its float `SCORE` from a `qti-map-response-point` of
@@ -1298,16 +1332,29 @@ describe("checkRules", () => {
       );
     });
 
-    it("accepts a qti-variable of the built-in duration and of a declared template variable", () => {
-      assert.deepStrictEqual(
-        judged(
-          item(
-            [outcome("SCORE"), declaration("qti-template-declaration", "T", "single", "float")],
-            [],
-            [processing(undefined, [setScore(variable("duration")), setScore(variable("T"))])],
-          ),
-        ),
+    it("[I-9a] accepts a qti-variable of the built-in duration in a time-dependent item and of a declared template variable, and refuses the duration in an item that is not (item-duration)", () => {
+      const reading = item(
+        [outcome("SCORE"), declaration("qti-template-declaration", "T", "single", "float")],
         [],
+        [processing(undefined, [setScore(variable("duration")), setScore(variable("T"))])],
+      );
+
+      assert.deepStrictEqual(
+        [judged(timed(reading)), judged(reading)],
+        [
+          [],
+          [
+            {
+              detail: {
+                check: "untimed-duration",
+                element: "qti-variable",
+                identifier: "duration",
+              },
+              path: `${rulePath}[1]/qti-variable`,
+              rule: "undeclared-variable",
+            },
+          ],
+        ],
       );
     });
 
@@ -1404,6 +1451,106 @@ describe("checkRules", () => {
         );
       });
     });
+
+    describe("the built-in duration, which only a time-dependent item has (item-duration)", () => {
+      /**
+       * A `qti-any-n` whose `min` names `duration`, a reference attribute of base type integer,
+       * over one boolean operand.
+       */
+      const anyN = el(
+        "qti-any-n",
+        [attr("min", "duration"), attr("max", "1")],
+        [baseValue("boolean", "true")],
+      );
+
+      /**
+       * The refusal of a `qti-variable` that reads `duration` in an item that is not time
+       * dependent.
+       */
+      const untimedRead = {
+        detail: { check: "untimed-duration", element: "qti-variable", identifier: "duration" },
+        path: `${rulePath}/qti-variable`,
+        rule: "undeclared-variable" as const,
+      };
+
+      /**
+       * The refusal of {@link anyN}'s `min`, which names `duration`, in an item that is not time
+       * dependent.
+       */
+      const untimedNamed = {
+        detail: {
+          attribute: "min",
+          check: "untimed-duration",
+          element: "qti-any-n",
+          identifier: "duration",
+        },
+        path: `${rulePath}/qti-any-n`,
+        rule: "undeclared-variable" as const,
+      };
+
+      /**
+       * The refusal of {@link anyN}'s `min`, which names a built-in, no template or outcome variable
+       * (P24), whether the item is time dependent or not.
+       */
+      const builtInNamed = {
+        detail: {
+          attribute: "min",
+          check: "reference",
+          element: "qti-any-n",
+          expectedBaseType: "integer",
+          identifier: "duration",
+        },
+        path: `${rulePath}/qti-any-n`,
+        rule: "expression-type" as const,
+      };
+
+      it("[I-9a] refuses a qti-variable of duration in an item that is not time dependent (item-duration)", () => {
+        assert.deepStrictEqual(
+          judged(settingOutcome([outcome("SCORE")], "SCORE", variable("duration"))),
+          [untimedRead],
+        );
+      });
+
+      it("[I-9a] refuses qti-any-n's min naming duration in an item that is not time dependent, and as no template or outcome variable (item-duration, P24)", () => {
+        assert.deepStrictEqual(
+          judged(settingOutcome([outcome("PASSED", "boolean")], "PASSED", anyN)),
+          [untimedNamed, builtInNamed],
+        );
+      });
+
+      it("[I-9a] accepts a qti-variable of duration in a time-dependent item", () => {
+        assert.deepStrictEqual(
+          judged(timed(settingOutcome([outcome("SCORE")], "SCORE", variable("duration")))),
+          [],
+        );
+      });
+
+      it("[I-9a] refuses qti-any-n's min naming duration in a time-dependent item only as no template or outcome variable (P24)", () => {
+        assert.deepStrictEqual(
+          judged(timed(settingOutcome([outcome("PASSED", "boolean")], "PASSED", anyN))),
+          [builtInNamed],
+        );
+      });
+
+      it("[I-9a] accepts a declared outcome named duration, read by a qti-variable and by qti-any-n's min, in an item timed or not", () => {
+        const declared = item(
+          [
+            outcome("duration", "integer"),
+            outcome("HITS", "integer"),
+            outcome("PASSED", "boolean"),
+          ],
+          [],
+          [
+            processing(undefined, [
+              setOutcome("HITS", variable("duration")),
+              setOutcome("PASSED", anyN),
+            ]),
+          ],
+        );
+
+        assert.deepStrictEqual([judged(timed(declared)), judged(declared)], [[], []]);
+      });
+    });
   });
 
   describe("expression-type", () => {
@@ -1440,8 +1587,30 @@ describe("checkRules", () => {
       assert.deepStrictEqual(settingScore(variable("numAttempts")), [scoreRefused("integer")]);
     });
 
-    it("accepts setting it from duration, a float in an item (reading 29)", () => {
-      assert.deepStrictEqual(settingScore(variable("duration")), []);
+    it("[I-9a] accepts setting it from duration, a float in a time-dependent item (reading 29), and refuses no type in an item that is not, only the read (item-duration)", () => {
+      const setting = item(
+        [outcome("SCORE")],
+        [],
+        [processing(undefined, [setScore(variable("duration"))])],
+      );
+
+      assert.deepStrictEqual(
+        [judged(timed(setting)), judged(setting)],
+        [
+          [],
+          [
+            {
+              detail: {
+                check: "untimed-duration",
+                element: "qti-variable",
+                identifier: "duration",
+              },
+              path: `${rulePath}/qti-variable`,
+              rule: "undeclared-variable",
+            },
+          ],
+        ],
+      );
     });
 
     it("neither types nor refuses an expression that holds a qti-field-value, not yet landed", () => {

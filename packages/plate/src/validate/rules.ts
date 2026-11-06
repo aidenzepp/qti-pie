@@ -36,6 +36,7 @@ import type {
   ReferenceEntry,
   ResultAttributes,
 } from "#plate/model/expression.ts";
+import { xsBooleanOf } from "#plate/model/attributes.ts";
 import { kindRules } from "#plate/model/expressions/read.ts";
 import {
   isModelled,
@@ -951,6 +952,10 @@ const textValueType = (
  * `duration` is a single float, seconds). `QTI_CONTEXT` is the built-in context variable, a record,
  * which has no base type of its own: "any references within an item or an assessment to the
  * QTI_CONTEXT variable [...] must succeed" (`info-compact.txt:8456`).
+ *
+ * `duration` is typed here in every item, so a read of it types the same whether the item is time
+ * dependent or not; an item that is not may not read it at all, which {@link untimedDuration}
+ * decides.
  */
 const builtIns: ReadonlyMap<string, ExpressionType> = new Map<string, ExpressionType>([
   ["completionStatus", singleOf("identifier")],
@@ -958,6 +963,32 @@ const builtIns: ReadonlyMap<string, ExpressionType> = new Map<string, Expression
   ["numAttempts", singleOf("integer")],
   ["QTI_CONTEXT", { baseType: "unknown", cardinality: "record" }],
 ]);
+
+/**
+ * Report whether a name, which no declaration answers, reads the built-in `duration` of an item
+ * that is not time dependent: "The value of duration for items that are not time dependent must
+ * not be used in any item or test-level expression" (`info-compact.txt:8472`). The qti package
+ * refuses the same as `item-duration` (S-R49, `untimedDuration` in
+ * `packages/pantry/src/processing/check.ts`).
+ *
+ * The root's `time-dependent` is read as `xs:boolean`. One that is absent or outside
+ * `xs:boolean` is the structural validator's refusal, so the item is not judged untimed here. A
+ * root other than a `qti-assessment-item` has no item `duration` of its own: a test reaches an
+ * item's through an item ref, which is not judged here.
+ *
+ * @param source The document whose root the name is read in.
+ * @param identifier The name, which the caller has found no declaration of.
+ * @returns Whether the name is `duration` and the root is an item whose `time-dependent` is false.
+ */
+const untimedDuration = (source: SourceDocument, identifier: string): boolean =>
+  identifier === "duration" &&
+  isQti(source.root, (local) => local === "qti-assessment-item") &&
+  Option.exists(
+    Option.flatMap(attributeOf(source.root, "time-dependent"), (attribute) =>
+      xsBooleanOf(attribute.value),
+    ),
+    (timeDependent) => !timeDependent,
+  );
 
 /**
  * The kind of variable an element's `identifier` must name: a response, an outcome, or any
@@ -1093,6 +1124,22 @@ const declarationType = (declaration: SourceElement): Option.Option<ExpressionTy
 };
 
 /**
+ * Give the item's declarations a reference of a kind may name.
+ *
+ * @param expected The kind of variable the reference must name.
+ * @param context The item's declarations.
+ * @returns The outcome or the response declarations, or every declaration a `qti-variable` may
+ *   read, by identifier.
+ */
+const declarationsNamable = (
+  expected: Expected,
+  context: Context,
+): ReadonlyMap<string, SourceElement> =>
+  ({ outcome: context.outcomes, response: context.responses, variable: context.variables })[
+    expected
+  ];
+
+/**
  * Find the variable a reference names, and its type.
  *
  * A declaration of the expected kind wins over a built-in of the same name. Identifiers compare
@@ -1108,12 +1155,7 @@ const variableType = (
   reference: Reference,
   context: Context,
 ): Option.Option<Option.Option<ExpressionType>> => {
-  const declarations = {
-    outcome: context.outcomes,
-    response: context.responses,
-    variable: context.variables,
-  }[reference.expected];
-  const declaration = declarations.get(reference.identifier);
+  const declaration = declarationsNamable(reference.expected, context).get(reference.identifier);
   if (declaration !== undefined) {
     return Option.some(declarationType(declaration));
   }
@@ -1138,11 +1180,17 @@ const variableType = (
  * `packages/pantry/src/processing/check.ts`). A reference attribute that names no variable is
  * {@link attributeReferences}' refusal.
  *
+ * One that reads the built-in `duration`, which no declaration of the expected kind answers, in an
+ * item that is not time dependent is refused too, with `check: "untimed-duration"`
+ * ({@link untimedDuration}, pantry's `item-duration`). A declaration named `duration` is read
+ * instead, timed or not, as the qti package's `reference` reads the declaration first.
+ *
  * @param source The document.
  * @param visit The element's visit.
  * @param context The item's declarations and the parents the walk has met.
- * @returns The refusal at the element's path when it names no variable of the kind it must; none
- *   for any other element and for one outside response processing.
+ * @returns The refusal at the element's path when it names no variable of the kind it must, or the
+ *   `duration` an item that is not time dependent does not have; none for any other element and
+ *   for one outside response processing.
  */
 const undeclaredVariable = (
   source: SourceDocument,
@@ -1150,21 +1198,31 @@ const undeclaredVariable = (
   context: Context,
 ): readonly Refusal[] => {
   const reference = referenceOf(visit.element);
-  if (
-    Option.isNone(reference) ||
-    !inResponseProcessing(context, visit.element) ||
-    Option.isSome(variableType(reference.value, context))
-  ) {
+  if (Option.isNone(reference) || !inResponseProcessing(context, visit.element)) {
     return [];
   }
 
-  return [
-    refusal(source, "undeclared-variable", visit.path, {
-      element: visit.element.local,
-      expected: reference.value.expected,
-      identifier: reference.value.identifier,
-    }),
-  ];
+  const { expected, identifier } = reference.value;
+  if (Option.isNone(variableType(reference.value, context))) {
+    return [
+      refusal(source, "undeclared-variable", visit.path, {
+        element: visit.element.local,
+        expected,
+        identifier,
+      }),
+    ];
+  }
+
+  return !declarationsNamable(expected, context).has(identifier) &&
+    untimedDuration(source, identifier)
+    ? [
+        refusal(source, "undeclared-variable", visit.path, {
+          check: "untimed-duration",
+          element: visit.element.local,
+          identifier,
+        }),
+      ]
+    : [];
 };
 
 /**
@@ -1644,6 +1702,11 @@ const valuesOf = (written: string, entry: ReferenceEntry): readonly string[] =>
  * reference whose text is no NCName lies outside both members of the attribute's union, which is
  * the structural validator's refusal, so it is passed over here.
  *
+ * A reference to the built-in `duration`, which no declaration answers, in an item that is not time
+ * dependent is also `undeclared-variable`, with `check: "untimed-duration"` and the `attribute`
+ * ({@link untimedDuration}, pantry's `item-duration`), before its P24: the qti package refuses
+ * both, `item-duration` first. In a time-dependent item it is P24 alone.
+ *
  * It reads only the facet entries it is given, so it judges any kind whose rule declares them.
  *
  * @param source The document.
@@ -1651,7 +1714,8 @@ const valuesOf = (written: string, entry: ReferenceEntry): readonly string[] =>
  * @param references The reference facet of the expression's kind.
  * @param declarations Every declaration of the item, by identifier.
  * @returns The refusals at the expression's path, one per value that names no variable or one of
- *   another kind or type.
+ *   another kind or type, and one more for each that names the `duration` an item that is not time
+ *   dependent does not have.
  */
 export const referenceRefusals = (
   source: SourceDocument,
@@ -1697,17 +1761,29 @@ export const referenceRefusals = (
           (type) => !agree(type, singleOf(entry.baseType)),
         );
 
-      return fits
-        ? []
-        : [
-            refusal(source, "expression-type", visit.path, {
-              attribute: entry.attribute,
-              check: "reference",
-              element: visit.element.local,
-              expectedBaseType: entry.baseType,
-              identifier,
-            }),
-          ];
+      return [
+        ...(declaration === undefined && untimedDuration(source, identifier)
+          ? [
+              refusal(source, "undeclared-variable", visit.path, {
+                attribute: entry.attribute,
+                check: "untimed-duration",
+                element: visit.element.local,
+                identifier,
+              }),
+            ]
+          : []),
+        ...(fits
+          ? []
+          : [
+              refusal(source, "expression-type", visit.path, {
+                attribute: entry.attribute,
+                check: "reference",
+                element: visit.element.local,
+                expectedBaseType: entry.baseType,
+                identifier,
+              }),
+            ]),
+      ];
     });
   });
 
@@ -1827,7 +1903,8 @@ const setCorrectResponses = (
  * judges the declarations a standard template, an inline `qti-map-response` or
  * `qti-map-response-point` and a `qti-lookup-outcome-value` need. `undeclared-variable` judges the
  * variable a rule or an expression names, through its kind's declaration facet in the registry,
- * and the variables its reference attributes name, through its kind's reference facet.
+ * and the variables its reference attributes name, through its kind's reference facet, and refuses
+ * a read of the built-in `duration` in an item whose `time-dependent` is false.
  * `expression-type` judges what a `qti-set-outcome-value` sets, a lookup's operand, every
  * expression's operands by its kind's rule, and the variables its reference attributes name. Each
  * expression is typed through its kind's rule in the registry (`kindRules` in
