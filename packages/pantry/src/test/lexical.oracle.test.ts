@@ -191,6 +191,16 @@ interface Recorded {
  */
 const recorded: readonly Recorded[] = [
   {
+    kind: /^m:/u,
+    reason: {
+      _tag: "reading",
+      reading: 2,
+      why: "MathML 3's xref names an id of its document (an xs:IDREF, §5.4.2), where QTI's bundled MathML XSD types it xs:anySimpleType, so text that is no IDREF is refused",
+    },
+    subject: /^xref$/u,
+    xsd: "valid",
+  },
+  {
     kind: /^qti-match-table-entry$/u,
     reason: {
       _tag: "reading",
