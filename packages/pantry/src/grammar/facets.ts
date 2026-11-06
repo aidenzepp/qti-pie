@@ -1052,75 +1052,108 @@ const piecewiseModel = (() => {
 })();
 
 /**
- * A model's qualifiers and their arguments as the RelaxNG states them, with `interval` among the
- * qualifiers: `DomainQ = (domainofapplication|condition|interval|(lowlimit,uplimit?))*`
- * (`mathml3-content.rnc` line 41), the XSD's `DomainQ` without `interval` ("Ambiguous content model
- * altered (interval)", `mathml3-content.xsd` line 92), then any content expressions.
+ * A model's bound variables, qualifiers and arguments as the RelaxNG states them (`DomainQ =
+ * (domainofapplication|condition|interval|(lowlimit,uplimit?))*`, `mathml3-content.rnc` line 41,
+ * the XSD's `DomainQ` without `interval`, "Ambiguous content model altered (interval)",
+ * `mathml3-content.xsd` line 92), narrowed by the Recommendation's prose, which the RelaxNG does
+ * not say (§4.3.3):
+ *
+ * - §4.3.3, "In all cases, if more than one qualifier is present, they appear in the order bvar,
+ *   lowlimit, uplimit, interval, condition, domainofapplication, degree, momentabout, logbase":
+ *   they stand in the order `bvar*`, `(lowlimit, uplimit?)*`, `interval*`, `condition*`,
+ *   `domainofapplication*`, then `extra` (`degree`, `momentabout`, `logbase`), each kind's run in
+ *   its place;
+ * - §4.3.3.2, "condition qualifiers always contain instances of the bound variable, and thus require
+ *   a preceding bvar": a `condition` stands only after a `bvar`;
+ * - §4.2.6.1, "This is followed by a non-empty list of bvar elements": a `bind` needs one.
  *
  * An interval is a content expression too, so it is a qualifier when a qualifier follows it and an
- * argument otherwise: `(interval | qualifier)*, (other, interval*)*`, `other` a content expression
- * that is no interval, which ends the qualifiers. Each step is one position, so Unique Particle
- * Attribution keeps it deterministic, and its language is the RelaxNG's.
+ * argument otherwise. Before the later qualifiers the `interval*` run takes every interval that
+ * precedes the arguments, and the arguments `(other, interval*)*` open with `other`, a content
+ * expression that is no interval, which ends the qualifiers. Once a later qualifier has stood, no
+ * qualifier follows an interval, and the arguments `(interval | other)*` take it. Each step is one
+ * position, so Unique Particle Attribution keeps it deterministic.
  *
  * @param sources - Where the model comes from.
  * @param extra - The qualifiers beyond `DomainQ` the model admits: `apply`'s `degree`,
  *   `momentabout` and `logbase` (`Qualifier`, line 47), none for the constructors.
  * @param arguments_ - How the arguments end the model: any number, or, for `lambda`, at most the
  *   one other, which its ending completes.
- * @returns The qualifiers' and the arguments' particles.
+ * @param binding - Whether the model's `bvar` run may be empty: `bind` needs one. Without one the
+ *   model has no `condition`.
+ * @returns The model's particle after its leading content expression, if it has one.
  */
 const qualified = (
   sources: Sources,
   extra: readonly string[],
   arguments_: "many" | "one",
-): readonly Particle[] => {
+  binding: "optional" | "required",
+): Particle => {
   const once = Option.some(1);
   const interval = mathParticle(["m:interval"], 1, once, sources);
   const other = mathParticle(nonIntervals, 1, once, sources);
-
-  return [
-    anyNumber(
-      mathGroup(
-        "choice",
-        sources,
-        interval,
-        mathParticle(["m:domainofapplication"], 1, once, sources),
-        mathParticle(["m:condition"], 1, once, sources),
+  const run = (kind: string, min: 0 | 1): Particle =>
+    mathParticle([kind], min, Option.none(), sources);
+  const limits = anyNumber(
+    mathGroup(
+      "sequence",
+      sources,
+      mathParticle(["m:lowlimit"], 1, once, sources),
+      mathParticle(["m:uplimit"], 0, once, sources),
+    ),
+  );
+  const intervals = run("m:interval", 0);
+  const arguments1 =
+    arguments_ === "many"
+      ? anyNumber(mathGroup("sequence", sources, other, anyNumber(interval)))
+      : { ...other, occurs: { max: once, min: 0 } };
+  const arguments2 =
+    arguments_ === "many"
+      ? anyNumber(mathGroup("choice", sources, interval, other))
+      : { ...mathGroup("choice", sources, interval, other), occurs: { max: once, min: 0 } };
+  const after = (kinds: readonly string[]): Particle =>
+    mathGroup(
+      "choice",
+      sources,
+      arguments1,
+      ...kinds.map((first, at) =>
         mathGroup(
           "sequence",
           sources,
-          mathParticle(["m:lowlimit"], 1, once, sources),
-          mathParticle(["m:uplimit"], 0, once, sources),
+          run(first, 1),
+          ...kinds.slice(at + 1).map((kind) => run(kind, 0)),
+          arguments2,
         ),
-        ...extra.map((kind) => mathParticle([kind], 1, once, sources)),
       ),
-    ),
-    arguments_ === "many"
-      ? anyNumber(mathGroup("sequence", sources, other, anyNumber(interval)))
-      : { ...other, occurs: { max: once, min: 0 } },
-  ];
-};
+    );
+  const bound = (kinds: readonly string[], min: 0 | 1): Particle =>
+    mathGroup(
+      "sequence",
+      sources,
+      ...(min === 1 ? [mathParticle(["m:bvar"], 1, Option.none(), sources)] : []),
+      limits,
+      intervals,
+      after(kinds),
+    );
+  const later = ["m:domainofapplication", ...extra];
 
-/**
- * The bound variables a model opens with, any number (`BvarQ = bvar*`,
- * `mathml3-strict-content.rnc` line 38).
- *
- * @param sources - Where the model comes from.
- * @returns The particle.
- */
-const boundVariables = (sources: Sources): Particle =>
-  mathParticle(["m:bvar"], 0, Option.none(), sources);
+  return binding === "required"
+    ? bound(["m:condition", ...later], 1)
+    : mathGroup("choice", sources, bound(["m:condition", ...later], 1), bound(later, 0));
+};
 
 /**
  * `apply.content = ContExp+ | (ContExp, BvarQ, Qualifier*, ContExp*)` (`mathml3-content.rnc` line
  * 29), `bind.content` the same (line 31), with `Qualifier = DomainQ|degree|momentabout|logbase`
- * (line 47): `ContExp, bvar*, (interval | qualifier)*, (other, interval*)*` ({@link qualified}).
- * The first alternative is the second's with no bound variable and no qualifier.
+ * (line 47): `ContExp`, then {@link qualified}'s qualifiers and arguments in the Recommendation's
+ * order. The first alternative is the second's with no bound variable and no qualifier. A `bind`
+ * holds at least one `bvar` (§4.2.6.1).
  *
  * @param line - The line of the kind's model.
+ * @param binding - Whether the kind's `bvar` run may be empty.
  * @returns The restated model.
  */
-const applyModel = (line: number): Particle => {
+const applyModel = (line: number, binding: "optional" | "required"): Particle => {
   const sources = relaxNg(
     "mathml3-content.rnc",
     line,
@@ -1131,21 +1164,21 @@ const applyModel = (line: number): Particle => {
     "sequence",
     sources,
     mathParticle(contentExpressions, 1, Option.some(1), sources),
-    boundVariables(sources),
-    ...qualified(sources, ["m:degree", "m:momentabout", "m:logbase"], "many"),
+    qualified(sources, ["m:degree", "m:momentabout", "m:logbase"], "many", binding),
   );
 };
 
 /**
  * `lambda = element lambda {CommonAtt, DefEncAtt, BvarQ, DomainQ, ContExp}` (`mathml3-content.rnc`
- * line 103): `bvar*, (interval | qualifier)*, other?`, which {@link lambdaEnding} ends with a
- * content expression. The RelaxNG's language, `bvar* (interval | qualifier)* (interval | other)`,
- * has no deterministic expression (`content.ts`, `endedBy`).
+ * line 103): {@link qualified}'s bound variables and qualifiers, then `other?`, which
+ * {@link lambdaEnding} ends with a content expression. The RelaxNG's language, `bvar*
+ * (interval | qualifier)* (interval | other)` in the Recommendation's order, has no deterministic
+ * expression (`content.ts`, `endedBy`).
  */
 const lambdaModel = (() => {
   const sources = relaxNg("mathml3-content.rnc", 103, "§4.4.1.3 Lambda");
 
-  return mathGroup("sequence", sources, boundVariables(sources), ...qualified(sources, [], "one"));
+  return mathGroup("sequence", sources, qualified(sources, [], "one", "optional"));
 })();
 
 /**
@@ -1193,8 +1226,7 @@ const mstackModel = anyNumber(
 /**
  * The constructors' model, `bvar*, DomainQ, ContExp*` (`vector`, `matrix` and `matrixrow`,
  * `mathml3-content.rnc` lines 325-327), and `set` and `list`'s `BvarQ*, DomainQ*, ContExp*` (lines
- * 230 and 231), the same language: `bvar*, (interval | qualifier)*, (other, interval*)*`
- * ({@link qualified}).
+ * 230 and 231), the same language: {@link qualified}'s bound variables, qualifiers and arguments.
  *
  * @param line - The line of the kind's model.
  * @param section - The Recommendation's section of the kind.
@@ -1203,7 +1235,7 @@ const mstackModel = anyNumber(
 const constructorModel = (line: number, section: string): Particle => {
   const sources = relaxNg("mathml3-content.rnc", line, section);
 
-  return mathGroup("sequence", sources, boundVariables(sources), ...qualified(sources, [], "many"));
+  return mathGroup("sequence", sources, qualified(sources, [], "many", "optional"));
 };
 
 /**
@@ -1309,13 +1341,13 @@ export const mathml: Facets = {
       {
         _tag: "restate",
         parent: "m:apply",
-        particle: applyModel(29),
+        particle: applyModel(29, "optional"),
         source: relaxNgCite("mathml3-content.rnc", 29, "§4.2.5 Function Application"),
       },
       {
         _tag: "restate",
         parent: "m:bind",
-        particle: applyModel(31),
+        particle: applyModel(31, "required"),
         source: relaxNgCite("mathml3-content.rnc", 31, "§4.2.6.1 Bindings"),
       },
       {
