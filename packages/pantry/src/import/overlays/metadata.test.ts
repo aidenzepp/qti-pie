@@ -5,7 +5,7 @@
  * and `lom-title` laws over the rows refuse exactly the records reading 62 refuses: the identifier
  * as the law oracle (`#pantry/test/oracle.ts`) judges it and as the spec reads the package's own
  * sketch, the title as the spec reads the sketch under the named weakening's exact comparisons;
- * and a usage value has its typed row exactly where it writes a `baseType` (reading 97).
+ * and a usage value has its typed row exactly where it writes a `baseType` (reading 105).
  */
 import { NodeServices } from "@effect/platform-node";
 import type { Addition, Uuid } from "@bjornpagen/grizzle";
@@ -479,7 +479,7 @@ const pathOf = (resource: ResourceSketch, at: number): string =>
 /**
  * Write a sketched package's files: its manifest, and each resource's document, an item or test
  * root whose identifier is `choice` between the sketch's padding and whose title is
- * {@link objectTitle}, an item with the sketch's `xml:lang` (a test admits none, reading 81), or a
+ * {@link objectTitle}, an item with the sketch's `xml:lang` (a test admits none, reading 90), or a
  * web page.
  *
  * A resource with no `href` lists no file, so no reading takes one of its files for its document.
@@ -1003,7 +1003,7 @@ describe("import/overlays/metadata.ts, usage values", () => {
   it.effect(
     "writes a UsageValue row exactly for a ud:value that writes baseType, its code the handle it spells and its text its string value",
     (ctx) =>
-      // Oracle: the specification as a checker, reading 97 and C17: a row where `baseType` is
+      // Oracle: the specification as a checker, reading 105 and C17: a row where `baseType` is
       // written and none elsewhere, its code the `BaseType` handle its lexical form spells as
       // written (`none` for a misspelling, which `E1_derived` refuses), its text the string value
       // of its content.
@@ -1024,7 +1024,7 @@ describe("import/overlays/metadata.ts, usage values", () => {
             generator: usageCases,
             limit: 30,
             literal: Formatter.format,
-            oracle: { kind: "specification", name: "reading 97 and C17's spelled codes" },
+            oracle: { kind: "specification", name: "reading 105 and C17's spelled codes" },
             suite: "pantry/import/overlays-metadata-usage-values",
           },
           (input: UsageCase, c) =>

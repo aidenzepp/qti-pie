@@ -202,7 +202,7 @@ export const keyTextCodePoints = keyTextBound(widestTextKey);
  * The most code points a name holds where a key holds it beside another text: an NCName written as
  * its start character and one counted repetition of the rest, which `DUPMAX` bounds, as
  * `OpenAttributeName`'s `local` is (`#pantry/qti/attributes.ts`). XML puts no bound on a name
- * (reading 85), so a longer one is refused as a stated limit of the representation.
+ * (reading 94), so a longer one is refused as a stated limit of the representation.
  */
 export const localNameCodePoints = repetitionMax;
 
@@ -281,7 +281,7 @@ export const keyText = str.regex(keyTextPattern, "su");
  * `href-form`). It is the form of a path: a query or a fragment after it is its params, an
  * external URI is never resolved, and a document's reference may start with `./` and `../`
  * segments, which `#pantry/qti/package.ts` `ReferencePath` removes before reading the rest in this
- * form (spec reading 94).
+ * form (spec reading 102).
  *
  * @see {@link https://www.rfc-editor.org/rfc/rfc3986#section-5.2 | RFC 3986, §5.2}
  */

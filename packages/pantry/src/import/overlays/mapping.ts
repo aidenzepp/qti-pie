@@ -45,7 +45,7 @@ import type {
  */
 export interface MappingIds {
   /**
-   * The document's context (spec reading 110), its own where none is given: an included
+   * The document's context (spec reading 117), its own where none is given: an included
    * fragment's nodes take the interaction their includes stand in as their nearest.
    */
   readonly context?: DocumentContext;
@@ -437,7 +437,7 @@ const addTypedKey = (
  * itself; a child of an interaction's is that interaction; every other node's is its parent's.
  *
  * @param nodes - A document's node rows, in document order, so each parent precedes its children.
- * @param rootNearest - The document node's own, its context's (spec reading 110); itself where
+ * @param rootNearest - The document node's own, its context's (spec reading 117); itself where
  *   none is given.
  * @returns Each node's nearest interaction, by its id.
  */

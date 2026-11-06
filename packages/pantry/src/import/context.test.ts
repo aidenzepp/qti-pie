@@ -145,7 +145,7 @@ describe("contextsOf", () => {
             literal: Formatter.format,
             oracle: {
               kind: "specification",
-              name: "reading 110, the Enters flags and N8's nearest interaction, by hand",
+              name: "reading 117, the Enters flags and N8's nearest interaction, by hand",
             },
             suite: "import/context",
           },

@@ -207,7 +207,7 @@ const vocabularyOf: ReadonlyMap<string, string> = new Map(
 
 /**
  * Whether an element of a namespace may name a type of another in its `xsi:type`, read off spec
- * reading 72's schema sets alone: a type of XML Schema's namespace everywhere; else where a set
+ * reading 81's schema sets alone: a type of XML Schema's namespace everywhere; else where a set
  * lists the type's vocabulary and the element's, or the element's namespace is no vocabulary's.
  *
  * @param parent - The element's namespace.
@@ -243,7 +243,7 @@ describe("TypeAvailable", () => {
   it.effect(
     "with the vocabulary namespaces, admits a type under exactly the parent namespaces whose schema sets hold it: every type under every vocabulary's namespace, XML Schema's, none and another",
     (ctx) =>
-      // Oracle: spec reading 72's schema sets (`schemaSets`), read directly.
+      // Oracle: spec reading 81's schema sets (`schemaSets`), read directly.
       // Bound: every TypeName handle, against every parent namespace listed.
       searched(
         ctx,
@@ -255,7 +255,7 @@ describe("TypeAvailable", () => {
             generator: int(0, grammar.typeAvailable.rows.length - 1),
             limit: grammar.typeAvailable.rows.length,
             literal: Formatter.format,
-            oracle: { kind: "specification", name: "spec reading 72's schema sets" },
+            oracle: { kind: "specification", name: "spec reading 81's schema sets" },
             suite: "grammar/names/type-available",
           },
           (index, c) =>
@@ -306,7 +306,7 @@ describe("TypeAvailable", () => {
 describe("HeldRootsUnder", () => {
   it("is keyed by the strictly held families, and names exactly the reading-6 roots their strict wildcards find in their documents' schema sets", () => {
     // Oracle: StrictlyHeld, spec reading 6's roots (`foreignRoots`), the global kinds and spec
-    // reading 72's schema sets (`schemaSets`), each read directly; the expanded names as texts.
+    // reading 81's schema sets (`schemaSets`), each read directly; the expanded names as texts.
     // Bound: every strictly held family, against every root of each version.
     const held = Map.groupBy(
       grammar.content.strictlyHeld.rows,

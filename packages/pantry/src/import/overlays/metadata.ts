@@ -793,7 +793,7 @@ const titleRowOf = (
  * kind when none does, so the law refuses the record. A title with no string has no string to name,
  * so its row names the title itself, which no title string is. A resource whose `href` names no
  * document gets the manifest as its document, which the record's containments refuse. An href's
- * path is its text before its first `?` or `#` (reading 94, `ResourceHref.path`).
+ * path is its text before its first `?` or `#` (reading 102, `ResourceHref.path`).
  *
  * @param manifest - The manifest's tree, as shred gives it.
  * @param ids - The ids its rows are written under.

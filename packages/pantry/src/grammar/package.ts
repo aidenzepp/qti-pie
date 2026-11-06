@@ -59,7 +59,7 @@ export interface PackageGrammar {
    * `RootOfType`, the set of (resource type, root element kind) pairs: each type that lists
    * documents with the kinds their roots may be, the law on a `Document`'s (resource type, root
    * kind) cell (`root-type-reverse`). Each type but one has one root; an included fragment's type
-   * has every kind an include stands for (spec reading 107). A type absent from it lists no
+   * has every kind an include stands for (spec reading 114). A type absent from it lists no
    * document.
    */
   readonly rootOfType: Closed<

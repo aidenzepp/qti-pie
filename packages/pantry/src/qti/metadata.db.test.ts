@@ -19,7 +19,7 @@
  *   `usage3-padded` and `usage3-float-padded` is accepted by its row's laws, its generated `date`
  *   the day it names; `usage3-feb-30`'s and `usage3-bad-month`'s are refused by `day`'s domain,
  *   `lexicalForm(date)` (23514).
- * - **Usage typed value** (reading 97): each usage value that writes a `baseType` in `usage3-typed`
+ * - **Usage typed value** (reading 105): each usage value that writes a `baseType` in `usage3-typed`
  *   and `usage3-float-padded` is accepted by its row's laws; `usage3-integer-float`'s float under
  *   `integer` is refused by the `usage_typed_value` CHECK (23514), and a code its lexical form does
  *   not spell by `e_1_derived`.
@@ -616,7 +616,7 @@ describe.skipIf(!hasLease)("qti/metadata.db.test.ts, on the lease", () => {
   it.effect(
     "accepts each usage value its base type reads, and refuses a float under integer and a code its lexical form does not spell, by Usage typed value and E1 derived",
     () =>
-      // Oracle: PostgreSQL, `UsageValue`'s own laws: the `Usage_typed_value` check (reading 97),
+      // Oracle: PostgreSQL, `UsageValue`'s own laws: the `Usage_typed_value` check (reading 105),
       // its text matched against `BaseTypePattern`'s pattern of its base type (23514 on
       // `usage_typed_value`), and `E1_derived`, its code the one `BaseTypeLexical` spells.
       // Bound: the three usage-data fixtures whose values write a `baseType`: `usage3-typed`'s 24

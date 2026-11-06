@@ -33,14 +33,14 @@
  *   tokens' targets.
  * - **§1.6:** `resource-type`, `root-type-reverse`, `file-listed`, `href-listed`, `entry-kind` and
  *   `manifest-id-space`.
- * - **§1.7, the overlays the grammar's relations state today:** O1 `document-key` over reading 93's
+ * - **§1.7, the overlays the grammar's relations state today:** O1 `document-key` over reading 101's
  *   bindings, an ID-typed element text's id bound to its parent (a cell's `headers` is the XSD's
  *   identifier list, with no reference rule: HTML's same-table rule was a departure, deleted by the
  *   operator's ruling of 2026-11-05), and R26's `document-lang`; O2 `declaration-key`; O3
  *   `binding-declared`, `binding-fit` with `record-binding-fit`, `choice-bounds`,
- *   `choice-identifier-distinct` (reading 96), and the feedback, template and printed-variable
+ *   `choice-identifier-distinct` (reading 104), and the feedback, template and printed-variable
  *   references; O4 arity (`P2`) and undeclared references (`P8`); O5 `mapping-base-type`; O6
- *   `lom-identifier` and a usage value's base type (reading 97); O7 a selection's bound.
+ *   `lom-identifier` and a usage value's base type (reading 105); O7 a selection's bound.
  *
  * The overlays' other laws have no statement yet beyond the rule each replaces, and the oracle
  * leaves them to their W5 slices: `lang-set-copy`, the reserved declarations, `mastery-range`, the
@@ -467,7 +467,7 @@ export const lawSources = {
   "AreaMapping base type":
     "https://www.imsglobal.org/spec/qti/v3p0/info#Data_AreaMapping (§5.5, the AreaMapping class: 'A special class used to create a mapping from a source set of point values to a target set of float values'): an area mapping's response declaration is of base type point (mapping.ts AreaMapping_base_type)",
   "Aria value range":
-    "https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_ARIABase.Attr_aria-valuemax (§5.2.31, and §7.1.31 of ARIABaseEmpty: 'Authors MUST ensure the value of 'aria-valuemax' is greater than or equal to the value of 'aria-valuemin''), both read as xs:decimal, as the XSD types them (interactions.ts AriaRange); reading 82 makes the MUST a law",
+    "https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_ARIABase.Attr_aria-valuemax (§5.2.31, and §7.1.31 of ARIABaseEmpty: 'Authors MUST ensure the value of 'aria-valuemax' is greater than or equal to the value of 'aria-valuemin''), both read as xs:decimal, as the XSD types them (interactions.ts AriaRange); reading 91 makes the MUST a law",
   Arity:
     "https://www.imsglobal.org/spec/qti/v3p0/info#Expr3 (§2.11.3, Operators: each operator's sub-expression count, as §2.11.3.28 Match, https://www.imsglobal.org/spec/qti/v3p0/info#OpMatch, 'takes two sub-expressions') (expression.ts OperatorArity); reading 21",
   "Attribute prefix":
@@ -475,23 +475,23 @@ export const lawSources = {
   "AttributeEntity owner":
     "XML 1.0 §4.1 (entity references in attribute values), kept unexpanded (plan §1.4)",
   "Binding cardinality":
-    "https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_ChoiceInteraction.Attr_max-choices (§5.30.2: 'If max-choices is greater than 1 (or 0) then the interaction must be bound to a response with multiple cardinality'), and the same sentence of max-choices (§5.66.1, §5.68.2, §5.107.3, §5.128.2) and max-associations (§5.8.2, §5.57.3, §5.59.2, §5.60.2, §5.89.2), reading 83; the Schematron's RESPONSEDEC rule 2 is the choice interaction's case; a most left unwritten reads its XSD default",
+    "https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_ChoiceInteraction.Attr_max-choices (§5.30.2: 'If max-choices is greater than 1 (or 0) then the interaction must be bound to a response with multiple cardinality'), and the same sentence of max-choices (§5.66.1, §5.68.2, §5.107.3, §5.128.2) and max-associations (§5.8.2, §5.57.3, §5.59.2, §5.60.2, §5.89.2), reading 92; the Schematron's RESPONSEDEC rule 2 is the choice interaction's case; a most left unwritten reads its XSD default",
   "Binding declared":
-    "reading 66: https://www.imsglobal.org/spec/qti/v3p0/info#Main2p4 (§2.4: each interaction 'must be bound to a response variable', as §2.4.1.1's 'The qti-choice-interaction must be bound to a response variable with a base-type of identifier and single or multiple cardinality'), https://www.imsglobal.org/spec/qti/v3p0/info#IV_Response (§2.2.2.2: 'Response variables are declared by response declarations and bound to interactions in the itemBody') and https://www.imsglobal.org/spec/qti/v3p0/info#Variables (§2.2.2: 'All variables must be declared except for the built-in session variables'); the text entry interaction's response-identifier is the XSD's IDREF (reading 14), every other interaction's, the extended text interaction's among them, an IdentifierDType this law resolves",
+    "reading 75: https://www.imsglobal.org/spec/qti/v3p0/info#Main2p4 (§2.4: each interaction 'must be bound to a response variable', as §2.4.1.1's 'The qti-choice-interaction must be bound to a response variable with a base-type of identifier and single or multiple cardinality'), https://www.imsglobal.org/spec/qti/v3p0/info#IV_Response (§2.2.2.2: 'Response variables are declared by response declarations and bound to interactions in the itemBody') and https://www.imsglobal.org/spec/qti/v3p0/info#Variables (§2.2.2: 'All variables must be declared except for the built-in session variables'); the text entry interaction's response-identifier is the XSD's IDREF (reading 14), every other interaction's, the extended text interaction's among them, an IdentifierDType this law resolves",
   "Binding unique":
-    "reading 83: https://www.imsglobal.org/spec/qti/v3p0/info#IV_Response (§2.2.2.2: 'Each response variable declared may be bound to one and only one interaction'): no two interactions of an item name one response variable",
+    "reading 92: https://www.imsglobal.org/spec/qti/v3p0/info#IV_Response (§2.2.2.2: 'Each response variable declared may be bound to one and only one interaction'): no two interactions of an item name one response variable",
   BindingFit:
     "https://www.imsglobal.org/spec/qti/v3p0/info#Main2p4 (§2.4, each interaction's 'must be bound to a response variable with a base-type of … and … cardinality', as §2.4.1.1 https://www.imsglobal.org/spec/qti/v3p0/info#ChoiceInt) (expression.ts BindingFit)",
   "Branch forward":
-    "reading 78: https://www.imsglobal.org/spec/qti/v3p0/info#Data_BranchRule (§5.23: 'the test jumps forward to the item, section or part referred to by the target identifier', 'the target must refer to an item or section in the same test-part that has not yet been presented'; §2.8.3.2): a target lies after its source's end in the assembled test, unless the section that orders the two shuffles (§5.98, an invisible section not kept together mixing its children into its parent's order); fixed is not read, a recorded limit (tests.ts Branch_forward)",
+    "reading 87: https://www.imsglobal.org/spec/qti/v3p0/info#Data_BranchRule (§5.23: 'the test jumps forward to the item, section or part referred to by the target identifier', 'the target must refer to an item or section in the same test-part that has not yet been presented'; §2.8.3.2): a target lies after its source's end in the assembled test, unless the section that orders the two shuffles (§5.98, an invisible section not kept together mixing its children into its parent's order); fixed is not read, a recorded limit (tests.ts Branch_forward)",
   "Branch target":
-    "reading 78: https://www.imsglobal.org/spec/qti/v3p0/info#Data_BranchRule (§5.23: 'In the case of an item or section, the target must refer to an item or section in the same test-part … For test-parts, the target must refer to another test-part'; §5.23.1, the reserved EXIT_SECTION, EXIT_TESTPART and EXIT_TEST), §7.5 ('branching rules should treat referred sections as leaf nodes') and §5.98 ('It is therefore an error to make such an item the target of a branch-rule', of an item a selection with replacement can repeat): a target is an exit, or a part of its source's kind in its source's test part, in an instance that holds its source's, never a replaceable item ref (tests.ts Branch_target)",
+    "reading 87: https://www.imsglobal.org/spec/qti/v3p0/info#Data_BranchRule (§5.23: 'In the case of an item or section, the target must refer to an item or section in the same test-part … For test-parts, the target must refer to another test-part'; §5.23.1, the reserved EXIT_SECTION, EXIT_TESTPART and EXIT_TEST), §7.5 ('branching rules should treat referred sections as leaf nodes') and §5.98 ('It is therefore an error to make such an item the target of a branch-rule', of an item a selection with replacement can repeat): a target is an exit, or a part of its source's kind in its source's test part, in an instance that holds its source's, never a replaceable item ref (tests.ts Branch_target)",
   "Choice bounds":
-    "reading 67: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_ChoiceInteraction.Attr_min-choices (§5.30.3: 'min-choices must be less than or equal to the limit imposed by max-choices'; §5.30.2: 'If max-choices is 0 then there is no restriction'), the same sentence for min-associations (§5.8.3, §5.57.2, §5.59.1, §5.60.1, §5.89.3), match-min (§5.7.9, §5.56.6, §5.58.6, §5.131.7), min-choices (§5.66.2, §5.68.1, §5.107.2, §5.128.1) and min-strings (§5.48.7, with reading 53's 0); reading 18: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_OrderInteraction.Attr_max-choices (§5.97.3, and §5.61.2 of the graphic order interaction: 'Used in conjunction with min-choices, if specified, max-choices must be greater than or equal to min-choices and must not exceed the number of choices available'; §5.97.2, §5.61.1: min-choices 'must not exceed the number of choices available. If unspecified, all of the choices must be ordered and max-choices is ignored'), with no 0 exemption, read only where min-choices is written (references.ts ChoiceBound's counted zero and ChoiceCount); the media interaction's plays by reading 9, the Schematron's rule 13Ba read by intent, max-plays 0 no limit (§5.92.3)",
+    "reading 76: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_ChoiceInteraction.Attr_min-choices (§5.30.3: 'min-choices must be less than or equal to the limit imposed by max-choices'; §5.30.2: 'If max-choices is 0 then there is no restriction'), the same sentence for min-associations (§5.8.3, §5.57.2, §5.59.1, §5.60.1, §5.89.3), match-min (§5.7.9, §5.56.6, §5.58.6, §5.131.7), min-choices (§5.66.2, §5.68.1, §5.107.2, §5.128.1) and min-strings (§5.48.7, with reading 53's 0); reading 18: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_OrderInteraction.Attr_max-choices (§5.97.3, and §5.61.2 of the graphic order interaction: 'Used in conjunction with min-choices, if specified, max-choices must be greater than or equal to min-choices and must not exceed the number of choices available'; §5.97.2, §5.61.1: min-choices 'must not exceed the number of choices available. If unspecified, all of the choices must be ordered and max-choices is ignored'), with no 0 exemption, read only where min-choices is written (references.ts ChoiceBound's counted zero and ChoiceCount); the media interaction's plays by reading 9, the Schematron's rule 13Ba read by intent, max-plays 0 no limit (§5.92.3)",
   "Choice identifier key":
-    'reading 96: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_SimpleChoice.Attr_identifier (§5.132.1, and §5.7.1, §5.55.1, §5.56.1, §5.58.1, §5.65.1, §5.67.1, §5.73.1 and §5.131.1: \'This identifier must not be used by any other choice or item variable\', each class naming its own noun) and https://www.imsglobal.org/spec/qti/v3p0/info#Data_Identifier (§7.16: an identifier is \'a logical reference to another object in the item, such as an itemVariable or choice\'): no two choices of one kind in a document share an identifier, whichever interactions hold them, nor two hottexts of a document, compared collapsed (interactions.ts key(on(Choice, "document", "kind", "identifier")) and key(on(Hottext, "document", "identifier")))',
+    'reading 104: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_SimpleChoice.Attr_identifier (§5.132.1, and §5.7.1, §5.55.1, §5.56.1, §5.58.1, §5.65.1, §5.67.1, §5.73.1 and §5.131.1: \'This identifier must not be used by any other choice or item variable\', each class naming its own noun) and https://www.imsglobal.org/spec/qti/v3p0/info#Data_Identifier (§7.16: an identifier is \'a logical reference to another object in the item, such as an itemVariable or choice\'): no two choices of one kind in a document share an identifier, whichever interactions hold them, nor two hottexts of a document, compared collapsed (interactions.ts key(on(Choice, "document", "kind", "identifier")) and key(on(Hottext, "document", "identifier")))',
   "Choice not variable":
-    "reading 96: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_SimpleChoice.Attr_identifier (§5.132.1 and the other choice classes' identifier: 'This identifier must not be used by any other choice or item variable') and https://www.imsglobal.org/spec/qti/v3p0/info#Variables (§2.2.2: item variables are declared, 'except for the built-in session variables referred to below which are declared implicitly'; §2.2.2.1, QTI_CONTEXT): no choice or hottext bears the identifier of a declaration of its document, nor in an item that of a built-in variable, compared collapsed (interactions.ts ChoiceVariableName, Choice_not_variable)",
+    "reading 104: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_SimpleChoice.Attr_identifier (§5.132.1 and the other choice classes' identifier: 'This identifier must not be used by any other choice or item variable') and https://www.imsglobal.org/spec/qti/v3p0/info#Variables (§2.2.2: item variables are declared, 'except for the built-in session variables referred to below which are declared implicitly'; §2.2.2.1, QTI_CONTEXT): no choice or hottext bears the identifier of a declaration of its document, nor in an item that of a built-in variable, compared collapsed (interactions.ts ChoiceVariableName, Choice_not_variable)",
   "Condition type":
     "https://www.imsglobal.org/spec/qti/v3p0/info#RootCharacteristic_ResponseIf (§2.5.1.2, ResponseIf and ResponseElseIf: 'An expression which must have an effective value of boolean' single), the outcome and template branches alike, and TemplateConstraint (§2.8.1.6) (expressions.ts Condition_type; the old checker's P21)",
   "Context variable reference":
@@ -499,21 +499,21 @@ export const lawSources = {
   "Declaration base type":
     "https://www.imsglobal.org/spec/qti/v3p0/info#RootCharacteristic_OutcomeDeclaration.Attr_base-type (§4.5.3, and §5.34.3, §5.115.3, §5.151.3: 'The value space from which the variable's value can be drawn (or in the case of containers, from which the individual values are drawn) is identified with a base-type', 'Variables with record cardinality have no base-type'): a record declares no base type (BaseType none), and every other variable declares one",
   "Declaration key":
-    "reading 65: https://www.imsglobal.org/spec/qti/v3p0/info#Variables (§2.2.2: 'The purpose of the declaration is to associate an identifier with the variable') and https://www.imsglobal.org/spec/qti/v3p0/info#RootCharacteristic_OutcomeDeclaration.Attr_identifier (§4.5.1, and §5.34.1, §5.115.1, §5.151.1: 'All item variables declared in an item share the same namespace'); a response's and a context's identifier is a UniqueIdentifier (§5.115.1, §5.34.1; §7.43: 'unique within the scope of the instance'), though the XSD types the context's an IdentifierDType, an xs:NCName, so DocumentId key counts it among the IDs",
+    "reading 74: https://www.imsglobal.org/spec/qti/v3p0/info#Variables (§2.2.2: 'The purpose of the declaration is to associate an identifier with the variable') and https://www.imsglobal.org/spec/qti/v3p0/info#RootCharacteristic_OutcomeDeclaration.Attr_identifier (§4.5.1, and §5.34.1, §5.115.1, §5.151.1: 'All item variables declared in an item share the same namespace'); a response's and a context's identifier is a UniqueIdentifier (§5.115.1, §5.34.1; §7.43: 'unique within the scope of the instance'), though the XSD types the context's an IdentifierDType, an xs:NCName, so DocumentId key counts it among the IDs",
   "Declaration not reserved":
-    "reading 63: https://www.imsglobal.org/spec/qti/v3p0/info#Variables (§2.2.2: 'All variables must be declared except for the built-in session variables referred to below which are declared implicitly and must not be declared'; §2.2.2.2: numAttempts and duration 'must not appear in a response declaration'; §2.2.2.3: completionStatus 'must not appear in an outcome declaration') and https://www.imsglobal.org/spec/qti/v3p0/info#RootCharacteristic_OutcomeDeclaration.Attr_identifier (§4.5.1, §5.115.1, §5.151.1: 'The identifiers of the built-in session variables are reserved. They are completionStatus, numAttempts and duration'), each spelled exactly, with no alias, the identifier compared collapsed (references.ts BuiltInVariable, its session variables); the context variable QTI_CONTEXT is Reserved type's",
+    "reading 72: https://www.imsglobal.org/spec/qti/v3p0/info#Variables (§2.2.2: 'All variables must be declared except for the built-in session variables referred to below which are declared implicitly and must not be declared'; §2.2.2.2: numAttempts and duration 'must not appear in a response declaration'; §2.2.2.3: completionStatus 'must not appear in an outcome declaration') and https://www.imsglobal.org/spec/qti/v3p0/info#RootCharacteristic_OutcomeDeclaration.Attr_identifier (§4.5.1, §5.115.1, §5.151.1: 'The identifiers of the built-in session variables are reserved. They are completionStatus, numAttempts and duration'), each spelled exactly, with no alias, the identifier compared collapsed (references.ts BuiltInVariable, its session variables); the context variable QTI_CONTEXT is Reserved type's",
   Document: "the XDM document node as the Document row (plan §1.4, fin.md D7)",
   "Document entry": "IMS Content Packaging 1.2: a listed document is an entry of the package",
   "Document lang":
     "https://www.imsglobal.org/sites/default/files/spec/qti/v3/md-bind/index.html (QTI 3.0 Metadata §2.7.1.3, Language: 'There must be one value for each of the languages referred to by the language attributes on the associated assessmentItem, test or object bank and its 'bodyElements'', normative by its §1.2; ~/.cache/gr8des/qti-md-bind/index.txt:1509 and :388): each language an item's or a test's xml:lang states (XML 1.0 §2.12, the empty one stating none) is listed by every general category of each record of the resource whose href names the document (identity.ts documentLang, through metadata.ts LomObject); xml:lang compared by its collapsed xs:language value, the LOM language as written. BCP 47 compares tags without regard to case (RFC 5646 §2.1.1); the database and this oracle compare them exactly until grizzle has a case fold (identity.ts, G-text), a named weakening",
   "DocumentId key":
-    "XML Schema Part 1, Validation Rule: Validation Root (the ID/IDREF table): no id's [binding] has more than one member, an attribute's binding its element, an ID-typed element text's its parent (§3.15.5; reading 93; identity.ts IdBinding); reading 14; reading 65: a context declaration's identifier, a UniqueIdentifier (https://www.imsglobal.org/spec/qti/v3p0/info#RootCharacteristic_ContextDeclaration.Attr_identifier, §5.34.1), is one of the document's IDs, though the XSD types it an IdentifierDType",
+    "XML Schema Part 1, Validation Rule: Validation Root (the ID/IDREF table): no id's [binding] has more than one member, an attribute's binding its element, an ID-typed element text's its parent (§3.15.5; reading 101; identity.ts IdBinding); reading 14; reading 74: a context declaration's identifier, a UniqueIdentifier (https://www.imsglobal.org/spec/qti/v3p0/info#RootCharacteristic_ContextDeclaration.Attr_identifier, §5.34.1), is one of the document's IDs, though the XSD types it an IdentifierDType",
   "E1 derived":
     "fin.md §17, E1: the fields closed relations determine, and the string value (folds.ts)",
   "Feedback outcome type":
-    "reading 68: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_FeedbackBlock.Attr_outcome-identifier (§5.49.1, and §5.52.1, §5.93.1, §5.148.1, §5.157.2: 'The identifier of an outcome variable that must have a base-type of identifier and be of either single or multiple cardinality'); the built-in completionStatus is 'a single identifier' (§2.2.2.3)",
+    "reading 77: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_FeedbackBlock.Attr_outcome-identifier (§5.49.1, and §5.52.1, §5.93.1, §5.148.1, §5.157.2: 'The identifier of an outcome variable that must have a base-type of identifier and be of either single or multiple cardinality'); the built-in completionStatus is 'a single identifier' (§2.2.2.3)",
   "Feedback reference":
-    "reading 68: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_FeedbackBlock.Attr_outcome-identifier (§5.49.1, and §5.52.1, §5.93.1, §5.148.1, §5.157.2: 'The identifier of an outcome variable that must have a base-type of identifier and be of either single or multiple cardinality'), the built-in completionStatus among them (§2.2.2.3: 'a single identifier'); the outcome's base type and cardinality are Feedback outcome type's (references.ts ContentReference)",
+    "reading 77: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_FeedbackBlock.Attr_outcome-identifier (§5.49.1, and §5.52.1, §5.93.1, §5.148.1, §5.157.2: 'The identifier of an outcome variable that must have a base-type of identifier and be of either single or multiple cardinality'), the built-in completionStatus among them (§2.2.2.3: 'a single identifier'); the outcome's base type and cardinality are Feedback outcome type's (references.ts ContentReference)",
   "File exists":
     "imscp_infov1p2pd2.txt:409 and :411 (IMS Content Packaging 1.2, InterchangePackage (b): 'Any file described in the Manifest using a URI that resolves to a location within the InterchangePackage shall be included in the InterchangePackage'; (d): 'When a file contained in an InterchangePackage references another file using a URI that resolves to a location within the InterchangePackage, the referenced file shall be described in the InterchangePackage's Manifest'): a cp:file's href in the resolvedHref form is an entry's path, an external one left out (reading 35), and so is each reference a document resolves (package.ts ReferencePath)",
   "File listed": "IMS Content Packaging 1.2 and QTI packaging: every file is described; reading 33",
@@ -524,23 +524,23 @@ export const lawSources = {
   "Foreign simple content":
     "reading 60: https://www.w3.org/TR/xmlschema-1/#cvc-type (XML Schema 1.0 Part 1 §3.3.4, Element Locally Valid (Type), clause 3.1.2: an element a simple type governs holds no element child), over each foreign element whose xsi:type names a simple type (attributes.ts Governor, TypeText); its attributes are AL1's under the governor, the four xsi: names alone (clause 3.1.1), and its text TextDomain's under the type (clause 3.1.3)",
   "Fragment context":
-    "reading 110: https://www.imsglobal.org/spec/qti/v3p0/info#Main2p12 (§2.12: 'the content of the fragment must satisfy the requirements of the specification in the context of the item in which it is being included'): an included fragment's content is one written element per node, judged under the union of the ancestries of the includes that place it and under one nearest interaction; a fragment two includes place inside different interactions, or one inside an interaction and one outside, would need two rows per node, so it is refused: a stated limit of the representation, not a law of the specification",
+    "reading 117: https://www.imsglobal.org/spec/qti/v3p0/info#Main2p12 (§2.12: 'the content of the fragment must satisfy the requirements of the specification in the context of the item in which it is being included'): an included fragment's content is one written element per node, judged under the union of the ancestries of the includes that place it and under one nearest interaction; a fragment two includes place inside different interactions, or one inside an interaction and one outside, would need two rows per node, so it is refused: a stated limit of the representation, not a law of the specification",
   "Graphic gap match default hotspot":
-    "reading 71: https://www.imsglobal.org/spec/qti/v3p0/info#DataAttribute_GraphicGapMatchInteraction_qti-associable-hotspot (§5.60.9: 'The default hotspot must not be defined')",
+    "reading 80: https://www.imsglobal.org/spec/qti/v3p0/info#DataAttribute_GraphicGapMatchInteraction_qti-associable-hotspot (§5.60.9: 'The default hotspot must not be defined')",
   "Href form":
-    "src/qti/limits.ts resolvedHref and reading 94: an href is its path and its params, a query or fragment that names no other file; a path this representation resolves is a relative path of plain segments, which names the entry at its document's directory followed by it (RFC 3986 §5.2); a dot segment, a percent-encoding, a backslash or whitespace in that path, a srcset of more than one candidate, and an xml:base in a document holding a resolved reference (or on a cp:manifest, cp:resources or cp:resource) take a resolution no relation states, so they are refused: a stated limit of the representation, not a law of the specification. A path with a scheme or a leading / is external, admitted and never resolved where a cp:file or a content reference holds it (reading 35), and refused where a law needs the href to name an entry",
+    "src/qti/limits.ts resolvedHref and reading 102: an href is its path and its params, a query or fragment that names no other file; a path this representation resolves is a relative path of plain segments, which names the entry at its document's directory followed by it (RFC 3986 §5.2); a dot segment, a percent-encoding, a backslash or whitespace in that path, a srcset of more than one candidate, and an xml:base in a document holding a resolved reference (or on a cp:manifest, cp:resources or cp:resource) take a resolution no relation states, so they are refused: a stated limit of the representation, not a law of the specification. A path with a scheme or a leading / is external, admitted and never resolved where a cp:file or a content reference holds it (reading 35), and refused where a law needs the href to name an entry",
   "Href listed":
-    "imscp_infov1p2pd2.txt:770 (IMS Content Packaging 1.2, §6.6.2: 'A file reference declared in a Resource{ Href } shall have an associated declaration in a File object in the same Resource'): a resource href's path is the href of one of its files, its launch parameters aside (reading 94)",
+    "imscp_infov1p2pd2.txt:770 (IMS Content Packaging 1.2, §6.6.2: 'A file reference declared in a Resource{ Href } shall have an associated declaration in a File object in the same Resource'): a resource href's path is the href of one of its files, its launch parameters aside (reading 102)",
   "Idref target":
-    "XML Schema Part 1, Validation Rule: Validation Root (the ID/IDREF table): an IDREF names an ID of its document, an attribute's tokens and an IDREF- or IDREFS-typed element text's alike (§3.15.5; reading 93); reading 14",
+    "XML Schema Part 1, Validation Rule: Validation Root (the ID/IDREF table): an IDREF names an ID of its document, an attribute's tokens and an IDREF- or IDREFS-typed element text's alike (§3.15.5; reading 101); reading 14",
   "Include fragment identifier":
-    "reading 108: https://www.w3.org/TR/xinclude/#include_element (XInclude 1.0 Second Edition §3.1, href: 'Fragment identifiers must not be used; their appearance is a fatal error'): an xi:include's href carries no #, wherever it stands after the path",
+    "reading 115: https://www.w3.org/TR/xinclude/#include_element (XInclude 1.0 Second Edition §3.1, href: 'Fragment identifiers must not be used; their appearance is a fatal error'): an xi:include's href carries no #, wherever it stands after the path",
   "Include root":
-    "reading 107: https://www.imsglobal.org/spec/qti/v3p0/info#Main2p12 (§2.12: an include 'is treated as if it was actually an instance of the root element of the fragment referred to'; 'A fragment may appear anywhere in the model where one of the following abstract classes may appear') and Table 9.4.1 (Include's parent classes): an include under a parent whose model holds one stands for its fragment's root, which is one of its particle's choice-group alternatives, a kind whose position the parent's automaton follows and ends on as the include's",
+    "reading 114: https://www.imsglobal.org/spec/qti/v3p0/info#Main2p12 (§2.12: an include 'is treated as if it was actually an instance of the root element of the fragment referred to'; 'A fragment may appear anywhere in the model where one of the following abstract classes may appear') and Table 9.4.1 (Include's parent classes): an include under a parent whose model holds one stands for its fragment's root, which is one of its particle's choice-group alternatives, a kind whose position the parent's automaton follows and ends on as the include's",
   "Include target":
-    "reading 108: https://www.imsglobal.org/spec/qti/v3p0/info#Main2p12 (§2.12: 'Fragments are packaged as separate resources'); https://www.w3.org/TR/xinclude/#include_element (XInclude 1.0 §3.1: 'If the href attribute is absent when parse=\"xml\", the xpointer attribute must be present', and reading 76 refuses xpointer): an include the information model reads names, by an href this representation resolves, a document its package lists",
+    "reading 115: https://www.imsglobal.org/spec/qti/v3p0/info#Main2p12 (§2.12: 'Fragments are packaged as separate resources'); https://www.w3.org/TR/xinclude/#include_element (XInclude 1.0 §3.1: 'If the href attribute is absent when parse=\"xml\", the xpointer attribute must be present', and reading 85 refuses xpointer): an include the information model reads names, by an href this representation resolves, a document its package lists",
   "Inclusion cycle":
-    "reading 76: https://www.imsglobal.org/spec/qti/v3p0/info#Main2p12 (§2.12: an include 'is treated as if it was actually an instance of the root element of the fragment referred to'), §7.5 (a section ref 'functions as a facade for the qti-assessment-section to which it refers') and §2.8.3.2 ('unbounded repetition is not supported'); https://www.w3.org/TR/xinclude/#loops (XInclude 1.0 §4.2.7: an inclusion loop is 'a fatal error'): no chain of qti-assessment-section-ref and xi:include hrefs, over the documents the manifest lists, returns to a document already on it",
+    "reading 85: https://www.imsglobal.org/spec/qti/v3p0/info#Main2p12 (§2.12: an include 'is treated as if it was actually an instance of the root element of the fragment referred to'), §7.5 (a section ref 'functions as a facade for the qti-assessment-section to which it refers') and §2.8.3.2 ('unbounded repetition is not supported'); https://www.w3.org/TR/xinclude/#loops (XInclude 1.0 §4.2.7: an inclusion loop is 'a fatal error'): no chain of qti-assessment-section-ref and xi:include hrefs, over the documents the manifest lists, returns to a document already on it",
   "Item duration":
     "https://www.imsglobal.org/spec/qti/v3p0/info#IV_Response (§2.2.2.2: 'The value of duration for items that are not time dependent must not be used in any item or test-level expression', info.txt:8468) (expressions.ts Item_duration over ItemTiming; the UP audit's A62)",
   "Item ref target":
@@ -550,7 +550,7 @@ export const lawSources = {
   "Label tools":
     "https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_BaseSequence.Attr_label (§5.16.5, and §5.15.5, §5.17.5 to §5.21.5 and §5.79.4: 'If an item uses labels then values for the associated toolName and toolVersion characteristics must also be provided'); the item root's own label (§4.1.3) states none, and the sentence binds an item, not a stimulus or a test",
   "Literal lexical":
-    "https://www.imsglobal.org/spec/qti/v3p0/info#Data_BaseType (§8.13, BaseTypeEnum, each base type's value set): a qti-base-value's text is a lexical form of its base-type, the same language as Typed value's (expression-types.ts BaseTypePattern; readings 7, 34, 45 and 61)",
+    "https://www.imsglobal.org/spec/qti/v3p0/info#Data_BaseType (§8.13, BaseTypeEnum, each base type's value set): a qti-base-value's text is a lexical form of its base-type, the same language as Typed value's (expression-types.ts BaseTypePattern; readings 7, 34, 45 and 71)",
   LomObjectIdentifier:
     "https://www.imsglobal.org/sites/default/files/spec/qti/v3/md-bind/index.html (QTI 3.0 Metadata §2.7.1.1, Identifier: 'One of the values given for the identifier must have an entry that matches the identifier of the associated item, test or object bank', normative by its §1.2), over the general category's identifiers alone; info §4.1.1 and §4.4.1 ('MUST be the same'); reading 62 as UP's audit merges it (docs/research/up.md §2.2), the entry compared collapsed",
   LomObjectTitle:
@@ -564,7 +564,7 @@ export const lawSources = {
   "Map key":
     "https://www.imsglobal.org/spec/qti/v3p0/info#Data_Mapping (§5.88.4 and §7.21: 'The map is defined by a set of mapEntries, each of which maps a single value from the source set onto a single float'), so a mapping is a function of its source value: no two of its entries share a key, compared as values of its base type where the schema holds one (an integer's canonical form, a float of grizzle's double form as its double, mapping.ts MapKeyInteger and MapKeyFloat) and as written otherwise (readings 7, 34 and 45)",
   MappableBaseType:
-    "reading 69: https://www.imsglobal.org/spec/qti/v3p0/info#Data_Mapping (§5.88, the Mapping class: 'A special class used to create a mapping from a source set of any base-type (except file and duration) to a single float') and https://www.imsglobal.org/spec/qti/v3p0/info#ExpMapResponse (§2.11.1.5: 'This expression cannot be applied to variables of record cardinality') (expression.ts MappableBaseType)",
+    "reading 78: https://www.imsglobal.org/spec/qti/v3p0/info#Data_Mapping (§5.88, the Mapping class: 'A special class used to create a mapping from a source set of any base-type (except file and duration) to a single float') and https://www.imsglobal.org/spec/qti/v3p0/info#ExpMapResponse (§2.11.1.5: 'This expression cannot be applied to variables of record cardinality') (expression.ts MappableBaseType)",
   "Mapped response":
     "https://www.imsglobal.org/spec/qti/v3p0/info#ExprMapResponse (§2.11.3.29, MapResponse: 'the response variable must have been declared with an associated mapping'; §2.11.3.30, MapResponsePoint: an areaMapping, of base-type point) (expressions.ts Mapped_response; the old checker's P27)",
   "Mastery range":
@@ -608,9 +608,9 @@ export const lawSources = {
   "Outcome only":
     "https://www.imsglobal.org/spec/qti/v3p0/info#ExprTestNumberCorrect (§2.11.4, the test operators NumberCorrect, NumberIncorrect, NumberPresented, NumberResponded, NumberSelected, OutcomeMaximum, OutcomeMinimum and TestVariables: 'can only be used in outcomes processing') (expressions.ts Outcome_only, its language Processing's; the old checker's P25)",
   "Prefixed reference":
-    "readings 48 and 79: https://www.imsglobal.org/spec/qti/v3p0/info#ExprVariable (§2.11.1.2: 'values taken from an individual item session can be looked up by prefixing the name of the item variable with the identifier assigned to the item in the qti-assessment-item-ref, separated by a period character'; under with-replacement 'a number that denotes the instance's place in the sequence of the item's instantiation is inserted between the item variable identifier and the item variable'), §2.2.2 ('The values of these durations can be refered to during outcome-processing by using the variable name duration prefixed with the identifier of the part or section followed by the period character', info.txt:9214), read over the assembled test (readings 4, 5 and 77): a test-level reference is accepted when exactly one of its readings, unsplit, split at a dot, or numbered at two dots, names a scope of the test and a variable of that scope, a numbered one only under a selection with replacement and only from 1, and none through a name two placements give (expressions.ts Reading: the key and the containment over its resolving readings, M3, and Prefixed_reference)",
+    "readings 48 and 88: https://www.imsglobal.org/spec/qti/v3p0/info#ExprVariable (§2.11.1.2: 'values taken from an individual item session can be looked up by prefixing the name of the item variable with the identifier assigned to the item in the qti-assessment-item-ref, separated by a period character'; under with-replacement 'a number that denotes the instance's place in the sequence of the item's instantiation is inserted between the item variable identifier and the item variable'), §2.2.2 ('The values of these durations can be refered to during outcome-processing by using the variable name duration prefixed with the identifier of the part or section followed by the period character', info.txt:9214), read over the assembled test (readings 4, 5 and 86): a test-level reference is accepted when exactly one of its readings, unsplit, split at a dot, or numbered at two dots, names a scope of the test and a variable of that scope, a numbered one only under a selection with replacement and only from 1, and none through a name two placements give (expressions.ts Reading: the key and the containment over its resolving readings, M3, and Prefixed_reference)",
   "Printed variable reference":
-    "reading 68: https://www.imsglobal.org/spec/qti/v3p0/info#DerivedCharacteristic_PrintedVariable.Attr_identifier (§7.30.6: 'The outcome variable or template variable must have been defined. The values of response variables cannot be printed directly'), the built-in completionStatus among them (§2.2.2.3) (references.ts ContentReference)",
+    "reading 77: https://www.imsglobal.org/spec/qti/v3p0/info#DerivedCharacteristic_PrintedVariable.Attr_identifier (§7.30.6: 'The outcome variable or template variable must have been defined. The values of response variables cannot be printed directly'), the built-in completionStatus among them (§2.2.2.3) (references.ts ContentReference)",
   "Record field key":
     "https://www.imsglobal.org/spec/qti/v3p0/info#Data_Cardinality (§8.16, CardinalityEnum, record: 'a special container that contains a set of independent values each identified by its own identifier and having its own base-type'): no two fields of one record value share a field-identifier, compared collapsed",
   RecordBindingFit:
@@ -618,7 +618,7 @@ export const lawSources = {
   "Reference type":
     "https://www.imsglobal.org/spec/qti/v3p0/info#Data_IntegerOrVariableRef (§8.25, §8.24 and §8.42: an integerOrVariableRef, floatOrVariableRef or stringOrVariableRef names a template or outcome variable of that base type, single) (expression.ts ReferenceBase; the old checker's P24)",
   "Reserved type":
-    "https://www.imsglobal.org/spec/qti/v3p0/info#IV_Outcome (§2.2.2.3, Outcomes Variable: 'SCORE MUST be a float', 'MAXSCORE MUST be a float', 'PASSED MUST be a boolean'), of an outcome declaration of that identifier; https://www.imsglobal.org/spec/qti/v3p0/info#IV_Context (§2.2.2.1: 'There is one built-in context variable: 'QTI_CONTEXT', which has record cardinality'), which the implementation guide declares explicitly (§3.7.11, 'an explicit (though unnecessary) qti-context-declaration of QTI_CONTEXT'): a declaration of QTI_CONTEXT is a record context declaration, since one of another kind or cardinality would make one identifier name two variables (reading 65)",
+    "https://www.imsglobal.org/spec/qti/v3p0/info#IV_Outcome (§2.2.2.3, Outcomes Variable: 'SCORE MUST be a float', 'MAXSCORE MUST be a float', 'PASSED MUST be a boolean'), of an outcome declaration of that identifier; https://www.imsglobal.org/spec/qti/v3p0/info#IV_Context (§2.2.2.1: 'There is one built-in context variable: 'QTI_CONTEXT', which has record cardinality'), which the implementation guide declares explicitly (§3.7.11, 'an explicit (though unnecessary) qti-context-declaration of QTI_CONTEXT'): a declaration of QTI_CONTEXT is a record context declaration, since one of another kind or cardinality would make one identifier name two variables (reading 74)",
   ResourceTypeOf:
     "QTI 3 packaging: the resource types each schema version admits (package.ts); reading 33",
   RootOfType: "QTI 3 packaging: the document root of each resource type (package.ts)",
@@ -627,11 +627,11 @@ export const lawSources = {
   "SSML trim mark":
     "reading 3: https://www.w3.org/TR/speech-synthesis11/#S3.1.1.1 (SSML 1.1 §3.1.1.1: 'Only markers defined once in the document, i.e. that are unique, are permitted as the value of either startmark or endmark'; 'It is an error if the value given for either startmark or endmark is not a valid mark in the document'), the document being the speak, each name an xs:token (§3.3.2) compared with its outer whitespace set apart, a named weakening of its collapse until grizzle can fold inner whitespace (identity.ts ssmlTrimMark, G-text)",
   "Section identifier target":
-    "readings 5 and 77: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_Number.Attr_section-identifier (§7.27.1, and §7.28.1, §7.39.1: 'If specified, only variables from items in the qti-assessment-section with matching identifier are matched', info.txt:69115), resolved over each test that places the document: a section-identifier names exactly one section or section ref of the assembled test (expressions.ts Reading, form name; the UP audit's A61)",
+    "readings 5 and 86: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_Number.Attr_section-identifier (§7.27.1, and §7.28.1, §7.39.1: 'If specified, only variables from items in the qti-assessment-section with matching identifier are matched', info.txt:69115), resolved over each test that places the document: a section-identifier names exactly one section or section ref of the assembled test (expressions.ts Reading, form name; the UP audit's A61)",
   "Section parts":
     "reading 26: https://www.imsglobal.org/spec/qti/v3p0/info#Root_AssessmentSection (§4.2: a section holds 'at least one other Section or Item'): a section holds at least one part, an item ref, section, section ref or include standing for one (references.ts SectionPart; tests.ts Section_parts)",
   "Selection bound":
-    "reading 70: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_Selection.Attr_select (§5.129.1: 'The number of children to select may exceed the number of child elements defined only if with-replacement is true'; 'Sub-sections always count as 1') (references.ts SectionPart); reading 26",
+    "reading 79: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_Selection.Attr_select (§5.129.1: 'The number of children to select may exceed the number of child elements defined only if with-replacement is true'; 'Sub-sections always count as 1') (references.ts SectionPart); reading 26",
   "Selection required":
     "https://www.imsglobal.org/spec/qti/v3p0/info#RootCharacteristic_AssessmentSection.Attr_required (§4.2.2, and §5.6.2 of the item ref: 'If a child element is required it must appear (at least once) in the selection. It is an error if a section contains a selection rule that selects fewer child elements than the number of required elements it contains'): a section's parts whose required is true are at most its selection's select (tests.ts Selection_required)",
   "Self dependency":
@@ -645,9 +645,9 @@ export const lawSources = {
   "Stimulus ref target":
     "info.txt:67012 and :67066 (https://www.imsglobal.org/spec/qti/v3p0/info#Root_AssessmentStimulusRef, §7.6: the stimulus ref 'enables reference to a 'qti-assessment-stimulus' instance', and its href is 'The uri used to refer to the stimulus file'): a stimulus ref's href that resolves in the package names a listed document whose root is a qti-assessment-stimulus; an external href is not resolved (reading 35's reading of an absolute URI) (package.ts ReferencePath, the UP audit's B5)",
   "Strictly held":
-    "reading 72: https://www.w3.org/TR/xmlschema-1/#cvc-wildcard (XML Schema 1.0 Part 1 §3.10.4, Item Valid (Wildcard), clause 2: a strict wildcard's element has the context-determined declaration mustFind), with §3.3.4 clause 1.2 and §3.3.5 [validity] clause 1.1.3: an element only the strict wildcards of its parent's model hold (install.ts StrictlyHeld) stands only under an xsi:type naming a type of its document's schema set or a built-in, so its governing type is not none (C44; shred: strict-undeclared), but for reading 6's root whose declaration the wildcard finds (§3.10.4 clause 2, §3.3.4 clause 1.1.1.3.2), kept foreign and unrefused (install.ts HeldRootsUnder, C13)",
+    "reading 81: https://www.w3.org/TR/xmlschema-1/#cvc-wildcard (XML Schema 1.0 Part 1 §3.10.4, Item Valid (Wildcard), clause 2: a strict wildcard's element has the context-determined declaration mustFind), with §3.3.4 clause 1.2 and §3.3.5 [validity] clause 1.1.3: an element only the strict wildcards of its parent's model hold (install.ts StrictlyHeld) stands only under an xsi:type naming a type of its document's schema set or a built-in, so its governing type is not none (C44; shred: strict-undeclared), but for reading 6's root whose declaration the wildcard finds (§3.10.4 clause 2, §3.3.4 clause 1.1.1.3.2), kept foreign and unrefused (install.ts HeldRootsUnder, C13)",
   "Structure identifier":
-    "reading 77: https://www.imsglobal.org/spec/qti/v3p0/info#RootCharacteristic_AssessmentSection.Attr_identifier (§4.2.1: 'The identifier of the section or item reference must be unique within the test and must not be the identifier of any testPart') and §5.159.1 ('The identifier of the test part must be unique within the test and must not be the identifier of any qti-assessment-section or qti-assessment-item-ref'), compared collapsed: no two test parts, sections, section refs or item refs of one document share an identifier, whatever their roles (tests.ts Named)",
+    "reading 86: https://www.imsglobal.org/spec/qti/v3p0/info#RootCharacteristic_AssessmentSection.Attr_identifier (§4.2.1: 'The identifier of the section or item reference must be unique within the test and must not be the identifier of any testPart') and §5.159.1 ('The identifier of the test part must be unique within the test and must not be the identifier of any qti-assessment-section or qti-assessment-item-ref'), compared collapsed: no two test parts, sections, section refs or item refs of one document share an identifier, whatever their roles (tests.ts Named)",
   "T1 document order": "trees.md §2, T1",
   "T2 root": "trees.md §2, T2",
   "T3 first child": "trees.md §2, T3, with the merged parent copy (trees.md §6)",
@@ -655,7 +655,7 @@ export const lawSources = {
   "T5 last child": "trees.md §2, T5",
   "T6 nonempty and leaf": "trees.md §2, T6",
   "Template default target":
-    "the UP audit's A37: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_TemplateDefault.Attr_template-identifier (§5.152.1: 'The identifier of the template variable affected'; §5.152: 'The default value of a template variable in an item can be overridden based on the test context'): a template default names a template declaration of the item its item ref names, compared collapsed (expressions.ts TemplateDefault, through tests.ts ItemRefDocument); an item ref that names an LTI link names no item, so no template of it (reading 103)",
+    "the UP audit's A37: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_TemplateDefault.Attr_template-identifier (§5.152.1: 'The identifier of the template variable affected'; §5.152: 'The default value of a template variable in an item can be overridden based on the test context'): a template default names a template declaration of the item its item ref names, compared collapsed (expressions.ts TemplateDefault, through tests.ts ItemRefDocument); an item ref that names an LTI link names no item, so no template of it (reading 110)",
   "Template default type":
     "the UP audit's A38, the old checker's P20 for a setter: https://www.imsglobal.org/spec/qti/v3p0/info#Data_TemplateDefault (§5.152: the template variable's default 'is obtained by evaluating an expression defined within the reference to the item'), so the expression's value is a value of the template variable, and https://www.imsglobal.org/spec/qti/v3p0/info#RootCharacteristic_SetOutcomeValue (§2.5.1.3: 'The expression must have an effective value type which is compatible with the variable's base-type and cardinality'): a template default's expression fits its template variable's type, a type no declaration says aside (reading 4) (expressions.ts Template_default_type)",
   "Template reads":
@@ -663,40 +663,40 @@ export const lawSources = {
   "Template reference":
     "https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_TemplateBlock.Attr_template-identifier (§5.145.1, §5.155.1; §2.7.2: 'A references must match the identifier in a corresponding template declaration') (references.ts ContentReference)",
   "Test name key":
-    "reading 77: https://www.imsglobal.org/spec/qti/v3p0/info#RootCharacteristic_AssessmentSection.Attr_identifier (§4.2.1) and §5.159.1, read over the assembled test (reading 5): the test document and every section document its section refs and includes place; and §7.5.3 ('A test may refer to the same section multiple times within a test'), so a section document placed twice is one document and names nothing twice: no two written elements of one test share an identifier (tests.ts InstanceName, AssembledName)",
+    "reading 86: https://www.imsglobal.org/spec/qti/v3p0/info#RootCharacteristic_AssessmentSection.Attr_identifier (§4.2.1) and §5.159.1, read over the assembled test (reading 5): the test document and every section document its section refs and includes place; and §7.5.3 ('A test may refer to the same section multiple times within a test'), so a section document placed twice is one document and names nothing twice: no two written elements of one test share an identifier (tests.ts InstanceName, AssembledName)",
   TextDomain:
     "XML Schema Part 2, each simple-content kind's type compiled with its whiteSpace (domains.ts); reading 7; and https://www.w3.org/TR/xmlschema-2/#NOTATION (§3.2.19: 'The ·value space· of NOTATION is the set of QNames of notations declared in the current schema'), which no pinned XSD declares, so a text read in xs:NOTATION's empty domain is refused (reading 60, C47: attributes.ts emptyDomains)",
   "Typed attribute value":
     "readings 7 and 8, and https://www.imsglobal.org/spec/qti/v3p0/info#Data_BaseType (§8.13, BaseTypeEnum, each base type's value set): a qti-map-entry's map-key is a value of its mapping's base type (§7.21.1, 'The source value'), and a lookup table entry's target-value and a table's default-value are values of its outcome's base type (§5.90.1, §5.78.1, §7.23.2, §7.18.3); each is written as its base type's lexical form with no whitespace around it unless the base type is string (mapping.ts Typed_attribute_value over expression-types.ts BaseTypePattern)",
   "Typed value":
-    "https://www.imsglobal.org/spec/qti/v3p0/info#Data_Value (§7.46, Value: 'The base-type is defined by the 'base-type' attribute of the declaration except in the case of variables with record cardinality') and https://www.imsglobal.org/spec/qti/v3p0/info#Data_BaseType (§8.13, BaseTypeEnum, each base type's value set): a qti-value's text is a lexical form of its base type, outer whitespace formatting but for string (reading 7): boolean true or false (reading 34), integer xs:integer unbounded (reading 45), float and duration xs:double (§8.13: durations 'are represented using the 'xsd:double' datatype'), identifier IdentifierDType, uri xs:anyURI (reading 61), point two integers, pair and directedPair two identifiers; string and file any text",
+    "https://www.imsglobal.org/spec/qti/v3p0/info#Data_Value (§7.46, Value: 'The base-type is defined by the 'base-type' attribute of the declaration except in the case of variables with record cardinality') and https://www.imsglobal.org/spec/qti/v3p0/info#Data_BaseType (§8.13, BaseTypeEnum, each base type's value set): a qti-value's text is a lexical form of its base type, outer whitespace formatting but for string (reading 7): boolean true or false (reading 34), integer xs:integer unbounded (reading 45), float and duration xs:double (§8.13: durations 'are represented using the 'xsd:double' datatype'), identifier IdentifierDType, uri xs:anyURI (reading 71), point two integers, pair and directedPair two identifiers; string and file any text",
   "Usage typed value":
-    "reading 97: https://www.imsglobal.org/sites/default/files/spec/qti/v3/ud-bind/index.html (QTI 3.0 Usage Data binding §2.6.5, Value: 'A class that can represent a single value of any baseType'; §2.7.1, BaseTypeEnum) and https://www.imsglobal.org/spec/qti/v3p0/info#Data_BaseType (§8.13, BaseTypeEnum, each base type's value set): a ud:value that writes baseType holds a lexical form of that base type, read as a qti-value's text is (readings 7, 34, 45 and 61), and one that writes none is xs:normalizedString text (metadata.ts UsageValue over expression-types.ts BaseTypePattern)",
+    "reading 105: https://www.imsglobal.org/sites/default/files/spec/qti/v3/ud-bind/index.html (QTI 3.0 Usage Data binding §2.6.5, Value: 'A class that can represent a single value of any baseType'; §2.7.1, BaseTypeEnum) and https://www.imsglobal.org/spec/qti/v3p0/info#Data_BaseType (§8.13, BaseTypeEnum, each base type's value set): a ud:value that writes baseType holds a lexical form of that base type, read as a qti-value's text is (readings 7, 34, 45 and 71), and one that writes none is xs:normalizedString text (metadata.ts UsageValue over expression-types.ts BaseTypePattern)",
   "Value cardinality":
     "https://www.imsglobal.org/spec/qti/v3p0/info#Data_Cardinality (§8.16, CardinalityEnum: single 'a single value'; record 'a set of independent values each identified by its own identifier and having its own base-type') and https://www.imsglobal.org/spec/qti/v3p0/info#Data_Value (§7.46.1, §7.46.2: field-identifier and base-type are 'only used for' a value that forms part of a record): a single variable's default or correct value holds one qti-value, and a value is a record's field, with its field-identifier and base-type, exactly when its variable is a record",
   "Variable declared":
     "https://www.imsglobal.org/spec/qti/v3p0/info#Variables (§2.2.2: 'All variables must be declared except for the built-in session variables'; §2.11.1.2, a variable expression names 'an item variable that has been declared … or is one of the built-in variables') (references.ts); readings 4, 29 and 48",
   "Variable kind":
-    "https://www.imsglobal.org/spec/qti/v3p0/info, each processing element's definition of the variable it reads or sets: §7.10.1 Correct ('The identifier of the associated response variable'), §7.22.1 MapResponse ('the associated Response variable'), §6.9.46 MapResponsePoint ('looks up the value of a response variable'), §5.87.1 and §6.32.1 LookupOutcomeValue ('the outcome variable to be set'), §6.32.3 and §6.39.4 SetOutcomeValue ('sets the value of an outcome variable'), §6.50.1 SetTemplateValue ('sets the value of a template variable'), §6.50.4 SetDefaultValue ('The response variable or outcome variable to have its default value set'), §6.50.5 SetCorrectResponse ('The response variable to have its correct value set'), and §7.47.1 Variable and §7.12.1 Default, any item variable (§2.2.2: 'context, response, outcome or template variables'): a reference by identifier names a declaration, or a built-in standing as one (BuiltInVariable), of a kind its element reads or sets; and a setter (§5.130.1 SetValue: 'The identifier of the variable to be set') sets a variable of its own document, which only an unsplit reading names, since an item's variables reach a test only to be looked up (§2.11.1.2: 'values taken from an individual item session can be looked up by prefixing'), reading 105 (expression-types.ts ReferenceDeclaration and setterKinds, over VariableRef and a test's Reading)",
+    "https://www.imsglobal.org/spec/qti/v3p0/info, each processing element's definition of the variable it reads or sets: §7.10.1 Correct ('The identifier of the associated response variable'), §7.22.1 MapResponse ('the associated Response variable'), §6.9.46 MapResponsePoint ('looks up the value of a response variable'), §5.87.1 and §6.32.1 LookupOutcomeValue ('the outcome variable to be set'), §6.32.3 and §6.39.4 SetOutcomeValue ('sets the value of an outcome variable'), §6.50.1 SetTemplateValue ('sets the value of a template variable'), §6.50.4 SetDefaultValue ('The response variable or outcome variable to have its default value set'), §6.50.5 SetCorrectResponse ('The response variable to have its correct value set'), and §7.47.1 Variable and §7.12.1 Default, any item variable (§2.2.2: 'context, response, outcome or template variables'): a reference by identifier names a declaration, or a built-in standing as one (BuiltInVariable), of a kind its element reads or sets; and a setter (§5.130.1 SetValue: 'The identifier of the variable to be set') sets a variable of its own document, which only an unsplit reading names, since an item's variables reach a test only to be looked up (§2.11.1.2: 'values taken from an individual item session can be looked up by prefixing'), reading 112 (expression-types.ts ReferenceDeclaration and setterKinds, over VariableRef and a test's Reading)",
   "Variable mapping source":
-    "the UP audit's A34: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_VariableMapping.Attr_source-identifier (§7.48.1: 'The identifier of the outcome variable to identify the name of the source identifier during outcome processing variable mapping', info.txt:71656): a mapping's source names an outcome declaration of the item its item ref names, compared collapsed (expressions.ts MappingSource, through tests.ts ItemRefDocument); an item ref that names an LTI link names no item, so no outcome of it (reading 103)",
+    "the UP audit's A34: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_VariableMapping.Attr_source-identifier (§7.48.1: 'The identifier of the outcome variable to identify the name of the source identifier during outcome processing variable mapping', info.txt:71656): a mapping's source names an outcome declaration of the item its item ref names, compared collapsed (expressions.ts MappingSource, through tests.ts ItemRefDocument); an item ref that names an LTI link names no item, so no outcome of it (reading 110)",
   "Variable mapping target":
-    "https://www.imsglobal.org/spec/qti/v3p0/info#Data_VariableMapping (§7.48: 'Variable mappings allow outcome variables declared with the name source-identifier in the corresponding item to be treated as if they were declared with the name target-identifier during outcome processing') with §4.5.1 ('All item variables declared in an item share the same namespace'; 'The identifiers of the built-in session variables are reserved') and reading 65: no two mappings of one item ref name one target, no target names a built-in session variable, and no target names another variable its item declares (reading 89), compared collapsed (tests.ts VariableMapping; expressions.ts MappingSource, its declared half)",
+    "https://www.imsglobal.org/spec/qti/v3p0/info#Data_VariableMapping (§7.48: 'Variable mappings allow outcome variables declared with the name source-identifier in the corresponding item to be treated as if they were declared with the name target-identifier during outcome processing') with §4.5.1 ('All item variables declared in an item share the same namespace'; 'The identifiers of the built-in session variables are reserved') and reading 74: no two mappings of one item ref name one target, no target names a built-in session variable, and no target names another variable its item declares (reading 97), compared collapsed (tests.ts VariableMapping; expressions.ts MappingSource, its declared half)",
   "Weighted base":
     "https://www.imsglobal.org/spec/qti/v3p0/info#ExprTestVariables (§2.11.4.8, TestVariables: with a weight-identifier the result is a float, so a base-type, where written, is float) (expressions.ts Weighted_base; the old checker's P29)",
   "XsiType available":
-    "readings 60 and 72: https://www.w3.org/TR/xmlschema-1/#cvc-assess-elt (XML Schema 1.0 Part 1 §3.3.4, Schema-Validity Assessment (Element), clause 1.2: an element no declaration assesses is assessed against the type its xsi:type resolves to in the schema its document is assessed against), so a foreign element's governing type is none, one of XML Schema's own, or a type of a schema set its parent's namespace stands in (open.ts typeAvailable; install.ts TypeAvailable, C15 and C36); a parent in no vocabulary's namespace stands in documents of every set, and the document's own set is reading 72's recorded limit",
+    "readings 60 and 81: https://www.w3.org/TR/xmlschema-1/#cvc-assess-elt (XML Schema 1.0 Part 1 §3.3.4, Schema-Validity Assessment (Element), clause 1.2: an element no declaration assesses is assessed against the type its xsi:type resolves to in the schema its document is assessed against), so a foreign element's governing type is none, one of XML Schema's own, or a type of a schema set its parent's namespace stands in (open.ts typeAvailable; install.ts TypeAvailable, C15 and C36); a parent in no vocabulary's namespace stands in documents of every set, and the document's own set is reading 81's recorded limit",
   "XsiType derived":
     "reading 47: https://www.w3.org/TR/xmlschema-1/#cvc-elt (XML Schema 1.0 Part 1 §3.3.4, Element Locally Valid (Element), clause 4.3: the local type definition 'must be validly derived from the {type definition}', §3.4.6 and §3.14.6), over the type that governs each element of a vocabulary kind (Node.governs: its xsi:type's, else its declared type; xsi.ts XsiType). Clauses 4.1 and 4.2, a value that is no QName in scope or names no type, are the codec's (shred: type-unresolved, type-unknown)",
   "comment arm": "the XDM comment nodes as rows (plan §1.4)",
   "default hotspot last slot":
-    "reading 71: https://www.imsglobal.org/spec/qti/v3p0/info#DataAttribute_HotspotInteraction_qti-hotspot-choice (§5.68.6, and the HotspotChoice class description, §5.67: 'The default hotspot, if defined, must appear last'), of qti-hotspot-choice only, since the AssociableHotspot class (§5.7) and the graphic associate interaction's hotspots (§5.59.4) state no such rule; last among its parent's element children, so whitespace, comments and instructions after it do not count (children.ts LastWhere, ruling D3)",
+    "reading 80: https://www.imsglobal.org/spec/qti/v3p0/info#DataAttribute_HotspotInteraction_qti-hotspot-choice (§5.68.6, and the HotspotChoice class description, §5.67: 'The default hotspot, if defined, must appear last'), of qti-hotspot-choice only, since the AssociableHotspot class (§5.7) and the graphic associate interaction's hotspots (§5.59.4) state no such rule; last among its parent's element children, so whitespace, comments and instructions after it do not count (children.ts LastWhere, ruling D3)",
   "doctype arm": "the XDM doctype as a row (plan §1.4)",
   "entityRef arm": "the XDM entity references as rows (plan §1.4)",
   "pi arm": "the XDM processing instructions as rows (plan §1.4)",
   "text arm": "the XDM text nodes as rows (plan §1.4)",
   "value domain":
-    "XML Schema Part 2, each attribute's simple type compiled with its whiteSpace and residual facets (domains.ts); readings 7, 45, 46, 56 and 61",
+    "XML Schema Part 2, each attribute's simple type compiled with its whiteSpace and residual facets (domains.ts); readings 7, 45, 46, 56 and 71",
   "ws arm": "the XDM whitespace nodes as rows (plan §1.4)",
 } as const satisfies Readonly<Record<LawName, string>>;
 
@@ -2477,7 +2477,7 @@ const compiledOf = (laws: Laws, attribute: FoldedAttribute<Composed>) =>
   );
 
 /**
- * Decide whether an attribute is a context declaration's `identifier`, which spec reading 65 counts
+ * Decide whether an attribute is a context declaration's `identifier`, which spec reading 74 counts
  * among its document's IDs: the information model makes it a UniqueIdentifier (§5.34.1), "unique
  * within the scope of the instance" (§7.43), and outranks the XSD, which types it an
  * `IdentifierDType`, an `xs:NCName` no ID table holds.
@@ -2534,7 +2534,7 @@ const emptyTextOf = (laws: Laws, node: FoldedNode<Composed>): boolean =>
  * Collect a document's ids: the collapsed value of every attribute whose domain is an `ID`, or that
  * is a context declaration's `identifier` ({@link isContextIdentifier}), and of every element's
  * text whose governor reads it in an `ID` domain (C50), each that its domain holds, with the node
- * that carries it and the element its ID/IDREF binding names (reading 93: an attribute's element,
+ * that carries it and the element its ID/IDREF binding names (reading 101: an attribute's element,
  * a text's parent), attributes first, each in document order. A value outside its domain is no ID
  * value, so it takes no part in the key (XML Schema 1.0 Part 1, 3.3.4, cvc-id.2): the value domain
  * law refuses it, and two such values never collide.
@@ -3296,7 +3296,7 @@ const exactBodyOf = (local: string): string =>
  * Each base type's lexical form as an attribute writes its value, with no whitespace around it
  * (reading 7): boolean `true` or `false` (reading 34), integer `xs:integer` (reading 45), float
  * and duration `xs:double`, identifier `IdentifierDType` (`xs:NCName`), uri `xs:anyURI` (reading
- * 61), a point two integers and a pair or directed pair two identifiers, one whitespace character
+ * 71), a point two integers and a pair or directed pair two identifiers, one whitespace character
  * between them (as `BaseTypePattern` reads them); a base type absent here, `string` and `file`,
  * reads any text.
  */
@@ -3347,7 +3347,7 @@ export const typedTextHolds = (baseType: string, text: string): boolean => {
 /**
  * The choice classes whose identifier "must not be used by any other choice or item variable"
  * (information model §5.132.1, and §5.7.1, §5.55.1, §5.56.1, §5.58.1, §5.65.1, §5.67.1, §5.73.1
- * and §5.131.1), each class's element, which spec reading 96 reads one class at a time.
+ * and §5.131.1), each class's element, which spec reading 104 reads one class at a time.
  */
 const choiceClasses: ReadonlySet<string> = new Set([
   "qti-associable-hotspot",
@@ -3450,7 +3450,7 @@ const namedBy = (
  * "If max-choices is greater than 1 (or 0) then the interaction must be bound to a response with
  * multiple cardinality" (information model §5.30.2, and §5.66.1, §5.68.2, §5.107.3 and §5.128.2),
  * and the same sentence of `max-associations` (§5.8.2, §5.57.3, §5.59.2, §5.60.2 and §5.89.2):
- * spec reading 83, which found the select point interaction's.
+ * spec reading 92, which found the select point interaction's.
  */
 const cardinalityBounds: ReadonlyMap<string, string> = new Map([
   ["qti-associate-interaction", "max-associations"],
@@ -3478,7 +3478,7 @@ const overlayLaws: readonly ((
   overlay: Overlay,
 ) => readonly Finding[])[] = [
   (node, overlay) =>
-    // Reading 97: a usage value that names its base type holds a lexical form of it, read as
+    // Reading 105: a usage value that names its base type holds a lexical form of it, read as
     // element content is (reading 7); one that names none is untyped text.
     node.kind === "ud:value"
       ? Option.toArray(valueOf(overlay.view, node.id, "baseType")).flatMap((baseType) => {
@@ -3523,7 +3523,7 @@ const overlayLaws: readonly ((
       ({ max, min, zero }): readonly Finding[] => {
         // Reading 18: a counted bound binds only where its least is written, and then a most of
         // 0 is a count below it; every other bound reads an unwritten least as its default, or 0,
-        // and a most of 0 as no limit (reading 67).
+        // and a most of 0 as no limit (reading 76).
         const written = Option.isSome(valueOf(overlay.view, node.id, min));
         if (zero === "counted" && !written) {
           return [];
@@ -3804,7 +3804,7 @@ const overlayLaws: readonly ((
 
 /**
  * Evaluate the overlay laws of §1.7 a document states alone: O1's id key and an item's label
- * tools, O2's declaration key, O3's one binding per response (reading 83), and
+ * tools, O2's declaration key, O3's one binding per response (reading 92), and
  * {@link overlayLaws} over every node.
  *
  * @param view - The document.
@@ -3853,7 +3853,7 @@ const overlayBreaches = (view: View, laws: Laws): readonly Breach[] => {
       : view.members.filter(
           ({ id }) => id !== root?.id && Option.isSome(valueOf(view, id, "label")),
         );
-  // Reading 83: "Each response variable declared may be bound to one and only one interaction",
+  // Reading 92: "Each response variable declared may be bound to one and only one interaction",
   // so in an item no two of the interactions Binding declared reads name one response.
   const bindings = overlay.isItem
     ? Map.groupBy(
@@ -3877,7 +3877,7 @@ const overlayBreaches = (view: View, laws: Laws): readonly Breach[] => {
         string,
         readonly { readonly identifier: string; readonly node: FoldedNode<Composed> }[]
       >();
-  // Reading 96: a choice's identifier names one choice of its class in its document, whichever
+  // Reading 104: a choice's identifier names one choice of its class in its document, whichever
   // interactions hold them, and no item variable: no declaration of its document and, in an item,
   // no built-in variable.
   const choices = view.members.flatMap((node) =>
@@ -3903,7 +3903,7 @@ const overlayBreaches = (view: View, laws: Laws): readonly Breach[] => {
   };
 
   return [
-    // Reading 93: an id's binding is the set of elements that purport it, an attribute's element
+    // Reading 101: an id's binding is the set of elements that purport it, an attribute's element
     // or an ID-typed text's parent, and cvc-id.2 refuses a binding of more than one member.
     ...[...ids].flatMap(([id, held]) => {
       const owners = [...new Set(held.map(({ owner }) => owner))];
@@ -4008,7 +4008,7 @@ interface Listed {
    */
   readonly rootKind: string;
   /**
-   * Its XDM tree as shred gives it, which an including document splices in place (reading 110).
+   * Its XDM tree as shred gives it, which an including document splices in place (reading 117).
    */
   readonly tree: XdmDocument<Composed>;
 }
@@ -4027,7 +4027,7 @@ interface ResourceOf {
   readonly identifier: string;
   readonly node: FoldedNode<Composed>;
   /**
-   * Its href's path, the href before its first `?` or `#` (reading 94): the file it names, its
+   * Its href's path, the href before its first `?` or `#` (reading 102): the file it names, its
    * launch parameters aside.
    */
   readonly path: Option.Option<string>;
@@ -4036,7 +4036,7 @@ interface ResourceOf {
 
 /**
  * Read an href's path: the href before its first `?` or `#`, where its query or fragment starts
- * (RFC 3986, §3.3), the piece a file's href is compared with (reading 94).
+ * (RFC 3986, §3.3), the piece a file's href is compared with (reading 102).
  *
  * @param href - The href, as written.
  * @returns Its path.
@@ -4073,7 +4073,7 @@ const resourcesOf = (manifest: View, grammar: ComposedGrammar): readonly Resourc
 
 /**
  * Name the documents a manifest lists: each resource whose type `RootOfType` maps to a root kind,
- * through its `href`'s path (readings 84 and 94). A resource with no `href` names no document.
+ * through its `href`'s path (readings 93 and 102). A resource with no `href` names no document.
  *
  * @param resources - The manifest's resources.
  * @param grammar - The composed grammar.
@@ -4109,14 +4109,14 @@ const descendantTexts = (view: View, node: FoldedNode<Composed>, kind: string): 
     .map(({ id }) => collapsed(contentOf(view, id)));
 
 /**
- * The kinds whose `href` names a document merged into the one that holds it (reading 76): a
+ * The kinds whose `href` names a document merged into the one that holds it (reading 85): a
  * section ref, a facade for the section it names (information model §7.5), and an XInclude,
  * "treated as if it was actually an instance of the root element of the fragment" (§2.12).
  */
 const including: ReadonlySet<string> = new Set(["qti-assessment-section-ref", "xi:include"]);
 
 /**
- * The kinds an include is the information model's Include under (reading 107): the parents whose
+ * The kinds an include is the information model's Include under (reading 114): the parents whose
  * content model holds an explicit `xi:include` particle, by the composed grammar.
  */
 const includeParentsCache = new WeakMap<ComposedGrammar, ReadonlySet<string>>();
@@ -4140,8 +4140,8 @@ const includeParentsOf = (grammar: ComposedGrammar): ReadonlySet<string> => {
 };
 
 /**
- * Whether a node merges the document its href names into its own (reading 76): a section ref, or an
- * include under a parent the information model gives an Include (reading 107). An include in
+ * Whether a node merges the document its href names into its own (reading 85): a section ref, or an
+ * include under a parent the information model gives an Include (reading 114). An include in
  * wildcard content is foreign content, read as written.
  *
  * @param grammar - The composed grammar.
@@ -4170,11 +4170,11 @@ const packagePath = (href: string, base: string): string =>
   new URL(href, new URL(base, "pkg:/")).pathname.replace(/^\//u, "");
 
 /**
- * Find the inclusion cycles among a package's documents (reading 76): each chain of section refs
+ * Find the inclusion cycles among a package's documents (reading 85): each chain of section refs
  * and includes, in any mix, that leads from a listed document back to it, over the documents the
  * manifest lists. Each cycle is found once, from its least path, and two refs of one document that
  * are not nested are no cycle. An include counts where the information model gives its parent an
- * Include (reading 107); one in wildcard content is read as written.
+ * Include (reading 114); one in wildcard content is read as written.
  *
  * @param documents - The documents the manifest lists, read.
  * @param grammar - The composed grammar, whose include parents an include counts under.
@@ -4233,7 +4233,7 @@ const lomNamed: ReadonlySet<string> = new Set([itemType, "imsqti_test_xmlv3p0"])
 const resolvedPath = new RegExp(resolvedHref, "u");
 
 /**
- * An external href, restated from `#pantry/qti/package.ts` `externalHrefPattern` (reading 94): a
+ * An external href, restated from `#pantry/qti/package.ts` `externalHrefPattern` (reading 102): a
  * scheme, or a leading `/`, which names no package entry.
  */
 const externalPath = /^(?:[A-Za-z][A-Za-z0-9+.-]*:|\/)/u;
@@ -4247,7 +4247,7 @@ const externalPath = /^(?:[A-Za-z][A-Za-z0-9+.-]*:|\/)/u;
 const inForm = (path: string): boolean => resolvedPath.test(path) || externalPath.test(path);
 
 /**
- * Read a reference's target, the path it names (reading 94): its value with the XML whitespace
+ * Read a reference's target, the path it names (reading 102): its value with the XML whitespace
  * around it set aside, up to its first `?` or `#`.
  *
  * @param lexical - The attribute's lexical form.
@@ -4258,12 +4258,12 @@ const referenceTargetOf = (lexical: string): string =>
 
 /**
  * The most `../` segments the representation resolves a reference by, restated from
- * `#pantry/qti/package.ts` `DotDepth` (reading 94).
+ * `#pantry/qti/package.ts` `DotDepth` (reading 102).
  */
 const dotDepthMax = 8;
 
 /**
- * Resolve a reference's target against its document's directory as reading 94 reads it, restated
+ * Resolve a reference's target against its document's directory as reading 102 reads it, restated
  * from RFC 3986's dot-segment removal (§5.2.4) for leading dot segments: each leading `./` is
  * dropped and each leading `../` removes the directory's last segment, and the rest must be a path
  * in the `resolvedHref` form.
@@ -4295,7 +4295,7 @@ const resolutionOf = (
 };
 
 /**
- * Evaluate R6 and the reference half of the stated limit over each listed document (readings 94
+ * Evaluate R6 and the reference half of the stated limit over each listed document (readings 102
  * and 95): every attribute of the grammar's reference census is read as its target; a target
  * outside the form, neither external nor empty, and a `srcset` of more than one candidate, breaks
  * "Href form"; a document that holds an `xml:base` and a target in the form breaks it at each
@@ -4471,7 +4471,7 @@ const signatureOf = (grammar: ComposedGrammar, family: string, position: string)
 };
 
 /**
- * Decide whether an include under a parent may stand for a root kind (reading 107), independently
+ * Decide whether an include under a parent may stand for a root kind (reading 114), independently
  * of the grammar's choice-group reading: the root takes a position of the parent's model whose
  * signature is the include's own.
  *
@@ -4503,7 +4503,7 @@ const standsFor = (
 };
 
 /**
- * One site of a listed document (reading 76): a section ref or an include the information model
+ * One site of a listed document (reading 85): a section ref or an include the information model
  * reads, its href as written, the path it resolves to and the listed document there.
  */
 interface SiteOf {
@@ -4557,7 +4557,7 @@ const sitesOf = (documents: readonly Listed[], grammar: ComposedGrammar): readon
 
 /**
  * Decide whether an include under a parent is spliced in place: one a section holds is a site of
- * the test's assembly instead, which reading 77 reads as Q5.13's instances do, each written
+ * the test's assembly instead, which reading 86 reads as Q5.13's instances do, each written
  * element once, so its document is judged as written.
  *
  * @param grammar - The composed grammar.
@@ -4640,7 +4640,7 @@ const sameContexts = (
 ): boolean => next.size === held.size && [...next].every(([at, near]) => held.get(at) === near);
 
 /**
- * Evaluate the include laws over the listed documents (readings 107, 108 and 110):
+ * Evaluate the include laws over the listed documents (readings 114, 115 and 117):
  *
  * - **"Include target":** an include the information model reads names, by an href this
  *   representation resolves, a document the manifest lists;
@@ -4749,7 +4749,7 @@ const inclusionBreaches = (
 };
 
 /**
- * Splice a document's includes in place (reading 110, XInclude's result infoset): each include the
+ * Splice a document's includes in place (reading 117, XInclude's result infoset): each include the
  * information model reads outside a section whose target is listed and whose root the include may
  * stand for is replaced by its target's root element, its own includes spliced in turn, unless the
  * target is already on the chain, which "Inclusion cycle" refuses.
@@ -4814,7 +4814,7 @@ const manifestBaseKinds: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * Collect the documents a merged document is written in (spec reading 110): the listed documents
+ * Collect the documents a merged document is written in (spec reading 117): the listed documents
  * themselves, and every document their includes splice in, transitively, each once.
  *
  * @param listed - The documents at one path.
@@ -4845,9 +4845,9 @@ const mergedDocumentsOf = (
  * assessmentItem, test or object bank and its 'bodyElements'"): each language an item's or a test's
  * `xml:lang` states is listed by every general category of each record that is a child of the
  * `cp:metadata` of a resource whose `href` names the document, as every listed document's resource
- * does (`documentsOf`, readings 84 and 94). An item's `xml:lang` forms are its merged document's
- * (spec reading 110): its own, and those of every fragment its includes splice in; a fragment a
- * test places is a known under-refusal, which reading 110 lists.
+ * does (`documentsOf`, readings 93 and 102). An item's `xml:lang` forms are its merged document's
+ * (spec reading 117): its own, and those of every fragment its includes splice in; a fragment a
+ * test places is a known under-refusal, which reading 117 lists.
  *
  * An `xml:lang` is read by its value, its form with its outer whitespace set apart, and one that is
  * empty or all whitespace states no language (XML 1.0 §2.12); a LOM `language` is its text as
@@ -4935,7 +4935,7 @@ const documentLangBreaches = (
 /**
  * Evaluate the laws of §1.6 and O6 over a package: the stated limit `href-form` first, then
  * `resource-type`, `root-type-reverse`, `file-listed`, `href-listed`, `entry-kind`, `file-exists`,
- * `manifest-id-space`, `self-dependency` and `lom-identifier`, and reading 76's `inclusion-cycle`
+ * `manifest-id-space`, `self-dependency` and `lom-identifier`, and reading 85's `inclusion-cycle`
  * ({@link inclusionCycles}), then R26's `document-lang` ({@link documentLangBreaches}).
  *
  * @param input - The package.
@@ -5300,7 +5300,7 @@ const declaredVersion = (manifest: XmlDocument): Option.Option<string> =>
   );
 
 /**
- * Judge every listed document's own laws in place (reading 110): a document an include splices into
+ * Judge every listed document's own laws in place (reading 117): a document an include splices into
  * another is judged inside each document that splices it, and not alone; every other document is
  * judged with its includes spliced, as XInclude's result infoset reads it, so its included
  * fragments' content stands where it is included, binding its item's responses and counting among

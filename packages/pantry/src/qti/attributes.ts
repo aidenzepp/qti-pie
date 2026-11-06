@@ -7,7 +7,7 @@
  * An attribute is read under its element's governor, `GoverningOf(version, kind, governs)`: the
  * kind itself where its declared type governs it, or the (kind, type) pair where an `xsi:type`
  * names a type derived from the declared one, or a simple type governs a foreign element (spec
- * readings 60, 74 and 75). `AttributeGrammar(version, governor, name)` then gives the name's value
+ * readings 60, 83 and 84). `AttributeGrammar(version, governor, name)` then gives the name's value
  * domain, use and slot. `Attribute` copies `kind`, `version`, `document` and `governs` from its
  * element along the family's owner axis, so every law below reads its governor inline.
  *

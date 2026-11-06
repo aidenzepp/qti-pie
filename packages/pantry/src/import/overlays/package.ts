@@ -120,7 +120,7 @@ const isParams = (text: string): text is Params =>
 const isWhitespace = (text: string): text is Whitespace => /^[\t\n\r ]*$/u.test(text);
 
 /**
- * An href's two written pieces (reading 94), `href = path ‖ params`.
+ * An href's two written pieces (reading 102), `href = path ‖ params`.
  */
 export interface HrefPieces {
   readonly params: Params;
@@ -146,7 +146,7 @@ export interface DirectorySplit {
 }
 
 /**
- * Split an href into its two written pieces (reading 94): `path`, up to its first `?` or `#`, and
+ * Split an href into its two written pieces (reading 102): `path`, up to its first `?` or `#`, and
  * `params`, the query or fragment from there, so `href = path ‖ params`.
  *
  * @param href - The href, as written.
@@ -354,9 +354,9 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: ManifestIds): PackageRow
 };
 
 /**
- * Name the documents a manifest's resources name (reading 84): each pair of an href's path and a
+ * Name the documents a manifest's resources name (reading 93): each pair of an href's path and a
  * resource type `RootOfType` maps, so the importer reads the entry at the path as a document of
- * that type (reading 94: the href's launch parameters name no other file).
+ * that type (reading 102: the href's launch parameters name no other file).
  *
  * @param rows - The manifest's overlay rows.
  * @returns The named documents' paths and types, a keyed set by (path, type). One path named under
@@ -396,9 +396,9 @@ export type ReferenceCensus = (
 ) => ReferenceForm | undefined;
 
 /**
- * The grammar's reference census, `ReferenceAttribute` (spec reading 95): the census the database's
- * copy into `Reference` selects by, so the builder writes a row for exactly the attributes the
- * copy requires one of.
+ * The grammar's reference census, `ReferenceAttribute` (spec reading 103): the census the
+ * database's copy into `Reference` selects by, so the builder writes a row for exactly the
+ * attributes the copy requires one of.
  *
  * @param version - The element's schema version.
  * @param kind - Its kind.
@@ -450,7 +450,7 @@ type Depth = Addition<typeof ReferencePath>["climb"];
 const isDepth = (text: string): text is Depth => DotDepth.handles.some((handle) => handle === text);
 
 /**
- * The pieces a `ReferencePath` proves its path by (reading 94): `target = ups ‖ rest`,
+ * The pieces a `ReferencePath` proves its path by (reading 102): `target = ups ‖ rest`,
  * `directory = kept ‖ removed`, and `path = kept ‖ rest`, with `climb` the `../` segments of
  * `ups`.
  */

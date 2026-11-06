@@ -7,7 +7,7 @@
  * identification where its body uses labels.
  *
  * - **{@link DocumentId}** holds one row per element that carries an ID: an attribute whose value
- *   domain's identity is `xs:ID`, a context declaration's `identifier`, which spec reading 65
+ *   domain's identity is `xs:ID`, a context declaration's `identifier`, which spec reading 74
  *   counts among its document's IDs though 3.0.1's XSD types it an `IdentifierDType`, or the
  *   element's own text, where its governing type's text domain is an `xs:ID` (C50, an
  *   {@link IdentityText}). Its `id` is the value, the lexical form with its outer whitespace set
@@ -46,7 +46,7 @@
  *   categories that list it (`DocumentLang.generals`), and the two are equal. Q5.07 had culled the
  *   old one-sided flag `DocumentLang.lomGeneral` with a read in its place, on the orchestrator's
  *   ruling that R26 had no source; UP's audit found the source and the ruling is reversed, so the
- *   read is this refusal. In place (spec reading 110), an included fragment's elements are its
+ *   read is this refusal. In place (spec reading 117), an included fragment's elements are its
  *   item's body elements: each item instance's `xml:lang` carriers are placed under its assembly
  *   ({@link PlacedXmlLang}, as many as its document has, `Document.langs`), gathered per form
  *   ({@link AssembledLang}), and each form the assembly states is listed by every category that
@@ -421,7 +421,7 @@ export const FragmentValue = relation(
  * Every relation this module declares, by name, as `schema.ts` composes them.
  */
 /**
- * An id a document's IDREF tokens name, a projection keyed by its heading (spec reading 110): every
+ * An id a document's IDREF tokens name, a projection keyed by its heading (spec reading 117): every
  * `Idref` and `TextIdref` token's value, with its document's `assembled`. A document in no
  * assembly resolves each in its own IDs; one in an assembly, in its assembly's, once per instance
  * ({@link PlacedIdref}). Its rows count as `Document.idrefTargets`.
@@ -433,10 +433,10 @@ export const IdrefTarget = relation(
 );
 
 /**
- * One ID of an instance of an assembly (Q5.13's `Instance`, spec reading 110), keyed by the
+ * One ID of an instance of an assembly (Q5.13's `Instance`, spec reading 117), keyed by the
  * instance and the element that carries it: a {@link DocumentId} of the instance's document, with
  * the instance's assembly and assembly kind, and its `copy`, the instance, but the nil uuid under a
- * test's assembly, where a section document placed twice is written once (reading 77).
+ * test's assembly, where a section document placed twice is written once (reading 86).
  */
 export const PlacedId = relation(
   "PlacedId",
@@ -468,7 +468,7 @@ export const AssembledId = relation(
 );
 
 /**
- * One id an instance's document's IDREFs name (spec reading 110), keyed by the instance and the id:
+ * One id an instance's document's IDREFs name (spec reading 117), keyed by the instance and the id:
  * an {@link IdrefTarget} of the instance's document, which resolves among its assembly's IDs
  * ("Idref target").
  */
@@ -513,7 +513,7 @@ export const placedIdrefFamily = counted(
 );
 
 /**
- * One `xml:lang` of an instance of an item's assembly (Q5.13's `Instance`, spec reading 110), keyed
+ * One `xml:lang` of an instance of an item's assembly (Q5.13's `Instance`, spec reading 117), keyed
  * by the instance and the element's node: an {@link XmlLang} of the instance's document, under the
  * assembly. An included fragment's elements are its item's body elements in place, so their
  * languages are among those R26 holds the item's records to list.
@@ -644,7 +644,7 @@ const textIdentityOf = (n: GovernedRow) =>
 
 /**
  * The attributes whose value is one of their document's IDs: those of an `xs:ID` domain, and each
- * context declaration's `identifier` (spec reading 65).
+ * context declaration's `identifier` (spec reading 74).
  */
 export const idAttributes = select(Attribute, (a) =>
   a.or(
@@ -828,7 +828,7 @@ const statedAssembledLangs = select(AssembledLang, (a) =>
 );
 
 /**
- * R26 in place (law "Document lang", spec reading 110): each form an item's assembly states, its
+ * R26 in place (law "Document lang", spec reading 117): each form an item's assembly states, its
  * included fragments' among them, counts as many listing categories as describe the item.
  */
 export const assembledLang = contained(
@@ -884,11 +884,11 @@ export const ssmlLexiconReference = contained(
  *   its text and an ID's none (`E1_derived`);
  * - **Idref target:** each IDREF token, an attribute's or a text's, names one of its document's
  *   {@link IdrefTarget} rows, each an id of its document where the document is in no assembly;
- * - **in place** (spec reading 110): under each instance of each assembly, as many {@link PlacedId}
+ * - **in place** (spec reading 117): under each instance of each assembly, as many {@link PlacedId}
  *   and {@link PlacedIdref} rows as its document has IDs and IDREF targets, each its document's;
  *   their projection {@link AssembledId}, each binding carried, under "DocumentId key" over the
  *   assembly (a fragment's ID distinct from its item's, and a fragment placed twice in one item
- *   holding its IDs twice; a section document placed twice in a test, once, reading 77); and "Idref
+ *   holding its IDs twice; a section document placed twice in a test, once, reading 86); and "Idref
  *   target" over the assembly, so an item's IDREF may name its fragment's ID and a fragment's its
  *   item's;
  * - **DocumentLang:** each `xml:lang` copied into its `XmlLang` row and each row an attribute's, the

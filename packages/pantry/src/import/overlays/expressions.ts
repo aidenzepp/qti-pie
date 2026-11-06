@@ -99,7 +99,7 @@ import type { Declaration } from "#pantry/qti/declarations.ts";
  */
 export interface ExpressionIds {
   /**
-   * The document's context (spec reading 110), its own where none is given: an included
+   * The document's context (spec reading 117), its own where none is given: an included
    * fragment's nodes take the interaction their includes stand in as their nearest.
    */
   readonly context?: DocumentContext;
@@ -577,7 +577,7 @@ const parentKindOf = (doc: Document, node: NodeRow<Composed>): NodeRow<Composed>
  *
  * @param rows - The document's flat rows, in document order.
  * @param byId - The nodes by id.
- * @param rootNearest - The document node's nearest interaction, its context's (spec reading 110);
+ * @param rootNearest - The document node's nearest interaction, its context's (spec reading 117);
  *   itself where none is given.
  * @returns Each node's nearest interaction and language.
  */
@@ -1412,7 +1412,7 @@ const itemBuiltInNames: ReadonlySet<string> = new Set(
 );
 
 /**
- * The kinds a prefix names a `duration` of (spec reading 77 for the section ref).
+ * The kinds a prefix names a `duration` of (spec reading 86 for the section ref).
  */
 const durationScopes: ReadonlySet<string> = new Set([partKind, sectionKind, sectionRefKind]);
 
@@ -1541,7 +1541,7 @@ interface ReadingText {
 }
 
 /**
- * List every reading of a test-level reference (spec readings 48 and 79): a `section-identifier`'s
+ * List every reading of a test-level reference (spec readings 48 and 88): a `section-identifier`'s
  * one name reading; a variable's unsplit reading, its split at every dot, and its numbered reading
  * at every dot followed by a piece of digits and then another dot.
  *
@@ -2139,7 +2139,7 @@ const placedRowsOf = (
 
 /**
  * Build the rows a package's documents build together (`representation-gaps.md` §4; spec
- * readings 5, 48 and 79): each mapping's and template default's item declarations, and for each
+ * readings 5, 48 and 88): each mapping's and template default's item declarations, and for each
  * test, every reference of every document it places, placed once per instance, read once, split
  * into its name's pieces, and read in every reading, each reading's scope, variable and source
  * looked up, absent names written as probes. Where the documents break a law, the rows still say
@@ -2206,7 +2206,7 @@ export const resolvingReadingsOf = (
 
 /**
  * A package's variable references placed under each instance of an item's assembly (spec reading
- * 110), and the declaration lookups their claims of no declaration read.
+ * 117), and the declaration lookups their claims of no declaration read.
  */
 export interface PlacedVariableRows {
   readonly PlacedVariableRef: ReadonlyMap<string, Addition<typeof PlacedVariableRef>>;
@@ -2255,7 +2255,7 @@ const placedResolutionOf = (
 };
 
 /**
- * Build a package's variable references in place (spec reading 110): under each instance of an
+ * Build a package's variable references in place (spec reading 117): under each instance of an
  * item's assembly, every `VariableRef` of the instance's document, its name resolved as an item's
  * own is, among the item's declarations, else to one of an item's built-in variables, else to
  * nothing, which "Variable declared" refuses; and for each name that resolves to no declaration,

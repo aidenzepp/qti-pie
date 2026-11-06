@@ -6,7 +6,7 @@
  *   admits, which no foreign element under it may hold, since a name a parent admits resolves to
  *   its kind (XML Schema 1.0 Part 1, §3.3.2 and §3.10.4; `kinds.ts`, `resolution`).
  * - `TypeAvailable`: type → namespaces, the namespaces of the vocabularies under whose elements an
- *   `xsi:type` may name the type, so its document's schema set holds it (spec readings 60 and 72;
+ *   `xsi:type` may name the type, so its document's schema set holds it (spec readings 60 and 81;
  *   `open.ts`, `typeAvailable`).
  *
  * A foreign element keeps its namespace and local name as open text (`OpenElementName`), and a

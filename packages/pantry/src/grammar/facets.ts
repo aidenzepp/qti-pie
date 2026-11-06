@@ -217,15 +217,15 @@ const resourceTypesIn = (
 };
 
 /**
- * Where `qti-ordering`'s restated model comes from: spec reading 102 (upstream's 61)
+ * Where `qti-ordering`'s restated model comes from: spec reading 61
  * (`aidenzepp/qti-pie`, 8e573eca), which the information model's §5.98.3 states and the XSD's own
  * mapping of the same sentence elsewhere writes.
  */
 const orderingSource =
-  "spec reading 102 (upstream's 61): information model §5.98.3, 'may be new tags and reused QTI ASI tags', as the XSD writes the same sentence at §5.36.2 and §5.144.1 (##any)";
+  "spec reading 61: information model §5.98.3, 'may be new tags and reused QTI ASI tags', as the XSD writes the same sentence at §5.36.2 and §5.144.1 (##any)";
 
 /**
- * `qti-ordering`'s content, as spec reading 102 (upstream's 61) restates it: any number of elements
+ * `qti-ordering`'s content, as spec reading 61 restates it: any number of elements
  * of any namespace, assessed laxly, `sequence(any ##any lax 0..n)`.
  *
  * The XSD writes `##other` (`imsqti_asiv3p0p1_v1p0.xsd` lines 29976 and 24031), which refuses an
@@ -263,8 +263,8 @@ const orderingModel: Particle = {
  * - Its 22 interactions, and the expression kinds' arities, both projected from the IR;
  * - The ancestry blocks of an item's content, and a test's rubric block and feedback entering `test`,
  *   under which no template sits (spec reading 25);
- * - Spec reading 26, a section holds at least one part; spec reading 102 (upstream's 61),
- *   `qti-ordering`'s extension slot admits any namespace ({@link orderingModel});
+ * - Spec reading 26, a section holds at least one part; spec reading 61, `qti-ordering`'s extension
+ *   slot admits any namespace ({@link orderingModel});
  * - HTML's `colgroup` with `span` holding no `col`, and the default hotspot that ends its
  *   interaction;
  * - The response bindings, the package roots and the references.
@@ -312,7 +312,7 @@ export const asi: Facets = {
         versions: schemaVersions,
       },
     ],
-    // Spec reading 71: only a hotspot choice's default must appear last. The AssociableHotspot
+    // Spec reading 80: only a hotspot choice's default must appear last. The AssociableHotspot
     // class and the graphic associate interaction's hotspots (§5.7, §5.59.4) state no such rule, so
     // a `qti-associable-hotspot` default stands anywhere; the graphic gap match interaction's ban on
     // any default (§5.60.9) is a law of its own.
@@ -473,7 +473,7 @@ export const ud: Facets = {
  * SSML's facets: spec reading 40, `meta`, `metadata` and `lexicon` before every other SSML element
  * of `speak` and before its text that is not whitespace. The XSD's sequence orders the elements;
  * the restated model orders the text too, at one text position Unique Particle Attribution keeps
- * unique (`content.ts`, the `first` edit). Its file references are spec reading 95's.
+ * unique (`content.ts`, the `first` edit). Its file references are spec reading 103's.
  */
 export const ssml: Facets = {
   ...noFacets,
@@ -899,7 +899,7 @@ const contentExpressionParents: readonly (readonly [kind: string, file: string, 
  *   inside an element `annotation-xml` admits by `anyElement`, whose content the RelaxNG bars from
  *   MathML (line 61).
  *
- * Its file references are spec reading 95's (`mathmlCensus` of `references.ts`).
+ * Its file references are spec reading 103's (`mathmlCensus` of `references.ts`).
  */
 export const mathml: Facets = {
   ...noFacets,
@@ -992,8 +992,8 @@ const kindNames: ReadonlyMap<string, { readonly local: string; readonly name: st
 );
 
 /**
- * The kinds an included fragment's document may have as its root (spec readings 76, 107 and
- * 109): every kind an include stands for somewhere, but a context-split kind, under the fragment
+ * The kinds an included fragment's document may have as its root (spec readings 85, 114 and
+ * 116): every kind an include stands for somewhere, but a context-split kind, under the fragment
  * resource type of the implementation guide's §6.2.
  */
 export const fragmentRoots: readonly RootOf[] = fragmentRootsOf(
@@ -1003,11 +1003,11 @@ export const fragmentRoots: readonly RootOf[] = fragmentRootsOf(
 ).map((root) => ({ root, type: fragmentType }));
 
 /**
- * Where spec reading 111 restates an include's content from: XInclude's own text, which the XSD
+ * Where spec reading 118 restates an include's content from: XInclude's own text, which the XSD
  * makes wider.
  */
 const includeSource =
-  "spec reading 111: XInclude 1.0 Second Edition §3.1, 'The children property of the xi:include element may include a single xi:fallback element; the appearance of more than one xi:fallback element ... is a fatal error'";
+  "spec reading 118: XInclude 1.0 Second Edition §3.1, 'The children property of the xi:include element may include a single xi:fallback element; the appearance of more than one xi:fallback element ... is a fatal error'";
 
 /**
  * Any number of elements an include ignores: of another namespace than XInclude's, or of none, each
@@ -1030,7 +1030,7 @@ const ignoredContent = (): Particle => ({
 });
 
 /**
- * `xi:include`'s content, as spec reading 111 restates it: the elements it ignores, and at most one
+ * `xi:include`'s content, as spec reading 118 restates it: the elements it ignores, and at most one
  * `xi:fallback` among them, where `XInclude.xsd`'s `includeType` admits any number (XInclude 1.0
  * Second Edition, §3.1). The XSD's text and its other children stay as they are.
  */
@@ -1060,8 +1060,8 @@ const includeModel: Particle = {
 };
 
 /**
- * XInclude's facets: its file reference, spec reading 95's; the roots of the fragments it
- * includes, which a fragment resource lists (spec reading 107); and spec reading 111's one
+ * XInclude's facets: its file reference, spec reading 103's; the roots of the fragments it
+ * includes, which a fragment resource lists (spec reading 114); and spec reading 118's one
  * fallback an include may hold ({@link includeModel}).
  */
 export const xi: Facets = {
@@ -1099,7 +1099,7 @@ export const manifestRoot = "cp:manifest";
 /**
  * The element kinds a document's root may be in production's composition: the manifest's root,
  * then each root kind a vocabulary's package facet names, once, in facet order, an included
- * fragment's last (spec reading 107).
+ * fragment's last (spec reading 114).
  */
 export const documentRoots: readonly [string, ...string[]] = [
   manifestRoot,

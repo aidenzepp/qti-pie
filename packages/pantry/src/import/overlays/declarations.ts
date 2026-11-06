@@ -38,7 +38,7 @@ import type {
  */
 export interface DocumentIds {
   /**
-   * The document's context (spec reading 110), its own where none is given: an included
+   * The document's context (spec reading 117), its own where none is given: an included
    * fragment's nodes take the interaction their includes stand in as their nearest.
    */
   readonly context?: DocumentContext;
@@ -230,7 +230,7 @@ interface Derived {
  *
  * @param rows - A document's flat rows, its nodes in document order, so each parent precedes its
  *   children.
- * @param rootNearest - The document node's nearest interaction, its context's (spec reading 110);
+ * @param rootNearest - The document node's nearest interaction, its context's (spec reading 117);
  *   itself where none is given.
  * @returns The derived values, by node id.
  */

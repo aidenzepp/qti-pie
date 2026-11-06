@@ -1107,7 +1107,7 @@ interface ClassCell {
 
 /**
  * The kinds whose element wildcard a spec reading restates, and the wildcard it reads in place of
- * the XSD's: spec reading 102 (upstream's 61), `qti-ordering`'s extension slot `##any` where the
+ * the XSD's: spec reading 61, `qti-ordering`'s extension slot `##any` where the
  * XSD writes `##other` (information model §5.98.3; `facets.ts`, `orderingModel`).
  */
 const restatedWildcards: ReadonlyMap<string, readonly (typeof anyTypeWildcard)[]> = new Map([
@@ -1194,7 +1194,7 @@ describe("vocab/open.ts namespace classes against XML Schema 1.0, 3.10.4", () =>
                   const foreign = foreignKinds[namespaceClassOf(namespace, own)];
                   // Every processing admits an undeclared element its constraint admits; a
                   // `strict` one only with an xsi:type its document's schema set resolves (spec
-                  // reading 72), so `StrictlyHeld` marks a foreign kind only strict wildcards admit.
+                  // reading 81), so `StrictlyHeld` marks a foreign kind only strict wildcards admit.
                   // No wildcard admits one in MathML's namespace: MathML content stands only inside
                   // m:math, and the RelaxNG's anyElement excludes MathML's own (spec reading 2).
                   const admitting = elements.filter(
@@ -1222,7 +1222,7 @@ describe("vocab/open.ts namespace classes against XML Schema 1.0, 3.10.4", () =>
                       { foreign: isForeignKind(kind), local: kind, namespace: own },
                     ),
                   )._tag;
-                  // On an element the Schematron's extension rules cover, spec reading 81 admits no
+                  // On an element the Schematron's extension rules cover, spec reading 90 admits no
                   // attribute its XSD does not declare but a `data-` one, whatever its wildcard
                   // admits, and the drawn name is no `data-` name.
                   const attributeSpecified =
@@ -1272,7 +1272,7 @@ describe("XLink's global attributes (C30)", () => {
     "are admitted, with xlink.xsd's types, on exactly the kinds whose lax or strict attribute wildcard admits another namespace and whose documents the content-packaging set assesses, and on the foreign kinds: every admission row of every kind, both versions",
     () =>
       // Oracle: XML Schema 1.0 Part 1, §3.10.4 and §3.4.4 clause 3.2, over the leaf's attribute
-      // wildcards, with spec reading 72's schema sets read directly: only the content-packaging
+      // wildcards, with spec reading 81's schema sets read directly: only the content-packaging
       // set imports xlink.xsd (`cpext/imsqtiv3p0p1_cpextv1p2_v1p0.xsd` line 10), and a foreign
       // element, assessed against `xs:anyType`'s lax `##any`, stands in documents of every set.
       // Bound: every (version, kind) the attribute grammar admits a name on.

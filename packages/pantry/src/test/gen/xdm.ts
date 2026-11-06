@@ -534,7 +534,7 @@ const childrenOf = (grammar: ComposedGrammar): ReadonlyMap<string, readonly Cand
   const children = new Map<string, Candidate[]>();
   for (const { child, parent, position, version } of grammar.admission.rows) {
     // A foreign element only a strict wildcard holds stands only with an xsi:type its document's
-    // schema set resolves (spec reading 72, `StrictlyHeld`). A foreign element's xsi:type is drawn
+    // schema set resolves (spec reading 81, `StrictlyHeld`). A foreign element's xsi:type is drawn
     // with no regard to the wildcard that holds it, a name no schema defines among them, so none
     // is drawn there.
     const strict = Option.isSome(grammar.content.strictlyHeld.lookup({ child, parent, version }));
@@ -1262,9 +1262,9 @@ const openNamesOf = (
  * element's namespace under its own prefix, so an element in no namespace draws none.
  *
  * The governing type is the declared one, or the type a drawn `xsi:type` names, which then governs
- * the element: its attributes are its governor's where the type is one (spec reading 75), and a
+ * the element: its attributes are its governor's where the type is one (spec reading 84), and a
  * foreign element's `xsi:type` is drawn among {@link Index.governing}'s names, so it always
- * resolves, as shred reads it (spec readings 60 and 74).
+ * resolves, as shred reads it (spec readings 60 and 83).
  *
  * @param context - The case.
  * @param kind - The element's kind, a foreign kind for a foreign element.

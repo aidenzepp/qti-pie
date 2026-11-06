@@ -18,7 +18,7 @@
  *   whitespace;
  * - A kind whose element wildcard reads globally declared elements as their kinds admits each of them
  *   in the wildcard's namespaces that a schema set of the kind's documents declares (spec reading
- *   72, `open.wildcardReads`), but the roots spec reading 6 keeps foreign, since that needs every
+ *   81, `open.wildcardReads`), but the roots spec reading 6 keeps foreign, since that needs every
  *   vocabulary's registry;
  * - XML Schema's `xsi:` attributes are admitted on every element kind (spec reading 47), `xsi:nil`
  *   only on the foreign kinds, since no pinned element is nillable (audit A6); and the four `xml:`
@@ -29,7 +29,7 @@
  * - The open classes (`data-*`, `foreign`, `no-namespace`, `own-namespace`) are admitted, as free
  *   text, on every kind whose attribute wildcard's namespace classes let them through, and all but
  *   `data-*` on the foreign kinds (fin.md, D2). On a kind the Schematron's extension rules cover,
- *   only `data-*` is, and no `xml:` name the kind does not declare (spec reading 81, `coveredBy`).
+ *   only `data-*` is, and no `xml:` name the kind does not declare (spec reading 90, `coveredBy`).
  *
  * Every admitted triple is stated once: a triple two sources state is a `KeyCollision`.
  */
@@ -137,7 +137,7 @@ export const typedCardinalities = ["single", "multiple", "ordered"] as const;
 /**
  * Pair a vocabulary the pinned XSDs declare with its content models, its attribute declarations and
  * its facets: the leaves' rows of its kinds, the declarations as the spec readings that add or
- * remove an attribute read them (`readDeclarations`: readings 10 and 76).
+ * remove an attribute read them (`readDeclarations`: readings 10 and 85).
  *
  * @param declared - The vocabulary's roster.
  * @returns The vocabulary as the composition reads it.
@@ -251,14 +251,14 @@ const attributeKey = (row: {
 }): string => `${row.version}\u0000${row.kind}\u0000${row.name}`;
 
 /**
- * Read which element kinds spec reading 81 holds to their declared attributes in each version:
+ * Read which element kinds spec reading 90 holds to their declared attributes in each version:
  * those whose element the Schematron's extension rules of that version cover (`coveredElements`,
  * from the `RULESET_*_DATAEXTENSIONRULES` patterns both ASI XSDs embed), compared by expanded name,
  * so every kind one element name resolves to is covered alike (`qti-rubric-block` and
  * `qti-rubric-block.test`).
  *
  * The reading is QTI's own rule, not XML Schema's, so it follows the element's name, never the type
- * an `xsi:type` makes it governed by (spec reading 75).
+ * an `xsi:type` makes it governed by (spec reading 84).
  *
  * @param kinds - The composition's kinds.
  * @returns Whether a kind's element is covered in a version.
@@ -308,7 +308,7 @@ const isIdType = ({ domain }: { readonly domain: Domain }): boolean =>
  * from ID". A wild ID is an attribute a wildcard admits whose declaration's type is an ID: only
  * `xml:id`, which `xml.xsd` types `xs:ID`, under a `lax` or `strict` wildcard (under `skip` it is
  * not assessed, so it has no type). So an element whose uses include an ID-derived one admits no
- * `xml:id` its type does not declare (spec reading 101). Clause 5.1, at most one wild ID, holds by
+ * `xml:id` its type does not declare (spec reading 109). Clause 5.1, at most one wild ID, holds by
  * construction: `xml:id` is the only global attribute of an ID type.
  *
  * @param attribute - An attribute a wildcard admits.
@@ -327,14 +327,14 @@ const admitsWild = (attribute: { readonly domain: Domain }, declaresId: boolean)
  * - On every kind of an element that holds an attribute wildcard, the `xml:` names, typed as the
  *   wildcard's processing reads them, and the open classes it admits, as free text; but on a kind
  *   whose element the Schematron's extension rules cover ({@link coveredBy}), only `data-*`, where
- *   the wildcard admits it: spec reading 81 makes every attribute such an element does not declare
+ *   the wildcard admits it: spec reading 90 makes every attribute such an element does not declare
  *   an extension, and an extension a `data-` name in no namespace, so no other open class and no
  *   `xml:` name the kind does not declare is admitted there;
  * - On each foreign kind, the `xml:` names with `xml.xsd`'s types, and the open classes but `data-*`
  *   (`open.foreignAttributes`).
  *
  * But a kind whose declared uses include an ID-derived one admits no wild ID, the `xml:id` its
- * wildcard would validate ({@link admitsWild}, spec reading 101).
+ * wildcard would validate ({@link admitsWild}, spec reading 109).
  *
  * A foreign element is one a `lax` element wildcard admits with no declaration, and XML Schema
  * assesses it laxly, against `xs:anyType`, whose attribute wildcard is `##any` and `lax`: so its
@@ -456,17 +456,17 @@ interface GovernedAttributes {
 }
 
 /**
- * State the governors (spec readings 60 and 75) and the attributes each admits.
+ * State the governors (spec readings 60 and 84) and the attributes each admits.
  *
  * A governor is a (version, kind, type) where the type may govern an element of the kind in place
  * of its declared type: each `XsiType` row whose type is not the kind's declared one, and, on each
  * foreign kind, every named simple type of the leaf, which governs a foreign element's text. An
  * element under a complex governing type carries that type's attributes as `layerOf` states a
  * kind's: the type's declarations through the kind's own spec readings (`readDeclarations`), the
- * `xml:` names and open classes the type's attribute wildcard admits, but on a kind spec reading 81
+ * `xml:` names and open classes the type's attribute wildcard admits, but on a kind spec reading 90
  * covers only `data-*`, since that reading follows the element's name, and the `xsi:` names but
  * `xsi:nil`, which no pinned element declaration makes nillable; and no wild ID where the type's
- * declared uses include an ID-derived one ({@link admitsWild}, spec reading 101). An element under
+ * declared uses include an ID-derived one ({@link admitsWild}, spec reading 109). An element under
  * a simple type carries the `xsi:` names alone (XML Schema 1.0 Part 1, §3.3.4, Element Locally
  * Valid (Type), clause 3.1.1), `xsi:nil` among them on a foreign element, which no declaration
  * assesses.
@@ -574,7 +574,7 @@ export interface Grammar<K extends string, N extends string> {
    */
   readonly heldRootsUnder: HeldRootsUnder;
   /**
-   * The kinds an include stands for under each parent whose model holds one (spec reading 107).
+   * The kinds an include stands for under each parent whose model holds one (spec reading 114).
    */
   readonly include: IncludeGrammar;
   /**
@@ -597,7 +597,7 @@ export interface Grammar<K extends string, N extends string> {
   readonly references: References;
   /**
    * `TypeAvailable`: type → namespaces, the vocabulary namespaces under whose elements an
-   * `xsi:type` may name the type (C15, C36; spec readings 60 and 72).
+   * `xsi:type` may name the type (C15, C36; spec readings 60 and 81).
    */
   readonly typeAvailable: TypesAvailable;
   /**

@@ -311,7 +311,7 @@ const libxml2Count = (matches: readonly (Recorded | undefined)[]): number =>
  *
  * Only a laxly assessed element is this class, decided from the law oracle's own rows: it is one of
  * the foreign kinds, whose `OpenElementName` row holds its expanded name, or of a kind whose
- * namespace the document's schema set does not declare (reading 72). A strictly assessed
+ * namespace the document's schema set does not declare (reading 81). A strictly assessed
  * element whose `xsi:type` resolves to no type definition fails Element Locally Valid (Element),
  * cvc-elt clause 4.2 (XML Schema 1.0 Part 1 §3.3.4): it is invalid, so the law oracle accepting it
  * is a defect and stays unrecorded.
@@ -397,7 +397,7 @@ const isNestedRoot = (difference: Difference, nested: ReadonlySet<string>): bool
   difference.detail.split(" | ").every((message) => isNestedMessage(message, nested));
 
 /**
- * The class of disagreement spec reading 72 states as its known limit: the grammar is keyed by
+ * The class of disagreement spec reading 81 states as its known limit: the grammar is keyed by
  * version and not by schema set, so a kind that stands in documents of more than one set (LOM's,
  * in a manifest and in an external LOM file, and the foreign kinds, in every document) reads an
  * element under its `lax` wildcards as the declaration any of those sets gives it, and judges it
@@ -411,13 +411,13 @@ const outsideSet: Recorded = {
   direction: "oracle-only",
   reason: {
     _tag: "reading",
-    reading: 72,
+    reading: 81,
     why: "the grammar, keyed by version and not by schema set, judges an element or attribute its document's schema set does not declare as another set declares it; XML Schema assesses it against nothing",
   },
 };
 
 /**
- * `qti-ordering`'s extension slot (spec reading 102): it admits an element in QTI's own namespace
+ * `qti-ordering`'s extension slot (spec reading 61): it admits an element in QTI's own namespace
  * or in none, which the information model's "reused QTI ASI tags" allows, laxly, while the XSD's
  * `##other` wildcard refuses it and `xmllint` with it, naming the first such child of the slot.
  */
@@ -426,13 +426,13 @@ const orderingSlot: Recorded = {
   direction: "xsd-only",
   reason: {
     _tag: "reading",
-    reading: 102,
+    reading: 61,
     why: "qti-ordering's extension slot admits QTI's own elements and elements in no namespace, read as ##any laxly; the XSD's ##other refuses them",
   },
 };
 
 /**
- * One `xmllint` message of reading 102's class: an element its parent's `##other` wildcard over
+ * One `xmllint` message of reading 61's class: an element its parent's `##other` wildcard over
  * QTI's namespace does not expect, as {@link compareJudgments} writes it. `xmllint` names the
  * wildcard it expected only while no other element has matched it.
  */
@@ -440,7 +440,7 @@ const otherWildcardMessage =
   /^line \d+ (?<element>\S+): This element is not expected\.(?: Expected is \( ##other\{http:\/\/www\.imsglobal\.org\/xsd\/imsqtiasi_v3p0\}\* \)\.)?$/u;
 
 /**
- * A document whose root is only an included fragment's (spec reading 107): its root is any kind an
+ * A document whose root is only an included fragment's (spec reading 114): its root is any kind an
  * include stands for, which the XSDs declare locally, so `xmllint`, validating the document alone,
  * finds no global declaration for its validation root and judges nothing below it, while the law
  * oracle judges the document as a fragment's, its root admitted, the package's `RootOfType`
@@ -450,13 +450,13 @@ const fragmentRoot: Recorded = {
   direction: "xsd-only",
   reason: {
     _tag: "reading",
-    reading: 107,
+    reading: 114,
     why: "a fragment's document roots at a kind an include stands for, which the XSDs declare locally; xmllint, validating it alone, finds no global declaration for the root",
   },
 };
 
 /**
- * The expanded names of the roots only a fragment's document has (spec reading 107), as
+ * The expanded names of the roots only a fragment's document has (spec reading 114), as
  * `namespace}local`.
  */
 const fragmentOnlyRoots: ReadonlySet<string> = (() => {
@@ -479,7 +479,7 @@ const fragmentOnlyRoots: ReadonlySet<string> = (() => {
 })();
 
 /**
- * The namespaces of the global attributes reading 72's limit types by the union of a kind's schema
+ * The namespaces of the global attributes reading 81's limit types by the union of a kind's schema
  * sets, by the prefix the law table names them with: `xml.xsd`'s four, which the ASI and
  * content-packaging sets import, and XLink's ten, which the content-packaging set alone imports.
  */
@@ -528,14 +528,14 @@ const isNestedRootLaw = (difference: Difference, nestedPaths: ReadonlySet<string
 };
 
 /**
- * Decide whether a difference is reading 72's limit ({@link outsideSet}): the law oracle refuses an
+ * Decide whether a difference is reading 81's limit ({@link outsideSet}): the law oracle refuses an
  * element whose kind's namespace, or an `xml:` or XLink attribute whose namespace, the document's
  * schema set does not declare, and a kind that stands in more than one set read it: a foreign
  * element above the element, or holding the attribute, whose wildcard reads every set, or, in an
  * external LOM file, LOM's kinds reading a manifest's set. An `xsi:` attribute is XML Schema's own,
  * which every set declares, and a foreign kind names no namespace of its own, so neither is this
  * class. An element outside the set that no such kind read is not the limit but the grammar reading
- * it where reading 72 makes it foreign, a defect, and stays unrecorded.
+ * it where reading 81 makes it foreign, a defect, and stays unrecorded.
  *
  * @param difference - The difference.
  * @param names - The document's names, its schema set and what LOM's kinds read beyond it.
@@ -581,7 +581,7 @@ const isOutsideSet = (
 };
 
 /**
- * The class of disagreement spec reading 81 departs from the XSD by: on an element the Schematron's
+ * The class of disagreement spec reading 90 departs from the XSD by: on an element the Schematron's
  * extension rules cover (`coveredElements`), an attribute its XSD does not declare is a `data-`
  * name in no namespace or the document is refused, while `xmllint`, which runs no Schematron,
  * admits it under the element's `##any` `lax` wildcard. The codec refuses it as an attribute its
@@ -598,14 +598,14 @@ const extensionAttribute: Recorded = {
   direction: "oracle-only",
   reason: {
     _tag: "reading",
-    reading: 81,
+    reading: 90,
     why: "the Schematron's extension rules admit no undeclared attribute but a data- one on the elements they cover; xmllint runs no Schematron and admits it under the ##any lax wildcard",
   },
   rule: "attribute-admission",
 };
 
 /**
- * Decide whether a generated case's difference is reading 72's limit ({@link outsideSet}) by where
+ * Decide whether a generated case's difference is reading 81's limit ({@link outsideSet}) by where
  * its variant was applied: a named invalid variant at an element whose namespace the document's
  * schema set does not declare, which only a kind standing in more than one set reads as its
  * declaration, so the law oracle refuses what XML Schema assesses against nothing. The codec may
@@ -651,7 +651,7 @@ const recorded: readonly Recorded[] = [
     direction: "beyond",
     reason: {
       _tag: "reading",
-      reading: 63,
+      reading: 72,
       why: "the built-in outcome is completionStatus, compared exactly; adaptive.xml sets completion_status, which nothing declares",
     },
     rule: "P8",
@@ -672,7 +672,7 @@ const recorded: readonly Recorded[] = [
     direction: "beyond",
     reason: {
       _tag: "reading",
-      reading: 96,
+      reading: 104,
       why: "no two choices of one class in a document share an identifier, whichever interactions hold them; the XSD states no key over choice identifiers",
     },
     rule: "choice-identifier-distinct",
@@ -748,7 +748,7 @@ const generatedRecorded: readonly Recorded[] = [
     direction: "beyond",
     reason: {
       _tag: "reading",
-      reading: 65,
+      reading: 74,
       why: "a variable's identifier is declared once in its item or test; the XSD states no key over declarations",
     },
     rule: "declaration-key",
@@ -789,7 +789,7 @@ const generatedRecorded: readonly Recorded[] = [
     direction: "beyond",
     reason: {
       _tag: "reading",
-      reading: 69,
+      reading: 78,
       why: "a mapping maps a base type other than file and duration, of a variable that is not a record, so a declaration with no base type maps none; the XSD admits a mapping in any response declaration",
     },
     rule: "mapping-base-type",
@@ -799,7 +799,7 @@ const generatedRecorded: readonly Recorded[] = [
     direction: "beyond",
     reason: {
       _tag: "reading",
-      reading: 92,
+      reading: 100,
       why: "a match or interpolation table sets a single outcome, so one under a multiple, ordered or record outcome declaration is refused; the XSD admits the tables under any outcome declaration",
     },
     rule: "lookup-cardinality",
@@ -809,7 +809,7 @@ const generatedRecorded: readonly Recorded[] = [
     direction: "beyond",
     reason: {
       _tag: "reading",
-      reading: 66,
+      reading: 75,
       why: "an interaction's response-identifier names a response its item declares; the XSD types it an identifier and resolves it nowhere",
     },
     rule: "binding-declared",
@@ -852,10 +852,10 @@ const nodeIdOf = (index: number): NodeId =>
  * `{namespace}local`: every foreign element (`lax`); every element within a nested root that
  * reading 6 keeps foreign (`nested`, {@link nestedRoot}), and each such node's place as the law
  * oracle writes it (`nestedPaths`, {@link nestedRootLaw}); every element of a kind whose namespace
- * the document's schema set does not declare (`outside`, reading 72), which a wildcard can only
+ * the document's schema set does not declare (`outside`, reading 81), which a wildcard can only
  * assess laxly; that set's namespaces (`set`); and the namespaces LOM's kinds read beyond it
  * (`lomReads`): in an external LOM file, a manifest's set, since LOM's kinds stand in manifests too
- * (reading 72's limit), and none in any other document.
+ * (reading 81's limit), and none in any other document.
  */
 interface ForeignNames {
   readonly lax: ReadonlySet<string>;
@@ -1172,7 +1172,7 @@ const declaredOf = (bytes: Uint8Array): string =>
 
 /**
  * Validate documents with `xmllint` in a version, each against its root's schema set (spec reading
- * 72): grouped by the namespace of their root, each group with that namespace's root driver.
+ * 81): grouped by the namespace of their root, each group with that namespace's root driver.
  *
  * @param oracle - What `writeXsdOracle` wrote.
  * @param version - The schema version.
@@ -1488,11 +1488,11 @@ const elementsIn = (root: Element): readonly (readonly [Element, readonly number
 };
 
 /**
- * Decide whether a difference is reading 102's ({@link orderingSlot}): at least one message is the
+ * Decide whether a difference is reading 61's ({@link orderingSlot}): at least one message is the
  * `##other` wildcard's on a child of a `qti-ordering` of the document, where the law oracle admits
  * it, and every other is reading 6's ({@link isNestedMessage}), since `xmllint` reports both
  * classes' messages as one content difference. The same message under another `##other` slot,
- * such as `qti-selection`'s, which reading 102 leaves to the XSD, is not this class.
+ * such as `qti-selection`'s, which reading 61 leaves to the XSD, is not this class.
  *
  * @param difference - The difference.
  * @param root - The document's root.
@@ -1910,7 +1910,7 @@ describe.skipIf(!cached)("xsd.corpus.test.ts, generated documents", () => {
               .join(""),
           );
           yield* Console.log(
-            `xsd.generated: TEST_SEED=${String(run.seed)}, ${String(cases.length)} cases drawn (stream pantry/xsd-differential), ${String(cases.length - judgeable.length)} left out for unexpanded entity references, ${String(judgeable.length)} judged; ${String(unrecorded.length)} unrecorded differences; libxml2 ${String(libxml2Count(matched))}; lax xsi:type (reading 60) ${String(matched.filter((match) => match === laxXsiType).length)}; nested roots (reading 6) ${String(matched.filter((match) => match === nestedRoot || match === nestedRootLaw).length)}; fragment roots (reading 107) ${String(matched.filter((match) => match === fragmentRoot).length)}; outside the schema set (reading 72) ${String(matched.filter((match) => match === outsideSet).length)}; qti-ordering's slot (reading 102) ${String(matched.filter((match) => match === orderingSlot).length)}; the documents are under work/xsd-generated/`,
+            `xsd.generated: TEST_SEED=${String(run.seed)}, ${String(cases.length)} cases drawn (stream pantry/xsd-differential), ${String(cases.length - judgeable.length)} left out for unexpanded entity references, ${String(judgeable.length)} judged; ${String(unrecorded.length)} unrecorded differences; libxml2 ${String(libxml2Count(matched))}; lax xsi:type (reading 60) ${String(matched.filter((match) => match === laxXsiType).length)}; nested roots (reading 6) ${String(matched.filter((match) => match === nestedRoot || match === nestedRootLaw).length)}; fragment roots (reading 114) ${String(matched.filter((match) => match === fragmentRoot).length)}; outside the schema set (reading 81) ${String(matched.filter((match) => match === outsideSet).length)}; qti-ordering's slot (reading 61) ${String(matched.filter((match) => match === orderingSlot).length)}; the documents are under work/xsd-generated/`,
           );
 
           assert.deepStrictEqual(
@@ -1965,7 +1965,7 @@ const underMark = (...attributes: readonly string[]): string =>
 /**
  * An item whose companion materials hold an SSML `mark`, whose content is a `##other` lax
  * wildcard, holding the given content, with the `xsi` prefix bound. The item's schema set holds
- * the ASI XSD, MathML and SSML (spec reading 72), so a global element of either beneath the mark is
+ * the ASI XSD, MathML and SSML (spec reading 81), so a global element of either beneath the mark is
  * assessed against its declaration, and an element no XSD of the set declares against nothing.
  *
  * @param content - The mark's content, as written, in the ASI namespace unless it says otherwise.
@@ -1990,7 +1990,7 @@ const locatedTest = (attribute: string): string =>
  * A test whose one section's selection carries the given attribute, every attribute it needs
  * besides. The Schematron's extension rules cover `qti-test-part` and not `qti-selection`, so an
  * `xml:` name `qti-selection`'s `##other` wildcard admits is still read by its declaration there,
- * where spec reading 81 refuses one on the test part outright.
+ * where spec reading 90 refuses one on the test part outright.
  *
  * @param attribute - The attribute, as written.
  * @returns The test's text.
@@ -2121,7 +2121,7 @@ describe.skipIf(!cached)(
       );
 
       it.effect(
-        "each document root's schema set, read from the XSDs' own imports, is reading 72's",
+        "each document root's schema set, read from the XSDs' own imports, is reading 81's",
         () =>
           Effect.gen(function* schemaSets() {
             const asi = "http://www.imsglobal.org/xsd/imsqtiasi_v3p0";

@@ -621,7 +621,7 @@ describe(
         // Oracle: the case's own model read as keyed sets: each description's type and text, its
         // node and its div's numbered in document order (the root node 1, each div, then each of
         // its descriptions and that description's text node), and XML Schema 1.0 Part 1
-        // §3.15.5's [binding], the parent of an element whose text is an ID (reading 93).
+        // §3.15.5's [binding], the parent of an element whose text is an ID (reading 101).
         // Bound: every item of 1 or 2 divs of at most 2 descriptions over 4 types and 2 texts,
         // 5,402.
         searched(

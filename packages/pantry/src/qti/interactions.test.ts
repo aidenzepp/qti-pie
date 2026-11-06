@@ -175,7 +175,7 @@ describe("qti/interactions.ts, the closed data its laws read", () => {
     }
   });
 
-  it("reads reading 83's cardinality kinds' most count with an XSD default in every version, so the law reads a known most", () => {
+  it("reads reading 92's cardinality kinds' most count with an XSD default in every version, so the law reads a known most", () => {
     // Oracle: the inventory leaf's attribute declarations, by way of `countDefault`, and
     // `ChoiceBound`'s max attributes.
     for (const kind of cardinalityKinds) {
@@ -223,7 +223,7 @@ describe("qti/interactions.ts, the closed data its laws read", () => {
 });
 
 /**
- * The `simple` fixture's item, the one document the reading-96 cases edit.
+ * The `simple` fixture's item, the one document the reading-104 cases edit.
  */
 const simpleItem = "choice.xml";
 
@@ -244,7 +244,7 @@ const secondDeclaration =
   '<qti-response-declaration identifier="RESPONSE2" cardinality="single" base-type="identifier"/>';
 
 /**
- * The reading-96 cases over the `simple` fixture's item: each edit, written as search and
+ * The reading-104 cases over the `simple` fixture's item: each edit, written as search and
  * replacement pairs applied in order, and the laws of the two it must break.
  */
 const choiceNameCases: readonly {
@@ -302,11 +302,11 @@ const choiceNameCases: readonly {
   },
 ];
 
-describe("qti/interactions.ts, reading 96 by the law oracle", () => {
+describe("qti/interactions.ts, reading 104 by the law oracle", () => {
   it.effect(
-    "breaks Choice not variable and Choice identifier key exactly where reading 96 says, over edits of simple's item",
+    "breaks Choice not variable and Choice identifier key exactly where reading 104 says, over edits of simple's item",
     () =>
-      // Oracle: the specification as a checker, reading 96 (§5.132.1, §5.65.1, §7.16, §2.2.2): a
+      // Oracle: the specification as a checker, reading 104 (§5.132.1, §5.65.1, §7.16, §2.2.2): a
       // choice's identifier names one choice of its class in its document and no item variable,
       // declared or built in; each case's expected laws are read off its edit.
       // Bound: the `simple` fixture as it is and 7 edits of its item: a choice named as a declared

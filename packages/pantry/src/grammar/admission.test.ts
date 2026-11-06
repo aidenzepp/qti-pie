@@ -37,7 +37,7 @@ import {
 } from "#pantry/test/gen/relaxng.ts";
 
 /**
- * The wildcards a parent's content reads, a spec reading's in place of the XSD's: spec reading 102
+ * The wildcards a parent's content reads, a spec reading's in place of the XSD's: spec reading 61
  * (upstream's 61) reads `qti-ordering`'s extension slot as `##any` where the XSD writes `##other`
  * (information model §5.98.3; `facets.ts`, `orderingModel`).
  *
@@ -208,10 +208,10 @@ describe.skipIf(!cached)("Admission against the XSD", () => {
       // Oracle: XML Schema Part 1 §3.3.2 and §3.10.4 over the tests' own reading of the XSDs: a
       // parent's model declares a name by an element particle, and a wildcard admitting the name's
       // namespace finds its top-level declaration in the schema set the parent was read from, its
-      // root XSD and what that imports (spec reading 72), but for reading 6's roots, which stay
+      // root XSD and what that imports (spec reading 81), but for reading 6's roots, which stay
       // foreign; any other name is undeclared there. A parent read from several roots finds a
-      // declaration any of their sets holds, as reading 72's limit says. The document node
-      // declares the roots its model (R5) names, and `qti-ordering`'s slot is spec reading 102's
+      // declaration any of their sets holds, as reading 81's limit says. The document node
+      // declares the roots its model (R5) names, and `qti-ordering`'s slot is spec reading 61's
       // `##any` (`readWildcards`). The box is every parent the walks reach, in either version, by
       // every element name.
       Effect.gen(function* locality() {

@@ -90,7 +90,7 @@ export interface ShredGrammar<V extends XdmVocabulary> {
   ) => boolean;
   /**
    * Whether an element admits an attribute name: a row of its governor's `GovernedAttribute`
-   * where a governor governs it, else of its kind's `AttributeAdmission` (spec reading 75).
+   * where a governor governs it, else of its kind's `AttributeAdmission` (spec reading 84).
    *
    * @param version - The version of the attribute's document.
    * @param kind - The kind of the attribute's element, a foreign kind for a foreign element.
@@ -155,7 +155,7 @@ export interface ShredGrammar<V extends XdmVocabulary> {
   /**
    * Whether only a `strict` wildcard of a parent admits a foreign kind: a row of `StrictlyHeld`.
    * An element read as that kind there has no declaration its document's schema set gives it, so
-   * it stands only with an `xsi:type` naming a type that set holds or a built-in (spec reading 72).
+   * it stands only with an `xsi:type` naming a type that set holds or a built-in (spec reading 81).
    *
    * @param version - The version of the element's document.
    * @param parent - The kind of the element's parent.
@@ -192,13 +192,13 @@ export interface ShredGrammar<V extends XdmVocabulary> {
  * - `type-unresolved`: an `xsi:type` whose value is no QName whose prefix is in scope, on an element
  *   of a kind or a foreign one alike, since XML Schema assesses the attribute against its own
  *   declaration where no element declaration is found (XML Schema 1.0 Part 1, §3.3.4 clause 4.1,
- *   §3.2.4 clause 1.2, §3.15.3; spec reading 74);
+ *   §3.2.4 clause 1.2, §3.15.3; spec reading 83);
  * - `type-unknown`: an `xsi:type` on an element of a kind whose QName names no type of the pinned
  *   schemas (clause 4.2); on a foreign element such a name leaves it to lax assessment, or under
  *   `strict` is `strict-undeclared` (spec reading 60);
  * - `strict-undeclared`: an element a `strict` wildcard holds that no global declaration of its
  *   document's schema set names, with no `xsi:type` naming a type of that set or a built-in, so XML
- *   Schema cannot assess it (§3.10.4 clause 2, §3.3.4 clause 1.2; spec reading 72).
+ *   Schema cannot assess it (§3.10.4 clause 2, §3.3.4 clause 1.2; spec reading 81).
  * - `mathml-foreign`: an element in the MathML namespace that would be read as a foreign element,
  *   where no MathML kind its parent admits takes its name. MathML's grammar starts at `math` and
  *   its `anyElement` excludes MathML's own namespace (MathML 3 RelaxNG, `mathml3-common.rnc` lines
@@ -271,7 +271,7 @@ export class UnmodeledVocabulary extends Schema.TaggedError<UnmodeledVocabulary>
 /**
  * Why a document is not read as QTI 3: its package declares no QTI 3 schema version, its XML
  * declaration declares a version other than 1.x, or its root element is in a namespace of QTI 2
- * (spec reading 80).
+ * (spec reading 89).
  */
 export const notQti3Reasons = ["schema-version", "xml-version", "root-namespace"] as const;
 
@@ -280,7 +280,7 @@ export const notQti3Reasons = ["schema-version", "xml-version", "root-namespace"
  * `SchemaVersion` roster does not hold, or none; its XML declaration declares a version other
  * than 1.x, which no QTI 3 document is written in; or its root element is in a namespace one of
  * QTI 2's XSDs declares (`qti2Namespaces` of `#pantry/vocab/namespaces.ts`), which no QTI 3 schema
- * reads, whatever its package's manifest declares (spec reading 80).
+ * reads, whatever its package's manifest declares (spec reading 89).
  *
  * `found` is the version as written, none when the package declares no schema version; for
  * `root-namespace` it is the root's namespace name.
@@ -513,7 +513,7 @@ const qNameParts = /^(?:(?<prefix>[^\s:]+):)?(?<local>[^\s:]+)$/u;
 /**
  * Read an `xsi:type` value as the expanded name it is: a QName resolved against the bindings in
  * scope, an unprefixed name taking the default namespace (XML Schema 1.0 Part 1, §3.15.3; spec
- * reading 74).
+ * reading 83).
  *
  * @param typed - The `xsi:type` attribute.
  * @param element - The element that carries it.
@@ -544,8 +544,8 @@ const qNameOf = (
  * A foreign element has no declaration, and its `xsi:type` is still assessed against XML Schema's
  * own declaration of the attribute (§3.2.4 clause 1.2, reached through the ur-type's `lax`
  * attribute wildcard), so a value that is no QName in scope is `type-unresolved` there too (spec
- * reading 74). A QName that names a type its document's schema set holds, or a built-in
- * (`typeAvailable`, spec reading 72), governs the element, which is then assessed against
+ * reading 83). A QName that names a type its document's schema set holds, or a built-in
+ * (`typeAvailable`, spec reading 81), governs the element, which is then assessed against
  * that type (§3.3.4, Schema-Validity Assessment (Element), clause 1.2): a simple type's text is
  * checked by the law that reads the governing type, a complex one is reading 50's unchecked limit.
  * With no `xsi:type`, or one that names no such type, no type governs it (`none`): under `lax` it
@@ -612,7 +612,7 @@ const governsOf = <V extends XdmVocabulary>(
  *
  * The root's namespace is read first: one of QTI 2's makes the document a QTI 2 document, which is
  * refused as `not-qti3` before any of its names is read, so the refusal says what the document is
- * rather than that its root's name is unknown (spec reading 80).
+ * rather than that its root's name is unknown (spec reading 89).
  *
  * @param element - The root element.
  * @param grammar - The grammar.
@@ -868,7 +868,7 @@ interface Opened<V extends XdmVocabulary> {
  * Read what every element holds but its children: its namespace declarations, then its governing
  * type, then its attributes, once its kind is known, the order in which each binds or names the
  * next. The namespace declarations bind the `xsi:type` QName, and the governing type decides which
- * attributes the element admits (spec reading 75), so an attribute its declared type does not
+ * attributes the element admits (spec reading 84), so an attribute its declared type does not
  * declare but its governing type does is read, and one its governing type does not declare is not.
  *
  * @param reading - How the element is read.

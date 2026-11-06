@@ -60,7 +60,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import --dry-run", (it
   it.effect(
     "refuses a package the codec refuses, naming its rule, as an import refusal that exits 1",
     () =>
-      // Oracle: the specification as a checker, the codec's rule (`not-qti3`, spec reading 80): the
+      // Oracle: the specification as a checker, the codec's rule (`not-qti3`, spec reading 89): the
       // published PCI sample declares a schema version the roster does not hold. The dry run reaches
       // no law of the database, so the refusal names no law and no source.
       Effect.gen(function* refused() {

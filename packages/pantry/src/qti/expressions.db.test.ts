@@ -635,7 +635,7 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
       );
 
       it.effect("refuses each reading law's breach by its law, and keeps its control", () =>
-        // Oracle: PostgreSQL, each CHECK of `Reading`, against spec readings 48 and 79, the
+        // Oracle: PostgreSQL, each CHECK of `Reading`, against spec readings 48 and 88, the
         // information model's §2.2.2.2 time-dependence sentence (A62), P24 (A66) and §7.27.1's
         // `section-identifier` (A61).
         // Bound: one breach of each law, beside the same row with the breach repaired.
@@ -714,7 +714,7 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
       it.effect(
         "refuses a reference by identifier that names a variable of a kind its element does not read or set, and keeps one that does",
         () =>
-          // Oracle: PostgreSQL, the containment into `ReferenceDeclaration` (spec reading 104),
+          // Oracle: PostgreSQL, the containment into `ReferenceDeclaration` (spec reading 111),
           // against the information model's definitions of each element's `identifier`: a set
           // outcome value sets an outcome (§6.32.3), a correct names a response (§7.10.1), a
           // variable any item variable (§7.47.1), and `numAttempts` stands as a response.
@@ -818,8 +818,8 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
         "refuses a template default or a mapping its item's declarations do not admit, and keeps its control",
         () =>
           // Oracle: PostgreSQL, `Template_default_target` and `Template_default_type` (A37, A38,
-          // spec reading 100) and `Variable_mapping_source` and `Variable_mapping_target` (A34,
-          // reading 89). Bound: one breach of each, beside its repair.
+          // spec reading 108) and `Variable_mapping_source` and `Variable_mapping_target` (A34,
+          // reading 97). Bound: one breach of each, beside its repair.
           Effect.gen(function* itemRefLaws() {
             const db = yield* Db.open(AuthorApp.roles.author, {});
             const templateDefault: Addition<typeof TemplateDefault> = {

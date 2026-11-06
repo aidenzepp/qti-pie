@@ -152,7 +152,7 @@ export const RpTemplate = closed("RpTemplate", rpTemplates);
  * The forms a test-level reference is read in (spec reading 48; `representation-gaps.md` §4.3), in
  * code order: `unsplit`, the test's own variable of the whole identifier; `split`, a scope (an item
  * ref, test part, section or section ref) and its variable, at one dot; `numbered`, an item ref, an
- * instance number and its variable, at two dots (reading 79); and `name`, the whole identifier as a
+ * instance number and its variable, at two dots (reading 88); and `name`, the whole identifier as a
  * name of the assembled test, the one reading a `section-identifier` has (the UP audit's A61).
  */
 export const readingForms = ["unsplit", "split", "numbered", "name"] as const;
@@ -286,7 +286,7 @@ export const ncChar = `\\-.0-9\\u{B7}\\u{300}-\\u{36F}\\u{203F}-\\u{2040}${ncSta
  * - `float` and `duration`: `xs:double` (information model §8.13: a duration is "represented as a
  *   single float that records time in seconds ... using the 'xsd:double' datatype").
  * - `identifier`: QTI's identifier class, `IdentifierDType`.
- * - `uri`: `xs:anyURI` (spec reading 61).
+ * - `uri`: `xs:anyURI` (spec reading 71).
  *
  * Stated with Q5.08's `Typed_value` law, whose single source this module is.
  */
@@ -502,7 +502,7 @@ const anyDeclaration: readonly DeclarationHandle[] = [
  * set" (§5.87.1) or "the variable to be set" (§5.130.1, SetValue), and an item's variables reach
  * a test only to be read: "values taken from an individual item session can be looked up by
  * prefixing the name of the item variable" (§2.11.1.2). So a prefixed reading never resolves a
- * setter (spec reading 105).
+ * setter (spec reading 112).
  */
 export const referenceDeclarations: readonly {
   readonly declarations: readonly DeclarationHandle[];

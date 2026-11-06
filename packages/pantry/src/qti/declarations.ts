@@ -104,7 +104,7 @@ export const valueSetKinds = ["qti-default-value", "qti-correct-response"] as co
  * (§2.2.2.2: "must not appear in a 'response declaration'") and `completionStatus` (§2.2.2.3:
  * "must not appear in an outcome declaration"), the reserved identifiers of tables 4.5.1, 5.115.1
  * and 5.151.1 ("The identifiers of the built-in session variables are reserved. They are
- * completionStatus, numAttempts and duration"). Spec reading 63: the name is spelled exactly, with
+ * completionStatus, numAttempts and duration"). Spec reading 72: the name is spelled exactly, with
  * no alias, so `completion_status` is an ordinary identifier. Each name is read once, though
  * `BuiltInVariable` holds `duration` under an item's roots and a test's alike.
  *
@@ -146,7 +146,7 @@ export const reservedBaseTypes: readonly ReservedBaseType[] = [
  * (information model §2.2.2.1: "There is one built-in context variable: 'QTI_CONTEXT', which has
  * record cardinality"; the implementation guide's "explicit (though unnecessary)
  * qti-context-declaration of QTI_CONTEXT", §3.7.11). A declaration of another kind or cardinality
- * would make one identifier name two variables, which spec reading 65 refuses.
+ * would make one identifier name two variables, which spec reading 74 refuses.
  */
 export const contextVariable = {
   cardinality: "record",
@@ -516,8 +516,8 @@ const doubleForm = lexicalForm(pg["double precision"]);
  * - **E1 (C17), `E1_derived`:** a declaration's kind is its `Declares` kind; each code is the one its
  *   lexical form spells (`<Roster>Lexical`), `none` exactly where no base type is written; each
  *   identifier is its lexical form collapsed; a value's base type is its set's, or its field's.
- * - **`Declaration key`** (spec reading 65): `key(document, identifier)`.
- * - **`Declaration not reserved`** (reading 63): no declaration names a built-in session variable, in
+ * - **`Declaration key`** (spec reading 74): `key(document, identifier)`.
+ * - **`Declaration not reserved`** (reading 72): no declaration names a built-in session variable, in
  *   any document, an item's, a test's or a section's alike, since every declaration element has its
  *   row whatever its root (information model tables 4.5.1, 5.115.1 and 5.151.1).
  * - **`Reserved type`**: SCORE, MAXSCORE, PASSED and QTI_CONTEXT keep their specified types.

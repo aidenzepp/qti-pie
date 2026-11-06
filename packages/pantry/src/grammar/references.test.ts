@@ -143,7 +143,7 @@ const reading = {
     ["min-choices", "max-choices"],
     ["min-plays", "max-plays"],
     ["match-min", "match-max"],
-    // Spec reading 67: "min-strings must be less than or equal to the limit imposed by
+    // Spec reading 76: "min-strings must be less than or equal to the limit imposed by
     // max-strings" (information model §5.48.7), with reading 53's 0 exemption.
     ["min-strings", "max-strings"],
   ],
@@ -719,7 +719,7 @@ describe("references", () => {
 });
 
 /**
- * Spec reading 95's census, every vocabulary's entries, and the prefix of the kinds an entry that
+ * Spec reading 103's census, every vocabulary's entries, and the prefix of the kinds an entry that
  * lists none reads.
  */
 const censuses = [
@@ -729,7 +729,7 @@ const censuses = [
   { census: xiCensus, prefix: Option.some("xi:") },
 ] as const;
 
-describe("ReferenceAttribute, spec reading 95's census", () => {
+describe("ReferenceAttribute, spec reading 103's census", () => {
   it.effect(
     "names exactly the census's declared attributes, each in the versions its XSD declares it, with its entry's form, and every listed kind declares its attribute",
     () =>

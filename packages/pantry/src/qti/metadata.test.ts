@@ -544,7 +544,7 @@ describe("qti/metadata.ts, the usage typed value by the law oracle", { timeout: 
   it.effect(
     "breaks Usage typed value on a float under integer, and not on the typed or padded values",
     () =>
-      // Oracle: the specification as a checker, reading 97: a `ud:value` that writes `baseType` is
+      // Oracle: the specification as a checker, reading 105: a `ud:value` that writes `baseType` is
       // a lexical form of that base type, outer whitespace formatting, and one that writes none is
       // any text; each fixture's expected verdict is read off its edit of the usage-data example.
       // Bound: `usage3` (no value writes a baseType), `usage3-typed` (24 typed values),

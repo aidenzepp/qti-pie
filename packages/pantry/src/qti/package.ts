@@ -1,6 +1,6 @@
 /**
  * The package and its record, and the manifest's overlays (plan §1.6; the W5 amendment's C17 and
- * C18; the orchestrator's rulings of 2026-11-06 and spec reading 84).
+ * C18; the orchestrator's rulings of 2026-11-06 and spec reading 93).
  *
  * {@link Package} owns its {@link Entry} rows, an ordered family in listing order: every entry's
  * bytes as read, the record the model is rebuildable from. The manifest's elements that a law reads
@@ -18,10 +18,10 @@
  * existentials a key cannot: a file may be listed by several resources and twice by one (spec
  * reading 36), so no file href is a key.
  *
- * A resource names a document only through its `href` (reading 84): a resource of a type
+ * A resource names a document only through its `href` (reading 93): a resource of a type
  * `RootOfType` maps names the document at its `href`, and every other document is the manifest.
  *
- * An href is read in two written pieces, `path ‖ params` (reading 94): `params` is empty or starts
+ * An href is read in two written pieces, `path ‖ params` (reading 102): `params` is empty or starts
  * at the first `?` or `#`, a query or a fragment, and only `path` names a file. So a resource's
  * `href` may carry launch parameters its file's `href` does not (IMS Content Packaging 1.2,
  * §6.6.2), and a reference may carry a media fragment. A path this representation resolves to an
@@ -173,7 +173,7 @@ export const Resource = relation(
 );
 
 /**
- * The pattern of an href's `params` piece (reading 94): empty, or a query or a fragment, from the
+ * The pattern of an href's `params` piece (reading 102): empty, or a query or a fragment, from the
  * first `?` or `#` to the end (RFC 3986, §3.4 and §3.5, which end a path at either). The `path`
  * before it holds neither ({@link hrefPathPattern}), so the split of an href is one.
  *
@@ -187,7 +187,7 @@ export const hrefParamsPattern = "^(?:[?#].*)?$";
 export const hrefPathPattern = "^[^?#]*$";
 
 /**
- * An href's `params` piece, its query or fragment (reading 94): text no key holds and no law
+ * An href's `params` piece, its query or fragment (reading 102): text no key holds and no law
  * compares, written beside the `path` it follows so the two concatenate to the href.
  */
 export const HrefParams = str.regex(hrefParamsPattern, "su");
@@ -196,7 +196,7 @@ export const HrefParams = str.regex(hrefParamsPattern, "su");
  * An external href, which names no package entry and is never resolved: a URI with a scheme
  * (reading 35's absolute href), or a reference that starts with `/`, a network path or an absolute
  * path, which resolves against the location a package is read from rather than within it (reading
- * 94). The pattern reads the start of the href alone.
+ * 102). The pattern reads the start of the href alone.
  *
  * @see {@link https://www.rfc-editor.org/rfc/rfc3986#section-4.2 | RFC 3986, §4.2}
  */
@@ -238,7 +238,7 @@ export const dotDepthMax = DotDepth.handles.length - 1;
 const patternText = str.regex("^.*$", "su");
 
 /**
- * The pattern of a reference's leading dot segments that climb by `depth` (reading 94): any number
+ * The pattern of a reference's leading dot segments that climb by `depth` (reading 102): any number
  * of `./`, and exactly `depth` of `../`, each segment ending with `/`, in any order.
  *
  * @param depth - The number of `../` segments.
@@ -259,7 +259,7 @@ export const removedPattern = (depth: number): string => `^${"[^/]+/".repeat(dep
 /**
  * `DotSegments`: depth → (ups, removed), the patterns a resolved reference's leading dot segments
  * and the directory segments they remove are read under, so a row check states RFC 3986 §5.2.4's
- * removal of leading dot segments (reading 94) with no loop: `ups` holds `depth` `../` segments
+ * removal of leading dot segments (reading 102) with no loop: `ups` holds `depth` `../` segments
  * and `removed` exactly `depth` segments of the directory.
  */
 export const DotSegments = closed.relation(
@@ -274,7 +274,7 @@ export const DotSegments = closed.relation(
 );
 
 /**
- * A reference's target this representation resolves (reading 94): any run of leading `./` and
+ * A reference's target this representation resolves (reading 102): any run of leading `./` and
  * `../` segments, then a path in the `resolvedHref` form, its first segment holding no `:`.
  */
 export const dotPrefixedHrefPattern = `^(?:\\.\\.?/)*${resolvedHref.slice(1)}`;
@@ -282,7 +282,7 @@ export const dotPrefixedHrefPattern = `^(?:\\.\\.?/)*${resolvedHref.slice(1)}`;
 /**
  * A resource's `href`, keyed by the resource's node: an optional attribute is a row of its own. It
  * carries its resource's package and type, so a document-typed resource's href is judged as the
- * document it names, and its two pieces (reading 94): `path`, the file it names, and `params`, the
+ * document it names, and its two pieces (reading 102): `path`, the file it names, and `params`, the
  * launch parameters CP 1.2 §6.6.2 lets it carry beyond its file's href, which `E1_derived` proves
  * concatenate to `href`.
  */
@@ -414,11 +414,11 @@ export const XmlBase = relation("XmlBase", { document: uuid, node: uuid }, ["nod
 
 /**
  * A reference attribute's value, keyed by its element and its attribute's name: every attribute of
- * the reference census (`ReferenceAttribute`, the grammar's, spec reading 95), its lexical form and
- * its element's document and kind copied from `Attribute` (C18), and its split, which `E1_derived`
- * proves: `lexical = lead ‖ target ‖ params ‖ trail`, its outer whitespace, which a URL
- * "potentially surrounded by spaces" and an `xs:anyURI` both set aside, then its path and its query
- * or fragment (reading 94).
+ * the reference census (`ReferenceAttribute`, the grammar's, spec reading 103), its lexical form
+ * and its element's document and kind copied from `Attribute` (C18), and its split, which
+ * `E1_derived` proves: `lexical = lead ‖ target ‖ params ‖ trail`, its outer whitespace, which a
+ * URL "potentially surrounded by spaces" and an `xs:anyURI` both set aside, then its path and its
+ * query or fragment (reading 102).
  *
  * "Href form" judges `target`: a path in the `resolvedHref` form, after any leading dot segments,
  * is an in-package path, which has its {@link ReferencePath}; an external target
@@ -448,7 +448,7 @@ export const Reference = relation(
  *
  * - **the host's:** `node` and `name`; `document`, `package` and `directory`, its document's
  *   {@link DocumentDirectory} row's; `kind` and `target`, its {@link Reference}'s element kind and
- *   path piece; and the pieces of RFC 3986's resolution (§5.2.2 to §5.2.4, reading 94), each
+ *   path piece; and the pieces of RFC 3986's resolution (§5.2.2 to §5.2.4, reading 102), each
  *   proved: `target = ups ‖ rest`, its leading `./` and `../` segments and the path after them;
  *   `directory = kept ‖ removed`, the directory with the `climb` segments its `../` remove split
  *   off; and `path = kept ‖ rest`, the entry it names (`E1_derived`). "Href form" holds `rest` to
@@ -599,9 +599,9 @@ const manifestBaseKinds = ["cp:manifest", "cp:resources", "cp:resource"] as cons
 const xmlBases = select(Attribute, (a) => a.eq(a.name, "xml:base"));
 
 /**
- * The attributes of the reference census (`ReferenceAttribute`, spec reading 95): each an attribute
- * by which an element of its kind names a file under its version, of either form. Each is a
- * {@link Reference}'s copy (C18); the key over its `(node, name)`, true since an element holds one
+ * The attributes of the reference census (`ReferenceAttribute`, spec reading 103): each an
+ * attribute by which an element of its kind names a file under its version, of either form. Each is
+ * a {@link Reference}'s copy (C18); the key over its `(node, name)`, true since an element holds one
  * attribute of a closed name (AL2), serves the copy's reverse probe, so no index holds the lexical
  * form.
  */
@@ -645,15 +645,15 @@ export const hrefPaths = select(ReferencePath, (p) => p.eq(p.name, "href"));
  * - **P1 `resource-type` ("ResourceTypeOf"):** a resource's (version, type) is in `ResourceTypeOf`.
  * - **P2 `root-type-reverse` ("RootOfType"):** a document's (resource type, root kind) is a row of
  *   the set `RootOfType`, or it is the manifest, of type `none` (an included fragment's type holds
- *   every kind an include stands for, spec reading 107); every document-typed resource href's path
+ *   every kind an include stands for, spec reading 114); every document-typed resource href's path
  *   is a document of that type; and every document but the manifest is one a resource names, of the
  *   type it names.
  * - **P3 `file-listed` ("File listed"), `href-listed` ("Href listed") and `entry-kind` ("Document
  *   entry"):** every entry but the manifest is the href of a file; a resource's href's path is the
- *   href of one of its own files (reading 94); every document-typed href's path is an entry.
+ *   href of one of its own files (reading 102); every document-typed href's path is an entry.
  * - **P4 `manifest-id-space` ("Manifest id space"):** no resource's identifier is its manifest's.
  * - **C17 ("E1 derived"):** a resource's type code is the one its lexical form spells, or `none`; an
- *   href is `path ‖ params` (reading 94); a document's path is `directory ‖ name`; a resolved
+ *   href is `path ‖ params` (reading 102); a document's path is `directory ‖ name`; a resolved
  *   reference's path is `directory ‖ target`.
  * - **`href-form` ("Href form"), a stated limit:** a file's href and a resource href's path are in
  *   the `resolvedHref` form or external; a reference's target is in the form, external, or empty;
@@ -661,9 +661,9 @@ export const hrefPaths = select(ReferencePath, (p) => p.eq(p.name, "href"));
  *   reference.
  * - **`include-href` ("Include fragment identifier"):** an `xi:include`'s href carries no fragment
  *   identifier, wherever its `#` stands in its params (XInclude 1.0 Second Edition, §3.1: "Fragment
- *   identifiers must not be used; their appearance is a fatal error"; spec reading 108). Its query
- *   is admitted and names no other file (reading 94).
- * - **the references:** every attribute of the reference census (`ReferenceAttribute`, spec reading 95)
+ *   identifiers must not be used; their appearance is a fatal error"; spec reading 115). Its query
+ *   is admitted and names no other file (reading 102).
+ * - **the references:** every attribute of the reference census (`ReferenceAttribute`, spec reading 103)
  *   is one {@link Reference}, copied from `Attribute` both ways; each whose target is in the form
  *   has its {@link ReferencePath} and no other has one; each document's directory is its
  *   `Document`'s path split at its last `/`.

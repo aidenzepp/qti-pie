@@ -152,7 +152,7 @@ describe("XsiType", () => {
   );
 
   it("names a derived type only where a schema set of its kind's documents holds it", () => {
-    // Oracle: XML Schema 1.0 Part 1, §3.3.4 clause 4.1 with spec reading 72's schema sets, by hand:
+    // Oracle: XML Schema 1.0 Part 1, §3.3.4 clause 4.1 with spec reading 81's schema sets, by hand:
     // a csmd kind stands only in a manifest, whose set holds csmd's types, LOM's and XML Schema's
     // own, and no ASI type. Bound: one kind, each of the four namespaces' types; residual none.
     const declared: ExpandedName = { local: "GUID.Type", namespace: setNamespaces.csmd };
@@ -392,7 +392,7 @@ describe("Governor", () => {
       // Oracle: the leaf's own reading of the pinned XSDs, `typeAttributeDeclarations` and
       // `typeTexts` (whose re-run declarations.test.ts holds byte for byte), against the
       // composition's `Governor`, `GovernedAttribute` and `TypeText`, under XML Schema 1.0 Part 1,
-      // §3.3.4, clauses 5.2.1 and 3.1, as spec readings 60 and 75 read them.
+      // §3.3.4, clauses 5.2.1 and 3.1, as spec readings 60 and 84 read them.
       // Bound: every row of `Governor` in production, exhausted.
       Effect.gen(function* governors() {
         const grammar = yield* Effect.fromResult(composed());

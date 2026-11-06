@@ -23,10 +23,10 @@
  *   kind explains;
  * - `attribute:wildcard`, per (version, kind) whose attribute wildcard admits the XML namespace:
  *   `xml.xsd`'s four global attributes admitted, but on a kind the Schematron's extension rules
- *   cover, where spec reading 81 admits none the kind does not declare;
+ *   cover, where spec reading 90 admits none the kind does not declare;
  * - `attribute:extension`, per (version, kind) the Schematron's extension rules cover: no name
  *   admitted but a declared one, `data-*`, an `xsi:` name and a reading's second spelling (spec
- *   readings 81 and 10);
+ *   readings 90 and 10);
  * - `text:domain`, per simple-content (version, kind): `TextDomain`'s row;
  * - `reading`, per spec reading of `docs/spec-readings.md`, with the status the alignment audit gives
  *   it after the operator's rulings.
@@ -109,9 +109,9 @@ interface ReadingEntry {
  * Every spec reading's status and owner. Reading 14 is restated to follow the XSD (the text-entry
  * references are IDREFs), so the Idref family owns it; D4 is closed by the Glushkov ruling, so the
  * ruled gaps are D12 (reading 2's unknown rest) and reading 50; reading 60, restated, checks a
- * simple `xsi:type`'s text and leaves a complex one reading 50's. Readings 51 to 55, 58 and 59 bind
- * plate, which delivers and scores; pantry's part is to store the values they read as written,
- * which the codec does.
+ * simple `xsi:type`'s text and leaves a complex one reading 50's. Readings 51 to 55, 58, 59, 65,
+ * 66, 68, 69 and 70 bind plate, which delivers, scores and reports; pantry's part is to store the
+ * values they read as written, which the codec does.
  */
 export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, ReadingEntry>([
   [1, { owner: "every law", status: "meta" }],
@@ -154,7 +154,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     9,
     {
       owner:
-        "the Schematron the ASI XSDs embed, each rule to its law (docs/research/unowned-readings.md §9), its extension-attribute lists to reading 81's AL1 rows; mastery-range, string-identifier-distinct and reading 23 in W5",
+        "the Schematron the ASI XSDs embed, each rule to its law (docs/research/unowned-readings.md §9), its extension-attribute lists to reading 90's AL1 rows; mastery-range, string-identifier-distinct and reading 23 in W5",
       status: "P",
     },
   ],
@@ -220,7 +220,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     47,
     {
       owner:
-        "`xsi:nil` admitted only on the foreign kinds (A6); XsiType derived (Q11's `XsiType`); the governing type's attributes and text under reading 75 (Governor, GovernedAttribute, TypeText)",
+        "`xsi:nil` admitted only on the foreign kinds (A6); XsiType derived (Q11's `XsiType`); the governing type's attributes and text under reading 84 (Governor, GovernedAttribute, TypeText)",
       status: "P",
     },
   ],
@@ -254,24 +254,81 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
   [
     61,
     {
+      owner:
+        "content:admission: `qti-ordering`'s restated model (`orderingModel` of `src/grammar/facets.ts`), N5 admitted, Follow and Last; the xmllint differentials set its `##other` verdicts aside by this reading",
+      status: "G",
+    },
+  ],
+  [62, { owner: "LomObjectIdentifier, LomObjectTitle", status: "G" }],
+  [
+    63,
+    {
+      owner:
+        "plate resolves item session control attribute by attribute; pantry stores each `qti-item-session-control` attribute as written, its XSD defaults read by no law",
+      status: "G",
+    },
+  ],
+  [
+    64,
+    {
+      owner:
+        "no law relates `min-time` and `max-time`; each is the XSD's `NonNegativeDoubleDType` (AttributeGrammar)",
+      status: "G",
+    },
+  ],
+  [
+    65,
+    {
+      owner: "plate shows section rubric; pantry stores `qti-rubric-block` as written",
+      status: "G",
+    },
+  ],
+  [
+    66,
+    {
+      owner:
+        "plate selects and orders; pantry stores `fixed` as written (`Branch_forward` does not read it: reading 87's limit)",
+      status: "G",
+    },
+  ],
+  [
+    67,
+    {
+      owner:
+        "shred's `versionOf` from the manifest's `schemaversion` (`not-qti3`, reason `schema-version`); P1 `ResourceTypeOf` per version and E1_derived over `ResourceTypeLexical` (`src/qti/package.ts`); the per-version `cp:resource` model (`cpx:variant` 0..0 in 3.0.1)",
+      status: "G",
+    },
+  ],
+  [
+    68,
+    {
+      owner:
+        "plate writes results reports; pantry writes none, and reads a duration value as `xs:double` (`expression-types.ts` `domainValues`)",
+      status: "G",
+    },
+  ],
+  [69, { owner: "plate writes results reports; pantry neither writes nor reads one", status: "G" }],
+  [70, { owner: "plate delivers tests; pantry delivers nothing", status: "G" }],
+  [
+    71,
+    {
       owner: "the anyURI domain's pattern, RFC 2396 with RFC 2732 (Q3's builtinDomainOf, Q9)",
       status: "G",
     },
   ],
-  [62, { owner: "LomObjectIdentifier", status: "G" }],
-  [63, { owner: "Variable declared (P8)", status: "G" }],
-  [64, { owner: "the derived unsigned domains", status: "G" }],
-  [65, { owner: "Declaration key", status: "G" }],
-  [66, { owner: "Binding declared", status: "G" }],
-  [67, { owner: "Choice bounds (references.ts ChoiceBound)", status: "G" }],
+  [72, { owner: "Variable declared (P8)", status: "G" }],
+  [73, { owner: "the derived unsigned domains", status: "G" }],
+  [74, { owner: "Declaration key", status: "G" }],
+  [75, { owner: "Binding declared", status: "G" }],
+  [76, { owner: "Choice bounds (references.ts ChoiceBound)", status: "G" }],
   [
-    68,
+    77,
     { owner: "Feedback reference, Feedback outcome type, Printed variable reference", status: "G" },
   ],
-  [69, { owner: "MappableBaseType", status: "G" }],
-  [70, { owner: "Selection bound", status: "G" }],
+  [78, { owner: "MappableBaseType", status: "G" }],
+  [79, { owner: "Selection bound", status: "G" }],
   [
-    71,
+    80,
     {
       owner:
         "default hotspot last slot (`qti-hotspot-choice` only), Graphic gap match default hotspot",
@@ -279,7 +336,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     },
   ],
   [
-    72,
+    81,
     {
       owner:
         "Admission under a wildcard by the document's schema set (`open.wildcardReads`), `StrictlyHeld` and shred's `strict-undeclared`, over the stored rows Strictly held (node.ts, C44) and XsiType available (chardata.ts, C15 and C36); the version-keyed admissions of LOM's and the foreign kinds are its stated limit",
@@ -287,7 +344,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     },
   ],
   [
-    73,
+    82,
     {
       owner:
         "ResourceTypeOf and RootOfType (facets.ts `package.roots`): `imsqti_resprocessing_xmlv3p0` admitted, the guide's spelling refused",
@@ -295,7 +352,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     },
   ],
   [
-    74,
+    83,
     {
       owner:
         "shred's `type-unresolved` over `xsi:type` values (B2); element and attribute name prefixes held by crust's reader (`WellFormednessError`, Namespaces in XML 1.0 §5 Prefix Declared), with no law over the stored rows; an SSML `role` item's and an `xs:QName` text's binding in scope, which no law reads, is its recorded limit (C48)",
@@ -303,42 +360,42 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     },
   ],
   [
-    75,
+    84,
     {
       owner: "Q5.05's AttributeGrammar keyed by the governing type; Q5.03's `Node.governs`",
       status: "P",
     },
   ],
   [
-    76,
+    85,
     {
       owner:
         "AL1 (`xi:include` `parse` is `xml` and `xpointer` refused, attributes.ts); the oracle's Inclusion cycle over a package; Q5.13's `Instance` tree, item-level includes among it",
       status: "P",
     },
   ],
-  [77, { owner: "Q5.13's `TestName`; the oracle's test name key", status: "P" }],
-  [78, { owner: "Q5.13's branch targets over `Instance`", status: "P" }],
+  [86, { owner: "Q5.13's `TestName`; the oracle's test name key", status: "P" }],
+  [87, { owner: "Q5.13's branch targets over `Instance`", status: "P" }],
   [
-    79,
+    88,
     {
       owner:
         "PE's numbered `Reading` (`src/qti/expressions.ts`): its item ref's `InstanceName.replaced` through `NameLookup`, and a number of at least 1; the oracle's Prefixed reference",
       status: "G",
     },
   ],
-  [80, { owner: "shred's `root-namespace` reason of `not-qti3`", status: "P" }],
+  [89, { owner: "shred's `root-namespace` reason of `not-qti3`", status: "P" }],
   [
-    81,
+    90,
     {
       owner:
         "AL1: the composition's `coveredBy` over the Schematron's extension rules (`src/vocab/inventory/extensions.ts`)",
       status: "G",
     },
   ],
-  [82, { owner: "every reading's law, or its recorded limit", status: "meta" }],
+  [91, { owner: "every reading's law, or its recorded limit", status: "meta" }],
   [
-    83,
+    92,
     {
       owner:
         "AL1 (a position object's `min-choices` at least 1); Context variable reference (ContentReference); the oracle's Binding cardinality and Binding unique, Q5.09",
@@ -346,7 +403,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     },
   ],
   [
-    84,
+    93,
     {
       owner:
         "P2 and P3 over `ResourceHref` and `NamedHref` (`src/qti/package.ts`): a document-typed resource names the document at its href, and every document but the manifest is one a resource names; the importer reads documents through `namedDocuments` (`src/import/overlays/package.ts`)",
@@ -354,7 +411,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     },
   ],
   [
-    85,
+    94,
     {
       owner:
         "AL1: `xs:NCName` and the types derived from it, over XML 1.0 Second Edition's name tables (`src/grammar/domains.ts`, read from the cached specification by `domains.test.ts`, judged against xmllint by `lexical.oracle.test.ts`); the oracle's bare variable reference",
@@ -362,7 +419,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     },
   ],
   [
-    86,
+    95,
     {
       owner:
         "the `entityRef_arm` check of `src/qti/chardata.ts`: a node of kind `entityRef` holds `&`, an NCName and `;`",
@@ -370,74 +427,10 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     },
   ],
   [
-    88,
-    {
-      owner:
-        "content:automaton: `Follow` and `Last` keep the XSD's sequence order after a repeated wildcard; `content.test.ts`'s xmllint differential sets libxml2's widened verdict aside by this reading, and its reading-88 test exhausts the two widened models",
-      status: "G",
-    },
-  ],
-  [
-    89,
-    {
-      owner:
-        "Q5.13's `VariableMapping` (`src/qti/tests.ts`): the key (item ref, target) and `Variable_mapping_target`, no session variable; PE's `MappingSource` (`src/qti/expressions.ts`): no other variable of the item, through `ItemRefDocument` and `VariableLookup`",
-      status: "G",
-    },
-  ],
-  [
-    90,
-    {
-      owner:
-        "Q5.11's map keys (`src/qti/mapping.ts`): `key(MapKey(mapping, key))` over the lexical key, and `key(mapping, value)` over each typed relation, `MapKeyInteger`, `MapKeyFloat` (reading 56's limit), `MapKeyPoint`, `MapKeyPair` and `MapKeyDirectedPair`; the oracle's `Map key`",
-      status: "G",
-    },
-  ],
-  [
-    91,
-    {
-      owner:
-        "Q5.11's `AreaMapping_base_type` check (`src/qti/mapping.ts`) over the declaration's base type `AreaMapping` copies; the oracle's `AreaMapping base type`",
-      status: "G",
-    },
-  ],
-  [
-    92,
-    {
-      owner:
-        "Q5.11's `Lookup_table_cardinality` check on `MatchTable` and `InterpolationTable`, and `Typed_attribute_value` on `LookupValue` (`src/qti/mapping.ts`); the oracle's `Lookup table cardinality` and `Typed attribute value`",
-      status: "G",
-    },
-  ],
-  [
-    93,
-    {
-      owner:
-        "PI's `IdBinding` (`src/qti/identity.ts`): each `DocumentId` bound to its `owner`, an attribute's element or an ID-typed text's parent (`IdentityText`), the key (document, id) over the bindings, and Idref target over attribute and text tokens (`TextIdref`); the oracle's `DocumentId key` and `Idref target`",
-      status: "G",
-    },
-  ],
-  [
-    94,
-    {
-      owner:
-        "HP's `ResourceHref` `path ‖ params` and `Reference` `lead ‖ target ‖ params ‖ trail` (`E1_derived`), href-listed and the documents named over the path, `ReferencePath`'s removal of leading dot segments over `DotSegments` (`E1_derived`), and the stated limit `Href_form` over `File`, `ResourceHref`, `Reference`, `ReferencePath`, `DocumentDirectory` and the manifest's `xml:base` (`src/qti/package.ts`, `resolvedHref` of `src/qti/limits.ts`); the oracle's Href form, Href listed and File exists",
-      status: "G",
-    },
-  ],
-  [
-    95,
-    {
-      owner:
-        "the census `ReferenceAttribute` (`src/grammar/references.ts`, `asiCensus`, `xiCensus`, `mathmlCensus`, `ssmlCensus`; installed by `src/grammar/install.ts`), read by HP's R6 `file-exists` over `Reference` and `ReferencePath` (`src/qti/package.ts`)",
-      status: "P",
-    },
-  ],
-  [
     96,
     {
       owner:
-        "PM's `ChoiceVariableName` (`src/qti/interactions.ts`): `Choice_not_variable` over the counted families of `Choice`, `Hottext` and `Declaration` on (document, identifier), and the keys `Choice(document, kind, identifier)` and `Hottext(document, identifier)`; the oracle's Choice not variable and Choice identifier key",
+        "content:automaton: `Follow` and `Last` keep the XSD's sequence order after a repeated wildcard; `content.test.ts`'s xmllint differential sets libxml2's widened verdict aside by this reading, and its reading-96 test exhausts the two widened models",
       status: "G",
     },
   ],
@@ -445,7 +438,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     97,
     {
       owner:
-        "PM's `UsageValue` (`src/qti/metadata.ts`): `Usage_typed_value` over `BaseTypePattern`, the `ud:value` text folded by `copiedTextKinds` (`src/qti/node.ts`); the oracle's Usage typed value",
+        "Q5.13's `VariableMapping` (`src/qti/tests.ts`): the key (item ref, target) and `Variable_mapping_target`, no session variable; PE's `MappingSource` (`src/qti/expressions.ts`): no other variable of the item, through `ItemRefDocument` and `VariableLookup`",
       status: "G",
     },
   ],
@@ -453,7 +446,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     98,
     {
       owner:
-        "PE's `Reading` (`src/qti/expressions.ts`): an item ref's prefix reaches the built-ins `BuiltInVariable` lists under an item's root, `QTI_CONTEXT` among them; the oracle's Prefixed reference",
+        "Q5.11's map keys (`src/qti/mapping.ts`): `key(MapKey(mapping, key))` over the lexical key, and `key(mapping, value)` over each typed relation, `MapKeyInteger`, `MapKeyFloat` (reading 56's limit), `MapKeyPoint`, `MapKeyPair` and `MapKeyDirectedPair`; the oracle's `Map key`",
       status: "G",
     },
   ],
@@ -461,7 +454,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     99,
     {
       owner:
-        "PE's `MappingSource` and `MappingLookup` (`src/qti/expressions.ts`): a mapped name and its source both resolve; the oracle's Variable mapping source and Prefixed reference",
+        "Q5.11's `AreaMapping_base_type` check (`src/qti/mapping.ts`) over the declaration's base type `AreaMapping` copies; the oracle's `AreaMapping base type`",
       status: "G",
     },
   ],
@@ -469,7 +462,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     100,
     {
       owner:
-        "PE's `TemplateDefault` (`src/qti/expressions.ts`): `Template_default_target` and `Template_default_type`; the oracle's Template default target and Template default type",
+        "Q5.11's `Lookup_table_cardinality` check on `MatchTable` and `InterpolationTable`, and `Typed_attribute_value` on `LookupValue` (`src/qti/mapping.ts`); the oracle's `Lookup table cardinality` and `Typed attribute value`",
       status: "G",
     },
   ],
@@ -477,7 +470,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     101,
     {
       owner:
-        "AL1 admission: the composition's `admitsWild` (`src/grammar/compose.ts`) admits no wildcard `xml:id` on a kind or governor whose declared uses include an ID-derived one; `compose.test.ts`'s wild-ID test over every (version, kind) and (version, governor); xmllint's unimplemented clause 5.2 recorded",
+        "PI's `IdBinding` (`src/qti/identity.ts`): each `DocumentId` bound to its `owner`, an attribute's element or an ID-typed text's parent (`IdentityText`), the key (document, id) over the bindings, and Idref target over attribute and text tokens (`TextIdref`); the oracle's `DocumentId key` and `Idref target`",
       status: "G",
     },
   ],
@@ -485,7 +478,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     102,
     {
       owner:
-        "content:admission: `qti-ordering`'s restated model (`orderingModel` of `src/grammar/facets.ts`), N5 admitted, Follow and Last; the xmllint differentials set its `##other` verdicts aside by this reading",
+        "HP's `ResourceHref` `path ‖ params` and `Reference` `lead ‖ target ‖ params ‖ trail` (`E1_derived`), href-listed and the documents named over the path, `ReferencePath`'s removal of leading dot segments over `DotSegments` (`E1_derived`), and the stated limit `Href_form` over `File`, `ResourceHref`, `Reference`, `ReferencePath`, `DocumentDirectory` and the manifest's `xml:base` (`src/qti/package.ts`, `resolvedHref` of `src/qti/limits.ts`); the oracle's Href form, Href listed and File exists",
       status: "G",
     },
   ],
@@ -493,15 +486,15 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     103,
     {
       owner:
-        "PE's `MappingSource` and `TemplateDefault` (`src/qti/expressions.ts`), through `ItemRefDocument` (`src/qti/tests.ts`): under an LTI link no item declares a source or a template; the oracle's Variable mapping source and Template default target",
-      status: "G",
+        "the census `ReferenceAttribute` (`src/grammar/references.ts`, `asiCensus`, `xiCensus`, `mathmlCensus`, `ssmlCensus`; installed by `src/grammar/install.ts`), read by HP's R6 `file-exists` over `Reference` and `ReferencePath` (`src/qti/package.ts`)",
+      status: "P",
     },
   ],
   [
     104,
     {
       owner:
-        "PE's `ReferenceDeclaration` (`src/qti/expression-types.ts`, each row cited), over `VariableRef` and a test's resolving `Reading` (`src/qti/expressions.ts`); the oracle's Variable kind",
+        "PM's `ChoiceVariableName` (`src/qti/interactions.ts`): `Choice_not_variable` over the counted families of `Choice`, `Hottext` and `Declaration` on (document, identifier), and the keys `Choice(document, kind, identifier)` and `Hottext(document, identifier)`; the oracle's Choice not variable and Choice identifier key",
       status: "G",
     },
   ],
@@ -509,7 +502,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     105,
     {
       owner:
-        "PE's `setterKinds` (`src/qti/expression-types.ts`): a setter's prefixed `Reading` resolves nothing, and a setter's reference resolves only by its own document's declaration (`src/qti/expressions.ts`); the oracle's Variable kind",
+        "PM's `UsageValue` (`src/qti/metadata.ts`): `Usage_typed_value` over `BaseTypePattern`, the `ud:value` text folded by `copiedTextKinds` (`src/qti/node.ts`); the oracle's Usage typed value",
       status: "G",
     },
   ],
@@ -517,7 +510,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     106,
     {
       owner:
-        "PG's `HeldRootsUnder` (`install.ts`), read by shred's `heldRoot` (`src/model/shred.ts`, so a held root is no `strict-undeclared`) and PN's `Strictly_held` on `OpenElementName` (`src/qti/chardata.ts`); the oracle's Strictly held",
+        "PE's `Reading` (`src/qti/expressions.ts`): an item ref's prefix reaches the built-ins `BuiltInVariable` lists under an item's root, `QTI_CONTEXT` among them; the oracle's Prefixed reference",
       status: "G",
     },
   ],
@@ -525,7 +518,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     107,
     {
       owner:
-        "IN's `IncludeRoot` and `IncludeParent` (`src/grammar/include.ts`, `install.ts`), the fragment rows of `RootOfType` (`facets.ts` `fragmentRoots`) and the document node's roots; `Inclusion` into `IncludeRoot` (`src/qti/tests.ts`); `include.test.ts` against each parent's automaton; the oracle's Include root and its in-place splice",
+        "PE's `MappingSource` and `MappingLookup` (`src/qti/expressions.ts`): a mapped name and its source both resolve; the oracle's Variable mapping source and Prefixed reference",
       status: "G",
     },
   ],
@@ -533,7 +526,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     108,
     {
       owner:
-        "IN's `Site` into `Document` and every include its site (`src/qti/tests.ts`, Include target), and `Include_fragment_identifier` on `Reference` (`src/qti/package.ts`); the oracle's Include target and Include fragment identifier",
+        "PE's `TemplateDefault` (`src/qti/expressions.ts`): `Template_default_target` and `Template_default_type`; the oracle's Template default target and Template default type",
       status: "G",
     },
   ],
@@ -541,7 +534,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     109,
     {
       owner:
-        "IN's `fragmentRootsOf` (`src/grammar/include.ts`): a context-split kind roots no fragment, so `IncludeRoot` refuses an include where only it stands; a stated limit",
+        "AL1 admission: the composition's `admitsWild` (`src/grammar/compose.ts`) admits no wildcard `xml:id` on a kind or governor whose declared uses include an ID-derived one; `compose.test.ts`'s wild-ID test over every (version, kind) and (version, governor); xmllint's unimplemented clause 5.2 recorded",
       status: "G",
     },
   ],
@@ -549,12 +542,68 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     110,
     {
       owner:
-        "IN's document context (`Document.context`, `contextNearest`, `src/qti/chardata.ts`, through `nodeContext`; `Site`'s fold and `Fragment_context`, `src/qti/tests.ts`), `PlacedBinding`, `PlacedChoice`, `PlacedHottext`, `ChoiceVariableName`'s placed counts and the section references' fragment placements (`SectionScope`, `SectionTemplateRef`, `SectionContextRef`, `src/qti/interactions.ts`) `IdrefTarget`, `PlacedId`, `AssembledId`, `PlacedIdref`, `PlacedXmlLang`, `AssembledLang` and `PlacedGeneralLang` (`src/qti/identity.ts`) and `PlacedVariableRef` (`src/qti/expressions.ts`) under Q5.13's `Instance`; the importer's `contextsOf` (`src/import/context.ts`); the oracle's in-place splice (`inPlaceBreaches`), Fragment context and Document lang over the merged item; the laws it lists are known under-refusals",
+        "PE's `MappingSource` and `TemplateDefault` (`src/qti/expressions.ts`), through `ItemRefDocument` (`src/qti/tests.ts`): under an LTI link no item declares a source or a template; the oracle's Variable mapping source and Template default target",
       status: "G",
     },
   ],
   [
     111,
+    {
+      owner:
+        "PE's `ReferenceDeclaration` (`src/qti/expression-types.ts`, each row cited), over `VariableRef` and a test's resolving `Reading` (`src/qti/expressions.ts`); the oracle's Variable kind",
+      status: "G",
+    },
+  ],
+  [
+    112,
+    {
+      owner:
+        "PE's `setterKinds` (`src/qti/expression-types.ts`): a setter's prefixed `Reading` resolves nothing, and a setter's reference resolves only by its own document's declaration (`src/qti/expressions.ts`); the oracle's Variable kind",
+      status: "G",
+    },
+  ],
+  [
+    113,
+    {
+      owner:
+        "PG's `HeldRootsUnder` (`install.ts`), read by shred's `heldRoot` (`src/model/shred.ts`, so a held root is no `strict-undeclared`) and PN's `Strictly_held` on `OpenElementName` (`src/qti/chardata.ts`); the oracle's Strictly held",
+      status: "G",
+    },
+  ],
+  [
+    114,
+    {
+      owner:
+        "IN's `IncludeRoot` and `IncludeParent` (`src/grammar/include.ts`, `install.ts`), the fragment rows of `RootOfType` (`facets.ts` `fragmentRoots`) and the document node's roots; `Inclusion` into `IncludeRoot` (`src/qti/tests.ts`); `include.test.ts` against each parent's automaton; the oracle's Include root and its in-place splice",
+      status: "G",
+    },
+  ],
+  [
+    115,
+    {
+      owner:
+        "IN's `Site` into `Document` and every include its site (`src/qti/tests.ts`, Include target), and `Include_fragment_identifier` on `Reference` (`src/qti/package.ts`); the oracle's Include target and Include fragment identifier",
+      status: "G",
+    },
+  ],
+  [
+    116,
+    {
+      owner:
+        "IN's `fragmentRootsOf` (`src/grammar/include.ts`): a context-split kind roots no fragment, so `IncludeRoot` refuses an include where only it stands; a stated limit",
+      status: "G",
+    },
+  ],
+  [
+    117,
+    {
+      owner:
+        "IN's document context (`Document.context`, `contextNearest`, `src/qti/chardata.ts`, through `nodeContext`; `Site`'s fold and `Fragment_context`, `src/qti/tests.ts`), `PlacedBinding`, `PlacedChoice`, `PlacedHottext`, `ChoiceVariableName`'s placed counts and the section references' fragment placements (`SectionScope`, `SectionTemplateRef`, `SectionContextRef`, `src/qti/interactions.ts`) `IdrefTarget`, `PlacedId`, `AssembledId`, `PlacedIdref`, `PlacedXmlLang`, `AssembledLang` and `PlacedGeneralLang` (`src/qti/identity.ts`) and `PlacedVariableRef` (`src/qti/expressions.ts`) under Q5.13's `Instance`; the importer's `contextsOf` (`src/import/context.ts`); the oracle's in-place splice (`inPlaceBreaches`), Fragment context and Document lang over the merged item; the laws it lists are known under-refusals",
+      status: "G",
+    },
+  ],
+  [
+    118,
     {
       owner:
         "IN's restated `xi:include` model (`facets.ts` `includeModel`) and `httpHeaderText` on `accept` and `accept-language` (`src/grammar/attributes.ts`); a fallback in wildcard content is a known under-refusal",
@@ -610,7 +659,7 @@ const readingAdmissions: ReadonlyMap<string, number> = new Map([
     "m:interval",
   ].map((parent): readonly [string, number] => [`${parent} m:semantics.contexp`, 2]),
   ["m:annotation-xml m:semantics", 2],
-  // Spec reading 102 (upstream's 61): `qti-ordering`'s slot reads `##any` where the XSD writes
+  // Spec reading 61: `qti-ordering`'s slot reads `##any` where the XSD writes
   // `##other`, so it admits QTI's own namespace's globals, but its roots, and the own- and
   // no-namespace foreign classes, beside the XSD's other namespaces.
   ...[
@@ -619,7 +668,7 @@ const readingAdmissions: ReadonlyMap<string, number> = new Map([
       .map(({ kind }) => kind),
     foreignKinds.own,
     foreignKinds.absent,
-  ].map((child): readonly [string, number] => [`qti-ordering ${child}`, 102]),
+  ].map((child): readonly [string, number] => [`qti-ordering ${child}`, 61]),
 ]);
 
 /**
@@ -627,7 +676,7 @@ const readingAdmissions: ReadonlyMap<string, number> = new Map([
  */
 const readingDepartures: ReadonlyMap<string, number> = new Map([
   ["attribute:type qti-match-table-entry target-value", 8],
-  ["attribute:type xi:include parse", 76],
+  ["attribute:type xi:include parse", 85],
   ...readingRefusals.map(({ kind, name, reading }): readonly [string, number] => [
     `attribute:admission ${kind} ${name}`,
     reading,
@@ -1197,7 +1246,7 @@ const spelledBy = (
  * The attributes the grammar admits that no declaration states and no wildcard of the kind admits,
  * the document layer's names aside: contradicted, or by a reading where a reading's second
  * spelling of a declared name explains it. On a kind the Schematron's extension rules cover, a
- * wildcard explains no name but the layer's `data-*` (spec reading 81).
+ * wildcard explains no name but the layer's `data-*` (spec reading 90).
  *
  * @param grammar - The grammar.
  * @param index - Its index.
@@ -1268,7 +1317,7 @@ const xmlGlobals = ["xml:base", "xml:id", "xml:lang", "xml:space"] as const;
  * The census of the attribute wildcards that admit the XML namespace: each admits `xml.xsd`'s four
  * global attributes on its kind (validated against their declarations under `lax` and `strict`,
  * unvalidated under `skip`), so `AttributeAdmission` must hold each; but on a kind the
- * Schematron's extension rules cover, spec reading 81 admits only those the kind declares, so a
+ * Schematron's extension rules cover, spec reading 90 admits only those the kind declares, so a
  * name it does not declare is held by the reading when the grammar refuses it.
  *
  * @param grammar - The grammar.
@@ -1300,7 +1349,7 @@ const wildcardXmlRules = (
             })();
 
             return {
-              detail: `${wildcard.namespace} ${wildcard.processing}; ${held ? "admitted" : "not admitted"}${refused ? "; reading 81" : ""}`,
+              detail: `${wildcard.namespace} ${wildcard.processing}; ${held ? "admitted" : "not admitted"}${refused ? "; reading 90" : ""}`,
               family: "attribute:wildcard",
               owner: "AttributeAdmission (the document layer's xml: names)",
               parent: wildcard.kind,
@@ -1315,7 +1364,7 @@ const wildcardXmlRules = (
 };
 
 /**
- * The census of spec reading 81 on each (version, kind) the Schematron's extension rules cover:
+ * The census of spec reading 90 on each (version, kind) the Schematron's extension rules cover:
  * every name `AttributeAdmission` holds there is one the kind declares, `data-*`, an `xsi:` name,
  * or a reading's second spelling of a declared name (reading 10). Any other is a name the reading
  * refuses that the grammar admits.
@@ -1354,7 +1403,7 @@ const extensionRules = (
       {
         detail: `${String(rows.length)} names; beyond the reading [${extra.join(" ")}]`,
         family: "attribute:extension",
-        owner: "AttributeAdmission (reading 81, compose.ts coveredBy)",
+        owner: "AttributeAdmission (reading 90, compose.ts coveredBy)",
         parent: first.kind,
         status: extra.length === 0 ? "G" : "X",
         subject: first.kind,

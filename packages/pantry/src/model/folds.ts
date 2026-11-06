@@ -101,7 +101,7 @@ export interface ChildKey<V extends XdmVocabulary> {
 /**
  * An attribute's name under its element's kind and governing type in one schema version: the key
  * an attribute's position is read under, `GovernedAttribute`'s where the element's governing type
- * is a governor of its kind, else `AttributeAdmission`'s (spec reading 75).
+ * is a governor of its kind, else `AttributeAdmission`'s (spec reading 84).
  */
 export interface AttributeKey<V extends XdmVocabulary> {
   readonly governs: string;
@@ -326,7 +326,7 @@ export interface FoldedAttribute<V extends XdmVocabulary> extends AttributeRow<V
   readonly document: NodeId;
   /**
    * The owner's governing type, which with its kind decides the attribute's position and domain
-   * (spec reading 75).
+   * (spec reading 84).
    */
   readonly governs: string;
   readonly kind: XdmKind<V>;

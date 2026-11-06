@@ -250,7 +250,7 @@ const namespaceOf = (kind: string): string =>
 
 /**
  * A type no element under a QTI parent may name: the first of `TypeAvailable`'s types whose
- * namespaces leave QTI's own out, a type of the content-packaging set (spec reading 72).
+ * namespaces leave QTI's own out, a type of the content-packaging set (spec reading 81).
  */
 const otherSetType =
   TypeAvailable.rows.find(({ namespaces }) => !new RegExp(namespaces, "u").test(asi))?.type ??
@@ -544,7 +544,7 @@ describe.skipIf(!hasLease)("qti/chardata.db.test.ts, on the lease", () => {
       it.effect(
         "refuses a foreign element under a QTI parent whose xsi:type names a type of another schema set, by the XsiType available check",
         () =>
-          // Oracle: PostgreSQL, the `XsiType_available` CHECK (C15, C36; spec readings 60 and 72):
+          // Oracle: PostgreSQL, the `XsiType_available` CHECK (C15, C36; spec readings 60 and 81):
           // an item's set holds no content-packaging type, so under a parent in QTI's namespace the
           // type is no type `TypeAvailable` gives that namespace.
           // Bound: one row, a foreign element under `qti-selection`'s lax slot, governed by the
@@ -580,7 +580,7 @@ describe.skipIf(!hasLease)("qti/chardata.db.test.ts, on the lease", () => {
       it.effect(
         "refuses a foreign element only a strict wildcard holds, with no type and no root's name, by the Strictly held check",
         () =>
-          // Oracle: PostgreSQL, the `Strictly_held` CHECK (C44, spec reading 72): a `strict`
+          // Oracle: PostgreSQL, the `Strictly_held` CHECK (C44, spec reading 81): a `strict`
           // wildcard's element is `mustFind` (XML Schema 1.0 Part 1 §3.10.4 clause 2), so with no
           // governing type and no declaration of its set's roots (`HeldRootsUnder`) it has no
           // known validity, and its parent is invalid (§3.3.5 [validity] clause 1.1.3).
@@ -634,7 +634,7 @@ describe.skipIf(!hasLease)("qti/chardata.db.test.ts, on the lease", () => {
           // Bound: `qti-variable` in QTI's namespace and `foo` in none under `qti-ordering`, each
           // governed by `none`; a foreign element under `qti-selection` governed by `xs:string`;
           // one under a foreign parent governed by a content-packaging type, which stands since its
-          // parent's namespace is no vocabulary's (reading 72's recorded limit); and `cp:manifest`
+          // parent's namespace is no vocabulary's (reading 81's recorded limit); and `cp:manifest`
           // under `drd:accessForAllResource`'s strict slot with no type, a root its set declares
           // (C13, `HeldRootsUnder`); and one under `qti-companion-materials-info`'s strict slot
           // governed by `xs:string`, which assesses it (reading 60).

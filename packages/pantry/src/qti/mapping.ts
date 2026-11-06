@@ -23,7 +23,7 @@
  *
  * The laws, by the rule each states:
  *
- * - **`mapping-base-type`** (reading 69): a mapping's base type is in `MappableBaseType`, so `file`,
+ * - **`mapping-base-type`** (reading 78): a mapping's base type is in `MappableBaseType`, so `file`,
  *   `duration` and a record's `none` are refused; an area mapping's is `point` (information model
  *   §5.5, "a mapping from a source set of point values").
  * - **Map keys are distinct** (information model §5.88.4 and §7.21: "a set of mapEntries, each of

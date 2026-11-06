@@ -81,7 +81,7 @@ export interface TestIds {
    */
   readonly assembled?: boolean;
   /**
-   * The document's context (spec reading 110), its own where none is given.
+   * The document's context (spec reading 117), its own where none is given.
    */
   readonly context?: DocumentContext;
   readonly documentAt: (path: string) => Option.Option<NodeId>;
@@ -620,7 +620,7 @@ const orderingsOf = (
 
 /**
  * Whether a node is a site: a section ref, or an include under a parent whose model holds an
- * explicit include particle (spec reading 107).
+ * explicit include particle (spec reading 114).
  *
  * @param view - The document.
  * @param node - The node.

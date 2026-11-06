@@ -1,10 +1,10 @@
 /* oxlint-disable unicorn/text-encoding-identifier-case -- The generated documents carry the charset label crust's reader reports, `UTF-8`. */
 /**
- * The O3 overlay rows against a second reading of the same tree: a direct walk of the XDM
- * document, numbering its nodes in document order as the tree's rows are numbered and taking each
- * choice's nearest interaction from its ancestors, the oracle's table of XSD defaults for the
- * counts, and reading 96's set of the names choices, hottexts and declarations use. The walk shares
- * no code with the builder, which reads the tree's flat rows (`flatten`).
+ * The O3 overlay rows against a second reading of the same tree: a direct walk of the XDM document,
+ * numbering its nodes in document order as the tree's rows are numbered and taking each choice's
+ * nearest interaction from its ancestors, the oracle's table of XSD defaults for the counts, and
+ * reading 104's set of the names choices, hottexts and declarations use. The walk shares no code
+ * with the builder, which reads the tree's flat rows (`flatten`).
  */
 import type { Addition } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
@@ -999,7 +999,7 @@ describe("import/overlays/interactions.ts, choice names", () => {
   it.effect(
     "writes one ChoiceVariableName row per identifier a choice, a hottext or a declaration of the document bears, and no other",
     (ctx) =>
-      // Oracle: the specification as a checker, reading 96's projection read off the tree: the set
+      // Oracle: the specification as a checker, reading 104's projection read off the tree: the set
       // of every choice's and hottext's identifier and every declaration's, each collapsed (XML
       // Schema Part 2 §4.3.6), a declaration without one as the empty name Q5.08's Declaration row
       // holds, under the document node and the item's root kind.
@@ -1022,7 +1022,7 @@ describe("import/overlays/interactions.ts, choice names", () => {
             generator: nameCases,
             limit: 1200,
             literal: Formatter.format,
-            oracle: { kind: "specification", name: "reading 96's projection, read off the tree" },
+            oracle: { kind: "specification", name: "reading 104's projection, read off the tree" },
             suite: "pantry/import/overlays-interactions-choice-names",
           },
           (input: NameCase, c) =>

@@ -6,7 +6,7 @@
  * rows.
  *
  * A record names its document when it is a `lom:lom` child of the `cp:metadata` of a resource of
- * type `imsqti_item_xmlv3p0` or `imsqti_test_xmlv3p0` that has an `href` (reading 84): its
+ * type `imsqti_item_xmlv3p0` or `imsqti_test_xmlv3p0` that has an `href` (reading 93): its
  * {@link LomRecord}'s `named` is the resource's type, and its {@link LomObject} the document at the
  * `href`. A file's record describes the file, and an external record ({@link LomRecord}'s owner is
  * the document node) may describe many items, so neither names one. Spec reading 62, as UP's audit
@@ -30,7 +30,7 @@
  * - **`calendar`** (G-parse): every `lastUpdated` of a usage statistic, a `DateDType`, is a day of
  *   the Gregorian calendar, its value the typed `date` PostgreSQL derives from it
  *   ({@link StatisticDate}).
- * - **Usage typed value** (G-match, spec reading 97): a usage statistic's `ud:value` that writes a
+ * - **Usage typed value** (G-match, spec reading 105): a usage statistic's `ud:value` that writes a
  *   `baseType` holds a value of that base type ("A class that can represent a single value of any
  *   baseType", the usage data binding's Value class, §2.6.5), its text read as a `qti-value`'s is,
  *   by `BaseTypePattern`; one that writes none is the XSD's `xs:normalizedString` text
@@ -234,7 +234,7 @@ export const LomRecord = relation(
 /**
  * The document a naming record names, keyed by the record: the record's resource and type, the
  * resource's package and the `path` its `href` names (`ResourceHref`'s, the href less its query or
- * fragment, reading 94), and the document at that path. Every record whose `named` is not `none`
+ * fragment, reading 102), and the document at that path. Every record whose `named` is not `none`
  * has one, so each law over a record reads its document here.
  */
 export const LomObject = relation(
@@ -486,7 +486,7 @@ export const StatisticDate = relation.generated(
  *
  * A value that writes no `baseType` has no row: the usage data binding has no declaration to type
  * it, so it is its governing type's `xs:normalizedString` text, which every text is (spec reading
- * 97).
+ * 105).
  */
 export const UsageValue = relation(
   "UsageValue",

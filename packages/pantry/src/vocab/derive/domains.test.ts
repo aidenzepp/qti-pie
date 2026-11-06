@@ -245,7 +245,7 @@ const ipv6Text: Parser = (text, at) =>
 
 /**
  * RFC 2396, Appendix A, with RFC 2732, section 3's three changes, transliterated rule by rule: the
- * reference interpreter of spec reading 61, written apart from the pattern under test.
+ * reference interpreter of spec reading 71, written apart from the pattern under test.
  */
 const uriReference: Parser = (() => {
   const alpha = ch((character) => /^[A-Za-z]$/u.test(character));
@@ -539,7 +539,7 @@ const candidate: Gen<string> = weighted([
 ]);
 
 describe("vocab/derive/domains.ts, xs:anyURI", () => {
-  it("gives each vector the verdict reading 61's grammar gives by hand", () => {
+  it("gives each vector the verdict reading 71's grammar gives by hand", () => {
     const wrong = vectors.filter(([value, valid]) => anyUri.test(value) !== valid);
 
     if (wrong.length > 0) {

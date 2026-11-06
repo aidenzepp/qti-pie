@@ -796,7 +796,7 @@ const sectionTest = (section: string): string =>
 
 /**
  * A type no element under a QTI parent may name: the first of `TypeAvailable`'s types whose
- * namespaces leave QTI's own out, a type of the content-packaging set (spec reading 72).
+ * namespaces leave QTI's own out, a type of the content-packaging set (spec reading 81).
  */
 const otherSetType =
   install.TypeAvailable.rows.find(({ namespaces }) => !new RegExp(namespaces, "u").test(asi))

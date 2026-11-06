@@ -91,7 +91,7 @@ import type {
  */
 export interface InteractionIds {
   /**
-   * The document's context (spec reading 110), its own where none is given: an included
+   * The document's context (spec reading 117), its own where none is given: an included
    * fragment's nodes take the interaction their includes stand in as their nearest.
    */
   readonly context?: DocumentContext;
@@ -268,7 +268,7 @@ interface TreeFacts {
  *
  * @param nodes - A document's node rows, in document order, so each parent precedes its children.
  * @param context - The document's context, whose nearest the document node's is (spec reading
- *   110), and whose kind an interaction of another document has.
+ *   117), and whose kind an interaction of another document has.
  * @returns The facts.
  */
 const treeFactsOf = (nodes: readonly NodeRow<Composed>[], context: DocumentContext): TreeFacts => {
@@ -1072,8 +1072,8 @@ const placedOf = (
 
 /**
  * Decide whether an instance is a placement `SectionScope` holds: a section document under a test,
- * or an included fragment under an item (spec reading 110). A fragment a section document places
- * resolves nothing yet, a known under-refusal reading 110 lists.
+ * or an included fragment under an item (spec reading 117). A fragment a section document places
+ * resolves nothing yet, a known under-refusal reading 117 lists.
  *
  * @param root - The assembly's root instance.
  * @param instance - The instance.
@@ -1166,7 +1166,7 @@ export interface PlacedBindingRows {
 }
 
 /**
- * Build each instance of an item's assembly's bindings (spec reading 110): under the item's own
+ * Build each instance of an item's assembly's bindings (spec reading 117): under the item's own
  * instance and each fragment it places, every binding attribute of the instance's document,
  * resolved among the item's declarations as `BoundVariable` resolves an item's own, and carrying
  * the item's `adaptive`. A name no response declaration of the item holds resolves to the nil

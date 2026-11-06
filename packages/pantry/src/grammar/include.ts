@@ -1,5 +1,5 @@
 /**
- * The kinds an included fragment's root may be (spec readings 76 and 107 to 111; QTI 3.0
+ * The kinds an included fragment's root may be (spec readings 85 and 114 to 118; QTI 3.0
  * information model, §2.12 and Table 9.4.1).
  *
  * An `xi:include` "is treated as if it was actually an instance of the root element of the
@@ -10,18 +10,18 @@
  * as a `choice` group holding an explicit `xi:include` element particle beside the class's members,
  * so an include under a parent stands for its fragment's root exactly where that root is one of the
  * include's alternatives: the element kinds of the choice group the include's particle sits in,
- * nested choices flattened (spec reading 107). Each alternative's position in the parent's
+ * nested choices flattened (spec reading 114). Each alternative's position in the parent's
  * Glushkov automaton follows and is followed by the same positions as the include's own, so N5,
  * stepping the include at its own position, steps the parent's automaton as its root would
  * (`include.test.ts` proves it over every row).
  *
  * An include held by a wildcard (`qti-custom-interaction`'s markup, `qti-ordering`'s extension
  * slot, HTML's `template`) is no Include of the information model: it has no explicit particle, so
- * no row here, and it is read as written (reading 107).
+ * no row here, and it is read as written (reading 114).
  *
  * A fragment's root element is read at its own document's root, by its expanded name alone, so a
  * kind the composition splits by context (`qti-template-block.rubric` beside
- * `qti-template-block`) never roots a fragment (reading 109): {@link fragmentRootsOf} keeps the
+ * `qti-template-block`) never roots a fragment (reading 116): {@link fragmentRootsOf} keeps the
  * kind of each name whose handle is its name.
  */
 import { Result } from "effect";
@@ -153,7 +153,7 @@ export const includeAlternativesOf = (
 
 /**
  * Pick the kinds that may root a fragment's own document: every alternative, but of the kinds
- * that share one expanded name only the one whose handle is the name (spec reading 109), since a
+ * that share one expanded name only the one whose handle is the name (spec reading 116), since a
  * document's root is read by its name alone.
  *
  * @param alternatives - The include alternatives.

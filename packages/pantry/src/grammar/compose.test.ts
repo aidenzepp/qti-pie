@@ -205,7 +205,7 @@ describe("the composition", () => {
 });
 
 /**
- * The attributes the reading-81 property writes on an element, each a named variant: a valid
+ * The attributes the reading-90 property writes on an element, each a named variant: a valid
  * `data-` name; an undeclared name in no namespace; a name in another namespace; a name in the
  * element's own namespace; `xml:id` and `xml:space`, which `xml.xsd` declares; an `xsi:` name;
  * and ARIA's `aria-keyshortcuts`.
@@ -296,7 +296,7 @@ const pathTo = (
   return Option.none();
 };
 
-describe("spec reading 81, through the codec", () => {
+describe("spec reading 90, through the codec", () => {
   it.effect(
     "reads on every covered element exactly its declared names, data-*, xsi: names and aria-keyshortcuts beside aria-keyshorts",
     (ctx) =>
@@ -350,7 +350,7 @@ describe("spec reading 81, through the codec", () => {
               generator: int(0, cases.length - 1),
               limit: cases.length,
               literal: Formatter.format,
-              suite: "grammar/compose/reading-81",
+              suite: "grammar/compose/reading-90",
             },
             (index, c) =>
               Effect.gen(function* readOne() {
@@ -378,7 +378,7 @@ describe("spec reading 81, through the codec", () => {
                   readXml(new TextEncoder().encode(`${opening}${closing}`)),
                 );
                 const outcome = yield* shred(document, version, shredGrammar).pipe(Effect.result);
-                // Oracle: reading 81 restated: on a covered element an attribute its XSD does not
+                // Oracle: reading 90 restated: on a covered element an attribute its XSD does not
                 // declare is read only when it is a `data-` name in no namespace or an `xsi:`
                 // name (reading 47), and reading 10 adds `aria-keyshortcuts` wherever the XSD
                 // declares `aria-keyshorts`; every covered element holds a `##any` `lax`
@@ -437,7 +437,7 @@ const declaredUses: ReadonlyMap<string, ReadonlyMap<string, boolean>> = (() => {
   return uses;
 })();
 
-describe("spec reading 101, wild IDs", () => {
+describe("spec reading 109, wild IDs", () => {
   it.effect(
     "admit no wild xml:id on a kind or governor whose declared uses include an ID-derived one, and keep it on every other: every admitted (version, kind) and (version, governor)",
     (ctx) =>

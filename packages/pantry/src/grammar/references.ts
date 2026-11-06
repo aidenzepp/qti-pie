@@ -2,7 +2,7 @@
  * The closed relations of variables and the references to them: `DeclarationKind`, `Declares`,
  * `BuiltInVariable`, `VariableReference`, `ContentReference`, `ChoiceBound`, `ChoiceCount` and
  * `SectionPart` (fin.md §14, §17; review R9); and of the references a document makes to the files
- * of its package, `ReferenceAttribute` (spec reading 95).
+ * of its package, `ReferenceAttribute` (spec reading 103).
  *
  * Each is a priori, a fact of QTI's vocabulary, so it is a closed relation. The rows are a
  * vocabulary's facet ({@link ReferenceFacet}), and {@link references} codes the facets of a
@@ -87,7 +87,7 @@ export interface BuiltInRow {
 /**
  * What a most of 0 means in a count bound, in code order: the `BoundZero` roster's handles.
  *
- * - `unbounded`: a most of 0 imposes no limit, so any least meets it (spec readings 53 and 67: "If
+ * - `unbounded`: a most of 0 imposes no limit, so any least meets it (spec readings 53 and 76: "If
  *   max-choices is 0 then there is no restriction", information model §5.30.2).
  * - `counted`: 0 is a count like any other, below every least of at least 1, and the pair binds only
  *   where the least is written (spec reading 18: the order interactions give 0 no meaning of its
@@ -150,7 +150,7 @@ export type ReferenceForm = (typeof referenceForms)[number];
 
 /**
  * One attribute by which an element of a kind names a file of its package, in the versions that
- * declare it, and how its value names it (spec reading 95).
+ * declare it, and how its value names it (spec reading 103).
  */
 export interface FileReferenceRow {
   readonly form: ReferenceForm;
@@ -189,8 +189,8 @@ export const noReferences: ReferenceFacet = {
 };
 
 /**
- * One entry of spec reading 95's census: an attribute that names a file, on the listed kinds, or on
- * every kind of the vocabulary that declares it where none are listed, how its value names the
+ * One entry of spec reading 103's census: an attribute that names a file, on the listed kinds, or
+ * on every kind of the vocabulary that declares it where none are listed, how its value names the
  * file, and the source that makes its value a reference to a file.
  */
 export interface CensusEntry {
@@ -217,7 +217,7 @@ const onKinds = (
 ): CensusEntry => ({ form, kinds: Option.some(kinds), name, source });
 
 /**
- * Spec reading 95's census in the ASI vocabulary: the attributes of QTI's HTML subset whose HTML
+ * Spec reading 103's census in the ASI vocabulary: the attributes of QTI's HTML subset whose HTML
  * definition is a URL its element links to, cites, embeds or loads, and QTI's own attributes the
  * information model defines as the location of a file. IMS Content Packaging 1.2's
  * InterchangePackage (d) then requires every file such a value resolves to within the package to be
@@ -284,15 +284,15 @@ export const asiCensus: readonly CensusEntry[] = [
 ];
 
 /**
- * Spec reading 95's census in XInclude: `xi:include`'s `href`, "a URI reference ... the location of
- * the resource to include" (XInclude 1.0 §3.1).
+ * Spec reading 103's census in XInclude: `xi:include`'s `href`, "a URI reference ... the location
+ * of the resource to include" (XInclude 1.0 §3.1).
  */
 export const xiCensus: readonly CensusEntry[] = [
   onKinds("href", ["xi:include"], "XInclude 1.0 §3.1: the location of the resource to include"),
 ];
 
 /**
- * Spec reading 95's census in MathML 3: `href`, which makes any element a hyperlink (§2.1.6);
+ * Spec reading 103's census in MathML 3: `href`, which makes any element a hyperlink (§2.1.6);
  * `math`'s `altimg`, its fallback image, and `cdgroup`, a content dictionary group file (§2.2.1);
  * `mglyph`'s `src`, the glyph's image (§3.2.1.2); `share`'s `src`, the shared expression (§4.2.7);
  * and the `src` of `annotation` and `annotation-xml`, the annotation's location (§5.1.2).
@@ -312,7 +312,7 @@ export const mathmlCensus: readonly CensusEntry[] = [
 ];
 
 /**
- * Spec reading 95's census in SSML 1.1: `audio`'s `src`, the audio file (§3.3.1), and `lexicon`'s
+ * Spec reading 103's census in SSML 1.1: `audio`'s `src`, the audio file (§3.3.1), and `lexicon`'s
  * `uri`, the pronunciation lexicon document (§3.1.4).
  */
 export const ssmlCensus: readonly CensusEntry[] = [
@@ -461,7 +461,7 @@ const itemRoot = "qti-assessment-item";
  * `outcome-identifier`, "The identifier of an outcome variable that must have a base-type of
  * identifier and be of either single or multiple cardinality. The visibility of the test feedback
  * is controlled by assigning a value (or values) to this outcome variable during Outcomes
- * Processing" (information model §5.157.2, TestFeedback; the UP audit's A43, spec reading 68). It
+ * Processing" (information model §5.157.2, TestFeedback; the UP audit's A43, spec reading 77). It
  * names an outcome the test declares, read as the bare identifier.
  */
 const testFeedback = {
@@ -536,7 +536,7 @@ const printing: ReadonlyMap<
  * The pairs of count attributes whose least may not exceed their most: the choices, the
  * associations, a choice's matches, a medium's plays and an extended text's strings (information
  * model, each interaction's and choice's `min-*` and `max-*`, `match-min` and `match-max`, and
- * §5.48.7's `min-strings`; spec readings 53 and 67; the rule `choice-bounds`). The kinds that carry
+ * §5.48.7's `min-strings`; spec readings 53 and 76; the rule `choice-bounds`). The kinds that carry
  * a pair are the XSD's: every kind declaring both. A most of 0 bounds nothing there, but on the
  * kinds {@link orderedChoices} names.
  */
@@ -974,7 +974,7 @@ export interface References {
   readonly sectionPart: KindSet<string>;
   /**
    * `ReferenceAttribute`: (version, kind, name) → form, every attribute by which an element of a
-   * kind names a file of its package in the version, and how its value names it (spec reading 95).
+   * kind names a file of its package in the version, and how its value names it (spec reading 103).
    */
   readonly referenceAttribute: Closed<
     readonly [IdField<"version", SchemaVersion>, KindField, AttributeField<"name">],

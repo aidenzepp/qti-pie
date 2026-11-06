@@ -98,7 +98,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("previewPackage", (suit
   );
 
   suite.effect("refuses a package the codec refuses as an ImportRefused naming its rule", () =>
-    // Oracle: the specification as a checker, the codec's rule (`not-qti3`, spec reading 80): the
+    // Oracle: the specification as a checker, the codec's rule (`not-qti3`, spec reading 89): the
     // published PCI sample declares a schema version the roster does not hold, and no database is
     // needed to say so.
     Effect.gen(function* refused() {

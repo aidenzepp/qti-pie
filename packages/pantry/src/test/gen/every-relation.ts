@@ -283,7 +283,7 @@ const itemOf = (members: MemberCounts): string =>
 
 /**
  * The second item: one choice interaction, scored by the published match-correct template, and an
- * included fragment (spec reading 110) whose text entry binds the item's `TEXT`, whose hottext
+ * included fragment (spec reading 117) whose text entry binds the item's `TEXT`, whose hottext
  * interaction binds its `WORD`, whose portable custom interaction binds its `WIDGET2` and reads its
  * context variable `CTX2`, and whose template inline names its template variable `SHOWN`.
  */
@@ -314,7 +314,7 @@ const templatedItem = [
 ].join("\n");
 
 /**
- * The fragment the second item includes (spec readings 107 and 110): a division holding an ID, a
+ * The fragment the second item includes (spec readings 114 and 117): a division holding an ID, a
  * text entry, whose `response-identifier`, an IDREF (reading 14), names the item's `TEXT`, a
  * hottext interaction naming its `WORD`, whose hottext counts among the item's assembly's, a
  * portable custom interaction naming its `WIDGET2` and its context variable `CTX2`, and a template
@@ -340,7 +340,7 @@ const fragment = [
 
 /**
  * The third item: a score and response processing that includes a response rule fragment (spec
- * reading 110), whose references name the item's `SCORE` and its built-in `numAttempts`.
+ * reading 117), whose references name the item's `SCORE` and its built-in `numAttempts`.
  */
 const ruledItem = [
   declaration,

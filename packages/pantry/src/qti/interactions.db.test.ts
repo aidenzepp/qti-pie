@@ -592,7 +592,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
       it.effect(
         "refuses a binding to a variable that is no response declaration, by Binding declared",
         () =>
-          // Oracle: PostgreSQL, the `Binding_declared` check (reading 66): an interaction binds a
+          // Oracle: PostgreSQL, the `Binding_declared` check (reading 75): an interaction binds a
           // response variable.
           // Bound: a binding resolved to an outcome declaration.
           Effect.gen(function* bindingDeclared() {
@@ -612,7 +612,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
         "refuses two bindings of one response variable, two interactions' or one interaction's response and string identifiers, by the key on (document, identifier)",
         () =>
           // Oracle: PostgreSQL's UNIQUE, or the host's key check before it, of
-          // key(on(BoundVariable, "document", "identifier")): reading 83, "Each response variable
+          // key(on(BoundVariable, "document", "identifier")): reading 92, "Each response variable
           // declared may be bound to one and only one interaction", and the string identifier's
           // "second response variable" (§5.162.3), the old `string-identifier-distinct`.
           // Bound: two interactions naming one variable; one text entry naming it twice.
@@ -644,7 +644,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
       it.effect(
         "refuses counts past their bounds and a typed count its lexical form does not spell, by Choice bounds and E1 derived",
         () =>
-          // Oracle: PostgreSQL, the `Choice_bounds` check (readings 18 and 67) and `E1_derived`'s
+          // Oracle: PostgreSQL, the `Choice_bounds` check (readings 18 and 76) and `E1_derived`'s
           // G-parse agreement of each count's integer with its lexical form.
           // Bound: an order interaction's most one past its choices, its least past its choices,
           // its least past a most of 0 (no exemption, reading 18); a choice interaction's least
@@ -688,7 +688,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
         "accepts an order interaction's most equal to its choices, and a choice interaction's most of 0 below its least, by every law of the row itself",
         () =>
           // Oracle: PostgreSQL, the row's domains and CHECKs with every foreign key deferred and
-          // none set immediate: the edge maxChoices = choices (reading 18), and reading 67's 0.
+          // none set immediate: the edge maxChoices = choices (reading 18), and reading 76's 0.
           // Bound: the two edges.
           Effect.gen(function* choiceEdges() {
             const client = yield* loginSession;
@@ -719,7 +719,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
       it.effect(
         "refuses a single response bound to an interaction whose most is not 1, and accepts a most of 1, by the containment into CountBound",
         () =>
-          // Oracle: PostgreSQL, the foreign key of "Binding cardinality" (reading 83): a single
+          // Oracle: PostgreSQL, the foreign key of "Binding cardinality" (reading 92): a single
           // response's interaction is in select(CountBound, mostValue = 1). 23503 on that key.
           // Bound: a choice interaction's most of 2 and of 0, refused, and of 1, accepted.
           Effect.gen(function* bindingCardinality() {
@@ -822,7 +822,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
         "refuses a default hotspot before its parent's last element and a graphic gap match's default hotspot, by the default hotspot checks",
         () =>
           // Oracle: PostgreSQL, the `default_hotspot_last_slot` and
-          // `Graphic_gap_match_default_hotspot` checks (reading 71).
+          // `Graphic_gap_match_default_hotspot` checks (reading 80).
           // Bound: a hotspot interaction's default hotspot at element 1 of 2; a graphic gap match's
           // associable hotspot of shape default.
           Effect.gen(function* defaultHotspot() {
@@ -892,7 +892,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
       it.effect(
         "refuses a feedback outcome of another type, in an item's or a section's placement, and a reference to a built-in its law does not allow, by Feedback outcome type and the containment into ContentReference",
         () =>
-          // Oracle: PostgreSQL, the `Feedback_outcome_type` check (reading 68) and the containment
+          // Oracle: PostgreSQL, the `Feedback_outcome_type` check (reading 77) and the containment
           // of (kind, attribute, declarationKind) into the closed `ContentReference`.
           // Bound: a float outcome, of an item's feedback and of a section's feedback placed under
           // a test (port audit A45); a feedback naming the response built-in numAttempts.
@@ -974,7 +974,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
           // key(on(Choice, "document", "kind", "identifier")) and key(on(Hottext, "document",
           // "identifier")): the choice classes' "This identifier must not be used by any other
           // choice or item variable" (§5.132.1, §5.65.1), each class of its own kind, the document
-          // its scope (reading 96).
+          // its scope (reading 104).
           // Bound: two simple choices named A of one interaction, and of two; two hottexts named H,
           // one in a hottext interaction and one outside any; a gap and a gap text named A of one
           // interaction, which the key lets be (the rows are stray, so the deferred foreign keys
@@ -1020,7 +1020,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
       it.effect(
         "refuses a choice or a hottext named as a declaration of its document, or in an item as a built-in variable, by Choice not variable",
         () =>
-          // Oracle: PostgreSQL, the `Choice_not_variable` check on `ChoiceVariableName` (reading 96:
+          // Oracle: PostgreSQL, the `Choice_not_variable` check on `ChoiceVariableName` (reading 104:
           // "This identifier must not be used by any other choice or item variable"), over the
           // counts its three families draw from the rows the ChangeSet writes.
           // Bound: a simple choice and an outcome declaration named A; a hottext and that
@@ -1093,7 +1093,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
         "accepts a name of choices alone, of a declaration alone and a stimulus choice named as a built-in, and refuses a name counted by both and one counted by none, by the row's own checks",
         () =>
           // Oracle: PostgreSQL, `ChoiceVariableName`'s CHECKs with every foreign key and family
-          // proof deferred and none set immediate: `Choice_not_variable` (reading 96) and
+          // proof deferred and none set immediate: `Choice_not_variable` (reading 104) and
           // `E1_derived` (some count above 0), 23514 on the check refused.
           // Bound: two choices of one name; one declaration; a stimulus's choice named
           // numAttempts, accepted; a hottext and a declaration of one name, and a name of no

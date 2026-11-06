@@ -2251,7 +2251,7 @@ describe("the unowned readings 2, 3, 9, 39, 41, 42, 43 and 47", () => {
   }
 });
 
-describe("the laws the information model states, read as it states them (readings 65 to 71)", () => {
+describe("the laws the information model states, read as it states them (readings 74 to 80)", () => {
   it.effect(
     "a default hotspot followed by whitespace or a comment is last among its elements",
     () =>
@@ -2451,9 +2451,9 @@ const includingTest = (attributes: string) => ({
   "test.xml": `<qti-assessment-test xmlns="${asi}" xmlns:xi="http://www.w3.org/2001/XInclude" identifier="T" title="Test"><qti-test-part identifier="P" navigation-mode="linear" submission-mode="individual"><qti-assessment-section identifier="S" title="Section" visible="true"><qti-assessment-item-ref identifier="I" href="item.xml"/><xi:include href="s.xml" ${attributes}/></qti-assessment-section></qti-test-part></qti-assessment-test>`,
 });
 
-describe("the laws readings 18, 65, 76 and 83 state, over generated packages", () => {
+describe("the laws readings 18, 74, 85 and 92 state, over generated packages", () => {
   it.effect(
-    "Choice bounds: an order interaction's counts as reading 18 bounds them, a choice interaction's as reading 67 does",
+    "Choice bounds: an order interaction's counts as reading 18 bounds them, a choice interaction's as reading 76 does",
     (ctx) =>
       searched(
         ctx,
@@ -2539,7 +2539,7 @@ describe("the laws readings 18, 65, 76 and 83 state, over generated packages", (
                 "Binding unique",
               );
 
-              // Oracle: reading 83, "Each response variable declared may be bound to one and only
+              // Oracle: reading 92, "Each response variable declared may be bound to one and only
               // one interaction" (§2.2.2.2): a response named by n interactions breaks it n − 1
               // times, declared or not.
               assert.strictEqual(breaches.length, expected, shown(breaches));
@@ -2572,7 +2572,7 @@ describe("the laws readings 18, 65, 76 and 83 state, over generated packages", (
           },
           ({ cardinality, max }, c) =>
             Effect.gen(function* selectPoint() {
-              // Oracle: reading 83, §5.128.2: "If max-choices is greater than 1 (or 0) then the
+              // Oracle: reading 92, §5.128.2: "If max-choices is greater than 1 (or 0) then the
               // interaction must be bound to a response with multiple cardinality", an unwritten
               // max-choices read as its XSD default, 0.
               const most = max ?? 0;
@@ -2602,7 +2602,7 @@ describe("the laws readings 18, 65, 76 and 83 state, over generated packages", (
   );
 
   it.effect(
-    "DocumentId key: a context declaration's identifier is one of its document's IDs (reading 65)",
+    "DocumentId key: a context declaration's identifier is one of its document's IDs (reading 74)",
     (ctx) =>
       searched(
         ctx,
@@ -2621,7 +2621,7 @@ describe("the laws readings 18, 65, 76 and 83 state, over generated packages", (
           },
           (context, c) =>
             Effect.gen(function* contextIds() {
-              // Oracle: reading 65: a context's identifier is a UniqueIdentifier, "unique within
+              // Oracle: reading 74: a context's identifier is a UniqueIdentifier, "unique within
               // the scope of the instance" (§5.34.1, §7.43), so it shares no value with an element
               // id or a response declaration's identifier, each an xs:ID.
               const situations = {
@@ -2761,7 +2761,7 @@ describe("the laws readings 18, 65, 76 and 83 state, over generated packages", (
   );
 
   it.effect(
-    "default hotspot last slot: a hotspot choice's default stands last, an associable hotspot's anywhere (reading 71)",
+    "default hotspot last slot: a hotspot choice's default stands last, an associable hotspot's anywhere (reading 80)",
     (ctx) =>
       searched(
         ctx,
@@ -2791,11 +2791,11 @@ describe("the laws readings 18, 65, 76 and 83 state, over generated packages", (
             },
             limit: 27,
             literal: Formatter.format,
-            suite: "oracle/default-hotspot-reading-71",
+            suite: "oracle/default-hotspot-reading-80",
           },
           ({ at, count, kind }, c) =>
             Effect.gen(function* defaultHotspot() {
-              // Oracle: reading 71: "The default hotspot, if defined, must appear last" of the
+              // Oracle: reading 80: "The default hotspot, if defined, must appear last" of the
               // HotspotChoice class and the hotspot interaction's choices (§5.67, §5.68.6), and
               // nothing of the AssociableHotspot class (§5.7, §5.59.4).
               const associable = kind === "qti-graphic-associate-interaction";
@@ -2839,7 +2839,7 @@ describe("the laws readings 18, 65, 76 and 83 state, over generated packages", (
   );
 
   it.effect(
-    'reading 76: an xi:include\'s xpointer is refused by the codec, and parse="text" by its value domain',
+    'reading 85: an xi:include\'s xpointer is refused by the codec, and parse="text" by its value domain',
     () =>
       Effect.gen(function* xpointer() {
         const pointed = yield* judged(includingTest(`xpointer="element(/1)"`));
@@ -2911,7 +2911,7 @@ const hrefPackage = (input: HrefCase) => ({
 
 /**
  * The breaches of each package law a case's reading names, counted by hand from the sources:
- * CP 1.2 §6.6.2 and reading 94 (an href's launch parameters and fragment are not its path, and a
+ * CP 1.2 §6.6.2 and reading 102 (an href's launch parameters and fragment are not its path, and a
  * path with a dot segment or a percent-encoding is outside the form, refused under "Href form"; a
  * scheme or a leading `/` is external), InterchangePackage (b) (a listed in-package file is an
  * entry) and §6.11.5 B ii (a dependency names a sibling, never its own resource).
@@ -2928,12 +2928,12 @@ const hrefExpected = (input: HrefCase) => ({
   "Self dependency": input.dependency === "W" ? 1 : 0,
 });
 
-describe("the package hrefs reading 94 and IMS Content Packaging 1.2 state, over generated packages", () => {
+describe("the package hrefs reading 102 and IMS Content Packaging 1.2 state, over generated packages", () => {
   it.effect(
     "Href form, File exists, Href listed and Self dependency: a package breaks each exactly as its sources count",
     (ctx) =>
       // Oracle: the specification as a checker, each law's count read off the case by hand from
-      // CP 1.2 §6.6.2, InterchangePackage (b), §6.11.5 B ii and reading 94 (`hrefExpected`).
+      // CP 1.2 §6.6.2, InterchangePackage (b), §6.11.5 B ii and reading 102 (`hrefExpected`).
       // Bound: every case of 4 item hrefs, 6 extra files and 3 dependencies, 72.
       searched(
         ctx,
@@ -2953,9 +2953,9 @@ describe("the package hrefs reading 94 and IMS Content Packaging 1.2 state, over
             literal: Formatter.format,
             oracle: {
               kind: "specification",
-              name: "CP 1.2 §6.6.2, InterchangePackage (b), §6.11.5 B ii and reading 94, by hand",
+              name: "CP 1.2 §6.6.2, InterchangePackage (b), §6.11.5 B ii and reading 102, by hand",
             },
-            suite: "oracle/package-hrefs-reading-94",
+            suite: "oracle/package-hrefs-reading-102",
           },
           (input, c) =>
             Effect.gen(function* hrefLaws() {
@@ -3037,7 +3037,7 @@ const referencePackage = (input: ReferenceCase) => ({
 
 /**
  * Each law's count over a references' case, read off by hand from InterchangePackage (d) and
- * readings 94 and 95: `../a.png` names `a.png` from `items/` (RFC 3986 §5.2.4's removal of a
+ * readings 102 and 103: `../a.png` names `a.png` from `items/` (RFC 3986 §5.2.4's removal of a
  * leading dot segment) and climbs above the package root from the root, refused under "Href form";
  * an `xml:base` beside a reference the representation resolves is refused under it too;
  * `missing.png` resolves to no entry ("File exists"); every other value resolves to an entry or is
@@ -3056,9 +3056,9 @@ const referenceExpected = (input: ReferenceCase) => {
   };
 };
 
-describe("the references reading 95's census names, over generated packages", () => {
+describe("the references reading 103's census names, over generated packages", () => {
   it.effect(
-    "File exists and Href form: a document's references break each exactly as InterchangePackage (d) and readings 94 and 95 count",
+    "File exists and Href form: a document's references break each exactly as InterchangePackage (d) and readings 102 and 103 count",
     (ctx) =>
       // Oracle: the specification as a checker, each law's count read off the case by hand
       // (`referenceExpected`), over `img@src`, a uri attribute of the grammar's census.
@@ -3080,9 +3080,9 @@ describe("the references reading 95's census names, over generated packages", ()
             literal: Formatter.format,
             oracle: {
               kind: "specification",
-              name: "InterchangePackage (d) and readings 94 and 95, by hand",
+              name: "InterchangePackage (d) and readings 102 and 103, by hand",
             },
-            suite: "oracle/references-reading-95",
+            suite: "oracle/references-reading-103",
           },
           (input, c) =>
             Effect.gen(function* referenceLaws() {
@@ -3261,7 +3261,7 @@ const interaction = (include: string): string =>
  */
 const fragmentResource = resourceOf("F", "imsqti_fragment_xmlv3p0", "f.xml");
 
-describe("reading 110: an included fragment judged in place", () => {
+describe("reading 117: an included fragment judged in place", () => {
   it.effect(
     "the item that includes a fragment breaks exactly the laws its merged document breaks, and Include root exactly where the merged document's root is out of place",
     (ctx) =>
@@ -3357,7 +3357,7 @@ describe("reading 110: an included fragment judged in place", () => {
             literal: Formatter.format,
             oracle: {
               kind: "specification",
-              name: "readings 76, 96, 108 and 110 (XInclude 1.0 §3.1, information model §2.12 and §5.132.1, the metadata binding §2.7.1.3), by hand",
+              name: "readings 85, 104, 115 and 117 (XInclude 1.0 §3.1, information model §2.12 and §5.132.1, the metadata binding §2.7.1.3), by hand",
             },
             suite: "oracle/include-laws",
           },

@@ -757,7 +757,7 @@ describe("the rosters", () => {
       "none",
     ]);
     assert.strictEqual(handlesOf("SharedModel")[0], "none");
-    // Spec reading 111's include model is a model of its own, and names the ignored elements'
+    // Spec reading 118's include model is a model of its own, and names the ignored elements'
     // wildcards at two positions.
     assert.lengthOf(handlesOf("SharedModel"), 25);
     assert.lengthOf(handlesOf("ContentModel"), 115);

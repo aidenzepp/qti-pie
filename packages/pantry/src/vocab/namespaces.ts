@@ -101,7 +101,7 @@ export const qtiMetadataNamespace = vocabularyNamespaces.qmd.namespace;
  * sections and tests in `imsqti_v2p0`, `imsqti_v2p1` and `imsqti_v2p2`, then the 2.1 and 2.2
  * metadata, results reporting and usage data. A document whose root is in one is a QTI 2 document,
  * which no QTI 3 schema reads, so shred refuses it as `not-qti3` before it reads a name (spec
- * reading 80). QTI 3.0's own namespaces are disjoint from these; a root in any other namespace QTI
+ * reading 89). QTI 3.0's own namespaces are disjoint from these; a root in any other namespace QTI
  * 3.0 does not declare is not QTI 2 and is refused as an unknown name.
  *
  * @see {@link https://www.imsglobal.org/xsd/imsqti_v2p2.xsd | QTI 2.2 ASI XSD, `targetNamespace` (line 3)}

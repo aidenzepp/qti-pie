@@ -99,10 +99,10 @@ describe("qti/declarations.ts, declared", () => {
     assert.include(lawNames, "Record field key");
   });
 
-  it("reserves exactly the built-in session variables, spelled exactly with no alias (spec reading 63)", () => {
+  it("reserves exactly the built-in session variables, spelled exactly with no alias (spec reading 72)", () => {
     // Oracle: the specification as a checker. The information model's tables 4.5.1, 5.115.1 and
     // 5.151.1 ("They are completionStatus, numAttempts and duration") and §2.2.2.1's one built-in
-    // context variable, QTI_CONTEXT, which may be declared as the record it is; reading 63 adds no
+    // context variable, QTI_CONTEXT, which may be declared as the record it is; reading 72 adds no
     // alias, so `completion_status` and `completion-status` name ordinary variables.
     assert.sameMembers([...sessionVariables], ["completionStatus", "duration", "numAttempts"]);
     assert.sameMembers(
@@ -133,7 +133,7 @@ describe("qti/declarations.ts, declared", () => {
 
 /**
  * The base types `Typed_value` judges by a pattern: every handle but those every text is a value
- * of, and `uri`, whose pattern is spec reading 61's (`value domain`'s, Q5.05), checked apart.
+ * of, and `uri`, whose pattern is spec reading 71's (`value domain`'s, Q5.05), checked apart.
  */
 const judgedBaseTypes = BaseType.handles.filter(
   (handle) => !unjudgedBaseTypes.some((unjudged) => unjudged === handle) && handle !== "uri",
@@ -272,8 +272,8 @@ describe("qti/declarations.ts, typed values", () => {
       ),
   );
 
-  it("admits a uri's text by xs:anyURI's pattern, spec reading 61's", () => {
-    // Oracle: the specification as a checker, RFC 2396 by way of reading 61: an absolute URI and a
+  it("admits a uri's text by xs:anyURI's pattern, spec reading 71's", () => {
+    // Oracle: the specification as a checker, RFC 2396 by way of reading 71: an absolute URI and a
     // relative reference are values, and a percent sign not followed by two hex digits is not.
     const uri = patternOf("uri");
     for (const text of ["http://example.com/a?b#c", "a/b.xml", " urn:x:y "]) {

@@ -20,7 +20,7 @@
  * whose elements are only ever declared locally.
  *
  * A root driver imports one vocabulary, the one whose XSD declares a document's root, so the
- * schema a document is assessed against is its root's schema set (spec reading 72): that XSD and
+ * schema a document is assessed against is its root's schema set (spec reading 81): that XSD and
  * every XSD it imports, transitively, as the XSDs' own `xs:import`s state it ({@link schemaSetOf}).
  * Under the union driver a `strict` wildcard would find a declaration no XSD of the document's
  * set imports, as a DRD element under an item's `qti-companion-materials-info`.
@@ -305,7 +305,7 @@ const sourceByUrl: ReadonlyMap<string, SourcePath> = new Map(
 const readSets = new Map<string, ReadonlySet<string>>();
 
 /**
- * Read a document's schema set from the pinned XSDs (spec reading 72): the XSD of a version that
+ * Read a document's schema set from the pinned XSDs (spec reading 81): the XSD of a version that
  * declares a namespace, and every XSD it imports, includes or redefines, transitively, each
  * `schemaLocation` resolved against the URL of the XSD that names it and read from its pin. The
  * set is the target namespaces of those XSDs, read once per (version, namespace) a run asks for.

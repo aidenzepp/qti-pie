@@ -317,7 +317,7 @@ describe.skipIf(!hasLease)("qti/tests.db.test.ts, on the lease", () => {
       it.effect(
         "accepts a selection of exactly its section's parts, and refuses one over unless it is with replacement, by Selection_bound",
         () =>
-          // Oracle: PostgreSQL, the `selection_bound` CHECK; reading 70 says which states it holds.
+          // Oracle: PostgreSQL, the `selection_bound` CHECK; reading 79 says which states it holds.
           // Bound: select at members and at members + 1, with and without replacement, members 3.
           Effect.gen(function* selectionBound() {
             const client = yield* loginSession;

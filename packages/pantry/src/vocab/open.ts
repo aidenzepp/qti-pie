@@ -127,7 +127,7 @@ export const foreignRoots: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * The schema sets QTI 3.0 validates its documents against (spec reading 72), each by the
+ * The schema sets QTI 3.0 validates its documents against (spec reading 81), each by the
  * vocabularies, named as `src/vocab/inventory/vocabularies.ts` names them, whose global element
  * declarations it holds: its root XSD's and those of every XSD that one imports, transitively.
  *
@@ -163,7 +163,7 @@ const vocabularyOf: ReadonlyMap<string, string> = new Map(
 /**
  * Whether the schema set of every document an element of `parent`'s namespace stands in may hold
  * a component of `child`'s namespace: some set lists both vocabularies. An element of no
- * vocabulary's namespace, a foreign element, stands in documents of every set (spec reading 72).
+ * vocabulary's namespace, a foreign element, stands in documents of every set (spec reading 81).
  *
  * @param parent - The element's namespace.
  * @param child - The component's namespace.
@@ -184,7 +184,7 @@ const sharesSet = (parent: string, child: string): boolean => {
 
 /**
  * Whether a `lax` or `strict` element wildcard of a kind reads an element another vocabulary
- * declares globally as that declaration (spec reading 72): when a schema set a document holding the
+ * declares globally as that declaration (spec reading 81): when a schema set a document holding the
  * kind is validated against holds the declaration. XML Schema finds a wildcard's element by its
  * top-level declaration in the schema the document is assessed against, and only there (Part 1,
  * section 3.10.4, Item Valid (Wildcard), clauses 1 and 2; section 3.3.4, Schema-Validity
@@ -195,7 +195,7 @@ const sharesSet = (parent: string, child: string): boolean => {
  * A kind of a vocabulary stands in the documents of every set that lists its vocabulary, LOM's in
  * a manifest and in an external LOM file, and a kind of none, a foreign element, in documents of
  * every set. One grammar serves all of a kind's documents, so its wildcards read a declaration any
- * of those sets holds: reading 72 states that limit.
+ * of those sets holds: reading 81 states that limit.
  *
  * @param parent - The namespace of the wildcard's kind, empty for a kind of no vocabulary.
  * @param child - The namespace of the globally declared element.
@@ -269,8 +269,8 @@ export const attributeSchemaSets = {
  * Whether an element of a namespace may carry an attribute-only schema's global attributes under
  * their closed handles: some schema set its documents are assessed against imports the schema. An
  * element of a vocabulary stands in the documents of every set that lists the vocabulary, and one
- * of no vocabulary's namespace, a foreign element, in documents of every set (spec reading 72), so
- * one grammar serves all of them and admits the declarations any of those sets holds: reading 72's
+ * of no vocabulary's namespace, a foreign element, in documents of every set (spec reading 81), so
+ * one grammar serves all of them and admits the declarations any of those sets holds: reading 81's
  * limit, for attributes as for elements.
  *
  * @param host - The element's namespace, empty for a kind of no vocabulary.

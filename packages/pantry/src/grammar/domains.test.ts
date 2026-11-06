@@ -69,14 +69,14 @@ const leafDomains: readonly { readonly domain: Domain; readonly where: string }[
 ];
 
 /**
- * `xs:anyURI`'s built-in domain as the derivation gives it: reading 61's pattern
+ * `xs:anyURI`'s built-in domain as the derivation gives it: reading 71's pattern
  * ({@link anyUriPattern}), its value collapsed.
  */
 const anyUriDomain: Domain = Result.getOrThrow(builtinDomainOf("anyURI"));
 
 /**
  * Research seat AU's 131 test vectors (`docs/research/anyuri.md`, §4), each a collapsed value and
- * the verdict reading 61 gives it: RFC 2396 and RFC 2732 judged rule by rule.
+ * the verdict reading 71 gives it: RFC 2396 and RFC 2732 judged rule by rule.
  */
 const anyUriVectors: readonly (readonly [value: string, valid: boolean])[] = [
   ["", true],
@@ -642,7 +642,7 @@ const patternsOf = (domain: Domain): readonly string[] => [
 /**
  * The distinct pattern facets of the pinned XSDs, as the leaf states them: every pattern of its
  * domains but `anyURI`'s lexical pattern ({@link anyUriPattern}), which the derivation states for
- * the primitive (spec reading 61) and no XSD writes. Its oracles are research seat AU's vectors
+ * the primitive (spec reading 71) and no XSD writes. Its oracles are research seat AU's vectors
  * and the RFC 2396 interpreter (`src/vocab/derive/domains.test.ts`); xmllint is none, since
  * libxml2 2.9.13's regular expressions depart from it, admitting `ab]`, which its relative-segment
  * class excludes.
@@ -1264,13 +1264,13 @@ describe("The shared syntax", () => {
 });
 
 describe("xs:anyURI", () => {
-  it("reads each of AU's vectors as reading 61 does, and as written with whitespace XSD collapses away", () => {
+  it("reads each of AU's vectors as reading 71 does, and as written with whitespace XSD collapses away", () => {
     const regex = cachedRegex(anyUriDomain, "xsd");
     const disagreements = anyUriVectors.flatMap(([value, valid]) =>
       [value, ` ${value}`, `\t${value}\n `, value.replaceAll(" ", " \r\n ")].flatMap((raw) =>
         regex.test(raw) === valid
           ? []
-          : [`${spelled(raw)}: reading 61 ${valid ? "admits" : "refuses"} it`],
+          : [`${spelled(raw)}: reading 71 ${valid ? "admits" : "refuses"} it`],
       ),
     );
 

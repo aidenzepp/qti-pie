@@ -20,25 +20,25 @@
  *   its `response-identifier` and its `string-identifier` (§5.48.2, §5.162.3: "binding the
  *   interaction to a second response variable (of base-type string)"), with the variable's
  *   declaration, through `declarationRef`. `key(document, identifier)` is "Binding unique" (reading
- *   83: "Each response variable declared may be bound to one and only one interaction"), so an
+ *   92: "Each response variable declared may be bound to one and only one interaction"), so an
  *   interaction whose string identifier is its response identifier, the old
  *   `string-identifier-distinct`, breaks that key.
  * - {@link Choice}: every choice, its `interaction` its nearest interaction (N8), the `Gap` rows
  *   among them, with its identifier distinct among its document's choices of its kind (§5.132.1 and
  *   the other choice classes': "This identifier must not be used by any other choice or item
- *   variable"; spec reading 96: the item is the scope, as §7.16 reads an identifier, "a logical
+ *   variable"; spec reading 104: the item is the scope, as §7.16 reads an identifier, "a logical
  *   reference to another object in the item, such as an itemVariable or choice").
  * - {@link Hottext}: every hottext, its nearest interaction's kind, so {@link HottextOwner} is the
  *   hottexts of a hottext interaction; elsewhere a hottext is valid and owned by none (reading 38).
- *   Its identifier is distinct among its document's hottexts (§5.65.1, reading 96).
+ *   Its identifier is distinct among its document's hottexts (§5.65.1, reading 104).
  * - {@link ChoiceVariableName}: each identifier a document's choices, hottexts or declarations use,
  *   counting each, so a choice's identifier is no item variable's: no declaration's of its
- *   document, and in an item no built-in variable's (reading 96, "Choice not variable").
+ *   document, and in an item no built-in variable's (reading 104, "Choice not variable").
  * - {@link Hotspot}: the hotspot choices and associable hotspots, their shape, and their element
- *   ranks beside their parent's element count, through `nodeCounts` (reading 71).
+ *   ranks beside their parent's element count, through `nodeCounts` (reading 80).
  * - {@link CountBound}: every element whose counts `ChoiceBound` pairs, its least and most, each
- *   written or its XSD default, typed by G-parse; "Choice bounds" (readings 18 and 67), "Binding
- *   cardinality" (reading 83) and `max-strings-required` (reading 19) read it.
+ *   written or its XSD default, typed by G-parse; "Choice bounds" (readings 18 and 76), "Binding
+ *   cardinality" (reading 92) and `max-strings-required` (reading 19) read it.
  * - {@link Slider} (reading 9, the Schematron's 14Ba), {@link AriaRange} (§5.2.31: "Authors MUST
  *   ensure the value of 'aria-valuemax' is greater than or equal to the value of 'aria-valuemin'"),
  *   and {@link ItemMode}, an item's `adaptive`, which "AdaptiveFeedback" reads (§5.49, §5.52: "A
@@ -47,14 +47,14 @@
  * - The content references: {@link FeedbackRef}, {@link TemplateRef}, {@link PrintedVariableRef},
  *   {@link VarRef} (the old `varref-copy`) and {@link ContextRef}, each naming a declaration of a
  *   kind `ContentReference` allows, through `declarationRef`, or a built-in variable that stands as
- *   one (reading 68), in an item's or a test's own declarations (the port audit's A43 and A44).
+ *   one (reading 77), in an item's or a test's own declarations (the port audit's A43 and A44).
  * - A section document's feedback and printed variables ({@link SectionFeedbackName},
  *   {@link SectionPrintedName}) resolve once per test that places it ({@link SectionFeedbackRef},
  *   {@link SectionPrintedRef}, A45), every one of them under each placement ({@link SectionScope},
  *   whose counts of resolutions are its document's counts of references,
  *   {@link ReferringDocument}). An included fragment's feedback, printed variables, template
  *   variables ({@link SectionTemplateName}) and context variables ({@link SectionContextName})
- *   resolve so once per item that places it (spec reading 110), the same relations holding them: a
+ *   resolve so once per item that places it (spec reading 117), the same relations holding them: a
  *   fragment declares nothing, as a section does.
  *
  * A row a builder gets wrong is refused, never accepted: each overlay's node is its node's, through
@@ -192,14 +192,14 @@ export const testRoot = "qti-assessment-test" satisfies Kind;
 /**
  * The root kinds of the documents whose content references resolve in their own declarations: an
  * item's, and a test's. Every other document's resolve once per assembly that places it: a section
- * document's in each test's declarations, an included fragment's in each item's (spec reading 110).
+ * document's in each test's declarations, an included fragment's in each item's (spec reading 117).
  */
 export const referringRoots = [itemRoot, testRoot] as const satisfies readonly Kind[];
 
 /**
  * The root kinds of the documents that are no included fragment's content: an item, a test, and a
  * section document, which a section ref or an include places as a section. Every other document a
- * reference stands in is a fragment (spec reading 110), whose template and context variable
+ * reference stands in is a fragment (spec reading 117), whose template and context variable
  * references resolve once per item that places it, as its feedback and printed variables do.
  */
 export const unfragmentedRoots = [
@@ -238,7 +238,7 @@ export const hottextKind = "qti-hottext" satisfies Kind;
 export const hottextInteraction = "qti-hottext-interaction" satisfies Kind;
 
 /**
- * The kinds that carry a `shape` the default-hotspot laws read (reading 71).
+ * The kinds that carry a `shape` the default-hotspot laws read (reading 80).
  */
 export const hotspotKinds = [
   "qti-hotspot-choice",
@@ -246,7 +246,7 @@ export const hotspotKinds = [
 ] as const satisfies readonly Kind[];
 
 /**
- * The graphic gap match interaction, whose hotspots have no default (reading 71, §5.60.9: "The
+ * The graphic gap match interaction, whose hotspots have no default (reading 80, §5.60.9: "The
  * default hotspot must not be defined").
  */
 export const graphicGapMatch = "qti-graphic-gap-match-interaction" satisfies Kind;
@@ -292,7 +292,7 @@ export const bindingAttributes = [
 ] as const satisfies readonly Name[];
 
 /**
- * The interactions whose response cardinality their most count decides, spec reading 83: "If
+ * The interactions whose response cardinality their most count decides, spec reading 92: "If
  * max-choices is greater than 1 (or 0) then the interaction must be bound to a response with
  * multiple cardinality", of the `max-choices` of the choice (§5.30.2), hottext (§5.66.1), hotspot
  * (§5.68.2), position object (§5.107.3) and select point (§5.128.2) interactions, and the same
@@ -315,7 +315,7 @@ export const cardinalityKinds = [
 /**
  * The interactions of any response type: those neither `BindingFit` nor `RecordBindingFit` names,
  * the custom and portable custom interactions, which bind a declared response variable of any base
- * type and cardinality (reading 66 binds them all).
+ * type and cardinality (reading 75 binds them all).
  */
 export const anyTypeKinds: readonly Kind[] = interactionKinds.filter(
   (kind) =>
@@ -580,7 +580,7 @@ export const BoundVariable = relation(
 
 /**
  * One attribute by which an interaction of any document binds a response variable, keyed by the
- * interaction's node and the attribute (spec reading 110): `kind`, the interaction's; `document`;
+ * interaction's node and the attribute (spec reading 117): `kind`, the interaction's; `document`;
  * and `identifier`, the attribute's value collapsed. A fragment's interactions bind no variable of
  * their own document, which declares none, but one of each item that places the fragment
  * ({@link PlacedBinding}); its rows count as `Document.bindings`.
@@ -598,7 +598,7 @@ export const BindingName = relation(
 );
 
 /**
- * One binding of an instance of an item's assembly (Q5.13's `Instance`, spec reading 110), keyed by
+ * One binding of an instance of an item's assembly (Q5.13's `Instance`, spec reading 117), keyed by
  * the instance, the interaction's node and the attribute: the item's own bindings under its root
  * instance, and an included fragment's under each instance that places it, so each placement binds
  * the item's responses as its merged document would ("interactions included from fragments must be
@@ -628,7 +628,7 @@ export const PlacedBinding = relation(
 );
 
 /**
- * One choice of an instance of an assembly (Q5.13's `Instance`, spec reading 110), keyed by the
+ * One choice of an instance of an assembly (Q5.13's `Instance`, spec reading 117), keyed by the
  * instance and the choice's node: a {@link Choice} of the instance's document, under the
  * assembly, so an included fragment's choices count among its item's ("Choice identifier key" over
  * the assembly: "This identifier must not be used by any other choice", information model
@@ -763,9 +763,9 @@ export const placedHottextFamily = counted(
  * or item variable" (§5.132.1; §5.7.1, §5.55.1, §5.56.1, §5.58.1, §5.65.1, §5.67.1, §5.73.1 and
  * §5.131.1 alike), and the item variables are its declarations and its built-in variables
  * (§2.2.2), so "Choice not variable" holds a used identifier to its choices and hottexts or to its
- * variables, never both (spec reading 96). The comparison spans two relations, so it is a count
+ * variables, never both (spec reading 104). The comparison spans two relations, so it is a count
  * of each under one key: a containment cannot say that a name is absent. An included fragment's
- * choices are its item's (spec reading 110), and a fragment declares nothing, so an item's
+ * choices are its item's (spec reading 117), and a fragment declares nothing, so an item's
  * assembly's placed choices and hottexts are held to the item's own variables.
  */
 export const ChoiceVariableName = relation(
@@ -811,7 +811,7 @@ export const declarationNameFamily = counted(
 
 /**
  * Each identifier an assembly places on a choice, counted by `ChoiceVariableName.placedChoices`
- * under the assembly's root document (spec reading 110).
+ * under the assembly's root document (spec reading 117).
  */
 export const placedChoiceNameFamily = counted(
   on(PlacedChoice, "assembly", "identifier"),
@@ -951,7 +951,7 @@ const referenceFields = {
 };
 
 /**
- * A feedback element's outcome, keyed by its node and `outcome-identifier` (reading 68).
+ * A feedback element's outcome, keyed by its node and `outcome-identifier` (reading 77).
  */
 export const FeedbackRef = relation("FeedbackRef", referenceFields, ["node", "attribute"]);
 
@@ -979,7 +979,7 @@ export const VarRef = relation("VarRef", referenceFields, ["node", "attribute"])
 
 /**
  * The context variable a PCI's `qti-context-variable` binds, keyed by its node and `identifier`
- * (reading 83: "the context variables are the declared ones and the built-in QTI_CONTEXT").
+ * (reading 92: "the context variables are the declared ones and the built-in QTI_CONTEXT").
  */
 export const ContextRef = relation("ContextRef", referenceFields, ["node", "attribute"]);
 
@@ -1017,7 +1017,7 @@ export const SectionPrintedName = relation("SectionPrintedName", sectionNameFiel
 
 /**
  * An included fragment's template variable reference, a template element's or a choice's
- * `template-identifier`, keyed by its node and attribute (spec reading 110).
+ * `template-identifier`, keyed by its node and attribute (spec reading 117).
  */
 export const SectionTemplateName = relation("SectionTemplateName", sectionNameFields, [
   "node",
@@ -1026,7 +1026,7 @@ export const SectionTemplateName = relation("SectionTemplateName", sectionNameFi
 
 /**
  * An included fragment's context variable reference, a `qti-context-variable`'s `identifier`,
- * keyed by its node and attribute (spec reading 110).
+ * keyed by its node and attribute (spec reading 117).
  */
 export const SectionContextName = relation("SectionContextName", sectionNameFields, [
   "node",
@@ -1085,7 +1085,7 @@ export const sectionContextNameFamily = counted(
 
 /**
  * One placement of a section document under a test, or of an included fragment under an item
- * (spec reading 110), keyed by its `Instance`: the document it places, the assembly (its root's
+ * (spec reading 117), keyed by its `Instance`: the document it places, the assembly (its root's
  * document node), and its counts of {@link SectionFeedbackRef}, {@link SectionPrintedRef},
  * {@link SectionTemplateRef} and {@link SectionContextRef} rows, which the families draw.
  */
@@ -1267,8 +1267,8 @@ const itemBuiltInNames: readonly string[] = [
 ];
 
 /**
- * State "Choice not variable" over one used identifier (spec reading 96): no choice or hottext
- * bears it, its document's own or one its assembly places (spec reading 110), or no declaration of
+ * State "Choice not variable" over one used identifier (spec reading 104): no choice or hottext
+ * bears it, its document's own or one its assembly places (spec reading 117), or no declaration of
  * its document does and, in an item, it names none of the item's built-in variables, which "are
  * declared implicitly" (§2.2.2) and so are item variables too.
  *
@@ -1449,7 +1449,7 @@ const mostKnown = (b: BoundRow) =>
   );
 
 /**
- * State "Choice bounds" over one bound, as the oracle reads readings 18 and 67:
+ * State "Choice bounds" over one bound, as the oracle reads readings 18 and 76:
  *
  * - Where `ChoiceBound`'s zero is `unbounded`, a known most of 0 bounds nothing, and otherwise the
  *   least is at most the most;
@@ -1512,7 +1512,7 @@ const AriaDecimal = pg.numeric(511, 255);
 const decimalForm = lexicalForm(AriaDecimal);
 
 /**
- * State the default-hotspot law of each `LastWhere` rule over `shape` (reading 71, ruling D3): a
+ * State the default-hotspot law of each `LastWhere` rule over `shape` (reading 80, ruling D3): a
  * hotspot of the rule's kind, under one of its parents, in one of its versions, whose shape is the
  * rule's value, is its parent's last element child, so whitespace, comments and instructions after
  * it do not count.
@@ -1605,7 +1605,7 @@ const sectionPrintedSource = select(InteractionAttribute, (v) =>
 );
 
 /**
- * Select the read attributes a fragment's references of one class are (spec reading 110): the
+ * Select the read attributes a fragment's references of one class are (spec reading 117): the
  * class's attributes on its kinds, in a document that is no item, test or section.
  *
  * @param reference - The class's attributes and kinds.
@@ -1633,7 +1633,7 @@ const fragmentSources = {
 
 /**
  * The instances of an item's assembly: its root, and each fragment it places, whose bindings each
- * resolve in the item's declarations (spec reading 110).
+ * resolve in the item's declarations (spec reading 117).
  */
 const itemInstances = select(Instance, (i) => i.eq(i.assemblyKind, itemKind));
 
@@ -1641,8 +1641,8 @@ const itemInstances = select(Instance, (i) => i.eq(i.assemblyKind, itemKind));
  * The placements `SectionScope` holds: a section document's under a test, one per test that
  * reaches the document (a section document no test places has only its own section-rooted
  * assembly, which resolves nothing), and an included fragment's under an item, one per item that
- * places it (spec reading 110). A fragment a section document places resolves nothing yet: a known
- * under-refusal, which reading 110 lists.
+ * places it (spec reading 117). A fragment a section document places resolves nothing yet: a known
+ * under-refusal, which reading 117 lists.
  */
 const sectionPlacements = select(Instance, (i) =>
   i.or(
@@ -1657,7 +1657,7 @@ const sectionPlacements = select(Instance, (i) =>
  * - **the read attributes:** one copy from `Attribute` with the key that serves it, and the copy's
  *   reverse, so `InteractionAttribute` holds exactly the attributes O3 reads; each one's root kind
  *   its document's; `E1_derived`, its value its lexical form collapsed.
- * - **bindings in place** (spec reading 110): each interaction's binding attributes in every document
+ * - **bindings in place** (spec reading 117): each interaction's binding attributes in every document
  *   ({@link BindingName}), counted per document; under each instance of an item's assembly, as many
  *   {@link PlacedBinding} rows as its document has binding attributes, each its document's and
  *   resolved among the item's declarations, under the item's own laws: "Binding declared",
@@ -1666,7 +1666,7 @@ const sectionPlacements = select(Instance, (i) =>
  *   whose feedback ancestry an included fragment inherits from its context.
  * - **bindings:** each interaction's {@link Binding} (its node's, of an interaction kind, its
  *   identifier its `response-identifier`'s); each item binding's {@link BoundVariable}, whose
- *   declaration is a response declaration ("Binding declared", reading 66) of a type `BindingFit`
+ *   declaration is a response declaration ("Binding declared", reading 75) of a type `BindingFit`
  *   or `RecordBindingFit` admits, the custom and portable custom interactions of any type, and a
  *   string binding's of base type string ("BindingFit"); "Binding unique" (`key(document,
  *   identifier)`); "Binding cardinality" (a single response takes a most of 1);
@@ -1676,15 +1676,16 @@ const sectionPlacements = select(Instance, (i) =>
  *   inside feedback is in an adaptive item.
  * - **choices:** the counted family under `Binding`, each choice's interaction its nearest; its
  *   identifier distinct among its document's choices of its kind; each hottext's nearest kind, and
- *   its identifier distinct among its document's hottexts (reading 96); and in place (spec reading
- *   110), under each instance of each assembly, as many {@link PlacedChoice} and
+ *   its identifier distinct among its document's hottexts (reading 104); and in place (spec reading
+ *   117), under each instance of each assembly, as many {@link PlacedChoice} and
  *   {@link PlacedHottext} rows as its document has choices and hottexts, each its document's, their
  *   identifiers distinct over the assembly.
- * - **choice names** (reading 96): each identifier a choice, a hottext or a declaration uses, or that
- *   an assembly places on a choice or a hottext (reading 110), has its {@link ChoiceVariableName}
- *   under its document or its assembly's root document, of that document's root kind, counting each
- *   of the five; no row counts none (`E1_derived`); and "Choice not variable".
- * - **the default hotspot** (reading 71): `default_hotspot_last_slot` and
+ * - **choice names** (reading 104): each identifier a choice, a hottext or a declaration uses, or
+ *   that an assembly places on a choice or a hottext (reading 117), has its
+ *   {@link ChoiceVariableName} under its document or its assembly's root document, of that
+ *   document's root kind, counting each of the five; no row counts none (`E1_derived`); and "Choice
+ *   not variable".
+ * - **the default hotspot** (reading 80): `default_hotspot_last_slot` and
  *   `Graphic_gap_match_default_hotspot` over each hotspot's shape, its rank and its parent's
  *   count.
  * - **counts:** each bound's counts written or defaulted, typed by G-parse (`E1_derived`), and
@@ -1693,7 +1694,7 @@ const sectionPlacements = select(Instance, (i) =>
  *   bounds.
  * - **section documents' and fragments' references:** each one's row, counted per document and class;
  *   one placement row per section-rooted instance under a test and per fragment-rooted instance
- *   under an item (spec reading 110), counting as many resolutions of each class as its document
+ *   under an item (spec reading 117), counting as many resolutions of each class as its document
  *   has references; each resolution its placement's and its reference's, resolved in the assembly's
  *   declarations or to a built-in, under "Feedback reference" and "Feedback outcome type", "Printed
  *   variable reference", "Template reference" or "Context variable reference".
@@ -1701,7 +1702,7 @@ const sectionPlacements = select(Instance, (i) =>
  *   resolves to is one `ContentReference` allows for its kind and attribute; a name that is no
  *   built-in's is a declaration's, through `declarationRef`; and a built-in's resolves to the
  *   built-in, under its reference's law ("Feedback reference", "Template reference", "Printed
- *   variable reference", "Context variable reference"); and "Feedback outcome type" (reading 68: an
+ *   variable reference", "Context variable reference"); and "Feedback outcome type" (reading 77: an
  *   outcome of base type identifier, single or multiple).
  */
 export const interactionLaws = [

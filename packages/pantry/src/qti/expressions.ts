@@ -24,7 +24,7 @@
  * - **{@link ExpressionAttribute}** carries the attributes an expression's type follows from
  *   (`base-type`, `name`, `weight-identifier`), an unwritten one included, {@link Literal} a base
  *   value's text, and {@link ProcessingTemplate} a response processing's published template.
- * - **A test's references** (spec readings 4, 5, 48 and 79; `representation-gaps.md` §4): every
+ * - **A test's references** (spec readings 4, 5, 48 and 88; `representation-gaps.md` §4): every
  *   reference of a test or a section document ({@link TestReference}) is placed once per instance
  *   of every test that places its document ({@link PlacedReference}) and read once per test
  *   ({@link AssembledReference}), its name split at every dot ({@link ReferenceSegment}) and read
@@ -351,7 +351,7 @@ export const VariableRef = relation(
 
 /**
  * One variable reference of an instance of an item's assembly (Q5.13's `Instance`, spec reading
- * 110), keyed by the instance and the reference's element node and attribute: a
+ * 117), keyed by the instance and the reference's element node and attribute: a
  * {@link VariableRef} of the instance's document, its name resolved among the item's
  * declarations, else to one of the item's built-in variables, else to nothing, so a response or
  * outcome rule fragment's references name its item's variables ("Variable declared" over the
@@ -508,7 +508,7 @@ export const VariableLookup = relation(
 
 /**
  * A test's template default, keyed by its `qti-template-default` node (the UP audit's A37 and A38;
- * spec reading 100): its item ref (`itemRef`, its parent), the item that names (`itemDocument`,
+ * spec reading 108): its item ref (`itemRef`, its parent), the item that names (`itemDocument`,
  * through {@link ItemRefDocument}), its `template-identifier` as written (`lexical`) and collapsed
  * (`lead`, `template`, `trail`), the template declaration of the item it names with that
  * declaration's codes, and `heldBase` and `heldCardinality`, its one expression's type. The
@@ -539,7 +539,7 @@ export const TemplateDefault = relation(
 
 /**
  * A variable mapping's source in the item it maps, keyed by the mapping's node (the UP audit's
- * A34; spec readings 89 and 99): its item ref and that ref's item, its collapsed `source` and
+ * A34; spec readings 97 and 107): its item ref and that ref's item, its collapsed `source` and
  * `target` (`VariableMapping`'s, each copied by a containment of its own, since one index holds at
  * most one key text, `#pantry/qti/limits.ts`), the outcome declaration of the item `source` names
  * with its codes, and `targetDeclared`, whether the item declares `target` too, read from
@@ -738,7 +738,7 @@ export const Separator = str.regex("^\\.?$");
 /**
  * One dot-separated piece of a reference's name, at its place `at` from 0 (A59's split as a
  * sequence): its `piece`, which holds no dot, its `separator` and `token = separator ‖ piece`,
- * `digit`, whether it follows a dot and is all digits (a reading 79 instance number), and the
+ * `digit`, whether it follows a dot and is all digits (a reading 88 instance number), and the
  * concatenation fold's running `before` and `after`, so `before` at `at = j` is the name's first
  * `j` pieces joined, the scope of its split at `j`.
  */
@@ -760,7 +760,7 @@ export const ReferenceSegment = relation(
 );
 
 /**
- * One reading of one reference by one test (spec readings 48 and 79; `representation-gaps.md`
+ * One reading of one reference by one test (spec readings 48 and 88; `representation-gaps.md`
  * §4.3), keyed by the reference, its `form` and `split`, the dot it splits at (0 for an unsplit
  * and a name reading):
  *
@@ -777,7 +777,7 @@ export const ReferenceSegment = relation(
  * - **the copy:** `identifier`, `kind`, `role`, its {@link AssembledReference}'s.
  *
  * A reading resolves when its variable is named and, numbered, its item ref can repeat and its
- * number is at least 1 (reading 79). Exactly one reading of a variable reference resolves (M3).
+ * number is at least 1 (reading 88). Exactly one reading of a variable reference resolves (M3).
  */
 export const Reading = relation(
   "Reading",
@@ -1222,7 +1222,7 @@ const publishedTemplates = rpTemplates.flatMap((template) =>
 );
 
 /**
- * The positive instance numbers of reading 79: all digits, and not all zeros, so at least 1, with
+ * The positive instance numbers of reading 88: all digits, and not all zeros, so at least 1, with
  * no bound (a number beyond the instances drawn names one never drawn, which no static rule
  * refuses).
  */
@@ -1249,7 +1249,7 @@ const testBuiltIns = builtInNamesOf(testKind);
  * holds, `QTI_CONTEXT` among them (information model §2.2.2: "Item variables are declared by
  * variable declarations: context, response, outcome or template variables", and §2.2.2.1:
  * "QTI_CONTEXT is a built-in variable and so any references within an item or an assessment to
- * the QTI_CONTEXT variable ... must succeed"; spec reading 98).
+ * the QTI_CONTEXT variable ... must succeed"; spec reading 106).
  */
 const itemBuiltIns = builtInNamesOf("qti-assessment-item");
 
@@ -1257,7 +1257,7 @@ const itemBuiltIns = builtInNamesOf("qti-assessment-item");
  * The kinds whose `duration` a part's or a section's prefix names (information model §2.2.2,
  * info.txt:9214: "time spent on test parts or sections are treated as built-in response variables
  * declared within each respective scope"; a section ref names its placement as a section does,
- * spec reading 77).
+ * spec reading 86).
  */
 const durationScopes = [partKind, sectionKind, sectionRefKind] as const;
 
@@ -1357,9 +1357,9 @@ const builtInKindOfScope = (r: ReadingRow) =>
 /**
  * State that a reading resolves (spec reading 48): its variable is named, declared, mapped or
  * built in, and, numbered, its item ref can repeat under a selection with replacement and its
- * number is at least 1 (reading 79). A name reading, a `section-identifier`'s, is no variable's,
+ * number is at least 1 (reading 88). A name reading, a `section-identifier`'s, is no variable's,
  * and a setter's prefixed reading resolves nothing: a setter sets its own document's variable
- * (reading 105).
+ * (reading 112).
  *
  * @param r - The row.
  * @returns The predicate.
@@ -1535,7 +1535,7 @@ export const readingFamily = counted(
 );
 
 /**
- * The statements over a test's references (spec readings 4, 5, 48 and 79; `representation-gaps.md`
+ * The statements over a test's references (spec readings 4, 5, 48 and 88; `representation-gaps.md`
  * §4; the UP audit's A47, A50, A53, A55, A56, A58 to A61, A65 and A66), the lookups they read (M2)
  * and the declarations a test's item refs name (A34, A37, A38), each `check` named by its oracle
  * law:
@@ -1545,12 +1545,12 @@ export const readingFamily = counted(
  * - **an item ref's declarations:** a template default's template declaration
  *   (`Template_default_target`) and its type fit (`Template_default_type`, P20); a mapping's
  *   source, an outcome of the item (`Variable_mapping_source`), and its target, no other variable
- *   of the item (`Variable_mapping_target`, reading 89);
+ *   of the item (`Variable_mapping_target`, reading 97);
  * - **the references:** each test or section document's, placed once per instance of every test that
  *   places its document and read once per test, its name split at every dot (A59's concatenation),
  *   its readings exactly the readings of its name, exactly one of them resolving
  *   (`Prefixed_reference`, M3, the refusal naming both), none through a name two placements give
- *   (reading 77), an unsplit name declared (`Variable_declared`, P8), an item's `duration` only a
+ *   (reading 86), an unsplit name declared (`Variable_declared`, P8), an item's `duration` only a
  *   time-dependent item's (`Item_duration`), a literal's stand-in typed (`Reference_type`, P24),
  *   and a `section-identifier` a section's (`Section_identifier_target`).
  */
@@ -2495,7 +2495,7 @@ export const expressionLaws = [
     ),
   ),
 
-  // PlacedVariableRef (spec reading 110): each item instance's references, its document's,
+  // PlacedVariableRef (spec reading 117): each item instance's references, its document's,
   // resolved among the item's declarations, under "Variable declared" over the assembly.
   documentVariableFamily,
   placedVariableFamily,

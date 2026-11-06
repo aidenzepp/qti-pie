@@ -4,7 +4,7 @@
  *
  * The package is read whole (`readPackage`), its manifest is decoded and its schema version read,
  * and the manifest is shredded. The documents it names are the (href, type) pairs of its resources
- * whose type `RootOfType` maps (spec reading 84, `namedDocuments`), and each one an entry holds is
+ * whose type `RootOfType` maps (spec reading 93, `namedDocuments`), and each one an entry holds is
  * shredded in the version the manifest declares. A named href no entry holds is shredded as
  * nothing: the record's laws refuse it in the database (`entry-kind`). Then one id is minted per
  * package, node and attribute ({@link nodeIdsOf}), and the rows are built: each document's tree,

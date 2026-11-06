@@ -158,7 +158,7 @@ describe("LastWhere", () => {
   );
 
   it.effect(
-    "puts last only a hotspot choice's default, under the hotspot and graphic order interactions, never an associable hotspot's (spec reading 71)",
+    "puts last only a hotspot choice's default, under the hotspot and graphic order interactions, never an associable hotspot's (spec reading 80)",
     () =>
       // Oracle: the specification as a checker. "The default hotspot, if defined, must appear
       // last" is said of the HotspotChoice class (§5.67), whose choices the hotspot and graphic

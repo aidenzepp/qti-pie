@@ -24,7 +24,7 @@
  *   → (domain, use, position), and `TypeText` is (version, type) → domain. An element whose
  *   `xsi:type` names a type derived from its kind's declared one is validated against that type, so
  *   its admitted and required attributes, their domains and its text's domain are the type's (XML
- *   Schema 1.0 Part 1, §3.3.4, clause 5.2.1; spec reading 75), and a foreign element a simple type
+ *   Schema 1.0 Part 1, §3.3.4, clause 5.2.1; spec reading 84), and a foreign element a simple type
  *   governs admits the four `xsi:` names alone and holds text in the type's domain (§3.3.4, Element
  *   Locally Valid (Type), clause 3.1; spec reading 60). The (kind, type) pair is the governor, read
  *   in place of the kind wherever the element's attributes and text are, and the rules QTI's
@@ -132,7 +132,7 @@ export interface DeclaredText {
 /**
  * A governor: a named type an `xsi:type` may give an element of a kind in a version in place of
  * the kind's declared type, which then governs it (XML Schema 1.0 Part 1, §3.3.4, Element Locally
- * Valid (Element), clauses 4.3 and 5.2.1; spec reading 75), or a simple type that governs a foreign
+ * Valid (Element), clauses 4.3 and 5.2.1; spec reading 84), or a simple type that governs a foreign
  * element's text (spec reading 60). `governs` is its `TypeName` handle.
  */
 export interface Governor {
@@ -299,7 +299,7 @@ const ssmlVersion = (domain: Domain): Domain => ({
 
 /**
  * An `xi:include`'s `parse`, which `XInclude.xsd` types `xi:parseType`, `xml` or `text`: spec
- * reading 76 narrows it to `xml`, since the information model says "all included fragments must be
+ * reading 85 narrows it to `xml`, since the information model says "all included fragments must be
  * treated as parsed xml" (§2.12, Items and Test Fragments). The type's `collapse` whitespace stays
  * the XSD's.
  *
@@ -317,7 +317,7 @@ const xmlParse = (domain: Domain): Domain => ({
 
 /**
  * An `xi:include`'s `accept` or `accept-language`, which `XInclude.xsd` types `xs:string`: spec
- * reading 111 narrows it to the characters an HTTP header holds, since XInclude says "Values
+ * reading 118 narrows it to the characters an HTTP header holds, since XInclude says "Values
  * containing characters outside the range #x20 through #x7E must be flagged as fatal errors"
  * (XInclude 1.0 Second Edition, §3.1).
  *
@@ -416,7 +416,7 @@ const counts = [
  * Spec reading 2 follows them over the XSD's types, `m:unsigned-integer`, `m:positive-integer` and
  * `m:integer`, which are `xs:unsignedLong`, `xs:positiveInteger` and `xs:integer`
  * (`mathml3-presentation.xsd` lines 93, 133 and 96, as the RelaxNG's `mathml3-presentation.rnc`
- * lines 60, 75 and 61 are) and so admit a leading `+`, and `-0` for the first (spec reading 64). A
+ * lines 60, 75 and 61 are) and so admit a leading `+`, and `-0` for the first (spec reading 73). A
  * value meets both the notation and its type, so the pattern narrows the type's lexical space and
  * keeps its bounds and its `collapse`: §2.1.5.1 asks only that "leading and trailing whitespace in
  * attribute values should be avoided".
@@ -536,12 +536,12 @@ export const specReadings: readonly SpecReading[] = [
     "xsd",
     (domain) => withFacets(domain, [{ facet: "minInclusive", value: "1" }]),
   ),
-  on(83, ["qti-position-object-interaction"], "min-choices", "xsd", (domain) =>
+  on(92, ["qti-position-object-interaction"], "min-choices", "xsd", (domain) =>
     withFacets(domain, [{ facet: "minInclusive", value: "1" }]),
   ),
-  on(76, ["xi:include"], "parse", "xsd", xmlParse),
-  on(111, ["xi:include"], "accept", "xsd", httpHeaderText),
-  on(111, ["xi:include"], "accept-language", "xsd", httpHeaderText),
+  on(85, ["xi:include"], "parse", "xsd", xmlParse),
+  on(118, ["xi:include"], "accept", "xsd", httpHeaderText),
+  on(118, ["xi:include"], "accept-language", "xsd", httpHeaderText),
   on(39, ["ssml:speak"], "version", "xsd", ssmlVersion),
   on(42, ["ssml:voice"], "languages", "xsd", ssmlLanguages),
   ...[...counts, "figures"].map((name): SpecReading => ({
@@ -585,7 +585,7 @@ export interface ReadingSpelling {
  * other there, so both are accepted and the one written is kept (reading 1).
  *
  * The admission is explicit, a closed name, rather than the open `no-namespace` name the empty
- * families' `##any` wildcard would read it as, since spec reading 81 takes that open class away
+ * families' `##any` wildcard would read it as, since spec reading 90 takes that open class away
  * from every element the Schematron's extension rules cover, the empty families among them.
  */
 export const readingSpellings: readonly ReadingSpelling[] = [
@@ -602,7 +602,7 @@ export interface ReadingRefusal {
 }
 
 /**
- * The declared attributes spec readings refuse: reading 76's `xpointer` on `xi:include`, which
+ * The declared attributes spec readings refuse: reading 85's `xpointer` on `xi:include`, which
  * `XInclude.xsd` declares and the information model forbids ("when using an XML binding, the
  * xpointer mechanism defined by the XInclude specification MUST NOT be used", §2.12). No wildcard
  * of `xi:include` admits a name in no namespace (`##other`), so a refused `xpointer` is refused
@@ -611,7 +611,7 @@ export interface ReadingRefusal {
  * @see {@link https://www.imsglobal.org/spec/qti/v3p0/info#Main2p12 | QTI 3.0 information model, 2.12 Items and Test Fragments}
  */
 export const readingRefusals: readonly ReadingRefusal[] = [
-  { kind: "xi:include", name: "xpointer", reading: 76 },
+  { kind: "xi:include", name: "xpointer", reading: 85 },
 ];
 
 /**
@@ -739,7 +739,7 @@ export interface AttributeGrammar {
    * `GovernedAttribute`: each attribute an element may carry in a version under a governor, with
    * its value domain, its use and its position among the names that governor admits there. Under a
    * governor, the XSD-derived admission is the governing type's, and the rules spec readings state
-   * follow the element's kind (spec reading 75); an element of no governor reads `admission`.
+   * follow the element's kind (spec reading 84); an element of no governor reads `admission`.
    */
   readonly governed: Closed<GovernedKey, AttributePayload>;
   /**
@@ -773,7 +773,7 @@ export interface AttributeGrammar {
   >;
   /**
    * `TypeText`: the value domain of the text of each named type with simple content in a version,
-   * which an element that type governs holds its text in (spec readings 60 and 75).
+   * which an element that type governs holds its text in (spec readings 60 and 84).
    */
   readonly typeText: Closed<
     readonly [IdField<"version", string>, IdField<"governs", string>],
@@ -1283,7 +1283,7 @@ export interface GoverningKey {
 
 /**
  * Find the governor of an element: the (kind, type) pair its governing type makes it, where that
- * type governs it in place of its kind's declared type (spec reading 75), or is a simple type that
+ * type governs it in place of its kind's declared type (spec reading 84), or is a simple type that
  * governs a foreign element's text (spec reading 60).
  *
  * @param grammar - The attribute grammar.

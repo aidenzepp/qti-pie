@@ -770,7 +770,7 @@ describe("import/overlays/expressions.ts, the fixtures' verdicts", () => {
   );
 });
 
-// The readings of a test's references (spec readings 48 and 79; representation-gaps.md §4).
+// The readings of a test's references (spec readings 48 and 88; representation-gaps.md §4).
 
 /**
  * An element of a kind, with its attributes as (name, lexical) pairs and its children.
@@ -909,7 +909,7 @@ const packageRowsOf = (
 };
 
 /**
- * One reading of a name as reading 48 and reading 79 state it: unsplit; split at a dot into a
+ * One reading of a name as reading 48 and reading 88 state it: unsplit; split at a dot into a
  * scope and a variable; or numbered, at two dots with digits between them.
  */
 interface StatedReading {
@@ -968,8 +968,8 @@ const readingKey = (reading: Omit<StatedReading, "form"> & { readonly form: stri
   JSON.stringify([reading.form, reading.scope, reading.number, reading.variable]);
 
 describe("import/overlays/expressions.ts, the readings of a name", () => {
-  it("lists exactly the readings reading 48 and reading 79 give a name, and its pieces count them", () => {
-    // Oracle: a second statement of readings 48 and 79 read off the name's characters
+  it("lists exactly the readings reading 48 and reading 88 give a name, and its pieces count them", () => {
+    // Oracle: a second statement of readings 48 and 88 read off the name's characters
     // (`statedReadings`), against `readingTextsOf`; and the count law of `AssembledReference`
     // (readings = segments + digits − lastDigit), over the pieces `split(".")` gives.
     // Bound: every name of 1 to 7 characters over {a, 1, .} that starts with a letter, 1,093
@@ -1124,12 +1124,12 @@ const referenceCaseOf = (
 
 /**
  * The built-in variables an item ref's prefix reaches, as the information model states them
- * (§2.2.2: the session variables, and §2.2.2.1, `QTI_CONTEXT`; spec reading 98).
+ * (§2.2.2: the session variables, and §2.2.2.1, `QTI_CONTEXT`; spec reading 106).
  */
 const itemBuiltInsStated = new Set(["completionStatus", "duration", "numAttempts", "QTI_CONTEXT"]);
 
 /**
- * Whether a reference case's name is accepted, as readings 48 and 79 state it over the case's own
+ * Whether a reference case's name is accepted, as readings 48 and 88 state it over the case's own
  * description: exactly one of its readings names a real scope and a variable of it.
  *
  * @param c - The case.
@@ -1181,7 +1181,7 @@ type ReadingRow =
 /**
  * The setters, as the information model defines them: the rules that set the variable their
  * `identifier` names (§5.87.1, §5.130.1, §6.32.3, §6.50.1, §6.50.4, §6.50.5), whose prefixed
- * readings resolve nothing (spec reading 105).
+ * readings resolve nothing (spec reading 112).
  */
 const settersStated: ReadonlySet<string> = new Set([
   "qti-lookup-outcome-value",
@@ -1338,7 +1338,7 @@ const nameProbeHolds = (rows: PackageRows, r: ReadingRow): boolean => {
 /**
  * Whether a reading's variable is a built-in of its scope, as the information model states the
  * built-ins: a test's `duration` and `QTI_CONTEXT`, unsplit; an item's, through an item ref; a
- * part's, a section's or a section ref's `duration` (§2.2.2, info.txt:9214; spec reading 77).
+ * part's, a section's or a section ref's `duration` (§2.2.2, info.txt:9214; spec reading 86).
  *
  * @param r - The reading.
  * @param itemScoped - Whether its scope is a found item ref.
@@ -1518,7 +1518,7 @@ const subsets = <A>(of: readonly A[]): readonly (readonly A[])[] => {
 
 describe("import/overlays/expressions.ts, a test's references", () => {
   it("accepts a test's reference exactly where one reading resolves, over every small test", () => {
-    // Oracle: a second implementation, readings 48 and 79 stated over the case's description
+    // Oracle: a second implementation, readings 48 and 88 stated over the case's description
     // (`acceptedAsStated`), against `Prefixed_reference`'s laws judged on the rows the builders
     // write, every structural law over those rows holding (`structuralBreaches`).
     // Bound: the section's item refs {a}, {a.b} or both; a's item declaring any subset of
@@ -1573,7 +1573,7 @@ describe("import/overlays/expressions.ts, a test's references", () => {
   });
 
   it("refuses a name a section document placed twice gives twice, reads that document's own reference once, and accepts it placed once", () => {
-    // Oracle: spec reading 77 ("a reference that names an item ref or a section through such a
+    // Oracle: spec reading 86 ("a reference that names an item ref or a section through such a
     // document ... resolves once for each placement ... so it is refused") and reading 5 ("once
     // for each test that includes the section"): the test reads `a.SCORE`, `a` an item ref of a
     // section document its section refs place; the section document's own pre-condition reads
@@ -1673,7 +1673,7 @@ describe("import/overlays/expressions.ts, a test's references", () => {
   });
 
   it("resolves a test's setter only by its own document's declaration, never through an item ref", () => {
-    // Oracle: spec reading 105 (§5.87.1 and §5.130.1, "the variable to be set"; §2.11.1.2,
+    // Oracle: spec reading 112 (§5.87.1 and §5.130.1, "the variable to be set"; §2.11.1.2,
     // prefixing looks item values up): a `qti-set-outcome-value` naming `a.SCORE`, item ref `a`'s
     // item declaring `SCORE`, resolves only where the test itself declares `a.SCORE` whole, and
     // its prefixed reading never counts, so it is not ambiguous then. Bound: the test declaring
@@ -2071,7 +2071,7 @@ const itemRefCaseOf = (c: ItemRefCase): readonly (readonly [string, XdmDocument<
 
 describe("import/overlays/expressions.ts, an item ref's declarations", () => {
   it("names no item under an item ref that names an LTI link, so its mapping's source and its template default's template are undeclared", () => {
-    // Oracle: spec reading 103 (§7.48 and §5.152 name variables declared in the corresponding
+    // Oracle: spec reading 110 (§7.48 and §5.152 name variables declared in the corresponding
     // item; an LTI link, the implementation guide's §6.2.9, declares none) and the UP audit's B3:
     // the item ref's target is the link's resource type, it has no item document, and the laws
     // that name the item's declarations, `Variable_mapping_source` and `Template_default_target`,
@@ -2112,7 +2112,7 @@ describe("import/overlays/expressions.ts, an item ref's declarations", () => {
     // Oracle: the information model's sentences over the case's description: a template default
     // names a template variable of its item (§5.152, A37) and its expression fits that variable's
     // type (A38, P20); a mapping's source is an outcome of its item (§7.48, A34) and its target
-    // names no other variable of the item (reading 89). Against the laws over the rows the
+    // names no other variable of the item (reading 97). Against the laws over the rows the
     // builders write: `Template_default_target` (a declaration found, and a template one),
     // `Template_default_type`, `Variable_mapping_source` and `Variable_mapping_target`.
     // Bound: every template of {T, U, SCORE}, expression of {integer, float}, source of {SCORE,

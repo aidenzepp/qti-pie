@@ -4,7 +4,7 @@
  * 9051 declarations, 402 wildcards and 70 text types, each stated once for the schema versions it
  * holds in.
  *
- * Beside them, the governing types an `xsi:type` may give an element (spec readings 60 and 75): 909
+ * Beside them, the governing types an `xsi:type` may give an element (spec readings 60 and 84): 909
  * attribute declarations and 15 wildcards of the complex types that may govern an element in place
  * of its declared type, and the texts of 133 named types with simple content.
  *
@@ -30280,7 +30280,7 @@ const typeText = (
 /**
  * The attribute declarations of every complex type an `xsi:type` may name in place of a kind's
  * declared type, which an element it governs carries in place of its declared type's (spec reading
- * 75).
+ * 84).
  */
 export const typeAttributeDeclarations: readonly TypeAttributeDeclaration[] = [
   ...typeDeclares("ARIABaseEmptyDType", everyVersion, [
@@ -34413,7 +34413,7 @@ export const typeAttributeWildcards: readonly TypeAttributeWildcard[] = [
 /**
  * The text type of every named simple type of the pinned XSDs and every built-in but `xs:anyType`,
  * and of every such complex type with simple content: the text of an element an `xsi:type` gives
- * that type (spec readings 60 and 75).
+ * that type (spec readings 60 and 84).
  */
 export const typeTexts: readonly TypeText[] = [
   typeText("xs:anySimpleType", everyVersion, xsAnySimpleTypeType, xsAnySimpleTypeDomain),

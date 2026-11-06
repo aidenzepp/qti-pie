@@ -648,7 +648,7 @@ const lengthNames = ["length", "minLength", "maxLength"] as const satisfies read
 /**
  * The spellings a length facet's value draws among, each with the count it names when it is an
  * `xs:nonNegativeInteger` literal (Part 2, 3.3.20, collapsed; `+` before any digits and `-` only
- * before zero, spec reading 64), and none when it is no such literal.
+ * before zero, spec reading 73), and none when it is no such literal.
  */
 const spellings: readonly (readonly [string, Option.Option<bigint>])[] = [
   ["0", Option.some(0n)],

@@ -7,7 +7,7 @@
  */
 
 /**
- * `xs:anyURI`'s lexical space (spec reading 61), anchored: `anyUriPattern` of
+ * `xs:anyURI`'s lexical space (spec reading 71), anchored: `anyUriPattern` of
  * `src/grammar/domains.ts`, translated. Judged on the collapsed value.
  */
 export const anyUriSource =

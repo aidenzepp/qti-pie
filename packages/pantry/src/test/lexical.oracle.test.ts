@@ -227,10 +227,10 @@ const recorded: readonly Recorded[] = [
     xsd: "valid",
   },
   {
-    domain: /\(reading [^)]*\b76\b/u,
+    domain: /\(reading [^)]*\b85\b/u,
     reason: {
       _tag: "reading",
-      reading: 76,
+      reading: 85,
       why: "an xi:include's parse is xml: every included fragment is treated as parsed XML (information model §2.12)",
     },
     value: /^text$/u,
@@ -329,7 +329,7 @@ const recorded: readonly Recorded[] = [
     domain: /anyURI/u,
     reason: {
       _tag: "reading",
-      reading: 61,
+      reading: 71,
       why: "xs:anyURI is XML Schema 1.0's, RFC 2396 as RFC 2732 amends it after XLink's escaping; libxml2 judges by RFC 3986 with departures of its own and accepts %zz, a second #, and, once escaped, a space or tab before a second #, which RFC 2396's URI-reference refuses",
     },
     xsd: "valid",
@@ -339,7 +339,7 @@ const recorded: readonly Recorded[] = [
     reason: {
       _tag: "reading",
       reading: 2,
-      why: 'MathML 3 §2.1.5.1 writes positive-integer as "a string of decimal-digits" and integer as "an optional "-" ... followed by a string of decimal digits", with no +, which xs:positiveInteger and xs:integer admit; unsigned-integer\'s + and -0, which reading 64 would admit, libxml2 2.9.13 refuses too, so it records no difference',
+      why: 'MathML 3 §2.1.5.1 writes positive-integer as "a string of decimal-digits" and integer as "an optional "-" ... followed by a string of decimal digits", with no +, which xs:positiveInteger and xs:integer admit; unsigned-integer\'s + and -0, which reading 73 would admit, libxml2 2.9.13 refuses too, so it records no difference',
     },
     value: /^[\t\n\r ]*\+/u,
     xsd: "valid",

@@ -154,7 +154,7 @@ describe("IncludeRoot", () => {
       // Oracle: the installed Glushkov automaton (ChildGrammar, Follow, Last and Symbol), a second
       // implementation of include.ts's choice-group reading of the IR. A kind whose position has
       // the include's signature is accepted in its place by every word the include is, so N5,
-      // stepping the include at its own position, judges the merged document (spec reading 107).
+      // stepping the include at its own position, judges the merged document (spec reading 114).
       // Bound: every (version, include parent) family IncludeRoot holds, 155, each with every kind.
       searched(
         ctx,
@@ -257,7 +257,7 @@ describe("IncludeRoot", () => {
   it("roots a fragment's document at every kind an include stands for but the three context-split kinds", () => {
     // Oracle: the kinds' names, read off the roster by hand: three handles share their element's
     // name with another kind, so a document's root, read by its name, is never one of them (spec
-    // reading 109). Bound: every kind IncludeRoot holds.
+    // reading 116). Bound: every kind IncludeRoot holds.
     const standing: ReadonlySet<string> = new Set(IncludeRoot.rows.map(({ kind }) => kind));
     const roots = new Set(fragmentRoots.map(({ root }) => root));
 

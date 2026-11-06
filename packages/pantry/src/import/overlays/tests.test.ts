@@ -6,12 +6,12 @@
  * - **Parts** (C15): each section's `SectionMember` rows are its direct part children, and its
  *   selection's counts are theirs.
  * - **Pieces**: a lexical form's split restates it, its value collapsed.
- * - **The assembly** (reading 76, 77): over every small package of a test and two section documents,
+ * - **The assembly** (reading 85, 86): over every small package of a test and two section documents,
  *   the instance trees hold one child per site exactly where the inclusion graph has no cycle and
  *   no dangling site, each child places its site's target, and the namespace key holds exactly
  *   where the test's distinct written elements have distinct identifiers.
- * - **The jumps** (reading 78): over every branch rule of a small test, the branch laws accept a rule
- *   exactly where reading 78's bullets do.
+ * - **The jumps** (reading 87): over every branch rule of a small test, the branch laws accept a rule
+ *   exactly where reading 87's bullets do.
  */
 import { assert, describe, it } from "@effect/vitest";
 import { exhaust, drawn, explore } from "@grizzle/testing/explore";
@@ -725,7 +725,7 @@ const sectionNames = (name: string, item: string, sites: readonly string[]): rea
 
 /**
  * List the identifiers of a box package's test's distinct written elements: the test's own, and
- * each section document's its sites reach, once however often it is placed (reading 77).
+ * each section document's its sites reach, once however often it is placed (reading 86).
  *
  * @param box - The package, whose graph has no cycle or dangling site.
  * @returns The identifiers, one per written element.
@@ -806,7 +806,7 @@ describe("import/overlays/tests.ts, the assembly", { timeout: searchTimeout }, (
     (ctx) =>
       // Oracle: a second implementation per property: a depth-first walk of the inclusion graph
       // (the oracle's Inclusion cycle, over every listed document); the documents a breadth-first
-      // walk from the test reaches, each written element once (reading 77); and a pre-order walk
+      // walk from the test reaches, each written element once (reading 86); and a pre-order walk
       // of the nested trees for the intervals grizzle draws.
       // Bound: every package of a test and two section documents, each with at most 2 section
       // refs over a.xml, b.xml and z.xml, and each section document's item ref named X or Y,
@@ -1031,7 +1031,7 @@ const ancestors = (name: string): readonly string[] => {
 const isPart = (name: string): boolean => name === "P1" || name === "P2";
 
 /**
- * Judge a jump case by reading 78's bullets, over the case's own structure: a reserved exit; a
+ * Judge a jump case by reading 87's bullets, over the case's own structure: a reserved exit; a
  * test part's rule naming a later test part; or a rule of an item ref or section naming an item
  * ref, section or section ref of its own part after its end, never an item ref a replacement can
  * repeat, the order exempt where the section holding both shuffles them and neither holds the
@@ -1085,9 +1085,9 @@ const readingAccepts = (jump: JumpCase): boolean => {
 
 describe("import/overlays/tests.ts, the jumps", () => {
   it.effect(
-    "accepts a branch rule by Branch_target and Branch_forward exactly where reading 78 does, each resolution copying the rows its containments name",
+    "accepts a branch rule by Branch_target and Branch_forward exactly where reading 87 does, each resolution copying the rows its containments name",
     (ctx) =>
-      // Oracle: the specification as a checker, reading 78's bullets over the case's structure,
+      // Oracle: the specification as a checker, reading 87's bullets over the case's structure,
       // against the laws restated on the host over the builder's resolution; and a second
       // implementation of the containments, the builder's names by key.
       // Bound: every owner of 4, target of 9, shuffle and replacement, 144.
@@ -1106,7 +1106,7 @@ describe("import/overlays/tests.ts, the jumps", () => {
             generator: jumpCases,
             limit: 200,
             literal: Formatter.format,
-            oracle: { kind: "specification", name: "reading 78's bullets" },
+            oracle: { kind: "specification", name: "reading 87's bullets" },
             suite: "import/overlays-tests-jumps",
           },
           (jump: JumpCase, c) =>

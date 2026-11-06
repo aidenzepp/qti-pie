@@ -671,7 +671,7 @@ describe.skipIf(!hasLease)("qti/identity.db.test.ts, on the lease", () => {
     "refuses one id bound to two elements of one document by DocumentId key, and accepts one id bound twice to one element and one id in two documents",
     () =>
       // Oracle: PostgreSQL, the UNIQUE of `key(on(IdBinding, "document", "id"))`, against XML
-      // Schema 1.0 Part 1 §3.15.5 and cvc-id clause 2 (reading 93): an id's [binding] is the set of
+      // Schema 1.0 Part 1 §3.15.5 and cvc-id clause 2 (reading 101): an id's [binding] is the set of
       // elements that purport it, an attribute's element or an ID-typed text's parent, and no
       // binding has two members; so two ID-typed children of one parent with one value, ` a ` and
       // `a`, are one binding, and so are one id in each of two documents.
@@ -868,7 +868,7 @@ describe.skipIf(!hasLease)("qti/identity.db.test.ts, on the lease", () => {
     () =>
       // Oracle: the catalogue, against the statements `contained(on(Idref, "document", "token"),
       // on(IdBinding, "document", "id"))` and its `TextIdref` twin: XML Schema's Validation Root, an
-      // IDREF, an attribute's or an element text's (reading 93), names an ID of its document. The
+      // IDREF, an attribute's or an element text's (reading 101), names an ID of its document. The
       // dangling token itself is refused over a whole stored document (Q5.15, P2).
       // Bound: the two foreign keys.
       Effect.gen(function* idrefTarget() {

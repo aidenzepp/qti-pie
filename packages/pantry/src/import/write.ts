@@ -234,7 +234,7 @@ export interface NodeIds {
    */
   readonly assembled: boolean;
   /**
-   * The context the document is judged in (spec reading 110, `#pantry/import/context.ts`): its own,
+   * The context the document is judged in (spec reading 117, `#pantry/import/context.ts`): its own,
    * or, for a document sites name, the union of their ancestries and the interaction they stand in.
    */
   readonly context: DocumentContext;
@@ -273,7 +273,7 @@ export interface NodeIds {
   readonly targetAt: (path: string) => Option.Option<ListedTarget>;
   /**
    * Whether a site of the package names the document, so it is an instance of every assembly
-   * that places it (Q5.13's `Instance`, spec reading 110).
+   * that places it (Q5.13's `Instance`, spec reading 117).
    */
   readonly targeted: boolean;
 }
@@ -904,7 +904,7 @@ const memberOf = (
  * - `state` by `contentStep` (C5), the document node's 0;
  * - `ancestry`, its parent's with the flags its kind enters (`E1_derived`);
  * - `nearest` and `nearestKind`, its parent where the parent is an interaction, else its parent's
- *   (N8), the document node's its document's context's (spec reading 110), itself where no site
+ *   (N8), the document node's its document's context's (spec reading 117), itself where no site
  *   names the document from inside an interaction;
  * - The document node's `ancestry`, its context's, empty where no site names the document;
  * - `chars`, a text or whitespace node's characters and an entity reference's `&name;`, empty
@@ -1102,7 +1102,7 @@ export const documentRowsOf = (
  *
  * `Value`'s `Typed_value` reads the pattern of its base type's domain (Q5.08), `Literal_lexical`
  * its type code's and `ExpressionAttribute`'s `E1_derived` its attribute's and base type's
- * (Q5.10), and `UsageValue`'s `Usage_typed_value` its base type's (spec reading 97). A relation
+ * (Q5.10), and `UsageValue`'s `Usage_typed_value` its base type's (spec reading 105). A relation
  * joins this table when a check over it reads a pattern by a field.
  */
 export const patternInputs = {

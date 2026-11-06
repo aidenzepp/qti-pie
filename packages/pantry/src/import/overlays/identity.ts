@@ -69,11 +69,11 @@ import type { InstanceMember, InstanceRoot } from "#pantry/import/overlays/tests
 export interface IdentityIds {
   /**
    * Whether the document is in an assembly (`Document.assembled`), so its IDREFs resolve per
-   * instance (spec reading 110); none read as no.
+   * instance (spec reading 117); none read as no.
    */
   readonly assembled?: boolean;
   /**
-   * The document's context (spec reading 110), its own where none is given: an included
+   * The document's context (spec reading 117), its own where none is given: an included
    * fragment's nodes take the interaction their includes stand in as their nearest.
    */
   readonly context?: DocumentContext;
@@ -119,7 +119,7 @@ export interface IdentityRows {
 
 /**
  * A package's IDs and IDREF targets placed under each instance of each assembly, and the
- * assemblies' ID bindings (spec reading 110), one keyed set per relation.
+ * assemblies' ID bindings (spec reading 117), one keyed set per relation.
  */
 export interface PlacedIdRows {
   readonly AssembledId: ReadonlyMap<string, Addition<typeof AssembledId>>;
@@ -135,7 +135,7 @@ export interface LanguageRows {
 }
 
 /**
- * A package's languages placed under each instance of an item's assembly (spec reading 110), one
+ * A package's languages placed under each instance of an item's assembly (spec reading 117), one
  * keyed set per relation.
  */
 export interface PlacedLanguageRows {
@@ -246,7 +246,7 @@ const governorOf = (element: NodeRow<Composed>): string | undefined =>
 /**
  * Decide whether an attribute's value is one of its document's IDs, as `identity.ts`'s
  * `idAttributes` selects it: its domain's identity under its element's governor is `xs:ID`, or it
- * is a context declaration's `identifier` (spec reading 65).
+ * is a context declaration's `identifier` (spec reading 74).
  *
  * @param attribute - The attribute row.
  * @param element - Its element's node row.
@@ -392,7 +392,7 @@ interface Tree {
   readonly byId: ReadonlyMap<NodeId, NodeRow<Composed>>;
   readonly document: NodeId;
   /**
-   * The document node's nearest interaction, its context's (spec reading 110).
+   * The document node's nearest interaction, its context's (spec reading 117).
    */
   readonly rootNearest: NodeId | undefined;
   readonly rootKind: Addition<typeof LabelUse>["rootKind"];
@@ -727,7 +727,7 @@ const ssmlRowsOf = (
  *
  * A resource's general category names the type its record names: the resource's `type` where that
  * spells an item's or a test's handle and the resource has an `href` (Q5.12's `LomRecord.named`),
- * else `none`; and a naming category describes the document at the `href`'s path (reading 94), or
+ * else `none`; and a naming category describes the document at the `href`'s path (reading 102), or
  * the manifest itself where the package holds none there, as Q5.12's `LomObject` does, whose
  * containments refuse it.
  *
@@ -785,7 +785,7 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: IdentityIds): IdentityRo
 
 /**
  * The nil uuid: a placed ID's `copy` under a test's assembly, where a section document placed twice
- * holds its IDs once (reading 77).
+ * holds its IDs once (reading 86).
  */
 const nilUuid = "00000000-0000-0000-0000-000000000000";
 
@@ -807,10 +807,10 @@ const instancesOf = (root: InstanceRoot): readonly (InstanceMember | InstanceRoo
 };
 
 /**
- * Build a package's placed IDs and IDREF targets (spec reading 110): under each instance of each
+ * Build a package's placed IDs and IDREF targets (spec reading 117): under each instance of each
  * assembly, every `DocumentId` and every `IdrefTarget` of the instance's document; and their
  * projection, each placed ID's binding in its assembly, its copy the instance but under a test's
- * assembly, where a section document placed twice is written once (reading 77).
+ * assembly, where a section document placed twice is written once (reading 86).
  *
  * @param input - The package's rows the placements read.
  * @param input.ids - Every document's IDs ({@link rowsOf}'s `DocumentId`).
@@ -915,7 +915,7 @@ export const languageRowsOf = (documents: readonly IdentityRows[]): LanguageRows
 };
 
 /**
- * Build a package's languages in place (spec reading 110): under each instance of an item's
+ * Build a package's languages in place (spec reading 117): under each instance of an item's
  * assembly, every `xml:lang` carrier of the instance's document; each form the assembly carries,
  * once; and R26's witnesses in place, for each general category that describes the item and each
  * form of its assembly that states a language, a {@link PlacedGeneralLang} row where the category

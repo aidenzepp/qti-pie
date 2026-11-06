@@ -181,7 +181,7 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
         "refuses a mapping of a base type MappableBaseType does not hold, by its containment into MappableBaseType",
         () =>
           // Oracle: PostgreSQL, the containment of Mapping.baseType into MappableBaseType, a CHECK
-          // on Mapping's table (reading 69).
+          // on Mapping's table (reading 78).
           // Bound: every BaseType handle MappableBaseType leaves out: file, duration, and a
           // record's none.
           Effect.gen(function* unmappable() {

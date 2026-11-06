@@ -381,7 +381,7 @@ describe(
       "breaks DocumentId key exactly where one id is purported by two parents, and Idref target exactly where a text's IDREF names no id",
       (ctx) =>
         // Oracle: the specification as a checker, XML Schema 1.0 Part 1 §3.15.5 and cvc-id (reading
-        // 93): an element text's ID is bound to its parent, no id's binding has two members, and an
+        // 101): an element text's ID is bound to its parent, no id's binding has two members, and an
         // IDREF names an id of its document.
         // Bound: every pair of custom interactions, each of at most 2 foreign children over an ID
         // `a`, an ID `b` and an IDREF to `a`, 169.
@@ -493,7 +493,7 @@ describe(
 
 /**
  * One choice of the Document lang box: the item root's `xml:lang`, whether its resource names it
- * by `href` (else by its one file, which names no document under reading 84), and the languages
+ * by `href` (else by its one file, which names no document under reading 93), and the languages
  * of each general category of the resource's record.
  */
 interface DocumentLangCase {
@@ -533,7 +533,7 @@ describe("test/oracle.ts, Document lang (R26)", { timeout: buildTimeout }, () =>
       // Oracle: the specification as a checker, QTI 3.0 Metadata §2.7.1.3 ("There must be one
       // value for each of the languages referred to by the language attributes on the associated
       // assessmentItem, test or object bank and its 'bodyElements'"), over a resource that names
-      // its item by href (reading 84), an xml:lang by its collapsed value, the empty one stating
+      // its item by href (reading 93), an xml:lang by its collapsed value, the empty one stating
       // none (XML 1.0 §2.12), compared exactly (the named weakening, G-text).
       // Bound: every item root xml:lang of 4, href or none, and at most 2 categories of at most
       // one of en and fr, 104.

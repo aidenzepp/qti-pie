@@ -225,7 +225,7 @@ export const builtinBases: ReadonlyMap<string, Option.Option<string>> = new Map(
 
 /**
  * The lexical grammar a primitive's own definition gives as patterns, where the specification
- * states it as one: `anyURI`'s (spec reading 61). Every other primitive's lexical space is its
+ * states it as one: `anyURI`'s (spec reading 71). Every other primitive's lexical space is its
  * datatype's, which the domain's primitive names.
  */
 const primitivePatterns: Readonly<Partial<Record<Primitive, readonly (readonly string[])[]>>> = {
@@ -361,7 +361,7 @@ type Lengths = Readonly<Partial<Record<LengthFacet, StatedLength>>>;
 
 /**
  * `xs:nonNegativeInteger`'s lexical space after the `collapse` its `whiteSpace` applies: `+`
- * before any digits and `-` before zero only (spec reading 64).
+ * before any digits and `-` before zero only (spec reading 73).
  */
 const nonNegativeInteger = /^[\t\n\r ]*(?:\+?\d+|-0+)[\t\n\r ]*$/u;
 
@@ -833,7 +833,7 @@ export const renderPatterns = (): Result.Result<string, UnreadPattern> =>
       " */",
       "",
       "/**",
-      " * `xs:anyURI`'s lexical space (spec reading 61), anchored: `anyUriPattern` of",
+      " * `xs:anyURI`'s lexical space (spec reading 71), anchored: `anyUriPattern` of",
       " * `src/grammar/domains.ts`, translated. Judged on the collapsed value.",
       " */",
       `export const anyUriSource = ${JSON.stringify(anyUri)} as const;`,

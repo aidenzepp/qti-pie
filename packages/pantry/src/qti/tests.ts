@@ -1,6 +1,6 @@
 /**
  * Tests and sections (plan §1.7 O7, N11 and D13; the W5 amendment's C2, C15, C17, C18 and C21;
- * `representation-gaps.md` RG3; spec readings 5, 70 and 76 to 79).
+ * `representation-gaps.md` RG3; spec readings 5, 79 and 85 to 88).
  *
  * Two layers of rows hold a test's structure.
  *
@@ -12,23 +12,23 @@
  * family), with its `qti-selection` ({@link SectionSelection}) and its `qti-ordering`
  * ({@link SectionOrdering}) beside it. Each href of an item ref or a site resolves against its
  * document's directory to an entry of the package through its `ReferencePath`
- * (`#pantry/qti/package.ts` `hrefPaths`, spec readings 94 and 95).
+ * (`#pantry/qti/package.ts` `hrefPaths`, spec readings 102 and 103).
  *
  * **The assembled test** (RG3, reading 5). {@link Instance} is a tree: its root is a document of
  * a test or a section, and each instance has exactly one child per site of its document, the
  * instance of the section document that site names. A chain of section refs and includes that
  * returns to a document already on it would need infinitely many instances, so no finite tree
- * holds it, and the count law `children = sites` refuses it (reading 76). Under a test's root,
+ * holds it, and the count law `children = sites` refuses it (reading 85). Under a test's root,
  * each instance carries one {@link InstanceName} per name of its document, and their projection
  * {@link AssembledName} holds each written element once per test, so a section document placed
- * twice names nothing twice, and the key on `(assembly, identifier)` is reading 77's one namespace.
+ * twice names nothing twice, and the key on `(assembly, identifier)` is reading 86's one namespace.
  * Each branch rule of each instance resolves once ({@link BranchResolution}), to a target of its
  * kind in its own test part, in an instance that holds it, not inside a placement it is outside of,
  * never an item ref a replacement can repeat (`Branch_target`), and after its source's end unless
- * the section that orders the two shuffles (`Branch_forward`, reading 78). A section document no
+ * the section that orders the two shuffles (`Branch_forward`, reading 87). A section document no
  * test places resolves nothing.
  *
- * Beside them: an item ref's variable mappings ({@link VariableMapping}, reading 89) and an item's
+ * Beside them: an item ref's variable mappings ({@link VariableMapping}, reading 97) and an item's
  * stimulus refs ({@link StimulusRef}), each keyed by its node with its law a key, and the item each
  * item ref names ({@link ItemRefTarget} and {@link ItemRefDocument}, B2 and B3).
  *
@@ -94,7 +94,7 @@ export const testKind = "qti-assessment-test" satisfies Kind;
 
 /**
  * The item's root kind, the root of an assembly whose instances place their bindings (spec reading
- * 110).
+ * 117).
  */
 export const itemKind = "qti-assessment-item" satisfies Kind;
 
@@ -156,12 +156,12 @@ export const sessionVariables = ["completionStatus", "numAttempts", "duration"] 
 
 /**
  * The root kinds of the documents an assembly is rooted at: a test, and a section document, whose
- * own chain of inclusions reading 76 refuses as the oracle does, over every listed document.
+ * own chain of inclusions reading 85 refuses as the oracle does, over every listed document.
  */
 export const assembledRoots = [testKind, sectionKind] as const satisfies readonly Kind[];
 
 /**
- * The kinds whose identifiers are one namespace across an assembled test (reading 77).
+ * The kinds whose identifiers are one namespace across an assembled test (reading 86).
  */
 export const namedKinds = [
   partKind,
@@ -171,7 +171,7 @@ export const namedKinds = [
 ] as const satisfies readonly Kind[];
 
 /**
- * The kinds an item ref, section or section ref branches to (reading 78): every name but a test
+ * The kinds an item ref, section or section ref branches to (reading 87): every name but a test
  * part.
  */
 const sectionTargets = [
@@ -182,7 +182,7 @@ const sectionTargets = [
 
 /**
  * The kinds a section holds as its parts (`SectionPart`, information model §6.46): an item ref, a
- * section, a section ref, or an include standing in for one. Reading 70 counts each once.
+ * section, a section ref, or an include standing in for one. Reading 79 counts each once.
  */
 export const sectionParts: readonly Kind[] = NodeKind.handles.filter((kind) =>
   grammar.references.sectionPart.rows.some((row) => row.kind === kind),
@@ -314,7 +314,7 @@ export const TestFlag = relation(
 
 /**
  * A test part, section, section ref or item ref, keyed by its node: the elements whose identifiers
- * are one namespace across the assembled test (reading 77), and among which branch rules jump.
+ * are one namespace across the assembled test (reading 86), and among which branch rules jump.
  *
  * - **the host's:** its {@link nodeRef} tuple; `end`, its node's; `parentKind`, its parent's kind;
  *   `identifier`, its collapsed identifier ({@link TestToken}); and its scope in its own document:
@@ -464,7 +464,7 @@ export const SectionOrdering = relation(
 
 /**
  * A site, keyed by its node: a section ref, or an include under a parent the information model
- * gives an Include (spec reading 107), each the place where the document it names is merged into
+ * gives an Include (spec reading 114), each the place where the document it names is merged into
  * its own (information model §7.5 and §2.12).
  *
  * - **the host's:** its node's context, the {@link nodeContext} tuple (`node`, `children`,
@@ -476,7 +476,7 @@ export const SectionOrdering = relation(
  *   `replaced` (its parent section's `replacing`), `parentMixes` and `parentLooseChain`.
  *
  * Its ancestry is its target's context's part (`Document.context`, the union over the sites that
- * name a document, spec reading 110).
+ * name a document, spec reading 117).
  */
 export const Site = relation(
   "Site",
@@ -510,7 +510,7 @@ export const Site = relation(
 /**
  * An include's site as an include, keyed by its node: its version, its parent's kind and the
  * `IncludeParent` handle that kind is, and its target's root kind, the kind the include stands for
- * (spec reading 107). An optional value is a row of its own: a section ref has none.
+ * (spec reading 114). An optional value is a row of its own: a section ref has none.
  */
 export const Inclusion = relation(
   "Inclusion",
@@ -560,7 +560,7 @@ export const BranchRule = relation(
  * - **the tree's group:** `parent`;
  * - **drawn:** `at`, `children`, `start` and `end`, and `names` and `rules`, the counts of its
  *   {@link instanceNameFamily} and {@link resolutionFamily}; and the counts of its document's rows
- *   it places (spec reading 110): `bindings`, Q5.09's `PlacedBinding` rows, under an item's
+ *   it places (spec reading 117): `bindings`, Q5.09's `PlacedBinding` rows, under an item's
  *   assembly alone; `choices` and `hottexts`, Q5.09's `PlacedChoice` and `PlacedHottext` rows; and
  *   `ids` and `idrefTargets`, Q5.07's `PlacedId` and `PlacedIdref` rows, each its document's count;
  *   and `langs` and `variables`, Q5.07's `PlacedXmlLang` and Q5.10's `PlacedVariableRef` rows,
@@ -647,7 +647,7 @@ export const InstanceName = relation(
 /**
  * A written element of a test's assembly, keyed by the test and the element's node, a projection
  * of {@link InstanceName}: a section document placed twice is one document, so each of its
- * elements is one row here however often it is placed (reading 77), its `placements` the instances
+ * elements is one row here however often it is placed (reading 86), its `placements` the instances
  * that place it.
  */
 export const AssembledName = relation(
@@ -658,7 +658,7 @@ export const AssembledName = relation(
 
 /**
  * One branch rule of one instance of a test's assembly, resolved, keyed by the instance and the
- * rule (reading 78).
+ * rule (reading 87).
  *
  * - **the host's:** `instance` and `rule`; the rule's `target`, `owner` (its source) and `ownerKind`;
  *   the owner's place in the instance, `ownerStart`, `ownerEnd` and `ownerPart`; the target,
@@ -833,7 +833,7 @@ export const testRelations = {
 export const siteFamily = counted(on(Site, "document"), fin(TestDocument, "sites"));
 
 /**
- * The sites that name each document, counted by `Document.targetedBy` (spec reading 110).
+ * The sites that name each document, counted by `Document.targetedBy` (spec reading 117).
  */
 export const siteTargetFamily = counted(on(Site, "target"), fin(Document, "targetedBy"));
 
@@ -841,7 +841,7 @@ export const siteTargetFamily = counted(on(Site, "target"), fin(Document, "targe
  * A document's context: the union of the ancestries of the sites that name it, `Document.context`,
  * empty where none does. Every node below the document node inherits it, so the existing N6 judges
  * an included fragment's content under every placement at once: a ban is a disjointness, and a
- * flag no placement holds is banned under none (spec reading 110).
+ * flag no placement holds is banned under none (spec reading 117).
  */
 export const contextFold = fold(
   siteTargetFamily,
@@ -861,7 +861,7 @@ export const nameFamily = counted(on(Named, "document"), fin(TestDocument, "name
 export const ruleFamily = counted(on(BranchRule, "document"), fin(TestDocument, "rules"));
 
 /**
- * Each section's parts (C15), counted by `Section.members`: reading 70's count, each part once.
+ * Each section's parts (C15), counted by `Section.members`: reading 79's count, each part once.
  */
 export const sectionFamily = counted(on(SectionMember, "section"), fin(Section, "members"));
 
@@ -891,7 +891,7 @@ export const assembledNameFamily = counted(
 export const resolutionFamily = counted(on(BranchResolution, "instance"), fin(Instance, "rules"));
 
 /**
- * The includes the information model reads as Include (spec reading 107): each `xi:include` under
+ * The includes the information model reads as Include (spec reading 114): each `xi:include` under
  * a parent whose content model holds an explicit include particle. Each is a site.
  */
 const includes = select(Node, (n) =>
@@ -900,13 +900,13 @@ const includes = select(Node, (n) =>
 
 /**
  * The documents in an assembly: each has its `TestDocument` row, and its IDREFs resolve per
- * instance (spec reading 110).
+ * instance (spec reading 117).
  */
 const assembledDocuments = select(Document, (d) => d.eq(d.assembled, true));
 
 /**
  * The instances of an item's assembly, each of which places its document's bindings (Q5.09's
- * `PlacedBinding`, spec reading 110).
+ * `PlacedBinding`, spec reading 117).
  */
 const itemInstances = select(Instance, (i) => i.eq(i.assemblyKind, itemKind));
 
@@ -1493,7 +1493,7 @@ type ResolutionRow = RowScalars<typeof BranchResolution>;
 const sameInstance = (b: ResolutionRow) => b.eq(b.targetInstance, b.instance);
 
 /**
- * State that a resolution's target lies after its source's end (reading 78): in its own instance,
+ * State that a resolution's target lies after its source's end (reading 87): in its own instance,
  * at or after the owner's end; in an instance above, after the site its own instance descends
  * through.
  *
@@ -1589,7 +1589,7 @@ const shuffled = (b: ResolutionRow) =>
   );
 
 /**
- * The statements of reading 76's law, "Inclusion cycle": the instance tree, each instance's copy
+ * The statements of reading 85's law, "Inclusion cycle": the instance tree, each instance's copy
  * of its parent's scope and of its site, one child per site and one root per document, and the
  * count that makes a chain returning to a document on it unrepresentable, the deferred foreign key
  * `Instance(document, rootKind, children) → TestDocument(node, rootKind, sites)`. Its `E1_derived`
@@ -1678,7 +1678,7 @@ export const inclusionLaws = [
 ] as const;
 
 /**
- * The statements of reading 77's law, "Test name key": each instance of a test's assembly holds
+ * The statements of reading 86's law, "Test name key": each instance of a test's assembly holds
  * one name per name of its document, their projection holds each written element once, so a
  * section document placed twice names nothing twice, and no two written elements of one test share
  * an identifier. Its `E1_derived` derives each name's scope in the assembly.
@@ -1759,7 +1759,7 @@ export const testNameLaws = [
 ] as const;
 
 /**
- * The statements of reading 78's law, "Branch target": each instance of a test's assembly
+ * The statements of reading 87's law, "Branch target": each instance of a test's assembly
  * resolves each of its document's branch rules that names a target once, each resolution copies
  * its rule, its source, its target and the names the ordering law reads. `Branch_target` judges
  * its target's kind, part and replacement and that its instance holds the rule's, and
@@ -1937,7 +1937,7 @@ export const itemRefLaws = [
  * - **the sections** ({@link Section}, {@link SectionMember}, {@link SectionSelection},
  *   {@link SectionOrdering}): their parts counted (C15), at least one (reading 26,
  *   `Section_parts`), their required parts folded ({@link requiredFold}), their flags and scope;
- *   reading 70's `Selection_bound`, `select ≤ members` unless the selection is with replacement,
+ *   reading 79's `Selection_bound`, `select ≤ members` unless the selection is with replacement,
  *   and info §4.2.2's `Selection_required`, `required ≤ select`;
  * - **the hrefs:** each item ref and site has its href's `ReferencePath` (`#pantry/qti/package.ts`
  *   `hrefPaths`), an entry of the package, under the stated limit `Href_form`;
@@ -1945,13 +1945,13 @@ export const itemRefLaws = [
  *   document;
  * - **the branch rules** ({@link BranchRule}): each one that names no exit;
  * - **the mappings** ({@link VariableMapping}): no two of one item ref name one target, and none a
- *   session variable (reading 89, `Variable_mapping_target`);
+ *   session variable (reading 97, `Variable_mapping_target`);
  * - **the stimulus refs** ({@link StimulusRef}): no two of one item share an identifier (B16);
  * - **the assembly** ({@link Instance}): one tree per document of a test or a section, one child per
- *   site, so an inclusion cycle has no finite tree (reading 76);
+ *   site, so an inclusion cycle has no finite tree (reading 85);
  * - **the namespace** ({@link InstanceName}, {@link AssembledName}): `Test_name_key`, each written
- *   element once per test, and the key `(assembly, identifier)` (reading 77);
- * - **the jumps** ({@link BranchResolution}): `Branch_target` and `Branch_forward` (reading 78);
+ *   element once per test, and the key `(assembly, identifier)` (reading 86);
+ * - **the jumps** ({@link BranchResolution}): `Branch_target` and `Branch_forward` (reading 87);
  * - **the items** ({@link ItemRefTarget}, {@link ItemRefDocument}): each item ref's href names an
  *   item document of the package or an LTI link (B2, B3, "Item ref target").
  */

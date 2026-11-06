@@ -435,7 +435,7 @@ const wildcardNames = [
  * packaging phase's metadata and content cuts with their negatives, the 11 positive fixtures of
  * phase 5's tests, sections and stimuli ({@link testNames}) and its 63 negatives
  * ({@link negativeNames}), the ten wildcard fixtures of {@link wildcardNames}, and `rtest01`, the
- * examples' included fragment in place (spec reading 110), with one negative per include law.
+ * examples' included fragment in place (spec reading 117), with one negative per include law.
  */
 export const fixtureNames = [
   "simple",
@@ -2067,7 +2067,7 @@ const rtest01Include = '<xi:include href="rtest01-fragment.xml" parse="xml"/>';
 
 /**
  * A fragment of hottexts alone, which `rtest01-fragment-context` places inside two items'
- * interactions (spec reading 110's limit).
+ * interactions (spec reading 117's limit).
  */
 const rtest01Words: BytesResource = {
   href: `${rtest01Directory}/rtest01-words.xml`,
@@ -2080,7 +2080,7 @@ const rtest01Words: BytesResource = {
 
 /**
  * A response rule fragment that sets an outcome no `rtest01` set item declares, which
- * `rtest01-rule-variable` includes in an item's response processing (spec reading 110).
+ * `rtest01-rule-variable` includes in an item's response processing (spec reading 117).
  */
 const rtest01Rules: BytesResource = {
   href: `${rtest01Directory}/rtest01-rules.xml`,

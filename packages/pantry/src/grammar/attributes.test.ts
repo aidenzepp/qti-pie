@@ -7,8 +7,8 @@
  *   exactly those, with the XSD's use, beside the document layer's names.
  * - **The spec readings' text.** Each reading of `docs/spec-readings.md` that narrows a value is
  *   checked on every attribute it names, and the XSD's own reading of the same type is checked
- *   everywhere else; readings 10 and 76, which add and take away an attribute, are restated beside
- *   the XSD reading, and reading 81 beside the document layer's `xml:` names, its covered elements
+ *   everywhere else; readings 10 and 85, which add and take away an attribute, are restated beside
+ *   the XSD reading, and reading 90 beside the document layer's `xml:` names, its covered elements
  *   from the Schematron's leaf, which its own test reads against the XSDs' raw text.
  * - **The XSD's values, for the departures of the old grammar.** Each value the XSD admits and the
  *   old grammar refused is admitted, read from the leaf's own resolution of the XSD.
@@ -365,7 +365,7 @@ describe("The spec readings", () => {
 
   it("read 18 and 83: an order, graphic-order or position object interaction's min-choices is at least 1, every other kind's at least 0", () => {
     // Reading 18: "If specified, min-choices must be 1 or greater" of the order interactions
-    // (§5.97.2, §5.61.1); reading 83: the same sentence of the position object (§5.107.2).
+    // (§5.97.2, §5.61.1); reading 92: the same sentence of the position object (§5.107.2).
     const floored = new Set([
       "qti-order-interaction",
       "qti-graphic-order-interaction",
@@ -770,7 +770,7 @@ describe.skipIf(!cached)("The XSD's attribute uses", () => {
             }
 
             // Spec reading 10: ARIA's `aria-keyshortcuts` beside the XSD's `aria-keyshorts`, with
-            // its use; spec reading 76: an `xi:include` carries no `xpointer` (§2.12).
+            // its use; spec reading 85: an `xi:include` carries no `xpointer` (§2.12).
             const misspelled = expected.get("aria-keyshorts");
             if (misspelled !== undefined) {
               expected.set("aria-keyshortcuts", misspelled);
@@ -839,7 +839,7 @@ describe.skipIf(!cached)("The document layer", () => {
       Effect.gen(function* layerFollowsTheWildcards() {
         const { attributes, kinds } = yield* Effect.fromResult(composed());
         const byHandle = new Map(attributes.domains.map((domain) => [domain.handle, domain]));
-        // Spec reading 81: on an element the Schematron's extension rules cover, an `xml:` name
+        // Spec reading 90: on an element the Schematron's extension rules cover, an `xml:` name
         // the kind does not declare is no `data-` extension, so it is refused there.
         const covered = new Set(
           coveredElements.flatMap(({ element, versions }) =>
@@ -872,7 +872,7 @@ describe.skipIf(!cached)("The document layer", () => {
                 refused += 1;
                 if (Option.isSome(row)) {
                   missing.push(
-                    `${version} ${wildcard.kind}@${global.name} is admitted, though reading 81 refuses it`,
+                    `${version} ${wildcard.kind}@${global.name} is admitted, though reading 90 refuses it`,
                   );
                 }
               } else if (Option.isNone(row)) {

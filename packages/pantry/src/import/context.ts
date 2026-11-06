@@ -1,5 +1,5 @@
 /**
- * The context each listed document is judged in (spec readings 76 and 110): the ancestry and the
+ * The context each listed document is judged in (spec readings 85 and 117): the ancestry and the
  * nearest interaction its document node holds, which every node below it inherits.
  *
  * A document no site names is judged as it stands: no ancestry, its own document node as its
@@ -11,7 +11,7 @@
  * database refuses the other under the stated limit "Fragment context".
  *
  * A site is a section ref, or an `xi:include` under a parent whose model holds an explicit include
- * particle (spec reading 107), whose href resolves, as its `ReferencePath` does, to a listed
+ * particle (spec reading 114), whose href resolves, as its `ReferencePath` does, to a listed
  * document. The contexts are a fixpoint over the sites: a fragment a fragment includes inherits
  * through the includer's own context, and a chain that returns to a document on it, which the
  * database refuses as an inclusion cycle, is cut where the walk meets the bound.
@@ -78,7 +78,7 @@ const entersAt: ReadonlyMap<string, readonly FlagHandle[]> = new Map(
 const interactions: ReadonlySet<string> = new Set(interactionKinds);
 
 /**
- * The kinds an include is a site under (spec reading 107).
+ * The kinds an include is a site under (spec reading 114).
  */
 const includeParents: ReadonlySet<string> = new Set(includeParentKinds);
 

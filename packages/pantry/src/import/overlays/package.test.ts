@@ -87,7 +87,7 @@ type Expected = { readonly [Relation in keyof PackageRows]: Map<string, object> 
 const heading = (values: readonly string[]): string => JSON.stringify(values);
 
 /**
- * Expect a resource's `href` rows: its `ResourceHref`, split at its first `?` or `#` (reading 94),
+ * Expect a resource's `href` rows: its `ResourceHref`, split at its first `?` or `#` (reading 102),
  * and the `NamedHref` of its path and type.
  *
  * @param expected - The walk's rows so far.
@@ -287,7 +287,7 @@ interface ManifestCase {
 /**
  * The generated manifests: up to three resources, each of a document type, a type no document has
  * and a type no handle spells (named variant `unknown-type`), with or without an href (`no-href`),
- * an href with launch parameters or a fragment among them (`href-params`, reading 94), listing up
+ * an href with launch parameters or a fragment among them (`href-params`, reading 102), listing up
  * to three files drawn from two hrefs, so a file listed twice (`file-twice`) and a file two
  * resources list (`shared-file`) are drawn, and up to two dependencies, a resource's own identifier
  * among them (`self-dependency`).
@@ -1035,7 +1035,7 @@ describe("import/overlays/package.ts, hrefs and references", () => {
   );
 
   it("reads the grammar's census as ReferenceAttribute's rows hold it, and no form for an attribute outside it", () => {
-    // Oracle: the closed relation's own rows (`ReferenceAttribute`, spec reading 95), which the
+    // Oracle: the closed relation's own rows (`ReferenceAttribute`, spec reading 103), which the
     // database's copy into Reference selects by, against the builder's lookup.
     // Bound: every row of ReferenceAttribute, and three attributes outside it.
     assert.isNotEmpty(ReferenceAttribute.rows);

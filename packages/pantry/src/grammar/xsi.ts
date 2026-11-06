@@ -10,11 +10,11 @@
  * that resolves to a type definition validly derived from the declared one (XML Schema 1.0 Part 1,
  * §3.3.4 Element Locally Valid (Element), clause 4; derivation by §3.4.6 and §3.14.6), and the
  * definition is one of the schema its document is assessed against (clause 4.1, "resolves to a type
- * definition"; spec reading 72's schema sets). So a kind's row names a derived type only where a
+ * definition"; spec reading 81's schema sets). So a kind's row names a derived type only where a
  * schema set its documents are assessed against holds it, its own schema's or XML Schema's
  * (`typeAvailable` of `#pantry/vocab/open.ts`): a content-packaging kind such as `csmd:GUID` names
  * no ASI type, which no manifest's set imports. A kind standing in several sets takes the union,
- * reading 72's limit. The codec resolves the QName against the element's in-scope namespaces, and
+ * reading 81's limit. The codec resolves the QName against the element's in-scope namespaces, and
  * the law reads this set. An element of an anonymous declared type admits no named type, since none
  * derives from an anonymous one: its only row is {@link noType}, its own type with no `xsi:type`.
  *

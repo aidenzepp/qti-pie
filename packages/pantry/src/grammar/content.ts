@@ -213,7 +213,7 @@ export interface ContentGrammar {
    * parent's model admit, each sourced to the wildcard. Such a child has no declaration its
    * document's schema set gives it, so it stands only where its `xsi:type` names a type that set
    * holds or a built-in, against which XML Schema assesses it (Part 1, §3.3.4 clause 1.2; spec
-   * reading 72); without one it is invalid (§3.10.4 clause 2, §3.3.5 [validity] clause 1.1.3).
+   * reading 81); without one it is invalid (§3.10.4 clause 2, §3.3.5 [validity] clause 1.1.3).
    */
   readonly strictlyHeld: Sourced<
     readonly [
@@ -662,7 +662,7 @@ interface Installed {
  *
  * An element particle admits its kinds. A wildcard admits, by its processing, the globally
  * declared kinds in its namespaces that no element particle of the model names and that the
- * schema sets of the model's documents declare (spec reading 72), but the roots reading 6 keeps
+ * schema sets of the model's documents declare (spec reading 81), but the roots reading 6 keeps
  * foreign and, of a namespace a facet states the roots of, every kind but those roots (`lax`,
  * `strict`), and the foreign kinds of the namespace classes its constraint admits (`lax`, `skip`).
  * The content type admits its character data at position 0. A reading's ending narrows the
@@ -759,7 +759,7 @@ export const contentOf = (input: {
             // An element no declaration names is its namespace class's foreign kind, and the
             // wildcard admits the classes its constraint does (§3.10.1). Under `strict` such an
             // element stands only with an `xsi:type` its document's schema set can resolve
-            // (§3.3.4, clause 1.2; spec reading 72), which `StrictlyHeld` marks for the reader.
+            // (§3.3.4, clause 1.2; spec reading 81), which `StrictlyHeld` marks for the reader.
             for (const namespaceClass of namespaceClassesUnder[symbol.namespace]) {
               admit(foreignKinds[namespaceClass], number);
               hold(foreignKinds[namespaceClass], symbol.processing);

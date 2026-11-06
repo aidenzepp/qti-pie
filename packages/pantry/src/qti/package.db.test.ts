@@ -500,7 +500,7 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
         () =>
           // Oracle: PostgreSQL, P2: a typed document's (resource type, root kind) is a row of the
           // set RootOfType (its containment, a CHECK on `Document`), and an untyped one is the
-          // manifest, of type `none` at imsmanifest.xml (reading 84, the `RootOfType` CHECK).
+          // manifest, of type `none` at imsmanifest.xml (reading 93, the `RootOfType` CHECK).
           // Bound: an item resource's document with a stimulus root, and a `none` document at
           // another path.
           Effect.gen(function* rootOfType() {
@@ -555,7 +555,7 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
           // same step, so no count is missing):
           // - E1_derived: an href that is not `path ‖ params`, a reference that is not
           //   `lead ‖ target ‖ params ‖ trail`, a resolved path that is not `kept ‖ rest`, a
-          //   document path that is not `directory ‖ name` (reading 94);
+          //   document path that is not `directory ‖ name` (reading 102);
           // - Href_form, the stated limit: a resource href's path and a file's href with a dot
           //   segment or a percent-encoding, a reference target with a dot segment after a plain
           //   one, a srcset of two candidates, a resolved target that climbs above the package
@@ -736,8 +736,8 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
         () =>
           // Oracle: PostgreSQL, each containment's foreign key, set immediate alone: 23503 on it.
           // - href-listed: a resource href's path no file of its resource lists (CP 1.2 §6.6.2,
-          //   reading 94);
-          // - root-type-reverse: a document-typed href that is no document of its type (reading 84);
+          //   reading 102);
+          // - root-type-reverse: a document-typed href that is no document of its type (reading 93);
           // - entry-kind: a document-typed href, and a document, that is no entry of the record;
           // - a dependency whose identifierref names no resource of its package (CP 1.2 §6.11.5 B);
           // - file-exists: a file whose href is in the resolvedHref form, and a resolved reference,

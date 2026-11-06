@@ -24,7 +24,7 @@
  *   one-position law a total function over (version, parent) ({@link CountedOf},
  *   {@link BarredOf}).
  * - An element's attributes and text are read under its governor ({@link GoverningOf}): its kind, or
- *   the type an `xsi:type` makes govern it (spec readings 60 and 75).
+ *   the type an `xsi:type` makes govern it (spec readings 60 and 84).
  */
 import { closed, closedId, fin, natural, slot, str } from "@bjornpagen/grizzle";
 import { Array as Arr, Option, Result } from "effect";
@@ -294,7 +294,7 @@ export const Identity = closed(
  * The `Governor` roster: what an element's attributes and text are read under. Each `NodeKind`
  * handle first, in code order, a kind governing its own elements by its declared type; then each
  * (kind, type) where the type governs an element of the kind in place of its declared type, or a
- * simple type governs a foreign element's text (spec readings 60 and 75), spelled `<kind> <type>`
+ * simple type governs a foreign element's text (spec readings 60 and 84), spelled `<kind> <type>`
  * (`attributes.ts`). A kind's handle holds no space, so no two spellings meet.
  */
 export const Governor = closed("Governor", [
@@ -329,7 +329,7 @@ export const ReferenceSpelling = closed(
 
 /**
  * The `ReferenceForm` roster: how a file reference's value names its files, one URI reference or an
- * image candidate list (spec reading 95).
+ * image candidate list (spec reading 103).
  */
 export const ReferenceForm = closed(
   "ReferenceForm",
@@ -811,7 +811,7 @@ export const BarredOf = closed.relation(
 /**
  * `StrictlyHeld`: the set of (version, parent, child) where only `strict` wildcards of the parent's
  * model admit the foreign kind, so the child stands only under an `xsi:type` its document's schema
- * set resolves (spec reading 72).
+ * set resolves (spec reading 81).
  */
 export const StrictlyHeld = closed.relation(
   "StrictlyHeld",
@@ -897,7 +897,7 @@ export const XsiType = closed.relation(
   })),
 );
 
-// Attributes and texts under their governor (AL1 to AL3, text-copy; spec readings 60 and 75).
+// Attributes and texts under their governor (AL1 to AL3, text-copy; spec readings 60 and 84).
 
 /**
  * The governor of each (version, kind, governs) the grammar's `Governor` relation holds, by
@@ -1212,7 +1212,7 @@ export const HeldRootsUnder = closed.relation(
 /**
  * `TypeAvailable`: type → namespaces, total over `TypeName`: the pattern of the vocabulary
  * namespaces under whose elements an element's `xsi:type` may name the type, every namespace for
- * `none` and XML Schema's own types (spec readings 60 and 72; C15, C36). An element whose parent's
+ * `none` and XML Schema's own types (spec readings 60 and 81; C15, C36). An element whose parent's
  * namespace is no vocabulary's stands in documents of every schema set, so it may name any type:
  * the law over a foreign element's `governs` is `Compute.matches(parentNamespace,
  * TypeAvailable.at("namespaces", governs)) ∨ ¬Compute.matches(parentNamespace,
@@ -1233,12 +1233,12 @@ export const vocabularyNamespacePattern: string = vocabularyNamespacesPattern(
   grammar.kinds.elementName.rows.map(({ namespace }) => namespace),
 );
 
-// Files (spec reading 95).
+// Files (spec reading 103).
 
 /**
  * `ReferenceAttribute`: (version, kind, name) → form, every attribute by which an element of a kind
  * names a file of its package in the version, and how its value names it: R6's census, IMS Content
- * Packaging 1.2's InterchangePackage (d) (spec reading 95). A law reads it as
+ * Packaging 1.2's InterchangePackage (d) (spec reading 103). A law reads it as
  * `ReferenceAttribute.at("form", version, kind, name)`, absent for an attribute of no census row.
  */
 export const ReferenceAttribute = closed.relation(
@@ -1353,7 +1353,7 @@ export const ResourceTypeOf = closed.relation(
 /**
  * `RootOfType`: the set of (type, root), each root element kind the documents a resource type
  * lists may have; a type with no row lists no document. Each type but an included fragment's has
- * one root, and the fragment's type has every kind an include stands for (spec reading 107).
+ * one root, and the fragment's type has every kind an include stands for (spec reading 114).
  */
 export const RootOfType = closed.relation(
   "RootOfType",
@@ -1365,7 +1365,7 @@ export const RootOfType = closed.relation(
   })),
 );
 
-// Includes (spec readings 76 and 107).
+// Includes (spec readings 85 and 114).
 
 /**
  * The `IncludeParent` roster: every kind whose content model holds an explicit `xi:include`, the

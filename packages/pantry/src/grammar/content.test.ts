@@ -339,7 +339,7 @@ const probeBound = { children: 2, families: 6 } as const;
  * {@link probeBound}'s families of the model's admitted element kinds, drawn from the run's seed.
  * A kind the walk reached with more than one distinct content (its declarations state more than
  * one type) has no one model to probe, and is counted as skipped. Every admitted kind is drawn,
- * those a wildcard admits among them: spec reading 72 admits under a wildcard only the global
+ * those a wildcard admits among them: spec reading 81 admits under a wildcard only the global
  * elements the schema set declares, so xmllint judges each against the same declarations.
  *
  * @param input - The schema's contents and what probing them reads.
@@ -504,7 +504,7 @@ const wildcardProbesOf = (input: {
 };
 
 /**
- * One place spec reading 88 records, where libxml2 widens a sequence: an element particle and the
+ * One place spec reading 96 records, where libxml2 widens a sequence: an element particle and the
  * repeated wildcard right after it, and the element particle before them, if any.
  */
 interface Widened {
@@ -522,7 +522,7 @@ interface Widening {
 }
 
 /**
- * Restate a particle as libxml2 2.9.13's `xmllint` reads it, by spec reading 88. That reading sets
+ * Restate a particle as libxml2 2.9.13's `xmllint` reads it, by spec reading 96. That reading sets
  * the verdict aside as a defect of the oracle.
  *
  * - The defect: in a sequence, take an element particle with no substitution group that repeats
@@ -610,7 +610,7 @@ const libxmlWidened = (particle: Particle): Widening => {
 };
 
 /**
- * A model's language as acceptors over child kinds: the XSD's, and libxml2's by spec reading 88.
+ * A model's language as acceptors over child kinds: the XSD's, and libxml2's by spec reading 96.
  */
 interface Languages {
   readonly libxml: (kinds: readonly string[]) => boolean;
@@ -618,7 +618,7 @@ interface Languages {
 }
 
 /**
- * The XSD's language of a model and libxml2's, by spec reading 88 ({@link libxmlWidened}), as
+ * The XSD's language of a model and libxml2's, by spec reading 96 ({@link libxmlWidened}), as
  * acceptors over child kinds. A wildcard stands for the admitted kinds no element particle names,
  * as in `acceptorOf`.
  *
@@ -657,7 +657,7 @@ const languagesOf = (
 };
 
 /**
- * Whether spec reading 88 explains a family xmllint accepts: libxml2's widened sequence accepts it
+ * Whether spec reading 96 explains a family xmllint accepts: libxml2's widened sequence accepts it
  * and the XSD's own refuses it, so libxml2 admits an element again after a child of the repeated
  * wildcard that follows it.
  *
@@ -683,7 +683,7 @@ const widenedOnly = (
   );
 
 /**
- * Whether spec reading 102 (upstream's 61) rules a family the grammar accepts and xmllint refuses:
+ * Whether spec reading 61 rules a family the grammar accepts and xmllint refuses:
  * a family of `qti-ordering`, whose extension slot the reading widens from the XSD's `##other` to
  * `##any` (information model §5.98.3), that holds a child in QTI's own namespace or in none, which
  * `##other` refuses and `##any` admits.
@@ -692,7 +692,7 @@ const widenedOnly = (
  * @param probe - The family.
  * @returns Whether the reading rules it.
  */
-const reading102 = (composedGrammar: ComposedGrammar, probe: KindProbe): boolean =>
+const reading61 = (composedGrammar: ComposedGrammar, probe: KindProbe): boolean =>
   probe.parentKind === "qti-ordering" &&
   probe.kinds.some((kind) =>
     Option.match(composedGrammar.kinds.elementName.lookup({ kind }), {
@@ -703,7 +703,7 @@ const reading102 = (composedGrammar: ComposedGrammar, probe: KindProbe): boolean
 
 /**
  * Classify the grammar's verdict on a foreign element's probe against xmllint's: they agree,
- * reading 102 (upstream's 61) rules their difference ({@link reading102}), or they disagree.
+ * reading 61 rules their difference ({@link reading61}), or they disagree.
  *
  * @param composedGrammar - The grammar.
  * @param probe - The family.
@@ -716,23 +716,23 @@ const foreignRuling = (
   probe: KindProbe,
   expected: boolean,
   verdict: Validated | undefined,
-): "agrees" | "disagrees" | "reading 102" => {
+): "agrees" | "disagrees" | "reading 61" => {
   if (verdict !== undefined && verdict.refused !== expected) {
     return "agrees";
   }
 
-  return expected && verdict?.refused === true && reading102(composedGrammar, probe)
-    ? "reading 102"
+  return expected && verdict?.refused === true && reading61(composedGrammar, probe)
+    ? "reading 61"
     : "disagrees";
 };
 
 /**
  * Classify the grammar's verdict on an xmllint probe against xmllint's: they agree, a spec reading
- * rules their difference, or they disagree. Reading 26 and reading 88 rule a family the grammar
- * refuses and xmllint accepts: reading 26 one of a section that holds no part, and reading 88 one
- * only libxml2's widened sequence accepts ({@link widenedOnly}). Spec reading 102 (upstream's 61)
+ * rules their difference, or they disagree. Reading 26 and reading 96 rule a family the grammar
+ * refuses and xmllint accepts: reading 26 one of a section that holds no part, and reading 96 one
+ * only libxml2's widened sequence accepts ({@link widenedOnly}). Spec reading 61
  * rules a family the grammar accepts and xmllint refuses: one of `qti-ordering` holding a child of
- * QTI's namespace or none ({@link reading102}). Spec reading 111 rules a family of `xi:include`
+ * QTI's namespace or none ({@link reading61}). Spec reading 118 rules a family of `xi:include`
  * holding two fallbacks, which XInclude 1.0 §3.1 refuses and `XInclude.xsd` admits.
  *
  * @param input - The probe and both verdicts.
@@ -751,7 +751,7 @@ const xmllintRuling = (input: {
   readonly readings: readonly Content[] | undefined;
   readonly verdict: Validated | undefined;
   readonly version: SchemaVersion;
-}): "agrees" | "disagrees" | "reading 26" | "reading 102" | "reading 111" | "reading 88" => {
+}): "agrees" | "disagrees" | "reading 26" | "reading 61" | "reading 118" | "reading 96" => {
   const { expected, probe, verdict } = input;
   if (verdict !== undefined && verdict.refused !== expected) {
     return "agrees";
@@ -763,11 +763,11 @@ const xmllintRuling = (input: {
     probe.parentKind === "xi:include" &&
     probe.kinds.filter((kind) => kind === "xi:fallback").length > 1
   ) {
-    return "reading 111";
+    return "reading 118";
   }
 
-  if (expected && verdict?.refused === true && reading102(input.grammar, probe)) {
-    return "reading 102";
+  if (expected && verdict?.refused === true && reading61(input.grammar, probe)) {
+    return "reading 61";
   }
 
   if (expected || verdict?.refused !== false) {
@@ -782,14 +782,14 @@ const xmllintRuling = (input: {
   }
 
   return widenedOnly(input.grammar, input.version, input.readings, probe)
-    ? "reading 88"
+    ? "reading 96"
     : "disagrees";
 };
 
 /**
  * Whether a spec reading narrows the XSD to refuse a family it accepts. Reading 26: a section holds
  * at least one part, where its XSD admits none, so a section's family that holds no part. Reading
- * 111: an include holds at most one fallback (XInclude 1.0 §3.1), where its XSD admits any number,
+ * 118: an include holds at most one fallback (XInclude 1.0 §3.1), where its XSD admits any number,
  * so an include's family that holds two.
  *
  * @param parent - The family's parent.
@@ -902,7 +902,7 @@ describe.skipIf(!cached)("the content automata against the XSD", () => {
 
         yield* Effect.promise(() =>
           ctx.annotate(
-            `${models} models (${drawnFrom} naming more than ${namedBound} kinds, whose ${namedBound} the run seed drew), ${compared} sequences, ${ruled} ruled by readings 2, 26 and 111; ${skipped} kinds skipped for holding more than one content`,
+            `${models} models (${drawnFrom} naming more than ${namedBound} kinds, whose ${namedBound} the run seed drew), ${compared} sequences, ${ruled} ruled by readings 2, 26 and 118; ${skipped} kinds skipped for holding more than one content`,
             "bound",
           ),
         );
@@ -918,8 +918,8 @@ describe.skipIf(!cached)("the content automata against the XSD", () => {
       // Oracle: libxml2's schema validator over the pinned ASI XSDs, against the automaton with
       // the two count laws beside it, Counted and OperatorArity. Where the grammar and the XSD's
       // own order refuse a family that libxml2's widened sequence accepts, its verdict is spec
-      // reading 88's to set aside, and is counted as ruled; where the grammar accepts a family of
-      // `qti-ordering` the XSD's `##other` refuses, reading 102 (upstream's 61) widens the slot to
+      // reading 96's to set aside, and is counted as ruled; where the grammar accepts a family of
+      // `qti-ordering` the XSD's `##other` refuses, reading 61 widens the slot to
       // `##any`, and the family is counted as widened.
       // Bound: probeBound's families a model, a fresh draw each run (TEST_SEED replays it), over
       // the admitted kinds the ASI schema set declares; a kind with more than one content is
@@ -965,8 +965,8 @@ describe.skipIf(!cached)("the content automata against the XSD", () => {
               verdict,
               version,
             });
-            ruled += ruling === "reading 88" || ruling === "reading 111" ? 1 : 0;
-            widened += ruling === "reading 102" ? 1 : 0;
+            ruled += ruling === "reading 96" || ruling === "reading 118" ? 1 : 0;
+            widened += ruling === "reading 61" ? 1 : 0;
             if (ruling === "disagrees") {
               failures.push(
                 `${version} ${probe.parentKind} [${probe.kinds.join(", ")}]: the grammar ${expected ? "accepts" : "refuses"}, xmllint ${verdict?.refused === true ? "refuses" : "accepts"}${(verdict?.messages.length ?? 0) > 0 ? `: ${verdict?.messages[0] ?? ""}` : ""}`,
@@ -977,7 +977,7 @@ describe.skipIf(!cached)("the content automata against the XSD", () => {
 
         yield* Effect.promise(() =>
           ctx.annotate(
-            `${probed} probes, ${ruled} ruled by readings 88 and 111 and ${widened} by reading 102 (upstream's 61); ${skipped} kinds skipped for holding more than one content`,
+            `${probed} probes, ${ruled} ruled by readings 96 and 118 and ${widened} by reading 61; ${skipped} kinds skipped for holding more than one content`,
             "xmllint",
           ),
         );
@@ -996,7 +996,7 @@ describe.skipIf(!cached)("the content automata against the XSD", () => {
       // constraint, processing and position, both where it admits the child and where it refuses.
       // A drawn element carries no xsi:type, so under a strict wildcard nothing assesses it, and
       // the grammar's verdict is the automaton's with `StrictlyHeld`'s refusal beside it (spec
-      // reading 72, §3.10.4 clause 2). `qti-ordering`'s slot is reading 102's `##any`,
+      // reading 81, §3.10.4 clause 2). `qti-ordering`'s slot is reading 61's `##any`,
       // where xmllint reads the XSD's `##other`: an element of QTI's namespace or none there is
       // accepted by the grammar and refused by xmllint, and counted as widened.
       Effect.gen(function* foreignAtWildcards() {
@@ -1050,7 +1050,7 @@ describe.skipIf(!cached)("the content automata against the XSD", () => {
               !strictlyHeld;
             const verdict = verdicts[index];
             const ruling = foreignRuling(composedGrammar, probe, expected, verdict);
-            widened += ruling === "reading 102" ? 1 : 0;
+            widened += ruling === "reading 61" ? 1 : 0;
             if (ruling === "disagrees") {
               failures.push(
                 `${root} ${probe.parentKind} [${probe.kinds.join(", ")}]: the grammar ${expected ? "accepts" : "refuses"}, xmllint ${verdict?.refused === true ? "refuses" : "accepts"}${(verdict?.messages.length ?? 0) > 0 ? `: ${verdict?.messages[0] ?? ""}` : ""}`,
@@ -1061,7 +1061,7 @@ describe.skipIf(!cached)("the content automata against the XSD", () => {
 
         yield* Effect.promise(() =>
           ctx.annotate(
-            `${models} models with a wildcard, ${probed} probes, ${widened} ruled by reading 102 (upstream's 61), ${unprobed} models with no global element or named type to probe`,
+            `${models} models with a wildcard, ${probed} probes, ${widened} ruled by reading 61, ${unprobed} models with no global element or named type to probe`,
             "xmllint",
           ),
         );
@@ -1080,7 +1080,7 @@ describe.skipIf(!cached)("the content automata against the XSD", () => {
  * AssessmentStimulus and ResponseProcessing, the last both a template's and a resource's), §6.3's
  * external metadata (LOM's `lom`) and §6.5's usage data (`usageData`); and the root of §6.2's
  * `imsqti_fragment_xmlv3p0`, "QTI 3 inclusion (XInclude)", any kind an include stands for (spec
- * reading 107), which `include.test.ts` proves against each parent's automaton.
+ * reading 114), which `include.test.ts` proves against each parent's automaton.
  */
 const statedRoots: ReadonlySet<string> = new Set([
   "cp:manifest",
@@ -1682,8 +1682,8 @@ describe.skipIf(!cached)("spec reading 40 in ssml:speak", () => {
 });
 
 /**
- * The pinned schema sets spec reading 88's census walks, every set a pinned document is assessed
- * against (spec reading 72), each with the version its rows are read in and, for a set whose
+ * The pinned schema sets spec reading 96's census walks, every set a pinned document is assessed
+ * against (spec reading 81), each with the version its rows are read in and, for a set whose
  * widened places are probed, its target namespace.
  */
 const widenedSchemas: readonly {
@@ -1717,7 +1717,7 @@ const widenedSchemas: readonly {
 
 /**
  * Every place libxml2's sequence construction widens a model the walks of the pinned schema sets
- * reach, as `version parent element`: spec reading 88's census, a set. A new pin that adds one
+ * reach, as `version parent element`: spec reading 96's census, a set. A new pin that adds one
  * fails the reading's test until the reading names it.
  *
  * The DRD's 3.0.1 model is the fourth place, and no walk reaches it: a 3.0.1 manifest gives
@@ -1767,7 +1767,7 @@ const automatonRowsOf = (
   ].toSorted();
 
 /**
- * One family spec reading 88's test probes: the probe, the version its rows are read in, and the
+ * One family spec reading 96's test probes: the probe, the version its rows are read in, and the
  * XSD's verdict and libxml2's, by the reading.
  */
 type WidenedProbe = KindProbe & {
@@ -1801,7 +1801,7 @@ const placesOf = (
     );
 
 /**
- * Draw spec reading 88's families of one model: at each place libxml2 widens it, every sequence of
+ * Draw spec reading 96's families of one model: at each place libxml2 widens it, every sequence of
  * at most 3 children over the element particle before the place, its element, and the first kind,
  * in lexical order, that the grammar admits, no element particle names and the schema set declares
  * globally, so that xmllint assesses it against its declaration. The parent is its named type in
@@ -1887,7 +1887,7 @@ const widenedProbesOf = (input: {
 };
 
 /**
- * Judge one of spec reading 88's families: the grammar must give the XSD's verdict, and xmllint the
+ * Judge one of spec reading 96's families: the grammar must give the XSD's verdict, and xmllint the
  * reading's record of libxml2's.
  *
  * @param composedGrammar - The grammar.
@@ -1919,13 +1919,13 @@ const widenedFailures = (
     ...(verdict !== undefined && verdict.refused !== probe.libxml
       ? []
       : [
-          `${family}: xmllint ${said} and reading 88's record of it ${probe.libxml ? "accepts" : "refuses"}${message === "" ? "" : `: ${message}`}`,
+          `${family}: xmllint ${said} and reading 96's record of it ${probe.libxml ? "accepts" : "refuses"}${message === "" ? "" : `: ${message}`}`,
         ]),
   ];
 };
 
 /**
- * The children spec reading 102 (upstream's 61) admits in `qti-ordering`'s extension slot, one of
+ * The children spec reading 61 admits in `qti-ordering`'s extension slot, one of
  * each kind of child: a QTI element no declaration names (`own-namespace-element`), an element in
  * no namespace, one of another namespace, an HTML, a MathML, an SSML and an XInclude global, read
  * as their kinds, and a QTI root, which spec reading 6 keeps foreign.
@@ -1940,16 +1940,16 @@ const orderingChildren = [
   "xi:include",
 ] as const;
 
-describe("spec reading 102 (upstream's 61), qti-ordering's extension slot", () => {
+describe("spec reading 61, qti-ordering's extension slot", () => {
   it.effect(
     "admits any element of any namespace in any number and order, character data apart, and qti-selection's slot keeps refusing QTI's namespace and none: every family of at most 3 children over one of each kind of child, in both versions",
     () =>
-      // Oracle: reading 102's model as a checker, `sequence(any ##any lax 0..n)`: every element
+      // Oracle: reading 61's model as a checker, `sequence(any ##any lax 0..n)`: every element
       // child admitted, in any order and number, and no text, the content being element-only;
       // `qti-selection` keeps the XSD's `##other` (information model §5.129.4).
       // Bound: every family of 0 to 3 children over the seven kinds of child above and `text`, the
       // named invalid variant, under both parents, in both versions.
-      Effect.gen(function* reading102Slot() {
+      Effect.gen(function* reading61Slot() {
         const composedGrammar = yield* grammar;
         const wrong: string[] = [];
         let families = 0;
@@ -1980,7 +1980,7 @@ describe("spec reading 102 (upstream's 61), qti-ordering's extension slot", () =
   );
 });
 
-describe.skipIf(!cached)("spec reading 88, a repeated wildcard keeps its sequence's order", () => {
+describe.skipIf(!cached)("spec reading 96, a repeated wildcard keeps its sequence's order", () => {
   it.effect(
     "refuses the element before a repeated wildcard after a child the wildcard holds, as the XSD does, where xmllint accepts it and nothing else: every family of at most 3 children over that element, the one before it and a declared kind the wildcard admits, in each widened place of the pinned schema sets",
     (ctx) =>
@@ -2042,14 +2042,14 @@ describe.skipIf(!cached)("spec reading 88, a repeated wildcard keeps its sequenc
             "bound",
           ),
         );
-        assert.deepStrictEqual([...found].toSorted(), widenedPlaces, "reading 88's census");
+        assert.deepStrictEqual([...found].toSorted(), widenedPlaces, "reading 96's census");
         assert.deepStrictEqual(
           automatonRowsOf(composedGrammar, unwalkedTwin.unwalked, unwalkedTwin.kind),
           automatonRowsOf(composedGrammar, unwalkedTwin.reached, unwalkedTwin.kind),
           "the DRD's 3.0.1 model, which no walk reaches, is installed as its 3.0.0 model",
         );
         assert.deepStrictEqual(failures.slice(0, 40), []);
-        assert.isAbove(ruled, 0, "xmllint no longer widens these sequences: revisit reading 88");
+        assert.isAbove(ruled, 0, "xmllint no longer widens these sequences: revisit reading 96");
       }).pipe(Effect.provide(XsdOracleLayer)),
     xsdTimeout,
   );

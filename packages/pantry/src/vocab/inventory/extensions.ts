@@ -5,7 +5,7 @@
  * RULESET_LOCALELEMENT_DATAEXTENSIONRULES patterns names, by its expanded name, with the versions
  * whose rules name it and the line of each version's first such rule.
  *
- * On these elements spec reading 81 admits no undeclared attribute but a `data-` one, `xsi:` names
+ * On these elements spec reading 90 admits no undeclared attribute but a `data-` one, `xsi:` names
  * and reading 10's `aria-keyshortcuts` apart. The rules' assertions are not read: the XSDs' own
  * declarations say which attributes each element declares.
  *

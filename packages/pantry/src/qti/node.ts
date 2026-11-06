@@ -315,7 +315,7 @@ const inCheckedText = (n: NodeRow) => checkedText(n, n.parentKind, n.parentGover
  * - `qti-base-value`: Q5.10's expression overlay checks a literal's lexical form against its own base
  *   type (O4).
  * - `ud:value`: Q5.12's metadata overlay checks a usage statistic's value against the base type its
- *   `baseType` names (O6, spec reading 97), not against its governing type's
+ *   `baseType` names (O6, spec reading 105), not against its governing type's
  *   `xs:normalizedString`.
  */
 export const copiedTextKinds = [
@@ -388,7 +388,7 @@ const members = select(Node, member);
 export const nodeRef = on(Node, "id", "document", "kind", "start", "nearest", "version", "parent");
 
 /**
- * A node's context (spec readings 76 and 110): the fields the tree's owner axis copies to its
+ * A node's context (spec readings 85 and 117): the fields the tree's owner axis copies to its
  * children, with its id, children, document and start. It is exactly the column set the owner
  * axis's foreign key targets, so a containment into it shares that UNIQUE on `Node` and adds no
  * index: a document's `Document` row states its document node's context through it, and an
@@ -500,7 +500,7 @@ const stringValueFold = fold(
  *   of an owner-axis copy on a tree (`laws/model/plan.ts` `#pin`): the owner axis's foreign key,
  *   planned from the plain `parent`, holds the root to itself, which leaves `parentAncestry` free,
  *   since `Enters(document)` is empty (C10). So the root's copies and `state` are pinned here. Its
- *   ancestry and nearest interaction are its document's context (spec reading 110), which its
+ *   ancestry and nearest interaction are its document's context (spec reading 117), which its
  *   `Document` row states through {@link nodeContext}: none and itself for every document but an
  *   included fragment, whose content is judged in the context its includes stand in.
  * - **N3:** the parent copies, riding the owner axis.

@@ -16,7 +16,7 @@
  *
  * - `anyElement`: whether a kind outside MathML stands for an element `anyElement`
  *   (`mathml3-common.rnc` line 61) matches under the parent, an element its wildcard reads, which
- *   spec reading 72 bounds by the parent's schema set;
+ *   spec reading 81 bounds by the parent's schema set;
  * - `content`: the RelaxNG's `ContExp` (`mathml3-strict-content.rnc` line 14), the XSD's `ContExp`
  *   and `semantics-contexp`, the kind `m:semantics.contexp`;
  * - `math`: the RelaxNG's `MathExpression` (`mathml3-common.rnc` line 18, extended in the content and

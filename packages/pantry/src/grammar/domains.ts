@@ -1490,7 +1490,7 @@ const hexBinaryLexical = star(twoOf("0-9A-Fa-f", "0-9A-Fa-f"));
 /**
  * The lexical space of each XSD primitive this compiler reads, in the form XSD reads it after the
  * primitive's whitespace class. `anyURI`'s is every string here: its lexical space (spec reading
- * 61, XML Schema 1.0's RFC 2396 as RFC 2732 amends it, after XLink's escaping) is the pattern the
+ * 71, XML Schema 1.0's RFC 2396 as RFC 2732 amends it, after XLink's escaping) is the pattern the
  * leaf states of the built-in, which the compiler reads like any other. `NOTATION`'s value space is
  * the QNames of the notations the schema declares (XML Schema Part 2, 3.2.19), and no pinned XSD
  * declares one, so it is empty: an `xsi:type` may name the built-in (spec reading 60), and no text
@@ -3778,7 +3778,7 @@ const uri = (() => {
 })();
 
 /**
- * `xs:anyURI`'s lexical space as XML Schema 1.0 defines it (spec reading 61), as an XML Schema
+ * `xs:anyURI`'s lexical space as XML Schema 1.0 defines it (spec reading 71), as an XML Schema
  * regular expression matched against the collapsed value: a string that, once XLink 1.0, section
  * 5.4, escapes its disallowed characters, is RFC 2396's `URI-reference` as RFC 2732 amends it, the
  * IPv6 address of RFC 2373's Appendix B or its section 2.2 text forms.

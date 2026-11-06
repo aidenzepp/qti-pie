@@ -930,7 +930,7 @@ describe("qti/chardata.ts", () => {
       // `brokenChecks` judges its row by the checks over the installed patterns: an element in no
       // namespace has no prefix (Namespaces in XML 1.0 §5, §6.2), a name the slot admits is its
       // kind's (XML Schema 1.0 Part 1 §3.3.4 clause 1.1.1), and an `xsi:type` names a type of
-      // the document's schema set (reading 72), and a strictly held element has a type unless it is
+      // the document's schema set (reading 81), and a strictly held element has a type unless it is
       // a root its set declares (§3.10.4 clause 2; reading 6). Each other variant edits one field of
       // a lawful row, or moves the foreign row under a strict slot.
       // Bound: each version, the four foreign children of `qti-ordering` written once each, the

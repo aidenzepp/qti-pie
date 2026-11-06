@@ -396,7 +396,7 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
       it.effect(
         "refuses a second declaration of one identifier in one document, padded or not, by Declaration key",
         () =>
-          // Oracle: the specification as a checker, reading 65: no two declarations of a document
+          // Oracle: the specification as a checker, reading 74: no two declarations of a document
           // share an identifier, compared collapsed (XML Schema Part 2, §4.3.6).
           // Bound: two declarations, the second's lexical form `A` and ` A`; the host finds the
           // key, so `laws` holds it whether or not any SQL ran.
@@ -426,7 +426,7 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
         "refuses a declaration of a built-in session variable of any kind, and admits completion_status and QTI_CONTEXT's record context, by Declaration not reserved",
         () =>
           // Oracle: the specification as a checker, §2.2.2 and tables 4.5.1, 5.115.1, 5.151.1 with
-          // reading 63: the session variables are reserved in every declaration of every document,
+          // reading 72: the session variables are reserved in every declaration of every document,
           // spelled exactly; every other name is no built-in's.
           // Bound: every declaration kind (4) against the session variables (3) and three controls,
           // `completion_status`, `completion-status` and `SCORE`, 24 cases.
@@ -465,7 +465,7 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
         () =>
           // Oracle: the specification as a checker, §2.2.2.3 ("SCORE MUST be a float", "MAXSCORE
           // MUST be a float", "PASSED MUST be a boolean") of an outcome, and §2.2.2.1's record
-          // context variable QTI_CONTEXT, with reading 65.
+          // context variable QTI_CONTEXT, with reading 74.
           // Bound: each typed outcome name under every declaration kind against every base type
           // but `none` (3 × 4 × 11), so the same name of another kind is the control, then
           // QTI_CONTEXT against every declaration kind and cardinality (4 × 4), 148 cases.

@@ -344,7 +344,7 @@ export const Doctype = relation("Doctype", { node: uuid, value: DoctypeText }, [
  *   element proves. `RootOfType`'s payload is over `NodeKind` too, so P2 compares them directly.
  * - `resourceType` is the type of the resource that lists the document, `none` for the manifest,
  *   which no resource lists (ResourceType's code 0); Q5.06's P1 and P2 judge it.
- * - **its context** (spec readings 76 and 110): the ancestry and nearest interaction its document
+ * - **its context** (spec readings 85 and 117): the ancestry and nearest interaction its document
  *   node holds, which every node below it inherits along the tree's owner axis, so an included
  *   fragment's content is judged where it is included. `context` is the union of the ancestries of
  *   the sites that name the document (Q5.13's `Site`, counted by `targetedBy` and folded by
@@ -352,7 +352,7 @@ export const Doctype = relation("Doctype", { node: uuid, value: DoctypeText }, [
  *   placement. `contextNearest` and `contextNearestKind` are the host's: the document node itself
  *   and `document`, or the one interaction every site that names the document stands in, which
  *   Q5.13's "Fragment context" holds each site to.
- * - **its assembly** (spec readings 76 and 110): `assembled`, the host's, whether the document is in
+ * - **its assembly** (spec readings 85 and 117): `assembled`, the host's, whether the document is in
  *   an assembly (it has a Q5.13 `TestDocument` row: a test or a section, or a document that holds a
  *   site or that a site names), so its IDREFs resolve per instance of its assemblies rather than in
  *   it alone (Q5.07); and the counts its instances copy, drawn: `bindings`, `choices` and
@@ -488,7 +488,7 @@ const rootElements = select(Node, (n) =>
  *   kind.
  * - **"Document":** one row per document node, both ways; its root kind is its root element's; and no
  *   declaration means no `encoding` and no `standalone` (q1.02's hand-off).
- * - **its context** (spec reading 110): its document node's ancestry and nearest interaction are its
+ * - **its context** (spec reading 117): its document node's ancestry and nearest interaction are its
  *   `context`, `contextNearest` and `contextNearestKind`, through {@link nodeContext}; and
  *   (`E1_derived`) the nearest is the document node itself, unless sites name the document from
  *   inside one interaction.
@@ -511,12 +511,12 @@ const rootElements = select(Node, (n) =>
  *   §3.3.4 clauses 1.1.1.2 and 1.1.1.3.2, with §3.10.4 clause 2; shred reads it so).
  *   `KindByNameUnder` holds each (version, parent)'s names as one pattern over `namespace}local`,
  *   the subject built by `Compute.concat`, since a closed relation's key is closed ids only.
- * - **"XsiType available"** (C15, C36; spec readings 60 and 72): a foreign element's governing type
+ * - **"XsiType available"** (C15, C36; spec readings 60 and 81): a foreign element's governing type
  *   is one its document's schema set holds, or XML Schema's own, or `none`, read from its parent's
  *   namespace through `TypeAvailable`; under a parent of no vocabulary's namespace, which stands in
  *   documents of every set, any type stands. Which set a document is assessed against is not on
- *   `Node`, so the parent's namespace stands for it: reading 72's recorded limit.
- * - **"Strictly held"** (C44, C13; spec readings 6 and 72): a foreign element its parent's model
+ *   `Node`, so the parent's namespace stands for it: reading 81's recorded limit.
+ * - **"Strictly held"** (C44, C13; spec readings 6 and 81): a foreign element its parent's model
  *   holds only by `strict` wildcards (`StrictlyHeld`) has a governing type, since without one XML
  *   Schema cannot assess it (§3.10.4 clause 2, §3.3.5 [validity] clause 1.1.3), unless its expanded
  *   name is one of reading 6's roots its documents' schema set declares there (`HeldRootsUnder`),

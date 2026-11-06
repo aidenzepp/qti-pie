@@ -452,7 +452,7 @@ describe("shred's refusals", { timeout: searchTimeout }, () => {
       // attribute its kind admits under no name or class, a declared `xsi:` name its kind does not admit, a
       // malformed `data-` name, a namespace read through an entity, a document not in XML 1.x, a
       // MathML element where only a foreign one stands (MathML 3 §2.2, law "MathML foreign
-      // element"), and a foreign element's xsi:type whose prefix nothing binds (spec reading 74).
+      // element"), and a foreign element's xsi:type whose prefix nothing binds (spec reading 83).
       // Bound: the generator's drawn bounds, one name added to a valid tree a case, on an element
       // drawn among those the variant fits, so no case is discarded.
       searched(
@@ -1181,7 +1181,7 @@ const laxChildOf = (tree: XdmDocument<Composed>): Option.Option<XdmChild<Compose
   return Option.some(node);
 };
 
-describe("a foreign element's governing type (spec readings 60 and 74)", () => {
+describe("a foreign element's governing type (spec readings 60 and 83)", () => {
   it.effect(
     "resolves every foreign xsi:type under a lax wildcard, refuses an unbound prefix, judges a simple type's attributes, children and text, and xmllint agrees but where reading 60 records libxml2's departure: every arm in both versions",
     () =>
@@ -1261,7 +1261,7 @@ describe("a foreign element's governing type (spec readings 60 and 74)", () => {
 });
 
 /**
- * The roots of spec reading 80's box, each a local name in a namespace: QTI 2's nine namespaces,
+ * The roots of spec reading 89's box, each a local name in a namespace: QTI 2's nine namespaces,
  * where every root is refused as `not-qti3` before its name is read; QTI 3.0's ASI and usage-data
  * namespaces, where a root QTI 3 names is read; and a namespace QTI declares none of, and none,
  * where a root no vocabulary names is `unnamed`.
@@ -1280,11 +1280,11 @@ const rootNamespaces = [
  */
 const rootLocals = ["assessmentItem", "usageData", "qti-assessment-item", "x"] as const;
 
-describe("a QTI 2 root (spec reading 80)", () => {
+describe("a QTI 2 root (spec reading 89)", () => {
   it.effect(
     "refuses a root in each of QTI 2's nine namespaces as not-qti3, reason root-namespace, before its name is read, and reads every other root by its name: every namespace with every local name, in both versions",
     () =>
-      // Oracle: the specification as a checker, reading 80: QTI 2's XSDs' targetNamespaces, read
+      // Oracle: the specification as a checker, reading 89: QTI 2's XSDs' targetNamespaces, read
       // from the published files where the cache holds them, decide the refusal, before the root's
       // name or its attribute is read; any other root is read by its name, `unnamed` where none
       // resolves, and its attribute no root declares refused where its kind admits no such name.
@@ -1416,11 +1416,11 @@ const sameNames = (left: ReadonlySet<string>, right: ReadonlySet<string>): boole
 
 /**
  * The kinds an `xsi:type` gives the 41 attribute-only extensions of `EmptyPrimitiveTypeDType` to
- * (spec reading 75), each in a response-processing template ({@link governedDocument}).
+ * (spec reading 84), each in a response-processing template ({@link governedDocument}).
  */
 const governedKinds = ["qti-null", "qti-exit-response"] as const;
 
-describe("an element under its governing type (spec reading 75)", () => {
+describe("an element under its governing type (spec reading 84)", () => {
   it.effect(
     "reads qti-null typed VariableDType and qti-exit-response typed TrackDType under their types: identifier and src admitted and required, and xmllint agrees on every case",
     () =>
@@ -1513,14 +1513,14 @@ describe("an element under its governing type (spec reading 75)", () => {
   );
 
   it.effect(
-    "requires exactly the governing type's required attributes and admits exactly its declared ones on every governor of qti-null and qti-exit-response, and xmllint agrees but where reading 81 follows the element's name: every governor in both versions",
+    "requires exactly the governing type's required attributes and admits exactly its declared ones on every governor of qti-null and qti-exit-response, and xmllint agrees but where reading 90 follows the element's name: every governor in both versions",
     () =>
       // Oracle: libxml2 over the ASI XSD, a second implementation of XML Schema's §3.3.4 clause
       // 5.2.1 and Element Locally Valid (Complex Type) clauses 2 and 4: its "is required but
       // missing" and "is not allowed" names against shred's admission and AL3's required set under
-      // each governor. Where the element's kind is one spec reading 81 covers, an undeclared name
+      // each governor. Where the element's kind is one spec reading 90 covers, an undeclared name
       // in no namespace that the type's attribute wildcard admits is refused by the reading, which
-      // follows the element's name (reading 75), and libxml2's admission of it is that reading's
+      // follows the element's name (reading 84), and libxml2's admission of it is that reading's
       // departure from the XSD.
       // Bound: every governor of the 2 kinds in the 2 versions; each with no attribute but its
       // xsi:type, each declared name in no namespace alone, and 3 names other governors declare.
@@ -1643,7 +1643,7 @@ describe("an element under its governing type (spec reading 75)", () => {
 
 /**
  * The ways an element no global declaration names stands under a `strict` wildcard, each a named
- * arm of spec reading 72's box: an `xsi:type` naming a built-in, `xs:anyType`, or a simple type of
+ * arm of spec reading 81's box: an `xsi:type` naming a built-in, `xs:anyType`, or a simple type of
  * the document's own schema set, each of which XML Schema assesses the element against (Part 1,
  * §3.3.4 clause 1.2); and an `xsi:type` naming a type of a set the document does not use, a type no
  * pinned schema defines, a QName whose prefix is unbound, or no `xsi:type` at all, each of which
@@ -1750,7 +1750,7 @@ const strictChild = (arm: StrictArm, parent: (typeof strictParents)[number]): st
   }
 };
 
-describe("a strict wildcard's undeclared element (spec reading 72)", () => {
+describe("a strict wildcard's undeclared element (spec reading 81)", () => {
   it.effect(
     "stands exactly when its xsi:type names a built-in or a type of its document's schema set, and xmllint agrees wherever libxml2 reads XML Schema's clause 1.2: every arm under both strict wildcards in both versions",
     () =>
@@ -1847,7 +1847,7 @@ const heldRootArms = [
 
 /**
  * The three `strict` `##other` wildcards of the box, each with its own namespace's vocabulary, the
- * vocabularies its documents' schema set declares globals of (spec reading 72), and its document:
+ * vocabularies its documents' schema set declares globals of (spec reading 81), and its document:
  * `qti-companion-materials-info` in an item, a file's metadata in a manifest, and
  * `drd:accessForAllResource`'s `grpStrict.any` inside that metadata.
  */
@@ -1913,7 +1913,7 @@ describe("a reading 6 root under a strict wildcard (C13)", () => {
     () =>
       // Oracle: the specification as a checker, XML Schema 1.0 Part 1 §3.10.4 clauses 1 and 2 and
       // §3.3.4 clause 1.1.1.3.2, with reading 6 (the root is kept foreign, not refused) and reading
-      // 72's schema sets, as `heldRootVerdict`; libxml2 over each document's root XSD as a control,
+      // 81's schema sets, as `heldRootVerdict`; libxml2 over each document's root XSD as a control,
       // which assesses the found manifest against its declaration and refuses every other arm.
       // Bound: the 2 roots under the 3 wildcards in the 2 versions, 12 documents, exhausted.
       Effect.gen(function* heldRoots() {
@@ -2017,13 +2017,13 @@ const attributesAt = (
   return [];
 };
 
-describe("XLink's attributes (C30, spec reading 72)", () => {
+describe("XLink's attributes (C30, spec reading 81)", () => {
   it.effect(
     "reads xl:href on a kind of the content-packaging set as XLink's closed global under its written prefix, and on an ASI kind, whose set imports no XLink, as a foreign name: both versions",
     () =>
       // Oracle: the specification as a checker: XLink's ten globals are declared only in the
       // schema set the content-packaging extension imports them into (`cpext/` XSDs line 10,
-      // reading 72), where a lax `##other` attribute wildcard validates the attribute against its
+      // reading 81), where a lax `##other` attribute wildcard validates the attribute against its
       // declaration, so it is that declaration's closed handle; the ASI XSDs import no XLink, so
       // there the same attribute has no declaration and is a foreign name (XML Schema 1.0 Part 1,
       // §3.10.4, §3.4.4 clause 3.1).

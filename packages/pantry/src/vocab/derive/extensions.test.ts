@@ -1,10 +1,10 @@
 /**
- * The extension-rules deriver's tests (spec reading 81), each against an independent oracle:
+ * The extension-rules deriver's tests (spec reading 90), each against an independent oracle:
  *
  * - **The pinned XSDs, read as text.** Over the cache, the leaf is what a re-run prints, after `vp
  *   fmt`, byte for byte, and its elements per version are exactly the `//qti:<local>` contexts a
  *   regular expression finds in the raw text of the three data-extension patterns, with no XML
- *   reader between: 126 in 3.0.0 and 127 in 3.0.1, as reading 81 counts them. Skipped, with its
+ *   reader between: 126 in 3.0.0 and 127 in 3.0.1, as reading 90 counts them. Skipped, with its
  *   reason, without the pinned cache.
  * - **A naive model of the reading, over generated Schematron.** Toy schemas of up to six rules, each
  *   a valid rule, a repeated element, a rule of another pattern, or one of the named invalid
@@ -137,7 +137,7 @@ describe.skipIf(Option.isSome(absence))("vocab/derive/extensions.ts over the pin
       "covers exactly the contexts the raw text of each version's patterns names, 126 and 127",
       () =>
         // Oracle: the pinned XSDs as text, read by a regular expression and no XML reader; the
-        // counts are reading 81's.
+        // counts are reading 90's.
         Effect.gen(function* againstTheText() {
           const fs = yield* FileSystem.FileSystem;
           const directory = yield* xsdDirectory;
