@@ -1304,6 +1304,28 @@ exports of it packed identical tarballs, and its testing tarball and its skill a
   follow. `keyTextBytes` alone still leaves this axis 8 bytes over, by the null bitmap of its NULL-able hidden columns
   (the next entry), so the tree holds `keyTextCodePoints` at 646. The fixing commit is recorded here when it lands.
 
+### `keyTextBytes` leaves out the null bitmap of a tree axis's NULL-able hidden columns (grizzle `f66c05b`), triage pending
+
+- **Seen.** The schema refused at compile (`schemaArtifacts`, R87's `work/rv/r87/compile.ts`) with `UnrepresentableKey
+  at fold Node at Node.fold.count (src/qti/node.ts:537:20): the UNIQUE of Node the predecessor axis of the tree of Node
+  references … its B-tree entry can reach 2712 bytes, above PostgreSQL's 2704-byte limit (field parent 16 bytes, at 8,
+  charsAfter 2592, elements 8, end 8, state 2, after Node.children 0 0 8, after Node.children 1 0 8)`. That was with
+  `keyText` a pattern of 647 code points. For the same fields, `keyTextBytes([uuid, natural ×5, closedId(Position),
+  that 647-code-point pattern])` returns 0, which says a text fits beside them.
+- **Cause, from the source at f66c05b.** `textBytesBeside` (engine `schema/representability.ts`, "whatever the key's
+  field order and with none of them NULL") lays the datums out from `indexDataOffset(false)`, which is 8. The index
+  check `btreeEntryBytes` starts at `indexDataOffset(columns.some((c) => c.nullable))`, which is 16 once any column is
+  NULL-able. The tree's predecessor axis carries NULL-able hidden columns: the first child has no predecessor. So its
+  entry is 8 bytes past what `keyTextBytes` measured. The public doc of `keyTextBytes` (`public/text.ts`) states no NULL
+  caveat, and an author can't declare a NULL-able field, so nothing in the fields passed shows the axis's bitmap.
+- **Workaround in this repo.** `src/qti/limits.ts` `keyTextCodePoints` is 646, the most for which `keyTextBytes` still
+  leaves a byte. The further text it sizes costs 7 bytes (header and worst padding), and the bitmap costs 8, so the
+  key text fits exactly where a byte is left. `limits.test.ts` holds 646 to leave a byte and 647 to leave none.
+- **Classification:** pending. Either `keyTextBytes` should take the key it serves (and count a grizzle-added
+  NULL-able column), or the public doc should state that the bytes are for a key of no NULL-able column. Before any
+  issue: pull trunk, build a standalone reproduction (a tree with a `Monoid.concat` fold over a text bounded at
+  `keyTextBytes(widest)`), keep the control (one code point less), and get the independent check.
+
 ## A role lacked EXECUTE on what its CHECKs cast to (grizzle defect, fixed in `f66c05b`)
 
 - **Found by:** seat N1's database tier on server A at `64f0427` (`docs/rfc/swarm-ledger.md`, 14:05 on 2026-11-06).
