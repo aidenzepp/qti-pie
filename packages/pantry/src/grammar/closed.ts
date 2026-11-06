@@ -1,13 +1,12 @@
 /* oxlint-disable unicorn/throw-new-error -- `Schema.TaggedError<Self>()` is a class factory that is called once and extended, never thrown, so the rule's "call without new" reading does not apply. */
 /**
- * Rosters and closed relations as values, and the shape of the constant each relation erases to
- * (fin.md §17).
+ * Rosters and closed relations as values (fin.md §17).
  *
  * A roster is a closed vocabulary of handles, each coded by its position. A closed relation is
- * fixed when the schema compiles, so it has no table: grizzle packs it into one bit string, read
- * `width` bits at a time at its key's index. This module holds the rows a generator states,
- * refuses the rows no constant can hold, sizes the constant, and answers lookups on the host. It
- * packs nothing; grizzle does.
+ * fixed when the schema compiles, so it has no table: grizzle packs it into a constant. This module
+ * holds the rows a generator states, refuses a row with a value outside its field's code space or
+ * a key stated twice, and answers lookups on the host. It packs and sizes nothing: grizzle does,
+ * and refuses a constant past PostgreSQL's longest bit string itself (README, "Limits").
  *
  * The shapes follow grizzle's two declaration forms (grizzle D1 to D3): a roster, and
  * `closed.relation(name, fields, key, rows)`. A key digit is a closed id, a field over a roster
@@ -48,11 +47,6 @@ export interface Roster<Handle extends string> {
    */
   readonly has: (value: string) => value is Handle;
 }
-
-/**
- * Any roster, as the encoder reads it.
- */
-export type AnyRoster = Roster<string>;
 
 /**
  * A field whose values are a roster's handles: a closed id. Every key field is one.
@@ -150,13 +144,8 @@ export type Row<
 type AnyRow = Readonly<Record<string, Primitive>>;
 
 /**
- * A closed relation under a declared key, and the shape of the string of cells it erases to.
- *
- * The string has one cell per point of the key's code space. A row's cell sits at its key's
- * mixed-radix index, row-major over `key` in declared order: `((k₁·|K₂| + k₂)·|K₃| + k₃)…`, each kᵢ
- * the row's code in its key field. A cell is 0 where the relation holds no row, and 1 + c where it
- * does, c being the mixed-radix code of the row's payload values. A relation with no payload is a
- * set, and its cells are single bits.
+ * A closed relation under a declared key: its rows, one per key, each value within its field's code
+ * space. A relation with no payload is a set.
  */
 export interface Closed<Key extends readonly AnyKeyField[], Payload extends readonly AnyField[]> {
   readonly name: string;
@@ -171,22 +160,6 @@ export interface Closed<Key extends readonly AnyKeyField[], Payload extends read
    */
   readonly rows: readonly Row<Key, Payload>[];
   /**
-   * The string's length in cells: the product of the key fields' roster sizes, a dependent field's
-   * size summed over its prefixes.
-   */
-  readonly cells: number;
-  /**
-   * The bits per cell, w = ⌈log₂(1 + |payload space|)⌉, with |payload space| the product of the
-   * payload fields' code-space sizes: the fewest bits that hold 0 for absent and 1 + c for every
-   * payload code c. A set's payload space has one point, so its width is 1.
-   */
-  readonly width: number;
-  /**
-   * The constant's size as PostgreSQL stores it, before compression: ⌈cells · width / 8⌉ bytes of
-   * bits after an 8-byte header.
-   */
-  readonly bytes: number;
-  /**
    * Find the row at a key.
    *
    * @param key - A handle for each key field.
@@ -197,11 +170,6 @@ export interface Closed<Key extends readonly AnyKeyField[], Payload extends read
     Row<Key, Payload>
   >;
 }
-
-/**
- * Any closed relation, as a size report or a reader reads it.
- */
-export type AnyClosed = Closed<readonly AnyKeyField[], readonly AnyField[]>;
 
 /**
  * A closed relation whose rows carry their spec source (the operator's ruling of 2026-11-05): the
@@ -244,29 +212,10 @@ export const sourced = <
 });
 
 /**
- * The largest `int2`, 2¹⁵ − 1: the top of the carrier of `Node.state` and `Node.hi`, the bound that
- * bounds nothing where an order interval is free.
- */
-export const int2Max = 32_767;
-
-/**
  * The largest `int8`, 2⁶³ − 1: the top of the carrier of a count of children, the bound that bounds
  * nothing where an arity is unbounded.
  */
 export const int8Max = 9_223_372_036_854_775_807n;
-
-/**
- * The most bits one PostgreSQL bit string holds, `VARBITMAXLEN` = INT_MAX − 7 (19rc1,
- * `src/include/utils/varbit.h:83`). A closed relation's constant is one bit string, so no relation
- * exceeds it, and every index below it is an exact JavaScript integer.
- */
-export const varbitMaxBits = 2_147_483_647 - 7;
-
-/**
- * The bytes PostgreSQL stores before a bit string's bits: the 4-byte varlena header and the 4-byte
- * bit length (`VARBITTOTALLEN`, 19rc1, `src/include/utils/varbit.h:77`).
- */
-const bitStringHeader = 8;
 
 /**
  * Two rows of a closed relation at one key. A key is a law of the relation (fin.md §17, E4): its
@@ -318,25 +267,9 @@ export class RepeatedValue extends Schema.TaggedError<RepeatedValue>()("Repeated
 }
 
 /**
- * A closed relation whose string of cells is longer than one PostgreSQL bit string can be.
+ * The ways a stated closed relation is refused.
  */
-export class BeyondConstant extends Schema.TaggedError<BeyondConstant>()("BeyondConstant", {
-  bits: Schema.Number,
-  max: Schema.Number,
-  relation: Schema.String,
-}) {
-  /**
-   * The relation, the bits it needs against the cap, and the repair.
-   */
-  override get message(): string {
-    return `${this.relation} needs ${this.bits} bits, and one PostgreSQL bit string holds at most ${this.max}. Give its key denser coordinates, so that its code spaces multiply to fewer cells.`;
-  }
-}
-
-/**
- * The ways a stated closed relation has no constant.
- */
-export type ClosedRelationError = BeyondConstant | KeyCollision | OutsideCodeSpace | RepeatedValue;
+export type ClosedRelationError = KeyCollision | OutsideCodeSpace | RepeatedValue;
 
 /**
  * Construct a roster from its handles in code order.
@@ -519,18 +452,18 @@ const spell = (fields: readonly (AnyField | DependentField<string>)[], row: AnyR
   fields.map(({ name }) => `${name} ${String(row[name])}`).join(", ");
 
 /**
- * The index space of a key: its leading closed ids, and the dependent fields that follow them
- * (with any closed ids among them), each prefix's block at its offset.
+ * The host's index of a key, which a lookup and the key law read: each key one number, and a value
+ * outside its field's code space, a dependent one past its prefix's size among them, refused.
  */
 interface Layout {
-  readonly cells: number;
   readonly indexOf: (row: AnyRow) => Result.Result<number, AnyField | DependentField<string>>;
 }
 
 /**
- * Lay out a key's index space: row-major mixed radix over the closed ids before the first dependent
+ * Lay out a key's index: row-major mixed radix over the closed ids before the first dependent
  * field, then each such prefix's block, the mixed radix of the remaining fields at the sizes the
- * prefix gives them, at the sum of the earlier prefixes' block sizes (fin.md §17, "The index").
+ * prefix gives them, at the sum of the earlier prefixes' block sizes (fin.md §17, "The index"), so
+ * no two keys share an index.
  *
  * @param key - The key's fields.
  * @returns The layout.
@@ -538,7 +471,7 @@ interface Layout {
 const layoutOf = (key: readonly AnyKeyField[]): Layout => {
   const split = key.findIndex((field) => field._tag === "dependent");
   if (split === -1) {
-    return { cells: pointsOf(key), indexOf: (row) => indexIn(key, row) };
+    return { indexOf: (row) => indexIn(key, row) };
   }
 
   const prefix = key.slice(0, split);
@@ -565,7 +498,6 @@ const layoutOf = (key: readonly AnyKeyField[]): Layout => {
   }
 
   return {
-    cells: offsets[prefixes] ?? 0,
     indexOf: (row) =>
       Result.flatMap(indexIn(prefix, row), (at) => {
         const sizes = sizesOf(
@@ -588,70 +520,51 @@ const layoutOf = (key: readonly AnyKeyField[]): Layout => {
 };
 
 /**
- * Construct closed relations whose string of cells may hold at most `maxBits` bits: production's
- * cap is {@link varbitMaxBits}, which {@link closed} applies; a test gives a small one, so the edge
- * lies within the relations it can draw.
+ * Construct a closed relation from rows of handles and values: every value must lie in its field's
+ * code space, and no two rows may share a key (E4).
  *
- * Every value must lie in its field's code space, no two rows may share a key (E4), and the string
- * of cells must fit the cap.
- *
- * @param maxBits - The most bits a relation's string may hold.
- * @returns The constructor: from the relation as a generator states it (its name, as its laws and
- *   its failures name it; its key's fields in index order, the first the most significant digit;
- *   the fields outside the key, none for a set; and its rows), the relation, or the first reason
- *   it has no constant.
+ * @param relation - The relation as a generator states it.
+ * @param relation.key - Its key's fields in index order, the first the most significant digit.
+ * @param relation.name - Its name, as its laws and its failures name it.
+ * @param relation.payload - The fields outside the key, none for a set.
+ * @param relation.rows - Its rows.
+ * @returns The relation, or the first reason it is refused.
  */
-export const closedWithin =
-  (maxBits: number) =>
-  <const Key extends readonly AnyKeyField[], const Payload extends readonly AnyField[]>(relation: {
-    readonly key: Key;
-    readonly name: string;
-    readonly payload: Payload;
-    readonly rows: readonly Row<Key, Payload>[];
-  }): Result.Result<Closed<Key, Payload>, ClosedRelationError> =>
-    Result.gen(function* parseClosed() {
-      const { key, name, payload, rows } = relation;
-      const layout = layoutOf(key);
-      const { cells } = layout;
-      const width = pointsOf(payload).toString(2).length;
-      const bits = cells * width;
+export const closed = <
+  const Key extends readonly AnyKeyField[],
+  const Payload extends readonly AnyField[],
+>(relation: {
+  readonly key: Key;
+  readonly name: string;
+  readonly payload: Payload;
+  readonly rows: readonly Row<Key, Payload>[];
+}): Result.Result<Closed<Key, Payload>, ClosedRelationError> =>
+  Result.gen(function* parseClosed() {
+    const { key, name, payload, rows } = relation;
+    const layout = layoutOf(key);
+    const byIndex = new Map<number, Row<Key, Payload>>();
+    const outside = (row: AnyRow) => (field: AnyField | DependentField<string>) =>
+      new OutsideCodeSpace({ field: field.name, relation: name, value: String(row[field.name]) });
 
-      if (bits > maxBits) {
-        return yield* Result.fail(new BeyondConstant({ bits, max: maxBits, relation: name }));
+    for (const row of rows) {
+      const index = yield* Result.mapError(layout.indexOf(row), outside(row));
+      yield* Result.mapError(indexIn(payload, row), outside(row));
+
+      if (byIndex.has(index)) {
+        return yield* Result.fail(new KeyCollision({ key: spell(key, row), relation: name }));
       }
 
-      const byIndex = new Map<number, Row<Key, Payload>>();
-      const outside = (row: AnyRow) => (field: AnyField | DependentField<string>) =>
-        new OutsideCodeSpace({ field: field.name, relation: name, value: String(row[field.name]) });
+      byIndex.set(index, row);
+    }
 
-      for (const row of rows) {
-        const index = yield* Result.mapError(layout.indexOf(row), outside(row));
-        yield* Result.mapError(indexIn(payload, row), outside(row));
-
-        if (byIndex.has(index)) {
-          return yield* Result.fail(new KeyCollision({ key: spell(key, row), relation: name }));
-        }
-
-        byIndex.set(index, row);
-      }
-
-      return {
-        bytes: Math.ceil(bits / 8) + bitStringHeader,
-        cells,
-        key,
-        lookup: (at) =>
-          Result.getSuccess(layout.indexOf(at)).pipe(
-            Option.flatMap((index) => Option.fromNullishOr(byIndex.get(index))),
-          ),
-        name,
-        payload,
-        rows,
-        width,
-      };
-    });
-
-/**
- * Construct a closed relation from rows of handles and values, refusing the rows no constant can
- * hold: {@link closedWithin} under one PostgreSQL bit string's cap, {@link varbitMaxBits}.
- */
-export const closed = closedWithin(varbitMaxBits);
+    return {
+      key,
+      lookup: (at) =>
+        Result.getSuccess(layout.indexOf(at)).pipe(
+          Option.flatMap((index) => Option.fromNullishOr(byIndex.get(index))),
+        ),
+      name,
+      payload,
+      rows,
+    };
+  });

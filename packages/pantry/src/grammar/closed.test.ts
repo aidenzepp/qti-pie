@@ -8,7 +8,7 @@ import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Formatter, Option, Result } from "effect";
 import {
-  closedWithin,
+  closed,
   dependentField,
   fin,
   idField,
@@ -56,59 +56,18 @@ const variants = [
 ] as const satisfies readonly Variant[];
 
 /**
- * What a model case reaches: the variant its rows carry, and which side of the bit cap its string
- * falls on.
- */
-type ModelFeature = Variant | "beyond the cap" | "within the cap";
-
-/**
  * A drawn relation: the key's roster sizes, whether the last key field is a dependent `fin` and
  * its sizes per prefix, the payload's sizes, the rows as points, the variant one more row carries,
- * the key digit an alias breaks, and the most bits the relation's string may hold.
+ * and the key digit an alias breaks.
  */
 interface Drawn {
   readonly aliased: number;
   readonly dependent: Option.Option<readonly number[]>;
   readonly keySizes: readonly number[];
-  readonly maxBits: number;
   readonly payloadSizes: readonly number[];
   readonly points: readonly (readonly number[])[];
   readonly variant: Variant;
 }
-
-/**
- * The number of cells of a key, as the model counts them: the product of its rosters, or, with a
- * dependent last field, the sum of its prefixes' sizes.
- *
- * @param keySizes - The key's roster sizes.
- * @param dependent - The dependent field's size per prefix, none for no dependent field.
- * @returns The cells.
- */
-const cellsOf = (keySizes: readonly number[], dependent: Option.Option<readonly number[]>) => {
-  const prefixes = keySizes.slice(0, -1).reduce((product, size) => product * size, 1);
-
-  return Option.match(dependent, {
-    onNone: () => keySizes.reduce((product, size) => product * size, 1),
-    onSome: (sizes) => sizes.slice(0, prefixes).reduce((sum, size) => sum + size, 0),
-  });
-};
-
-/**
- * The bits one cell takes, as the model counts them: enough for every payload point and the empty
- * cell.
- *
- * @param payloadSizes - The payload's sizes.
- * @returns The width.
- */
-const widthOf = (payloadSizes: readonly number[]) => {
-  const payloadPoints = payloadSizes.reduce((product, size) => product * size, 1);
-  let width = 1;
-  while (2 ** width < 1 + payloadPoints) {
-    width += 1;
-  }
-
-  return width;
-};
 
 /**
  * Draw a relation in a small box, built for its variant (rule 4: no variant falls back to valid
@@ -116,9 +75,7 @@ const widthOf = (payloadSizes: readonly number[]) => {
  * at the digit above the broken one; the last field dependent half the time, always for
  * `beyondPrefix` and never for `alias`, with prefix sizes 0 to 3, the first row's below 3 for
  * `beyondPrefix`; 0 to 2 payload fields of 1 to 3 values, at least one for `outsidePayload`; up to
- * 4 points as rows (the holes are the points left out), at least one for an invalid variant; and a
- * bit cap within 2 of the string's size, below it one case in four (rule 10: production's cap,
- * 2³¹ − 8 bits, moved into the box).
+ * 4 points as rows (the holes are the points left out), at least one for an invalid variant.
  */
 const drawnRelation: Gen<Drawn> = (source) => {
   const variant = source.draw(
@@ -171,17 +128,11 @@ const drawnRelation: Gen<Drawn> = (source) => {
         ),
       )
     : Option.none<readonly number[]>();
-  const bits = cellsOf(keySizes, dependent) * widthOf(payloadSizes);
-  const maxBits =
-    bits > 0 && source.choose(0, 3) === 0
-      ? source.choose(Math.max(0, bits - 2), bits - 1)
-      : source.choose(bits, bits + 2);
 
   return {
     aliased,
     dependent,
     keySizes,
-    maxBits,
     payloadSizes,
     points: points.length === 0 ? [] : [carried, ...rest],
     variant,
@@ -196,7 +147,7 @@ const drawnRelation: Gen<Drawn> = (source) => {
  *   have no constant, if any, as `closed` names it.
  */
 const built = (drawnCase: Drawn) => {
-  const { aliased, dependent, keySizes, maxBits, payloadSizes, variant } = drawnCase;
+  const { aliased, dependent, keySizes, payloadSizes, variant } = drawnCase;
   const keyRowOf = (row: Readonly<Record<string, string>>): Readonly<Record<string, string>> =>
     Object.fromEntries(keySizes.map((_, at) => [`k${at}`, String(row[`k${at}`])]));
   const prefixSize = (row: Readonly<Record<string, string>>) => {
@@ -279,10 +230,8 @@ const built = (drawnCase: Drawn) => {
 
       return (at === 0 ? /^\d+$/u : /^v\d+$/u).test(value ?? "") && code < size;
     });
-  const cells = cellsOf(keySizes, dependent);
-  const width = widthOf(payloadSizes);
   const seen = new Map<string, Readonly<Record<string, string>>>();
-  let reason = cells * width > maxBits ? Option.some("BeyondConstant") : Option.none<string>();
+  let reason = Option.none<string>();
   for (const row of rows) {
     const at = keyOf(row);
     if (Option.isSome(reason)) {
@@ -298,22 +247,22 @@ const built = (drawnCase: Drawn) => {
     }
   }
 
-  return { cells, key, keyOf, keyRowOf, payload, reason, rows, seen, width };
+  return { key, keyOf, keyRowOf, payload, reason, rows, seen };
 };
 
 describe("closed relations against a naive tuple-set model", () => {
   it.effect(
-    "refuse exactly the rows the model refuses, by the first reason it finds, size the string as it does against a cap drawn within 2 bits of it, and look every point up as it does",
+    "refuse exactly the rows the model refuses, by the first reason it finds, and look every point up as it does",
     (ctx) =>
-      // Oracle: a second implementation, a naive tuple-set model of the relation and its string.
+      // Oracle: a second implementation, a naive tuple-set model of the relation.
       // Bound: up to 3 key fields of up to 3 handles, 2 payload fields, 4 rows and one variant a
-      // case; the cap within 2 bits of the string's size.
+      // case.
       searched(
         ctx,
         explore(
           {
             ...budget,
-            coverage: required<ModelFeature>([...variants, "beyond the cap", "within the cap"], {
+            coverage: required<Variant>(variants, {
               cases: 300,
               sense: notesOnly,
             }),
@@ -324,16 +273,13 @@ describe("closed relations against a naive tuple-set model", () => {
           (drawnCase, c) =>
             Effect.sync(() => {
               const model = built(drawnCase);
-              const result = closedWithin(drawnCase.maxBits)({
+              const result = closed({
                 key: model.key,
                 name: "Toy",
                 payload: model.payload,
                 rows: model.rows,
               });
               c.note(drawnCase.variant);
-              c.note(
-                model.cells * model.width > drawnCase.maxBits ? "beyond the cap" : "within the cap",
-              );
 
               if (Option.isSome(model.reason)) {
                 assert.strictEqual(
@@ -347,13 +293,6 @@ describe("closed relations against a naive tuple-set model", () => {
                 );
                 if (Result.isSuccess(result)) {
                   const relation = result.success;
-                  assert.strictEqual(relation.cells, model.cells);
-                  assert.strictEqual(relation.width, model.width);
-                  assert.strictEqual(
-                    relation.bytes,
-                    Math.ceil((model.cells * model.width) / 8) + 8,
-                  );
-
                   const probes = [
                     ...model.rows,
                     ...model.rows.map((row) => ({
