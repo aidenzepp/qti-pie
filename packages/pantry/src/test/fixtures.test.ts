@@ -827,6 +827,35 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts", (it
     ),
   );
 
+  it.effect("a cut keeps the file only an altimg names, and its manifest lists it", () =>
+    inFreshRoot(() =>
+      Effect.gen(function* cutAltimg() {
+        const fs = yield* FileSystem.FileSystem;
+        const spec: FixtureSpec = {
+          ...specOf("cut-drawing"),
+          edits: [
+            {
+              _tag: "ReplaceText",
+              file: "items/drawing-interaction-1.xml",
+              replacement: 'altimg="images/anglePQR.svg"',
+              search: 'srcset="images/anglePQR.svg"',
+            },
+            ...specOf("cut-drawing").edits,
+          ],
+          name: "cut-altimg",
+        };
+        const dir = yield* materializeSpec(spec);
+
+        assert.isTrue(yield* fs.exists(`${dir}/items/images/anglePQR.svg`), "anglePQR.svg kept");
+        assert.include(
+          yield* fs.readFileString(`${dir}/imsmanifest.xml`),
+          "items/images/anglePQR.svg",
+          "manifest lists anglePQR.svg",
+        );
+      }),
+    ),
+  );
+
   it.effect("doctype declares a general entity and an ATTLIST default and uses the entity", () =>
     inFreshRoot(() =>
       Effect.gen(function* doctypeVariant() {
