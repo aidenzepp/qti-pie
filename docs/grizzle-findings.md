@@ -1313,8 +1313,9 @@ closed-relation constant now always one hex literal.
   interim until grizzle's fix. The octet contract was to follow at grizzle `a2ff5eb`: there the bound would be N =
   2,587 bytes, the largest for which `keyTextBytes([...widestTextKey, keyText])` still leaves a byte, with no `proves`
   needed, because `a2ff5eb`'s bound analysis reads `octetLength` off the predicate. A containment cannot copy a text
-  into a contract field, though (the entry after next), so `keyText` stays the 646-code-point pattern until that is
-  settled.
+  into a contract field, though (the entry after next), so the contract is set aside. Instead `keyText` becomes
+  `str.bytes(keyTextBytes(...))` once grizzle beta.1's byte refinement lands, a flip of `src/qti/limits.ts` alone; until
+  then it stays the 646-code-point pattern.
 
 ### `keyTextBytes` leaves out a tree axis's null bitmap (grizzle defect, open at `f66c05b`, fixing before beta.1)
 
@@ -1340,7 +1341,7 @@ closed-relation constant now always one hex literal.
   bound admitted and tight. qti-pie's 646 interim is `e0fcddbf`, and grizzle's fixing commit is recorded here when it
   lands.
 
-### A text contract can't be the target of a copy (a limit at grizzle `f66c05b` and `a2ff5eb`, feature request pending)
+### A text contract can't be the target of a copy (a limit; accepted for grizzle beta.1 as `str.bytes(N)`)
 
 - **Seen.** keyText as the ruled octet contract, `contract("KeyText", str.regex("^.*$", "su"), (v) =>
   Compute.octetLength(v).le(N))`, typechecked in a scratch copy of pantry. The 54 containments that copy a document's
@@ -1355,10 +1356,13 @@ closed-relation constant now always one hex literal.
   `tsc.out`): a containment from a plain text field into a field of a text contract is refused, and the control into a
   pattern-bounded field (`^.{0,100}$`) passes. At run time `own(schemaDescOf(S))` succeeds (`run.out`), so the refusal
   is grizzle's types alone, and its runtime admission disagrees with them; grizzle should settle which one is meant.
-- **Classification: a limit, with a feature request.** Containment's one-type rule is grizzle's documented typing, so
-  this is no defect. The ask is a byte bound that, like a pattern, is no part of a text's type: `octet_length(VALUE) <=
-  N`, read exactly by the bound analysis. The coordinator has sent it to the grizzle session (pending its answer).
-  Until it lands, keyText stays the 646-code-point pattern held to `keyTextBytes` (e0fcddbf).
+- **Classification:** a limit at `f66c05b` and `a2ff5eb`; the feature is accepted for grizzle beta.1 as `str.bytes(N)`.
+  Containment's one-type rule is grizzle's documented typing, so this is no defect. The grizzle session accepted the
+  ask in its lane K, after the `keyTextBytes` fix: a byte bound as a text refinement, `str.bytes(N)`, with the CHECK
+  `octet_length(VALUE) <= N`, read exactly by the bound analysis. Like a pattern, it is no part of the type, so it meets
+  plain and pattern-refined text in containments, and N comes from `keyTextBytes(fields)`. The reproduction above
+  becomes one of grizzle's kept cases. Nothing to file. Until it lands, `keyText` stays the 646-code-point pattern held
+  to `keyTextBytes` (`e0fcddbf`).
 
 ## A role lacked EXECUTE on what its CHECKs cast to (grizzle defect, fixed in `f66c05b`)
 
