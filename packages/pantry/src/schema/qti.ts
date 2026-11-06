@@ -38,6 +38,7 @@ import * as lang from "#pantry/schema/lang.ts";
 import * as mapping from "#pantry/schema/mapping.ts";
 import * as mathmlArms from "#pantry/schema/mathml/arms.ts";
 import * as mathmlAttributes from "#pantry/schema/mathml/attributes.ts";
+import * as mathmlRules from "#pantry/schema/mathml/rules.ts";
 import * as metadata from "#pantry/schema/metadata.ts";
 import * as node from "#pantry/schema/node.ts";
 import * as outcome from "#pantry/schema/outcome.ts";
@@ -208,6 +209,7 @@ export const Qti = schema(
     ...reference.rules,
     ...mathmlArms.rules,
     ...mathmlAttributes.rules,
+    ...mathmlRules.rules,
     contained(on(node.Node, "kind"), on(node.NodeKind, "id")),
     ...node.NodeKind.handles.map((kind) =>
       mirrors(on(select(node.Node, { kind }), "id"), on(nodeArms[kind], "id")),
