@@ -50,10 +50,11 @@ const tagOrder = [
 ];
 
 /**
- * Run an effect with a provider over `env` alone, never the host environment.
+ * Construct a function that runs an effect with a provider over `env` alone, never the host
+ * environment.
  *
  * @param env The settings the provider holds.
- * @returns The effect, reading only `env`.
+ * @returns A function that gives its effect, reading only `env`.
  */
 const under =
   (env: Record<string, string>) =>

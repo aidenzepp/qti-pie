@@ -1,17 +1,11 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { assert, describe, it } from "@effect/vitest";
-import { Config, Effect, Result } from "effect";
+import { Effect, Result } from "effect";
 import committed from "#plate/model/blocks.generated.json" with { type: "json" };
-import { blocks, generateBlocks, xsdPart2CachePath, xsdPart2Sha256 } from "#plate/model/blocks.ts";
+import { blocks, generateBlocks, xsdPart2Sha256 } from "#plate/model/blocks.ts";
+import { xsdPart2Path } from "#plate/test/caches.ts";
 import { checkAllowlist, sourceModules } from "#plate/test/imports.ts";
-
-/**
- * Where XML Schema 1.0 Part 2 is cached under `HOME`.
- */
-const xsdPart2Path = Config.String("HOME").pipe(
-  Config.map((home) => `${home}/${xsdPart2CachePath}`),
-);
 
 /**
  * The cached Recommendation's bytes.
