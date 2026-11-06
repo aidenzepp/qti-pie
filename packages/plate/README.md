@@ -368,11 +368,14 @@ this split. A host that sends the accepted item to the browser sends what `redac
   show a choice that plate did not render.
 - Render a restored item with the instance and the configuration you first rendered it with. Its
   record does not say which they were, and a shuffled Choice's order depends on both.
-- An accepted package's `files` holds only the files a host may serve. It leaves out the manifest
-  and the document of every QTI resource, such as an item, a test or its response processing,
-  because those can hold correct responses. Serve only the files it holds, from another origin or
-  under the CSP `sandbox` directive, since some are live documents. Refuse an asset path that
-  leaves the package once it is percent-decoded.
+- An accepted package's `files` holds each file inside the package that the manifest lists, except
+  the documents of its QTI resources, which can hold correct responses. A QTI resource's document
+  is the file its `href` names, such as an item, a test or a response-processing document. For a
+  QTI resource without an `href`, `files` leaves out every file the resource lists, because plate
+  cannot tell which one is its document. A QTI document listed in any other way stays in `files`,
+  because plate does not read a file to tell what it is. Serve only the files `files` holds, from
+  another origin or under the CSP `sandbox` directive, since some are live documents. Refuse an
+  asset path that leaves the package once it is percent-decoded.
 
 ## Hosts
 

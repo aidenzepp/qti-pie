@@ -734,6 +734,34 @@ describe("package/open.ts", () => {
         }),
     );
 
+    it.effect(
+      "files leaves out every file a QTI resource without href lists, its document among them, while a QTI resource with href keeps the files it lists besides its document",
+      () =>
+        Effect.gen(function* hrefless() {
+          const verdict = yield* openPackage(
+            location,
+            packageOf({
+              [manifestFile]: manifestXml(
+                '<resource identifier="H" type="imsqti_item_xmlv3p0"><file href="items/q.html"/><file href="items/q.png"/></resource>',
+                '<resource identifier="A" type="imsqti_item_xmlv3p0" href="items/a.xml"><file href="items/a.xml"/><file href="items/a.png"/></resource>',
+              ),
+              "items/a.png": "PNG",
+              "items/a.xml": itemXml("a", "SCORE"),
+              "items/q.html": `<qti-assessment-item xmlns="${qti}" identifier="q" title="q" adaptive="false" time-dependent="false"><qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier"><qti-correct-response><qti-value>A</qti-value></qti-correct-response></qti-response-declaration><qti-item-body><p>q</p></qti-item-body></qti-assessment-item>`,
+              "items/q.png": "PNG",
+            }),
+          );
+          const accepted = acceptedOf(verdict);
+
+          assert.isTrue(Option.isNone(resourceOf(verdict, "H").path));
+          assert.deepStrictEqual(
+            [...accepted.items.keys()],
+            [fileLocation(location, "items/a.xml")],
+          );
+          assert.deepStrictEqual([...accepted.files], ["items/a.png"]);
+        }),
+    );
+
     it.effect("refuses a hand-built map holding ../x as package-path-outside", () =>
       Effect.gen(function* outside() {
         const verdict = yield* openPackage(
