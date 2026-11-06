@@ -301,6 +301,18 @@ const recorded: readonly Recorded[] = [
     xsd: "valid",
   },
   {
+    domain: /\(reading [^)]*\b9\b/u,
+    kind: /^h1$/u,
+    reason: {
+      _tag: "reading",
+      reading: 9,
+      why: "the Schematron's RULE ARIA ROLE 1b says \"The 'h1' tag may have an ARIA role value of 'heading' or 'tab' or 'presentation' only\" (ASI binding §5.3.1, whose section 5 is normative), where the XSD lists 74 ARIA roles for h1's role",
+    },
+    subject: /^role$/u,
+    value: /^(?!(?:heading|tab|presentation)$)/u,
+    xsd: "valid",
+  },
+  {
     kind: /^m:cn$/u,
     reason: {
       _tag: "reading",
