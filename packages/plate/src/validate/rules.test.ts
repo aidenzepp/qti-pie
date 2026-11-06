@@ -2029,13 +2029,38 @@ describe("checkRules", () => {
       );
     });
 
-    it("accepts a lookup that names the built-in completionStatus", () => {
+    it("[I-9a] refuses a lookup that targets the built-in completionStatus, which only a qti-set-outcome-value sets, as undeclared-variable (pantry P9, info.txt:8488)", () => {
       assert.deepStrictEqual(
         judged(
           item(
             [outcome("SCORE")],
             [],
             [processing(undefined, [lookup("completionStatus", baseValue("integer", "1"))])],
+          ),
+        ),
+        [
+          {
+            detail: {
+              check: "built-in-target",
+              element: "qti-lookup-outcome-value",
+              identifier: "completionStatus",
+              source: "info.txt:8488",
+            },
+            path: "qti-assessment-item/qti-response-processing/qti-lookup-outcome-value",
+            rule: "undeclared-variable",
+          },
+        ],
+      );
+      assert.deepStrictEqual(
+        judged(
+          item(
+            [outcome("SCORE")],
+            [],
+            [
+              processing(undefined, [
+                setOutcome("completionStatus", baseValue("identifier", "completed")),
+              ]),
+            ],
           ),
         ),
         [],

@@ -2097,6 +2097,26 @@ describe("describeRefusal", () => {
     assert.notInclude(named, "declares no");
   });
 
+  it("[I-9a] names the built-in a qti-lookup-outcome-value sets, which only a qti-set-outcome-value may set, and cites the information model's line", () => {
+    const sentence = describeRefusal(
+      refusalOf("undeclared-variable", {
+        check: "built-in-target",
+        element: "qti-lookup-outcome-value",
+        identifier: "completionStatus",
+        source: "info.txt:8488",
+      }),
+    );
+
+    assert.include(
+      sentence,
+      "`qti-lookup-outcome-value` sets the built-in `completionStatus`, which only a `qti-set-outcome-value` may set (info.txt:8488).",
+    );
+    assert.include(
+      sentence,
+      "To make it valid: set `completionStatus` with a `qti-set-outcome-value`, or name a declared outcome.",
+    );
+  });
+
   it("names a dotted name that resolves to no item ref, test part or section variable (reading 48)", () => {
     const sentence = describeRefusal(
       refusalOf("undeclared-variable", {

@@ -1451,6 +1451,8 @@ const expressionType = (refusal: Refusal): string => {
  *   not time dependent.
  * - `reading` (pantry's `prefixed-ref`): a dotted name that resolves to no variable of an item ref,
  *   test part or section (reading 48).
+ * - `built-in-target` (pantry's P9): a rule other than `qti-set-outcome-value` that sets a built-in,
+ *   citing the information model's line its `source` names.
  * - None (P8): a name the item declares no variable for.
  *
  * Each names the element, or the element's attribute when a reference attribute names the
@@ -1481,6 +1483,15 @@ const undeclaredVariable = (refusal: Refusal): string => {
         refusal,
         `${subject} names ${identifier}, which resolves to no item ref, test part or section variable${citation(refusal)}.`,
         `name a variable that an item ref, test part or section of the test declares`,
+      );
+    }
+    case "built-in-target": {
+      const setter = code("qti-set-outcome-value");
+
+      return sentence(
+        refusal,
+        `${subject} sets the built-in ${identifier}, which only a ${setter} may set${settled(refusal)}.`,
+        `set ${identifier} with a ${setter}, or name a declared outcome`,
       );
     }
     default: {
