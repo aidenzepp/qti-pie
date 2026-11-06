@@ -23,7 +23,7 @@
  * oracle joins this file.
  */
 import { assert, describe, it } from "@effect/vitest";
-import { drawn, explore } from "@grizzle/testing/explore";
+import { drawn, exhaust, explore } from "@grizzle/testing/explore";
 import type { Case } from "@grizzle/testing/explore";
 import { noCoverage } from "@grizzle/testing/features";
 import { completeShrink } from "@grizzle/testing/shrink";
@@ -33,7 +33,8 @@ import { composed } from "#pantry/grammar/compose.ts";
 import { lawNames as statedLawNames, lawTable, precedence } from "#pantry/import/refusal.ts";
 import type { FoldedRows } from "#pantry/model/folds.ts";
 import type { Composed } from "#pantry/model/composed.ts";
-import { memberCounts } from "#pantry/test/gen/every-relation.ts";
+import { int } from "@grizzle/testing/gen";
+import { everyRelationPackage, memberCounts } from "#pantry/test/gen/every-relation.ts";
 import type { MemberCounts, PackageEntries } from "#pantry/test/gen/every-relation.ts";
 import { documentMutations } from "#pantry/test/oracle-complete/documents.ts";
 import { expressionMutations } from "#pantry/test/oracle-complete/expressions.ts";
@@ -42,6 +43,8 @@ import {
   everyRelationBase,
   filesOf,
   foldedDocument,
+  textOf,
+  withText,
 } from "#pantry/test/oracle-complete/mutation.ts";
 import type { Mutation } from "#pantry/test/oracle-complete/mutation.ts";
 import { overlayMutations } from "#pantry/test/oracle-complete/overlays.ts";
@@ -104,10 +107,7 @@ const owed: Readonly<Partial<Record<LawName, string>>> = {
   "Choice bounds": "its mutation is not written yet",
   "Choice identifier key": "its mutation is not written yet",
   "Choice not variable": "its mutation is not written yet",
-  "Condition type": "no producer raises it yet (R87's finding)",
   "Context variable reference": "its mutation is not written yet",
-  "Declaration base type": "no producer raises it yet (R87's finding)",
-  "Declaration not reserved": "no producer raises it yet (R87's finding)",
   Document: "its mutation is not written yet",
   "Document entry": "its mutation is not written yet",
   "Document lang": "its mutation is not written yet",
@@ -130,20 +130,14 @@ const owed: Readonly<Partial<Record<LawName, string>>> = {
   "Include root": "its mutation is not written yet",
   "Include target": "its mutation is not written yet",
   "Inclusion cycle": "its mutation is not written yet",
-  "Item duration": "no producer raises it yet (R87's finding)",
   "Key text bound": "its mutation is not written yet",
   "LOM learning resource type": "its mutation is not written yet",
   "Label tools": "its mutation is not written yet",
-  "Literal lexical": "no producer raises it yet (R87's finding)",
   LomObjectIdentifier: "its mutation is not written yet",
-  LomObjectTitle: "no producer raises it yet (R87's finding)",
   "Lookup table cardinality": "its mutation is not written yet",
-  "Lookup type": "no producer raises it yet (R87's finding)",
   "Manifest id space": "its mutation is not written yet",
   "Map key": "its mutation is not written yet",
   MappableBaseType: "its mutation is not written yet",
-  "Mapped response": "no producer raises it yet (R87's finding)",
-  "Mastery range": "no producer raises it yet (R87's finding)",
   "MathML arity": "its mutation is not written yet",
   "MathML foreign element": "its mutation is not written yet",
   "Media source src": "its mutation is not written yet",
@@ -166,18 +160,12 @@ const owed: Readonly<Partial<Record<LawName, string>>> = {
   "Namespace family": "its mutation is not written yet",
   "Namespace name": "its mutation is not written yet",
   "Node key": "its mutation is not written yet",
-  "One base": "no producer raises it yet (R87's finding)",
   OpenElementName: "its mutation is not written yet",
   "OpenElementName canonical": "its mutation is not written yet",
-  "Operand fit": "no producer raises it yet (R87's finding)",
-  "Outcome only": "no producer raises it yet (R87's finding)",
   "Picture source srcset": "its mutation is not written yet",
   "Printed variable reference": "its mutation is not written yet",
   "Quotation punctuation": "its mutation is not written yet",
-  "Record field key": "no producer raises it yet (R87's finding)",
   RecordBindingFit: "its mutation is not written yet",
-  "Reference type": "no producer raises it yet (R87's finding)",
-  "Reserved type": "no producer raises it yet (R87's finding)",
   ResourceTypeOf: "its mutation is not written yet",
   RootOfType: "its mutation is not written yet",
   "Rounding figures": "its mutation is not written yet",
@@ -185,7 +173,6 @@ const owed: Readonly<Partial<Record<LawName, string>>> = {
   "SSML trim mark": "its mutation is not written yet",
   "Selection bound": "its mutation is not written yet",
   "Self dependency": "its mutation is not written yet",
-  "Set type": "no producer raises it yet (R87's finding)",
   "Slider bounds": "its mutation is not written yet",
   "Stimulus ref target": "its mutation is not written yet",
   "Strictly held": "its mutation is not written yet",
@@ -196,18 +183,12 @@ const owed: Readonly<Partial<Record<LawName, string>>> = {
   "T5 last child": "its mutation is not written yet",
   "T6 nonempty and leaf": "its mutation is not written yet",
   "Table headers": "its mutation is not written yet",
-  "Template default type": "no producer raises it yet (R87's finding)",
-  "Template reads": "no producer raises it yet (R87's finding)",
   "Template reference": "its mutation is not written yet",
   TextDomain: "its mutation is not written yet",
   "Track srclang": "its mutation is not written yet",
   "Typed attribute value": "its mutation is not written yet",
-  "Typed value": "no producer raises it yet (R87's finding)",
   "Usage typed value": "its mutation is not written yet",
-  "Value cardinality": "no producer raises it yet (R87's finding)",
   "Variable declared": "its mutation is not written yet",
-  "Variable kind": "no producer raises it yet (R87's finding)",
-  "Weighted base": "no producer raises it yet (R87's finding)",
   "XsiType available": "its mutation is not written yet",
   "XsiType derived": "its mutation is not written yet",
   "comment arm": "its mutation is not written yet",
@@ -224,14 +205,7 @@ const owed: Readonly<Partial<Record<LawName, string>>> = {
  * The laws the schema states that the oracle owes a declaration and a producer, each with why: the
  * list only shrinks.
  */
-const owedStatements = {
-  "Adaptive feedback": "a package can break it, and no producer states it yet",
-  "Calendar date": "a package can break it, and no producer states it yet",
-  "Dependency target": "a package can break it, and no producer states it yet",
-  "Max strings required": "a package can break it, and no producer states it yet",
-  "Variable reference copy": "a package can break it, and no producer states it yet",
-  "XML production": "a row can break it, and no producer states it yet",
-} as const satisfies Readonly<Record<string, string>>;
+const owedStatements = {} as const satisfies Readonly<Record<string, string>>;
 
 /**
  * Each rule's place in the refusal's precedence.
@@ -454,6 +428,80 @@ describe("every law the oracle declares", () => {
       );
     }
   }
+});
+
+/**
+ * The every-relation package whose declarations the absent-cardinality search exhausts: its widest
+ * member counts.
+ */
+const absentBase = everyRelationPackage({ choices: 3, hotspots: 2, hottexts: 2 });
+
+/**
+ * Every declaration the base's items and test write, by its document and its start tag, each a
+ * site a declaration with no cardinality is written at.
+ */
+const declarationSites = [
+  "items/item.xml",
+  "items/item2.xml",
+  "items/item3.xml",
+  "test.xml",
+].flatMap((path) =>
+  [
+    ...textOf(absentBase, path).matchAll(
+      /<qti-(?:context|response|outcome|template)-declaration [^>]*cardinality="[^"]*"[^>]*>/gu,
+    ),
+  ].map((match) => ({ path, tag: match[0] })),
+);
+
+describe("a declaration that writes no cardinality", () => {
+  it.effect(
+    "is refused under required-attribute alone, as the database's rows can hold no Declaration for it",
+    (ctx) =>
+      // Oracle: the specification as a checker. AL3 refuses a declaration with no cardinality, and
+      // every law that reads a declaration's cardinality reads its Declaration row, which the
+      // database cannot write for it, so the oracle may raise no other rule (the orchestrator's
+      // ruling of 2026-11-06: an absent attribute is no empty one). Bound: every declaration of
+      // the every-relation items and test, each its cardinality dropped, exhausted.
+      searched(
+        ctx,
+        exhaust(
+          {
+            box: "every declaration of the every-relation items and test, its cardinality dropped",
+            caseHang: Duration.seconds(60),
+            coverage: noCoverage,
+            generator: int(0, declarationSites.length - 1),
+            limit: declarationSites.length,
+            literal: String,
+            oracle: { kind: "specification", name: "AL3's required cardinality, alone" },
+            suite: "pantry/oracle-complete/absent-cardinality",
+          },
+          (at) =>
+            Effect.gen(function* absentCardinality() {
+              const site = declarationSites[at];
+              assert.isDefined(site, `no declaration site ${String(at)}`);
+
+              const { path, tag } = site ?? { path: "", tag: "" };
+              const mutated = withText(
+                absentBase,
+                path,
+                textOf(absentBase, path).replace(tag, tag.replace(/ cardinality="[^"]*"/u, "")),
+              );
+              const judgment = yield* judge(filesOf(mutated), grammar, laws);
+              const rules =
+                judgment._tag === "Judged"
+                  ? judgment.breaches.map(({ law }) => ruleOf(law))
+                  : [judgment.rule];
+
+              assert.deepStrictEqual(
+                [...new Set(rules)],
+                ["required-attribute"],
+                `${path} ${tag}:\n${judgment._tag === "Judged" ? judgment.breaches.map((breach) => shownBreach(breach, grammar)).join("\n") : judgment.detail}`,
+              );
+            }),
+        ),
+      ),
+    300_000,
+  );
 });
 
 describe("every law the schema states", () => {

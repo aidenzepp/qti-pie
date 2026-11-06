@@ -658,15 +658,19 @@ describe("fold's refusals", { timeout: searchTimeout }, () => {
 const unconstructed = {
   "AL3 required": "the required attributes, which the generator draws a subset of",
   "AL5 attribute count": "spec readings 41 and 43's attribute counts",
+  "Adaptive feedback":
+    "an interaction's place under feedback in an item's mode, drawn without reading",
   "AreaMapping base type": "a declaration's base type, a value drawn without reading",
   Arity: "an operator's arity, a count of children the content automaton relaxes",
   "Binding cardinality": "a response binding, over identifiers drawn without reading",
   "Binding declared": "a response binding, over identifiers drawn without reading",
   BindingFit: "a response binding, over identifiers drawn without reading",
+  "Calendar date": "a usage statistic's date, a value drawn without reading",
   "Choice bounds": "an interaction's choice counts, values drawn without reading",
   "Choice identifier key": "a choice's identifier, a value drawn without reading",
   "Choice not variable":
     "a choice's identifier against its document's declarations, values drawn without reading",
+  "Condition type": "a condition's type, over expressions drawn without typing",
   "Context variable reference": "a reference, over identifiers drawn without reading",
   "Declaration base type":
     "a declaration's base type against its cardinality, values drawn without reading",
@@ -680,22 +684,32 @@ const unconstructed = {
   "Graphic gap match default hotspot": "the default hotspot's place among its siblings",
   "Href listed": "a package's law",
   "Idref target": "an IDREF's target, over values drawn without reading",
+  "Item duration": "a reference to duration in an item's timing, drawn without reading",
   "Label tools":
     "the item root's tool-name and tool-version, attributes the generator draws a subset of",
+  "Literal lexical": "a base value's text against its base type, over text drawn without reading",
   LomObjectIdentifier: "a package's law",
   "Lookup table cardinality": "a declaration's cardinality, a value drawn without reading",
+  "Lookup type": "a lookup's expression type and table, drawn without typing",
   "Manifest id space": "a package's law",
   "Map key": "a mapping's keys, values drawn without reading",
   MappableBaseType: "a declaration's base type, a value drawn without reading",
+  "Mapped response": "a mapped response's declaration and tables, drawn without reading",
   "Mastery range": "a declaration's mastery and normal bounds, values drawn without reading",
   "MathML arity": "an operator's arity, a count of children the content automaton relaxes",
+  "Max strings required":
+    "an extended text interaction's binding, over identifiers drawn without reading",
   "N6 ancestry":
     "the ancestry bans, which the generator does not read; a search of its own judges N6",
   "N7 Counted": "the counts of 2…n the content automaton relaxes",
   "N7 barred by": "the children an attribute bars",
+  "One base": "an operator's operand types, over expressions drawn without typing",
+  "Operand fit": "an operator's operand types, over expressions drawn without typing",
+  "Outcome only": "a test operator's processing language, over expressions drawn without reading",
   "Printed variable reference": "a reference, over identifiers drawn without reading",
   "Record field key": "a record value's field identifiers, values drawn without reading",
   RecordBindingFit: "a response binding, over identifiers drawn without reading",
+  "Reference type": "a reference's declared type, over identifiers drawn without reading",
   "Reserved type":
     "a built-in variable's declared type, over identifiers and base types drawn without reading",
   ResourceTypeOf: "a package's law",
@@ -703,7 +717,9 @@ const unconstructed = {
   "SSML lexicon reference": "a reference, over identifiers drawn without reading",
   "SSML trim mark": "a mark's name, a value drawn without reading",
   "Selection bound": "a selection's count, a value drawn without reading",
+  "Set type": "a setter's expression type, over expressions drawn without typing",
   "Slider bounds": "a slider's bounds, values drawn without reading",
+  "Template reads": "what template processing reads, over identifiers drawn without reading",
   "Template reference": "a reference, over identifiers drawn without reading",
   TextDomain: "an element's value domain, over text drawn without reading",
   "Typed value": "a value's text against its base type, over text drawn without reading",
@@ -712,6 +728,8 @@ const unconstructed = {
   "Value cardinality":
     "a declaration's count of values against its cardinality, a count the content automaton relaxes",
   "Variable declared": "a reference, over identifiers drawn without reading",
+  "Variable kind": "a reference's declaration kind, over identifiers drawn without reading",
+  "Weighted base": "a test variables' base type beside its weight, drawn without reading",
   "default hotspot last slot": "the default hotspot's place among its siblings",
   "value domain": "an attribute's value domain, over lexical forms drawn without reading",
 } as const satisfies Partial<Readonly<Record<LawName, string>>>;

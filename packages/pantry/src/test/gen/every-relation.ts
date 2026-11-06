@@ -419,7 +419,7 @@ const stimulus = [
 
 /**
  * The section document the test places: a rubric whose printed variable's index names the test's
- * `PLACE` and whose feedback names its `PASSED`, and an item ref whose precondition reads its
+ * `PLACE` and whose feedback names its `VERDICT`, and an item ref whose precondition reads its
  * `TOTAL`, each resolved against the test that places it (spec reading 5).
  */
 const section = [
@@ -427,7 +427,7 @@ const section = [
   `<qti-assessment-section xmlns="${asi}" identifier="placed" title="A placed section" visible="true">`,
   '  <qti-rubric-block use="instructions" view="candidate">',
   "    <qti-content-body>",
-  '      <div><qti-printed-variable identifier="TOTAL" index="PLACE"/> <qti-feedback-inline outcome-identifier="PASSED" identifier="true" show-hide="show">Passed.</qti-feedback-inline></div>',
+  '      <div><qti-printed-variable identifier="TOTAL" index="PLACE"/> <qti-feedback-inline outcome-identifier="VERDICT" identifier="true" show-hide="show">Passed.</qti-feedback-inline></div>',
   "    </qti-content-body>",
   "  </qti-rubric-block>",
   `  <qti-assessment-item-ref identifier="placedItem" href="${paths.templated}">`,
@@ -457,7 +457,9 @@ const test = [
   '  <qti-outcome-declaration identifier="PLACE" cardinality="single" base-type="integer">',
   "    <qti-default-value><qti-value>1</qti-value></qti-default-value>",
   "  </qti-outcome-declaration>",
-  '  <qti-outcome-declaration identifier="PASSED" cardinality="single" base-type="identifier"/>',
+  // An identifier outcome, which the section's feedback names (Feedback outcome type); PASSED
+  // would have to be a boolean (§2.2.2.3, "PASSED MUST be a boolean", law "Reserved type").
+  '  <qti-outcome-declaration identifier="VERDICT" cardinality="single" base-type="identifier"/>',
   '  <qti-test-part identifier="part1" navigation-mode="linear" submission-mode="individual">',
   '    <qti-assessment-section identifier="first" title="First" visible="true">',
   `      <qti-assessment-item-ref identifier="ref1" href="${paths.item}">`,
