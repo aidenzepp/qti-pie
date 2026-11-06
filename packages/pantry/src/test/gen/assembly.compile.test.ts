@@ -1,22 +1,17 @@
 /**
- * Generated packages' write programs compiled as `DbLayer.make` compiles a workload program (R87):
- * the packages of the assembly generator's small box and a swarm's sample beyond it
+ * Every generated package's write program compiled as `DbLayer.make` compiles a workload program
+ * (R87): the packages of the assembly generator's small box and a swarm's sample beyond it
  * (`#pantry/test/gen/assembly.ts`), each imported to its rows and its ChangeSet built by
- * `changeSetOf`, then a spread of {@link compiledCount} of those ChangeSets compiled in one layer of
- * the author login. Compiling a ChangeSet runs grizzle's write filler over every family of the
- * schema, so a field the filler cannot fill, such as an owner-axis copy of a column the owner fills
- * after its members, fails on the first generated package compiled, named with its literal.
+ * `changeSetOf`, then every one of those ChangeSets compiled in one layer of the author login.
+ * Compiling a ChangeSet runs grizzle's write filler over every family of the schema, so a field the
+ * filler cannot fill fails on the first generated package compiled, named with its literal.
  *
- * Why a spread and not every package: grizzle compiles a ChangeSet from its Description, which
- * names each insert and none of its rows, and `changeSetOf` names the same inserts for every
- * package, so every package's program is one program. `workload` checks each program it is given
- * against the schema, at about 10 s a ChangeSet over `Qti` (measured 2026-11-06 at load average 60:
- * 9.2 s for one, 72.5 s for five), so the 368 drawn programs would take an hour.
- *
- * It needs the committed snapshot to be the schema's, and grizzle's nested write of a tree that
- * owns an ordered family (`Node.attributes`) to compile, which grizzle `64f0427` refuses
- * (`docs/grizzle-findings.md`, R87). It lands with the pin that fixes that, beside the import's
- * write program in the author login's workload (`#pantry/qti/logins.ts` `importWork`).
+ * Every package's program has one Description, since `changeSetOf` names the same inserts for every
+ * package, so this holds the write compiler to the generated packages' own ChangeSets rather than
+ * adding programs: `workload` checks each program it is given in about 3 ms at grizzle `a2ff5eb`
+ * (288 ms for 100, measured 2026-11-06), where it took about 10 s at `64f0427`. The layer needs the
+ * committed snapshot to be the schema's, as every `DbLayer` does, and the import's write program is
+ * also declared in the author login's workload (`#pantry/qti/logins.ts` `importWork`).
  */
 import { DbLayer, login, OpenError, workload } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
@@ -45,35 +40,10 @@ import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 
 /**
  * Every generated package's write program, with the package's literal, in the order the searches
- * drew them: what the last test compiles a spread of.
+ * drew them: what the last test compiles.
  */
 const programs: { readonly change: ReturnType<typeof changeSetOf>; readonly literal: string }[] =
   [];
-
-/**
- * How many of the drawn programs the last test compiles: the first, the last, and the rest spread
- * evenly between them.
- */
-const compiledCount = 6;
-
-/**
- * The drawn programs the last test compiles, each with its index among them all: the first, the
- * last, and the rest evenly spread.
- *
- * @returns The programs, by their index in {@link programs}.
- */
-const spread = (): readonly (readonly [number, (typeof programs)[number]])[] =>
-  [
-    ...new Set(
-      Array.from({ length: compiledCount }, (_, at) =>
-        Math.round((at * (programs.length - 1)) / (compiledCount - 1)),
-      ),
-    ),
-  ].flatMap((index) => {
-    const program = programs[index];
-
-    return program === undefined ? [] : [[index, program] as const];
-  });
 
 /**
  * Import one generated package to its rows and keep its write program.
@@ -109,8 +79,8 @@ const snapshotOf = Effect.gen(function* snapshotOf() {
 });
 
 /**
- * Build a layer of the author login whose workload holds the {@link spread} of the kept programs,
- * each under the name `case<n>` of its index and nothing else, and release it at once:
+ * Build a layer of the author login whose workload holds every kept program, each under the name
+ * `case<n>` of its index and nothing else, and release it at once:
  * `DbLayer.make` compiles every program before it compares their access with the snapshot
  * (grizzle's `adapter/pool/registry.ts` `startupCheck`, `loginAccess` then `accessDrift`), and
  * opens no session.
@@ -123,7 +93,7 @@ const compileKept = Effect.gen(function* compileKept() {
     workload: [
       workload(
         Author,
-        Object.fromEntries(spread().map(([at, { change }]) => [`case${String(at)}`, change])),
+        Object.fromEntries(programs.map(({ change }, at) => [`case${String(at)}`, change])),
       ),
     ],
   });
@@ -193,14 +163,14 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/gen/assembly.ts, 
   );
 
   it.effect(
-    "compiles a spread of the generated packages' write programs as the layer compiles a workload program",
+    "compiles every generated package's write program as the layer compiles a workload program",
     () =>
       // Oracle: grizzle itself, `DbLayer.make`'s startup compilation: a program that does not
       // compile is `OpenError` carrying its `CompileError`, at `programs.case<n>`. Every kept
       // program is new to the snapshot, so a layer whose programs all compile stops at the first
       // of them it does not record, `WorkloadUngenerated` naming `case<n>`, which it can only name
       // once every program has compiled.
-      // Bound: 6 of the packages the test above drew, spread over the box and the sample.
+      // Bound: every package the test above drew, 368.
       Effect.gen(function* compiles() {
         assert.isAbove(programs.length, 0, "no package was drawn");
 
