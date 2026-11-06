@@ -414,52 +414,59 @@ describe("startTest", () => {
         assert.strictEqual(session.started, startedAt.toISOString());
         assert.strictEqual(session.document, `${guide}/BGtest.xml`);
       }),
+    { tags: ["corpus"] },
   );
 
-  it.effect("refuses items with no entry for an item ref: item-missing", () =>
-    Effect.gen(function* missingItem() {
-      const delivery = yield* guideDelivery();
-      const items = new Map(delivery.items);
-      items.delete("beginnersguide009");
+  it.effect(
+    "refuses items with no entry for an item ref: item-missing",
+    () =>
+      Effect.gen(function* missingItem() {
+        const delivery = yield* guideDelivery();
+        const items = new Map(delivery.items);
+        items.delete("beginnersguide009");
 
-      const refused = startTest(delivery.test, items, yield* configure({}), {
-        instance,
-        now: startedAt,
-      });
+        const refused = startTest(delivery.test, items, yield* configure({}), {
+          instance,
+          now: startedAt,
+        });
 
-      const failure = failureTagged(refused, "TestNotDeliverable");
+        const failure = failureTagged(refused, "TestNotDeliverable");
 
-      assert.deepStrictEqual(
-        [failure.reason, failure.ref, failure.expected, failure.found],
-        ["item-missing", "beginnersguide009", `${guide}/items/BG009.xml`, Option.none()],
-      );
-    }),
+        assert.deepStrictEqual(
+          [failure.reason, failure.ref, failure.expected, failure.found],
+          ["item-missing", "beginnersguide009", `${guide}/items/BG009.xml`, Option.none()],
+        );
+      }),
+    { tags: ["corpus"] },
   );
 
-  it.effect("refuses an item from another document than its ref names: item-mismatch", () =>
-    Effect.gen(function* mismatchedItem() {
-      const delivery = yield* guideDelivery();
-      const items = new Map(delivery.items);
-      const bg007 = items.get("beginnersguide007") ?? assert.fail("BG007 is not among the items");
-      items.set("beginnersguide008", bg007);
+  it.effect(
+    "refuses an item from another document than its ref names: item-mismatch",
+    () =>
+      Effect.gen(function* mismatchedItem() {
+        const delivery = yield* guideDelivery();
+        const items = new Map(delivery.items);
+        const bg007 = items.get("beginnersguide007") ?? assert.fail("BG007 is not among the items");
+        items.set("beginnersguide008", bg007);
 
-      const refused = startTest(delivery.test, items, yield* configure({}), {
-        instance,
-        now: startedAt,
-      });
+        const refused = startTest(delivery.test, items, yield* configure({}), {
+          instance,
+          now: startedAt,
+        });
 
-      const failure = failureTagged(refused, "TestNotDeliverable");
+        const failure = failureTagged(refused, "TestNotDeliverable");
 
-      assert.deepStrictEqual(
-        [failure.reason, failure.ref, failure.expected, failure.found],
-        [
-          "item-mismatch",
-          "beginnersguide008",
-          `${guide}/items/BG008.xml`,
-          Option.some(`${guide}/items/BG007.xml`),
-        ],
-      );
-    }),
+        assert.deepStrictEqual(
+          [failure.reason, failure.ref, failure.expected, failure.found],
+          [
+            "item-mismatch",
+            "beginnersguide008",
+            `${guide}/items/BG008.xml`,
+            Option.some(`${guide}/items/BG007.xml`),
+          ],
+        );
+      }),
+    { tags: ["corpus"] },
   );
 
   it.effect(
@@ -582,26 +589,29 @@ describe("startTest", () => {
       }),
   );
 
-  it.effect("refuses a session instance checkInstance refuses, and an invalid now", () =>
-    Effect.gen(function* brokenContext() {
-      const delivery = yield* guideDelivery();
-      const configuration = yield* configure({});
+  it.effect(
+    "refuses a session instance checkInstance refuses, and an invalid now",
+    () =>
+      Effect.gen(function* brokenContext() {
+        const delivery = yield* guideDelivery();
+        const configuration = yield* configure({});
 
-      const badInstance = startTest(delivery.test, delivery.items, configuration, {
-        instance: "sitting-",
-        now: startedAt,
-      });
-      const badTime = startTest(delivery.test, delivery.items, configuration, {
-        instance,
-        now: new Date(Number.NaN),
-      });
+        const badInstance = startTest(delivery.test, delivery.items, configuration, {
+          instance: "sitting-",
+          now: startedAt,
+        });
+        const badTime = startTest(delivery.test, delivery.items, configuration, {
+          instance,
+          now: new Date(Number.NaN),
+        });
 
-      assert.strictEqual(
-        failureTagged(badInstance, "InvalidSessionInstance").requirement,
-        "id-boundary",
-      );
-      assert.strictEqual(failureTagged(badTime, "InvalidTime").argument, "context.now");
-    }),
+        assert.strictEqual(
+          failureTagged(badInstance, "InvalidSessionInstance").requirement,
+          "id-boundary",
+        );
+        assert.strictEqual(failureTagged(badTime, "InvalidTime").argument, "context.now");
+      }),
+    { tags: ["corpus"] },
   );
 });
 
@@ -621,19 +631,23 @@ describe("current", () => {
         assert.deepStrictEqual([view.navigation, view.submission], ["nonlinear", "individual"]);
         assert.deepStrictEqual(view.values, { RESPONSE: nullChoice });
       }),
+    { tags: ["corpus"] },
   );
 
-  it.effect("renders with the seed the session started with, not the host's", () =>
-    Effect.gen(function* storedSeed() {
-      const delivery = yield* guideDelivery();
-      const session = started(delivery, yield* configure({ seed: 7 }));
+  it.effect(
+    "renders with the seed the session started with, not the host's",
+    () =>
+      Effect.gen(function* storedSeed() {
+        const delivery = yield* guideDelivery();
+        const session = started(delivery, yield* configure({ seed: 7 }));
 
-      assert.deepStrictEqual(session.seed, Option.some(7));
-      assert.strictEqual(
-        currentItem(delivery, session, yield* configure({ seed: 9 })).configuration.seed,
-        7,
-      );
-    }),
+        assert.deepStrictEqual(session.seed, Option.some(7));
+        assert.strictEqual(
+          currentItem(delivery, session, yield* configure({ seed: 9 })).configuration.seed,
+          7,
+        );
+      }),
+    { tags: ["corpus"] },
   );
 
   it.effect(
@@ -676,56 +690,62 @@ describe("current", () => {
       }),
   );
 
-  it.effect("[T-14] gives the same view after encode, a JSON round trip and decode", () =>
-    Effect.gen(function* viewRoundTrip() {
-      const delivery = yield* guideDelivery();
-      const configuration = yield* configure({});
-      const session = Result.getOrElse(
-        recordStep(
-          started(delivery, configuration),
-          { intent: { kind: "next" }, responses: { RESPONSE: chosen } },
-          after(4200),
-        ),
-        (failure) => assert.fail(failure.message),
-      );
-      const restored = throughHost(delivery.test, session);
+  it.effect(
+    "[T-14] gives the same view after encode, a JSON round trip and decode",
+    () =>
+      Effect.gen(function* viewRoundTrip() {
+        const delivery = yield* guideDelivery();
+        const configuration = yield* configure({});
+        const session = Result.getOrElse(
+          recordStep(
+            started(delivery, configuration),
+            { intent: { kind: "next" }, responses: { RESPONSE: chosen } },
+            after(4200),
+          ),
+          (failure) => assert.fail(failure.message),
+        );
+        const restored = throughHost(delivery.test, session);
 
-      assert.deepStrictEqual(restored, session);
-      assert.deepStrictEqual(
-        current(delivery.test, restored, configuration),
-        current(delivery.test, session, configuration),
-      );
-      assert.deepStrictEqual(currentItem(delivery, restored, configuration).values, {
-        RESPONSE: chosen,
-      });
-    }),
+        assert.deepStrictEqual(restored, session);
+        assert.deepStrictEqual(
+          current(delivery.test, restored, configuration),
+          current(delivery.test, session, configuration),
+        );
+        assert.deepStrictEqual(currentItem(delivery, restored, configuration).values, {
+          RESPONSE: chosen,
+        });
+      }),
+    { tags: ["corpus"] },
   );
 
-  it.effect("gives the summary once the test is closed, each item with its permits", () =>
-    Effect.gen(function* closedSummary() {
-      const delivery = yield* guideDelivery();
-      const session = started(delivery, yield* configure({}));
-      const closed: TestSession = {
-        ...session,
-        parts: [{ identifier: "testPart-1", status: "ended" }],
-        status: "closed",
-      };
-      const shown = Result.getOrElse(
-        current(delivery.test, closed, yield* configure({})),
-        (failure) => assert.fail(failure.message),
-      );
+  it.effect(
+    "gives the summary once the test is closed, each item with its permits",
+    () =>
+      Effect.gen(function* closedSummary() {
+        const delivery = yield* guideDelivery();
+        const session = started(delivery, yield* configure({}));
+        const closed: TestSession = {
+          ...session,
+          parts: [{ identifier: "testPart-1", status: "ended" }],
+          status: "closed",
+        };
+        const shown = Result.getOrElse(
+          current(delivery.test, closed, yield* configure({})),
+          (failure) => assert.fail(failure.message),
+        );
 
-      assert.deepStrictEqual(shown, {
-        items: guideRefs.map(([ref], index) => ({
-          numAttempts: 0,
-          permits: { review: true, solution: false },
-          presented: index === 0,
-          ref,
-          sequenceIndex: index + 1,
-        })),
-        kind: "summary",
-      });
-    }),
+        assert.deepStrictEqual(shown, {
+          items: guideRefs.map(([ref], index) => ({
+            numAttempts: 0,
+            permits: { review: true, solution: false },
+            presented: index === 0,
+            ref,
+            sequenceIndex: index + 1,
+          })),
+          kind: "summary",
+        });
+      }),
+    { tags: ["corpus"] },
   );
 });
 
@@ -762,34 +782,40 @@ describe("present", () => {
       }),
   );
 
-  it.effect("changes nothing on an item already presented", () =>
-    Effect.gen(function* presentedTwice() {
-      const delivery = yield* guideDelivery();
-      const session = started(delivery, yield* configure({}));
+  it.effect(
+    "changes nothing on an item already presented",
+    () =>
+      Effect.gen(function* presentedTwice() {
+        const delivery = yield* guideDelivery();
+        const session = started(delivery, yield* configure({}));
 
-      assert.deepStrictEqual(
-        present(delivery.items, session, 1, after(5000)),
-        Result.succeed(session),
-      );
-    }),
+        assert.deepStrictEqual(
+          present(delivery.items, session, 1, after(5000)),
+          Result.succeed(session),
+        );
+      }),
+    { tags: ["corpus"] },
   );
 
-  it.effect("refuses a sequence index the session lacks: ItemNotInSession", () =>
-    Effect.gen(function* presentOutside() {
-      const delivery = yield* guideDelivery();
-      const session = started(delivery, yield* configure({}));
+  it.effect(
+    "refuses a sequence index the session lacks: ItemNotInSession",
+    () =>
+      Effect.gen(function* presentOutside() {
+        const delivery = yield* guideDelivery();
+        const session = started(delivery, yield* configure({}));
 
-      const failure = failureTagged(
-        present(delivery.items, session, 7, after(1000)),
-        "ItemNotInSession",
-      );
+        const failure = failureTagged(
+          present(delivery.items, session, 7, after(1000)),
+          "ItemNotInSession",
+        );
 
-      assert.deepStrictEqual([failure.sequenceIndex, failure.count], [7, 6]);
-    }),
+        assert.deepStrictEqual([failure.sequenceIndex, failure.count], [7, 6]);
+      }),
+    { tags: ["corpus"] },
   );
 });
 
-describe("itemView", () => {
+describe("itemView", { tags: ["corpus"] }, () => {
   it.effect("[T-4] [T-7] [S-7] gives BGtest.xml's item 3 the instance <instance>.3", () =>
     Effect.gen(function* thirdItem() {
       const delivery = yield* guideDelivery();
@@ -818,7 +844,7 @@ describe("itemView", () => {
   );
 });
 
-describe("itemViews", () => {
+describe("itemViews", { tags: ["corpus"] }, () => {
   it.effect("gives each item's view as itemView does, in the order asked", () =>
     Effect.gen(function* everyView() {
       const delivery = yield* guideDelivery();
@@ -861,7 +887,7 @@ describe("itemViews", () => {
   );
 });
 
-describe("permits", () => {
+describe("permits", { tags: ["corpus"] }, () => {
   it.effect(
     "permits nothing on an open item, and review on one whose single attempt was processed",
     () =>
@@ -894,7 +920,7 @@ describe("permits", () => {
   );
 });
 
-describe("recordStep", () => {
+describe("recordStep", { tags: ["corpus"] }, () => {
   it.effect(
     "saves the step's responses and adds the interval since the last transition, a negative one adding 0",
     () =>
