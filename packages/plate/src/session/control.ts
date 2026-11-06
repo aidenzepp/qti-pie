@@ -11,7 +11,7 @@
 import { Array as Arr, Data, Option, Result } from "effect";
 import type { Configuration } from "#plate/configuration.ts";
 import type { ControlAttributes, SectionChild, Test } from "#plate/model/test.ts";
-import { sessionControlDefaults } from "#plate/vocabulary.ts";
+import { sessionControlDefaults } from "#plate/session/control-defaults.ts";
 import type { SubmissionMode } from "#plate/vocabulary.ts";
 
 /**

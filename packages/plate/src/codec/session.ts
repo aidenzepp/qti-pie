@@ -61,8 +61,8 @@ const sessionFields = {
 
 /**
  * The Schema of a test session; its type is {@link TestSession}, and its encoded form the
- * {@link StoredTestSession} the host keeps, which adds `version`. Encoding writes version 1 and
- * decoding requires it, so the plain session carries no version.
+ * {@link StoredTestSession} the host keeps, which adds `version`. Encoding writes
+ * {@link storedVersion} and decoding requires it, so the plain session carries no version.
  */
 export const TestSessionSchema = Schema.Struct({
   ...sessionFields,
@@ -133,7 +133,8 @@ export class InvalidSession extends Data.TaggedError("InvalidSession")<{
   readonly stage: SessionStage;
   /**
    * The value the stored session holds under `version`, which is `1` when something else is
-   * wrong; none when it names no version, and at stage `encode`, where no stored session was read.
+   * wrong; none when it is not an object or names no version, and at stage `encode`, where no
+   * stored session was read.
    */
   readonly version: Option.Option<unknown>;
 }> {
@@ -230,7 +231,7 @@ const belonging = (
  *
  * @param input The stored session, as the host returned it: the {@link StoredTestSession}
  *   {@link encodeSession} wrote, after any JSON round trip. A session that names no version, or
- *   another version than 1, is refused before the rest is read.
+ *   another version than {@link storedVersion}, is refused before the rest is read.
  * @param test The test the session must belong to.
  * @returns The session; {@link InvalidSession} at stage `decode` naming what does not fit, with the
  *   version found when that is what does not fit; or {@link SessionMismatch} when the session
