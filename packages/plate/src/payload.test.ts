@@ -25,6 +25,7 @@ import type {
   View,
 } from "#plate/payload.ts";
 import { redact, render } from "#plate/render.ts";
+import { growthFactor, growthLimit, growthRatio } from "#plate/test/growth.ts";
 import { parseHtml } from "#plate/test/round-trip.ts";
 import { acceptForTest } from "#plate/validate/verdict.ts";
 
@@ -1387,6 +1388,57 @@ const postingOf = (
   options: { base },
 });
 
+/**
+ * The responses of the smaller item the growth check reads, each bound to its own Text Entry,
+ * before it reads one with {@link growthFactor} times as many.
+ */
+const fewerEntries = 2000;
+
+/**
+ * The growth check reads 16,000 responses three times and 2,000 responses 24 times. A read that
+ * searched every interaction for each response took about a second at 16,000 responses, and a
+ * failing check should report its ratio, not a timeout.
+ */
+const growthTimeoutMs = 300_000;
+
+/**
+ * Construct a redacted item whose body is one paragraph of Text Entries, each bound to its own
+ * single string response, `R1` to `R<count>`.
+ *
+ * @param count How many responses and Text Entries it holds.
+ * @returns The redacted item.
+ */
+const entriesItem = (count: number): Redacted => {
+  const identifiers = Array.from({ length: count }, (_, index) => `R${String(index + 1)}`);
+
+  return redactItem({
+    ...item,
+    body: [
+      {
+        attributes: [],
+        children: identifiers.map((identifier) => textEntry(identifier)),
+        kind: "element",
+        path: "qti-assessment-item/qti-item-body/p",
+        tag: "p",
+      },
+    ],
+    responses: new Map(
+      identifiers.map((identifier) => [
+        identifier,
+        {
+          areaMapping: Option.none(),
+          baseType: "string",
+          cardinality: "single",
+          correct: Option.none(),
+          defaultValue: Option.none(),
+          identifier,
+          mapping: Option.none(),
+        },
+      ]),
+    ),
+  });
+};
+
 describe("postings", () => {
   it("gives each posted response its binding and its first text interaction's base, in declaration order", () => {
     const bound: Item = {
@@ -1436,4 +1488,29 @@ describe("postings", () => {
       postingOf("CAPITAL", "identifier", 10),
     ]);
   });
+
+  it.effect(
+    "gives the postings of 8 times the responses, each bound to its own Text Entry, in under 32 times the time",
+    () =>
+      Effect.gen(function* postingsInLinearTime() {
+        const fewer = entriesItem(fewerEntries);
+        const more = entriesItem(fewerEntries * growthFactor);
+        assert.lengthOf(postings(more, instance), fewerEntries * growthFactor);
+
+        const growth = yield* growthRatio(
+          () => {
+            postings(fewer, instance);
+          },
+          () => {
+            postings(more, instance);
+          },
+        );
+        assert.isBelow(
+          growth,
+          growthLimit,
+          `8 times the bound responses took ${growth.toFixed(1)} times as long`,
+        );
+      }),
+    growthTimeoutMs,
+  );
 });
