@@ -90,6 +90,9 @@ and both of its entry points are unstable until M3.
 - A `StoredRecord` carries `version: 1`. plate refuses a record that M1's `score` wrote, since it
   names no version.
 - A Text Entry's and an Extended Text's controls carry `autocomplete="off"` in every mode.
+- `PartSwapRefused` refuses with `root-not-allowed` a replacement for a Text Entry's `control`
+  that writes its type in another case, such as `TYPE="checkbox"`, as it already refused
+  `type="checkbox"`.
 - `decode` refuses posted text that holds a character XML 1.0 cannot carry, such as U+0000 or
   U+FFFE, with `Malformed` and the reason `character`. A stored record or session with a string or
   URI value that holds such a character is refused when plate reads it back.

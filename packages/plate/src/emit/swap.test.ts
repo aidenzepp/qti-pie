@@ -389,6 +389,33 @@ describe("applyPart, I3", () => {
       assert.strictEqual(error.part, "control");
     }),
   );
+
+  it.effect(
+    '[Q-12] refuses a Text Entry Control replacement whose TYPE="checkbox" names its type in upper case',
+    () =>
+      Effect.gen(function* upperCaseType() {
+        const row = rowFor("text-entry-interaction", "control");
+        const error = yield* Effect.flip(
+          Effect.fromResult(
+            applyPart(
+              row,
+              {
+                "data-slot": row.slot,
+                id: "i1-RESPONSE-control-0",
+                name: "RESPONSE",
+                type: "text",
+              },
+              [],
+              () => h("input", { TYPE: "checkbox" }),
+            ),
+          ),
+        );
+        assert.strictEqual(error._tag, "PartSwapRefused");
+        assert.strictEqual(error.cause, "root-not-allowed");
+        assert.strictEqual(error.interaction, "text-entry-interaction");
+        assert.strictEqual(error.part, "control");
+      }),
+  );
 });
 
 describe("applyPart, the list joint rule", () => {

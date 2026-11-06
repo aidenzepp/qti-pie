@@ -1,7 +1,7 @@
 import { Data, Result } from "effect";
 import { h } from "#plate/emit/node.ts";
 import type { Attributes, Element, Node, PartFunction } from "#plate/emit/node.ts";
-import { allows, lists, splitTokens } from "#plate/emit/parts.ts";
+import { allows, attributeOf, lists, splitTokens } from "#plate/emit/parts.ts";
 import type { PartRow, TagClass } from "#plate/emit/parts.ts";
 
 /**
@@ -137,15 +137,15 @@ const mayBecome = {
  * Name a node of the output tree for a refusal's detail.
  *
  * @param node The node.
- * @returns The element's tag in angle brackets, with its `type` when it is an `input`, or the text
- *   quoted and cut to 24 characters.
+ * @returns The element's tag in angle brackets, with its `type`, read in any case, when it is an
+ *   `input`, or the text quoted and cut to 24 characters.
  */
 const describeNode = (node: Node): string => {
   if (node.kind === "text") {
     return `text ${JSON.stringify(node.text.length > 24 ? `${node.text.slice(0, 24)}…` : node.text)}`;
   }
 
-  const { type } = node.attrs;
+  const type = attributeOf(node.attrs, "type");
 
   return node.tag === "input" && type !== undefined && type !== true
     ? `<input type=${JSON.stringify(type)}>`

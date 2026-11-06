@@ -65,7 +65,7 @@ export type Position = "flow" | "phrasing";
  * - `choice-item`: `li`, or a flow container under a Choices that is not a list.
  * - `native-input`: an `input`, whose `type` I1 writes back, so the native control stays the one the
  *   interaction computed.
- * - `text-input`: an `input` of type `text`, written or by default.
+ * - `text-input`: an `input` of type `text`, written in any case or by default.
  * - `select`: a `select` with no `multiple` and no `size` other than 1, so it stays a drop-down that
  *   posts one entry (spec §4.9 I2).
  * - `option`: an `option` with no `label`, because a `label` replaces the text the option shows, and
@@ -378,13 +378,13 @@ const isTextType = (type: string | true | undefined): boolean =>
 
 /**
  * Give an element's attribute by name in any ASCII case, as HTML reads attribute names, so a
- * replacement cannot write `MULTIPLE` past a check that reads `multiple`.
+ * replacement cannot write `TYPE` or `MULTIPLE` past a check that reads `type` or `multiple`.
  *
  * @param attrs The element's attributes.
  * @param name The attribute's name, in lower case.
  * @returns The value of the first attribute whose name matches, or undefined when none does.
  */
-const attributeOf = (attrs: Attributes, name: string): string | true | undefined => {
+export const attributeOf = (attrs: Attributes, name: string): string | true | undefined => {
   const key = Object.keys(attrs).find((candidate) => candidate.toLowerCase() === name);
 
   return key === undefined ? undefined : attrs[key];
@@ -430,7 +430,7 @@ const admits = {
   "phrasing-container": ({ tag }) => isPhrasingContainer(tag),
   prompt: ({ tag }) => tag === "p" || isFlowContainer(tag),
   select: ({ attrs, tag }) => tag === "select" && isDropDown(attrs),
-  "text-input": ({ attrs, tag }) => tag === "input" && isTextType(attrs["type"]),
+  "text-input": ({ attrs, tag }) => tag === "input" && isTextType(attributeOf(attrs, "type")),
   textarea: ({ tag }) => tag === "textarea",
 } satisfies { readonly [C in TagClass]: (element: Element) => boolean };
 
