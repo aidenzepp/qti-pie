@@ -434,40 +434,29 @@ describe("the containers family's bound on a computed container (operator ruling
     assertUnset(evaluated(repeatOf(literal(500_001n), one("A"), list("B"))), list());
   });
 
-  it("[I-9a] qti-repeat checks its running size inside the pass loop, so a pass that grows past 1,000,000 values gives the ordered NULL", () => {
+  it("[I-9a] qti-repeat evaluates its operands once and repeats that pass's values, so an operand whose later values would grow past 1,000,000 is never evaluated again", () => {
     const { repeat } = containersEvaluators;
     assert.notStrictEqual(repeat, "unlanded", "qti-repeat is landed");
     if (repeat === "unlanded") {
       return;
     }
 
-    let passes = 0;
+    let evaluations = 0;
     const growing: Evaluate = () => {
-      passes += 1;
+      evaluations += 1;
 
-      return Result.succeed(passes === 1 ? one("A") : sized("ordered", 600_000));
+      return Result.succeed(evaluations === 1 ? one("A") : sized("ordered", 600_000));
     };
-    const scope = scopeOf(bg007Item, none);
-    const grown = repeat(
+    const repeated = repeat(
       { kind: "repeat", numberRepeats: literal(3n), operands: [operandOf(one("A"))] },
-      scope,
+      scopeOf(bg007Item, none),
       growing,
     );
-    assert.isTrue(Result.isSuccess(grown), "qti-repeat failed");
+    assert.isTrue(Result.isSuccess(repeated), "qti-repeat failed");
 
-    const value = Result.getOrThrow(grown);
-    assertUnset(value, list());
+    const value = Result.getOrThrow(repeated);
+    assert.deepStrictEqual(value, list("A", "A", "A"));
     assertKindType(value, "repeat", [typeOf(one("A"))]);
-    assert.strictEqual(passes, 3, "the third pass, which grows past the bound, ran");
-
-    passes = 0;
-    const kept = Result.getOrThrow(
-      repeat(
-        { kind: "repeat", numberRepeats: literal(2n), operands: [operandOf(one("A"))] },
-        scope,
-        growing,
-      ),
-    );
-    assert.strictEqual(kept.values.length, 600_001, "two passes stay within the bound");
+    assert.strictEqual(evaluations, 1, "the operand was evaluated once, not once per pass");
   });
 });

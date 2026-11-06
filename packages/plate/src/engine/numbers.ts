@@ -3,7 +3,8 @@
  * from an integer to a float ({@link toFloat}), the one number a single numeric value holds
  * ({@link numberOf}), exact equality of two numbers ({@link sameNumber}), the single boolean a
  * test gives ({@link booleanOf}), and the bounds on what the engine computes
- * ({@link integerBitBound}, {@link containerSizeBound}).
+ * ({@link integerBitBound}, {@link containerSizeBound}), and a product held to the first, built one
+ * factor at a time ({@link boundedTimes}).
  *
  * Integers are exact `bigint`s (reading 45) and floats are 64-bit doubles, never infinite when made
  * from an integer. An integer and a float compare exactly, never through a lossy conversion. The
@@ -129,7 +130,9 @@ export const containerSizeBound = 1_000_000;
 /**
  * Give the number of bits an integer has: the binary digits of its magnitude, so 0 has none, 1 has
  * one and 2^999999 has 1,000,000, and an integer and its negative have the same. It reads the
- * hexadecimal digits, which `bigint` writes in time linear in its size.
+ * hexadecimal digits, which `bigint` writes in time linear in its size, so it makes a string the
+ * integer's size: {@link boundedTimes} measures each factor once this way, and a product only when
+ * its factors cannot decide it.
  *
  * @param integer The integer.
  * @returns Its bit length.
@@ -154,11 +157,74 @@ export const boundedInteger = (integer: bigint): Option.Option<bigint> =>
   bitLengthOf(integer) <= integerBitBound ? Option.some(integer) : Option.none();
 
 /**
- * Give the product of two integers when it is within {@link integerBitBound}, without computing a
- * product that must be past it: a product of two integers that are not 0, of `a` and `b` bits, has
- * `a + b` or `a + b − 1` bits, so one whose operands' bits sum to more than the bound plus one is
- * none before any multiplication, and any other is computed, at most one bit past the bound, and
- * checked exactly. A product with 0 is 0, whatever the other's size.
+ * A product the engine is building factor by factor, with the range its bit length lies in:
+ * `leastBits <= bitLengthOf(integer) <= mostBits`. A product's bit length is known from its
+ * factors' to within one bit, so the range is carried from one factor to the next instead of
+ * measuring each partial product.
+ */
+export interface PartialProduct {
+  readonly integer: bigint;
+  readonly leastBits: number;
+  readonly mostBits: number;
+}
+
+/**
+ * The product of no factor: 1, of exactly one bit, where a product built by
+ * {@link boundedTimes} starts.
+ */
+export const emptyProduct: PartialProduct = { integer: 1n, leastBits: 1, mostBits: 1 };
+
+/**
+ * The product of 0 and any integer: 0, of no bits.
+ */
+const zeroProduct: PartialProduct = { integer: 0n, leastBits: 0, mostBits: 0 };
+
+/**
+ * Multiply a product by one more integer when the result is within {@link integerBitBound},
+ * deciding from bit lengths wherever they suffice. The factor is measured once; the product is
+ * not. A product of `a` and `b` bits, neither 0, has `a + b` or `a + b − 1` bits, and exactly the
+ * other's bits when one is ±1, the one factor of one bit. So the product is kept unmeasured when
+ * the most it can have is at most the bound, and is none before any multiplication when the least
+ * it can have is past it; only in between is it measured, exactly, and it is then at most the
+ * factor's bits past the bound. A product with 0 is 0, whatever the other's size.
+ *
+ * @param held The product so far, within the bound.
+ * @param factor The next integer.
+ * @returns The product with the range of its bit length, exact once measured, or none when it has
+ *   more than 1,000,000 bits.
+ */
+export const boundedTimes = (
+  held: PartialProduct,
+  factor: bigint,
+): Option.Option<PartialProduct> => {
+  if (held.integer === 0n || factor === 0n) {
+    return Option.some(zeroProduct);
+  }
+
+  const bits = bitLengthOf(factor);
+  const leastBits = held.leastBits + bits - 1;
+  if (leastBits > integerBitBound) {
+    return Option.none();
+  }
+
+  const integer = held.integer * factor;
+  const mostBits = held.mostBits + bits - (held.mostBits === 1 || bits === 1 ? 1 : 0);
+  if (mostBits <= integerBitBound) {
+    return Option.some({ integer, leastBits, mostBits });
+  }
+
+  const exact = bitLengthOf(integer);
+
+  return exact <= integerBitBound
+    ? Option.some({ integer, leastBits: exact, mostBits: exact })
+    : Option.none();
+};
+
+/**
+ * Give the product of two integers when it is within {@link integerBitBound}: 0 when either is 0,
+ * whatever the other's size, and otherwise the product {@link boundedTimes} builds from
+ * {@link emptyProduct}, which measures each integer once and the product only when their bit
+ * lengths cannot decide it.
  *
  * @param left One integer.
  * @param right The other.
@@ -169,9 +235,10 @@ export const boundedProduct = (left: bigint, right: bigint): Option.Option<bigin
     return Option.some(0n);
   }
 
-  return bitLengthOf(left) + bitLengthOf(right) > integerBitBound + 1
-    ? Option.none()
-    : boundedInteger(left * right);
+  return Option.map(
+    Option.flatMap(boundedTimes(emptyProduct, left), (held) => boundedTimes(held, right)),
+    (product) => product.integer,
+  );
 };
 
 /**

@@ -211,19 +211,25 @@ const evaluateOrdered: Evaluator<"ordered"> = (expression, scope, evaluate) =>
  * is NULL, when `number-repeats` is below 1 or names a variable that holds NULL, and when the
  * container would hold more than 1,000,000 values.
  *
- * `number-repeats` is resolved first, then the operands are evaluated once per pass, as the
- * information model fills the container, left to right; the first failure is the result. The first
- * pass runs even when `number-repeats` is below 1, so the NULL keeps the operands' base type.
+ * `number-repeats` is resolved first, then the operands are evaluated once, left to right; the
+ * first failure is the result. That pass runs even when `number-repeats` is below 1, so the NULL
+ * keeps the operands' base type. Its values are then added `number-repeats` times, one at a time.
  *
- * The bound is checked before the work and as it goes. After the first pass, its size times
- * `number-repeats` past the bound gives NULL before a second pass runs. A first pass that gives no
- * value gives NULL at once, however many passes `number-repeats` asks for: an operand's value
- * depends only on the scope, which a pass does not change, so every pass would give none. That
- * holds while no random kind runs (`qti-random`, `qti-random-integer` and `qti-random-float` are
- * unlanded, so the reader marks any processing that holds one), and it is what keeps a nested
- * `qti-repeat` of nothing from running a million passes a million times. Each later pass's size is
- * checked against the running size inside the loop, so a pass whose size is known only once it has
- * run is bounded too.
+ * Evaluating once is exact only while no operand kind is random: an operand's value depends only on
+ * the scope, which a pass does not change, so every pass would give the first pass's values.
+ * `qti-random`, `qti-random-integer` and `qti-random-float` are unlanded, so the reader marks any
+ * processing that holds one. M3.b-2 (P7T-01), which lands them, must evaluate the operands once per
+ * pass again, under a budget on the passes, for the information model fills the container pass by
+ * pass. Until then one evaluation is what keeps a costly operand, such as a product of two
+ * 500,000-bit integers, from being computed a million times, though the container stays within
+ * the bound.
+ *
+ * The bound is checked before any value is added: the pass's size times `number-repeats` past the
+ * bound gives NULL, and a pass that gives no value gives NULL at once, however many passes
+ * `number-repeats` asks for, which keeps a nested `qti-repeat` of nothing from running a million
+ * passes a million times. The running size is checked again before each pass is added. That
+ * cannot fail while one pass's values are repeated; it is the check per-pass evaluation needs, for
+ * a pass whose size is known only once it has run.
  *
  * @param expression The `qti-repeat`.
  * @param scope The item and the variables of the attempt.
@@ -234,26 +240,24 @@ const evaluateOrdered: Evaluator<"ordered"> = (expression, scope, evaluate) =>
 const evaluateRepeat: Evaluator<"repeat"> = (expression, scope, evaluate) =>
   Result.gen(function* repeatOperands() {
     const repeats = yield* integerOf(scope, expression.numberRepeats);
-    const first = yield* valuesOf(expression.operands, scope, evaluate);
+    const pass = yield* valuesOf(expression.operands, scope, evaluate);
     const count = Option.getOrElse(repeats, () => 0n);
-    const unset = nullOf(baseOf(first), "ordered");
-    const passSize = sizeOf(first);
+    const unset = nullOf(baseOf(pass), "ordered");
+    const passSize = sizeOf(pass);
     if (count < 1n || passSize === 0 || !withinContainerBound(BigInt(passSize) * count)) {
       return unset;
     }
 
     const held: Single[] = [];
-    appendTo(held, first);
-    for (let pass = 1n; pass < count; pass += 1n) {
-      const values = yield* valuesOf(expression.operands, scope, evaluate);
-      if (!withinContainerBound(BigInt(held.length + sizeOf(values)))) {
+    for (let added = 0n; added < count; added += 1n) {
+      if (!withinContainerBound(BigInt(held.length + passSize))) {
         return unset;
       }
 
-      appendTo(held, values);
+      appendTo(held, pass);
     }
 
-    return { baseType: baseOf(first), cardinality: "ordered", values: held };
+    return { baseType: baseOf(pass), cardinality: "ordered", values: held };
   });
 
 /**

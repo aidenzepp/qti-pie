@@ -24,7 +24,8 @@
 import { Option, Result } from "effect";
 import type { Evaluate, Evaluator, FamilyTable, Scope } from "#plate/engine/evaluate.ts";
 import type { EngineFailure } from "#plate/engine/failures.ts";
-import { boundedProduct, toFloat } from "#plate/engine/numbers.ts";
+import { boundedTimes, emptyProduct, toFloat } from "#plate/engine/numbers.ts";
+import type { PartialProduct } from "#plate/engine/numbers.ts";
 import type { Expression } from "#plate/model/expression.ts";
 import { nullOf } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
@@ -267,30 +268,31 @@ const evaluateGcd: Evaluator<"gcd"> = (expression, scope, evaluate) =>
 
 /**
  * Give the least common multiple of integers that are not 0, by their magnitudes, held to the
- * bound without building a multiple far past it: each partial multiple is the one before divided
- * by its common divisor with the next integer, times that integer, through `boundedProduct`, so
- * the first past the bound gives none. Each partial multiple divides the whole one, so the first
- * past the bound means the whole is past it. The first integer's magnitude alone is held to the
- * bound too, for the multiple of one operand is computed, not written.
+ * bound without building a multiple far past it: each partial multiple is the one before times
+ * the next integer divided by their common divisor, lcm(m, n) = m × (n / gcd(m, n)), through
+ * `boundedTimes`, so the first past the bound gives none. Only that quotient, no larger than the
+ * integer, is measured; the range of each partial multiple's bit length is carried, so no partial
+ * multiple is measured unless the bit lengths cannot decide it. Each partial multiple divides the
+ * whole one, so the first past the bound means the whole is past it. The first integer's
+ * magnitude alone is held to the bound too, for the multiple of one operand is computed, not
+ * written.
  *
  * @param integers The integers, none of them 0.
  * @returns The least common multiple, or none when it has more than 1,000,000 bits.
  */
 const leastCommonMultiple = (integers: readonly bigint[]): Option.Option<bigint> => {
-  let multiple: Option.Option<bigint> = Option.some(1n);
+  let multiple: PartialProduct = emptyProduct;
   for (const integer of integers) {
-    if (Option.isNone(multiple)) {
-      return multiple;
+    const factor = magnitudeOf(integer);
+    const next = boundedTimes(multiple, factor / greatestCommonDivisor(multiple.integer, factor));
+    if (Option.isNone(next)) {
+      return Option.none();
     }
 
-    const factor = magnitudeOf(integer);
-    multiple = boundedProduct(
-      multiple.value / greatestCommonDivisor(multiple.value, factor),
-      factor,
-    );
+    multiple = next.value;
   }
 
-  return multiple;
+  return Option.some(multiple.integer);
 };
 
 /**

@@ -4,7 +4,9 @@ import {
   bitLengthOf,
   boundedInteger,
   boundedProduct,
+  boundedTimes,
   containerSizeBound,
+  emptyProduct,
   integerBitBound,
   toFloat,
   withinContainerBound,
@@ -83,6 +85,70 @@ describe("the engine's bounds on what it computes (operator ruling afb7e648)", (
     assert.deepStrictEqual(boundedProduct(2n ** 500_000n, -(2n ** 500_000n)), Option.none());
     assert.deepStrictEqual(boundedProduct(2n ** 3_000_000n, 0n), Option.some(0n));
     assert.deepStrictEqual(boundedProduct(0n, -(2n ** 3_000_000n)), Option.some(0n));
+  });
+
+  it("[I-9a] boundedTimes decides from its factors' bit lengths: kept unmeasured when they sum to at most 1,000,000, none when the sum less one is past it, and measured only in between", () => {
+    const half = Option.getOrThrow(boundedTimes(emptyProduct, 2n ** 499_999n));
+    const over = Option.getOrThrow(boundedTimes(emptyProduct, 2n ** 500_000n));
+    assert.deepStrictEqual(
+      half,
+      { integer: 2n ** 499_999n, leastBits: 500_000, mostBits: 500_000 },
+      "1 times an integer has exactly its bits",
+    );
+    assert.deepStrictEqual(over, {
+      integer: 2n ** 500_000n,
+      leastBits: 500_001,
+      mostBits: 500_001,
+    });
+
+    assert.deepStrictEqual(
+      boundedTimes(half, 2n ** 499_999n),
+      Option.some({ integer: 2n ** 999_998n, leastBits: 999_999, mostBits: 1_000_000 }),
+      "500,000 and 500,000 bits sum to the bound: kept, and its range is not narrowed by a measure",
+    );
+    assert.deepStrictEqual(
+      boundedTimes(over, 2n ** 500_000n),
+      Option.none(),
+      "500,001 and 500,001 bits: the sum less one, 1,000,001, is past the bound",
+    );
+    assert.deepStrictEqual(
+      boundedTimes(half, 2n ** 500_000n),
+      Option.some({ integer: 2n ** 999_999n, leastBits: 1_000_000, mostBits: 1_000_000 }),
+      "500,000 and 500,001 bits: in between, measured exactly at 1,000,000",
+    );
+    assert.deepStrictEqual(
+      boundedTimes(
+        Option.getOrThrow(boundedTimes(emptyProduct, 3n * 2n ** 499_998n)),
+        3n * 2n ** 499_999n,
+      ),
+      Option.none(),
+      "500,000 and 500,001 bits: in between, measured exactly at 1,000,001",
+    );
+  });
+
+  it("[I-9a] boundedTimes carries a partial product's range: a factor of ±1 keeps it, a range across the bound is measured, and 0 gives 0", () => {
+    const kept = Option.getOrThrow(
+      boundedTimes(Option.getOrThrow(boundedTimes(emptyProduct, 2n ** 499_999n)), 2n ** 499_999n),
+    );
+
+    assert.deepStrictEqual(
+      boundedTimes(kept, -1n),
+      Option.some({ integer: -(2n ** 999_998n), leastBits: 999_999, mostBits: 1_000_000 }),
+    );
+    assert.deepStrictEqual(
+      boundedTimes(kept, 2n),
+      Option.some({ integer: 2n ** 999_999n, leastBits: 1_000_000, mostBits: 1_000_000 }),
+      "999,999 to 1,000,000 bits times 2 bits is 1,000,000 to 1,000,002: measured, 1,000,000",
+    );
+    assert.deepStrictEqual(
+      boundedTimes(kept, 4n),
+      Option.none(),
+      "999,999 to 1,000,000 bits times 3 bits is at least 1,000,001",
+    );
+    assert.deepStrictEqual(
+      boundedTimes(kept, 0n),
+      Option.some({ integer: 0n, leastBits: 0, mostBits: 0 }),
+    );
   });
 
   it("[I-9a] withinContainerBound holds a container of 1,000,000 values and not one of 1,000,001", () => {
