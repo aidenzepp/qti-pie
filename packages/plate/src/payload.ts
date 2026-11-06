@@ -91,8 +91,8 @@ export interface View {
   readonly names: ReadonlyMap<string, string>;
   readonly posted: Option.Option<ReadonlyMap<string, readonly string[]>>;
   /**
-   * The configuration's `seed`, which keys a shuffled Choice's order with the instance and the
-   * response; keyed as the empty string when absent.
+   * The configuration's `seed`, which keys a shuffled Choice's or Inline Choice's order with the
+   * instance and the response; keyed as the empty string when absent.
    */
   readonly seed?: number;
   /**
@@ -281,8 +281,8 @@ export interface InlineChoicePayload extends ModePayload, ValidationPayload {
 }
 
 /**
- * Where a text control's first Control stands among the Controls the renderer names (Q10): `n`,
- * from 1, among the `count` of the item.
+ * Where the first Control of a text control or an Inline Choice stands among the Controls the
+ * renderer names (Q10): `n`, from 1, among the `count` of the item.
  */
 export interface UnnamedPosition {
   readonly count: number;
@@ -290,7 +290,7 @@ export interface UnnamedPosition {
 }
 
 /**
- * How a text control is named.
+ * How a text control or an Inline Choice is named.
  *
  * `ariaLabel` is the author's, as written. `ariaLabelledby` holds the ids of the author's that an
  * element of the item carries, unscoped ({@link resolvedLabelledby}), none when none is carried.
@@ -675,7 +675,7 @@ const validationOf = (interaction: Interaction, build: Build): ValidationPayload
  * @returns The payload nodes.
  */
 const copyNodes = (nodes: readonly BodyNode[], build: Build): readonly PayloadNode[] =>
-  // oxlint-disable-next-line eslint/no-use-before-define -- `copyNodes` and `copyNode` are mutually recursive, as elements, Prompts and choices nest; the call runs only after both are defined.
+  // oxlint-disable-next-line eslint/no-use-before-define -- `copyNodes` and `copyNode` are mutually recursive, as elements, Prompts, Labels and choices nest; the call runs only after both are defined.
   nodes.map((node) => copyNode(node, build));
 
 /**
