@@ -59,6 +59,36 @@ that needs one asks the operator first.
      `m:positive-integer`, whitespace collapsed likewise: `base="16"` and `base=" 2 "` are admitted, and `base="+10"`
      and `base="0"` refused. "The base attribute should only be used on elements with type "integer" or "real"" is
      advice and is not read;
+   - `mscarries` is not the last element of an `mstack` or `mlongdiv`: "It is an error for mscarries to be the last
+     element of an mstack or mlongdiv element" (§3.6.1);
+   - a `bind` holds at least one `bvar`: "a non-empty list of bvar elements denoting the bound variables" (§4.2.6.1);
+   - qualifiers appear in the order "bvar, lowlimit, uplimit, interval, condition, domainofapplication, degree,
+     momentabout, logbase" (§4.3.3), and a `condition` only after a `bvar`: "condition qualifiers always contain
+     instances of the bound variable, and thus require a preceding bvar" (§4.3.3.2);
+   - `selector` takes at least one argument ("It accepts one or more arguments", §4.4) and `partialdiff` without a
+     `bvar` two;
+   - an `maction`'s `selection` names one of its children: "If the value specified is out of range, it is an error"
+     (§3.7.1.1);
+   - an `mglyph` is accepted with or without `src`, `alt` and `index`. The Recommendation states the two as an
+     unenforced recommendation: "Note that the src and alt attributes are required for correct usage in MathML 3,
+     however this is not enforced by the schema due to the deprecated usage described below" (§3.2.1.2). Appendix A's
+     `mglyph.attributes` makes `src` and `alt` optional and `mglyph.deprecatedattributes` makes `index` optional, so
+     pantry refuses none of them (operator decision 327);
+   - an `maligngroup` inside a table cell stands only where §3.5.5.2 lets it (an `mrow` or `mstyle` that changes no
+     direction, `mphantom`, `mfenced`, the selected child of an `maction`, `semantics`) and the cell's first complete
+     element is a group, while a group outside a cell is ignored and an `mrow dir="ltr"` in an LTR formula is no change
+     of direction (decision 321);
+   - a `share`'s `#id` names an element of its document, and no element dominates itself: "An element may not dominate
+     itself" (§4.2.7);
+   - `cn`'s content has the form its `type` implies (§4.2.1: integer, real, double, hexdouble, e-notation, rational,
+     complex-cartesian and complex-polar; every other type is text), split at `m:sep`, with digits read in `base` from 2
+     to 36;
+   - `xref` names an `id` of its document, an `xs:IDREF`;
+   - a MathML element whose RelaxNG content is `empty` (`mspace`, `mglyph`, `none`, `mprescripts`, `malignmark`,
+     `maligngroup`, and the empty Content MathML elements) admits whitespace-only text. §2 says "The RelaxNG Schema is
+     normative", RELAX NG matches a whitespace-only text against `empty`, and QTI's bundled XSD, whose empty types
+     refuse it, is set aside here (decision 321: "MathML's own schema wins where QTI's bundled copy is stricter
+     (accept)"). `<m:mspace> </m:mspace>` is accepted; text other than whitespace stays refused;
    - each operator's argument count under `apply`, by its class (MathML 3 §4.1.5, §4.3.4.5 and §4.3.4.6), for an
      `apply` that holds no qualifier but its operator's own. `moment` is left out, because the Recommendation's own
      example (§4.4.8.6) applies it to five arguments.
@@ -2226,3 +2256,17 @@ against it. A reading that is not an information-model-over-XSD case says which 
      Main stored no order: its `AttributeLexical` was keyed by `(node, attribute)` (`2b276d76`). This binds pantry
      and plate alike. This is not a case of documents in conflict. (Operator ruling of 2026-11-06 that attribute and
      namespace-declaration order is kept as written, from RV seat AO.)
+
+**R6-hexdouble** (a proposal for the operator; numbered at integration). A MathML `cn` of type `hexdouble` holds
+exactly 16 hexadecimal digits, in either case, kept as written. The definition of the type is the 64-bit pattern of a
+double, so 16 digits is what it means; the Recommendation's 8-digit example `7F800000` (the single-precision infinity
+pattern) is an error in an informative example, and a shorter or longer string is refused. The definition's "0-9, A-F"
+names the digit values and does not ban a spelling, hex case carries no meaning and the MathML schema puts no pattern
+on `cn` text, so `a-f` is admitted and the source spelling is kept (section 4.2.1.2, Strict uses of `cn`, of MathML 3).
+This binds pantry and plate alike. (The operator's ruling 346e70e2; 2026-11-06.)
+
+**R6-head-qualifiers** (a proposal for the operator; numbered at integration). `degree`, `momentabout` and `logbase`
+stand only beside an operator whose §4.4 syntax table lists them (`degree` beside `root` and `moment`, and, to refuse
+none of the Recommendation's own examples, `diff` and `partialdiff`; `momentabout` beside `moment`; `logbase` beside
+`log`); beside any head that is no built-in operator (`apply`, `ci`, `csymbol`, `fn`, `semantics`, `lambda`) nothing is
+judged; `BvarQ` and `DomainQ` are the RelaxNG's on every `apply`. This binds pantry and plate alike.

@@ -121,7 +121,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     2,
     {
       owner:
-        "the automaton's restated models (`m:bvar`, `m:piecewise`, the `interval` qualifier's eight, `m:annotation-xml`, `m:lambda`'s ending), `m:semantics.contexp` beside `m:ci`, MathML's root (`roots`), the `math` ancestry flag, the notation domains (`mathmlNotationReadings`, `number` among them, and `cnBaseReadings` for `m:cn`'s `base`) and the MathML arity law; the MathML foreign element law (QS); the Recommendation's other prose rules, the nine recorded limits the reading lists (reading 91)",
+        "the automaton's restated models (`m:bvar`, `m:piecewise`, the `interval` qualifier's eight, `m:annotation-xml`, `m:lambda`'s ending), `m:semantics.contexp` beside `m:ci`, MathML's root (`roots`), the `math` ancestry flag, the notation domains (`mathmlNotationReadings`, `number` among them, `cnBaseReadings` for `m:cn`'s `base`, and `mathmlXrefReading` for `xref`), the `ends` edits of `m:mstack` and `m:mlongdiv`, the restated `qualified` and `bind` models, the arity rows of `selector` and `partialdiff`, the MathML arity law and the laws `MathML head qualifier`, `MathML cn form`, `MathML maction selection`, `MathML align placement`, `MathML align first` and `MathML share cycle`; the MathML empty-content whitespace (`src/grammar/content.ts` `characterData`); the MathML foreign element law (QS); the Recommendation's other prose rules, the nine recorded limits the reading lists (reading 91)",
       status: "R",
     },
   ],
