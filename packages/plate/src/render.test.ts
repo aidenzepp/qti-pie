@@ -9,7 +9,13 @@ import { rowFor, scopedId } from "#plate/emit/parts.ts";
 import { checkInstance, entryName, partition } from "#plate/form/encoding.ts";
 import { message } from "#plate/messages.ts";
 import type { Entry, InstanceRequirement } from "#plate/form/encoding.ts";
-import type { BodyNode, ChoiceInteraction, Item, TextEntryInteraction } from "#plate/model/item.ts";
+import type {
+  BodyNode,
+  ChoiceInteraction,
+  InlineChoiceInteraction,
+  Item,
+  TextEntryInteraction,
+} from "#plate/model/item.ts";
 import type { Value } from "#plate/model/values.ts";
 import type { Redacted, RenderMode } from "#plate/payload.ts";
 import { InvalidInstance, redact, render, renderStatus } from "#plate/render.ts";
@@ -302,6 +308,90 @@ const shuffled = redact(
     ]),
   }),
 );
+
+/**
+ * An unnamed Inline Choice of three colours with no Label, bound to the single identifier response
+ * `COLOUR`.
+ */
+const colours: InlineChoiceInteraction = {
+  ariaLabel: Option.none(),
+  ariaLabelledby: Option.none(),
+  choices: [
+    { content: [words("red")], fixed: false, identifier: "R" },
+    { content: [words("green")], fixed: false, identifier: "G" },
+    { content: [words("blue")], fixed: false, identifier: "B" },
+  ],
+  class: "",
+  kind: "inline-choice",
+  label: Option.none(),
+  messages: { min: Option.none() },
+  minChoices: 0n,
+  path: "qti-assessment-item/qti-item-body/p/qti-inline-choice-interaction",
+  placeholder: Option.none(),
+  required: false,
+  response: "COLOUR",
+  shuffle: false,
+};
+
+/**
+ * Construct an item whose one paragraph holds an Inline Choice and then {@link city} with no
+ * `aria-label`, so both are unnamed unless the Inline Choice's own fields name it.
+ *
+ * @param inline The Inline Choice, bound to `COLOUR`.
+ * @returns The item, redacted.
+ */
+const sentence = (inline: InlineChoiceInteraction): Redacted =>
+  redact(
+    acceptForTest({
+      ...item,
+      body: [
+        {
+          attributes: [],
+          children: [
+            words("The sky is "),
+            inline,
+            words(" over "),
+            {
+              ...city,
+              ariaLabel: Option.none(),
+              path: "qti-assessment-item/qti-item-body/p/qti-text-entry-interaction",
+            },
+            words("."),
+          ],
+          kind: "element",
+          path: "qti-assessment-item/qti-item-body/p",
+          tag: "p",
+        },
+      ],
+      processing: Option.none(),
+      responses: new Map([
+        [
+          "COLOUR",
+          {
+            areaMapping: Option.none(),
+            baseType: "identifier",
+            cardinality: "single",
+            correct: Option.none(),
+            defaultValue: Option.none(),
+            identifier: "COLOUR",
+            mapping: Option.none(),
+          },
+        ],
+        [
+          "CITY",
+          {
+            areaMapping: Option.none(),
+            baseType: "string",
+            cardinality: "single",
+            correct: Option.none(),
+            defaultValue: Option.none(),
+            identifier: "CITY",
+            mapping: Option.none(),
+          },
+        ],
+      ]),
+    }),
+  );
 
 /**
  * The values a recorded attempt of {@link item} holds, which a `review` render shows: `B` and
@@ -656,6 +746,107 @@ describe("render", () => {
         assert.deepStrictEqual(
           named.filter((element) => element.tag === "img").map((image) => image.attrs["src"]),
           ["https://option.example/assets/images/france.png"],
+        );
+      }),
+  );
+});
+
+describe("render, an Inline Choice", () => {
+  it.effect(
+    "[Q-12] renders the select with its Placeholder and Options, and numbers its Control with a Text Entry",
+    () =>
+      Effect.gen(function* rendersInlineChoice() {
+        const configuration = yield* defaults;
+        const elements = elementsIn(
+          yield* Effect.fromResult(render(sentence(colours), configuration, { instance })),
+        );
+        const [select] = controlsOf(elements, instance, "COLOUR");
+        assert.strictEqual(select?.tag, "select");
+        assert.deepStrictEqual(
+          (select?.children ?? []).map((option) =>
+            option.kind === "element" ? [option.tag, option.attrs["value"], textOf(option)] : [],
+          ),
+          [
+            ["option", "", message("en", "selectPrompt")],
+            ["option", "R", "red"],
+            ["option", "G", "green"],
+            ["option", "B", "blue"],
+          ],
+        );
+        assert.deepStrictEqual(
+          [
+            ...controlsOf(elements, instance, "COLOUR"),
+            ...controlsOf(elements, instance, "CITY"),
+          ].map((control) => [control.tag, control.attrs["aria-label"]]),
+          [
+            ["select", "Answer 1 of 2"],
+            ["input", "Answer 2 of 2"],
+          ],
+        );
+      }),
+  );
+
+  it.effect(
+    "[Q-12] counts an Inline Choice whose qti-label is empty, writing no aria-labelledby and the Label's for",
+    () =>
+      Effect.gen(function* emptyLabel() {
+        const configuration = yield* defaults;
+        const elements = elementsIn(
+          yield* Effect.fromResult(
+            render(sentence({ ...colours, label: Option.some([]) }), configuration, { instance }),
+          ),
+        );
+        const [select] = controlsOf(elements, instance, "COLOUR");
+        assert.deepStrictEqual(
+          [
+            ...controlsOf(elements, instance, "COLOUR"),
+            ...controlsOf(elements, instance, "CITY"),
+          ].map((control) => control.attrs["aria-label"]),
+          ["Answer 1 of 2", "Answer 2 of 2"],
+        );
+        assert.isFalse("aria-labelledby" in (select?.attrs ?? {}));
+
+        const labels = elements.filter((element) => element.tag === "label");
+        assert.deepStrictEqual(
+          labels.map((label) => label.attrs["for"]),
+          [select?.attrs["id"]],
+        );
+      }),
+  );
+
+  it.effect(
+    "[Q-12] names by Q10 an Inline Choice whose aria-labelledby names only an id inside a choice",
+    () =>
+      Effect.gen(function* idInsideChoice() {
+        const configuration = yield* defaults;
+        const hinted: InlineChoiceInteraction = {
+          ...colours,
+          ariaLabelledby: Option.some("hint"),
+          choices: colours.choices.map((entry) =>
+            entry.identifier === "G"
+              ? {
+                  ...entry,
+                  content: [
+                    {
+                      attributes: [{ name: "id", value: "hint" }],
+                      children: [words("green")],
+                      kind: "element",
+                      path: `${colours.path}/qti-inline-choice[2]/span`,
+                      tag: "span",
+                    },
+                  ],
+                }
+              : entry,
+          ),
+        };
+        const elements = elementsIn(
+          yield* Effect.fromResult(render(sentence(hinted), configuration, { instance })),
+        );
+        const [select] = controlsOf(elements, instance, "COLOUR");
+        assert.isFalse("aria-labelledby" in (select?.attrs ?? {}));
+        assert.strictEqual(select?.attrs["aria-label"], "Answer 1 of 2");
+        assert.isFalse(
+          elements.some((element) => String(element.attrs["id"] ?? "").includes("hint")),
         );
       }),
   );

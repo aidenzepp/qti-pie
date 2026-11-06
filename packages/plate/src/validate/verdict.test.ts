@@ -307,6 +307,7 @@ const outline = (nodes: readonly BodyNode[]): readonly unknown[] =>
       }
       case "choice":
       case "extended-text":
+      case "inline-choice":
       case "text-entry": {
         return node.kind;
       }

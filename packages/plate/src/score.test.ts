@@ -6,7 +6,12 @@ import { Configuration, configure } from "#plate/configuration.ts";
 import { Malformed } from "#plate/form/encoding.ts";
 import type { PostedBaseType } from "#plate/index.ts";
 import { message } from "#plate/messages.ts";
-import type { ChoiceInteraction, Item, TextEntryInteraction } from "#plate/model/item.ts";
+import type {
+  ChoiceInteraction,
+  InlineChoiceInteraction,
+  Item,
+  TextEntryInteraction,
+} from "#plate/model/item.ts";
 import { fresh } from "#plate/model/record.ts";
 import type { Value } from "#plate/model/values.ts";
 import { render } from "#plate/render.ts";
@@ -195,6 +200,63 @@ const item: Item = {
  * The item as `check` would accept it, through the tests' named seam.
  */
 const accepted = acceptForTest(item);
+
+/**
+ * A required Inline Choice of choices `A`, `B` and `C`, bound to the single identifier response
+ * `TONE`.
+ */
+const tone: InlineChoiceInteraction = {
+  ariaLabel: Option.some("Tone"),
+  ariaLabelledby: Option.none(),
+  choices: ["A", "B", "C"].map((identifier) => ({
+    content: [{ kind: "text", text: identifier }],
+    fixed: false,
+    identifier,
+  })),
+  class: "",
+  kind: "inline-choice",
+  label: Option.none(),
+  messages: { min: Option.none() },
+  minChoices: 0n,
+  path: "qti-assessment-item/qti-item-body/p/qti-inline-choice-interaction",
+  placeholder: Option.none(),
+  required: true,
+  response: "TONE",
+  shuffle: false,
+};
+
+/**
+ * An item whose one paragraph holds {@link tone}, with no processing, as `check` would accept it.
+ */
+const inlineAccepted = acceptForTest({
+  ...item,
+  body: [
+    {
+      attributes: [],
+      children: [{ kind: "text", text: "The tone is " }, tone],
+      kind: "element",
+      path: "qti-assessment-item/qti-item-body/p",
+      tag: "p",
+    },
+  ],
+  document: "items/tone.xml",
+  identifier: "tone",
+  processing: Option.none(),
+  responses: new Map([
+    [
+      "TONE",
+      {
+        areaMapping: Option.none(),
+        baseType: "identifier",
+        cardinality: "single",
+        correct: Option.none(),
+        defaultValue: Option.none(),
+        identifier: "TONE",
+        mapping: Option.none(),
+      },
+    ],
+  ]),
+});
 
 /**
  * Another item, at another location: a record of it never belongs to {@link item}.
@@ -470,6 +532,28 @@ describe("checkResponses", () => {
           checkResponses(accepted, { ...tooMany, RESPONSE: identifiers("single", "Z") }, lenient),
           [{ response: "RESPONSE", text: message("en", "unknownChoice") }, atMost],
         );
+      }),
+  );
+
+  it.effect(
+    "[Q-12] gives an Inline Choice one unknownChoice for a stray identifier and none for a presented one",
+    () =>
+      Effect.gen(function* inlineChoice() {
+        const lenient = yield* configure({});
+        const strict = yield* configure({ validateResponses: true });
+
+        assert.deepStrictEqual(
+          checkResponses(inlineAccepted, { TONE: identifiers("single", "Z") }, lenient),
+          [{ response: "TONE", text: message("en", "unknownChoice") }],
+        );
+        assert.deepStrictEqual(
+          checkResponses(inlineAccepted, { TONE: identifiers("single", "B") }, strict),
+          [],
+        );
+        assert.deepStrictEqual(checkResponses(inlineAccepted, {}, lenient), []);
+        assert.deepStrictEqual(checkResponses(inlineAccepted, {}, strict), [
+          { response: "TONE", text: message("en", "atLeast", { n: "1" }) },
+        ]);
       }),
   );
 
