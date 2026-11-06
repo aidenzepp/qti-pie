@@ -773,7 +773,12 @@ const rules = {
         form === undefined ||
         visits
           .slice(index + 1)
-          .some((later) => later.ancestors.includes(form) && isFormControl(later.element))
+          .some(
+            (later) =>
+              later.ancestors.includes(form) &&
+              isFormControl(later.element) &&
+              !isSubmitButton(later.element),
+          )
       );
     }),
   "tabindex-minus-one": ({ visits }) =>
@@ -790,13 +795,14 @@ const rules = {
  * The rules are {@link checks}'s, reported in that order and, within one check, in document order.
  * Parts are found by their `data-slot` markers, read through the part table's `partForSlot` (spec
  * §4.3): the item's Status, and an interaction's Root, Prompt, Choice, Control and Label. The form
- * and its submit button are the host's composition, not parts, so `submit-order` reads them from
- * the HTML: a submit button must sit inside a `form`, after every control of that form. A Choice
- * Root's Prompt must take one of the two ruled markups, a `legend` first in the `fieldset` or a
- * `qti-prompt` the `fieldset` names through `aria-labelledby`. A text interaction's Prompt names
- * its one Control; an Extended Text Root that holds several Controls is a group its Prompt names,
- * and one whose Controls the cap's Notice replaces names nothing. A Root with no Prompt has no name
- * requirement (Q9).
+ * and its submit buttons are the host's composition, not parts, so `submit-order` reads them from
+ * the HTML: a submit button must sit inside a `form`, after every control of that form other than
+ * its submit buttons, so a form may end in several, as a navigation swapped to submit buttons does
+ * (spec §4.11's focus order). A Choice Root's Prompt must take one of the two ruled markups, a
+ * `legend` first in the `fieldset` or a `qti-prompt` the `fieldset` names through
+ * `aria-labelledby`. A text interaction's Prompt names its one Control; an Extended Text Root that
+ * holds several Controls is a group its Prompt names, and one whose Controls the cap's Notice
+ * replaces names nothing. A Root with no Prompt has no name requirement (Q9).
  *
  * @param tree The tree's root, which must carry `lang`.
  * @param options How the tree sits in its page.

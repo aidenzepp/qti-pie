@@ -52,7 +52,7 @@ import type {
   TestSession,
   Value,
 } from "#plate/index.ts";
-import { attribute, checkTree, inputType, isSubmitButton } from "#plate/test/accessibility.ts";
+import { attribute, checkTree, inputType } from "#plate/test/accessibility.ts";
 import { keyboardWalk, tabOrder } from "#plate/test/keyboard.ts";
 import type { Key } from "#plate/test/keyboard.ts";
 import { parseHtml } from "#plate/test/round-trip.ts";
@@ -334,20 +334,9 @@ const pageHtml = (content: string, form: boolean): string =>
     : `<div lang="en">${content}</div>`;
 
 /**
- * The tags of the controls a candidate answers with, which every submit button of a page follows.
- */
-const answerTags: ReadonlySet<string> = new Set(["input", "select", "textarea"]);
-
-/**
  * Check a page against the static accessibility rules, as every page state is checked: `checkTree`
- * finds nothing, and no control a candidate answers with follows a submit button.
- *
- * `checkTree`'s `submit-order` asks each submit button to follow every other control of its form,
- * other submit buttons included, so it flags each submit button but the last of a form that holds
- * several, as a page with the navigation swapped for submit buttons does (spec §4.11's focus order:
- * after the item's controls, Previous, the items, Next, Submit, End). Those findings are set aside
- * here, and what the rule guards, that the candidate's controls come before any submit button, is
- * checked directly.
+ * finds nothing, the navigation swapped for submit buttons included (spec §4.11's focus order:
+ * after the item's controls, Previous, the items, Next, Submit, End).
  *
  * @param html The page's HTML.
  * @param state The page state, for the failure's message.
@@ -355,26 +344,8 @@ const answerTags: ReadonlySet<string> = new Set(["input", "select", "textarea"])
  */
 const checked = (html: string, state: string): Element => {
   const page = rootOf(html);
-  const elements = elementsOf([page]);
-  const buttons = elements.filter(isSubmitButton);
-  const firstButton = elements.findIndex(isSubmitButton);
-  const lastAnswer = elements.findLastIndex((element) => answerTags.has(element.tag));
-  const violations = checkTree(page, { baseLevel: 2 });
 
-  assert.deepStrictEqual(
-    violations.filter((violation) => violation.check !== "submit-order"),
-    [],
-    `checkTree passes on ${state}`,
-  );
-  assert.lengthOf(
-    violations,
-    Math.max(buttons.length - 1, 0),
-    `${state}: submit-order flags only the submit buttons other submit buttons follow`,
-  );
-  assert.isTrue(
-    firstButton === -1 || lastAnswer < firstButton,
-    `${state}: every control a candidate answers with comes before the first submit button`,
-  );
+  assert.deepStrictEqual(checkTree(page, { baseLevel: 2 }), [], `checkTree passes on ${state}`);
 
   return page;
 };
