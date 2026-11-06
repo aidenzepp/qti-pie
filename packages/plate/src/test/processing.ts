@@ -1,7 +1,8 @@
 /**
  * Test support for response processing: the one builder of the evaluator's {@link Scope}, an
- * evaluator a test passes as an expression's `evaluate`, and the hand-built item documents the
- * expression families' tests share, with their model build, their run and their refusals.
+ * evaluator a test passes as an expression's `evaluate`, the hand-built item documents the
+ * expression families' tests share, with their model build, their run and their refusals, and the
+ * type invariant every family's tests keep ({@link assertKindType}).
  *
  * A family test builds a `Scope` only through {@link scopeOf}, never as a literal, so a field the
  * engine adds to it changes this file alone. It is not a browser module: it reads the item model
@@ -9,15 +10,18 @@
  *
  * @module
  */
+import { assert } from "@effect/vitest";
 import { Effect, Option } from "effect";
 import { attr, doc, el, text } from "#plate/document/source.ts";
 import type { SourceAttribute, SourceDocument, SourceElement } from "#plate/document/source.ts";
 import { evaluateExpression, runRules } from "#plate/engine/evaluate.ts";
 import type { EngineFailure, Evaluate, Scope, Variables } from "#plate/engine/evaluate.ts";
-import type { ExpressionKind } from "#plate/model/expression.ts";
+import type { ExpressionKind, ExpressionType, ResultAttributes } from "#plate/model/expression.ts";
+import { kindRules } from "#plate/model/expressions/read.ts";
 import type { Item } from "#plate/model/item.ts";
 import { buildItem } from "#plate/model/item.ts";
 import { outcomeDefaults } from "#plate/model/record.ts";
+import type { Value } from "#plate/model/values.ts";
 import { checkRules } from "#plate/validate/rules.ts";
 import type { Refusal } from "#plate/validate/refusal.ts";
 import { tables } from "#plate/validate/tables.ts";
@@ -203,3 +207,35 @@ export const refusalsOf = (
     path: refusal.location.kind === "path" ? refusal.location.path : refusal.location.kind,
     rule: refusal.rule,
   }));
+
+/**
+ * Assert the type invariant of an expression family: a value an expression gave has the type its
+ * kind's rule gives (`kindRules` in `#plate/model/expressions/read.ts`), its base type and its
+ * cardinality those of `resultType` over the operands' types and the attributes. So the model's
+ * typing and the evaluators cannot drift apart. A NULL keeps the type of the expression that gave
+ * it, so it is held to the same type. A base type of `any` or `unknown`, or a cardinality of
+ * `unknown`, says nothing, so any value's holds it.
+ *
+ * @param value The value the expression gave.
+ * @param kind The expression's kind.
+ * @param operands The types of its operands, in order.
+ * @param attributes Its result attributes, as the caller of `resultType` fills them in: none
+ *   unless given.
+ */
+export const assertKindType = (
+  value: Value,
+  kind: ExpressionKind,
+  operands: readonly ExpressionType[],
+  attributes: ResultAttributes = {},
+): void => {
+  const expected = kindRules[kind].resultType(operands, attributes);
+  const given: ExpressionType = {
+    baseType:
+      expected.baseType === "any" || expected.baseType === "unknown"
+        ? expected.baseType
+        : value.baseType,
+    cardinality: expected.cardinality === "unknown" ? expected.cardinality : value.cardinality,
+  };
+
+  assert.deepStrictEqual(given, expected, `qti-${kind} gave a value of another type than its rule`);
+};
