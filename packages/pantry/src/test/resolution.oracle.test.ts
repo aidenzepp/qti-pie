@@ -389,10 +389,10 @@ type Drawn =
  * Draw a case: an adversarial one by name a third of the time, under each whitespace class, and a
  * swarmed one otherwise.
  */
-const cases: Gen<Drawn> = weighted([
+const cases: Gen<Drawn> = weighted<Drawn>([
   [
     1,
-    (source) => {
+    (source): Drawn => {
       const { input, name } = source.draw(element(adversarial));
 
       return {
@@ -405,7 +405,7 @@ const cases: Gen<Drawn> = weighted([
       };
     },
   ],
-  [2, (source) => ({ _tag: "swarmed", input: source.draw(swarmed).input })],
+  [2, (source): Drawn => ({ _tag: "swarmed", input: source.draw(swarmed).input })],
 ]);
 
 /**
@@ -421,7 +421,8 @@ type Situation =
   | "limit control"
   | "limit octets"
   | "limit percent"
-  | "limit separator";
+  | "limit separator"
+  | "limit srcset";
 
 /**
  * Judge a case: the importer and the oracle agree, and each planted bug that disagrees is caught.
