@@ -100,6 +100,7 @@ const walks: ReadonlyMap<string, readonly string[]> = new Map([
     [
       "[Q-12] [I-9b] [keyboard] QTI3-inline-choice.xml by keyboard: Tab, type Y, Tab and Enter choose York and score 1, Lancaster 0, and no choice posts the Placeholder and scores 0",
       "[Q-12] [keyboard] multi-input.xml's shuffled Inline Choice keeps choiceOrder's order, its fixed choice first, across a refused post with one instance and seed, and Marion typed on the refused page posts A2",
+      "[Q-12] [keyboard] a host Option replacement that selects C, with nothing restored, leaves the Placeholder selected: Tab then Enter posts its empty value, not C, and the record holds no response",
     ],
   ],
   [
