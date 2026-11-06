@@ -1,27 +1,303 @@
 /**
- * The integers family of the engine: `qti-integer-divide`, `qti-integer-modulus`,
- * `qti-integer-to-float`, `qti-gcd` and `qti-lcm`. The family has landed no kind yet, so each entry
- * is the stub marker (ruling R2); its slice (`p7-05`) replaces each marker with the kind's
- * evaluator.
+ * The integers family of the engine: the evaluators of `qti-integer-divide`,
+ * `qti-integer-modulus`, `qti-integer-to-float`, `qti-gcd` and `qti-lcm`.
  *
- * It reads the evaluator's types from `#plate/engine/evaluate.ts` as types only, so the
+ * Every integer is an exact `bigint` (reading 45), so each kind but `qti-integer-to-float`
+ * computes exactly at any size; `qti-integer-to-float` makes its float through the one conversion,
+ * `toFloat`, which gives an integer beyond the largest finite float that float, of its sign. A NULL
+ * operand gives the NULL of the kind's type, before any other rule: a divisor of 0 gives NULL, and
+ * a NULL beside a zero operand of `qti-lcm` gives NULL, not 0.
+ *
+ * It value-imports only engine leaves, `#plate/model/values.ts` and `effect`'s `Option` and
+ * `Result`, and reads the evaluator's types from `#plate/engine/evaluate.ts` as types, so the
  * dispatcher's table may import it without a cycle.
  *
  * @module
  */
-import type { FamilyTable } from "#plate/engine/evaluate.ts";
+import { Option, Result } from "effect";
+import type { Evaluate, Evaluator, FamilyTable, Scope } from "#plate/engine/evaluate.ts";
+import type { EngineFailure } from "#plate/engine/failures.ts";
+import { toFloat } from "#plate/engine/numbers.ts";
+import type { Expression } from "#plate/model/expression.ts";
+import { nullOf } from "#plate/model/values.ts";
+import type { Value } from "#plate/model/values.ts";
 
 /**
- * The integers family's evaluators by kind: the stub marker for each, which the dispatcher in
- * `#plate/engine/evaluate.ts` never reaches on a checked item, because the reader marks an unlanded
- * kind and its processing never runs.
+ * Construct a single integer value.
+ *
+ * @param integer The integer.
+ * @returns The value.
+ */
+const integerValue = (integer: bigint): Value => ({
+  baseType: "integer",
+  cardinality: "single",
+  values: [{ baseType: "integer", value: integer }],
+});
+
+/**
+ * Give the single integer NULL, the value of an integers expression whose value is not defined.
+ *
+ * @returns The NULL.
+ */
+const unsetInteger = (): Value => nullOf("integer", "single");
+
+/**
+ * Give the integer a single integer value holds.
+ *
+ * Every operand of `qti-integer-divide`, `qti-integer-modulus` and `qti-integer-to-float` is a
+ * single integer on a checked item: the validator refuses any other (P23). One that is not is
+ * counted as NULL, as the information model counts a value that is not numerical.
+ *
+ * @param value The operand's value.
+ * @returns The integer, or none when the value is NULL or not a single integer.
+ */
+const integerOf = (value: Value): Option.Option<bigint> => {
+  const [single, ...rest] = value.values;
+
+  return value.cardinality === "single" && rest.length === 0 && single?.baseType === "integer"
+    ? Option.some(single.value)
+    : Option.none();
+};
+
+/**
+ * Give every integer an operand of `qti-gcd` or `qti-lcm` holds: the one of a single, or each
+ * member of a multiple or ordered container.
+ *
+ * Every operand of these kinds holds integers on a checked item: the validator refuses any other
+ * (P23). One that holds another base type is counted as NULL, as the information model counts a
+ * value that is not numerical.
+ *
+ * @param value The operand's value.
+ * @returns The integers, in order; none when the value is NULL, an empty container included, or
+ *   holds a member that is not an integer.
+ */
+const integersOf = (value: Value): Option.Option<readonly bigint[]> =>
+  value.values.length === 0
+    ? Option.none()
+    : Option.all(
+        value.values.map((single) =>
+          single.baseType === "integer" ? Option.some(single.value) : Option.none(),
+        ),
+      );
+
+/**
+ * Give the magnitude of an integer.
+ *
+ * @param integer The integer.
+ * @returns Its absolute value.
+ */
+const magnitudeOf = (integer: bigint): bigint => (integer < 0n ? -integer : integer);
+
+/**
+ * Give the quotient of two integers rounded down, the greatest integer `i` such that `i ≤ x / y`:
+ * `bigint` division rounds toward zero, so a quotient with a remainder whose operands differ in
+ * sign is one less.
+ *
+ * @param dividend The integer divided, `x`.
+ * @param divisor The integer it is divided by, `y`, not 0.
+ * @returns The floored quotient.
+ */
+const flooredQuotient = (dividend: bigint, divisor: bigint): bigint => {
+  const quotient = dividend / divisor;
+
+  return dividend % divisor !== 0n && dividend < 0n !== divisor < 0n ? quotient - 1n : quotient;
+};
+
+/**
+ * Give the greatest common divisor of two integers' magnitudes, by Euclid's algorithm, in a loop,
+ * so an integer of any size takes no stack. The divisor of 0 and `n` is `|n|`, so a zero is
+ * ignored, and of 0 and 0 is 0.
+ *
+ * @param left One integer.
+ * @param right The other.
+ * @returns Their greatest common divisor, not negative.
+ */
+const greatestCommonDivisor = (left: bigint, right: bigint): bigint => {
+  let larger = magnitudeOf(left);
+  let smaller = magnitudeOf(right);
+  while (smaller !== 0n) {
+    [larger, smaller] = [smaller, larger % smaller];
+  }
+
+  return larger;
+};
+
+/**
+ * Evaluate every operand, left to right, and give the integers each holds; the first failure is
+ * the result.
+ *
+ * @param operands The operands.
+ * @param scope The item and the variables of the attempt.
+ * @param evaluate The evaluator, which gives each operand's value.
+ * @returns Every operand's integers, in order, or none when any operand is NULL or holds a value
+ *   that is not an integer; or the first operand's failure.
+ */
+const aggregateOf = (
+  operands: readonly Expression[],
+  scope: Scope,
+  evaluate: Evaluate,
+): Result.Result<Option.Option<readonly bigint[]>, EngineFailure> =>
+  Result.map(Result.all(operands.map((operand) => evaluate(operand, scope))), (values) =>
+    Option.map(Option.all(values.map((value) => integersOf(value))), (lists): readonly bigint[] =>
+      lists.flat(),
+    ),
+  );
+
+/**
+ * Evaluate the two operands of `qti-integer-divide` or `qti-integer-modulus`, left to right, and
+ * give an integer of them, NULL when either is NULL or the divisor is 0.
+ *
+ * @param operands The dividend and the divisor.
+ * @param scope The item and the variables of the attempt.
+ * @param evaluate The evaluator, which gives each operand's value.
+ * @param divided The integer of a dividend and a divisor that is not 0.
+ * @returns The single integer, or the first operand's failure.
+ */
+const dividedOf = (
+  [dividend, divisor]: readonly [Expression, Expression],
+  scope: Scope,
+  evaluate: Evaluate,
+  divided: (dividend: bigint, divisor: bigint) => bigint,
+): Result.Result<Value, EngineFailure> =>
+  Result.map(
+    Result.all([evaluate(dividend, scope), evaluate(divisor, scope)]),
+    ([dividendValue, divisorValue]) =>
+      Option.match(
+        Option.filter(
+          Option.all([integerOf(dividendValue), integerOf(divisorValue)]),
+          ([, held]) => held !== 0n,
+        ),
+        {
+          onNone: unsetInteger,
+          onSome: ([x, y]) => integerValue(divided(x, y)),
+        },
+      ),
+  );
+
+/**
+ * Give the value of a `qti-integer-divide`: a single integer, its first operand divided by its
+ * second rounded down ({@link flooredQuotient}), so −7 / 2 gives −4; NULL when either operand is
+ * NULL or the divisor is 0.
+ *
+ * @param expression The `qti-integer-divide`.
+ * @param scope The item and the variables of the attempt.
+ * @param evaluate The evaluator, which gives each operand's value.
+ * @returns The single integer, or the first operand's failure.
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpIntDivide
+ */
+const evaluateIntegerDivide: Evaluator<"integer-divide"> = (expression, scope, evaluate) =>
+  dividedOf(expression.operands, scope, evaluate, flooredQuotient);
+
+/**
+ * Give the value of a `qti-integer-modulus`: a single integer, `x − z × y` for `z` the quotient
+ * `qti-integer-divide` gives, so the remainder takes the divisor's sign: 7 mod −2 gives −1 and −7
+ * mod 2 gives 1. NULL when either operand is NULL or the divisor is 0.
+ *
+ * @param expression The `qti-integer-modulus`.
+ * @param scope The item and the variables of the attempt.
+ * @param evaluate The evaluator, which gives each operand's value.
+ * @returns The single integer, or the first operand's failure.
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpIntModulus
+ */
+const evaluateIntegerModulus: Evaluator<"integer-modulus"> = (expression, scope, evaluate) =>
+  dividedOf(
+    expression.operands,
+    scope,
+    evaluate,
+    (dividend, divisor) => dividend - flooredQuotient(dividend, divisor) * divisor,
+  );
+
+/**
+ * Give the value of a `qti-integer-to-float`: a single float, its operand's nearest double through
+ * `toFloat`, so 10^400 gives the largest finite float (reading 45); NULL when the operand is NULL.
+ *
+ * @param expression The `qti-integer-to-float`.
+ * @param scope The item and the variables of the attempt.
+ * @param evaluate The evaluator, which gives the operand's value.
+ * @returns The single float, or the operand's failure.
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpInttoFloat
+ */
+const evaluateIntegerToFloat: Evaluator<"integer-to-float"> = (expression, scope, evaluate) => {
+  const [operand] = expression.operands;
+
+  return Result.map(evaluate(operand, scope), (value) =>
+    Option.match(integerOf(value), {
+      onNone: () => nullOf("float", "single"),
+      onSome: (integer): Value => ({
+        baseType: "float",
+        cardinality: "single",
+        values: [{ baseType: "float", value: toFloat(integer) }],
+      }),
+    }),
+  );
+};
+
+/**
+ * Give the value of a `qti-gcd`: a single integer, the greatest common divisor of every integer
+ * its operands hold, a container's members each counted, by their magnitudes (9.20). gcd(0, 0) is
+ * 0, and a zero among other integers is ignored, gcd(0, n) = |n|. NULL when any operand is NULL.
+ *
+ * @param expression The `qti-gcd`.
+ * @param scope The item and the variables of the attempt.
+ * @param evaluate The evaluator, which gives each operand's value.
+ * @returns The single integer, or the first operand's failure.
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpGcd
+ */
+const evaluateGcd: Evaluator<"gcd"> = (expression, scope, evaluate) =>
+  Result.map(aggregateOf(expression.operands, scope, evaluate), (held) =>
+    Option.match(held, {
+      onNone: unsetInteger,
+      onSome: (integers) => {
+        let divisor = 0n;
+        for (const integer of integers) {
+          divisor = greatestCommonDivisor(divisor, integer);
+        }
+
+        return integerValue(divisor);
+      },
+    }),
+  );
+
+/**
+ * Give the value of a `qti-lcm`: a single integer, the least common multiple of every integer its
+ * operands hold, a container's members each counted, by their magnitudes (9.20). It is 0 when any
+ * integer is 0, lcm(0, n) = 0. NULL when any operand is NULL, a zero beside it included.
+ *
+ * @param expression The `qti-lcm`.
+ * @param scope The item and the variables of the attempt.
+ * @param evaluate The evaluator, which gives each operand's value.
+ * @returns The single integer, or the first operand's failure.
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpLcm
+ */
+const evaluateLcm: Evaluator<"lcm"> = (expression, scope, evaluate) =>
+  Result.map(aggregateOf(expression.operands, scope, evaluate), (held) =>
+    Option.match(held, {
+      onNone: unsetInteger,
+      onSome: (integers) => {
+        let multiple = 1n;
+        for (const integer of integers) {
+          if (integer === 0n) {
+            return integerValue(0n);
+          }
+
+          const factor = magnitudeOf(integer);
+          multiple = (multiple / greatestCommonDivisor(multiple, factor)) * factor;
+        }
+
+        return integerValue(multiple);
+      },
+    }),
+  );
+
+/**
+ * The integers family's evaluators by kind.
  */
 export const integersEvaluators: FamilyTable<
   "gcd" | "integer-divide" | "integer-modulus" | "integer-to-float" | "lcm"
 > = {
-  gcd: "unlanded",
-  "integer-divide": "unlanded",
-  "integer-modulus": "unlanded",
-  "integer-to-float": "unlanded",
-  lcm: "unlanded",
+  gcd: evaluateGcd,
+  "integer-divide": evaluateIntegerDivide,
+  "integer-modulus": evaluateIntegerModulus,
+  "integer-to-float": evaluateIntegerToFloat,
+  lcm: evaluateLcm,
 };

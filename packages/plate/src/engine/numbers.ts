@@ -4,9 +4,9 @@
  * ({@link numberOf}), exact equality of two numbers ({@link sameNumber}), and the single boolean a
  * test gives ({@link booleanOf}).
  *
- * Integers are exact `bigint`s (reading 45) and floats are 64-bit doubles. An integer and a float
- * compare exactly, never through a lossy conversion. The module value-imports only `Option` from
- * `effect`, and the value model's types.
+ * Integers are exact `bigint`s (reading 45) and floats are 64-bit doubles, never infinite when made
+ * from an integer. An integer and a float compare exactly, never through a lossy conversion. The
+ * module value-imports only `Option` from `effect`, and the value model's types.
  *
  * @module
  */
@@ -26,17 +26,30 @@ export const booleanOf = (value: boolean): Value => ({
 });
 
 /**
- * Convert an exact integer to a float: the nearest double, ties to even. It is the one conversion
- * from an integer to a float (integer plan `10f98260` part C).
+ * Convert an exact integer to a float: the nearest double, ties to even, and the largest finite
+ * double of its sign for an integer beyond it. It is the one conversion from an integer to a float
+ * (integer plan `10f98260` part C), so every kind that makes a float of an integer clamps alike.
  *
  * Beyond 2^53 a double cannot hold every integer, so `2^53 + 1` becomes `2^53`. That loss is the
  * float QTI specifies wherever an integer is compared as one, so it is not reported.
  *
+ * An integer has no largest value (reading 45), and the float base type holds no infinity, so "an
+ * integer beyond the largest finite float becomes the largest finite float of its sign" (reading
+ * 45): from 2^1024 − 2^970, the least integer whose nearest double is an infinity, `10^400`
+ * among them, it gives `Number.MAX_VALUE`, and its negative `-Number.MAX_VALUE`. `Number` of a
+ * `bigint` is never NaN.
+ *
  * @param integer The integer.
- * @returns The nearest double.
+ * @returns The nearest double, finite.
  */
-// oxlint-disable-next-line unicorn/prefer-native-coercion-functions -- `toFloat` names the one integer-to-float conversion the integer plan fixes, so its precision loss is documented and found in one place.
-export const toFloat = (integer: bigint): number => Number(integer);
+export const toFloat = (integer: bigint): number => {
+  const nearest = Number(integer);
+  if (nearest === Number.POSITIVE_INFINITY) {
+    return Number.MAX_VALUE;
+  }
+
+  return nearest === Number.NEGATIVE_INFINITY ? -Number.MAX_VALUE : nearest;
+};
 
 /**
  * A single integer or float.
