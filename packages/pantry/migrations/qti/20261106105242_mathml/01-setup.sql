@@ -1,5 +1,7 @@
 -- grizzle: no-transaction
 
+ALTER TYPE "qti"."ancestry" ADD VALUE IF NOT EXISTS 'math' BEFORE 'fb.modal';
+
 ALTER TYPE "qti"."attribute_name" ADD VALUE IF NOT EXISTS 'mathcolor';
 
 ALTER TYPE "qti"."attribute_name" ADD VALUE IF NOT EXISTS 'mathbackground';

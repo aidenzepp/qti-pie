@@ -6,6 +6,10 @@
 				"steps": [
 					{
 						"kind": "statement",
+						"statement": "ALTER TYPE \"qti\".\"ancestry\" ADD VALUE IF NOT EXISTS 'math' BEFORE 'fb.modal'"
+					},
+					{
+						"kind": "statement",
 						"statement": "ALTER TYPE \"qti\".\"attribute_name\" ADD VALUE IF NOT EXISTS 'mathcolor'"
 					},
 					{
@@ -34087,7 +34091,7 @@
 		"schema": "qti",
 		"schemaName": "Qti",
 		"source": "2456543e0bd4b23345250fd1ce6b83ba15c7ce332589f53c411e8b7ddaad03bc",
-		"target": "7783e70e6cdd27a60550ffc0014c9f2e955b273e590f73eebc5d9cf61e451e95"
+		"target": "50553a8a84dba448308072365ab5ec46a9257fb5fc0b3be1e0584e006d037d84"
 	},
-	"seal": "fa4bba468e05f3ac2dd692b1b1e7a3c23ede68214af9f50fb78875acdfe75afb"
+	"seal": "1688c78b9a926911f28d6ea9eec5be9ab07181846b27ff0763f1bdad8723e6c1"
 }
