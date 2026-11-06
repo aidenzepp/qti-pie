@@ -1022,6 +1022,15 @@ const builtInsNamed = {
 } as const satisfies Record<Expected, readonly string[]>;
 
 /**
+ * The rules that may set a built-in variable: only `qti-set-outcome-value`, which sets
+ * `completionStatus`. That variable changes only "by a setOutcomeValue rule in responseProcessing"
+ * (`info.txt:8488`), and the qti package's `BuiltInRefKind` admits a built-in as a rule's target
+ * only there (`packages/pantry/src/schema/processing.ts:622-627`, P9), so a
+ * `qti-lookup-outcome-value` that targets it is refused.
+ */
+const builtInSetters: ReadonlySet<string> = new Set(["qti-set-outcome-value"]);
+
+/**
  * An element's `identifier`, read as a reference to a variable of the kind the element names.
  */
 interface Reference {
@@ -1183,7 +1192,10 @@ const variableType = (
  * One that reads the built-in `duration`, which no declaration of the expected kind answers, in an
  * item that is not time dependent is refused too, with `check: "untimed-duration"`
  * ({@link untimedDuration}, pantry's `item-duration`). A declaration named `duration` is read
- * instead, timed or not, as the qti package's `reference` reads the declaration first.
+ * instead, timed or not, as the qti package's `reference` reads the declaration first. A rule
+ * other than {@link builtInSetters} that targets a built-in no declaration answers, a
+ * `qti-lookup-outcome-value` of `completionStatus`, is refused with `check: "built-in-target"`
+ * and the information model's line as `source` (pantry's P9).
  *
  * @param source The document.
  * @param visit The element's visit.
@@ -1213,8 +1225,19 @@ const undeclaredVariable = (
     ];
   }
 
-  return !declarationsNamable(expected, context).has(identifier) &&
-    untimedDuration(source, identifier)
+  const builtIn = !declarationsNamable(expected, context).has(identifier);
+  if (builtIn && referencing.has(visit.element.local) && !builtInSetters.has(visit.element.local)) {
+    return [
+      refusal(source, "undeclared-variable", visit.path, {
+        check: "built-in-target",
+        element: visit.element.local,
+        identifier,
+        source: "info.txt:8488",
+      }),
+    ];
+  }
+
+  return builtIn && untimedDuration(source, identifier)
     ? [
         refusal(source, "undeclared-variable", visit.path, {
           check: "untimed-duration",

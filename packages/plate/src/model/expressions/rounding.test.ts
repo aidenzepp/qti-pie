@@ -372,7 +372,7 @@ describe("the rounding family's reader specs and kind rules", () => {
   });
 
   it.effect(
-    "[I-9a] read figures at the signed 64-bit bounds exactly and run them, and refuse one beyond them (count-range, reading 46)",
+    "[I-9a] read figures at 2^63 - 1 exactly and run it, refuse 2^63 (count-range, reading 46), and refuse -2^63 under decimalPlaces (attribute-type, info.txt:39732), which the model still runs to NULL",
     () =>
       Effect.gen(function* readsFiguresRange() {
         const greatest = roundToElement(
@@ -391,7 +391,10 @@ describe("the rounding family's reader specs and kind rules", () => {
         );
 
         assert.deepStrictEqual(checkStructure(outItem("float", greatest), tables), []);
-        assert.deepStrictEqual(checkStructure(outItem("float", least), tables), []);
+        assert.deepStrictEqual(
+          checkStructure(outItem("float", least), tables).map((refusal) => refusal.rule),
+          ["attribute-type"],
+        );
         assert.deepStrictEqual(
           checkStructure(beyond, tables).map((refusal) => refusal.rule),
           ["count-range"],

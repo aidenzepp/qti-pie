@@ -607,6 +607,64 @@ const rangeDetail = (attribute: string, lexical: string) => ({
 });
 
 /**
+ * Construct a document whose root is one expression element with the given attributes, to check
+ * against the generated tables.
+ *
+ * @param name The element's local name.
+ * @param attributes Its attributes.
+ * @returns The document.
+ */
+const literal = (name: string, ...attributes: readonly SourceAttribute[]): SourceDocument =>
+  doc(location, el(name, attributes));
+
+/**
+ * Construct a document whose root is a `qti-repeat` of one integer operand (reading 21), repeated
+ * the given times.
+ *
+ * @param numberRepeats The `number-repeats` as written.
+ * @returns The document.
+ */
+const repeated = (numberRepeats: string): SourceDocument =>
+  doc(
+    location,
+    el(
+      "qti-repeat",
+      [attr("number-repeats", numberRepeats)],
+      [el("qti-base-value", [attr("base-type", "integer")], [text("1")])],
+    ),
+  );
+
+/**
+ * The detail of an `attribute-type` refusal of a `figures` below the information model's floor for
+ * its rounding mode.
+ *
+ * @param rounding The rounding element's local name.
+ * @param written The `figures` refused, as written.
+ * @param roundingMode The mode in force, written or the default.
+ * @param line The information model's line that sets the floor.
+ * @returns The detail.
+ */
+const figuresDetail = (
+  rounding: string,
+  written: string,
+  roundingMode: "decimalPlaces" | "significantFigures",
+  line: string,
+) => {
+  const least = roundingMode === "significantFigures" ? "1" : "0";
+
+  return {
+    attribute: "figures",
+    element: rounding,
+    expected: `an integer at least ${least} when rounding-mode is ${roundingMode}`,
+    least,
+    source: line,
+    value: written,
+    whenAttribute: "rounding-mode",
+    whenValue: roundingMode,
+  };
+};
+
+/**
  * Name a type in the QTI namespace.
  *
  * @param local The type's local name.
@@ -2086,6 +2144,159 @@ describe("checkStructure", () => {
         ).filter(([rule]) => rule === "count-range");
 
         assert.deepStrictEqual(ranged, [["count-range", at(`${name}/@${local}`)]]);
+      }
+    });
+  });
+
+  describe("the information model's bounds on a literal figures and n (pantry P10, P11), and number-repeats' xs:int (P6)", () => {
+    it("[I-9a] refuses qti-round-to's figures 0 under significantFigures as attribute-type (P10, info.txt:39732), and admits 1", () => {
+      const zero = literal(
+        "qti-round-to",
+        attr("rounding-mode", "significantFigures"),
+        attr("figures", "0"),
+      );
+
+      assert.deepStrictEqual(found(zero, generatedTables), [
+        ["attribute-type", at("qti-round-to/@figures")],
+      ]);
+      assert.deepStrictEqual(
+        first(zero, generatedTables)?.detail,
+        figuresDetail("qti-round-to", "0", "significantFigures", "info.txt:39732"),
+      );
+      assert.deepStrictEqual(
+        found(
+          literal(
+            "qti-round-to",
+            attr("rounding-mode", "significantFigures"),
+            attr("figures", "1"),
+          ),
+          generatedTables,
+        ),
+        [],
+      );
+    });
+
+    it("[I-9a] refuses qti-round-to's figures -1 under decimalPlaces as attribute-type (P10, info.txt:39732), and admits 0", () => {
+      const negative = literal(
+        "qti-round-to",
+        attr("rounding-mode", "decimalPlaces"),
+        attr("figures", " -1 "),
+      );
+
+      assert.deepStrictEqual(found(negative, generatedTables), [
+        ["attribute-type", at("qti-round-to/@figures")],
+      ]);
+      assert.deepStrictEqual(
+        first(negative, generatedTables)?.detail,
+        figuresDetail("qti-round-to", " -1 ", "decimalPlaces", "info.txt:39732"),
+      );
+      assert.deepStrictEqual(
+        found(
+          literal("qti-round-to", attr("rounding-mode", "decimalPlaces"), attr("figures", "0")),
+          generatedTables,
+        ),
+        [],
+      );
+    });
+
+    it("[I-9a] refuses qti-equal-rounded's figures 0 with no rounding-mode, the significantFigures default, as attribute-type (P10, info.txt:25131)", () => {
+      const unwritten = literal("qti-equal-rounded", attr("figures", "0"));
+
+      assert.deepStrictEqual(found(unwritten, generatedTables), [
+        ["attribute-type", at("qti-equal-rounded/@figures")],
+      ]);
+      assert.deepStrictEqual(
+        first(unwritten, generatedTables)?.detail,
+        figuresDetail("qti-equal-rounded", "0", "significantFigures", "info.txt:25131"),
+      );
+      assert.deepStrictEqual(
+        found(
+          literal(
+            "qti-equal-rounded",
+            attr("rounding-mode", "decimalPlaces"),
+            attr("figures", "0"),
+          ),
+          generatedTables,
+        ),
+        [],
+      );
+    });
+
+    it("[I-9a] admits a figures that names a variable under either mode, its value known only at run time", () => {
+      for (const mode of ["decimalPlaces", "significantFigures"]) {
+        for (const name of ["qti-equal-rounded", "qti-round-to"]) {
+          assert.deepStrictEqual(
+            found(
+              literal(name, attr("rounding-mode", mode), attr("figures", "DIGITS")),
+              generatedTables,
+            ),
+            [],
+          );
+        }
+      }
+    });
+
+    it("[I-9a] refuses qti-index's n 0 and -3 as attribute-type (P11, info.txt:9426), and admits 1 and a variable's name", () => {
+      for (const n of ["0", "-3"]) {
+        const below = literal("qti-index", attr("n", n));
+
+        assert.deepStrictEqual(found(below, generatedTables), [
+          ["attribute-type", at("qti-index/@n")],
+        ]);
+        assert.deepStrictEqual(first(below, generatedTables)?.detail, {
+          attribute: "n",
+          element: "qti-index",
+          expected: "an integer at least 1",
+          least: "1",
+          source: "info.txt:9426",
+          value: n,
+        });
+      }
+      for (const n of ["1", "POSITION"]) {
+        assert.deepStrictEqual(found(literal("qti-index", attr("n", n)), generatedTables), []);
+      }
+    });
+
+    it("[I-9a] refuses qti-repeat's number-repeats 2147483648 as attribute-type through the XSD's xs:int (P6), and admits 2147483647", () => {
+      const over = repeated("2147483648");
+
+      assert.deepStrictEqual(found(over, generatedTables), [
+        ["attribute-type", at("qti-repeat/@number-repeats")],
+      ]);
+      assert.deepStrictEqual(first(over, generatedTables)?.detail, {
+        attribute: "number-repeats",
+        element: "qti-repeat",
+        expected: "NCName or int",
+        value: "2147483648",
+      });
+      assert.deepStrictEqual(found(repeated("2147483647"), generatedTables), []);
+    });
+
+    it("[I-9a] refuses a qti-equal whose tolerance-mode is absolute or relative and that has no tolerance as missing-attribute (P36, info.txt:24946)", () => {
+      for (const mode of ["absolute", "relative"]) {
+        const untolerant = literal("qti-equal", attr("tolerance-mode", mode));
+
+        assert.deepStrictEqual(found(untolerant, generatedTables), [
+          ["missing-attribute", at("qti-equal")],
+        ]);
+        assert.deepStrictEqual(first(untolerant, generatedTables)?.detail, {
+          attribute: "tolerance",
+          element: "qti-equal",
+          source: "info.txt:24946",
+          whenAttribute: "tolerance-mode",
+          whenValue: mode,
+        });
+      }
+    });
+
+    it("[I-9a] admits a qti-equal with one tolerance token under absolute and relative, and with none under exact, written or the default", () => {
+      for (const tolerant of [
+        literal("qti-equal", attr("tolerance-mode", "absolute"), attr("tolerance", "0.5")),
+        literal("qti-equal", attr("tolerance-mode", "relative"), attr("tolerance", "5")),
+        literal("qti-equal", attr("tolerance-mode", "exact")),
+        literal("qti-equal"),
+      ]) {
+        assert.deepStrictEqual(found(tolerant, generatedTables), []);
       }
     });
   });
