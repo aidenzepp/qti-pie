@@ -48,14 +48,17 @@ const readsToken = (rule: StyleRule, property: string, token: string): boolean =
   );
 
 describe("dev/playground.css", () => {
-  it.effect("scans, and every use holds the floor", () =>
-    Effect.gen(function* holdsTheFloor() {
-      const scanned = yield* sheet;
-      const data = yield* readWebFeatures;
+  it.effect(
+    "scans, and every use holds the floor",
+    () =>
+      Effect.gen(function* holdsTheFloor() {
+        const scanned = yield* sheet;
+        const data = yield* readWebFeatures;
 
-      assert.isNotEmpty(scanned.rules);
-      assert.deepStrictEqual(checkFloor(uses(scanned), data, browserSupport), []);
-    }),
+        assert.isNotEmpty(scanned.rules);
+        assert.deepStrictEqual(checkFloor(uses(scanned), data, browserSupport), []);
+      }),
+    { tags: ["web-features"] },
   );
 
   it.effect("reads only the token subset, each var() with its token's fallback", () =>
