@@ -24,6 +24,7 @@ import {
   itemFormOf,
   keyOf,
   openItem,
+  press,
   stopsToSubmit,
   submitBy,
   submitButton,
@@ -137,26 +138,6 @@ const postByEnter = (page: Page) =>
     () => page.keyboard.press("Enter"),
     (method) => method === "POST",
   );
-
-/**
- * Bring focus to a target by keys: no press when it already holds focus, as the first invalid
- * Control may through `autofocus` on the page after a refused post, else presses of the
- * next-control key until it does.
- *
- * @param page The page.
- * @param key The next-control key.
- * @param target The element to reach.
- * @param most The most presses of the key.
- * @returns How many presses it took, 0 when the target already held focus.
- */
-const reach = Effect.fn("reach")(function* reach(
-  page: Page,
-  key: string,
-  target: Locator,
-  most: number,
-) {
-  return (yield* isFocused(page, target)) ? 0 : yield* tabUntil(page, key, target, most);
-});
 
 /**
  * Press the next-control key through an item's page to its Submit, and compare the stops it makes
@@ -273,7 +254,7 @@ eachEngine((it, name) => {
 
     walk.effect(
       '[Q-12] [keyboard] inline.xml answered by keys: Submit with nothing chosen shows "Pick a planet first." in the Status region and keeps the shuffled order, "None of these" last; then J typed and Submit record Jupiter, scoring 1, with RESPONSE2 left NULL',
-      (context) =>
+      () =>
         Effect.gen(function* answerPlanet() {
           const interaction = yield* inlineChoiceOf(inlineItem, responseId);
           const tooFew = Option.getOrElse(interaction.messages.min, () =>
@@ -318,7 +299,21 @@ eachEngine((it, name) => {
               );
               assert.strictEqual(yield* valueOf(planet), "", "the Placeholder is restored");
 
-              const presses = yield* reach(page, key, planet, most);
+              // The item form's action names the Status region as its fragment, so HTML skips the
+              // invalid select's `autofocus` and focus rests on the region; the next press moves
+              // into the item, whose first stop is the select.
+              assert.isTrue(
+                yield* isFocused(page, page.getByRole("status")),
+                "the Status region holds focus on the refused page",
+              );
+
+              yield* press(page, key);
+
+              assert.isTrue(
+                yield* isFocused(page, planet),
+                `${key} from the Status region reaches the select`,
+              );
+
               yield* type(page, typed.inline.letter);
 
               assert.strictEqual(
@@ -343,16 +338,6 @@ eachEngine((it, name) => {
                 yield* valueOf(water),
                 "",
                 "RESPONSE2 is NULL, so its Placeholder is restored",
-              );
-
-              yield* Effect.promise(() =>
-                context.annotate(
-                  `${name}, ${key}: on the refused page, ${
-                    presses === 0
-                      ? "the select already held focus"
-                      : `${String(presses)} presses reached the select`
-                  }`,
-                ),
               );
             }),
           );
