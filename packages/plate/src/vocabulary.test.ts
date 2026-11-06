@@ -170,6 +170,9 @@ describe("the closed value sets", () => {
           "qti-response-else-if",
           "qti-response-else",
           "qti-set-outcome-value",
+          "qti-lookup-outcome-value",
+          "qti-exit-response",
+          "qti-response-processing-fragment",
         ],
       ],
       [

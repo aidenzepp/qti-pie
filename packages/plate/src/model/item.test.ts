@@ -3,7 +3,15 @@ import { assert, describe, it } from "@effect/vitest";
 import { Config, ConfigProvider, Data, Duration, Effect, Option } from "effect";
 import { configure } from "#plate/configuration.ts";
 import { readSource } from "#plate/document/read.ts";
-import { attr, doc, el, entity, text, xmlNamespace } from "#plate/document/source.ts";
+import {
+  attr,
+  doc,
+  el,
+  entity,
+  text,
+  xincludeNamespace,
+  xmlNamespace,
+} from "#plate/document/source.ts";
 import type {
   SourceAttribute,
   SourceChild,
@@ -898,6 +906,44 @@ const bindQuadratically = (source: SourceDocument): readonly (SourceElement | un
           valueIn(part, "identifier") === valueIn(interaction, "response-identifier"),
       ),
     );
+
+/**
+ * An item whose inline response processing holds the given rules, with an integer `RESPONSE`, a
+ * float `SCORE`, and an identifier `GRADE` with a match table.
+ *
+ * @param rules The rule elements of its `qti-response-processing`.
+ * @returns The document.
+ */
+const rulesItem = (rules: readonly SourceElement[]): SourceDocument =>
+  item({
+    after: [el("qti-response-processing", [], rules)],
+    body: [],
+    declarations: [
+      declaration("qti-response-declaration", "RESPONSE", "integer", "single"),
+      declaration("qti-outcome-declaration", "SCORE", "float", "single"),
+      declaration("qti-outcome-declaration", "GRADE", "identifier", "single", [
+        el(
+          "qti-match-table",
+          [attr("default-value", "F")],
+          [el("qti-match-table-entry", [attr("source-value", "1"), attr("target-value", "A")])],
+        ),
+      ]),
+    ],
+  });
+
+/**
+ * A `qti-lookup-outcome-value` of an outcome to a `qti-variable`.
+ *
+ * @param identifier The outcome it looks up.
+ * @param source The variable whose value it looks up.
+ * @returns The rule element.
+ */
+const lookupElement = (identifier: string, source: string): SourceElement =>
+  el(
+    "qti-lookup-outcome-value",
+    [attr("identifier", identifier)],
+    [el("qti-variable", [attr("identifier", source)])],
+  );
 
 describe("buildItem", () => {
   it.effect(
@@ -2666,6 +2712,149 @@ describe("buildItem", () => {
         [Option.some("match"), Option.some("interpolation")],
       );
     }),
+  );
+
+  it.effect(
+    "[I-9a] reads a qti-lookup-outcome-value into a lookup rule and a qti-exit-response into an exit, with no mark",
+    () =>
+      Effect.gen(function* readsLookupAndExit() {
+        const built = yield* buildItem(
+          rulesItem([lookupElement("GRADE", "RESPONSE"), el("qti-exit-response"), setScore("1")]),
+        );
+
+        assert.deepStrictEqual(
+          built.processing,
+          Option.some([
+            {
+              expression: {
+                identifier: "RESPONSE",
+                kind: "variable",
+                operands: [],
+                weightIdentifier: Option.none(),
+              },
+              identifier: "GRADE",
+              kind: "lookup-outcome",
+            },
+            { kind: "exit" },
+            scoreRule(1),
+          ]),
+        );
+        assert.deepStrictEqual(built.unsupported, []);
+      }),
+  );
+
+  it.effect(
+    "[I-9a] reads a qti-response-processing-fragment's rules in its place, nested fragments and a branch's included",
+    () =>
+      Effect.gen(function* readsFragments() {
+        const built = yield* buildItem(
+          rulesItem([
+            el(
+              "qti-response-processing-fragment",
+              [],
+              [
+                setScore("1"),
+                el("qti-response-processing-fragment", [], [el("qti-exit-response")]),
+              ],
+            ),
+            el(
+              "qti-response-condition",
+              [],
+              [
+                el(
+                  "qti-response-if",
+                  [],
+                  [
+                    el("qti-base-value", [attr("base-type", "boolean")], [text("true")]),
+                    el("qti-response-processing-fragment", [], [setScore("2")]),
+                  ],
+                ),
+              ],
+            ),
+            setScore("0"),
+          ]),
+        );
+
+        assert.deepStrictEqual(
+          built.processing,
+          Option.some([
+            scoreRule(1),
+            { kind: "exit" },
+            {
+              branches: [
+                branch(
+                  {
+                    kind: "base-value",
+                    operands: [],
+                    value: {
+                      baseType: "boolean",
+                      cardinality: "single",
+                      values: [{ baseType: "boolean", value: true }],
+                    },
+                  },
+                  [scoreRule(2)],
+                ),
+              ],
+              kind: "condition",
+              otherwise: Option.none(),
+            },
+            scoreRule(0),
+          ]),
+        );
+        assert.deepStrictEqual(built.unsupported, []);
+      }),
+  );
+
+  it.effect(
+    "[I-9a] marks each xi:include in response processing xi:include at its path and runs none, as it is never fetched (S-6)",
+    () =>
+      Effect.gen(function* marksInclude() {
+        const built = yield* buildItem(
+          rulesItem([
+            setScore("1"),
+            el("include", [attr("href", "rules.xml")], [], xincludeNamespace),
+            el(
+              "qti-response-processing-fragment",
+              [],
+              [el("include", [attr("href", "more.xml")], [], xincludeNamespace)],
+            ),
+          ]),
+        );
+
+        assert.deepStrictEqual(built.processing, Option.none());
+        assert.deepStrictEqual(built.unsupported, [
+          {
+            feature: "xi:include",
+            path: `${root}/qti-response-processing/{${xincludeNamespace}}include`,
+            shown: "mark",
+          },
+          {
+            feature: "xi:include",
+            path: `${root}/qti-response-processing/qti-response-processing-fragment/{${xincludeNamespace}}include`,
+            shown: "mark",
+          },
+        ]);
+      }),
+  );
+
+  it.effect(
+    "[I-9a] marks a lookup whose outcome or expression names a variable the engine does not hold, as a set's",
+    () =>
+      Effect.gen(function* marksUnheldLookup() {
+        const built = yield* buildItem(
+          rulesItem([lookupElement("MISSING", "GRADE"), lookupElement("GRADE", "UNDECLARED")]),
+        );
+
+        assert.deepStrictEqual(built.processing, Option.none());
+        assert.deepStrictEqual(built.unsupported, [
+          { feature: "variable:MISSING", path: `${root}/qti-response-processing`, shown: "mark" },
+          {
+            feature: "variable:UNDECLARED",
+            path: `${root}/qti-response-processing`,
+            shown: "mark",
+          },
+        ]);
+      }),
   );
 
   it.effect('[Q-2] refuses max-choices="-1" as value-type, outside xs:nonNegativeInteger', () =>

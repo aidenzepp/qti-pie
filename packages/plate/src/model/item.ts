@@ -10,7 +10,7 @@
  * @module
  */
 import { Array as Arr, Effect, Option, Result, pipe } from "effect";
-import { attributePath, walk } from "#plate/document/source.ts";
+import { attributePath, walk, xincludeNamespace } from "#plate/document/source.ts";
 import type { SourceChild, SourceDocument, SourceElement } from "#plate/document/source.ts";
 import {
   attributeName,
@@ -1730,7 +1730,8 @@ const expression = (
 const branchOf = (when: Expression, then: readonly Rule[]): Branch => ({ then, when });
 
 /**
- * Read a sequence of response rules.
+ * Read a sequence of response rules. A `qti-response-processing-fragment`'s rules take its place,
+ * so the sequence holds no fragment.
  *
  * @param build The build.
  * @param elements The rule elements, in order.
@@ -1742,9 +1743,9 @@ const rules = (
 ): Effect.Effect<Option.Option<readonly Rule[]>, Refusal> =>
   pipe(
     elements,
-    // oxlint-disable-next-line eslint/no-use-before-define -- `rules` and `rule` are mutually recursive, as conditions nest; the call runs only after both are defined.
+    // oxlint-disable-next-line eslint/no-use-before-define -- `rules` and `rule` are mutually recursive, as conditions and fragments nest; the call runs only after both are defined.
     Effect.forEach((element) => rule(build, element)),
-    Effect.map(Option.all),
+    Effect.map((read) => Option.map(Option.all(read), (each) => each.flat())),
   );
 
 /**
@@ -1772,33 +1773,78 @@ const branch = (
   });
 
 /**
- * Read one response rule: a `qti-response-condition` or a `qti-set-outcome-value`.
+ * The mark of an XInclude `include` in response processing, which is never fetched (S-6), as the
+ * test model marks one.
+ */
+const includeMark = "xi:include";
+
+/**
+ * Read the rule that holds one expression and names an outcome: a `qti-set-outcome-value` or a
+ * `qti-lookup-outcome-value`.
  *
  * @param build The build.
  * @param element The rule element.
- * @returns The rule, none when it holds an element the engine does not run, or a refusal.
+ * @param kind The rule's kind.
+ * @returns The rule, none when it does not hold exactly one expression or its expression holds an
+ *   element the engine does not run, or a refusal.
  */
-const rule = (build: Build, element: SourceElement): Effect.Effect<Option.Option<Rule>, Refusal> =>
+const outcomeRule = (
+  build: Build,
+  element: SourceElement,
+  kind: "lookup-outcome" | "set-outcome",
+): Effect.Effect<Option.Option<Rule>, Refusal> =>
+  Effect.gen(function* readOutcomeRule() {
+    const identifier = yield* identifierAttribute(build, element, "identifier");
+    const [operand, ...extra] = elementsOf(element);
+    if (operand === undefined || extra.length > 0) {
+      return yield* unread(build, element);
+    }
+
+    const read = yield* expression(build, operand);
+
+    return read.pipe(Option.map((value): Rule => ({ expression: value, identifier, kind })));
+  });
+
+/**
+ * Read one response rule element into the rules it runs: a `qti-response-condition`, a
+ * `qti-set-outcome-value`, a `qti-lookup-outcome-value` and a `qti-exit-response` are one rule
+ * each, and a `qti-response-processing-fragment` is its own rules, read in place, nested fragments
+ * included. An XInclude `include` is never fetched (S-6): it is marked `xi:include` at its path, so
+ * the processing that holds it runs none.
+ *
+ * @param build The build.
+ * @param element The rule element.
+ * @returns The rules, none when it holds an element the engine does not run, or a refusal.
+ */
+const rule = (
+  build: Build,
+  element: SourceElement,
+): Effect.Effect<Option.Option<readonly Rule[]>, Refusal> =>
   Effect.gen(function* readRule() {
-    const parts = elementsOf(element);
-    if (isQti(element, "qti-set-outcome-value")) {
-      const identifier = yield* identifierAttribute(build, element, "identifier");
-      const [operand, ...extra] = parts;
-      if (operand === undefined || extra.length > 0) {
-        return yield* unread(build, element);
-      }
+    if (element.namespace === xincludeNamespace && element.local === "include") {
+      return yield* unread(build, element, includeMark);
+    }
 
-      const read = yield* expression(build, operand);
+    if (isQti(element, "qti-response-processing-fragment")) {
+      return yield* rules(build, elementsOf(element));
+    }
 
-      return read.pipe(
-        Option.map((value) => ({ expression: value, identifier, kind: "set-outcome" })),
-      );
+    if (isQti(element, "qti-exit-response")) {
+      return Option.some<readonly Rule[]>([{ kind: "exit" }]);
+    }
+
+    if (isQti(element, "qti-set-outcome-value") || isQti(element, "qti-lookup-outcome-value")) {
+      const kind = isQti(element, "qti-set-outcome-value") ? "set-outcome" : "lookup-outcome";
+      const read = yield* outcomeRule(build, element, kind);
+
+      return read.pipe(Option.map((each) => [each]));
     }
 
     if (!isQti(element, "qti-response-condition")) {
       return yield* unread(build, element);
     }
 
+    const parts = elementsOf(element);
     const branches = yield* Effect.forEach(
       parts.filter((part) => isQti(part, "qti-response-if") || isQti(part, "qti-response-else-if")),
       (part) => branch(build, part),
@@ -1822,7 +1868,9 @@ const rule = (build: Build, element: SourceElement): Effect.Effect<Option.Option
 
     return Option.map(
       Option.all({ branches: Option.all(branches), otherwise, strays: Option.all(strays) }),
-      (read) => ({ branches: read.branches, kind: "condition", otherwise: read.otherwise }),
+      (read): readonly Rule[] => [
+        { branches: read.branches, kind: "condition", otherwise: read.otherwise },
+      ],
     );
   });
 
@@ -2257,19 +2305,14 @@ const unheldIdentifiers = (
 
   /**
    * Add each identifier a rule sequence names, nested branches included, that the engine does not
-   * hold: each outcome it sets, and each identifier its expressions read.
+   * hold: each outcome it sets or looks up, and each identifier its expressions read. An exit
+   * names none.
    *
    * @param sequence The rules, in order.
    */
   const run = (sequence: readonly Rule[]): void => {
     for (const each of sequence) {
-      if (each.kind === "set-outcome") {
-        if (!outcomes.has(each.identifier)) {
-          unheld.add(each.identifier);
-        }
-
-        read(each.expression);
-      } else {
+      if (each.kind === "condition") {
         for (const { then, when } of each.branches) {
           read(when);
           run(then);
@@ -2277,6 +2320,12 @@ const unheldIdentifiers = (
         if (Option.isSome(each.otherwise)) {
           run(each.otherwise.value);
         }
+      } else if (each.kind !== "exit") {
+        if (!outcomes.has(each.identifier)) {
+          unheld.add(each.identifier);
+        }
+
+        read(each.expression);
       }
     }
   };
@@ -2308,15 +2357,14 @@ const expressionsOf = (tree: readonly Rule[]): readonly Expression[] => {
   };
 
   /**
-   * Add the expressions of a rule sequence.
+   * Add the expressions of a rule sequence: a set's and a lookup's expression, and each branch's
+   * condition and rules. An exit holds none.
    *
    * @param sequence The rules, in order.
    */
   const run = (sequence: readonly Rule[]): void => {
     for (const each of sequence) {
-      if (each.kind === "set-outcome") {
-        add(each.expression);
-      } else {
+      if (each.kind === "condition") {
         for (const { then, when } of each.branches) {
           add(when);
           run(then);
@@ -2324,6 +2372,8 @@ const expressionsOf = (tree: readonly Rule[]): readonly Expression[] => {
         if (Option.isSome(each.otherwise)) {
           run(each.otherwise.value);
         }
+      } else if (each.kind !== "exit") {
+        add(each.expression);
       }
     }
   };
@@ -2554,34 +2604,40 @@ const unmetNeeds = (
 
   /**
    * Add the marks of a rule sequence, nested branches included: each mapping its expressions read
-   * that their response lacks, and each outcome it sets to a value of another type.
+   * that their response lacks, and each outcome it sets to a value of another type. A lookup gives
+   * a single value of its outcome's base type (reading 8), so it needs an outcome of cardinality
+   * `single`; an exit needs nothing.
    *
    * @param sequence The rules, in order.
    */
   const run = (sequence: readonly Rule[]): void => {
     for (const each of sequence) {
-      if (each.kind === "set-outcome") {
-        read(each.expression);
-
-        const outcome = outcomes.get(each.identifier);
-        const given = typeOf(each.expression, responses, outcomes, builtIns);
-        if (
-          outcome !== undefined &&
-          Option.exists(
-            given,
-            (type) =>
-              type.baseType !== outcome.baseType || type.cardinality !== outcome.cardinality,
-          )
-        ) {
-          unmet.add(`outcome-type:${each.identifier}`);
-        }
-      } else {
+      if (each.kind === "condition") {
         for (const { then, when } of each.branches) {
           read(when);
           run(then);
         }
         if (Option.isSome(each.otherwise)) {
           run(each.otherwise.value);
+        }
+      } else if (each.kind !== "exit") {
+        read(each.expression);
+
+        const outcome = outcomes.get(each.identifier);
+        if (outcome !== undefined) {
+          const given =
+            each.kind === "set-outcome"
+              ? typeOf(each.expression, responses, outcomes, builtIns)
+              : Option.some<ValueType>({ baseType: outcome.baseType, cardinality: "single" });
+          if (
+            Option.exists(
+              given,
+              (type) =>
+                type.baseType !== outcome.baseType || type.cardinality !== outcome.cardinality,
+            )
+          ) {
+            unmet.add(`outcome-type:${each.identifier}`);
+          }
         }
       }
     }
