@@ -14,6 +14,8 @@
   },
   "scripts": {
     "browsers": "PLAYWRIGHT_BROWSERS_PATH=\"$HOME/.cache/gr8des/ms-playwright\" playwright-core install --only-shell chromium webkit",
+    "host:astro": "node scripts/astro-server.ts",
+    "host:astro:build": "ASTRO_TELEMETRY_DISABLED=1 astro build --root hosts/astro",
     "ledger": "node scripts/ledger.ts",
     "serve": "node scripts/serve.ts",
     "test": "mkdir -p work/.vp-tmp && TMPDIR=\"$PWD/work/.vp-tmp\" NODE_OPTIONS=\"$NODE_OPTIONS --disable-proto=delete --disable-sigusr1\" vp test run",

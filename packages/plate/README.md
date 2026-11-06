@@ -394,6 +394,7 @@ const verdict = await Effect.runPromise(open("item.xml", await readFile("item.xm
 const configuration = await Effect.runPromise(configure({}));
 const item = Option.getOrThrow(acceptedItem(verdict));
 const { html } = Result.getOrThrow(render(redact(item), configuration, { instance: "q1" }));
+Astro.response.headers.set("cache-control", "no-store");
 ---
 <form method="POST" autocomplete="off">
   <Fragment set:html={html} />
@@ -402,6 +403,9 @@ const { html } = Result.getOrThrow(render(redact(item), configuration, { instanc
 ```
 
 On a `POST`, read `await Astro.request.formData()` and score it as the plain-HTML host does.
+[`hosts/astro/`](hosts/astro/src/pages/index.astro) renders and scores BG010 this way, and
+`pnpm --filter @qti-pie/plate host:astro` serves it at `http://127.0.0.1:5192`. Serve a production
+build, such as `@astrojs/node`'s standalone server: Astro's dev server adds a script to every page.
 
 ## Styling
 
