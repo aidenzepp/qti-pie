@@ -165,6 +165,7 @@ import {
   VariableRef,
 } from "#pantry/qti/expressions.ts";
 import { Node, nodeLaws } from "#pantry/qti/node.ts";
+import { mathmlLaws, mathmlRelations } from "#pantry/qti/mathml.ts";
 import { operatorLaws, operatorRelations } from "#pantry/qti/operators.ts";
 import {
   Dependency,
@@ -407,6 +408,7 @@ export const Qti = schema(
     ...htmlRelations,
     ...quotationRelations,
     ...operatorRelations,
+    ...mathmlRelations,
   },
   [
     ...nodeLaws,
@@ -423,5 +425,6 @@ export const Qti = schema(
     ...htmlLaws,
     ...quotationLaws,
     ...operatorLaws,
+    ...mathmlLaws,
   ],
 );

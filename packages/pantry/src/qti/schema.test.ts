@@ -30,6 +30,8 @@ import * as metadata from "#pantry/qti/metadata.ts";
 import { metadataLaws } from "#pantry/qti/metadata.ts";
 import * as node from "#pantry/qti/node.ts";
 import { nodeLaws } from "#pantry/qti/node.ts";
+import * as mathml from "#pantry/qti/mathml.ts";
+import { mathmlLaws } from "#pantry/qti/mathml.ts";
 import * as operators from "#pantry/qti/operators.ts";
 import { operatorLaws } from "#pantry/qti/operators.ts";
 import * as pkg from "#pantry/qti/package.ts";
@@ -59,6 +61,7 @@ const composedLaws: readonly (readonly [string, readonly Statement[]])[] = [
   ["src/qti/html.ts htmlLaws", htmlLaws],
   ["src/qti/quotation.ts quotationLaws", quotationLaws],
   ["src/qti/operators.ts operatorLaws", operatorLaws],
+  ["src/qti/mathml.ts mathmlLaws", mathmlLaws],
 ];
 
 /**
@@ -82,6 +85,7 @@ const composedModules = [
   ["src/qti/html.ts", html],
   ["src/qti/quotation.ts", quotation],
   ["src/qti/operators.ts", operators],
+  ["src/qti/mathml.ts", mathml],
 ] as const;
 
 /**
