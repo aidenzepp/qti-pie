@@ -2,6 +2,8 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option } from "effect";
 import { attr, el } from "#plate/document/source.ts";
 import type { SourceElement } from "#plate/document/source.ts";
+import { evaluators } from "#plate/engine/evaluate.ts";
+import { expressionKinds } from "#plate/model/expression.ts";
 import type { Expression } from "#plate/model/expression.ts";
 import { kindRules } from "#plate/model/expressions/read.ts";
 import { buildItem } from "#plate/model/item.ts";
@@ -157,15 +159,21 @@ describe("the references family's reader specs", () => {
     }),
   );
 
-  it.effect("mark a stub kind, qti-sum, at its path, and read nothing in it", () =>
+  it.effect("mark a stub kind at its path, and read nothing in it", () =>
     Effect.gen(function* marksStub() {
+      // The first kind whose evaluator is still the stub marker, read from the registry so a
+      // family's landing never turns this case's kind into a landed one. Once every kind has
+      // landed there is no stub left to mark, and this case goes.
+      const stub = expressionKinds.find((kind) => evaluators[kind] === "unlanded");
+      assert.isDefined(stub, "every kind has landed, so no stub is left to mark");
+
       const built = yield* buildItem(
         outItem(
           expressionElement(
-            "sum",
+            stub,
             [],
             [
-              expressionElement("product", [], [baseValueElement("integer", "1")]),
+              expressionElement(stub, [], [baseValueElement("integer", "1")]),
               baseValueElement("duration", "PT1S"),
             ],
           ),
@@ -174,7 +182,7 @@ describe("the references family's reader specs", () => {
 
       assert.deepStrictEqual(built.processing, Option.none());
       assert.deepStrictEqual(built.unsupported, [
-        { feature: "qti-sum", path: `${setOut}/qti-sum`, shown: "mark" },
+        { feature: `qti-${stub}`, path: `${setOut}/qti-${stub}`, shown: "mark" },
       ]);
     }),
   );

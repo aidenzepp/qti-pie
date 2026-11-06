@@ -1,27 +1,358 @@
 /**
- * The arithmetic family of the engine: `qti-sum`, `qti-product`, `qti-subtract`, `qti-divide`,
- * `qti-min` and `qti-max`. The family has landed no kind yet, so each entry is the stub marker
- * (ruling R2); its slice (`p7-04`) replaces each marker with the kind's evaluator.
+ * The arithmetic family of the engine: the evaluators of `qti-sum`, `qti-product`, `qti-subtract`,
+ * `qti-divide`, `qti-min` and `qti-max`.
  *
- * It reads the evaluator's types from `#plate/engine/evaluate.ts` as types only, so the
+ * Integers are exact `bigint`s (reading 45), so when every operand is an integer, `qti-sum`,
+ * `qti-product`, `qti-subtract`, `qti-min` and `qti-max` compute exactly at any size and give a
+ * single integer. Otherwise each integer meets the floats through `toFloat`, the one
+ * integer-to-float conversion, and the kind gives a single float of 64-bit double arithmetic, left
+ * to right. `qti-divide` always gives a single float, and gives NULL for a divisor of 0 and for a
+ * quotient of INF, -INF or NaN, which the information model's float value set does not hold (§4.4);
+ * every other kind keeps INF as the value its arithmetic gives.
+ *
+ * Any NULL operand, an empty container among them, gives NULL, and so does an operand that is not
+ * a number, which the validator refuses on a checked item (P23). The NULL keeps the type the kind's
+ * rule gives (`#plate/model/expressions/arithmetic.ts`).
+ *
+ * It value-imports only engine leaves, `#plate/model/values.ts` and `effect`'s `Array`, `Option`
+ * and `Result`, and reads the evaluator's types from `#plate/engine/evaluate.ts` as types, so the
  * dispatcher's table may import it without a cycle.
  *
  * @module
  */
-import type { FamilyTable } from "#plate/engine/evaluate.ts";
+import { Array, Option, Result } from "effect";
+import type { Evaluate, Evaluator, FamilyTable, Scope } from "#plate/engine/evaluate.ts";
+import type { EngineFailure } from "#plate/engine/failures.ts";
+import { numberOf, toFloat } from "#plate/engine/numbers.ts";
+import type { NumberSingle } from "#plate/engine/numbers.ts";
+import type { Expression } from "#plate/model/expression.ts";
+import { isNull, nullOf } from "#plate/model/values.ts";
+import type { Value } from "#plate/model/values.ts";
 
 /**
- * The arithmetic family's evaluators by kind: the stub marker for each, which the dispatcher in
- * `#plate/engine/evaluate.ts` never reaches on a checked item, because the reader marks an unlanded
- * kind and its processing never runs.
+ * The numbers an arithmetic expression's operands hold, in order, each member of a container in
+ * its place: exact integers when every one is an integer, else floats, each integer through
+ * `toFloat`.
+ */
+type Members =
+  | { readonly _tag: "float"; readonly values: Array.NonEmptyReadonlyArray<number> }
+  | { readonly _tag: "integer"; readonly values: Array.NonEmptyReadonlyArray<bigint> };
+
+/**
+ * How an arithmetic kind combines two numbers, the one held so far and the next, on each of the
+ * two bases.
+ */
+interface Step {
+  readonly float: (held: number, next: number) => number;
+  readonly integer: (held: bigint, next: bigint) => bigint;
+}
+
+/**
+ * Construct a single integer value.
+ *
+ * @param value The integer.
+ * @returns The value.
+ */
+const integerValue = (value: bigint): Value => ({
+  baseType: "integer",
+  cardinality: "single",
+  values: [{ baseType: "integer", value }],
+});
+
+/**
+ * Construct a single float value.
+ *
+ * @param value The float.
+ * @returns The value.
+ */
+const floatValue = (value: number): Value => ({
+  baseType: "float",
+  cardinality: "single",
+  values: [{ baseType: "float", value }],
+});
+
+/**
+ * Give the float a single number stands for: a float as it is, an integer through `toFloat`.
+ *
+ * @param single The number.
+ * @returns The float.
+ */
+const floatOf = (single: NumberSingle): number =>
+  single.baseType === "integer" ? toFloat(single.value) : single.value;
+
+/**
+ * Give the base type of the NULL an arithmetic kind's operands give, the kind's rule over their
+ * types: integer when every operand that says its base type is an integer, else float. A NULL of a
+ * base type that is not numerical says nothing, as the rule passes over `qti-null`'s `any`: it is
+ * the only such NULL on a checked item, which refuses every other operand that is not a number.
+ *
+ * @param values The operands' values.
+ * @returns The base type.
+ */
+const resultBaseOf = (values: readonly Value[]): "float" | "integer" => {
+  const said = values.filter(
+    (value) => !isNull(value) || value.baseType === "integer" || value.baseType === "float",
+  );
+
+  return said.length > 0 && said.every((value) => value.baseType === "integer")
+    ? "integer"
+    : "float";
+};
+
+/**
+ * Give the numbers the operands hold, each member of a container in its place.
+ *
+ * @param values The operands' values.
+ * @returns The numbers; none when an operand is NULL, an empty container included, or holds a
+ *   value that is not a number.
+ */
+const membersOf = (values: readonly Value[]): Option.Option<Members> => {
+  if (values.some((value) => isNull(value))) {
+    return Option.none();
+  }
+
+  const singles = values.flatMap((value) => value.values);
+  const integers = singles.flatMap((single) =>
+    single.baseType === "integer" ? [single.value] : [],
+  );
+  if (integers.length === singles.length && Array.isReadonlyArrayNonEmpty(integers)) {
+    return Option.some({ _tag: "integer", values: integers });
+  }
+
+  const floats = singles.flatMap((single) =>
+    single.baseType === "integer" || single.baseType === "float" ? [floatOf(single)] : [],
+  );
+
+  return floats.length === singles.length && Array.isReadonlyArrayNonEmpty(floats)
+    ? Option.some({ _tag: "float", values: floats })
+    : Option.none();
+};
+
+/**
+ * Combine numbers left to right: the first, then each next with the one held so far.
+ *
+ * @param values The numbers, one or more.
+ * @param step How two combine.
+ * @returns The number they combine to.
+ */
+const fold = <A>(values: Array.NonEmptyReadonlyArray<A>, step: (held: A, next: A) => A): A => {
+  const [first, ...rest] = values;
+  let held = first;
+  for (const next of rest) {
+    held = step(held, next);
+  }
+
+  return held;
+};
+
+/**
+ * Evaluate every operand, left to right; the first failure is the result. An operator has no side
+ * effects, so evaluating them all changes no value.
+ *
+ * @param operands The operands.
+ * @param scope The item and the variables of the attempt.
+ * @param evaluate The evaluator, which gives each operand's value.
+ * @returns The operands' values, or the first operand's failure.
+ */
+const valuesOf = (
+  operands: readonly Expression[],
+  scope: Scope,
+  evaluate: Evaluate,
+): Result.Result<readonly Value[], EngineFailure> =>
+  Result.all(operands.map((operand) => evaluate(operand, scope)));
+
+/**
+ * Give the value an arithmetic kind combines its operands' values to: a single integer of the
+ * integers when every number is one, else a single float of the floats, or NULL of the kind's type
+ * when {@link membersOf} gives none.
+ *
+ * @param values The operands' values.
+ * @param step How the kind combines two numbers.
+ * @returns The value.
+ */
+const combined = (values: readonly Value[], step: Step): Value =>
+  Option.match(membersOf(values), {
+    onNone: () => nullOf(resultBaseOf(values), "single"),
+    onSome: (members) =>
+      members._tag === "integer"
+        ? integerValue(fold(members.values, step.integer))
+        : floatValue(fold(members.values, step.float)),
+  });
+
+/**
+ * Addition: exact on integers, IEEE 754 on floats.
+ */
+const add: Step = { float: (held, next) => held + next, integer: (held, next) => held + next };
+
+/**
+ * Multiplication: exact on integers, IEEE 754 on floats.
+ */
+const multiply: Step = {
+  float: (held, next) => held * next,
+  integer: (held, next) => held * next,
+};
+
+/**
+ * Subtraction: exact on integers, IEEE 754 on floats.
+ */
+const takeAway: Step = {
+  float: (held, next) => held - next,
+  integer: (held, next) => held - next,
+};
+
+/**
+ * The lesser of two numbers. Of two floats it is `Math.min`'s, so a NaN gives NaN and -0 is less
+ * than 0.
+ *
+ * Integers that meet a float are compared as their floats here, never exactly, and that gives the
+ * same result: `toFloat` keeps order (a greater integer never becomes a lesser float) and leaves a
+ * float as it is, so the least float of the numbers is the float of the least number.
+ */
+const least: Step = {
+  float: (held, next) => Math.min(held, next),
+  integer: (held, next) => (next < held ? next : held),
+};
+
+/**
+ * The greater of two numbers. Of two floats it is `Math.max`'s, so a NaN gives NaN and 0 is
+ * greater than -0. Integers that meet a float are compared as their floats, which gives the
+ * greatest number's float, as {@link least} says of the least.
+ */
+const greatest: Step = {
+  float: (held, next) => Math.max(held, next),
+  integer: (held, next) => (next > held ? next : held),
+};
+
+/**
+ * Give the value of a `qti-sum`: the sum of every number its operands hold, a container's members
+ * each in its place; a single integer when every operand is an integer, else a single float. NULL
+ * when any operand is NULL.
+ *
+ * @param expression The `qti-sum`.
+ * @param scope The item and the variables of the attempt.
+ * @param evaluate The evaluator, which gives each operand's value.
+ * @returns The single number, or the first operand's failure.
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpSum
+ */
+const evaluateSum: Evaluator<"sum"> = (expression, scope, evaluate) =>
+  Result.map(valuesOf(expression.operands, scope, evaluate), (values) => combined(values, add));
+
+/**
+ * Give the value of a `qti-product`: the product of every number its operands hold, a container's
+ * members each in its place; a single integer when every operand is an integer, else a single
+ * float. NULL when any operand is NULL.
+ *
+ * @param expression The `qti-product`.
+ * @param scope The item and the variables of the attempt.
+ * @param evaluate The evaluator, which gives each operand's value.
+ * @returns The single number, or the first operand's failure.
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpProduct
+ */
+const evaluateProduct: Evaluator<"product"> = (expression, scope, evaluate) =>
+  Result.map(valuesOf(expression.operands, scope, evaluate), (values) =>
+    combined(values, multiply),
+  );
+
+/**
+ * Give the value of a `qti-subtract`: its first operand less its second; a single integer when
+ * both are integers, else a single float. NULL when either is NULL or not a single number.
+ *
+ * @param expression The `qti-subtract`.
+ * @param scope The item and the variables of the attempt.
+ * @param evaluate The evaluator, which gives each operand's value.
+ * @returns The single number, or the first operand's failure.
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpSubcontract
+ */
+const evaluateSubtract: Evaluator<"subtract"> = (expression, scope, evaluate) =>
+  Result.map(valuesOf(expression.operands, scope, evaluate), (values) =>
+    values.every((value) => value.cardinality === "single")
+      ? combined(values, takeAway)
+      : nullOf(resultBaseOf(values), "single"),
+  );
+
+/**
+ * Give the quotient of two floats, when the float value set holds it.
+ *
+ * @param dividend The dividend.
+ * @param divisor The divisor.
+ * @returns The quotient; none for a divisor of 0 or -0, and for a quotient of INF, -INF or NaN.
+ */
+const quotientOf = (dividend: number, divisor: number): Option.Option<number> => {
+  if (divisor === 0) {
+    return Option.none();
+  }
+
+  const quotient = dividend / divisor;
+
+  return Number.isFinite(quotient) ? Option.some(quotient) : Option.none();
+};
+
+/**
+ * Give the value of a `qti-divide`: a single float, its first operand divided by its second, each
+ * an integer through `toFloat`. NULL when either is NULL or not a single number, when the divisor
+ * is 0, and when the quotient is INF, -INF or NaN, which the float value set does not hold (§4.4).
+ *
+ * @param expression The `qti-divide`.
+ * @param scope The item and the variables of the attempt.
+ * @param evaluate The evaluator, which gives each operand's value.
+ * @returns The single float, or the first operand's failure.
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpDivide
+ */
+const evaluateDivide: Evaluator<"divide"> = (expression, scope, evaluate) => {
+  const [dividend, divisor] = expression.operands;
+
+  return Result.map(
+    Result.all([evaluate(dividend, scope), evaluate(divisor, scope)]),
+    ([left, right]) =>
+      Option.match(
+        Option.flatMap(Option.all([numberOf(left), numberOf(right)]), ([over, under]) =>
+          quotientOf(floatOf(over), floatOf(under)),
+        ),
+        { onNone: () => nullOf("float", "single"), onSome: floatValue },
+      ),
+  );
+};
+
+/**
+ * Give the value of a `qti-min`: the least number its operands hold, a container's members each in
+ * its place; a single integer when every operand is an integer, else a single float. NULL when any
+ * operand is NULL.
+ *
+ * @param expression The `qti-min`.
+ * @param scope The item and the variables of the attempt.
+ * @param evaluate The evaluator, which gives each operand's value.
+ * @returns The single number, or the first operand's failure.
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpMin
+ */
+const evaluateMin: Evaluator<"min"> = (expression, scope, evaluate) =>
+  Result.map(valuesOf(expression.operands, scope, evaluate), (values) => combined(values, least));
+
+/**
+ * Give the value of a `qti-max`: the greatest number its operands hold, a container's members each
+ * in its place; a single integer when every operand is an integer, else a single float. NULL when
+ * any operand is NULL.
+ *
+ * @param expression The `qti-max`.
+ * @param scope The item and the variables of the attempt.
+ * @param evaluate The evaluator, which gives each operand's value.
+ * @returns The single number, or the first operand's failure.
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpMax
+ */
+const evaluateMax: Evaluator<"max"> = (expression, scope, evaluate) =>
+  Result.map(valuesOf(expression.operands, scope, evaluate), (values) =>
+    combined(values, greatest),
+  );
+
+/**
+ * The arithmetic family's evaluators by kind.
  */
 export const arithmeticEvaluators: FamilyTable<
   "divide" | "max" | "min" | "product" | "subtract" | "sum"
 > = {
-  divide: "unlanded",
-  max: "unlanded",
-  min: "unlanded",
-  product: "unlanded",
-  subtract: "unlanded",
-  sum: "unlanded",
+  divide: evaluateDivide,
+  max: evaluateMax,
+  min: evaluateMin,
+  product: evaluateProduct,
+  subtract: evaluateSubtract,
+  sum: evaluateSum,
 };
