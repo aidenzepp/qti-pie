@@ -21,18 +21,17 @@ import {
   isQti,
   leastInt,
   listed,
-  outcomeDeclaration,
   pathOf,
-  pathsOf,
   refusal,
   requiredAttribute,
   requiredValue,
   valueOf,
-  xmlWhitespaceRun,
   xsBoolean,
   xsBooleanOf,
-} from "#plate/model/item.ts";
-import type { ModelWalk, OutcomeDeclaration, UnsupportedFeature } from "#plate/model/item.ts";
+} from "#plate/model/attributes.ts";
+import type { ModelWalk } from "#plate/model/attributes.ts";
+import { outcomeDeclaration, pathsOf, xmlWhitespaceRun } from "#plate/model/item.ts";
+import type { OutcomeDeclaration, UnsupportedFeature } from "#plate/model/item.ts";
 import { integerLexical, trimXmlSpace } from "#plate/model/values.ts";
 import type { Refusal } from "#plate/validate/refusal.ts";
 import { navigationModes, renders, submissionModes, testMarks } from "#plate/vocabulary.ts";
