@@ -204,6 +204,27 @@ const packageFile = (file: string): string =>
 const readme = (): string => packageFile("README.md");
 
 /**
+ * Give the lines of `src/engine/math.ts`'s opening legal comment, the `/*! … *\/` that carries
+ * FDLIBM 5.3's notices, which `NOTICE` reproduces as plain text. The comment's own first and last
+ * lines are left out, and each line between them loses its leading ` *` and the space after it.
+ *
+ * @returns The comment's lines, in order.
+ */
+const legalNotice = (): readonly string[] => {
+  const [first, ...rest] = packageFile("src/engine/math.ts").split("\n");
+  const end = rest.indexOf(" */");
+  assert.strictEqual(first, "/*!", "math.ts opens with a legal comment");
+  assert.isAbove(end, 0, "math.ts's legal comment closes on a line of its own");
+
+  const body = rest.slice(0, end);
+  for (const line of body) {
+    assert.match(line, /^ \*(?: |$)/u, "each line of the legal comment starts with ` *`");
+  }
+
+  return body.map((line) => line.replace(/^ \*(?: |$)/u, ""));
+};
+
+/**
  * Give the lines of a Markdown text with the lines inside fenced code blocks marked, so a `#` in
  * a code block never reads as a heading.
  *
@@ -628,10 +649,16 @@ describe("README.md", () => {
       }),
   );
 
-  it("names the licence package.json declares, MIT", () => {
+  it("names the licence package.json declares, MIT, on License's first line, and links NOTICE", () => {
     const { license } = Schema.decodeUnknownSync(Manifest)(JSON.parse(packageFile("package.json")));
+    const [first, ...rest] = sectionOf("## License").trim().split("\n");
 
     assert.strictEqual(license, "MIT");
-    assert.strictEqual(sectionOf("## License").trim(), license);
+    assert.strictEqual(first, license);
+    assert.include(rest.join("\n"), "[NOTICE](NOTICE)");
+  });
+
+  it("holds in NOTICE every line of math.ts's opening legal comment, in order", () => {
+    assert.include(packageFile("NOTICE"), legalNotice().join("\n"));
   });
 });

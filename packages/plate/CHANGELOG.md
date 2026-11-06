@@ -9,6 +9,62 @@ changes. [`docs/spec-readings.md`](../../docs/spec-readings.md) numbers the read
 The first entry lists the surface of M1 and M2, and what M3 adds to it. plate is not published,
 and both of its entry points are unstable until M3.
 
+### Response processing (M3)
+
+- In inline response processing, `score` runs every response rule and 50 of the 64 expressions
+  QTI 3.0 defines. Before, it ran `qti-response-condition` and `qti-set-outcome-value` over eight
+  expressions. `open` marked processing that held anything else, and that processing did not run.
+  The README's [Scoring](README.md#scoring) section lists the 14 expressions that later stages of M3
+  bring.
+- `qti-lookup-outcome-value` maps a value through its outcome's `qti-match-table` or
+  `qti-interpolation-table`, and the verdict no longer marks either table. `qti-exit-response` ends
+  processing, and a `qti-response-processing-fragment`'s rules run where the fragment stands.
+- `qti-equal` runs in its `absolute` and `relative` tolerance modes, as well as in `exact`.
+- The verdict still marks `qti-custom-operator`, but its processing now runs, with the operator's
+  value NULL.
+- The verdict still marks processing that holds any of these, and `score` does not run it: one of
+  the later expressions that an item may hold, an `xi:include`, a `%` coordinate in a `qti-inside`
+  or an area mapping, a `qti-pattern-match` pattern that plate cannot translate, or a variable that
+  plate holds no value for.
+- `open` refuses each of the following, as pantry's processing checker does. The refusals with
+  `expression-type` and `undeclared-variable` judge only inline response processing.
+  - With `expression-type`: a `qti-response-if` or `qti-response-else-if` whose condition is not a
+    single `boolean` (P21), an operand of a type its expression does not take (P23), and a
+    reference attribute, such as `qti-index`'s `n`, that names a variable other than a single
+    template or outcome variable of the attribute's base type (P24). Before, `open` judged the
+    operands of `qti-equal` alone.
+  - With `undeclared-variable`: a reference attribute that names no declared variable (P8), the
+    built-in `duration` read in an item that is not time dependent (`item-duration`), and a
+    `qti-lookup-outcome-value` that sets the built-in `completionStatus` (P9).
+  - With `attribute-type`: a literal `figures` below 1, or below 0 in `decimalPlaces` mode (P10),
+    and a literal `n` of `qti-index` below 1 (P11).
+  - With `missing-attribute`: a `qti-equal` in `absolute` or `relative` mode that has no
+    `tolerance` (P36).
+- Where QTI makes an integer a float, an integer beyond the largest finite float becomes the
+  largest finite float of its sign (reading 45). Before, it became an infinity.
+- The math functions run on plate's own port of FDLIBM 5.3, so they give the same result in Node,
+  Chromium and WebKit. [`NOTICE`](NOTICE) holds Sun's notice for the ported routines.
+- `qti-sum`, `qti-subtract`, `qti-product` and `qti-lcm` give NULL for an integer result of more
+  than 1,000,000 bits. `qti-multiple`, `qti-ordered` and `qti-repeat` give NULL for a container of
+  more than 1,000,000 values. Values written in an item or stored in a record are never bounded.
+  These bounds limit size, not time, so call `score` and `advance` on items you do not trust under
+  a time limit.
+- Processing reads and sets the built-in `completionStatus`. Unless a declaration names it, an
+  item's `StoredRecord` holds it among the outcomes. It is `not_attempted` before the first
+  attempt and `unknown` when the first attempt's processing starts, and each later attempt starts
+  from the value the last one left. The record's `version` stays 1. A record that does not hold
+  `completionStatus`, such as one written before this change, still reads, and its next attempt
+  starts it at `unknown`. Once an attempt has run, `results` reports the value the record holds.
+- The verdict still marks an adaptive item `adaptive="true"`, and its processing runs as a
+  non-adaptive item's. Each attempt starts from the declared defaults, so outcomes do not add up
+  across attempts until M5.
+- `Accepted`, which `@qti-pie/plate` exports, holds `item: Item`, so a host's types see the `Rule`
+  and `Expression` types of `item.processing`. Their shape changed. Every expression is a
+  `{ kind, operands, … }` variant of one of the 64 kinds. A leaf such as `variable` has
+  `operands: []`, and `is-null`'s `operand` is now `operands`. `Rule` gains the kinds
+  `lookup-outcome` and `exit`, and an `OutcomeDeclaration` holds its `lookupTable`. The list of
+  exports is unchanged, and so is `EngineFailure`.
+
 ### Inline Choice (M3)
 
 - `render` writes an Inline Choice as a native `select`. Its first option, the author's
