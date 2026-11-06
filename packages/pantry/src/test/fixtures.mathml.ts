@@ -317,34 +317,6 @@ const generatedFiles = (group: MathmlGroup): readonly string[] => [
 ];
 
 /**
- * The anchors that keep the files a generated group's blocks name only by `altimg`: an `img` for
- * each, first in the item body. The cut keeps the files an item's `src`, `data`, `href`, `poster`,
- * `srcset`, `cite` and `longdesc` values name and no others, while the file-exists law reads an
- * `m:math`'s `altimg` as a file reference too, so a file only `altimg` names is deleted by the cut
- * and the package then refuses under `file-exists`. An `img` with that `src` makes the cut keep the
- * file and list it.
- *
- * @param group - The generated group.
- * @returns The anchors' text, empty when every file the group names is kept by the cut.
- */
-const altimgAnchors = (group: MathmlGroup): string => {
-  const named = (attributes: string): ReadonlySet<string> =>
-    new Set(
-      group.blocks.flatMap((block) =>
-        [...block.xml.matchAll(new RegExp(`\\s(?:${attributes})="(?<file>[^"#]+)"`, "gu"))].map(
-          (match) => match.groups?.["file"] ?? "",
-        ),
-      ),
-    );
-  const kept = named("data|href|src");
-
-  return generatedFiles(group)
-    .filter((file) => named("altimg").has(file) && !kept.has(file))
-    .map((file) => `<div><img src="${file}" alt="x"/></div>`)
-    .join("");
-};
-
-/**
  * The edits that put a generated group into its base item: the response declarations of the
  * interactions the group's blocks hold, the `FEEDBACK` outcome and the `TPL` template variable they
  * name, the blocks of the body site at the start of the item body and those of the item site last
@@ -374,11 +346,7 @@ const generatedItemEdits = (item: string, group: MathmlGroup): readonly TextEdit
   return [
     replaceIn(item, "</qti-response-declaration>", `</qti-response-declaration>${responses}`),
     replaceIn(item, scoreOutcome, `${scoreOutcome}${generatedOutcome(group)}${template}`),
-    replaceIn(
-      item,
-      "<qti-item-body>",
-      `<qti-item-body>${altimgAnchors(group)}${generatedAt(group, "body")}`,
-    ),
+    replaceIn(item, "<qti-item-body>", `<qti-item-body>${generatedAt(group, "body")}`),
     replaceIn(
       item,
       "</qti-assessment-item>",
