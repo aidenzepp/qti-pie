@@ -215,6 +215,34 @@ const isDigits = (text: string): text is IntegerParts["digits"] =>
   /^(?:0|[1-9][0-9]*)$/u.test(text);
 
 /**
+ * The float map keys of grizzle's form that name their double: PostgreSQL's cast reads them, and
+ * JavaScript's `Number` reads none of them as that double.
+ */
+const namedFloats: ReadonlyMap<string, number> = new Map([
+  ["-INF", Number.NEGATIVE_INFINITY],
+  ["INF", Number.POSITIVE_INFINITY],
+  ["NaN", Number.NaN],
+]);
+
+/**
+ * Read a float map key of grizzle's `double precision` form as the double PostgreSQL's cast reads
+ * it, the value `E1_derived` holds `MapKeyFloat.value` to: `INF`, `-INF` and `NaN` by name, which
+ * the cast reads and JavaScript's `Number` does not, and every other key by `Number`, which reads
+ * the form's sign, point, exponent and padding zeros as the cast does and rounds the decimal to the
+ * nearest double.
+ *
+ * ECMAScript requires that rounding only for up to 20 significant digits (§7.1.4.1.1,
+ * RoundMVResult), and the form admits 30; V8, which Node runs, rounds every decimal correctly, as
+ * PostgreSQL's `strtod` does. Were an engine to round otherwise, `E1_derived` would refuse the row
+ * rather than store a wrong value.
+ *
+ * @param key - A member of {@link floatKeyPattern}.
+ * @returns Its double.
+ * @see {@link https://tc39.es/ecma262/#sec-roundmvresult | ECMAScript, RoundMVResult}
+ */
+export const floatValueOf = (key: string): number => namedFloats.get(key) ?? Number(key);
+
+/**
  * Split an integer map key into its typed value's parts: the sign, the leading zeros, the
  * magnitude, and its canonical form's sign, so `negative ‖ digits` is the canonical form XML
  * Schema gives the integer.
@@ -416,7 +444,7 @@ const addTypedKey = (
   }
 
   if (baseType === "float" && floatKey.test(key)) {
-    typed.MapKeyFloat.set(node, entry);
+    typed.MapKeyFloat.set(node, { ...entry, value: floatValueOf(key) });
   }
 
   if (point !== undefined) {

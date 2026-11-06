@@ -24,6 +24,7 @@ import { assert, layer } from "@effect/vitest";
 import { Effect } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
+import { floatValueOf } from "#pantry/import/overlays/mapping.ts";
 import { AuthorApp } from "#pantry/qti/logins.ts";
 import {
   AreaMapping,
@@ -324,7 +325,8 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
         "refuses two float keys of one mapping that name one double, by the key on (mapping, value)",
         () =>
           // Oracle: PostgreSQL, the UNIQUE of key(on(MapKeyFloat, "mapping", "value")) over the
-          // generated cast, which rounds each decimal once to its nearest double (reading 56).
+          // host's value, which E1_derived holds to the cast that rounds each decimal once to its
+          // nearest double (reading 56).
           // Bound: 1 and 1.0, 1 and 10e-1, 0 and -0, and 0.1 and .10.
           Effect.gen(function* floatRepeat() {
             const db = yield* Db.open(AuthorApp.roles.author, {});
@@ -336,8 +338,8 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
             ] as const) {
               const outcome = yield* db.apply(
                 ChangeSet.empty(Author).insert(MapKeyFloat, [
-                  { key: first, ...at(0) },
-                  { key: second, ...at(1) },
+                  { key: first, value: floatValueOf(first), ...at(0) },
+                  { key: second, value: floatValueOf(second), ...at(1) },
                 ]),
                 {},
               );
@@ -346,6 +348,30 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
                 rejectedBy(outcome, keyOver("MapKeyFloat", ["mapping", "value"])),
                 `${first} ${second}`,
               );
+            }
+          }),
+      );
+
+      it.effect(
+        "refuses a float key whose value is not the double its key names, by MapKeyFloat's E1_derived",
+        () =>
+          // Oracle: PostgreSQL, the E1_derived CHECK on MapKeyFloat, `value = key::double
+          // precision`, judged as the row is inserted.
+          // Bound: a value off by one, the double next above 0.1 (one unit in its last place,
+          // 2^-56), and a zero for -INF.
+          Effect.gen(function* floatDerived() {
+            const db = yield* Db.open(AuthorApp.roles.author, {});
+            for (const row of [
+              { key: "1", value: 2 },
+              { key: "0.1", value: 0.1 + 2 ** -56 },
+              { key: "-INF", value: 0 },
+            ] as const) {
+              const outcome = yield* db.apply(
+                ChangeSet.empty(Author).insert(MapKeyFloat, [{ ...row, ...at(0) }]),
+                {},
+              );
+
+              assert.isTrue(rejectedBy(outcome, checkNamed("MapKeyFloat", "E1_derived")), row.key);
             }
           }),
       );
