@@ -274,16 +274,43 @@ const toleranceOf = (
   );
 
 /**
+ * Give the bounds of a `qti-equal`'s range in a tolerance mode, as {@link withinTolerance} reads
+ * them.
+ *
+ * @param mode The tolerance mode, `absolute` or `relative` (`exact` reads no range).
+ * @param x The first operand, as a float.
+ * @param t0 The tolerance below `x`.
+ * @param t1 The tolerance above `x`.
+ * @returns The lower bound, then the upper.
+ */
+const rangeOf = (
+  mode: Extract<Expression, { readonly kind: "equal" }>["toleranceMode"],
+  x: number,
+  t0: number,
+  t1: number,
+): readonly [number, number] => {
+  if (mode !== "relative") {
+    return [x - t0, x + t1];
+  }
+
+  return x < 0
+    ? [x * (1 + t0 / 100), x * (1 - t1 / 100)]
+    : [x * (1 - t0 / 100), x * (1 + t1 / 100)];
+};
+
+/**
  * Report whether a `qti-equal` in a tolerance mode holds: whether its second operand, `y`, lies in
  * the range its first, `x`, defines with `t0` and `t1`, each bound closed when its flag is true.
  *
- * The range is `[x − t0, x + t1]` in `absolute` mode and `[x − |x|·t0/100, x + |x|·t1/100]` in
- * `relative` mode, `t0` and `t1` read as percentages of `|x|`, `t0` below `x` and `t1` above it
- * (Mind amendment 2, for the M3.b-1 readings). For `x ≥ 0` that is the information model's
- * `[x·(1 − t0/100), x·(1 + t1/100)]`; as written, that range puts its lower bound above its upper
- * for a negative `x` and holds no value. For `x = 0` the range is `{0}`. The bounds are computed in
- * floats from `x` through `toFloat`; `y` is compared with each exactly ({@link orderOf}), and a NaN
- * bound, such as `INF − INF` for an infinite `x` in `relative` mode, holds nothing.
+ * The range is `[x − t0, x + t1]` in `absolute` mode. In `relative` mode, `t0` and `t1` are
+ * percentages, `t0` below `x` and `t1` above it, and the range is computed by the sign of `x`
+ * (Mind amendments 2 and 3, for the M3.b-1 readings): for `x ≥ 0`, `−0` included, it is the
+ * information model's `[x·(1 − t0/100), x·(1 + t1/100)]` exactly, so `x = INF` holds `INF` alone
+ * for a tolerance below 100 and `x = 0` holds `0` alone; for `x < 0` it is the same band mirrored,
+ * `[x·(1 + t0/100), x·(1 − t1/100)]`, where the range as written would put its lower bound above
+ * its upper and hold no value. The bounds are computed in floats from `x` through `toFloat`; `y` is
+ * compared with each exactly ({@link orderOf}), and a NaN bound, such as `INF·0` for an infinite
+ * `x` and a tolerance of 100, holds nothing.
  *
  * @param equal The `qti-equal`, in its `absolute` or `relative` mode.
  * @param x The first operand.
@@ -300,12 +327,7 @@ const withinTolerance = (
   [t0, t1]: readonly [number, number],
 ): boolean => {
   const first = floatOf(x);
-  const [below, above] =
-    equal.toleranceMode === "relative"
-      ? [(Math.abs(first) * t0) / 100, (Math.abs(first) * t1) / 100]
-      : [t0, t1];
-  const lower = first - below;
-  const upper = first + above;
+  const [lower, upper] = rangeOf(equal.toleranceMode, first, t0, t1);
   const aboveLower = Option.exists(orderOf(y, { baseType: "float", value: lower }), (order) =>
     equal.includeLowerBound ? order >= 0 : order > 0,
   );

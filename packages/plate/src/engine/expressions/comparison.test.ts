@@ -288,6 +288,24 @@ describe("the comparison family's evaluators", () => {
     );
   });
 
+  it("[I-9a] qti-equal in relative mode with x = INF holds INF alone for a tolerance below 100, as the written range does (Mind amendment 3)", () => {
+    assert.deepStrictEqual(
+      [Number.POSITIVE_INFINITY, Number.MAX_VALUE].map((y) =>
+        tolerated("relative", [float(Number.POSITIVE_INFINITY), float(y)], [literal(10)]),
+      ),
+      [true, false].map((held) => truth(held)),
+    );
+  });
+
+  it("[I-9a] qti-equal in relative mode with x = -INF holds -INF alone for a tolerance below 100, the range mirrored (Mind amendment 3)", () => {
+    assert.deepStrictEqual(
+      [Number.NEGATIVE_INFINITY, -Number.MAX_VALUE].map((y) =>
+        tolerated("relative", [float(Number.NEGATIVE_INFINITY), float(y)], [literal(10)]),
+      ),
+      [true, false].map((held) => truth(held)),
+    );
+  });
+
   it("[I-9a] qti-equal in relative mode with x = 0 holds 0 alone, whatever its tolerance (Mind amendment 2)", () => {
     assert.deepStrictEqual(
       [-0.001, 0, 0.001].map((y) =>
