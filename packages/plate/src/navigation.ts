@@ -1,0 +1,250 @@
+/**
+ * A test session's navigation as data: the current part's modes, where the candidate stands, the
+ * state of each item of the part, and the intents the session takes now.
+ *
+ * {@link navigationState} is what a host builds its navigation from, and what plate's navigation
+ * parts render. It is pure and keeps nothing between calls. This is a browser module: it
+ * value-imports from `effect` only `Array`, `Data`, `Option` and `Result`.
+ *
+ * @module
+ */
+import { Array as Arr, Data, Option, Result } from "effect";
+import type { Configuration } from "#plate/configuration.ts";
+import type { SectionChild, Test, TestPart } from "#plate/model/test.ts";
+import { isNull } from "#plate/model/values.ts";
+import type { UnknownItemRef } from "#plate/session/control.ts";
+import { allowedIntents } from "#plate/session/intents.ts";
+import type { Intent, SessionItem, TestSession } from "#plate/session/session.ts";
+import { current, itemView } from "#plate/session/start.ts";
+import type { ItemNotInSession } from "#plate/session/start.ts";
+import type { AcceptedTest } from "#plate/validate/verdict.ts";
+import type { NavigationMode, SubmissionMode } from "#plate/vocabulary.ts";
+
+/**
+ * Where an item of the current part stands, in the order {@link navigationState} decides it:
+ * `closed` when the item is closed; else `submitted` when it has a processed attempt; else
+ * `answered` when its saved responses hold a value that is not NULL; else `not-answered`.
+ */
+export type NavigationItemState = "answered" | "closed" | "not-answered" | "submitted";
+
+/**
+ * One item of the current test part, as a navigation shows it.
+ */
+export interface NavigationItem {
+  /**
+   * Whether the item is the one shown now; no item is current once the test has closed.
+   */
+  readonly current: boolean;
+  /**
+   * The item's place in the session's sequence, counted from 1.
+   */
+  readonly sequenceIndex: number;
+  readonly state: NavigationItemState;
+}
+
+/**
+ * A test session's navigation now.
+ *
+ * While the test is open, `navigation`, `submission`, `position` and `count` are what `current`
+ * gives: the current part's modes, the current item's sequence index and the session's item count,
+ * and `items` are the current part's, in order. Once the test has closed, `allowed` is empty and
+ * `items` are the test's last part's, in the modes of that part; `position` is then the sequence
+ * index of the item the session closed on, 0 for a test with no item.
+ */
+export interface NavigationState {
+  /**
+   * The intents the session takes now, as `allowedIntents` lists them and in its order.
+   */
+  readonly allowed: readonly Intent[];
+  readonly count: number;
+  readonly items: readonly NavigationItem[];
+  readonly navigation: NavigationMode;
+  readonly position: number;
+  readonly submission: SubmissionMode;
+}
+
+/**
+ * A broken invariant of the test model {@link navigationState} reads: a test with no test part,
+ * which `check` never accepts, since a `qti-assessment-test` holds at least one `qti-test-part`.
+ *
+ * It cannot occur on a test `check` accepted, only on a hand-built one. It is thrown, never
+ * returned, so {@link navigationState}'s error channel holds only what a session can cause.
+ */
+export class PartlessTestDefect extends Data.TaggedError("PartlessTestDefect")<{
+  readonly test: string;
+}> {
+  /**
+   * The test, and what to pass instead.
+   */
+  override get message(): string {
+    return `The test ${this.test} holds no test part, so its closed session has no last part to navigate. Pass the test check accepted, or build the test with at least one part.`;
+  }
+}
+
+/**
+ * The configuration {@link navigationState} reads item views through.
+ *
+ * `itemConfiguration` writes every session-control field over the configuration it is given, so
+ * an item's closed state and its part's modes depend on the test and the session alone, and none
+ * of these values reaches the navigation.
+ */
+const readingBase: Configuration = {
+  allowComment: false,
+  allowReview: true,
+  allowSkipping: true,
+  assetBase: "",
+  headingLevel: 2,
+  locale: "en",
+  maxAttempts: 1,
+  showFeedback: false,
+  showSolution: false,
+  validateResponses: false,
+};
+
+/**
+ * List the identifiers of the item refs among some section children, nested sections' included,
+ * in document order.
+ *
+ * @param children The children.
+ * @returns Their item refs' identifiers.
+ */
+const refsOf = (children: readonly SectionChild[]): readonly string[] =>
+  children.flatMap((child) =>
+    child.kind === "item-ref" ? [child.identifier] : refsOf(child.children),
+  );
+
+/**
+ * List the session items some test parts deliver, in the session's order.
+ *
+ * @param session The session.
+ * @param parts The parts.
+ * @returns The items whose item ref one of the parts holds.
+ */
+const itemsOf = (session: TestSession, parts: readonly TestPart[]): readonly SessionItem[] => {
+  const refs = new Set(parts.flatMap((part) => refsOf(part.children)));
+
+  return session.items.filter((item) => refs.has(item.ref));
+};
+
+/**
+ * Say where an item stands.
+ *
+ * @param item The session item.
+ * @param closed Whether the item is closed, as its view gives it.
+ * @returns The item's state.
+ */
+const stateOf = (item: SessionItem, closed: boolean): NavigationItemState => {
+  if (closed) {
+    return "closed";
+  }
+
+  if (item.record.numAttempts > 0) {
+    return "submitted";
+  }
+
+  return Option.exists(item.saved, (saved) => Object.values(saved).some((value) => !isNull(value)))
+    ? "answered"
+    : "not-answered";
+};
+
+/**
+ * The part a navigation shows, and the place in it the session stands at.
+ */
+interface Shown {
+  readonly count: number;
+  readonly items: readonly SessionItem[];
+  readonly navigation: NavigationMode;
+  readonly open: boolean;
+  readonly position: number;
+  readonly submission: SubmissionMode;
+}
+
+/**
+ * Give the last part of a closed session's test and the item the session closed on.
+ *
+ * @param test The test.
+ * @param session The session, closed.
+ * @returns What the navigation shows.
+ * @throws {PartlessTestDefect} When the test holds no part, which `check` never accepts.
+ */
+const closedShown = (test: Test, session: TestSession): Shown => {
+  const last = Arr.last(test.parts);
+  if (Option.isNone(last)) {
+    throw new PartlessTestDefect({ test: test.identifier });
+  }
+
+  return {
+    count: session.items.length,
+    items: itemsOf(session, [last.value]),
+    navigation: last.value.navigation,
+    open: false,
+    position: session.items[session.position]?.sequenceIndex ?? 0,
+    submission: last.value.submission,
+  };
+};
+
+/**
+ * Give a test session's navigation now: the current part's modes, the current item's position,
+ * each item of the part with its state, and the intents the session takes.
+ *
+ * Each item of the part is `closed` when it is closed (its part has ended, the test has closed, or
+ * its attempt limit is above 0 and reached); else `submitted` when its record has a processed
+ * attempt, since the item's session status is `final` only once the item has closed; else
+ * `answered` when its saved responses hold a value that is not NULL; else `not-answered`.
+ *
+ * @example
+ *   navigationState(test, session);
+ *   // Result.succeed({ navigation: "nonlinear", submission: "individual", position: 2, count: 6,
+ *   //   items: [{ sequenceIndex: 1, state: "answered", current: false }, …], allowed: [...] })
+ *
+ * @param test The test the session was started from.
+ * @param session The session.
+ * @returns The navigation; {@link ItemNotInSession} for an open session whose position is past its
+ *   items; {@link UnknownItemRef} when the test holds no item ref an item names, as when the
+ *   session belongs to another test.
+ * @throws {PartlessTestDefect} When the session is closed and the test holds no part, which
+ *   `check` never accepts.
+ */
+export const navigationState = (
+  test: AcceptedTest,
+  session: TestSession,
+): Result.Result<NavigationState, ItemNotInSession | UnknownItemRef> =>
+  Result.gen(function* navigate() {
+    const shownNow = yield* current(test, session, readingBase);
+    const allowed = yield* allowedIntents(test, session);
+    const shown: Shown =
+      shownNow.kind === "item"
+        ? {
+            count: shownNow.count,
+            items: itemsOf(
+              session,
+              test.test.parts.filter((part) => refsOf(part.children).includes(shownNow.ref)),
+            ),
+            navigation: shownNow.navigation,
+            open: true,
+            position: shownNow.sequenceIndex,
+            submission: shownNow.submission,
+          }
+        : closedShown(test.test, session);
+    const items = yield* Result.all(
+      shown.items.map((item) =>
+        Result.map(
+          itemView(test, session, readingBase, item.sequenceIndex),
+          (view): NavigationItem => ({
+            current: shown.open && item.sequenceIndex === shown.position,
+            sequenceIndex: item.sequenceIndex,
+            state: stateOf(item, view.disabled),
+          }),
+        ),
+      ),
+    );
+
+    return {
+      allowed,
+      count: shown.count,
+      items,
+      navigation: shown.navigation,
+      position: shown.position,
+      submission: shown.submission,
+    };
+  });
