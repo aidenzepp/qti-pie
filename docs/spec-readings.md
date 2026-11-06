@@ -2098,3 +2098,24 @@ against it. A reading that is not an information-model-over-XSD case says which 
      stays optional, as the XSD declares it. This is no departure from the XSD, so the attribute grammar states nothing
      for it. (Decided 2026-11-06 by RV seat X, on the review of PR #46, under the operator's standing ruling of
      2026-11-05 that the spec wins.)
+137. **An element's attributes and its namespace declarations are kept in the order they are written, the export
+     writes each family back in that order, and no law reads either order.** XML 1.0 says "Note that the order of
+     attribute specifications in a start-tag or empty-element tag is not significant" (section 3.1). The XML
+     Information Set gives an element its [attributes], "An unordered set of attribute information items, one for
+     each of the attributes (specified or defaulted from the DTD) of this element. Namespace declarations do not
+     appear in this set", and its [namespace attributes], "An unordered set of attribute information items, one for
+     each of the namespace declarations" (section 2.2). Canonical XML 1.0 imposes "Lexicographic order ... on the
+     namespace declarations and attributes of each element" (section 1.1), every namespace node before every
+     attribute node (section 2.2). So the order means nothing, and keeping it is fidelity alone: each attribute is
+     stored at its slot among its element's attributes as written (`Attribute.at`), and each declaration at its slot
+     among its element's declarations (`Namespace.at`); the export writes an element's declarations, in their order,
+     then its attributes, in theirs. The one order not kept is the interleaving of the two families, which the
+     Information Set holds as two properties: a declaration written after an attribute is exported before it, and
+     Canonical XML, the equality the export promises, sorts both. No law reads either order: a package's verdict, the
+     rule its refusal is named by and the breaches it is refused for are functions of each element's attributes and
+     declarations as sets. Where several of an element's attributes have no representation, the codec refuses the
+     first of them by namespace name and then local name, Canonical XML's keys, never the first written, so `<div
+     foo="1" data-="x">` and `<div data-="x" foo="1">` are both refused under `unmodeled-vocabulary`, for `data-`.
+     Main stored no order: its `AttributeLexical` was keyed by `(node, attribute)` (`2b276d76`). This binds pantry
+     and plate alike. This is not a case of documents in conflict. (Operator ruling of 2026-11-06 that attribute and
+     namespace-declaration order is kept as written, from RV seat AO.)

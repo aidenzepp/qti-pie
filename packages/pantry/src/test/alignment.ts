@@ -715,6 +715,14 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
       status: "G",
     },
   ],
+  [
+    137,
+    {
+      owner:
+        "the record: `Attribute.at` and `Namespace.at` keep each family's order (shred, `rootInsertOf`), assembly places by `at`, and `unshred` writes declarations then attributes; no law reads either order, shred's `refusalOrder` names a codec refusal by Canonical XML's keys, and the oracle lists an element's breaches law by law (`attribute-order.oracle.test.ts`, `attribute-order.export.test.ts`, `attribute-order.db.test.ts`)",
+      status: "G",
+    },
+  ],
 ]);
 
 /**
