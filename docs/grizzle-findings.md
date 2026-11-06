@@ -1287,6 +1287,26 @@ HEAD on 2026-11-06. At each pin two exports of the commit packed the three tarba
   its commit: the regex IR carries each node's path profiles, so `matchPattern` and `analyzeText` refuse exactly the
   empty languages. Not re-run here: qti-pie states no pattern with a mid-pattern anchor.
 
+## A role lacked EXECUTE on what its CHECKs cast to (grizzle defect, fixed in `f66c05b`)
+
+- **Found by:** seat N1's database tier on server A at `64f0427` (`docs/rfc/swarm-ledger.md`, 14:05 on 2026-11-06).
+  `qti__author` lacked EXECUTE on 3 of the 7 roster `_live_` functions, whose bits domains appear only as casts inside
+  CHECKs, so PostgreSQL refused every `Node` and `Attribute` insert. `src/qti/attributes.db.test.ts` (5 cases) and
+  `src/qti/node.db.test.ts` (1) went red on it.
+- **Cause**, at `64f0427`: `roleExecutes` (`packages/engine/src/physical/ddl/roles.ts:1162` to `1180`) grants EXECUTE
+  on what `callsOf` and `reached` (`packages/engine/src/physical/ddl/context.ts:413` to `440`) find in the role's
+  statements. Those statements are the CHECKs of the domains in `use.domains`, the tables the role writes and its
+  views. A domain reached only through a cast inside a CHECK is not in `use.domains`, so its CHECK's calls are never
+  reached. The doc comment (`roles.ts:1156` to `1158`) promises the CHECKs "which a write and a cast to the domain run",
+  since PostgreSQL checks EXECUTE against the invoker.
+- **Reproduction:** none kept by qti-pie. N1 proved it on the cluster with `Qti`'s own schema, and it was handed to the
+  grizzle session as its first priority.
+- **Status:** fixed in `f66c05b` (`f66c05b71bb016247163520f29d69de516968c2c`), which qti-pie repins to now (lane T):
+  "one reachability over the DDL graph through functions and domains (casts in CHECKs and generated columns, domain
+  CHECKs, base chains, constant bodies) grants exactly what a role's writes and reads evaluate; a generated test holds
+  granted = reachable against pg_depend on the cluster" (the commit's message). It is not filed by qti-pie, and qti-pie
+  took no workaround. The six red database tests need no pantry change (RV-slices §7).
+
 ## R87: three writes `grizzle generate` accepts and the write compiler refuses (grizzle `64f0427`)
 
 `grizzle generate`, `grizzle check` and `grizzle migrate` accepted the `Qti` schema. On the migrated schema every import
@@ -1308,9 +1328,13 @@ Each reproduction needs nothing of qti-pie and lives in `~/.cache/gr8des/integra
   apply.ts`, then `grizzle generate` with the same write declared in the login's workload. `run.out` keeps that
   output verbatim, with each exit code.
 
-Status of all three: reported to the grizzle session on 2026-11-06 with these reproductions. grizzle is fixing 1 and 3
-in lane W-fill, which moves every schema-only write refusal to compile time, and 2 in its nesting fix. None is filed as
-a GitHub issue by qti-pie.
+Status of all three: reported to the grizzle session on 2026-11-06 with these reproductions, and fixed in `f66c05b`
+(`f66c05b71bb016247163520f29d69de516968c2c`), which qti-pie repins to now (lane T). That commit carries grizzle's lane
+W-fill and its nesting fix: "the fill order is analyzed once in the theory (analysis/theory/fill.ts), refusing an
+unfillable copy and an unwritable relation at compile; a tree owning an ordered family and copies of a node's end along
+owner axes are writable; a unique over a generated field is refused at compile" (its message). So 1 and 2 are writable,
+and 3 is refused when the schema compiles, never first at a write. None is filed as a GitHub issue by qti-pie, and the
+reproductions were not re-run at `f66c05b` here.
 
 ### 1. An owner-axis copy of a column the owner fills after its members (grizzle defect)
 
@@ -1358,7 +1382,7 @@ a GitHub issue by qti-pie.
 - **qti-pie:** `Node` (`nodeTree`) owns `Node.attributes` and `Node.namespaces`, both ordered, so every import is
   refused at `insert Node`.
   - No workaround is taken. Making either family counted would change the model, which is the operator's call.
-  - grizzle's nesting fix closes it.
+  - grizzle's nesting fix closes it, in `f66c05b`.
 
 ### 3. A key over a field PostgreSQL generates (grizzle defect, schema-only refusal at write time)
 
@@ -1380,7 +1404,8 @@ a GitHub issue by qti-pie.
     holds it to the same cast (`src/qti/mapping.ts`, `e255b860`). The key therefore judges the same values.
   - `floatValueOf` is held to IEEE 754 roundTiesToEven of the key's exact value, computed in BigInt arithmetic, over
     2,000 keys (`src/import/overlays/mapping.test.ts`).
-  - The workaround stays until grizzle admits such a key or refuses it at compile.
+  - The workaround stays: `f66c05b` refuses such a key at compile, so a key over a host-written value that a check
+    proves is the shape that compiles.
 
 ### The guard qti-pie keeps
 
@@ -1391,7 +1416,7 @@ rows, `importWork` in `src/qti/logins.ts`.
 
 - The patch is `work/rv/r87/workload-guard.patch`. It holds `logins.ts`, the `schema.test.ts` assertion, and three new
   test files: `src/qti/logins.test.ts`, `src/test/gen/assembly.compile.test.ts` and `src/test/gen/assembly.db.test.ts`.
-- It lands with the pin that fixes 2. Until then generate refuses with 2's text.
+- It lands with the repin to `f66c05b`, which fixes 2. Until that repin, generate refuses with 2's text.
 - A cost worth telling grizzle: `workload(role, programs)` takes about 10 s for each ChangeSet program over `Qti`, so a
   workload cannot hold one program per generated package. It took 9.2 s for one program and 72.5 s for five, measured
   2026-11-06 at load average 60. `assembly.compile.test.ts` therefore compiles a spread of six. Every package's
@@ -1410,7 +1435,7 @@ messages, but nothing raises either one.
 - `src/test/gen/assembly.test.ts` judges reading 87 by its own model instead, held against the import's rows under the
   laws restated on the host.
 
-## N3: `workload()` and `login()` re-encode whole descriptions (open at `64f0427`, fix in progress)
+## N3: `workload()` and `login()` re-encode whole descriptions (fixed in `f66c05b`)
 
 - **Found by:** our CPU profile of `grizzle check` over `Qti` at `64f0427`
   (`~/.cache/gr8des/integration/prof/CPU.20261106.133120.71117.0.001.cpuprofile`, summarised by `analyze.py` beside
@@ -1515,8 +1540,10 @@ messages, but nothing raises either one.
 - **Classification:** a grizzle performance defect. Neither the README nor the agent guide states a cost for
   `workload` or `login`. Row 64 is the same family: role descriptions re-encoded on every `ChangeSet.insert`,
   recorded as fixed upstream on 2026-11-05.
-- **Status:** open at `64f0427`, fix in progress. It was reported to the grizzle session on 2026-11-06 with the
-  profile, and grizzle's lane PERF is fixing it. On PERF's measurement at 150 relations, `DbLayer.make` falls from
-  43.7 s to 8.0 s, and `grizzle migrate`'s time before it connects falls from 70.3 s to 0.93 s. It is not filed by
-  qti-pie. qti-pie takes no workaround: building `AuthorApp` lazily would only move the cost to the first database
-  use.
+- **Status:** fixed in `f66c05b` (`f66c05b71bb016247163520f29d69de516968c2c`), which qti-pie repins to now (lane T). It
+  was reported to the grizzle session on 2026-11-06 with the profile, and grizzle's lane PERF fixed it: "each schema
+  carries a content digest taken at build, so login, role, workload and every level check compare digests; DbLayer.make
+  compiles one installation for all roles" (the commit's message). On PERF's measurement at 150 relations,
+  `DbLayer.make` falls from 43.7 s to 8.0 s, and `grizzle migrate`'s time before it connects falls from 70.3 s to
+  0.93 s. The reproduction above was not re-run at `f66c05b` here. It is not filed by qti-pie, and qti-pie took no
+  workaround: building `AuthorApp` lazily would only have moved the cost to the first database use.
