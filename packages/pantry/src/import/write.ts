@@ -112,6 +112,7 @@ import {
   MatchTable,
 } from "#pantry/qti/mapping.ts";
 import { copiedTextKinds, Node, universalDomains } from "#pantry/qti/node.ts";
+import { Rounding, Tolerance } from "#pantry/qti/operators.ts";
 import {
   Dependency,
   DocumentDirectory,
@@ -1253,6 +1254,7 @@ export const changeSetOf = (author: typeof Author, inputs: PackageInputs) =>
     .insert(ResourceHref, [...inputs.ResourceHref.values()])
     .insert(ResourceLomGeneral, [...inputs.ResourceLomGeneral.values()])
     .insert(ResourceLomLanguageSet, [...inputs.ResourceLomLanguageSet.values()])
+    .insert(Rounding, [...inputs.Rounding.values()])
     .insert(Section, [...inputs.Section.values()])
     .insert(SectionContextName, [...inputs.SectionContextName.values()])
     .insert(SectionContextRef, [...inputs.SectionContextRef.values()])
@@ -1276,6 +1278,7 @@ export const changeSetOf = (author: typeof Author, inputs: PackageInputs) =>
     .insert(TestDocument, [...inputs.TestDocument.values()])
     .insert(TestFlag, [...inputs.TestFlag.values()])
     .insert(TestToken, [...inputs.TestToken.values()])
+    .insert(Tolerance, [...inputs.Tolerance.values()])
     .insert(UsageValue, domainOrdered(inputs.UsageValue.values(), patternInputs.UsageValue))
     .insert(Value, domainOrdered(inputs.Value.values(), patternInputs.Value))
     .insert(ValueSet, [...inputs.ValueSet.values()])

@@ -57,6 +57,8 @@ import { rowsOf as mappingRowsOf } from "#pantry/import/overlays/mapping.ts";
 import type { MappingRows } from "#pantry/import/overlays/mapping.ts";
 import { rowsOf as metadataRowsOf, objectRowsOfPackage } from "#pantry/import/overlays/metadata.ts";
 import type { MetadataRows, NamedDocument, ObjectRows } from "#pantry/import/overlays/metadata.ts";
+import { rowsOf as operatorRowsOf } from "#pantry/import/overlays/operators.ts";
+import type { OperatorRows } from "#pantry/import/overlays/operators.ts";
 import {
   rowsOf as packageRowsOf,
   referenceCensus,
@@ -85,6 +87,7 @@ export type OverlayRows = AssembledExpressionRows &
   MappingRows &
   MetadataRows &
   ObjectRows &
+  OperatorRows &
   PackageRows &
   PlacedBindingRows &
   PlacedIdRows &
@@ -106,6 +109,7 @@ interface DocumentRows {
   readonly interactions: InteractionRows;
   readonly mapping: MappingRows;
   readonly metadata: MetadataRows;
+  readonly operators: OperatorRows;
   readonly package: PackageRows;
   readonly quotation: QuotationRows;
   readonly references: ReferenceRows;
@@ -135,6 +139,7 @@ const documentRowsOf = ({
   interactions: interactionRowsOf(tree, ids),
   mapping: mappingRowsOf(tree, ids),
   metadata: metadataRowsOf(tree, ids),
+  operators: operatorRowsOf(tree, ids),
   package: packageRowsOf(tree, ids),
   quotation: quotationRowsOf(tree, ids),
   references: referenceRowsOf(tree, ids, referenceCensus),
@@ -630,6 +635,10 @@ const mergedOf = (
       "ResourceLomLanguageSet",
       parts.map(({ ResourceLomLanguageSet: rows }) => rows),
     ),
+    Rounding: unionOf(
+      "Rounding",
+      parts.map(({ Rounding: rows }) => rows),
+    ),
     Section: unionOf(
       "Section",
       parts.map(({ Section: rows }) => rows),
@@ -742,6 +751,10 @@ const mergedOf = (
       "TestToken",
       parts.map(({ TestToken: rows }) => rows),
     ),
+    Tolerance: unionOf(
+      "Tolerance",
+      parts.map(({ Tolerance: rows }) => rows),
+    ),
     UsageValue: unionOf(
       "UsageValue",
       parts.map(({ UsageValue: rows }) => rows),
@@ -837,6 +850,7 @@ export const overlayRowsOf = (
       rows.interactions,
       rows.mapping,
       rows.metadata,
+      rows.operators,
       rows.package,
       rows.quotation,
       rows.references,
