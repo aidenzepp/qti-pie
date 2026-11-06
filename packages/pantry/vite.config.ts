@@ -41,5 +41,7 @@ export default defineConfig({
       },
     ],
     reporters: ["default", "@grizzle/testing/vitest/reporter"],
+    // Counts each test file's compositions of the grammar, and fails a file that composes production's twice.
+    setupFiles: ["./src/test/compositions.ts"],
   },
 });

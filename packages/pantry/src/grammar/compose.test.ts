@@ -1,16 +1,17 @@
 import { assert, describe, it } from "@effect/vitest";
 import { exhaust } from "@grizzle/testing/explore";
 import { requiredInSpace } from "@grizzle/testing/features";
-import { int } from "@grizzle/testing/gen";
+import { array, element as choice, int } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Formatter, Option, Result } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
-import { composed, layerAttributeNames } from "#pantry/grammar/compose.ts";
+import { composed, layerAttributeNames, vocabularies } from "#pantry/grammar/compose.ts";
 import type { ComposedGrammar, Kind, Name } from "#pantry/grammar/compose.ts";
 import { fixedKinds, foreignKinds, openClasses, schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import { shredGrammarOf } from "#pantry/model/composed.ts";
 import { shred } from "#pantry/model/shred.ts";
+import { compositionsOf } from "#pantry/test/compositions.ts";
 import { toyFacets, toyGrammar, toySources, toyVocabulary } from "#pantry/test/gen/grammar.ts";
 import {
   attributeDeclarations,
@@ -39,6 +40,72 @@ describe("the composition", () => {
 
     assert.isTrue(kindsAreLiteral && namesAreLiteral);
   });
+
+  it.effect(
+    "composes production's list once per process: every composed() returns the first's result, beside a toy list composed at each of its calls, on every sequence of up to three calls",
+    (ctx) =>
+      // Oracle: the specification as a count. This file read production's grammar when it loaded,
+      // so the process has announced production's list once, and `composed()` composes it no
+      // more; a toy list is announced once per `compose` call (`src/test/compositions.ts`).
+      searched(
+        ctx,
+        exhaust(
+          {
+            box: "every sequence of 1 to 3 calls over composed() and a toy composition",
+            caseHang: Duration.minutes(1),
+            coverage: requiredInSpace<"production after a toy" | "production twice">([
+              "production after a toy",
+              "production twice",
+            ]),
+            generator: array(choice(["production", "toy"] as const), { max: 3, min: 1 }),
+            limit: 14,
+            literal: Formatter.format,
+            oracle: {
+              kind: "specification",
+              name: "one composition of production's list per process",
+            },
+            suite: "grammar/compose/once",
+          },
+          (calls, c) =>
+            Effect.sync(() => {
+              const first = composed();
+              const toy = [
+                toyVocabulary({
+                  admission: [],
+                  attributes: [],
+                  data: ["ws"],
+                  facets: toyFacets({}),
+                  kinds: ["e0"],
+                }),
+              ];
+              for (const [at, call] of calls.entries()) {
+                if (call === "production") {
+                  assert.strictEqual(composed(), first, calls.join(", "));
+                } else {
+                  toyGrammar(toy);
+                }
+
+                const sofar = calls.slice(0, at + 1);
+                assert.strictEqual(compositionsOf(vocabularies), 1, sofar.join(", "));
+                assert.strictEqual(
+                  compositionsOf(toy),
+                  sofar.filter((step) => step === "toy").length,
+                  sofar.join(", "),
+                );
+              }
+
+              if (calls.join(" ").includes("toy production")) {
+                c.note("production after a toy");
+              }
+
+              if (calls.filter((step) => step === "production").length > 1) {
+                c.note("production twice");
+              }
+            }),
+        ),
+      ),
+    120_000,
+  );
 
   it.effect(
     "admits XML Schema's xsi: names on every element kind, xsi:nil only on the foreign kinds (audit A6)",
@@ -94,12 +161,18 @@ describe("the composition", () => {
     () =>
       Effect.gen(function* positions() {
         const { admission, content } = yield* grammar;
-        const reached = new Set(
-          content.follow.rows.map(({ parent, to, version }) => `${version} ${parent} ${to}`),
+        // The positions each model's automaton reaches, and each family's model.
+        const reached = new Set(content.follow.rows.map(({ model, to }) => `${model} ${to}`));
+        const modelOf = new Map(
+          content.contentModelOf.rows.map(({ model, parent, version }) => [
+            `${version} ${parent}`,
+            model,
+          ]),
         );
         const outside = admission.rows.filter(
           ({ parent, position, version }) =>
-            position !== "0" && !reached.has(`${version} ${parent} ${position}`),
+            position !== "0" &&
+            !reached.has(`${modelOf.get(`${version} ${parent}`) ?? ""} ${position}`),
         );
 
         assert.deepStrictEqual(outside.slice(0, 10), []);

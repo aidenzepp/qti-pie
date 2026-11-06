@@ -33,7 +33,7 @@
  *
  * Every admitted triple is stated once: a triple two sources state is a `KeyCollision`.
  */
-import { Option, Result } from "effect";
+import { Function as Fn, Option, Result } from "effect";
 import type { Admission, AdmittedChild } from "#pantry/grammar/admission.ts";
 import { generate as generateAncestry } from "#pantry/grammar/ancestry.ts";
 import type { AncestrySets } from "#pantry/grammar/ancestry.ts";
@@ -53,6 +53,7 @@ import { barredByOf } from "#pantry/grammar/children.ts";
 import type { BarredBy, ChildError, LastWhere } from "#pantry/grammar/children.ts";
 import { closed, idField, roster, sourced } from "#pantry/grammar/closed.ts";
 import type { ClosedRelationError, Roster } from "#pantry/grammar/closed.ts";
+import { compositions } from "#pantry/grammar/compositions.ts";
 import {
   bindingFit,
   mappableBaseType,
@@ -637,6 +638,9 @@ const typeNamespaceOf = (type: string): string =>
 /**
  * Run every generator over a vocabulary list.
  *
+ * Each call composes anew and first announces the list on {@link compositions}, so a subscriber
+ * counts the work. Production's list is composed once per process, through {@link composed}.
+ *
  * @param list - The vocabularies, in composition order.
  * @returns The grammar, or the first generator's refusal.
  */
@@ -644,6 +648,8 @@ export const compose = <const V extends readonly Vocabulary[]>(
   list: V,
 ): Result.Result<Grammar<KindOf<V>, NameOf<V>>, ComposeError> =>
   Result.gen(function* composeGrammar() {
+    compositions.publish(list);
+
     const stated = list.map((entry) => entry.facets);
     const base = yield* generateKinds({
       interactions: stated.flatMap((facet) => facet.interactions),
@@ -831,8 +837,21 @@ export const compose = <const V extends readonly Vocabulary[]>(
   });
 
 /**
- * The grammar of production's composition, {@link vocabularies}.
+ * {@link compose} memoized by its list's identity (Effect's `Function.memoize`), for
+ * {@link composed}, which passes it {@link vocabularies} alone.
+ */
+const production = Fn.memoize((list: typeof vocabularies) => compose(list));
+
+/**
+ * Compose production's list, {@link vocabularies}, once per process: the first call composes it,
+ * and every later call returns that same result.
+ *
+ * A composition takes seconds and production's list never changes, so every reader of the grammar
+ * shares one: `install.ts` when it loads, and every test, whether or not its file loads
+ * `install.ts` too. `compose(vocabularies)` composes it again, and the test support fails a test
+ * file that composes it twice (`src/test/compositions.ts`).
  *
  * @returns The grammar, or the first generator's refusal.
  */
-export const composed = (): Result.Result<ComposedGrammar, ComposeError> => compose(vocabularies);
+export const composed = (): Result.Result<ComposedGrammar, ComposeError> =>
+  production(vocabularies);

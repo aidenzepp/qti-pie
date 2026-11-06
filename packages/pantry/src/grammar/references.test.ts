@@ -67,12 +67,10 @@ import type { Fault } from "#pantry/test/gen/references.ts";
 
 /**
  * The composed grammar of production, whose rosters the reference relations are coded in. It is
- * composed once, when a test first reads it, so only the tests that read it fail when a generator
- * refuses.
+ * composed once, when a test first reads it (`composed()` returns that result after), so only the
+ * tests that read it fail when a generator refuses.
  */
-const grammar = await Effect.runPromise(
-  Effect.cached(Effect.suspend(() => Effect.fromResult(composed()))),
-);
+const grammar = Effect.suspend(() => Effect.fromResult(composed()));
 
 /**
  * How long the first read of the composed grammar may take: one composition took 11.2 s on
