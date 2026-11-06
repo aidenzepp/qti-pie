@@ -1,12 +1,12 @@
 /**
- * The derived XSD inventory: for every ASI, HTML, processing, test and MathML kind handle, the
- * element and type the ASI 3.0.1 XSD (for MathML, the MathML 3 XSD it imports) declares, whether
- * the type is mixed, every attribute it declares and every element it references.
+ * The derived XSD inventory: for every ASI, HTML, processing and test kind handle, the element and
+ * type the ASI 3.0.1 XSD declares, whether the type is mixed, every attribute it declares and every
+ * element it references.
  *
  * The inventory is data derived once from `imsqti_asiv3p0p1_v1p0.xsd` and read by the kinds files,
  * the attribute arms and the importer. Each vocabulary is a leaf file (`inventory/asi.ts`,
- * `inventory/html.ts`, `inventory/processing.ts`, `inventory/test.ts`, `inventory/mathml.ts`)
- * composed here, so a later phase adds its own leaf and one spread line.
+ * `inventory/html.ts`, `inventory/processing.ts`, `inventory/test.ts`) composed here, so a later
+ * phase adds its own leaf and one spread line.
  *
  * An attribute's `family` is `base` for the ten names every element shares (`id`, `class`, `lang`,
  * `xml:lang`, `label`, `dir`, `xml:base`, `data-qti-suppress-tts`, `data-catalog-idref`,
@@ -289,7 +289,6 @@ import { Option } from "effect";
 
 import { asiInventory } from "#pantry/schema/content/inventory/asi.ts";
 import { htmlInventory } from "#pantry/schema/content/inventory/html.ts";
-import { mathmlInventory } from "#pantry/schema/content/inventory/mathml.ts";
 import { processingInventory } from "#pantry/schema/content/inventory/processing.ts";
 import { testInventory } from "#pantry/schema/content/inventory/test.ts";
 
@@ -341,22 +340,20 @@ export interface InventoryLeaf {
 }
 
 /**
- * The inventory of every ASI, HTML, processing, test and MathML kind, keyed by handle.
+ * The inventory of every ASI, HTML, processing and test kind, keyed by handle.
  */
 export const inventory: InventoryLeaf = {
   ...asiInventory,
   ...htmlInventory,
   ...processingInventory,
   ...testInventory,
-  ...mathmlInventory,
 };
 
 /**
  * Look up the inventory entry of a kind handle.
  *
  * @param handle - A kind handle such as `qti-simple-match-set` or `qti-content-body.modal`.
- * @returns The entry, or `None` when the handle is not an ASI, HTML, processing, test or MathML
- *   kind.
+ * @returns The entry, or `None` when the handle is not an ASI, HTML or processing kind.
  */
 export const entryOf = (handle: string): Option.Option<InventoryEntry> =>
   Option.fromNullishOr(Object.hasOwn(inventory, handle) ? inventory[handle] : undefined);

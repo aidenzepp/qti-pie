@@ -10,7 +10,6 @@
 import { Option } from "effect";
 
 import type { NamespacePolicyHandle } from "#pantry/schema/content/rosters.ts";
-import { annotationXmlAdmits } from "#pantry/schema/kinds/mathml.ts";
 import type {
   AdmissionRow,
   RegistryRow,
@@ -92,11 +91,7 @@ const namespaceOfKind = (registries: readonly KindRegistryLike[]): ReadonlyMap<s
  *
  * Under any host that is not a MathML element, and under `foreign`, a MathML kind other than
  * `math` is not admitted: MathML validity is the MathML Recommendation's, which names `math`
- * alone as the root a foreign host may hold (reading 2, decision 110). Under a MathML element
- * (`m:annotation-xml`) the MathML kinds admitted are `annotationXmlAdmits`, the `m:MathExpression`
- * group (decision 90, spec 4.7's J6), read as data rather than from the MathML globals: the group
- * holds `m:semantics`, which the XSD declares only locally and so no global names, and leaves out
- * `m:math`, `m:annotation` and `m:sep`, which a global names.
+ * alone as the root a foreign host may hold (reading 2, decision 110).
  *
  * @param input - The wildcard hosts, the global elements and the registries.
  * @returns The rows, unsorted and not deduplicated against other rows.
@@ -118,19 +113,11 @@ export const wildcardAdmissionRows = (input: {
 
       if (typed) {
         const underMathml = namespaces.get(host.host) === mathml;
-        if (underMathml && admitsNamespace(host.policy, host.target, mathml)) {
-          for (const kind of annotationXmlAdmits) {
-            rows.push({ child: kind, parent: host.host, version });
-          }
-        }
-
         for (const global of input.globals) {
-          if (
-            admitsNamespace(host.policy, host.target, global.namespace) &&
-            !(underMathml && global.namespace === mathml)
-          ) {
+          if (admitsNamespace(host.policy, host.target, global.namespace)) {
             for (const kind of named.get(`{${global.namespace}}${global.local}`) ?? []) {
-              const mathmlOnly = global.namespace === mathml && global.local !== "math";
+              const mathmlOnly =
+                global.namespace === mathml && global.local !== "math" && !underMathml;
               if (!exceptedKinds.has(kind) && !mathmlOnly) {
                 rows.push({ child: kind, parent: host.host, version });
               }

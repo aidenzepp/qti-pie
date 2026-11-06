@@ -37,7 +37,6 @@ import * as qmd from "#pantry/schema/kinds/qmd.ts";
 import * as ud from "#pantry/schema/kinds/ud.ts";
 import * as test from "#pantry/schema/kinds/test.ts";
 import * as foreign from "#pantry/schema/kinds/foreign.ts";
-import * as mathml from "#pantry/schema/kinds/mathml.ts";
 import * as xi from "#pantry/schema/kinds/xi.ts";
 import {
   NamespacePrefix,
@@ -69,7 +68,6 @@ export const vocabularies = [
   xi,
   test,
   foreign,
-  mathml,
 ] as const;
 
 /**
@@ -90,7 +88,6 @@ export const kindTuples = [
   xi.kinds,
   test.kinds,
   foreign.kinds,
-  mathml.kinds,
 ] as const;
 
 /**
@@ -110,7 +107,6 @@ export const attributeTuples = [
   xi.attributes,
   test.attributes,
   foreign.attributes,
-  mathml.attributes,
 ] as const;
 
 const schemaVersions = ["3.0.0", "3.0.1"] as const satisfies readonly SchemaVersionHandle[];
@@ -167,7 +163,6 @@ export const NodeKind = closed("NodeKind", [
   ...xi.kinds,
   ...test.kinds,
   ...foreign.kinds,
-  ...mathml.kinds,
 ]);
 
 /**
@@ -191,7 +186,6 @@ export const AttributeName = closed("AttributeName", [
   ...xi.attributes,
   ...test.attributes,
   ...foreign.attributes,
-  ...mathml.attributes,
 ]);
 
 /**

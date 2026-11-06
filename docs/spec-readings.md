@@ -610,10 +610,3 @@ against it. A reading that is not an information-model-over-XSD case says which 
     plate, which delivers tests; pantry delivers nothing. This is not a case of documents in conflict: the information
     model is silent on responses a candidate cannot give, and this follows its own rule for an item with none. (The
     renderer's ruling in its phase-4 repair, applied in plate; 2026-11-06.)
-71. **A MathML `cn` of type `hexdouble` holds exactly 16 hexadecimal digits, in either case, kept as written.** The
-    definition of the type is the 64-bit pattern of a double, so 16 digits is what it means; the Recommendation's
-    8-digit example `7F800000` (the single-precision infinity pattern) is an error in an informative example, and a
-    shorter or longer string is refused. The definition's "0-9, A-F" names the digit values and does not ban a
-    spelling, hex case carries no meaning and the MathML schema puts no pattern on `cn` text, so `a-f` is admitted and
-    the source spelling is kept (section 4.2.1.2, Strict uses of `cn`, of MathML 3). This binds pantry and plate alike.
-    (The operator's ruling 346e70e2; 2026-11-06.)

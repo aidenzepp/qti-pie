@@ -57,7 +57,6 @@ import {
   PrintedVariableId,
 } from "#pantry/schema/document.ts";
 import { NodeXmlSpace } from "#pantry/schema/foreign-attributes.ts";
-import { isMathmlKind } from "#pantry/schema/kinds/mathml.ts";
 import { AttributeLexical, AttributeName, Tree, XsiTypeAttribute } from "#pantry/schema/node.ts";
 import type { NodeKindHandle } from "#pantry/schema/node.ts";
 import { ManifestId, ManifestXmlId } from "#pantry/schema/package.ts";
@@ -595,10 +594,6 @@ const writeElement = (
  * `label` rows copy its root kind. Every attribute is checked against its element's registry
  * before any row is written, so a refusal leaves the caller with the rows it passed in.
  *
- * A MathML element is left out of the check and the write: its attributes are MathML's builder's,
- * so this pass writes no `NodeClass` or `HtmlId` row for one. An HTML element under
- * `m:annotation-xml` is still written here.
- *
  * @param tree - The root element of the tree.
  * @param nodes - The node each element became, from the tree walk.
  * @param documentId - The id of the document the tree is, which every `id` is unique within.
@@ -614,9 +609,7 @@ export const attributeRows = Effect.fn("import.attributeRows")(function* attribu
   documentId: Uuid,
   rows: Rows,
 ): Effect.fn.Return<Rows, ImportRefused | UnmodeledVocabulary> {
-  const elements = indexedElements(tree, nodes).filter(
-    (element) => !isMathmlKind(nodes.get(element)?.kind ?? ""),
-  );
+  const elements = indexedElements(tree, nodes);
   const root = nodes.get(tree);
   const treeRow = Option.fromNullishOr(Rows.of(rows, Tree).find((row) => row.id === root?.id));
   if (root === undefined || Option.isNone(treeRow)) {

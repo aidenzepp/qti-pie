@@ -7,18 +7,13 @@
  * An ancestry is the set of flags a node sits inside, named by its flags joined with `.` in
  * `FLAGS` order, `root` for the empty set. `reachable` computes the sets by closure over the
  * `Admission` rows: a tree starts at each kind no row admits as a child, at the empty set; a node
- * of kind `k` at set `S` that is not banned yields each child kind at `S` plus `KindEnters[k]`,
- * except that an absorbing flag the set holds or the kind enters (`absorbing`) is the only flag
- * its children hold.
+ * of kind `k` at set `S` that is not banned yields each child kind at `S` plus `KindEnters[k]`.
  * The bans are the missing `AncestryStep` rows:
  *
  * - An interaction kind at any set holding `int`, `choice`, `htx`, `rubric`, `tmpl` or `modal`;
- * - `qti-gap` at a set without `gap`, unless the set holds an absorbing flag (`math`: the flags of
- *   the QTI content beneath an `m:annotation-xml` are not tracked, so the import guard judges it);
+ * - `qti-gap` at a set without `gap`;
  * - `qti-rubric-block` at a set holding `rubric`;
  * - `qti-hottext` at a set holding `htx` (a hottext under a prompt or a choice is admitted);
- * - `m:math` at a set holding `math` (MathML E M2: a math element holds no other math element); no
- *   `qti-` kind is banned at `math`, the XSD's lax `m:annotation-xml` wildcard admits them;
  * - At a set holding `testfb`, every interaction kind, every template kind and both rubric block
  *   kinds (reading 25: a test's rubric and feedback hold no interactions or templates, and no
  *   nested rubric); `qti-printed-variable` and `qti-feedback-inline` stay admitted.
@@ -42,7 +37,6 @@ export const FLAGS = [
   "choice",
   "htx",
   "testfb",
-  "math",
 ] as const;
 
 /**
@@ -112,7 +106,6 @@ export const KindEnters: KindEnterTable = Object.fromEntries(
         ]),
         ...entering("modal", ["qti-modal-feedback"]),
         ...entering("testfb", ["qti-rubric-block.test", "qti-test-feedback"]),
-        ...entering("math", ["m:math"]),
         ...entering("fb", [
           "qti-feedback-block",
           "qti-feedback-block.template",
@@ -132,13 +125,6 @@ export const KindEnters: KindEnterTable = Object.fromEntries(
  */
 export const handleOf = (flags: readonly Flag[]): string =>
   FLAGS.filter((flag) => flags.includes(flag)).join(".") || "root";
-
-/**
- * The absorbing flags in precedence order. A node that holds or enters an absorbing flag hands its
- * children exactly that flag: the first of these the set holds or the kind enters, whatever else
- * the kind enters. `math` is the only one here; phase 9, landing second, puts `card` first.
- */
-export const absorbing: readonly Flag[] = ["math"];
 
 const interactions: ReadonlySet<string> = new Set(interactionKinds);
 
@@ -166,12 +152,8 @@ export const banned = (flagSet: readonly Flag[], kind: string): boolean => {
     return (["int", "choice", "htx", "rubric", "tmpl", "modal"] as const).some(has);
   }
 
-  if (kind === "m:math") {
-    return has("math");
-  }
-
   if (kind === "qti-gap") {
-    return !absorbing.some(has) && !has("gap");
+    return !has("gap");
   }
 
   if (kind === "qti-rubric-block") {
@@ -186,23 +168,14 @@ export const banned = (flagSet: readonly Flag[], kind: string): boolean => {
 };
 
 /**
- * The flag set a node of `kind` at `flagSet` hands its children: the first absorbing flag the set
- * holds or the kind enters alone, otherwise the flags the set holds and the kind enters. The walk
- * (`import/tree.ts`) calls this too, so the seed and the walk state one rule.
+ * The flag set a node of `kind` at `flagSet` hands its children.
  */
-export const stepOf = (
+const stepOf = (
   flagSet: readonly Flag[],
   kind: string,
   kindEnters: KindEnterTable,
-  absorbs: readonly Flag[] = absorbing,
-): readonly Flag[] => {
-  const entered = kindEnters[kind] ?? [];
-  const absorbed = absorbs.find((flag) => flagSet.includes(flag) || entered.includes(flag));
-
-  return absorbed === undefined
-    ? FLAGS.filter((flag) => flagSet.includes(flag) || entered.includes(flag))
-    : [absorbed];
-};
+): readonly Flag[] =>
+  FLAGS.filter((flag) => flagSet.includes(flag) || (kindEnters[kind] ?? []).includes(flag));
 
 /**
  * The reachable flag sets, by size and then `FLAGS` order, as the closure from `root` over the
@@ -245,9 +218,9 @@ export const reachable = (
 };
 
 /**
- * The 61 reachable ancestries over the kinds files' `Admission` rows (M0, M1, MathML and the test
- * kinds), by size and then `FLAGS` order, as `reachable(admission, KindEnters)` printed them. The
- * count stays under 64.
+ * The 60 reachable ancestries over the kinds files' `Admission` rows (M0, M1 and the test kinds),
+ * by size and then `FLAGS` order, as `reachable(admission, KindEnters)` printed them. The count
+ * stays under 64.
  */
 export const ancestryHandles = [
   "root",
@@ -258,7 +231,6 @@ export const ancestryHandles = [
   "int",
   "htx",
   "testfb",
-  "math",
   "fb.modal",
   "fb.rubric",
   "fb.tmpl",

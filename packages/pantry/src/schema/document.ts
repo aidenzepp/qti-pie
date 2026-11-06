@@ -114,8 +114,8 @@ export const DocumentId = relation(
 );
 
 /**
- * The `id` of an element of the HTML profile or of MathML, with the kind of the element that holds
- * it. The `(node)` key holds because an element has one `id`, and a containment can only reach a
+ * The `id` of an element of the HTML profile, with the kind of the element that holds it. The
+ * `(node)` key holds because an element has one `id`, and a containment can only reach a
  * projection that is keyed. `attribute` is always `id`: it makes `(kind, attribute)` the pair the
  * `AttributeAdmission` containment reads, because a containment into a selected target is refused.
  */

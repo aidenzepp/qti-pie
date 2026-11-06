@@ -11,9 +11,7 @@
 import { Option } from "effect";
 import type { Attribute, Element } from "@qti-pie/crust/tree.ts";
 import type { ProcessContentsHandle, SchemaSetHandle } from "#pantry/schema/content/rosters.ts";
-import { SchemaVersion } from "#pantry/schema/node.ts";
 import type { NodeKindHandle, RootKindHandle, SchemaVersionHandle } from "#pantry/schema/node.ts";
-import { annotationXmlAdmits } from "#pantry/schema/kinds/mathml.ts";
 import { attributeAdmission, explicitAdmission } from "#pantry/schema/seed/admission.ts";
 import {
   attributeWildcard,
@@ -101,18 +99,9 @@ const opaque: ReadonlySet<string> = new Set(
   opaqueGlobals.map((row) => inSet(row.set, clark(row.namespace, row.local))),
 );
 
-/**
- * The `(version, parent, child)` triples step 1 takes as the host's own: the kinds files' explicit
- * particles, and for each schema version the kinds of MathML's expression group under
- * `m:annotation-xml`, whose content model is the group the XSD declares there. The other rows the
- * seed derives from the wildcard hosts are left out.
- */
-const admitted: ReadonlySet<string> = new Set([
-  ...explicitAdmission.map((row) => `${row.version}\u0000${row.parent}\u0000${row.child}`),
-  ...SchemaVersion.handles.flatMap((version) =>
-    annotationXmlAdmits.map((child) => `${version}\u0000m:annotation-xml\u0000${child}`),
-  ),
-]);
+const admitted: ReadonlySet<string> = new Set(
+  explicitAdmission.map((row) => `${row.version}\u0000${row.parent}\u0000${row.child}`),
+);
 
 /**
  * The attribute wildcard hosts.
@@ -144,12 +133,11 @@ const typedAttributes: ReadonlySet<string> = new Set(
  * The kind an element is, given what `kindOf` made of it.
  *
  * Inside a wildcard context, an element child of a lax host or of a `foreign` node, in order: the
- * host's admitted kind (`kindOf` names a kind and a kinds file's `Admission(version, parent, kind)`
- * row exists, or the parent is `m:annotation-xml` and the kind is one of `annotationXmlAdmits`, the
- * other derived wildcard rows not counted); else a typed global of
- * the tree's schema set, which is its kind whether or not the derived `Admission` row exists (the
- * database refuses an absent row as `admission`) and, when no kind exists yet, none, so the caller
- * refuses it as unmodeled; a global of another set is neither, so it falls to the third step; else
+ * host's explicit particle (`kindOf` names a kind and a kinds file's `Admission(version, parent,
+ * kind)` row exists, the derived wildcard rows not counted); else a typed global of the tree's
+ * schema set, which is its kind whether or not the derived `Admission` row exists (the database
+ * refuses an absent row as `admission`) and, when no kind exists yet, none, so the caller refuses
+ * it as unmodeled; a global of another set is neither, so it falls to the third step; else
  * `foreign`, whatever its namespace, an opaque global included. Under a strict host the third step
  * admits an opaque global only; any other element is none. Outside a wildcard context the answer is
  * `kindOf`'s.

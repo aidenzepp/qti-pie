@@ -30,7 +30,6 @@ export const seededNames = [
   "GlobalAttribute",
   "GlobalElement",
   "MappableBaseType",
-  "MathmlAttributeType",
   "OperatorArity",
   "OperatorArityMax",
   "OperatorArityUnbounded",

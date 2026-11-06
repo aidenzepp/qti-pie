@@ -581,25 +581,3 @@ describe("attributeRows on the closed attribute families and ARIA", () => {
     }),
   );
 });
-
-describe("attributeRows on MathML elements", () => {
-  const mathml = "http://www.w3.org/1998/Math/MathML";
-  const body = `<p class="c"><m:math xmlns:m="${mathml}" id="x"><m:mi dir="rtl">y</m:mi><m:mo class="sign">+</m:mo></m:math></p>`;
-
-  it.effect("writes no shared row for a MathML kind, refuses nothing, and keeps the p's", () =>
-    Effect.gen(function* mathmlSkipped() {
-      const { nodes, root, rows } = yield* indexed(item(body), "item");
-      assert.isTrue([...nodes.values()].some((found) => found.kind === "m:math"));
-
-      const built = yield* attributeRows(root, nodes, documentId, rows);
-      const pId = idOf(nodes, "p");
-
-      assert.deepStrictEqual(Rows.of(built, attributes.NodeClass), [
-        { attribute: "class", kind: "p", node: pId, value: ClassList("c") },
-      ]);
-      assert.deepStrictEqual(Rows.of(built, attributes.NodeDir), []);
-      assert.deepStrictEqual(Rows.of(built, HtmlId), []);
-      assert.deepStrictEqual(Rows.of(built, DocumentId), []);
-    }),
-  );
-});

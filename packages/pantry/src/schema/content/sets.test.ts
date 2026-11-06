@@ -42,8 +42,7 @@ describe("shared rosters", () => {
 
   it("holds the IDREF attributes", () => {
     assert.isTrue(rosters.IdrefAttribute.handles.includes("headers"));
-    assert.isTrue(rosters.IdrefAttribute.handles.includes("xref"));
-    assert.strictEqual(rosters.IdrefAttribute.handles.length, 11);
+    assert.strictEqual(rosters.IdrefAttribute.handles.length, 10);
   });
 
   it("exports every roster as a schema member and no rules", () => {

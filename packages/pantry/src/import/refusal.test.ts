@@ -10,7 +10,6 @@ import {
 } from "#pantry/import/refusal.ts";
 import type { ImportLaw } from "#pantry/import/refusal.ts";
 import * as contracts from "#pantry/schema/contracts.ts";
-import { families } from "#pantry/schema/mathml/values.ts";
 import * as patterns from "#pantry/schema/patterns.ts";
 import * as valueContracts from "#pantry/schema/value-contracts.ts";
 import { Qti } from "#pantry/schema/qti.ts";
@@ -312,17 +311,6 @@ const writtenRules = {
     "MappingScore",
     "MatchGroupList",
     "MatchSourceValue",
-    "MathmlBaseValue",
-    "MathmlCbytesValue",
-    "MathmlCdValue",
-    "MathmlIndexValue",
-    "MathmlNameValue",
-    "MathmlNargsValue",
-    "MathmlPositionValue",
-    "MathmlScriptlevelValue",
-    "MathmlSelectionValue",
-    "MathmlShiftValue",
-    "MathmlSpanValue",
     "MediaRectCoords",
     "PrintedVariableIntegerOrVariable",
     "RectCoords",
@@ -348,9 +336,6 @@ const writtenRules = {
     "ItemRefHref",
     "LongDescriptionUri",
     "LongInterpretationUri",
-    "MathmlCdgroupValue",
-    "MathmlDefinitionUrlValue",
-    "MathmlSrcValue",
     "NamespaceUri",
     "SectionRefHref",
     "StatisticContextUri",
@@ -468,38 +453,12 @@ const makeEveryContract = (): readonly string[] => {
 const everyContract: readonly string[] = makeEveryContract();
 
 describe("the rules of a contract", () => {
-  it("names 165 contracts, each in the expected table once", () => {
+  it("names 151 contracts, each in the expected table once", () => {
     const names = everyContract;
 
-    assert.strictEqual(names.length, 165);
-    assert.strictEqual(expectedRules.size, 165);
+    assert.strictEqual(names.length, 151);
+    assert.strictEqual(expectedRules.size, 151);
     assert.deepStrictEqual([...expectedRules.keys()].toSorted(), names.toSorted());
-  });
-
-  it("maps the 14 MathML contracts: three under uri-syntax, eleven under attribute-lexical", () => {
-    const uri = ["MathmlCdgroupValue", "MathmlDefinitionUrlValue", "MathmlSrcValue"];
-    const lexical = [
-      "MathmlBaseValue",
-      "MathmlCbytesValue",
-      "MathmlCdValue",
-      "MathmlIndexValue",
-      "MathmlNameValue",
-      "MathmlNargsValue",
-      "MathmlPositionValue",
-      "MathmlScriptlevelValue",
-      "MathmlSelectionValue",
-      "MathmlShiftValue",
-      "MathmlSpanValue",
-    ];
-
-    for (const name of uri) {
-      assert.isTrue(isMappedLaw(contractLaw(name)), name);
-      assert.strictEqual(ruleOfLaw(contractLaw(name)), "uri-syntax", name);
-    }
-    for (const name of lexical) {
-      assert.isTrue(isMappedLaw(contractLaw(name)), name);
-      assert.strictEqual(ruleOfLaw(contractLaw(name)), "attribute-lexical", name);
-    }
   });
 
   it("maps every contract of the schema to its rule, mapped", () => {
@@ -1149,82 +1108,5 @@ describe("the rules of the phase-5 statements", () => {
     const signatures = phaseRules.flatMap(([, listed]) => listed);
 
     assert.strictEqual(new Set(signatures).size, signatures.length);
-  });
-});
-
-/**
- * The composed laws whose signature is exactly `signature`.
- */
-const lawsOf = (signature: string): readonly ImportLaw[] =>
-  composed.filter((signed) => signed.signature === signature).map((signed) => signed.law);
-
-/**
- * Assert the composed schema states `signature` once and that its law maps to `rule`.
- */
-const assertStated = (signature: string, rule: string): void => {
-  const found = lawsOf(signature);
-
-  assert.strictEqual(found.length, 1, signature);
-  for (const law of found) {
-    assertMapped(law, rule);
-  }
-};
-
-describe("the rules of the MathML laws (spec 4.13)", () => {
-  const mathmlPatterns = Object.entries(patterns).filter(([name]) => name.startsWith("mathml"));
-
-  it("names the 28 MathML pattern sources, each its own source", () => {
-    assert.strictEqual(mathmlPatterns.length, 28);
-    assert.strictEqual(new Set(mathmlPatterns.map(([, source]) => source)).size, 28);
-  });
-
-  it("maps each MathML pattern source to attribute-lexical", () => {
-    for (const [name, source] of mathmlPatterns) {
-      assert.isTrue(patternRuleSources.includes(source), name);
-      assertMapped(pattern(source), "attribute-lexical");
-    }
-  });
-
-  it("maps each family's containment into the matrix to attribute-admission", () => {
-    assert.strictEqual(families.length, 67);
-    for (const family of families) {
-      assertStated(
-        `contained ${family.relation}(kind,attribute) > MathmlAttributeType(kind,attribute)[type=${family.handle}]`,
-        "attribute-admission",
-      );
-    }
-  });
-
-  it("maps each family's containment into Node to attribute-admission", () => {
-    for (const family of families) {
-      assertStated(
-        `contained ${family.relation}(node,kind) > Node(id,kind)`,
-        "attribute-admission",
-      );
-    }
-  });
-
-  it("maps the matrix's containment into AttributeAdmission to attribute-admission", () => {
-    assertStated(
-      "contained MathmlAttributeType(kind,attribute) > AttributeAdmission(kind,attribute)",
-      "attribute-admission",
-    );
-  });
-
-  it("maps the class and dir exclusions to attribute-admission", () => {
-    assertStated("check NodeClass.NodeClassNotMathml", "attribute-admission");
-    assertStated("check NodeDir.NodeDirNotMathml", "attribute-admission");
-  });
-
-  it("maps the three capacities to union-count", () => {
-    assertStated(
-      "capacity MathmlMmultiscripts(id) < Edge(parent)[childKind=m:mprescripts]",
-      "union-count",
-    );
-    assertStated("capacity MathmlBvar(id) < Edge(parent)[childKind=m:degree]", "union-count");
-    assertStated(
-      "capacity MathmlPiecewise(id) < Edge(parent)[childKind=m:otherwise]",
-      "union-count",
-    );
   });
 });

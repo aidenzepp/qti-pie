@@ -232,8 +232,8 @@ const expected: Readonly<Record<(typeof handles)[number], readonly string[]>> = 
     "qti-test-feedback",
   ],
   "qti-branch-rule": [...generic, ...expressionKinds],
-  "qti-content-body.testFeedback": [...mixed, ...flow, "xi:include", "m:math"],
-  "qti-content-body.testRubric": [...mixed, ...flow, "xi:include", "m:math"],
+  "qti-content-body.testFeedback": [...mixed, ...flow, "xi:include"],
+  "qti-content-body.testRubric": [...mixed, ...flow, "xi:include"],
   "qti-item-session-control": ["comment", "pi"],
   "qti-metadata-ref": ["comment", "pi"],
   "qti-ordering": ["comment", "pi"],
@@ -273,7 +273,6 @@ const expected: Readonly<Record<(typeof handles)[number], readonly string[]>> = 
     "table",
     "ul",
     "video",
-    "m:math",
   ],
   "qti-template-default": [...generic, ...expressionKinds],
   "qti-test-feedback": [
