@@ -77,7 +77,9 @@ const takesMove = (
 /**
  * List the intents a test session takes now: exactly those `advance` accepts, given responses that
  * pass the current item's `allow-skipping`, `validate-responses` and `score`'s own checks, which
- * depend on what a request posts.
+ * depend on what a request posts. So in a linear, simultaneous part `next` is listed whatever the
+ * item holds, and `advance` refuses it (`responses-invalid`) when `score` would refuse the
+ * responses the item is left with, since the candidate cannot return to it.
  *
  * In order: `next`, `previous`, `go` to each sequence index it reaches, ascending, then
  * `submit-item`, `submit-part` and `end-part`. `go` to the current item is among them in every mode

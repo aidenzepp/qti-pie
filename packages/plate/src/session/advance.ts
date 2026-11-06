@@ -14,17 +14,19 @@
  * @module
  */
 import { Data, Option, Result } from "effect";
+import { encodeRecord } from "#plate/codec/record.ts";
 import type { InvalidRecord } from "#plate/codec/record.ts";
 import type { Configuration } from "#plate/configuration.ts";
 import type { EngineFailure } from "#plate/engine/evaluate.ts";
 import type { ValidationMessage } from "#plate/payload.ts";
+import { score } from "#plate/score.ts";
 import type { InvalidResponses, RecordMismatch, ResponsesRefused } from "#plate/score.ts";
 import type { UnknownItemRef } from "#plate/session/control.ts";
 import { move } from "#plate/session/navigate.ts";
 import type { MoveRefused, MoveRule, MoveStep } from "#plate/session/navigate.ts";
-import type { Intent, Step, TestSession } from "#plate/session/session.ts";
-import { current } from "#plate/session/start.ts";
-import type { InvalidTime, ItemNotInSession, TestNotDeliverable } from "#plate/session/start.ts";
+import type { Intent, SessionItem, Step, TestSession } from "#plate/session/session.ts";
+import { ItemNotInSession, TestNotDeliverable, current } from "#plate/session/start.ts";
+import type { InvalidTime } from "#plate/session/start.ts";
 import { endPart, submitItem, submitPart } from "#plate/session/submit.ts";
 import type { SubmissionFailure, SubmissionRefused } from "#plate/session/submit.ts";
 import type { Accepted, AcceptedTest } from "#plate/validate/verdict.ts";
@@ -48,8 +50,10 @@ import type { Accepted, AcceptedTest } from "#plate/validate/verdict.ts";
  *   declared default.
  * - `responses-invalid`: the item's `validate-responses` is true and a response breaks a limit of its
  *   interaction; or `score` refuses the responses of an item `submit-part` processes, which break a
- *   limit the item sets whatever the configuration (tier (a)). The refusal carries the messages and
- *   names the item they concern.
+ *   limit the item sets whatever the configuration (tier (a)); or `score` would refuse the
+ *   responses of the item a `next` leaves in a linear, simultaneous part, which the candidate
+ *   cannot return to before `submit-part` processes it. The refusal carries the messages and names
+ *   the item they concern.
  */
 export type IntentRule =
   | "attempts-exhausted"
@@ -82,9 +86,10 @@ const requestOf = (intent: Intent): string =>
  * responses for `responses-invalid`, ready for `render`'s `messages` option with the instance of
  * the item `sequenceIndex` names, and is empty for every other rule.
  * `refusal` is the move's or the submission's own refusal, with what it knows of the place, such as
- * the part's first and last items; it is none for the two refusals `advance` makes itself:
- * `test-closed`, and `end-part` in a linear, individual part. A refused intent changes nothing, the
- * responses the request carried included.
+ * the part's first and last items; it is none for the three refusals `advance` makes itself:
+ * `test-closed`, `end-part` in a linear, individual part, and `next` in a linear, simultaneous part
+ * whose item's responses `score` would refuse (`responses-invalid`). A refused intent changes
+ * nothing, the responses the request carried included.
  */
 export class IntentRefused extends Data.TaggedError("IntentRefused")<{
   readonly intent: Intent;
@@ -104,10 +109,19 @@ export class IntentRefused extends Data.TaggedError("IntentRefused")<{
     });
 
     return Option.match(this.refusal, {
-      onNone: () =>
-        this.rule === "test-closed"
-          ? `The test session has closed, so it takes no ${request}. Show the summary current gives instead.`
-          : `The ${request} from ${item} is refused (${this.rule}): its part is linear with individual submission, so the candidate leaves it only with next, which on the part's last item submits that item when it has no processed attempt and ends the part. Offer next instead.`,
+      onNone: () => {
+        if (this.rule === "test-closed") {
+          return `The test session has closed, so it takes no ${request}. Show the summary current gives instead.`;
+        }
+
+        if (this.rule === "responses-invalid") {
+          const said = this.messages.map((entry) => `${entry.response}: ${entry.text}`).join("; ");
+
+          return `The ${request} from ${item} is refused (${this.rule}) and nothing it posted is saved: its part is linear, so the candidate cannot return to the item, and its responses break limits the item sets whatever the configuration (${said}), so score would refuse them when the part is submitted. Show these messages on that item, for example through render's messages option with its instance, and post ${request} again with corrected responses.`;
+        }
+
+        return `The ${request} from ${item} is refused (${this.rule}): its part is linear with individual submission, so the candidate leaves it only with next, which on the part's last item submits that item when it has no processed attempt and ends the part. Offer next instead.`;
+      },
       onSome: (refusal) =>
         refusal._tag === "SubmissionRefused" && this.intent.kind === "next"
           ? `The next from ${item} submits it first, since its part is linear with individual submission and it has no processed attempt, and that submission is refused (${this.rule}): ${refusal.message}`
@@ -120,7 +134,8 @@ export class IntentRefused extends Data.TaggedError("IntentRefused")<{
  * Why {@link advance} may fail.
  *
  * {@link IntentRefused} is the test's rules refusing the intent, a `submit-part` whose `score`
- * refuses an item's responses among them (`responses-invalid`, naming the item).
+ * refuses an item's responses and a `next` in a linear, simultaneous part whose item's responses
+ * `score` would refuse among them (`responses-invalid`, naming the item).
  * `ResponsesRefused` is `score` refusing the responses `submit-item`, or a `next` that submits
  * first, processes on the current item; `InvalidResponses` is `score` refusing a response that does
  * not fit its declaration; and `EngineFailure` is an item's processing failing. The rest pass
@@ -155,6 +170,12 @@ interface Advancing {
    * holds for the whole call.
    */
   readonly linearIndividual: boolean;
+  /**
+   * Whether the current part is linear with simultaneous submission: the combination where `next`
+   * leaves an item for good while its attempt waits for `submit-part`, so `next` first checks the
+   * item's responses as `score` will.
+   */
+  readonly linearSimultaneous: boolean;
   readonly now: Date;
   readonly test: AcceptedTest;
 }
@@ -240,13 +261,98 @@ const submitted = (
   );
 
 /**
+ * Find the accepted item the host passed for a session item, and check it is the item its record
+ * belongs to, as the part's submission does.
+ *
+ * @param items The accepted items, keyed by item ref identifier.
+ * @param session The session.
+ * @param item The session item.
+ * @returns The accepted item, or {@link TestNotDeliverable}: `item-missing` when the items have no
+ *   entry for its ref, `item-mismatch` when its entry is the item of another document.
+ */
+const deliveredItem = (
+  items: ReadonlyMap<string, Accepted>,
+  session: TestSession,
+  item: SessionItem,
+): Result.Result<Accepted, TestNotDeliverable> => {
+  const accepted = items.get(item.ref);
+  const expected = item.record.document;
+
+  return accepted !== undefined && accepted.document === expected
+    ? Result.succeed(accepted)
+    : Result.fail(
+        new TestNotDeliverable({
+          expected,
+          found: Option.map(Option.fromUndefinedOr(accepted), (entry) => entry.document),
+          reason: accepted === undefined ? "item-missing" : "item-mismatch",
+          ref: item.ref,
+          test: session.test,
+        }),
+      );
+};
+
+/**
+ * Check the item a `next` left in a linear, simultaneous part the way `submit-part` will process
+ * it: `score` over its record with its saved responses, the attempt it gives discarded.
+ *
+ * The candidate cannot return to an item of a linear part, and `submit-part` processes it with the
+ * responses it holds when it is left. So responses `score` refuses (tier (a)) would refuse the
+ * part's submission with no way to correct them; they refuse the `next` instead, as
+ * `responses-invalid` naming the item, with `score`'s messages. Tier (b), `validate-responses`,
+ * does not apply in a simultaneous part.
+ *
+ * @param advancing What the call works with.
+ * @param session The session the `next` was posted on.
+ * @param moved The session after the move, whose item at `session`'s position holds the step.
+ * @param intent The intent posted.
+ * @returns `moved` when `score` takes the item's responses; {@link IntentRefused}
+ *   `responses-invalid` when it refuses them; what `score` or the record's codec fails with
+ *   otherwise, which `submit-part` would meet.
+ */
+const leftScoreable = (
+  advancing: Advancing,
+  session: TestSession,
+  moved: TestSession,
+  intent: Intent,
+): Result.Result<TestSession, AdvanceFailure> =>
+  Result.gen(function* checkLeftItem() {
+    const left = yield* Result.fromOption(
+      Option.fromUndefinedOr(moved.items[session.position]),
+      () =>
+        new ItemNotInSession({ count: moved.items.length, sequenceIndex: session.position + 1 }),
+    );
+    const accepted = yield* deliveredItem(advancing.items, moved, left);
+    const values = Option.match(left.saved, {
+      onNone: () => left.record.responses,
+      onSome: (saved) => ({ ...left.record.responses, ...saved }),
+    });
+    const attempt = score(accepted, values, yield* encodeRecord(left.record));
+    if (Result.isFailure(attempt) && attempt.failure._tag === "ResponsesRefused") {
+      return yield* Result.fail(
+        new IntentRefused({
+          intent,
+          messages: attempt.failure.messages,
+          refusal: Option.none(),
+          rule: "responses-invalid",
+          sequenceIndex: Option.some(left.sequenceIndex),
+        }),
+      );
+    }
+
+    yield* attempt;
+
+    return moved;
+  });
+
+/**
  * Carry out `next`, `previous` or `go`.
  *
  * The move decides through `moveTarget`. Where it refuses `next` from a linear, individual item
  * with no processed attempt (`unsubmitted`), the item is submitted with the request's responses
  * first and the move is made again from there. Where it refuses `next` from the last item of a
  * linear, individual part (`end-of-part`), the part ends instead, as its last item's `next` does.
- * Any other refusal is the intent's.
+ * Any other refusal is the intent's. In a linear, simultaneous part, a `next` the move takes is
+ * refused when `score` would refuse the responses of the item it leaves (`responses-invalid`).
  *
  * @param advancing What the call works with.
  * @param session The session.
@@ -259,7 +365,13 @@ const moved = (
   step: MoveStep,
 ): Result.Result<TestSession, AdvanceFailure> =>
   Result.orElse(
-    move(advancing.test, advancing.items, session, step, advancing.now),
+    Result.flatMap(
+      move(advancing.test, advancing.items, session, step, advancing.now),
+      (after): Result.Result<TestSession, AdvanceFailure> =>
+        step.intent.kind === "next" && advancing.linearSimultaneous
+          ? leftScoreable(advancing, session, after, step.intent)
+          : Result.succeed(after),
+    ),
     (failure): Result.Result<TestSession, AdvanceFailure> => {
       if (failure._tag !== "MoveRefused") {
         return Result.fail(failure);
@@ -290,9 +402,12 @@ const moved = (
  * Each intent goes to the transition that owns it, which saves the step first. In a linear part
  * with individual submission, `next` from an item with no processed attempt submits it first and
  * then moves, and `next` on the part's last item ends the part; `end-part` is not offered there
- * and is refused (`linear-jump`). A refused intent returns no session, so nothing it carried is
- * saved. `allowedIntents` lists exactly the intents this accepts now, given responses that pass
- * the item's `allow-skipping`, `validate-responses` and `score`'s own checks.
+ * and is refused (`linear-jump`). In a linear part with simultaneous submission, `next` is refused
+ * (`responses-invalid`) when `score` would refuse the responses of the item it leaves, which the
+ * candidate cannot return to before `submit-part` processes it. A refused intent returns no
+ * session, so nothing it carried is saved. `allowedIntents` lists exactly the intents this accepts
+ * now, given responses that pass the item's `allow-skipping`, `validate-responses` and `score`'s
+ * own checks.
  *
  * @example
  *   advance(test, items, session, { intent: { kind: "next" }, responses }, configuration, {
@@ -334,6 +449,7 @@ export const advance = (
         configuration,
         items,
         linearIndividual: shown.navigation === "linear" && shown.submission === "individual",
+        linearSimultaneous: shown.navigation === "linear" && shown.submission === "simultaneous",
         now: context.now,
         test,
       };

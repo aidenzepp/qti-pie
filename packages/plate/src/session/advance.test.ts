@@ -67,22 +67,49 @@ const chosen = (identifier: string): Value => ({
 const answer: Responses = { RESPONSE: chosen("A") };
 
 /**
- * Write the text of a hand-built Choice item: `RESPONSE`, a single identifier whose correct
- * response is `A`, scored by `match_correct` into `SCORE`.
+ * A multiple identifier value: the choices a candidate ticked.
+ *
+ * @param identifiers The ticked choices' identifiers.
+ * @returns The value.
+ */
+const ticked = (...identifiers: readonly string[]): Value => ({
+  baseType: "identifier",
+  cardinality: "multiple",
+  values: identifiers.map((value) => ({ baseType: "identifier", value })),
+});
+
+/**
+ * What a hand-built Choice item sets beyond its fixed text.
+ */
+interface ChoiceOptions {
+  /**
+   * The Choice's `min-choices`, when it sets one.
+   */
+  readonly minChoices?: number;
+  /**
+   * Whether `RESPONSE` is a multiple identifier, so a post can tick more choices than the Choice's
+   * `max-choices` of 1 allows, which `score` refuses (tier (a)).
+   */
+  readonly multiple?: boolean;
+}
+
+/**
+ * Write the text of a hand-built Choice item: `RESPONSE`, an identifier whose correct response is
+ * `A`, scored by `match_correct` into `SCORE`, from a Choice of `A` and `B` with `max-choices` 1.
  *
  * @param identifier The item's identifier.
- * @param minChoices The Choice's `min-choices`, when it sets one.
+ * @param options What the Choice sets: a single `RESPONSE` and no `min-choices` when empty.
  * @returns The item's text.
  */
-const choiceItemXml = (identifier: string, minChoices?: number): string =>
+const choiceItemXml = (identifier: string, options: ChoiceOptions = {}): string =>
   [
     `<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="${identifier}" title="${identifier}" adaptive="false" time-dependent="false">`,
-    '<qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier">',
+    `<qti-response-declaration identifier="RESPONSE" cardinality="${options.multiple === true ? "multiple" : "single"}" base-type="identifier">`,
     "<qti-correct-response><qti-value>A</qti-value></qti-correct-response>",
     "</qti-response-declaration>",
     '<qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/>',
     "<qti-item-body>",
-    `<qti-choice-interaction response-identifier="RESPONSE" shuffle="false" max-choices="1"${minChoices === undefined ? "" : ` min-choices="${minChoices}"`}>`,
+    `<qti-choice-interaction response-identifier="RESPONSE" shuffle="false" max-choices="1"${options.minChoices === undefined ? "" : ` min-choices="${options.minChoices}"`}>`,
     '<qti-simple-choice identifier="A">Choice A</qti-simple-choice>',
     '<qti-simple-choice identifier="B">Choice B</qti-simple-choice>',
     "</qti-choice-interaction></qti-item-body>",
@@ -150,11 +177,12 @@ interface Delivery {
  * @param options What the test sets.
  * @param options.control The attributes of each part's item session control.
  * @param options.minChoices Each Choice's `min-choices`, when it sets one.
+ * @param options.multiple Whether each item's `RESPONSE` is a multiple identifier.
  * @returns The test and its items.
  */
 const delivery = Effect.fnUntraced(function* delivery(
   modes: Modes,
-  options: { readonly control?: string; readonly minChoices?: number } = {},
+  options: ChoiceOptions & { readonly control?: string } = {},
 ) {
   const encoder = new TextEncoder();
   const verdict = yield* open("tests/T.xml", encoder.encode(testXml(modes, options.control ?? "")));
@@ -165,10 +193,7 @@ const delivery = Effect.fnUntraced(function* delivery(
       : assert.fail(`the test is ${verdict.verdict} on a ${verdict.kind}, not an accepted test`);
   const items = new Map<string, Accepted>();
   for (const ref of ["i1", "i2", "i3", "i4"]) {
-    const opened = yield* open(
-      `tests/${ref}.xml`,
-      encoder.encode(choiceItemXml(ref, options.minChoices)),
-    );
+    const opened = yield* open(`tests/${ref}.xml`, encoder.encode(choiceItemXml(ref, options)));
     items.set(
       ref,
       Option.getOrElse(acceptedItem(opened), () => assert.fail(`${ref} is ${opened.verdict}`)),
@@ -386,6 +411,38 @@ describe("advance and allowedIntents", () => {
         }),
     );
   }
+
+  it.effect(
+    "differ only on posted values: a linear, simultaneous part lists next, and advance refuses a next whose responses score would refuse",
+    () =>
+      Effect.gen(function* refuseOnPostedValues() {
+        const given = yield* delivery(
+          { navigation: "linear", submission: "simultaneous" },
+          { multiple: true },
+        );
+        const configuration = yield* configure({});
+        const session = started(given, configuration);
+        assert.include(allowedNow(given.test, session), "next");
+
+        const refusal = refused(
+          advance(
+            given.test,
+            given.items,
+            session,
+            { intent: { kind: "next" }, responses: { RESPONSE: ticked("A", "B") } },
+            configuration,
+            { now: after(1) },
+          ),
+        );
+        assert.strictEqual(refusal.rule, "responses-invalid");
+        assert.deepStrictEqual(refusal.intent, { kind: "next" });
+        assert.deepStrictEqual(refusal.sequenceIndex, Option.some(1));
+        assert.deepStrictEqual(
+          refusal.messages.map((said) => said.response),
+          ["RESPONSE"],
+        );
+      }),
+  );
 });
 
 describe("advance", () => {
@@ -550,6 +607,56 @@ describe("advance", () => {
         assert.deepStrictEqual(
           refusal.messages.map((said) => said.response),
           ["RESPONSE"],
+        );
+      }),
+  );
+
+  it.effect(
+    "refuses next in a linear, simultaneous part over responses score would refuse, so the part's submit never meets them",
+    () =>
+      Effect.gen(function* checkBeforeLeaving() {
+        const given = yield* delivery(
+          { navigation: "linear", submission: "simultaneous" },
+          { multiple: true },
+        );
+        const configuration = yield* configure({});
+        const overTicked: Responses = { RESPONSE: ticked("A", "B") };
+        const correct: Responses = { RESPONSE: ticked("A") };
+        const post = (session: TestSession, step: Step, seconds: number) =>
+          advance(given.test, given.items, session, step, configuration, { now: after(seconds) });
+        const start = started(given, configuration);
+
+        const posted = refused(post(start, { intent: { kind: "next" }, responses: overTicked }, 1));
+        assert.strictEqual(posted.rule, "responses-invalid");
+        assert.deepStrictEqual(posted.sequenceIndex, Option.some(1));
+        assert.isTrue(Option.isNone(posted.refusal));
+        assert.isAbove(posted.messages.length, 0);
+
+        const kept = accepted(
+          post(start, { intent: { kind: "go", sequenceIndex: 1 }, responses: overTicked }, 2),
+        );
+        assert.strictEqual(kept.position, 0);
+
+        const stored = refused(post(kept, { intent: { kind: "next" } }, 3));
+        assert.strictEqual(stored.rule, "responses-invalid");
+        assert.deepStrictEqual(stored.sequenceIndex, Option.some(1));
+
+        const onTwo = accepted(post(kept, { intent: { kind: "next" }, responses: correct }, 4));
+        assert.strictEqual(onTwo.position, 1);
+
+        const onLast = accepted(post(onTwo, { intent: { kind: "next" }, responses: correct }, 5));
+        assert.strictEqual(onLast.position, 2);
+
+        const submitted = accepted(
+          post(onLast, { intent: { kind: "submit-part" }, responses: correct }, 6),
+        );
+        assert.deepStrictEqual(
+          submitted.parts.map((part) => part.status),
+          ["ended", "current"],
+        );
+        assert.deepStrictEqual(
+          submitted.items.slice(0, 3).map((item) => item.record.numAttempts),
+          [1, 1, 1],
         );
       }),
   );
