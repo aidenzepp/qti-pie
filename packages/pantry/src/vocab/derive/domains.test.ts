@@ -5,29 +5,15 @@ import { array, element, weighted } from "@grizzle/testing/gen";
 import type { Gen } from "@grizzle/testing/gen";
 import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
-import path from "node:path";
-import { NodeChildProcessSpawner, NodeServices } from "@effect/platform-node";
-import { Duration, Effect, FileSystem, Formatter, Layer, Result } from "effect";
-import { anyUriPattern } from "#pantry/grammar/domains.ts";
-import { vpFmt } from "#pantry/test/vp-fmt.ts";
-import { builtinDomainOf, renderPatterns } from "#pantry/vocab/derive/domains.ts";
-import { anyUriSource } from "#pantry/vocab/inventory/patterns.ts";
-
-/**
- * The package folder, `packages/pantry`, which the committed leaf and `vp fmt` are relative to.
- */
-const packageRoot = path.resolve(import.meta.dirname, "../../..");
-
-/**
- * The patterns leaf, relative to {@link packageRoot}.
- */
-const patternsLeaf = "src/vocab/inventory/patterns.ts";
+import { Duration, Effect, Formatter, Result } from "effect";
+import { anyUriPattern, patternFlags, translatePattern } from "#pantry/grammar/domains.ts";
+import { builtinDomainOf } from "#pantry/vocab/derive/domains.ts";
 
 /**
  * The anyURI pattern as the schema reads it: {@link anyUriPattern} through the one translation of
  * XSD's regular expressions, so the vectors and the interpreter judge what the runtime matches.
  */
-const anyUri = new RegExp(anyUriSource, "u");
+const anyUri = new RegExp(Result.getOrThrow(translatePattern(anyUriPattern)), patternFlags);
 
 /**
  * A parser over a string: from a start position, every position a match can end at.
@@ -576,21 +562,6 @@ describe("vocab/derive/domains.ts, xs:anyURI", () => {
         ),
       ),
     60_000,
-  );
-
-  it.effect(
-    `regenerates ${patternsLeaf} byte for byte after vp fmt`,
-    () =>
-      Effect.gen(function* regenerate() {
-        const fs = yield* FileSystem.FileSystem;
-        const derived = yield* vpFmt(yield* Effect.fromResult(renderPatterns()), patternsLeaf);
-
-        assert.strictEqual(derived, yield* fs.readFileString(`${packageRoot}/${patternsLeaf}`));
-      }).pipe(
-        Effect.provide(Layer.mergeAll(NodeServices.layer, NodeChildProcessSpawner.layer)),
-        Effect.provide(NodeServices.layer),
-      ),
-    30_000,
   );
 
   it("is the lexical pattern of the anyURI built-in's domain, which collapses its value", () => {
