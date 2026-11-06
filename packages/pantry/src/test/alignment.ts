@@ -840,11 +840,7 @@ const readingDepartures: ReadonlyMap<string, number> = new Map([
  * The rules nothing states yet that a named slice owns, by `family parent subject`, with the
  * slice.
  */
-const planned: ReadonlyMap<string, string> = new Map([
-  ["attribute:required qti-area-map-entry coords", "Q5.09, coords by shape"],
-  ["attribute:required qti-associable-hotspot coords", "Q5.09, coords by shape"],
-  ["attribute:required qti-hotspot-choice coords", "Q5.09, coords by shape"],
-]);
+const planned: ReadonlyMap<string, string> = new Map();
 
 /**
  * The attribute names the document layer admits on every kind, beside the open classes: XML's
