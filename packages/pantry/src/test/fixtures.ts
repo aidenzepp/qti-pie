@@ -3029,12 +3029,17 @@ const includeWithFallback = `<xi:include xmlns:xi="${xincludeNamespace}" href="p
 
 /**
  * The edits of `operator-foreign-content`, and of `nested-root-in-foreign` with `inside` in the
- * extension.
+ * extension. The two `xi:include` targets, `inner.xml` and `part.xml`, are added as package
+ * entries beside `sineRuleItem` (decision 285): the reference census records every in-package
+ * `xi:include/@href`, and the importer stores an include as written and never resolves it. File
+ * edits apply before text edits and the cut, and the cut keeps every file its `href` scan finds.
  *
  * @param inside - Content at the end of the extension.
  * @returns The edits of `sineRuleItem`.
  */
 const operatorForeignEdits = (inside: string): readonly Edit[] => [
+  { _tag: "addFile", path: "id-bd44a757f562/inner.xml", source: { text: "<inner/>" } },
+  { _tag: "addFile", path: "id-bd44a757f562/part.xml", source: { text: "<part/>" } },
   replaceIn(sineRuleItem, `${customOperatorStart}>`, `${customOperatorStart} xml:foo="1">`),
   afterOperand(extension(inside) + includeWithFallback),
 ];
@@ -3053,9 +3058,12 @@ const fallbackResponseProcessing =
 /**
  * The edits of `fallback-3-0-1`: an `xi:include` with a fallback in the item body, and a response
  * condition testing a custom operator, with a foreign element after its operand, in the response
- * processing.
+ * processing. The include's target, `items/part.xml`, is a package entry added beside the item
+ * (decision 285): the reference census records every in-package `xi:include/@href`, and the
+ * importer stores an include as written and never resolves it.
  */
 const fallbackEdits: readonly Edit[] = [
+  { _tag: "addFile", path: "items/part.xml", source: { text: "<part/>" } },
   replaceIn(
     fallbackItem,
     bgChoiceQuestion,
@@ -4118,6 +4126,9 @@ const negativeSpecs: Record<(typeof negativeNames)[number], FixtureSpec> = {
  *   `qti-response-processing` inside the extension.
  * - `fallback-3-0-1` is a 3.0.1 item with an `xi:include` fallback in its body and a custom operator
  *   with a foreign element in its response processing.
+ * - Every `xi:include` target in these fixtures (`inner.xml` and `part.xml` beside
+ *   `SineRule-001.xml`, `items/part.xml`) is a package entry (decision 285): the importer stores an
+ *   include as written and never resolves it, and the reference census needs the target to exist.
  * - `lom-wildcard` is `extmeta` with foreign content and XLink attributes in LOM.
  * - The refusals: `operator-foreign-first` puts the foreign element before the operand,
  *   `unqualified-on-operator` an unqualified attribute on the operator, `strict-file-foreign` a
