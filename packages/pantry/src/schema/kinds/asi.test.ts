@@ -292,13 +292,14 @@ describe("kinds/asi processing rows", () => {
     assert.isTrue(childrenOf("qti-assessment-item").includes("qti-template-processing"));
   });
 
-  it("admits xi:include under the ten response and outcome rule hosts and no other processing host", () => {
+  it("admits xi:include under the ten response and outcome rule hosts and qti-custom-operator (through its ##other wildcard), and no other processing host", () => {
     const hosts = [...expressions, ...rules, "qti-response-processing"].filter((host) =>
       childrenOf(host).includes("xi:include"),
     );
     assert.deepStrictEqual(
       hosts.toSorted(),
       [
+        "qti-custom-operator",
         "qti-response-processing",
         "qti-response-if",
         "qti-response-else-if",

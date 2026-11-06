@@ -519,6 +519,11 @@ export const ResourceLomIdentified = relation(
 /**
  * The one identifier an item resource's record names the item by: the whitespace-collapsed
  * `lom:entry` at its position, bound to the item document's `identifier`.
+ *
+ * Required by normative text, not chosen: the QTI 3.0 ASI Information Model 4.1.1 and 4.4.1
+ * (normative section 4) say the identifier "MUST be the same" in the item and in its metadata, and
+ * the metadata binding 2.7.1.1 (#Gen1, normative by binding 1.2) says it again for
+ * `lom:identifier`. Decision 307; reading 62 of `docs/spec-readings.md`.
  */
 export const LomObjectIdentifier = relation(
   "LomObjectIdentifier",
@@ -547,6 +552,11 @@ export const ResourceLomTitled = relation(
 /**
  * The one title an item resource's record names the item by: the whitespace-collapsed string at its
  * position, bound to the item document's `title`.
+ *
+ * Required by normative text, not chosen: the QTI 3.0 ASI Information Model 4.1.2 (normative
+ * section 4) says the title "MUST be the same" in the item and in its metadata, and the metadata
+ * binding 2.7.1.2 (#Gen2, normative by binding 1.2) says it again for `lom:title`. Decision 307;
+ * reading 62 of `docs/spec-readings.md`.
  *
  * The collapsed form holds at most 256 non-space characters, a representation limit
  * (campaign decision 26), because a key-shaped containment target or index holds it.
@@ -1572,6 +1582,10 @@ export const rules = [
     from: on(LomObjectIdentifier, "lom"),
     within: within(1n, 1n),
   }),
+  capacity(on(select(ResourceLomIdentified, { type: "imsqti_test_xmlv3p0" }), "lom"), {
+    from: on(LomObjectIdentifier, "lom"),
+    within: within(1n, 1n),
+  }),
   key(ResourceLomTitled, ["lom"]),
   contained(
     on(ResourceLomTitled, "lom", "package", "resource", "type"),
@@ -1599,6 +1613,10 @@ export const rules = [
     on(DocumentTitle, "package", "resource", "collapsed"),
   ),
   capacity(on(select(ResourceLomTitled, { type: "imsqti_item_xmlv3p0" }), "lom"), {
+    from: on(LomObjectTitle, "lom"),
+    within: within(1n, 1n),
+  }),
+  capacity(on(select(ResourceLomTitled, { type: "imsqti_test_xmlv3p0" }), "lom"), {
     from: on(LomObjectTitle, "lom"),
     within: within(1n, 1n),
   }),

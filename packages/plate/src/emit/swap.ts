@@ -1,7 +1,7 @@
 import { Data, Result } from "effect";
 import { h } from "#plate/emit/node.ts";
 import type { Attributes, Element, Node, PartFunction } from "#plate/emit/node.ts";
-import { allows, lists } from "#plate/emit/parts.ts";
+import { allows, lists, splitTokens } from "#plate/emit/parts.ts";
 import type { PartRow, TagClass } from "#plate/emit/parts.ts";
 
 /**
@@ -40,8 +40,8 @@ const remedies = {
 } satisfies { readonly [C in SwapCause]: string };
 
 /**
- * What a Control's refusal at I3 asks instead of the generic remedy: a Control stays the native
- * control the interaction computed, so the ruling names the supported ways around it.
+ * Give what a Control's refusal at I3 asks instead of the generic remedy: a Control stays the
+ * native control the interaction computed, so the ruling names the supported ways around it.
  *
  * Only the Choice interaction has an Indicator part, so only its Controls are told to swap it.
  *
@@ -287,16 +287,14 @@ const checkLegendFirst = (root: Element, children: readonly Node[]): Breach | un
 };
 
 /**
- * Split a `class` value into its tokens, at ASCII whitespace as HTML does.
+ * Split a `class` value into its tokens, at ASCII whitespace as HTML does ({@link splitTokens}).
  *
  * @param value The attribute's value, if present.
  * @returns The tokens, none for an absent or boolean attribute.
  * @see https://html.spec.whatwg.org/multipage/dom.html#classes
  */
 const classTokens = (value: string | true | undefined): readonly string[] =>
-  value === undefined || value === true
-    ? []
-    : value.split(/[\t\n\f\r ]+/u).filter((token) => token !== "");
+  value === undefined || value === true ? [] : splitTokens(value);
 
 /**
  * Apply I1: write every attribute of `props` onto the replacement's root, `props` winning a

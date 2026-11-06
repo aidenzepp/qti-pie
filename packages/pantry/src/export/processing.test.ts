@@ -1,6 +1,7 @@
 import path from "node:path";
 import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
+import type { AnyRelation, Uuid } from "@bjornpagen/grizzle";
 import { Effect, FileSystem, Layer } from "effect";
 import { renderTree } from "#pantry/export/render.ts";
 import { itemRows } from "#pantry/import/item.ts";
@@ -12,6 +13,14 @@ import { emptyEnvironment, environmentOf, withDeclarations } from "#pantry/proce
 import type { DeclarationEntry, Environment, Mode } from "#pantry/processing/env.ts";
 import { templateDocuments } from "#pantry/processing/fixtures.ts";
 import type { RootKindHandle } from "#pantry/schema/node.ts";
+import { Node } from "#pantry/schema/node.ts";
+import {
+  ItemInstanceSpelling,
+  ItemInstanceVariableRef,
+  ItemVariableRef,
+  SectionDurationRef,
+  SectionVariableRef,
+} from "#pantry/schema/processing.ts";
 import { canonicalize } from "@qti-pie/crust/canonical.ts";
 import { xmllintC14n } from "#pantry/xml/oracle.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
@@ -373,6 +382,111 @@ layer(TestLayer, { excludeTestServices: true })("renderTree on processing docume
       assert.strictEqual(rendered, decode(canonicalize(doc)));
       assert.include(rendered, '<xi:include href="shared-rules.xml" parse="xml">');
       assert.include(rendered, "<xi:fallback>fallback</xi:fallback>");
+    }),
+  );
+});
+
+/**
+ * The `identifier` the export writes on a `qti-variable` whose reference is the hand-built row of
+ * `relation`: the document holds only the node, so the row is the one place the name lives.
+ *
+ * @param relation - The relation of the reference form under test.
+ * @param fields - Its columns other than `document`, `id` and `root`.
+ * @param extra - A relation that holds more of the form, with its row.
+ * @returns The `identifier` attribute of the rendered node.
+ */
+const identifierOfReference = (
+  relation: AnyRelation,
+  fields: Record<string, bigint | string>,
+  extra?: readonly [AnyRelation, (ref: Uuid) => Record<string, bigint | string>],
+) =>
+  Effect.gen(function* referenceIdentifier() {
+    const doc = yield* readXml(
+      new TextEncoder().encode(`<qti-variable xmlns="${asiNamespace}" identifier="X"/>`),
+    );
+    const tree = crypto.randomUUID();
+    const built = yield* treeRows(
+      doc,
+      { charset: doc.charset, id: tree, kind: "document", root: "test", version: "3.0.0" },
+      Rows.empty(),
+    );
+    const node =
+      Rows.of(built.rows, Node).find((row) => row.kind === "qti-variable")?.id ??
+      assert.fail("the document has no qti-variable");
+    const withRef = Rows.add(built.rows, relation, [
+      { document: tree, id: node, root: "test", ...fields },
+    ]);
+    const rows = extra === undefined ? withRef : Rows.add(withRef, extra[0], [extra[1](node)]);
+    const attribute = renderTree(rows, tree).root.attributes.find(
+      (candidate) => candidate.local === "identifier",
+    );
+
+    return attribute?.value;
+  });
+
+layer(TestLayer, { excludeTestServices: true })("renderTree on prefixed references", (suite) => {
+  const cases: readonly (readonly [
+    string,
+    AnyRelation,
+    Record<string, bigint | string>,
+    string,
+  ])[] = [
+    ["I1.SCORE", ItemVariableRef, { prefix: "I1", variable: "SCORE" }, "I1.SCORE"],
+    [
+      "I1.2.SCORE",
+      ItemInstanceVariableRef,
+      { instance: 2n, prefix: "I1", variable: "SCORE" },
+      "I1.2.SCORE",
+    ],
+    ["PART.duration", SectionDurationRef, { prefix: "PART" }, "PART.duration"],
+    [
+      "a section document's SCORE",
+      SectionVariableRef,
+      { identifier: "SCORE", referrerKind: "qti-variable" },
+      "SCORE",
+    ],
+    [
+      "a section document's I2.SCORE",
+      SectionVariableRef,
+      { identifier: "I2.SCORE", referrerKind: "qti-variable" },
+      "I2.SCORE",
+    ],
+    [
+      "a section document's I1.A.B",
+      SectionVariableRef,
+      { identifier: "I1.A.B", referrerKind: "qti-variable" },
+      "I1.A.B",
+    ],
+  ];
+
+  for (const [name, relation, fields, expected] of cases) {
+    suite.effect(`renders ${name} as written`, () =>
+      Effect.gen(function* writtenReference() {
+        assert.strictEqual(yield* identifierOfReference(relation, fields), expected);
+      }),
+    );
+  }
+
+  suite.effect("renders I1.02.SCORE with the instance as written", () =>
+    Effect.gen(function* spelledInstance() {
+      const value = yield* identifierOfReference(
+        ItemInstanceVariableRef,
+        { instance: 2n, prefix: "I1", variable: "SCORE" },
+        [ItemInstanceSpelling, (ref) => ({ ref, value: "02" })],
+      );
+
+      assert.strictEqual(value, "I1.02.SCORE");
+    }),
+  );
+
+  suite.effect("renders I1.A.B as an item variable whose name has a dot", () =>
+    Effect.gen(function* dottedVariable() {
+      const value = yield* identifierOfReference(ItemVariableRef, {
+        prefix: "I1",
+        variable: "A.B",
+      });
+
+      assert.strictEqual(value, "I1.A.B");
     }),
   );
 });

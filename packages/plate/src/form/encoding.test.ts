@@ -1,9 +1,10 @@
-import { threadCpuUsage } from "node:process";
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
 import { checkInstance, decode, encode, entryName, partition } from "#plate/form/encoding.ts";
 import type { Binding, Entry, Malformed } from "#plate/form/encoding.ts";
+import { format } from "#plate/model/values.ts";
 import type { Single, Value } from "#plate/model/values.ts";
+import { growthFactor, growthLimit, growthRatio } from "#plate/test/growth.ts";
 
 /**
  * The item instance the tests post for.
@@ -58,6 +59,14 @@ const value = (bound: Binding, ...values: readonly Single[]): Value => ({
 const identifier = (text: string): Single => ({ baseType: "identifier", value: text });
 
 /**
+ * Construct a string value.
+ *
+ * @param text The string.
+ * @returns The value.
+ */
+const stringOf = (text: string): Single => ({ baseType: "string", value: text });
+
+/**
  * Encode a value under a binding and decode the entries back.
  *
  * @param bound The binding.
@@ -68,27 +77,9 @@ const roundTrip = (bound: Binding, original: Value): Effect.Effect<Value, Malfor
   Effect.fromResult(decode(encode(original, bound), bound));
 
 /**
- * The digits the Q-20 growth check reads first, before it reads {@link digitGrowth} times as many.
+ * The digits the Q-20 growth check reads first, before it reads {@link growthFactor} times as many.
  */
 const fewerDigits = 12_500;
-
-/**
- * How many times as many digits the growth check reads second: a linear parse then takes about 8
- * times as long, and a quadratic one about 64 times.
- */
-const digitGrowth = 8;
-
-/**
- * The most a parse's time may grow by on {@link digitGrowth} times the digits, 4 times linear and
- * half of quadratic, so a busy machine neither fails a linear parse nor passes a quadratic one.
- */
-const growthLimit = 32;
-
-/**
- * The runs of each size the growth check times, keeping the fastest, so a run a busy machine
- * slowed does not count.
- */
-const growthRuns = 3;
 
 /**
  * The quadratic control reads 100,000 digits three times, about 1.5 s alone; under load that nears
@@ -97,54 +88,26 @@ const growthRuns = 3;
 const controlTimeoutMs = 60_000;
 
 /**
- * Run a computation and measure the CPU time this thread spent on it, which a busy machine
- * inflates far less than wall-clock time: the time other processes hold the CPU is not counted.
+ * Measure how a parse's CPU time grows with its digits, through {@link growthRatio}: on the first
+ * {@link fewerDigits} digits and on {@link growthFactor} times as many.
  *
- * @param work The computation.
- * @returns The thread's CPU time over `work`, in milliseconds.
- */
-const cpuMillis = (work: () => void): Effect.Effect<number> =>
-  Effect.sync(() => {
-    const before = threadCpuUsage();
-    work();
-
-    const { system, user } = threadCpuUsage(before);
-
-    return (system + user) / 1000;
-  });
-
-/**
- * Measure how a parse's CPU time grows with its digits: time it on the first {@link fewerDigits}
- * digits and on {@link digitGrowth} times as many, alternating so a busy spell slows both sizes,
- * and keep the fastest of {@link growthRuns} runs of each. A run of the smaller size parses it
- * {@link digitGrowth} times over, so both runs last about as long for a linear parse and meet the
- * same cores and clock speeds.
- *
- * @param spelling The digits, at least `fewerDigits * digitGrowth` of them.
+ * @param spelling The digits, at least `fewerDigits * growthFactor` of them.
  * @param parse The parse to time.
  * @returns How many times as long the parse took on the larger prefix as on the smaller.
  */
-const growthRatio = (spelling: string, parse: (digits: string) => void): Effect.Effect<number> =>
-  Effect.gen(function* timeGrowth() {
-    const fewer = spelling.slice(0, fewerDigits);
-    const more = spelling.slice(0, fewerDigits * digitGrowth);
-    let fewerMs = Number.POSITIVE_INFINITY;
-    let moreMs = Number.POSITIVE_INFINITY;
-    for (let run = 0; run < growthRuns; run += 1) {
-      const fewerRun = yield* cpuMillis(() => {
-        for (let repeat = 0; repeat < digitGrowth; repeat += 1) {
-          parse(fewer);
-        }
-      });
-      const moreRun = yield* cpuMillis(() => {
-        parse(more);
-      });
-      fewerMs = Math.min(fewerMs, fewerRun / digitGrowth);
-      moreMs = Math.min(moreMs, moreRun);
-    }
+const digitGrowth = (spelling: string, parse: (digits: string) => void): Effect.Effect<number> => {
+  const fewer = spelling.slice(0, fewerDigits);
+  const more = spelling.slice(0, fewerDigits * growthFactor);
 
-    return moreMs / fewerMs;
-  });
+  return growthRatio(
+    () => {
+      parse(fewer);
+    },
+    () => {
+      parse(more);
+    },
+  );
+};
 
 /**
  * The growth check's control, a deliberately quadratic parse: a per-digit `total * 36n + digit`
@@ -339,7 +302,7 @@ describe("encode and decode", () => {
         const read = yield* Effect.fromResult(decode(posted(spelling), integer, { base: 36 }));
         assert.deepStrictEqual(read, value(integer, { baseType: "integer", value: exact }));
 
-        const growth = yield* growthRatio(spelling, (digits) => {
+        const growth = yield* digitGrowth(spelling, (digits) => {
           decode(posted(digits), integer, { base: 36 });
         });
         assert.isBelow(
@@ -354,10 +317,10 @@ describe("encode and decode", () => {
     "[Q-20] control: a quadratic parse fails the growth check",
     () =>
       Effect.gen(function* quadraticControl() {
-        const spelling = "z".repeat(fewerDigits * digitGrowth);
+        const spelling = "z".repeat(fewerDigits * growthFactor);
         assert.strictEqual(parseQuadratically("zz"), 35n * 36n + 35n);
 
-        const growth = yield* growthRatio(spelling, (digits) => {
+        const growth = yield* digitGrowth(spelling, (digits) => {
           parseQuadratically(digits);
         });
         assert.isAtLeast(
@@ -438,6 +401,46 @@ describe("encode and decode", () => {
       assert.deepStrictEqual(
         yield* Effect.fromResult(decode(entries, single)),
         value(single, identifier("choiceB")),
+      );
+    }),
+  );
+
+  it.effect("decodes an ordered container's filled Controls in the order they were posted", () =>
+    Effect.gen(function* orderedContainer() {
+      const ordered = binding("string", "ordered");
+
+      assert.deepStrictEqual(
+        yield* Effect.fromResult(decode(posted("a", "", "b"), ordered)),
+        value(ordered, stringOf("a"), stringOf("b")),
+      );
+      assert.deepStrictEqual(
+        yield* Effect.fromResult(decode(posted("b", "", "a"), ordered)),
+        value(ordered, stringOf("b"), stringOf("a")),
+      );
+    }),
+  );
+
+  it.effect("decodes a multiple container's filled Controls as their multiset", () =>
+    Effect.gen(function* multipleContainer() {
+      const multiple = binding("string", "multiple");
+      const decoded = yield* Effect.fromResult(decode(posted("a", "", "b"), multiple));
+
+      assert.strictEqual(decoded.baseType, "string");
+      assert.strictEqual(decoded.cardinality, "multiple");
+      assert.deepStrictEqual(
+        decoded.values.map(format).toSorted((left, right) => left.localeCompare(right)),
+        ["a", "b"],
+      );
+    }),
+  );
+
+  it.effect("decodes an ordered container whose Controls are all empty as NULL", () =>
+    Effect.gen(function* emptyContainer() {
+      const ordered = binding("string", "ordered");
+
+      assert.deepStrictEqual(
+        yield* Effect.fromResult(decode(posted("", "", ""), ordered)),
+        value(ordered),
       );
     }),
   );

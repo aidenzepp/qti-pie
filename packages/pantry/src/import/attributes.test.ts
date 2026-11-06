@@ -29,15 +29,15 @@ const idOf = (nodes: NodeIndex, kind: string): Uuid =>
   );
 
 /**
- * An item read and walked by `treeRows`, then run through `attributeRows`: the path the item
- * composition takes for a tree the walk admits.
+ * A document read and walked by `treeRows`, then run through `attributeRows`: the path the item
+ * and stimulus compositions take for a tree the walk admits.
  */
-const walked = (xml: string) =>
+const walked = (xml: string, root: RootKindHandle = "item") =>
   Effect.gen(function* walkedItem() {
     const doc = yield* readXml(new TextEncoder().encode(xml));
     const tree = yield* treeRows(
       doc,
-      { charset: "utf-8", id: documentId, kind: "document", root: "item", version: "3.0.1" },
+      { charset: "utf-8", id: documentId, kind: "document", root, version: "3.0.1" },
       Rows.empty(),
     );
 
@@ -456,6 +456,20 @@ describe("attributeRows on a tree of either root", () => {
 
       assert.deepStrictEqual(Rows.of(rows, attributes.NodeLabel), []);
       assert.deepStrictEqual(Rows.of(rows, AttributeLexical), []);
+    }),
+  );
+
+  it.effect("writes the label row of a stimulus body element and none for the stimulus root", () =>
+    Effect.gen(function* stimulusLabel() {
+      const { nodes, rows } = yield* walked(
+        `<qti-assessment-stimulus xmlns="${itemNamespace}" identifier="s" title="t" label="x"><qti-stimulus-body><p label="y">t</p></qti-stimulus-body></qti-assessment-stimulus>`,
+        "stimulus",
+      );
+
+      assert.deepStrictEqual(
+        Rows.of(rows, attributes.NodeLabel).map((row) => [row.node, row.value, row.rootKind]),
+        [[idOf(nodes, "p"), "y", "stimulus"]],
+      );
     }),
   );
 });

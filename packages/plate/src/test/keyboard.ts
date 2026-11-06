@@ -1,6 +1,12 @@
 import { Option } from "effect";
 import type { Element } from "#plate/emit/node.ts";
-import { attribute, inputType, isFocusable, tabindexOf } from "#plate/test/accessibility.ts";
+import {
+  attribute,
+  inputType,
+  isFocusable,
+  isSubmitButton,
+  tabindexOf,
+} from "#plate/test/accessibility.ts";
 
 /**
  * A key a keyboard walk presses, or a run of text typed into the focused control.
@@ -105,18 +111,16 @@ const blockingTypes: ReadonlySet<string> = new Set([
 /**
  * Classify an element by what the walk's keys do to it.
  *
- * A `button` with a missing or unknown `type` is a submit button, as HTML's default says.
+ * A `button` with a missing or unknown `type` is a submit button, as HTML's default says
+ * ({@link isSubmitButton}).
  *
  * @param element The element to classify.
  * @returns The element's kind.
- * @see https://html.spec.whatwg.org/multipage/form-elements.html#attr-button-type
  */
 const kindOf = (element: Element): Kind => {
   switch (element.tag) {
     case "button": {
-      const type = attribute(element, "type")?.toLowerCase();
-
-      return type === "button" || type === "reset" ? "other" : "submit";
+      return isSubmitButton(element) ? "submit" : "other";
     }
     case "input": {
       const type = inputType(element);
@@ -151,6 +155,13 @@ const isDisabled = (element: Element): boolean => attribute(element, "disabled")
  */
 const pageOf = (tree: Element): Page => {
   const visits: Visit[] = [];
+
+  /**
+   * Record an element and then, in order, every element below it, each with its form owner.
+   *
+   * @param element The element to record.
+   * @param form The nearest `form` above it, absent outside every form.
+   */
   const descend = (element: Element, form?: Element): void => {
     visits.push({ element, form, index: visits.length, kind: kindOf(element) });
 

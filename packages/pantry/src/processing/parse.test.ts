@@ -583,3 +583,80 @@ layer(NodeServices.layer, { excludeTestServices: true })("processing/parse.ts", 
     }),
   );
 });
+
+/**
+ * Parse a single-expression root written as a string, `body` standing under it.
+ */
+const parseSingle = (root: string, attributes: string, body: string) =>
+  Effect.gen(function* parseSingleRoot() {
+    const text = `<${root} ${asiNamespace}${attributes}>${body}</${root}>`;
+    const document = yield* readXml(new TextEncoder().encode(text));
+
+    return yield* parseProcessing(document.root, "expression");
+  });
+
+layer(NodeServices.layer, { excludeTestServices: true })(
+  "processing/parse.ts single-expression roots",
+  (suite) => {
+    suite.effect("parses each of the three roots as one holder of its expression", () =>
+      Effect.gen(function* threeRoots() {
+        const roots = [
+          ["qti-pre-condition", "", "target", undefined],
+          ["qti-branch-rule", ' target="EXIT_TEST"', "target", "EXIT_TEST"],
+          ["qti-template-default", ' template-identifier="T"', "template-identifier", "T"],
+        ] as const;
+        for (const [root, attributes, name, value] of roots) {
+          const ast = yield* parseSingle(root, attributes, `<qti-null/>`);
+          assert.strictEqual(ast.language, "expression");
+          assert.strictEqual(ast.rules.length, 1);
+
+          const holder = ruleAt(ast, 0);
+          assert.strictEqual(holder.kind, root);
+          assert.deepStrictEqual(holder.position.path, []);
+          assert.strictEqual(holder.attributes.get(name)?.processed, value);
+          assert.strictEqual(Option.getOrUndefined(holder.expression)?.kind, "qti-null");
+        }
+      }),
+    );
+
+    suite.effect("refuses a second expression and a rule under the root, naming it", () =>
+      Effect.gen(function* contentModel() {
+        const second = yield* refusalOf(
+          parseSingle("qti-pre-condition", "", `<qti-null/><qti-null/>`),
+        );
+        assert.strictEqual(second.name, "qti-null");
+        assert.deepStrictEqual(second.parent, Option.some("qti-pre-condition"));
+
+        const rule = yield* refusalOf(
+          parseSingle("qti-branch-rule", ' target="EXIT_TEST"', `<qti-exit-test/>`),
+        );
+        assert.strictEqual(rule.name, "qti-exit-test");
+      }),
+    );
+
+    suite.effect("refuses an attribute the root does not carry and any other root", () =>
+      Effect.gen(function* strays() {
+        const attribute = yield* refusalOf(
+          parseSingle("qti-pre-condition", ' target="EXIT_TEST"', `<qti-null/>`),
+        );
+        assert.strictEqual(attribute.kind, "attribute");
+        assert.strictEqual(attribute.name, "target");
+
+        const root = yield* refusalOf(parseSingle("qti-set-outcome-value", "", `<qti-null/>`));
+        assert.strictEqual(root.kind, "element");
+        assert.strictEqual(root.name, "qti-set-outcome-value");
+      }),
+    );
+
+    suite.effect("refuses a single-expression root under the three processing languages", () =>
+      Effect.gen(function* wrongLanguage() {
+        const text = `<qti-pre-condition ${asiNamespace}><qti-null/></qti-pre-condition>`;
+        const document = yield* readXml(new TextEncoder().encode(text));
+        for (const named of ["response", "outcome", "template"] as const) {
+          const refusal = yield* refusalOf(parseProcessing(document.root, named));
+          assert.strictEqual(refusal.name, "qti-pre-condition");
+        }
+      }),
+    );
+  },
+);

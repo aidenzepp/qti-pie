@@ -17,7 +17,7 @@ import {
   TableSpan,
   TrackLanguage,
 } from "#pantry/schema/contracts.ts";
-import { Img, P } from "#pantry/schema/html.ts";
+import { Img, ImgHeight, ImgLongdesc, ImgWidth, P } from "#pantry/schema/html.ts";
 import * as media from "#pantry/schema/html/media.ts";
 import * as structure from "#pantry/schema/html/structure.ts";
 import * as text from "#pantry/schema/html/text.ts";
@@ -282,12 +282,27 @@ describe("htmlRows on the text and structure elements", () => {
     }),
   );
 
-  it.effect("skips the paragraph and the image, which the item pass writes", () =>
-    Effect.gen(function* skipped() {
-      const { rows } = yield* built("3.0.0", '<p>x<img src="a.png" alt=""/></p>');
+  it.effect("writes the paragraph and the image arms", () =>
+    Effect.gen(function* written() {
+      const { nodes, rows } = yield* built("3.0.0", '<p>x<img src="a.png" alt="" width="10"/></p>');
+      const image = idOf(nodes, "img");
 
-      assert.strictEqual(Rows.of(rows, P).length, 0);
-      assert.strictEqual(Rows.of(rows, Img).length, 0);
+      assert.deepStrictEqual(Rows.of(rows, P), [{ id: idOf(nodes, "p") }]);
+      assert.deepStrictEqual(Rows.of(rows, Img), [
+        { alt: "", id: image, src: EmbedSourceUri("a.png") },
+      ]);
+      assert.deepStrictEqual(Rows.of(rows, ImgWidth), [{ node: image, value: "10" }]);
+      assert.deepStrictEqual(Rows.of(rows, ImgHeight), []);
+      assert.deepStrictEqual(Rows.of(rows, ImgLongdesc), []);
+    }),
+  );
+
+  it.effect("refuses an image with no alt as a required attribute", () =>
+    Effect.gen(function* noAlt() {
+      const refusal = yield* Effect.flip(built("3.0.0", '<p><img src="a.png"/></p>'));
+
+      assert.instanceOf(refusal, ItemRefusal);
+      assert.strictEqual(refusal instanceof ItemRefusal ? refusal.rule : "", "required-attribute");
     }),
   );
 });

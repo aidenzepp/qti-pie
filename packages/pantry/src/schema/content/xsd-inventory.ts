@@ -1,12 +1,12 @@
 /**
- * The derived XSD inventory: for every ASI, HTML and processing kind handle, the element and type
- * the ASI 3.0.1 XSD declares, whether the type is mixed, every attribute it declares and every
+ * The derived XSD inventory: for every ASI, HTML, processing and test kind handle, the element and
+ * type the ASI 3.0.1 XSD declares, whether the type is mixed, every attribute it declares and every
  * element it references.
  *
  * The inventory is data derived once from `imsqti_asiv3p0p1_v1p0.xsd` and read by the kinds files,
  * the attribute arms and the importer. Each vocabulary is a leaf file (`inventory/asi.ts`,
- * `inventory/html.ts`, `inventory/processing.ts`) composed here, so a later phase adds its own leaf
- * and one spread line.
+ * `inventory/html.ts`, `inventory/processing.ts`, `inventory/test.ts`) composed here, so a later
+ * phase adds its own leaf and one spread line.
  *
  * An attribute's `family` is `base` for the ten names every element shares (`id`, `class`, `lang`,
  * `xml:lang`, `label`, `dir`, `xml:base`, `data-qti-suppress-tts`, `data-catalog-idref`,
@@ -18,8 +18,8 @@
  * group, `None` for unbounded; the choice groups are listed in each leaf's module comment.
  *
  * The leaves are the output of this script, run from any directory as `python3 -I derive.py asi`,
- * `python3 -I derive.py html` and `python3 -I derive.py processing` with the XSD cached at
- * `~/.cache/gr8des/qti3/xsd/`, then formatted with `vp fmt`:
+ * `python3 -I derive.py html`, `python3 -I derive.py processing` and `python3 -I derive.py test`
+ * with the XSD cached at `~/.cache/gr8des/qti3/xsd/`, then formatted with `vp fmt`:
  *
  * ```python
  * import xml.etree.ElementTree as E, collections, os, re, sys, textwrap
@@ -267,6 +267,17 @@
  *     main(sys.argv[1])
  * ```
  *
+ * The test leaf extends the script with the M4 element list and three `DOTTED` entries of its own,
+ * a `test` branch at the head of `entries` (the 23 names are the spec's 3.3; each has one type):
+ *
+ * ```python
+ * M4=["qti-adaptive-engine-ref","qti-adaptive-selection","qti-adaptive-settings-ref","qti-assessment-item-ref","qti-assessment-section","qti-assessment-section-ref","qti-assessment-stimulus","qti-assessment-stimulus-ref","qti-assessment-test","qti-branch-rule","qti-item-session-control","qti-metadata-ref","qti-ordering","qti-pre-condition","qti-selection","qti-stimulus-body","qti-template-default","qti-test-feedback","qti-test-part","qti-time-limits","qti-usagedata-ref","qti-variable-mapping","qti-weight"]
+ * DOTTED_T={"qti-rubric-block.test":("qti-rubric-block","TestRubricBlockDType"),"qti-content-body.testRubric":("qti-content-body","TestRubricBlockContentBodyDType"),"qti-content-body.testFeedback":("qti-content-body","TestFeedbackFlowContentBodyDType")}
+ * # in entries(which), first: if which=="test": entry(n,n,next(iter(DECL[n]))) for n in M4,
+ * # entry(h,n,t) for h,(n,t) in DOTTED_T.items(); return them sorted by handle
+ * # (VOCAB gains "test":"test")
+ * ```
+ *
  * Over the 145 entries of the ASI and HTML leaves the attribute declarations number 4217
  * `collapse`, 2053 `preserve`, 396 `replace` and 3 `union`. The phase-2 spec's counts (4254, 2071,
  * 399 and 4) add the 37, 18, 3 and 1 declarations of `TestRubricBlockDType`, the type of
@@ -279,6 +290,7 @@ import { Option } from "effect";
 import { asiInventory } from "#pantry/schema/content/inventory/asi.ts";
 import { htmlInventory } from "#pantry/schema/content/inventory/html.ts";
 import { processingInventory } from "#pantry/schema/content/inventory/processing.ts";
+import { testInventory } from "#pantry/schema/content/inventory/test.ts";
 
 /**
  * One attribute an XSD type declares, through its attribute groups and its extension bases.
@@ -328,12 +340,13 @@ export interface InventoryLeaf {
 }
 
 /**
- * The inventory of every ASI, HTML and processing kind, keyed by handle.
+ * The inventory of every ASI, HTML, processing and test kind, keyed by handle.
  */
 export const inventory: InventoryLeaf = {
   ...asiInventory,
   ...htmlInventory,
   ...processingInventory,
+  ...testInventory,
 };
 
 /**

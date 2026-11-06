@@ -8,6 +8,10 @@ import {
   specOfProcessing,
 } from "#pantry/processing/fixtures.ts";
 import type { ProcessingFixtureName } from "#pantry/processing/fixtures.ts";
+import { readRows } from "#pantry/import/package.ts";
+import { Rows } from "#pantry/import/tree.ts";
+import { AttributeFileReference } from "#pantry/schema/reference.ts";
+import { PackageEntry } from "#pantry/schema/package.ts";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { Child, Element } from "@qti-pie/crust/tree.ts";
 
@@ -70,6 +74,48 @@ layer(NodeServices.layer, { excludeTestServices: true })("processing fixtures", 
         ["large-program", "processing-item", "rptemplates", "template-item"],
       );
     }),
+  );
+
+  it.effect(
+    "each package that carries response.xml's rules holds the file its xi:include names",
+    () =>
+      Effect.gen(function* included() {
+        const fs = yield* FileSystem.FileSystem;
+        const names: readonly ProcessingFixtureName[] = [
+          "large-program",
+          "padded-literal",
+          "padded-reference",
+          "processing-item",
+        ];
+
+        for (const name of names) {
+          const dir = yield* materializeProcessing(name);
+
+          assert.isTrue(
+            yield* fs.exists(path.join(dir, "shared-rules.xml")),
+            `${name}: no shared-rules.xml in the package`,
+          );
+
+          // padded-reference is refused for its own rule (attribute-lexical) before any rows exist,
+          // so it is checked on the files alone.
+          if (name !== "padded-reference") {
+            const { rows } = yield* readRows(dir);
+            const references = Rows.of(rows, AttributeFileReference);
+            const entries = new Set(
+              Rows.of(rows, PackageEntry).map((entry) => `${entry.package}\n${entry.path}`),
+            );
+
+            assert.isAbove(references.length, 0, `${name}: no AttributeFileReference row`);
+
+            for (const reference of references) {
+              assert.isTrue(
+                entries.has(`${reference.package}\n${reference.path}`),
+                `${name}: ${reference.path} is no PackageEntry row`,
+              );
+            }
+          }
+        }
+      }),
   );
 
   it.effect("every derived item is named as simple's manifest names it", () =>

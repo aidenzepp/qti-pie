@@ -14,7 +14,7 @@
  * @see `redactItem` in `#plate/payload.ts`, the allowlist that decides which fields a `Redacted`
  *   holds.
  */
-import { Data, Predicate, Result, Schema } from "effect";
+import { Data, Option, Predicate, Result, Schema } from "effect";
 import type {
   BodyNode,
   ChoiceInteraction,
@@ -24,6 +24,7 @@ import type {
 import { modelledBaseTypes, modelledCardinalities } from "#plate/model/values.ts";
 import { brandRedacted } from "#plate/payload.ts";
 import type { Redacted, RedactedFields } from "#plate/payload.ts";
+import { greatestCount } from "#plate/vocabulary.ts";
 
 /**
  * A body element's attribute in the JSON form.
@@ -57,6 +58,7 @@ interface BodyTextJson {
  */
 interface SimpleChoiceJson {
   readonly content: readonly BodyNodeJson[];
+  readonly fixed: boolean;
   readonly identifier: string;
 }
 
@@ -93,19 +95,23 @@ interface TextEntryInteractionJson {
   readonly expectedLength?: string;
   readonly kind: "text-entry";
   readonly path: string;
+  readonly patternMask?: string;
   readonly patternMaskMessage?: string;
   readonly placeholder?: string;
   readonly response: string;
 }
 
 /**
- * An Extended Text in the JSON form: a Text Entry's fields, with `expectedLines` as decimal digits
- * and its Prompt an optional key.
+ * An Extended Text in the JSON form: a Text Entry's fields, with `expectedLines`, `maxStrings` and
+ * `minStrings` as decimal digits, and `expectedLines`, `maxStrings` and its Prompt optional keys.
  */
 interface ExtendedTextInteractionJson extends Omit<TextEntryInteractionJson, "kind"> {
+  readonly cardinality: ExtendedTextInteraction["cardinality"];
   readonly expectedLines?: string;
   readonly format: ExtendedTextInteraction["format"];
   readonly kind: "extended-text";
+  readonly maxStrings?: string;
+  readonly minStrings: string;
   readonly prompt?: readonly BodyNodeJson[];
 }
 
@@ -149,16 +155,20 @@ const OptionalText = Schema.OptionFromOptionalKey(Schema.String);
  * decimal digits (reading 46).
  */
 const ChoiceCount = Schema.BigIntFromString.check(
-  Schema.isBetweenBigInt({ maximum: 2n ** 63n - 1n, minimum: 0n }),
+  Schema.isBetweenBigInt({ maximum: greatestCount, minimum: 0n }),
 );
 
 /**
- * `expected-length` and `expected-lines`: a count with no upper bound, held exactly and written as
- * its decimal digits, an optional key absent when the author gave none.
+ * `min-strings`: a count with no upper bound (reading 46 does not list it), held exactly and
+ * written as its decimal digits.
  */
-const OptionalCount = Schema.OptionFromOptionalKey(
-  Schema.BigIntFromString.check(Schema.isGreaterThanOrEqualToBigInt(0n)),
-);
+const Count = Schema.BigIntFromString.check(Schema.isGreaterThanOrEqualToBigInt(0n));
+
+/**
+ * `expected-length`, `expected-lines` and `max-strings`: a {@link Count}, an optional key absent
+ * when the author gave none.
+ */
+const OptionalCount = Schema.OptionFromOptionalKey(Count);
 
 /**
  * The fields a Text Entry and an Extended Text share, as `TextEntryInteraction` declares them.
@@ -171,6 +181,7 @@ const textControlFields = {
   class: Schema.String,
   expectedLength: OptionalCount,
   path: Schema.String,
+  patternMask: OptionalText,
   patternMaskMessage: OptionalText,
   placeholder: OptionalText,
   response: Schema.String,
@@ -193,7 +204,9 @@ const BodyNodeSchema = Schema.Union([
     ariaLabel: OptionalText,
     ariaLabelledby: OptionalText,
     cardinality: Schema.Literals(["multiple", "single"]),
-    choices: Schema.Array(Schema.Struct({ content: BodyNodes, identifier: Schema.String })),
+    choices: Schema.Array(
+      Schema.Struct({ content: BodyNodes, fixed: Schema.Boolean, identifier: Schema.String }),
+    ),
     class: Schema.String,
     kind: Schema.Literal("choice"),
     maxChoices: ChoiceCount,
@@ -208,9 +221,12 @@ const BodyNodeSchema = Schema.Union([
   Schema.Struct({ ...textControlFields, kind: Schema.Literal("text-entry") }),
   Schema.Struct({
     ...textControlFields,
+    cardinality: Schema.Literals(["multiple", "ordered", "single"]),
     expectedLines: OptionalCount,
-    format: Schema.Literals(["plain", "preformatted"]),
+    format: Schema.Literals(["plain", "preformatted", "xhtml"]),
     kind: Schema.Literal("extended-text"),
+    maxStrings: OptionalCount,
+    minStrings: Count,
     prompt: Schema.OptionFromOptionalKey(BodyNodes),
   }),
   Schema.Struct({
@@ -265,13 +281,15 @@ const redactedRemedies: Readonly<Record<RedactedStage, (issue: string) => string
 
 /**
  * A redacted item the codec could not read or write: input that is not the JSON form
- * {@link encodeRedacted} writes (`stage` `decode`), or a `Redacted` with a field that does not fit
- * {@link RedactedSchema} (`stage` `encode`), which only an object built by hand can hold.
+ * {@link encodeRedacted} writes, or that holds an interaction `render` cannot emit (`stage`
+ * `decode`), or a `Redacted` with a field that does not fit {@link RedactedSchema} (`stage`
+ * `encode`), which only an object built by hand can hold.
  */
 export class InvalidRedacted extends Data.TaggedError("InvalidRedacted")<{
   /**
    * What the Schema found wrong, with the path to it, how deep the input nests past
-   * {@link maximumDepth}, or what reading the input threw.
+   * {@link maximumDepth}, which interaction sits where QTI's schema admits none, or what reading
+   * the input threw.
    */
   readonly issue: string;
   /**
@@ -316,9 +334,9 @@ export const encodeRedacted = (item: Redacted): Result.Result<RedactedJson, Inva
 const maximumDepth = 1024;
 
 /**
- * Whether a value nests arrays and objects more than {@link maximumDepth} levels deep, measured
- * with a list of pending values rather than by recursion, so the measure cannot overflow the stack
- * it guards, and stopping at the first value past the bound, so a cycle ends it too.
+ * Tell whether a value nests arrays and objects more than {@link maximumDepth} levels deep,
+ * measured with a list of pending values rather than by recursion, so the measure cannot overflow
+ * the stack it guards, and stopping at the first value past the bound, so a cycle ends it too.
  *
  * It follows own enumerable properties, the only ones plain JSON data has. The Schema reads
  * inherited and non-enumerable ones too, so a live object can hide a deep field from this measure;
@@ -349,8 +367,75 @@ const nestsTooDeep = (input: unknown): boolean => {
 };
 
 /**
- * Measure the input's depth, then check it against {@link RedactedSchema}; either may throw on a
- * live object, which {@link decodeRedacted} refuses.
+ * A body node waiting to be walked, with the content it sits in when QTI's schema admits no
+ * interaction there, a Prompt or a choice's content, and none elsewhere.
+ */
+interface PendingNode {
+  readonly node: BodyNode;
+  readonly within: Option.Option<string>;
+}
+
+/**
+ * Find the first interaction, in document order, that the body holds inside a Choice's Prompt or a
+ * choice's content, or inside an Extended Text's Prompt: content where QTI's schema admits no
+ * interaction, and where `render` throws `NestedInteractionDefect` on one.
+ *
+ * It walks with a list of pending nodes rather than by recursion, as {@link nestsTooDeep} does, so
+ * no body the depth bound lets through can overflow the stack.
+ *
+ * @param body The body the Schema decoded.
+ * @returns What the interaction is and where it sits, or none when the body holds none there.
+ */
+const misplacedInteraction = (body: readonly BodyNode[]): Option.Option<string> => {
+  const pending: PendingNode[] = [];
+  const enqueue = (nodes: readonly BodyNode[], within: Option.Option<string>): void => {
+    for (const node of nodes.toReversed()) {
+      pending.push({ node, within });
+    }
+  };
+
+  enqueue(body, Option.none());
+  for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
+    const { node, within } = next;
+
+    if (node.kind === "element") {
+      enqueue(node.children, within);
+    } else if (
+      node.kind === "choice" ||
+      node.kind === "extended-text" ||
+      node.kind === "text-entry"
+    ) {
+      if (Option.isSome(within)) {
+        return Option.some(
+          `a ${node.kind} interaction for the response ${JSON.stringify(node.response)} sits inside ${within.value}, where QTI's schema admits no interaction and render cannot emit one`,
+        );
+      }
+
+      const owner = `the ${node.kind} interaction for the response ${JSON.stringify(node.response)}`;
+      if (node.kind === "choice") {
+        for (const simple of node.choices.toReversed()) {
+          enqueue(
+            simple.content,
+            Option.some(
+              `the content of the choice ${JSON.stringify(simple.identifier)} of ${owner}`,
+            ),
+          );
+        }
+      }
+
+      if (node.kind !== "text-entry" && Option.isSome(node.prompt)) {
+        enqueue(node.prompt.value, Option.some(`the Prompt of ${owner}`));
+      }
+    }
+  }
+
+  return Option.none();
+};
+
+/**
+ * Measure the input's depth, check it against {@link RedactedSchema}, then walk its body for an
+ * interaction `render` cannot emit; the first two may throw on a live object, which
+ * {@link decodeRedacted} refuses.
  *
  * @param input The JSON form as the host handed it over.
  * @returns The redacted item, or {@link InvalidRedacted} at stage `decode`.
@@ -364,15 +449,29 @@ const decodeJson = (input: unknown): Result.Result<Redacted, InvalidRedacted> =>
           stage: "decode",
         }),
       )
-    : Result.mapBoth(Schema.decodeUnknownResult(RedactedSchema)(input), {
-        onFailure: (schemaError) =>
-          new InvalidRedacted({ issue: schemaError.message, stage: "decode" }),
-        onSuccess: (fields: RedactedFields) => brandRedacted(fields),
-      });
+    : Result.flatMap(
+        Result.mapError(
+          Schema.decodeUnknownResult(RedactedSchema)(input),
+          (schemaError) => new InvalidRedacted({ issue: schemaError.message, stage: "decode" }),
+        ),
+        (fields: RedactedFields) =>
+          Option.match(misplacedInteraction(fields.body), {
+            onNone: () => Result.succeed(brandRedacted(fields)),
+            onSome: (issue) => Result.fail(new InvalidRedacted({ issue, stage: "decode" })),
+          }),
+      );
 
 /**
  * Check the JSON form of a redacted item and make the {@link Redacted} `render` takes. It never
  * throws, whatever it is handed.
+ *
+ * It checks the JSON's shape, every field against {@link RedactedSchema}, and one rule of the
+ * body's content: no interaction stands, at any depth, inside a Choice's Prompt or a choice's
+ * content or inside an Extended Text's Prompt, where QTI's schema admits none and `render` cannot
+ * emit one, so `render` never meets such an interaction in a `Redacted` it returns. It checks the
+ * item against no other rule of QTI's, so a host trusts redacted JSON only as far as the item it
+ * came from; the emitter still keeps only the HTML subset's elements and attributes, and the URLs
+ * `url.ts` keeps.
  *
  * @param input The JSON form as the host handed it over: the {@link RedactedJson}
  *   {@link encodeRedacted} wrote, after any JSON round trip. A count written as a JSON number is
@@ -380,8 +479,9 @@ const decodeJson = (input: unknown): Result.Result<Redacted, InvalidRedacted> =>
  *   deep, which no item the reader accepts reaches. So is a live object that throws when read,
  *   such as one hiding a deep field in its prototype or a non-enumerable property, or holding a
  *   getter that throws; plain JSON data never does.
- * @returns The redacted item, branded only after every field passed {@link RedactedSchema}, or
- *   {@link InvalidRedacted} at stage `decode` naming what does not fit.
+ * @returns The redacted item, branded only after every field passed {@link RedactedSchema} and its
+ *   body held no interaction where `render` cannot emit one, or {@link InvalidRedacted} at stage
+ *   `decode` naming what does not fit.
  */
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The JSON form arrives from the host as any value, and this is the check that parses it.
 export const decodeRedacted = (input: unknown): Result.Result<Redacted, InvalidRedacted> =>

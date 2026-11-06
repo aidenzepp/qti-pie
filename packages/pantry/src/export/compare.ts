@@ -5,7 +5,7 @@ import { listPackage, readEntry } from "#pantry/package/read.ts";
 import type { PackageReadError } from "#pantry/package/read.ts";
 import type { ZipRefusal } from "#pantry/package/zip.ts";
 import { recordTypes, soleFileTypes } from "#pantry/import/record.ts";
-import { collapse } from "#pantry/import/tree.ts";
+import { collapse } from "#pantry/import/whitespace.ts";
 import { rootOfType } from "#pantry/schema/seed/root-of-type.ts";
 import { canonicalize } from "@qti-pie/crust/canonical.ts";
 import type { ReaderRefusal, WellFormednessError } from "@qti-pie/crust/errors.ts";

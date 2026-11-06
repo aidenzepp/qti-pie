@@ -19,6 +19,8 @@ import * as expression from "#pantry/schema/expression.ts";
 import * as expressionAttributes from "#pantry/schema/expression-attributes.ts";
 import * as document from "#pantry/schema/document.ts";
 import * as feedback from "#pantry/schema/feedback.ts";
+import * as foreignAttributes from "#pantry/schema/foreign-attributes.ts";
+import * as foreign from "#pantry/schema/foreign.ts";
 import * as html from "#pantry/schema/html.ts";
 import * as htmlMedia from "#pantry/schema/html/media.ts";
 import * as htmlStructure from "#pantry/schema/html/structure.ts";
@@ -39,12 +41,20 @@ import * as node from "#pantry/schema/node.ts";
 import * as outcome from "#pantry/schema/outcome.ts";
 import * as pkg from "#pantry/schema/package.ts";
 import * as processing from "#pantry/schema/processing.ts";
+import * as reference from "#pantry/schema/reference.ts";
 import * as rubric from "#pantry/schema/rubric.ts";
 import * as rule from "#pantry/schema/rule.ts";
 import * as coords from "#pantry/schema/shapes.ts";
+import * as stimulus from "#pantry/schema/stimulus.ts";
 import * as template from "#pantry/schema/template.ts";
+import * as testContent from "#pantry/schema/test/content.ts";
+import * as testControl from "#pantry/schema/test/control.ts";
+import * as testProcessing from "#pantry/schema/test/processing.ts";
+import * as testRules from "#pantry/schema/test/rules.ts";
+import * as testStructure from "#pantry/schema/test/structure.ts";
 import * as usage from "#pantry/schema/usage.ts";
 import * as value from "#pantry/schema/value.ts";
+import * as xlink from "#pantry/schema/xlink.ts";
 
 /**
  * The arm of each `NodeKind` handle, one relation per handle.
@@ -79,10 +89,16 @@ export const nodeArms = {
   ...textInteraction.arms,
   ...other.arms,
   ...feedback.arms,
+  ...foreign.arms,
   ...template.arms,
   ...rubric.arms,
   ...mapping.arms,
   ...lang.arms,
+  ...testStructure.arms,
+  ...testControl.arms,
+  ...testRules.arms,
+  ...testContent.arms,
+  ...stimulus.arms,
 };
 
 export const Qti = schema(
@@ -117,6 +133,9 @@ export const Qti = schema(
     ...textInteraction.relations,
     ...other.relations,
     ...feedback.relations,
+    ...foreign.relations,
+    ...foreignAttributes.relations,
+    ...xlink.relations,
     ...template.relations,
     ...rubric.relations,
     ...mapping.relations,
@@ -124,6 +143,12 @@ export const Qti = schema(
     ...outcome.relations,
     ...csm.relations,
     ...usage.relations,
+    ...testStructure.relations,
+    ...testControl.relations,
+    ...testRules.relations,
+    ...testContent.relations,
+    ...stimulus.relations,
+    ...reference.relations,
     StatisticKind: usage.StatisticKind,
     TargetObjectType: usage.TargetObjectType,
   },
@@ -136,6 +161,7 @@ export const Qti = schema(
     ...value.rules,
     ...interaction.rules,
     ...processing.rules,
+    ...testProcessing.rules,
     ...expression.rules,
     ...expressionAttributes.rules,
     ...rule.rules,
@@ -157,6 +183,9 @@ export const Qti = schema(
     ...textInteraction.rules,
     ...other.rules,
     ...feedback.rules,
+    ...foreign.rules,
+    ...foreignAttributes.rules,
+    ...xlink.rules,
     ...template.rules,
     ...rubric.rules,
     ...mapping.rules,
@@ -164,6 +193,12 @@ export const Qti = schema(
     ...outcome.rules,
     ...csm.rules,
     ...usage.rules,
+    ...testStructure.rules,
+    ...testControl.rules,
+    ...testRules.rules,
+    ...testContent.rules,
+    ...stimulus.rules,
+    ...reference.rules,
     contained(on(node.Node, "kind"), on(node.NodeKind, "id")),
     ...node.NodeKind.handles.map((kind) =>
       mirrors(on(select(node.Node, { kind }), "id"), on(nodeArms[kind], "id")),

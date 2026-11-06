@@ -140,6 +140,11 @@ interface MetadataCut {
    */
   readonly counts: Readonly<Record<string, number>>;
   readonly name: FixtureName;
+  /**
+   * The copies made from the positive, each differing from it in its manifest or its record. They
+   * are named negatives for most, which a rule refuses; `filelom-qmd` is grouped here for its
+   * manifest and is not refused (its file-level `qtiMetadata` is stored as foreign content).
+   */
   readonly negatives: readonly FixtureName[];
   /**
    * The number of content packaging `resource` elements in the positive's manifest.
@@ -575,17 +580,15 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts (pack
     ),
   );
 
-  it.effect("extmeta's record is the published metadata with no xml:lang attribute", () =>
+  it.effect("extmeta's record is the published metadata, xml:lang included", () =>
     inFreshRoot(() =>
       Effect.gen(function* externalRecord() {
         const fs = yield* FileSystem.FileSystem;
         const dir = yield* materialize("extmeta");
         const record = yield* fs.readFileString(`${dir}/meta/choice.xml`);
 
-        assert.notInclude(record, "xml:lang");
-        assert.include(record, "<string>jacs</string>");
-        assert.include(record, "<string>Mathematics</string>");
-        assert.isBelow(record.length, 2726);
+        assert.include(record, '<string xml:lang="en">jacs</string>');
+        assert.include(record, '<string xml:lang="en">Mathematics</string>');
         assert.deepStrictEqual(yield* filesUnder(dir), [
           "choice.xml",
           "images/sign.png",

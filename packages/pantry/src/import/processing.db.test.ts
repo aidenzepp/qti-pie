@@ -81,8 +81,10 @@ const roundTripped = [
  * `integerOrVariableString` both are, so the refusal names content's rule, the side the
  * forward-merge plan's F2 took for identical pairs). `padded-literal` is not refused: decision 157
  * reads its identifier literal with outer whitespace removed, so it is in `roundTripped`.
- * `p29-test-variables-weight-integer` has a test root, which the reader refuses as
- * `unmodeled-vocabulary`; its XML path is M4's. Five packages hold content's vocabulary
+ * `p29-test-variables-weight-integer` is a bare `qti-outcome-processing` listed as an item, a root
+ * the reader dispatches to no builder, so `documentRows` refuses it as `unmodeled-vocabulary`
+ * before the package stage's test pass could check it; its P29 is `check.test.ts`'s, over a
+ * hand-written test environment. Five packages hold content's vocabulary
  * (`qti-template-declaration`, `qti-context-declaration`, `qti-match-table`) that the reader
  * refuses on this branch, so their XML path is the join's (`join-m1-m3.db.test.ts`):
  * `p22-string-into-lookup`, `p25-number-correct-in-template`, `p26-template-reads-response` and

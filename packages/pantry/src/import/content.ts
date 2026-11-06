@@ -20,14 +20,13 @@ import { requiredAttribute } from "#pantry/import/required.ts";
 import type { DeclaredVariable, NodeRef } from "#pantry/import/interactions.ts";
 import {
   closedOf,
-  collapse,
   ItemRefusal,
-  replace,
   Rows,
   typedAttribute,
   valueText,
   withParents,
 } from "#pantry/import/tree.ts";
+import { collapse, replace } from "#pantry/import/whitespace.ts";
 import type { NodeIndex, UnmodeledVocabulary } from "#pantry/import/tree.ts";
 import {
   BaseType,
@@ -43,6 +42,8 @@ import {
 import {
   RecordFieldIdentifier,
   ShowHideIdentifier,
+  StimulusRefHref,
+  StimulusRefIdentifier,
   VariableReference,
 } from "#pantry/schema/contracts.ts";
 import type { DeclarationKind, DeclarationShape } from "#pantry/schema/declaration.ts";
@@ -64,7 +65,7 @@ import {
   TemplateFeedbackBlock,
 } from "#pantry/schema/feedback.ts";
 import { Edge, Node } from "#pantry/schema/node.ts";
-import type { AttributeNameHandle, NodeKindHandle } from "#pantry/schema/node.ts";
+import type { AttributeNameHandle, NodeKindHandle, RootKindHandle } from "#pantry/schema/node.ts";
 import * as patterns from "#pantry/schema/patterns.ts";
 import { BooleanLiteral, ShowHide, XsBoolean } from "#pantry/schema/content/rosters.ts";
 import {
@@ -96,6 +97,7 @@ import {
   TemplateContentRef,
   TemplateInline,
 } from "#pantry/schema/template.ts";
+import { ItemStimulusRef, ItemStimulusRefTitle } from "#pantry/schema/stimulus.ts";
 import * as values from "#pantry/schema/value.ts";
 import type { Element } from "@qti-pie/crust/tree.ts";
 
@@ -122,6 +124,7 @@ interface Context {
   readonly documentId: Uuid;
   readonly nodes: NodeIndex;
   readonly positions: ReadonlyMap<Uuid, bigint>;
+  readonly root: RootKindHandle;
   readonly variables: ReadonlyMap<string, KnownVariable>;
   readonly versions: ReadonlyMap<Uuid, string>;
 }
@@ -447,6 +450,15 @@ const typedVariable = (
 };
 
 /**
+ * Whether the document binds its feedback and printed variables into declarations of its own: an
+ * item and a test do. A section declares nothing, so each test that reaches it binds them, and a
+ * stimulus stores them bare (goal 5.15), so neither document writes a reference row or is refused
+ * `binding-declared` for one.
+ */
+const bindsVariables = (context: Context): boolean =>
+  context.root === "item" || context.root === "test";
+
+/**
  * Write a feedback's reference to the outcome it reads.
  */
 const feedbackRef = Effect.fn("import.feedbackRef")(function* feedbackRef(
@@ -455,6 +467,10 @@ const feedbackRef = Effect.fn("import.feedbackRef")(function* feedbackRef(
   identifier: string,
   context: Context,
 ): Effect.fn.Return<Rows, ItemRefusal> {
+  if (!bindsVariables(context)) {
+    return rows;
+  }
+
   const found = typedVariable(context.variables, identifier);
   if (Option.isNone(found)) {
     return yield* undeclared(
@@ -485,6 +501,10 @@ const templateContentRef = Effect.fn("import.templateContentRef")(function* temp
   identifier: string,
   context: Context,
 ): Effect.fn.Return<Rows, ItemRefusal> {
+  if (context.root === "stimulus") {
+    return rows;
+  }
+
   const found = typedVariable(context.variables, identifier);
   if (Option.isNone(found)) {
     return yield* undeclared(
@@ -769,6 +789,10 @@ const printedRows = Effect.fn("import.printedRows")(function* printedRows(
     written(field, (value) => ({ node: node.id, value: judgedLater(value) })),
   );
 
+  if (!bindsVariables(context)) {
+    return built;
+  }
+
   const printed = context.variables.get(identifier);
   if (printed === undefined) {
     return yield* undeclared(
@@ -925,10 +949,41 @@ type Builder = (
 ) => Effect.Effect<Rows, ImportRefused | ItemRefusal>;
 
 /**
+ * The rows of a `qti-assessment-stimulus-ref`: the reference with the `identifier` and `href` it
+ * must write, and its `title` when it wrote one.
+ */
+const stimulusRefRows = Effect.fn("import.stimulusRefRows")(function* stimulusRefRows(
+  rows: Rows,
+  element: Element,
+  node: NodeRef,
+  context: Context,
+): Effect.fn.Return<Rows, ItemRefusal> {
+  const attributes = attributeReader(rows, element, node);
+  const identifier = yield* requiredAttribute(element, "identifier", attributes.read("identifier"));
+  const href = yield* requiredAttribute(element, "href", attributes.read("href"));
+  const title = attributes.read("title");
+  const built = Rows.add(attributes.rows(), ItemStimulusRef, [
+    {
+      document: context.documentId,
+      href: StimulusRefHref(href),
+      id: node.id,
+      identifier: StimulusRefIdentifier(identifier),
+    },
+  ]);
+
+  return Rows.add(
+    built,
+    ItemStimulusRefTitle,
+    written(title, (value) => ({ node: node.id, value })),
+  );
+});
+
+/**
  * The builder of each kind that has attributes or references; the thin kinds are written by
  * {@link thinRows}.
  */
 const builders: ReadonlyMap<NodeKindHandle, Builder> = new Map<NodeKindHandle, Builder>([
+  ["qti-assessment-stimulus-ref", stimulusRefRows],
   ["qti-feedback-block", feedbackRows],
   ["qti-feedback-block.template", feedbackRows],
   ["qti-feedback-inline", feedbackRows],
@@ -997,6 +1052,10 @@ const declarationPass = Effect.fn("import.content.declarationPass")(function* de
  * @param root - The item's root element.
  * @param nodes - The node index of the item's tree.
  * @param documentId - The id of the item's document, which is also its tree's.
+ * @param documentRoot - The root kind of the document: a `section` document declares nothing, so
+ *   its feedback and printed variables bind to no declaration, and neither do a `stimulus`
+ *   document's, nor its template content (a stimulus stores them bare); an `item` or a `test`
+ *   binds them into its own declarations.
  * @param declarations - The variables the item's response and outcome declarations name, by
  *   identifier, as the item pass wrote them.
  * @param rows - The rows so far, which hold the item's tree.
@@ -1010,6 +1069,7 @@ export const contentRows = Effect.fn("import.contentRows")(function* contentRows
   root: Element,
   nodes: NodeIndex,
   documentId: Uuid,
+  documentRoot: RootKindHandle,
   declarations: ReadonlyMap<string, DeclaredVariable>,
   rows: Rows,
 ): Effect.fn.Return<Rows, UnmodeledVocabulary | ItemRefusal | ImportRefused> {
@@ -1018,6 +1078,7 @@ export const contentRows = Effect.fn("import.contentRows")(function* contentRows
     documentId,
     nodes,
     positions: new Map(Rows.of(rows, Edge).map((edge) => [edge.child, edge.position])),
+    root: documentRoot,
     versions: new Map(Rows.of(rows, Node).map((node) => [node.id, node.version])),
   };
   const declared = yield* declarationPass(walked, nodes, declarations, rows, base);

@@ -43,16 +43,19 @@ interface Crossing {
 /**
  * The specifiers the core may not load (rules `b454bdf7` and `6f47762b`, and the composition
  * ruling `a9d04969` point 1, so the one `"."` entry stays callable anywhere): the dev playground,
- * test support, the Node-only corpus reader, every Node built-in, the HTML parser the tests use,
- * the QTI database package and grizzle. One that ends in `/` or `:` forbids every specifier it
- * begins; any other forbids itself and its subpaths.
+ * the conformance ledger, test support, the Node-only corpus reader, every Node built-in, the HTML
+ * parser the tests use, the browser driver the browser tests use, the QTI database package and
+ * grizzle. One that ends in `/` or `:` forbids every specifier it begins; any other forbids itself
+ * and its subpaths.
  */
 const forbiddenSpecifiers: readonly string[] = [
   "#plate/dev/",
+  "#plate/ledger/",
   "#plate/test/",
   "#plate/document/corpus.ts",
   "node:",
   "parse5",
+  "playwright-core",
   "@qti-pie/pantry",
   "@bjornpagen/grizzle",
 ];
@@ -160,6 +163,7 @@ describe("the core boundary's scanner", () => {
   it("forbids each listed specifier and its subpaths, and nothing else", () => {
     const forbidden = [
       "#plate/dev/serve.ts",
+      "#plate/ledger/view.ts",
       "#plate/test/imports.ts",
       "#plate/document/corpus.ts",
       "node:fs",
@@ -168,6 +172,8 @@ describe("the core boundary's scanner", () => {
       "parse5/dist/index.js",
       "@qti-pie/pantry",
       "@bjornpagen/grizzle/schema",
+      "playwright-core",
+      "playwright-core/lib/server",
     ];
     const allowed = [
       "effect",
@@ -205,10 +211,25 @@ const closure = valueClosure(modules, ["src/index.ts"]);
 /**
  * The parts of `package.json` this witness reads.
  */
-const Manifest = Schema.Struct({ exports: Schema.Record(Schema.String, Schema.String) });
+const Manifest = Schema.Struct({
+  dependencies: Schema.Record(Schema.String, Schema.String),
+  devDependencies: Schema.Record(Schema.String, Schema.String),
+  exports: Schema.Record(Schema.String, Schema.String),
+});
+
+/**
+ * Read plate's `package.json`, once per case, so a manifest that does not decode fails only the
+ * cases that read it.
+ *
+ * @returns The parts of the manifest {@link Manifest} names.
+ */
+const readManifest = (): typeof Manifest.Type =>
+  Schema.decodeUnknownSync(Manifest)(
+    JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf-8")),
+  );
 
 describe("the core, from src/index.ts", () => {
-  it("loads no dev playground, test support, corpus reader, Node built-in, parse5, pantry or grizzle", () => {
+  it("loads no dev playground, ledger, test support, corpus reader, Node built-in, parse5, playwright-core, pantry or grizzle", () => {
     assert.deepStrictEqual(crossings(modules, ["src/index.ts"]), []);
   });
 
@@ -240,13 +261,16 @@ describe("the core, from src/index.ts", () => {
   });
 
   it("publishes src/index.ts as the exports map's only script module", () => {
-    const manifest = Schema.decodeUnknownSync(Manifest)(
-      JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf-8")),
-    );
-
     assert.deepStrictEqual(
-      Object.entries(manifest.exports).filter(([, target]) => /\.[cm]?[jt]s$/u.test(target)),
+      Object.entries(readManifest().exports).filter(([, target]) => /\.[cm]?[jt]s$/u.test(target)),
       [[".", "./src/index.ts"]],
     );
+  });
+
+  it("holds playwright-core at exactly 1.64.1 among the devDependencies, never the dependencies", () => {
+    const { dependencies, devDependencies } = readManifest();
+
+    assert.strictEqual(devDependencies["playwright-core"], "1.64.1");
+    assert.notProperty(dependencies, "playwright-core");
   });
 });

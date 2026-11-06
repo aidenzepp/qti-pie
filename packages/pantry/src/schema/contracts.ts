@@ -8,8 +8,8 @@
  * `types/schema/statements.ts:155-164`). A contract name shares the relation name space (grizzle
  * `physical/ddl/domains.ts:341-366`), so no name here is the name of a relation of `Qti`.
  *
- * There are 86 contracts written out below. The 64 value-arm contracts are minted from the context
- * table of `value.ts` in `value-contracts.ts`, which this module cannot import: 150 in all.
+ * There are 101 contracts written out below. The 64 value-arm contracts are minted from the context
+ * table of `value.ts` in `value-contracts.ts`, which this module cannot import: 165 in all.
  */
 /* oxlint-disable anti-slop/no-shape-in-symbol-names -- `ShapeCoords` is the contract of the coordinates of an HTML shape, a name the contracts document settles; it is not a structural description. */
 import { contract, str } from "@bjornpagen/grizzle";
@@ -73,11 +73,92 @@ export const ChoiceIdentifier = contract("ChoiceIdentifier", str.regex(patterns.
 export const TemplateParameterName = contract("TemplateParameterName", str.regex(patterns.ncName));
 
 /**
- * A reference to an assessment section by identifier.
+ * The identifier of a test part, an assessment section or an assessment item reference of a test
+ * (the `identifier` columns of the test-structure relations).
  *
  * The base is `patterns.ncName`.
  */
-export const SectionReference = contract("SectionReference", str.regex(patterns.ncName));
+export const TestStructureIdentifier = contract(
+  "TestStructureIdentifier",
+  str.regex(patterns.ncName),
+);
+
+/**
+ * The identifier of an assessment stimulus reference (the `identifier` column of the
+ * stimulus-reference relation).
+ *
+ * The base is `patterns.ncName`.
+ */
+export const StimulusRefIdentifier = contract("StimulusRefIdentifier", str.regex(patterns.ncName));
+
+/**
+ * The identifier of an adaptive engine reference (the `identifier` column of the adaptive-reference
+ * relation).
+ *
+ * The base is `patterns.ncName`.
+ */
+export const AdaptiveRefIdentifier = contract("AdaptiveRefIdentifier", str.regex(patterns.ncName));
+
+/**
+ * The name of a variable on either side of a test variable mapping (the `sourceIdentifier` and
+ * `targetIdentifier` columns of the variable-mapping relation).
+ *
+ * The base is `patterns.ncName`.
+ */
+export const MappedVariableName = contract("MappedVariableName", str.regex(patterns.ncName));
+
+/**
+ * The `href` of an assessment item reference (the `href` column of the item-reference relation).
+ *
+ * The base is `patterns.anyUri`.
+ */
+export const ItemRefHref = contract("ItemRefHref", str.regex(patterns.anyUri));
+
+/**
+ * The `href` of an assessment section reference (the `href` column of the section-reference
+ * relation).
+ *
+ * The base is `patterns.anyUri`.
+ */
+export const SectionRefHref = contract("SectionRefHref", str.regex(patterns.anyUri));
+
+/**
+ * The `href` of an assessment stimulus reference (the `href` column of the stimulus-reference
+ * relation).
+ *
+ * The base is `patterns.anyUri`.
+ */
+export const StimulusRefHref = contract("StimulusRefHref", str.regex(patterns.anyUri));
+
+/**
+ * The `href` of an adaptive engine reference (the `href` column of the adaptive-reference
+ * relation).
+ *
+ * The base is `patterns.anyUri`.
+ */
+export const AdaptiveRefHref = contract("AdaptiveRefHref", str.regex(patterns.anyUri));
+
+/**
+ * The `value` of a weight of a test structure (the `value` column of the weight relation).
+ *
+ * The base is `patterns.xsDouble`.
+ */
+export const WeightValue = contract("WeightValue", str.regex(patterns.xsDouble));
+
+/**
+ * A time limit in seconds (the `minTime` and `maxTime` columns of the time-limit relations).
+ *
+ * The base is `patterns.nonNegativeDouble`.
+ */
+export const TimeLimitSeconds = contract("TimeLimitSeconds", str.regex(patterns.nonNegativeDouble));
+
+/**
+ * A bound of a slider interaction (the `lowerBound` and `upperBound` columns of
+ * `SliderInteraction`).
+ *
+ * The base is `patterns.nonNegativeDouble`.
+ */
+export const SliderBound = contract("SliderBound", str.regex(patterns.nonNegativeDouble));
 
 /**
  * The Java-style class name of a custom operator.
@@ -561,6 +642,41 @@ export const AccessModeAdapted = contract(
   "AccessModeAdapted",
   str.regex(patterns.drdAccessModeAdapted),
 );
+
+/**
+ * The local name of a foreign element.
+ *
+ * The base is `patterns.ncName`.
+ */
+export const XmlLocalName = contract("XmlLocalName", str.regex(patterns.ncName));
+
+/**
+ * The URI an `xlink:href` locates.
+ *
+ * The base is `patterns.anyUri`.
+ */
+export const XlinkHrefUri = contract("XlinkHrefUri", str.regex(patterns.anyUri));
+
+/**
+ * The URI an `xlink:role` names.
+ *
+ * The base is `patterns.anyUri`.
+ */
+export const XlinkRoleUri = contract("XlinkRoleUri", str.regex(patterns.anyUri));
+
+/**
+ * The URI an `xlink:arcrole` names.
+ *
+ * The base is `patterns.anyUri`.
+ */
+export const XlinkArcroleUri = contract("XlinkArcroleUri", str.regex(patterns.anyUri));
+
+/**
+ * The name an `xlink:label` gives a resource or locator.
+ *
+ * The base is `patterns.ncName`.
+ */
+export const XlinkLabelName = contract("XlinkLabelName", str.regex(patterns.ncName));
 
 /**
  * The value of the `definitionURL` attribute of a MathML element: the URI of the definition that

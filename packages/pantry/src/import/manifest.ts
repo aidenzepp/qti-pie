@@ -13,14 +13,8 @@ import type { AnyRelation, Fact, Uuid } from "@bjornpagen/grizzle";
 import { Effect, Option, Schema } from "effect";
 import type { FileSystem, PlatformError } from "effect";
 import { attributeRows } from "#pantry/import/attributes.ts";
-import {
-  closedOf,
-  collapse,
-  replace,
-  Rows,
-  treeRows,
-  typedAttribute,
-} from "#pantry/import/tree.ts";
+import { closedOf, Rows, treeRows, typedAttribute } from "#pantry/import/tree.ts";
+import { collapse, replace } from "#pantry/import/whitespace.ts";
 import type { NodeIndex, UnmodeledVocabulary } from "#pantry/import/tree.ts";
 import { classed, contentOf, elementChildren, qmdLeafRows } from "#pantry/import/leaf.ts";
 import { recordFile, recordTypes, soleFileTypes } from "#pantry/import/record.ts";
@@ -192,9 +186,16 @@ interface LomFindings {
 }
 
 /**
- * The type of the resource whose record holds exactly one object identifier and one object title.
+ * The type of an item resource, whose record holds exactly one object identifier and one object
+ * title.
  */
 const itemType = "imsqti_item_xmlv3p0";
+
+/**
+ * The type of a test resource, whose record holds exactly one object identifier and one object
+ * title.
+ */
+const testType = "imsqti_test_xmlv3p0";
 
 /**
  * The facts of one element of a `lom:lom` subtree a kind's arm copies.
@@ -1073,7 +1074,7 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
       add(md.ResourceLomTitled, [bound]);
     }
 
-    if (resource.type !== itemType) {
+    if (resource.type !== itemType && resource.type !== testType) {
       return;
     }
 

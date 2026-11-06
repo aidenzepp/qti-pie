@@ -14,7 +14,8 @@ import { Effect, Option, Schema } from "effect";
 import type { Uuid } from "@bjornpagen/grizzle";
 import type { ImportRefused, Rule } from "#pantry/import/refusal.ts";
 import { closedOf, Rows, spelledInteger, typedAttribute, valueText } from "#pantry/import/tree.ts";
-import type { NodeIndex, UnmodeledVocabulary, WhiteSpace } from "#pantry/import/tree.ts";
+import type { NodeIndex, UnmodeledVocabulary } from "#pantry/import/tree.ts";
+import type { WhiteSpace } from "#pantry/import/whitespace.ts";
 import type {
   AttributeValue,
   IncludeNode,
@@ -24,9 +25,12 @@ import type {
   RuleOrExpressionKind,
 } from "#pantry/processing/ast.ts";
 import { checkProcessing } from "#pantry/processing/check.ts";
-import type { PId } from "#pantry/processing/check.ts";
-import type { Environment, Mode } from "#pantry/processing/env.ts";
+import type { CheckResult, PId } from "#pantry/processing/check.ts";
+import { resolvePrefixed } from "#pantry/processing/env.ts";
+import type { Environment, Mode, ResolvedReading } from "#pantry/processing/env.ts";
 import { literalOrRef, parseProcessing } from "#pantry/processing/parse.ts";
+import type { PrefixedForm } from "#pantry/processing/prefixed.ts";
+import type { StructureHolder } from "#pantry/schema/content/rosters.ts";
 import {
   BooleanLiteral,
   MathConstantName,
@@ -38,7 +42,11 @@ import {
   XIncludeParseValue,
   XsBoolean,
 } from "#pantry/schema/content/rosters.ts";
-import { XIncludeUri } from "#pantry/schema/contracts.ts";
+import {
+  MappedVariableName,
+  TestStructureIdentifier,
+  XIncludeUri,
+} from "#pantry/schema/contracts.ts";
 import { BaseType } from "#pantry/schema/declaration.ts";
 import * as expression from "#pantry/schema/expression.ts";
 import * as attributed from "#pantry/schema/expression-attributes.ts";
@@ -76,6 +84,8 @@ export class ProcessingRefused extends Schema.TaggedError<ProcessingRefused>()(
       "P26",
       "P27",
       "P29",
+      "item-duration",
+      "prefixed-ref",
     ]),
   },
 ) {
@@ -88,11 +98,47 @@ export class ProcessingRefused extends Schema.TaggedError<ProcessingRefused>()(
 }
 
 /**
+ * One structure holder a test reaches, as a prefixed name or a `section-identifier` names it: the
+ * node that holds the identifier, its kind and, for an item reference that resolved to an item,
+ * that item's document.
+ */
+export interface StructureEntry {
+  readonly holder: Uuid;
+  readonly holderKind: (typeof StructureHolder.handles)[number];
+  readonly itemDocument: Option.Option<Uuid>;
+}
+
+/**
+ * The test a processing tree is resolved in: its document and every identifier its reach holds.
+ *
+ * A test document is resolved in its own test, so `test` is its `document`.
+ */
+export interface TestScope {
+  readonly structure: ReadonlyMap<string, StructureEntry>;
+  readonly test: Uuid;
+}
+
+/**
+ * One test that reaches a section document: the environment the document is checked in under it,
+ * the test's own scope, and its identifier as written, to name it in a refusal.
+ */
+export interface SectionTest {
+  readonly env: Environment;
+  readonly name: string;
+  readonly scope: TestScope;
+}
+
+/**
  * What {@link processingRows} needs beside the rows: the processing root, the node each of its
  * elements became, the document and tree it belongs to, and the environment it is checked in.
  *
  * `document` is the id of the document whose declarations a reference names and `tree` the id of
- * the tree whose nodes the rows hang from; an item's document and tree share one id.
+ * the tree whose nodes the rows hang from; an item's document and tree share one id. `test` is
+ * present for a tree checked in `test` mode under a test: a prefixed name that tree resolves, and a
+ * `section-identifier` it names, write their per-test rows against it. `tests` is present, instead,
+ * for a section document: one entry for each test that reaches it, possibly none. Its tree is
+ * checked once under each, its rows are written once, and a reference or `section-identifier`
+ * that a test resolves writes that test's rows.
  */
 export interface ProcessingInput {
   readonly document: Uuid;
@@ -102,6 +148,8 @@ export interface ProcessingInput {
   readonly nodes: NodeIndex;
   readonly root: Element;
   readonly rootKind: RootKindHandle;
+  readonly test?: TestScope;
+  readonly tests?: readonly SectionTest[];
   readonly tree: Uuid;
   readonly version: SchemaVersionHandle;
 }
@@ -166,6 +214,10 @@ const guidance: Readonly<Record<PId, string>> = {
   P27: "it names a variable that has no mapping of the kind it needs. Declare the mapping or name another variable.",
   P29: "a weighted test variable must be a float. Set base-type to float or remove the weight.",
   P8: "it names a variable that no declaration of the document declares and no built-in provides. Declare the variable, or correct the identifier.",
+  "item-duration":
+    "it reads the duration of an item that is not time dependent. Set the item's time-dependent to true or do not read its duration.",
+  "prefixed-ref":
+    "its prefixed variable name does not name exactly one variable of the test. Name one item reference, part or section and one of its variables, or declare the name whole.",
 };
 
 /**
@@ -178,15 +230,51 @@ const placeOf = (position: Position): string =>
   position.path.length === 0 ? "the root" : position.path.join("/");
 
 /**
+ * What a test's reach calls the identifier a reading names, for a refusal's detail.
+ */
+const namesOf = (prefix: string, env: Environment): string => {
+  const kind = env.reach.get(prefix)?.kind;
+
+  return kind === "item-ref" ? "item reference" : (kind ?? "identifier");
+};
+
+/**
+ * Say each reading of an ambiguous prefixed name: what its prefix names, the prefix, the instance
+ * as written when there is one, and the variable.
+ */
+const readingsOf = (readings: readonly PrefixedForm[], env: Environment): string =>
+  readings
+    .map((reading) => {
+      const instance =
+        reading.instance === undefined ? "" : `, instance ${reading.instance.spelling}`;
+
+      return `the ${namesOf(reading.prefix, env)} ${reading.prefix}${instance} with the variable ${reading.variable}`;
+    })
+    .join("; or ");
+
+/**
  * The detail of a checker refusal: the element, its place and the rule's reason.
  *
- * @param rule - The rule the checker named.
- * @param kind - The refused element's kind.
- * @param position - Where the element stands.
+ * A prefixed name that two or more readings resolve says each reading and what to rename, so that
+ * one reading alone names a variable.
+ *
+ * @param refusal - The checker's refusal: the rule, the refused element's kind, where it stands and
+ *   the readings that resolved.
+ * @param env - The environment the tree was checked in, whose reach names each reading's prefix.
  * @returns The sentence that names the element and what to change.
  */
-const detailOf = (rule: PId, kind: string, position: Position): string =>
-  `${kind} at ${placeOf(position)} is refused: ${guidance[rule]}`;
+const detailOf = (
+  refusal: Extract<CheckResult, { readonly _tag: "refused" }>,
+  env: Environment,
+): string => {
+  const { kind, position, readings, rule } = refusal;
+  const where = `${kind} at ${placeOf(position)} is refused: `;
+  if (rule === "prefixed-ref" && readings.length > 1) {
+    return `${where}its prefixed variable name reads as ${readingsOf(readings, env)}, and the test names more than one of them. Rename the item reference, part, section or variable so that one reading alone names a variable.`;
+  }
+
+  return `${where}${guidance[rule]}`;
+};
 
 /**
  * An expression as the row builder and the required-attribute scan read it: the untyped AST's
@@ -195,6 +283,7 @@ const detailOf = (rule: PId, kind: string, position: Position): string =>
 interface ExpressionLike {
   readonly attributes: ReadonlyMap<string, AttributeValue>;
   readonly element: Element;
+  readonly includes: readonly IncludeNode[];
   readonly kind: RuleOrExpressionKind;
   readonly operands: readonly ExpressionLike[];
   readonly position: Position;
@@ -229,6 +318,17 @@ interface Flat {
 const nothing: Flat = { expressions: [], includes: [], ordered: [], rules: [] };
 
 /**
+ * An include and the includes inside its foreign children, in document order.
+ *
+ * @param node - The include.
+ * @returns The include first, then the ones it holds.
+ */
+const flattenInclude = (node: IncludeNode): readonly IncludeNode[] => [
+  node,
+  ...node.includes.flatMap(flattenInclude),
+];
+
+/**
  * Flatten an expression and its operands, in document order.
  *
  * @param node - The expression at the top of the subtree.
@@ -239,7 +339,10 @@ const flattenExpression = (node: ExpressionLike): Flat => {
 
   return {
     expressions: [node, ...inner.flatMap((found) => found.expressions)],
-    includes: [],
+    includes: [
+      ...node.includes.flatMap(flattenInclude),
+      ...inner.flatMap((found) => found.includes),
+    ],
     ordered: [node, ...inner.flatMap((found) => found.ordered)],
     rules: [],
   };
@@ -254,7 +357,7 @@ const flattenExpression = (node: ExpressionLike): Flat => {
  */
 const flattenRule = (node: IncludeNode | RuleLike): Flat => {
   if (node.kind === "xi:include") {
-    return { ...nothing, includes: [node] };
+    return { ...nothing, includes: flattenInclude(node) };
   }
 
   const own = Option.match(node.expression, { onNone: () => nothing, onSome: flattenExpression });
@@ -262,7 +365,7 @@ const flattenRule = (node: IncludeNode | RuleLike): Flat => {
 
   return {
     expressions: [...own.expressions, ...nested.flatMap((found) => found.expressions)],
-    includes: nested.flatMap((found) => found.includes),
+    includes: [...own.includes, ...nested.flatMap((found) => found.includes)],
     ordered: [node, ...own.ordered, ...nested.flatMap((found) => found.ordered)],
     rules: [node, ...nested.flatMap((found) => found.rules)],
   };
@@ -488,13 +591,286 @@ const arity: ReadonlyMap<
 );
 
 /**
+ * The item-session built-in a prefixed name resolved to, as its roster handle.
+ */
+const builtInOf = (name: string) => processing.BuiltIn.handles.find((handle) => handle === name);
+
+/**
+ * The scopes a tree writes per-test rows against: the one test a test document is resolved in, or
+ * each test that reaches a section document.
+ */
+const scopesOf = (input: ProcessingInput): readonly TestScope[] =>
+  input.tests === undefined
+    ? Option.toArray(Option.fromNullishOr(input.test))
+    : input.tests.map((reaching) => reaching.scope);
+
+/**
+ * Write the hub of a reference's prefixed variable for one test, and the source arm it names: the
+ * item reference the prefix names, that item's document and where the variable comes from.
+ *
+ * @param rows - The rows so far.
+ * @param document - The document that holds the reference.
+ * @param scope - The test the reference is resolved in.
+ * @param ref - The reference's node.
+ * @param refKind - The reference kind the hub belongs to.
+ * @param resolution - The one reading that resolved, from an item reference.
+ * @returns The rows with the hub and source added, and none when the prefix names no holder.
+ */
+const sourceRows = (
+  rows: Rows,
+  document: Uuid,
+  scope: TestScope,
+  ref: Uuid,
+  refKind: (typeof processing.RefKind.handles)[number],
+  resolution: ResolvedReading,
+): Rows => {
+  const { reading, source } = resolution;
+  const holder = scope.structure.get(reading.prefix);
+  if (holder === undefined || source === "duration") {
+    return rows;
+  }
+
+  const itemDocument = Option.getOrThrow(holder.itemDocument);
+  const built = Rows.add(rows, processing.PrefixedVariableSource, [
+    {
+      document,
+      itemDocument,
+      itemRef: holder.holder,
+      prefix: TestStructureIdentifier(reading.prefix),
+      ref,
+      refKind,
+      source,
+      test: scope.test,
+    },
+  ]);
+  const own = { ref, test: scope.test };
+  if (source === "declared") {
+    return Rows.add(built, processing.PrefixedDeclared, [
+      { ...own, itemDocument, variable: judgedLater(reading.variable) },
+    ]);
+  }
+
+  if (source === "mapped") {
+    return Rows.add(built, processing.PrefixedMapped, [
+      { ...own, itemRef: holder.holder, variable: MappedVariableName(reading.variable) },
+    ]);
+  }
+
+  return Rows.add(
+    built,
+    processing.PrefixedBuiltIn,
+    Option.toArray(Option.fromNullishOr(builtInOf(reading.variable))).map((builtIn) => ({
+      ...own,
+      builtIn,
+    })),
+  );
+};
+
+/**
+ * Write the `SectionDurationTarget` of a reference to a part's or section's `duration` for one
+ * test: the structure node its prefix names and that node's kind.
+ *
+ * @param rows - The rows so far.
+ * @param document - The document that holds the reference.
+ * @param scope - The test the reference is resolved in.
+ * @param ref - The reference's node.
+ * @param refKind - The reference kind the target belongs to.
+ * @param prefix - The resolving reading's prefix.
+ * @returns The rows with the target added, and none when the prefix names no holder.
+ */
+const durationTargetRows = (
+  rows: Rows,
+  document: Uuid,
+  scope: TestScope,
+  ref: Uuid,
+  refKind: (typeof processing.RefKind.handles)[number],
+  prefix: string,
+): Rows => {
+  const holder = scope.structure.get(prefix);
+
+  return holder === undefined
+    ? rows
+    : Rows.add(rows, processing.SectionDurationTarget, [
+        {
+          document,
+          holder: holder.holder,
+          holderKind: holder.holderKind,
+          prefix: TestStructureIdentifier(prefix),
+          ref,
+          refKind,
+          test: scope.test,
+        },
+      ]);
+};
+
+/**
+ * Write the rows of a prefixed name the checker resolved in the test: its `VariableRef` row, the
+ * arm that keeps its spelling, and either the hub and the source arm that name where an item
+ * reference's variable comes from, or the `SectionDurationTarget` of a part's or section's
+ * `duration`.
+ *
+ * The prefix and the variable are the resolving reading's, so `J.K.SCORE` of an item reference
+ * `J.K` is the prefix `J.K` and the variable `SCORE`, and `I.A.B` of `I` the variable `A.B`
+ * (reading 37).
+ *
+ * @param rows - The rows so far.
+ * @param input - The processing input.
+ * @param scope - The test the name is resolved in.
+ * @param node - The referring node.
+ * @param resolution - The one reading that resolved.
+ * @returns The rows with the reference added.
+ */
+const prefixedRows = (
+  rows: Rows,
+  input: ProcessingInput,
+  scope: TestScope,
+  node: NodeEntry,
+  resolution: ResolvedReading,
+): Rows => {
+  const { reading, source } = resolution;
+  if (!scope.structure.has(reading.prefix)) {
+    return rows;
+  }
+
+  const prefix = TestStructureIdentifier(reading.prefix);
+  const variable = judgedLater(reading.variable);
+  const arm = { document: input.document, id: node.id, prefix, root: input.rootKind };
+  if (source === "duration") {
+    return durationTargetRows(
+      Rows.add(
+        Rows.add(rows, processing.VariableRef, [
+          { document: input.tree, id: node.id, kind: "sectionDuration" },
+        ]),
+        processing.SectionDurationRef,
+        [arm],
+      ),
+      input.document,
+      scope,
+      node.id,
+      "sectionDuration",
+      reading.prefix,
+    );
+  }
+
+  const refKind = reading.instance === undefined ? "itemVariable" : "itemInstanceVariable";
+  let built = Rows.add(rows, processing.VariableRef, [
+    { document: input.tree, id: node.id, kind: refKind },
+  ]);
+  if (reading.instance === undefined) {
+    built = Rows.add(built, processing.ItemVariableRef, [{ ...arm, variable }]);
+  } else {
+    const { spelling, value } = reading.instance;
+    built = Rows.add(built, processing.ItemInstanceVariableRef, [
+      { ...arm, instance: value, variable },
+    ]);
+    built = Rows.add(
+      built,
+      processing.ItemInstanceSpelling,
+      spelling === String(value) ? [] : [{ ref: node.id, value: judgedLater(spelling) }],
+    );
+  }
+
+  return sourceRows(built, input.document, scope, node.id, refKind, resolution);
+};
+
+/**
+ * Write the rows of a section document's reference that no built-in name covers: its
+ * `VariableRef` and `SectionVariableRef` as written, once, and for each reaching test the
+ * `SectionVariableResolution` row and the arm of what the test makes of the name.
+ *
+ * A name the test declares whole is `declared`; otherwise the test's reach resolves it, to a
+ * part's or section's `duration` (`duration`, with its `SectionDurationTarget`) or to a variable of
+ * an item reference (`prefixed`, with its hub and source). Neither writes a prefixed arm: the
+ * reference keeps the identifier as written, whichever test reads it.
+ *
+ * @param rows - The rows so far.
+ * @param input - The processing input of the section document.
+ * @param node - The referring node.
+ * @param identifier - The processed identifier it names.
+ * @returns The rows with the reference and its per-test rows added.
+ */
+const sectionVariableRows = (
+  rows: Rows,
+  input: ProcessingInput,
+  node: NodeEntry,
+  identifier: string,
+): Rows => {
+  let built = Rows.add(
+    Rows.add(rows, processing.VariableRef, [
+      { document: input.tree, id: node.id, kind: "sectionVariable" },
+    ]),
+    processing.SectionVariableRef,
+    [
+      {
+        document: input.document,
+        id: node.id,
+        identifier: judgedLater(identifier),
+        referrerKind: node.kind,
+        root: input.rootKind,
+      },
+    ],
+  );
+  for (const { env, scope } of input.tests ?? []) {
+    const own = { ref: node.id, test: scope.test };
+    const declaration = env.declarations.get(identifier);
+    if (declaration !== undefined) {
+      built = Rows.add(built, processing.SectionVariableResolution, [
+        { document: input.document, ref: node.id, target: "declared", test: scope.test },
+      ]);
+      built = Rows.add(built, processing.SectionVariableDeclared, [
+        {
+          ...own,
+          declarationKind: declaration.kind,
+          identifier: judgedLater(identifier),
+          referrerKind: node.kind,
+        },
+      ]);
+      continue;
+    }
+
+    const resolution = resolvePrefixed(identifier, env);
+    if (resolution._tag !== "resolved") {
+      continue;
+    }
+
+    const duration = resolution.source === "duration";
+    built = Rows.add(built, processing.SectionVariableResolution, [
+      {
+        document: input.document,
+        ref: node.id,
+        target: duration ? "duration" : "prefixed",
+        test: scope.test,
+      },
+    ]);
+    if (duration) {
+      built = Rows.add(built, processing.SectionVariableDuration, [own]);
+      built = durationTargetRows(
+        built,
+        input.document,
+        scope,
+        node.id,
+        "sectionVariable",
+        resolution.reading.prefix,
+      );
+    } else {
+      built = Rows.add(built, processing.SectionVariablePrefixed, [own]);
+      built = sourceRows(built, input.document, scope, node.id, "sectionVariable", resolution);
+    }
+  }
+
+  return built;
+};
+
+/**
  * Write the references of a node that names a variable: the `VariableRef` row and the arm for the
  * way it names it.
  *
  * A name the document declares is a declared reference with its declaring kind; a name only the
- * mode provides is a built-in; in a template document any other name is a template parameter; in
- * any other mode a name nothing declares has no arm, and the checker has already refused it in an
- * `item`.
+ * mode provides is a built-in; in a test with a reach, a name its reach resolves as prefixed has
+ * the prefixed arm and its per-test rows; in a section document any other name is a section
+ * variable, resolved under each reaching test; in a template document any other name is a template
+ * parameter; in any other mode a name nothing declares has no arm, and the checker has already
+ * refused it in an `item`.
  *
  * @param rows - The rows so far.
  * @param input - The processing input.
@@ -508,7 +884,8 @@ const referenceRows = (
   node: NodeEntry,
   identifier: string,
 ): Rows => {
-  const declaration = input.env.declarations.get(identifier);
+  const declaration =
+    input.tests === undefined ? input.env.declarations.get(identifier) : undefined;
   if (declaration !== undefined) {
     return Rows.add(
       Rows.add(rows, processing.VariableRef, [
@@ -538,6 +915,15 @@ const referenceRows = (
       processing.BuiltInRef,
       [{ id: node.id, name: builtIn, referrerKind: node.kind }],
     );
+  }
+
+  if (input.tests !== undefined) {
+    return sectionVariableRows(rows, input, node, identifier);
+  }
+
+  const resolution = input.mode === "test" ? resolvePrefixed(identifier, input.env) : undefined;
+  if (resolution?._tag === "resolved" && input.test !== undefined) {
+    return prefixedRows(rows, input, input.test, node, resolution);
   }
 
   if (input.mode !== "template") {
@@ -604,22 +990,54 @@ interface Arm {
 }
 
 /**
+ * The `SectionIdentifierTarget` rows of a `section-identifier`: one for each test the tree is
+ * resolved in that names a section or a section reference by it.
+ */
+const sectionTargets = (input: ProcessingInput, id: Uuid, identifier: Option.Option<string>) =>
+  Option.toArray(identifier).flatMap((own) =>
+    scopesOf(input).flatMap((scope) => {
+      const held = scope.structure.get(own);
+
+      return held?.holderKind !== "section" && held?.holderKind !== "sectionRef"
+        ? []
+        : [
+            {
+              document: input.document,
+              holderKind: held.holderKind,
+              identifier: TestStructureIdentifier(own),
+              node: id,
+              test: scope.test,
+            },
+          ];
+    }),
+  );
+
+/**
  * Read the three category and section filters of an outcome-only expression and return the writer
  * of their rows, to be called after the node's last read.
  *
+ * A `section-identifier` that names a section or a section reference of a test the tree is
+ * resolved in also gets its `SectionIdentifierTarget` row for that test; one that names nothing
+ * there has none.
+ *
  * @param attributes - The node's reader.
+ * @param input - The processing input, whose test resolves a section identifier.
  * @returns A function that adds the filter rows for the written ones.
  */
-const filtersOf = (attributes: Reader) => {
+const filtersOf = (attributes: Reader, input: ProcessingInput) => {
   const section = attributes.read("section-identifier");
   const include = attributes.read("include-category");
   const exclude = attributes.read("exclude-category");
 
   return (rows: Rows, id: Uuid): Rows => {
     const withSection = Rows.add(
-      rows,
-      expression.ExpressionSectionIdentifier,
-      written(section, (own) => ({ node: id, value: judgedLater(own) })),
+      Rows.add(
+        rows,
+        expression.ExpressionSectionIdentifier,
+        written(section, (own) => ({ node: id, value: judgedLater(own) })),
+      ),
+      expression.SectionIdentifierTarget,
+      sectionTargets(input, id, section),
     );
     const withInclude = Rows.add(
       withSection,
@@ -699,12 +1117,12 @@ const roundingFigures = Effect.fn("import.processing.roundingFigures")(function*
  * @returns The rows with the bound's added.
  */
 const outcomeBoundRows = (
-  { attributes, entry }: Arm,
+  { attributes, entry, input }: Arm,
   thin: typeof attributed.OutcomeMaximumArm | typeof attributed.OutcomeMinimumArm,
 ): Rows => {
   const outcome = need(attributes.read("outcome-identifier"));
   const weight = attributes.read("weight-identifier");
-  const filters = filtersOf(attributes);
+  const filters = filtersOf(attributes, input);
   const built = Rows.add(attributes.rows(), attributed.OutcomeMinMax, [
     { id: entry.id, kind: entry.kind, outcomeIdentifier: judgedLater(outcome) },
   ]);
@@ -1072,11 +1490,12 @@ const countedArmBuilders: Readonly<
   "qti-test-variables": Effect.fn("import.processing.testVariables")(function* testVariables({
     attributes,
     entry,
+    input,
   }: Arm) {
     const variable = need(attributes.read("variable-identifier"));
     const baseType = attributes.read("base-type");
     const weight = attributes.read("weight-identifier");
-    const filters = filtersOf(attributes);
+    const filters = filtersOf(attributes, input);
     const baseTypeHandle = yield* Option.match(baseType, {
       onNone: () => Effect.succeed(Option.none<(typeof BaseType.handles)[number]>()),
       onSome: (own) =>
@@ -1202,7 +1621,7 @@ const expressionRows = Effect.fn("import.processing.expressionRows")(function* e
     return attributes.rows();
   }
 
-  const filters = countingKinds.has(node.kind) ? filtersOf(attributes) : undefined;
+  const filters = countingKinds.has(node.kind) ? filtersOf(attributes, input) : undefined;
   const identifier = referringKinds.has(node.kind)
     ? attributes.read("identifier")
     : Option.none<string>();
@@ -1347,14 +1766,14 @@ const ruleRows = (
  * `Fallback` of its `xi:fallback` child. The include is stored as written and never resolved.
  *
  * @param rows - The rows so far.
- * @param input - The processing input.
+ * @param nodes - The tree's node index, which names the fallback's node.
  * @param node - The include.
  * @param entry - The node it became.
  * @returns The rows with the include's added.
  */
 const includeRows = Effect.fn("import.processing.includeRows")(function* includeRows(
   rows: Rows,
-  input: ProcessingInput,
+  nodes: NodeIndex,
   node: IncludeNode,
   entry: NodeEntry,
 ): Effect.fn.Return<Rows, ImportRefused> {
@@ -1393,7 +1812,7 @@ const includeRows = Effect.fn("import.processing.includeRows")(function* include
     built,
     ruleSchema.Fallback,
     Option.toArray(node.fallback).flatMap((element) => {
-      const fallback = input.nodes.get(element);
+      const fallback = nodes.get(element);
 
       return fallback === undefined ? [] : [{ id: fallback.id }];
     }),
@@ -1456,15 +1875,25 @@ export const processingRows = Effect.fn("import.processingRows")(function* proce
     });
   }
 
-  const checked = checkProcessing(ast, input.env);
-  if (checked._tag === "refused") {
+  for (const reaching of input.tests ?? []) {
+    const refused = checkProcessing(ast, reaching.env);
+    if (refused._tag === "refused") {
+      return yield* new ProcessingRefused({
+        detail: `Under the test ${reaching.name}, ${detailOf(refused, reaching.env)}`,
+        rule: refused.rule,
+      });
+    }
+  }
+
+  const checked = input.tests === undefined ? checkProcessing(ast, input.env) : undefined;
+  if (checked?._tag === "refused") {
     return yield* new ProcessingRefused({
-      detail: detailOf(checked.rule, checked.kind, checked.position),
+      detail: detailOf(checked, input.env),
       rule: checked.rule,
     });
   }
 
-  const tree = flatten(checked.typed.rules);
+  const tree = flatten(checked === undefined ? ast.rules : checked.typed.rules);
   let built = rows;
   for (const node of tree.expressions) {
     const entry = input.nodes.get(node.element);
@@ -1492,7 +1921,7 @@ export const processingRows = Effect.fn("import.processingRows")(function* proce
 
   for (const node of tree.includes) {
     const entry = input.nodes.get(node.element);
-    built = entry === undefined ? built : yield* includeRows(built, input, node, entry);
+    built = entry === undefined ? built : yield* includeRows(built, input.nodes, node, entry);
   }
 
   const root = input.nodes.get(input.root);

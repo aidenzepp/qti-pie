@@ -17,19 +17,19 @@ const slot = <I extends InteractionKey>(interaction: I, part: PartOf<I>): string
   rowFor(interaction, part).slot;
 
 /**
- * Build one Choice row as the part table lays it out: `li > [Control, Label > [Indicator, text]]`,
+ * Build one Choice row as the part table lays it out: `li > [Control, Label > [Indicator, ...]]`,
  * the Control named by `aria-labelledby` and the Label pointing back with `for`.
  *
  * @param response The response identifier the row's ids are scoped by.
  * @param key The choice identifier.
- * @param label The choice text.
+ * @param label The nodes the Label holds after its Indicator.
  * @param control Attributes merged over the Control's defaults.
  * @returns The Choice row.
  */
-const choiceRow = (
+const contentRow = (
   response: string,
   key: string,
-  label: string,
+  label: readonly Node[],
   control: Attributes = {},
 ): Element =>
   h("li", { "data-slot": slot("choice-interaction", "choice") }, [
@@ -53,10 +53,26 @@ const choiceRow = (
         h("span", { "aria-hidden": "true", "data-slot": slot("choice-interaction", "indicator") }, [
           text("o"),
         ]),
-        text(label),
+        ...label,
       ],
     ),
   ]);
+
+/**
+ * Build one Choice row whose Label holds text after its Indicator.
+ *
+ * @param response The response identifier the row's ids are scoped by.
+ * @param key The choice identifier.
+ * @param label The choice text.
+ * @param control Attributes merged over the Control's defaults.
+ * @returns The Choice row.
+ */
+const choiceRow = (
+  response: string,
+  key: string,
+  label: string,
+  control: Attributes = {},
+): Element => contentRow(response, key, [text(label)], control);
 
 /**
  * Build the Choices list holding the rows.
@@ -212,6 +228,32 @@ describe("textOf", () => {
     ]);
     assert.strictEqual(textOf(label), "Paris France");
   });
+
+  it("counts an img's alt, below the element and as the element itself", () => {
+    const flag = h("img", { alt: "French flag", src: "images/fr.png" });
+    const label = h("label", {}, [
+      h("span", { "aria-hidden": "true" }, [h("img", { alt: "Hidden", src: "images/x.png" })]),
+      h("img", { src: "images/blank.png" }),
+      flag,
+    ]);
+    assert.strictEqual(textOf(label), "French flag");
+    assert.strictEqual(textOf(flag), "French flag");
+  });
+
+  it("counts an element's aria-label in place of its subtree, unless it is blank or hidden", () => {
+    const swatch = h("span", { "aria-label": "Green swatch", role: "img" }, [text("Ignored")]);
+    const flag = h("img", { alt: "Ignored", "aria-label": "French flag", src: "images/fr.png" });
+    const label = h("label", {}, [
+      text("Pick "),
+      swatch,
+      text(" or "),
+      h("span", { "aria-label": " \n " }, [text("this")]),
+      h("span", { "aria-hidden": "true", "aria-label": "Hidden" }, []),
+    ]);
+    assert.strictEqual(textOf(label), "Pick Green swatch or this");
+    assert.strictEqual(textOf(swatch), "Green swatch");
+    assert.strictEqual(textOf(flag), "French flag");
+  });
 });
 
 describe("nameOf", () => {
@@ -245,6 +287,21 @@ describe("nameOf", () => {
     const tree = h("div", {}, [submit, input]);
     assert.strictEqual(nameOf(submit, tree), "Submit");
     assert.strictEqual(nameOf(input, tree), "");
+  });
+
+  it("names a fieldset by its first legend child, after aria-label", () => {
+    const fieldset = h("fieldset", {}, [
+      text(" "),
+      h("legend", {}, [text("Pick a city")]),
+      h("legend", {}, [text("Ignored")]),
+    ]);
+    assert.strictEqual(nameOf(fieldset, fieldset), "Pick a city");
+
+    const labelled = h("fieldset", { "aria-label": "Cities" }, fieldset.children);
+    assert.strictEqual(nameOf(labelled, labelled), "Cities");
+
+    const nested = h("fieldset", {}, [h("div", {}, [h("legend", {}, [text("Deep")])])]);
+    assert.strictEqual(nameOf(nested, nested), "");
   });
 });
 
@@ -290,6 +347,38 @@ describe("isFocusable", () => {
     const stray = h("summary", {}, [text("More")]);
     assert.isFalse(isFocusable(stray, h("div", {}, [stray])));
   });
+
+  it("refuses a control under a disabled fieldset unless it sits in that fieldset's first legend", () => {
+    const inLegend = h("input", { type: "checkbox" });
+    const deepInLegend = h("button", {}, [text("Help")]);
+    const inLaterLegend = h("input", { type: "text" });
+    const inBody = h("select", {});
+    const widget = h("div", { tabindex: "-1" });
+    const fieldset = h("fieldset", { disabled: true }, [
+      text(" "),
+      h("legend", {}, [inLegend, h("span", {}, [deepInLegend])]),
+      h("legend", {}, [inLaterLegend]),
+      h("p", {}, [inBody, widget]),
+    ]);
+    assert.isTrue(isFocusable(inLegend, fieldset));
+    assert.isTrue(isFocusable(deepInLegend, fieldset));
+    assert.isFalse(isFocusable(inLaterLegend, fieldset));
+    assert.isFalse(isFocusable(inBody, fieldset));
+    assert.isTrue(isFocusable(widget, fieldset));
+  });
+
+  it("keeps a control under an enabled fieldset, and refuses one an outer disabled fieldset holds", () => {
+    const control = h("input", { type: "text" });
+    const inner = h("fieldset", {}, [h("legend", {}, [control])]);
+    assert.isTrue(isFocusable(control, h("div", {}, [inner])));
+
+    const shielded = h("input", { type: "text" });
+    const outer = h("fieldset", { disabled: true }, [
+      h("legend", {}, [text("Outer")]),
+      h("fieldset", { disabled: true }, [h("legend", {}, [shielded])]),
+    ]);
+    assert.isFalse(isFocusable(shielded, outer));
+  });
 });
 
 describe("checkTree", () => {
@@ -306,6 +395,14 @@ describe("checkTree", () => {
       checksOf(item([status, essay({ "aria-labelledby": "q1-ESSAY-prompt" }), submit])),
       [],
     );
+  });
+
+  it("passes a Choice whose Labels hold only an image, named by its alt", () => {
+    const flags = choice("Which flag is France's?", [
+      contentRow("RESPONSE", "A", [h("img", { alt: "French flag", src: "images/fr.png" })]),
+      contentRow("RESPONSE", "B", [h("img", { alt: "British flag", src: "images/gb.png" })]),
+    ]);
+    assert.deepStrictEqual(checksOf(item([status, flags, submit])), []);
   });
 
   it("passes autofocus on the Status region", () => {
@@ -351,6 +448,36 @@ describe("checkTree", () => {
         path: ["qti-assessment-item", "form", "fieldset", "ul", "li", "input"],
       },
     ]);
+  });
+
+  it("label-name: skips a row whose Label gives no text; control-name still asks the Control for a name", () => {
+    const decorative = [h("img", { alt: "", src: "images/green.png" })];
+    const unlabelled = (key: string, control: Attributes): Element => {
+      const [, label] = contentRow("RESPONSE", key, decorative).children;
+
+      return h("li", { "data-slot": slot("choice-interaction", "choice") }, [
+        h("input", {
+          "data-slot": slot("choice-interaction", "control"),
+          id: `q1-RESPONSE-${key}`,
+          name: "q1-RESPONSE",
+          type: "radio",
+          value: key,
+          ...control,
+        }),
+        ...(label === undefined ? [] : [label]),
+      ]);
+    };
+    const named = choice("Which swatch is green?", [
+      unlabelled("A", { "aria-label": "Choice 1 of 2" }),
+      choiceRow("RESPONSE", "B", "Blue"),
+    ]);
+    const nameless = choice("Which swatch is green?", [
+      contentRow("RESPONSE", "A", decorative),
+      choiceRow("RESPONSE", "B", "Blue"),
+    ]);
+
+    assert.deepStrictEqual(checksOf(item([status, named, submit])), []);
+    assert.deepStrictEqual(checksOf(item([status, nameless, submit])), ["control-name"]);
   });
 
   it("nested-label: a label inside a label, reported once for the inner label", () => {
@@ -399,6 +526,56 @@ describe("checkTree", () => {
     assert.deepStrictEqual(checksOf(item([status, essay({ "aria-label": "Essay" }), submit])), [
       "prompt-name",
     ]);
+  });
+
+  it("prompt-name: an Extended Text group of Controls its Prompt does not name", () => {
+    const [prompt, control] = essay({ "aria-label": "Answer 1 of 2" }).children;
+    const second = h("textarea", {
+      "aria-label": "Answer 2 of 2",
+      "data-slot": slot("extended-text-interaction", "control"),
+      id: "q1-ESSAY-1",
+      name: "q1-ESSAY",
+    });
+    const group = (root: Attributes) =>
+      h("qti-extended-text-interaction", root, [prompt ?? text(""), control ?? text(""), second]);
+    const marker = { "data-slot": slot("extended-text-interaction", "root") };
+
+    assert.deepStrictEqual(
+      checksOf(
+        item([
+          status,
+          group({ ...marker, "aria-labelledby": "q1-ESSAY-prompt", role: "group" }),
+          submit,
+        ]),
+      ),
+      [],
+    );
+    assert.deepStrictEqual(
+      checksOf(item([status, group({ ...marker, "aria-label": "Essay", role: "group" }), submit])),
+      ["prompt-name"],
+    );
+    assert.deepStrictEqual(
+      checksOf(item([status, group({ ...marker, "aria-labelledby": "q1-ESSAY-prompt" }), submit])),
+      ["prompt-name"],
+    );
+  });
+
+  it("prompt-name: an Extended Text with a Prompt, no Control and no Notice", () => {
+    const [prompt] = essay({}).children;
+    const bare = h(
+      "qti-extended-text-interaction",
+      { "data-slot": slot("extended-text-interaction", "root") },
+      [prompt ?? text("")],
+    );
+    const capped = h(bare.tag, bare.attrs, [
+      ...bare.children,
+      h("span", { "data-slot": slot("item", "notice"), role: "note" }, [
+        text("Not supported here: min-strings>100"),
+      ]),
+    ]);
+
+    assert.deepStrictEqual(checksOf(item([status, bare, submit])), ["prompt-name"]);
+    assert.deepStrictEqual(checksOf(item([status, capped, submit])), []);
   });
 
   it("list-item: a stray li", () => {

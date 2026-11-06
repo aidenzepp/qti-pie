@@ -23,8 +23,9 @@ import type { ItemRecord } from "#plate/model/record.ts";
  * other response keeps the record's value; `numAttempts` goes up by one; the outcomes reset to
  * {@link outcomeDefaults}, because a non-adaptive item resets them before each response processing
  * run; the item's rules run over those variables, and with no processing the outcomes stay at their
- * defaults; `attempt` becomes `submitted`. The record passed in is not changed, on success or on
- * failure.
+ * defaults; `attempt` becomes `submitted`. The rules read the built-in `numAttempts` as the raised
+ * count, this attempt included, because QTI raises it at the start of each attempt. The record
+ * passed in is not changed, on success or on failure.
  *
  * @param item The item the record belongs to.
  * @param record The session record before the attempt.
@@ -34,6 +35,7 @@ import type { ItemRecord } from "#plate/model/record.ts";
  *   {@link EngineFailure}: a rule names an identifier the item or the variables do not hold, sets
  *   an outcome to a value of another type, or maps a response that has no mapping.
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#IV_Outcome
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#IV_Response
  */
 export const runAttempt = (
   item: Item,
@@ -41,6 +43,7 @@ export const runAttempt = (
   responses: ItemRecord["responses"],
 ): Result.Result<ItemRecord, EngineFailure> => {
   const before: Variables = {
+    numAttempts: BigInt(record.numAttempts) + 1n,
     outcomes: outcomeDefaults(item),
     responses: { ...record.responses, ...responses },
   };

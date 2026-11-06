@@ -183,7 +183,7 @@ const textEntryRows = Effect.fn("import.textEntryRows")(function* textEntryRows(
       base: judgedLater(Option.getOrElse(base, () => "10")),
       id: node.id,
       responseIdentifier,
-      rootKind: "item",
+      rootKind: ctx.rootKind,
     },
   ]);
   built = ctx.shared.markers(built, textEntryMarkers, node.id, attributes.written());
@@ -237,7 +237,7 @@ const extendedTextRows = Effect.fn("import.extendedTextRows")(function* extended
       id: node.id,
       minStrings: stringCountOf(Option.getOrElse(minStrings, () => "0")),
       responseIdentifier,
-      rootKind: "item",
+      rootKind: ctx.rootKind,
     },
   ]);
   built = ctx.shared.markers(built, extendedTextMarkers, node.id, attributes.written());
@@ -297,7 +297,7 @@ const inlineChoiceInteractionRows = Effect.fn("import.inlineChoiceInteractionRow
         minChoices: ChoiceCount(natural(Option.getOrElse(minChoices, () => "0"))),
         required: requiredHandle,
         responseIdentifier,
-        rootKind: "item",
+        rootKind: ctx.rootKind,
         shuffle: shuffleHandle,
       },
     ]);
