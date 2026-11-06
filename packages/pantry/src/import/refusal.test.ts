@@ -128,6 +128,13 @@ const assertMapped = (law: ImportLaw, rule: string): void => {
 };
 
 describe("the rules of the canonical wave's new laws", () => {
+  it("keys ForeignAttribute(node,prefix,local) wildcard-attribute", () => {
+    assertMapped(
+      { fields: ["node", "prefix", "local"], kind: "primaryKey", relation: "ForeignAttribute" },
+      "wildcard-attribute",
+    );
+  });
+
   it("keys AttributeSpelling attribute-lexical, as AttributeLexical is", () => {
     const spelling: ImportLaw = {
       fields: ["node", "attribute"],
