@@ -198,7 +198,17 @@ describe.skipIf(!cached)("Admission against the XSD", () => {
             }
 
             const data = new Set(admitted.filter((child) => !isElement(child)));
-            const expected = new Set(models.flatMap(characterDataOf));
+            // Spec reading 2: MathML's RelaxNG matches whitespace against `empty` (§2), which the
+            // XSD's empty content type does not admit (decision 321 (5)).
+            const readingTwoEmpty =
+              Option.exists(namespaceOf(parent), (namespace) => namespace === mathmlNamespace) &&
+              models.some(
+                (model) => !model.simple && !model.mixed && Option.isNone(model.particle),
+              );
+            const expected = new Set([
+              ...models.flatMap(characterDataOf),
+              ...(readingTwoEmpty ? ["ws"] : []),
+            ]);
             if (data.symmetricDifference(expected).size > 0) {
               differences.push(
                 `${root} ${version} ${parent} admits ${[...data].toSorted().join(",")} of character data, and its content type admits ${[...expected].toSorted().join(",")}`,
