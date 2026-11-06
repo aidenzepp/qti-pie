@@ -278,7 +278,7 @@ export const XmlStandalone = closed("XmlStandalone", ["none", "yes", "no"]);
  * pattern is the literal that bound gives, since `str.regex` reads a literal source; the bounds
  * box in `chardata.test.ts` holds it to `keyTextCodePoints`.
  */
-export const EntryPath = str.regex("^[^/].{0,255}.{0,255}.{0,137}$", "su");
+export const EntryPath = str.regex("^[^/].{0,255}.{0,255}.{0,135}$", "su");
 
 /**
  * A namespace declaration's prefix as written: an NCName, or empty for a default declaration
@@ -389,7 +389,7 @@ export const NamespaceUri = str.regex(`^${uriReference}$`);
  *
  * Exported for `src/import/refusal.ts`, which names its pattern law.
  */
-export const ForeignNamespace = str.regex(`^[${xmlChar}]{0,255}[${xmlChar}]{0,156}$`);
+export const ForeignNamespace = str.regex(`^[${xmlChar}]{0,255}[${xmlChar}]{0,154}$`);
 
 /**
  * An NCName: a foreign element's local name.
