@@ -74,8 +74,8 @@ const closedNameOf = (name: Name): Option.Option<ClosedName<Composed>> =>
 /**
  * Read the composed grammar as shred reads a grammar: its kind resolution, the `AttributeName`
  * roster's closed handles, `Admission`'s key set as the children each kind admits,
- * `AttributeAdmission`, `StrictlyHeld` with `HeldRootsUnder`'s patterns, each compiled once, and
- * the `TypeName` roster with each kind's declared type.
+ * `AttributeAdmission`, `ElementName`'s names, `StrictlyHeld` with `HeldRootsUnder`'s patterns,
+ * each compiled once, and the `TypeName` roster with each kind's declared type.
  *
  * @param grammar - The composed grammar.
  * @returns The grammar shred reads documents through.
@@ -88,6 +88,10 @@ export const shredGrammarOf = (grammar: ComposedGrammar): ShredGrammar<Composed>
     ]),
   );
 
+  const named: ReadonlySet<string> = new Set(
+    grammar.kinds.elementName.rows.map(({ local, namespace }) => `${namespace} ${local}`),
+  );
+
   return {
     admitsChild: (version, parent, child) =>
       Option.isSome(grammar.admission.lookup({ child, parent, version })),
@@ -98,6 +102,7 @@ export const shredGrammarOf = (grammar: ComposedGrammar): ShredGrammar<Composed>
     declaredType: (version, kind) => grammar.xsi.declaredType(version, kind),
     heldRoot: (version, parent, name) =>
       heldRoots.get(`${version} ${parent}`)?.test(expandedText(name)) ?? false,
+    named: (namespace, local) => named.has(`${namespace} ${local}`),
     resolve: (namespace, local, parent) =>
       grammar.kinds.resolve(namespace, local, parent).pipe(Option.flatMap(elementKindOf)),
     strictlyHeld: (version, parent, kind) =>

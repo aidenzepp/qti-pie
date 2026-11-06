@@ -2060,3 +2060,57 @@ describe("XLink's attributes (C30, spec reading 81)", () => {
       }),
   );
 });
+
+describe("a MathML element where the parent admits none (p6n-6)", () => {
+  it.effect(
+    "refuses m:annotation, m:sep and m:math directly in m:annotation-xml as mathml-foreign, and a MathML name no kind takes as unnamed: both versions",
+    () =>
+      // Oracle: the specification as a checker: MathML 3's `annotation-xml` content is `anyElement`
+      // outside MathML's own namespace, or MathML content its own models admit, so an `m:annotation`,
+      // `m:sep` or `m:math` is a MathML kind `m:annotation-xml` does not admit there (a kind the
+      // vocabulary reads), while `m:notanelement` is no MathML kind at all (MathML 3 RelaxNG,
+      // `mathml3-common.rnc` lines 15 and 61).
+      // Bound: three MathML kinds and one unnamed MathML name, in the 2 versions.
+      Effect.gen(function* mathmlNotAdmitted() {
+        const mathml = "http://www.w3.org/1998/Math/MathML";
+        const refusalOf = (version: Composed["version"], child: string) =>
+          Effect.flip(
+            reread(
+              new TextEncoder().encode(
+                `<qti-assessment-item xmlns="${asi}" xmlns:m="${mathml}" identifier="i" title="t" adaptive="false" time-dependent="false"><qti-item-body><p><m:math><m:semantics><m:mi>x</m:mi><m:annotation-xml encoding="x">${child}</m:annotation-xml></m:semantics></m:math></p></qti-item-body></qti-assessment-item>`,
+              ),
+              version,
+            ),
+          );
+
+        for (const version of schemaVersions) {
+          for (const [local, child] of [
+            ["annotation", '<m:annotation encoding="text/plain">y</m:annotation>'],
+            ["sep", "<m:sep/>"],
+            ["math", "<m:math/>"],
+          ] as const) {
+            assert.deepStrictEqual(
+              yield* refusalOf(version, child),
+              new UnmodeledVocabulary({
+                kind: "element",
+                name: `m:${local}`,
+                parent: Option.some("m:annotation-xml"),
+                reason: "mathml-foreign",
+              }),
+              `m:${local} in ${version}`,
+            );
+          }
+          assert.deepStrictEqual(
+            yield* refusalOf(version, "<m:notanelement/>"),
+            new UnmodeledVocabulary({
+              kind: "element",
+              name: "m:notanelement",
+              parent: Option.some("m:annotation-xml"),
+              reason: "unnamed",
+            }),
+            `m:notanelement in ${version}`,
+          );
+        }
+      }),
+  );
+});
