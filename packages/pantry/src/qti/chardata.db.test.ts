@@ -43,6 +43,7 @@ import { AuthorApp } from "#pantry/qti/logins.ts";
 import { manifestPath } from "#pantry/qti/package.ts";
 import { Author } from "#pantry/qti/roles.ts";
 import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
+import { isUriReference } from "#pantry/test/uri-reference.ts";
 import { mathmlNamespace } from "#pantry/vocab/namespaces.ts";
 
 /**
@@ -209,6 +210,122 @@ const deferredInsert = (client: Client, table: string, row: SqlRow, immediate: r
 
     return outcome;
   });
+
+/**
+ * Read the type one of `Qti`'s columns casts its values to: a grizzle text domain for a field of a
+ * pattern contract, by the name PostgreSQL prints it with.
+ *
+ * @param client - The session.
+ * @param table - The table.
+ * @param column - The column.
+ * @returns The domain's name, schema-qualified.
+ */
+const domainOf = (client: Client, table: string, column: string) =>
+  rowsOf<{ readonly domain: string }>(
+    client,
+    `SELECT a.atttypid::pg_catalog.regtype::text AS domain FROM pg_catalog.pg_attribute a
+      WHERE a.attrelid = pg_catalog.to_regclass($1) AND a.attname = $2 AND NOT a.attisdropped`,
+    [`${qtiSchema}.${table}`, column],
+  ).pipe(
+    Effect.map(
+      (rows) =>
+        rows[0]?.domain ?? assert.fail(`${table}.${column}: the catalogue holds no such column`),
+    ),
+  );
+
+/**
+ * Cast one text to a domain as the author role, and roll back: PostgreSQL's verdict on the value by
+ * the domain's CHECK, as a statement casts a value before any row's constraint (README, "Direct SQL
+ * access": a value its pattern refuses is 23514, as the statement casts it).
+ *
+ * @param client - The session.
+ * @param domain - The domain, as {@link domainOf} names it.
+ * @param text - The value.
+ * @returns The server's error, or none when the domain admits the value; fails with any other
+ *   failure.
+ */
+const castTo = (client: Client, domain: string, text: string) =>
+  Effect.gen(function* cast() {
+    yield* rowsOf(client, "BEGIN");
+
+    const outcome = yield* Effect.gen(function* statements() {
+      yield* rowsOf(client, `SET LOCAL ROLE ${authorRole}`);
+      yield* rowsOf(client, `SELECT $1::${domain} AS value`, [text]);
+    }).pipe(
+      Effect.as(Option.none<DatabaseError>()),
+      Effect.catch((error) =>
+        isServerError(error.cause) ? Effect.succeed(Option.some(error.cause)) : Effect.fail(error),
+      ),
+    );
+    yield* rowsOf(client, "ROLLBACK");
+
+    return outcome;
+  });
+
+/**
+ * Judge many texts by a domain in one statement as the author role: `pg_input_is_valid` reads each
+ * through the domain's input, its CHECK among it, and answers false for a value the domain refuses.
+ *
+ * @param client - The session.
+ * @param domain - The domain, as {@link domainOf} names it.
+ * @param texts - The values.
+ * @returns Each value's verdict, in order.
+ */
+const admittedBy = (client: Client, domain: string, texts: readonly string[]) =>
+  Effect.gen(function* admitted() {
+    yield* rowsOf(client, "BEGIN");
+    yield* rowsOf(client, `SET LOCAL ROLE ${authorRole}`);
+
+    const rows = yield* rowsOf<{ readonly admitted: boolean; readonly text: string }>(
+      client,
+      `SELECT t.text, pg_catalog.pg_input_is_valid(t.text, $2) AS admitted
+         FROM pg_catalog.unnest($1::text[]) WITH ORDINALITY AS t(text, at)
+        ORDER BY t.at`,
+      [[...texts], domain],
+    );
+    yield* rowsOf(client, "ROLLBACK");
+
+    return rows;
+  });
+
+/**
+ * The characters the namespace name box is drawn over: a letter, a digit, every delimiter whose
+ * place RFC 3986's grammar fixes, and a space, which no URI reference holds.
+ */
+const uriCharacters = ["a", "1", ".", ":", "/", "?", "#", "%", "@", "[", "]", " "] as const;
+
+/**
+ * Every text of at most three of {@link uriCharacters}, the empty one first: the small scope of
+ * namespace names, exhausted.
+ */
+const shortUris: readonly string[] = [0, 1, 2, 3].flatMap((length) =>
+  Array.from({ length: uriCharacters.length ** length }, (_, at) =>
+    Array.from(
+      { length },
+      (_unused, place) =>
+        uriCharacters[Math.floor(at / uriCharacters.length ** place) % uriCharacters.length],
+    ).join(""),
+  ),
+);
+
+/**
+ * Namespace names by name, each a case RFC 3986's grammar decides by one of its rules: the QTI
+ * namespace, a URN, a relative reference with every part, an IP literal, and the refusals spec
+ * reading 131 names (an unclosed IP literal, a space, a percent sign without two hex digits, a port
+ * that is no digits) with an IRI's character beyond ASCII and leading whitespace.
+ */
+const namedUris = [
+  "http://www.imsglobal.org/xsd/imsqtiasi_v3p0",
+  "urn:x:y",
+  "../a/b;c?d=e#f",
+  "http://[::1]/",
+  "http://[bad",
+  "a b",
+  "%zz",
+  "http://h:x/",
+  "http://\u{4F8B}.jp/",
+  " urn:x",
+] as const;
 
 /**
  * A uuid no stored row holds: the arms' rows below name it as their node.
@@ -745,6 +862,42 @@ describe.skipIf(!hasLease)("qti/chardata.db.test.ts, on the lease", () => {
               );
 
               assert.isUndefined(refused, refused?.message);
+            }
+          }).pipe(Effect.scoped),
+      );
+
+      it.effect(
+        "refuses a namespace name that is no RFC 3986 URI reference by NamespaceUri's domain, and admits a relative reference, as the specification's grammar judges every name of the box (spec reading 131)",
+        () =>
+          // Oracle: the law oracle's own recogniser of RFC 3986's `URI-reference`, Appendix A's
+          // grammar run rule by rule (`#pantry/test/uri-reference.ts`), against Namespaces in XML
+          // 1.0 §3 ("either a URI reference … or an empty string") and §2.1 (RFC 3986): PostgreSQL
+          // judges `Namespace.uri`'s domain, `NamespaceUri`'s pattern as grizzle installs it, and a
+          // refused name's cast is 23514 by the domain's CHECK, named `check` (rule
+          // `namespace-name`).
+          // Bound: the small scope exhausted, every name of at most three of twelve characters (1,885
+          // names, the empty one among them), and ten names drawn by name; one refused and one
+          // admitted cast besides.
+          Effect.gen(function* namespaceName() {
+            const client = yield* loginSession;
+            const domain = yield* domainOf(client, "namespace", "uri");
+
+            const refused = Option.getOrUndefined(yield* castTo(client, domain, "http://[bad"));
+            assert.strictEqual(refused?.code, "23514", refused?.message ?? "admitted");
+            assert.strictEqual(refused?.constraint, "check");
+            assert.isTrue(
+              refused?.dataType !== undefined && domain.endsWith(refused.dataType),
+              `the refusal names the domain ${domain}: ${refused?.dataType ?? "none"}`,
+            );
+
+            const relative = Option.getOrUndefined(yield* castTo(client, domain, "../a/b;c?d=e#f"));
+            assert.isUndefined(relative, relative?.message);
+
+            for (const { admitted, text } of yield* admittedBy(client, domain, [
+              ...shortUris,
+              ...namedUris,
+            ])) {
+              assert.strictEqual(admitted, isUriReference(text), JSON.stringify(text));
             }
           }).pipe(Effect.scoped),
       );
