@@ -357,6 +357,69 @@ A host can rely on these, and [`src/interactions/`](src/interactions/) documents
 interaction that plate renders collects a `point`, so `map_response_point` scores only a point
 your own control supplies.
 
+Inline processing runs every response rule, among them `qti-lookup-outcome-value` through a match
+or interpolation table, and `qti-exit-response`. A `qti-response-processing-fragment`'s rules run
+where the fragment stands. Of the 64 expressions QTI 3.0 defines, plate runs 50. Later stages of
+M3 bring the other 14:
+
+| Stage | Expressions | Lands with |
+| --- | --- | --- |
+| M3.b-2 | `qti-random`, `qti-random-integer`, `qti-random-float` | Template processing |
+| M3.b-3 | `qti-duration-lt`, `qti-duration-gte` | Duration values |
+| M3.b-3 | `qti-number-correct`, `qti-number-incorrect`, `qti-number-presented`, `qti-number-responded`, `qti-number-selected`, `qti-outcome-maximum`, `qti-outcome-minimum`, `qti-test-variables` | A test's outcome processing |
+| M3.b-4 | `qti-field-value` | Record values |
+
+Until M3.b-4 lands, the [ledger](#conformance-ledger) reports row I-9a (Response Processing: Full)
+as `limited`. Only a test's outcome processing may hold the eight expressions of the third row, so
+`open` refuses one in an item with `expression-placement`.
+
+The verdict marks processing that holds any of these, and that processing does not run, so `score`
+leaves the item's outcomes at their defaults:
+
+- One of the other six expressions in the table
+- An `xi:include`, which plate never fetches
+- A `%` coordinate in a `qti-inside`, or in an area mapping that `qti-map-response-point` reads
+- A `qti-pattern-match` pattern that plate cannot translate
+- A variable that plate holds no value for, such as a `file` response, a template variable or the
+  built-in `duration` of a time-dependent item
+
+The verdict marks `qti-custom-operator` too, but its processing runs, and the operator's value is
+NULL.
+
+`open` refuses each of these as pantry's processing checker does. The rows ruled `expression-type`
+and `undeclared-variable` judge inline response processing only.
+
+| Refused | Rule | pantry's rule |
+| --- | --- | --- |
+| A `qti-response-if` or `qti-response-else-if` whose condition is not a single `boolean` | `expression-type` | P21 |
+| An operand of a type its expression does not take | `expression-type` | P23 |
+| A reference attribute, such as `qti-index`'s `n`, that names a variable other than a single template or outcome variable of its base type | `expression-type` | P24 |
+| A reference attribute that names no declared variable | `undeclared-variable` | P8 |
+| The built-in `duration`, read in an item that is not time dependent | `undeclared-variable` | `item-duration` |
+| A `qti-lookup-outcome-value` that sets the built-in `completionStatus` | `undeclared-variable` | P9 |
+| A literal `figures` below 1, or below 0 in `decimalPlaces` mode | `attribute-type` | P10 |
+| A literal `n` of `qti-index` below 1 | `attribute-type` | P11 |
+| A `qti-equal` in `absolute` or `relative` mode that has no `tolerance` | `missing-attribute` | P36 |
+
+Integers are exact. `qti-sum`, `qti-subtract`, `qti-product` and `qti-lcm` give NULL for an
+integer result of more than 1,000,000 bits, and `qti-multiple`, `qti-ordered` and `qti-repeat`
+give NULL for a container of more than 1,000,000 values. Values written in an item or stored in a
+record are never bounded. These bounds limit size, not time. To score items you do not trust, call
+`score` and `advance` under a time limit, for example in a worker that you can stop.
+
+Where QTI makes an integer a float, an integer beyond the largest finite float becomes the largest
+finite float of its sign, not an infinity ([reading 45](../../docs/spec-readings.md)). The math
+functions, such as those of `qti-math-operator` and `qti-power`, run on plate's own port of FDLIBM
+5.3, so they give the same result in Node, Chromium and WebKit.
+
+Processing reads and sets the built-in `completionStatus`. It is `unknown` when the first
+attempt's processing starts, and each later attempt starts from the value the last one left. An
+item's `StoredRecord` holds it with the outcomes.
+
+The verdict marks an adaptive item `adaptive="true"`, and its processing runs as a non-adaptive
+item's. Each attempt starts from the declared defaults, so outcomes do not add up across attempts
+until M5.
+
 ## Server and browser
 
 The server keeps what `open` accepted, correct responses included. The browser gets only the HTML
@@ -503,3 +566,6 @@ specifications. Agents start at [`AGENTS.md`](../../AGENTS.md).
 ## License
 
 MIT
+
+[`src/engine/math.ts`](src/engine/math.ts) ports routines of FDLIBM 5.3, and [NOTICE](NOTICE)
+holds Sun's notice for them.
