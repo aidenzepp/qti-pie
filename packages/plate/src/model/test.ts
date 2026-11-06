@@ -20,6 +20,7 @@ import {
   xmlNamespace,
 } from "#plate/document/source.ts";
 import type { SourceAttribute, SourceDocument, SourceElement } from "#plate/document/source.ts";
+import { outcomeReporting } from "#plate/model/item.ts";
 import type { OutcomeDeclaration, UnsupportedFeature } from "#plate/model/item.ts";
 import { integerLexical, isModelled, parseElementText, trimXmlSpace } from "#plate/model/values.ts";
 import type { InvalidValue, Value } from "#plate/model/values.ts";
@@ -692,7 +693,8 @@ const defaultValueOf = (
   );
 
 /**
- * Read a test-level `qti-outcome-declaration` as the item model reads an item's.
+ * Read a test-level `qti-outcome-declaration` as the item model reads an item's, its six
+ * reporting attributes through the item model's own reader.
  *
  * @param build The build.
  * @param declaration The declaration.
@@ -719,9 +721,12 @@ const outcomeDeclaration = (
       return Option.none();
     }
 
+    const reporting = yield* outcomeReporting(declaration, (attribute, rule, detail) =>
+      refusal(build, rule, attributePath(pathOf(build, declaration), attribute), detail),
+    );
     const defaultValue = yield* defaultValueOf(build, declaration, read.value);
 
-    return Option.some({ ...read.value, defaultValue, identifier });
+    return Option.some({ ...read.value, ...reporting, defaultValue, identifier });
   });
 
 /**

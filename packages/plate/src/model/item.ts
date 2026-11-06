@@ -140,7 +140,28 @@ export interface ResponseDeclaration {
 }
 
 /**
+ * The views an outcome is reported to, the XSD's `ViewEnumDType`.
+ */
+export const views = [
+  "author",
+  "candidate",
+  "proctor",
+  "scorer",
+  "testConstructor",
+  "tutor",
+] as const;
+
+/**
+ * One of {@link views}.
+ */
+export type View = (typeof views)[number];
+
+/**
  * A `qti-outcome-declaration` of a modelled base type and cardinality (I-2).
+ *
+ * Its last six fields are the attributes Results Reporting mirrors on an `outcomeVariable`, each
+ * read as the XSD types it and none when the declaration does not carry it. No XSD default is
+ * filled in, so an absent `normal-minimum` is none, not 0. Nothing renders them.
  */
 export interface OutcomeDeclaration {
   readonly baseType: ModelledBaseType;
@@ -150,7 +171,56 @@ export interface OutcomeDeclaration {
    */
   readonly defaultValue: Option.Option<Value>;
   readonly identifier: string;
+  /**
+   * `interpretation`, an `xs:string`, as written.
+   */
+  readonly interpretation: Option.Option<string>;
+  /**
+   * `long-interpretation`, an `xs:anyURI`, with its whitespace collapsed. It is only ever copied
+   * into a result, never rendered or fetched, so it does not pass through `#plate/model/url.ts`.
+   */
+  readonly longInterpretation: Option.Option<string>;
+  /**
+   * `mastery-value`, an `xs:double`.
+   */
+  readonly masteryValue: Option.Option<number>;
+  /**
+   * `normal-maximum`, an `xs:double`. The structural check holds it above 0 (reading 16).
+   */
+  readonly normalMaximum: Option.Option<number>;
+  /**
+   * `normal-minimum`, an `xs:double`.
+   */
+  readonly normalMinimum: Option.Option<number>;
+  /**
+   * `view`, a list of {@link views} in the order written. The structural check holds it to at
+   * least one view (reading 17).
+   */
+  readonly view: Option.Option<readonly View[]>;
 }
+
+/**
+ * The six reporting attributes of an {@link OutcomeDeclaration}.
+ */
+export type OutcomeReporting = Pick<
+  OutcomeDeclaration,
+  | "interpretation"
+  | "longInterpretation"
+  | "masteryValue"
+  | "normalMaximum"
+  | "normalMinimum"
+  | "view"
+>;
+
+/**
+ * Construct the refusal of an attribute of the document being read, at that attribute's path.
+ * Each model passes its own, so a refusal names the document and path it was found in.
+ */
+export type AttributeRefusal = (
+  attribute: SourceAttribute,
+  rule: RefusalRule,
+  detail: Readonly<Record<string, string>>,
+) => Refusal;
 
 /**
  * An attribute of a body element as written, `xml:lang` under the name `xml:lang`.
@@ -1366,6 +1436,104 @@ const responseDeclaration = (
   });
 
 /**
+ * A run of XML whitespace, which an XSD list or a collapsed value reads as one space.
+ */
+const xmlWhitespaceRun = /[\t\n\r ]+/gu;
+
+/**
+ * Read an `xs:double` attribute as the XSD reads it (readings 7 and 56): outer whitespace goes,
+ * then the literal reads in the double's lexical space, one beyond the largest finite double naming
+ * that double.
+ *
+ * @param element The element.
+ * @param name The attribute's name.
+ * @param refuse The reader's refusal of an attribute.
+ * @returns The number, none when absent, or the refusal `value-type` at the attribute.
+ */
+const doubleAttribute = (
+  element: SourceElement,
+  name: string,
+  refuse: AttributeRefusal,
+): Effect.Effect<Option.Option<number>, Refusal> =>
+  Effect.transposeOption(
+    Option.map(attributeOf(element, name), (attribute) => {
+      const lexical = trimXmlSpace(attribute.value);
+
+      return Effect.fromResult(parseLexical("float", lexical)).pipe(
+        Effect.mapError(() => refuse(attribute, "value-type", { baseType: "xs:double", lexical })),
+        Effect.map(floatOf),
+      );
+    }),
+  );
+
+/**
+ * Read an outcome declaration's `view`, an XSD list of {@link views}: its tokens are the runs
+ * between XML whitespace.
+ *
+ * @param declaration The declaration.
+ * @param refuse The reader's refusal of an attribute.
+ * @returns The views in the order written, none when absent, or the refusal `attribute-type` at
+ *   the attribute when a token is not a view.
+ */
+const viewAttribute = (
+  declaration: SourceElement,
+  refuse: AttributeRefusal,
+): Effect.Effect<Option.Option<readonly View[]>, Refusal> =>
+  Effect.transposeOption(
+    Option.map(attributeOf(declaration, "view"), (attribute) =>
+      Effect.forEach(
+        attribute.value.split(xmlWhitespaceRun).filter((token) => token !== ""),
+        (token) =>
+          Option.match(
+            Arr.findFirst(views, (view) => view === token),
+            {
+              onNone: () =>
+                Effect.fail(
+                  refuse(attribute, "attribute-type", {
+                    attribute: "view",
+                    value: attribute.value,
+                  }),
+                ),
+              onSome: (view) => Effect.succeed(view),
+            },
+          ),
+      ),
+    ),
+  );
+
+/**
+ * Read the six attributes of a `qti-outcome-declaration` that Results Reporting mirrors on an
+ * `outcomeVariable`, each as the XSD types it. The item and the test model both read a
+ * declaration's through this, so the two read them alike.
+ *
+ * @param declaration The declaration.
+ * @param refuse The reader's refusal of an attribute, at that attribute's path in its document.
+ * @returns The six, each none when absent, or the refusal `value-type` at a double outside
+ *   `xs:double`'s lexical space or `attribute-type` at a `view` naming something other than a view.
+ */
+export const outcomeReporting = (
+  declaration: SourceElement,
+  refuse: AttributeRefusal,
+): Effect.Effect<OutcomeReporting, Refusal> =>
+  Effect.gen(function* readOutcomeReporting() {
+    const view = yield* viewAttribute(declaration, refuse);
+    const normalMaximum = yield* doubleAttribute(declaration, "normal-maximum", refuse);
+    const normalMinimum = yield* doubleAttribute(declaration, "normal-minimum", refuse);
+    const masteryValue = yield* doubleAttribute(declaration, "mastery-value", refuse);
+
+    return {
+      interpretation: valueOf(declaration, "interpretation"),
+      longInterpretation: Option.map(valueOf(declaration, "long-interpretation"), (written) =>
+        trimXmlSpace(written).replaceAll(xmlWhitespaceRun, " "),
+      ),
+      masteryValue,
+      normalMaximum,
+      normalMinimum,
+      view,
+    };
+  });
+
+/**
  * Read a `qti-outcome-declaration`.
  *
  * @param build The build.
@@ -1382,9 +1550,12 @@ const outcomeDeclaration = (
       return Option.none();
     }
 
+    const reporting = yield* outcomeReporting(declaration, (attribute, rule, detail) =>
+      refusal(build, rule, attributePath(pathOf(build, declaration), attribute), detail),
+    );
     const defaultValue = yield* optionalValue(build, declaration, "qti-default-value", read.value);
 
-    return Option.some({ ...read.value, defaultValue });
+    return Option.some({ ...read.value, ...reporting, defaultValue });
   });
 
 /**
