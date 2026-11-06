@@ -1790,16 +1790,17 @@ const referenceLaws = [
     ),
   ),
 
-  // SectionIdentifier: its copy, its document, and the name it spells.
+  // SectionIdentifier: its copy, its document, and the name it spells. The copy is the forward
+  // containment: each attribute's row holds its name, kind and lexical form. The reverse only
+  // needs the attribute to exist, by the selection's key: both sides are keyed by `node`, so the
+  // forward containment's row for that attribute is this row. Its UNIQUE is that key's, and
+  // `Attribute.lexical`, which no pattern bounds, sits in no UNIQUE.
   key(on(sectionIdentifierAttributes, "node")),
   contained(
     on(sectionIdentifierAttributes, "node", "name", "kind", "lexical"),
     on(SectionIdentifier, "node", "attribute", "kind", "lexical"),
   ),
-  contained(
-    on(SectionIdentifier, "node", "attribute", "kind", "lexical"),
-    on(sectionIdentifierAttributes, "node", "name", "kind", "lexical"),
-  ),
+  contained(on(SectionIdentifier, "node"), on(sectionIdentifierAttributes, "node")),
   contained(on(SectionIdentifier, "node", "document"), on(Node, "id", "document")),
   contained(on(SectionIdentifier, "document", "rootKind"), on(Document, "node", "rootKind")),
   check("E1_derived", SectionIdentifier, (s) =>
@@ -2683,10 +2684,11 @@ export const expressionLaws = [
     on(ExpressionAttribute, "node", "parent", "kind", "language", "baseType", "cardinality"),
     exprRef,
   ),
-  contained(
-    on(writtenAttributes, "node", "attribute", "kind", "lexical"),
-    on(typingAttributes, "node", "name", "kind", "lexical"),
-  ),
+  // A written row's attribute exists, by the selection's key `(node, name)`. Its kind and lexical
+  // form are the forward containment's: both sides are keyed by node and name, so that
+  // containment's row for the attribute is this row. Its UNIQUE is that key's, and
+  // `Attribute.lexical`, which no pattern bounds, sits in no UNIQUE.
+  contained(on(writtenAttributes, "node", "attribute"), on(typingAttributes, "node", "name")),
   key(on(typeAttributes, "node")),
   contained(
     on(
