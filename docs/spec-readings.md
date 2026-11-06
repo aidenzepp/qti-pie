@@ -271,9 +271,23 @@ against it. A reading that is not an information-model-over-XSD case says which 
     meaning "no restriction" that the choice interaction's `max-choices` has (section 5.30.2), so a `max-choices="0"`
     beside a written `min-choices` is below it and is refused. The Schematron's rules for the two (5Ba and 8Ba,
     `not(not(@max-choices=0) and @max-choices < @min-choices)`) exempt 0, and the information model outranks the XSD
-    that embeds them, so the exemption is set aside. (2026-11-04; restated 2026-11-05 under "the spec wins": the earlier
-    text exempted `max-choices="0"` by the Schematron's rule, without the information model's sentence, which has no
-    exemption, and did not bound either count by the choices.)
+    that embeds them, so the exemption is set aside. Decision 321 (6d) of 2026-11-06 asked whether this reversal
+    refuses any document whose `max-choices="0"` means unlimited, and found none. (1) No text gives `0` that meaning
+    for either interaction: sections 5.97.3 and 5.61.2 describe `max-choices` as the most the candidate may select
+    and order, with "If unspecified, all of the choices may be ordered" and nothing on `0`; the implementation guide's
+    tables give the attribute as a non-negative number with the same unspecified sentence; rules 5Ba and 8Ba say only
+    that the value, "provided it is not 0", must not be less than `min-choices`, which skips the comparison without
+    saying what `0` means; and the sentence "If max-choices is 0 then there is no restriction" appears only for the
+    choice, hotspot and hottext interactions (sections 5.30.2, 5.68.2 and 5.66.1). (2) The corpus (the 1EdTech
+    examples tarball the verdict file names) holds 12 order or graphic-order interactions, and none writes
+    `max-choices="0"`: 11 write neither bound and one writes `min-choices="1" max-choices="5"`. The reversal stands.
+    An author who writes `max-choices="0"` beside a `min-choices` on one of these two interactions has the document
+    refused, because `0` is below the least; with no `min-choices` beside it, nothing reads `max-choices` and the
+    document is accepted. Against `main`, which exempted `max-choices="0"` as unlimited, such a document was accepted
+    and now is not, and the author who meant no limit leaves `max-choices` out, which the information model gives the
+    same meaning, "all of the choices may be ordered". (2026-11-04; restated 2026-11-05 under "the spec wins": the
+    earlier text exempted `max-choices="0"` by the Schematron's rule, without the information model's sentence, which
+    has no exemption, and did not bound either count by the choices.)
 19. **An extended-text interaction bound to a container has `max-strings`.** The XSD makes `max-strings` optional. The
     information model's prose requires it when the interaction is bound to a container (multiple or ordered
     cardinality). This follows the information model and sets the XSD aside, because the prose states the rule and the
