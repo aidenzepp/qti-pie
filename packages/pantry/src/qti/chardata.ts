@@ -451,25 +451,6 @@ export const OpenElementName = relation(
 );
 
 /**
- * `ForeignKindSelf`: the diagonal of the three foreign kinds, so `ForeignKindSelf.row(k)` is the
- * singleton {k} of a foreign kind and the empty set of any other (C6, as `PositionSelf` is
- * `Position`'s): the left side of the membership test "Strictly held" reads.
- *
- * It stands for a set literal: grizzle's set operations take a `Bits.of` value as their second
- * operand by their types and their documentation, but the builder at the pinned commit refuses a
- * literal there (`scalar/compute/builders.ts`, `subset: binary("subset", "term")`), and
- * `Compute.literal`, which the builder runs, refuses a set's descriptor by its type (`NotRoster`).
- * grizzle's trunk admits the literal (`subset: binary("subset", "literal")`), so the diagonal can
- * go at the next pin.
- */
-export const ForeignKindSelf = closed.relation(
-  "ForeignKindSelf",
-  { kind: closedId(NodeKind), self: closedId(NodeKind) },
-  ["kind", "self"],
-  openElementClasses.map((kind) => ({ kind, self: kind })),
-);
-
-/**
  * The root element of each document: the document node's one child that is an element. Its parent
  * copy reads `document`, and every other child of the document node is a doctype, a comment or an
  * instruction.
@@ -652,9 +633,14 @@ export const chardataLaws = [
   check("Strictly_held", OpenElementName, (o) =>
     o.or(
       o.not(o.in(o.kind, openElementClasses)),
-      o.eq(
-        Compute.subset(ForeignKindSelf.row(o.kind), StrictlyHeld.row(o.version, o.parentKind)),
-        false,
+      ...openElementClasses.map((kind) =>
+        o.and(
+          o.eq(o.kind, kind),
+          o.eq(
+            Compute.disjoint(StrictlyHeld.row(o.version, o.parentKind), Bits.of(NodeKind, [kind])),
+            true,
+          ),
+        ),
       ),
       o.ne(o.governs, "none"),
       Compute.matches(

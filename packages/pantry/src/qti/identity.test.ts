@@ -503,8 +503,9 @@ interface DocumentLangCase {
 }
 
 /**
- * Every choice of the Document lang box: no `xml:lang`, `en`, ` en` or the empty one; an `href`
- * or none; and at most 2 general categories, each listing at most one of `en` and `fr`.
+ * Every choice of the Document lang box: no `xml:lang`, `en`, ` EN` (`en` padded and in another
+ * case) or the empty one; an `href` or none; and at most 2 general categories, each listing at most
+ * one of `en` and `fr`.
  */
 const documentLangCases: Gen<DocumentLangCase> = (source) => ({
   generals: source.draw(
@@ -512,9 +513,23 @@ const documentLangCases: Gen<DocumentLangCase> = (source) => ({
   ),
   href: source.draw(boolean),
   rootLang: source.draw(
-    element([Option.none(), Option.some("en"), Option.some(" en"), Option.some("")]),
+    element([Option.none(), Option.some("en"), Option.some(" EN"), Option.some("")]),
   ),
 });
+
+/**
+ * Read a language tag as BCP 47 compares it: its form collapsed (XML Schema Part 2, §4.3.6), then
+ * its ASCII capitals as small letters (RFC 5646 §2.1.1).
+ *
+ * @param form - The form as written.
+ * @returns The tag the form names.
+ */
+const tagOf = (form: string): string =>
+  form
+    .replaceAll(/[\t\n\r ]+/gu, " ")
+    .replace(/^ /u, "")
+    .replace(/ $/u, "")
+    .replaceAll(/[A-Z]/gu, (c) => c.toLowerCase());
 
 /**
  * A situation the Document lang box must reach: each way R26 holds or breaks.
@@ -534,14 +549,15 @@ describe("test/oracle.ts, Document lang (R26)", { timeout: buildTimeout }, () =>
       // value for each of the languages referred to by the language attributes on the associated
       // assessmentItem, test or object bank and its 'bodyElements'"), over a resource that names
       // its item by href (reading 93), an xml:lang by its collapsed value, the empty one stating
-      // none (XML 1.0 §2.12), compared exactly (the named weakening, G-text).
+      // none (XML 1.0 §2.12), compared with each listed language as a tag, without regard to case
+      // (RFC 5646 §2.1.1).
       // Bound: every item root xml:lang of 4, href or none, and at most 2 categories of at most
       // one of en and fr, 104.
       searched(
         ctx,
         exhaust(
           {
-            box: "every item xml:lang of none, en, padded en and empty, named by href or not, beside at most 2 general categories of at most one of en and fr",
+            box: "every item xml:lang of none, en, padded EN and empty, named by href or not, beside at most 2 general categories of at most one of en and fr",
             caseHang: Duration.seconds(30),
             coverage: requiredInSpace<DocumentLangSituation>([
               "listed by every category",
@@ -568,11 +584,11 @@ describe("test/oracle.ts, Document lang (R26)", { timeout: buildTimeout }, () =>
                 "imsmanifest.xml": `<manifest xmlns="${cp}" xmlns:imsmd="http://ltsc.ieee.org/xsd/LOM" identifier="M"><metadata><schema>QTI Package</schema><schemaversion>3.0.1</schemaversion></metadata><organizations/><resources><resource identifier="R" type="imsqti_item_xmlv3p0"${drawn.href ? ' href="item.xml"' : ""}><metadata><imsmd:lom>${generals}</imsmd:lom></metadata><file href="item.xml"/></resource></resources></manifest>`,
                 "item.xml": `<qti-assessment-item xmlns="${asi}" identifier="item" title="Item" time-dependent="false"${Option.match(drawn.rootLang, { onNone: () => "", onSome: (lang) => ` xml:lang="${lang}"` })}><qti-item-body><p>Hi</p></qti-item-body></qti-assessment-item>`,
               });
-              const stated = Option.getOrElse(drawn.rootLang, () => "").trim();
+              const stated = tagOf(Option.getOrElse(drawn.rootLang, () => ""));
               const breaks =
                 drawn.href &&
                 stated !== "" &&
-                drawn.generals.some((langs) => !langs.includes(stated));
+                drawn.generals.some((langs) => !langs.map(tagOf).includes(stated));
               const situation = (): DocumentLangSituation => {
                 if (!drawn.href) {
                   return "named by no href";
@@ -648,8 +664,8 @@ describe(
         // Oracle: the specification as a checker, SSML 1.1 §3.1.1.1 ("Only markers defined once in
         // the document, i.e. that are unique, are permitted as the value of either startmark or
         // endmark") and §3.1.5.1 ("The scope of this name is the current SSML document"), read
-        // under spec reading 3: "the document" is each speak fragment, a name compared with its
-        // outer whitespace set apart.
+        // under spec reading 3: "the document" is each speak fragment, a name compared by its
+        // value, collapsed (an xs:token's whiteSpace, SSML 1.1 §3.3.2).
         // Bound: every first speak of 3 startmarks and at most 2 marks, beside a second speak that
         // defines the mark or not, with a lookup in neither, to its own lexicon or the other
         // speak's, 54.

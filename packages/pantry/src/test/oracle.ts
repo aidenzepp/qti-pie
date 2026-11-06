@@ -505,7 +505,7 @@ export const lawSources = {
   Document: "the XDM document node as the Document row (plan §1.4, fin.md D7)",
   "Document entry": "IMS Content Packaging 1.2: a listed document is an entry of the package",
   "Document lang":
-    "https://www.imsglobal.org/sites/default/files/spec/qti/v3/md-bind/index.html (QTI 3.0 Metadata §2.7.1.3, Language: 'There must be one value for each of the languages referred to by the language attributes on the associated assessmentItem, test or object bank and its 'bodyElements'', normative by its §1.2; ~/.cache/gr8des/qti-md-bind/index.txt:1509 and :388): each language an item's or a test's xml:lang states (XML 1.0 §2.12, the empty one stating none) is listed by every general category of each record of the resource whose href names the document (identity.ts documentLang, through metadata.ts LomObject); xml:lang compared by its collapsed xs:language value, the LOM language as written. BCP 47 compares tags without regard to case (RFC 5646 §2.1.1); the database and this oracle compare them exactly until grizzle has a case fold (identity.ts, G-text), a named weakening",
+    "https://www.imsglobal.org/sites/default/files/spec/qti/v3/md-bind/index.html (QTI 3.0 Metadata §2.7.1.3, Language: 'There must be one value for each of the languages referred to by the language attributes on the associated assessmentItem, test or object bank and its 'bodyElements'', normative by its §1.2; ~/.cache/gr8des/qti-md-bind/index.txt:1509 and :388): each language an item's or a test's xml:lang states (XML 1.0 §2.12, the empty one stating none) is listed by every general category of each record of the resource whose href names the document (identity.ts documentLang, through metadata.ts LomObject); xml:lang compared by its collapsed xs:language value and the LOM language as written, both as tags without regard to case (RFC 5646 §2.1.1)",
   "DocumentId key":
     "XML Schema Part 1, Validation Rule: Validation Root (the ID/IDREF table): no id's [binding] has more than one member, an attribute's binding its element, an ID-typed element text's its parent (§3.15.5; reading 101; identity.ts IdBinding); reading 14; reading 74: a context declaration's identifier, a UniqueIdentifier (https://www.imsglobal.org/spec/qti/v3p0/info#RootCharacteristic_ContextDeclaration.Attr_identifier, §5.34.1), is one of the document's IDs, though the XSD types it an IdentifierDType",
   "E1 derived":
@@ -554,7 +554,7 @@ export const lawSources = {
   LomObjectIdentifier:
     "https://www.imsglobal.org/sites/default/files/spec/qti/v3/md-bind/index.html (QTI 3.0 Metadata §2.7.1.1, Identifier: 'One of the values given for the identifier must have an entry that matches the identifier of the associated item, test or object bank', normative by its §1.2), over the general category's identifiers alone; info §4.1.1 and §4.4.1 ('MUST be the same'); reading 62 as UP's audit merges it (docs/research/up.md §2.2), the entry compared collapsed",
   LomObjectTitle:
-    "https://www.imsglobal.org/sites/default/files/spec/qti/v3/md-bind/index.html (QTI 3.0 Metadata §2.7.1.2, Title: 'The title must have a value that matches the value of the title attribute of the associated item, test or object bank. The language used to interpret the title is taken from the language attribute of the associated item, test or object bank', normative by its §1.2); info §4.1.2 and §4.4.2; reading 62 as UP's audit merges it (docs/research/up.md §2.2). The database states it with exact comparisons until grizzle has a translation term and a case fold (metadata.ts, G-text); this oracle states no evaluator of it",
+    "https://www.imsglobal.org/sites/default/files/spec/qti/v3/md-bind/index.html (QTI 3.0 Metadata §2.7.1.2, Title: 'The title must have a value that matches the value of the title attribute of the associated item, test or object bank. The language used to interpret the title is taken from the language attribute of the associated item, test or object bank', normative by its §1.2); info §4.1.2 and §4.4.2; reading 62 as UP's audit merges it (docs/research/up.md §2.2). Titles compare in xs:normalizedString's value space and language tags without regard to case (RFC 5646 §2.1.1; metadata.ts); this oracle states no evaluator of it",
   "Lookup table cardinality":
     "https://www.imsglobal.org/spec/qti/v3p0/info#DataAttribute_OutcomeDeclaration_lookupTable (§4.5.13: a lookup table maps 'a numeric source value to a single outcome value in the declared value set'): a qti-match-table's or qti-interpolation-table's outcome declaration is of single cardinality (mapping.ts Lookup_table_cardinality)",
   "Lookup type":
@@ -625,7 +625,7 @@ export const lawSources = {
   "SSML lexicon reference":
     "reading 3: https://www.w3.org/TR/speech-synthesis11/#S3.1.5.2 (SSML 1.1 §3.1.5.2: 'The ref attribute specifies a name that references a lexicon document as assigned by the xml:id attribute of the lexicon element') and #S3.1.5.1 (§3.1.5.1: 'The scope of this name is the current SSML document'), the document being the lookup's nearest speak (identity.ts ssmlLexiconReference, through SsmlScope)",
   "SSML trim mark":
-    "reading 3: https://www.w3.org/TR/speech-synthesis11/#S3.1.1.1 (SSML 1.1 §3.1.1.1: 'Only markers defined once in the document, i.e. that are unique, are permitted as the value of either startmark or endmark'; 'It is an error if the value given for either startmark or endmark is not a valid mark in the document'), the document being the speak, each name an xs:token (§3.3.2) compared with its outer whitespace set apart, a named weakening of its collapse until grizzle can fold inner whitespace (identity.ts ssmlTrimMark, G-text)",
+    "reading 3: https://www.w3.org/TR/speech-synthesis11/#S3.1.1.1 (SSML 1.1 §3.1.1.1: 'Only markers defined once in the document, i.e. that are unique, are permitted as the value of either startmark or endmark'; 'It is an error if the value given for either startmark or endmark is not a valid mark in the document'), the document being the speak, each name an xs:token (§3.3.2) compared by its collapsed value (identity.ts ssmlTrimMark)",
   "Section identifier target":
     "readings 5 and 86: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_Number.Attr_section-identifier (§7.27.1, and §7.28.1, §7.39.1: 'If specified, only variables from items in the qti-assessment-section with matching identifier are matched', info.txt:69115), resolved over each test that places the document: a section-identifier names exactly one section or section ref of the assembled test (expressions.ts Reading, form name; the UP audit's A61)",
   "Section parts":
@@ -744,23 +744,26 @@ const xmlWhitespace = /[\t\n\r]/gu;
  * (`#pantry/grammar/domains.ts`), so the domain laws read the form as written.
  *
  * @param lexical - The form as read.
- * @returns The form with tabs, line feeds and carriage returns as spaces, trimmed, each run of
- *   spaces made one.
+ * @returns The form with tabs, line feeds and carriage returns as spaces, each run of spaces made
+ *   one, and none at either end. No other character is whitespace to it, so a no-break space stays.
  * @see {@link https://www.w3.org/TR/xmlschema-2/#rf-whiteSpace | XML Schema Part 2, whiteSpace}
  */
 const collapsed = (lexical: string): string =>
-  lexical.replaceAll(xmlWhitespace, " ").trim().replaceAll(/ +/gu, " ");
+  lexical
+    .replaceAll(xmlWhitespace, " ")
+    .replaceAll(/ +/gu, " ")
+    .replace(/^ /u, "")
+    .replace(/ $/u, "");
 
 /**
- * Set a form's outer XML whitespace apart: what the database's overlays compare where grizzle
- * cannot state a collapse's inner folding (the `xml:lang` value of R26, an SSML name; G-text).
+ * Fold a tag's ASCII capitals to small letters: BCP 47 compares tags without regard to case, and a
+ * tag's subtags are ASCII letters, digits and hyphens (RFC 5646 §2.1 and §2.1.1).
  *
- * @param lexical - The form as read.
- * @returns The form with its leading and trailing tabs, line feeds, carriage returns and spaces
- *   removed, its inner whitespace as written.
+ * @param tag - The tag as read.
+ * @returns The tag with each of `A` to `Z` as its small letter, every other character as it is.
  */
-const outerTrimmed = (lexical: string): string =>
-  lexical.replace(/^[\t\n\r ]+/u, "").replace(/[\t\n\r ]+$/u, "");
+const caseFolded = (tag: string): string =>
+  tag.replaceAll(/[A-Z]/gu, (capital) => capital.toLowerCase());
 
 /**
  * Split a collapsed list form into its tokens.
@@ -1621,9 +1624,8 @@ const fragmentOf = (view: View, node: FoldedNode<Composed>): NodeId | undefined 
 
 /**
  * What one SSML fragment defines: its lexicons' `xml:id`s and how many of its marks hold each
- * `name`, each with its outer whitespace set apart ({@link outerTrimmed}): the database's named
- * weakening of a mark name's `xs:token` collapse, which also folds each inner run of whitespace
- * (`#pantry/qti/identity.ts`, G-text).
+ * `name`, each by its value, collapsed ({@link collapsed}; an `xs:ID`'s and an `xs:token`'s
+ * whiteSpace, SSML 1.1 §3.3.2).
  */
 interface Fragment {
   readonly lexicons: ReadonlySet<string>;
@@ -1653,14 +1655,14 @@ const fragmentsOf = (view: View): ReadonlyMap<NodeId, Fragment> => {
     const fragment = fragmentOf(view, node);
     if (fragment !== undefined && node.kind === "ssml:lexicon") {
       for (const id of Option.toArray(valueOf(view, node.id, "xml:id"))) {
-        lexicons.set(fragment, (lexicons.get(fragment) ?? new Set()).add(outerTrimmed(id)));
+        lexicons.set(fragment, (lexicons.get(fragment) ?? new Set()).add(collapsed(id)));
       }
     }
 
     if (fragment !== undefined && node.kind === "ssml:mark") {
       for (const name of Option.toArray(valueOf(view, node.id, "name"))) {
         const counted = marks.get(fragment) ?? new Map<string, number>();
-        counted.set(outerTrimmed(name), (counted.get(outerTrimmed(name)) ?? 0) + 1);
+        counted.set(collapsed(name), (counted.get(collapsed(name)) ?? 0) + 1);
         marks.set(fragment, counted);
       }
     }
@@ -2226,8 +2228,8 @@ const nodeLaws: readonly NodeLaw[] = [
 
             return unless(
               fragment !== undefined &&
-                (fragmentsOf(view).get(fragment)?.lexicons ?? new Set()).has(outerTrimmed(ref)),
-              () => ({ fragment: fragment ?? "", ref: outerTrimmed(ref) }),
+                (fragmentsOf(view).get(fragment)?.lexicons ?? new Set()).has(collapsed(ref)),
+              () => ({ fragment: fragment ?? "", ref: collapsed(ref) }),
             );
           })
         : Option.none(),
@@ -2243,7 +2245,7 @@ const nodeLaws: readonly NodeLaw[] = [
       const marks = fragmentsOf(view).get(node.id)?.marks ?? new Map<string, number>();
       const unmarked = ["startmark", "endmark"].flatMap((name) =>
         Option.toArray(valueOf(view, node.id, name))
-          .map(outerTrimmed)
+          .map(collapsed)
           .filter((mark) => marks.get(mark) !== 1)
           .map((mark) => `${name}=${mark}:${String(marks.get(mark) ?? 0)}`),
       );
@@ -4849,10 +4851,9 @@ const mergedDocumentsOf = (
  * (spec reading 117): its own, and those of every fragment its includes splice in; a fragment a
  * test places is a known under-refusal, which reading 117 lists.
  *
- * An `xml:lang` is read by its value, its form with its outer whitespace set apart, and one that is
- * empty or all whitespace states no language (XML 1.0 §2.12); a LOM `language` is its text as
- * written. Both compare exactly, the named weakening `#pantry/qti/identity.ts` states until grizzle
- * has a case fold (G-text).
+ * An `xml:lang` is read by its value, its form collapsed, and one that is empty or all whitespace
+ * states no language (XML 1.0 §2.12); a LOM `language` is its text as written. The two compare as
+ * tags, without regard to case (RFC 5646 §2.1.1).
  *
  * @param documents - The documents the manifest lists that shredded.
  * @param manifest - The manifest's view.
@@ -4868,7 +4869,7 @@ const documentLangBreaches = (
   const languagesOf = (general: FoldedNode<Composed>): readonly string[] =>
     (manifest.childrenOf.get(general.id) ?? [])
       .filter(({ kind }) => kind === "lom:language")
-      .map(({ id }) => contentOf(manifest, id));
+      .map(({ id }) => caseFolded(contentOf(manifest, id)));
   const spliced = Map.groupBy(
     sitesOf(documents, grammar).flatMap((site) =>
       Option.toArray(splicedTarget(grammar, site)).map((target) => ({
@@ -4912,7 +4913,7 @@ const documentLangBreaches = (
     );
 
     return [...forms].flatMap((form): readonly Breach[] => {
-      const value = outerTrimmed(form);
+      const value = caseFolded(collapsed(form));
       const missing = generals.filter((general) => !languagesOf(general).includes(value));
 
       return value === "" || missing.length === 0

@@ -24,9 +24,9 @@
  *   interpret the title is taken from the language attribute of the associated item, test or object
  *   bank"): when the record's general category has a `title`, one of its strings in the document's
  *   language is the document's `title`: a string whose `language` is the root's `xml:lang`, or one
- *   with no `language`, or any string where the root states no `xml:lang`. An empty `xml:lang`
- *   states none ("the absence of language information", XML 1.0 §2.12), and an empty `language` is
- *   read alike.
+ *   with no `language`, or any string where the root states no `xml:lang`. An empty `xml:lang`, or
+ *   one of whitespace alone, states none ("the absence of language information", XML 1.0 §2.12),
+ *   and an empty `language` is read alike.
  * - **`calendar`** (G-parse): every `lastUpdated` of a usage statistic, a `DateDType`, is a day of
  *   the Gregorian calendar, its value the typed `date` PostgreSQL derives from it
  *   ({@link StatisticDate}).
@@ -36,14 +36,14 @@
  *   by `BaseTypePattern`; one that writes none is the XSD's `xs:normalizedString` text
  *   ({@link UsageValue}).
  *
- * **A named weakening of `lom-title`, until grizzle's text terms grow.** The binding compares a
- * title in `xs:normalizedString`'s value space, where a tab, a line feed and a carriage return each
- * read as a space, and a language tag without regard to case (BCP 47 §2.1.1). grizzle's `Compute`
- * has four text terms, `matches`, `concat`, `startsWith` and `endsWith` (README, "Queries"), and no
- * translation or case fold, so both are compared exactly here: the law over-refuses a title that
- * differs from the document's only by a tab, line feed or carriage return where the other has a
- * space, and a string whose `language` differs from the root's `xml:lang` only in case. Marker
- * `G-text` below names the two places the terms replace.
+ * **`lom-title`'s comparisons.** The binding compares a title in `xs:normalizedString`'s value
+ * space, where a tab, a line feed and a carriage return each read as a space (XML Schema 1.0 Part 2
+ * §4.3.6, whiteSpace `replace`), and a language tag without regard to case (RFC 5646 §2.1.1), whose
+ * subtags are ASCII (§2.1). So each side carries its compared form beside its written one, which
+ * `E1_derived` proves: a title its `Compute.replaceWhitespace` ({@link AssessmentObject}'s
+ * `titleValue`, {@link LomTitleString}'s `textValue`), the root's `xml:lang` its value collapsed
+ * (an `xs:language`) and case-folded by `Compute.lowerAscii` (`langTag`), and a string's
+ * `language`, an `xs:string`, case-folded as written (`languageTag`).
  *
  * "Compared collapsed" is stated with G-concat's pieces: a text is `lead ‖ token ‖ trail`, its
  * outer whitespace set apart. A document's identifier holds no whitespace (an `IdentifierDType`,
@@ -369,8 +369,11 @@ export const lomStringLanguages = counted(
 
 /**
  * A string of a LOM title, keyed by its `lom:string` node: its {@link nodeRef} tuple (its parent the
- * title), its title's record, its string value, `Node.stringValue` folded by `copiedTitleText`
- * (`#pantry/qti/node.ts`), and its `language` as {@link LomString} holds it.
+ * title), its title's record, its string value `text`, `Node.stringValue` folded by
+ * `copiedTitleText` (`#pantry/qti/node.ts`), and its `language` as {@link LomString} holds it; and
+ * the host's two compared forms, `textValue`, the text in `xs:normalizedString`'s value space
+ * (`Compute.replaceWhitespace`), and `languageTag`, the language case-folded
+ * (`Compute.lowerAscii`).
  */
 export const LomTitleString = relation(
   "LomTitleString",
@@ -378,12 +381,14 @@ export const LomTitleString = relation(
     document: uuid,
     kind: closedId(NodeKind),
     language: keyText,
+    languageTag: keyText,
     nearest: uuid,
     node: uuid,
     parent: uuid,
     record: uuid,
     start: natural,
     text: keyText,
+    textValue: keyText,
     version: closedId(SchemaVersion),
   },
   ["node"],
@@ -392,9 +397,11 @@ export const LomTitleString = relation(
 /**
  * An assessment object, keyed by the `qti-assessment-item` or `qti-assessment-test` root: its
  * {@link nodeRef} tuple; its `identifier` attribute in pieces, the lexical form as written,
- * `identifierLexical`, and its collapsed value, `identifier`; its `title` as written; and its count
+ * `identifierLexical`, and its collapsed value, `identifier`; its `title` as written, and
+ * `titleValue`, its value as an `xs:normalizedString` (`Compute.replaceWhitespace`); and its count
  * of `xml:lang` attributes (0 or 1, as {@link ObjectLang} holds them) with `lang`, that attribute's
- * lexical form, or the empty text where it has none.
+ * lexical form, or the empty text where it has none, and `langTag`, its value collapsed and
+ * case-folded (`Compute.lowerAscii`), empty where it states no language.
  */
 export const AssessmentObject = relation(
   "AssessmentObject",
@@ -406,12 +413,14 @@ export const AssessmentObject = relation(
     identifierTrail: Space,
     kind: closedId(NodeKind),
     lang: keyText,
+    langTag: keyText,
     langs: drawn(natural),
     nearest: uuid,
     node: uuid,
     parent: uuid,
     start: natural,
     title: keyText,
+    titleValue: keyText,
     version: closedId(SchemaVersion),
   },
   ["node"],
@@ -443,9 +452,10 @@ export const LomObjectIdentifier = relation(
 
 /**
  * The title string by which a record names its document (`lom-title`), keyed by the record: the
- * document, its `title` and its `xml:lang` (empty where it states none), and a string of one of the
- * record's titles whose text is that title, with the string's `language` (empty where it has
- * none).
+ * document, its title's value ({@link AssessmentObject}'s `titleValue`) and its `xml:lang`'s
+ * case-folded value (`langTag`, empty where it states none), and a string of one of the record's
+ * titles whose text has that value (`textValue`), with the string's case-folded `language`
+ * (`languageTag`, empty where it has none).
  *
  * A row exists for every naming record that has a general title; its string is the existential's
  * witness, so a record none of whose title strings names its document has no row that holds.
@@ -644,17 +654,18 @@ const usageBaseTypes = attributesOf("baseType", [usageValueKind]);
  *   its record's for a general category's entry, else `none`.
  * - **the titles and strings:** each `lom:title` has its {@link LomTitle} with its record's `named`;
  *   each `lom:string` its {@link LomString}, whose `languages` counts its copied `language`; and
- *   each title's string its {@link LomTitleString}, whose `text` is its string value and whose
- *   `language` is its {@link LomString}'s.
+ *   each title's string its {@link LomTitleString}, whose `text` is its string value, whose
+ *   `language` is its {@link LomString}'s, and whose compared forms are those two's ("E1
+ *   derived").
  * - **the objects:** each item's and test's root has its {@link AssessmentObject}, one per document,
- *   with its `identifier` (in pieces), `title` and `xml:lang` copied, and `langs` counting the
- *   last.
+ *   with its `identifier` (in pieces), `title` and `xml:lang` copied, `langs` counting the last,
+ *   and its title's and language's compared forms ("E1 derived").
  * - **`lom-identifier`:** a general entry of a naming record makes its record's
  *   {@link LomObjectIdentifier} exist, whose document is its record's object's, whose identifier is
  *   that document's, and whose entry is a general entry of the record with that token.
  * - **`lom-title`:** a title of a naming record makes its record's {@link LomObjectTitle} exist,
- *   whose document, title and language are its record's object's, and whose string is a title
- *   string of the record with that text, in the document's language ("LomObjectTitle").
+ *   whose document, title value and language tag are its record's object's, and whose string is a
+ *   title string of the record with that value, in the document's language ("LomObjectTitle").
  * - **`calendar`:** each statistic's `lastUpdated` is copied into its {@link StatisticDate}, and
  *   every such row has its attribute; its pieces concatenate to the lexical form, and `day`'s type
  *   is the calendar's.
@@ -805,7 +816,13 @@ export const metadataLaws = [
   contained(on(titleStringNodes, "id", "stringValue"), on(LomTitleString, "node", "text")),
   contained(on(LomTitleString, "parent", "record"), on(LomTitle, "node", "record")),
   contained(on(LomTitleString, "node", "language"), on(LomString, "node", "language")),
-  check("E1_derived", LomTitleString, (s) => s.eq(s.kind, "lom:string")),
+  check("E1_derived", LomTitleString, (s) =>
+    s.and(
+      s.eq(s.kind, "lom:string"),
+      s.eq(s.textValue, Compute.replaceWhitespace(s.text)),
+      s.eq(s.languageTag, Compute.lowerAscii(s.language)),
+    ),
+  ),
 
   contained(
     on(AssessmentObject, "node", "document", "kind", "start", "nearest", "version", "parent"),
@@ -840,6 +857,8 @@ export const metadataLaws = [
       ),
       Compute.matches(o.identifier, identifierPattern),
       o.or(o.eq(o.langs, 1n), o.eq(o.lang, "")),
+      o.eq(o.titleValue, Compute.replaceWhitespace(o.title)),
+      o.eq(o.langTag, Compute.lowerAscii(Compute.collapse(o.lang))),
     ),
   ),
 
@@ -856,16 +875,22 @@ export const metadataLaws = [
 
   contained(on(namingTitles, "record"), on(LomObjectTitle, "record")),
   contained(on(LomObjectTitle, "record", "document"), on(LomObject, "record", "document")),
-  // G-text: `title` and `text` compare in xs:normalizedString's value space once grizzle has a
-  // translation term (tab, line feed and carriage return to a space), and `objectLang` and
-  // `stringLanguage` compare case-folded once it has an ASCII case fold; until then, exactly.
-  contained(on(LomObjectTitle, "document", "title"), on(AssessmentObject, "document", "title")),
-  contained(on(LomObjectTitle, "document", "objectLang"), on(AssessmentObject, "document", "lang")),
+  contained(
+    on(LomObjectTitle, "document", "title"),
+    on(AssessmentObject, "document", "titleValue"),
+  ),
+  contained(
+    on(LomObjectTitle, "document", "objectLang"),
+    on(AssessmentObject, "document", "langTag"),
+  ),
   contained(
     on(LomObjectTitle, "string", "record", "title"),
-    on(LomTitleString, "node", "record", "text"),
+    on(LomTitleString, "node", "record", "textValue"),
   ),
-  contained(on(LomObjectTitle, "string", "stringLanguage"), on(LomTitleString, "node", "language")),
+  contained(
+    on(LomObjectTitle, "string", "stringLanguage"),
+    on(LomTitleString, "node", "languageTag"),
+  ),
   check("LomObjectTitle", LomObjectTitle, (l) =>
     l.or(l.eq(l.objectLang, ""), l.eq(l.stringLanguage, ""), l.eq(l.stringLanguage, l.objectLang)),
   ),

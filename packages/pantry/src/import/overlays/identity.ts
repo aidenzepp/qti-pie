@@ -24,6 +24,7 @@ import {
   TextDomain,
   ValueIdentity,
 } from "#pantry/grammar/install.ts";
+import { collapse, lowerAscii } from "#pantry/import/overlays/metadata.ts";
 import { hrefPiecesOf } from "#pantry/import/overlays/package.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
@@ -509,9 +510,10 @@ const textRowsOf = (tree: Tree): Pick<IdentityRows, "DocumentId" | "IdentityText
 };
 
 /**
- * Build the rows a document's LOM general categories give: each `lom:language`'s `LomLanguage` and
- * its category's language set, and, for a category of a resource's record, its `GeneralNamed` and,
- * where the record names a document, its `GeneralObject`.
+ * Build the rows a document's LOM general categories give: each `lom:language`'s `LomLanguage`,
+ * with its tag case-folded, and its category's language set, by those tags; and, for a category of
+ * a resource's record, its `GeneralNamed` and, where the record names a document, its
+ * `GeneralObject`.
  *
  * @param tree - The document's tree.
  * @param ids - The ids its rows are written under, whose `documentAt` resolves a resource's href.
@@ -533,8 +535,9 @@ const lomRowsOf = (
     const text = tree.values.get(node.id) ?? "";
     const parent = tree.byId.get(node.parent);
     if (node.kind === "lom:language" && parent?.kind === "lom:general" && fitsKey(text)) {
-      lomLanguages.set(node.id, { general: node.parent, lang: text, node: node.id });
-      lomSets.set(headingKey([node.parent, text]), { general: node.parent, lang: text });
+      const tag = lowerAscii(text);
+      lomLanguages.set(node.id, { general: node.parent, lang: text, node: node.id, tag });
+      lomSets.set(headingKey([node.parent, tag]), { general: node.parent, lang: tag });
     }
 
     const owner = parent?.kind === "lom:lom" ? tree.byId.get(parent.parent) : undefined;
@@ -653,7 +656,8 @@ const scopeWalkOf = (tree: Tree, element: NodeRow<Composed>): ScopeWalk => {
 
 /**
  * Build the rows a document's SSML attributes give (spec reading 3): each read attribute's
- * `SsmlAttribute`, split around its value and placed in its element's fragment; each element on the
+ * `SsmlAttribute`, its value its lexical form collapsed, placed in its element's fragment; each
+ * element on the
  * walk up to that fragment its `SsmlScope`; and each fragment's values, by kind, once each.
  *
  * @param tree - The document's tree.
@@ -680,24 +684,21 @@ const ssmlRowsOf = (
         continue;
       }
 
-      for (const { after, before, value } of Option.toArray(piecesOf(lexical))) {
-        attributes.set(headingKey([element.id, name]), {
-          fragment,
-          kind: element.kind,
-          lead: before,
-          lexical,
-          name,
-          node: element.id,
-          refers: read.refers,
-          trail: after,
-          value,
-        });
-        values.set(headingKey([fragment, element.kind, value]), {
-          fragment,
-          kind: element.kind,
-          value,
-        });
-      }
+      const value = collapse(lexical);
+      attributes.set(headingKey([element.id, name]), {
+        fragment,
+        kind: element.kind,
+        lexical,
+        name,
+        node: element.id,
+        refers: read.refers,
+        value,
+      });
+      values.set(headingKey([fragment, element.kind, value]), {
+        fragment,
+        kind: element.kind,
+        value,
+      });
 
       for (const node of walk) {
         scopes.set(node.id, {
@@ -869,7 +870,8 @@ export const placedIdRowsOf = (input: {
  * Build a package's R26 witnesses from every document's identity rows: for each general category
  * that describes a document ({@link IdentityRows.GeneralObject}, the manifest's) and each of the
  * document's `xml:lang` forms that states a language, a {@link GeneralLang} row where the category
- * lists the form's collapsed value as written ({@link IdentityRows.ResourceLomLanguageSet}). A
+ * lists the form's value, collapsed and case-folded, among its case-folded languages
+ * ({@link IdentityRows.ResourceLomLanguageSet}). A
  * form no category lists has no witness, so its count falls short of its document's categories and
  * the database refuses it under "Document lang".
  *
@@ -894,19 +896,9 @@ export const languageRowsOf = (documents: readonly IdentityRows[]): LanguageRows
     ...rows.GeneralObject.values(),
   ])) {
     for (const { lang } of formsOf.get(document) ?? []) {
-      for (const { after, before, value } of Option.toArray(piecesOf(lang))) {
-        // G-text: `value` and the listed language compare case-folded once grizzle has an ASCII
-        // case fold (`#pantry/qti/identity.ts`); until then, exactly.
-        if (value !== "" && listed.has(headingKey([general, value]))) {
-          witnesses.set(headingKey([general, lang]), {
-            document,
-            general,
-            lang,
-            lead: before,
-            trail: after,
-            value,
-          });
-        }
+      const value = lowerAscii(collapse(lang));
+      if (value !== "" && listed.has(headingKey([general, value]))) {
+        witnesses.set(headingKey([general, lang]), { document, general, lang, value });
       }
     }
   }
@@ -919,8 +911,9 @@ export const languageRowsOf = (documents: readonly IdentityRows[]): LanguageRows
  * assembly, every `xml:lang` carrier of the instance's document; each form the assembly carries,
  * once; and R26's witnesses in place, for each general category that describes the item and each
  * form of its assembly that states a language, a {@link PlacedGeneralLang} row where the category
- * lists the form's collapsed value as written. A form no category lists has no witness, so its
- * count falls short of the item's categories and the database refuses it under "Document lang".
+ * lists the form's value, collapsed and case-folded. A form no category lists has no witness, so
+ * its count falls short of the item's categories and the database refuses it under "Document
+ * lang".
  *
  * @param documents - Each document's identity rows, the manifest's among them.
  * @param instances - Every assembly's root instance, its tree nested (Q5.13's `assembledRowsOf`).
@@ -964,19 +957,10 @@ export const placedLanguageRowsOf = (
   }
 
   for (const { assembly, lang } of assembled.values()) {
+    const value = lowerAscii(collapse(lang));
     for (const { general } of generalsOf.get(assembly) ?? []) {
-      for (const { after, before, value } of Option.toArray(piecesOf(lang))) {
-        // G-text: compared exactly until grizzle has an ASCII case fold, as `languageRowsOf` does.
-        if (value !== "" && listed.has(headingKey([general, value]))) {
-          witnesses.set(headingKey([general, lang]), {
-            assembly,
-            general,
-            lang,
-            lead: before,
-            trail: after,
-            value,
-          });
-        }
+      if (value !== "" && listed.has(headingKey([general, value]))) {
+        witnesses.set(headingKey([general, lang]), { assembly, general, lang, value });
       }
     }
   }

@@ -9,6 +9,12 @@
  * is the one module under `src/grammar/` that imports grizzle (`purity.test.ts`), so the generators
  * stay pure and each schema module imports its rosters and relations from here.
  *
+ * Six of them, {@link ChildGrammar}, {@link Follow}, {@link Last}, {@link Symbol},
+ * {@link GoverningOf} and {@link AttributeGrammar}, declare `pack: "hex"`: a generator builds their
+ * rows and the generators' tests review them, so the migration states each constant as one
+ * bit-string literal under its row count and digest, which `grizzle check` decodes, rather than a
+ * line per row (README, "Closed relations").
+ *
  * Where grizzle's surface differs from the generators' shapes, the declaration restates the
  * relation and says why:
  *
@@ -614,6 +620,7 @@ export const ChildGrammar = closed.relation(
     position,
     version,
   })),
+  { pack: "hex" },
 );
 
 /**
@@ -643,6 +650,7 @@ export const Follow = closed.relation(
   { from: familyPosition, model: closedId(ContentModel), to: familyPosition },
   ["model", "from", "to"],
   modelRows(contentModels, familyRows.follow, ({ from, to }, model) => ({ from, model, to })),
+  { pack: "hex" },
 );
 
 /**
@@ -654,6 +662,7 @@ export const Last = closed.relation(
   { model: closedId(ContentModel), position: familyPosition },
   ["model", "position"],
   modelRows(contentModels, familyRows.last, ({ position }, model) => ({ model, position })),
+  { pack: "hex" },
 );
 
 /**
@@ -687,6 +696,7 @@ export const Symbol = closed.relation(
     model,
     position,
   })),
+  { pack: "hex" },
 );
 
 /**
@@ -981,6 +991,7 @@ export const GoverningOf = closed.relation(
   },
   ["version", "kind", "governs"],
   governingRows(),
+  { pack: "hex" },
 );
 
 /**
@@ -1021,6 +1032,7 @@ export const AttributeGrammar = closed.relation(
       }),
     ),
   ],
+  { pack: "hex" },
 );
 
 /**

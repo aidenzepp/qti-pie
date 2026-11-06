@@ -36,6 +36,28 @@ import { idOf, searchTimeout } from "#pantry/test/gen/xdm.ts";
 const version = "3.0.1";
 
 /**
+ * Collapse a text as XML Schema's whiteSpace `collapse` does: each run of tabs, line feeds,
+ * carriage returns and spaces one space, and none at either end (XML Schema Part 2, §4.3.6).
+ *
+ * @param text - The text.
+ * @returns The collapsed text.
+ */
+const collapsed = (text: string): string =>
+  text
+    .replaceAll(/[\t\n\r ]+/gu, " ")
+    .replace(/^ /u, "")
+    .replace(/ $/u, "");
+
+/**
+ * Read a language tag without regard to case (RFC 5646 §2.1.1): its ASCII capitals as small
+ * letters, a tag's subtags being ASCII (§2.1).
+ *
+ * @param tag - The tag.
+ * @returns The folded tag.
+ */
+const folded = (tag: string): string => tag.replaceAll(/[A-Z]/gu, (c) => c.toLowerCase());
+
+/**
  * The kinds the cases' elements are of.
  */
 type CaseKind =
@@ -406,9 +428,10 @@ describe(
 );
 
 /**
- * The texts a LOM language is written with: `en`, `fr`, or none, an empty element.
+ * The texts a LOM language is written with: `en`, `EN`, the same tag in another case, `fr`, or
+ * none, an empty element.
  */
-const lomTexts = ["en", "fr", ""] as const;
+const lomTexts = ["en", "EN", "fr", ""] as const;
 
 /**
  * A LOM case: each general category's languages, and the educational category's one language or
@@ -442,30 +465,37 @@ const languageOf = (text: string): XdmClosedElement<Composed> =>
 /**
  * A situation the LOM box must reach.
  */
-type LomSituation = "repeated language" | "empty language" | "two categories" | "educational";
+type LomSituation =
+  | "repeated language"
+  | "one language in two cases"
+  | "empty language"
+  | "two categories"
+  | "educational";
 
 describe("import/overlays/identity.ts, a LOM record's rows", { timeout: searchTimeout }, () => {
   it.effect(
-    "gives one LomLanguage row per general category's language, its category its parent, and each (category, language) once, and none for another category's language",
+    "gives one LomLanguage row per general category's language, its category its parent and its tag case-folded, and each (category, tag) once, and none for another category's language",
     (ctx) =>
       // Oracle: the case's own model read as keyed sets, each node numbered in document order:
-      // the record node 1, then each category and, after it, each language and its text node.
-      // Bound: every record of 1 or 2 general categories of at most 2 languages over en, fr and
-      // empty, with an educational language or none, 364.
+      // the record node 1, then each category and, after it, each language and its text node; a
+      // tag read without regard to case (RFC 5646 §2.1.1).
+      // Bound: every record of 1 or 2 general categories of at most 2 languages over en, EN, fr
+      // and empty, with an educational language or none, 924.
       searched(
         ctx,
         exhaust(
           {
-            box: "every record of 1 or 2 general categories of at most 2 languages over en, fr and empty, beside an educational language or none",
+            box: "every record of 1 or 2 general categories of at most 2 languages over en, EN, fr and empty, beside an educational language or none",
             caseHang: Duration.seconds(10),
             coverage: requiredInSpace<LomSituation>([
               "repeated language",
+              "one language in two cases",
               "empty language",
               "two categories",
               "educational",
             ]),
             generator: lomCases,
-            limit: 500,
+            limit: 1000,
             literal: (drawn) => JSON.stringify(drawn),
             oracle: { kind: "specification", name: "the case's model, read as keyed sets" },
             suite: "import/identity-lom-rows",
@@ -499,6 +529,14 @@ describe("import/overlays/identity.ts, a LOM record's rows", { timeout: searchTi
                 c.note("repeated language");
               }
 
+              if (
+                drawn.generals.some(
+                  (texts) => new Set(texts.map(folded)).size < new Set(texts).size,
+                )
+              ) {
+                c.note("one language in two cases");
+              }
+
               if (drawn.generals.some((texts) => texts.includes(""))) {
                 c.note("empty language");
               }
@@ -514,10 +552,12 @@ describe("import/overlays/identity.ts, a LOM record's rows", { timeout: searchTi
               assert.deepStrictEqual(
                 asSet(
                   [...rows.LomLanguage.values()].map(
-                    ({ general, lang, node }) => `${node} ${general} ${lang}`,
+                    ({ general, lang, node, tag }) => `${node} ${general} ${lang} ${tag}`,
                   ),
                 ),
-                expected.map(({ general, lang, node }) => `${node} ${general} ${lang}`).toSorted(),
+                expected
+                  .map(({ general, lang, node }) => `${node} ${general} ${lang} ${folded(lang)}`)
+                  .toSorted(),
               );
               assert.deepStrictEqual(
                 asSet(
@@ -525,7 +565,9 @@ describe("import/overlays/identity.ts, a LOM record's rows", { timeout: searchTi
                     ({ general, lang }) => `${general} ${lang}`,
                   ),
                 ),
-                [...new Set(expected.map(({ general, lang }) => `${general} ${lang}`))].toSorted(),
+                [
+                  ...new Set(expected.map(({ general, lang }) => `${general} ${folded(lang)}`)),
+                ].toSorted(),
               );
             }),
         ),
@@ -821,8 +863,8 @@ interface LangCase {
 /**
  * Every R26 case: an item or a stimulus resource with no `href`, the item's or a path the package
  * holds no document at, whose record has at most 2 general categories, each listing at most 2
- * languages over `en` and `fr`; and an item whose root states no `xml:lang`, `en`, ` fr` or the
- * empty one, and whose `div` states none, `en` or `fr`.
+ * languages over `en` and `fr`; and an item whose root states no `xml:lang`, `en`, ` FR` (`fr`
+ * collapsed and in another case) or the empty one, and whose `div` states none, `en` or `fr`.
  */
 const langCases: Gen<LangCase> = (source) => ({
   divLang: source.draw(element([Option.none(), Option.some("en"), Option.some("fr")])),
@@ -831,10 +873,21 @@ const langCases: Gen<LangCase> = (source) => ({
   ),
   href: source.draw(element([Option.none(), Option.some(itemPath), Option.some("missing.xml")])),
   rootLang: source.draw(
-    element([Option.none(), Option.some("en"), Option.some(" fr"), Option.some("")]),
+    element([Option.none(), Option.some("en"), Option.some(" FR"), Option.some("")]),
   ),
   type: source.draw(element(["imsqti_item_xmlv3p0", "imsqti_stimulus_xmlv3p0"] as const)),
 });
+
+/**
+ * Decide whether a category's languages list the language an `xml:lang` form states: its value,
+ * collapsed, among them, each read as a tag without regard to case (RFC 5646 §2.1.1).
+ *
+ * @param langs - The category's languages, as written.
+ * @param form - The form, as written.
+ * @returns Whether the category lists it.
+ */
+const lists = (langs: readonly string[], form: string): boolean =>
+  langs.map(folded).includes(folded(collapsed(form)));
 
 /**
  * A situation the R26 box must reach: each way the law holds or breaks.
@@ -854,9 +907,9 @@ describe("import/overlays/identity.ts, R26's rows", { timeout: searchTimeout }, 
       // Oracle: the specification as a checker, QTI 3.0 Metadata §2.7.1.3 ("There must be one
       // value for each of the languages referred to by the language attributes on the associated
       // assessmentItem, test or object bank and its 'bodyElements'") over the case's model, read
-      // as keyed sets: an xml:lang by its value, its outer whitespace set apart, the empty one
-      // stating none (XML 1.0 §2.12), a LOM language as written, both compared exactly (the named
-      // weakening, G-text); the manifest's nodes numbered in document order (the manifest 1, its
+      // as keyed sets: an xml:lang by its value, collapsed, the empty one stating none (XML 1.0
+      // §2.12), a LOM language as written, the two compared as tags without regard to case (RFC
+      // 5646 §2.1.1); the manifest's nodes numbered in document order (the manifest 1, its
       // resources 2, the resource 3, its metadata 4, the record 5, then each category and, after
       // it, each language and its text node).
       // Bound: every item or stimulus resource of 3 hrefs, at most 2 categories of at most 2
@@ -961,12 +1014,10 @@ describe("import/overlays/identity.ts, R26's rows", { timeout: searchTimeout }, 
               const forms = [
                 ...new Set([...Option.toArray(drawn.rootLang), ...Option.toArray(drawn.divLang)]),
               ];
-              const stated = forms.filter((form) => form.trim() !== "");
+              const stated = forms.filter((form) => collapsed(form) !== "");
               const naming = named === "none" ? [] : generals;
               const holds = stated.every((form) =>
-                naming.every(
-                  ({ langs }) => described !== itemDocument || langs.includes(form.trim()),
-                ),
+                naming.every(({ langs }) => described !== itemDocument || lists(langs, form)),
               );
 
               if (stated.length > 0 && naming.length > 0 && described === itemDocument) {
@@ -1008,29 +1059,15 @@ describe("import/overlays/identity.ts, R26's rows", { timeout: searchTimeout }, 
               assert.deepStrictEqual(
                 asSet(
                   [...witnesses.values()].map((row) =>
-                    JSON.stringify([
-                      row.general,
-                      row.document,
-                      row.lang,
-                      row.lead,
-                      row.value,
-                      row.trail,
-                    ]),
+                    JSON.stringify([row.general, row.document, row.lang, row.value]),
                   ),
                 ),
                 (described === itemDocument ? naming : [])
                   .flatMap(({ langs, node }) =>
                     stated
-                      .filter((form) => langs.includes(form.trim()))
+                      .filter((form) => lists(langs, form))
                       .map((form) =>
-                        JSON.stringify([
-                          node,
-                          itemDocument,
-                          form,
-                          form.slice(0, form.length - form.trimStart().length),
-                          form.trim(),
-                          form.slice(form.trimEnd().length),
-                        ]),
+                        JSON.stringify([node, itemDocument, form, folded(collapsed(form))]),
                       ),
                   )
                   .toSorted(),
@@ -1077,8 +1114,8 @@ interface SsmlCase {
 
 /**
  * Every SSML case: an item whose `div` holds a mark of its own or not, then 1 or 2 `speak`s, each
- * of no `startmark`, `m` or ` m`, at most 2 marks named `m`, and no lookup, one beside its lexicon
- * or one without.
+ * of no `startmark`, `m n` or ` m\t n ` (the same token collapsed), at most 2 marks named `m n`,
+ * and no lookup, one beside its lexicon or one without.
  */
 const ssmlCases: Gen<SsmlCase> = (source) => ({
   outside: source.draw(boolean),
@@ -1087,7 +1124,7 @@ const ssmlCases: Gen<SsmlCase> = (source) => ({
       (inner) => ({
         lookup: inner.draw(element(["none", "resolved", "unresolved"] as const)),
         marks: inner.draw(element([0, 1, 2])),
-        startmark: inner.draw(element([Option.none(), Option.some("m"), Option.some(" m")])),
+        startmark: inner.draw(element([Option.none(), Option.some("m n"), Option.some(" m\t n ")])),
       }),
       { max: 2, min: 1 },
     ),
@@ -1112,15 +1149,15 @@ describe("import/overlays/identity.ts, SSML's rows (reading 3)", { timeout: sear
       // Oracle: the specification as a checker, SSML 1.1 §3.1.1.1 and §3.1.5 over spec reading 3
       // ("the document" is each speak fragment) and the case's model, read as keyed sets: the
       // nodes numbered in document order (the root 1, its div 2, the outside mark 3 where drawn,
-      // then each speak and, after it, its lexicon, its marks and its lookup), each name with its
-      // outer whitespace set apart (the named weakening, G-text).
+      // then each speak and, after it, its lexicon, its marks and its lookup), each name by its
+      // value, collapsed (an xs:token's whiteSpace, SSML 1.1 §3.3.2).
       // Bound: an outside mark or none and 1 or 2 speaks of 3 trims, at most 2 marks and 3
       // lookups, 1,512.
       searched(
         ctx,
         exhaust(
           {
-            box: "every item of an outside mark or none and 1 or 2 speaks, each of 3 startmarks, at most 2 marks named m and 3 lookups",
+            box: "every item of an outside mark or none and 1 or 2 speaks, each of 3 startmarks, at most 2 marks named m n and 3 lookups",
             caseHang: Duration.seconds(10),
             coverage: requiredInSpace<SsmlSituation>([
               "a mark defined once",
@@ -1147,7 +1184,7 @@ describe("import/overlays/identity.ts, SSML's rows (reading 3)", { timeout: sear
                       ? [elementOf("ssml:lexicon", [attribute("xml:id", "L")], [])]
                       : []),
                     ...Array.from({ length: choice.marks }, () =>
-                      elementOf("ssml:mark", [attribute("name", "m")], []),
+                      elementOf("ssml:mark", [attribute("name", "m n")], []),
                     ),
                     ...(choice.lookup === "none"
                       ? []
@@ -1164,7 +1201,7 @@ describe("import/overlays/identity.ts, SSML's rows (reading 3)", { timeout: sear
                     [],
                     [
                       ...(drawn.outside
-                        ? [elementOf("ssml:mark", [attribute("name", "m")], [])]
+                        ? [elementOf("ssml:mark", [attribute("name", "m n")], [])]
                         : []),
                       ...speaks,
                     ],
@@ -1177,7 +1214,7 @@ describe("import/overlays/identity.ts, SSML's rows (reading 3)", { timeout: sear
               const expectedScopes: string[] = [];
               const outsideMark = idOf(3);
               if (drawn.outside) {
-                expectedAttributes.push(`${outsideMark} name ssml:mark m ${documentNode}`);
+                expectedAttributes.push(`${outsideMark} name ssml:mark m n ${documentNode}`);
                 expectedScopes.push(
                   `${outsideMark} ${documentNode}`,
                   `${idOf(2)} ${documentNode}`,
@@ -1191,7 +1228,9 @@ describe("import/overlays/identity.ts, SSML's rows (reading 3)", { timeout: sear
                 const speak = idOf(next);
                 next += 1;
                 for (const mark of Option.toArray(choice.startmark)) {
-                  expectedAttributes.push(`${speak} startmark ssml:speak ${mark.trim()} ${speak}`);
+                  expectedAttributes.push(
+                    `${speak} startmark ssml:speak ${collapsed(mark)} ${speak}`,
+                  );
                   expectedScopes.push(`${speak} ${speak}`);
                   trims.push({ marks: choice.marks, speak });
                 }
@@ -1203,7 +1242,7 @@ describe("import/overlays/identity.ts, SSML's rows (reading 3)", { timeout: sear
                 }
 
                 for (let at = 0; at < choice.marks; at += 1) {
-                  expectedAttributes.push(`${idOf(next)} name ssml:mark m ${speak}`);
+                  expectedAttributes.push(`${idOf(next)} name ssml:mark m n ${speak}`);
                   expectedScopes.push(`${idOf(next)} ${speak}`, `${speak} ${speak}`);
                   next += 1;
                 }

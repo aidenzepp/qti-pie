@@ -4,8 +4,9 @@
  * with `ResourceTypeLexical` (C17), each entry's pieces restate its text, and the `lom-identifier`
  * and `lom-title` laws over the rows refuse exactly the records reading 62 refuses: the identifier
  * as the law oracle (`#pantry/test/oracle.ts`) judges it and as the spec reads the package's own
- * sketch, the title as the spec reads the sketch under the named weakening's exact comparisons;
- * and a usage value has its typed row exactly where it writes a `baseType` (reading 105).
+ * sketch, the title as the spec reads the sketch, in `xs:normalizedString`'s value space with tags
+ * compared without regard to case; and a usage value has its typed row exactly where it writes a
+ * `baseType` (reading 105).
  */
 import { NodeServices } from "@effect/platform-node";
 import type { Addition, Uuid } from "@bjornpagen/grizzle";
@@ -211,8 +212,9 @@ const identifierRefusals = (built: Built): ReadonlySet<string> =>
 
 /**
  * Judge the `lom-title` law over a package's rows as PostgreSQL will: a record's row holds when its
- * document is its record's object's and has its title and `xml:lang`, its witness is a title string
- * of the record with that text and its own `language`, and the `LomObjectTitle` check holds.
+ * document is its record's object's and has its title's value and its `xml:lang`'s tag, its witness
+ * is a title string of the record with that value and its own language tag, and the
+ * `LomObjectTitle` check holds.
  *
  * @param built - The package's rows.
  * @returns The records whose row breaks the law, by id.
@@ -224,11 +226,11 @@ const titleRefusals = (built: Built): ReadonlySet<string> =>
       const object = built.objects.get(row.document);
       const holds =
         built.rows.LomObject.get(row.record)?.document === row.document &&
-        object?.title === row.title &&
-        object.lang === row.objectLang &&
+        object?.titleValue === row.title &&
+        object.langTag === row.objectLang &&
         string?.record === row.record &&
-        string.text === row.title &&
-        string.language === row.stringLanguage &&
+        string.textValue === row.title &&
+        string.languageTag === row.stringLanguage &&
         (row.objectLang === "" ||
           row.stringLanguage === "" ||
           row.stringLanguage === row.objectLang);
@@ -337,9 +339,15 @@ const languages = element([
 ]);
 
 /**
- * The `xml:lang` a sketched item writes: `en`, none, and the empty text.
+ * The `xml:lang` a sketched item writes: `en`, ` EN` (`en` padded and in capitals), none, and the
+ * empty text.
  */
-const itemLangs = element([Option.some("en"), Option.none<string>(), Option.some("")]);
+const itemLangs = element([
+  Option.some("en"),
+  Option.some(" EN"),
+  Option.none<string>(),
+  Option.some(""),
+]);
 
 /**
  * One entry of a sketch.
@@ -553,6 +561,39 @@ const collapse = (text: string): string =>
 const normalize = (text: string): string => text.replaceAll(/[\t\n\r]/gu, " ");
 
 /**
+ * Read a language tag without regard to case (RFC 5646 §2.1.1): its ASCII capitals as small
+ * letters, a tag's subtags being ASCII (§2.1).
+ *
+ * @param tag - The tag.
+ * @returns The folded tag.
+ */
+const asciiFolded = (tag: string): string => tag.replaceAll(/[A-Z]/gu, (c) => c.toLowerCase());
+
+/**
+ * Judge `E1_derived`'s compared forms over a package's rows as PostgreSQL will: each object's
+ * `titleValue` is its title with its whitespace replaced and its `langTag` its `xml:lang`
+ * collapsed and case-folded, and each title string's `textValue` and `languageTag` are its text
+ * and its language so read.
+ *
+ * @param built - The package's rows.
+ * @returns The rows whose compared forms differ, by id.
+ */
+const comparedFormBreaches = (built: Built): readonly string[] => [
+  ...[...built.objects.values()].flatMap((object) =>
+    object.titleValue === normalize(object.title) &&
+    object.langTag === asciiFolded(collapse(object.lang))
+      ? []
+      : [object.node],
+  ),
+  ...[...built.manifest.LomTitleString.values()].flatMap((string) =>
+    string.textValue === normalize(string.text) &&
+    string.languageTag === asciiFolded(string.language)
+      ? []
+      : [string.node],
+  ),
+];
+
+/**
  * The records of a sketch that name a document: those of an item or test resource with an `href`,
  * each with its resource's kind.
  *
@@ -583,19 +624,20 @@ const sketchIdentifierBreaches = (sketch: PackageSketch): number =>
 /**
  * Count the records reading 62's title half refuses in a sketch: each naming record with a general
  * title none of whose strings in the object's language holds the object's title, under the
- * binding's comparisons (`strict`: `xs:normalizedString`'s value space and tags without regard to
- * case) or the named weakening's exact ones.
+ * binding's comparisons (`strict`: `xs:normalizedString`'s value space, the `xml:lang` collapsed,
+ * and tags without regard to case) or exact ones, which the situations compare it with.
  *
  * @param sketch - The package.
  * @param strict - Whether to compare as the binding does.
  * @returns The count.
  */
 const sketchTitleBreaches = (sketch: PackageSketch, strict: boolean): number => {
-  const fold = (text: string) => (strict ? text.toLowerCase() : text);
+  const fold = (text: string) => (strict ? asciiFolded(text) : text);
   const value = (text: string) => (strict ? normalize(text) : text);
 
   return namingOf(sketch).filter(({ kind, record }) => {
-    const lang = kind === "item" ? Option.getOrElse(sketch.lang, () => "") : "";
+    const written = kind === "item" ? Option.getOrElse(sketch.lang, () => "") : "";
+    const lang = strict ? collapse(written) : written;
     const named = record.titles.flat().some(({ language, text }) => {
       const tag = Option.getOrElse(language, () => "");
 
@@ -626,7 +668,7 @@ type SketchSituation =
   | "title named"
   | "title in another language"
   | "empty title"
-  | "weakening over-refuses";
+  | "named only in the value space";
 
 /**
  * Decide whether a sketched entry names the objects' identifier: its text collapses to `choice`.
@@ -681,10 +723,10 @@ const situationsOf = (sketch: PackageSketch): readonly SketchSituation[] => {
     ],
     [sketch.manifestRecords.length > 0, "manifest record"],
     [generalEntries.some(({ value }) => value === "ch oice"), "entry with inner space"],
-    [sketchTitleBreaches(sketch, false) > 0, "title refused"],
+    [sketchTitleBreaches(sketch, true) > 0, "title refused"],
     [
       naming.some(({ record }) => record.titles.length > 0) &&
-        sketchTitleBreaches(sketch, false) <
+        sketchTitleBreaches(sketch, true) <
           naming.filter(({ record }) => record.titles.length > 0).length,
       "title named",
     ],
@@ -695,15 +737,21 @@ const situationsOf = (sketch: PackageSketch): readonly SketchSituation[] => {
           record.titles
             .flat()
             .some(({ language }) =>
-              Option.exists(language, (tag) => tag !== "" && !Option.contains(sketch.lang, tag)),
+              Option.exists(
+                language,
+                (tag) =>
+                  tag !== "" &&
+                  asciiFolded(tag) !==
+                    asciiFolded(collapse(Option.getOrElse(sketch.lang, () => ""))),
+              ),
             ),
-      ) && Option.exists(sketch.lang, (lang) => lang !== ""),
+      ) && Option.exists(sketch.lang, (lang) => collapse(lang) !== ""),
       "title in another language",
     ],
     [naming.some(({ record }) => record.titles.some((title) => title.length === 0)), "empty title"],
     [
       sketchTitleBreaches(sketch, false) > sketchTitleBreaches(sketch, true),
-      "weakening over-refuses",
+      "named only in the value space",
     ],
   ];
 
@@ -728,7 +776,7 @@ const reached = required<SketchSituation>(
     "title named",
     "title in another language",
     "empty title",
-    "weakening over-refuses",
+    "named only in the value space",
   ],
   { cases: 200, sense: notesOnly },
 );
@@ -843,14 +891,15 @@ describe("import/overlays/metadata.ts, generated packages", { timeout: searchTim
   );
 
   it.effect(
-    "refuses exactly the records reading 62 refuses: the identifier as the law oracle judges it, the title under the named weakening",
+    "refuses exactly the records reading 62 refuses: the identifier as the law oracle judges it, the title in its value space with tags compared without regard to case",
     (ctx) =>
       // Oracle: for the identifier, two at once: a second implementation, the law oracle's
       // `LomObjectIdentifier` (`#pantry/test/oracle.ts`, over the shredded and folded package),
       // and the specification as a checker, reading 62 over the package's sketch (a naming record
       // that lists general entries names its document's collapsed identifier). For the title, the
-      // specification over the sketch (QTI 3.0 Metadata §2.7.1.2) with the weakening's exact
-      // comparisons; the strict count is noted, and is never above the weakened one.
+      // specification over the sketch (QTI 3.0 Metadata §2.7.1.2): titles compared as
+      // xs:normalizedString values, the root's xml:lang collapsed, and tags without regard to case
+      // (RFC 5646 §2.1.1); each row's compared forms as E1 derived states them.
       // Bound: as the rows' search above; 300 cases.
       searched(
         ctx,
@@ -882,8 +931,8 @@ describe("import/overlays/metadata.ts, generated packages", { timeout: searchTim
 
               assert.strictEqual(identified.size, sketchIdentifierBreaches(sketch), "sketch");
               assert.strictEqual(identified.size, yield* oracleBreaches(files), "law oracle");
-              assert.strictEqual(titles.size, sketchTitleBreaches(sketch, false), "title");
-              assert.isAtMost(sketchTitleBreaches(sketch, true), titles.size, "the weakening");
+              assert.strictEqual(titles.size, sketchTitleBreaches(sketch, true), "title");
+              assert.deepStrictEqual(comparedFormBreaches(built), [], "compared forms");
             }),
         ),
       ),

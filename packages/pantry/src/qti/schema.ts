@@ -96,7 +96,6 @@ import {
   chardataLaws,
   Doctype,
   Document,
-  ForeignKindSelf,
   Namespace,
   OpenElementName,
   Pi,
@@ -278,14 +277,12 @@ const grammarRelations = {
 const nodeRelations = { Node };
 
 /**
- * `chardata.ts`'s relations and roster: character data, documents, namespaces and foreign names,
- * and the diagonal of the foreign kinds its "Strictly held" check reads.
+ * `chardata.ts`'s relations and roster: character data, documents, namespaces and foreign names.
  */
 const chardataRelations = {
   Comment,
   Doctype,
   Document,
-  ForeignKindSelf,
   Namespace,
   OpenElementName,
   Pi,

@@ -133,7 +133,10 @@ breaking change may briefly break older application instances that are still run
   chain is free of the names it moves into); then the violation check of each rule over closed relations alone that
   is new or whose closed rows changed, a DO block raising 23000 with the rule's name, so rows that break it refuse the
   migration before it changes anything; then extensions, each new content-addressed constant, and new domains. A
-  closed relation's constant is packed by a DO block from its rows as codes, each row's handles named in a comment; a
+  closed relation's constant is packed by a DO block from its rows as codes, each row's handles named in a comment, or,
+  where the relation declares `{ pack: "hex" }` or that block would pass what one statement carries, stated as one hex
+  bit-string literal, its row count and content digest in a comment, which `grizzle check` decodes and holds to that
+  digest and to its function's name; never edit one by hand (a change of form is a migration of no file); a
   roster's names constant is its handles as `name[]` in code order, `""` at a hole; a set's `live` function is
   derived from it. The domains are a roster's smallint domain over its names constant, a set's `bit(n)` domain over
   `live`, and the contract and text domains, one per distinct definition.
@@ -154,10 +157,10 @@ breaking change may briefly break older application instances that are still run
   with a placeholder for the conversion, or by its cast, with no placeholder, when the new type holds the old one's
   values (a pattern changed, a contract added, removed or swapped for another over the same base), after the
   constraints, indexes and statistics over it are dropped; they are built again as on any table with rows, but a key
-  over it, which is added again right after the conversion in the same transaction, so it holds throughout. A contract's
-  changed predicate replaces its domain's one CHECK in place, `NOT VALID`, validated in Validate. A changed pattern is
-  another pattern's domain, so each field it types is converted to it by its cast, which refuses a stored value the new
-  pattern doesn't admit (23514). Every world object an existing role relies on (a view, a policy, a filter function, a
+  over it, which is added again right after the conversion in the same transaction, so it holds throughout. A domain is
+  named by its whole definition, so a contract's changed predicate, like a changed pattern, is another domain: each
+  field it types is converted to it by its cast, which refuses a stored value the new definition doesn't admit (23514).
+  Every world object an existing role relies on (a view, a policy, a filter function, a
   key or unique probe) that changes, or that reads anything the migration changes or drops (a relation, a column, a
   type, a materialized view, a function), is dropped at the start of this transaction and created again, with its
   grants, at its end, so no committed state lacks it.
@@ -294,6 +297,7 @@ every check, and refuses before connecting.
 | a migration file is named NN-<words>.sql, one per NN | fix the file: rename it to NN-<words>.sql with an NN of its own |
 | a migration file runs as one transaction, or each statement alone with -- grizzle: no-transaction, and never controls the transaction itself | fix the file: delete the transaction control; SAVEPOINT and ROLLBACK TO are allowed |
 | -- grizzle: no-transaction counts only as a file's first line | fix the file: move the marker to the first line, or delete it |
+| a closed constant's literal pack was edited after it was drafted: its literal, its comment and its function's name no longer agree | restore the file from git, or regenerate; never hand-edit a literal pack |
 | the migrations directory holds what grizzle generate never writes | fix the file: remove it, or move it out of the migrations directory |
 
 Applied files, which only `migrate` can check against the ledger:
@@ -436,8 +440,20 @@ The command line's own refusals, by stage:
   compiler measures; a pattern held in an ordinary field or a parameter is refused. A literal pattern's match is a
   guard: `Compute.when(Compute.matches(x, "^[0-9]+$"), (x) => …, otherwise)`. `Compute.concat` builds text in checks,
   generated fields and folds; in a query, compare a text with a concatenation (`Compute.eq(t, Compute.concat(a, b))`)
-  and it is decided without building it. Fold an ordered family's texts with `Monoid.concat`, naming its
-  `(before, after)` pair, and write each member's separator into its own step value.
+  and it is decided without building it. Its first operand is a term: write a leading literal as
+  `Compute.literal(Prose, "item-")`. Normalize text with `Compute.translate(x, from, to)`, strings of one length with
+  each character of `from` once (`Compute.translate(title, "\t\n\r", "   ")` for `xs:normalizedString`), and fold
+  ASCII case with `Compute.lowerAscii(x)`, never a locale's `lower`. A translation is text of the image of `x`'s
+  pattern, so store it as `generated(T, Compute.cast(Compute.translate(…), T))` for any refined text `T` the image
+  lies in, which compilation proves; translate in a query only over a pattern that bounds its length. For XML
+  Schema's whiteSpace facets use `Compute.replaceWhitespace(x)` (tab, LF and CR to spaces) and `Compute.collapse(x)`
+  (runs to one space, none at either end), never a regex of your own; cast a collapse into a refined text the same
+  way, such as `str.regex("^(?:[^ \\t\\n\\r]+(?: [^ \\t\\n\\r]+)*)?$", "su")` for any text. A query's
+  `Compute.matches` and `Compute.collapse`, like its translate, need a pattern that bounds the subject's length:
+  PostgreSQL's regex engine widens its subject fourfold. Fold an ordered family's texts with `Monoid.concat`, naming its
+  `(before, after)` pair, and write each member's separator into its own step value; type the step and the
+  accumulators by a bounded pattern, `str.regex("^.{0,64}$", "su")`, since the family's axes key each running text
+  and an unbounded one is UnrepresentableKey.
 - Every numeric field declares its precision and scale, `pg.numeric(p, s)`; there is no bare `pg.numeric`. A sum,
   a mean or an operation's numeric result carries the digits its computation proves, and one past 131,072 integer
   digits is `ResourceBound`. Convert an integer, money or a float to numeric with `Compute.numeric(x)`, never a cast to

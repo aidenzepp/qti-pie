@@ -58,22 +58,21 @@
  *   other's names. {@link SsmlAttribute} holds the attributes the two laws read,
  *   {@link FragmentValue} each fragment's values by element kind, and {@link SsmlScope} each
  *   element's fragment, read up the tree from the elements those attributes stand on, so `Node`
- *   carries no copy of it. A name is compared with its outer whitespace set apart, a named
- *   weakening of an `xs:token`'s collapse (G-text below).
+ *   carries no copy of it. A name is compared by its value, the lexical form collapsed (an
+ *   `xs:token`'s or an `xs:ID`'s whiteSpace, SSML 1.1 §3.3.2), which `Compute.collapse` states.
  * - **Label tools** (rule `label-tool`): an item that labels an element of its content names the tool
  *   that labelled it, by both `tool-name` and `tool-version` on its root ({@link LabelUse}).
  *
- * **Language equality, a named weakening until grizzle's text terms grow.** A language is the one
- * a tag names: `xml:lang` is an `xs:language`, compared by its value, its lexical form collapsed
- * (XML Schema 1.0 Part 2 §3.3.3, whiteSpace `collapse` from `xs:token`), and a LOM `language` a
- * `CharacterString`, an `xs:string` compared as written; BCP 47 compares tags without regard to
- * case ("At all times, language tags and their subtags … are to be treated as case insensitive",
- * RFC 5646 §2.1.1, which XML 1.0 §2.12 names for `xml:lang`). grizzle's `Compute` has no case fold
- * (Q5.12's `lom-title` meets the same), so tags are compared exactly here, and the law
- * over-refuses a document language that differs from a listed one only by case. Marker `G-text`
- * below names the place `Compute.lowerAscii` replaces. An empty `xml:lang`, or one of whitespace
- * alone, states no language ("there is no language information available", XML 1.0 §2.12), so it
- * asks for no listing.
+ * **Language equality.** A language is the one a tag names: `xml:lang` is an `xs:language`,
+ * compared by its value, its lexical form collapsed (XML Schema 1.0 Part 2 §3.3.3, whiteSpace
+ * `collapse` from `xs:token`), and a LOM `language` a `CharacterString`, an `xs:string` read as
+ * written; BCP 47 compares tags without regard to case ("At all times, language tags and their
+ * subtags … are to be treated as case insensitive", RFC 5646 §2.1.1, which XML 1.0 §2.12 names for
+ * `xml:lang`). A tag's subtags are ASCII letters, digits and hyphens (RFC 5646 §2.1), so its case
+ * is ASCII's, and both sides compare by `Compute.lowerAscii`: {@link LomLanguage}'s `tag` and
+ * {@link GeneralLang}'s `value`. An empty `xml:lang`, or one of whitespace alone, states no
+ * language ("there is no language information available", XML 1.0 §2.12), so it asks for no
+ * listing.
  *
  * Every copy of an attribute into an overlay follows C18 the other way round, from
  * `select(Attribute, φ)` into the overlay, beside a key over the same selection whose UNIQUE serves
@@ -127,13 +126,7 @@ import {
 import { Attribute, Idref } from "#pantry/qti/attributes.ts";
 import { Document } from "#pantry/qti/chardata.ts";
 import { keyText } from "#pantry/qti/limits.ts";
-import {
-  LomGeneral,
-  LomObject,
-  LomRecord,
-  ResourceLomGeneral,
-  trimmedPattern,
-} from "#pantry/qti/metadata.ts";
+import { LomGeneral, LomObject, LomRecord, ResourceLomGeneral } from "#pantry/qti/metadata.ts";
 import { Node, nodeRef } from "#pantry/qti/node.ts";
 import { Instance, testKind } from "#pantry/qti/tests.ts";
 
@@ -278,17 +271,22 @@ export const DocumentLang = relation(
 
 /**
  * One language a LOM `general` category lists, keyed by its `lom:language` node: the category, its
- * parent, and the element's string value, the member that carries a
+ * parent; `lang`, the element's string value as written; and `tag`, that value case-folded
+ * (`Compute.lowerAscii`, RFC 5646 §2.1.1), the member that carries a
  * {@link ResourceLomLanguageSet} value. `Node.stringValue` folds a `lom:language`'s characters
  * though no domain checks them, since it is one of `copiedTextKinds` (`#pantry/qti/node.ts`).
  */
-export const LomLanguage = relation("LomLanguage", { general: uuid, lang: keyText, node: uuid }, [
-  "node",
-]);
+export const LomLanguage = relation(
+  "LomLanguage",
+  { general: uuid, lang: keyText, node: uuid, tag: keyText },
+  ["node"],
+);
 
 /**
  * The languages each LOM `general` category lists, a projection keyed by its heading: one row per
- * (category, language), its `carriers` the `lom:language` elements that list it.
+ * (category, language), the language its tag case-folded ({@link LomLanguage}'s `tag`), so two
+ * listings that differ only in case are one language, and its `carriers` the `lom:language`
+ * elements that list it.
  *
  * It is keyed by the category's node, not by a resource: one hop from a `lom:language` cannot tell
  * a resource's record from the manifest's, a file's or an external one. R26 reads the categories
@@ -337,13 +335,13 @@ export const DocumentGenerals = relation(
  * One language of a document that one of the general categories describing it lists, keyed by
  * (category, form): R26's witness.
  *
- * - `lang` is the document's `xml:lang` form ({@link DocumentLang}), and `lead ‖ value ‖ trail` is
- *   `lang`, `value` its collapsed value, an `xs:language` holding no whitespace;
- * - `value` is a language the category lists, as written ({@link ResourceLomLanguageSet}).
+ * - `lang` is the document's `xml:lang` form ({@link DocumentLang}), and `value` its value collapsed
+ *   and case-folded, `lowerAscii(collapse(lang))`, nonempty since the form states a language;
+ * - `value` is a language the category lists ({@link ResourceLomLanguageSet}).
  */
 export const GeneralLang = relation(
   "GeneralLang",
-  { document: uuid, general: uuid, lang: keyText, lead: Space, trail: Space, value: keyText },
+  { document: uuid, general: uuid, lang: keyText, value: keyText },
   ["general", "lang"],
 );
 
@@ -362,22 +360,19 @@ export const LabelUse = relation(
  * `name`, a `speak`'s `startmark` and `endmark`, a `lexicon`'s `xml:id` and a `lookup`'s `ref`.
  *
  * - **copied from the attribute:** `node`, `name`, `kind` (its element's) and `lexical`;
- * - **the host's:** `lead ‖ value ‖ trail`, the lexical form with its outer whitespace set apart
- *   (`trail` empty where `value` is, so the split is one per form), `refers`, the kind its value
- *   names (a trim a `mark`'s, a lookup a `lexicon`'s, a definition its own kind), and `fragment`,
- *   its element's {@link SsmlScope}.
+ * - **the host's:** `value`, the lexical form collapsed (`Compute.collapse`: an `xs:token`'s or an
+ *   `xs:ID`'s whiteSpace), `refers`, the kind its value names (a trim a `mark`'s, a lookup a
+ *   `lexicon`'s, a definition its own kind), and `fragment`, its element's {@link SsmlScope}.
  */
 export const SsmlAttribute = relation(
   "SsmlAttribute",
   {
     fragment: uuid,
     kind: closedId(NodeKind),
-    lead: Space,
     lexical: keyText,
     name: closedId(AttributeName),
     node: uuid,
     refers: closedId(NodeKind),
-    trail: Space,
     value: keyText,
   },
   ["node", "name"],
@@ -542,7 +537,7 @@ export const AssembledLang = relation(
  */
 export const PlacedGeneralLang = relation(
   "PlacedGeneralLang",
-  { assembly: uuid, general: uuid, lang: keyText, lead: Space, trail: Space, value: keyText },
+  { assembly: uuid, general: uuid, lang: keyText, value: keyText },
   ["general", "lang"],
 );
 
@@ -788,7 +783,7 @@ export const langFamily = counted(on(XmlLang, "document", "lang"), fin(DocumentL
  * `ResourceLomLanguageSet.carriers`.
  */
 export const lomLanguageFamily = counted(
-  on(LomLanguage, "general", "lang"),
+  on(LomLanguage, "general", "tag"),
   fin(ResourceLomLanguageSet, "carriers"),
 );
 
@@ -894,19 +889,20 @@ export const ssmlLexiconReference = contained(
  * - **DocumentLang:** each `xml:lang` copied into its `XmlLang` row and each row an attribute's, the
  *   counted family, and each form carried (`E1_derived`);
  * - **ResourceLomLanguageSet:** each general category's `lom:language` copied into its `LomLanguage`
- *   row, its category its parent and its language its string value, and each row an element's; the
- *   counted family, and each language listed (`E1_derived`);
+ *   row, its category its parent and its language its string value, and each row an element's; its
+ *   tag the value case-folded, the counted family over the tags, and each language listed
+ *   (`E1_derived`);
  * - **R26:** each resource's general category with its record's `named`, both ways; each one of a
  *   naming record with its document; each document with its count of categories; each witness a
- *   category's of its document, listing its form's value; and {@link documentLang}; in place, each
- *   item instance's carriers placed and counted against its document's, each assembly form's
- *   carriers and listing categories counted, each witness a category's of the item, listing its
- *   form's value; and {@link assembledLang};
- * - **Reading 3:** each read SSML attribute copied into its {@link SsmlAttribute} row, both ways,
- *   split around its value and placed in its element's fragment; each fragment's values counted;
- *   each scope on its node's {@link nodeRef} tuple, a `speak` its own fragment, a root that is no
- *   `speak` the document's and every other element its parent's; {@link ssmlTrimMark} and
- *   {@link ssmlLexiconReference};
+ *   category's of its document, listing its form's value collapsed and case-folded; and
+ *   {@link documentLang}; in place, each item instance's carriers placed and counted against its
+ *   document's, each assembly form's carriers and listing categories counted, each witness a
+ *   category's of the item, listing its form's value; and {@link assembledLang};
+ * - **Reading 3:** each read SSML attribute copied into its {@link SsmlAttribute} row, both ways, its
+ *   value its lexical form collapsed, and placed in its element's fragment; each fragment's values
+ *   counted; each scope on its node's {@link nodeRef} tuple, a `speak` its own fragment, a root
+ *   that is no `speak` the document's and every other element its parent's; {@link ssmlTrimMark}
+ *   and {@link ssmlLexiconReference};
  * - **Label tools:** each non-root `label` copied into its `LabelUse` row and each row a label's, its
  *   root kind its document's, and in an item each label's document one whose root carries
  *   `tool-name` and `tool-version`.
@@ -1013,6 +1009,7 @@ export const identityLaws = [
     on(LomLanguage, "node", "general", "lang"),
   ),
   contained(on(LomLanguage, "node"), on(lomLanguages, "id")),
+  check("E1_derived", LomLanguage, (l) => l.eq(l.tag, Compute.lowerAscii(l.lang))),
   lomLanguageFamily,
   check("E1_derived", ResourceLomLanguageSet, (s) => s.gt(s.carriers, 0n)),
 
@@ -1026,15 +1023,9 @@ export const identityLaws = [
   generalObjectFamily,
   generalLangFamily,
   contained(on(GeneralLang, "general", "document"), on(GeneralObject, "general", "document")),
-  // G-text: `value` and the category's `lang` compare case-folded (BCP 47 §2.1.1) once grizzle has
-  // an ASCII case fold, `Compute.lowerAscii`, on both sides; until then, exactly.
   contained(on(GeneralLang, "general", "value"), on(ResourceLomLanguageSet, "general", "lang")),
   check("E1_derived", GeneralLang, (g) =>
-    g.and(
-      g.eq(g.lang, Compute.concat(Compute.concat(g.lead, g.value), g.trail)),
-      Compute.matches(g.value, trimmedPattern),
-      g.ne(g.value, ""),
-    ),
+    g.and(g.eq(g.value, Compute.lowerAscii(Compute.collapse(g.lang))), g.ne(g.value, "")),
   ),
   documentLang,
   documentLangFamily,
@@ -1053,11 +1044,7 @@ export const identityLaws = [
     on(ResourceLomLanguageSet, "general", "lang"),
   ),
   check("E1_derived", PlacedGeneralLang, (g) =>
-    g.and(
-      g.eq(g.lang, Compute.concat(Compute.concat(g.lead, g.value), g.trail)),
-      Compute.matches(g.value, trimmedPattern),
-      g.ne(g.value, ""),
-    ),
+    g.and(g.eq(g.value, Compute.lowerAscii(Compute.collapse(g.lang))), g.ne(g.value, "")),
   ),
   assembledLang,
 
@@ -1068,14 +1055,9 @@ export const identityLaws = [
   ),
   contained(on(SsmlAttribute, "node", "name"), on(ssmlAttributes, "node", "name")),
   contained(on(SsmlAttribute, "node", "fragment"), on(SsmlScope, "node", "fragment")),
-  // G-text: a mark name is an xs:token (SSML 1.1 §3.3.2), whose collapse also folds each inner run
-  // of whitespace into one space; grizzle cannot state it, so only the outer whitespace is set
-  // apart here, and two names that differ only in their inner whitespace are two names.
   check("E1_derived", SsmlAttribute, (s) =>
     s.and(
-      s.eq(s.lexical, Compute.concat(Compute.concat(s.lead, s.value), s.trail)),
-      Compute.matches(s.value, trimmedPattern),
-      s.or(s.ne(s.value, ""), s.eq(s.trail, "")),
+      s.eq(s.value, Compute.collapse(s.lexical)),
       s.or(
         s.and(s.eq(s.kind, "ssml:speak"), s.eq(s.refers, "ssml:mark")),
         s.and(s.eq(s.kind, "ssml:lookup"), s.eq(s.refers, "ssml:lexicon")),

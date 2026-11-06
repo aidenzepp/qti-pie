@@ -175,6 +175,40 @@ export const piecesOf = (text: string): Pieces => {
 };
 
 /**
+ * Read a text in `xs:normalizedString`'s value space, as `Compute.replaceWhitespace` does: each
+ * tab, line feed and carriage return a space.
+ *
+ * @param text - The text.
+ * @returns The text with every such character replaced.
+ * @see {@link https://www.w3.org/TR/xmlschema-2/#rf-whiteSpace | XML Schema Part 2, whiteSpace}
+ */
+export const replaceWhitespace = (text: string): string => text.replaceAll(/[\t\n\r]/gu, " ");
+
+/**
+ * Collapse a text, as `Compute.collapse` does: each run of tabs, line feeds, carriage returns and
+ * spaces one space, and none at either end. No other character is whitespace to it.
+ *
+ * @param text - The text.
+ * @returns The collapsed text.
+ * @see {@link https://www.w3.org/TR/xmlschema-2/#rf-whiteSpace | XML Schema Part 2, whiteSpace}
+ */
+export const collapse = (text: string): string =>
+  text
+    .replaceAll(/[\t\n\r ]+/gu, " ")
+    .replace(/^ /u, "")
+    .replace(/ $/u, "");
+
+/**
+ * Fold a text's ASCII capitals to small letters, as `Compute.lowerAscii` does, every other
+ * character as it is: a BCP 47 tag's case (RFC 5646 §2.1.1).
+ *
+ * @param text - The text.
+ * @returns The folded text.
+ */
+export const lowerAscii = (text: string): string =>
+  text.replaceAll(/[A-Z]/gu, (capital) => capital.toLowerCase());
+
+/**
  * Read the code of a resource's `type` from its lexical form.
  *
  * @param lexical - The `type` attribute's lexical form, as written.
@@ -509,7 +543,8 @@ const stringRowsOf = (tree: Tree): StringRows => {
 
 /**
  * Build a document's {@link LomTitleString} rows: one per `lom:string` of a title, with its title's
- * record, its string value, and its `language`'s count and form.
+ * record, its string value and its `language` as written, and the two as `lom-title` compares them:
+ * the value with its whitespace replaced, the language case-folded.
  *
  * @param tree - The document's tree.
  * @param titles - The document's {@link LomTitle} rows.
@@ -526,14 +561,19 @@ const titleStringRowsOf = (
         return [];
       }
 
+      const language = tree.valueOf(node, "language") ?? "";
+      const text = tree.stringValueOf(node.id);
+
       return [
         [
           node.id,
           {
             ...tree.tupleOf(node),
-            language: tree.valueOf(node, "language") ?? "",
+            language,
+            languageTag: lowerAscii(language),
             record: title.record,
-            text: tree.stringValueOf(node.id),
+            text,
+            textValue: replaceWhitespace(text),
           },
         ] as const,
       ];
@@ -551,9 +591,9 @@ interface RootRows {
 
 /**
  * Build a document's {@link AssessmentObject} and {@link ObjectLang} rows: one per item's or test's
- * root, its `identifier` split around its collapsed value, its `title` as written, and its
- * `xml:lang` where it writes one. A root that writes no `identifier` or `title` has none, which AL3
- * refuses.
+ * root, its `identifier` split around its collapsed value, its `title` as written and with its
+ * whitespace replaced, and its `xml:lang` where it writes one, as written and collapsed and
+ * case-folded. A root that writes no `identifier` or `title` has none, which AL3 refuses.
  *
  * @param tree - The document's tree.
  * @returns The rows, each by its node's id.
@@ -578,6 +618,7 @@ const objectRowsOf = (tree: Tree): RootRows => {
         }
 
         const { lead, token, trail } = piecesOf(lexical);
+        const lang = tree.valueOf(node, "xml:lang") ?? "";
 
         return [
           [
@@ -588,8 +629,10 @@ const objectRowsOf = (tree: Tree): RootRows => {
               identifierLead: lead,
               identifierLexical: lexical,
               identifierTrail: trail,
-              lang: tree.valueOf(node, "xml:lang") ?? "",
+              lang,
+              langTag: lowerAscii(collapse(lang)),
               title,
+              titleValue: replaceWhitespace(title),
             },
           ] as const,
         ];
@@ -703,9 +746,9 @@ export interface NamedDocument {
 }
 
 /**
- * Decide whether a title string is in an object's language (`lom-title`, by the exact comparison
- * of the named weakening): the object states no `xml:lang`, the string no `language` (an empty one
- * states none alike), or the two are written alike.
+ * Decide whether a title string is in an object's language (`lom-title`): the object states no
+ * `xml:lang` (an empty one, or one of whitespace alone, states none), the string no `language` (an
+ * empty one states none alike), or the two name one tag without regard to case.
  *
  * @param string - The title string.
  * @param object - The object.
@@ -716,9 +759,9 @@ const inLanguage = (
   object: Addition<typeof AssessmentObject> | undefined,
 ): boolean =>
   object === undefined ||
-  object.lang === "" ||
-  string.language === "" ||
-  string.language === object.lang;
+  object.langTag === "" ||
+  string.languageTag === "" ||
+  string.languageTag === object.langTag;
 
 /**
  * Build a naming record's {@link LomObjectIdentifier} row: its witness the first general entry of
@@ -748,8 +791,9 @@ const identifierRowOf = (
 
 /**
  * Build a naming record's {@link LomObjectTitle} row: its witness the first title string of the
- * record, in document order, in the document's language whose text is its title, or the first
- * string when none is, or the title itself when the record's titles hold no string.
+ * record, in document order, in the document's language whose text has its title's value (both
+ * with their whitespace replaced), or the first string when none is, or the title itself when the
+ * record's titles hold no string.
  *
  * @param record - The record's node.
  * @param document - The document it names.
@@ -767,18 +811,19 @@ const titleRowOf = (
   const strings = [...metadata.LomTitleString.values()].filter(
     (string) => string.record === record,
   );
-  const title = object?.title ?? "";
+  const title = object?.titleValue ?? "";
   const witness =
-    strings.find((string) => string.text === title && inLanguage(string, object)) ?? strings.at(0);
+    strings.find((string) => string.textValue === title && inLanguage(string, object)) ??
+    strings.at(0);
 
   return first === undefined
     ? undefined
     : {
         document,
-        objectLang: object?.lang ?? "",
+        objectLang: object?.langTag ?? "",
         record,
         string: witness?.node ?? first.node,
-        stringLanguage: witness?.language ?? "",
+        stringLanguage: witness?.languageTag ?? "",
         title,
       };
 };
