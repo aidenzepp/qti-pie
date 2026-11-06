@@ -15,6 +15,7 @@
  *   holds.
  */
 import { Data, Option, Predicate, Result, Schema } from "effect";
+import { greatestCount } from "#plate/count-range.ts";
 import type {
   BodyNode,
   ChoiceInteraction,
@@ -24,7 +25,6 @@ import type {
 import { modelledBaseTypes, modelledCardinalities } from "#plate/model/values.ts";
 import { brandRedacted } from "#plate/payload.ts";
 import type { Redacted, RedactedFields } from "#plate/payload.ts";
-import { greatestCount } from "#plate/vocabulary.ts";
 
 /**
  * A body element's attribute in the JSON form.

@@ -23,9 +23,9 @@ const sweepTimeoutMs = 600_000;
 const noticeSlot = rowFor("item", "notice").slot;
 
 /**
- * The verdict kinds that carry an accepted document.
+ * The verdicts that carry an accepted document.
  */
-const acceptingKinds: ReadonlySet<Verdict["verdict"]> = new Set([
+const acceptingVerdicts: ReadonlySet<Verdict["verdict"]> = new Set([
   "accepted",
   "accepted-with-unsupported",
 ]);
@@ -312,11 +312,11 @@ describe("the verdict and render sweep over the corpus", () => {
       Effect.gen(function* everyRender() {
         const members = yield* openCorpus;
         const renderings = renderingsOf(members, yield* configure({}));
-        const counted = verdictsOf(members).filter(([, verdict]) =>
-          acceptingKinds.has(verdict.verdict),
+        const counted = verdictsOf(members).filter(
+          ([, verdict]) => verdict.kind === "item" && acceptingVerdicts.has(verdict.verdict),
         );
 
-        assert.lengthOf(renderings, counted.length, "every accepting verdict is rendered");
+        assert.lengthOf(renderings, counted.length, "every item's accepting verdict is rendered");
         assert.deepStrictEqual(statesProblems(renderings, r1Problems), []);
       }),
     sweepTimeoutMs,

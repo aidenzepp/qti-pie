@@ -177,6 +177,44 @@ describe("decodeRecord", () => {
   );
 });
 
+describe("the stored record's version", () => {
+  it.effect("[T-14] is written as version 1 and read back", () =>
+    Effect.gen(function* writesVersion() {
+      const stored = yield* Effect.fromResult(encodeRecord(fresh(bg007Item, "i1")));
+
+      assert.strictEqual(stored.version, 1);
+      assert.deepStrictEqual(
+        yield* Effect.fromResult(throughHost(fresh(bg007Item, "i1"))),
+        fresh(bg007Item, "i1"),
+      );
+    }),
+  );
+
+  it.effect(
+    "[T-14] is required: a stored record without one is InvalidRecord at stage decode",
+    () =>
+      Effect.gen(function* requiresVersion() {
+        const { version: _written, ...unversioned } = yield* Effect.fromResult(
+          encodeRecord(fresh(bg007Item, "i1")),
+        );
+        const error = yield* Effect.flip(Effect.fromResult(decodeRecord(unversioned)));
+
+        assert.strictEqual(error._tag, "InvalidRecord");
+        assert.strictEqual(error.stage, "decode");
+      }),
+  );
+
+  it.effect("[T-14] must be 1: a stored record of version 2 is InvalidRecord at stage decode", () =>
+    Effect.gen(function* refusesOtherVersion() {
+      const stored = yield* Effect.fromResult(encodeRecord(fresh(bg007Item, "i1")));
+      const error = yield* Effect.flip(Effect.fromResult(decodeRecord({ ...stored, version: 2 })));
+
+      assert.strictEqual(error._tag, "InvalidRecord");
+      assert.strictEqual(error.stage, "decode");
+    }),
+  );
+});
+
 describe("encodeRecord", () => {
   it.effect(
     "refuses an integer outcome holding the number 1.5: InvalidRecord at stage encode",

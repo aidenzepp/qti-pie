@@ -1,5 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Option, Predicate } from "effect";
+import { Effect, Option, Predicate } from "effect";
+import { configure } from "#plate/configuration.ts";
+import type { Element, Node } from "#plate/emit/node.ts";
 import { shuffleOrder } from "#plate/engine/random.ts";
 import { entryName } from "#plate/form/encoding.ts";
 import type {
@@ -10,17 +12,22 @@ import type {
   TextEntryInteraction,
 } from "#plate/model/item.ts";
 import type { Value } from "#plate/model/values.ts";
-import { identifyMessages, payload, redactItem } from "#plate/payload.ts";
+import { choiceOrder, identifyMessages, payload, postings, redactItem } from "#plate/payload.ts";
 import type {
   ChoicePayload,
   ExtendedTextPayload,
   InteractionPayload,
   Payload,
   PayloadNode,
+  Posting,
   Redacted,
   TextEntryPayload,
   View,
 } from "#plate/payload.ts";
+import { redact, render } from "#plate/render.ts";
+import { growthFactor, growthLimit, growthRatio } from "#plate/test/growth.ts";
+import { parseHtml } from "#plate/test/round-trip.ts";
+import { acceptForTest } from "#plate/validate/verdict.ts";
 
 /**
  * The strings only the hidden parts of {@link item} hold: its correct responses, a mapping key, a
@@ -197,6 +204,12 @@ const item: Item = {
         cardinality: "single",
         defaultValue: Option.none(),
         identifier: "SCORE",
+        interpretation: Option.none(),
+        longInterpretation: Option.none(),
+        masteryValue: Option.none(),
+        normalMaximum: Option.none(),
+        normalMinimum: Option.none(),
+        view: Option.none(),
       },
     ],
     [
@@ -206,6 +219,12 @@ const item: Item = {
         cardinality: "single",
         defaultValue: Option.some(one({ baseType: "identifier", value: "MarkerOutcomeDefault" })),
         identifier: "FEEDBACK",
+        interpretation: Option.none(),
+        longInterpretation: Option.none(),
+        masteryValue: Option.none(),
+        normalMaximum: Option.none(),
+        normalMinimum: Option.none(),
+        view: Option.none(),
       },
     ],
   ]),
@@ -321,6 +340,7 @@ const answering: View = {
   instance,
   locale: "en",
   messages: [],
+  mode: "answering",
   names: new Map(),
   posted: Option.none(),
   values: new Map(),
@@ -685,6 +705,8 @@ describe("payload", () => {
       ["no messages", answering],
       ["messages and posted text", refused],
       ["finished", finished],
+      ["review", { ...answering, mode: "review", values: held }],
+      ["solution without values", { ...answering, mode: "solution" }],
     ];
 
     for (const [state, view] of views) {
@@ -738,6 +760,25 @@ describe("payload", () => {
     assert.strictEqual(built.lang, "en");
     assert.strictEqual(welsh.lang, "cy");
     assert.isFalse(built.finished);
+  });
+
+  it("carries the view's mode, and editable on every interaction only when answering, finished or not", () => {
+    for (const mode of ["answering", "review", "solution"] as const) {
+      for (const view of [answering, finished, refused]) {
+        const built = payload(redacted, { ...view, mode });
+        const interactions = interactionsIn(built.body);
+
+        assert.strictEqual(built.mode, mode);
+        assert.lengthOf(interactions, 5);
+        for (const interaction of interactions) {
+          assert.strictEqual(
+            interaction.editable,
+            mode === "answering",
+            `${mode}, ${interaction.response}`,
+          );
+        }
+      }
+    }
   });
 
   it("[Q-2] presents the choices in document order with the Prompt and the binding", () => {
@@ -1216,4 +1257,260 @@ describe("payload", () => {
     ]);
     assert.deepStrictEqual(extendedTextFor(posted, "LIST").restores, ["rain", "", "rivers"]);
   });
+});
+
+/**
+ * Collect every element of some nodes, each before its descendants.
+ *
+ * @param nodes The nodes.
+ * @returns Each element, in document order.
+ */
+const elementsOf = (nodes: readonly Node[]): readonly Element[] =>
+  nodes.flatMap((node) => (node.kind === "element" ? [node, ...elementsOf(node.children)] : []));
+
+/**
+ * The shuffled {@link planets} as the one interaction of an accepted item, redacted for `render`.
+ */
+const planetsRedacted = redact(
+  acceptForTest({
+    ...item,
+    body: [planets],
+    processing: Option.none(),
+    responses: new Map([
+      [
+        "PLANET",
+        {
+          areaMapping: Option.none(),
+          baseType: "identifier",
+          cardinality: "single",
+          correct: Option.none(),
+          defaultValue: Option.none(),
+          identifier: "PLANET",
+          mapping: Option.none(),
+        },
+      ],
+    ]),
+  }),
+);
+
+/**
+ * Render {@link planetsRedacted} and give the choices its HTML presents: the values of the Controls
+ * posting under `PLANET`'s entry name, in the order the HTML emits them.
+ *
+ * @param seed The configuration's seed, none for a configuration without one.
+ * @param token The render's instance.
+ * @returns Each Control's value, in emitted order.
+ */
+const renderedOrder = Effect.fn(function* renderedOrder(
+  seed: Option.Option<number>,
+  token: string,
+) {
+  const configuration = yield* configure(
+    Option.match(seed, { onNone: () => ({}), onSome: (value) => ({ seed: value }) }),
+  );
+  const rendered = yield* Effect.fromResult(
+    render(planetsRedacted, configuration, { instance: token }),
+  );
+
+  return elementsOf(parseHtml(rendered.html))
+    .filter((element) => element.attrs["name"] === entryName(token, "PLANET"))
+    .map((control) => {
+      const { value } = control.attrs;
+
+      return value === undefined || value === true ? assert.fail("A Control has no value.") : value;
+    });
+});
+
+/**
+ * The seeds the order is checked under: none, and two others.
+ */
+const seeds: readonly Option.Option<number>[] = [Option.none(), Option.some(7), Option.some(11)];
+
+/**
+ * The instances the order is checked under.
+ */
+const instances: readonly string[] = [instance, "q1"];
+
+describe("choiceOrder", () => {
+  it.effect(
+    "gives the order render presents for a shuffled Choice, under two seeds, no seed and two instances",
+    () =>
+      Effect.gen(function* presentedOrders() {
+        const orders: string[] = [];
+        for (const seed of seeds) {
+          for (const token of instances) {
+            const presented = yield* renderedOrder(seed, token);
+
+            assert.lengthOf(presented, planets.choices.length);
+            assert.deepStrictEqual(choiceOrder(planets, seed, token), presented);
+            orders.push(presented.join(" "));
+          }
+        }
+
+        assert.isAbove(new Set(orders).size, 1);
+      }),
+  );
+
+  it("keeps a fixed choice at its document index in a shuffled Choice", () => {
+    for (const seed of seeds) {
+      for (const token of instances) {
+        assert.strictEqual(choiceOrder(planets, seed, token)[2], "P2");
+      }
+    }
+  });
+
+  it("keeps document order for a Choice that is not shuffled, whatever the seed and instance", () => {
+    const ordered = { ...planets, shuffle: false };
+
+    for (const seed of seeds) {
+      for (const token of instances) {
+        assert.deepStrictEqual(choiceOrder(ordered, seed, token), ["P0", "P1", "P2", "P3", "P4"]);
+      }
+    }
+  });
+});
+
+/**
+ * Construct the posting of a single response with the entry name `render` gives it here.
+ *
+ * @param identifier The response's identifier.
+ * @param baseType Its declared base type.
+ * @param base The number base its entries are read in.
+ * @returns The posting.
+ */
+const postingOf = (
+  identifier: string,
+  baseType: Posting["binding"]["baseType"],
+  base: number,
+): Posting => ({
+  binding: { baseType, cardinality: "single", name: entryName(instance, identifier) },
+  identifier,
+  options: { base },
+});
+
+/**
+ * The responses of the smaller item the growth check reads, each bound to its own Text Entry,
+ * before it reads one with {@link growthFactor} times as many.
+ */
+const fewerEntries = 2000;
+
+/**
+ * The growth check reads 16,000 responses three times and 2,000 responses 24 times. A read that
+ * searched every interaction for each response took about a second at 16,000 responses, and a
+ * failing check should report its ratio, not a timeout.
+ */
+const growthTimeoutMs = 300_000;
+
+/**
+ * Construct a redacted item whose body is one paragraph of Text Entries, each bound to its own
+ * single string response, `R1` to `R<count>`.
+ *
+ * @param count How many responses and Text Entries it holds.
+ * @returns The redacted item.
+ */
+const entriesItem = (count: number): Redacted => {
+  const identifiers = Array.from({ length: count }, (_, index) => `R${String(index + 1)}`);
+
+  return redactItem({
+    ...item,
+    body: [
+      {
+        attributes: [],
+        children: identifiers.map((identifier) => textEntry(identifier)),
+        kind: "element",
+        path: "qti-assessment-item/qti-item-body/p",
+        tag: "p",
+      },
+    ],
+    responses: new Map(
+      identifiers.map((identifier) => [
+        identifier,
+        {
+          areaMapping: Option.none(),
+          baseType: "string",
+          cardinality: "single",
+          correct: Option.none(),
+          defaultValue: Option.none(),
+          identifier,
+          mapping: Option.none(),
+        },
+      ]),
+    ),
+  });
+};
+
+describe("postings", () => {
+  it("gives each posted response its binding and its first text interaction's base, in declaration order", () => {
+    const bound: Item = {
+      ...item,
+      body: [
+        { ...essay, base: 8 },
+        choice,
+        { ...textEntry("FIRST"), base: 16 },
+        {
+          attributes: [],
+          children: [{ ...textEntry("FIRST"), base: 2 }, textEntry("SECOND"), textEntry("NAMED")],
+          kind: "element",
+          path: "qti-assessment-item/qti-item-body/p",
+          tag: "p",
+        },
+      ],
+      responses: new Map([
+        ...item.responses,
+        [
+          "POINT",
+          {
+            areaMapping: Option.none(),
+            baseType: "point",
+            cardinality: "single",
+            correct: Option.none(),
+            defaultValue: Option.none(),
+            identifier: "POINT",
+            mapping: Option.none(),
+          },
+        ],
+      ]),
+    };
+
+    assert.deepStrictEqual(postings(redactItem(bound), instance), [
+      postingOf("CAPITAL", "identifier", 10),
+      postingOf("FIRST", "string", 16),
+      postingOf("SECOND", "string", 10),
+      postingOf("NAMED", "string", 10),
+      postingOf("ESSAY", "string", 8),
+    ]);
+  });
+
+  it("gives no posting to a declared response no interaction binds, so a post carries nothing over its record value", () => {
+    const unbound: Item = { ...item, body: [choice] };
+
+    assert.deepStrictEqual(postings(redactItem(unbound), instance), [
+      postingOf("CAPITAL", "identifier", 10),
+    ]);
+  });
+
+  it.effect(
+    "gives the postings of 8 times the responses, each bound to its own Text Entry, in under 32 times the time",
+    () =>
+      Effect.gen(function* postingsInLinearTime() {
+        const fewer = entriesItem(fewerEntries);
+        const more = entriesItem(fewerEntries * growthFactor);
+        assert.lengthOf(postings(more, instance), fewerEntries * growthFactor);
+
+        const growth = yield* growthRatio(
+          () => {
+            postings(fewer, instance);
+          },
+          () => {
+            postings(more, instance);
+          },
+        );
+        assert.isBelow(
+          growth,
+          growthLimit,
+          `8 times the bound responses took ${growth.toFixed(1)} times as long`,
+        );
+      }),
+    growthTimeoutMs,
+  );
 });

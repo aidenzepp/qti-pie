@@ -14,6 +14,7 @@ import type {
 } from "#plate/model/item.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
 import { format } from "#plate/model/values.ts";
+import { acceptedItem } from "#plate/validate/verdict.ts";
 
 /**
  * Each case opens one corpus item and scores it at most three times, which takes well under a
@@ -83,15 +84,15 @@ const insideItems = [
  * verdict.
  *
  * @param location The item's path under the corpus root, which `open` takes as its location.
- * @returns The accepting verdict.
+ * @returns The accepting verdict, with the accepted item `acceptedItem` reads out of it.
  */
 const openAccepted = Effect.fnUntraced(function* openAccepted(location: string) {
   const verdict = yield* open(location, yield* readCorpusFile(location));
-  if (verdict.verdict === "accepted" || verdict.verdict === "accepted-with-unsupported") {
-    return verdict;
-  }
+  const accepted = Option.getOrElse(acceptedItem(verdict), () =>
+    assert.fail(`${location} is ${verdict.verdict}, not accepted`),
+  );
 
-  return assert.fail(`${location} is ${verdict.verdict}, not accepted`);
+  return { accepted, verdict };
 });
 
 /**
@@ -307,10 +308,12 @@ const chosen = (identifier: string): Value => ({
  */
 const markedNotRun = Effect.fnUntraced(function* markedNotRun(bytes: Uint8Array, feature: string) {
   const verdict = yield* open("items/cc2.xml", bytes);
-  const accepted =
-    verdict.verdict === "accepted-with-unsupported"
-      ? verdict.accepted
-      : assert.fail(`the item is ${verdict.verdict}, not accepted-with-unsupported`);
+  const accepted = acceptedItem(verdict).pipe(
+    Option.filter(() => verdict.verdict === "accepted-with-unsupported"),
+    Option.getOrElse(() =>
+      assert.fail(`the item is ${verdict.verdict}, not accepted-with-unsupported`),
+    ),
+  );
   const right = outcomesAfter(accepted, { [response]: chosen("A") });
   const wrong = outcomesAfter(accepted, { [response]: chosen("B") });
   const none = outcomesAfter(accepted, {});
@@ -401,8 +404,8 @@ describe("the built-in templates over named corpus items", () => {
       `[I-9b] ${location} (CC2_match) scores its correct response 1, a choice outside it 0 and no response 0`,
       () =>
         Effect.gen(function* cc2Match() {
-          const verdict = yield* openAccepted(location);
-          const { item, unsupported } = verdict.accepted;
+          const { accepted, verdict } = yield* openAccepted(location);
+          const { item, unsupported } = accepted;
           const declaration = declarationOf(item);
           const correct = Option.getOrElse(declaration.correct, () =>
             assert.fail(`${location} declares no correct response`),
@@ -433,12 +436,12 @@ describe("the built-in templates over named corpus items", () => {
           assert.deepStrictEqual(unsupported.filter(namesProcessing), []);
           assert.isTrue(Option.isSome(item.processing));
           assert.strictEqual(
-            numberOf(outcomesAfter(verdict.accepted, { [response]: correct })["SCORE"], "SCORE"),
+            numberOf(outcomesAfter(accepted, { [response]: correct })["SCORE"], "SCORE"),
             1,
           );
           assert.strictEqual(
             numberOf(
-              outcomesAfter(verdict.accepted, {
+              outcomesAfter(accepted, {
                 [response]: {
                   baseType: "identifier",
                   cardinality: declaration.cardinality,
@@ -449,7 +452,7 @@ describe("the built-in templates over named corpus items", () => {
             ),
             0,
           );
-          assert.strictEqual(numberOf(outcomesAfter(verdict.accepted, {})["SCORE"], "SCORE"), 0);
+          assert.strictEqual(numberOf(outcomesAfter(accepted, {})["SCORE"], "SCORE"), 0);
         }),
       corpusTimeoutMs,
     );
@@ -460,8 +463,8 @@ describe("the built-in templates over named corpus items", () => {
       `[I-9b] ${location} (CC2_map_response) maps its first key's text, a text no key matches and no response, setting FEEDBACK against MAXSCORE`,
       () =>
         Effect.gen(function* cc2MapResponse() {
-          const verdict = yield* openAccepted(location);
-          const { item, unsupported } = verdict.accepted;
+          const { accepted, verdict } = yield* openAccepted(location);
+          const { item, unsupported } = accepted;
           const declaration = declarationOf(item);
           const mapping = Option.getOrElse(declaration.mapping, () =>
             assert.fail(`${location} declares no mapping`),
@@ -488,14 +491,14 @@ describe("the built-in templates over named corpus items", () => {
             Result.getOrElse(decode([[name, text]], { baseType, cardinality, name }), (malformed) =>
               assert.fail(`${location}: the text ${text} does not decode: ${malformed.message}`),
             );
-          const matched = outcomesAfter(verdict.accepted, {
+          const matched = outcomesAfter(accepted, {
             [response]: posted(format(first.key)),
           });
           // Longer than every key, so it equals none of them, case folded or not.
-          const unmatched = outcomesAfter(verdict.accepted, {
+          const unmatched = outcomesAfter(accepted, {
             [response]: posted(`${keys.join(" ")} (no key)`),
           });
-          const none = outcomesAfter(verdict.accepted, {});
+          const none = outcomesAfter(accepted, {});
 
           assert.strictEqual(verdict.verdict, "accepted-with-unsupported");
           assert.isTrue(
@@ -527,8 +530,8 @@ describe("the built-in templates over named corpus items", () => {
       `[I-9b] ${location} (map_response_point) scores its correct response at its areas' sum, no response 0 and a point in no area the default`,
       () =>
         Effect.gen(function* mapResponsePoint() {
-          const verdict = yield* openAccepted(location);
-          const { item } = verdict.accepted;
+          const { accepted } = yield* openAccepted(location);
+          const { item } = accepted;
           const declaration = declarationOf(item);
           const correct = Option.getOrElse(declaration.correct, () =>
             assert.fail(`${location} declares no correct response`),
@@ -548,12 +551,12 @@ describe("the built-in templates over named corpus items", () => {
 
           assert.isTrue(Option.isSome(item.processing));
           assert.strictEqual(
-            numberOf(outcomesAfter(verdict.accepted, { [response]: correct })["SCORE"], "SCORE"),
+            numberOf(outcomesAfter(accepted, { [response]: correct })["SCORE"], "SCORE"),
             clamped(mapping, sum),
           );
-          assert.strictEqual(numberOf(outcomesAfter(verdict.accepted, {})["SCORE"], "SCORE"), 0);
+          assert.strictEqual(numberOf(outcomesAfter(accepted, {})["SCORE"], "SCORE"), 0);
           assert.strictEqual(
-            numberOf(outcomesAfter(verdict.accepted, { [response]: outside })["SCORE"], "SCORE"),
+            numberOf(outcomesAfter(accepted, { [response]: outside })["SCORE"], "SCORE"),
             clamped(mapping, mapping.defaultValue),
           );
         }),

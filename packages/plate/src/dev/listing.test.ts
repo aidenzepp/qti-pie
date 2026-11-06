@@ -59,7 +59,7 @@ const counting = (): Counting => {
       Effect.sync((): Verdict => {
         opened.push(member);
 
-        return { document: member, reasons: [], verdict: "unchecked" };
+        return { document: member, kind: "none", reasons: [], verdict: "unchecked" };
       }),
   };
 };

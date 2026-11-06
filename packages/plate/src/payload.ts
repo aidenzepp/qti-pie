@@ -8,7 +8,8 @@
  * reaches the page only when this file names it. Neither copy holds a correct response, a mapping,
  * a response or outcome default, a processing rule, a template value or feedback content, and the
  * payload holds no seed: the view's seed only orders a shuffled Choice's choices. What the page
- * cannot be given, it cannot leak.
+ * cannot be given, it cannot leak. A `solution` render shows correct responses only when the
+ * author passes them as the view's values; nothing here reads them from the item.
  *
  * @module
  * @see {@link Item} for the model it reads.
@@ -19,7 +20,8 @@ import { controlCap, exceedsControlCap } from "#plate/control-cap.ts";
 import { scopedId } from "#plate/emit/parts.ts";
 import type { Resolved } from "#plate/emit/parts.ts";
 import { shuffleOrder } from "#plate/engine/random.ts";
-import { entryName } from "#plate/form/encoding.ts";
+import { entryName, isPosted } from "#plate/form/encoding.ts";
+import type { Binding, DecodeOptions } from "#plate/form/encoding.ts";
 import { authorsLabel, resolvedLabelledby } from "#plate/interactions/name.ts";
 import type { Locale } from "#plate/messages.ts";
 import { interactionsIn } from "#plate/model/interactions.ts";
@@ -47,8 +49,17 @@ export interface ValidationMessage {
 }
 
 /**
- * The author's inputs to one render: the instance, the seed, the values to show, the entry names,
- * and the messages of a post the author refused.
+ * The state a render shows an item in, which its Root's `data-mode` names.
+ *
+ * `answering` lets the candidate change each response. `review` and `solution` show the values the
+ * author passes and let the candidate change none: `review` shows a recorded attempt, and
+ * `solution` the correct responses, which reach the page only as the author's values.
+ */
+export type RenderMode = "answering" | "review" | "solution";
+
+/**
+ * The author's inputs to one render: the instance, the mode, the seed, the values to show, the
+ * entry names, and the messages of a post the author refused.
  *
  * The library decides no flow, so every field is the author's: each map is keyed by response
  * identifier, and a response it omits takes the default the field names. `messages` decides how
@@ -68,6 +79,10 @@ export interface View {
   readonly instance: string;
   readonly locale: Locale;
   readonly messages: readonly ValidationMessage[];
+  /**
+   * The state the item is shown in, which decides whether the candidate may change a response.
+   */
+  readonly mode: RenderMode;
   /**
    * The name each response's controls post under, `entryName(instance, response)` when absent.
    */
@@ -159,10 +174,23 @@ export interface ValidationPayload {
 }
 
 /**
+ * What every interaction payload says about the render's mode.
+ *
+ * `editable` holds exactly when the mode is `answering`. When it is false, in `review` and
+ * `solution`, the candidate may change no response, and the interaction's render function is to
+ * show its Controls' values without accepting input. It is apart from the payload's `finished`,
+ * the author's choice to disable every control, so a Control accepts input only when `editable`
+ * holds and `finished` does not.
+ */
+export interface ModePayload {
+  readonly editable: boolean;
+}
+
+/**
  * A Choice as the page may know it (Q-2): its binding, its constraints, its Prompt, its choices in
  * the order they are presented, and the identifiers to show as checked.
  */
-export interface ChoicePayload extends ValidationPayload {
+export interface ChoicePayload extends ModePayload, ValidationPayload {
   /**
    * The author's `aria-label`, which names the group when there is no Prompt.
    */
@@ -214,7 +242,7 @@ export interface UnnamedPosition {
 }
 
 /**
- * How a text control is named (§4.8, Q10).
+ * How a text control is named.
  *
  * `ariaLabel` is the author's, as written. `ariaLabelledby` holds the ids of the author's that an
  * element of the item carries, unscoped ({@link resolvedLabelledby}), none when none is carried.
@@ -235,7 +263,7 @@ export interface TextName {
  * What a Text Entry and an Extended Text share: the binding, the integer `base`, the placeholder,
  * the entry name and the accessible name.
  */
-export interface TextControlPayload extends ValidationPayload {
+export interface TextControlPayload extends ModePayload, ValidationPayload {
   readonly base: number;
   readonly baseType: "float" | "integer" | "string";
   /**
@@ -321,8 +349,8 @@ export type PayloadNode = ElementPayload | InteractionPayload | NoticePayload | 
  * Everything the emitter may know about one render of an item.
  *
  * `lang` is the item's `xml:lang`, else the view's locale. `finished` is the view's: the author
- * disabled every control. `mode` is the Root's `data-mode` state (spec §4.4), which phase 1 only
- * renders as `answering`. `notices` names the unsupported features the body shows as notices.
+ * disabled every control. `mode` is the view's, the state the Root's and each interaction Root's
+ * `data-mode` name. `notices` names the unsupported features the body shows as notices.
  */
 export interface Payload {
   readonly body: readonly PayloadNode[];
@@ -333,7 +361,7 @@ export interface Payload {
   readonly instance: string;
   readonly lang: string;
   readonly messages: readonly MessagePayload[];
-  readonly mode: "answering";
+  readonly mode: RenderMode;
   readonly notices: readonly string[];
   readonly title: string;
 }
@@ -406,6 +434,10 @@ interface Build {
    */
   readonly autofocus: Option.Option<Interaction>;
   /**
+   * Whether the view's mode lets the candidate change a response ({@link ModePayload}).
+   */
+  readonly editable: boolean;
+  /**
    * The ids the author gave the item's elements, unscoped ({@link authoredIdsIn}).
    */
   readonly ids: ReadonlySet<string>;
@@ -417,9 +449,9 @@ interface Build {
    */
   readonly posted: Option.Option<ReadonlyMap<string, readonly string[]>>;
   /**
-   * The view's seed written with `String`, the empty string when the view has none.
+   * The view's seed, none when the view has none.
    */
-  readonly seed: string;
+  readonly seed: Option.Option<number>;
   /**
    * Each text control the renderer names, with where its first Control stands among the Controls
    * the renderer names ({@link TextName}).
@@ -576,25 +608,62 @@ const copyNodes = (nodes: readonly BodyNode[], build: Build): readonly PayloadNo
 const keySeparator = "\u001F";
 
 /**
- * Give a Choice's choices in the order they are presented.
+ * Give the identifiers of a Choice's choices in the order a render presents them.
  *
  * A Choice with `shuffle` true is presented in {@link shuffleOrder}'s order under the key
- * `<seed>\u001F<instance>\u001F<response>`: its non-fixed choices are permuted among the non-fixed
- * positions, and each fixed choice keeps its document position. Any other Choice keeps document
- * order. The order is presentation only: scores, records and validation read identifiers, never
- * positions.
+ * `<seed>\u001F<instance>\u001F<response>`, where the seed is written with `String` and an absent
+ * seed is the empty string: its non-fixed choices are permuted among the non-fixed positions, and
+ * each fixed choice keeps its document position. Any other Choice keeps document order. The same
+ * Choice, seed and instance always give the same order, the one `render` presents, so a host can
+ * report it, such as a result's `choiceSequence`. The order is presentation only: scores, records
+ * and validation read identifiers, never positions.
+ *
+ * @example
+ *   // A shuffled Choice of choices A, B and C, none fixed, bound to RESPONSE:
+ *   choiceOrder(interaction, Option.some(7), "_r_1_"); // ["B", "A", "C"]
+ *   choiceOrder(interaction, Option.none(), "_r_1_"); // ["A", "C", "B"]
+ *
+ * @param interaction The Choice.
+ * @param seed The configuration's `seed`, none when it has none.
+ * @param instance The item instance key the Choice is rendered under.
+ * @returns The choice identifiers, in presented order.
+ */
+export const choiceOrder = (
+  interaction: ChoiceInteraction,
+  seed: Option.Option<number>,
+  instance: string,
+): readonly string[] =>
+  interaction.shuffle
+    ? shuffleOrder(
+        [
+          Option.match(seed, { onNone: () => "", onSome: String }),
+          instance,
+          interaction.response,
+        ].join(keySeparator),
+        interaction.choices.map((choice) => choice.fixed),
+      ).flatMap((index) => interaction.choices[index]?.identifier ?? [])
+    : interaction.choices.map((choice) => choice.identifier);
+
+/**
+ * Give a Choice's choices in the order they are presented, {@link choiceOrder}'s.
+ *
+ * A checked Choice's choice identifiers are unique (`duplicate-identifier`, info.txt:42411), so
+ * each identifier names exactly one choice.
  *
  * @param interaction The Choice.
  * @param build The build, which gives the seed and the instance.
  * @returns The choices, in presented order.
  */
-const presentedChoices = (interaction: ChoiceInteraction, build: Build): readonly SimpleChoice[] =>
-  interaction.shuffle
-    ? shuffleOrder(
-        [build.seed, build.instance, interaction.response].join(keySeparator),
-        interaction.choices.map((choice) => choice.fixed),
-      ).flatMap((index) => interaction.choices[index] ?? [])
-    : interaction.choices;
+const presentedChoices = (
+  interaction: ChoiceInteraction,
+  build: Build,
+): readonly SimpleChoice[] => {
+  const byIdentifier = new Map(interaction.choices.map((choice) => [choice.identifier, choice]));
+
+  return choiceOrder(interaction, build.seed, build.instance).flatMap(
+    (identifier) => byIdentifier.get(identifier) ?? [],
+  );
+};
 
 /**
  * Copy a Choice into its payload.
@@ -614,6 +683,7 @@ const choicePayload = (interaction: ChoiceInteraction, build: Build): ChoicePayl
     identifier: choice.identifier,
   })),
   class: interaction.class,
+  editable: build.editable,
   formName: formNameOf(build, interaction.response),
   kind: "choice",
   maxChoices: interaction.maxChoices,
@@ -642,6 +712,7 @@ const textControlPayload = (
   base: interaction.base,
   baseType: interaction.baseType,
   class: interaction.class,
+  editable: build.editable,
   formName: formNameOf(build, interaction.response),
   name: {
     ariaLabel: interaction.ariaLabel,
@@ -886,15 +957,91 @@ export const redactItem = (item: Item): Redacted =>
   });
 
 /**
+ * How one response travels through a host's form: its identifier, its binding, and the options
+ * `decode` reads its entries with.
+ *
+ * The binding's `name` is the entry name `render` gives the response's Controls by default,
+ * `entryName(instance, identifier)`. {@link postings} does not see `render`'s `names` option, so a
+ * host that passes `names` to `render` must decode each response under the name it passed there,
+ * not under the binding's `name`.
+ */
+export interface Posting {
+  readonly binding: Binding;
+  readonly identifier: string;
+  /**
+   * The number base its integer is written in: the `base` of the first Text Entry or Extended
+   * Text, in document order, that binds the response, and 10 when only a Choice binds it.
+   */
+  readonly options: DecodeOptions;
+}
+
+/**
+ * Give the postings of a redacted item in one instance: one for each response of a posted base
+ * type that an interaction in the body binds, in the order of the item's `responses`, so a host
+ * decodes each from its form with the base its interaction declares instead of assuming base 10.
+ *
+ * A declared response that no interaction binds has no posting. The form has no Control for it,
+ * so a post never carries it, and decoding it would give NULL. A host that saved that NULL would
+ * replace the value the response holds in its record, the declared default a test session writes
+ * when the item is first presented, and processing would read NULL instead.
+ *
+ * It reads only a {@link Redacted}, so a host needs no type of the item's body to decode a post.
+ * It walks the body once and indexes its interactions by the response each binds, keeping
+ * document order, so its time grows with the item, not with its responses times its interactions.
+ *
+ * @example
+ *   const values = postings(redact(accepted), instance).map(({ binding, options }) =>
+ *     decode(entries, binding, options),
+ *   );
+ *
+ * @param redacted The item, through `redact`.
+ * @param instance The instance token the render used, one `checkInstance` passes.
+ * @returns The postings: a response no interaction binds, or of a base type no phase-1
+ *   interaction posts, has none.
+ */
+export const postings = (redacted: Redacted, instance: string): readonly Posting[] => {
+  const byResponse = new Map<string, Interaction[]>();
+  for (const interaction of interactionsIn(redacted.body)) {
+    const others = byResponse.get(interaction.response);
+    if (others === undefined) {
+      byResponse.set(interaction.response, [interaction]);
+    } else {
+      others.push(interaction);
+    }
+  }
+
+  return redacted.responses.flatMap(({ baseType, cardinality, identifier }): readonly Posting[] => {
+    const bound = byResponse.get(identifier) ?? [];
+    if (!isPosted(baseType) || bound.length === 0) {
+      return [];
+    }
+
+    const typed = Arr.findFirst(
+      bound,
+      (interaction): interaction is ExtendedTextInteraction | TextEntryInteraction =>
+        interaction.kind !== "choice",
+    );
+
+    return [
+      {
+        binding: { baseType, cardinality, name: entryName(instance, identifier) },
+        identifier,
+        options: { base: Option.match(typed, { onNone: () => 10, onSome: ({ base }) => base }) },
+      },
+    ];
+  });
+};
+
+/**
  * Compute the payload of one render: the allowlist of what the emitter may know about a redacted
  * item and the author's inputs.
  *
  * @param redacted The item, through {@link redactItem}.
- * @param view The author's inputs: the instance, the seed, values, names, messages and posted
- *   strings.
+ * @param view The author's inputs: the instance, the mode, the seed, values, names, messages and
+ *   posted strings.
  * @returns The payload. It holds no correct response, mapping, default, processing rule, seed,
- *   template value or feedback content, whatever the view; the seed only orders a shuffled
- *   Choice's choices.
+ *   template value or feedback content of the item, whatever the view; the seed only orders a
+ *   shuffled Choice's choices, and a value it shows is one the view gave.
  */
 export const payload = (redacted: Redacted, view: View): Payload => {
   const messages = identifyMessages(view.instance, view.messages);
@@ -909,10 +1056,11 @@ export const payload = (redacted: Redacted, view: View): Payload => {
     autofocus: Arr.findFirst(interactions, (interaction) =>
       messages.some((entry) => entry.response === interaction.response),
     ),
+    editable: view.mode === "answering",
     instance: view.instance,
     messages,
     names: view.names,
-    seed: view.seed === undefined ? "" : String(view.seed),
+    seed: Option.fromUndefinedOr(view.seed),
     unnamed: unnamedPositions(interactions, restoring),
   };
 
@@ -922,7 +1070,7 @@ export const payload = (redacted: Redacted, view: View): Payload => {
     instance: view.instance,
     lang: Option.getOrElse(redacted.lang, () => view.locale),
     messages,
-    mode: "answering",
+    mode: view.mode,
     notices: redacted.notices,
     title: redacted.title,
   };

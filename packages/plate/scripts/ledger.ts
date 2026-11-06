@@ -47,7 +47,7 @@ import { BrowserRun, browserRunFile, standsInForSafari } from "#plate/ledger/run
 import { ledgerText, verdictLines } from "#plate/ledger/view.ts";
 import { open } from "#plate/validate/open.ts";
 import { Location, RefusalRule } from "#plate/validate/refusal.ts";
-import { describeRefusal } from "#plate/validate/verdict.ts";
+import { describeRefusal, unsupportedFeatures } from "#plate/validate/verdict.ts";
 import type { Verdict } from "#plate/validate/verdict.ts";
 
 /**
@@ -425,7 +425,7 @@ const toEntry = (verdict: Verdict): VerdictEntry => {
 
   return {
     document: verdict.document,
-    unsupported: verdict.accepted.unsupported.map(({ feature, path: at }) => ({
+    unsupported: unsupportedFeatures(verdict).map(({ feature, path: at }) => ({
       feature,
       path: at,
     })),

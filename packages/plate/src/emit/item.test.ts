@@ -14,7 +14,9 @@ import type {
   InteractionPayload,
   Payload,
   PayloadNode,
+  RenderMode,
   ValidationMessage,
+  View,
 } from "#plate/payload.ts";
 import { checkTree, nameOf, textOf } from "#plate/test/accessibility.ts";
 import { roundTrips } from "#plate/test/round-trip.ts";
@@ -28,23 +30,30 @@ const instance = "i1";
  * Construct a payload with an empty body, as `payload` gives it.
  *
  * @param finished Whether the author disabled every control.
+ * @param mode The render's mode, `answering` by default.
  * @returns The payload, its language `en-GB` and its title `Colours`.
  */
-const payloadOf = (finished: boolean): Payload => ({
+const payloadOf = (finished: boolean, mode: RenderMode = "answering"): Payload => ({
   body: [],
   finished,
   instance,
   lang: "en-GB",
   messages: [],
-  mode: "answering",
+  mode,
   notices: [],
   title: "Colours",
 });
 
 /**
- * The renders the Root is checked in: with every control enabled, and finished.
+ * The renders the Root is checked in: answering with every control enabled and finished, then
+ * review and solution.
  */
-const renders: readonly Payload[] = [payloadOf(false), payloadOf(true)];
+const renders: readonly Payload[] = [
+  payloadOf(false),
+  payloadOf(true),
+  payloadOf(false, "review"),
+  payloadOf(false, "solution"),
+];
 
 /**
  * Construct the emit state, with the given part overrides resolved.
@@ -104,7 +113,7 @@ describe("emitItem", () => {
           assert.strictEqual(root.attrs["data-slot"], rowFor("item", "root").slot);
           assert.strictEqual(root.attrs["lang"], "en-GB");
           assert.strictEqual(root.attrs["id"], scopedId(instance, "item"));
-          assert.strictEqual(root.attrs["data-mode"], "answering");
+          assert.strictEqual(root.attrs["data-mode"], render.mode);
           assert.strictEqual(root.attrs["data-disabled"], render.finished ? true : undefined);
           assert.doesNotHaveAnyKeys(root.attrs, ["data-attempt", "data-finished"]);
         }
@@ -188,7 +197,18 @@ const notAccepted: StatusInput = { heading: "notAccepted", instance, messages: r
 
 const recorded: StatusInput = { heading: "responseRecorded", instance };
 
-const statuses: readonly StatusInput[] = [scored, notAccepted, recorded];
+/**
+ * Every Status input checked here: the three after-submit states, then a review, a solution, a
+ * submitted part and a finished test, each showing only its heading.
+ */
+const statuses: readonly StatusInput[] = [
+  scored,
+  notAccepted,
+  recorded,
+  ...(["review", "solution", "partSubmitted", "testFinished"] as const).map(
+    (heading): StatusInput => ({ heading, instance }),
+  ),
+];
 
 /**
  * Give an element child of a part, which the test expects to be there.
@@ -306,25 +326,43 @@ const interactionsIn = (nodes: readonly PayloadNode[]): readonly InteractionPayl
     }
   });
 
+/**
+ * The view of a first render of {@link rivers}: answering, no messages, nothing posted, no values.
+ */
+const first: View = {
+  finished: false,
+  instance,
+  locale: "en",
+  messages: [],
+  mode: "answering",
+  names: new Map(),
+  posted: Option.none(),
+  values: new Map(),
+};
+
 describe("emitItem, from a built payload", () => {
   it.effect(
     "[I-0] a render with every control disabled keeps data-mode answering and carries data-disabled",
     () =>
       Effect.gen(function* disabledRender() {
         const state = yield* stateWith();
-        const built = payload(redactItem(rivers), {
-          finished: true,
-          instance,
-          locale: "en",
-          messages: [],
-          names: new Map(),
-          posted: Option.none(),
-          values: new Map(),
-        });
+        const built = payload(redactItem(rivers), { ...first, finished: true });
         const root = yield* Effect.fromResult(emitItem(built, state, body()));
         assert.strictEqual(root.attrs["data-mode"], "answering");
         assert.strictEqual(root.attrs["data-disabled"], true);
       }),
+  );
+
+  it.effect("[I-0] a review or solution render names its mode and is not disabled", () =>
+    Effect.gen(function* modeRender() {
+      const state = yield* stateWith();
+      for (const mode of ["review", "solution"] as const) {
+        const built = payload(redactItem(rivers), { ...first, mode });
+        const root = yield* Effect.fromResult(emitItem(built, state, body()));
+        assert.strictEqual(root.attrs["data-mode"], mode);
+        assert.isUndefined(root.attrs["data-disabled"]);
+      }
+    }),
   );
 });
 
@@ -430,15 +468,7 @@ describe("emitStatus", () => {
           identifyMessages(instance, refusals).map((entry) => entry.id),
         );
 
-        const built = payload(redactItem(rivers), {
-          finished: false,
-          instance,
-          locale: "en",
-          messages: refusals,
-          names: new Map(),
-          posted: Option.none(),
-          values: new Map(),
-        });
+        const built = payload(redactItem(rivers), { ...first, messages: refusals });
         const controls = interactionsIn(built.body);
         assert.deepStrictEqual(
           controls.map((control) => control.response),

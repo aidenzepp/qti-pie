@@ -1,6 +1,13 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
-import { checkInstance, decode, encode, entryName, partition } from "#plate/form/encoding.ts";
+import {
+  checkInstance,
+  decode,
+  encode,
+  entryName,
+  isXmlText,
+  partition,
+} from "#plate/form/encoding.ts";
 import type { Binding, Entry, Malformed } from "#plate/form/encoding.ts";
 import { format } from "#plate/model/values.ts";
 import type { Single, Value } from "#plate/model/values.ts";
@@ -390,6 +397,41 @@ describe("encode and decode", () => {
     }),
   );
 
+  it("refuses posted text holding a character XML cannot carry, and keeps tab, line breaks and an astral character", () => {
+    const string = binding("string");
+    const postedForm = (query: string): readonly Entry[] => [
+      ...new URLSearchParams(`${string.name}=${query}`),
+    ];
+
+    for (const query of ["a%00b", "a%0Bb", "a%EF%BF%BEb", "a%EF%BF%BFb", "a%1Fb"]) {
+      assert.deepStrictEqual(
+        Option.map(Result.getFailure(decode(postedForm(query), string)), ({ _tag, reason }) => ({
+          _tag,
+          reason,
+        })),
+        Option.some({ _tag: "Malformed", reason: "character" }),
+        query,
+      );
+    }
+    assert.deepStrictEqual(
+      Option.map(Result.getFailure(decode(posted("a\uD800b"), string)), ({ reason }) => reason),
+      Option.some("character"),
+      "a lone surrogate",
+    );
+    assert.deepStrictEqual(
+      Option.map(
+        Result.getFailure(decode(posted("choiceA\u0000"), binding("identifier"))),
+        ({ reason }) => reason,
+      ),
+      Option.some("character"),
+      "an identifier",
+    );
+    assert.deepStrictEqual(
+      Result.getSuccess(decode(postedForm("a%09b%0Ac%0D%0Ad%F0%9F%98%80"), string)),
+      Option.some(value(string, stringOf("a\tb\nc\nd\u{1F600}"))),
+    );
+  });
+
   it.effect("decodes only the entries its binding names", () =>
     Effect.gen(function* namedEntries() {
       const single = binding("identifier");
@@ -444,6 +486,28 @@ describe("encode and decode", () => {
       );
     }),
   );
+});
+
+describe("isXmlText", () => {
+  it("refuses a control character other than tab and the line breaks, U+FFFE, U+FFFF and a lone surrogate", () => {
+    for (const text of [
+      "a\u0000b",
+      "a\u000Bb",
+      "a\u001Fb",
+      "a\uFFFEb",
+      "a\uFFFFb",
+      "a\uD800b",
+      "\uDC00",
+    ]) {
+      assert.isFalse(isXmlText(text), JSON.stringify(text));
+    }
+  });
+
+  it("admits tab, the line breaks, the empty text and an astral character", () => {
+    for (const text of ["", "a\tb\nc\rd", "a\u{1F600}b", "\u{10FFFF}", "\uFFFD\uE000\uD7FF"]) {
+      assert.isTrue(isXmlText(text), JSON.stringify(text));
+    }
+  });
 });
 
 describe("checkInstance", () => {

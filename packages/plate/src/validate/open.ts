@@ -19,8 +19,8 @@ import type { Verdict } from "#plate/validate/verdict.ts";
  * committed tables.
  *
  * It never fails, because a refusal is a verdict. A document the reader cannot build a tree from
- * is `refused` with the reader's one refusal (`not-well-formed` or `reader-refused`); any other is
- * `check`'s verdict. Nothing but its two inputs decides the result.
+ * is `refused`, of kind `none`, with the reader's one refusal (`not-well-formed` or
+ * `reader-refused`); any other is `check`'s verdict. Nothing but its two inputs decides the result.
  *
  * @param location The document's location as the host named it, which the verdict and every
  *   refusal carry as `document`.
@@ -35,10 +35,11 @@ export const open = Effect.fn("open")(function* open(
 
   const read = yield* Effect.result(readSource(location, bytes));
   const verdict: Verdict = Result.isFailure(read)
-    ? { document: location, refusals: [read.failure], verdict: "refused" }
+    ? { document: location, kind: "none", refusals: [read.failure], verdict: "refused" }
     : check(read.success, tables);
 
   yield* Effect.annotateCurrentSpan("document.verdict", verdict.verdict);
+  yield* Effect.annotateCurrentSpan("document.kind", verdict.kind);
 
   return verdict;
 });

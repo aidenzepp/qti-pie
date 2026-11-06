@@ -109,6 +109,12 @@ const item: Item = {
         cardinality: "single",
         defaultValue: Option.none(),
         identifier: "SCORE",
+        interpretation: Option.none(),
+        longInterpretation: Option.none(),
+        masteryValue: Option.none(),
+        normalMaximum: Option.none(),
+        normalMinimum: Option.none(),
+        view: Option.none(),
       },
     ],
   ]),
@@ -504,35 +510,66 @@ describe("the public surface", () => {
       const surface = yield* Effect.promise(() => import("#plate/index.ts"));
 
       assert.deepStrictEqual(Object.keys(surface).toSorted(), [
+        "IntentRefused",
         "InvalidConfiguration",
         "InvalidInstance",
         "InvalidRecord",
         "InvalidRedacted",
         "InvalidResponses",
+        "InvalidResultContext",
+        "InvalidSession",
+        "InvalidSessionInstance",
+        "InvalidTime",
+        "ItemNotInSession",
         "Malformed",
         "OutcomeMismatchError",
         "PartSwapRefused",
         "RecordMismatch",
         "ResponsesRefused",
+        "ResultItemMissing",
+        "SessionMismatch",
+        "StepResponseMisfit",
+        "TestNotDeliverable",
         "UnknownIdentifierError",
+        "UnknownItemRef",
         "UnknownPart",
         "UnmappedResponseError",
+        "acceptedItem",
+        "advance",
+        "allowedIntents",
         "checkInstance",
         "checkResponses",
         "configure",
+        "current",
         "decode",
+        "decodeIntent",
         "decodeRedacted",
+        "decodeSession",
         "encode",
+        "encodeIntent",
         "encodeRedacted",
+        "encodeSession",
         "entryName",
         "h",
+        "intentName",
         "isPosted",
+        "itemRefs",
+        "itemView",
+        "navigationState",
         "open",
+        "openPackage",
         "partition",
+        "permits",
+        "postings",
         "redact",
         "render",
+        "renderNavigation",
         "renderStatus",
+        "restore",
+        "results",
         "score",
+        "solution",
+        "startTest",
       ]);
     }),
   );
@@ -547,12 +584,21 @@ describe("the public surface", () => {
   );
 
   it.effect(
-    "exports neither test seam nor the brand's constructor: acceptForTest and brandRedacted",
+    "exports none of the five …ForTest seams, nor brandRedacted, the brand's constructor",
     () =>
       Effect.gen(function* noSeams() {
         const surface = yield* Effect.promise(() => import("#plate/index.ts"));
 
-        for (const name of ["acceptForTest", "brandRedacted", "redactItem", "payload"]) {
+        for (const name of [
+          "acceptForTest",
+          "acceptPackageForTest",
+          "acceptSectionForTest",
+          "acceptStimulusForTest",
+          "acceptTestForTest",
+          "brandRedacted",
+          "redactItem",
+          "payload",
+        ]) {
           assert.notProperty(surface, name);
         }
       }),

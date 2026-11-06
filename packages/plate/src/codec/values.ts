@@ -8,6 +8,7 @@
  * @module
  */
 import { Array as Arr, Option, Schema, SchemaTransformation } from "effect";
+import { isXmlText } from "#plate/form/encoding.ts";
 import { isNcName, modelledBaseTypes, modelledCardinalities } from "#plate/model/values.ts";
 import type { Single, Value } from "#plate/model/values.ts";
 
@@ -17,6 +18,18 @@ import type { Single, Value } from "#plate/model/values.ts";
 const IdentifierText = Schema.String.check(
   Schema.makeFilter((text: string) =>
     isNcName(text) ? undefined : "an identifier must be an NCName; start it with a letter or _",
+  ),
+);
+
+/**
+ * A string or a URI as a Schema: text whose every character XML can carry, since a stored value
+ * may be written into a result. It refuses what `decode` refuses of a posted string.
+ */
+const XmlText = Schema.String.check(
+  Schema.makeFilter((text: string) =>
+    isXmlText(text)
+      ? undefined
+      : "this text holds a character XML cannot carry; remove each control character other than tab, line feed and carriage return, each U+FFFE and U+FFFF, and each lone surrogate",
   ),
 );
 
@@ -75,16 +88,17 @@ export const decodeStoredFloat = Schema.decodeOption(FloatFromJson);
  *
  * An integer is exact at any size. Its encoded form is its decimal digits, which `parseLexical`
  * reads to the same value, so a value decoded from a record is one the parser could have read. A
- * point is two such integers, x then y, each encoded as its decimal digits. A float is an
- * xs:double. Its encoded form is a JSON number when it is finite and not negative zero,
- * and otherwise `"INF"`, `"-INF"`, `"NaN"` or `"-0"`, so `JSON.stringify` keeps every float.
+ * point is two such integers, x then y, each encoded as its decimal digits. A string or a URI holds
+ * only characters XML can carry. A float is an xs:double. Its encoded form is a JSON number when it
+ * is finite and not negative zero, and otherwise `"INF"`, `"-INF"`, `"NaN"` or `"-0"`, so
+ * `JSON.stringify` keeps every float.
  */
 export const SingleSchema = Schema.Union([
   Schema.Struct({ baseType: Schema.Literal("identifier"), value: IdentifierText }),
   Schema.Struct({ baseType: Schema.Literal("boolean"), value: Schema.Boolean }),
   Schema.Struct({ baseType: Schema.Literal("integer"), value: Schema.BigIntFromString }),
   Schema.Struct({ baseType: Schema.Literal("float"), value: FloatFromJson }),
-  Schema.Struct({ baseType: Schema.Literal("string"), value: Schema.String }),
+  Schema.Struct({ baseType: Schema.Literal("string"), value: XmlText }),
   Schema.Struct({
     baseType: Schema.Literal("point"),
     value: Schema.Tuple([Schema.BigIntFromString, Schema.BigIntFromString]),
@@ -97,7 +111,7 @@ export const SingleSchema = Schema.Union([
     baseType: Schema.Literal("directedPair"),
     value: Schema.Tuple([IdentifierText, IdentifierText]),
   }),
-  Schema.Struct({ baseType: Schema.Literal("uri"), value: Schema.String }),
+  Schema.Struct({ baseType: Schema.Literal("uri"), value: XmlText }),
 ]);
 
 /**

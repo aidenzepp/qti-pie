@@ -102,6 +102,7 @@ const built: Payload = payload(redactItem(item), {
   instance: "6f2c9a1e-3b7d-4e05-8c21-9d4a7b0e5f13",
   locale: "en",
   messages: [],
+  mode: "answering",
   names: new Map(),
   posted: Option.none(),
   values: new Map(),

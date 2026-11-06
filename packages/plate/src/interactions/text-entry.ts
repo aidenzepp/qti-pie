@@ -2,12 +2,14 @@
  * Text Entry (Q-20): its parts, its connect function and its response validation, on the module
  * shape of Choice.
  *
- * {@link renderTextEntry} emits the structure of spec §4.3: a `qti-text-entry-interaction` Root, a
+ * {@link renderTextEntry} emits this structure: a `qti-text-entry-interaction` Root, a
  * phrasing container that stands inside the author's sentence, holding one native text `input`, the
  * Control. The connect function computes every attribute of both parts once, and `applyPart` places
  * each one, through the embedder's replacement when there is one (ruling `fb4fe744` S1, S2). The
- * Control is a native text input, so the browser's own keyboard map applies (§4.8), and Enter
- * submits the author's form by implicit submission.
+ * Control is a native text input, so the browser's own keyboard map applies, and Enter
+ * submits the author's form by implicit submission. In review and solution the Control is
+ * `readonly`, so it shows its value, stays a tab stop and posts that value with the form, but takes
+ * no input; it is `disabled` only when the author finished the item.
  *
  * {@link validateTextEntry} checks a value the caller decoded. Tier (a) always applies: a posted
  * text that is not a number of the bound base type, or a file or a second entry, which a native
@@ -96,15 +98,19 @@ const inputModeOf = (interaction: TextEntryPayload): Attributes => {
  * - Root: the marker, the state (`data-mode`, and `data-disabled` when the author disabled every
  *   control), and the author's `class`.
  * - Control: a text `input`; its id, the payload's `formName` and its restored `value`; `disabled`
- *   when finished; `inputmode` by the base type; `expected-length` as `size` when above 0, which
- *   HTML requires; `placeholder-text` as `placeholder`; its name ({@link textControlName});
- *   `aria-invalid` and `aria-describedby` → the message ids when the response is invalid; and
- *   `autofocus` when the payload says.
+ *   when finished; `readonly` when the interaction is not `editable` (review and solution);
+ *   `autocomplete="off"` in every mode, so the browser offers no remembered answer; `inputmode` by
+ *   the base type; `expected-length` as `size` when above 0, which HTML requires;
+ *   `placeholder-text` as `placeholder`; its name ({@link textControlName}); `aria-invalid` and
+ *   `aria-describedby` → the message ids when the response is invalid; and `autofocus` when the
+ *   payload says.
  *
- * @param interaction The Text Entry.
+ * @param interaction The Text Entry, which gives `editable`.
  * @param payload The payload, which gives the instance, the mode and `finished`.
  * @param locale The locale of the renderer's own text.
  * @returns The attributes of both parts.
+ * @see https://html.spec.whatwg.org/multipage/input.html#attr-input-readonly
+ * @see https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#attr-fe-autocomplete
  */
 const connect = (interaction: TextEntryPayload, payload: Payload, locale: Locale): Connected => ({
   control: {
@@ -114,11 +120,13 @@ const connect = (interaction: TextEntryPayload, payload: Payload, locale: Locale
       "aria-invalid": "true",
     }),
     ...when(interaction.autofocus, { autofocus: true }),
+    autocomplete: "off",
     "data-slot": rows.control.slot,
     ...when(payload.finished, { disabled: true }),
     id: scopedId(payload.instance, interaction.response, "control"),
     ...inputModeOf(interaction),
     name: interaction.formName,
+    ...when(!interaction.editable, { readonly: true }),
     ...whenSome(interaction.placeholder, (placeholder) => ({ placeholder })),
     ...whenSome(
       interaction.expectedLength.pipe(Option.filter((expected) => expected > 0n)),
@@ -136,7 +144,7 @@ const connect = (interaction: TextEntryPayload, payload: Payload, locale: Locale
 });
 
 /**
- * Render a Text Entry as spec §4.3 structures it: a `qti-text-entry-interaction` Root holding one
+ * Render a Text Entry: a `qti-text-entry-interaction` Root holding one
  * text `input` Control.
  *
  * Each part goes through `applyPart` with its replacement from `state.parts`, so every swap holds
@@ -170,10 +178,10 @@ export const renderTextEntry = (
  * the value, or the {@link Malformed} `decode` gave. So the entry name stays the caller's, while
  * the message and the author's override stay here.
  *
- * - A {@link Malformed} input of an `integer` or `float` binding: `malformedNumber`, or the author's
- *   `data-patternmask-message` when set.
- * - A {@link Malformed} input of a `string` binding: the message of its reason, `malformedFile` for a
- *   file and `malformedSingleMany` for a second entry.
+ * - A {@link Malformed} input of any binding, by its reason ({@link malformedMessage}):
+ *   `malformedFile` for a file and `malformedSingleMany` for a second entry; for a text that is not
+ *   a number of an `integer` or `float` binding, the author's `data-patternmask-message` when set,
+ *   else `malformedNumber`; `notAccepted` for any other reason.
  * - A decoded value, under `validateResponses`: one message when it mismatches the Text Entry's
  *   `pattern-mask` ({@link patternMessage}), the author's `data-patternmask-message` or else
  *   `patternMismatch`. NULL, a Text Entry without a `pattern-mask`, and every value without

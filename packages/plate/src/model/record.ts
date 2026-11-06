@@ -36,39 +36,37 @@ export interface ItemRecord {
 }
 
 /**
- * Give the value an outcome without a default holds before any processing sets it: 0 for a single
- * integer or float, NULL otherwise (`ea422814` §8.2).
+ * Give the value an outcome holds before any processing sets it: its declared default, else 0 for
+ * a single integer or float, else NULL. An item's and a test's outcomes start alike, so the record
+ * and the results report read the same value.
  *
  * @param outcome The outcome's declaration.
  * @returns The outcome's starting value.
  */
-const initial = (outcome: OutcomeDeclaration): Value => {
-  if (outcome.cardinality === "single" && outcome.baseType === "integer") {
-    return {
-      baseType: "integer",
-      cardinality: "single",
-      values: [{ baseType: "integer", value: 0n }],
-    };
-  }
+export const startingValue = (outcome: OutcomeDeclaration): Value =>
+  Option.getOrElse(outcome.defaultValue, (): Value => {
+    if (outcome.cardinality === "single" && outcome.baseType === "integer") {
+      return {
+        baseType: "integer",
+        cardinality: "single",
+        values: [{ baseType: "integer", value: 0n }],
+      };
+    }
 
-  return outcome.cardinality === "single" && outcome.baseType === "float"
-    ? { baseType: "float", cardinality: "single", values: [{ baseType: "float", value: 0 }] }
-    : nullOf(outcome.baseType, outcome.cardinality);
-};
+    return outcome.cardinality === "single" && outcome.baseType === "float"
+      ? { baseType: "float", cardinality: "single", values: [{ baseType: "float", value: 0 }] }
+      : nullOf(outcome.baseType, outcome.cardinality);
+  });
 
 /**
  * Give each outcome of an item its starting value, the value a non-adaptive attempt resets it to.
  *
  * @param item The item.
- * @returns Each outcome at its declared default, else 0 for a single integer or float, else NULL,
- *   keyed by identifier.
+ * @returns Each outcome at {@link startingValue}, keyed by identifier.
  */
 export const outcomeDefaults = (item: Item): ItemRecord["outcomes"] =>
   Object.fromEntries(
-    Array.from(item.outcomes, ([identifier, outcome]) => [
-      identifier,
-      Option.getOrElse(outcome.defaultValue, () => initial(outcome)),
-    ]),
+    Array.from(item.outcomes, ([identifier, outcome]) => [identifier, startingValue(outcome)]),
   );
 
 /**

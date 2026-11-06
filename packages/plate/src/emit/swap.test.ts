@@ -3,6 +3,7 @@ import { Effect, Option, Result } from "effect";
 import { h, text } from "#plate/emit/node.ts";
 import type { Attributes, Element, Node } from "#plate/emit/node.ts";
 import { rowFor } from "#plate/emit/parts.ts";
+import type { PartRow } from "#plate/emit/parts.ts";
 import { applyPart } from "#plate/emit/swap.ts";
 
 /**
@@ -184,6 +185,111 @@ describe("applyPart, I1", () => {
         ),
       );
       assert.isFalse(Object.hasOwn(result.attrs, "class"));
+    }),
+  );
+});
+
+/**
+ * A test-only row of a `button` part whose `type` is defaulted to `button` and never merged, as a
+ * navigation part's is: the Notice's row with a `button` element any tag may replace.
+ */
+const buttonRow: PartRow = {
+  ...rowFor("item", "notice"),
+  defaults: { type: "button" },
+  element: "button",
+  merged: ["disabled"],
+  tagClass: "any",
+};
+
+/**
+ * The button row's attributes, as a connect function computes them: its marker only.
+ */
+const buttonProps: Attributes = { "data-slot": buttonRow.slot };
+
+describe("applyPart, a row's defaults", () => {
+  it.effect("writes a default onto the default element on the fast path", () =>
+    Effect.gen(function* defaultsOnFastPath() {
+      const result = yield* Effect.fromResult(applyPart(buttonRow, buttonProps, [text("Next")]));
+      assert.strictEqual(result.tag, "button");
+      assert.deepStrictEqual(result.attrs, { "data-slot": buttonRow.slot, type: "button" });
+    }),
+  );
+
+  it.effect(
+    "keeps a replacement's own attributes over the defaults, and writes the props over both",
+    () =>
+      Effect.gen(function* replacementOverDefaults() {
+        const replacement = returning(h("button", { name: "n", type: "submit", value: "v" }));
+        const result = yield* Effect.fromResult(applyPart(buttonRow, buttonProps, [], replacement));
+        assert.deepStrictEqual(result.attrs, {
+          "data-slot": buttonRow.slot,
+          name: "n",
+          type: "submit",
+          value: "v",
+        });
+      }),
+  );
+
+  it.effect("writes a default a replacement leaves out", () =>
+    Effect.gen(function* defaultUnderReplacement() {
+      const result = yield* Effect.fromResult(applyPart(buttonRow, buttonProps, [], as("button")));
+      assert.deepStrictEqual(result.attrs, { "data-slot": buttonRow.slot, type: "button" });
+    }),
+  );
+});
+
+/**
+ * The navigation Next button's row, a plain button whose `type` is a default.
+ */
+const nextRow = rowFor("test-navigation", "next");
+
+/**
+ * The Next button's attributes, as the navigation parts compute them for a disabled Next.
+ */
+const nextProps: Attributes = { "data-intent": "next", "data-slot": nextRow.slot, disabled: true };
+
+describe("applyPart, the navigation Next button", () => {
+  it.effect("writes type button onto the default button on the fast path", () =>
+    Effect.gen(function* nextFastPath() {
+      const result = yield* Effect.fromResult(applyPart(nextRow, nextProps, [text("Next item")]));
+      assert.strictEqual(result.tag, "button");
+      assert.deepStrictEqual(result.attrs, { ...nextProps, type: "button" });
+    }),
+  );
+
+  it.effect(
+    "keeps a host submit button's type, name and value, and writes the props over them",
+    () =>
+      Effect.gen(function* nextSubmitSwap() {
+        const replacement = returning(
+          h("button", { "data-slot": "host-button", name: "n", type: "submit", value: "v" }),
+        );
+        const result = yield* Effect.fromResult(applyPart(nextRow, nextProps, [], replacement));
+        assert.deepStrictEqual(result.attrs, {
+          ...nextProps,
+          name: "n",
+          type: "submit",
+          value: "v",
+        });
+      }),
+  );
+
+  it.effect("writes type button onto a replacement button that names no type", () =>
+    Effect.gen(function* nextUntypedSwap() {
+      const result = yield* Effect.fromResult(applyPart(nextRow, nextProps, [], as("button")));
+      assert.deepStrictEqual(result.attrs, { ...nextProps, type: "button" });
+    }),
+  );
+
+  it.effect("refuses a div for the Next button as root-not-allowed", () =>
+    Effect.gen(function* nextNotButton() {
+      const error = yield* Effect.flip(
+        Effect.fromResult(applyPart(nextRow, nextProps, [], as("div"))),
+      );
+      assert.strictEqual(error._tag, "PartSwapRefused");
+      assert.strictEqual(error.cause, "root-not-allowed");
+      assert.strictEqual(error.interaction, "test-navigation");
+      assert.strictEqual(error.part, "next");
     }),
   );
 });

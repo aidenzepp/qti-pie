@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Effect, Option, Result } from "effect";
+import { Effect, Option, Predicate, Result } from "effect";
 import { configure } from "#plate/configuration.ts";
 import type { Configuration } from "#plate/configuration.ts";
 import type { StatusInput } from "#plate/emit/item.ts";
@@ -7,13 +7,14 @@ import { h, text } from "#plate/emit/node.ts";
 import type { Element, Node } from "#plate/emit/node.ts";
 import { rowFor, scopedId } from "#plate/emit/parts.ts";
 import { checkInstance, entryName, partition } from "#plate/form/encoding.ts";
+import { message } from "#plate/messages.ts";
 import type { Entry, InstanceRequirement } from "#plate/form/encoding.ts";
 import type { BodyNode, ChoiceInteraction, Item, TextEntryInteraction } from "#plate/model/item.ts";
 import type { Value } from "#plate/model/values.ts";
-import type { Redacted } from "#plate/payload.ts";
+import type { Redacted, RenderMode } from "#plate/payload.ts";
 import { InvalidInstance, redact, render, renderStatus } from "#plate/render.ts";
 import type { Options, Rendered } from "#plate/render.ts";
-import { checkTree } from "#plate/test/accessibility.ts";
+import { checkTree, nameOf, textOf } from "#plate/test/accessibility.ts";
 import { keyboardWalk } from "#plate/test/keyboard.ts";
 import { parseHtml } from "#plate/test/round-trip.ts";
 import { acceptForTest } from "#plate/validate/verdict.ts";
@@ -31,6 +32,20 @@ const markers = [
   "MarkerResponseDefault",
   "MarkerRuleValue",
 ] as const;
+
+/**
+ * The {@link markers} of the correct responses, which a `solution` render shows only when the
+ * author passes them as values.
+ */
+const correctMarkers: readonly string[] = ["MarkerCorrectChoice", "MarkerCorrectText"];
+
+/**
+ * The {@link markers} no render shows in any mode: the mapping key, the defaults and the rule
+ * value.
+ */
+const hiddenMarkers: readonly string[] = markers.filter(
+  (marker) => !correctMarkers.includes(marker),
+);
 
 /**
  * The item instance most renders here pass.
@@ -142,6 +157,12 @@ const item: Item = {
         cardinality: "single",
         defaultValue: Option.none(),
         identifier: "SCORE",
+        interpretation: Option.none(),
+        longInterpretation: Option.none(),
+        masteryValue: Option.none(),
+        normalMaximum: Option.none(),
+        normalMinimum: Option.none(),
+        view: Option.none(),
       },
     ],
     [
@@ -151,6 +172,12 @@ const item: Item = {
         cardinality: "single",
         defaultValue: Option.some(one({ baseType: "identifier", value: "MarkerOutcomeDefault" })),
         identifier: "FEEDBACK",
+        interpretation: Option.none(),
+        longInterpretation: Option.none(),
+        masteryValue: Option.none(),
+        normalMaximum: Option.none(),
+        normalMinimum: Option.none(),
+        view: Option.none(),
       },
     ],
   ]),
@@ -275,6 +302,48 @@ const shuffled = redact(
     ]),
   }),
 );
+
+/**
+ * The values a recorded attempt of {@link item} holds, which a `review` render shows: `B` and
+ * `Lyon`.
+ */
+const recordedValues = {
+  CITY: one({ baseType: "string", value: "Lyon" }),
+  RESPONSE: one({ baseType: "identifier", value: "B" }),
+} satisfies Readonly<Record<string, Value>>;
+
+/**
+ * The correct responses of {@link item}, as an author passes them to a `solution` render.
+ */
+const correctValues = {
+  CITY: one({ baseType: "string", value: "MarkerCorrectText" }),
+  RESPONSE: one({ baseType: "identifier", value: "MarkerCorrectChoice" }),
+} satisfies Readonly<Record<string, Value>>;
+
+/**
+ * Write a redacted item as JSON, every bigint, such as a count, as its decimal digits, which plain
+ * `JSON.stringify` refuses to write, so nothing it holds is hidden from a search of the text.
+ *
+ * @param value The redacted item.
+ * @returns Its JSON text.
+ */
+const jsonOf = (value: Redacted): string =>
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- `JSON.stringify` hands its replacer every value the item holds, of any type; the replacer only looks for a bigint to write out.
+  JSON.stringify(value, (_key, field: unknown) =>
+    Predicate.isBigInt(field) ? String(field) : field,
+  );
+
+/**
+ * Give the element a render's HTML parses to: the item Root or the Status region.
+ *
+ * @param rendered The render.
+ * @returns The first element of its HTML.
+ */
+const rootOf = (rendered: Rendered): Element => {
+  const [root] = parseHtml(rendered.html);
+
+  return root?.kind === "element" ? root : assert.fail("The HTML does not start with an element.");
+};
 
 /**
  * The default configuration.
@@ -592,6 +661,77 @@ describe("render", () => {
   );
 });
 
+describe("render, the mode", () => {
+  it.effect(
+    "names the mode in the Root's data-mode: answering by default, else the one asked for",
+    () =>
+      Effect.gen(function* rootMode() {
+        const configuration = yield* defaults;
+        const modes: readonly (readonly [RenderMode | undefined, RenderMode])[] = [
+          [undefined, "answering"],
+          ["answering", "answering"],
+          ["review", "review"],
+          ["solution", "solution"],
+        ];
+        for (const [asked, named] of modes) {
+          const options: Options = asked === undefined ? { instance } : { instance, mode: asked };
+          const rendered = yield* Effect.fromResult(render(redacted, configuration, options));
+          assert.strictEqual(rootOf(rendered).attrs["data-mode"], named, String(asked));
+        }
+      }),
+  );
+
+  it.effect("gives the same HTML for the default and for answering named", () =>
+    Effect.gen(function* answeringByDefault() {
+      const configuration = yield* defaults;
+      for (const options of [
+        { instance },
+        { disabled: true, instance, values: recordedValues },
+        {
+          instance,
+          messages: [{ response: "CITY", text: "Enter a city." }],
+          posted: { CITY: [""] },
+        },
+      ] satisfies readonly Options[]) {
+        const unnamed = yield* Effect.fromResult(render(redacted, configuration, options));
+        const named = yield* Effect.fromResult(
+          render(redacted, configuration, { ...options, mode: "answering" }),
+        );
+        assert.strictEqual(named.html, unnamed.html);
+      }
+    }),
+  );
+
+  it.effect(
+    "shows no mapping, default or rule value in review or solution, and a correct response only as the author's values",
+    () =>
+      Effect.gen(function* hiddenInEveryMode() {
+        const configuration = yield* defaults;
+        const review = yield* Effect.fromResult(
+          render(redacted, configuration, { instance, mode: "review", values: recordedValues }),
+        );
+        const bare = yield* Effect.fromResult(
+          render(redacted, configuration, { instance, mode: "solution" }),
+        );
+        const solved = yield* Effect.fromResult(
+          render(redacted, configuration, { instance, mode: "solution", values: correctValues }),
+        );
+
+        for (const marker of markers) {
+          assert.notInclude(review.html, marker, `review holds ${marker}`);
+          assert.notInclude(bare.html, marker, `solution without values holds ${marker}`);
+        }
+        for (const marker of hiddenMarkers) {
+          assert.notInclude(solved.html, marker, `solution holds ${marker}`);
+        }
+        assert.include(solved.html, "MarkerCorrectText");
+        for (const marker of correctMarkers) {
+          assert.notInclude(jsonOf(redacted), marker, `redact's output holds ${marker}`);
+        }
+      }),
+  );
+});
+
 describe("render, a shuffled Choice", () => {
   it.effect("[Q-2] gives byte-equal HTML for two renders with the same instance and seed", () =>
     Effect.gen(function* seededTwice() {
@@ -763,6 +903,24 @@ describe("renderStatus", () => {
         assert.strictEqual(region.tag, rowFor("item", "status").element);
         assert.strictEqual(region.attrs["role"], "status");
         assert.strictEqual(region.attrs["id"], scopedId(instance, "status"));
+      }
+    }),
+  );
+
+  it.effect("names the region by each heading of a review, a solution, a part and a test", () =>
+    Effect.gen(function* statusHeadings() {
+      const configuration = yield* defaults;
+      for (const heading of ["review", "solution", "partSubmitted", "testFinished"] as const) {
+        const region = rootOf(
+          yield* Effect.fromResult(renderStatus({ heading, instance }, configuration)),
+        );
+        const title = region.children.find((child) => child.kind === "element");
+        assert.strictEqual(region.attrs["role"], "status");
+        assert.strictEqual(
+          title?.kind === "element" ? textOf(title) : title,
+          message("en", heading),
+        );
+        assert.strictEqual(nameOf(region, region), message("en", heading));
       }
     }),
   );

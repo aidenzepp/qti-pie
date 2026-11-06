@@ -26,6 +26,7 @@ import { Playground, WalkCorpus } from "#plate/test/browsers.ts";
 import type { EngineName } from "#plate/test/browsers.ts";
 import { tabOrder } from "#plate/test/keyboard.ts";
 import { parseHtml } from "#plate/test/round-trip.ts";
+import { acceptedItem } from "#plate/validate/verdict.ts";
 
 /**
  * Collect every element of a tree, each before its descendants.
@@ -189,11 +190,12 @@ export const correctOf = Effect.fn("correctOf")(function* correctOf(
   response: string,
 ) {
   const verdict = yield* openMember(corpusPath);
-  if (verdict.verdict === "refused" || verdict.verdict === "unchecked") {
+  const accepted = acceptedItem(verdict);
+  if (Option.isNone(accepted)) {
     return assert.fail(`${corpusPath} is ${verdict.verdict}, not accepted`);
   }
 
-  const declaration = verdict.accepted.item.responses.get(response);
+  const declaration = accepted.value.item.responses.get(response);
 
   return declaration === undefined
     ? []
@@ -217,11 +219,12 @@ export const textEntryOf = Effect.fn("textEntryOf")(function* textEntryOf(member
       ConfigProvider.layer(ConfigProvider.fromUnknown({ PLATE_CORPUS_DIR: directory })),
     ),
   );
-  if (verdict.verdict === "refused" || verdict.verdict === "unchecked") {
+  const accepted = acceptedItem(verdict);
+  if (Option.isNone(accepted)) {
     return assert.fail(`${member} is ${verdict.verdict}, not accepted`);
   }
 
-  const entries = interactionsIn(verdict.accepted.item.body).flatMap((interaction) =>
+  const entries = interactionsIn(accepted.value.item.body).flatMap((interaction) =>
     interaction.kind === "text-entry" ? [interaction] : [],
   );
   const [entry] = entries;

@@ -4,7 +4,8 @@
  * text, whether it is declared globally and the types it is declared with; and for every named
  * type, what it derives from and how, and its own table of the same attributes, children,
  * wildcards and text. {@link generateTables} builds them from the XSD's source view; structural
- * validation reads them and never the XSD itself.
+ * validation reads them and never the XSD itself. {@link generateOccurrences} gives, for the same
+ * elements and types, how many times each one's content model admits each child it names.
  *
  * @module
  */
@@ -260,6 +261,46 @@ export const Tables = Schema.Struct({
  * The tables, as {@link Tables} decodes them.
  */
 export type Tables = typeof Tables.Type;
+
+/**
+ * The Schema of how many times a table admits one child it names: the child's namespace and local
+ * name, and the least and the greatest number of times its content model admits it, as XML
+ * Schema's `minOccurs` and `maxOccurs` spell them.
+ *
+ * Each count is the decimal form of a non-negative integer, so it stays exact; `maxOccurs` is
+ * `unbounded` when the content model sets no greatest number.
+ */
+// oxlint-disable-next-line eslint/no-redeclare -- `ChildOccurrence` is the Schema and the type of a child's counts under one name, as `ChildName` is.
+export const ChildOccurrence = Schema.Struct({
+  local: Schema.String,
+  maxOccurs: Schema.String,
+  minOccurs: Schema.String,
+  namespace: Schema.String,
+});
+
+/**
+ * A child's counts, as {@link ChildOccurrence} decodes them.
+ */
+export type ChildOccurrence = typeof ChildOccurrence.Type;
+
+/**
+ * The Schema of the occurrences: for every element table and every named type's entry the
+ * {@link Tables} of the same XSD hold, keyed the same way, the counts of each child it names,
+ * sorted by namespace then local name.
+ *
+ * An element a wildcard admits has no counts, and a type or element with no children by name has
+ * an empty list.
+ */
+// oxlint-disable-next-line eslint/no-redeclare -- `Occurrences` is the Schema and the type of the occurrences under one name, as `Tables` is.
+export const Occurrences = Schema.Struct({
+  elements: Schema.Record(Schema.String, Schema.Array(ChildOccurrence)),
+  types: Schema.Record(Schema.String, Schema.Array(ChildOccurrence)),
+});
+
+/**
+ * The occurrences, as {@link Occurrences} decodes them.
+ */
+export type Occurrences = typeof Occurrences.Type;
 
 /**
  * The failure of table generation on an XSD construct the tables have no form for.
@@ -1411,6 +1452,48 @@ const childName = Effect.fnUntraced(function* childName(
 const modelGroups: ReadonlySet<string> = new Set(["all", "choice", "sequence"]);
 
 /**
+ * A named model group a `xs:group` reference expands to, with the set of groups being expanded
+ * once it is.
+ */
+interface ReferencedGroup {
+  readonly definition: SourceElement;
+  readonly expanding: ReadonlySet<string>;
+}
+
+/**
+ * Find the named model group an `xs:group` reference names.
+ *
+ * @param context The generation's context.
+ * @param reference The `xs:group` reference.
+ * @param groups The groups being expanded, so a group that refers to itself fails.
+ * @returns The group's definition and the groups being expanded with it, or
+ *   {@link TableGenerationError} when the reference has no `ref`, names no group of the target
+ *   namespace, or names a group being expanded.
+ */
+const referencedGroup = Effect.fnUntraced(function* referencedGroup(
+  context: Context,
+  reference: SourceElement,
+  groups: ReadonlySet<string>,
+): Effect.fn.Return<ReferencedGroup, TableGenerationError> {
+  const ref = valueOf(reference, "ref");
+  if (ref === undefined) {
+    return yield* failure("xs:group", "a reference has no ref");
+  }
+
+  const name = yield* resolveQName(context, reference, ref);
+  const definition = name.namespace === context.target ? context.groups.get(name.local) : undefined;
+  if (definition === undefined) {
+    return yield* failure("xs:group", `no group ${ref} is declared`);
+  }
+
+  if (groups.has(name.local)) {
+    return yield* failure("xs:group", `${ref} refers to itself`);
+  }
+
+  return { definition, expanding: new Set([...groups, name.local]) };
+});
+
+/**
  * Gather a content model's children and element wildcards, flattening `sequence`, `choice` and
  * `all` and expanding `xs:group` references, nested ones included.
  *
@@ -1439,22 +1522,8 @@ const gatherParticles = Effect.fnUntraced(function* gatherParticles(
       children.push(...nested.children);
       wildcards.push(...nested.wildcards);
     } else if (child.local === "group") {
-      const ref = valueOf(child, "ref");
-      if (ref === undefined) {
-        return yield* failure("xs:group", "a reference has no ref");
-      }
-
-      const name = yield* resolveQName(context, child, ref);
-      const group = name.namespace === context.target ? context.groups.get(name.local) : undefined;
-      if (group === undefined) {
-        return yield* failure("xs:group", `no group ${ref} is declared`);
-      }
-
-      if (groups.has(name.local)) {
-        return yield* failure("xs:group", `${ref} refers to itself`);
-      }
-
-      const nested = yield* gatherParticles(context, group, new Set([...groups, name.local]));
+      const group = yield* referencedGroup(context, child, groups);
+      const nested = yield* gatherParticles(context, group.definition, group.expanding);
       children.push(...nested.children);
       wildcards.push(...nested.wildcards);
     }
@@ -2113,13 +2182,458 @@ const unionTables = Effect.fnUntraced(function* unionTables(
 });
 
 /**
+ * How many times a content model admits one child: from `min` to `max`, where `max` is `unbounded`
+ * when the model sets no greatest number.
+ */
+interface Range {
+  readonly max: bigint | "unbounded";
+  readonly min: bigint;
+}
+
+/**
+ * One child a content model names, with its {@link Range}.
+ */
+interface Counted {
+  readonly name: ChildName;
+  readonly range: Range;
+}
+
+/**
+ * The children a content model names, each keyed by {@link clarkName} with its range.
+ */
+type Counts = ReadonlyMap<string, Counted>;
+
+/**
+ * What one generation of occurrences remembers beside the tables' context: the counts of the
+ * named complex types it has mapped, and the names of those it is mapping, so a type that derives
+ * from itself fails rather than looping.
+ */
+interface Counting {
+  readonly cache: Map<string, Counts>;
+  readonly context: Context;
+  readonly pending: Set<string>;
+}
+
+/**
+ * The range of a child a content model does not name: it never appears.
+ */
+const absent: Range = { max: 0n, min: 0n };
+
+/**
+ * The particles a content model holds: element declarations and references, element wildcards,
+ * model groups and group references.
+ */
+const particleNames: ReadonlySet<string> = new Set([...modelGroups, "any", "element", "group"]);
+
+/**
+ * The lexical form of `xs:nonNegativeInteger`, whose values `minOccurs` and `maxOccurs` take.
+ */
+const nonNegativeInteger = /^\+?[0-9]+$/u;
+
+/**
+ * Report the larger of two counts, `unbounded` larger than any number.
+ *
+ * @param left One count.
+ * @param right The other.
+ * @returns The larger count.
+ */
+const larger = (left: Range["max"], right: Range["max"]): Range["max"] => {
+  if (left === "unbounded" || right === "unbounded") {
+    return "unbounded";
+  }
+
+  return left > right ? left : right;
+};
+
+/**
+ * Multiply two greatest counts, where none of anything is none even when the other is unbounded.
+ *
+ * @param left One count.
+ * @param right The other.
+ * @returns The product.
+ */
+const product = (left: Range["max"], right: Range["max"]): Range["max"] => {
+  if (left === 0n || right === 0n) {
+    return 0n;
+  }
+
+  return left === "unbounded" || right === "unbounded" ? "unbounded" : left * right;
+};
+
+/**
+ * Read a particle's `minOccurs` and `maxOccurs`, each 1 when absent, as XML Schema defines them.
+ *
+ * @param particle The particle.
+ * @returns Its range, or {@link TableGenerationError} for a `minOccurs` that is not a non-negative
+ *   integer or a `maxOccurs` that is neither one nor `unbounded`.
+ */
+const occursOf = Effect.fnUntraced(function* occursOf(
+  particle: SourceElement,
+): Effect.fn.Return<Range, TableGenerationError> {
+  const min = valueOf(particle, "minOccurs")?.trim() ?? "1";
+  const max = valueOf(particle, "maxOccurs")?.trim() ?? "1";
+  if (!nonNegativeInteger.test(min)) {
+    return yield* failure(
+      `xs:${particle.local}`,
+      `minOccurs="${min}" is not a non-negative integer`,
+    );
+  }
+
+  if (max !== "unbounded" && !nonNegativeInteger.test(max)) {
+    return yield* failure(
+      `xs:${particle.local}`,
+      `maxOccurs="${max}" is neither a non-negative integer nor unbounded`,
+    );
+  }
+
+  return { max: max === "unbounded" ? "unbounded" : BigInt(max), min: BigInt(min) };
+});
+
+/**
+ * Repeat a content model's counts as a particle's own range repeats it.
+ *
+ * @param counts The counts of the particle's content.
+ * @param by The particle's own range.
+ * @returns Each child's range multiplied by it.
+ */
+const repeatCounts = (counts: Counts, by: Range): Counts =>
+  new Map(
+    [...counts].map(([key, { name, range }]) => [
+      key,
+      { name, range: { max: product(range.max, by.max), min: range.min * by.min } },
+    ]),
+  );
+
+/**
+ * Join the counts of particles that all appear, a sequence's or an `all`'s, or a base's content and
+ * an extension's: a child named in several adds their ranges.
+ *
+ * @param parts The particles' counts, in order.
+ * @returns The counts of their sequence.
+ */
+const sequenceCounts = (parts: readonly Counts[]): Counts => {
+  const counts = new Map<string, Counted>();
+  for (const part of parts) {
+    for (const [key, entry] of part) {
+      const seen = counts.get(key);
+      counts.set(
+        key,
+        seen === undefined
+          ? entry
+          : {
+              name: entry.name,
+              range: {
+                max:
+                  seen.range.max === "unbounded" || entry.range.max === "unbounded"
+                    ? "unbounded"
+                    : seen.range.max + entry.range.max,
+                min: seen.range.min + entry.range.min,
+              },
+            },
+      );
+    }
+  }
+
+  return counts;
+};
+
+/**
+ * Join the counts of alternatives of which one applies, a choice's branches or the types of one
+ * element name's declarations: each child takes its least and greatest count over them, an
+ * alternative that does not name it counting none.
+ *
+ * @param alternatives The alternatives' counts.
+ * @returns The counts of their choice.
+ */
+const alternativeCounts = (alternatives: readonly Counts[]): Counts => {
+  const names = new Map<string, ChildName>();
+  for (const alternative of alternatives) {
+    for (const [key, { name }] of alternative) {
+      names.set(key, name);
+    }
+  }
+
+  const counts = new Map<string, Counted>();
+  for (const [key, name] of names) {
+    let range: Range | undefined;
+    for (const alternative of alternatives) {
+      const next = alternative.get(key)?.range ?? absent;
+      range =
+        range === undefined
+          ? next
+          : { max: larger(range.max, next.max), min: range.min < next.min ? range.min : next.min };
+    }
+    counts.set(key, { name, range: range ?? absent });
+  }
+
+  return counts;
+};
+
+/**
+ * Count the children one particle names: an element declaration or reference once per its own
+ * range, a model group's particles joined as a sequence or a choice and repeated by its range, a
+ * group reference's named group repeated by the reference's, and an element wildcard none.
+ *
+ * @param context The generation's context.
+ * @param particle The particle.
+ * @param groups The groups being expanded, so a group that refers to itself fails.
+ * @returns The counts, or {@link TableGenerationError} naming what could not be mapped.
+ */
+const particleCounts = Effect.fnUntraced(function* particleCounts(
+  context: Context,
+  particle: SourceElement,
+  groups: ReadonlySet<string>,
+): Effect.fn.Return<Counts, TableGenerationError> {
+  const range = yield* occursOf(particle);
+  if (particle.local === "element") {
+    const name = yield* childName(context, particle);
+
+    return new Map([[clarkName(name), { name, range }]]);
+  }
+
+  if (particle.local === "any") {
+    return new Map();
+  }
+
+  if (particle.local === "group") {
+    const group = yield* referencedGroup(context, particle, groups);
+    // oxlint-disable-next-line eslint/no-use-before-define -- `particleCounts` and `contentCounts` are mutually recursive, as a named group holds a model group; the call runs only after both are defined.
+    const content = yield* contentCounts(context, group.definition, group.expanding);
+
+    return repeatCounts(content, range);
+  }
+
+  const parts: Counts[] = [];
+  for (const child of xsdChildren(particle).filter((nested) => particleNames.has(nested.local))) {
+    parts.push(yield* particleCounts(context, child, groups));
+  }
+
+  return repeatCounts(
+    particle.local === "choice" ? alternativeCounts(parts) : sequenceCounts(parts),
+    range,
+  );
+});
+
+/**
+ * Count the children named by the content model a holder holds: the model group or group reference
+ * of a complex type, a derivation or a named group, or none when it holds neither.
+ *
+ * @param context The generation's context.
+ * @param holder The holder.
+ * @param groups The groups being expanded, so a group that refers to itself fails.
+ * @returns The counts, or {@link TableGenerationError} naming what could not be mapped.
+ */
+const contentCounts = Effect.fnUntraced(function* contentCounts(
+  context: Context,
+  holder: SourceElement,
+  groups: ReadonlySet<string>,
+): Effect.fn.Return<Counts, TableGenerationError> {
+  const content = xsdChildren(holder).find(
+    (child) => modelGroups.has(child.local) || child.local === "group",
+  );
+
+  return content === undefined ? new Map() : yield* particleCounts(context, content, groups);
+});
+
+/**
+ * Count the children of the type a name resolves to, as {@link typeTable} finds its table: a named
+ * complex type's from its definition, once per generation, and none for a simple type or an XML
+ * Schema built-in, `xs:anyType` included, whose wildcards name no child.
+ *
+ * @param counting The generation's memory.
+ * @param name The type's resolved name.
+ * @returns The counts, or {@link TableGenerationError} when no such type exists.
+ */
+const typeCounts = Effect.fnUntraced(function* typeCounts(
+  counting: Counting,
+  name: QName,
+): Effect.fn.Return<Counts, TableGenerationError> {
+  const { context } = counting;
+  if (name.namespace === xsdNamespace) {
+    if (name.local === "anyType" || builtins.has(name.local)) {
+      return new Map();
+    }
+
+    return yield* failure("type", `xs:${name.local} is not a built-in the tables record`);
+  }
+
+  const complex =
+    name.namespace === context.target ? context.complexTypes.get(name.local) : undefined;
+  if (complex === undefined) {
+    if (name.namespace === context.target && context.simpleTypes.has(name.local)) {
+      return new Map();
+    }
+
+    return yield* failure("type", `no type ${clarkName(name)} is declared`);
+  }
+
+  const cached = counting.cache.get(name.local);
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  if (counting.pending.has(name.local)) {
+    return yield* failure("xs:complexType", `${name.local} derives from itself`);
+  }
+
+  counting.pending.add(name.local);
+
+  // oxlint-disable-next-line eslint/no-use-before-define -- `typeCounts` and `complexCounts` are mutually recursive, as a complex type derives from another; the call runs only after both are defined.
+  const counts = yield* complexCounts(counting, complex);
+  counting.pending.delete(name.local);
+  counting.cache.set(name.local, counts);
+
+  return counts;
+});
+
+/**
+ * Count the children of a complex type, as {@link complexTable} finds them: its own content
+ * model's, an extension's base's followed by its own, and a restriction's own alone.
+ *
+ * @param counting The generation's memory.
+ * @param type The `xs:complexType` element.
+ * @returns The counts, or {@link TableGenerationError} naming what could not be mapped.
+ */
+const complexCounts = Effect.fnUntraced(function* complexCounts(
+  counting: Counting,
+  type: SourceElement,
+): Effect.fn.Return<Counts, TableGenerationError> {
+  const { context } = counting;
+  const content = childNamed(type, "complexContent") ?? childNamed(type, "simpleContent");
+  if (content === undefined) {
+    return yield* contentCounts(context, type, new Set());
+  }
+
+  const derivation = childNamed(content, "extension") ?? childNamed(content, "restriction");
+  if (derivation === undefined) {
+    return yield* failure(`xs:${content.local}`, "it holds neither an extension nor a restriction");
+  }
+
+  const baseName = valueOf(derivation, "base");
+  if (baseName === undefined) {
+    return yield* failure(`xs:${derivation.local}`, "it has no base");
+  }
+
+  const base = yield* typeCounts(counting, yield* resolveQName(context, derivation, baseName));
+  const own = yield* contentCounts(context, derivation, new Set());
+
+  return derivation.local === "restriction" ? own : sequenceCounts([base, own]);
+});
+
+/**
+ * Count the children of an element declaration's type: its `type`, its inline complex type, or
+ * none for an inline simple type or `xs:anyType`.
+ *
+ * @param counting The generation's memory.
+ * @param element The `xs:element` element.
+ * @returns The counts, or {@link TableGenerationError} naming what could not be mapped.
+ */
+const declarationCounts = Effect.fnUntraced(function* declarationCounts(
+  counting: Counting,
+  element: SourceElement,
+): Effect.fn.Return<Counts, TableGenerationError> {
+  const typeName = valueOf(element, "type");
+  if (typeName !== undefined) {
+    return yield* typeCounts(counting, yield* resolveQName(counting.context, element, typeName));
+  }
+
+  const complex = childNamed(element, "complexType");
+
+  return complex === undefined ? new Map() : yield* complexCounts(counting, complex);
+});
+
+/**
+ * Write counts in the {@link Occurrences} form: each child's counts in decimal, sorted by namespace
+ * then local name.
+ *
+ * @param counts The counts.
+ * @returns The children's occurrences.
+ */
+const occurrenceList = (counts: Counts): readonly ChildOccurrence[] =>
+  [...counts.values()]
+    .map(({ name, range }) => ({
+      local: name.local,
+      maxOccurs: String(range.max),
+      minOccurs: String(range.min),
+      namespace: name.namespace,
+    }))
+    .toSorted(compareNames);
+
+/**
+ * Write each holder's counts in the {@link Occurrences} form, keyed by local name in sorted order.
+ *
+ * @param holders Each element's or type's counts by local name.
+ * @returns The occurrences of each.
+ */
+const occurrenceRecord = (
+  holders: ReadonlyMap<string, Counts>,
+): Readonly<Record<string, readonly ChildOccurrence[]>> =>
+  Object.fromEntries(
+    [...holders]
+      .toSorted(([left], [right]) => compareText(left, right))
+      .map(([name, counts]) => [name, occurrenceList(counts)]),
+  );
+
+/**
+ * What a generation reads from a schema before it maps anything: the context it maps with, and
+ * every named element declaration, global or local, with its name, in document order.
+ */
+interface Generation {
+  readonly context: Context;
+  readonly declarations: SchemaIndex["declarations"];
+}
+
+/**
+ * Read a schema's root, refuse the constructs the tables do not record, and build the context one
+ * generation maps it with.
+ *
+ * @param xsd The XSD, whose root is `xs:schema`.
+ * @returns The context and the named element declarations, or {@link TableGenerationError} for a
+ *   root that is not `xs:schema` or the first construct the tables do not record.
+ */
+const schemaContext = Effect.fnUntraced(function* schemaContext(
+  xsd: SourceDocument,
+): Effect.fn.Return<Generation, TableGenerationError> {
+  const { root } = xsd;
+  if (root.namespace !== xsdNamespace || root.local !== "schema") {
+    return yield* failure(
+      "xs:schema",
+      `the root of ${xsd.location} is {${root.namespace}}${root.local}, not xs:schema`,
+    );
+  }
+
+  const { declarations, scopes } = indexSchema(root);
+  yield* refuseUnrecorded(scopes.keys());
+
+  return {
+    context: {
+      attributeGroups: definitions(root, "attributeGroup"),
+      attributes: definitions(root, "attribute"),
+      complexCache: new Map(),
+      complexTypes: definitions(root, "complexType"),
+      elements: definitions(root, "element"),
+      groups: definitions(root, "group"),
+      pending: new Set(),
+      qualifiedAttributes: valueOf(root, "attributeFormDefault") === "qualified",
+      qualifiedElements: valueOf(root, "elementFormDefault") === "qualified",
+      scopes,
+      simpleCache: new Map(),
+      simpleTypes: definitions(root, "simpleType"),
+      target: valueOf(root, "targetNamespace") ?? "",
+    },
+    declarations,
+  };
+});
+
+/**
  * Generate the tables of an XSD from its source view.
  *
  * Every `xs:element` with a `name`, global or local, gets the table of its type, and a name
  * declared with more than one type gets the union of their tables, with whether any declaration of
  * it is global and the types they give. Attribute group references expand, extensions and
  * restrictions inherit, and every simple type maps to an {@link AttributeType}. Content models
- * flatten into the children an element admits, through group references, with no order or counts.
+ * flatten into the children an element admits, through group references, with no order or counts;
+ * {@link generateOccurrences} gives the counts.
  * Every named type gets its {@link TypeEntry}: its derivation, and the table an element declared
  * with it alone gets. The XSD is recorded as written; readings that set part of it aside are
  * applied over the tables by structural validation. Imported schemas are never read: an element
@@ -2136,33 +2650,7 @@ const unionTables = Effect.fnUntraced(function* unionTables(
 export const generateTables = Effect.fn("generateTables")(function* generateTables(
   xsd: SourceDocument,
 ): Effect.fn.Return<Tables, TableGenerationError> {
-  const { root } = xsd;
-  if (root.namespace !== xsdNamespace || root.local !== "schema") {
-    return yield* failure(
-      "xs:schema",
-      `the root of ${xsd.location} is {${root.namespace}}${root.local}, not xs:schema`,
-    );
-  }
-
-  const { declarations, scopes } = indexSchema(root);
-  yield* refuseUnrecorded(scopes.keys());
-
-  const context: Context = {
-    attributeGroups: definitions(root, "attributeGroup"),
-    attributes: definitions(root, "attribute"),
-    complexCache: new Map(),
-    complexTypes: definitions(root, "complexType"),
-    elements: definitions(root, "element"),
-    groups: definitions(root, "group"),
-    pending: new Set(),
-    qualifiedAttributes: valueOf(root, "attributeFormDefault") === "qualified",
-    qualifiedElements: valueOf(root, "elementFormDefault") === "qualified",
-    scopes,
-    simpleCache: new Map(),
-    simpleTypes: definitions(root, "simpleType"),
-    target: valueOf(root, "targetNamespace") ?? "",
-  };
-
+  const { context, declarations } = yield* schemaContext(xsd);
   const tables = new Map<string, ElementTable>();
   for (const [name, element] of declarations) {
     const declared = yield* declaredType(context, element);
@@ -2181,4 +2669,54 @@ export const generateTables = Effect.fn("generateTables")(function* generateTabl
     ),
     types: yield* typeEntries(context),
   };
+});
+
+/**
+ * Generate the occurrences of an XSD from its source view: for every element and named type
+ * {@link generateTables} gives a table, how many times its content model admits each child it
+ * names.
+ *
+ * A child's least and greatest count are those its content model sets, model groups and group
+ * references followed: a sequence adds what its particles admit, a choice takes the least and the
+ * greatest over its branches, and a particle's own `minOccurs` and `maxOccurs` multiply what it
+ * holds. An extension adds its own content to its base's, and a restriction's content is its own.
+ * A name declared with more than one type takes, for each child, the least and the greatest count
+ * over its declarations, a declaration that does not name the child counting none. The counts are
+ * bounds on each child alone: they keep no order, and no rule that ties one child's count to
+ * another's. Elements a wildcard admits are not counted.
+ *
+ * @param xsd The XSD, whose root is `xs:schema`.
+ * @returns The occurrences, keyed as {@link generateTables} keys the tables, or
+ *   {@link TableGenerationError} naming the first construct with no table form, as
+ *   {@link generateTables} would, or a count that is not a non-negative integer.
+ */
+export const generateOccurrences = Effect.fn("generateOccurrences")(function* generateOccurrences(
+  xsd: SourceDocument,
+): Effect.fn.Return<Occurrences, TableGenerationError> {
+  const { context, declarations } = yield* schemaContext(xsd);
+  const counting: Counting = { cache: new Map(), context, pending: new Set() };
+
+  const elements = new Map<string, Counts>();
+  for (const [name, element] of declarations) {
+    const counts = yield* declarationCounts(counting, element);
+    const seen = elements.get(name);
+    elements.set(name, seen === undefined ? counts : alternativeCounts([seen, counts]));
+  }
+
+  const types = new Map<string, Counts>();
+  for (const name of context.complexTypes.keys()) {
+    types.set(name, yield* typeCounts(counting, { local: name, namespace: context.target }));
+  }
+  for (const name of context.simpleTypes.keys()) {
+    if (types.has(name)) {
+      return yield* failure(
+        "xs:simpleType",
+        `${name} also names a complex type, and simple and complex types share one symbol space`,
+      );
+    }
+
+    types.set(name, new Map());
+  }
+
+  return { elements: occurrenceRecord(elements), types: occurrenceRecord(types) };
 });

@@ -7,7 +7,7 @@ import type { InteractionKey, PartName, PartOf } from "#plate/emit/parts.ts";
  * The checks `checkTree` runs, in the order it reports their violations.
  *
  * Each is a static rule over the emitter's node tree: the goal's two name checks, the structural
- * rules an emitted page must keep, and spec §4.8's focus rules. They read explicit references only,
+ * rules an emitted page must keep, and the focus rules. They read explicit references only,
  * with no accname implementation and no browser (ruling `fb4fe744` S2). `label-name` asks a Choice
  * Control's name to equal its Label's text only where the Label gives text: where it gives none,
  * the renderer names the Control (Q10), and `control-name` still asks for a name. `nested-label`
@@ -139,7 +139,7 @@ export const attribute = (element: Element, name: string): string | undefined =>
 };
 
 /**
- * Read the part an element is, from its `data-slot` marker through the part table (spec §4.3).
+ * Read the part an element is, from its `data-slot` marker through the part table.
  *
  * @param element The element to read.
  * @returns The interaction and the part, or none for an element that is no part.
@@ -773,7 +773,12 @@ const rules = {
         form === undefined ||
         visits
           .slice(index + 1)
-          .some((later) => later.ancestors.includes(form) && isFormControl(later.element))
+          .some(
+            (later) =>
+              later.ancestors.includes(form) &&
+              isFormControl(later.element) &&
+              !isSubmitButton(later.element),
+          )
       );
     }),
   "tabindex-minus-one": ({ visits }) =>
@@ -788,10 +793,11 @@ const rules = {
  * Check an emitted tree against the static accessibility rules every emitting slice calls.
  *
  * The rules are {@link checks}'s, reported in that order and, within one check, in document order.
- * Parts are found by their `data-slot` markers, read through the part table's `partForSlot` (spec
- * §4.3): the item's Status, and an interaction's Root, Prompt, Choice, Control and Label. The form
- * and its submit button are the host's composition, not parts, so `submit-order` reads them from
- * the HTML: a submit button must sit inside a `form`, after every control of that form. A Choice
+ * Parts are found by their `data-slot` markers, read through the part table's `partForSlot`: the
+ * item's Status, and an interaction's Root, Prompt, Choice, Control and Label. The form and its
+ * submit buttons are the host's composition, not parts, so `submit-order` reads them from the HTML:
+ * a submit button must sit inside a `form`, after every control of that form other than its submit
+ * buttons, so a form may end in several, as a navigation swapped to submit buttons does. A Choice
  * Root's Prompt must take one of the two ruled markups, a `legend` first in the `fieldset` or a
  * `qti-prompt` the `fieldset` names through `aria-labelledby`. A text interaction's Prompt names
  * its one Control; an Extended Text Root that holds several Controls is a group its Prompt names,

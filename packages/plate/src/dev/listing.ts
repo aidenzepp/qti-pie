@@ -73,12 +73,15 @@ export interface VerdictCache {
 }
 
 /**
- * Keep an effect's result for the cache's life when it succeeds, and none of a failure.
+ * Keep an effect's result for the cache's life when it succeeds, and none of a failure. The
+ * playground's caches keep their entries by it.
  *
  * @param effect The effect.
  * @returns The effect that runs it once while it succeeds.
  */
-const keptOnSuccess = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<Effect.Effect<A, E>> =>
+export const keptOnSuccess = <A, E>(
+  effect: Effect.Effect<A, E>,
+): Effect.Effect<Effect.Effect<A, E>> =>
   Effect.cachedWithTTL(effect, (exit) => (Exit.isSuccess(exit) ? Duration.infinity : 0));
 
 /**

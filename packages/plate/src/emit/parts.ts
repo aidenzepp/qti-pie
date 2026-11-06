@@ -2,8 +2,8 @@ import { Data, Option, Result } from "effect";
 import type { Attributes, Element, Node, PartFunction } from "#plate/emit/node.ts";
 
 /**
- * The part keys of each interaction and of the item chrome, a part's name with a lower-case first
- * letter.
+ * The part keys of each interaction, of the item chrome and of the test chrome, a part's name with
+ * a lower-case first letter.
  */
 interface PartsOf {
   "choice-interaction":
@@ -16,11 +16,21 @@ interface PartsOf {
     | "root";
   "extended-text-interaction": "control" | "prompt" | "root";
   item: "message" | "messages" | "notice" | "root" | "status" | "statusHeading";
+  "test-navigation":
+    | "end"
+    | "item"
+    | "itemButton"
+    | "items"
+    | "next"
+    | "previous"
+    | "root"
+    | "submit";
   "text-entry-interaction": "control" | "root";
 }
 
 /**
- * The owner of a group of parts: the item chrome, or one of the interactions phase 1 renders.
+ * The owner of a group of parts: the item chrome, one of the interactions phase 1 renders, or the
+ * test chrome's navigation, `test-navigation`.
  *
  * It is also the first key of {@link PartOverrides}.
  */
@@ -48,7 +58,7 @@ export type Position = "flow" | "phrasing";
  *
  * - `flow-container`, `phrasing-container`: any element of that container class.
  * - `prompt`: a flow or phrasing container, or `p`, so the prompt is valid in any parent.
- * - `li`, `textarea`, `fieldset`, `legend`: that element only.
+ * - `li`, `textarea`, `fieldset`, `legend`, `button`: that element only.
  * - `heading`: `h1` to `h6`. `list`: `ul`, `ol` or `menu`.
  * - `choice-list`: `ul`, `ol` or a flow container; a swap to a flow container adds the list roles.
  * - `choice-item`: `li`, or a flow container under a Choices that is not a list.
@@ -59,6 +69,7 @@ export type Position = "flow" | "phrasing";
  */
 export type TagClass =
   | "any"
+  | "button"
   | "choice-item"
   | "choice-list"
   | "fieldset"
@@ -79,6 +90,15 @@ export type TagClass =
  */
 export interface PartRow {
   /**
+   * The attributes the part carries unless something sets them: written onto the default element,
+   * and under a replacement's own attributes on a swap, so a replacement may override each one
+   * (`type="button"` on a navigation button).
+   *
+   * A default is never in {@link PartRow.merged}, which I1 writes over a replacement's;
+   * `parts.test.ts` holds the two apart.
+   */
+  readonly defaults: Readonly<Record<string, string>>;
+  /**
    * The default element's local name.
    */
   readonly element: string;
@@ -95,7 +115,7 @@ export interface PartRow {
   readonly listOwner: boolean;
   /**
    * The attributes the interaction's connect function computes for this part, beyond the
-   * `data-slot` marker and the Root state of spec §4.4 (`data-mode`, `data-disabled`), which I1
+   * `data-slot` marker and the Root state (`data-mode`, `data-disabled`), which I1
    * writes over a replacement's: every one the part can carry, some only in some states.
    *
    * This records what the connect function computes, and `parts.test.ts` renders every row to
@@ -350,6 +370,7 @@ const isTextType = (type: string | true | undefined): boolean =>
  */
 const admits = {
   any: () => true,
+  button: ({ tag }) => tag === "button",
   "choice-item": ({ tag }) => tag === "li" || isFlowContainer(tag),
   "choice-list": ({ tag }) => tag === "ol" || tag === "ul" || isFlowContainer(tag),
   fieldset: ({ tag }) => tag === "fieldset",
@@ -366,11 +387,17 @@ const admits = {
 } satisfies { readonly [C in TagClass]: (element: Element) => boolean };
 
 /**
- * The rows of spec §4.3's part table, in the spec's order, before {@link partTable} derives each
- * marker.
+ * The rows of the part table, the item chrome's, then each interaction's, then the test chrome's
+ * navigation rows, before {@link partTable} derives each marker.
+ *
+ * The five navigation buttons are plain buttons (rule `9af3809b`): each defaults `type` to
+ * `button`, and no navigation row merges `type`, `name`, `value` or a `form*` attribute, so a
+ * host's replacement may give a button its own submit semantics while every attribute plate
+ * computes still stands.
  */
 const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
   {
+    defaults: {},
     element: "qti-assessment-item",
     interaction: "item",
     listOwner: false,
@@ -379,6 +406,7 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
     tagClass: "flow-container",
   },
   {
+    defaults: {},
     element: "section",
     interaction: "item",
     listOwner: false,
@@ -387,6 +415,7 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
     tagClass: "flow-container",
   },
   {
+    defaults: {},
     element: "h1",
     interaction: "item",
     listOwner: false,
@@ -395,6 +424,7 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
     tagClass: "heading",
   },
   {
+    defaults: {},
     element: "ul",
     interaction: "item",
     listOwner: false,
@@ -403,6 +433,7 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
     tagClass: "list",
   },
   {
+    defaults: {},
     element: "li",
     interaction: "item",
     listOwner: false,
@@ -411,6 +442,7 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
     tagClass: "li",
   },
   {
+    defaults: {},
     element: "span",
     interaction: "item",
     listOwner: false,
@@ -419,6 +451,7 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
     tagClass: "phrasing-container",
   },
   {
+    defaults: {},
     element: "fieldset",
     interaction: "choice-interaction",
     listOwner: false,
@@ -427,6 +460,7 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
     tagClass: "fieldset",
   },
   {
+    defaults: {},
     element: "qti-prompt",
     interaction: "choice-interaction",
     listOwner: false,
@@ -435,6 +469,7 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
     tagClass: "prompt",
   },
   {
+    defaults: {},
     element: "ul",
     interaction: "choice-interaction",
     listOwner: true,
@@ -443,6 +478,7 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
     tagClass: "choice-list",
   },
   {
+    defaults: {},
     element: "li",
     interaction: "choice-interaction",
     listOwner: false,
@@ -451,6 +487,7 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
     tagClass: "choice-item",
   },
   {
+    defaults: {},
     element: "input",
     interaction: "choice-interaction",
     listOwner: false,
@@ -470,6 +507,7 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
     tagClass: "native-input",
   },
   {
+    defaults: {},
     element: "span",
     interaction: "choice-interaction",
     listOwner: false,
@@ -478,6 +516,7 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
     tagClass: "any",
   },
   {
+    defaults: {},
     element: "label",
     interaction: "choice-interaction",
     listOwner: false,
@@ -486,6 +525,7 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
     tagClass: "any",
   },
   {
+    defaults: {},
     element: "qti-text-entry-interaction",
     interaction: "text-entry-interaction",
     listOwner: false,
@@ -494,6 +534,7 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
     tagClass: "phrasing-container",
   },
   {
+    defaults: {},
     element: "input",
     interaction: "text-entry-interaction",
     listOwner: false,
@@ -503,9 +544,11 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
       "type",
       "value",
       "disabled",
+      "readonly",
       "inputmode",
       "size",
       "placeholder",
+      "autocomplete",
       "aria-label",
       "aria-labelledby",
       "aria-invalid",
@@ -516,6 +559,7 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
     tagClass: "text-input",
   },
   {
+    defaults: {},
     element: "qti-extended-text-interaction",
     interaction: "extended-text-interaction",
     listOwner: false,
@@ -524,6 +568,7 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
     tagClass: "flow-container",
   },
   {
+    defaults: {},
     element: "qti-prompt",
     interaction: "extended-text-interaction",
     listOwner: false,
@@ -532,6 +577,7 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
     tagClass: "prompt",
   },
   {
+    defaults: {},
     element: "textarea",
     interaction: "extended-text-interaction",
     listOwner: false,
@@ -540,7 +586,9 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
       "name",
       "rows",
       "placeholder",
+      "autocomplete",
       "disabled",
+      "readonly",
       "aria-label",
       "aria-labelledby",
       "aria-invalid",
@@ -550,6 +598,78 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
     ],
     part: "control",
     tagClass: "textarea",
+  },
+  {
+    defaults: {},
+    element: "nav",
+    interaction: "test-navigation",
+    listOwner: false,
+    merged: ["aria-label", "data-navigation", "data-submission"],
+    part: "root",
+    tagClass: "flow-container",
+  },
+  {
+    defaults: { type: "button" },
+    element: "button",
+    interaction: "test-navigation",
+    listOwner: false,
+    merged: ["disabled", "data-intent"],
+    part: "previous",
+    tagClass: "button",
+  },
+  {
+    defaults: { type: "button" },
+    element: "button",
+    interaction: "test-navigation",
+    listOwner: false,
+    merged: ["disabled", "data-intent"],
+    part: "next",
+    tagClass: "button",
+  },
+  {
+    defaults: {},
+    element: "ol",
+    interaction: "test-navigation",
+    listOwner: false,
+    merged: [],
+    part: "items",
+    tagClass: "list",
+  },
+  {
+    defaults: {},
+    element: "li",
+    interaction: "test-navigation",
+    listOwner: false,
+    merged: [],
+    part: "item",
+    tagClass: "li",
+  },
+  {
+    defaults: { type: "button" },
+    element: "button",
+    interaction: "test-navigation",
+    listOwner: false,
+    merged: ["disabled", "data-intent", "aria-current"],
+    part: "itemButton",
+    tagClass: "button",
+  },
+  {
+    defaults: { type: "button" },
+    element: "button",
+    interaction: "test-navigation",
+    listOwner: false,
+    merged: ["disabled", "data-intent"],
+    part: "submit",
+    tagClass: "button",
+  },
+  {
+    defaults: { type: "button" },
+    element: "button",
+    interaction: "test-navigation",
+    listOwner: false,
+    merged: ["disabled", "data-intent"],
+    part: "end",
+    tagClass: "button",
   },
 ];
 
@@ -597,9 +717,11 @@ export class HeadingLevelDefect extends Data.TaggedError("HeadingLevelDefect")<{
  * Every marker the emitter writes and every check reads comes from here through the part table, so
  * no code spells one by hand.
  *
- * @param interaction The component: an interaction, or `item` for the host chrome.
+ * @param interaction The component: an interaction, `item` for the host chrome, or
+ *   `test-navigation` for the test chrome.
  * @param part The part.
- * @returns The marker: `choice-interaction`, `choice-interaction-indicator`, `item-status-heading`.
+ * @returns The marker: `choice-interaction`, `choice-interaction-indicator`, `item-status-heading`,
+ *   `test-navigation-item-button`.
  */
 const slotFor = (interaction: InteractionKey, part: PartKey): string =>
   part === "root"
@@ -607,7 +729,8 @@ const slotFor = (interaction: InteractionKey, part: PartKey): string =>
     : `${interaction}-${part.replaceAll(/[A-Z]/gu, (letter) => `-${letter.toLowerCase()}`)}`;
 
 /**
- * The part table of spec §4.3, one row per part, in the spec's order, each with its derived marker.
+ * The part table, one row per part of the item chrome, each interaction and the test chrome's
+ * navigation, in {@link rows}' order, each with its derived marker.
  *
  * The Notice, the StatusHeading and the Choice Root and Prompt hold their context-free defaults: a
  * phrasing `span`, `h1`, and the `labelledby` markup with no legend. {@link rowFor} gives the row

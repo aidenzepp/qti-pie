@@ -5,6 +5,7 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect, Exit, Scope } from "effect";
 import { bodyLimit, listen } from "#plate/dev/listen.ts";
 import type { Handler } from "#plate/dev/page.ts";
+import { dial } from "#plate/test/dial.ts";
 
 /**
  * What a stub handler saw of one request.
@@ -81,23 +82,6 @@ const exchange = (port: number, text: string) =>
   });
 
 /**
- * Open a TCP connection to the port on `127.0.0.1` and report how it ended.
- *
- * @param port The port.
- * @returns `"connected"`, or the system's error code for a refused connection.
- */
-const probe = (port: number) =>
-  Effect.callback<string>((resume) => {
-    const socket = connect(port, "127.0.0.1", () => {
-      socket.destroy();
-      resume(Effect.succeed("connected"));
-    });
-    socket.once("error", (error: NodeJS.ErrnoException) => {
-      resume(Effect.succeed(error.code ?? error.message));
-    });
-  });
-
-/**
  * Open a keep-alive connection and answer one request on it, leaving the connection open.
  *
  * @param port The listener's port on `127.0.0.1`.
@@ -130,7 +114,7 @@ describe("listen", () => {
 
       assert.isAbove(listening.port, 0);
       assert.strictEqual(listening.origin, `http://127.0.0.1:${String(listening.port)}`);
-      assert.strictEqual(yield* probe(listening.port), "connected");
+      assert.strictEqual(yield* dial(listening.port), "accepted");
     }),
   );
 
@@ -226,7 +210,7 @@ describe("listen", () => {
       yield* Scope.close(scope, Exit.void);
       yield* Effect.promise(() => kept.closed);
 
-      assert.strictEqual(yield* probe(listening.port), "ECONNREFUSED");
+      assert.strictEqual(yield* dial(listening.port), "refused");
     }),
   );
 

@@ -1,6 +1,5 @@
 /**
- * The item chrome the library emits (spec §4.3's item rows, §4.4, §4.7's first list): the item Root
- * around the emitted body, and the Status part.
+ * The item chrome the library emits: the item Root around the emitted body, and the Status part.
  *
  * The library emits parts, not a page: the Root holds the body and nothing else, and the Status
  * part decides no placement and no focus, so the form, its submit control, where the Status part
@@ -54,15 +53,16 @@ export const itemPart = (
 /**
  * Emit the item Root around an emitted body.
  *
- * The Root (`qti-assessment-item`) carries `lang`, its scoped `id`, `data-mode`, and
- * `data-disabled` when the author disabled every control. It holds the body's nodes by identity,
- * in order, and nothing else: no form, no submit control, no attempt state.
+ * The Root (`qti-assessment-item`) carries `lang`, its scoped `id`, `data-mode` naming the
+ * payload's mode, and `data-disabled` when the author disabled every control. It holds the body's
+ * nodes by identity, in order, and nothing else: no form, no submit control, no attempt state.
  *
  * @example
  *   Result.map(emitItem(payload, state, body), toHtml);
  *   // a qti-assessment-item element, its id `<instance>-item`, holding the body's HTML
  *
- * @param payload The render's payload, which gives the language, the instance and the state.
+ * @param payload The render's payload, which gives the language, the instance, the mode and
+ *   `finished`.
  * @param state The emit state, which holds the part overrides.
  * @param body The emitted body, which the Root holds.
  * @returns The item Root, or the refusal of a replacement that breaks the swap invariant.
@@ -85,8 +85,18 @@ export const emitItem = (
   );
 
 /**
- * The data the results box shows after a submit (spec §4.1): the instance, the after-submit state
- * its heading names, and what the region shows under the heading.
+ * The data the results box shows: the instance, the state its heading names, and what
+ * the region shows under the heading.
+ *
+ * Each heading names one state, in the text `messages.ts` keys it by:
+ *
+ * - `notAccepted`: the author refused a post, and `messages` says why.
+ * - `responseRecorded`: the author recorded a post that no processing scores.
+ * - `scored`: the author recorded a post and scored it, and `score` holds the score.
+ * - `review`: the item is shown for review, its values the attempt the author recorded.
+ * - `solution`: the item is shown with its correct responses as the values.
+ * - `partSubmitted`: the test part holding the item was submitted.
+ * - `testFinished`: the test holding the item was finished.
  *
  * The results box is a part plate keeps: `renderStatus` emits the Status region from this input,
  * and the author places it and feeds it what `score` or `checkResponses` gave. The part has no
@@ -114,10 +124,17 @@ export interface StatusInput {
    */
   readonly autofocus?: boolean;
   /**
-   * The after-submit state, as `messages.ts` keys it; the heading shows its text in the
-   * configuration's locale.
+   * The state, one of those listed above; the heading shows its text in the configuration's
+   * locale.
    */
-  readonly heading: "notAccepted" | "responseRecorded" | "scored";
+  readonly heading:
+    | "notAccepted"
+    | "partSubmitted"
+    | "responseRecorded"
+    | "review"
+    | "scored"
+    | "solution"
+    | "testFinished";
   /**
    * The item instance key `render` used, which scopes the region's ids and its Messages' ids.
    */
@@ -175,7 +192,7 @@ const statusDetail = (
  * heading, `tabindex="-1"`, and `autofocus` only when `input.autofocus` is true. Each Message `li`
  * carries the id {@link identifyMessages} gives its message, the id the payload writes into each
  * Control's `aria-describedby`, so the two agree. It places the region nowhere and moves no focus:
- * both are the author's composition (spec §4.7).
+ * both are the author's composition.
  *
  * @example
  *   Result.map(emitStatus({ heading: "scored", instance: "i1", score: "1" }, state), toHtml);

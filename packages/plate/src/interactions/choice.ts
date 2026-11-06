@@ -2,11 +2,11 @@
  * Choice (Q-2), the discovery interaction: its parts, its connect function and its response
  * validation, the module shape Text Entry and Extended Text copy.
  *
- * {@link renderChoice} emits the structure of spec §4.3: a native `fieldset` Root, the Prompt, and a
+ * {@link renderChoice} emits this structure: a native `fieldset` Root, the Prompt, and a
  * `ul` of Choices, each `li > [Control, Label > [Indicator, …choice content]]`. The connect
  * function computes every attribute of every part once, and `applyPart` places each one, through
  * the embedder's replacement when there is one (ruling `fb4fe744` S1, S2). The Controls are native
- * radios or checkboxes, so the browser's own keyboard map applies (§4.8): the radios form one
+ * radios or checkboxes, so the browser's own keyboard map applies: the radios form one
  * native group by their shared `name`. The Prompt and each choice's content go through the body's
  * {@link emitNodes}, so they get the body's id scoping, heading shift, URLs and Notices.
  *
@@ -116,20 +116,24 @@ const rowsFor = (markup: Option.Option<PromptMarkup>): Rows => {
  *   and needs none.
  * - Control: a radio when one choice can be posted (`max-choices` 1, or a single response), else a
  *   checkbox; its id, the payload's `formName` and its value; `checked` from the restore;
- *   `disabled` when finished; its name ({@link choiceControlName}): `aria-labelledby` → its Label,
- *   or, when the choice's content gives no text, the renderer's `aria-label` "Choice n of count",
- *   `n` its position as emitted; `aria-invalid` and `aria-describedby` → the message ids when the
+ *   `disabled` when finished or not `editable` (in `review` and `solution`), which keeps its name
+ *   and value but takes it out of the tab order and out of the entries its form posts, unlike a
+ *   text Control's `readonly`; no `autocomplete` in any mode, an attribute HTML does not apply to a
+ *   radio or a checkbox; its name ({@link choiceControlName}): `aria-labelledby` → its Label, or,
+ *   when the choice's content gives no text, the renderer's `aria-label` "Choice n of count", `n`
+ *   its position as emitted; `aria-invalid` and `aria-describedby` → the message ids when the
  *   response is invalid; and `autofocus` on the first Control when the payload says.
  * - Indicator: `aria-hidden="true"`. Label: its id, and `for` → its Control.
  *
  * Every id is `scopedId(instance, response, part, index)`.
  *
- * @param interaction The Choice.
+ * @param interaction The Choice, which gives `editable`.
  * @param payload The payload, which gives the instance, the mode and `finished`.
  * @param rows The rows of the Choice's parts as placed.
  * @param markup The Prompt's markup, none when there is no Prompt.
  * @param locale The locale of the renderer's own text.
  * @returns The attributes of every part.
+ * @see https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#constructing-the-form-data-set
  */
 const connect = (
   interaction: ChoicePayload,
@@ -167,7 +171,7 @@ const connect = (
           ...when(interaction.autofocus && index === 0, { autofocus: true }),
           ...when(interaction.restore.includes(choice.identifier), { checked: true }),
           "data-slot": rows.control.slot,
-          ...when(payload.finished, { disabled: true }),
+          ...when(payload.finished || !interaction.editable, { disabled: true }),
           id: controlId,
           name: interaction.formName,
           type,
@@ -197,7 +201,7 @@ const connect = (
  * Write every `label` element in a node of a choice's emitted content, at any depth, as a `span`
  * with the same children and the same attributes, `for` dropped.
  *
- * Spec §4.3: a `label` never nests a `label`. The XSD admits `label` in `qti-simple-choice`, and a
+ * A `label` never nests a `label`. The XSD admits `label` in `qti-simple-choice`, and a
  * choice's content sits inside its Label part, a `label` by default, which already labels the
  * choice's Control; so an authored `label` there is written as a `span`, and loses `for`, which is
  * not an attribute of `span`. A subtree that holds no `label` is kept by identity.
@@ -227,7 +231,7 @@ const labelAsSpan = (node: Node): Node => {
 };
 
 /**
- * Render a Choice as spec §4.3 structures it: a `fieldset` Root holding the Prompt, when there is
+ * Render a Choice: a `fieldset` Root holding the Prompt, when there is
  * one, then a `ul` of Choices, each `li > [Control, Label > [Indicator, …choice content]]`.
  *
  * The Prompt's markup is picked from its emitted content (rule `efed9867`): a Prompt of phrasing
