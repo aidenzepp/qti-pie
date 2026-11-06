@@ -17,7 +17,7 @@ import type { Addition } from "@bjornpagen/grizzle";
 import type { DocumentContext } from "#pantry/import/context.ts";
 import { Option } from "effect";
 import {
-  AttributeGrammar,
+  attributeRows,
   GoverningOf,
   interactionKinds,
   ResourceType,
@@ -157,10 +157,10 @@ const governorAt: ReadonlyMap<string, string> = new Map(
 );
 
 /**
- * The installed `AttributeGrammar`'s domains, keyed `version governor name`.
+ * The domains of the attribute grammar `AttributeGrammar` installs, keyed `version governor name`.
  */
 const domainAt: ReadonlyMap<string, string> = new Map(
-  AttributeGrammar.rows.map(({ domain, governor, name, version }) => [
+  attributeRows.map(({ domain, governor, name, version }) => [
     `${version} ${governor} ${name}`,
     domain,
   ]),

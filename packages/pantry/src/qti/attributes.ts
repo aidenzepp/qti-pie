@@ -7,12 +7,14 @@
  * An attribute is read under its element's governor, `GoverningOf(version, kind, governs)`: the
  * kind itself where its declared type governs it, or the (kind, type) pair where an `xsi:type`
  * names a type derived from the declared one, or a simple type governs a foreign element (spec
- * readings 60, 83 and 84). `AttributeGrammar(version, governor, name)` then gives the name's value
- * domain, use and slot. `Attribute` copies `kind`, `version`, `document` and `governs` from its
- * element along the family's owner axis, so every law below reads its governor inline.
+ * readings 60, 83 and 84). The governor's attribute model, `AttributeModelOf(version, governor)`,
+ * then gives the name's slot, `AttributeSlotOf(model, name)`, and the slot its value domain and
+ * use, `AttributeGrammar(model, slot)`. `Attribute` copies `kind`, `version`, `document` and
+ * `governs` from its element along the family's owner axis, so every law below reads its governor
+ * inline.
  *
  * - **AL1, admission** (`AL1_admission`, rule `attribute-admission`): the name is one its element's
- *   governor admits, `{name} ⊆ AttributeGrammar.row(version, governor)` through the diagonal
+ *   governor admits, `{name} ⊆ AttributeSlotOf.row(model)` through the diagonal
  *   `AttributeNameSelf`. It is a named check, not a generated column's NOT NULL: PostgreSQL reports
  *   a NULL in a NOT NULL column as 23502, which names no law of the installation, so grizzle would
  *   answer an unadmitted name with `ExecutionFailure` rather than `invariant-rejected`.
@@ -90,9 +92,11 @@ import {
 import type { RowScalars } from "@bjornpagen/grizzle";
 import {
   AttributeGrammar,
+  AttributeModelOf,
   AttributeName,
   AttributeNameSelf,
   AttributeSlot,
+  AttributeSlotOf,
   emptyDomains,
   GoverningOf,
   KindNamespace,
@@ -340,16 +344,33 @@ type AttributeRow = RowScalars<typeof Attribute>;
 const governorOf = (a: AttributeRow) => GoverningOf.at("governor", a.version, a.kind, a.governs);
 
 /**
+ * Read an attribute's attribute model: its governor's in the version (`AttributeModelOf`, total).
+ *
+ * @param a - The row.
+ * @returns The closed read.
+ */
+const attributeModelOf = (a: AttributeRow) =>
+  AttributeModelOf.at("model", a.version, governorOf(a));
+
+/**
+ * Read an admitted attribute's slot under its element's governor (`AttributeSlotOf`).
+ *
+ * @param a - The row.
+ * @returns The closed read, absent for an unadmitted name.
+ */
+const slotOf = (a: AttributeRow) => AttributeSlotOf.at("slot", attributeModelOf(a), a.name);
+
+/**
  * State that an attribute's name is one its element's governor admits: the singleton of the name
- * inside `AttributeGrammar`'s row of names for the (version, governor). It reads no NULL where the
- * name is unadmitted, so it is the admission law itself, not a closed read's absence.
+ * inside `AttributeSlotOf`'s row of names for the governor's model. It reads no NULL where the name
+ * is unadmitted, so it is the admission law itself, not a closed read's absence.
  *
  * @param a - The row.
  * @returns The predicate.
  */
 const admitted = (a: AttributeRow) =>
   a.eq(
-    Compute.subset(AttributeNameSelf.row(a.name), AttributeGrammar.row(a.version, governorOf(a))),
+    Compute.subset(AttributeNameSelf.row(a.name), AttributeSlotOf.row(attributeModelOf(a))),
     true,
   );
 
@@ -359,8 +380,7 @@ const admitted = (a: AttributeRow) =>
  * @param a - The row.
  * @returns The closed read, absent for an unadmitted name.
  */
-const domainOf = (a: AttributeRow) =>
-  AttributeGrammar.at("domain", a.version, governorOf(a), a.name);
+const domainOf = (a: AttributeRow) => AttributeGrammar.at("domain", attributeModelOf(a), slotOf(a));
 
 /**
  * State that an attribute's name is an open class's.
@@ -475,10 +495,7 @@ export const attributeLaws = [
     a.or(
       a.not(admitted(a)),
       a.and(
-        a.eq(
-          a.slot,
-          SlotSelf.row(AttributeGrammar.at("position", a.version, governorOf(a), a.name)),
-        ),
+        a.eq(a.slot, SlotSelf.row(slotOf(a))),
         a.or(
           a.and(carriesIdrefs(a), a.eq(a.lexical, a.idrefText)),
           a.and(a.not(carriesIdrefs(a)), a.eq(a.idrefs, 0n)),
@@ -500,7 +517,13 @@ export const attributeLaws = [
   ),
   check("AL2_distinct", Attribute, (a) => a.eq(Compute.disjoint(a.attrsWas, a.slot), true)),
   check("AL3_required", Node, (n) =>
-    n.eq(Compute.subset(Required.row(n.version, nodeGovernorOf(n)), n.attrs), true),
+    n.eq(
+      Compute.subset(
+        Required.row(AttributeModelOf.at("model", n.version, nodeGovernorOf(n))),
+        n.attrs,
+      ),
+      true,
+    ),
   ),
   check("AL4_open_names", Attribute, (a) =>
     a.or(a.and(open(a), a.eq(a.openName, 1n)), a.and(a.not(open(a)), a.eq(a.openName, 0n))),

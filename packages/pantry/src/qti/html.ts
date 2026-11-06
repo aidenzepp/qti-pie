@@ -64,7 +64,8 @@ import {
 } from "@bjornpagen/grizzle";
 import type { RowScalars } from "@bjornpagen/grizzle";
 import {
-  AttributeGrammar,
+  AttributeModelOf,
+  AttributeSlotOf,
   GoverningOf,
   NodeKind,
   SchemaVersion,
@@ -204,10 +205,13 @@ const carries = (n: NodeRow, name: "kind" | "src" | "srclang" | "srcset") =>
   n.eq(
     Compute.subset(
       SlotSelf.row(
-        AttributeGrammar.at(
-          "position",
-          n.version,
-          GoverningOf.at("governor", n.version, n.kind, n.governs),
+        AttributeSlotOf.at(
+          "slot",
+          AttributeModelOf.at(
+            "model",
+            n.version,
+            GoverningOf.at("governor", n.version, n.kind, n.governs),
+          ),
           name,
         ),
       ),

@@ -833,58 +833,196 @@ export const GoverningOf = closed.relation(
 );
 
 /**
- * `AttributeGrammar`: (version, governor, name) → (domain, use, position), each attribute an
- * element may carry under its governor in the version: its value domain, its use, and its slot
- * among the names the (version, governor) admits. A kind's own rows are the grammar's
- * `AttributeGrammar`, a governing type's its `GovernedAttribute`, and an unadmitted name reads no
- * row.
+ * The attribute grammar as the generators state it, a row per (version, governor, name): each
+ * attribute an element may carry under its governor in the version, with its value domain, its use
+ * and its slot among the names the (version, governor) admits, slots 0 to n − 1. A kind's own rows
+ * are the grammar's `AttributeGrammar`, a governing type's its `GovernedAttribute`. The installed
+ * relations restate it by attribute model and slot ({@link AttributeGrammar},
+ * {@link AttributeSlotOf}); the host reads these rows.
+ */
+export const attributeRows = [
+  ...grammar.attributes.admission.rows.map(({ domain, kind, name, position, use, version }) => ({
+    domain,
+    governor: handleIn("Governor", Governor.handles, kind),
+    name: memberOf(grammar.kinds.attributeName, name),
+    position,
+    use,
+    version: memberOf(grammar.kinds.versions, version),
+  })),
+  ...grammar.attributes.governed.rows.map(({ domain, governor, name, position, use, version }) => ({
+    domain,
+    governor: handleIn("Governor", Governor.handles, governor),
+    name: memberOf(grammar.kinds.attributeName, name),
+    position,
+    use,
+    version: memberOf(grammar.kinds.versions, version),
+  })),
+];
+
+/**
+ * One attribute row of {@link attributeRows}.
+ */
+type AttributeRow = (typeof attributeRows)[number];
+
+/**
+ * The attribute models the grammar is keyed by: two (version, governor) pairs whose rows are equal,
+ * name, domain, use and slot alike, are one model (rule 0), so a few hundred models stand for every
+ * (version, governor) the `Governor` roster holds, read in code order, the empty set among them. A
+ * model is named by its first governor, or by `<version> <governor>` where an earlier model took
+ * that name, so every handle is a governor's or six bytes longer, within a PostgreSQL name.
+ */
+const attributeModels = ((): {
+  readonly models: readonly { readonly handle: string; readonly rows: readonly AttributeRow[] }[];
+  readonly of: ReadonlyMap<string, string>;
+} => {
+  const byGovernor = Map.groupBy(attributeRows, (row) => `${row.version} ${row.governor}`);
+  const models: { readonly handle: string; readonly rows: readonly AttributeRow[] }[] = [];
+  const bySignature = new Map<string, string>();
+  const named = new Set<string>();
+  const of = new Map<string, string>();
+  for (const version of grammar.kinds.versions.handles) {
+    for (const governor of Governor.handles) {
+      const at = `${version} ${governor}`;
+      const rows = (byGovernor.get(at) ?? []).toSorted(
+        (left, right) => Number(left.position) - Number(right.position),
+      );
+      const signature = rows
+        .map(({ domain, name, position, use }) => `${position}:${name}:${domain}:${use}`)
+        .join(" ");
+      const known = bySignature.get(signature);
+      const handle = known ?? (named.has(governor) ? at : governor);
+      if (known === undefined) {
+        bySignature.set(signature, handle);
+        named.add(handle);
+        models.push({ handle, rows });
+      }
+
+      of.set(at, handle);
+    }
+  }
+
+  return { models, of };
+})();
+
+/**
+ * The `AttributeModel` roster: every distinct attribute grammar of a (version, governor), named by
+ * its first governor, {@link AttributeGrammar} and {@link AttributeSlotOf} keyed by it.
+ */
+export const AttributeModel = closed(
+  "AttributeModel",
+  nonEmpty(
+    "AttributeModel",
+    attributeModels.models.map(({ handle }) => handle),
+  ),
+);
+
+/**
+ * `AttributeModelOf`: (version, governor) → model, total, the attribute grammar an element under
+ * the governor reads in the version, read by AL1 to AL3 as `AttributeModelOf.at("model", version,
+ * governor)`.
+ */
+export const AttributeModelOf = closed.relation(
+  "AttributeModelOf",
+  {
+    governor: closedId(Governor),
+    model: closedId(AttributeModel),
+    version: closedId(SchemaVersion),
+  },
+  ["version", "governor"],
+  grammar.kinds.versions.handles.flatMap((version) =>
+    Governor.handles.map((governor) => ({
+      governor,
+      model: handleIn(
+        "AttributeModel",
+        AttributeModel.handles,
+        attributeModels.of.get(`${version} ${governor}`) ?? "",
+      ),
+      version,
+    })),
+  ),
+);
+
+/**
+ * `AttributeSlots`: model → slots, the number of attributes each model admits, the slots 0 to
+ * n − 1 of {@link AttributeGrammar}'s blocks (README, "Closed relations").
+ */
+export const AttributeSlots = closed.relation(
+  "AttributeSlots",
+  { model: closedId(AttributeModel), slots: natural },
+  ["model"],
+  attributeModels.models.map(({ handle, rows }) => ({
+    model: handleIn("AttributeModel", AttributeModel.handles, handle),
+    slots: BigInt(rows.length),
+  })),
+);
+
+/**
+ * A slot of an attribute model, a slot of its `AttributeSlots` count.
+ */
+const modelSlot = slot(closedId(AttributeSlot), fin(AttributeSlots, "slots"));
+
+/**
+ * `AttributeGrammar`: (model, slot) → (name, domain, use), each attribute a model admits at its
+ * slot, keyed by the model's own slots as `Follow` is by its model's positions, so each model's
+ * block holds its own attributes and no other's: its name, its value domain and its use.
  */
 export const AttributeGrammar = closed.relation(
   "AttributeGrammar",
   {
     domain: closedId(ValueDomain),
-    governor: closedId(Governor),
+    model: closedId(AttributeModel),
     name: closedId(AttributeName),
-    position: closedId(AttributeSlot),
+    slot: modelSlot,
     use: closedId(Use),
-    version: closedId(SchemaVersion),
   },
-  ["version", "governor", "name"],
-  [
-    ...grammar.attributes.admission.rows.map(({ domain, kind, name, position, use, version }) => ({
+  ["model", "slot"],
+  attributeModels.models.flatMap(({ handle, rows }) =>
+    rows.map(({ domain, name, position, use }) => ({
       domain,
-      governor: kind,
-      name: memberOf(grammar.kinds.attributeName, name),
-      position,
+      model: handleIn("AttributeModel", AttributeModel.handles, handle),
+      name,
+      slot: position,
       use,
-      version: memberOf(grammar.kinds.versions, version),
     })),
-    ...grammar.attributes.governed.rows.map(
-      ({ domain, governor, name, position, use, version }) => ({
-        domain,
-        governor,
-        name: memberOf(grammar.kinds.attributeName, name),
-        position,
-        use,
-        version: memberOf(grammar.kinds.versions, version),
-      }),
-    ),
-  ],
+  ),
   { pack: "hex" },
 );
 
 /**
- * `Required`: the set of (version, governor, slot) where an element under the governor must carry
+ * `AttributeSlotOf`: (model, name) → slot, the slot of each name a model admits, the index an
+ * element's attribute is read through by name (AL1, AL2's slot and the value domain); an
+ * unadmitted name reads no row, and `AttributeSlotOf.row(model)` is the set of the model's names.
+ */
+export const AttributeSlotOf = closed.relation(
+  "AttributeSlotOf",
+  {
+    model: closedId(AttributeModel),
+    name: closedId(AttributeName),
+    slot: closedId(AttributeSlot),
+  },
+  ["model", "name"],
+  attributeModels.models.flatMap(({ handle, rows }) =>
+    rows.map(({ name, position }) => ({
+      model: handleIn("AttributeModel", AttributeModel.handles, handle),
+      name,
+      slot: position,
+    })),
+  ),
+  { pack: "hex" },
+);
+
+/**
+ * `Required`: the set of (model, slot) where an element under a governor of the model must carry
  * the attribute at the slot, `AttributeGrammar`'s rows of use `required` (C7), read as
- * `Required.row(version, governor)` by AL3.
+ * `Required.row(model)` by AL3.
  */
 export const Required = closed.relation(
   "Required",
-  { governor: closedId(Governor), slot: closedId(AttributeSlot), version: closedId(SchemaVersion) },
-  ["version", "governor", "slot"],
+  { model: closedId(AttributeModel), slot: modelSlot },
+  ["model", "slot"],
   AttributeGrammar.rows
     .filter(({ use }) => use === "required")
-    .map(({ governor, position, version }) => ({ governor, slot: position, version })),
+    .map(({ model, slot: at }) => ({ model, slot: at })),
 );
 
 /**

@@ -222,26 +222,6 @@ const comparisons: readonly Comparison[] = [
   { expected: () => grammar.ancestry.banned.rows, name: "Banned" },
   { expected: () => grammar.ancestry.needs.rows, name: "Needs" },
   { expected: () => grammar.xsi.xsiType.rows, name: "XsiType" },
-  {
-    expected: () => [
-      ...grammar.attributes.admission.rows.map(({ kind, ...row }) => ({ ...row, governor: kind })),
-      ...grammar.attributes.governed.rows,
-    ],
-    name: "AttributeGrammar",
-  },
-  {
-    expected: () =>
-      [
-        ...grammar.attributes.admission.rows.map(({ kind, ...row }) => ({
-          ...row,
-          governor: kind,
-        })),
-        ...grammar.attributes.governed.rows,
-      ]
-        .filter(({ use }) => use === "required")
-        .map(({ governor, position, version }) => ({ governor, slot: position, version })),
-    name: "Required",
-  },
   { expected: () => grammar.attributes.valueDomain.rows, name: "ValueDomainOf" },
   {
     expected: () => {
@@ -378,6 +358,84 @@ const handlesOf = (name: string): readonly string[] =>
  */
 const searchTimeout = 120_000;
 
+/**
+ * The empty set of row texts: a group no row is in.
+ */
+const noRows: ReadonlySet<string> = new Set();
+
+/**
+ * Index an installed relation's rows by a field, each row spelled by others.
+ *
+ * @param name - The relation's name.
+ * @param by - The field whose value names a row's group.
+ * @param fields - The fields that spell a row within its group.
+ * @returns Each group's rows' texts, by the group's value's text.
+ */
+const groupedBy = (
+  name: string,
+  by: string,
+  fields: readonly string[],
+): ReadonlyMap<string, ReadonlySet<string>> => {
+  const groups = new Map<string, Set<string>>();
+  for (const row of relationNamed(name).rows) {
+    const at = tupleText([row[by]]);
+    groups.set(at, (groups.get(at) ?? new Set()).add(tupleText(fields.map((field) => row[field]))));
+  }
+
+  return groups;
+};
+
+/**
+ * Every (version, governor) the `Governor` roster holds in each version.
+ */
+const governors = grammar.kinds.versions.handles.flatMap((version) =>
+  handlesOf("Governor").map((governor) => ({ governor, version })),
+);
+
+/**
+ * Each (version, governor)'s model, `AttributeModelOf`'s rows.
+ */
+const attributeModels: ReadonlyMap<string, string> = new Map(
+  relationNamed("AttributeModelOf").rows.map((row) => [
+    tupleText([row["version"], row["governor"]]),
+    tupleText([row["model"]]),
+  ]),
+);
+
+/**
+ * Each model's `AttributeGrammar` rows as (slot, name, domain, use).
+ */
+const attributeGrammar = groupedBy("AttributeGrammar", "model", ["slot", "name", "domain", "use"]);
+
+/**
+ * Each model's `AttributeSlotOf` rows as (name, slot).
+ */
+const attributeSlotOf = groupedBy("AttributeSlotOf", "model", ["name", "slot"]);
+
+/**
+ * Each model's `Required` slots.
+ */
+const required = groupedBy("Required", "model", ["slot"]);
+
+/**
+ * Each model's `AttributeSlots` count.
+ */
+const attributeSlots: ReadonlyMap<string, Value | undefined> = new Map(
+  relationNamed("AttributeSlots").rows.map((row) => [tupleText([row["model"]]), row["slots"]]),
+);
+
+/**
+ * The generator's attribute rows of each (version, governor): a kind's own under the kind, a
+ * governing type's under its governor.
+ */
+const ownAttributes = Map.groupBy(
+  [
+    ...grammar.attributes.admission.rows.map(({ kind, ...row }) => ({ ...row, governor: kind })),
+    ...grammar.attributes.governed.rows,
+  ],
+  ({ governor, version }) => `${version} ${governor}`,
+);
+
 describe("the installed relations", () => {
   it.effect(
     "hold exactly their generators' rows, as keyed sets, every relation stated over the generator's rows",
@@ -420,6 +478,85 @@ describe("the installed relations", () => {
       ),
     searchTimeout,
   );
+
+  it.effect(
+    "give every (version, governor) its attribute model: the model's slots, names, domains, uses and required slots are the governor's own rows",
+    (ctx) =>
+      searched(
+        ctx,
+        exhaust(
+          {
+            box: "every (version, governor), 2 × the Governor roster",
+            caseHang,
+            coverage: noCoverage,
+            generator: int(0, governors.length - 1),
+            limit: governors.length,
+            literal: Formatter.format,
+            oracle: {
+              kind: "second-implementation",
+              name: "the governor's generated attribute rows",
+            },
+            suite: "grammar/install/attribute-models",
+          },
+          (index) =>
+            Effect.sync(() => {
+              const { governor, version } = Arr.getUnsafe(governors, index);
+              const at = tupleText([version, governor]);
+              const model = attributeModels.get(at) ?? "";
+              const own = ownAttributes.get(`${version} ${governor}`) ?? [];
+
+              assert.deepStrictEqual(
+                attributeGrammar.get(model) ?? noRows,
+                new Set(
+                  own.map(({ domain, name, position, use }) =>
+                    tupleText([position, name, domain, use]),
+                  ),
+                ),
+                at,
+              );
+              assert.deepStrictEqual(
+                attributeSlotOf.get(model) ?? noRows,
+                new Set(own.map(({ name, position }) => tupleText([name, position]))),
+                at,
+              );
+              assert.deepStrictEqual(
+                required.get(model) ?? noRows,
+                new Set(
+                  own
+                    .filter(({ use }) => use === "required")
+                    .map(({ position }) => tupleText([position])),
+                ),
+                at,
+              );
+              assert.strictEqual(attributeSlots.get(model), BigInt(own.length), at);
+            }),
+        ),
+      ),
+    searchTimeout,
+  );
+
+  it("give the host the generator's attribute rows, each (version, governor, name) once", () => {
+    const fields = ["domain", "governor", "name", "position", "use", "version"] as const;
+    const spelled = (rows: readonly object[]) =>
+      rowsOf(rows).map((row) =>
+        Object.fromEntries(
+          fields.flatMap((field) => {
+            const value = row[field];
+
+            return value === undefined ? [] : [[field, value] as const];
+          }),
+        ),
+      );
+
+    assert.deepStrictEqual(
+      keyedSet("attributeRows", ["version", "governor", "name"], spelled(install.attributeRows)),
+      keyedSet(
+        "the attribute generator",
+        ["version", "governor", "name"],
+        spelled([...ownAttributes.values()].flat()),
+      ),
+    );
+  });
 
   it("make CountedOf and BarredOf total, their nonzero rows exactly today's Counted but its caps and ChildBarredBy, and Capped exactly Counted's caps", () => {
     const keys = new Set(families.map(({ parent, version }) => `${version} ${parent}`));

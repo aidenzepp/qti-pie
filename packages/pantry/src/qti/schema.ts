@@ -10,9 +10,13 @@
 import { schema } from "@bjornpagen/grizzle";
 import {
   AttributeGrammar,
+  AttributeModel,
+  AttributeModelOf,
   AttributeName,
   AttributeNameSelf,
   AttributeSlot,
+  AttributeSlotOf,
+  AttributeSlots,
   Banned,
   BarredOf,
   BaseType,
@@ -185,6 +189,7 @@ import { testLaws, testRelations } from "#pantry/qti/tests.ts";
  * The rosters `install.ts` declares: each a closed id's code space, read as codes, never a table.
  */
 const grammarRosters = {
+  AttributeModel,
   AttributeName,
   AttributeSlot,
   BaseType,
@@ -216,7 +221,10 @@ const grammarRosters = {
  */
 const grammarRelations = {
   AttributeGrammar,
+  AttributeModelOf,
   AttributeNameSelf,
+  AttributeSlotOf,
+  AttributeSlots,
   Banned,
   BarredOf,
   BaseTypeLexical,
