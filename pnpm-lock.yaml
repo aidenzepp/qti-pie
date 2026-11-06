@@ -220,7 +220,7 @@ importers:
     dependencies:
       '@bjornpagen/grizzle':
         specifier: file:../../vendor/bjornpagen-grizzle-1.0.0-beta.0.tgz
-        version: file:vendor/bjornpagen-grizzle-1.0.0-beta.0.tgz(effect@4.1.2)(pg@8.23.1)(redis@6.3.0)
+        version: file:vendor/bjornpagen-grizzle-1.0.0-beta.0.tgz(@types/pg@8.23.1)(effect@4.1.2)(pg@8.23.1)(redis@6.3.0)
       '@effect/platform-node':
         specifier: 4.1.2
         version: 4.1.2(effect@4.1.2)(redis@6.3.0)
@@ -230,6 +230,9 @@ importers:
       effect:
         specifier: 4.1.2
         version: 4.1.2
+      pg:
+        specifier: 8.23.1
+        version: 8.23.1
       saxes:
         specifier: 6.0.0
         version: 6.0.0
@@ -240,6 +243,9 @@ importers:
       '@grizzle/testing':
         specifier: file:../../vendor/grizzle-testing-0.0.0.tgz
         version: file:vendor/grizzle-testing-0.0.0.tgz(@types/node@26.6.4)(@vitest/browser-preview@5.1.0)(@vitest/ui@5.1.0)(oxlint-tsgolint@7.0.2005)(redis@6.3.0)(vite-plus@1.5.0(@astrojs/compiler-rs@0.5.2)(@types/node@26.6.4)(@vitest/browser-playwright@5.1.0(@voidzero-dev/vite-plus-core@1.5.0(@types/node@26.6.4)(typescript@7.1.0-beta)(yaml@2.9.1))(playwright@1.64.1)(vitest@5.1.0))(@vitest/ui@5.1.0)(playwright@1.64.1)(typescript@7.1.0-beta)(yaml@2.9.1))(yaml@2.9.1)
+      '@types/pg':
+        specifier: 8.23.1
+        version: 8.23.1
       vitest:
         specifier: 5.1.0
         version: 5.1.0(@types/node@26.6.4)(@vitest/browser-preview@5.1.0)(@vitest/ui@5.1.0)(@voidzero-dev/vite-plus-core@1.5.0(@types/node@26.6.4)(typescript@7.1.0-beta)(yaml@2.9.1))
@@ -1347,6 +1353,9 @@ packages:
 
   '@types/node@26.6.6':
     resolution: {integrity: sha512-MzQj+8Kx3XI40OmUAE6Qoh58ZMNstNNMwn2nfd3qWsfe7nDNSqJNzes4njhz6AHwrSHOffSLwXU6yb474Q4aog==}
+
+  '@types/pg@8.23.1':
+    resolution: {integrity: sha512-fKVHpikPdg4GKks3JuLEhvwSyvwzF23hnabPy6DD8ljVbC7+6J5dQzdv4arV6jqq57djnMgs1HKBxX4P8aBI3A==}
 
   '@types/unist@3.0.3':
     resolution: {integrity: sha512-ko/gIFJRv177XgZsZcBwnqJN5x/Gien8qNOn0D5bQU/zAzVf9Zt3BlcUiLqhV9y4ARk0GbT3tnUiPNgnTXzc/Q==}
@@ -3456,12 +3465,14 @@ snapshots:
       arkregex: 0.0.14
       effect: 4.1.2
 
-  '@bjornpagen/grizzle@file:vendor/bjornpagen-grizzle-1.0.0-beta.0.tgz(effect@4.1.2)(pg@8.23.1)(redis@6.3.0)':
+  '@bjornpagen/grizzle@file:vendor/bjornpagen-grizzle-1.0.0-beta.0.tgz(@types/pg@8.23.1)(effect@4.1.2)(pg@8.23.1)(redis@6.3.0)':
     dependencies:
       '@bjornpagen/grizzle-engine': file:vendor/bjornpagen-grizzle-engine-1.0.0-beta.0.tgz(effect@4.1.2)
       '@effect/platform-node': 4.1.2(effect@4.1.2)(redis@6.3.0)
       effect: 4.1.2
       pg: 8.23.1
+    optionalDependencies:
+      '@types/pg': 8.23.1
     transitivePeerDependencies:
       - bufferutil
       - redis
@@ -4169,6 +4180,12 @@ snapshots:
   '@types/node@26.6.6':
     dependencies:
       undici-types: 8.9.0
+
+  '@types/pg@8.23.1':
+    dependencies:
+      '@types/node': 26.6.6
+      pg-protocol: 1.16.1
+      pg-types: 2.2.0
 
   '@types/unist@3.0.3': {}
 

@@ -2,7 +2,8 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { ConfigProvider, Effect, FileSystem, Result } from "effect";
 import { fileURLToPath } from "node:url";
-import { AuthorAppLayer, ClusterConfigError } from "#pantry/db/layer.ts";
+import { ClusterConfigError } from "#pantry/db/connection.ts";
+import { AuthorAppLayer } from "#pantry/db/layer.ts";
 
 /**
  * The folder this file's empty `HOME` and `GRIZZLE_PG_STATE` folders are made in, under the
