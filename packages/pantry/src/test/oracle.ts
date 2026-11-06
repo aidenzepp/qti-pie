@@ -112,7 +112,7 @@ import type { PackageFile } from "#pantry/package/read.ts";
 import { builtinDomainOf } from "#pantry/vocab/derive/domains.ts";
 import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
 import { keyTextCodePoints, localNameCodePoints, namespaceCodePoints } from "#pantry/qti/limits.ts";
-import { keyCopies } from "#pantry/test/key-copies.ts";
+import { datumText, keyCopies } from "#pantry/test/key-copies.ts";
 import type { DocumentRows, KeyCopy } from "#pantry/test/key-copies.ts";
 import { isUriReference } from "#pantry/test/uri-reference.ts";
 import {
@@ -3013,7 +3013,7 @@ const copiedTexts = (
   if (copy.source === "Attribute") {
     return rows.attributes
       .filter(({ fields }) => copy.holds(fields))
-      .map(({ fields, node }) => ({ node, value: String(fields[copy.reads]) }));
+      .map(({ fields, node }) => ({ node, value: datumText(fields[copy.reads]) }));
   }
 
   return rows.nodes
@@ -3022,7 +3022,7 @@ const copiedTexts = (
         ? (rows.children.get(node) ?? []).some((child) => copy.holds(child))
         : copy.holds(fields),
     )
-    .map(({ fields, node }) => ({ node, value: String(fields[copy.reads]) }));
+    .map(({ fields, node }) => ({ node, value: datumText(fields[copy.reads]) }));
 };
 
 /**
