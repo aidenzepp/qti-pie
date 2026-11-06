@@ -1,4 +1,3 @@
-import path from "node:path";
 import { NodeChildProcessSpawner, NodeServices } from "@effect/platform-node";
 import { assert, describe, it, layer } from "@effect/vitest";
 import { exhaust } from "@grizzle/testing/explore";
@@ -55,11 +54,13 @@ import {
   xsiNamespace,
 } from "#pantry/vocab/namespaces.ts";
 import { dataName, foreignRoots, openClassOf } from "#pantry/vocab/open.ts";
+import { fileScratchDirectory } from "#pantry/test/scratch.ts";
 
 /**
- * The package folder, `packages/pantry`.
+ * The folder the xmllint probes are written to, `work/vocab-open-oracle-*`, the run's own, so two
+ * runs at once never rewrite each other's driver under xmllint.
  */
-const packageRoot = path.resolve(import.meta.dirname, "../..");
+const oracleRoot = fileScratchDirectory("vocab-open-oracle-");
 
 /**
  * How long one search case may run: every case reads precomputed verdicts or classifies one name.
@@ -801,7 +802,7 @@ const judgeVersion = Effect.fn("test.judgeOpenNames")(function* judgeVersion(
 
   // Every attribute probe stands before every element probe, so each case's errors are at its
   // list's index, the element cases' after all the attribute cases'.
-  const errors = yield* validate(`${packageRoot}/work/vocab-open-oracle/${version}`, driver, [
+  const errors = yield* validate(`${oracleRoot}/${version}`, driver, [
     ...attributeProbes,
     ...elementProbes,
   ]);
