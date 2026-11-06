@@ -20,27 +20,26 @@ import {
   outcomeDefaults,
 } from "#plate/model/record.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
-import { match } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
 
 /**
  * Give the value the built-in `completionStatus` holds when an attempt's processing starts. It
  * "starts with the reserved value 'not_attempted'. At the start of the first attempt it changes to
  * the reserved value 'unknown'. It remains with this value for the duration of the item session
- * unless set to a different value by a setOutcomeValue rule" (`info.txt:8488`). So it is `unknown`
- * where the record holds `not_attempted`, or lacks the built-in, as one written before it was held
- * does, which reads as `fresh` gives it; every later attempt starts from the record's value, the
- * one the last processing left, adaptive or not. The non-adaptive reset to the declared defaults
- * (`info.txt:8486`) covers declared outcomes, and the built-in has no declaration.
+ * unless set to a different value by a setOutcomeValue rule" (`info.txt:8488`). So the first
+ * attempt, where the record counts none, starts it at `unknown`; every later attempt starts from
+ * the record's value, the one the last processing left, `not_attempted` included, adaptive or not,
+ * and from `unknown` where the record lacks the built-in, as one written before it was held does.
+ * The non-adaptive reset to the declared defaults (`info.txt:8486`) covers declared outcomes, and
+ * the built-in has no declaration.
  *
  * @param record The session record before the attempt.
  * @returns The built-in's value as the rules first read it.
  */
 const startingCompletion = (record: ItemRecord): Value =>
-  Option.fromUndefinedOr(record.outcomes[completionStatus]).pipe(
-    Option.filter((stored) => !match(stored, completionValue("not_attempted"))),
-    Option.getOrElse(() => completionValue("unknown")),
-  );
+  record.numAttempts === 0
+    ? completionValue("unknown")
+    : (record.outcomes[completionStatus] ?? completionValue("unknown"));
 
 /**
  * Give the outcomes an attempt's processing starts from: each declared outcome at its default

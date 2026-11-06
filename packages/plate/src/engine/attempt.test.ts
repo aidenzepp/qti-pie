@@ -233,11 +233,14 @@ const readsCompletion = itemDocument(
 );
 
 /**
- * The parts of an item that copies the built-in `completionStatus` into `STATUS`, as its rules
- * first read it, then sets the built-in to `completed` when `RESPONSE` is correct and leaves it
+ * Construct the parts of an item that copies the built-in `completionStatus` into `STATUS`, as its
+ * rules first read it, then sets the built-in to a value when `RESPONSE` is correct and leaves it
  * alone otherwise.
+ *
+ * @param status The value the rules set.
+ * @returns The declarations and the processing.
  */
-const readsThenCompletes: readonly SourceElement[] = [
+const readsThenSets = (status: string): readonly SourceElement[] => [
   trueFalse,
   declaration("qti-outcome-declaration", "STATUS", "identifier"),
   el(
@@ -268,7 +271,7 @@ const readsThenCompletes: readonly SourceElement[] = [
               el(
                 "qti-set-outcome-value",
                 [attr("identifier", "completionStatus")],
-                [el("qti-base-value", [attr("base-type", "identifier")], [text("completed")])],
+                [el("qti-base-value", [attr("base-type", "identifier")], [text(status)])],
               ),
             ],
           ),
@@ -277,6 +280,11 @@ const readsThenCompletes: readonly SourceElement[] = [
     ],
   ),
 ];
+
+/**
+ * The parts of an item whose rules read `completionStatus` and then set it to `completed`.
+ */
+const readsThenCompletes = readsThenSets("completed");
 
 /**
  * {@link readsThenCompletes} in a non-adaptive item and in an adaptive one, which plate marks and
@@ -498,6 +506,52 @@ describe("runAttempt", () => {
         }),
     );
   }
+
+  it.effect(
+    "[I-9a] keeps the not_attempted a rule sets in attempt 1, so attempt 2's rules start from it",
+    () =>
+      Effect.gen(function* carriesNotAttempted() {
+        const item = yield* buildItem(itemDocument(...readsThenSets("not_attempted")));
+        const first = yield* Effect.fromResult(
+          runAttempt(item, fresh(item, instance), { RESPONSE: identifierValue("true") }),
+        );
+        const second = yield* Effect.fromResult(
+          runAttempt(item, first, { RESPONSE: identifierValue("false") }),
+        );
+
+        assert.isTrue(Option.isSome(item.processing));
+        assert.deepStrictEqual(first.outcomes, {
+          STATUS: identifierValue("unknown"),
+          completionStatus: identifierValue("not_attempted"),
+        });
+        assert.deepStrictEqual(second.outcomes, {
+          STATUS: identifierValue("not_attempted"),
+          completionStatus: identifierValue("not_attempted"),
+        });
+      }),
+  );
+
+  it.effect(
+    "[I-9a] starts a later attempt at unknown when the record lacks completionStatus, as one written before it was held does",
+    () =>
+      Effect.gen(function* lacksCompletion() {
+        const item = yield* buildItem(readsCompletion);
+        const first = yield* Effect.fromResult(
+          runAttempt(item, fresh(item, instance), { RESPONSE: identifierValue("true") }),
+        );
+        const lacking: ItemRecord = { ...first, outcomes: { STATUS: identifierValue("unknown") } };
+
+        const second = yield* Effect.fromResult(
+          runAttempt(item, lacking, { RESPONSE: identifierValue("false") }),
+        );
+
+        assert.strictEqual(lacking.numAttempts, 1);
+        assert.deepStrictEqual(second.outcomes, {
+          STATUS: identifierValue("unknown"),
+          completionStatus: identifierValue("unknown"),
+        });
+      }),
+  );
 
   it.effect("[I-9a] keeps unknown into attempt 2 when no rule sets completionStatus", () =>
     Effect.gen(function* keepsUnknown() {

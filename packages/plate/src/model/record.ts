@@ -22,8 +22,8 @@ import type { Value } from "#plate/model/values.ts";
  * refused posts keeps that count itself.
  * `responses` and `outcomes` hold every modelled variable by identifier, NULL included, and
  * `outcomes` the built-in `completionStatus` too where the item holds it
- * ({@link holdsCompletionStatus}). A record written before the built-in was held lacks it, and
- * reads as {@link outcomeDefaults} and the attempt start it. `notices` names the unsupported
+ * ({@link holdsCompletionStatus}). A record written before the built-in was held lacks it, and an
+ * attempt starts it at `unknown`. `notices` names the unsupported
  * features the item shows as notices.
  */
 export interface ItemRecord {

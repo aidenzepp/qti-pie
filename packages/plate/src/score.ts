@@ -252,10 +252,10 @@ const unlessMisfit = (
  * `completionStatus`, where the item holds it, is a single identifier. It is the check
  * {@link score} runs on the record it is handed.
  *
- * A declared response the record lacks is left to the engine, which fails
- * `UnknownIdentifierError` if the processing reads it, and a record that lacks `completionStatus`
- * reads as `fresh`. The declared outcomes are not checked: the attempt resets them to the item's
- * defaults before the rules run, so none the record holds reaches the engine.
+ * A declared response the record lacks is left to the engine, which fails `UnknownIdentifierError`
+ * if the processing reads it, and the attempt starts the built-in at `unknown` for a record that
+ * lacks it. The declared outcomes are not checked: the attempt resets them to the item's defaults
+ * before the rules run, so none the record holds reaches the engine.
  *
  * @param item The item.
  * @param record The decoded record, which belongs to the item.
@@ -304,8 +304,8 @@ const recordOutcomes = (
  * them; every record `score`
  * writes fits, since the engine sets only declared outcomes and the built-in `completionStatus`,
  * each to a value of its type. A declared variable the record lacks is not refused, nor is a
- * record that lacks `completionStatus`, as one written before the built-in was held does: it reads
- * as `fresh` gives it.
+ * record that lacks `completionStatus`, as one written before the built-in was held does: the
+ * attempt starts it at `unknown`.
  *
  * @param item The item.
  * @param record The decoded record, which belongs to the item.
