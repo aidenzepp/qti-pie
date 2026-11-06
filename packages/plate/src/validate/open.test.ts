@@ -69,30 +69,37 @@ describe("validate/open.ts", () => {
         assert.deepStrictEqual(matching[0]?.suggestion, Option.some("secondary-configuration"));
         assert.strictEqual(matching[0]?.document, location);
       }),
+    { tags: ["corpus"] },
   );
 
-  it.effect("CAT/test.xml is refused with the reader's refusal as its only one", () =>
-    Effect.gen(function* cat() {
-      const location = "qtiv3-examples/CAT/test.xml";
-      const verdict = yield* openCorpusFile(location);
+  it.effect(
+    "CAT/test.xml is refused with the reader's refusal as its only one",
+    () =>
+      Effect.gen(function* cat() {
+        const location = "qtiv3-examples/CAT/test.xml";
+        const verdict = yield* openCorpusFile(location);
 
-      assert.strictEqual(verdict.verdict, "refused");
-      assert.strictEqual(verdict.document, location);
-      assert.deepStrictEqual(
-        refusalsOf(verdict).map((refusal) => refusal.rule),
-        ["reader-refused"],
-      );
-    }),
+        assert.strictEqual(verdict.verdict, "refused");
+        assert.strictEqual(verdict.document, location);
+        assert.deepStrictEqual(
+          refusalsOf(verdict).map((refusal) => refusal.rule),
+          ["reader-refused"],
+        );
+      }),
+    { tags: ["corpus"] },
   );
 
-  it.effect("BG007 is accepted, the positive control", () =>
-    Effect.gen(function* bg007() {
-      const location = "QTI3_BPIG_Examples/items/BG007.xml";
-      const verdict = yield* openCorpusFile(location);
+  it.effect(
+    "BG007 is accepted, the positive control",
+    () =>
+      Effect.gen(function* bg007() {
+        const location = "QTI3_BPIG_Examples/items/BG007.xml";
+        const verdict = yield* openCorpusFile(location);
 
-      assert.strictEqual(verdict.verdict, "accepted");
-      assert.strictEqual(verdict.document, location);
-    }),
+        assert.strictEqual(verdict.verdict, "accepted");
+        assert.strictEqual(verdict.document, location);
+      }),
+    { tags: ["corpus"] },
   );
 
   describe("a large flat document", () => {

@@ -189,7 +189,7 @@ describe("package/tables.ts", () => {
         assert.deepStrictEqual(packageTables, partOf(generation, "tables"));
         assert.deepStrictEqual(packageOccurrences, partOf(generation, "occurrences"));
       }),
-    regenerateTimeoutMs,
+    { tags: ["qti-xsd"], timeout: regenerateTimeoutMs },
   );
 
   it.effect(
@@ -203,7 +203,7 @@ describe("package/tables.ts", () => {
           assert.strictEqual(sha256, xsdHashes.get(path), `the SHA-256 of ${path}`);
         }
       }),
-    regenerateTimeoutMs,
+    { tags: ["qti-xsd"], timeout: regenerateTimeoutMs },
   );
 
   it.effect(
@@ -217,7 +217,7 @@ describe("package/tables.ts", () => {
           [...xsdHashes.keys()].filter((path) => path !== resultsXsd),
         );
       }),
-    regenerateTimeoutMs,
+    { tags: ["qti-xsd"], timeout: regenerateTimeoutMs },
   );
 
   it("each CP version tables exactly the namespaces its profile reaches, none of them xlink's", () => {

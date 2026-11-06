@@ -255,6 +255,7 @@ describe("package/store.ts", () => {
           );
           assert.lengthOf(files, 12);
         }),
+      { tags: ["corpus"] },
     );
 
     it.effect(
@@ -287,6 +288,7 @@ describe("package/store.ts", () => {
             missing("pci_module_shading_deps_2"),
           ]);
         }),
+      { tags: ["corpus"] },
     );
 
     it("[P-1] refuses a hand-built map holding ../x as package-path-outside", () => {

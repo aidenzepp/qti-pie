@@ -1045,20 +1045,23 @@ const featuresOf = (
 ): readonly string[] => features.map(({ feature, path }) => `${feature}@${path}`);
 
 describe("check, every QTI 3 root", () => {
-  it.effect("[T-4] [S-0] accepts BGtest.xml as a test it delivers in full", () =>
-    Effect.gen(function* bgTest() {
-      const location = "QTI3_BeginnersGuide_Examples/BGtest.xml";
-      const accepted = acceptedTestOf(yield* corpusVerdict(location), "accepted");
+  it.effect(
+    "[T-4] [S-0] accepts BGtest.xml as a test it delivers in full",
+    () =>
+      Effect.gen(function* bgTest() {
+        const location = "QTI3_BeginnersGuide_Examples/BGtest.xml";
+        const accepted = acceptedTestOf(yield* corpusVerdict(location), "accepted");
 
-      assert.strictEqual(accepted.document, location);
-      assert.strictEqual(accepted.test.document, location);
-      assert.strictEqual(accepted.test.identifier, "BGtest");
-      assert.deepStrictEqual(accepted.unsupported, []);
-      assert.deepStrictEqual(
-        accepted.test.parts.map((part) => part.identifier),
-        ["testPart-1"],
-      );
-    }),
+        assert.strictEqual(accepted.document, location);
+        assert.strictEqual(accepted.test.document, location);
+        assert.strictEqual(accepted.test.identifier, "BGtest");
+        assert.deepStrictEqual(accepted.unsupported, []);
+        assert.deepStrictEqual(
+          accepted.test.parts.map((part) => part.identifier),
+          ["testPart-1"],
+        );
+      }),
+    { tags: ["corpus"] },
   );
 
   it.effect(
@@ -1078,6 +1081,7 @@ describe("check, every QTI 3 root", () => {
         });
         assert.deepStrictEqual(accepted.unsupported, accepted.test.unsupported);
       }),
+    { tags: ["corpus"] },
   );
 
   it("refuses a hand-built empty section document with child-count, of kind section", () => {
@@ -1352,36 +1356,42 @@ describe("acceptTestForTest, acceptSectionForTest and acceptStimulusForTest", ()
 });
 
 describe("acceptedItem", () => {
-  it.effect("gives BG007's accepted item, read from the corpus", () =>
-    Effect.gen(function* bg007() {
-      const location = "QTI3_BPIG_Examples/items/BG007.xml";
-      const source = yield* readCorpusFile(location).pipe(
-        Effect.flatMap((bytes) => readSource(location, bytes)),
-      );
-      const verdict = verdictOf(source);
-      const accepted = acceptedItem(verdict);
+  it.effect(
+    "gives BG007's accepted item, read from the corpus",
+    () =>
+      Effect.gen(function* bg007() {
+        const location = "QTI3_BPIG_Examples/items/BG007.xml";
+        const source = yield* readCorpusFile(location).pipe(
+          Effect.flatMap((bytes) => readSource(location, bytes)),
+        );
+        const verdict = verdictOf(source);
+        const accepted = acceptedItem(verdict);
 
-      assert.strictEqual(Option.getOrUndefined(accepted), acceptedOf(verdict, "accepted"));
-      assert.deepStrictEqual(
-        accepted.pipe(Option.map(({ item: built }) => built.identifier)),
-        Option.some("beginnersguide007"),
-      );
-    }),
+        assert.strictEqual(Option.getOrUndefined(accepted), acceptedOf(verdict, "accepted"));
+        assert.deepStrictEqual(
+          accepted.pipe(Option.map(({ item: built }) => built.identifier)),
+          Option.some("beginnersguide007"),
+        );
+      }),
+    { tags: ["corpus"] },
   );
 
-  it.effect("[Q-12] accepts QTI3-inline-choice.xml with one Inline Choice of three choices", () =>
-    Effect.gen(function* inlineChoiceItem() {
-      const location = "QTI3_BPIG_Examples/items/QTI3-inline-choice.xml";
-      const source = yield* readCorpusFile(location).pipe(
-        Effect.flatMap((bytes) => readSource(location, bytes)),
-      );
-      const accepted = acceptedOf(verdictOf(source), "accepted");
-      const inlineChoices = inlineChoicesIn(accepted.item.body);
+  it.effect(
+    "[Q-12] accepts QTI3-inline-choice.xml with one Inline Choice of three choices",
+    () =>
+      Effect.gen(function* inlineChoiceItem() {
+        const location = "QTI3_BPIG_Examples/items/QTI3-inline-choice.xml";
+        const source = yield* readCorpusFile(location).pipe(
+          Effect.flatMap((bytes) => readSource(location, bytes)),
+        );
+        const accepted = acceptedOf(verdictOf(source), "accepted");
+        const inlineChoices = inlineChoicesIn(accepted.item.body);
 
-      assert.deepStrictEqual(accepted.unsupported, []);
-      assert.strictEqual(inlineChoices.length, 1);
-      assert.strictEqual(inlineChoices[0]?.choices.length, 3);
-    }),
+        assert.deepStrictEqual(accepted.unsupported, []);
+        assert.strictEqual(inlineChoices.length, 1);
+        assert.strictEqual(inlineChoices[0]?.choices.length, 3);
+      }),
+    { tags: ["corpus"] },
   );
 
   it("gives the item of an accepted-with-unsupported verdict", () => {

@@ -198,7 +198,7 @@ describe("document/corpus.ts", () => {
         assert.isFalse(documents.some((member) => member.startsWith("qtiv2p2-examples/")));
         assert.isFalse(documents.some((member) => statSync(path.join(root, member)).isDirectory()));
       }),
-    corpusTimeoutMs,
+    { tags: ["corpus"], timeout: corpusTimeoutMs },
   );
 
   it.effect("the document set of a missing root fails with CorpusMissing, naming the root", () =>
