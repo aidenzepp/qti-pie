@@ -545,7 +545,7 @@ eachEngine((it) => {
     );
 
     walk.effect(
-      "[T-11] a Review link shows the candidate's values in disabled or read-only controls",
+      "[T-5] a Review link shows the candidate's values in disabled or read-only controls",
       () =>
         withPage({ javaScriptEnabled: false }, (page) =>
           Effect.gen(function* review() {
@@ -573,7 +573,7 @@ eachEngine((it) => {
         ),
     );
 
-    walk.effect("[T-12] a Solution link shows the correct values", () =>
+    walk.effect("[T-5] a Solution link shows the correct values", () =>
       withPage({ javaScriptEnabled: false }, (page) =>
         Effect.gen(function* solution() {
           const { origin } = yield* Playground;
@@ -601,7 +601,7 @@ eachEngine((it) => {
     );
 
     walk.effect(
-      "[T-14] the summary's results link downloads a file whose text validates against the Results XSD",
+      "the summary's results link downloads a file whose text validates against the Results XSD",
       () =>
         withPage({ javaScriptEnabled: false }, (page) =>
           Effect.gen(function* resultsDownload() {
