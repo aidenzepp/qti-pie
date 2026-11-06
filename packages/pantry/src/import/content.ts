@@ -16,6 +16,7 @@ import type { Relation, Uuid, uuid } from "@bjornpagen/grizzle";
 import { Effect, Option } from "effect";
 import type { ImportRefused } from "#pantry/import/refusal.ts";
 import { attributeReader, markers } from "#pantry/import/interactions.ts";
+import { mathmlRows } from "#pantry/import/mathml.ts";
 import { requiredAttribute } from "#pantry/import/required.ts";
 import type { DeclaredVariable, NodeRef } from "#pantry/import/interactions.ts";
 import {
@@ -64,6 +65,7 @@ import {
   ModalFeedbackTitle,
   TemplateFeedbackBlock,
 } from "#pantry/schema/feedback.ts";
+import { isMathmlKind } from "#pantry/schema/kinds/mathml.ts";
 import { Edge, Node } from "#pantry/schema/node.ts";
 import type { AttributeNameHandle, NodeKindHandle, RootKindHandle } from "#pantry/schema/node.ts";
 import * as patterns from "#pantry/schema/patterns.ts";
@@ -1091,8 +1093,13 @@ export const contentRows = Effect.fn("import.contentRows")(function* contentRows
     }
 
     const builder = builders.get(node.kind);
-    built =
-      builder === undefined ? thinRows(built, node) : yield* builder(built, element, node, context);
+    if (builder !== undefined) {
+      built = yield* builder(built, element, node, context);
+    } else if (isMathmlKind(node.kind)) {
+      built = yield* mathmlRows(built, element, node);
+    } else {
+      built = thinRows(built, node);
+    }
   }
 
   return built;
