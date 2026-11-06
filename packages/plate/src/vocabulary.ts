@@ -63,17 +63,18 @@ export const areaShapes = ["circle", "default", "ellipse", "poly", "rect"] as co
 export type AreaShape = (typeof areaShapes)[number];
 
 /**
- * The QTI names of the three interactions M1 renders: Choice (Q-2), Text Entry (Q-20) and Extended
- * Text (Q-5).
+ * The QTI names of the four interactions plate renders: Choice (Q-2), Text Entry (Q-20), Extended
+ * Text (Q-5) and Inline Choice (Q-12).
  */
 export const interactionNames = [
   "qti-choice-interaction",
   "qti-text-entry-interaction",
   "qti-extended-text-interaction",
+  "qti-inline-choice-interaction",
 ] as const;
 
 /**
- * An interaction M1 renders, by its QTI name.
+ * An interaction plate renders, by its QTI name.
  */
 export type InteractionName = (typeof interactionNames)[number];
 
@@ -82,6 +83,32 @@ export type InteractionName = (typeof interactionNames)[number];
  * their unsupported features.
  */
 const textInteractions = ["qti-text-entry-interaction", "qti-extended-text-interaction"] as const;
+
+/**
+ * The elements a native `option` can stand for by their text alone (spec §4.6): an Inline Choice
+ * whose choices hold only text and these, in the QTI namespace, renders as a `select`. Any other
+ * element, such as an `img`, a `br`, a `sub` or MathML, or an entity reference, is content an
+ * `option`, which holds only text, cannot show.
+ */
+const textSafeElements = [
+  "span",
+  "em",
+  "strong",
+  "b",
+  "i",
+  "code",
+  "kbd",
+  "samp",
+  "var",
+  "small",
+  "big",
+  "tt",
+  "cite",
+  "dfn",
+  "abbr",
+  "acronym",
+  "bdi",
+] as const;
 
 /**
  * The declarations whose `base-type` and `cardinality` the model reads.
@@ -142,6 +169,9 @@ export interface FormattedBindingRule extends BindingRule {
  * - `cardinality`: the response declaration the interaction binds has this cardinality.
  * - `integer-above`: the element's attribute `name`, its outer whitespace gone, reads as an integer
  *   greater than `limit`. A value that is not an integer never is.
+ * - `not-text-safe`: some descendant of one of the element's `qti-inline-choice` children is neither
+ *   text nor a QTI-namespace element named in `elements`; an entity reference is neither. A native
+ *   `option` holds only text, so it cannot show that choice.
  * - `refused-pattern`: the element carries the attribute `name`, and the translator refuses its value
  *   as an XML Schema regular expression (`translate` in `#plate/model/regex.ts`), so the pattern
  *   cannot be checked.
@@ -156,6 +186,7 @@ export type Condition =
   | { readonly kind: "attribute-true"; readonly name: string }
   | { readonly cardinality: Cardinality; readonly kind: "cardinality" }
   | { readonly kind: "integer-above"; readonly limit: bigint; readonly name: string }
+  | { readonly elements: readonly string[]; readonly kind: "not-text-safe" }
   | { readonly kind: "refused-pattern"; readonly name: string }
   | { readonly kind: "template"; readonly name: TemplateName }
   | { readonly kind: "untyped" };
@@ -183,6 +214,7 @@ export interface Renders {
   readonly bindings: {
     readonly "qti-choice-interaction": BindingRule;
     readonly "qti-extended-text-interaction": FormattedBindingRule;
+    readonly "qti-inline-choice-interaction": BindingRule;
     readonly "qti-text-entry-interaction": BindingRule;
   };
   /**
@@ -235,6 +267,10 @@ export const renders = {
       cardinalities: ["single", "multiple", "ordered"],
       formats: ["plain", "preformatted", "xhtml"],
     },
+    "qti-inline-choice-interaction": {
+      baseTypes: ["identifier"],
+      cardinalities: ["single"],
+    },
     "qti-text-entry-interaction": {
       baseTypes: ["string", "integer", "float"],
       cardinalities: ["single"],
@@ -257,6 +293,8 @@ export const renders = {
     ...interactionNames,
     "qti-prompt",
     "qti-simple-choice",
+    "qti-inline-choice",
+    "qti-label",
     ...engine,
   ],
   engine,
@@ -319,6 +357,13 @@ export const renders = {
       feature: 'cardinality="record"',
       on: textInteractions,
       when: { cardinality: "record", kind: "cardinality" },
+    },
+    // A choice a native option cannot show keeps the whole Inline Choice as its notice, as it was
+    // before plate rendered one (I8). Nothing is refused for it.
+    {
+      feature: "qti-inline-choice-interaction",
+      on: ["qti-inline-choice-interaction"],
+      when: { elements: textSafeElements, kind: "not-text-safe" },
     },
   ],
 } as const satisfies Renders;

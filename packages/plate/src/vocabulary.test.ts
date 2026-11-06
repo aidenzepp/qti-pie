@@ -153,7 +153,12 @@ describe("the closed value sets", () => {
       [
         "interactionNames",
         interactionNames,
-        ["qti-choice-interaction", "qti-text-entry-interaction", "qti-extended-text-interaction"],
+        [
+          "qti-choice-interaction",
+          "qti-text-entry-interaction",
+          "qti-extended-text-interaction",
+          "qti-inline-choice-interaction",
+        ],
       ],
       [
         "engine",
@@ -193,15 +198,18 @@ describe("the closed value sets", () => {
           "qti-choice-interaction",
           "qti-text-entry-interaction",
           "qti-extended-text-interaction",
+          "qti-inline-choice-interaction",
           "qti-prompt",
           "qti-simple-choice",
+          "qti-inline-choice",
+          "qti-label",
           ...renders.engine,
         ],
       ],
       [
         "notices",
         renders.notices.map((notice) => notice.feature),
-        ["pattern-mask", 'cardinality="record"'],
+        ["pattern-mask", 'cardinality="record"', "qti-inline-choice-interaction"],
       ],
       [
         "controlNotices",
@@ -284,6 +292,52 @@ describe("the closed value sets", () => {
     assert.sameMembers(
       [...renders.bindings["qti-extended-text-interaction"].formats],
       ["plain", "preformatted", "xhtml"],
+    );
+    assert.sameMembers(
+      [...renders.bindings["qti-inline-choice-interaction"].baseTypes],
+      ["identifier"],
+    );
+    assert.sameMembers(
+      [...renders.bindings["qti-inline-choice-interaction"].cardinalities],
+      ["single"],
+    );
+  });
+
+  it("[Q-12] shows an Inline Choice as its notice unless its choices hold only text and the seventeen text-safe elements", () => {
+    const inlineChoice = renders.notices.filter(
+      (notice) => notice.feature === "qti-inline-choice-interaction",
+    );
+
+    assert.deepStrictEqual(
+      inlineChoice.map((notice) => notice.on),
+      [["qti-inline-choice-interaction"]],
+    );
+
+    const [rule] = inlineChoice;
+    const elements = rule?.when.kind === "not-text-safe" ? rule.when.elements : [];
+
+    assertDistinct(elements);
+    assert.sameMembers(
+      [...elements],
+      [
+        "span",
+        "em",
+        "strong",
+        "b",
+        "i",
+        "code",
+        "kbd",
+        "samp",
+        "var",
+        "small",
+        "big",
+        "tt",
+        "cite",
+        "dfn",
+        "abbr",
+        "acronym",
+        "bdi",
+      ],
     );
   });
 
