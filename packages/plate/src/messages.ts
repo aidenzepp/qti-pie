@@ -16,14 +16,15 @@ export type Locale = (typeof locales)[number];
  * A `{name}` in a text is a placeholder that {@link message} fills. A Status heading's key is the
  * `heading` it names (`notAccepted`, `scored`, `responseRecorded`, `review`, `solution`,
  * `partSubmitted`, `testFinished`), and a page's title is `title` with a state's text as its
- * `state` (`answering`, `notAccepted`, `partSubmitted`, `review`, `solution`, `finished`), so the
- * closed test's summary is titled "Finished: {test}" through `title` and `finished`. An item's
- * state in words (`itemAnswered`, `itemNotAnswered`, `itemSubmitted`, `itemClosed`) follows its
- * name (`itemOf` on a navigation button, `item` on the confirm page's list) through `itemState`,
- * so the punctuation between them is the locale's. `atLeastStrings` and `atMostStrings` read in
- * the plural, so at a count of 1 an Extended Text writes `atLeastOneString` or `atMostOneString`,
- * their singular. This catalog is the source of the keys and of each key's placeholders; any other
- * locale's catalog has the same keys and placeholders.
+ * `state` (`answering`, `notAccepted`, `responseRecorded`, `scored`, `partSubmitted`, `review`,
+ * `solution`, `finished`), so the closed test's summary is titled "Finished: {test}" through
+ * `title` and `finished`. An item's state in words (`itemAnswered`, `itemNotAnswered`,
+ * `itemSubmitted`, `itemClosed`) follows its name (`itemOf` on a navigation button, `item` on the
+ * confirm page's list) through `itemState`, so the punctuation between them is the locale's.
+ * `atLeastStrings` and `atMostStrings` read in the plural, so at a count of 1 an Extended Text
+ * writes `atLeastOneString` or `atMostOneString`, their singular. This catalog is the source of the
+ * keys and of each key's placeholders; any other locale's catalog has the same keys and
+ * placeholders.
  */
 const en = {
   answer: "Answer",

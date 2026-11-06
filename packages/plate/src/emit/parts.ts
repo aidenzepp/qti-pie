@@ -94,8 +94,8 @@ export interface PartRow {
    * and under a replacement's own attributes on a swap, so a replacement may override each one
    * (`type="button"` on a navigation button).
    *
-   * A default is never in {@link merged}, which I1 writes over a replacement's; `parts.test.ts`
-   * holds the two apart.
+   * A default is never in {@link PartRow.merged}, which I1 writes over a replacement's;
+   * `parts.test.ts` holds the two apart.
    */
   readonly defaults: Readonly<Record<string, string>>;
   /**
@@ -387,12 +387,13 @@ const admits = {
 } satisfies { readonly [C in TagClass]: (element: Element) => boolean };
 
 /**
- * The rows of the part table, interactions first, then the navigation rows of the test
- * chrome (M2), before {@link partTable} derives each marker.
+ * The rows of the part table, the item chrome's, then each interaction's, then the test chrome's
+ * navigation rows, before {@link partTable} derives each marker.
  *
  * The five navigation buttons are plain buttons (rule `9af3809b`): each defaults `type` to
  * `button`, and no navigation row merges `type`, `name`, `value` or a `form*` attribute, so a
- * host's replacement may give a button its own submit semantics and nothing plate computes yields.
+ * host's replacement may give a button its own submit semantics while every attribute plate
+ * computes still stands.
  */
 const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
   {
@@ -728,8 +729,8 @@ const slotFor = (interaction: InteractionKey, part: PartKey): string =>
     : `${interaction}-${part.replaceAll(/[A-Z]/gu, (letter) => `-${letter.toLowerCase()}`)}`;
 
 /**
- * The part table and the test chrome's navigation rows, one row per part, in
- * {@link rows}' order, each with its derived marker.
+ * The part table, one row per part of the item chrome, each interaction and the test chrome's
+ * navigation, in {@link rows}' order, each with its derived marker.
  *
  * The Notice, the StatusHeading and the Choice Root and Prompt hold their context-free defaults: a
  * phrasing `span`, `h1`, and the `labelledby` markup with no legend. {@link rowFor} gives the row

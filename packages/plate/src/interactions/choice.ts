@@ -117,12 +117,12 @@ const rowsFor = (markup: Option.Option<PromptMarkup>): Rows => {
  * - Control: a radio when one choice can be posted (`max-choices` 1, or a single response), else a
  *   checkbox; its id, the payload's `formName` and its value; `checked` from the restore;
  *   `disabled` when finished or not `editable` (in `review` and `solution`), which keeps its name
- *   and value and takes it out of the tab order; no `autocomplete` in any mode, an attribute HTML
- *   does not apply to a radio or a checkbox; its name ({@link choiceControlName}):
- *   `aria-labelledby` → its Label, or, when the choice's content gives no text, the renderer's
- *   `aria-label` "Choice n of count", `n` its position as emitted; `aria-invalid` and
- *   `aria-describedby` → the message ids when the response is invalid; and `autofocus` on the first
- *   Control when the payload says.
+ *   and value but takes it out of the tab order and out of the entries its form posts, unlike a
+ *   text Control's `readonly`; no `autocomplete` in any mode, an attribute HTML does not apply to a
+ *   radio or a checkbox; its name ({@link choiceControlName}): `aria-labelledby` → its Label, or,
+ *   when the choice's content gives no text, the renderer's `aria-label` "Choice n of count", `n`
+ *   its position as emitted; `aria-invalid` and `aria-describedby` → the message ids when the
+ *   response is invalid; and `autofocus` on the first Control when the payload says.
  * - Indicator: `aria-hidden="true"`. Label: its id, and `for` → its Control.
  *
  * Every id is `scopedId(instance, response, part, index)`.
@@ -133,6 +133,7 @@ const rowsFor = (markup: Option.Option<PromptMarkup>): Rows => {
  * @param markup The Prompt's markup, none when there is no Prompt.
  * @param locale The locale of the renderer's own text.
  * @returns The attributes of every part.
+ * @see https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#constructing-the-form-data-set
  */
 const connect = (
   interaction: ChoicePayload,
