@@ -36,6 +36,8 @@ import * as textInteraction from "#pantry/schema/interactions/text.ts";
 import * as item from "#pantry/schema/item.ts";
 import * as lang from "#pantry/schema/lang.ts";
 import * as mapping from "#pantry/schema/mapping.ts";
+import * as mathmlArms from "#pantry/schema/mathml/arms.ts";
+import * as mathmlAttributes from "#pantry/schema/mathml/attributes.ts";
 import * as metadata from "#pantry/schema/metadata.ts";
 import * as node from "#pantry/schema/node.ts";
 import * as outcome from "#pantry/schema/outcome.ts";
@@ -99,6 +101,8 @@ export const nodeArms = {
   ...testRules.arms,
   ...testContent.arms,
   ...stimulus.arms,
+  ...mathmlArms.arms,
+  ...mathmlAttributes.contentArms,
 };
 
 export const Qti = schema(
@@ -149,6 +153,9 @@ export const Qti = schema(
     ...testContent.relations,
     ...stimulus.relations,
     ...reference.relations,
+    ...mathmlArms.relations,
+    ...mathmlAttributes.relations,
+    MathmlCbytes: mathmlAttributes.MathmlCbytes,
     StatisticKind: usage.StatisticKind,
     TargetObjectType: usage.TargetObjectType,
   },
@@ -199,6 +206,8 @@ export const Qti = schema(
     ...testContent.rules,
     ...stimulus.rules,
     ...reference.rules,
+    ...mathmlArms.rules,
+    ...mathmlAttributes.rules,
     contained(on(node.Node, "kind"), on(node.NodeKind, "id")),
     ...node.NodeKind.handles.map((kind) =>
       mirrors(on(select(node.Node, { kind }), "id"), on(nodeArms[kind], "id")),

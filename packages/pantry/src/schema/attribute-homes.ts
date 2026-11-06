@@ -12,6 +12,8 @@ import { Predicate } from "effect";
 import type { Rows as RowSet } from "#pantry/import/tree.ts";
 import * as family from "#pantry/schema/attributes.ts";
 import { IdrefAttribute } from "#pantry/schema/content/rosters.ts";
+import type { MathmlHome } from "#pantry/schema/mathml/homes.ts";
+import { mathmlHomes } from "#pantry/schema/mathml/homes.ts";
 import { Author } from "#pantry/schema/roles.ts";
 
 /**
@@ -529,6 +531,101 @@ const statistic: readonly Own[] = [
  * The attributes of a kind whose one attribute is the `identifier` of a declaration it refers to.
  */
 const referring: readonly Own[] = [["identifier", referenced]];
+
+/**
+ * The `position` column of a fact as a number, 0 for one that has none.
+ */
+const positionOf = (fact: Columns): number => Number(textOf(fact, "position") ?? 0);
+
+/**
+ * The `AttributeIdref` tokens of the identifier-reference attribute `name`, joined by one space:
+ * none where the node holds no token, which includes an empty `headers`, whose lexical row alone
+ * says it was written.
+ */
+const tokens =
+  (name: string): Source =>
+  (index) => {
+    const owned = index.many(R.AttributeIdref, "node");
+
+    return (id) => {
+      const found = (owned.get(id) ?? [])
+        .filter((fact) => textOf(fact, "attribute") === name)
+        .toSorted((left, right) => positionOf(left) - positionOf(right));
+
+      return found.length === 0
+        ? undefined
+        : found.map((fact) => textOf(fact, "target") ?? "").join(" ");
+    };
+  };
+
+/**
+ * The relations the importer writes, by name, for the homes that name one by its handle.
+ */
+const relationNamed: ReadonlyMap<string, AnyRelation> = new Map(Object.entries(R));
+
+/**
+ * The attribute `name` of a MathML family relation: the `value` of the row with this node and
+ * `attribute = name`, none where the source did not write it. A family holds one row per node and
+ * attribute, so the first match is the one.
+ *
+ * The columns are checked against the relation when the module loads, as {@link column} checks its
+ * own.
+ */
+const familyAttribute = (relation: AnyRelation, name: string): Source => {
+  const columns = columnsOf(relation);
+  if (!["attribute", "node", "value"].every((field) => columns.includes(field))) {
+    throw new Error(`The relation ${relation.name} is not a family keyed by node and attribute.`);
+  }
+
+  return (index) => {
+    const owned = index.many(relation, "node");
+
+    return (id) =>
+      textOf(
+        (owned.get(id) ?? []).find((fact) => textOf(fact, "attribute") === name),
+        "value",
+      );
+  };
+};
+
+/**
+ * The relation the importer writes under the name of `relation`, so the readers and the writers
+ * share one object.
+ */
+const writtenAs = (relation: AnyRelation): AnyRelation => {
+  const found = relationNamed.get(relation.name);
+  if (found === undefined) {
+    throw new Error(`The relation ${relation.name} is not one the importer writes.`);
+  }
+
+  return found;
+};
+
+/**
+ * The source of a MathML attribute, from the home `mathml/homes.ts` gives it.
+ */
+const mathmlSource = ({ home, name }: MathmlHome): Source => {
+  if ("family" in home) {
+    return familyAttribute(writtenAs(home.family), name);
+  }
+
+  if ("arm" in home) {
+    return arm(writtenAs(home.arm), home.field);
+  }
+
+  return "id" in home ? column(R.HtmlId, "id", "node") : tokens(name);
+};
+
+/**
+ * The own attributes of every MathML kind, by kind handle and in the XSD inventory's order: one
+ * entry per attribute, read from `mathmlHomes`, so the table and the homes are one fact.
+ */
+const mathmlOwn: Readonly<Record<string, readonly Own[]>> = Object.fromEntries(
+  Object.entries(mathmlHomes).map(([kind, entries]) => [
+    kind,
+    entries.map((entry): Own => [entry.name, mathmlSource(entry)]),
+  ]),
+);
 
 /**
  * The own attributes of every element kind that has any, by kind: each name with where its value
@@ -1295,6 +1392,7 @@ export const ownAttributes = {
     ["accept", optional(R.XIncludeAccept)],
     ["accept-language", optional(R.XIncludeAcceptLanguage)],
   ],
+  ...mathmlOwn,
 } satisfies Readonly<Record<string, readonly Own[]>>;
 
 /**
@@ -1304,32 +1402,6 @@ export const ownAttributes = {
 export const ownByKind: ReadonlyMap<string, readonly Own[]> = new Map(
   Object.entries(ownAttributes),
 );
-
-/**
- * The `position` column of a fact as a number, 0 for one that has none.
- */
-const positionOf = (fact: Columns): number => Number(textOf(fact, "position") ?? 0);
-
-/**
- * The `AttributeIdref` tokens of the identifier-reference attribute `name`, joined by one space:
- * none where the node holds no token, which includes an empty `headers`, whose lexical row alone
- * says it was written.
- */
-const tokens =
-  (name: string): Source =>
-  (index) => {
-    const owned = index.many(R.AttributeIdref, "node");
-
-    return (id) => {
-      const found = (owned.get(id) ?? [])
-        .filter((fact) => textOf(fact, "attribute") === name)
-        .toSorted((left, right) => positionOf(left) - positionOf(right));
-
-      return found.length === 0
-        ? undefined
-        : found.map((fact) => textOf(fact, "target") ?? "").join(" ");
-    };
-  };
 
 /**
  * `role` and the `aria-*` attributes: `AriaRole` holds `role` and every other `Aria<Name>` holds
