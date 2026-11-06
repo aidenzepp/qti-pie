@@ -376,6 +376,10 @@ const annotationPositives = [
     foreign: ["qti-assessment-item", "m:annotation-xml"],
     name: "math-annotation-xml-qti-root",
   },
+  {
+    chain: ["m:annotation-xml", "m:semantics", "m:annotation"],
+    name: "math-annotation-xml-semantics",
+  },
 ] as const satisfies readonly {
   readonly chain: readonly string[];
   readonly foreign?: readonly [string, string];
@@ -383,26 +387,13 @@ const annotationPositives = [
 }[];
 
 /**
- * The J6 positives that are not in {@link annotationPositives}: the foreign attribute, the kind
- * block and `math-annotation-xml-semantics`, which `readRows` refuses today (see
- * {@link semanticsRefusal}).
+ * The J6 positives that are not in {@link annotationPositives}: the foreign attribute and the kind
+ * block.
  */
 const otherAnnotationPositives = [
   "math-foreign-attribute",
   "math-annotation-xml-kind",
-  "math-annotation-xml-semantics",
 ] as const satisfies readonly FixtureName[];
-
-/**
- * The rule `readRows` refuses `math-annotation-xml-semantics` under today, a defect of the landed
- * classification and not a rule of the spec: `m:semantics` is no global element of the MathML
- * schema (the XSD declares it only inside groups), so `classifyElement` (`import/wildcard.ts`)
- * finds neither an explicit particle nor a typed global for it under `m:annotation-xml` and stores
- * it as `foreign`, which the exclusion row then refuses. Spec 4.9 admits it as the `m:semantics`
- * kind (J6's `Admission(m:annotation-xml, m:semantics)` rows exist). This case pins the measured
- * refusal; the fix flips it to the positive's `readRows` success.
- */
-const semanticsRefusal: Rule = "wildcard-namespace";
 
 /**
  * Whether the rows hold a path of nodes whose kinds are `chain`, each the child of the one before.
@@ -502,17 +493,6 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                 attribute.local === "href" &&
                 attribute.prefix === "xlink",
             ),
-          );
-        }),
-    );
-
-    it.effect.skipIf(!tarballPresent)(
-      `math-annotation-xml-semantics is refused by readRows under ${semanticsRefusal} today, where spec 4.9 reads it (skipped without the examples tarball)`,
-      () =>
-        Effect.gen(function* refusedToday() {
-          assert.deepStrictEqual(
-            yield* ruleOf("math-annotation-xml-semantics"),
-            Option.some(semanticsRefusal),
           );
         }),
     );
