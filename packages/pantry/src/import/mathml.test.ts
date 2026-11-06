@@ -1,6 +1,6 @@
 /**
- * The MathML arm rows (spec MA09, part 1): an item is read with `readXml`, walked with `treeRows`
- * and built with `contentRows`, with no database.
+ * The MathML arm and attribute rows (spec MA09): an item is read with `readXml`, walked with
+ * `treeRows` and built with `contentRows`, with no database.
  */
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Exit } from "effect";
@@ -8,12 +8,25 @@ import type { Uuid } from "@bjornpagen/grizzle";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { Element } from "@qti-pie/crust/tree.ts";
 import { contentRows } from "#pantry/import/content.ts";
-import { ItemRefusal, Rows, treeRows } from "#pantry/import/tree.ts";
+import { ImportRefused } from "#pantry/import/refusal.ts";
+import { ItemRefusal, Rows, treeRows, UnmodeledVocabulary } from "#pantry/import/tree.ts";
 import type { NodeIndex } from "#pantry/import/tree.ts";
-import { MathmlCbytesValue } from "#pantry/schema/contracts.ts";
-import { MathmlCbytes } from "#pantry/schema/mathml/attributes.ts";
+import { AttributeIdref } from "#pantry/schema/attributes.ts";
+import { MathmlBaseValue, MathmlCbytesValue } from "#pantry/schema/contracts.ts";
+import { DocumentId, HtmlId } from "#pantry/schema/document.ts";
+import {
+  familyRelation,
+  MathmlBase,
+  MathmlCbytes,
+  MathmlColor,
+  MathmlDisplay,
+  MathmlLength,
+  MathmlMpaddedLength,
+  MathmlTableWidth,
+} from "#pantry/schema/mathml/attributes.ts";
 import { arms, MathmlMaction } from "#pantry/schema/mathml/arms.ts";
-import { Edge, Node } from "#pantry/schema/node.ts";
+import { families } from "#pantry/schema/mathml/values.ts";
+import { AttributeLexical, Edge, Node } from "#pantry/schema/node.ts";
 
 const documentId: Uuid = "11111111-1111-4111-8111-111111111111";
 
@@ -26,7 +39,7 @@ const mathNamespace = "http://www.w3.org/1998/Math/MathML";
  */
 const built = (math: string) =>
   Effect.gen(function* run() {
-    const text = `<qti-assessment-item xmlns="${itemNamespace}" xmlns:m="${mathNamespace}" identifier="hand" title="Hand" time-dependent="false"><qti-item-body><p>${math}</p></qti-item-body></qti-assessment-item>`;
+    const text = `<qti-assessment-item xmlns="${itemNamespace}" xmlns:m="${mathNamespace}" xmlns:xlink="http://www.w3.org/1999/xlink" identifier="hand" title="Hand" time-dependent="false"><qti-item-body><p>${math}</p></qti-item-body></qti-assessment-item>`;
     const doc = yield* readXml(new TextEncoder().encode(text));
     const tree = yield* treeRows(
       doc,
@@ -140,6 +153,139 @@ describe("mathmlRows", () => {
 
       assert.isFalse(mathmlIds.has(div.id));
       assert.isFalse(div.kind.startsWith("m:"));
+    }),
+  );
+});
+
+/**
+ * The first failure of an exit.
+ */
+const failureOf = <A, E>(exit: Exit.Exit<A, E>): E | undefined =>
+  Exit.isFailure(exit)
+    ? exit.cause.reasons.flatMap((reason) => (reason._tag === "Fail" ? [reason.error] : []))[0]
+    : undefined;
+
+describe("mathmlRows attributes", () => {
+  it.effect("writes a roster attribute as its family row and nothing else", () =>
+    Effect.gen(function* run() {
+      const { nodes, root, rows } = yield* built('<m:math display="block"><m:mi>x</m:mi></m:math>');
+      const node = nodeNamed(root, nodes, "m:math");
+
+      assert.deepStrictEqual(Rows.of(rows, MathmlDisplay), [
+        { attribute: "display", kind: "m:math", node: node.id, value: "block" },
+      ]);
+      assert.deepStrictEqual(Rows.of(rows, AttributeLexical), []);
+    }),
+  );
+
+  it.effect("keeps the spelling of a collapsed attribute in an AttributeLexical row", () =>
+    Effect.gen(function* run() {
+      const { nodes, root, rows } = yield* built(
+        '<m:math display=" block "><m:mi>x</m:mi></m:math>',
+      );
+      const node = nodeNamed(root, nodes, "m:math");
+
+      assert.deepStrictEqual(Rows.of(rows, MathmlDisplay), [
+        { attribute: "display", kind: "m:math", node: node.id, value: "block" },
+      ]);
+      assert.deepStrictEqual(Rows.of(rows, AttributeLexical), [
+        { attribute: "display", kind: "m:math", node: node.id, value: " block " },
+      ]);
+    }),
+  );
+
+  it.effect("writes the id of an m:math as a DocumentId and an HtmlId row", () =>
+    Effect.gen(function* run() {
+      const { nodes, root, rows } = yield* built('<m:math id="x"><m:mi>x</m:mi></m:math>');
+      const node = nodeNamed(root, nodes, "m:math");
+
+      assert.deepStrictEqual(Rows.of(rows, DocumentId), [
+        { document: documentId, holder: "htmlId", id: "x" },
+      ]);
+      assert.deepStrictEqual(Rows.of(rows, HtmlId), [
+        { attribute: "id", document: documentId, id: "x", kind: "m:math", node: node.id },
+      ]);
+    }),
+  );
+
+  it.effect("writes xref as one AttributeIdref row at position 0", () =>
+    Effect.gen(function* run() {
+      const { nodes, root, rows } = yield* built('<m:math><m:mi xref="a">x</m:mi></m:math>');
+      const node = nodeNamed(root, nodes, "m:mi");
+
+      assert.deepStrictEqual(Rows.of(rows, AttributeIdref), [
+        { attribute: "xref", document: documentId, node: node.id, position: 0n, target: "a" },
+      ]);
+    }),
+  );
+
+  it.effect("routes width to the family its element's XSD type names", () =>
+    Effect.gen(function* run() {
+      const { nodes, root, rows } = yield* built(
+        '<m:math><m:mspace width="1em"/><m:mpadded width="+1em"><m:mi>x</m:mi></m:mpadded><m:mtable width="auto"/></m:math>',
+      );
+
+      for (const [qname, relation, value] of [
+        ["m:mspace", MathmlLength, "1em"],
+        ["m:mpadded", MathmlMpaddedLength, "+1em"],
+        ["m:mtable", MathmlTableWidth, "auto"],
+      ] as const) {
+        const node = nodeNamed(root, nodes, qname);
+
+        assert.deepStrictEqual(Rows.of(rows, relation), [
+          { attribute: "width", kind: node.kind, node: node.id, value },
+        ]);
+      }
+    }),
+  );
+
+  it.effect("refuses a roster value outside its roster as attribute-lexical", () =>
+    Effect.gen(function* run() {
+      const error = failureOf(
+        yield* Effect.exit(built('<m:math display="center"><m:mi>x</m:mi></m:math>')),
+      );
+
+      assert.instanceOf(error, ImportRefused);
+      assert.strictEqual(error instanceof ImportRefused ? error.rule : "", "attribute-lexical");
+    }),
+  );
+
+  it.effect("writes a contract family and a pattern family as read", () =>
+    Effect.gen(function* run() {
+      const { nodes, root, rows } = yield* built(
+        '<m:math><m:cn base="10">1</m:cn><m:mi mathcolor="#fff">x</m:mi></m:math>',
+      );
+      const cn = nodeNamed(root, nodes, "m:cn");
+      const mi = nodeNamed(root, nodes, "m:mi");
+
+      assert.deepStrictEqual(Rows.of(rows, MathmlBase), [
+        { attribute: "base", kind: "m:cn", node: cn.id, value: MathmlBaseValue("10") },
+      ]);
+      assert.deepStrictEqual(Rows.of(rows, MathmlColor), [
+        { attribute: "mathcolor", kind: "m:mi", node: mi.id, value: "#fff" },
+      ]);
+    }),
+  );
+
+  it("has a relation for every family", () => {
+    for (const family of families) {
+      assert.isTrue(familyRelation.has(family.handle));
+    }
+  });
+
+  it.effect("refuses display on m:mi and xlink:href on m:mi in the walk", () =>
+    Effect.gen(function* run() {
+      for (const [attribute, name] of [
+        ['display="block"', "display"],
+        ['xlink:href="http://example.com/"', "xlink:href"],
+      ] as const) {
+        const error = failureOf(
+          yield* Effect.exit(built(`<m:math><m:mi ${attribute}>x</m:mi></m:math>`)),
+        );
+
+        assert.instanceOf(error, UnmodeledVocabulary);
+        assert.strictEqual(error instanceof UnmodeledVocabulary ? error.name : "", name);
+      }
     }),
   );
 });
