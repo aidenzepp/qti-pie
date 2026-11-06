@@ -1436,8 +1436,19 @@ target's UNIQUE are both representable, and only the source's index is refused.
   - only the referenced UNIQUE must be bounded.
 
   The commit's message is a copy of `fce1088`'s and does not describe this change, so it is not quoted here; grizzle
-  was asked to correct the record going forward. The reproduction's result at `4b155e8` (lane R87) and qti-pie's
-  repin to it (lane N2) are recorded here when they land.
+  was asked to correct the record going forward.
+
+  Lane R87 packed tarballs from a scratch export of `4b155e8` (sha256 `c47013f1…` for grizzle, `92d16745…` for the
+  engine) and re-ran the reproduction, its output verbatim in `run-4b155e8.out`:
+  - **case:** `grizzle generate` exits 0, and `grizzle check` prints `Repro: ok (1 migration, snapshot 2c4ee745…)` and
+    exits 0. The draft has the foreign key from `Attr(id, value)` to `Ref(id, value)` and `Ref`'s UNIQUE `(id, value)`,
+    and no index over the unbounded `Attr.value`;
+  - **control** (bounded source): `Repro: ok (1 migration, snapshot d25ded70…)`, exit 0, the same snapshot as at
+    `fce1088`;
+  - **bounded-prefix control:** `Repro: ok (1 migration, snapshot 2071c499…)`, exit 0, also unchanged.
+
+  So the case generates and checks at `4b155e8`, and both controls stay ok. qti-pie takes the fix at lane N2's repin
+  B, and `Qti` generating at HEAD is recorded here when it lands.
 
 - **qti-pie:** no workaround. `Attribute.lexical` stays unbounded, as an attribute's lexical form is. Until the fix is
   pinned:
