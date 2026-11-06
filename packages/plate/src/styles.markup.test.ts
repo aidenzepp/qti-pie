@@ -3,9 +3,8 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
 import { h, text } from "#plate/emit/node.ts";
 import type { Attributes, Element, Node } from "#plate/emit/node.ts";
-import { resolveOverrides, rowFor } from "#plate/emit/parts.ts";
+import { rowFor } from "#plate/emit/parts.ts";
 import type { PartOf } from "#plate/emit/parts.ts";
-import { toHtml } from "#plate/emit/serialise.ts";
 import { isPosted } from "#plate/form/encoding.ts";
 import {
   checkResponses,
@@ -26,10 +25,8 @@ import type {
   ValidationMessage,
   Verdict,
 } from "#plate/index.ts";
-import { renderInlineChoice } from "#plate/interactions/inline-choice.ts";
 import { renderNavigation } from "#plate/navigation.ts";
 import type { NavigationOptions, NavigationState } from "#plate/navigation.ts";
-import type { InlineChoicePayload, RenderMode } from "#plate/payload.ts";
 import { compounds, scanSheet } from "#plate/test/css.ts";
 import type { AttributeTest, Compound, Sheet } from "#plate/test/css.ts";
 import { parseHtml } from "#plate/test/round-trip.ts";
@@ -336,9 +333,9 @@ interface Authored {
 
 /**
  * The items the witness renders: both Choice cardinalities, prompt shapes and orientations, a Text
- * Entry inside a `p`, an Extended Text with a prompt, and an interaction phase 1 does not render.
- * Each interaction carries every class the stylesheet styles for it, and a body element every
- * body class.
+ * Entry inside a `p`, an Extended Text with a prompt, an Inline Choice with a Label and one
+ * without, and an interaction plate does not render. Each interaction carries every class the
+ * stylesheet styles for it, and a body element every body class.
  */
 const authored: readonly Authored[] = [
   {
@@ -405,6 +402,31 @@ const authored: readonly Authored[] = [
     ),
     location: "witness/text.xml",
     posted: { ESSAY: ["It spins silk.", "It spins again."], RESPONSE: ["eight"] },
+    verdict: "accepted",
+  },
+  {
+    bytes: itemBytes(
+      "witness-inline-choice",
+      `<qti-response-declaration base-type="identifier" cardinality="single" identifier="RESPONSE">
+  <qti-correct-response>
+   <qti-value>eight</qti-value>
+  </qti-correct-response>
+ </qti-response-declaration>
+ <qti-response-declaration base-type="identifier" cardinality="single" identifier="COLOUR"/>`,
+      `<p>A spider has <qti-inline-choice-interaction
+   class="${classesOf("inline-choice-interaction")}" response-identifier="RESPONSE">
+   <qti-inline-choice identifier="six">six</qti-inline-choice>
+   <qti-inline-choice identifier="eight">eight</qti-inline-choice>
+  </qti-inline-choice-interaction> legs.</p>
+  <p>A garden spider is often <qti-inline-choice-interaction data-prompt="Pick a colour"
+   response-identifier="COLOUR">
+   <qti-label>Colour</qti-label>
+   <qti-inline-choice identifier="brown">brown</qti-inline-choice>
+   <qti-inline-choice identifier="green">green</qti-inline-choice>
+  </qti-inline-choice-interaction>.</p>`,
+    ),
+    location: "witness/inline-choice.xml",
+    posted: { RESPONSE: ["ten"] },
     verdict: "accepted",
   },
   {
@@ -578,78 +600,6 @@ const navigationTrees = (configuration: Configuration, options: NavigationOption
   );
 
 /**
- * An Inline Choice whose Label gives text and names its Control, restoring its second choice.
- */
-const labelledInlineChoice: InlineChoicePayload = {
-  autofocus: false,
-  choices: [
-    { content: [{ kind: "text", text: "red" }], identifier: "R" },
-    { content: [{ kind: "text", text: "blue" }], identifier: "B" },
-  ],
-  class: "",
-  editable: true,
-  formName: entryName(instance, "COLOUR"),
-  invalid: false,
-  kind: "inline-choice",
-  label: Option.some([{ kind: "text", text: "Colour" }]),
-  messageIds: [],
-  name: { ariaLabel: Option.none(), ariaLabelledby: Option.none(), unnamed: Option.none() },
-  placeholder: Option.none(),
-  response: "COLOUR",
-  restore: "B",
-};
-
-/**
- * The Inline Choice with no Label, which the renderer names, restoring nothing.
- */
-const unnamedInlineChoice: InlineChoicePayload = {
-  ...labelledInlineChoice,
-  label: Option.none(),
-  name: { ...labelledInlineChoice.name, unnamed: Option.some({ count: 1, n: 1 }) },
-  restore: "",
-};
-
-/**
- * Render the two Inline Choices through `renderInlineChoice`, each in answering and in review, and
- * read each Root back from its HTML.
- *
- * No authored item renders an Inline Choice through `render` until it builds one (p6-05a), so this
- * covers the Inline Choice markers until then; p6-06, which owns this file, decides whether to
- * keep it.
- *
- * @param configuration The configuration, which gives the locale.
- * @returns The Inline Choice Roots' trees.
- */
-const inlineChoiceTrees = (configuration: Configuration) =>
-  Effect.fromResult(resolveOverrides()).pipe(
-    Effect.flatMap((parts) =>
-      Effect.fromResult(
-        Result.all(
-          (["answering", "review"] as const satisfies readonly RenderMode[]).flatMap((mode) =>
-            [labelledInlineChoice, unnamedInlineChoice].map((interaction) =>
-              renderInlineChoice(
-                { ...interaction, editable: mode === "answering" },
-                {
-                  body: [],
-                  finished: false,
-                  instance,
-                  lang: configuration.locale,
-                  messages: [],
-                  mode,
-                  notices: [],
-                  title: "Colours",
-                },
-                { assetBase: "", headingLevel: 2, locale: configuration.locale, parts },
-              ),
-            ),
-          ),
-        ),
-      ),
-    ),
-    Effect.map((roots) => roots.flatMap((root) => parseHtml(toHtml(root)))),
-  );
-
-/**
  * Read and scan the stylesheet through the package's own import alias.
  */
 const readSheet = Effect.tryPromise(() =>
@@ -658,7 +608,7 @@ const readSheet = Effect.tryPromise(() =>
 
 /**
  * Render every markup the sheet styles: each authored item in every state, both Status headings,
- * the navigation, and the hand-built Inline Choices ({@link inlineChoiceTrees}).
+ * and the navigation.
  *
  * @param configuration The configuration.
  * @returns The trees, and the refused answers' messages.
@@ -679,7 +629,6 @@ const markupOf = Effect.fnUntraced(function* markupOf(configuration: Configurati
       ...renders.flatMap((entry) => entry.trees),
       ...status.flatMap((entry) => parseHtml(entry.html)),
       ...(yield* navigationTrees(configuration)),
-      ...(yield* inlineChoiceTrees(configuration)),
     ],
   };
 });
@@ -698,8 +647,8 @@ interface PartState {
 }
 
 /**
- * The states the sheet styles: the current item's button, a Choice Root in review and in solution,
- * and a readonly text Control.
+ * The states the sheet styles: the current item's button, a Choice Root and an Inline Choice Root
+ * in review and in solution, and a readonly text Control.
  */
 const partStates: readonly PartState[] = [
   {
@@ -715,6 +664,16 @@ const partStates: readonly PartState[] = [
   {
     name: "data-mode",
     slot: rowFor("choice-interaction", "root").slot,
+    value: Option.some("solution"),
+  },
+  {
+    name: "data-mode",
+    slot: rowFor("inline-choice-interaction", "root").slot,
+    value: Option.some("review"),
+  },
+  {
+    name: "data-mode",
+    slot: rowFor("inline-choice-interaction", "root").slot,
     value: Option.some("solution"),
   },
   {
@@ -789,19 +748,21 @@ const buttonsOf = (trees: readonly Node[]): readonly Element[] =>
   elementsOf(trees).filter((element) => element.tag === "button");
 
 describe("styles.css over emitted markup", () => {
-  it.effect("every compound of every selector names something the emitted markup holds", () =>
-    Effect.gen(function* witness() {
-      const { messages, trees } = yield* markupOf(yield* configure({}));
-      const sheet = yield* readSheet;
+  it.effect(
+    "[Q-12] every compound of every selector names something the emitted markup holds",
+    () =>
+      Effect.gen(function* witness() {
+        const { messages, trees } = yield* markupOf(yield* configure({}));
+        const sheet = yield* readSheet;
 
-      assert.isNotEmpty(messages);
-      assert.isAbove(matchable(sheet).length, 0);
-      assert.deepStrictEqual(unmatched(sheet, trees), []);
-    }),
+        assert.isNotEmpty(messages);
+        assert.isAbove(matchable(sheet).length, 0);
+        assert.deepStrictEqual(unmatched(sheet, trees), []);
+      }),
   );
 
   it.effect(
-    "reaches each state M2's markup carries: the current item, a Choice in review and solution, a readonly text Control",
+    "[Q-12] reaches each state the markup carries: the current item, a Choice and an Inline Choice in review and solution, a readonly text Control",
     () =>
       Effect.gen(function* states() {
         const { trees } = yield* markupOf(yield* configure({}));

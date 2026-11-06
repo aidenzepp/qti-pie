@@ -376,12 +376,14 @@ describe("the vocabulary class inventory", () => {
     "choice-interaction",
     "text-entry-interaction",
     "extended-text-interaction",
+    "inline-choice-interaction",
     "body",
   ];
   const interactionOwners: readonly ClassOwner[] = [
     "choice-interaction",
     "text-entry-interaction",
     "extended-text-interaction",
+    "inline-choice-interaction",
   ];
   const writingClasses = [
     "qti-writing-orientation-vertical-rl",
@@ -406,8 +408,9 @@ describe("the vocabulary class inventory", () => {
     );
   });
 
-  it("[I-19] gives the three interactions exactly the summary table's classes and the sections' three", () => {
-    // `vocab.txt:4026-4110`, the summary table (35 classes), then `:4325-5220`, the sections (3).
+  it("[I-19] [Q-12] gives the four interactions exactly the summary table's classes and the sections' three", () => {
+    // `vocab.txt:4026-4141`, the summary table (35 classes; Inline Choice's widths are Text Entry's),
+    // then `:4325-5822`, the sections (3).
     const summaryTable = [
       "qti-choices-stacking-1",
       "qti-choices-stacking-2",
@@ -457,6 +460,20 @@ describe("the vocabulary class inventory", () => {
     for (const owner of interactionOwners) {
       assert.includeMembers([...styledClasses[owner]], [...writingClasses], owner);
     }
+  });
+
+  it("[I-19] [Q-12] gives Inline Choice the fifteen widths and both writing classes, and no behaviour class", () => {
+    // `vocab.txt:4110-4141`, the summary table's Inline Choice row; `:5818`, section 1.2.7.3.
+    assert.deepStrictEqual(
+      [...styledClasses["inline-choice-interaction"]],
+      [
+        ...[1, 2, 3, 4, 6, 10, 15, 20, 25, 30, 35, 40, 45, 50, 72].map(
+          (width) => `qti-input-width-${width}`,
+        ),
+        ...writingClasses,
+      ],
+    );
+    assert.deepStrictEqual([...behaviourClasses["inline-choice-interaction"]], []);
   });
 
   it("[I-19] styles the six body utility classes and nothing else on the body", () => {

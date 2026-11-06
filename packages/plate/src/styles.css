@@ -339,81 +339,112 @@
 }
 
 /*
- * Text Entry's input widths (vocab.txt:4847): qti-input-width-N makes the Control at least N
- * characters wide.
+ * Text Entry's input widths (vocab.txt:4847) and Inline Choice's selection widths (vocab.txt:5711):
+ * qti-input-width-N makes the Control at least N characters wide, N taken from the class name
+ * (section 1.2.7.1's line for qti-input-width-35 says 40 characters, a typo).
  */
 .qti-input-width-1:where([data-slot="text-entry-interaction"])
-  :where([data-slot="text-entry-interaction-control"]) {
+  :where([data-slot="text-entry-interaction-control"]),
+.qti-input-width-1:where([data-slot="inline-choice-interaction"])
+  :where([data-slot="inline-choice-interaction-control"]) {
   min-inline-size: 1ch;
 }
 
 .qti-input-width-2:where([data-slot="text-entry-interaction"])
-  :where([data-slot="text-entry-interaction-control"]) {
+  :where([data-slot="text-entry-interaction-control"]),
+.qti-input-width-2:where([data-slot="inline-choice-interaction"])
+  :where([data-slot="inline-choice-interaction-control"]) {
   min-inline-size: 2ch;
 }
 
 .qti-input-width-3:where([data-slot="text-entry-interaction"])
-  :where([data-slot="text-entry-interaction-control"]) {
+  :where([data-slot="text-entry-interaction-control"]),
+.qti-input-width-3:where([data-slot="inline-choice-interaction"])
+  :where([data-slot="inline-choice-interaction-control"]) {
   min-inline-size: 3ch;
 }
 
 .qti-input-width-4:where([data-slot="text-entry-interaction"])
-  :where([data-slot="text-entry-interaction-control"]) {
+  :where([data-slot="text-entry-interaction-control"]),
+.qti-input-width-4:where([data-slot="inline-choice-interaction"])
+  :where([data-slot="inline-choice-interaction-control"]) {
   min-inline-size: 4ch;
 }
 
 .qti-input-width-6:where([data-slot="text-entry-interaction"])
-  :where([data-slot="text-entry-interaction-control"]) {
+  :where([data-slot="text-entry-interaction-control"]),
+.qti-input-width-6:where([data-slot="inline-choice-interaction"])
+  :where([data-slot="inline-choice-interaction-control"]) {
   min-inline-size: 6ch;
 }
 
 .qti-input-width-10:where([data-slot="text-entry-interaction"])
-  :where([data-slot="text-entry-interaction-control"]) {
+  :where([data-slot="text-entry-interaction-control"]),
+.qti-input-width-10:where([data-slot="inline-choice-interaction"])
+  :where([data-slot="inline-choice-interaction-control"]) {
   min-inline-size: 10ch;
 }
 
 .qti-input-width-15:where([data-slot="text-entry-interaction"])
-  :where([data-slot="text-entry-interaction-control"]) {
+  :where([data-slot="text-entry-interaction-control"]),
+.qti-input-width-15:where([data-slot="inline-choice-interaction"])
+  :where([data-slot="inline-choice-interaction-control"]) {
   min-inline-size: 15ch;
 }
 
 .qti-input-width-20:where([data-slot="text-entry-interaction"])
-  :where([data-slot="text-entry-interaction-control"]) {
+  :where([data-slot="text-entry-interaction-control"]),
+.qti-input-width-20:where([data-slot="inline-choice-interaction"])
+  :where([data-slot="inline-choice-interaction-control"]) {
   min-inline-size: 20ch;
 }
 
 .qti-input-width-25:where([data-slot="text-entry-interaction"])
-  :where([data-slot="text-entry-interaction-control"]) {
+  :where([data-slot="text-entry-interaction-control"]),
+.qti-input-width-25:where([data-slot="inline-choice-interaction"])
+  :where([data-slot="inline-choice-interaction-control"]) {
   min-inline-size: 25ch;
 }
 
 .qti-input-width-30:where([data-slot="text-entry-interaction"])
-  :where([data-slot="text-entry-interaction-control"]) {
+  :where([data-slot="text-entry-interaction-control"]),
+.qti-input-width-30:where([data-slot="inline-choice-interaction"])
+  :where([data-slot="inline-choice-interaction-control"]) {
   min-inline-size: 30ch;
 }
 
 .qti-input-width-35:where([data-slot="text-entry-interaction"])
-  :where([data-slot="text-entry-interaction-control"]) {
+  :where([data-slot="text-entry-interaction-control"]),
+.qti-input-width-35:where([data-slot="inline-choice-interaction"])
+  :where([data-slot="inline-choice-interaction-control"]) {
   min-inline-size: 35ch;
 }
 
 .qti-input-width-40:where([data-slot="text-entry-interaction"])
-  :where([data-slot="text-entry-interaction-control"]) {
+  :where([data-slot="text-entry-interaction-control"]),
+.qti-input-width-40:where([data-slot="inline-choice-interaction"])
+  :where([data-slot="inline-choice-interaction-control"]) {
   min-inline-size: 40ch;
 }
 
 .qti-input-width-45:where([data-slot="text-entry-interaction"])
-  :where([data-slot="text-entry-interaction-control"]) {
+  :where([data-slot="text-entry-interaction-control"]),
+.qti-input-width-45:where([data-slot="inline-choice-interaction"])
+  :where([data-slot="inline-choice-interaction-control"]) {
   min-inline-size: 45ch;
 }
 
 .qti-input-width-50:where([data-slot="text-entry-interaction"])
-  :where([data-slot="text-entry-interaction-control"]) {
+  :where([data-slot="text-entry-interaction-control"]),
+.qti-input-width-50:where([data-slot="inline-choice-interaction"])
+  :where([data-slot="inline-choice-interaction-control"]) {
   min-inline-size: 50ch;
 }
 
 .qti-input-width-72:where([data-slot="text-entry-interaction"])
-  :where([data-slot="text-entry-interaction-control"]) {
+  :where([data-slot="text-entry-interaction-control"]),
+.qti-input-width-72:where([data-slot="inline-choice-interaction"])
+  :where([data-slot="inline-choice-interaction-control"]) {
   min-inline-size: 72ch;
 }
 
@@ -437,16 +468,19 @@
 }
 
 /*
- * Vertical writing for the text interactions (vocab.txt:4961, :5171): the Root, and so its
- * Control, is set in vertical lines, right to left (vertical-rl) or left to right (vertical-lr).
+ * Vertical writing for the text interactions and Inline Choice (vocab.txt:4961, :5171, :5818): the
+ * Root, and so its Control, is set in vertical lines, right to left (vertical-rl) or left to right
+ * (vertical-lr).
  */
 .qti-writing-orientation-vertical-rl:where([data-slot="text-entry-interaction"]),
-.qti-writing-orientation-vertical-rl:where([data-slot="extended-text-interaction"]) {
+.qti-writing-orientation-vertical-rl:where([data-slot="extended-text-interaction"]),
+.qti-writing-orientation-vertical-rl:where([data-slot="inline-choice-interaction"]) {
   writing-mode: vertical-rl;
 }
 
 .qti-writing-orientation-vertical-lr:where([data-slot="text-entry-interaction"]),
-.qti-writing-orientation-vertical-lr:where([data-slot="extended-text-interaction"]) {
+.qti-writing-orientation-vertical-lr:where([data-slot="extended-text-interaction"]),
+.qti-writing-orientation-vertical-lr:where([data-slot="inline-choice-interaction"]) {
   writing-mode: vertical-lr;
 }
 
@@ -742,20 +776,37 @@
   opacity: 1;
 }
 
-/* A text Control holding a refused answer. */
+/* A text Control or the Inline Choice Control holding a refused answer. */
 :where(
   [data-slot="text-entry-interaction-control"][aria-invalid="true"],
-  [data-slot="extended-text-interaction-control"][aria-invalid="true"]
+  [data-slot="extended-text-interaction-control"][aria-invalid="true"],
+  [data-slot="inline-choice-interaction-control"][aria-invalid="true"]
 ) {
   border-color: var(--destructive, oklch(0.577 0.245 27.325));
 }
 
-/* A disabled text Control. */
+/* A disabled text Control or Inline Choice Control. */
 :where(
   [data-slot="text-entry-interaction-control"]:disabled,
-  [data-slot="extended-text-interaction-control"]:disabled
+  [data-slot="extended-text-interaction-control"]:disabled,
+  [data-slot="inline-choice-interaction-control"]:disabled
 ) {
   opacity: 0.5;
+}
+
+/*
+ * The Inline Choice Control in review or solution: at full strength, after the rule above. A
+ * select has no readonly, so it is disabled there only because the answer it shows cannot change,
+ * as a Choice row's Control is; a Root the author disabled, which carries data-disabled, stays
+ * dimmed in every mode.
+ */
+:where(
+  [data-slot="inline-choice-interaction"][data-mode="review"]:not([data-disabled])
+    [data-slot="inline-choice-interaction-control"],
+  [data-slot="inline-choice-interaction"][data-mode="solution"]:not([data-disabled])
+    [data-slot="inline-choice-interaction-control"]
+) {
+  opacity: 1;
 }
 
 /*
@@ -770,10 +821,11 @@
   color: var(--card-foreground, oklch(0.145 0 0));
 }
 
-/* Focus on a text Control: the same ring as a Choice row's. */
+/* Focus on a text Control or the Inline Choice Control: the same ring as a Choice row's. */
 :where(
   [data-slot="text-entry-interaction-control"]:focus-visible,
-  [data-slot="extended-text-interaction-control"]:focus-visible
+  [data-slot="extended-text-interaction-control"]:focus-visible,
+  [data-slot="inline-choice-interaction-control"]:focus-visible
 ) {
   outline-width: 3px;
   outline-offset: 0;
@@ -933,7 +985,8 @@
 
 /*
  * Forced colours drop drawn backgrounds, so the native Control shows in place of the Indicator,
- * on the Label's line.
+ * on the Label's line. The Inline Choice Control needs no rule here: it is a native select no rule
+ * hides, so the system draws it, its border and its focus ring in its own colours.
  */
 @media (forced-colors: active) {
   :where([data-slot="choice-interaction-control"]) {
