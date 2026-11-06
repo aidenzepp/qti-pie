@@ -490,3 +490,8 @@ against it. A reading that is not an information-model-over-XSD case says which 
     children included. This is not a case of documents in conflict: XML Schema decides what is valid, and only the
     text is beyond what a package here can check. (The renderer's phase-3 default, delivery spec section 5.1, applied
     in plate, narrowed to the text by XML Schema Part 1, section 3.3.4; 2026-11-05.)
+61. **An element in QTI's own namespace inside `qti-ordering`'s extension slot is valid.** The information model says
+    the slot's child tags "may be new tags and reused QTI ASI tags" (section 5.98.3, the `extensions` attribute of the
+    Ordering class), though the XSD admits only other namespaces there. Such an element is kept as the slot's extension
+    content, not read as QTI ordering. `qti-selection`'s slot is not covered: its information model text says the child
+    tags "must be new tags i.e. not reused QTI ASI tags" (section 5.129.4). (2026-11-06.)
