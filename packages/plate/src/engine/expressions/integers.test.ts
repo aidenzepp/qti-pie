@@ -222,3 +222,42 @@ describe("the integers family's evaluators", () => {
     }
   });
 });
+
+describe("the integers family's bound on a computed integer (operator ruling afb7e648)", () => {
+  it("[I-9a] qti-lcm keeps a computed integer of exactly 1,000,000 bits and gives the integer NULL for one of 1,000,001, a zero still giving 0", () => {
+    assert.deepStrictEqual(
+      evaluated(lcmOf(integer(2n ** 999_998n), integer(3n))),
+      integer(3n * 2n ** 999_998n),
+      "3 × 2^999998 has 1,000,000 bits",
+    );
+    assert.deepStrictEqual(
+      evaluated(lcmOf(integer(2n ** 999_999n), integer(-3n))),
+      unsetInteger,
+      "3 × 2^999999 has 1,000,001 bits",
+    );
+    assert.deepStrictEqual(
+      evaluated(lcmOf(integer(2n ** 999_999n), integer(3n), integer(0n))),
+      integer(0n),
+    );
+    assert.deepStrictEqual(
+      evaluated(lcmOf(integer(-(2n ** 1_000_000n)))),
+      unsetInteger,
+      "one operand's magnitude is computed, not written",
+    );
+  });
+
+  it("[I-9a] qti-gcd, qti-integer-divide and qti-integer-modulus stay exact past the bound: they cannot grow past their operands", () => {
+    assert.deepStrictEqual(
+      evaluated(gcdOf(integer(2n ** 1_000_000n), integer(2n ** 1_000_001n))),
+      integer(2n ** 1_000_000n),
+    );
+    assert.deepStrictEqual(
+      evaluated(divideOf(integer(2n ** 1_000_001n), integer(1n))),
+      integer(2n ** 1_000_001n),
+    );
+    assert.deepStrictEqual(
+      evaluated(modulusOf(integer(3n * 2n ** 1_000_000n), integer(2n ** 1_000_001n))),
+      integer(2n ** 1_000_000n),
+    );
+  });
+});

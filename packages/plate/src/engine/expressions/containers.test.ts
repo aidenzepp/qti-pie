@@ -1,9 +1,10 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Result } from "effect";
-import type { Variables } from "#plate/engine/evaluate.ts";
+import type { Evaluate, Variables } from "#plate/engine/evaluate.ts";
+import { containersEvaluators } from "#plate/engine/expressions/containers.ts";
 import type { Expression, ExpressionType, IntOrIdentifier } from "#plate/model/expression.ts";
 import { nullOf } from "#plate/model/values.ts";
-import type { Value } from "#plate/model/values.ts";
+import type { Single, Value } from "#plate/model/values.ts";
 import { bg007Item, integer } from "#plate/test/fixtures.ts";
 import { assertKindType, evaluateIn, scopeOf } from "#plate/test/processing.ts";
 
@@ -375,5 +376,98 @@ describe("the containers family's evaluators", () => {
 
     assert.deepStrictEqual(evaluated(pairOf("contains", bag(), bag("A"))), unknown);
     assert.deepStrictEqual(evaluated(pairOf("contains", list("A"), list())), unknown);
+  });
+});
+
+/**
+ * Construct a container of one identifier, `A`, held a number of times, built without spreading
+ * its values, as a container of a million values must be.
+ *
+ * @param cardinality Its cardinality.
+ * @param size How many values it holds.
+ * @returns The value.
+ */
+const sized = (cardinality: "multiple" | "ordered", size: number): Value => ({
+  baseType: "identifier",
+  cardinality,
+  values: Array.from({ length: size }, (): Single => ({ baseType: "identifier", value: "A" })),
+});
+
+/**
+ * Assert that a value is a NULL of a type, checking that it holds no value before comparing it, so
+ * a container of a million values fails with its size, not a diff of its values.
+ *
+ * @param value The value.
+ * @param expected The NULL it must be.
+ */
+const assertUnset = (value: Value, expected: Value): void => {
+  assert.strictEqual(value.values.length, 0, "the value holds values");
+  assert.deepStrictEqual(value, expected);
+};
+
+describe("the containers family's bound on a computed container (operator ruling afb7e648)", () => {
+  it("[I-9a] qti-multiple and qti-ordered keep a container of exactly 1,000,000 values and give the NULL of their base type and cardinality for one of 1,000,001", () => {
+    const bagged = evaluated(multipleOf(sized("multiple", 999_999), one("B")));
+    const listed = evaluated(orderedOf(one("B"), sized("ordered", 999_999)));
+
+    assert.strictEqual(bagged.values.length, 1_000_000);
+    assert.deepStrictEqual(bagged.values.at(-1), { baseType: "identifier", value: "B" });
+    assert.strictEqual(listed.values.length, 1_000_000);
+    assert.deepStrictEqual(listed.values[0], { baseType: "identifier", value: "B" });
+    assertUnset(evaluated(multipleOf(sized("multiple", 1_000_000), one("B"))), bag());
+    assertUnset(evaluated(orderedOf(one("B"), sized("ordered", 1_000_000))), list());
+    assertUnset(
+      evaluated(multipleOf(sized("multiple", 600_000), sized("multiple", 400_001))),
+      bag(),
+    );
+  });
+
+  it("[I-9a] qti-repeat keeps exactly 1,000,000 values and gives the ordered NULL past them", () => {
+    const kept = evaluated(repeatOf(literal(1_000_000n), one("A")));
+
+    assert.strictEqual(kept.values.length, 1_000_000);
+    assert.isTrue(
+      kept.values.every((single) => single.baseType === "identifier" && single.value === "A"),
+      "every value is A",
+    );
+    assertUnset(evaluated(repeatOf(literal(1_000_001n), one("A"))), list());
+    assertUnset(evaluated(repeatOf(literal(500_001n), one("A"), list("B"))), list());
+  });
+
+  it("[I-9a] qti-repeat checks its running size inside the pass loop, so a pass that grows past 1,000,000 values gives the ordered NULL", () => {
+    const { repeat } = containersEvaluators;
+    assert.notStrictEqual(repeat, "unlanded", "qti-repeat is landed");
+    if (repeat === "unlanded") {
+      return;
+    }
+
+    let passes = 0;
+    const growing: Evaluate = () => {
+      passes += 1;
+
+      return Result.succeed(passes === 1 ? one("A") : sized("ordered", 600_000));
+    };
+    const scope = scopeOf(bg007Item, none);
+    const grown = repeat(
+      { kind: "repeat", numberRepeats: literal(3n), operands: [operandOf(one("A"))] },
+      scope,
+      growing,
+    );
+    assert.isTrue(Result.isSuccess(grown), "qti-repeat failed");
+
+    const value = Result.getOrThrow(grown);
+    assertUnset(value, list());
+    assertKindType(value, "repeat", [typeOf(one("A"))]);
+    assert.strictEqual(passes, 3, "the third pass, which grows past the bound, ran");
+
+    passes = 0;
+    const kept = Result.getOrThrow(
+      repeat(
+        { kind: "repeat", numberRepeats: literal(2n), operands: [operandOf(one("A"))] },
+        scope,
+        growing,
+      ),
+    );
+    assert.strictEqual(kept.values.length, 600_001, "two passes stay within the bound");
   });
 });

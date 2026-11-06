@@ -8,6 +8,12 @@
  * container emptied or built of nothing is NULL, since NULL is a value with no values at any
  * cardinality.
  *
+ * A container `qti-multiple`, `qti-ordered` or `qti-repeat` builds is held to `containerSizeBound`
+ * (`#plate/engine/numbers.ts`, the principle of the operator's ruling `afb7e648`): one of more than
+ * 1,000,000 values is the NULL of its base type and cardinality, found before it is built, so a
+ * `number-repeats` of 2147483647 cannot hang scoring. The other kinds build no container larger
+ * than an operand, and no container as written or stored is held to the bound.
+ *
  * It value-imports only engine leaves, `#plate/model/values.ts` and `effect`'s `Option` and
  * `Result`, and reads the evaluator's types from `#plate/engine/evaluate.ts` as types, so the
  * dispatcher's table may import it without a cycle.
@@ -17,7 +23,7 @@
 import { Option, Result } from "effect";
 import type { Evaluate, Evaluator, FamilyTable, Scope } from "#plate/engine/evaluate.ts";
 import type { EngineFailure } from "#plate/engine/failures.ts";
-import { booleanOf } from "#plate/engine/numbers.ts";
+import { booleanOf, withinContainerBound } from "#plate/engine/numbers.ts";
 import { referenceValue } from "#plate/engine/refs.ts";
 import type { Expression, IntOrIdentifier } from "#plate/model/expression.ts";
 import { isNull, match, nullOf } from "#plate/model/values.ts";
@@ -66,19 +72,56 @@ const baseOf = (values: readonly Value[]): ModelledBaseType =>
   (values.find((value) => !isNull(value)) ?? values[0])?.baseType ?? "string";
 
 /**
+ * Give how many values some values hold together: one for a single value, each value of a
+ * container, and none for a NULL.
+ *
+ * @param values The values.
+ * @returns Their count.
+ */
+const sizeOf = (values: readonly Value[]): number => {
+  let size = 0;
+  for (const value of values) {
+    size += value.values.length;
+  }
+
+  return size;
+};
+
+/**
+ * Add the values' values to a container's, in order, one at a time, never as `push(...values)`,
+ * whose spread throws a `RangeError` for a large container even within the bound.
+ *
+ * @param held The container's values so far, which it extends.
+ * @param values The values to add, in order.
+ */
+const appendTo = (held: Single[], values: readonly Value[]): void => {
+  for (const value of values) {
+    for (const single of value.values) {
+      held.push(single);
+    }
+  }
+};
+
+/**
  * Give the container of a cardinality that holds the values' values in order: a single value adds
  * itself, a container adds each of its values, and a NULL adds nothing, so the container is NULL
- * when every value is or there is none.
+ * when every value is or there is none. One that would hold more than 1,000,000 values is NULL,
+ * found from the values' sizes before it is built.
  *
  * @param cardinality The container's cardinality.
  * @param values The values, in order.
  * @returns The container, of the values' base type ({@link baseOf}).
  */
-const containerOf = (cardinality: "multiple" | "ordered", values: readonly Value[]): Value => ({
-  baseType: baseOf(values),
-  cardinality,
-  values: values.flatMap((value) => value.values),
-});
+const containerOf = (cardinality: "multiple" | "ordered", values: readonly Value[]): Value => {
+  if (!withinContainerBound(BigInt(sizeOf(values)))) {
+    return nullOf(baseOf(values), cardinality);
+  }
+
+  const held: Single[] = [];
+  appendTo(held, values);
+
+  return { baseType: baseOf(values), cardinality, values: held };
+};
 
 /**
  * Construct the single value that holds one single.
@@ -132,7 +175,8 @@ const integerOf = (
 /**
  * Give the value of a `qti-multiple`: a multiple container of its operands' values, a multiple
  * operand's added one by one and a NULL one ignored; NULL when there is no operand or every one is
- * NULL. Applied to A, B and {C,D} it gives {A,B,C,D}.
+ * NULL, and when it would hold more than 1,000,000 values. Applied to A, B and {C,D} it gives
+ * {A,B,C,D}.
  *
  * @param expression The `qti-multiple`.
  * @param scope The item and the variables of the attempt.
@@ -148,7 +192,7 @@ const evaluateMultiple: Evaluator<"multiple"> = (expression, scope, evaluate) =>
 /**
  * Give the value of a `qti-ordered`: an ordered container of its operands' values, an ordered
  * operand's added in order and a NULL one ignored; NULL when there is no operand or every one is
- * NULL, so it never gives an empty container.
+ * NULL, so it never gives an empty container, and when it would hold more than 1,000,000 values.
  *
  * @param expression The `qti-ordered`.
  * @param scope The item and the variables of the attempt.
@@ -164,11 +208,22 @@ const evaluateOrdered: Evaluator<"ordered"> = (expression, scope, evaluate) =>
 /**
  * Give the value of a `qti-repeat`: an ordered container filled by evaluating each operand in turn
  * and adding its values, a NULL one ignored, `number-repeats` times in all; NULL when every operand
- * is NULL, and when `number-repeats` is below 1 or names a variable that holds NULL.
+ * is NULL, when `number-repeats` is below 1 or names a variable that holds NULL, and when the
+ * container would hold more than 1,000,000 values.
  *
  * `number-repeats` is resolved first, then the operands are evaluated once per pass, as the
  * information model fills the container, left to right; the first failure is the result. The first
  * pass runs even when `number-repeats` is below 1, so the NULL keeps the operands' base type.
+ *
+ * The bound is checked before the work and as it goes. After the first pass, its size times
+ * `number-repeats` past the bound gives NULL before a second pass runs. A first pass that gives no
+ * value gives NULL at once, however many passes `number-repeats` asks for: an operand's value
+ * depends only on the scope, which a pass does not change, so every pass would give none. That
+ * holds while no random kind runs (`qti-random`, `qti-random-integer` and `qti-random-float` are
+ * unlanded, so the reader marks any processing that holds one), and it is what keeps a nested
+ * `qti-repeat` of nothing from running a million passes a million times. Each later pass's size is
+ * checked against the running size inside the loop, so a pass whose size is known only once it has
+ * run is bounded too.
  *
  * @param expression The `qti-repeat`.
  * @param scope The item and the variables of the attempt.
@@ -181,16 +236,24 @@ const evaluateRepeat: Evaluator<"repeat"> = (expression, scope, evaluate) =>
     const repeats = yield* integerOf(scope, expression.numberRepeats);
     const first = yield* valuesOf(expression.operands, scope, evaluate);
     const count = Option.getOrElse(repeats, () => 0n);
-    if (count < 1n) {
-      return nullOf(baseOf(first), "ordered");
+    const unset = nullOf(baseOf(first), "ordered");
+    const passSize = sizeOf(first);
+    if (count < 1n || passSize === 0 || !withinContainerBound(BigInt(passSize) * count)) {
+      return unset;
     }
 
-    const passes = [...first];
+    const held: Single[] = [];
+    appendTo(held, first);
     for (let pass = 1n; pass < count; pass += 1n) {
-      passes.push(...(yield* valuesOf(expression.operands, scope, evaluate)));
+      const values = yield* valuesOf(expression.operands, scope, evaluate);
+      if (!withinContainerBound(BigInt(held.length + sizeOf(values)))) {
+        return unset;
+      }
+
+      appendTo(held, values);
     }
 
-    return containerOf("ordered", passes);
+    return { baseType: baseOf(first), cardinality: "ordered", values: held };
   });
 
 /**
