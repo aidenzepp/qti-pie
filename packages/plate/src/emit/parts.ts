@@ -59,13 +59,17 @@ export type Position = "flow" | "phrasing";
  *
  * - `flow-container`, `phrasing-container`: any element of that container class.
  * - `prompt`: a flow or phrasing container, or `p`, so the prompt is valid in any parent.
- * - `li`, `textarea`, `fieldset`, `legend`, `button`, `select`, `option`: that element only.
+ * - `li`, `textarea`, `fieldset`, `legend`, `button`: that element only.
  * - `heading`: `h1` to `h6`. `list`: `ul`, `ol` or `menu`.
  * - `choice-list`: `ul`, `ol` or a flow container; a swap to a flow container adds the list roles.
  * - `choice-item`: `li`, or a flow container under a Choices that is not a list.
  * - `native-input`: an `input`, whose `type` I1 writes back, so the native control stays the one the
  *   interaction computed.
- * - `text-input`: an `input` of type `text`, written or by default.
+ * - `text-input`: an `input` of type `text`, written in any case or by default.
+ * - `select`: a `select` with no `multiple` and no `size` other than 1, so it stays a drop-down that
+ *   posts one entry (spec §4.9 I2).
+ * - `option`: an `option` with no `label`, because a `label` replaces the text the option shows, and
+ *   a host supplies none of an item's data (rule `efed9867`).
  * - `inline-label`: a `label`, or a phrasing container, so a Label stays phrasing content inside the
  *   author's sentence. `label` is no phrasing container, and a `div` or `p` there would close the
  *   author's `p` in the HTML parser.
@@ -373,6 +377,40 @@ const isTextType = (type: string | true | undefined): boolean =>
   type !== true && (type ?? "text").toLowerCase() === "text";
 
 /**
+ * Give an element's attribute by name in any ASCII case, as HTML reads attribute names, so a
+ * replacement cannot write `TYPE` or `MULTIPLE` past a check that reads `type` or `multiple`.
+ *
+ * @param attrs The element's attributes.
+ * @param name The attribute's name, in lower case.
+ * @returns The value of the first attribute whose name matches, or undefined when none does.
+ */
+export const attributeOf = (attrs: Attributes, name: string): string | true | undefined => {
+  const key = Object.keys(attrs).find((candidate) => candidate.toLowerCase() === name);
+
+  return key === undefined ? undefined : attrs[key];
+};
+
+/**
+ * Tell whether a `select`'s attributes keep it a drop-down that posts one entry: no `multiple`,
+ * which lets it post one entry per chosen option, and no `size` other than 1, which draws a list
+ * box.
+ *
+ * A written `size` is 1 only when it is a valid non-negative integer, ASCII digits, of value 1.
+ *
+ * @param attrs The `select`'s attributes.
+ * @returns Whether `multiple` is absent and `size` is absent or 1.
+ * @see https://html.spec.whatwg.org/multipage/form-elements.html#attr-select-size
+ */
+const isDropDown = (attrs: Attributes): boolean => {
+  const size = attributeOf(attrs, "size");
+
+  return (
+    attributeOf(attrs, "multiple") === undefined &&
+    (size === undefined || (size !== true && /^0*1$/u.test(size)))
+  );
+};
+
+/**
  * I3's test of each tag class, on the element a replacement returned.
  */
 const admits = {
@@ -388,11 +426,11 @@ const admits = {
   li: ({ tag }) => tag === "li",
   list: ({ tag }) => lists.has(tag),
   "native-input": ({ tag }) => tag === "input",
-  option: ({ tag }) => tag === "option",
+  option: ({ attrs, tag }) => tag === "option" && attributeOf(attrs, "label") === undefined,
   "phrasing-container": ({ tag }) => isPhrasingContainer(tag),
   prompt: ({ tag }) => tag === "p" || isFlowContainer(tag),
-  select: ({ tag }) => tag === "select",
-  "text-input": ({ attrs, tag }) => tag === "input" && isTextType(attrs["type"]),
+  select: ({ attrs, tag }) => tag === "select" && isDropDown(attrs),
+  "text-input": ({ attrs, tag }) => tag === "input" && isTextType(attributeOf(attrs, "type")),
   textarea: ({ tag }) => tag === "textarea",
 } satisfies { readonly [C in TagClass]: (element: Element) => boolean };
 
@@ -916,7 +954,8 @@ export const rowFor = <I extends InteractionKey>(
 
 /**
  * Tell whether a replacement's root element may stand for a part (I3), by its tag and, for the
- * text input class, its `type`.
+ * text input class its `type`, for the select class its `multiple` and `size`, and for the option
+ * class its `label`.
  *
  * @param row The part's row, as {@link rowFor} gives it for the placement.
  * @param element The root element the replacement returned.

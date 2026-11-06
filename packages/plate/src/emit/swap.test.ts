@@ -61,6 +61,16 @@ const divChoice = (value: string): Element =>
   h("div", { "data-choice": value, "data-slot": slots.choice }, [text(value)]);
 
 /**
+ * Construct a Choice root that a Choice replacement made a `div` with a role of its own, named in
+ * upper case.
+ *
+ * @param value The choice's identifier, kept in a `data-` attribute so the two roots differ.
+ * @returns A `div` Choice root with `ROLE="option"`, holding a text node.
+ */
+const roleChoice = (value: string): Element =>
+  h("div", { ROLE: "option", "data-choice": value, "data-slot": slots.choice }, [text(value)]);
+
+/**
  * Construct a replacement that returns a fixed element regardless of what it is handed, for the
  * cases that build the returned subtree by hand.
  *
@@ -88,6 +98,18 @@ const as = (tag: string) => (props: Attributes, children: readonly Node[]) =>
  */
 const wrapFirst = (props: Attributes, children: readonly Node[]) =>
   h("li", props, [h("span", { class: "wrap" }, children.slice(0, 1)), ...children.slice(1)]);
+
+/**
+ * Give the attributes whose names match a name in ASCII lower case, as HTML matches them.
+ *
+ * @param attrs The attributes of an element.
+ * @param name The name, in lower case.
+ * @returns Each matching attribute as a name and value pair, in the element's order.
+ */
+const spelledAs = (attrs: Attributes, name: string) =>
+  Object.entries(attrs).filter(
+    ([candidate]) => candidate.replaceAll(/[A-Z]/gu, (letter) => letter.toLowerCase()) === name,
+  );
 
 describe("applyPart, a plain function", () => {
   it("returns a Result, failing PartSwapRefused when a replacement's root breaks I3", () => {
@@ -174,6 +196,70 @@ describe("applyPart, I1", () => {
     }),
   );
 
+  /**
+   * The Text Entry Control's row.
+   */
+  const textRow = rowFor("text-entry-interaction", "control");
+
+  /**
+   * The Text Entry Control's attributes, as its connect function computes them.
+   */
+  const textProps: Attributes = {
+    "aria-label": "Answer",
+    autocomplete: "off",
+    "data-slot": textRow.slot,
+    id: "i1-RESPONSE-control-0",
+    name: "RESPONSE",
+    type: "text",
+  };
+
+  it.effect(
+    "writes the props over a replacement's NAME, ID and ARIA-LABEL, leaving one attribute of each name",
+    () =>
+      Effect.gen(function* propsOverOtherCase() {
+        for (const [written, name] of [
+          ["NAME", "name"],
+          ["ID", "id"],
+          ["ARIA-LABEL", "aria-label"],
+        ] as const) {
+          const result = yield* Effect.fromResult(
+            applyPart(textRow, textProps, [], returning(h("input", { [written]: "HOST" }))),
+          );
+          assert.deepStrictEqual(spelledAs(result.attrs, name), [[name, textProps[name]]], written);
+        }
+      }),
+  );
+
+  it.effect("keeps a replacement's own attributes in any case when no prop shares their name", () =>
+    Effect.gen(function* otherCaseKept() {
+      const result = yield* Effect.fromResult(
+        applyPart(
+          textRow,
+          textProps,
+          [],
+          returning(h("input", { "DATA-HOST": "1", Title: "Their title" })),
+        ),
+      );
+      assert.strictEqual(result.attrs["DATA-HOST"], "1");
+      assert.strictEqual(result.attrs["Title"], "Their title");
+      assert.strictEqual(result.attrs["name"], "RESPONSE");
+    }),
+  );
+
+  it.effect("joins a replacement's CLASS with the props' class into one class attribute", () =>
+    Effect.gen(function* classOtherCase() {
+      const result = yield* Effect.fromResult(
+        applyPart(
+          rowFor("choice-interaction", "control"),
+          controlProps,
+          [],
+          returning(h("input", { CLASS: "b c", type: "radio" })),
+        ),
+      );
+      assert.deepStrictEqual(spelledAs(result.attrs, "class"), [["class", "a b c"]]);
+    }),
+  );
+
   it.effect("writes no class when neither side has one", () =>
     Effect.gen(function* noClass() {
       const result = yield* Effect.fromResult(
@@ -228,6 +314,15 @@ describe("applyPart, a row's defaults", () => {
           value: "v",
         });
       }),
+  );
+
+  it.effect("keeps a replacement's TYPE over the defaulted type, leaving one type attribute", () =>
+    Effect.gen(function* rootOverDefaultOtherCase() {
+      const result = yield* Effect.fromResult(
+        applyPart(buttonRow, buttonProps, [], returning(h("button", { TYPE: "submit" }))),
+      );
+      assert.deepStrictEqual(spelledAs(result.attrs, "type"), [["TYPE", "submit"]]);
+    }),
   );
 
   it.effect("writes a default a replacement leaves out", () =>
@@ -389,6 +484,33 @@ describe("applyPart, I3", () => {
       assert.strictEqual(error.part, "control");
     }),
   );
+
+  it.effect(
+    '[Q-12] refuses a Text Entry Control replacement whose TYPE="checkbox" names its type in upper case',
+    () =>
+      Effect.gen(function* upperCaseType() {
+        const row = rowFor("text-entry-interaction", "control");
+        const error = yield* Effect.flip(
+          Effect.fromResult(
+            applyPart(
+              row,
+              {
+                "data-slot": row.slot,
+                id: "i1-RESPONSE-control-0",
+                name: "RESPONSE",
+                type: "text",
+              },
+              [],
+              () => h("input", { TYPE: "checkbox" }),
+            ),
+          ),
+        );
+        assert.strictEqual(error._tag, "PartSwapRefused");
+        assert.strictEqual(error.cause, "root-not-allowed");
+        assert.strictEqual(error.interaction, "text-entry-interaction");
+        assert.strictEqual(error.part, "control");
+      }),
+  );
 });
 
 describe("applyPart, the list joint rule", () => {
@@ -432,6 +554,27 @@ describe("applyPart, the list joint rule", () => {
         );
       }
     }),
+  );
+
+  it.effect(
+    "writes the list roles over a ROLE the replacement or a Choice root names, leaving one",
+    () =>
+      Effect.gen(function* listRolesOtherCase() {
+        const result = yield* Effect.fromResult(
+          applyPart(
+            rowFor("choice-interaction", "choices"),
+            choicesProps,
+            [roleChoice("A"), roleChoice("B")],
+            (props, children) => h("div", { ...props, ROLE: "group" }, children),
+          ),
+        );
+        assert.deepStrictEqual(spelledAs(result.attrs, "role"), [["role", "list"]]);
+        for (const child of result.children) {
+          assert.deepStrictEqual(child.kind === "element" ? spelledAs(child.attrs, "role") : [], [
+            ["role", "listitem"],
+          ]);
+        }
+      }),
   );
 
   it.effect("finds the Choice roots below a wrapper when it adds listitem", () =>
@@ -673,6 +816,86 @@ describe("applyPart, the select joint rule", () => {
       );
       assert.strictEqual(error.cause, "select-content");
       assert.strictEqual(error.part, "option");
+    }),
+  );
+
+  it.effect(
+    "[Q-12] refuses a Control replacement that makes the select multiple, in any case",
+    () =>
+      Effect.gen(function* selectMultiple() {
+        const variants: readonly Attributes[] = [{ multiple: true }, { MULTIPLE: "multiple" }];
+        for (const multiple of variants) {
+          const error = yield* refusedAt(selectRow, selectProps, options, (props, children) =>
+            h("select", { ...props, ...multiple }, children),
+          );
+          assert.strictEqual(error._tag, "PartSwapRefused");
+          assert.strictEqual(error.cause, "root-not-allowed");
+          assert.strictEqual(error.interaction, "inline-choice-interaction");
+          assert.strictEqual(error.part, "control");
+        }
+      }),
+  );
+
+  it.effect("[Q-12] refuses a Control replacement that sizes the select as a list box", () =>
+    Effect.gen(function* selectSized() {
+      const error = yield* refusedAt(selectRow, selectProps, options, (props, children) =>
+        h("select", { ...props, size: "4" }, children),
+      );
+      assert.strictEqual(error.cause, "root-not-allowed");
+      assert.strictEqual(error.part, "control");
+    }),
+  );
+
+  it.effect("[Q-12] accepts a Control replacement whose select is sized 1, a drop-down", () =>
+    Effect.gen(function* selectSizedOne() {
+      const result = yield* Effect.fromResult(
+        applyPart(selectRow, selectProps, options, (_props, children) =>
+          h("select", { size: "1" }, children),
+        ),
+      );
+      assert.strictEqual(result.tag, "select");
+      assert.strictEqual(result.attrs["size"], "1");
+      assert.strictEqual(result.attrs["name"], "RESPONSE");
+    }),
+  );
+
+  it.effect("[Q-12] refuses an Option or Placeholder replacement that carries a label", () =>
+    Effect.gen(function* optionLabelled() {
+      for (const part of ["option", "placeholder"] as const) {
+        const row = rowFor("inline-choice-interaction", part);
+        const error = yield* refusedAt(row, optionProps, optionText, (props, children) =>
+          h("option", { ...props, label: "host text" }, children),
+        );
+        assert.strictEqual(error._tag, "PartSwapRefused");
+        assert.strictEqual(error.cause, "root-not-allowed");
+        assert.strictEqual(error.interaction, "inline-choice-interaction");
+        assert.strictEqual(error.part, part);
+      }
+    }),
+  );
+
+  it.effect("[Q-12] accepts an Option replacement that adds a class, and keeps its text", () =>
+    Effect.gen(function* optionClassed() {
+      const result = yield* Effect.fromResult(
+        applyPart(optionRow, optionProps, optionText, (props, children) =>
+          h("option", { ...props, class: "host" }, children),
+        ),
+      );
+      assert.strictEqual(result.tag, "option");
+      assert.strictEqual(result.attrs["class"], "host");
+      assert.strictEqual(result.attrs["value"], "A");
+      assert.deepStrictEqual(result.children, optionText);
+    }),
+  );
+
+  it.effect("[Q-12] writes the props' name over a Control replacement's NAME, leaving one", () =>
+    Effect.gen(function* selectNameOtherCase() {
+      const result = yield* Effect.fromResult(
+        applyPart(selectRow, selectProps, options, (_props, children) =>
+          h("select", { NAME: "HOST" }, children),
+        ),
+      );
+      assert.deepStrictEqual(spelledAs(result.attrs, "name"), [["name", "RESPONSE"]]);
     }),
   );
 

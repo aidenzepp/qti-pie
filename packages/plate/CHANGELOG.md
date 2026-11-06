@@ -19,6 +19,9 @@ and both of its entry points are unstable until M3.
 - `PartSwapRefused` has a new cause, `select-content`. It refuses a replacement for `control`,
   `placeholder` or `option` whose root does not hold exactly the nodes the part function receives,
   directly under it and in the order given.
+- A replacement for `control` may not return a `select` that is `multiple` or has a `size` other
+  than 1, and one for `placeholder` or `option` may not return an `option` with a `label`.
+  `PartSwapRefused` refuses either with the cause `root-not-allowed`.
 - `checkResponses` and `score` judge an Inline Choice's response. For an identifier that names none
   of its choices, `checkResponses` gives a message and `score` returns `ResponsesRefused`. Before,
   both took any identifier.
@@ -87,6 +90,12 @@ and both of its entry points are unstable until M3.
 - A `StoredRecord` carries `version: 1`. plate refuses a record that M1's `score` wrote, since it
   names no version.
 - A Text Entry's and an Extended Text's controls carry `autocomplete="off"` in every mode.
+- `PartSwapRefused` refuses with `root-not-allowed` a replacement for a Text Entry's `control`
+  that writes its type in another case, such as `TYPE="checkbox"`, as it already refused
+  `type="checkbox"`.
+- A replacement's attribute whose name differs only in case from one plate computes, such as
+  `NAME` beside `name`, is dropped, so the root holds one attribute of that name, plate's. Before,
+  both were written, and the browser read the replacement's.
 - `decode` refuses posted text that holds a character XML 1.0 cannot carry, such as U+0000 or
   U+FFFE, with `Malformed` and the reason `character`. A stored record or session with a string or
   URI value that holds such a character is refused when plate reads it back.
