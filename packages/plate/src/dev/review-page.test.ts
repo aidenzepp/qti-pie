@@ -485,7 +485,7 @@ describe("routeReview", () => {
         assert.deepStrictEqual(identifiers, [closed.id]);
         assert.isTrue(verdict.valid, verdict.messages.join("\n"));
       }),
-    oracleTimeoutMs,
+    { tags: ["qti-xsd"], timeout: oracleTimeoutMs },
   );
 });
 

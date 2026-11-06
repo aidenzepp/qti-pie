@@ -439,7 +439,7 @@ describe("dev/packages.ts", () => {
           }
           assert.isTrue(Option.isNone(yield* cache.packageOf("items")));
         }),
-      corpusTimeoutMs,
+      { tags: ["corpus"], timeout: corpusTimeoutMs },
     );
 
     it.effect(
@@ -490,29 +490,32 @@ describe("dev/packages.ts", () => {
             );
           }
         }),
-      corpusTimeoutMs,
+      { tags: ["corpus"], timeout: corpusTimeoutMs },
     );
 
-    it.effect("a refused package's page lists every refusal by its rule and starts no test", () =>
-      Effect.gen(function* refusedPage() {
-        const entry = yield* entryOf(ids.lti);
-        const answer = yield* request(packageHref(ids.lti));
-        const rules = findAll(answer.html, (element) => element.attrs["data-rule"] !== undefined);
+    it.effect(
+      "a refused package's page lists every refusal by its rule and starts no test",
+      () =>
+        Effect.gen(function* refusedPage() {
+          const entry = yield* entryOf(ids.lti);
+          const answer = yield* request(packageHref(ids.lti));
+          const rules = findAll(answer.html, (element) => element.attrs["data-rule"] !== undefined);
 
-        assert.strictEqual(answer.response.status, 200);
-        assert.strictEqual(entry.verdict.verdict, "refused");
-        assert.deepStrictEqual(
-          rules.map((element) => element.attrs["data-rule"]),
-          entry.verdict.verdict === "refused"
-            ? entry.verdict.refusals.map((refusal) => refusal.rule)
-            : [],
-        );
-        assert.lengthOf(
-          findAll(answer.html, (element) => element.attrs["name"] === testField),
-          0,
-        );
-        assert.include(answer.html, "No test starts: the package is refused.");
-      }),
+          assert.strictEqual(answer.response.status, 200);
+          assert.strictEqual(entry.verdict.verdict, "refused");
+          assert.deepStrictEqual(
+            rules.map((element) => element.attrs["data-rule"]),
+            entry.verdict.verdict === "refused"
+              ? entry.verdict.refusals.map((refusal) => refusal.rule)
+              : [],
+          );
+          assert.lengthOf(
+            findAll(answer.html, (element) => element.attrs["name"] === testField),
+            0,
+          );
+          assert.include(answer.html, "No test starts: the package is refused.");
+        }),
+      { tags: ["corpus"] },
     );
 
     it.effect(
@@ -572,7 +575,7 @@ describe("dev/packages.ts", () => {
             assert.strictEqual((yield* request(target)).response.status, 404, target);
           }
         }),
-      corpusTimeoutMs,
+      { tags: ["corpus"], timeout: corpusTimeoutMs },
     );
 
     it.effect(
@@ -650,7 +653,7 @@ describe("dev/packages.ts", () => {
             assertFramed(answer);
           }
         }),
-      corpusTimeoutMs,
+      { tags: ["corpus"], timeout: corpusTimeoutMs },
     );
 
     it.effect(
@@ -680,6 +683,7 @@ describe("dev/packages.ts", () => {
             assert.strictEqual((yield* request(target)).response.status, 404, target);
           }
         }),
+      { tags: ["corpus"] },
     );
 
     it.effect(
@@ -706,6 +710,7 @@ describe("dev/packages.ts", () => {
             listed.map(() => 1),
           );
         }),
+      { tags: ["corpus"] },
     );
 
     it.effect(
@@ -729,6 +734,7 @@ describe("dev/packages.ts", () => {
             ],
           );
         }),
+      { tags: ["corpus"] },
     );
   });
 });
