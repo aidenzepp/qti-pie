@@ -567,7 +567,7 @@ const saving = (responses: Responses): Partial<SessionItem> => ({
 
 describe("results", () => {
   it.effect(
-    "[T-14] writes BG007's item result, scored, valid against the Results XSD, with no correctResponse or choiceSequence",
+    "writes BG007's item result, scored, valid against the Results XSD, with no correctResponse or choiceSequence",
     () =>
       Effect.gen(function* bg007Result() {
         const accepted = yield* acceptItem(bg007, yield* readCorpusFile(bg007));
@@ -611,7 +611,7 @@ describe("results", () => {
       }),
   );
 
-  it.effect("[T-14] writes no choiceSequence in an item result, even for a shuffled Choice", () =>
+  it.effect("writes no choiceSequence in an item result, even for a shuffled Choice", () =>
     Effect.gen(function* itemShuffled() {
       const accepted = yield* fixtureItem("p1-multiple-choice.xml");
       const record = yield* Effect.fromResult(score(accepted, { RESPONSE: identifiers("A", "C") }));
@@ -629,7 +629,7 @@ describe("results", () => {
   );
 
   it.effect(
-    "[T-14] writes a closed session over three items, one never presented and one a shuffled Choice, valid against the Results XSD",
+    "writes a closed session over three items, one never presented and one a shuffled Choice, valid against the Results XSD",
     () =>
       Effect.gen(function* testResult() {
         const single = yield* fixtureItem("p1-single-choice.xml");
@@ -720,7 +720,7 @@ describe("results", () => {
       }),
   );
 
-  it.effect("[T-14] writes no test outcome for a test with outcome processing", () =>
+  it.effect("writes no test outcome for a test with outcome processing", () =>
     Effect.gen(function* processedTest() {
       const single = yield* fixtureItem("p1-single-choice.xml");
       const test = yield* acceptTest("processed", [
@@ -745,7 +745,7 @@ describe("results", () => {
   );
 
   it.effect(
-    "[T-14] mirrors an item outcome's six reporting attributes on its outcomeVariable, and writes none an outcome does not declare",
+    "mirrors an item outcome's six reporting attributes on its outcomeVariable, and writes none an outcome does not declare",
     () =>
       Effect.gen(function* itemReporting() {
         const accepted = yield* acceptItem(
@@ -782,7 +782,7 @@ describe("results", () => {
   );
 
   it.effect(
-    "[T-14] mirrors a test outcome's six reporting attributes on the test result's outcomeVariable",
+    "mirrors a test outcome's six reporting attributes on the test result's outcomeVariable",
     () =>
       Effect.gen(function* testReporting() {
         const single = yield* fixtureItem("p1-single-choice.xml");
@@ -813,142 +813,140 @@ describe("results", () => {
       }),
   );
 
-  it.effect(
-    "[T-14] counts the attempts started, and gives each sessionStatus and completionStatus",
-    () =>
-      Effect.gen(function* attempts() {
-        const accepted = yield* fixtureItem("p2-choice.xml");
-        const test = yield* acceptTest("counting", [
-          part("P1", individual, [
-            ref("one", "p2-choice.xml"),
-            ref("two", "p2-choice.xml", "2"),
-            ref("unlimited", "p2-choice.xml", "0"),
-          ]),
-          part("P2", simultaneous, [ref("together", "p2-choice.xml")]),
-        ]);
-        const items = new Map([
-          ["one", accepted],
-          ["two", accepted],
-          ["unlimited", accepted],
-          ["together", accepted],
-        ]);
-        const current: readonly SessionPart[] = [
-          { identifier: "P1", status: "current" },
-          { identifier: "P2", status: "pending" },
-        ];
-        const cases: readonly {
-          readonly label: string;
-          readonly ref: string;
-          readonly changes: Partial<SessionItem>;
-          readonly processed: number;
-          readonly parts?: readonly SessionPart[];
-          readonly expected: readonly [string, string, string];
-        }[] = [
-          {
-            changes: {},
-            expected: ["0", "initial", "not_attempted"],
-            label: "never presented",
-            processed: 0,
-            ref: "one",
-          },
-          {
-            changes: { presented: true },
-            expected: ["1", "pendingSubmission", "unknown"],
-            label: "presented and unsubmitted",
-            parts: current,
-            processed: 0,
-            ref: "one",
-          },
-          {
-            changes: { presented: true, saved: Option.some({ RESPONSE: identifiers("B") }) },
-            expected: ["1", "pendingSubmission", "unknown"],
-            label: "saved, unsubmitted, at the part's end",
-            processed: 0,
-            ref: "one",
-          },
-          {
-            changes: { presented: true },
-            expected: ["1", "final", "unknown"],
-            label: "1 of 1 processed",
-            processed: 1,
-            ref: "one",
-          },
-          {
-            changes: { presented: true },
-            expected: ["2", "pendingSubmission", "unknown"],
-            label: "1 of 2 processed, open",
-            parts: current,
-            processed: 1,
-            ref: "two",
-          },
-          {
-            changes: { presented: true },
-            expected: ["2", "pendingSubmission", "unknown"],
-            label: "1 of 2 processed, at the part's end",
-            processed: 1,
-            ref: "two",
-          },
-          {
-            changes: { presented: true },
-            expected: ["2", "final", "unknown"],
-            label: "2 of 2 processed",
-            processed: 2,
-            ref: "two",
-          },
-          {
-            changes: { presented: true },
-            expected: ["4", "pendingSubmission", "unknown"],
-            label: "3 processed with no limit",
-            processed: 3,
-            ref: "unlimited",
-          },
-          {
-            changes: { presented: true },
-            expected: ["1", "final", "unknown"],
-            label: "a simultaneous part, submitted",
-            processed: 1,
-            ref: "together",
-          },
-          {
-            changes: { presented: true },
-            expected: ["1", "pendingSubmission", "unknown"],
-            label: "a simultaneous part, presented",
-            parts: [
-              { identifier: "P1", status: "ended" },
-              { identifier: "P2", status: "current" },
-            ],
-            processed: 0,
-            ref: "together",
-          },
-        ];
+  it.effect("counts the attempts started, and gives each sessionStatus and completionStatus", () =>
+    Effect.gen(function* attempts() {
+      const accepted = yield* fixtureItem("p2-choice.xml");
+      const test = yield* acceptTest("counting", [
+        part("P1", individual, [
+          ref("one", "p2-choice.xml"),
+          ref("two", "p2-choice.xml", "2"),
+          ref("unlimited", "p2-choice.xml", "0"),
+        ]),
+        part("P2", simultaneous, [ref("together", "p2-choice.xml")]),
+      ]);
+      const items = new Map([
+        ["one", accepted],
+        ["two", accepted],
+        ["unlimited", accepted],
+        ["together", accepted],
+      ]);
+      const current: readonly SessionPart[] = [
+        { identifier: "P1", status: "current" },
+        { identifier: "P2", status: "pending" },
+      ];
+      const cases: readonly {
+        readonly label: string;
+        readonly ref: string;
+        readonly changes: Partial<SessionItem>;
+        readonly processed: number;
+        readonly parts?: readonly SessionPart[];
+        readonly expected: readonly [string, string, string];
+      }[] = [
+        {
+          changes: {},
+          expected: ["0", "initial", "not_attempted"],
+          label: "never presented",
+          processed: 0,
+          ref: "one",
+        },
+        {
+          changes: { presented: true },
+          expected: ["1", "pendingSubmission", "unknown"],
+          label: "presented and unsubmitted",
+          parts: current,
+          processed: 0,
+          ref: "one",
+        },
+        {
+          changes: { presented: true, saved: Option.some({ RESPONSE: identifiers("B") }) },
+          expected: ["1", "pendingSubmission", "unknown"],
+          label: "saved, unsubmitted, at the part's end",
+          processed: 0,
+          ref: "one",
+        },
+        {
+          changes: { presented: true },
+          expected: ["1", "final", "unknown"],
+          label: "1 of 1 processed",
+          processed: 1,
+          ref: "one",
+        },
+        {
+          changes: { presented: true },
+          expected: ["2", "pendingSubmission", "unknown"],
+          label: "1 of 2 processed, open",
+          parts: current,
+          processed: 1,
+          ref: "two",
+        },
+        {
+          changes: { presented: true },
+          expected: ["2", "pendingSubmission", "unknown"],
+          label: "1 of 2 processed, at the part's end",
+          processed: 1,
+          ref: "two",
+        },
+        {
+          changes: { presented: true },
+          expected: ["2", "final", "unknown"],
+          label: "2 of 2 processed",
+          processed: 2,
+          ref: "two",
+        },
+        {
+          changes: { presented: true },
+          expected: ["4", "pendingSubmission", "unknown"],
+          label: "3 processed with no limit",
+          processed: 3,
+          ref: "unlimited",
+        },
+        {
+          changes: { presented: true },
+          expected: ["1", "final", "unknown"],
+          label: "a simultaneous part, submitted",
+          processed: 1,
+          ref: "together",
+        },
+        {
+          changes: { presented: true },
+          expected: ["1", "pendingSubmission", "unknown"],
+          label: "a simultaneous part, presented",
+          parts: [
+            { identifier: "P1", status: "ended" },
+            { identifier: "P2", status: "current" },
+          ],
+          processed: 0,
+          ref: "together",
+        },
+      ];
 
-        for (const entry of cases) {
-          const base = sessionItem(accepted, entry.ref, 1, entry.changes);
-          const item = { ...base, record: processedRecord(base, entry.processed) };
-          const { report } = yield* reported({
-            context,
-            items,
-            kind: "test",
-            session: storedSession(test, [item], entry.parts),
-            test,
-          });
-          const written = itemOf(report, entry.ref);
+      for (const entry of cases) {
+        const base = sessionItem(accepted, entry.ref, 1, entry.changes);
+        const item = { ...base, record: processedRecord(base, entry.processed) };
+        const { report } = yield* reported({
+          context,
+          items,
+          kind: "test",
+          session: storedSession(test, [item], entry.parts),
+          test,
+        });
+        const written = itemOf(report, entry.ref);
 
-          assert.deepStrictEqual(
-            [
-              written.responses["numAttempts"]?.values[0],
-              written.attributes["sessionStatus"],
-              written.outcomes["completionStatus"]?.values[0],
-            ],
-            [...entry.expected],
-            entry.label,
-          );
-        }
-      }),
+        assert.deepStrictEqual(
+          [
+            written.responses["numAttempts"]?.values[0],
+            written.attributes["sessionStatus"],
+            written.outcomes["completionStatus"]?.values[0],
+          ],
+          [...entry.expected],
+          entry.label,
+        );
+      }
+    }),
   );
 
   it.effect(
-    "[T-14] reports the first outcomes of an item with no limit, and the last of one limited to 2",
+    "reports the first outcomes of an item with no limit, and the last of one limited to 2",
     () =>
       Effect.gen(function* firstOutcomes() {
         const accepted = yield* fixtureItem("p2-choice.xml");
@@ -984,7 +982,7 @@ describe("results", () => {
       }),
   );
 
-  it.effect("[T-14] gives each answeredStatus by Results Reporting's criteria", () =>
+  it.effect("gives each answeredStatus by Results Reporting's criteria", () =>
     Effect.gen(function* answered() {
       const multiple = yield* fixtureItem("p1-multiple-choice.xml");
       const single = yield* fixtureItem("p2-choice.xml");
@@ -1034,7 +1032,7 @@ describe("results", () => {
   );
 
   it.effect(
-    "[T-14] refuses a sourcedId, a session identifier or a sourceId the Results XSD refuses, and an invalid datestamp",
+    "refuses a sourcedId, a session identifier or a sourceId the Results XSD refuses, and an invalid datestamp",
     () =>
       Effect.gen(function* refusedContext() {
         const accepted = yield* fixtureItem("p2-choice.xml");
@@ -1078,6 +1076,88 @@ describe("results", () => {
           Option.some("datestamp"),
         );
       }),
+  );
+
+  it.effect(
+    "refuses a sourceId holding a character XML cannot carry, which URL.canParse reads",
+    () =>
+      Effect.gen(function* unwritableSourceId() {
+        const accepted = yield* fixtureItem("p2-choice.xml");
+        const record = yield* Effect.fromResult(score(accepted, { RESPONSE: identifiers("A") }));
+
+        for (const sourceId of ["\u0000http://a/", "http://a/\u0001", "http://a/\uFFFE"]) {
+          assert.isTrue(URL.canParse(sourceId), JSON.stringify(sourceId));
+          assert.deepStrictEqual(
+            contextFailure({
+              context: { sessions: [{ identifier: "s-1", sourceId }] },
+              datestamp: new Date(updated),
+              document: accepted,
+              kind: "item",
+              record,
+            }),
+            Option.some(["sourceId", Option.some(0), sourceId] as const),
+            JSON.stringify(sourceId),
+          );
+        }
+      }),
+  );
+
+  it.effect(
+    "refuses an item's record that does not fit its declarations, a response of two values where one is declared or an outcome of another base type, as score refuses the first",
+    () =>
+      Effect.gen(function* misfitItemRecord() {
+        const accepted = yield* fixtureItem("p2-choice.xml");
+        const good = yield* Effect.fromResult(score(accepted, { RESPONSE: identifiers("A") }));
+        const decoded = yield* Effect.fromResult(decodeRecord(good));
+        const twoValues = yield* Effect.fromResult(
+          encodeRecord({ ...decoded, responses: { RESPONSE: identifiers("A", "B") } }),
+        );
+        const fullScore = yield* Effect.fromResult(
+          encodeRecord({ ...decoded, outcomes: { SCORE: identifiers("full") } }),
+        );
+        const input = (record: StoredRecord): ResultsInput => ({
+          context,
+          datestamp: new Date(updated),
+          document: accepted,
+          kind: "item",
+          record,
+        });
+
+        assert.deepStrictEqual(failureTag(input(good)), Option.none());
+        assert.deepStrictEqual(
+          Option.map(Result.getFailure(score(accepted, {}, twoValues)), ({ _tag }) => _tag),
+          Option.some("InvalidRecord"),
+        );
+        assert.deepStrictEqual(failureTag(input(twoValues)), Option.some("InvalidRecord"));
+        assert.deepStrictEqual(failureTag(input(fullScore)), Option.some("InvalidRecord"));
+      }),
+  );
+
+  it.effect("refuses a session whose item record does not fit the item's declarations", () =>
+    Effect.gen(function* misfitSessionRecord() {
+      const single = yield* fixtureItem("p1-single-choice.xml");
+      const test = yield* acceptTest("misfit", [
+        part("P1", individual, [ref("one", "p1-single-choice.xml")]),
+      ]);
+      const item = sessionItem(single, "one", 1, { presented: true });
+      const input = (record: ItemRecord): ResultsInput => ({
+        context,
+        items: new Map([["one", single]]),
+        kind: "test",
+        session: storedSession(test, [{ ...item, record }]),
+        test,
+      });
+
+      assert.deepStrictEqual(failureTag(input(item.record)), Option.none());
+      assert.deepStrictEqual(
+        failureTag(input({ ...item.record, responses: { RESPONSE: identifiers("A", "B") } })),
+        Option.some("InvalidSession"),
+      );
+      assert.deepStrictEqual(
+        failureTag(input({ ...item.record, outcomes: { SCORE: identifiers("full") } })),
+        Option.some("InvalidSession"),
+      );
+    }),
   );
 
   it.effect(

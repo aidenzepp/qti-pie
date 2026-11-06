@@ -20,6 +20,7 @@ import type { SessionMismatch, StoredTestSession } from "#plate/codec/session.ts
 import type { Configuration } from "#plate/configuration.ts";
 import { xmlnsNamespace } from "#plate/document/source.ts";
 import { writeDocument } from "#plate/document/write.ts";
+import { isXmlText } from "#plate/form/encoding.ts";
 import { interactionsIn } from "#plate/model/interactions.ts";
 import type { Item, OutcomeDeclaration, OutcomeReporting } from "#plate/model/item.ts";
 import { startingValue } from "#plate/model/record.ts";
@@ -30,7 +31,7 @@ import { choiceOrder } from "#plate/payload.ts";
 import { checkResponses } from "#plate/responses.ts";
 import { resultValue, resultValues } from "#plate/results/values.ts";
 import type { ResultSingle } from "#plate/results/values.ts";
-import { RecordMismatch } from "#plate/score.ts";
+import { fitting, RecordMismatch } from "#plate/score.ts";
 import { itemConfiguration, sessionControl } from "#plate/session/control.ts";
 import type { SessionItem, TestSession } from "#plate/session/session.ts";
 import type { Accepted, AcceptedTest } from "#plate/validate/verdict.ts";
@@ -53,7 +54,9 @@ const resultNamespace = "http://www.imsglobal.org/xsd/imsqti_result_v3p0";
  * stricter than the XSD, whose `xs:anyURI` admits a relative reference
  * (`imsqti_resultv3p0_v1p0.xsd:603`): Results Reporting describes `sourceID` as a unique
  * identifier of the system that added the session identifier (`rr-bind.txt:3548`), and a relative
- * reference does not name a system on its own.
+ * reference does not name a system on its own. It must also hold only characters XML can carry,
+ * which `URL.canParse` does not check: it reads past a leading control character, and an
+ * attribute that holds one is not well-formed.
  */
 export interface ResultContext {
   readonly sessions?: readonly { readonly identifier: string; readonly sourceId: string }[];
@@ -95,15 +98,15 @@ const contextRemedies: Readonly<Record<ContextField, string>> = {
   identifier:
     'is not an NCName, which the Results XSD requires. Pass an identifier that starts with a letter or "_" and holds only letters, digits, "-", "_" and ".", such as "s-" followed by a UUID',
   sourceId:
-    'is not an absolute URI. Pass the URI of the system that issued the session identifier, such as "http://localhost:5190/"',
+    'is not an absolute URI made of characters XML can carry. Pass the URI of the system that issued the session identifier, such as "http://localhost:5190/", with no control character, U+FFFE, U+FFFF or lone surrogate',
   sourcedId:
     'is not an NCName, which the Results XSD requires. Pass an identifier that starts with a letter or "_" and holds only letters, digits, "-", "_" and ".", or leave sourcedId out',
 };
 
 /**
  * A result input the Results XSD cannot hold: a `sourcedId` or a session `identifier` that is not
- * an NCName, a session `sourceId` that is not an absolute URI, or an item result's `datestamp`
- * that is not a valid date.
+ * an NCName, a session `sourceId` that is not an absolute URI made of characters XML can carry, or
+ * an item result's `datestamp` that is not a valid date.
  *
  * `session` is the index of the session entry at fault, none for `sourcedId` and `datestamp`;
  * `value` is what was passed.
@@ -510,7 +513,7 @@ const contextElement = (context: ResultContext): Result.Result<Element, InvalidR
         );
       }
 
-      if (!URL.canParse(entry.sourceId)) {
+      if (!URL.canParse(entry.sourceId) || !isXmlText(entry.sourceId)) {
         return yield* Result.fail(
           new InvalidResultContext({
             field: "sourceId",
@@ -589,7 +592,8 @@ const belonging = (
  * rendered with.
  *
  * @param input The item, its record, when it last changed and the context.
- * @returns The document's text, or the failure of its context, its datestamp or its record.
+ * @returns The document's text, or the failure of its context, its datestamp or its record: a
+ *   record of another item, or one that does not fit the item's declarations (`fitting`).
  */
 const itemResults = (
   input: Extract<ResultsInput, { readonly kind: "item" }>,
@@ -606,7 +610,10 @@ const itemResults = (
       );
     }
 
-    const record = yield* belonging(input.document, yield* decodeRecord(input.record));
+    const record = yield* fitting(
+      input.document.item,
+      yield* belonging(input.document, yield* decodeRecord(input.record)),
+    );
     const presented = record.numAttempts > 0;
 
     return documentOf([
@@ -699,24 +706,36 @@ const choiceSequences = (
   );
 
 /**
- * Find the item a session item delivers, and check that its record is that item's.
+ * Find the item a session item delivers, and check that its record is that item's and fits it.
  *
  * @param items The items the session was started with, by item ref identifier.
  * @param entry The session item.
- * @returns The item, {@link ResultItemMissing} when `items` has none for its ref, or
- *   {@link RecordMismatch} when its record names another item or document.
+ * @returns The item; {@link ResultItemMissing} when `items` has none for its ref;
+ *   {@link RecordMismatch} when its record names another item or document; or
+ *   {@link InvalidSession} when its record does not fit the item's declarations (`fitting`).
  */
 const deliveredItem = (
   items: ReadonlyMap<string, Accepted>,
   entry: SessionItem,
-): Result.Result<Accepted, RecordMismatch | ResultItemMissing> =>
-  Result.flatMap(
-    Result.fromOption(
+): Result.Result<Accepted, InvalidSession | RecordMismatch | ResultItemMissing> =>
+  Result.gen(function* deliverItem() {
+    const document = yield* Result.fromOption(
       Option.fromUndefinedOr(items.get(entry.ref)),
       () => new ResultItemMissing({ document: entry.record.document, ref: entry.ref }),
-    ),
-    (document) => Result.map(belonging(document, entry.record), () => document),
-  );
+    );
+    yield* belonging(document, entry.record);
+    yield* Result.mapError(
+      fitting(document.item, entry.record),
+      ({ issue }) =>
+        new InvalidSession({
+          issue: `the record of its item ${String(entry.sequenceIndex)}, of the item ref ${JSON.stringify(entry.ref)}, does not fit the item: ${issue}`,
+          stage: "decode",
+          version: Option.some(storedVersion),
+        }),
+    );
+
+    return document;
+  });
 
 /**
  * Report one item of a test session.
@@ -852,8 +871,9 @@ const testResults = (
  * @returns The document's text; {@link InvalidResultContext} for a context or datestamp the
  *   Results XSD cannot hold; {@link InvalidRecord}, {@link InvalidSession} or
  *   {@link SessionMismatch} for a stored record or session this renderer did not write, or one of
- *   another test; {@link RecordMismatch} for a record of another item than the one it is reported
- *   for; or {@link ResultItemMissing} when the items lack a session item's item.
+ *   another test, a record that does not fit its item's declarations included;
+ *   {@link RecordMismatch} for a record of another item than the one it is reported for; or
+ *   {@link ResultItemMissing} when the items lack a session item's item.
  */
 export const results = (
   input: ResultsInput,

@@ -1,6 +1,13 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
-import { checkInstance, decode, encode, entryName, partition } from "#plate/form/encoding.ts";
+import {
+  checkInstance,
+  decode,
+  encode,
+  entryName,
+  isXmlText,
+  partition,
+} from "#plate/form/encoding.ts";
 import type { Binding, Entry, Malformed } from "#plate/form/encoding.ts";
 import { format } from "#plate/model/values.ts";
 import type { Single, Value } from "#plate/model/values.ts";
@@ -444,6 +451,28 @@ describe("encode and decode", () => {
       );
     }),
   );
+});
+
+describe("isXmlText", () => {
+  it("refuses a control character other than tab and the line breaks, U+FFFE, U+FFFF and a lone surrogate", () => {
+    for (const text of [
+      "a\u0000b",
+      "a\u000Bb",
+      "a\u001Fb",
+      "a\uFFFEb",
+      "a\uFFFFb",
+      "a\uD800b",
+      "\uDC00",
+    ]) {
+      assert.isFalse(isXmlText(text), JSON.stringify(text));
+    }
+  });
+
+  it("admits tab, the line breaks, the empty text and an astral character", () => {
+    for (const text of ["", "a\tb\nc\rd", "a\u{1F600}b", "\u{10FFFF}", "\uFFFD\uE000\uD7FF"]) {
+      assert.isTrue(isXmlText(text), JSON.stringify(text));
+    }
+  });
 });
 
 describe("checkInstance", () => {

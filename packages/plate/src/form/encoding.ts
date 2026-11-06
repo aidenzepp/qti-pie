@@ -60,6 +60,32 @@ export interface DecodeOptions {
 }
 
 /**
+ * Text made only of characters XML 1.0's `Char` production admits: tab, line feed, carriage
+ * return, and every code point from U+0020 up except the surrogates, U+FFFE and U+FFFF. Under the
+ * `u` flag a lone surrogate is a code point of its own, so it falls outside.
+ */
+const xmlText = /^[\t\n\r\u{20}-\u{D7FF}\u{E000}-\u{FFFD}\u{10000}-\u{10FFFF}]*$/u;
+
+/**
+ * Report whether XML can carry a text: whether every character of it is one XML 1.0's `Char`
+ * production admits, so no document that holds it, as text or in an attribute, is ill-formed.
+ *
+ * A stored value and a result's attributes are written into XML in the end, through crust's
+ * writer, which does not refuse the others, so the value codec and `results` check each with this
+ * on its way in.
+ *
+ * @example
+ *   isXmlText("a\tb\n"); // true
+ *   isXmlText("a\u0000b"); // false
+ *
+ * @param text The text.
+ * @returns Whether every character is an XML `Char`: no control character other than tab, line
+ *   feed and carriage return, no U+FFFE or U+FFFF, and no lone surrogate.
+ * @see https://www.w3.org/TR/xml/#NT-Char
+ */
+export const isXmlText = (text: string): boolean => xmlText.test(text);
+
+/**
  * Why posted entries do not decode to a value of their binding.
  */
 type MalformedReason = "file" | "identifier" | "number" | "single-many";
