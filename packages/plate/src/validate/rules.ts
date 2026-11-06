@@ -1369,6 +1369,62 @@ const setOutcomeType = (
 };
 
 /**
+ * The local names of the response rules whose first child is a condition.
+ */
+const conditionBranches: ReadonlySet<string> = new Set(["qti-response-else-if", "qti-response-if"]);
+
+/**
+ * The type every condition has.
+ */
+const singleBoolean: ExpressionType = { baseType: "boolean", cardinality: "single" };
+
+/**
+ * Apply `expression-type` to the condition of a `qti-response-if` or `qti-response-else-if` of
+ * inline response processing.
+ *
+ * "A responseIf part consists of an expression which must have an effective base-type of boolean
+ * and single cardinality" (`info-compact.txt:10963`), and a `qti-response-else-if` part likewise
+ * (`info-compact.txt:10945`): the branch's first child element, its condition, is a single
+ * `boolean` ({@link agree}). A condition that is untyped ({@link expressionType}) is not judged,
+ * and one of base type `any` or `unknown` passes, as a `qti-null` does. The qti package refuses the
+ * same as P21 (`typeRule` and `conditionKinds` in `packages/pantry/src/processing/check.ts`).
+ *
+ * @param source The document.
+ * @param visit The element's visit.
+ * @param context The item's declarations and the parents the walk has met.
+ * @returns The refusal at the branch's path, with `check: "condition"` and the condition's type,
+ *   when its condition is not a single `boolean`; none for any other element.
+ */
+const conditionType = (
+  source: SourceDocument,
+  visit: Visit,
+  context: Context,
+): readonly Refusal[] => {
+  if (
+    !isQti(visit.element, (local) => conditionBranches.has(local)) ||
+    !inResponseProcessing(context, visit.element)
+  ) {
+    return [];
+  }
+
+  const condition = Option.flatMap(Arr.head(operandsOf(visit.element)), (expression) =>
+    expressionType(expression, context),
+  );
+  if (Option.isNone(condition) || agree(condition.value, singleBoolean)) {
+    return [];
+  }
+
+  return [
+    refusal(source, "expression-type", visit.path, {
+      check: "condition",
+      element: visit.element.local,
+      expressionBaseType: baseTypeText(condition.value),
+      expressionCardinality: condition.value.cardinality,
+    }),
+  ];
+};
+
+/**
  * The base types a lookup operand may have under each lookup table (reading 28).
  */
 const lookupOperands = {
@@ -1839,6 +1895,7 @@ export const checkRules = (source: SourceDocument, tables: Tables): readonly Ref
       ...undeclaredVariable(source, visit, context),
       ...attributeReferences(source, visit, context),
       ...setOutcomeType(source, visit, context),
+      ...conditionType(source, visit, context),
       ...lookupTableRequirements(source, visit, context),
       ...lookupOperandType(source, visit, context),
       ...operandTypes(source, visit, context),

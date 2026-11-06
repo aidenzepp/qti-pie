@@ -438,6 +438,33 @@ const comparing = (...operands: readonly SourceElement[]) =>
   );
 
 /**
+ * Construct a branch of a response condition: its condition, then a rule that sets the
+ * float `SCORE`.
+ *
+ * @param local The branch's local name, `qti-response-if` or `qti-response-else-if`.
+ * @param condition Its condition.
+ * @returns The branch.
+ */
+const responseBranch = (local: string, condition: SourceElement): SourceElement =>
+  el(local, [], [condition, setScore(baseValue("float", "1"))]);
+
+/**
+ * Check an item whose inline processing holds one `qti-response-condition`, beside a single
+ * identifier `RESPONSE` a condition may read and a float `SCORE` each branch sets.
+ *
+ * @param branches The condition's branches, in document order.
+ * @returns The refusals, reduced.
+ */
+const branching = (...branches: readonly SourceElement[]) =>
+  judged(
+    item(
+      [response("RESPONSE", "single", "identifier"), outcome("SCORE")],
+      [],
+      [processing(undefined, [el("qti-response-condition", [], branches)])],
+    ),
+  );
+
+/**
  * The path of a `div` directly inside the body's `qti-custom-interaction`: a global QTI element
  * that the custom interaction's `lax` wildcard admits, so the structural walk checks it by its
  * table.
@@ -1709,6 +1736,67 @@ describe("checkRules", () => {
       it("accepts an operand that holds a qti-field-value, untyped", () => {
         assert.deepStrictEqual(
           judged(lookupItem("qti-match-table", fieldValue(variable("QTI_CONTEXT")))),
+          [],
+        );
+      });
+    });
+
+    describe("a response condition (P21)", () => {
+      const conditionPath = "qti-assessment-item/qti-response-processing/qti-response-condition";
+
+      /**
+       * A single boolean condition: `RESPONSE` matches the identifier `A`.
+       */
+      const matching = el("qti-match", [], [variable("RESPONSE"), baseValue("identifier", "A")]);
+
+      /**
+       * The refusal of a branch whose condition is a single value of another base type.
+       *
+       * @param local The branch's local name.
+       * @param baseType The condition's base type.
+       * @returns The refusal, reduced.
+       */
+      const conditionRefused = (local: string, baseType: string) => ({
+        detail: {
+          check: "condition",
+          element: local,
+          expressionBaseType: baseType,
+          expressionCardinality: "single",
+        },
+        path: `${conditionPath}/${local}`,
+        rule: "expression-type" as const,
+      });
+
+      it('[I-9a] refuses a qti-response-if whose condition is a qti-base-value of base-type="integer" (P21)', () => {
+        assert.deepStrictEqual(
+          branching(responseBranch("qti-response-if", baseValue("integer", "1"))),
+          [conditionRefused("qti-response-if", "integer")],
+        );
+      });
+
+      it('[I-9a] refuses a qti-response-else-if whose condition is a qti-base-value of base-type="integer" (P21)', () => {
+        assert.deepStrictEqual(
+          branching(
+            responseBranch("qti-response-if", matching),
+            responseBranch("qti-response-else-if", baseValue("integer", "1")),
+          ),
+          [conditionRefused("qti-response-else-if", "integer")],
+        );
+      });
+
+      it("[I-9a] accepts a qti-match condition, a single boolean (P21)", () => {
+        assert.deepStrictEqual(
+          branching(
+            responseBranch("qti-response-if", matching),
+            responseBranch("qti-response-else-if", matching),
+          ),
+          [],
+        );
+      });
+
+      it("[I-9a] accepts a condition that holds a kind not yet landed, untyped (P21, ruling R3)", () => {
+        assert.deepStrictEqual(
+          branching(responseBranch("qti-response-if", fieldValue(variable("QTI_CONTEXT")))),
           [],
         );
       });
