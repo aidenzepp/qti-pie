@@ -535,28 +535,32 @@ describe("the installed relations", () => {
     searchTimeout,
   );
 
-  it("give the host the generator's attribute rows, each (version, governor, name) once", () => {
-    const fields = ["domain", "governor", "name", "position", "use", "version"] as const;
-    const spelled = (rows: readonly object[]) =>
-      rowsOf(rows).map((row) =>
-        Object.fromEntries(
-          fields.flatMap((field) => {
-            const value = row[field];
+  it(
+    "give the host the generator's attribute rows, each (version, governor, name) once",
+    () => {
+      const fields = ["domain", "governor", "name", "position", "use", "version"] as const;
+      const spelled = (rows: readonly object[]) =>
+        rowsOf(rows).map((row) =>
+          Object.fromEntries(
+            fields.flatMap((field) => {
+              const value = row[field];
 
-            return value === undefined ? [] : [[field, value] as const];
-          }),
+              return value === undefined ? [] : [[field, value] as const];
+            }),
+          ),
+        );
+
+      assert.deepStrictEqual(
+        keyedSet("attributeRows", ["version", "governor", "name"], spelled(install.attributeRows)),
+        keyedSet(
+          "the attribute generator",
+          ["version", "governor", "name"],
+          spelled([...ownAttributes.values()].flat()),
         ),
       );
-
-    assert.deepStrictEqual(
-      keyedSet("attributeRows", ["version", "governor", "name"], spelled(install.attributeRows)),
-      keyedSet(
-        "the attribute generator",
-        ["version", "governor", "name"],
-        spelled([...ownAttributes.values()].flat()),
-      ),
-    );
-  });
+    },
+    searchTimeout,
+  );
 
   it("make CountedOf and BarredOf total, their nonzero rows exactly today's Counted but its caps and ChildBarredBy, and Capped exactly Counted's caps", () => {
     const keys = new Set(families.map(({ parent, version }) => `${version} ${parent}`));

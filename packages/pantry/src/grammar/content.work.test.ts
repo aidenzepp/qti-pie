@@ -56,6 +56,7 @@ vi.doMock("#pantry/grammar/closed.ts", async (importOriginal) => {
 
   return { ...original, closed };
 });
+
 vi.doMock("#pantry/vocab/sequencing.ts", async (importOriginal) => {
   const original = await importOriginal<typeof Sequencing>();
   const automatonOf: typeof original.automatonOf = (...input) => {

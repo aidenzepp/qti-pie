@@ -871,10 +871,7 @@ type AttributeRow = (typeof attributeRows)[number];
  * model is named by its first governor, or by `<version> <governor>` where an earlier model took
  * that name, so every handle is a governor's or six bytes longer, within a PostgreSQL name.
  */
-const attributeModels = ((): {
-  readonly models: readonly { readonly handle: string; readonly rows: readonly AttributeRow[] }[];
-  readonly of: ReadonlyMap<string, string>;
-} => {
+const attributeModels = (() => {
   const byGovernor = Map.groupBy(attributeRows, (row) => `${row.version} ${row.governor}`);
   const models: { readonly handle: string; readonly rows: readonly AttributeRow[] }[] = [];
   const bySignature = new Map<string, string>();
