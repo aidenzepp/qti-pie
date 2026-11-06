@@ -70,15 +70,22 @@ describe("test/xsd.ts", () => {
           assert.include(result.binary.version, "libxml");
         }
       }),
+    { tags: ["corpus", "qti-xsd"] },
   );
 
-  it.effect("full-example.xml, which is not well-formed, does not validate", () =>
-    Effect.gen(function* notWellFormed() {
-      const result = yield* validateAgainst(resultsXsd, yield* resultsExample("full-example.xml"));
+  it.effect(
+    "full-example.xml, which is not well-formed, does not validate",
+    () =>
+      Effect.gen(function* notWellFormed() {
+        const result = yield* validateAgainst(
+          resultsXsd,
+          yield* resultsExample("full-example.xml"),
+        );
 
-      assert.isFalse(result.valid);
-      assert.isNotEmpty(result.messages);
-    }),
+        assert.isFalse(result.valid);
+        assert.isNotEmpty(result.messages);
+      }),
+    { tags: ["corpus", "qti-xsd"] },
   );
 
   it.effect(
@@ -96,6 +103,7 @@ describe("test/xsd.ts", () => {
           result.messages.join("\n"),
         );
       }),
+    { tags: ["qti-xsd"] },
   );
 
   it.effect(
@@ -112,7 +120,7 @@ describe("test/xsd.ts", () => {
           refused.messages.join("\n"),
         );
       }),
-    asiTimeoutMs,
+    { tags: ["qti-xsd"], timeout: asiTimeoutMs },
   );
 
   it.effect("PLATE_XMLLINT naming no file fails with XmllintMissing, naming the setting", () =>
