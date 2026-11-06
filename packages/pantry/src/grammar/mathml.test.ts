@@ -50,6 +50,7 @@ import { contentEnds, contentStep } from "#pantry/grammar/content.ts";
 import { patternFlags } from "#pantry/grammar/domains.ts";
 import { foreignKinds, schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
+import { breachesOf, judged as judgedPackage, shown, withItem } from "#pantry/test/probe.ts";
 import { xsdDirectory } from "#pantry/vocab/derive/sources.ts";
 import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
 import type { ContentModel, Particle } from "#pantry/vocab/inventory/types.ts";
@@ -310,7 +311,16 @@ const boxClasses: MathClasses = {
     kind === foreignKinds.other || kind === foreignKinds.absent || kind === "div",
   content: new Set(["m:ci", "m:cn", "m:csymbol", "m:apply", "m:interval", semanticsContexp]),
   inMathml: (kind) => kind.startsWith("m:") || kind === foreignKinds.own,
-  math: new Set(["m:ci", "m:cn", "m:csymbol", "m:apply", "m:interval", "m:semantics", "m:mi"]),
+  math: new Set([
+    "m:ci",
+    "m:cn",
+    "m:csymbol",
+    "m:apply",
+    "m:interval",
+    "m:semantics",
+    "m:mi",
+    "m:mn",
+  ]),
 };
 
 /**
@@ -384,6 +394,11 @@ const boxes: readonly {
     parents: ["m:bvar"],
   },
   { alphabet: ["m:piece", "m:otherwise", "m:ci"], length: 5, parents: ["m:piecewise"] },
+  {
+    alphabet: ["m:mn", "m:msrow", "m:mscarries", "m:msline", "m:bvar"],
+    length: 4,
+    parents: ["m:mstack", "m:mlongdiv"],
+  },
   {
     alphabet: [
       "m:mi",
@@ -1138,6 +1153,32 @@ const endedToy = (model: ContentModel, ending: readonly [string, ...string[]]) =
       models: [model],
     },
   ]);
+
+describe("MathML 3 §3.6.1: mscarries is never the last element of an mstack or mlongdiv", () => {
+  it.effect(
+    "refuses a package whose mstack ends in an mscarries, under N7 Last and child-set",
+    () =>
+      // Oracle: §3.6.1, "It is an error for mscarries to be the last element of an mstack or
+      // mlongdiv element", as the law oracle judges a whole package. Bound: one package, the base
+      // item with that `mstack` after its paragraph.
+      Effect.gen(function* endsInCarries() {
+        const breaches = breachesOf(
+          yield* judgedPackage(
+            withItem(
+              `<p id="intro">Pick one.</p>`,
+              `<p id="intro">Pick one.</p><p><m:math xmlns:m="http://www.w3.org/1998/Math/MathML"><m:mstack><m:mn>1</m:mn><m:mscarries/></m:mstack></m:math></p>`,
+            ),
+          ),
+        );
+
+        assert.deepStrictEqual(
+          breaches.map(({ law }) => law),
+          ["N7 Last"],
+        );
+        assert.match(shown(breaches), /^N7 Last \(child-set\) at item\.xml/u);
+      }),
+  );
+});
 
 describe("the ending edit, which lambda's restatement reads (content.ts, endedBy)", () => {
   it.effect(

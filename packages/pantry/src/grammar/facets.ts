@@ -1154,6 +1154,43 @@ const lambdaModel = (() => {
 const lambdaEnding = relaxNgCite("mathml3-content.rnc", 103, "§4.4.1.3 Lambda");
 
 /**
+ * Where the rule that `mscarries` is not last comes from: the RelaxNG's `mstack` and `mlongdiv`
+ * (`mathml3-presentation.rnc` lines 494 and 504) and MathML 3 §3.6.1, "It is an error for mscarries
+ * to be the last element of an mstack or mlongdiv element", which the RelaxNG does not say.
+ */
+const mscarriesEnding =
+  "spec reading 2: MathML 3 RelaxNG, mathml3-presentation.rnc lines 494 and 504; MathML 3 §3.6.1 Stacks of Characters (mscarries is not the last element)";
+
+/**
+ * The kinds that may end an `mstack` or an `mlongdiv`: each kind the parent's model names but
+ * `m:mscarries`.
+ *
+ * @param parent - The kind of `mstack` or `mlongdiv`.
+ * @returns The kinds.
+ */
+const beforeCarries = (parent: string): readonly [string, ...string[]] =>
+  someKinds(
+    classOf(parent, "MstackExpression").filter((kind) => kind !== "m:mscarries"),
+    `The MathML XSD gives ${parent} no model naming a kind but m:mscarries.`,
+  );
+
+/**
+ * `mstack = element mstack {..., MstackExpression*}` (`mathml3-presentation.rnc` line 494) without
+ * a final `mscarries`: no child, or any children the last of which is not an `mscarries`. Restated
+ * as `(mscarries* other)*`, which Unique Particle Attribution keeps deterministic. An `ends` edit
+ * would state the same language but for the empty family, which an ending refuses (`content.ts`,
+ * `endedBy` clears `nullable`), and an empty `mstack` is the RelaxNG's.
+ */
+const mstackModel = anyNumber(
+  mathGroup(
+    "sequence",
+    cited(mscarriesEnding),
+    mathParticle(["m:mscarries"], 0, Option.none(), cited(mscarriesEnding)),
+    mathParticle(beforeCarries("m:mstack"), 1, Option.some(1), cited(mscarriesEnding)),
+  ),
+);
+
+/**
  * The constructors' model, `bvar*, DomainQ, ContExp*` (`vector`, `matrix` and `matrixrow`,
  * `mathml3-content.rnc` lines 325-327), and `set` and `list`'s `BvarQ*, DomainQ*, ContExp*` (lines
  * 230 and 231), the same language: `bvar*, (interval | qualifier)*, (other, interval*)*`
@@ -1288,6 +1325,18 @@ export const mathml: Facets = {
         source: lambdaEnding,
       },
       { _tag: "ends", kinds: contentExpressions, parent: "m:lambda", source: lambdaEnding },
+      {
+        _tag: "restate",
+        parent: "m:mstack",
+        particle: mstackModel,
+        source: mscarriesEnding,
+      },
+      {
+        _tag: "ends",
+        kinds: beforeCarries("m:mlongdiv"),
+        parent: "m:mlongdiv",
+        source: mscarriesEnding,
+      },
       ...(
         [
           ["m:set", 230, "§4.4.5.1 Set"],

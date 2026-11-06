@@ -157,6 +157,30 @@ const lambdaContent: Recognizer = (children, classes) => {
 };
 
 /**
+ * The kinds `MstackExpression = MathExpression|mscarries|msline|msrow|msgroup` adds to
+ * `MathExpression` (`mathml3-presentation.rnc` line 22).
+ */
+const stackOnly: ReadonlySet<string> = new Set(["m:mscarries", "m:msline", "m:msrow", "m:msgroup"]);
+
+/**
+ * The RelaxNG's `mstack` and `mlongdiv` with the Recommendation's prose rule applied, the one layer
+ * of this file that is not the RelaxNG alone: MathML 3 §3.6.1, "It is an error for mscarries to be
+ * the last element of an mstack or mlongdiv element", which the RelaxNG does not say. The pattern
+ * is `MstackExpression*` for `mstack` (`mathml3-presentation.rnc` line 494) and `MstackExpression,
+ * MstackExpression, MstackExpression+` for `mlongdiv` (line 504), so `mlongdiv` holds at least
+ * three.
+ *
+ * @param least - The fewest children the RelaxNG's pattern takes.
+ * @returns The recognizer.
+ */
+const stackContent =
+  (least: number): Recognizer =>
+  (children, classes) =>
+    children.length >= least &&
+    children.every((kind) => classes.math.has(kind) || stackOnly.has(kind)) &&
+    children.at(-1) !== "m:mscarries";
+
+/**
  * Exactly so many content expressions.
  *
  * @param count - How many.
@@ -180,7 +204,10 @@ const contentExpressions =
  * - The models of content expressions, whose `ContExp` holds `semantics-contexp`
  *   (`mathml3-strict-content.rnc` line 14): `semantics-contexp` (23), `cerror` (50), the qualifiers
  *   (`mathml3-content.rnc` lines 42 to 50), `piece` (62), `otherwise` (64), `reln` (70), `fn` (71),
- *   `declare` (72) and `interval` (84).
+ *   `declare` (72) and `interval` (84);
+ * - `mstack` and `mlongdiv` (`mathml3-presentation.rnc` lines 494 and 504) with §3.6.1's prose rule
+ *   that `mscarries` is not their last child, which is the RelaxNG with the Recommendation's prose
+ *   and not the RelaxNG alone.
  */
 export const relaxNgModels: ReadonlyMap<string, Recognizer> = new Map<string, Recognizer>([
   [
@@ -201,6 +228,8 @@ export const relaxNgModels: ReadonlyMap<string, Recognizer> = new Map<string, Re
   ["m:apply", applyContent],
   ["m:bind", applyContent],
   ["m:lambda", lambdaContent],
+  ["m:mstack", stackContent(0)],
+  ["m:mlongdiv", stackContent(3)],
   ["m:set", constructorContent],
   ["m:list", constructorContent],
   ["m:vector", constructorContent],
