@@ -223,6 +223,23 @@ describe("import/tree.ts wildcard element classification", () => {
     }),
   );
 
+  it.effect(
+    "a kind the seed derives under a wildcard host is that kind: m:semantics under m:annotation-xml",
+    () =>
+      Effect.gen(function* derivedAdmission() {
+        const walked = yield* walkedOf(
+          operatorItem(
+            `<m:math><m:annotation-xml encoding="application/mathml+xml"><m:semantics><m:mi>x</m:mi><m:annotation encoding="text/plain">x</m:annotation></m:semantics></m:annotation-xml></m:math>`,
+          ),
+          "item",
+        );
+
+        assert.strictEqual(named(walked, "m:annotation-xml").kind, "m:annotation-xml");
+        assert.strictEqual(named(walked, "m:semantics").kind, "m:semantics");
+        assert.strictEqual(named(walked, "m:mi").kind, "m:mi");
+      }),
+  );
+
   it.effect("RA-3: template under a foreign element is template", () =>
     Effect.gen(function* template() {
       const walked = yield* walkedOf(
