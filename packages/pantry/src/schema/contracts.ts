@@ -8,8 +8,8 @@
  * `types/schema/statements.ts:155-164`). A contract name shares the relation name space (grizzle
  * `physical/ddl/domains.ts:341-366`), so no name here is the name of a relation of `Qti`.
  *
- * There are 77 contracts written out below. The 64 value-arm contracts are minted from the context
- * table of `value.ts` in `value-contracts.ts`, which this module cannot import: 141 in all.
+ * There are 101 contracts written out below. The 64 value-arm contracts are minted from the context
+ * table of `value.ts` in `value-contracts.ts`, which this module cannot import: 165 in all.
  */
 /* oxlint-disable anti-slop/no-shape-in-symbol-names -- `ShapeCoords` is the contract of the coordinates of an HTML shape, a name the contracts document settles; it is not a structural description. */
 import { contract, str } from "@bjornpagen/grizzle";
@@ -677,3 +677,127 @@ export const XlinkArcroleUri = contract("XlinkArcroleUri", str.regex(patterns.an
  * The base is `patterns.ncName`.
  */
 export const XlinkLabelName = contract("XlinkLabelName", str.regex(patterns.ncName));
+
+/**
+ * The value of the `definitionURL` attribute of a MathML element: the URI of the definition that
+ * gives its meaning.
+ *
+ * The base is `patterns.anyUri`.
+ */
+export const MathmlDefinitionUrlValue = contract(
+  "MathmlDefinitionUrlValue",
+  str.regex(patterns.anyUri),
+);
+
+/**
+ * The value of the `src` attribute of `m:mglyph`: the URI of the glyph image.
+ *
+ * The base is `patterns.anyUri`.
+ */
+export const MathmlSrcValue = contract("MathmlSrcValue", str.regex(patterns.anyUri));
+
+/**
+ * The value of the `cdgroup` attribute of a MathML symbol: the URI of the group of content
+ * dictionaries its `cd` is looked up in.
+ *
+ * The base is `patterns.anyUri`.
+ */
+export const MathmlCdgroupValue = contract("MathmlCdgroupValue", str.regex(patterns.anyUri));
+
+/**
+ * The value of the `cd` attribute of a MathML symbol: the name of its content dictionary.
+ *
+ * The base is `patterns.ncName`.
+ */
+export const MathmlCdValue = contract("MathmlCdValue", str.regex(patterns.ncName));
+
+/**
+ * The value of the `name` attribute of a MathML annotation or semantics element: an `xs:NCName`.
+ *
+ * The base is `patterns.ncName`.
+ */
+export const MathmlNameValue = contract("MathmlNameValue", str.regex(patterns.ncName));
+
+/**
+ * The value of the `position` attribute of a MathML element: an integer without a leading plus
+ * sign.
+ *
+ * The base is `patterns.mathmlInteger`.
+ */
+export const MathmlPositionValue = contract(
+  "MathmlPositionValue",
+  str.regex(patterns.mathmlInteger),
+);
+
+/**
+ * The value of the `shift` attribute of a MathML element: an integer without a leading plus sign.
+ *
+ * The base is `patterns.mathmlInteger`.
+ */
+export const MathmlShiftValue = contract("MathmlShiftValue", str.regex(patterns.mathmlInteger));
+
+/**
+ * The value of the `index` attribute of `m:mglyph`: an integer without a leading plus sign.
+ *
+ * The base is `patterns.mathmlInteger`.
+ */
+export const MathmlIndexValue = contract("MathmlIndexValue", str.regex(patterns.mathmlInteger));
+
+/**
+ * The value of the `scriptlevel` attribute of a MathML element: an `xs:integer`.
+ *
+ * The base is `patterns.xsInteger`.
+ */
+export const MathmlScriptlevelValue = contract(
+  "MathmlScriptlevelValue",
+  str.regex(patterns.xsInteger),
+);
+
+/**
+ * The value of the `selection` attribute of `m:maction`: a positive integer without a leading plus
+ * sign.
+ *
+ * The base is `patterns.mathmlPositiveInteger`.
+ */
+export const MathmlSelectionValue = contract(
+  "MathmlSelectionValue",
+  str.regex(patterns.mathmlPositiveInteger),
+);
+
+/**
+ * The value of the `base` attribute of `m:cn`: a positive integer without a leading plus sign.
+ *
+ * The base is `patterns.mathmlPositiveInteger`.
+ */
+export const MathmlBaseValue = contract(
+  "MathmlBaseValue",
+  str.regex(patterns.mathmlPositiveInteger),
+);
+
+/**
+ * The value of the `nargs` attribute of a MathML element: an `xs:nonNegativeInteger`.
+ *
+ * The base is `patterns.xsNonNegativeInteger`.
+ */
+export const MathmlNargsValue = contract(
+  "MathmlNargsValue",
+  str.regex(patterns.xsNonNegativeInteger),
+);
+
+/**
+ * The value of the `rowspan` and `columnspan` attributes of a MathML table cell: a positive integer
+ * without a leading plus sign. `TableSpan` keeps `patterns.positiveInteger`, which admits `+2`.
+ *
+ * The base is `patterns.mathmlPositiveInteger`.
+ */
+export const MathmlSpanValue = contract(
+  "MathmlSpanValue",
+  str.regex(patterns.mathmlPositiveInteger),
+);
+
+/**
+ * The text of an `m:cbytes`: the base64 of its bytes.
+ *
+ * The base is `patterns.base64`, the one base64 pattern of the schema.
+ */
+export const MathmlCbytesValue = contract("MathmlCbytesValue", str.regex(patterns.base64));

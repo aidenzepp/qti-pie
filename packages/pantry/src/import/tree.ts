@@ -65,7 +65,7 @@ import {
   XmlLocalName,
 } from "#pantry/schema/contracts.ts";
 import * as patterns from "#pantry/schema/patterns.ts";
-import { FLAGS, handleOf, KindEnters } from "#pantry/schema/seed/ancestry.ts";
+import { handleOf, KindEnters, stepOf } from "#pantry/schema/seed/ancestry.ts";
 import type { Flag } from "#pantry/schema/seed/ancestry.ts";
 import { foreignRows, schemaSetOf } from "#pantry/import/foreign.ts";
 import { classifyAttribute, classifyElement, scopeOf } from "#pantry/import/wildcard.ts";
@@ -417,11 +417,11 @@ const ancestryOf = (flags: readonly Flag[]): Option.Option<AncestryHandle> =>
   Option.fromNullishOr(Ancestry.handles.find((handle) => handle === handleOf(flags)));
 
 /**
- * The flags in force under an element of `kind` that sits inside `flags`: those it sits inside and
- * the ones its kind enters.
+ * The flags in force under an element of `kind` that sits inside `flags`: the seed's step
+ * (`stepOf`), so an absorbing flag the element holds or enters is the only one.
  */
 const enteredBy = (flags: readonly Flag[], kind: NodeKindHandle): readonly Flag[] =>
-  FLAGS.filter((flag) => flags.includes(flag) || (KindEnters[kind] ?? []).includes(flag));
+  stepOf(flags, kind, KindEnters);
 
 /**
  * The parent kinds, beside a dotted handle's registry `parent`, under which its element name also
@@ -430,11 +430,13 @@ const enteredBy = (flags: readonly Flag[], kind: NodeKindHandle): readonly Flag[
  * A registry row names one parent, and the `Duration` container's `duration` child is the
  * `CharacterString` `lom:duration.string` under `lom:typicalLearningTime` as it is under
  * `lom:duration`, and a test's `qti-rubric-block.test` is the one under a test part and a section
- * as it is under `qti-assessment-test`.
+ * as it is under `qti-assessment-test`. MathML's `semantics-ci` group nests in itself, so a
+ * `semantics` under `m:semantics.ci` is `m:semantics.ci` too.
  */
 const alsoUnder: ReadonlyMap<string, readonly string[]> = new Map([
   ["lom:duration.string", ["lom:typicalLearningTime"]],
   ["qti-rubric-block.test", ["qti-test-part", "qti-assessment-section"]],
+  ["m:semantics.ci", ["m:semantics.ci"]],
 ]);
 
 const clark = (namespace: string, local: string): string => `{${namespace}}${local}`;

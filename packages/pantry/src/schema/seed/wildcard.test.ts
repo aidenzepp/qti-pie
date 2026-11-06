@@ -25,6 +25,7 @@ import { assert, beforeAll, describe, it } from "@effect/vitest";
 import { Config, Effect } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
 import type { Element } from "@qti-pie/crust/tree.ts";
+import { mathmlWildcards } from "#pantry/schema/content/inventory/mathml.ts";
 import { NamespacePolicy, ProcessContents, SchemaSet } from "#pantry/schema/content/rosters.ts";
 import type {
   NamespacePolicyHandle,
@@ -108,11 +109,10 @@ const pendingHosts: readonly (readonly [string, string, string])[] = [
 const XLINK = "http://www.w3.org/1999/xlink";
 
 /**
- * The vocabularies whose every host is not this phase's: MathML (J6), SSML (J7), and `xlink`,
- * whose hosts no instance document reaches.
+ * The vocabularies whose every host is not this phase's: SSML (J7), and `xlink`, whose hosts no
+ * instance document reaches.
  */
 const deferredNamespaces: readonly (readonly [string, string])[] = [
-  [MATHML, "J6"],
   ["http://www.w3.org/2001/10/synthesis", "J7"],
   [XLINK, "unreachable"],
 ];
@@ -323,6 +323,11 @@ interface Definition {
  */
 interface Declaration {
   /**
+   * Whether the declaration is abstract: no instance names it, a member of its substitution group
+   * stands in.
+   */
+  readonly abstract: boolean;
+  /**
    * The named complex type or group the declaration is written inside, or `""` at top level or
    * inside an anonymous type of a global element.
    */
@@ -331,6 +336,11 @@ interface Declaration {
   readonly namespace: string;
   readonly schema: Schema;
   readonly anonymous: Element | undefined;
+  /**
+   * The head of the substitution group the declaration belongs to, as `namespace|local`, when it
+   * has no type of its own and so takes its head's.
+   */
+  readonly head: string | undefined;
   readonly typeKey: string | undefined;
 }
 
@@ -410,10 +420,19 @@ const buildModel = (schemas: readonly Schema[]): Model => {
           const qualified =
             topLevel || form === "qualified" || (form === undefined && schema.elementsQualified);
           const typeName = attributeOf(child, "type");
+          const group = attributeOf(child, "substitutionGroup");
+          const anonymous = childElements(child).find((candidate) =>
+            isXs(candidate, "complexType"),
+          );
 
           declarations.push({
-            anonymous: childElements(child).find((candidate) => isXs(candidate, "complexType")),
+            abstract: attributeOf(child, "abstract") === "true",
+            anonymous,
             container: inside,
+            head:
+              group === undefined || anonymous !== undefined || typeName !== undefined
+                ? undefined
+                : keyOf(...resolve(schema, group)),
             local: name,
             namespace: qualified ? schema.effective : "",
             schema,
@@ -674,7 +693,9 @@ const kindRows = vocabularies.flatMap((vocabulary) =>
  * The kind a declaration names. A name one kind holds is that kind. A name several kinds hold
  * (`source`, `entry`, `duration` in LOM; `metadata` in the content package) is the kind whose
  * registry `parent` is the kind of the element that owns the type the declaration is written in,
- * and otherwise the kind that has no parent.
+ * and otherwise the kind that has no parent. The one exception is MathML's second `semantics`
+ * type, written inside the group `semantics-ci`: it is its own kind, `m:semantics.ci`, whose
+ * registry `parent` is `m:bvar` and which no type owns.
  *
  * @param model - The closure's definitions.
  * @param declaration - The element declaration.
@@ -682,6 +703,13 @@ const kindRows = vocabularies.flatMap((vocabulary) =>
  * @returns The handle, or `undefined` when no kind names it.
  */
 const kindOf = (model: Model, declaration: Declaration, depth = 0): NodeKindHandle | undefined => {
+  if (
+    declaration.container === keyOf(MATHML, "semantics-ci") &&
+    declaration.local === "semantics"
+  ) {
+    return "m:semantics.ci";
+  }
+
   const candidates = kindRows.filter(
     (row) => row.namespace === declaration.namespace && row.local === declaration.local,
   );
@@ -706,6 +734,11 @@ const kindOf = (model: Model, declaration: Declaration, depth = 0): NodeKindHand
  * One host the closure declares, merged over every declaration of its kind.
  */
 interface Host {
+  /**
+   * Whether the declaration is abstract: it is no instance's element, so it is no host row (a
+   * member of its substitution group, which takes its type, is the host).
+   */
+  readonly abstract: boolean;
   readonly attributes: Slot | undefined;
   readonly elements: Slot | undefined;
   readonly kind: NodeKindHandle | undefined;
@@ -721,12 +754,29 @@ interface Host {
  * @param declaration - The element declaration.
  * @returns The type's definition, or `undefined` for a simple or built-in type.
  */
-const definitionOf = (model: Model, declaration: Declaration): Definition | undefined => {
+const definitionOf = (
+  model: Model,
+  declaration: Declaration,
+  depth = 0,
+): Definition | undefined => {
   if (declaration.anonymous !== undefined) {
     return { element: declaration.anonymous, schema: declaration.schema };
   }
 
-  return declaration.typeKey === undefined ? undefined : model.types.get(declaration.typeKey);
+  if (declaration.typeKey !== undefined) {
+    return model.types.get(declaration.typeKey);
+  }
+
+  const head =
+    declaration.head === undefined || depth > 8
+      ? undefined
+      : model.declarations.find(
+          (candidate) =>
+            candidate.container === "" &&
+            keyOf(candidate.namespace, candidate.local) === declaration.head,
+        );
+
+  return head === undefined ? undefined : definitionOf(model, head, depth + 1);
 };
 
 /**
@@ -758,6 +808,7 @@ const hostsOf = (model: Model) => {
     const label = `${declaration.namespace}:${declaration.local}`;
     const kind = kindOf(model, declaration);
     const host: Host = {
+      abstract: declaration.abstract,
       attributes: mergeSlot(found.attributes, `${label} attributes`),
       elements: mergeSlot(found.elements, `${label} elements`),
       kind,
@@ -893,37 +944,45 @@ const rowOf = (host: Host, slot: Slot): seed.WildcardHostRow => ({
  */
 const derivedElementRows = () =>
   derived().hosts.flatMap((host) =>
-    host.elements !== undefined && pendingOf(host) === undefined
+    host.elements !== undefined && !host.abstract && pendingOf(host) === undefined
       ? [rowOf(host, host.elements)]
       : [],
   );
 
 /**
- * The attribute wildcard rows the documents give the kinds the model has: the lax attribute
- * wildcards that are not on the pending-join list. A strict or skipped attribute wildcard is
- * a pending join's or a strict attribute host's (`seed.strictAttributeHosts`), which gets typed
- * `xml:` rows and no row here.
+ * The attribute wildcard rows the documents give the kinds the model has: the lax and the skipped
+ * attribute wildcards (MathML's `CommonAtt`, J6) that are not on the pending-join list. A strict
+ * attribute wildcard is a pending join's or a strict attribute host's
+ * (`seed.strictAttributeHosts`), which gets typed `xml:` rows and no row here.
  *
  * @returns The rows.
  */
 const derivedAttributeRows = () =>
   derived().hosts.flatMap((host) => {
-    if (host.attributes === undefined) {
+    if (host.attributes === undefined || host.abstract) {
       return [];
     }
 
-    if (host.attributes.process !== "lax") {
+    if (host.attributes.process === "strict") {
       assert.isTrue(
         pendingOf(host) !== undefined ||
           (host.kind !== undefined && seed.strictAttributeHosts.includes(host.kind)),
-        `${host.namespace}:${host.local} has a ${host.attributes.process} attribute wildcard and is neither a pending join nor a strict attribute host`,
+        `${host.namespace}:${host.local} has a strict attribute wildcard and is neither a pending join nor a strict attribute host`,
       );
     }
 
-    return host.attributes.process === "lax" && pendingOf(host) === undefined
+    return host.attributes.process !== "strict" && pendingOf(host) === undefined
       ? [rowOf(host, host.attributes)]
       : [];
   });
+
+/**
+ * The lax attribute wildcard rows: the hosts whose declared global attributes are typed. A `skip`
+ * host (MathML's) judges nothing, so a declared global on it is unjudged foreign content.
+ *
+ * @returns The rows.
+ */
+const derivedLaxAttributeRows = () => derivedAttributeRows().filter((row) => row.process === "lax");
 
 /**
  * The `foreign` host row of both tables: any namespace, lax, no target.
@@ -975,6 +1034,27 @@ const informationModelAccepts: readonly string[] = [`qti-ordering|${seed.namespa
 
 const excluded = (host: string, namespace: string) =>
   seed.wildcardExclusion.some((row) => row.host === host && row.namespace === namespace);
+
+/**
+ * The host rows whose target namespace is MathML's.
+ *
+ * @param rows - The host rows.
+ * @returns The MathML ones.
+ */
+const mathmlHosts = (rows: readonly seed.WildcardHostRow[]) =>
+  rows.filter((row) => row.target === seed.namespaces.mathml);
+
+/**
+ * The namespaces the attribute wildcard of a host refuses, sorted.
+ *
+ * @param kind - The host.
+ * @returns The `attributeExclusion` namespaces of the host.
+ */
+const refusedAttributeNamespaces = (kind: string) =>
+  seed.attributeExclusion
+    .filter((row) => row.host === kind)
+    .map((row) => row.namespace)
+    .toSorted();
 
 const pairKey = (row: seed.HostNamespaceRow) => `${row.host}|${row.namespace}`;
 
@@ -1170,6 +1250,49 @@ describe("seed/wildcard rows", () => {
       );
     }
   });
+
+  it("MathML's wildcard rows (J6): m:annotation-xml is the one element host, and each CommonAtt kind is a skip attribute host", () => {
+    const annotationXml = "m:annotation-xml";
+    const attributeKinds = mathmlWildcards.attribute.kinds;
+
+    assert.strictEqual(attributeKinds.length, 183);
+    assert.deepStrictEqual(mathmlHosts(seed.wildcardHost), [
+      { host: annotationXml, policy: "any", process: "lax", target: seed.namespaces.mathml },
+    ]);
+    assert.deepStrictEqual(
+      mathmlHosts(seed.attributeWildcard).map((row) => row.host),
+      [...attributeKinds],
+    );
+    assert.isTrue(
+      mathmlHosts(seed.attributeWildcard).every(
+        (row) => row.policy === "other" && row.process === "skip",
+      ),
+    );
+    assert.strictEqual(
+      seed.attributeWildcard.filter((row) => row.process === "skip").length,
+      attributeKinds.length,
+    );
+    assert.isTrue(excluded(annotationXml, seed.namespaces.mathml));
+    assert.strictEqual(
+      seed.wildcardExclusion.filter((row) => row.host === annotationXml).length,
+      1,
+    );
+  });
+
+  it("each MathML skip host refuses xmlns, the MathML namespace and no namespace, and types no attribute", () => {
+    const typed: ReadonlySet<string> = new Set(
+      seed.wildcardAttributeAdmission.map((row) => row.kind),
+    );
+
+    for (const kind of mathmlWildcards.attribute.kinds) {
+      assert.deepStrictEqual(
+        refusedAttributeNamespaces(kind),
+        ["", seed.namespaces.mathml, seed.namespaces.xmlns].toSorted(),
+        kind,
+      );
+      assert.isFalse(typed.has(kind), `${kind} is a skip host and holds a typed attribute row`);
+    }
+  });
 });
 
 describe.skipIf(!existsSync(cacheDirectory))(
@@ -1236,7 +1359,7 @@ describe.skipIf(!existsSync(cacheDirectory))(
       );
     });
 
-    it("attributeWildcard is every derived lax attribute wildcard host, and foreign", () => {
+    it("attributeWildcard is every derived lax or skip attribute wildcard host, and foreign", () => {
       const rows = derivedAttributeRows();
 
       sameRows(
@@ -1306,7 +1429,7 @@ describe.skipIf(!existsSync(cacheDirectory))(
 
       reported.push({
         compared: hosts.filter((host) => pendingOf(host) !== undefined).length,
-        label: "pending-join hosts (J5, J6, J7, J9, J10 and the unreachable xlink hosts)",
+        label: "pending-join hosts (J5, J7, J9, J10 and the unreachable xlink hosts)",
       });
     });
 
@@ -1315,9 +1438,7 @@ describe.skipIf(!existsSync(cacheDirectory))(
       const fromXsd = hostRows
         .flatMap((row) => excludedBy(row).map((namespace) => `${row.host}|${namespace}`))
         .filter((row) => !informationModelAccepts.includes(row));
-      const fromRecommendation = hostRows
-        .filter((row) => row.target !== MATHML)
-        .map((row) => `${row.host}|${MATHML}`);
+      const fromRecommendation = hostRows.map((row) => `${row.host}|${MATHML}`);
       const inModule = seed.wildcardExclusion.map(pairKey);
 
       sameRows(
@@ -1403,7 +1524,7 @@ describe.skipIf(!existsSync(cacheDirectory))(
       }
 
       const kinds = [
-        ...derivedAttributeRows().map((row) => row.host),
+        ...derivedLaxAttributeRows().map((row) => row.host),
         ...seed.strictAttributeHosts,
         "foreign",
       ];
