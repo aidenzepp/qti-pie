@@ -497,17 +497,13 @@ export const languages = ["response", "outcome", "template", "none"] as const;
 export type Language = (typeof languages)[number];
 
 /**
- * How a processing reference names its variable, in code order: the `Resolution` roster's handles.
+ * How a processing reference names its variable, in code order: the `ReferenceResolution`
+ * roster's handles.
  * `declared`, a declaration of its document; `builtIn`, one of the built-in variables
  * (`BuiltInVariable`); `unresolved`, neither, which only a document that is no item may hold: a
  * response processing template's parameters and a test's item variables are declared elsewhere.
  */
 export const resolutions = ["declared", "builtIn", "unresolved"] as const;
-
-/**
- * A `Resolution` handle.
- */
-export type Resolution = (typeof resolutions)[number];
 
 /**
  * The tables a processing reference needs its declaration to hold, in code order: the
@@ -1014,13 +1010,6 @@ export const ruleKinds = [
   "qti-template-condition",
   "qti-template-else",
 ] as const;
-
-/**
- * The roots whose processing a test's built-in variables reach: a test's and a section's
- * (information model §2.2.2, the test-level `duration`; spec reading 29). Every other root, an
- * item's and a response processing template's, holds an item's built-ins.
- */
-export const testRoots = ["qti-assessment-test", "qti-assessment-section"] as const;
 
 /**
  * The built-in variables each root holds, with the type a reference to one has (information model

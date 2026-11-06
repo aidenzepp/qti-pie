@@ -19,9 +19,9 @@ import {
   builtInTypes,
   integerMathOperators,
   rpTemplatePattern,
-  testRoots,
 } from "#pantry/grammar/expression.ts";
 import { grammar, OperatorArity, VariableReference } from "#pantry/grammar/install.ts";
+import { testRoots } from "#pantry/grammar/references.ts";
 import {
   assembledExpressionRowsOf,
   lookupKey,

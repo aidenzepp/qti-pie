@@ -79,7 +79,6 @@ import {
   integerMathOperators,
   rpTemplatePattern,
   rpTemplates,
-  testRoots,
 } from "#pantry/grammar/expression.ts";
 import {
   AttributeName,
@@ -94,6 +93,7 @@ import {
   SchemaVersion,
   VariableReference,
 } from "#pantry/grammar/install.ts";
+import { testRoots } from "#pantry/grammar/references.ts";
 import { Attribute, Space } from "#pantry/qti/attributes.ts";
 import { Document } from "#pantry/qti/chardata.ts";
 import { Declaration, declarationRef } from "#pantry/qti/declarations.ts";

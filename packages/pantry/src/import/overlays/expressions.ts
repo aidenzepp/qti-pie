@@ -18,7 +18,6 @@ import {
   integerMathOperators,
   rpTemplatePattern,
   rpTemplates,
-  testRoots,
   valueBases,
   valueCardinalities,
 } from "#pantry/grammar/expression.ts";
@@ -30,6 +29,7 @@ import type {
 } from "#pantry/grammar/expression.ts";
 import { BuiltInVariable, interactionKinds, nonElementKinds } from "#pantry/grammar/install.ts";
 import type { BaseType, Cardinality } from "#pantry/grammar/install.ts";
+import { testRoots } from "#pantry/grammar/references.ts";
 import { baseTypeOf, cardinalityOf, piecesOf } from "#pantry/import/overlays/declarations.ts";
 import { itemRefPathsOf, keyOf } from "#pantry/import/overlays/tests.ts";
 import type {
