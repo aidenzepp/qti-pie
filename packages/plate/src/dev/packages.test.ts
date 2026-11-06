@@ -1,7 +1,9 @@
+import { randomUUID } from "node:crypto";
+import { mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { assert, describe, it } from "@effect/vitest";
-import { Effect, Option } from "effect";
+import { afterAll, assert, beforeAll, describe, it } from "@effect/vitest";
+import { ConfigProvider, Effect, Option } from "effect";
 import { defaultTreeAdapter, parse } from "parse5";
 import type { DefaultTreeAdapterTypes } from "parse5";
 import { pageHeaders, pageHtml } from "#plate/dev/frame.ts";
@@ -22,6 +24,7 @@ import { corpusRoot } from "#plate/document/corpus.ts";
 import type { Element, Node } from "#plate/emit/node.ts";
 import type { PackageVerdict } from "#plate/package/open.ts";
 import { parseHtml } from "#plate/test/round-trip.ts";
+import { manifestNamespace } from "#plate/vocabulary.ts";
 
 /**
  * The origin every request is made against; the route never opens it.
@@ -276,6 +279,114 @@ const headersBesidesType = (response: Response): readonly (readonly [string, str
     .toSorted(([a], [b]) => (a < b ? -1 : 1));
 
 /**
+ * The scratch folder this run owns, under the package's git-ignored `work/`, holding the crafted
+ * corpus root and a folder beside it. Its name is new for each run, so two runs at once never share
+ * or remove each other's files.
+ */
+const scratch = path.resolve(
+  import.meta.dirname,
+  "..",
+  "..",
+  "work",
+  `packages-test-${randomUUID()}`,
+);
+
+/**
+ * The crafted corpus root: the package `htmlitem`, whose item document is named `items/q.html`,
+ * the package `evil`, which holds `foo\secret.png` beside a link `foo` to the folder outside, and
+ * a link `linked` to the folder outside, which holds the directory `hidden.zip.d`.
+ */
+const craftedRoot = path.join(scratch, "corpus");
+
+/**
+ * The folder beside the crafted corpus root that `evil`'s link `foo` points at.
+ */
+const outsideRoot = path.join(scratch, "outside");
+
+/**
+ * The bytes of `secret.png` in {@link outsideRoot}, which no package route may answer with.
+ */
+const outsideBytes = "OUTSIDE-SECRET-BYTES";
+
+/**
+ * The bytes `evil` holds in its file named `foo\secret.png`, the file `openPackage` judged as
+ * `foo/secret.png`.
+ */
+const heldBytes = "HELD-BYTES";
+
+/**
+ * Write a 3.0.0 manifest whose one resource is an item with its document at `href`, listing it and
+ * the given other files.
+ *
+ * @param href The item document's path.
+ * @param others The other files the resource lists.
+ * @returns The manifest's text.
+ */
+const craftedManifest = (href: string, ...others: readonly string[]): string =>
+  `<manifest xmlns="${manifestNamespace}" identifier="M"><metadata><schema>QTI Package</schema><schemaversion>3.0.0</schemaversion></metadata><organizations/><resources><resource identifier="Q" type="imsqti_item_xmlv3p0" href="${href}">${[href, ...others].map((file) => `<file href="${file}"/>`).join("")}</resource></resources></manifest>`;
+
+/**
+ * An item whose one response declaration holds a correct response, `A`: what a host must never
+ * serve raw.
+ */
+const craftedItem =
+  '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="q" title="q" adaptive="false" time-dependent="false"><qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier"><qti-correct-response><qti-value>A</qti-value></qti-correct-response></qti-response-declaration><qti-item-body><p>q</p></qti-item-body></qti-assessment-item>';
+
+/**
+ * The package cache over the crafted corpus root, which only {@link craftedRequest} reads.
+ */
+const crafted = Effect.runSync(packageCache());
+
+/**
+ * Run an effect with the crafted corpus root as `PLATE_CORPUS_DIR`.
+ *
+ * @param effect The effect.
+ * @returns The effect under that setting.
+ */
+const inCrafted = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, E> =>
+  effect.pipe(
+    Effect.provide(
+      ConfigProvider.layer(ConfigProvider.fromUnknown({ PLATE_CORPUS_DIR: craftedRoot })),
+    ),
+  );
+
+/**
+ * Send a GET for a target to the route over the crafted packages.
+ *
+ * @param target The path.
+ * @returns The answer.
+ */
+const craftedRequest = (target: string) =>
+  inCrafted(routePackages(crafted, new Request(`${origin}${target}`))).pipe(
+    Effect.flatMap((outcome) => bodyOf(answerOf(outcome, target))),
+  );
+
+beforeAll(() => {
+  const evil = path.join(craftedRoot, "evil.zip.d");
+  const htmlItem = path.join(craftedRoot, "htmlitem.zip.d");
+  mkdirSync(evil, { recursive: true });
+  mkdirSync(path.join(htmlItem, "items"), { recursive: true });
+  mkdirSync(outsideRoot, { recursive: true });
+  writeFileSync(path.join(outsideRoot, "secret.png"), outsideBytes);
+  writeFileSync(path.join(evil, "imsmanifest.xml"), craftedManifest("item.xml", "foo/secret.png"));
+  writeFileSync(path.join(evil, "item.xml"), craftedItem);
+  writeFileSync(path.join(evil, "foo\\secret.png"), heldBytes);
+  symlinkSync(path.join("..", "..", "outside"), path.join(evil, "foo"));
+  mkdirSync(path.join(outsideRoot, "hidden.zip.d"));
+  writeFileSync(
+    path.join(outsideRoot, "hidden.zip.d", "imsmanifest.xml"),
+    craftedManifest("item.xml"),
+  );
+  symlinkSync(path.join("..", "outside"), path.join(craftedRoot, "linked"));
+  writeFileSync(path.join(htmlItem, "imsmanifest.xml"), craftedManifest("items/q.html"));
+  writeFileSync(path.join(htmlItem, "items", "q.html"), craftedItem);
+});
+
+afterAll(() => {
+  rmSync(scratch, { force: true, recursive: true });
+});
+
+/**
  * An unchecked verdict with no resources, which costs nothing to give.
  *
  * @param source The package.
@@ -462,6 +573,60 @@ describe("dev/packages.ts", () => {
           }
         }),
       corpusTimeoutMs,
+    );
+
+    it.effect(
+      "an item document named *.html is accepted but not a file the package lists, so the files route answers 404 for it",
+      () =>
+        Effect.gen(function* htmlItem() {
+          const entry = Option.getOrThrow(yield* inCrafted(crafted.packageOf("htmlitem")));
+          const answer = yield* craftedRequest(fileTarget("htmlitem", "items/q.html"));
+
+          assert.include(accepting, entry.verdict.verdict);
+          assert.isFalse(
+            "accepted" in entry.verdict && entry.verdict.accepted.files.has("items/q.html"),
+          );
+          assert.strictEqual(answer.response.status, 404);
+          assert.notInclude(answer.html, "qti-correct-response");
+        }),
+    );
+
+    it.effect(
+      "a listed file is read under the key openPackage judged: foo\\secret.png beside a link foo to a folder outside answers the held bytes, never the outside file",
+      () =>
+        Effect.gen(function* escape() {
+          const entry = Option.getOrThrow(yield* inCrafted(crafted.packageOf("evil")));
+          const answer = yield* craftedRequest(fileTarget("evil", "foo/secret.png"));
+          const outside = yield* Effect.promise(() =>
+            readFile(path.join(craftedRoot, "evil.zip.d", "foo", "secret.png"), "utf-8"),
+          );
+
+          assert.include(accepting, entry.verdict.verdict);
+          assert.isTrue(
+            "accepted" in entry.verdict && entry.verdict.accepted.files.has("foo/secret.png"),
+          );
+          assert.strictEqual(outside, outsideBytes);
+          assert.strictEqual(answer.response.status, 200);
+          assert.strictEqual(answer.html, heldBytes);
+        }),
+    );
+
+    it.effect(
+      "the packages are found without following links: a *.zip.d under a linked directory, or under a link inside a package, is not a package",
+      () =>
+        Effect.gen(function* unlinked() {
+          const listed = yield* inCrafted(
+            Effect.flatMap(
+              packageCache((source) => Effect.succeed(uncheckedOf(source))),
+              (found) => found.packages,
+            ),
+          );
+
+          assert.deepStrictEqual(
+            listed.map((entry) => entry.location),
+            ["evil.zip.d", "htmlitem.zip.d", "fixtures/m2"],
+          );
+        }),
     );
 
     it.effect(

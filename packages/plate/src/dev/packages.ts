@@ -8,8 +8,10 @@
  * verdict is kept for the cache's life. A package's page lists its resources with the verdict on
  * each document and, when the package is accepted, a native form with one Start button per test;
  * the form posts to `/packages/<id>/tests`, which the playground's session pages take. The files
- * route serves only a file an accepted package lists, of a type `/assets/*` also serves, with the
- * same asset headers, so a package document an item embeds runs in the same sandbox.
+ * route serves only a file in an accepted package's `files`, which leaves out every QTI document,
+ * of a type `/assets/*` also serves, with the same asset headers, so a package document an item
+ * embeds runs in the same sandbox. It reads the file under the key `openPackage` judged it by, and
+ * never through a link out of the package's root.
  *
  * The route returns the frame's {@link Page} for every HTML answer, so the playground's handler
  * writes it with the stylesheets, the theme box and the page headers, and a `Response` only for a
@@ -20,7 +22,7 @@
  * @module
  */
 /* oxlint-disable unicorn/throw-new-error -- `Schema.TaggedError<Self>()` is a class factory that is called once and extended, never thrown. */
-import { readdir, readFile } from "node:fs/promises";
+import { readdir, readFile, realpath } from "node:fs/promises";
 import path from "node:path";
 import { Effect, Option, Result, Schema } from "effect";
 import type { Config } from "effect";
@@ -32,6 +34,7 @@ import { h, text } from "#plate/emit/node.ts";
 import type { Element, Node } from "#plate/emit/node.ts";
 import { openPackage } from "#plate/package/open.ts";
 import type { PackageResource, PackageTest, PackageVerdict } from "#plate/package/open.ts";
+import { packageFiles } from "#plate/package/store.ts";
 import { describeRefusal } from "#plate/validate/verdict.ts";
 
 /**
@@ -176,10 +179,72 @@ export const packageIds = (locations: readonly string[]): readonly string[] => {
 };
 
 /**
- * List the files of a directory, at any depth, by their POSIX paths from it.
+ * One entry a walk of a directory meets: a real file or a real directory.
+ */
+interface WalkEntry {
+  /**
+   * Whether it is a directory; a file when not.
+   */
+  readonly directory: boolean;
+  /**
+   * Its POSIX path from the walk's root.
+   */
+  readonly path: string;
+}
+
+/**
+ * List the files and directories under a directory, at any depth, by their POSIX paths from it.
  *
- * Symbolic links are not followed, as the document set's listing does not follow them, so a link
- * is never a package file.
+ * Symbolic links are not followed: the walk reads one directory at a time and descends only into
+ * real directories, so a link, to a file or to a directory, is never an entry, and nothing outside
+ * the directory is listed through one. Node's recursive `readdir` descends into a linked
+ * directory, which is why the walk does not use it.
+ *
+ * @param root The directory.
+ * @param fix What to change when it cannot be listed.
+ * @returns Each entry, a directory before what it holds, in the order the walk meets them.
+ */
+const walkUnder = (
+  root: string,
+  fix: string,
+): Effect.Effect<readonly WalkEntry[], PackageUnreadable> => {
+  /**
+   * List the entries under one directory of the walk.
+   *
+   * @param relative The directory's POSIX path from the root, empty for the root itself.
+   * @returns Each entry under it, by its path from the root.
+   */
+  const walk = (relative: string): Effect.Effect<readonly WalkEntry[], PackageUnreadable> => {
+    const directory = path.join(root, relative);
+
+    return Effect.tryPromise({
+      catch: (cause) =>
+        new PackageUnreadable({ detail: `${causeText(cause)}; ${fix}`, path: directory }),
+      try: () => readdir(directory, { withFileTypes: true }),
+    }).pipe(
+      Effect.flatMap((entries) =>
+        Effect.all(
+          entries.map((entry) => {
+            const child = relative === "" ? entry.name : `${relative}/${entry.name}`;
+
+            return entry.isDirectory()
+              ? walk(child).pipe(
+                  Effect.map((under) => [{ directory: true, path: child }, ...under]),
+                )
+              : Effect.succeed(entry.isFile() ? [{ directory: false, path: child }] : []);
+          }),
+        ),
+      ),
+      Effect.map((lists) => lists.flat()),
+    );
+  };
+
+  return walk("");
+};
+
+/**
+ * List the files of a directory, at any depth, by their POSIX paths from it, through
+ * {@link walkUnder}, so no link is followed and no link is a file.
  *
  * @param root The directory.
  * @param fix What to change when it cannot be listed.
@@ -189,19 +254,29 @@ const filesUnder = (
   root: string,
   fix: string,
 ): Effect.Effect<readonly string[], PackageUnreadable> =>
-  Effect.tryPromise({
-    catch: (cause) => new PackageUnreadable({ detail: `${causeText(cause)}; ${fix}`, path: root }),
-    try: () => readdir(root, { recursive: true, withFileTypes: true }),
-  }).pipe(
+  walkUnder(root, fix).pipe(
     Effect.map((entries) =>
       entries
-        .filter((entry) => entry.isFile())
-        .map((entry) =>
-          path.relative(root, path.join(entry.parentPath, entry.name)).split(path.sep).join("/"),
-        )
+        .filter((entry) => !entry.directory)
+        .map((entry) => entry.path)
         .toSorted(),
     ),
   );
+
+/**
+ * Construct the failure of a file-system call on a path in a package's directory.
+ *
+ * @param source The package.
+ * @param full The path the call was given.
+ * @returns A function from the call's rejection to the failure.
+ */
+const unreadable =
+  (source: PackageSource, full: string) =>
+  (cause: unknown): PackageUnreadable =>
+    new PackageUnreadable({
+      detail: `${causeText(cause)}; restore the package's directory ${source.root}`,
+      path: full,
+    });
 
 /**
  * Read one file of a package.
@@ -216,15 +291,70 @@ const readPackageFile = (
 ): Effect.Effect<Uint8Array, PackageUnreadable> => {
   const full = path.join(source.root, file);
 
-  return Effect.tryPromise({
-    catch: (cause) =>
-      new PackageUnreadable({
-        detail: `${causeText(cause)}; restore the package's directory ${source.root}`,
-        path: full,
-      }),
-    try: () => readFile(full),
-  });
+  return Effect.tryPromise({ catch: unreadable(source, full), try: () => readFile(full) });
 };
+
+/**
+ * Give the real path of a path in a package's directory, every link on the way resolved.
+ *
+ * @param source The package.
+ * @param full The path.
+ * @returns Its real path.
+ */
+const realPathOf = (
+  source: PackageSource,
+  full: string,
+): Effect.Effect<string, PackageUnreadable> =>
+  Effect.tryPromise({ catch: unreadable(source, full), try: () => realpath(full) });
+
+/**
+ * Find the key a package's directory holds a file under: the path from its root, as the directory
+ * walk finds it, that `openPackage` kept for the file's normal form.
+ *
+ * {@link openDirectory} gives `openPackage` the walk's paths in the walk's order, and
+ * `packageFiles` keeps, of two keys with one normal form, the first, so the same walk through
+ * `packageFiles` gives the key whose bytes were judged. A file named `foo\secret.png` is judged as
+ * `foo/secret.png`, and its key is the name with the backslash, never the path through `foo`.
+ *
+ * @param source The package.
+ * @param file The file's path in normal form.
+ * @returns The key, none when the directory holds no file of that normal form now.
+ */
+const heldKey = (
+  source: PackageSource,
+  file: string,
+): Effect.Effect<Option.Option<string>, PackageUnreadable> =>
+  filesUnder(source.root, `restore the package's directory ${source.root}`).pipe(
+    Effect.map((paths) =>
+      Result.match(packageFiles(new Map(paths.map((key) => [key, key])), source.location), {
+        onFailure: () => Option.none(),
+        onSuccess: (held) => Option.fromUndefinedOr(held.get(file)),
+      }),
+    ),
+  );
+
+/**
+ * Read a file of a package by its key, only when its real path lies inside the package's real
+ * root, so a link swapped in after the walk never reaches a file outside it.
+ *
+ * @param source The package.
+ * @param key The file's key, as the directory walk found it.
+ * @returns The file's bytes, none when its real path is outside the root.
+ */
+const readInside = Effect.fnUntraced(function* readInside(
+  source: PackageSource,
+  key: string,
+): Effect.fn.Return<Option.Option<Uint8Array>, PackageUnreadable> {
+  const root = yield* realPathOf(source, source.root);
+  const full = yield* realPathOf(source, path.join(source.root, key));
+  if (!full.startsWith(`${root}${path.sep}`)) {
+    return Option.none();
+  }
+
+  return Option.some(
+    yield* Effect.tryPromise({ catch: unreadable(source, full), try: () => readFile(full) }),
+  );
+});
 
 /**
  * Open one package from its directory: read every file under it, keyed by its path from the
@@ -251,25 +381,22 @@ export const openDirectory: PackageOpener = Effect.fn("packages.openDirectory")(
  * Find the packages: every `*.zip.d` directory under the corpus root, at any depth, in the order of
  * their locations, then the fixture package, each with its id.
  *
- * Fails with {@link PackageUnreadable} when the corpus root cannot be listed, and a `ConfigError`
- * when neither `PLATE_CORPUS_DIR` nor `HOME` is set.
+ * The corpus is walked through {@link walkUnder}, so a `*.zip.d` reached only through a link, a
+ * linked directory or a link inside a package, is not a package.
+ *
+ * Fails with {@link PackageUnreadable} when a directory under the corpus root cannot be listed, and
+ * a `ConfigError` when neither `PLATE_CORPUS_DIR` nor `HOME` is set.
  */
 const packageSources: Effect.Effect<readonly PackageSource[], PackagesFailure> = Effect.gen(
   function* packageSources() {
     const corpus = yield* corpusRoot;
-    const entries = yield* Effect.tryPromise({
-      catch: (cause) =>
-        new PackageUnreadable({
-          detail: `${causeText(cause)}; extract the 1EdTech QTI 3 examples once under ~/.cache/gr8des/qti3-examples, each nested zip into the X.zip.d/ folder beside it, or set PLATE_CORPUS_DIR to the directory that holds them`,
-          path: corpus,
-        }),
-      try: () => readdir(corpus, { recursive: true, withFileTypes: true }),
-    });
+    const entries = yield* walkUnder(
+      corpus,
+      "extract the 1EdTech QTI 3 examples once under ~/.cache/gr8des/qti3-examples, each nested zip into the X.zip.d/ folder beside it, or set PLATE_CORPUS_DIR to the directory that holds them",
+    );
     const corpusLocations = entries
-      .filter((entry) => entry.isDirectory() && entry.name.endsWith(packageSuffix))
-      .map((entry) =>
-        path.relative(corpus, path.join(entry.parentPath, entry.name)).split(path.sep).join("/"),
-      )
+      .filter((entry) => entry.directory && entry.path.endsWith(packageSuffix))
+      .map((entry) => entry.path)
       .toSorted();
     const locations = [...corpusLocations, fixtureLocation];
     const ids = packageIds(locations);
@@ -583,17 +710,18 @@ const packagePage = (entry: PackageEntry): Page => {
 };
 
 /**
- * Serve one file of a package: only a file the accepted package lists, of a type the route serves,
+ * Serve one file of a package: only a file in the accepted package's `files`, of a type the route
+ * serves, read under the key `openPackage` judged it by and from inside the package's real root,
  * with the asset headers and its type.
  *
  * @param entry The package.
  * @param file The file's path from the package's root, already decoded by {@link servedFilePath}.
  * @returns The file's response, or the 404 page.
  */
-const serveFile = (
+const serveFile = Effect.fnUntraced(function* serveFile(
   entry: PackageEntry,
   file: string,
-): Effect.Effect<Page | Response, PackageUnreadable> => {
+): Effect.fn.Return<Page | Response, PackageUnreadable> {
   const { verdict } = entry;
   const type = assetTypes.get(path.posix.extname(file).toLowerCase());
   if (
@@ -601,22 +729,27 @@ const serveFile = (
     !verdict.accepted.files.has(file) ||
     type === undefined
   ) {
-    return Effect.succeed(notFound());
+    return notFound();
   }
 
-  return readPackageFile(entry, file).pipe(
-    Effect.map(
-      (bytes) =>
-        new Response(new Uint8Array(bytes), { headers: { ...assetHeaders, "content-type": type } }),
-    ),
-  );
-};
+  const key = yield* heldKey(entry, file);
+  if (Option.isNone(key)) {
+    return notFound();
+  }
+
+  return Option.match(yield* readInside(entry, key.value), {
+    onNone: notFound,
+    onSome: (bytes) =>
+      new Response(new Uint8Array(bytes), { headers: { ...assetHeaders, "content-type": type } }),
+  });
+});
 
 /**
  * Route one request under `/packages`: the listing at `/packages`, a package's page at
  * `/packages/<id>`, and a package's file at `/packages/<id>/files/<path>`, each for GET; another
  * method there is a 405, and any other path, an unknown id, an id or a path that does not decode, a
- * path that climbs and a file the package does not list are 404s.
+ * path that climbs, a file not in the accepted package's `files` and a file whose real path leaves
+ * the package's root are 404s.
  *
  * `POST /packages/<id>/tests`, which a package page's Start buttons post to, is not this route's;
  * the playground routes it to its session pages first.

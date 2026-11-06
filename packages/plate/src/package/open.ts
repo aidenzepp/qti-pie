@@ -43,7 +43,7 @@ import type { Location, RefusalRule } from "#plate/validate/refusal.ts";
 import { tables } from "#plate/validate/tables.ts";
 import { acceptedItem, check } from "#plate/validate/verdict.ts";
 import type { Accepted, AcceptedStimulus, AcceptedTest, Verdict } from "#plate/validate/verdict.ts";
-import { resourceRoots } from "#plate/vocabulary.ts";
+import { resourceRoots, resourceTypes } from "#plate/vocabulary.ts";
 import type { CpVersion } from "#plate/vocabulary.ts";
 
 /**
@@ -85,8 +85,17 @@ export interface PackageTest {
  */
 export interface PackageContents {
   /**
-   * Every file the manifest lists by a path inside the package, by that path from the package's
-   * root: the files a host may serve from it. The manifest itself is not one.
+   * The files a host may serve from the package, by their paths from its root: every file the
+   * manifest lists by a path inside the package, except the document of each resource of a QTI
+   * type (an item, a test, a section, a stimulus, outcome declarations, response processing, a
+   * response-processing template and a fragment), and never the manifest.
+   *
+   * A QTI document holds what a candidate must not read, an item's correct responses and mappings
+   * and the base values of response processing among them, whatever its file is named, so it is
+   * left out by the resource that names it, not by its extension; a host reads those documents
+   * through the package and serves only what `render` writes. What stays is what an item embeds,
+   * its images, media, stylesheets and package documents, which a host serves as live documents
+   * (from another origin or under the CSP `sandbox` directive).
    */
   readonly files: ReadonlySet<string>;
   /**
@@ -201,6 +210,16 @@ const judgedTypes: ReadonlySet<string> = new Set([
   "imsqti_stimulus_xmlv3p0",
   "imsqti_test_xmlv3p0",
 ]);
+
+/**
+ * The QTI resource types, the eight `imsqti_*` types of the profile's `type` enumeration: the
+ * document of a resource of one of these types never reaches `files`.
+ */
+const qtiTypes: ReadonlySet<string> = new Set(
+  Object.values(resourceTypes).flatMap((types) =>
+    types.filter((type) => type.startsWith("imsqti_")),
+  ),
+);
 
 /**
  * The root each QTI resource type with a fixed root names, by type.
@@ -735,10 +754,18 @@ const contentsOf = (
   const itemAt = (path: string): Option.Option<Accepted> =>
     verdictAt(documents, path).pipe(Option.flatMap(acceptedItem));
 
+  const documentPaths = new Set(
+    manifest.resources.flatMap((resource) =>
+      qtiTypes.has(resource.type) ? Option.toArray(documentPath(resource)) : [],
+    ),
+  );
+
   return {
     files: new Set(
       manifest.resources.flatMap((resource) =>
-        resource.files.flatMap((file) => Option.toArray(file.path)),
+        resource.files.flatMap((file) =>
+          Option.toArray(file.path).filter((path) => !documentPaths.has(path)),
+        ),
       ),
     ),
     items: byDocument(
