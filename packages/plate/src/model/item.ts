@@ -42,7 +42,17 @@ import {
 } from "#plate/model/attributes.ts";
 import type { AttributeRefusal, ModelWalk } from "#plate/model/attributes.ts";
 import { floatOrRefOf, toleranceModes } from "#plate/model/expression.ts";
-import type { Branch, Expression, FloatOrRef, Rule } from "#plate/model/expression.ts";
+import type {
+  Branch,
+  DeclarationFacet,
+  Expression,
+  ExpressionType,
+  FloatOrRef,
+  KindRule,
+  ResultAttributes,
+  Rule,
+} from "#plate/model/expression.ts";
+import { kindRules } from "#plate/model/expressions/read.ts";
 import { translate } from "#plate/model/regex.ts";
 import { isModelled, parseElementText, parseLexical, trimXmlSpace } from "#plate/model/values.ts";
 import type { ModelledBaseType, Single, Value } from "#plate/model/values.ts";
@@ -2147,37 +2157,102 @@ const readsPercentArea = (
 type ValueType = Pick<Value, "baseType" | "cardinality">;
 
 /**
- * Construct the `single` type of a base type.
+ * Give the value type of a type the kind rules give, none when the value model holds no value of
+ * it: a base type of `any`, `unknown`, `duration` or `file`, or a cardinality of `record` or
+ * `unknown`. Such a type is not judged.
  *
- * @param baseType The base type.
- * @returns The type.
+ * @param type The type.
+ * @returns Its value type, or none.
  */
-const singleType = (baseType: ModelledBaseType): ValueType => ({ baseType, cardinality: "single" });
+const valueTypeOf = (type: ExpressionType): Option.Option<ValueType> => {
+  const { baseType, cardinality } = type;
+
+  return isModelled(baseType) && cardinality !== "record" && cardinality !== "unknown"
+    ? Option.some({ baseType, cardinality })
+    : Option.none();
+};
 
 /**
- * Give the type of every value an expression gives, as the evaluator gives it
- * (`evaluateExpression` in `#plate/engine/evaluate.ts`). Each case names the code it mirrors in
- * that file, so a change to either is seen in the other:
+ * Give the type of the declaration an expression's declaration facet names, as the engine reads
+ * its value: among the responses for a kind that expects a response; among the responses, the
+ * outcomes and the built-in variables the engine holds for one that expects any variable. The one
+ * built-in the engine holds, `numAttempts` ({@link heldBuiltIns}), is a single integer
+ * (`builtInValue` in `#plate/engine/refs.ts`).
  *
- * - `variable`: the type of the response or the outcome it names, whose value the record holds
- *   (`evaluateExpression`'s `variable` case, through `variableValue`), else of the built-in it
- *   names: the one built-in the engine holds, `numAttempts` ({@link heldBuiltIns}), is a single
- *   integer (`builtInValue`).
- * - `correct`: its response's declared type, of the correct response or of the NULL in its place
- *   (`evaluateExpression`'s `correct` case).
- * - `base-value`: its own (`evaluateExpression`'s `base-value` case).
- * - `is-null`, `match` and `equal`: a single boolean (`evaluateExpression`'s `is-null`, `match` and
- *   `equal` cases, through `booleanOf` and `nullOf`).
- * - `map-response` and `map-response-point`: a single float (`mapResponse` and `mapResponsePoint`).
+ * @param identifier The identifier the expression names.
+ * @param expected The kind of variable the facet expects.
+ * @param responses The responses the model holds.
+ * @param outcomes The outcomes the model holds.
+ * @param builtIns The built-in variables the engine holds for this item.
+ * @returns The declaration's type, none when the engine holds no variable of that name.
+ */
+const declarationType = (
+  identifier: string,
+  expected: DeclarationFacet["expected"],
+  responses: ReadonlyMap<string, ResponseDeclaration>,
+  outcomes: ReadonlyMap<string, OutcomeDeclaration>,
+  builtIns: ReadonlySet<string>,
+): Option.Option<ValueType> => {
+  const response: ValueType | undefined = responses.get(identifier);
+  if (expected === "response") {
+    return Option.fromUndefinedOr(response);
+  }
+
+  return Option.fromUndefinedOr(response ?? outcomes.get(identifier)).pipe(
+    Option.orElse(() =>
+      builtIns.has(identifier)
+        ? Option.some<ValueType>({ baseType: "integer", cardinality: "single" })
+        : Option.none(),
+    ),
+  );
+};
+
+/**
+ * Give the attributes an expression's result type depends on that it holds itself:
+ * `qti-base-value`'s and `qti-test-variables`' base type and the operator name of
+ * `qti-math-operator` and `qti-stats-operator`. Every other kind holds none.
  *
- * A NULL keeps the type of the expression that gave it, and the session record holds each variable
- * at its declared type, so the type holds for every value the expression gives.
+ * @param operand The expression.
+ * @returns Its own result attributes.
+ */
+const ownAttributes = (operand: Expression): ResultAttributes => {
+  if (operand.kind === "base-value") {
+    return { baseType: operand.value.baseType };
+  }
+
+  if (operand.kind === "math-operator" || operand.kind === "stats-operator") {
+    return { name: operand.name };
+  }
+
+  if (operand.kind === "test-variables") {
+    return Option.match(operand.baseType, {
+      onNone: () => ({}),
+      onSome: (baseType) => ({ baseType }),
+    });
+  }
+
+  return {};
+};
+
+/**
+ * Give the type of every value an expression gives, through its kind's rule in the registry
+ * (`kindRules` in `#plate/model/expressions/read.ts`): the rule's `resultType` over the types of
+ * its operands, typed the same way, and its result attributes. For a kind with a declaration facet
+ * the attributes carry the type of the declaration it names ({@link declarationType}), and none
+ * when the engine holds no variable of that name, so a kind that takes the declaration's type is
+ * then unknown; the kind's own attributes, such as `qti-base-value`'s base type, come from the
+ * expression ({@link ownAttributes}). A type the value model holds no value of is none
+ * ({@link valueTypeOf}): not judged.
+ *
+ * Each family's tests hold its evaluators to its rules (the type invariant in
+ * `#plate/test/processing.ts`), and a NULL keeps the type of the expression that gave it, so the
+ * type holds for every value the engine gives the expression.
  *
  * @param operand The expression.
  * @param responses The responses the model holds.
  * @param outcomes The outcomes the model holds.
  * @param builtIns The built-in variables the engine holds for this item.
- * @returns Its type, none when it names an identifier the engine does not hold.
+ * @returns Its type, none when the rule gives a type the value model does not hold.
  */
 const typeOf = (
   operand: Expression,
@@ -2185,38 +2260,33 @@ const typeOf = (
   outcomes: ReadonlyMap<string, OutcomeDeclaration>,
   builtIns: ReadonlySet<string>,
 ): Option.Option<ValueType> => {
-  switch (operand.kind) {
-    case "variable": {
-      const ofDeclaration: ValueType | undefined =
-        responses.get(operand.identifier) ?? outcomes.get(operand.identifier);
+  /**
+   * Give the type an expression's kind rule gives it.
+   *
+   * @param each The expression.
+   * @returns Its type, unknown where the rule cannot say.
+   */
+  const expressionTypeOf = (each: Expression): ExpressionType => {
+    const kindRule: KindRule = kindRules[each.kind];
+    const declaration =
+      kindRule.declaration === undefined || !("identifier" in each)
+        ? Option.none()
+        : declarationType(
+            each.identifier,
+            kindRule.declaration.expected,
+            responses,
+            outcomes,
+            builtIns,
+          );
+    const operands: readonly Expression[] = each.operands;
 
-      return Option.fromUndefinedOr(ofDeclaration).pipe(
-        Option.orElse(() =>
-          builtIns.has(operand.identifier) ? Option.some(singleType("integer")) : Option.none(),
-        ),
-      );
-    }
-    case "correct": {
-      const ofDeclaration: ValueType | undefined = responses.get(operand.identifier);
+    return kindRule.resultType(operands.map(expressionTypeOf), {
+      ...ownAttributes(each),
+      ...Option.getOrElse(declaration, () => ({})),
+    });
+  };
 
-      return Option.fromUndefinedOr(ofDeclaration);
-    }
-    case "base-value": {
-      return Option.some(operand.value);
-    }
-    case "match":
-    case "equal":
-    case "is-null": {
-      return Option.some(singleType("boolean"));
-    }
-    case "map-response":
-    case "map-response-point": {
-      return Option.some(singleType("float"));
-    }
-    default: {
-      return operand satisfies never;
-    }
-  }
+  return valueTypeOf(expressionTypeOf(operand));
 };
 
 /**

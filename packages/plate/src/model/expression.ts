@@ -1,17 +1,21 @@
 /**
  * The expressions of response processing as the item model holds them: the names of the expression
  * kinds, the variants, the types of the attributes that may name a variable, with the one
- * classifier of each, and the rules that hold expressions.
+ * classifier of each, the rules that hold expressions, and the shape of a kind's rule
+ * ({@link KindRule}) with the helpers the families build their rules from. The rules themselves
+ * live in the families under `#plate/model/expressions/`.
  *
- * It imports from `effect` with `import type` only and value-imports only
- * `#plate/model/values.ts`, so an engine module, which is a browser module, may value-import its
- * names.
+ * It imports from `effect` and `#plate/vocabulary.ts` with `import type` only and value-imports
+ * only `#plate/model/values.ts`, so an engine module, which is a browser module, may value-import
+ * its names.
  *
  * @module
  */
 import type { Option } from "effect";
 import { isNcName, parseLexical, trimXmlSpace } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
+// oxlint-disable-next-line anti-slop/no-shape-in-symbol-names -- `shape` is the QTI attribute of `qti-inside` and names an area's geometry, not a structure.
+import type { AreaShape, BaseType, Cardinality } from "#plate/vocabulary.ts";
 
 /**
  * The expression kinds: the local name of each element QTI 3.0's XSD admits as a child of
@@ -238,18 +242,86 @@ export const stringOrRefOf = (written: string, declared: ReadonlySet<string>): S
 export const toleranceModes = ["absolute", "exact", "relative"] as const;
 
 /**
- * An expression of response processing, tagged by `kind`: `qti-match`, `qti-variable`,
- * `qti-correct`, `qti-base-value`, `qti-is-null`, `qti-map-response`, `qti-map-response-point` and
- * `qti-equal`.
+ * The values of `rounding-mode`, which `qti-round-to` requires and `qti-equal-rounded` defaults to
+ * `significantFigures`.
+ */
+export const roundingModes = ["decimalPlaces", "significantFigures"] as const;
+
+/**
+ * The functions `qti-math-operator`'s `name` names, in the XSD's order.
+ */
+export const mathOperatorNames = [
+  "sin",
+  "cos",
+  "tan",
+  "sec",
+  "csc",
+  "cot",
+  "asin",
+  "acos",
+  "atan",
+  "atan2",
+  "asec",
+  "acsc",
+  "acot",
+  "sinh",
+  "cosh",
+  "tanh",
+  "sech",
+  "csch",
+  "coth",
+  "log",
+  "ln",
+  "exp",
+  "abs",
+  "signum",
+  "floor",
+  "ceil",
+  "toDegrees",
+  "toRadians",
+] as const;
+
+/**
+ * The constants `qti-math-constant`'s `name` names, in the XSD's order.
+ */
+export const mathConstantNames = ["pi", "e"] as const;
+
+/**
+ * The statistics `qti-stats-operator`'s `name` names, in the XSD's order.
+ */
+export const statsOperatorNames = [
+  "mean",
+  "sampleVariance",
+  "sampleSD",
+  "popVariance",
+  "popSD",
+] as const;
+
+/**
+ * The filters a test-level count or aggregate takes over the items of a test: the section whose
+ * items it reads and the categories it includes and excludes. Each is optional with no default.
+ * An XSD list may be empty, so an empty list of categories is written, not absent.
+ */
+interface TestFilters {
+  readonly excludeCategory: Option.Option<readonly string[]>;
+  readonly includeCategory: Option.Option<readonly string[]>;
+  readonly sectionIdentifier: Option.Option<string>;
+}
+
+/**
+ * An expression of processing, tagged by `kind`: one variant for each of the 64
+ * {@link expressionKinds}, whatever the engine runs of it.
  *
  * Every variant holds its sub-expressions in `operands`, a tuple of the kind's operand count, so a
  * walk recurses over `operands` without knowing the kind, and an evaluator that takes them apart
- * meets no missing operand. A variant holds each attribute of its element: an optional one with a
- * default holds the default when absent, as `equal`'s tolerance mode (`exact`), tolerance (none)
- * and bounds (both included) do, and one with no default is an `Option`, as `variable`'s
- * `weightIdentifier` is, which an item reads and never evaluates. The reader builds an `equal` only
- * in its `exact` mode, the one mode the engine runs; one in `absolute` or `relative` mode is
- * marked.
+ * meets no missing operand. A variant holds each attribute of its element: a required one as
+ * written, an optional one with a default holding the default when absent, as `equal`'s tolerance
+ * mode (`exact`), tolerance (none) and bounds (both included) do, and one with no default as an
+ * `Option`, as `variable`'s `weightIdentifier` is, which an item reads and never evaluates. An
+ * attribute that may name a variable holds a literal or a reference ({@link IntegerOrRef},
+ * {@link FloatOrRef}, {@link StringOrRef}, {@link IntOrIdentifier}). The reader builds an `equal`
+ * only in its `exact` mode, the one mode the engine runs; one in `absolute` or `relative` mode is
+ * marked, as is every kind whose family has not landed.
  */
 export type Expression =
   | { readonly kind: "match"; readonly operands: readonly [Expression, Expression] }
@@ -275,7 +347,190 @@ export type Expression =
       readonly identifier: string;
       readonly kind: "map-response-point";
       readonly operands: readonly [];
-    };
+    }
+  // logic
+  | { readonly kind: "and"; readonly operands: readonly [Expression, ...Expression[]] }
+  | { readonly kind: "or"; readonly operands: readonly [Expression, ...Expression[]] }
+  | { readonly kind: "not"; readonly operands: readonly [Expression] }
+  | {
+      readonly kind: "any-n";
+      readonly max: IntegerOrRef;
+      readonly min: IntegerOrRef;
+      readonly operands: readonly [Expression, ...Expression[]];
+    }
+  // comparison
+  | { readonly kind: "gt"; readonly operands: readonly [Expression, Expression] }
+  | { readonly kind: "gte"; readonly operands: readonly [Expression, Expression] }
+  | { readonly kind: "lt"; readonly operands: readonly [Expression, Expression] }
+  | { readonly kind: "lte"; readonly operands: readonly [Expression, Expression] }
+  | { readonly kind: "duration-lt"; readonly operands: readonly [Expression, Expression] }
+  | { readonly kind: "duration-gte"; readonly operands: readonly [Expression, Expression] }
+  // arithmetic
+  | { readonly kind: "sum"; readonly operands: readonly [Expression, ...Expression[]] }
+  | { readonly kind: "product"; readonly operands: readonly [Expression, ...Expression[]] }
+  | { readonly kind: "subtract"; readonly operands: readonly [Expression, Expression] }
+  | { readonly kind: "divide"; readonly operands: readonly [Expression, Expression] }
+  | { readonly kind: "min"; readonly operands: readonly [Expression, ...Expression[]] }
+  | { readonly kind: "max"; readonly operands: readonly [Expression, ...Expression[]] }
+  // integers
+  | { readonly kind: "integer-divide"; readonly operands: readonly [Expression, Expression] }
+  | { readonly kind: "integer-modulus"; readonly operands: readonly [Expression, Expression] }
+  | { readonly kind: "integer-to-float"; readonly operands: readonly [Expression] }
+  | { readonly kind: "gcd"; readonly operands: readonly [Expression, ...Expression[]] }
+  | { readonly kind: "lcm"; readonly operands: readonly [Expression, ...Expression[]] }
+  // rounding
+  | { readonly kind: "round"; readonly operands: readonly [Expression] }
+  | { readonly kind: "truncate"; readonly operands: readonly [Expression] }
+  | {
+      readonly figures: IntegerOrRef;
+      readonly kind: "round-to";
+      readonly operands: readonly [Expression];
+      readonly roundingMode: (typeof roundingModes)[number];
+    }
+  | {
+      readonly figures: IntegerOrRef;
+      readonly kind: "equal-rounded";
+      readonly operands: readonly [Expression, Expression];
+      readonly roundingMode: (typeof roundingModes)[number];
+    }
+  // functions
+  | {
+      readonly kind: "math-operator";
+      readonly name: (typeof mathOperatorNames)[number];
+      readonly operands: readonly [Expression, ...Expression[]];
+    }
+  | {
+      readonly kind: "math-constant";
+      readonly name: (typeof mathConstantNames)[number];
+      readonly operands: readonly [];
+    }
+  | {
+      readonly kind: "stats-operator";
+      readonly name: (typeof statsOperatorNames)[number];
+      readonly operands: readonly [Expression];
+    }
+  | { readonly kind: "power"; readonly operands: readonly [Expression, Expression] }
+  // containers
+  | { readonly kind: "container-size"; readonly operands: readonly [Expression] }
+  | { readonly kind: "random"; readonly operands: readonly [Expression] }
+  | { readonly kind: "multiple"; readonly operands: readonly Expression[] }
+  | { readonly kind: "ordered"; readonly operands: readonly Expression[] }
+  | { readonly kind: "member"; readonly operands: readonly [Expression, Expression] }
+  | { readonly kind: "delete"; readonly operands: readonly [Expression, Expression] }
+  | { readonly kind: "contains"; readonly operands: readonly [Expression, Expression] }
+  | {
+      readonly kind: "repeat";
+      readonly numberRepeats: IntOrIdentifier;
+      readonly operands: readonly [Expression, ...Expression[]];
+    }
+  | {
+      readonly kind: "index";
+      readonly n: IntOrIdentifier;
+      readonly operands: readonly [Expression];
+    }
+  | {
+      /**
+       * The field of the record operand it reads: a name within the record, never a variable.
+       */
+      readonly fieldIdentifier: string;
+      readonly kind: "field-value";
+      readonly operands: readonly [Expression];
+    }
+  // text
+  | {
+      readonly caseSensitive: boolean;
+      readonly kind: "string-match";
+      readonly operands: readonly [Expression, Expression];
+      readonly substring: boolean;
+    }
+  | {
+      readonly caseSensitive: boolean;
+      readonly kind: "substring";
+      readonly operands: readonly [Expression, Expression];
+    }
+  | {
+      readonly kind: "pattern-match";
+      readonly operands: readonly [Expression];
+      readonly pattern: StringOrRef;
+    }
+  | {
+      /**
+       * The area's `coords`, in written order. A coordinate written with `%` holds its number
+       * without the sign; the reader marks that one was, as it does an area mapping's.
+       */
+      readonly coords: readonly number[];
+      readonly kind: "inside";
+      readonly operands: readonly [Expression];
+      // oxlint-disable-next-line anti-slop/no-shape-in-symbol-names -- `shape` is the QTI attribute of `qti-inside` and names an area's geometry, not a structure.
+      readonly shape: AreaShape;
+    }
+  | {
+      /**
+       * The `class`, an NCName naming the implementation. Foreign attributes and elements of the
+       * operator are not held.
+       */
+      readonly class: Option.Option<string>;
+      /**
+       * The `definition`, a URI naming the operator's definition.
+       */
+      readonly definition: Option.Option<string>;
+      readonly kind: "custom-operator";
+      readonly operands: readonly Expression[];
+    }
+  // references
+  | { readonly identifier: string; readonly kind: "default"; readonly operands: readonly [] }
+  | { readonly kind: "null"; readonly operands: readonly [] }
+  | {
+      readonly kind: "random-integer";
+      readonly max: IntegerOrRef;
+      /**
+       * The least value; the literal 0 when absent.
+       */
+      readonly min: IntegerOrRef;
+      readonly operands: readonly [];
+      /**
+       * The step between values; the literal 1 when absent.
+       */
+      readonly step: IntegerOrRef;
+    }
+  | {
+      readonly kind: "random-float";
+      readonly max: FloatOrRef;
+      /**
+       * The least value; the literal 0 when absent. The kind has no `step`.
+       */
+      readonly min: FloatOrRef;
+      readonly operands: readonly [];
+    }
+  // test
+  | ({ readonly kind: "number-correct"; readonly operands: readonly [] } & TestFilters)
+  | ({ readonly kind: "number-incorrect"; readonly operands: readonly [] } & TestFilters)
+  | ({ readonly kind: "number-presented"; readonly operands: readonly [] } & TestFilters)
+  | ({ readonly kind: "number-responded"; readonly operands: readonly [] } & TestFilters)
+  | ({ readonly kind: "number-selected"; readonly operands: readonly [] } & TestFilters)
+  | ({
+      readonly kind: "outcome-minimum";
+      readonly operands: readonly [];
+      readonly outcomeIdentifier: string;
+      readonly weightIdentifier: Option.Option<string>;
+    } & TestFilters)
+  | ({
+      readonly kind: "outcome-maximum";
+      readonly operands: readonly [];
+      readonly outcomeIdentifier: string;
+      readonly weightIdentifier: Option.Option<string>;
+    } & TestFilters)
+  | ({
+      /**
+       * The `base-type` of the variables it collects; all eleven are written, and none when
+       * absent.
+       */
+      readonly baseType: Option.Option<BaseType>;
+      readonly kind: "test-variables";
+      readonly operands: readonly [];
+      readonly variableIdentifier: string;
+      readonly weightIdentifier: Option.Option<string>;
+    } & TestFilters);
 
 /**
  * One `qti-response-if` or `qti-response-else-if`: its condition and the rules it runs.
@@ -296,3 +551,203 @@ export type Rule =
       readonly otherwise: Option.Option<readonly Rule[]>;
     }
   | { readonly expression: Expression; readonly identifier: string; readonly kind: "set-outcome" };
+
+/**
+ * The type of an expression as the kind rules give it: a base type and a cardinality.
+ *
+ * `any` is the base type of a value that takes any type, `qti-null`'s NULL; `unknown` is one no
+ * rule can say, such as a template variable's or a `qti-custom-operator`'s. A record has no base
+ * type of its own, so it is `{ baseType: "unknown", cardinality: "record" }`. A base type of `any`
+ * or `unknown`, and a cardinality of `unknown`, satisfy every operand rule, as the qti package's
+ * checker reads them (`packages/pantry/src/processing/check.ts`).
+ */
+export interface ExpressionType {
+  readonly baseType: BaseType | "any" | "unknown";
+  readonly cardinality: Cardinality | "unknown";
+}
+
+/**
+ * The attributes of an expression that its result type depends on, as the qti package normalizes
+ * them (`packages/pantry/src/processing/types.ts`). The caller fills them in from the expression or
+ * the declaration it names, and a rule reads an absent one as unknown:
+ *
+ * - `baseType` and `cardinality`: the type of the declaration the kind's declaration facet names, or
+ *   `qti-base-value`'s or `qti-test-variables`' `base-type`.
+ * - `name`: the operator name of `qti-math-operator` or `qti-stats-operator`.
+ */
+export interface ResultAttributes {
+  readonly baseType?: ExpressionType["baseType"];
+  readonly cardinality?: ExpressionType["cardinality"];
+  readonly name?: string;
+}
+
+/**
+ * One operand a kind does not accept, as its rule's `operandsAccept` gives it: its position and
+ * what the kind accepts there, so a refusal can say both.
+ */
+export interface OperandMismatch {
+  /**
+   * The base types the kind accepts at the operand, in the rule's order, or `any` when it accepts
+   * every base type and judges the cardinality alone.
+   */
+  readonly baseTypes: readonly BaseType[] | "any";
+  /**
+   * The cardinalities the kind accepts at the operand, in the rule's order.
+   */
+  readonly cardinalities: readonly Cardinality[];
+  /**
+   * The operand's position among the expression's operands, counted from 1.
+   */
+  readonly position: number;
+}
+
+/**
+ * One attribute of a kind that may name a variable, an entry of the kind rule's reference facet.
+ */
+export interface ReferenceEntry {
+  /**
+   * The attribute's name in the document, such as `number-repeats`.
+   */
+  readonly attribute: string;
+  /**
+   * The base type a variable the attribute names must have: `string` for `pattern`, `float` for
+   * `qti-random-float`'s `min` and `max`, `integer` for every other one, as the qti package's
+   * `referencedBaseType` gives it.
+   */
+  readonly baseType: "float" | "integer" | "string";
+  /**
+   * Whether a reference there is checked. One that is not, `qti-equal`'s `tolerance`, is never
+   * refused and gives NULL when it names no variable the attempt holds.
+   */
+  readonly checked: boolean;
+  /**
+   * The attribute's field in the kind's variant, such as `numberRepeats`.
+   */
+  readonly field: string;
+  /**
+   * Whether the attribute is a list of values, each a literal or a reference, as `tolerance` is.
+   */
+  readonly list: boolean;
+}
+
+/**
+ * A kind rule's declaration facet: the kind's `identifier` names a declaration whose type it takes
+ * or reads, and the kind of variable it expects there.
+ *
+ * `qti-variable` and `qti-default` expect any variable; `qti-correct`, `qti-map-response` and
+ * `qti-map-response-point` a response.
+ */
+export interface DeclarationFacet {
+  readonly attribute: "identifier";
+  readonly expected: "response" | "variable";
+}
+
+/**
+ * The typing of one expression kind, the data the model, the validator and the engine read
+ * generically in place of a case per kind:
+ *
+ * - `resultType`: the type the kind gives from its operands' types and its {@link ResultAttributes}.
+ * - `operandsAccept`: every operand the kind does not accept, each with its position and what the
+ *   kind accepts there, as the qti package's operand rules (P23) judge them; a rule that relates
+ *   its operands computes what it accepts from the others, the first operand setting the base
+ *   type.
+ * - `references`: the reference facet, one entry per attribute that may name a variable.
+ * - `declaration`: the declaration facet, absent for a kind whose `identifier` names no declaration.
+ *
+ * A kind its family has not landed has {@link unlandedRule}, which {@link isUnlanded} tells apart.
+ */
+export interface KindRule {
+  readonly declaration?: DeclarationFacet;
+  readonly operandsAccept: (operands: readonly ExpressionType[]) => readonly OperandMismatch[];
+  readonly references: readonly ReferenceEntry[];
+  readonly resultType: (
+    operands: readonly ExpressionType[],
+    attributes: ResultAttributes,
+  ) => ExpressionType;
+}
+
+/**
+ * A family's kind rules: one entry per kind of the family.
+ */
+export type FamilyRules<K extends ExpressionKind> = { readonly [P in K]: KindRule };
+
+/**
+ * Construct the `single` type of a base type.
+ *
+ * @param baseType The base type.
+ * @returns The type.
+ */
+export const singleOf = (baseType: ExpressionType["baseType"]): ExpressionType => ({
+  baseType,
+  cardinality: "single",
+});
+
+/**
+ * Report whether a type is one a kind accepts at an operand: a base type of the list, or any when
+ * the list is `any`, and a cardinality of the list. A base type of `any` or `unknown`, and a
+ * cardinality of `unknown`, say nothing yet, so they are accepted.
+ *
+ * @param type The operand's type.
+ * @param baseTypes The base types accepted, or `any`.
+ * @param cardinalities The cardinalities accepted.
+ * @returns Whether the type is accepted.
+ */
+export const accepts = (
+  type: ExpressionType,
+  baseTypes: readonly BaseType[] | "any",
+  cardinalities: readonly Cardinality[],
+): boolean =>
+  (baseTypes === "any" ||
+    type.baseType === "any" ||
+    type.baseType === "unknown" ||
+    baseTypes.includes(type.baseType)) &&
+  (type.cardinality === "unknown" || cardinalities.includes(type.cardinality));
+
+/**
+ * Construct the operand rule of a kind whose every operand is judged alone, by the same base types
+ * and cardinalities.
+ *
+ * @param baseTypes The base types accepted at every operand, in the rule's order, or `any`.
+ * @param cardinalities The cardinalities accepted at every operand, in the rule's order.
+ * @returns The rule, which gives each operand of another type.
+ */
+export const everyOperand =
+  (
+    baseTypes: readonly BaseType[] | "any",
+    cardinalities: readonly Cardinality[],
+  ): KindRule["operandsAccept"] =>
+  (operands) =>
+    operands.flatMap((operand, index) =>
+      accepts(operand, baseTypes, cardinalities)
+        ? []
+        : [{ baseTypes, cardinalities, position: index + 1 }],
+    );
+
+/**
+ * The operand rule of a kind that judges none of its operands.
+ *
+ * @returns No mismatch.
+ */
+export const acceptsAnyOperands: KindRule["operandsAccept"] = () => [];
+
+/**
+ * The rule of every kind its family has not landed: it accepts every operand, declares no
+ * reference and no declaration, and types every expression unknown. The validator holds such a
+ * kind untyped and never reads this `resultType` (ruling R3); the model reads it as not judged,
+ * and the reader marks such a kind, so no processing that holds one runs. A family replaces it
+ * with the kind's rule when it lands the kind.
+ */
+export const unlandedRule: KindRule = {
+  operandsAccept: acceptsAnyOperands,
+  references: [],
+  resultType: () => ({ baseType: "unknown", cardinality: "unknown" }),
+};
+
+/**
+ * Report whether a kind rule is {@link unlandedRule}, the rule of a kind its family has not
+ * landed.
+ *
+ * @param rule A kind's rule.
+ * @returns Whether it is the unlanded rule.
+ */
+export const isUnlanded = (rule: KindRule): boolean => rule === unlandedRule;
