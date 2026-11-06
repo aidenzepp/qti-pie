@@ -37,19 +37,22 @@ describe("model/blocks.ts", () => {
 
         assert.deepStrictEqual(generated, committed);
       }),
-    generateTimeoutMs,
+    { tags: ["xsd-datatypes"], timeout: generateTimeoutMs },
   );
 
-  it.effect("the cached Recommendation is the one the table was generated from", () =>
-    Effect.gen(function* xsdPart2Digest() {
-      const bytes = yield* xsdPart2Bytes;
+  it.effect(
+    "the cached Recommendation is the one the table was generated from",
+    () =>
+      Effect.gen(function* xsdPart2Digest() {
+        const bytes = yield* xsdPart2Bytes;
 
-      assert.strictEqual(
-        xsdPart2Sha256,
-        "980de872aa2c50013d5202176eb85eef3f183a7df635fdcb6b4aa34c1c12eb72",
-      );
-      assert.strictEqual(createHash("sha256").update(bytes).digest("hex"), xsdPart2Sha256);
-    }),
+        assert.strictEqual(
+          xsdPart2Sha256,
+          "980de872aa2c50013d5202176eb85eef3f183a7df635fdcb6b4aa34c1c12eb72",
+        );
+        assert.strictEqual(createHash("sha256").update(bytes).digest("hex"), xsdPart2Sha256);
+      }),
+    { tags: ["xsd-datatypes"] },
   );
 
   it("BasicLatin is U+0000 to U+007F", () => {

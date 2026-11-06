@@ -90,7 +90,7 @@ describe("ledger/agreement.ts", () => {
         );
         assert.strictEqual(new Set(recorded).size, recorded.length, "one row per disagreement");
       }),
-    corpusTimeoutMs,
+    { tags: ["corpus"], timeout: corpusTimeoutMs },
   );
 
   it.effect("every finding row says what it found", () =>
@@ -111,7 +111,7 @@ describe("ledger/agreement.ts", () => {
           "stale rulings",
         );
       }),
-    corpusTimeoutMs,
+    { tags: ["corpus"], timeout: corpusTimeoutMs },
   );
 
   it.effect(
@@ -205,7 +205,7 @@ describe("ledger/agreement.ts", () => {
 
         assert.deepStrictEqual(rows.map((row) => row.file).toSorted(), yield* corpusZips);
       }),
-    corpusTimeoutMs,
+    { tags: ["corpus"], timeout: corpusTimeoutMs },
   );
 
   it.effect("a row that lacks a column the reader names fails to decode", () =>

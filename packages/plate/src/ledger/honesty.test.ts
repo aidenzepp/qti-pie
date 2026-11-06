@@ -234,12 +234,15 @@ describe("ledger/honesty.ts", () => {
     );
   });
 
-  it.effect("finds nothing wrong with the package's own claims, features and tests", () =>
-    Effect.gen(function* realCheck() {
-      const conf = yield* confText;
+  it.effect(
+    "finds nothing wrong with the package's own claims, features and tests",
+    () =>
+      Effect.gen(function* realCheck() {
+        const conf = yield* confText;
 
-      assert.isAbove(packageSources.size, 0);
-      assert.deepStrictEqual(honesty({ claims, conf, features, sources: packageSources }), []);
-    }),
+        assert.isAbove(packageSources.size, 0);
+        assert.deepStrictEqual(honesty({ claims, conf, features, sources: packageSources }), []);
+      }),
+    { tags: ["conformance-text"] },
   );
 });
