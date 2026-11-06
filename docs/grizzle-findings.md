@@ -1623,3 +1623,18 @@ messages, but nothing raises either one.
   `GoverningOf` keyed as it is.
 - **Classification.** A documented limit, met by the model's coordinates: grizzle behaves as its README states, so
   nothing is filed.
+
+## `@grizzle/testing`'s `matching` builds every class before it refuses an unbounded repetition (performance, lane JAN)
+
+- **What:** `matching(/^(?:[\t\n\r -\uD7FF\uE000-\uFFFD\u{10000}-\u{10FFFF}]*)$/u)` throws `PatternRefused: … repeats
+  without a bound: write {min,max}`, but only after 2.8 to 4.3 s, at a load average near 45 on the shared laptop. The
+  refusal depends on the pattern's syntax alone (`*`, `+`, `{n,}`), yet it lands after the generator has expanded XML's
+  `Char` class, more than a million code points with the astral plane. A bounded pattern over the same class,
+  `String256DType`'s `{0,255}`, took 6.8 s before it drew.
+- **Measured:** in `src/test/lexical.oracle.test.ts` (a scratch probe, since deleted): xs:anySimpleType 3590 ms,
+  xs:normalizedString 4332 ms, xs:normalizedString (reading 132) 4223 ms, URLDType (reading 124) 2762 ms,
+  alphabet.datatype 3326 ms, every one refused; String256DType 6828 ms in `matching`, 1 ms in `sample`.
+- **qti-pie's workaround (8691dd27):** the test skips a pattern that repeats without a bound outside its classes and
+  escapes before calling `matching`. The probes come out byte-identical.
+- **Classification:** not triaged against grizzle's source; a performance note, not a correctness defect. A refusal
+  that needs no class could be checked before the classes are built.
