@@ -55,6 +55,12 @@ const walks: ReadonlyMap<string, readonly string[]> = new Map([
     ],
   ],
   [
+    "src/dev/session-keyboard.browser.test.ts",
+    [
+      "[T-4] [keyboard] P1 completed by keys alone: each item answered, Enter on Next between them, Enter on Submit part, and Enter on Confirm on the confirm page, which lists the three answered; P2's first item follows with the Part submitted Status focused",
+    ],
+  ],
+  [
     "src/dev/walk.browser.test.ts",
     [
       "[Q-2] [keyboard] BG007 by keys alone: Tab into the group, Space on True, Tab to Submit, Enter, scores 1",
