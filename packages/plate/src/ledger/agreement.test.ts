@@ -10,12 +10,13 @@ import {
   findings,
   pantryVerdicts,
   readVerdicts,
+  staleRulings,
   verdictColumns,
   verdictsCommit,
   verdictsCopy,
   verdictsSource,
 } from "#plate/ledger/agreement.ts";
-import type { Disagreement } from "#plate/ledger/agreement.ts";
+import type { Disagreement, Finding } from "#plate/ledger/agreement.ts";
 
 /**
  * Opening the 28 packages runs in under a second here; the bound leaves room for a slow machine
@@ -57,6 +58,18 @@ const keyOf = (entry: Disagreement): string =>
     entry.pantry.rule,
   ]);
 
+/**
+ * The disagreement a finding row records: its package and both sides, as the row states them.
+ *
+ * @param row The finding row.
+ * @returns The row's disagreement.
+ */
+const recordedDisagreement = (row: Finding): Disagreement => ({
+  file: row.file,
+  pantry: row.pantry,
+  plate: row.plate,
+});
+
 describe("ledger/agreement.ts", () => {
   it.effect(
     "every disagreement has its finding row, and every finding row is a disagreement",
@@ -80,13 +93,71 @@ describe("ledger/agreement.ts", () => {
     corpusTimeoutMs,
   );
 
-  it.effect("every finding row says what it found and carries a ruling", () =>
+  it.effect("every finding row says what it found", () =>
     Effect.gen(function* findingRows() {
       for (const row of yield* findings) {
         assert.isAbove(row.finding.trim().length, 0, row.file);
-        assert.include(["pending"], row.ruling, row.file);
       }
     }),
+  );
+
+  it.effect(
+    "no ruling is stale: each ruled row still disagrees, in the state its ruling was made on",
+    () =>
+      Effect.gen(function* rulingsHold() {
+        assert.deepStrictEqual(
+          staleRulings(yield* findings, yield* disagreements, verdictsCommit),
+          [],
+          "stale rulings",
+        );
+      }),
+    corpusTimeoutMs,
+  );
+
+  it.effect(
+    "a ruling is stale once its row's state changes or its row agrees, naming the row",
+    () =>
+      Effect.gen(function* staleFlagged() {
+        const rows = yield* findings;
+        const seen = rows.map(recordedDisagreement);
+        const ruled = rows.filter((row) => row.ruling !== "pending");
+        const [row] = ruled;
+
+        assert.isDefined(row, "the findings file holds a ruled row");
+        if (row === undefined || row.ruling === "pending") {
+          return;
+        }
+
+        assert.deepStrictEqual(staleRulings(rows, seen, verdictsCommit), [], "the recorded state");
+
+        const changed: Finding = {
+          ...row,
+          ruling: {
+            ...row.ruling,
+            state: { ...row.ruling.state, pantry: { ...row.ruling.state.pantry, rule: "changed" } },
+          },
+        };
+        assert.deepStrictEqual(
+          staleRulings(
+            rows.map((entry) => (entry === row ? changed : entry)),
+            seen,
+            verdictsCommit,
+          ),
+          [{ file: row.file, reason: "state-changed" }],
+        );
+        assert.deepStrictEqual(
+          staleRulings(
+            rows,
+            seen.filter((entry) => entry.file !== row.file),
+            verdictsCommit,
+          ),
+          [{ file: row.file, reason: "agrees" }],
+        );
+        assert.deepStrictEqual(
+          staleRulings(rows, seen, "0000000"),
+          ruled.map((entry) => ({ file: entry.file, reason: "state-changed" })),
+        );
+      }),
   );
 
   it.effect("the copy's header row is the verdict file's columns", () =>
