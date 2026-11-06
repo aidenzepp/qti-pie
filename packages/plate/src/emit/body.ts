@@ -59,10 +59,14 @@ export type RenderInteraction = (
 ) => Result.Result<Element, PartSwapRefused>;
 
 /**
- * Where a nested interaction was met: inside a Choice's Prompt or choice content, or inside an
- * Extended Text's Prompt.
+ * Where a nested interaction was met: inside a Choice's Prompt or choice content, an Extended
+ * Text's Prompt, or an Inline Choice's Label. An Inline Choice's choice content is written as
+ * option text, never as nodes, so its Label is the only content of one the emitter walks.
  */
-export type NestedWithin = "choice-interaction" | "extended-text-interaction";
+export type NestedWithin =
+  | "choice-interaction"
+  | "extended-text-interaction"
+  | "inline-choice-interaction";
 
 /**
  * The content each {@link NestedWithin} names, as the message says it.
@@ -70,6 +74,7 @@ export type NestedWithin = "choice-interaction" | "extended-text-interaction";
 const nestedPlaces: Readonly<Record<NestedWithin, string>> = {
   "choice-interaction": "a Choice's Prompt or choice content",
   "extended-text-interaction": "an Extended Text's Prompt",
+  "inline-choice-interaction": "an Inline Choice's Label",
 };
 
 /**
