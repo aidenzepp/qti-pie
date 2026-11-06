@@ -62,11 +62,6 @@ export const vocabularyNamespaces = {
 >;
 
 /**
- * A vocabulary the pinned XSDs declare.
- */
-export type VocabularyName = keyof typeof vocabularyNamespaces;
-
-/**
  * The QTI namespace, which the ASI XSDs' elements, HTML's included, are in.
  */
 export const asiNamespace = vocabularyNamespaces.asi.namespace;
@@ -90,11 +85,6 @@ export const xincludeNamespace = vocabularyNamespaces.xi.namespace;
  * The namespace of the content-packaging XSDs' elements.
  */
 export const cpNamespace = vocabularyNamespaces.cp.namespace;
-
-/**
- * The namespace of the QTI metadata XSD's elements.
- */
-export const qtiMetadataNamespace = vocabularyNamespaces.qmd.namespace;
 
 /**
  * The namespaces QTI 2's published XSDs declare, each the `targetNamespace` of one of them: items,

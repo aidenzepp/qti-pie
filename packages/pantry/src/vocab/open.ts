@@ -25,7 +25,8 @@
  * an attribute wildcard as the classes its constraint admits, unless it is `strict`, and
  * {@link foreignAttributes} gives a foreign element `xs:anyType`'s. So a class a wildcard refuses
  * is refused by the law, and the Foreign attribute class law ties a stored name's class to its
- * namespace. An open name keeps its lexical form only, read under {@link openValueType}.
+ * namespace. An open name keeps its lexical form only, read as `xs:anySimpleType` with its
+ * whitespace preserved (`openAttribute` of `src/vocab/inventory/attributes.ts`).
  *
  * **Foreign elements.** An element a wildcard admits and no declaration names is a foreign element,
  * whose kind is its namespace class (`foreignKinds` of `src/grammar/kinds.ts`), so the content law
@@ -98,16 +99,6 @@ export type OpenName =
  * breaks it is refused, never read as `no-namespace`.
  */
 export const dataName = /^data-[a-z0-9_.-]+$/u;
-
-/**
- * The type and domain every open attribute's value is read under: `xs:anySimpleType`, its
- * whitespace preserved, as the derived leaf states it (`openAttribute` of
- * `src/vocab/inventory/attributes.ts`).
- *
- * No declaration governs an open name, so no typed value is derived from it and the lexical form
- * is the whole record (fin.md, D2).
- */
-export const openValueType: GlobalAttributeDeclaration = openAttribute;
 
 /**
  * The global elements spec reading 6 keeps foreign inside wildcard content, by kind: QTI's
