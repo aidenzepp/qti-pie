@@ -1,3 +1,12 @@
+/**
+ * The importer's front door (`#pantry/import/package.ts`): its retry schedule on the host, and on
+ * the lease its verdicts, its retries and `CommitUnknown`'s resolution.
+ *
+ * A verdict on the lease is judged against the law oracle (`#pantry/test/locate.ts`
+ * `oracleVerdict`, a second implementation): a package the oracle accepts commits, and one it
+ * refuses is refused under one of the rules its breaches keep. A disagreement is a finding of the
+ * schema or the oracle, never of the package.
+ */
 import { CommitUnknown, Db, query, TransientFailure, uuid, v } from "@bjornpagen/grizzle";
 import type { SerializationFailure, ServerError, Uuid } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";
@@ -7,15 +16,13 @@ import { TestClock } from "effect/testing";
 import { describe, inject } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { importPackage, retrySchedule } from "#pantry/import/package.ts";
-import { ImportRefused, isMappedLaw } from "#pantry/import/refusal.ts";
-import type { ImportLaw, Rule } from "#pantry/import/refusal.ts";
-import { Document } from "#pantry/schema/document.ts";
-import { AuthorApp } from "#pantry/schema/logins.ts";
-import { AttributeLexical, Node, TreeExportCharset } from "#pantry/schema/node.ts";
-import { Package } from "#pantry/schema/package.ts";
-import { Author } from "#pantry/schema/roles.ts";
+import { ImportRefused } from "#pantry/import/refusal.ts";
+import { AuthorApp } from "#pantry/qti/logins.ts";
+import { Package } from "#pantry/qti/package.ts";
+import { Author } from "#pantry/qti/roles.ts";
 import { materialize } from "#pantry/test/fixtures.ts";
 import type { FixtureName } from "#pantry/test/fixtures.ts";
+import { importAgreesWithOracle } from "#pantry/test/locate.ts";
 import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
@@ -23,29 +30,8 @@ const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{1
 const fixtures = inject("fixtures");
 
 /**
- * The package ids a document's trees are, beside the manifest's tree, which is the package id.
+ * A package stored by its id.
  */
-const documentsOf = query(Author).rule((r) => {
-  const { id } = v(Document, "document");
-
-  return r.match(Document, { id, package: r.param("package", uuid) }).find({ id });
-});
-
-const charsetsOf = query(Author).rule((r) => {
-  const { label } = v(TreeExportCharset, "treeExportCharset");
-
-  return r.match(TreeExportCharset, { label, tree: r.param("tree", uuid) }).find({ label });
-});
-
-const lexicalsOf = query(Author).rule((r) => {
-  const { attribute, node } = v(AttributeLexical, "attributeLexical");
-
-  return r
-    .match(Node, { id: node, tree: r.param("tree", uuid) })
-    .match(AttributeLexical, { attribute, node })
-    .find({ attribute, node });
-});
-
 const packageRows = query(Author).rule((r) => {
   const { id } = v(Package, "package");
 
@@ -55,105 +41,14 @@ const packageRows = query(Author).rule((r) => {
     .find({ id });
 });
 
-/**
- * Every tree an imported package holds: the manifest's, whose id is the package id, and its
- * documents'.
- */
-const treesOf = (packageId: Uuid) =>
-  Effect.gen(function* treesOfPackage() {
-    const db = yield* Db.open(AuthorApp.roles.author, {});
-    const documents = yield* (yield* db.execute(documentsOf, { package: packageId })).collect;
-
-    return [packageId, ...documents.map((row) => row.id)];
-  });
-
-/**
- * The export charsets of every tree of a package, by label.
- */
-const charsetsOfPackage = (packageId: Uuid) =>
-  Effect.gen(function* charsetsOfTrees() {
-    const db = yield* Db.open(AuthorApp.roles.author, {});
-    const trees = yield* treesOf(packageId);
-    const found = yield* Effect.all(
-      trees.map((tree) =>
-        Effect.flatMap(db.execute(charsetsOf, { tree }), (result) => result.collect),
-      ),
-    );
-
-    return found.flat().map((row) => row.label);
-  });
-
-/**
- * The `AttributeLexical` rows of every tree of a package.
- */
-const lexicalsOfPackage = (packageId: Uuid) =>
-  Effect.gen(function* lexicalsOfTrees() {
-    const db = yield* Db.open(AuthorApp.roles.author, {});
-    const trees = yield* treesOf(packageId);
-    const found = yield* Effect.all(
-      trees.map((tree) =>
-        Effect.flatMap(db.execute(lexicalsOf, { tree }), (result) => result.collect),
-      ),
-    );
-
-    return found.flat();
-  });
-
-/**
- * The refusal an import fails with, or a test failure when it is accepted or fails otherwise.
- * A law that fell to the nearest rule is logged as a finding.
- */
-const refusalOf = (dir: string, label: string) =>
-  Effect.gen(function* refusalOfImport() {
-    const result = yield* Effect.result(importPackage(dir));
-    if (Result.isSuccess(result)) {
-      return assert.fail(`${label} was accepted as package ${result.success}`);
-    }
-
-    const refusal = result.failure;
-    if (!(refusal instanceof ImportRefused)) {
-      return assert.fail(`${label} failed with something other than a refusal: ${refusal.message}`);
-    }
-
-    // SAFETY: the importer keeps the engine's law verbatim, a value of the structural mirror.
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
-    const law = refusal.law as ImportLaw | undefined;
-    if (law !== undefined && !isMappedLaw(law)) {
-      yield* Effect.logWarning(
-        `FINDING ${label}: law not mapped, filed under ${refusal.rule}: ${refusal.detail}`,
-        law,
-      );
-    }
-
-    return refusal;
-  });
-
-const refused = (dir: string, label: string, rules: readonly Rule[]) =>
-  Effect.gen(function* refusedUnder() {
-    const refusal = yield* refusalOf(dir, label);
-
-    assert.include(rules, refusal.rule, `${label}: ${refusal.message}`);
-  });
-
-const accepted = (dir: string) =>
-  Effect.gen(function* acceptedImport() {
-    const id = yield* importPackage(dir);
-
-    assert.match(id, uuidPattern);
-
-    return id;
-  });
-
-const fixture = (name: FixtureName) => materialize(name);
-
 const serializationReason = {
   _tag: "SerializationFailure",
   message: "PostgreSQL found no serial order of this transaction and a concurrent one",
 };
 
-// SAFETY: Grizzle exports `SerializationFailure` as a type only (`adapter/public/errors.ts:57`;
+// SAFETY: Grizzle exports `SerializationFailure` as a type only (`adapter/public/errors.ts`;
 // findings row 21), so no public constructor builds one, and a constructor checks nothing its type
-// does not. The plain fields of the class at `adapter/errors/failures.ts:544-547` stand for it:
+// does not. The plain fields of the class at `adapter/errors/failures.ts` stand for it:
 // `TransientFailure` reads its reason only through `_tag` and `message`.
 // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
 const serializationReasonAsType = serializationReason as SerializationFailure;
@@ -171,10 +66,10 @@ const serverReport = {
   table: undefined,
 };
 
-// SAFETY: Grizzle exports `ServerError` as a type only (`adapter/public/errors.ts:58`; findings
-// row 21), and its `sqlstate` is a branded `Sqlstate` with no public parse
-// (`engine/src/core/sqlstate.ts:5`). The plain fields of the class at
-// `adapter/errors/failures.ts:34-44` stand for it: the code under test reads only `_tag`.
+// SAFETY: Grizzle exports `ServerError` as a type only (`adapter/public/errors.ts`; findings row
+// 21), and its `sqlstate` is a branded `Sqlstate` with no public parse (`engine/src/core/sqlstate.ts`).
+// The plain fields of the class at `adapter/errors/failures.ts` stand for it: the code under test
+// reads only `_tag`.
 // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
 const serverReportAsType = serverReport as ServerError;
 
@@ -223,6 +118,8 @@ const runRetrySchedule = Effect.gen(function* runRetrySchedule() {
 
 describe("retrySchedule", () => {
   plainIt.effect("keeps retrying past the fifth retry while under its time bound", () =>
+    // Oracle: the specification as a checker, the schedule's contract: bounded by elapsed time,
+    // not by count.
     Effect.gen(function* keepsRetrying() {
       const { attemptAt } = yield* runRetrySchedule;
 
@@ -232,6 +129,7 @@ describe("retrySchedule", () => {
   );
 
   plainIt.effect("waits at most one second between attempts", () =>
+    // Oracle: the specification as a checker, the cap of one second before jitter.
     Effect.gen(function* capsDelays() {
       const { attemptAt } = yield* runRetrySchedule;
       const gaps = attemptAt.slice(1).map((at, i) => at - (attemptAt[i] ?? 0));
@@ -241,6 +139,8 @@ describe("retrySchedule", () => {
   );
 
   plainIt.effect("stops once thirty seconds have passed, and then fails", () =>
+    // Oracle: the specification as a checker, the schedule's bound of thirty seconds: the attempt
+    // that ends past it is the last.
     Effect.gen(function* stopsAtBound() {
       const { attemptAt, gaveUp } = yield* runRetrySchedule;
       const last = attemptAt.at(-1) ?? 0;
@@ -260,6 +160,10 @@ const quickly = Schedule.recurs(2);
 /**
  * Fail `failures` times in a row, then succeed, retried on `schedule` while the failure is
  * transient, with the delays driven by the test clock so nothing sleeps. Gives the attempts made.
+ *
+ * @param schedule - The retries' schedule.
+ * @param failures - How many attempts fail before one succeeds.
+ * @returns The attempts made.
  */
 const attemptsUnder = (schedule: Schedule.Schedule<unknown>, failures: number) =>
   Effect.gen(function* simulated() {
@@ -278,17 +182,58 @@ const attemptsUnder = (schedule: Schedule.Schedule<unknown>, failures: number) =
 
 describe("import/package.test.ts, the retry budget", () => {
   plainIt.effect("the production schedule retries an injected failure and two real ones", () =>
+    // Oracle: the specification as a checker, the schedule's time bound, under which three
+    // transient failures are retried.
     Effect.gen(function* survives() {
       assert.strictEqual(yield* attemptsUnder(retrySchedule, 3), 4);
     }),
   );
 
   plainIt.effect("the test schedule gives up after one injected failure and two real ones", () =>
+    // Oracle: the specification as a checker, `Schedule.recurs(2)`: three attempts in all.
     Effect.gen(function* gaveUp() {
       assert.strictEqual(yield* attemptsUnder(quickly, 3), 3);
     }),
   );
 });
+
+/**
+ * The refusing fixtures, each a copy of `simple` with one hand edit.
+ */
+const broken: readonly FixtureName[] = [
+  "undeclared-response",
+  "choice-in-prompt",
+  "choice-bounds",
+  "body-empty",
+  "bad-template-uri",
+  "identifier-mismatch",
+];
+
+/**
+ * The refusing fixtures whose law the oracle states no host predicate for (Q5.08's value laws),
+ * with the rules the law each breaks keeps: judged against the rule, not the oracle.
+ * `title-mismatch`, whose `lom-title` the oracle states none for either, is judged in
+ * `program.db.test.ts` with Q5.12's cases.
+ */
+const brokenBeyondOracle: readonly (readonly [FixtureName, readonly string[]])[] = [
+  ["two-values-single", ["value-cardinality"]],
+  ["bad-identifier-value", ["typed-copy", "attribute-lexical"]],
+];
+
+/**
+ * The accepted fixtures, each a copy of `simple` in another encoding or layout.
+ */
+const clean: readonly FixtureName[] = [
+  "doctype",
+  "latin1",
+  "external",
+  "utf16",
+  "comment-in-element",
+  "padded-identifier-value",
+  "windows-1252",
+  "padded-attributes",
+  "padded-text",
+];
 
 describe.skipIf(!hasLease)(
   "import/package.test.ts, on the lease",
@@ -299,112 +244,57 @@ describe.skipIf(!hasLease)(
       timeout: "60 seconds",
     })("importPackage on the lease", (it) => {
       it.effect("accepts simple and returns the package's id", () =>
+        // Oracle: PostgreSQL, every law over `simple`, and the package read back by its id.
         Effect.gen(function* acceptsSimple() {
-          const id = yield* accepted(fixtures.simple);
+          const id = yield* importPackage(fixtures.simple);
           const db = yield* Db.open(AuthorApp.roles.author, {});
-          const rows = yield* (yield* db.execute(packageRows, { id })).collect;
 
-          assert.strictEqual(rows.length, 1);
+          assert.match(id, uuidPattern);
+          assert.lengthOf(yield* (yield* db.execute(packageRows, { id })).collect, 1);
         }),
       );
 
-      it.effect("refuses metaData under a LOM rule", () =>
-        refused(fixtures.metaData, "metaData", ["lom-identifier", "lom-title"]),
-      );
+      for (const name of [...broken, ...clean]) {
+        it.effect(`gives ${name} the law oracle's verdict`, () =>
+          // Oracle: a second implementation, the law oracle's verdict over the same entries.
+          Effect.gen(function* oracleAgrees() {
+            yield* importAgreesWithOracle(yield* materialize(name), name);
+          }),
+        );
+      }
 
-      it.effect("refuses identifier-mismatch under lom-identifier", () =>
-        Effect.gen(function* identifierMismatch() {
-          yield* refused(yield* fixture("identifier-mismatch"), "identifier-mismatch", [
-            "lom-identifier",
-          ]);
-        }),
-      );
-
-      it.effect("refuses title-mismatch under lom-title", () =>
-        Effect.gen(function* titleMismatch() {
-          yield* refused(yield* fixture("title-mismatch"), "title-mismatch", ["lom-title"]);
-        }),
-      );
-
-      it.effect("refuses lti under resource-type", () =>
-        refused(fixtures.lti, "lti", ["resource-type"]),
-      );
-
-      it.effect("refuses CAT_Test01_Adaptive_EchoAdapt under not-qti3", () =>
-        refused(fixtures.CAT_Test01_Adaptive_EchoAdapt, "CAT_Test01_Adaptive_EchoAdapt", [
-          "not-qti3",
-        ]),
-      );
-
-      it.effect("refuses sample_pci under not-qti3", () =>
-        refused(fixtures.sample_pci, "sample_pci", ["not-qti3"]),
-      );
-
-      const broken: readonly (readonly [FixtureName, readonly Rule[]])[] = [
-        ["undeclared-response", ["binding-declared"]],
-        ["choice-in-prompt", ["admission", "choice-parent"]],
-        ["two-values-single", ["value-single"]],
-        ["bad-identifier-value", ["value-lexical"]],
-        ["choice-bounds", ["choice-bounds"]],
-        ["body-empty", ["body-empty"]],
-        ["bad-template-uri", ["uri-syntax"]],
-      ];
-      for (const [name, rules] of broken) {
+      for (const [name, rules] of brokenBeyondOracle) {
         it.effect(`refuses ${name} under ${rules.join(" or ")}`, () =>
-          Effect.gen(function* refusesBroken() {
-            yield* refused(yield* fixture(name), name, rules);
+          // Oracle: the specification as a checker, the rule Q5.08's law keeps (the retired guard's,
+          // `value-single` and `value-lexical`, as the refusal table maps them).
+          Effect.gen(function* refusedBeyondOracle() {
+            const refused = yield* Effect.flip(importPackage(yield* materialize(name)));
+
+            assert.isTrue(
+              refused instanceof ImportRefused && rules.includes(refused.rule),
+              `${name}: ${refused.message}`,
+            );
           }),
         );
       }
 
-      const clean: readonly FixtureName[] = [
-        "doctype",
-        "latin1",
-        "external",
-        "utf16",
-        "comment-in-element",
-        "padded-identifier-value",
-      ];
-      for (const name of clean) {
-        it.effect(`accepts ${name}`, () =>
-          Effect.gen(function* acceptsClean() {
-            yield* accepted(yield* fixture(name));
-          }),
+      for (const [name, dir] of [
+        ["lti", fixtures.lti],
+        ["metaData", fixtures.metaData],
+        ["CAT_Test01_Adaptive_EchoAdapt", fixtures.CAT_Test01_Adaptive_EchoAdapt],
+        ["sample_pci", fixtures.sample_pci],
+      ] as const) {
+        it.effect(`gives the published ${name} the law oracle's verdict`, () =>
+          // Oracle: a second implementation, the law oracle's verdict over the same entries.
+          importAgreesWithOracle(dir, name),
         );
       }
-
-      it.effect("accepts windows-1252 with a TreeExportCharset row", () =>
-        Effect.gen(function* windows1252() {
-          const id = yield* accepted(yield* fixture("windows-1252"));
-          const labels = yield* charsetsOfPackage(id);
-
-          assert.strictEqual(labels.length, 1);
-        }),
-      );
-
-      it.effect("accepts padded-attributes with eight AttributeLexical rows", () =>
-        Effect.gen(function* paddedAttributes() {
-          const id = yield* accepted(yield* fixture("padded-attributes"));
-          const rows = yield* lexicalsOfPackage(id);
-
-          assert.strictEqual(rows.length, 8);
-        }),
-      );
-
-      it.effect("accepts padded-text with no AttributeLexical rows", () =>
-        Effect.gen(function* paddedText() {
-          const id = yield* accepted(yield* fixture("padded-text"));
-          const rows = yield* lexicalsOfPackage(id);
-
-          assert.strictEqual(rows.length, 0);
-        }),
-      );
 
       it.effect("retries one injected TransientFailure and then accepts", () =>
+        // Oracle: the specification as a checker, the retry rule: a transient failure is retried.
         Effect.gen(function* retriesTransient() {
           const attempts = yield* Ref.make(0);
-          // The production schedule, so a real 40001 beside the injected one is retried too.
-          const id = yield* importPackage(fixtures.simple, {
+          const id: Uuid = yield* importPackage(fixtures.simple, {
             wrapApply: <A, E, R>(apply: Effect.Effect<A, E, R>) =>
               Effect.flatMap(
                 Ref.getAndUpdate(attempts, (n) => n + 1),
@@ -419,6 +309,8 @@ describe.skipIf(!hasLease)(
       );
 
       it.effect("fails with the TransientFailure itself after the last retry", () =>
+        // Oracle: the specification as a checker, the retry rule: the last attempt's failure is the
+        // call's.
         Effect.gen(function* givesUp() {
           const attempts = yield* Ref.make(0);
           const result = yield* Effect.result(
@@ -432,7 +324,6 @@ describe.skipIf(!hasLease)(
             }),
           );
 
-          assert.isTrue(Result.isFailure(result));
           assert.strictEqual(
             Result.isFailure(result) ? result.failure : undefined,
             serializationFailure,
@@ -442,23 +333,24 @@ describe.skipIf(!hasLease)(
       );
 
       it.effect("reads the package back when the commit's outcome is unknown", () =>
+        // Oracle: the specification as a checker, `CommitUnknown`'s resolution: the apply ran and
+        // committed, so the package is read back and the import answers its id.
         Effect.gen(function* readsBack() {
           const id = yield* importPackage(fixtures.simple, {
             wrapApply: (apply) => Effect.andThen(apply, Effect.fail(new CommitUnknown())),
           });
           const db = yield* Db.open(AuthorApp.roles.author, {});
-          const rows = yield* (yield* db.execute(packageRows, { id })).collect;
 
-          assert.strictEqual(rows.length, 1);
+          assert.lengthOf(yield* (yield* db.execute(packageRows, { id })).collect, 1);
         }),
       );
 
       it.effect("fails with CommitUnknown when the package is not there", () =>
+        // Oracle: the specification as a checker, `CommitUnknown`'s resolution: no package was
+        // read back, so the error is the answer.
         Effect.gen(function* notThere() {
           const result = yield* Effect.result(
-            importPackage(fixtures.simple, {
-              wrapApply: () => Effect.fail(new CommitUnknown()),
-            }),
+            importPackage(fixtures.simple, { wrapApply: () => Effect.fail(new CommitUnknown()) }),
           );
 
           assert.isTrue(Result.isFailure(result) && result.failure._tag === "CommitUnknown");

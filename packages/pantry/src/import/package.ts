@@ -1,22 +1,28 @@
 /**
  * The importer's front door: a package directory in, one committed package out or one named
- * refusal.
+ * refusal (plan W5, Q5.15; the W5 amendment's A, C19 and C22).
  *
- * The package is read whole into rows in memory (manifest, then each document the manifest lists)
- * and judged by the guards, by the dry run's own read (`#pantry/import/preview.ts`), and written as
- * one `ChangeSet` applied once, so the database holds either the whole package or nothing of it.
+ * The package is read, shredded and built into its rows once (`readProgram` of
+ * `#pantry/import/program.ts`), and written as one ChangeSet step over the author role
+ * (`changeSetOf` of `#pantry/import/write.ts`), applied once by `db.apply` and compiled for that
+ * call. The apply is one transaction, so the database holds the whole package or nothing of it:
+ * there is no split and no completion marker, and a family past one statement's transport bounds
+ * is chunked by grizzle into consecutive statements of that transaction (fin.md §4.5a).
  */
-import { ChangeSet, Db } from "@bjornpagen/grizzle";
-import type { ApplyError, DbLayer, Fact, OpenError, Uuid } from "@bjornpagen/grizzle";
-import { Clock, Duration, Effect, Option, Random, Ref, Schedule } from "effect";
-import type { FileSystem, PlatformError } from "effect";
-import { readImport } from "#pantry/import/preview.ts";
-import type { ImportLaw, ImportRefused, ImportWitness } from "#pantry/import/refusal.ts";
-import { refusalOfLaw } from "#pantry/import/refusal.ts";
-import { Rows } from "#pantry/import/tree.ts";
-import { AuthorApp } from "#pantry/schema/logins.ts";
-import { Package } from "#pantry/schema/package.ts";
-import { Author } from "#pantry/schema/roles.ts";
+/* oxlint-disable unicorn/throw-new-error -- Schema.TaggedError is a schema class factory. */
+import { Db } from "@bjornpagen/grizzle";
+import type { ApplyError, DbLayer, Law, OpenError, Uuid } from "@bjornpagen/grizzle";
+import { Clock, Duration, Effect, Option, Random, Ref, Result, Schedule, Schema } from "effect";
+import type { Array as Arr, FileSystem, PlatformError } from "effect";
+import { grammar } from "#pantry/grammar/install.ts";
+import { readProgram } from "#pantry/import/program.ts";
+import { lawIdentity, refusalOfLaws } from "#pantry/import/refusal.ts";
+import type { ImportRefused, RefusalWitness } from "#pantry/import/refusal.ts";
+import { changeSetOf } from "#pantry/import/write.ts";
+import type { PackageFile } from "#pantry/package/read.ts";
+import { AuthorApp } from "#pantry/qti/logins.ts";
+import { Package } from "#pantry/qti/package.ts";
+import type { Author } from "#pantry/qti/roles.ts";
 
 /**
  * The longest the retries of one database call run, in total.
@@ -50,26 +56,73 @@ export const retrySchedule = Schedule.exponential("50 millis", 2).pipe(
 );
 
 /**
- * What a caller may replace in {@link importPackage}: how the database calls are retried and what
- * runs in place of the apply, so a test can inject a failure the cluster will not raise on demand.
+ * Where a law the database reported without a row broke, as the host found it: the relation and
+ * the fields of the row, or of the node, that breaks it.
+ */
+export interface Located {
+  readonly relation: string;
+  readonly values: Readonly<Record<string, string>>;
+}
+
+/**
+ * Find where a package breaks laws the database refused it under without naming a row: a CHECK or
+ * a foreign key PostgreSQL reports by its constraint alone (README, "Errors and outcomes").
+ *
+ * @param files - The package's entries, as `readPackage` read them.
+ * @param laws - The laws the refusal names.
+ * @returns The row that breaks one of them, or none when the host finds no breach of any.
+ */
+export type Locate = (
+  files: readonly PackageFile[],
+  laws: Arr.NonEmptyReadonlyArray<Law>,
+) => Effect.Effect<Option.Option<Located>>;
+
+/**
+ * What a caller may replace in {@link importPackage}: how the database calls are retried, what
+ * runs in place of the apply, so a test can inject a failure the cluster will not raise on demand,
+ * and how a refusal that names no row is located.
  */
 export interface ImportOptions {
+  /**
+   * Finds the row a CHECK or foreign-key refusal breaks, which grizzle's witness does not name.
+   * Without one, such a refusal says that the database names no row.
+   */
+  readonly locate?: Locate;
+  /**
+   * The schedule of the retries of `Db.open` and `db.apply`. Defaults to {@link retrySchedule}.
+   */
+  readonly schedule?: Schedule.Schedule<unknown>;
   /**
    * Wraps each attempt of the apply, in place of running it as is. Defaults to running it.
    */
   readonly wrapApply?: <A, E, R>(
     apply: Effect.Effect<A, E, R>,
   ) => Effect.Effect<A, E | ApplyError, R>;
+}
+
+/**
+ * The host found no breach of the laws the database refused a package under: the law oracle and
+ * the schema disagree, a defect of one of them, never a verdict on the package.
+ */
+export class LocateDisagreement extends Schema.TaggedError<LocateDisagreement>()(
+  "LocateDisagreement",
+  { laws: Schema.Array(Schema.String), packageId: Schema.String },
+) {
   /**
-   * The schedule of the retries of `Db.open` and `db.apply`. Defaults to {@link retrySchedule}.
+   * The laws, the package, and the repair.
    */
-  readonly schedule?: Schedule.Schedule<unknown>;
+  override get message(): string {
+    return `The database refused package ${this.packageId} under ${this.laws.join("; ")}, and the host's locator finds no breach of any of them. The schema and the law oracle disagree: find which states the law wrongly and correct it.`;
+  }
 }
 
 /**
  * Whether the database refused an attempt for a reason outside the call's inputs, so the same call
  * may succeed again: grizzle's `TransientFailure`, or an `OpenError` whose admission was refused by
  * `SERIALIZABLE`. Nothing else is retried.
+ *
+ * @param error - The failure.
+ * @returns Whether it is transient.
  */
 const isTransient = (error: ApplyError | OpenError): boolean =>
   error._tag === "TransientFailure" ||
@@ -80,6 +133,11 @@ const isTransient = (error: ApplyError | OpenError): boolean =>
  * logs the attempt it follows, the time since the first attempt and the failure's tag, so a run
  * shows how often it retried; a failure after the last retry is the error it was, logged with the
  * attempts made.
+ *
+ * @param name - The call's name, for the logs.
+ * @param attempt - One attempt.
+ * @param schedule - The retries' schedule.
+ * @returns The first attempt that succeeds, or the last failure.
  */
 const retried = <A, E extends ApplyError | OpenError, R>(
   name: string,
@@ -117,40 +175,59 @@ const retried = <A, E extends ApplyError | OpenError, R>(
   });
 
 /**
- * One `ChangeSet` inserting every row of `rows`, relation by relation, the package's own first.
+ * Build the refusal of an `invariant-rejected` outcome: its rule and explanation by
+ * `refusalOfLaws`, with the row a locator finds where grizzle's witness names none.
+ *
+ * @param refusal - The outcome's laws and witness, and the package's id and entries.
+ * @param refusal.files - The package's entries.
+ * @param refusal.laws - The laws.
+ * @param refusal.packageId - The package's id.
+ * @param refusal.witness - The witness.
+ * @param locate - The locator, if any.
+ * @returns The `ImportRefused`. Dies with `LocateDisagreement` when the locator finds no breach of
+ *   the laws, and with `UnownedLaws` when no rule owns them: each a defect of this package's
+ *   schema, oracle or law table, never a verdict on the package.
  */
-export const changeSetOf = (rows: Rows) => {
-  let changes = ChangeSet.empty(Author).insert(Package, Rows.of(rows, Package));
-
-  for (const [relation, facts] of rows) {
-    if (relation !== Package && facts.length > 0) {
-      // SAFETY: `Rows` holds each relation's own facts under that relation, and every relation it holds is one the author role writes, but a map keyed by `AnyRelation` cannot say so to `insert`'s per-relation write check; `Package` stands for any of them, and `insert` reads only the relation's name and the facts at run time.
-      changes = changes.insert(
-        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
-        relation as typeof Package,
-        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
-        facts as readonly Fact<typeof Package>[],
-      );
+const refusedBy = Effect.fnUntraced(function* refusedBy(
+  refusal: {
+    readonly files: readonly PackageFile[];
+    readonly laws: Arr.NonEmptyReadonlyArray<Law>;
+    readonly packageId: Uuid;
+    readonly witness: RefusalWitness;
+  },
+  locate: Locate | undefined,
+): Effect.fn.Return<ImportRefused> {
+  const { files, laws, packageId } = refusal;
+  let { witness } = refusal;
+  if (witness.kind === "unreported" && locate !== undefined) {
+    const located = yield* locate(files, laws);
+    if (Option.isNone(located)) {
+      return yield* Effect.die(new LocateDisagreement({ laws: laws.map(lawIdentity), packageId }));
     }
+
+    witness = { kind: "row", ...located.value };
   }
 
-  return changes;
-};
+  return yield* Result.match(refusalOfLaws(laws, witness, grammar), {
+    onFailure: (unowned) => Effect.die(unowned),
+    onSuccess: (refused) => Effect.succeed(refused),
+  });
+});
 
 /**
  * Import the package at `dir`.
  *
- * Reads `imsmanifest.xml` and every QTI document it lists, judges the rows with the tree, manifest,
- * item, content, processing, usage and wildcard guards, and applies them in one `ChangeSet` through
- * the author role. `Db.open` and `db.apply` are retried on a transient refusal and on nothing else.
- * When the commit's outcome is unknown the package row is read back by its id: present, the import
- * was accepted; absent, the error is the answer.
+ * Reads the package once, shreds the documents its manifest names, mints every id afresh and
+ * builds every row, then applies them as one ChangeSet through the author role. `Db.open` and
+ * `db.apply` are retried on a transient refusal and on nothing else. When the commit's outcome is
+ * unknown the package row is read back by its id: present, the import was accepted; absent, the
+ * error is the answer. The same package imported twice is two packages, each with its own ids.
  *
- * @param dir - The package directory.
- * @param options - Replacements for the retry schedule and the apply step, for tests.
+ * @param dir - The package directory or `.zip` file.
+ * @param options - Replacements for the retry schedule, the apply step and the locator, for tests.
  * @returns The id of the committed package. Fails with `ImportRefused` naming the rule the package
- *   broke, whether a guard, the reader or the database refused it; with the platform's error when
- *   the directory cannot be read; and with grizzle's own error when the database failed for a
+ *   broke, whether the reader, the codec or the database refused it; with the platform's error
+ *   when the directory cannot be read; and with grizzle's own error when the database failed for a
  *   reason that is not a refusal.
  */
 export const importPackage = Effect.fn("import.importPackage")(function* importPackage(
@@ -163,10 +240,11 @@ export const importPackage = Effect.fn("import.importPackage")(function* importP
 > {
   const schedule = options.schedule ?? retrySchedule;
   const wrap = options.wrapApply ?? (<A, E, R>(apply: Effect.Effect<A, E, R>) => apply);
-  const { packageId, rows } = yield* readImport(dir);
-  const changes = changeSetOf(rows);
+  const program = yield* readProgram(dir);
+  const { packageId } = program;
+  const changes = changeSetOf(AuthorApp.roles.author.role, program.inputs);
   const db = yield* retried("Db.open", Db.open(AuthorApp.roles.author, {}), schedule);
-  const outcome = yield* retried("db.apply", wrap(db.apply(changes, {})), schedule).pipe(
+  const [elapsed, outcome] = yield* retried("db.apply", wrap(db.apply(changes, {})), schedule).pipe(
     Effect.catchTag("CommitUnknown", (unknown) =>
       Effect.gen(function* readBack() {
         const found = yield* db
@@ -176,23 +254,28 @@ export const importPackage = Effect.fn("import.importPackage")(function* importP
         return Option.isSome(found) ? { kind: "committed" as const } : yield* unknown;
       }),
     ),
+    Effect.timed,
   );
 
+  yield* Effect.annotateCurrentSpan({ applyMillis: Duration.toMillis(elapsed), packageId });
+
   if (outcome.kind === "invariant-rejected") {
-    return yield* refusalOfLaw(
-      outcome.law satisfies ImportLaw,
-      outcome.witness satisfies ImportWitness,
+    return yield* Effect.fail(
+      yield* refusedBy(
+        { files: program.files, laws: outcome.laws, packageId, witness: outcome.witness },
+        options.locate,
+      ),
+    );
+  }
+
+  if (outcome.kind === "accepted") {
+    yield* Effect.logDebug(
+      "import applied",
+      Object.fromEntries(outcome.counts.map((c) => [c.relation, String(c.added)])),
     );
   }
 
   if (outcome.kind === "accepted" || outcome.kind === "committed") {
-    if (outcome.kind === "accepted") {
-      yield* Effect.logDebug(
-        "import applied",
-        Object.fromEntries(outcome.counts.map((c) => [c.relation, String(c.added)])),
-      );
-    }
-
     return packageId;
   }
 

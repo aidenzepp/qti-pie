@@ -18,10 +18,6 @@ import {
   transformHash,
 } from "#pantry/test/fixtures.ts";
 import type { Edit, FixtureName, FixtureSpec } from "#pantry/test/fixtures.ts";
-import { readRows } from "#pantry/import/preview.ts";
-import { Rows } from "#pantry/import/tree.ts";
-import { AttributeFileReference } from "#pantry/schema/reference.ts";
-import { PackageEntry } from "#pantry/schema/package.ts";
 import { settings as hostSettings } from "#pantry/test/settings.ts";
 
 /**
@@ -677,58 +673,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts", (it
     ),
   );
 
-  it.effect("the variants' Spanish image resolves to a file the package holds", () =>
-    inFreshRoot(() =>
-      Effect.gen(function* variantImages() {
-        for (const name of [
-          "variant",
-          "variant-padded",
-          "variant-no-resource",
-          "variant-no-metadata",
-        ] as const) {
-          const { rows } = yield* readRows(yield* materialize(name));
-          const references = Rows.of(rows, AttributeFileReference);
-          const entries = Rows.of(rows, PackageEntry);
-
-          assert.isAtLeast(references.length, 1, `${name}: file references`);
-
-          for (const reference of references) {
-            assert.isTrue(
-              entries.some(
-                (entry) => entry.package === reference.package && entry.path === reference.path,
-              ),
-              `${name}: ${reference.path} is a package entry`,
-            );
-          }
-        }
-      }),
-    ),
-  );
-
-  it.effect("the media fixtures' referenced files are entries of their package", () =>
-    inFreshRoot(() =>
-      Effect.gen(function* mediaFiles() {
-        for (const name of ["html-audio", "html-param", "controls-3-0-0"] as const) {
-          const { rows } = yield* readRows(yield* materialize(name));
-          const references = Rows.of(rows, AttributeFileReference);
-          const entries = Rows.of(rows, PackageEntry);
-
-          assert.isAtLeast(references.length, 1, `${name}: file references`);
-
-          for (const reference of references) {
-            assert.isTrue(
-              entries.some(
-                (entry) => entry.package === reference.package && entry.path === reference.path,
-              ),
-              `${name}: ${reference.path} is a package entry`,
-            );
-          }
-        }
-      }),
-    ),
-  );
-
-  it.effect("cut-drawing keeps the file its srcset names, and its references resolve", () =>
+  it.effect("cut-drawing keeps the file its srcset names, and its manifest lists it", () =>
     inFreshRoot(() =>
       Effect.gen(function* cutDrawing() {
         const fs = yield* FileSystem.FileSystem;
@@ -740,21 +685,6 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts", (it
           "items/images/anglePQR.svg",
           "manifest lists anglePQR.svg",
         );
-
-        const { rows } = yield* readRows(dir);
-        const references = Rows.of(rows, AttributeFileReference);
-        const entries = Rows.of(rows, PackageEntry);
-
-        assert.isAtLeast(references.length, 1, "file references");
-
-        for (const reference of references) {
-          assert.isTrue(
-            entries.some(
-              (entry) => entry.package === reference.package && entry.path === reference.path,
-            ),
-            `${reference.path} is a package entry`,
-          );
-        }
       }),
     ),
   );

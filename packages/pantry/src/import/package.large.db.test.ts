@@ -1,79 +1,215 @@
-import { NodeServices } from "@effect/platform-node";
+/**
+ * A package past one Bind message (plan W5, Q5.20; fin.md §4.5a; the operator's ruling of
+ * 2026-11-05 on issue #3): the every-relation package (`#pantry/test/gen/every-relation.ts`) with a
+ * bulk of binary entries whose record alone is longer than PostgreSQL's longest message, imported
+ * in one transaction and exported back equal.
+ *
+ * A package's record is one `Entry` family under its `Package` row, every entry's bytes as its
+ * canonical base64 (`#pantry/import/record.ts`), written in one ChangeSet step. One statement's
+ * Bind message carries at most 1,073,741,822 bytes (PostgreSQL's `PQ_LARGE_MESSAGE_LIMIT`,
+ * grizzle's `messageMaxBytes`), and one array literal at most 536,870,888 UTF-16 code units (V8's
+ * longest string, `maxStringLength`). A family past either is written by grizzle as one count
+ * update and consecutive inserts in ascending slot order, in the same transaction, and never
+ * refused as `InputTooLarge` (fin.md §4.5a, grizzle's W2.P1). So the importer never splits a
+ * package: the whole package is one transaction, however large.
+ *
+ * Written to run at N1 on the lease, never by a hand. It holds about 1.1 GB of base64 text on the
+ * JavaScript heap at once, the record as the import builds it and again as the export reads it,
+ * within Node's default heap of about 4 GB; on disk the bulk's entries are hard links to one file,
+ * and the export writes them out whole under the package's `work/`, removed when the test ends.
+ *
+ * @see {@link https://www.postgresql.org/docs/19/protocol-message-formats.html | PostgreSQL 19, §54.7 Message Formats}
+ */
+import { Db } from "@bjornpagen/grizzle";
+import type { DbConnection } from "@bjornpagen/grizzle";
+import { NodeFileSystem, NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
-import { Effect, FileSystem, Layer } from "effect";
+import { Duration, Effect, FileSystem, Layer, Option, Path, Redacted } from "effect";
+import { Client } from "pg";
 import { describe } from "vitest";
+import { loginConnection } from "#pantry/db/connection.ts";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { comparePackage, renderReport } from "#pantry/export/compare.ts";
 import { exportPackage } from "#pantry/export/package.ts";
 import { importPackage } from "#pantry/import/package.ts";
-import { readRows } from "#pantry/import/preview.ts";
-import { materializeProcessing } from "#pantry/processing/fixtures.ts";
-import { Package } from "#pantry/schema/package.ts";
-import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
+import { AuthorApp } from "#pantry/qti/logins.ts";
+import { Package } from "#pantry/qti/package.ts";
+import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
+import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
 
 /**
- * The floor on the relations `large-program` writes: the number its import wrote when it crossed
- * the compiler's old ceiling of 1,048,576 SQL bytes.
+ * The longest Bind message a PostgreSQL 19 backend reads, as its length word counts it: grizzle's
+ * `messageMaxBytes`, from `PQ_LARGE_MESSAGE_LIMIT` (grizzle's README, "Limits": "One statement's
+ * parameters are at most 1,073,741,822 bytes"). grizzle's public API does not export it.
  *
- * Measured on 2026-11-05 on pin `ee3b5fc`: the import program needed 1,048,611 SQL bytes, 35 over
- * the ceiling, and wrote facts to 199 relations (the `Package` relation and 198 others). `ee3b5fc`
- * refused it as `ResourceBound` on `sqlBytes`; the importer named the refusal `program-budget`.
- *
- * The floor keeps the package from silently shrinking below the size that crossed. It is a property
- * of the package, not a size of grizzle's program, which the pinned grizzle no longer reports.
+ * @see {@link https://github.com/postgres/postgres/blob/REL_19_RC1/src/include/libpq/libpq.h#L34 | libpq.h, PQ_LARGE_MESSAGE_LIMIT, one less than MaxAllocSize}
  */
-const LARGE_PROGRAM_RELATIONS = 199;
+const messageMaxBytes = 1_073_741_822;
 
 /**
- * The directory the export is written under: the package's gitignored `work/`.
+ * The bytes of each bulk entry: 64 MiB, whose base64 is 89,478,488 characters, so the literal
+ * bound admits five of them in one statement and the Bind bound twelve.
  */
-const exportRoot = `${import.meta.dirname}/../../work/export`;
+const bulkEntryBytes = 64 * 1024 * 1024;
+
+/**
+ * The length of the canonical base64 of a byte string, padded (RFC 4648, §4).
+ *
+ * @param bytes - The byte string's length.
+ * @returns Its base64's length, in characters, which are its UTF-8 bytes.
+ */
+const base64Length = (bytes: number): number => 4 * Math.ceil(bytes / 3);
+
+/**
+ * The bulk's entries: the fewest whose record content alone is past {@link messageMaxBytes}.
+ */
+const bulkEntries = Math.floor(messageMaxBytes / base64Length(bulkEntryBytes)) + 1;
+
+/**
+ * The timeout of the test: it sends past a gibibyte to the server and reads it back.
+ */
+const largeTimeoutMs = 1_800_000;
+
+/**
+ * The author login's PostgreSQL role, `<schema>__<login>`.
+ */
+const authorAppRole = "qti__author_app";
+
+/**
+ * The author role's PostgreSQL role, which holds SELECT on every table of `Qti` it writes whole.
+ */
+const authorRole = "qti__author";
+
+/**
+ * The password a connection authenticates with, read once.
+ *
+ * @param password - The connection's password.
+ * @returns The password's text.
+ */
+const passwordText = (password: DbConnection["password"]) =>
+  (Redacted.isRedacted(password) ? Effect.succeed(password) : password).pipe(
+    Effect.map(Redacted.value),
+  );
+
+/**
+ * A session of the author login on the lease, over verify-full TLS against the cluster's CA, as the
+ * author role, closed with its scope: a direct reader of the tables' system columns.
+ */
+const authorSession = Effect.gen(function* authorSession() {
+  const connection = yield* loginConnection(authorAppRole);
+  const password = yield* passwordText(connection.password);
+  const client = new Client({
+    database: connection.database,
+    host: connection.transport.host,
+    password,
+    port: connection.transport.port,
+    ssl: { ca: [connection.transport.ca].flat(), servername: connection.transport.servername },
+    user: authorAppRole,
+  });
+  const opened = yield* Effect.acquireRelease(
+    Effect.tryPromise(() => client.connect()).pipe(Effect.as(client)),
+    () => Effect.promise(() => client.end()),
+  );
+
+  yield* Effect.tryPromise(() => opened.query(`SET ROLE ${authorRole}`));
+
+  return opened;
+}).pipe(Effect.provide(NodeFileSystem.layer), Effect.orDie);
+
+/**
+ * Read a package's record against its own row's transaction: how many entries it holds, how many
+ * transactions inserted them, and whether the package's row's is one of them.
+ *
+ * @param client - The session.
+ * @param id - The package's id.
+ * @returns The counts.
+ */
+const recordTransactions = (client: Client, id: string) =>
+  Effect.tryPromise(() =>
+    client.query<{
+      readonly entries: string;
+      readonly ours: string;
+      readonly transactions: string;
+    }>(
+      `SELECT count(*)::text AS entries,
+              count(DISTINCT e.xmin::text)::text AS transactions,
+              count(*) FILTER (WHERE e.xmin::text = p.xmin::text)::text AS ours
+         FROM qti.entry e JOIN qti.package p ON p.id = e.package
+        WHERE p.id = $1`,
+      [id],
+    ),
+  ).pipe(
+    Effect.map(({ rows }) => ({
+      entries: Number(rows[0]?.entries ?? 0),
+      ours: Number(rows[0]?.ours ?? 0),
+      transactions: Number(rows[0]?.transactions ?? 0),
+    })),
+    Effect.orDie,
+  );
 
 describe.skipIf(!hasLease)(
   "import/package.large.db.test.ts, on the lease",
-  { timeout: leaseTestTimeoutMs },
+  { timeout: largeTimeoutMs },
   () => {
     layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
       excludeTestServices: true,
-      timeout: "120 seconds",
-    })("a package whose import program passes the old 1 MiB cap", (it) => {
-      it.effect("large-program imports in one transaction and its export compares all equal", () =>
-        Effect.gen(function* importsAndRoundTrips() {
-          const fs = yield* FileSystem.FileSystem;
-          const source = yield* materializeProcessing("large-program");
-          const { rows } = yield* readRows(source);
-          const relations = [...rows].filter(
-            ([relation, facts]) => relation === Package || facts.length > 0,
-          ).length;
-          const exported = `${exportRoot}/large-program`;
+      timeout: authorLayerHookTimeoutMs,
+    })("a package whose record is past one Bind message", (it) => {
+      it.effect(
+        "imports in one transaction as grizzle's chunked appends, and its export compares all equal",
+        () =>
+          // Oracle: PostgreSQL's system columns and the round trip. Every entry of the record
+          // carries its package row's `xmin`, so the one transaction that inserted the package
+          // inserted its whole record, though no one statement can carry it; and the export gives
+          // back every entry of the source, byte for byte or canonically.
+          // Bound: the every-relation package of 3 choices, 2 hottexts and 2 hotspots, with
+          // 12 bulk entries of 64 MiB, the fewest past the Bind bound.
+          Effect.gen(function* pastOneBind() {
+            const fs = yield* FileSystem.FileSystem;
+            const path = yield* Path.Path;
+            const entries = everyRelationPackage(
+              { choices: 3, hotspots: 2, hottexts: 2 },
+              { bytes: new Uint8Array(bulkEntryBytes), entries: bulkEntries },
+            );
+            const recordBytes = [...entries.values()].reduce(
+              (sum, bytes) => sum + base64Length(bytes.length),
+              0,
+            );
 
-          yield* Effect.log(`large-program: writes ${relations} relations`);
+            assert.isAbove(recordBytes, messageMaxBytes, "the record fits one Bind message");
 
-          assert.isAtLeast(relations, LARGE_PROGRAM_RELATIONS);
+            const source = yield* scopedPackage(entries);
+            const [importElapsed, id] = yield* Effect.timed(importPackage(source));
+            const db = yield* Db.open(AuthorApp.roles.author, {});
+            const client = yield* authorSession;
+            const record = yield* recordTransactions(client, id);
 
-          const importStarted = Date.now();
-          const id = yield* importPackage(source);
-          const importMs = Date.now() - importStarted;
+            assert.isTrue(Option.isSome(yield* db.get(Package, { id })), id);
+            assert.deepStrictEqual(record, {
+              entries: entries.size,
+              ours: entries.size,
+              transactions: 1,
+            });
 
-          yield* fs.remove(exported, { force: true, recursive: true });
-          yield* fs.makeDirectory(exported, { recursive: true });
+            const exported = yield* fs.makeTempDirectoryScoped({
+              directory: path.dirname(source),
+              prefix: "export-",
+            });
+            const [exportElapsed] = yield* Effect.timed(exportPackage(id, exported));
+            const report = yield* comparePackage(source, exported);
+            const rendered = renderReport(report);
 
-          const exportStarted = Date.now();
+            yield* Effect.log("past one Bind message", {
+              exportMillis: Duration.toMillis(exportElapsed),
+              importMillis: Duration.toMillis(importElapsed),
+              recordBytes,
+            });
 
-          yield* exportPackage(id, exported);
-
-          const report = yield* comparePackage(source, exported);
-          const rendered = renderReport(report);
-
-          yield* Effect.log(
-            `large-program: import ${importMs} ms, export and compare ${Date.now() - exportStarted} ms`,
-          );
-
-          assert.isAbove(report.length, 0);
-          for (const item of report) {
-            assert.include(["canonical-equal", "byte-identical"], item.outcome.kind, rendered);
-          }
-        }),
+            assert.strictEqual(report.length, entries.size, rendered);
+            for (const { outcome } of report) {
+              assert.include(["byte-identical", "canonical-equal"], outcome.kind, rendered);
+            }
+          }).pipe(Effect.scoped),
       );
     });
   },

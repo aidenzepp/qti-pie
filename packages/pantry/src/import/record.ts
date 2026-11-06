@@ -1,63 +1,48 @@
-/* oxlint-disable unicorn/throw-new-error -- `Schema.TaggedError<Self>()` is a class factory that is called once and extended, never thrown, so the rule's "call without new" reading does not apply. */
-
 /**
- * Which resources name a document by file: the file a `resourcemetadata/xml` resource names, and
- * the resource types the manifest import and the export comparison both read as documents.
- */
-import { Effect, Option, Schema } from "effect";
-
-/**
- * An external metadata file could not be recorded.
+ * The record of a package as the importer writes it (plan §1.6, fin.md P7): the `Package` row with
+ * its `Entry` rows nested in listing order, from what `readPackage` read.
  *
- * `detail` says which record was left unnamed.
+ * The record is every entry's bytes as read, so the model is rebuildable from it, and it is the
+ * write's one sequence over a package: grizzle draws each entry's `at` from its place in the
+ * nesting and the package's `entries` from their number, and chunks a family past one statement's
+ * transport bounds into consecutive statements of the one transaction (fin.md §4.5a), so the
+ * importer never splits a package.
  */
-export class ExternalRefusal extends Schema.TaggedError<ExternalRefusal>()("ExternalRefusal", {
-  detail: Schema.String,
-  rule: Schema.Literals(["record-unnamed"]),
-}) {}
+import type { Addition, Uuid } from "@bjornpagen/grizzle";
+import type { PackageFile } from "#pantry/package/read.ts";
+import { recordOf } from "#pantry/package/record.ts";
+import type { EntryRow } from "#pantry/package/record.ts";
+import type { Package } from "#pantry/qti/package.ts";
 
 /**
- * Name the file that holds an external metadata record: the resource's `href`, else its one file.
+ * A package's insert as its writer writes it: the `Package` row's own fields, and its entries
+ * nested at its count field `entries`, each without the `package` the nesting supplies and the `at`
+ * the family draws.
+ */
+export type PackageRecord = Addition<typeof Package> & { readonly entries: readonly EntryRow[] };
+
+/**
+ * Name a package by the place it was read from: the last segment of its directory or zip file's
+ * path, as given.
  *
- * @param resource - The resource's `href` and the `href` of each file it lists.
- * @returns The path of the record, or `ExternalRefusal` when the resource has no `href` and does
- *   not list exactly one file.
+ * @param source - The directory or `.zip` file `readPackage` read, `/`-separated.
+ * @returns Its last non-empty segment, or the path itself when it has no `/`.
  */
-export const recordFile = (resource: {
-  readonly files: readonly string[];
-  readonly href: Option.Option<string>;
-}): Effect.Effect<string, ExternalRefusal> => {
-  if (Option.isSome(resource.href)) {
-    return Effect.succeed(resource.href.value);
-  }
-
-  const [only, ...rest] = resource.files;
-  if (only !== undefined && rest.length === 0) {
-    return Effect.succeed(only);
-  }
-
-  return Effect.fail(
-    new ExternalRefusal({
-      detail: `the resource has no href and lists ${resource.files.length} files, so no file is named as its record; give it an href or list exactly one file`,
-      rule: "record-unnamed",
-    }),
-  );
-};
+export const packageNameOf = (source: string): string =>
+  source.split("/").findLast((segment) => segment.length > 0) ?? source;
 
 /**
- * The resource types whose `href` is read as a document beside the QTI ones: a record of metadata
- * and a record of usage data. A record of metadata with no `href` is named by {@link recordFile}
- * instead.
+ * Build a package's record from what `readPackage` read.
+ *
+ * @param input - The package's identity and its entries.
+ * @param input.id - The package's id, the one its overlays name it by.
+ * @param input.name - Its name, {@link packageNameOf} of where it was read from.
+ * @param input.files - Its entries with their bytes, in listing order.
+ * @returns The `Package` insert, its entries in the listing's order, each content the canonical
+ *   base64 of its bytes.
  */
-export const recordTypes: ReadonlySet<string> = new Set([
-  "resourcemetadata/xml",
-  "qtiusagedata/xml",
-]);
-
-/**
- * The QTI document types that also name their one file when they have no `href`.
- */
-export const soleFileTypes: ReadonlySet<string> = new Set([
-  "imsqti_outcomes_xmlv3p0",
-  "imsqti_resprocessing_xmlv3p0",
-]);
+export const packageRecordOf = (input: {
+  readonly files: readonly PackageFile[];
+  readonly id: Uuid;
+  readonly name: string;
+}): PackageRecord => ({ entries: recordOf(input.files), id: input.id, name: input.name });
