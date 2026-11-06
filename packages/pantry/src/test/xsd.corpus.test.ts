@@ -814,6 +814,29 @@ const generatedRecorded: readonly Recorded[] = [
     },
     rule: "binding-declared",
   },
+  {
+    class: "attribute-value",
+    detail:
+      /^value domain at \S+: (?:src|poster|srcset): "(?: |\\[nrt])*" is outside URLDType \(reading [^)]*\b12[45]\b/u,
+    direction: "oracle-only",
+    reason: {
+      _tag: "reading",
+      reading: 124,
+      why: 'a media URL "must contain a valid non-empty URL potentially surrounded by spaces" (information model §5.9.1, §5.135.1, §5.163.2, §5.166.1, §5.166.9; reading 125 for track), so an empty or blank src, poster or srcset is refused; the XSD\'s URLDType is any xs:normalizedString',
+    },
+    rule: "attribute-lexical",
+  },
+  {
+    class: "attribute-value",
+    detail: /^value domain at \S+: xref: ".*" is outside xs:IDREF\b/u,
+    direction: "oracle-only",
+    reason: {
+      _tag: "reading",
+      reading: 2,
+      why: "MathML 3's xref names an id of its document (an xs:IDREF, §5.4.2), where QTI's bundled MathML XSD types it xs:anySimpleType, so text that is no IDREF is refused",
+    },
+    rule: "attribute-lexical",
+  },
 ];
 
 /**
