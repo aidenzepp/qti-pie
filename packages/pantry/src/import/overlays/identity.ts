@@ -54,7 +54,6 @@ import type {
   TextIdref,
   XmlLang,
 } from "#pantry/qti/identity.ts";
-import { keyTextCodePoints } from "#pantry/qti/limits.ts";
 import { objectTypes } from "#pantry/qti/metadata.ts";
 import { testKind } from "#pantry/qti/tests.ts";
 import type { InstanceMember, InstanceRoot } from "#pantry/import/overlays/tests.ts";
@@ -219,19 +218,6 @@ const labelledRootVersion = "3.0.1";
  * @returns Their JSON array.
  */
 const headingKey = (values: readonly string[]): string => JSON.stringify(values);
-
-/**
- * Decide whether a text fits `keyText`, the type every copied text of a cross-row equality is
- * written in: a longer one has no overlay row, and its copy's foreign key refuses it beside the
- * schema's limit law.
- *
- * @param text - The text.
- * @returns Whether it holds at most `keyTextCodePoints` code points, counted as PostgreSQL's
- *   `char_length` counts a UTF-8 text's characters, never as UTF-16 code units.
- */
-const fitsKey = (text: string): boolean =>
-  // oxlint-disable-next-line typescript/no-misused-spread -- keyText bounds a text in code points, as PostgreSQL's char_length counts them, which spreading the string yields.
-  [...text].length <= keyTextCodePoints;
 
 /**
  * Read the identity type of an attribute's or an element's value domain.
@@ -453,13 +439,13 @@ const attributeRowsOf = (
   for (const attribute of tree.rows.attributes) {
     const element = tree.byId.get(attribute.node);
     const { lexical, name, node } = attribute;
-    if (element !== undefined && holdsId(attribute, element) && fitsKey(lexical)) {
+    if (element !== undefined && holdsId(attribute, element)) {
       for (const row of Option.toArray(documentIdOf(tree, node, lexical, node))) {
         documentIds.set(node, documentIds.get(node) ?? row);
       }
     }
 
-    if (element !== undefined && name === "xml:lang" && fitsKey(lexical)) {
+    if (element !== undefined && name === "xml:lang") {
       xmlLangs.set(node, { document, lang: lexical, node });
       documentLangs.set(headingKey([document, lexical]), { document, lang: lexical });
     }
@@ -495,7 +481,7 @@ const textRowsOf = (tree: Tree): Pick<IdentityRows, "DocumentId" | "IdentityText
   for (const node of tree.rows.nodes) {
     const text = tree.values.get(node.id) ?? "";
     const identity = textIdentityOf(node);
-    if (identity === "none" || !fitsKey(text)) {
+    if (identity === "none") {
       continue;
     }
 
@@ -547,7 +533,7 @@ const lomRowsOf = (
   for (const node of tree.rows.nodes) {
     const text = tree.values.get(node.id) ?? "";
     const parent = tree.byId.get(node.parent);
-    if (node.kind === "lom:language" && parent?.kind === "lom:general" && fitsKey(text)) {
+    if (node.kind === "lom:language" && parent?.kind === "lom:general") {
       const tag = lowerAscii(text);
       lomLanguages.set(node.id, { general: node.parent, lang: text, node: node.id, tag });
       lomSets.set(headingKey([node.parent, tag]), { general: node.parent, lang: tag });
@@ -697,7 +683,7 @@ const ssmlRowsOf = (
     const { fragment, walk } = scopeWalkOf(tree, element);
     for (const name of read.names) {
       const lexical = tree.valueOf(element.id, name);
-      if (lexical === undefined || !fitsKey(lexical)) {
+      if (lexical === undefined) {
         continue;
       }
 
@@ -740,7 +726,9 @@ const ssmlRowsOf = (
  *
  * Each overlay holds one row per element it describes, keyed by the element's node, and each
  * projection one row per value, so a value an element repeats is one row. A copied text past
- * `keyText`'s bound has no row (see {@link fitsKey}). Every document has its
+ * `keyText`'s bound keeps its row, whatever its length: `keyText`'s own check refuses it in the
+ * database under "Key text bound", the one rule a key text past its bound is refused by, as the law
+ * oracle names it. Every document has its
  * {@link DocumentGenerals} row, whose count the database draws.
  *
  * A resource's general category names the type its record names: the resource's `type` where that
@@ -794,9 +782,10 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: IdentityIds): IdentityRo
     ),
     IdentityText: texts.IdentityText,
     IdrefTarget: new Map(
-      targets
-        .filter(fitsKey)
-        .map((id) => [headingKey([tree.document, id]), { assembled, document: tree.document, id }]),
+      targets.map((id) => [
+        headingKey([tree.document, id]),
+        { assembled, document: tree.document, id },
+      ]),
     ),
   };
 };

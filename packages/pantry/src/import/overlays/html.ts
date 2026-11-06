@@ -17,7 +17,6 @@ import { flatten } from "#pantry/model/xdm.ts";
 import type { NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
 import { cellKinds } from "#pantry/qti/html.ts";
 import type { CellHeaders, HeaderToken, TableHeader, TableScope } from "#pantry/qti/html.ts";
-import { keyTextPattern } from "#pantry/qti/limits.ts";
 
 /**
  * The ids a document's rows are written under: each of its tree's nodes' and attributes', drawn by
@@ -54,12 +53,6 @@ export interface HtmlRows {
   readonly TableHeader: ReadonlyMap<string, Addition<typeof TableHeader>>;
   readonly TableScope: ReadonlyMap<string, Addition<typeof TableScope>>;
 }
-
-/**
- * `keyText`'s language: a copied text outside it has no overlay row, and its copy's foreign key
- * refuses it beside the schema's one limit law.
- */
-const keyTextForm = new RegExp(keyTextPattern, "su");
 
 /**
  * The interaction kinds, whose children take them as their nearest interaction (N8).
@@ -181,10 +174,11 @@ const tableWalkOf = (
 /**
  * Build a document's HTML rows.
  *
- * Each cell that writes `headers` within `keyText` has its {@link CellHeadersRow}, and each `th`
- * that writes an `id` within it its `TableHeader`, the ID's value its lexical form with its outer
- * whitespace set apart, as `DocumentId` holds it; each element on the walk up from either to its
- * nearest `table` has its `TableScope`. A document with no such cell gives no row.
+ * Each cell that writes `headers` has its {@link CellHeadersRow}, and each `th` that writes an `id`
+ * its `TableHeader`, the ID's value its lexical form with its outer whitespace set apart, as
+ * `DocumentId` holds it; each element on the walk up from either to its nearest `table` has its
+ * `TableScope`. A text past `keyText`'s bound keeps its row, which `keyText` refuses under "Key
+ * text bound". A document with no such cell gives no row.
  *
  * @param doc - The document's tree, as shred gives it.
  * @param ids - The ids its rows are written under.
@@ -194,11 +188,8 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: HtmlIds): HtmlRows => {
   const rows = flatten(doc, ids.idOf);
   const document = rows.document.node;
   const lexicals = new Map(rows.attributes.map((row) => [`${row.node} ${row.name}`, row.lexical]));
-  const keyedOf = (node: NodeRow<Composed>, name: string): string | undefined => {
-    const lexical = lexicals.get(`${node.id} ${name}`);
-
-    return lexical !== undefined && keyTextForm.test(lexical) ? lexical : undefined;
-  };
+  const valueOf = (node: NodeRow<Composed>, name: string): string | undefined =>
+    lexicals.get(`${node.id} ${name}`);
   const scopes = new Map<string, Addition<typeof TableScope>>();
   const headers = new Map<string, CellHeadersRow>();
   const headerIds = new Map<string, Addition<typeof TableHeader>>();
@@ -228,7 +219,7 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: HtmlIds): HtmlRows => {
   };
 
   for (const cell of cellNodes) {
-    const lexical = keyedOf(cell, "headers");
+    const lexical = valueOf(cell, "headers");
     if (lexical !== undefined) {
       headers.set(cell.id, {
         lexical,
@@ -238,7 +229,7 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: HtmlIds): HtmlRows => {
       });
     }
 
-    const id = cell.kind === "th" ? keyedOf(cell, "id") : undefined;
+    const id = cell.kind === "th" ? valueOf(cell, "id") : undefined;
     if (id !== undefined) {
       headerIds.set(cell.id, {
         document,
