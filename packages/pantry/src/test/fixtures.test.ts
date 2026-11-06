@@ -6,6 +6,7 @@ import { readXml } from "@qti-pie/crust/read.ts";
 import { inject } from "vitest";
 import {
   FIXTURES_VERSION,
+  assemblyNames,
   editBytes,
   fixtureNames,
   hash12,
@@ -14,6 +15,7 @@ import {
   materializePackage,
   materializeSpec,
   negativeNames,
+  restoredNames,
   specOf,
   transformHash,
 } from "#pantry/test/fixtures.ts";
@@ -381,6 +383,48 @@ const negativeRemovals: readonly (readonly [FixtureName, string, string])[] = [
     "test-lang-no-lom",
     "imsmanifest.xml",
     "<imsmd:general>\n                        <imsmd:language>",
+  ],
+];
+
+/**
+ * For each name of `restoredNames` and `assemblyNames`, a file of its package and the text its edit
+ * put there.
+ */
+const restoredAndAssemblyPresent: readonly (readonly [FixtureName, string, string])[] = [
+  ["aria-h1-role-button", "choice.xml", '<h1 role="button">'],
+  [
+    "aria-source-role",
+    "choice.xml",
+    '<source srcset="images/sign.png" type="image/png" role="presentation"/>',
+  ],
+  ["lang-case-mismatch", "choice.xml", 'xml:lang="en-GB"'],
+  ["lang-case-mismatch", "imsmanifest.xml", "<imsmd:language>en-gb</imsmd:language>"],
+  ["pattern-unresolved-item", "choice.xml", '<qti-pattern-match pattern="{NOSUCH}">'],
+  ["pattern-unresolved-test", "rtest13.xml", '<qti-pattern-match pattern="{NOSUCH}">'],
+  ["pattern-unresolved-test", "rtest13.xml", "<qti-outcome-processing>"],
+  [
+    "section-doc-twice",
+    "rtest01.xml",
+    '<qti-assessment-section-ref identifier="S2" href="sections/shared.xml"/>',
+  ],
+  [
+    "section-doc-name-clash",
+    "sections/shared.xml",
+    '<qti-assessment-item-ref identifier="shared" ',
+  ],
+  ["branch-backward-shuffled", "rtest13.xml", '<qti-ordering shuffle="true"/>'],
+  ["branch-backward-shuffled", "rtest13.xml", '<qti-branch-rule target="item347">'],
+  ["branch-to-own-section", "rtest13.xml", '<qti-branch-rule target="sectionB">'],
+  ["select-two-required", "rtest12.xml", 'identifier="item434" href="item434.xml" required="true"'],
+  [
+    "branch-in-twice-placed-section",
+    "rtest01.xml",
+    '<qti-assessment-section-ref identifier="S2" href="sections/shared.xml"/>',
+  ],
+  [
+    "branch-in-twice-placed-section",
+    "sections/shared.xml",
+    '<qti-branch-rule target="shared-item">',
   ],
 ];
 
@@ -1185,6 +1229,146 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts", (it
 
         assert.include(record, '<string xml:lang="en">jacs</string>');
         assert.include(record, '<string xml:lang="en">Mathematics</string>');
+      }),
+    ),
+  );
+
+  it.effect(
+    "the restored-check and assembly names are the brief's lists, each in the fixture table",
+    () =>
+      Effect.sync(() => {
+        assert.deepStrictEqual(
+          [...restoredNames],
+          [
+            "aria-h1-role-button",
+            "aria-source-role",
+            "lang-case-mismatch",
+            "pattern-unresolved-item",
+            "pattern-unresolved-test",
+          ],
+        );
+        assert.deepStrictEqual(
+          [...assemblyNames],
+          [
+            "section-doc-twice",
+            "section-doc-name-clash",
+            "branch-backward-shuffled",
+            "branch-to-own-section",
+            "select-two-required",
+            "branch-in-twice-placed-section",
+          ],
+        );
+        assert.strictEqual(new Set(restoredNames).size, 5);
+        assert.strictEqual(new Set(assemblyNames).size, 6);
+        assert.includeMembers([...fixtureNames], [...restoredNames, ...assemblyNames]);
+
+        for (const name of [...restoredNames, ...assemblyNames]) {
+          assert.notInclude([...negativeNames], name);
+          assert.notInclude(
+            positiveVersions.map(([positive]) => positive),
+            name,
+          );
+        }
+
+        assert.strictEqual(
+          new Set([...negativeNames, ...restoredNames, ...assemblyNames]).size,
+          negativeNames.length + restoredNames.length + assemblyNames.length,
+        );
+      }),
+  );
+
+  it.effect(
+    "each restored-check and assembly fixture materializes, lists every packaged file, holds QTI documents that parse and carries its edit",
+    () =>
+      inFreshRoot(() =>
+        Effect.gen(function* restoredAndAssemblyFixtures() {
+          const fs = yield* FileSystem.FileSystem;
+
+          for (const name of [...restoredNames, ...assemblyNames]) {
+            const dir = yield* materialize(name);
+            const files = yield* filesOf(dir);
+            const manifest = yield* fs.readFileString(`${dir}/imsmanifest.xml`);
+
+            assert.deepStrictEqual(
+              files.filter((file) => file !== "imsmanifest.xml"),
+              listedFilesOf(manifest),
+              name,
+            );
+
+            for (const file of files) {
+              if (file.endsWith(".xml") && file !== "imsmanifest.xml") {
+                const document = yield* readXml(yield* fs.readFile(`${dir}/${file}`));
+
+                assert.strictEqual(document.root.namespace, qtiNamespace, `${name}/${file}`);
+              }
+            }
+          }
+
+          for (const [name, file, needle] of restoredAndAssemblyPresent) {
+            const dir = yield* materialize(name);
+
+            assert.include(yield* fs.readFileString(`${dir}/${file}`), needle, `${name}: ${file}`);
+          }
+        }),
+      ),
+    180_000,
+  );
+
+  it.effect("the pattern fixtures name a variable that no document of the package declares", () =>
+    inFreshRoot(() =>
+      Effect.gen(function* unresolvedPatterns() {
+        const fs = yield* FileSystem.FileSystem;
+
+        for (const name of ["pattern-unresolved-item", "pattern-unresolved-test"] as const) {
+          const dir = yield* materialize(name);
+
+          for (const file of yield* filesOf(dir)) {
+            if (file.endsWith(".xml")) {
+              assert.notInclude(
+                yield* fs.readFileString(`${dir}/${file}`),
+                'identifier="NOSUCH"',
+                `${name}: ${file}`,
+              );
+            }
+          }
+        }
+
+        const item = yield* fs.readFileString(
+          `${yield* materialize("pattern-unresolved-item")}/choice.xml`,
+        );
+
+        assert.notInclude(item, "match_correct.xml");
+        assert.include(item, '<qti-set-outcome-value identifier="SCORE">');
+      }),
+    ),
+  );
+
+  it.effect("the assembly fixtures hold their edits where their brief says", () =>
+    inFreshRoot(() =>
+      Effect.gen(function* assemblyEdits() {
+        const fs = yield* FileSystem.FileSystem;
+        const twice = yield* materialize("section-doc-twice");
+        const placed = yield* fs.readFileString(`${twice}/rtest01.xml`);
+        const clash = yield* fs.readFileString(
+          `${yield* materialize("section-doc-name-clash")}/sections/shared.xml`,
+        );
+        const selection = yield* fs.readFileString(
+          `${yield* materialize("select-two-required")}/rtest12.xml`,
+        );
+        const inDocument = yield* fs.readFileString(
+          `${yield* materialize("branch-in-twice-placed-section")}/sections/shared.xml`,
+        );
+
+        assert.strictEqual(placed.split('href="sections/shared.xml"').length, 3);
+        assert.notInclude(clash, 'identifier="shared-item"');
+        assert.include(clash, "<qti-assessment-section ");
+        assert.include(clash, 'identifier="shared" title="shared"');
+        assert.notInclude(selection, "item365");
+        assert.strictEqual(selection.split('required="true"').length - 1, 3);
+        assert.isAbove(
+          inDocument.indexOf('identifier="shared-item"'),
+          inDocument.indexOf('<qti-branch-rule target="shared-item">'),
+        );
       }),
     ),
   );

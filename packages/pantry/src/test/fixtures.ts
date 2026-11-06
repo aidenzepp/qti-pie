@@ -407,6 +407,42 @@ export const negativeNames = [
 ] as const;
 
 /**
+ * The names of the fixtures that restore a lost check, each a data-only edit set over `simple` or
+ * one of {@link testNames}: `aria-h1-role-button` and `aria-source-role` break the two ARIA role
+ * rules (a `role` of `button` on an `h1`, a `role` on a `source`), `lang-case-mismatch` is the item
+ * root's `xml:lang="en-GB"` against the resource's LOM `language` `en-gb` (accepted, the two
+ * languages are the same one), and `pattern-unresolved-item` and `pattern-unresolved-test` hold a
+ * `qti-pattern-match` whose `pattern` is `{NOSUCH}`, with no variable of that name, in an item's
+ * response processing and a test's outcome processing (accepted, an unresolved braced pattern is a
+ * string).
+ */
+export const restoredNames = [
+  "aria-h1-role-button",
+  "aria-source-role",
+  "lang-case-mismatch",
+  "pattern-unresolved-item",
+  "pattern-unresolved-test",
+] as const;
+
+/**
+ * The names of the whole-package test fixtures over {@link testNames}: the section document
+ * placed twice (`section-doc-twice`, accepted), the item ref that shares an identifier with a
+ * section of the placed document (`section-doc-name-clash`), a backward branch inside a shuffled
+ * section (`branch-backward-shuffled`, accepted), a branch to the rule's own section
+ * (`branch-to-own-section`), a selection that equals its required parts (`select-two-required`,
+ * accepted) and a branch rule inside a section document placed twice that names a later item ref
+ * of the same document (`branch-in-twice-placed-section`, accepted).
+ */
+export const assemblyNames = [
+  "section-doc-twice",
+  "section-doc-name-clash",
+  "branch-backward-shuffled",
+  "branch-to-own-section",
+  "select-two-required",
+  "branch-in-twice-placed-section",
+] as const;
+
+/**
  * The names of the ten wildcard fixtures of phase 11 (spec W12): foreign content under the lax
  * hosts of `qti-custom-operator`, `xi:include`, `xi:fallback` and LOM, the four refusals, and
  * `test-selection-foreign`, a test with an extension element and an `xml:lang` on the strict
@@ -433,7 +469,9 @@ const wildcardNames = [
  * hand-written HTML positives of {@link htmlElements}, the 14 XML copies of {@link copyNames}, the
  * packaging phase's metadata and content cuts with their negatives, the 11 positive fixtures of
  * phase 5's tests, sections and stimuli ({@link testNames}) and its 63 negatives
- * ({@link negativeNames}), the ten wildcard fixtures of {@link wildcardNames}, and `rtest01`, the
+ * ({@link negativeNames}), the five restored-check fixtures of {@link restoredNames}, the six
+ * assembly fixtures of {@link assemblyNames}, the ten wildcard fixtures of {@link wildcardNames},
+ * and `rtest01`, the
  * examples' included fragment in place (spec reading 117), with one negative per include law.
  */
 export const fixtureNames = [
@@ -464,6 +502,8 @@ export const fixtureNames = [
   ...copyNames,
   ...testNames,
   ...negativeNames,
+  ...restoredNames,
+  ...assemblyNames,
   "lomrest",
   "lomrest-two-titles",
   "lomrest-two-purposes",
@@ -3564,20 +3604,23 @@ const testSpecs: Record<(typeof testNames)[number], FixtureSpec> = {
 };
 
 /**
- * The spec of a negative: the positive `base` with `edits` after its own, under the negative's
- * name.
+ * The spec of a negative, or of a restored-check or assembly fixture built the same way: the
+ * positive `base` with `edits` after its own, under the fixture's name.
  *
  * The edits of a spec apply by kind (file edits, then text edits, then the cut), each kind in list
  * order, so the extra edits of a negative see the positive's result.
  *
- * @param name - The negative's name.
+ * @param name - The fixture's name.
  * @param base - The positive it edits.
  * @param edits - The edits that make the breach; none for a "(direct)" negative, whose spec is the
  *   positive's own under the negative's name.
  * @returns The spec, whose directory is named by the hash of exactly these values like any other.
  */
 const negativeOver = (
-  name: (typeof negativeNames)[number],
+  name:
+    | (typeof negativeNames)[number]
+    | (typeof restoredNames)[number]
+    | (typeof assemblyNames)[number],
   base: (typeof testNames)[number],
   edits: readonly Edit[] = [],
 ): FixtureSpec => {
@@ -4245,6 +4288,164 @@ const negativeSpecs: Record<(typeof negativeNames)[number], FixtureSpec> = {
 };
 
 /**
+ * `simple`'s one `img`, which `aria-source-role` wraps in a `picture`.
+ */
+const simpleImage = '<img src="images/sign.png" alt="NEVER LEAVE LUGGAGE UNATTENDED"/>';
+
+/**
+ * A `qti-pattern-match` whose `pattern` names `NOSUCH`, a variable no fixture declares, over a
+ * string literal.
+ */
+const unresolvedPattern =
+  '<qti-pattern-match pattern="{NOSUCH}"><qti-base-value base-type="string">x</qti-base-value></qti-pattern-match>';
+
+/**
+ * A rule that sets `SCORE` to 1, which both `pattern-unresolved-*` fixtures put under the pattern.
+ */
+const scoreOne =
+  '<qti-set-outcome-value identifier="SCORE"><qti-base-value base-type="float">1</qti-base-value></qti-set-outcome-value>';
+
+/**
+ * The specs of {@link restoredNames}.
+ */
+const restoredSpecs: Record<(typeof restoredNames)[number], FixtureSpec> = {
+  "aria-h1-role-button": overSimple("aria-h1-role-button", [
+    replaceIn(
+      "choice.xml",
+      "<p>Look at the text in the picture.</p>",
+      '<h1 role="button">Look at the text in the picture.</h1>',
+    ),
+  ]),
+  "aria-source-role": overSimple("aria-source-role", [
+    replaceIn(
+      "choice.xml",
+      simpleImage,
+      `<picture><source srcset="images/sign.png" type="image/png" role="presentation"/>${simpleImage}</picture>`,
+    ),
+  ]),
+  "lang-case-mismatch": overSimple("lang-case-mismatch", [
+    replaceIn(
+      "choice.xml",
+      'adaptive="false" time-dependent="false">',
+      'adaptive="false" time-dependent="false" xml:lang="en-GB">',
+    ),
+    {
+      _tag: "InsertAfterLine",
+      file: "imsmanifest.xml",
+      line: simpleResourceTitleEnd,
+      text: "                        <imsmd:language>en-gb</imsmd:language>",
+    },
+  ]),
+  "pattern-unresolved-item": overSimple("pattern-unresolved-item", [
+    replaceIn(
+      "choice.xml",
+      '<qti-response-processing template="https://www.imsglobal.org/question/qti_v3p0/rptemplates/match_correct.xml"/>',
+      [
+        "<qti-response-processing>",
+        "        <qti-response-condition>",
+        "            <qti-response-if>",
+        `                ${unresolvedPattern}`,
+        `                ${scoreOne}`,
+        "            </qti-response-if>",
+        "        </qti-response-condition>",
+        "    </qti-response-processing>",
+      ].join(CRLF),
+    ),
+  ]),
+  "pattern-unresolved-test": negativeOver("pattern-unresolved-test", "test-linear", [
+    replaceIn(
+      "rtest13.xml",
+      "    </qti-test-part>",
+      [
+        "    </qti-test-part>",
+        "    <qti-outcome-processing>",
+        "        <qti-outcome-condition>",
+        "            <qti-outcome-if>",
+        `                ${unresolvedPattern}`,
+        `                ${scoreOne}`,
+        "            </qti-outcome-if>",
+        "        </qti-outcome-condition>",
+        "    </qti-outcome-processing>",
+      ].join("\n"),
+    ),
+  ]),
+};
+
+/**
+ * The edit that places `test-section-ref`'s section document a second time in the first test's
+ * part, under the section ref `S2`.
+ */
+const placeSectionTwice: Edit = replaceIn(
+  "rtest01.xml",
+  '<qti-assessment-section-ref identifier="S1" href="sections/shared.xml"/>',
+  [
+    '<qti-assessment-section-ref identifier="S1" href="sections/shared.xml"/>',
+    '            <qti-assessment-section-ref identifier="S2" href="sections/shared.xml"/>',
+  ].join("\n"),
+);
+
+/**
+ * The specs of {@link assemblyNames}.
+ */
+const assemblySpecs: Record<(typeof assemblyNames)[number], FixtureSpec> = {
+  "branch-backward-shuffled": negativeOver("branch-backward-shuffled", "test-linear", [
+    replaceIn(
+      "rtest13.xml",
+      '<qti-item-session-control max-attempts="2"/>',
+      '<qti-item-session-control max-attempts="2"/>\n            <qti-ordering shuffle="true"/>',
+    ),
+    replaceIn(
+      "rtest13.xml",
+      '<qti-branch-rule target="EXIT_TESTPART">',
+      [
+        `<qti-branch-rule target="item347">${greaterThan("item653.SCORE", "float", "1")}</qti-branch-rule>`,
+        '                <qti-branch-rule target="EXIT_TESTPART">',
+      ].join("\n"),
+    ),
+  ]),
+  "branch-in-twice-placed-section": negativeOver(
+    "branch-in-twice-placed-section",
+    "test-section-ref",
+    [
+      placeSectionTwice,
+      replaceIn(
+        "sections/shared.xml",
+        '<qti-assessment-item-ref identifier="shared-item" href="../items/shared.xml"/>',
+        [
+          '<qti-assessment-item-ref identifier="first-item" href="../items/shared.xml">',
+          `    <qti-branch-rule target="shared-item">${greaterThan("SCORE", "float", "0")}</qti-branch-rule>`,
+          "  </qti-assessment-item-ref>",
+          '  <qti-assessment-item-ref identifier="shared-item" href="../items/shared.xml"/>',
+        ].join("\n"),
+      ),
+    ],
+  ),
+  "branch-to-own-section": negativeOver("branch-to-own-section", "test-linear", [
+    replaceIn(
+      "rtest13.xml",
+      '<qti-branch-rule target="item656">',
+      '<qti-branch-rule target="sectionB">',
+    ),
+  ]),
+  "section-doc-name-clash": negativeOver("section-doc-name-clash", "test-section-ref", [
+    replaceIn("sections/shared.xml", 'identifier="shared-item"', 'identifier="shared"'),
+  ]),
+  "section-doc-twice": negativeOver("section-doc-twice", "test-section-ref", [placeSectionTwice]),
+  "select-two-required": negativeOver("select-two-required", "test-selection", [
+    replaceIn(
+      "rtest12.xml",
+      '<qti-assessment-item-ref identifier="item434" href="item434.xml"/>',
+      '<qti-assessment-item-ref identifier="item434" href="item434.xml" required="true"/>',
+    ),
+    replaceIn(
+      "rtest12.xml",
+      '            <qti-assessment-item-ref identifier="item365" href="item365.xml"/>\n',
+      "",
+    ),
+  ]),
+};
+
+/**
  * The edits of `test-selection-foreign`, over `test-selection`'s text edits: an `xml:lang` and one
  * `ma:ext` child, with its namespace declaration, on the first section's `qti-selection` and on
  * section C's `qti-ordering`. Both are strict attribute hosts (3.3 strict/a and strict/d): the
@@ -4368,6 +4569,8 @@ const specs: Record<FixtureName, FixtureSpec> = {
   ...copySpecs,
   ...testSpecs,
   ...negativeSpecs,
+  ...restoredSpecs,
+  ...assemblySpecs,
   ...wildcardSpecs,
   "bad-identifier-value": {
     edits: [
