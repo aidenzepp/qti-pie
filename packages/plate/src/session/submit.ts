@@ -23,6 +23,7 @@ import type { Item } from "#plate/model/item.ts";
 import { refIdentifiersIn } from "#plate/model/item-refs.ts";
 import type { Test, TestPart } from "#plate/model/test.ts";
 import { isNull, match } from "#plate/model/values.ts";
+import { postings, redactItem } from "#plate/payload.ts";
 import type { ValidationMessage } from "#plate/payload.ts";
 import { checkResponses } from "#plate/responses.ts";
 import { score } from "#plate/score.ts";
@@ -53,8 +54,8 @@ export type SubmissionIntent = "end-part" | "submit-item" | "submit-part";
  *   belong to an individual part, `submit-part` to a simultaneous one.
  * - `attempts-exhausted`: the item's processed attempts have reached its attempt limit.
  * - `item-closed`: the item is closed for another reason.
- * - `skipping-not-allowed`: the item's `allow-skipping` is false and every response is NULL or its
- *   declared default.
+ * - `skipping-not-allowed`: the item's `allow-skipping` is false and every response a page can post
+ *   is NULL or its declared default.
  * - `responses-invalid`: the item's `validate-responses` is true and a response breaks a limit of its
  *   interaction; or, for `submit-part`, `score` refuses a presented item's responses, which break a
  *   limit the item sets whatever the configuration (tier (a)). The refusal carries the messages and
@@ -286,12 +287,24 @@ const valuesOf = (item: SessionItem): Responses =>
  * 7.19.6, `allow-skipping`). A response is at its default when it `match`es the declaration's
  * `qti-default-value`.
  *
+ * Only the responses a rendered page can post count: those `postings` lists (ruling R2 of phase
+ * 4's repair, 2026-11-06). A response no interaction binds, one bound only to an interaction shown
+ * as a notice, or one of a base type no interaction posts never takes another value from the
+ * candidate, so counting it would leave an item under `allow-skipping` false that can never be
+ * submitted and, in a linear part, never left. An item with no response a page can post is
+ * treated as an item with no response variable: never skipped. A value a step carries for a
+ * response that is not counted does not answer the item either.
+ *
  * @param item The item.
+ * @param instance The item's instance, which names its postings.
  * @param values The responses, by identifier; one left out is NULL.
  * @returns Whether the item is skipped.
  */
-const skipped = (item: Item, values: Responses): boolean => {
-  const declarations = [...item.responses.values()];
+const skipped = (item: Item, instance: string, values: Responses): boolean => {
+  const posted = new Set(postings(redactItem(item), instance).map(({ identifier }) => identifier));
+  const declarations = [...item.responses.values()].filter(({ identifier }) =>
+    posted.has(identifier),
+  );
 
   return (
     declarations.length > 0 &&
@@ -430,9 +443,9 @@ const partEnded = (
  *
  * The step is saved first. Then, in order: a closed test is `test-closed`; a simultaneous part is
  * `wrong-submission-mode`; an item whose processed attempts, the record's `numAttempts`, have
- * reached its effective attempt limit above 0 is `attempts-exhausted`, and an item closed
- * otherwise `item-closed`; under `allow-skipping` false an item whose every response is NULL or its
- * declared default is `skipping-not-allowed`; under `validate-responses` true, responses
+ * reached its effective attempt limit above 0 is `attempts-exhausted`, and an item closed otherwise
+ * `item-closed`; under `allow-skipping` false an item whose every response a page can post is NULL
+ * or its declared default is `skipping-not-allowed`; under `validate-responses` true, responses
  * `checkResponses` gives messages for are `responses-invalid`. Otherwise `score` runs over the
  * item's record with its saved responses, and its failures, `ResponsesRefused` among them, pass
  * through. The item stays current: moving on is a move's.
@@ -488,7 +501,7 @@ export const submitItem = (
 
     const accepted = yield* deliveredItem(items, saved, item);
     const values = valuesOf(item);
-    if (!view.configuration.allowSkipping && skipped(accepted.item, values)) {
+    if (!view.configuration.allowSkipping && skipped(accepted.item, view.instance, values)) {
       return yield* refuse("skipping-not-allowed");
     }
 
