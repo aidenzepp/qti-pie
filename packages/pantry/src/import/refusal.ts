@@ -164,6 +164,7 @@ import {
   Reference,
   ReferencePath,
 } from "#pantry/qti/package.ts";
+import { mathmlLaws } from "#pantry/qti/mathml.ts";
 import { quotationLaws } from "#pantry/qti/quotation.ts";
 import {
   branchLaws,
@@ -3149,6 +3150,9 @@ const lawsOfStatement = (statement: Statement): readonly Law[] =>
  * - **Quotation** (`quotation.ts`, reading 127): every copy, key and containment is a restatement of
  *   the `q`'s node, its slot and its neighbours' ends, "E1 derived"; its law is its check,
  *   "Quotation punctuation".
+ * - **MathML** (`mathml.ts`, reading 2): none yet, since its four families are empty; each statement
+ *   a family gains is a restatement, "E1 derived", and a row of {@link writtenLaws} names a law of
+ *   a group otherwise.
  */
 export const lawGroups: readonly (readonly [readonly Statement[], LawName])[] = [
   [testOverlayLaws, "Test overlay"],
@@ -3161,6 +3165,7 @@ export const lawGroups: readonly (readonly [readonly Statement[], LawName])[] = 
   [mappingLaws, "Mapping overlay"],
   [expressionLaws, "E1 derived"],
   [quotationLaws, "E1 derived"],
+  [mathmlLaws, "E1 derived"],
 ];
 
 /**

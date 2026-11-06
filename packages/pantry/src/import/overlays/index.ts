@@ -57,6 +57,8 @@ import { rowsOf as mappingRowsOf } from "#pantry/import/overlays/mapping.ts";
 import type { MappingRows } from "#pantry/import/overlays/mapping.ts";
 import { rowsOf as metadataRowsOf, objectRowsOfPackage } from "#pantry/import/overlays/metadata.ts";
 import type { MetadataRows, NamedDocument, ObjectRows } from "#pantry/import/overlays/metadata.ts";
+import { mathmlRowsOf } from "#pantry/import/overlays/mathml.ts";
+import type { MathmlRows } from "#pantry/import/overlays/mathml.ts";
 import { rowsOf as operatorRowsOf } from "#pantry/import/overlays/operators.ts";
 import type { OperatorRows } from "#pantry/import/overlays/operators.ts";
 import {
@@ -85,6 +87,7 @@ export type OverlayRows = AssembledExpressionRows &
   InteractionRows &
   LanguageRows &
   MappingRows &
+  MathmlRows &
   MetadataRows &
   ObjectRows &
   OperatorRows &
@@ -108,6 +111,7 @@ interface DocumentRows {
   readonly identity: IdentityRows;
   readonly interactions: InteractionRows;
   readonly mapping: MappingRows;
+  readonly mathml: MathmlRows;
   readonly metadata: MetadataRows;
   readonly operators: OperatorRows;
   readonly package: PackageRows;
@@ -138,6 +142,7 @@ const documentRowsOf = ({
   identity: identityRowsOf(tree, ids),
   interactions: interactionRowsOf(tree, ids),
   mapping: mappingRowsOf(tree, ids),
+  mathml: mathmlRowsOf(tree, ids),
   metadata: metadataRowsOf(tree, ids),
   operators: operatorRowsOf(tree, ids),
   package: packageRowsOf(tree, ids),
@@ -849,6 +854,7 @@ export const overlayRowsOf = (
       rows.identity,
       rows.interactions,
       rows.mapping,
+      rows.mathml,
       rows.metadata,
       rows.operators,
       rows.package,
