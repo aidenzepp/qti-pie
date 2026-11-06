@@ -397,6 +397,41 @@ describe("encode and decode", () => {
     }),
   );
 
+  it("refuses posted text holding a character XML cannot carry, and keeps tab, line breaks and an astral character", () => {
+    const string = binding("string");
+    const postedForm = (query: string): readonly Entry[] => [
+      ...new URLSearchParams(`${string.name}=${query}`),
+    ];
+
+    for (const query of ["a%00b", "a%0Bb", "a%EF%BF%BEb", "a%EF%BF%BFb", "a%1Fb"]) {
+      assert.deepStrictEqual(
+        Option.map(Result.getFailure(decode(postedForm(query), string)), ({ _tag, reason }) => ({
+          _tag,
+          reason,
+        })),
+        Option.some({ _tag: "Malformed", reason: "character" }),
+        query,
+      );
+    }
+    assert.deepStrictEqual(
+      Option.map(Result.getFailure(decode(posted("a\uD800b"), string)), ({ reason }) => reason),
+      Option.some("character"),
+      "a lone surrogate",
+    );
+    assert.deepStrictEqual(
+      Option.map(
+        Result.getFailure(decode(posted("choiceA\u0000"), binding("identifier"))),
+        ({ reason }) => reason,
+      ),
+      Option.some("character"),
+      "an identifier",
+    );
+    assert.deepStrictEqual(
+      Result.getSuccess(decode(postedForm("a%09b%0Ac%0D%0Ad%F0%9F%98%80"), string)),
+      Option.some(value(string, stringOf("a\tb\nc\nd\u{1F600}"))),
+    );
+  });
+
   it.effect("decodes only the entries its binding names", () =>
     Effect.gen(function* namedEntries() {
       const single = binding("identifier");

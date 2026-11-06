@@ -70,9 +70,9 @@ const xmlText = /^[\t\n\r\u{20}-\u{D7FF}\u{E000}-\u{FFFD}\u{10000}-\u{10FFFF}]*$
  * Report whether XML can carry a text: whether every character of it is one XML 1.0's `Char`
  * production admits, so no document that holds it, as text or in an attribute, is ill-formed.
  *
- * A stored value and a result's attributes are written into XML in the end, through crust's
- * writer, which does not refuse the others, so the value codec and `results` check each with this
- * on its way in.
+ * A posted value, a stored value and a result's attributes are all written into XML in the end,
+ * a result through crust's writer, which does not refuse the others, so `decode`, the value codec
+ * and `results` check each with this on its way in.
  *
  * @example
  *   isXmlText("a\tb\n"); // true
@@ -88,12 +88,14 @@ export const isXmlText = (text: string): boolean => xmlText.test(text);
 /**
  * Why posted entries do not decode to a value of their binding.
  */
-type MalformedReason = "file" | "identifier" | "number" | "single-many";
+type MalformedReason = "character" | "file" | "identifier" | "number" | "single-many";
 
 /**
  * What each {@link MalformedReason} asks the poster to change.
  */
 const remedies = {
+  character:
+    "holds a character XML cannot carry: a control character other than tab, line feed and carriage return, U+FFFE, U+FFFF or a lone surrogate; post the text without it",
   file: "is a file, but this response takes text; post text, not a file",
   identifier:
     "is not an identifier; post a choice's identifier, an NCName such as choiceA, as the form gives it",
@@ -294,10 +296,12 @@ const notANumber = (): MalformedReason => "number";
 /**
  * Read one posted string as a value of a base type.
  *
- * Empty text is no value. A number is trimmed first, so blank text is no value too. An integer is
- * read exactly in `base`, then its decimal digits take the value model's one path, so a posted
- * integer is the value the same digits are in content. A float is the value model's reading of the
- * text; it is non-finite only for `INF`, `-INF` and `NaN`, which a posted form refuses.
+ * Text holding a character XML cannot carry is refused first, whatever the base type, since the
+ * value would end in a result no XML reader reads. Empty text is no value. A number is trimmed
+ * first, so blank text is no value too. An integer is read exactly in `base`, then its decimal
+ * digits take the value model's one path, so a posted integer is the value the same digits are in
+ * content. A float is the value model's reading of the text; it is non-finite only for `INF`,
+ * `-INF` and `NaN`, which a posted form refuses.
  *
  * @param baseType The binding's base type.
  * @param text The posted string.
@@ -309,6 +313,10 @@ const readPosted = (
   text: string,
   base: number,
 ): Result.Result<Option.Option<Single>, MalformedReason> => {
+  if (!isXmlText(text)) {
+    return Result.fail("character");
+  }
+
   const lexical = baseType === "integer" || baseType === "float" ? text.trim() : text;
   if (lexical === "") {
     return Result.succeedNone;
@@ -341,20 +349,22 @@ const readPosted = (
 /**
  * Decode the entries a form posted as a value of one binding.
  *
- * Only the entries named for the binding are read. No entry, or one empty entry, is NULL. A number
- * is trimmed, then read as an integer in `base` or as a decimal with an optional exponent. A posted
- * integer is exact at any size, in every base from 2 to 36, and in a base other than 2, 8, 10 or 16
- * it is read in time subquadratic in its digits. A posted float follows the value model's lexical
- * rules, as content does, so a decimal beyond the largest double reads as the largest finite double
- * of its sign; only `INF`, `-INF` and `NaN`, which the value model reads as non-finite, are
- * refused. An identifier must be an NCName. A string has CRLF and a lone CR turned into LF, as a
- * textarea's value has, so a value holds LF line breaks only.
+ * Only the entries named for the binding are read. Text holding a character outside XML 1.0's
+ * `Char` production is refused, so a decoded value is one a result can hold. No entry, or one empty
+ * entry, is NULL. A number is trimmed, then read as an integer in `base` or as a decimal with an
+ * optional exponent. A posted integer is exact at any size, in every base from 2 to 36, and in a
+ * base other than 2, 8, 10 or 16 it is read in time subquadratic in its digits. A posted float
+ * follows the value model's lexical rules, as content does, so a decimal beyond the largest double
+ * reads as the largest finite double of its sign; only `INF`, `-INF` and `NaN`, which the value
+ * model reads as non-finite, are refused. An identifier must be an NCName. A string has CRLF and a
+ * lone CR turned into LF, as a textarea's value has, so a value holds LF line breaks only.
  *
  * @param entries The posted entries.
  * @param binding The response's binding.
  * @param options The number base of an integer.
  * @returns The value, or {@link Malformed}: `file` for a file, `single-many` for two entries of a
- *   `single`, and `number` or `identifier` for text outside the base type's lexical space.
+ *   `single`, `character` for text holding a character XML cannot carry, and `number` or
+ *   `identifier` for text outside the base type's lexical space.
  */
 export const decode = (
   entries: readonly Entry[],
