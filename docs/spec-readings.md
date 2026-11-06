@@ -621,7 +621,12 @@ against it. A reading that is not an information-model-over-XSD case says which 
     run of padding zeros at most 255. A key outside it, such as `1e400` or `1.7976931348623157e308`, is distinct from
     every other key by its lexical form alone. So a mapping keyed `1e400` and `2e400`, which name one double, is
     accepted where comparing the values would refuse it. The corpus holds no float mapping. (Recorded 2026-11-06, from
-    W5 Q5.11.)
+    W5 Q5.11.) The cause is that grizzle's `double precision` lexical form, the only form its cast to `double
+    precision` is defined over, holds no key past those bounds, so a key outside it has no typed value to compare. What
+    would lift it is a `double precision` lexical form that holds every decimal spelling of a finite double, or a typed
+    key over a normalized spelling of the double that this package could write instead; the key's own text would then be
+    compared as a double whatever its spelling. The limit is recorded as row 69 of `docs/grizzle-findings.md`.
+    (Proposed in phase 15, 2026-11-06, for the operator; decision 321.)
 
 57. **In lax wildcard content, every prose rule judges the QTI elements the structural walk checks there, as it judges
     them anywhere else.** Under a `lax` element wildcard, such as the content of `qti-custom-interaction`, XML Schema
@@ -1471,12 +1476,21 @@ against it. A reading that is not an information-model-over-XSD case says which 
     values section 8.13 gives each base type: an integer by its value (reading 45, at any length); a float as the
     double it names (reading 56, within that reading's stated limit); a point as its integer tuple; a pair as an
     unordered pair of identifiers ("The association is undirected so (A,B) and (B,A) are equivalent"); a directed pair
-    as an ordered one; a boolean as written (reading 34); and a string, an identifier and a URI as written, a string by
-    its code points whatever its entry's `case-sensitive` says, since `case-sensitive` governs how a response is matched
-    (section 7.21.3), not the key's value. So `1` and `01` repeat in an integer mapping, `A B` and `B A` in a pair
-    mapping, and `York` and `york` are two keys of a string mapping. The corpus holds no repeated key. This binds pantry
-    and plate alike. This is not a case of documents in conflict. (Decided 2026-11-06 by W5 seat Q5.11 under the
-    operator's standing ruling of 2026-11-05 that the spec wins.)
+    as an ordered one; a boolean as written (reading 34); an identifier and a URI as written; and a string as its
+    entry's `case-sensitive` says it is matched, "Used to control whether or not a qti-map-entry string is matched case
+    sensitively. The default value is false" (section 7.21.3): by its code points where the entry writes
+    `case-sensitive="true"`, case-folded where it is `false`, the default. A map key is refused only where one response
+    value could map two ways, so two entries repeat a string key when they are matched the same way and the same string
+    matches both: two case-insensitive entries whose keys are one string once case is folded, or two case-sensitive
+    entries whose keys are one string. An entry matched case-sensitively beside an entry matched case-insensitively is
+    two keys, as the examples' own item BG010 (`QTI3_BeginnersGuide_Examples/items/BG010.xml`) writes them: `York` with
+    `case-sensitive="true"` mapped to 1 and `york` with the default mapped to 0.5; which entry a response that matches
+    both takes is delivery's, which is plate's. So `1` and `01` repeat in an integer mapping, `A B` and `B A` in a pair
+    mapping, `York` and `york` in a string mapping whose entries leave `case-sensitive` at its default, and `York` and
+    `york` are two keys where both entries write `case-sensitive="true"`. The corpus holds no repeated key. This binds
+    pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-06 by W5 seat Q5.11 under the
+    operator's standing ruling of 2026-11-05 that the spec wins; amended by decision 321 (6), which replaces the
+    code-point comparison of every string key.) (Proposed in phase 15, 2026-11-06, for the operator; decision 321.)
 99. **An area mapping maps points.** The information model says of AreaMapping "A special class used to create a
     mapping from a source set of point values to a target set of float values" (section 5.5,
     https://www.imsglobal.org/spec/qti/v3p0/info#Data_AreaMapping), so a `qti-area-mapping`'s response declaration is
@@ -1637,9 +1651,15 @@ against it. A reading that is not an information-model-over-XSD case says which 
      `~/.cache/gr8des/pm-ud/ud-bind.txt`) describes `ud:value` as "A class that can represent a single value of any
      baseType", an `xs:normalizedString` with an optional `baseType` of BaseTypeEnum (section 2.7.1), whose terms give
      each base type the values the information model gives it (section 8.13). Its `baseType` row adds "This attribute is
-     only used for specifying the base-type of a value that forms part of a record" (line 1426); read as the attribute's
-     purpose, not as a ban (reading 1), a `baseType` written on a statistic's value states that value's base type. So a
-     `ud:value` that writes `baseType` holds a lexical form of that base type, read as a `qti-value`'s text is: outer
+     only used for specifying the base-type of a value that forms part of a record" (line 1426), and its
+     `fieldIdentifier` row says the same of the field identifier, "only used for specifying the field identifier for a
+     value that forms part of a record" (section 2.6.5.1). A value forms part of a record where it writes a
+     `fieldIdentifier`. A `baseType` outside a record has no base type to state and is not read as one: a `ud:value`
+     that writes no `fieldIdentifier` is its type's `xs:normalizedString` text whatever `baseType` it writes, neither
+     refused nor typed (decision 321 (6): "usage-data baseType outside a record accepted untyped"). Read as the
+     attribute's purpose, not as a ban (reading 1), a `baseType` written on a value inside a record states that value's
+     base type. So a `ud:value` inside a record that writes `baseType` holds a lexical form of that base type, read as a
+     `qti-value`'s text is: outer
      whitespace is formatting but for string (reading 7), a boolean is `true` or `false` (reading 34), an integer is
      unbounded (reading 45), a float or a duration is an `xs:double`, an identifier an `IdentifierDType`, a uri an
      `xs:anyURI` (reading 71), a point two integers and a pair or a directed pair two identifiers, each with one
@@ -1648,10 +1668,12 @@ against it. A reading that is not an information-model-over-XSD case says which 
      writes no `baseType` is its type's `xs:normalizedString` text and nothing more, as the implementation guide's own
      usage-data file writes every value (section 6.5, `<value>0.87</value>`). The corpus holds no QTI 3 usage data (its
      `usageData` package is in QTI 2.2's namespace, refused `not-qti3` by reading 89), so no verdict moves; of the
-     fixtures, `usage3-integer-float` (`<value baseType="integer">0.87</value>`) is refused, and `usage3-typed` and
-     `usage3-float-padded` are accepted. This binds pantry and plate alike. This is not a case of documents in conflict:
-     the XSD types the text `xs:normalizedString` and the binding types the value by the base type it names. (Decided
-     2026-11-06 by W5 seat PM under the operator's standing ruling of 2026-11-05 that the spec wins.)
+     fixtures, `usage3-integer-float` (`<value baseType="integer">0.87</value>`, outside a record) is accepted untyped,
+     as are `usage3-typed` and `usage3-float-padded`. This binds pantry and plate alike. This is not a case of documents
+     in conflict: the XSD types the text `xs:normalizedString` and the binding types the value by the base type it names
+     where it forms part of a record. (Decided 2026-11-06 by W5 seat PM under the operator's standing ruling of
+     2026-11-05 that the spec wins; amended by decision 321 (6).) (Proposed in phase 15, 2026-11-06, for the operator;
+     decision 321.)
 106. **A prefixed reference reaches every built-in variable its item ref's item holds, `QTI_CONTEXT` among them.** The
      information model says "Item variables are declared by variable declarations: context, response, outcome or
      template variables" (section 2.2.2), "QTI_CONTEXT is a built-in variable and so any references within an item or
@@ -1664,12 +1686,14 @@ against it. A reading that is not an information-model-over-XSD case says which 
      this repository ported (the UP audit's A55) reached only the three session variables; `QTI_CONTEXT` is admitted
      here because section 2.2.2.1 says a reference to it must succeed (reading 1). A `duration` read so stays bound by
      section 2.2.2.2's sentence on items that are not time dependent (the oracle's Item duration), and an item ref
-     that names an LTI link has no item whose declarations a prefix reads, so through it only a built-in resolves. In
-     the corpus, the one test package that prefixes names, `test_package_minfiles`, reads `item034.SCORE`,
+     that names an LTI link has no item whose declarations a prefix reads, so a prefixed reference through it is
+     accepted unchecked, a recorded limit (reading 110). In the corpus, the one test package that prefixes names,
+     `test_package_minfiles`, reads `item034.SCORE`,
      `item063.SCORE`, `item065.SCORE` and `item160.SCORE`, each declared and each resolving once, and every test
      package is refused at the codec today, so no verdict moves. This binds pantry and plate alike. This is not a case
      of documents in conflict. (Decided 2026-11-06 by W5 seat PE under the operator's standing ruling of 2026-11-05 that
-     the spec wins.)
+     the spec wins; its LTI clause amended by decision 321 (6).) (Proposed in phase 15, 2026-11-06, for the operator;
+     decision 321.)
 107. **A variable mapping adds a name for an item's outcome, and the outcome's own name still names it.** The
      information model says "Variable mappings allow outcome variables declared with the name source-identifier in the
      corresponding item to be treated as if they were declared with the name target-identifier during outcome
@@ -1720,20 +1744,27 @@ against it. A reading that is not an information-model-over-XSD case says which 
      corpus verdict moves. This binds pantry and plate alike. This is not a case of documents in conflict: XML Schema
      decides its own validity. (Decided 2026-11-06 by W5 seats UP and PG under the operator's standing ruling of
      2026-11-05 that the spec wins.)
-110. **A variable mapping and a template default name variables an item declares, so under an item ref that names an
-     LTI link both are refused.** The information model says "Variable mappings allow outcome variables declared with
-     the name source-identifier in the corresponding item to be treated as if they were declared with the name
-     target-identifier during outcome processing" (section 7.48), and "The default value of a template variable in an
-     item can be overridden based on the test context in which the template is instantiated" (section 5.152), its
-     `template-identifier` being "The identifier of the template variable affected" (section 5.152.1). Each names a
-     variable declared in the corresponding item. An item ref may name an LTI link instead of an item (the
-     implementation guide's section 6.2.9, informative; the UP audit's B3), and an LTI link is no QTI item and
-     declares no variable, so a mapping's source or a template default's template under such an item ref names no
-     declared variable. It is refused under `variable-mapping-source` or `template-default-target`, as a source or
-     a template its item does not declare is, and never as a derived field. A prefixed name through such an item ref
-     reaches only the item built-ins (reading 106). The corpus's LTI item refs (testWithLti) hold neither, so no
+110. **A variable mapping and a template default name variables an item declares; under an item ref that names an LTI
+     link a variable mapping is accepted unchecked, a recorded limit, and a template default is refused.** The
+     information model says "Variable mappings allow outcome variables declared with the name source-identifier in the
+     corresponding item to be treated as if they were declared with the name target-identifier during outcome
+     processing" (section 7.48), and "The default value of a template variable in an item can be overridden based on the
+     test context in which the template is instantiated" (section 5.152), its `template-identifier` being "The
+     identifier of the template variable affected" (section 5.152.1). Each names a variable declared in the
+     corresponding item. An item ref may name an LTI link instead of an item (the implementation guide's section 6.2.9,
+     informative; the UP audit's B3), and an LTI link is no QTI item: the package holds no declaration of what the
+     external tool reports, so a mapping's source under such an item ref names a variable nothing in the package lists,
+     and a prefixed reference through it names one too (reading 106). Both are accepted unchecked. This is a recorded
+     limit, not a law of the specification: the cause is that the package states no declaration to check the name
+     against (audit F13), and what would lift it is a source that lists the outcomes an LTI link reports, against which
+     the source and the prefixed name would be checked as they are under an item. A template default stays refused
+     under such an item ref, under `template-default-target`, as a template its item does not declare is: an LTI link
+     is no QTI item and has no template variables to override, whatever outcomes it reports. A variable mapping under
+     an item ref that names an item is still refused under `variable-mapping-source` where its source is a variable the
+     item does not declare, and never as a derived field. The corpus's LTI item refs (testWithLti) hold neither, so no
      verdict moves. This binds pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-06
-     by W5 seat PE under the operator's standing ruling of 2026-11-05 that the spec wins.)
+     by W5 seat PE under the operator's standing ruling of 2026-11-05 that the spec wins; amended by decision 321 (6).)
+     (Proposed in phase 15, 2026-11-06, for the operator; decision 321.)
 111. **A processing element's `identifier` names a variable of the kind the element reads or sets.** The information
      model defines each: a correct value is of "the associated response variable" (section 7.10.1), a map response's
      and a map response point's variable a response (sections 7.22.1, 6.9.46), a lookup's "the outcome variable to be
@@ -1805,17 +1836,26 @@ against it. A reading that is not an information-model-over-XSD case says which 
      `rtest01-fragment.xml`, are accepted. This follows the information model. This binds pantry and plate alike. This
      is not a case of documents in conflict. (Decided 2026-11-06 by W5 seat IN under the operator's standing ruling of
      2026-11-05 that the spec wins.)
-115. **An include names a document of its package, by an href with no fragment identifier.** The information model says
+115. **An include names a document of its package or a resource outside it, by an href with no fragment identifier.**
+     The information model says
      "Fragments are packaged as separate resources and can be transported independently" (section 2.12), and XInclude
      says "If the href attribute is absent when parse="xml", the xpointer attribute must be present" and "Fragment
      identifiers must not be used; their appearance is a fatal error" (XInclude 1.0 Second Edition, W3C Recommendation,
      15 November 2006, section 3.1). Reading 85 refuses `xpointer`, so an include the information model reads
-     (reading 114) whose href is absent or empty, is external, or names no document the manifest lists, is refused under
-     "Include target", and one whose href holds a `#` after its path, with or without a query before it, is refused
-     under "Include fragment identifier", wherever the include stands. A query is admitted and names no other file
-     (reading 102). `XInclude.xsd` types `href` an optional `xs:anyURI`, which admits all of these; XInclude itself
-     makes them fatal errors. This binds pantry and plate alike. This is not a case of documents in conflict. (Decided
-     2026-11-06 by W5 seat IN under the operator's standing ruling of 2026-11-05 that the spec wins.)
+     (reading 114) whose href is absent or empty, or names no document the manifest lists, is refused under "Include
+     target", and one whose href holds a `#` after its path, with or without a query before it, is refused under
+     "Include fragment identifier", wherever the include stands. A query is admitted and names no other file (reading
+     102). `XInclude.xsd` types `href` an optional `xs:anyURI`, which admits all of these; XInclude itself makes them
+     fatal errors. An include whose href is external (reading 102: it starts with a scheme or with `/`) names a resource
+     the package does not hold, and is admitted: it is stored as written, with its element, and never fetched, and its
+     content is judged by no law, since there is no document to judge. That is a recorded under-check, not a law of the
+     specification: the information model says an included fragment's content "must satisfy the requirements of the
+     specification in the context of the item in which it is being included" (section 2.12, reading 117), which a
+     fragment pantry never reads cannot be checked against. What would lift it is a fetch of the resource, which an
+     importer of a package does not do (audit C B2). The corpus holds no external include, so no verdict moves. This
+     binds pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-06 by W5 seat IN under
+     the operator's standing ruling of 2026-11-05 that the spec wins; amended by the audit of PR #46, C B2.)
+     (Proposed in phase 15, 2026-11-06, for the operator; decision 321.)
 116. **A fragment's root is read by its name at its document's root, so the three kinds the composition splits by
      context never root a fragment: a stated limit.** The composition gives three element names two kinds each, by the
      context the XSDs declare them in: `qti-template-block` and `qti-template-block.rubric`, `qti-template-inline` and
@@ -2297,3 +2337,14 @@ lists cover, an attribute its XSD does not declare is a `data-` attribute or the
 90 state: the Schematron is normative. Where the XSD's attribute wildcard admits an attribute the lists do not,
 readings 16 and 17 take the stricter normative source. This binds pantry and plate alike. (Label R15-j; proposed in
 phase 15, 2026-11-06, for the operator; decision 327.)
+
+**A braced `pattern` that names no declared variable is a string value, stored as written.** The information model
+says of `StringOrVariableRef` that "if a string attribute appears to be a reference to a template or outcome variable
+but there is no variable with the given name it should be treated simply as string value" (section 2.7.2, line 9106 of
+`~/.cache/gr8des/qti3-text/info.txt`; section 9.3.4 says it again, line 74267; identical in 3.0.1). A `qti-pattern-match`'s
+`pattern` is the one attribute of that type, so a `pattern` written `{name}` where no variable of that name is declared
+is a string value, not a reference: pantry stores it as written and does not check it as a regular expression (reading
+58's brace rule is not applied to a value treated as a string), and what delivery matches against it is plate's. A name
+that matches a declared variable of the wrong kind or base type, one that is no template or outcome variable of base
+type string and single cardinality, is still refused (P24), as a name that resolves more than one way in a test is.
+This binds pantry and plate alike. (Label R15-k; proposed in phase 15, 2026-11-06, for the operator; decision 331.)
