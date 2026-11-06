@@ -966,15 +966,20 @@ export interface Posting {
   readonly identifier: string;
   /**
    * The number base its integer is written in: the `base` of the first Text Entry or Extended
-   * Text, in document order, that binds the response, and 10 when none does.
+   * Text, in document order, that binds the response, and 10 when only a Choice binds it.
    */
   readonly options: DecodeOptions;
 }
 
 /**
- * Give the postings of a redacted item in one instance: one for each response a phase-1
- * interaction can post, in the order of the item's `responses`, so a host decodes each from its
- * form with the base its interaction declares instead of assuming base 10.
+ * Give the postings of a redacted item in one instance: one for each response of a posted base
+ * type that an interaction in the body binds, in the order of the item's `responses`, so a host
+ * decodes each from its form with the base its interaction declares instead of assuming base 10.
+ *
+ * A declared response that no interaction binds has no posting. The form has no Control for it,
+ * so a post never carries it, and decoding it would give NULL. A host that saved that NULL would
+ * replace the value the response holds in its record, the declared default a test session writes
+ * when the item is first presented, and processing would read NULL instead.
  *
  * It reads only a {@link Redacted}, so a host needs no type of the item's body to decode a post.
  *
@@ -985,20 +990,22 @@ export interface Posting {
  *
  * @param redacted The item, through `redact`.
  * @param instance The instance token the render used, one `checkInstance` passes.
- * @returns The postings: a response of a base type no phase-1 interaction posts has none.
+ * @returns The postings: a response no interaction binds, or of a base type no phase-1
+ *   interaction posts, has none.
  */
 export const postings = (redacted: Redacted, instance: string): readonly Posting[] => {
   const interactions = interactionsIn(redacted.body);
 
   return redacted.responses.flatMap(({ baseType, cardinality, identifier }): readonly Posting[] => {
-    if (!isPosted(baseType)) {
+    const bound = interactions.filter(({ response }) => response === identifier);
+    if (!isPosted(baseType) || bound.length === 0) {
       return [];
     }
 
     const typed = Arr.findFirst(
-      interactions,
+      bound,
       (interaction): interaction is ExtendedTextInteraction | TextEntryInteraction =>
-        interaction.kind !== "choice" && interaction.response === identifier,
+        interaction.kind !== "choice",
     );
 
     return [

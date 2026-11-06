@@ -1,9 +1,31 @@
-import { readFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
+import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { assert, describe, it } from "@effect/vitest";
-import { Schema } from "effect";
+import { afterAll, assert, describe, it } from "@effect/vitest";
+import { Effect, Option, Predicate, Result, Schema } from "effect";
 import { storedVersion } from "#plate/codec/record.ts";
+import {
+  acceptedItem,
+  configure,
+  current,
+  decodeSession,
+  encodeIntent,
+  encodeSession,
+  entryName,
+  intentName,
+  open,
+  startTest,
+} from "#plate/index.ts";
+import type {
+  Accepted,
+  AcceptedTest,
+  Configuration,
+  Entry,
+  StoredTestSession,
+  Value,
+} from "#plate/index.ts";
 import { readImports } from "#plate/test/imports.ts";
 
 /**
@@ -84,6 +106,83 @@ const packageName = "@qti-pie/plate";
  * The part of plate's `package.json` the licence case reads.
  */
 const Manifest = Schema.Struct({ license: Schema.String });
+
+/**
+ * The scratch folder this run owns, under the package's git-ignored `work/`, where the server
+ * action's recipe is written to be imported. Its name is new for each run, so two runs at once
+ * never share or remove each other's files.
+ */
+const scratch = path.resolve(import.meta.dirname, "..", "work", `readme-test-${randomUUID()}`);
+
+/**
+ * The item the server action's recipe runs on, written fresh: a Text Entry that reads `RESPONSE`,
+ * a single integer, in base 16, and processing that sets `SCORE`, an integer, to `RESPONSE`.
+ */
+const byteItemXml = [
+  '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="byte" title="The largest byte" adaptive="false" time-dependent="false">',
+  '<qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="integer"/>',
+  '<qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="integer"/>',
+  "<qti-item-body><p>The largest byte, in hexadecimal, is ",
+  '<qti-text-entry-interaction response-identifier="RESPONSE" base="16"/>.</p></qti-item-body>',
+  '<qti-response-processing><qti-set-outcome-value identifier="SCORE"><qti-variable identifier="RESPONSE"/></qti-set-outcome-value></qti-response-processing>',
+  "</qti-assessment-item>",
+].join("");
+
+/**
+ * The test the server action's recipe runs on: one nonlinear part with individual submission that
+ * holds the byte item, its ref naming the document `byte.xml` beside the test.
+ */
+const byteTestXml = [
+  '<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="readme" title="README">',
+  '<qti-test-part identifier="part" navigation-mode="nonlinear" submission-mode="individual">',
+  '<qti-assessment-section identifier="section" title="Section" visible="true">',
+  '<qti-assessment-item-ref identifier="byte" href="byte.xml"/>',
+  "</qti-assessment-section></qti-test-part></qti-assessment-test>",
+].join("");
+
+/**
+ * The server action's recipe as the README writes it: the posted entries and the stored session
+ * in, the session to store out.
+ */
+type ServerAction = (
+  test: AcceptedTest,
+  items: ReadonlyMap<string, Accepted>,
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The recipe takes the session as the host stored it, JSON it has not read, and decodes it with decodeSession itself; this type mirrors that boundary.
+  stored: unknown,
+  entries: readonly Entry[],
+  configuration: Configuration,
+) => Result.Result<StoredTestSession, unknown>;
+
+/**
+ * Say whether a module exports the server action's `step`.
+ *
+ * @param module The module.
+ * @returns Whether it exports a function named `step`.
+ */
+const exportsStep = (module: unknown): module is { readonly step: ServerAction } =>
+  Predicate.hasProperty(module, "step") && Predicate.isFunction(module.step);
+
+/**
+ * Construct a single integer value.
+ *
+ * @param value The integer.
+ * @returns The value.
+ */
+const integer = (value: bigint): Value => ({
+  baseType: "integer",
+  cardinality: "single",
+  values: [{ baseType: "integer", value }],
+});
+
+/**
+ * Require a result to succeed.
+ *
+ * @param result The result.
+ * @param what What gave it, for a failure's message.
+ * @returns Its success.
+ */
+const ok = <A, E>(result: Result.Result<A, E>, what: string): A =>
+  Result.getOrElse(result, (failure) => assert.fail(`${what} failed: ${String(failure)}`));
 
 /**
  * Read a file of the package.
@@ -182,6 +281,60 @@ const scriptOf = (block: { readonly code: string; readonly lang: string }): stri
     }
   }
 };
+
+/**
+ * Import the README's server action: its one TypeScript block, written into {@link scratch} with
+ * its imports from `@qti-pie/plate` read through the package's own alias, so it runs on this
+ * checkout's source.
+ *
+ * @returns The recipe's `step`.
+ */
+const serverAction = Effect.fnUntraced(function* serverAction() {
+  const [block, ...others] = codeBlocks(sectionOf("### A plain server action")).filter(
+    ({ lang }) => lang === "ts",
+  );
+  assert.lengthOf(others, 0, "the server action is one TypeScript block");
+
+  const file = path.join(scratch, "server-action.ts");
+  mkdirSync(scratch, { recursive: true });
+  writeFileSync(
+    file,
+    (block ?? assert.fail("the server action has no TypeScript block")).code.replaceAll(
+      `"${packageName}"`,
+      '"#plate/index.ts"',
+    ),
+  );
+
+  const module: unknown = yield* Effect.promise(() => import(file));
+
+  return exportsStep(module) ? module.step : assert.fail("the server action exports no step");
+});
+
+/**
+ * Open the byte item and its test, each by `open`, the test at `tests/readme.xml` and the item
+ * beside it.
+ *
+ * @returns The test and its items, keyed by item ref.
+ */
+const byteDelivery = Effect.fnUntraced(function* byteDelivery() {
+  const encoder = new TextEncoder();
+  const tested = yield* open("tests/readme.xml", encoder.encode(byteTestXml));
+  const opened = yield* open("tests/byte.xml", encoder.encode(byteItemXml));
+  const test =
+    (tested.verdict === "accepted" || tested.verdict === "accepted-with-unsupported") &&
+    tested.kind === "test"
+      ? tested.accepted
+      : assert.fail(`the test is ${tested.verdict} on a ${tested.kind}, not an accepted test`);
+  const item = Option.getOrElse(acceptedItem(opened), () =>
+    assert.fail(`the item is ${opened.verdict}, not an accepted item`),
+  );
+
+  return { items: new Map([["byte", item]]), test };
+});
+
+afterAll(() => {
+  rmSync(scratch, { force: true, recursive: true });
+});
 
 describe("README.md", () => {
   it("opens with the rule's block, verbatim", () => {
@@ -300,6 +453,37 @@ describe("README.md", () => {
       "a paragraph of Hosts names postings(redacted, instance) for a posted Text Entry",
     );
   });
+
+  it.effect("runs the plain server action on a base-16 Text Entry, which scores ff as 255", () =>
+    Effect.gen(function* runsServerAction() {
+      const step = yield* serverAction();
+      const configuration = yield* configure({});
+      const { items, test } = yield* byteDelivery();
+      const session = ok(
+        startTest(test, items, configuration, {
+          instance: "readme",
+          now: new Date("2026-11-01T09:00:00.000Z"),
+        }),
+        "startTest",
+      );
+      const shown = ok(current(test, session, configuration), "current");
+      const entries: readonly Entry[] = [
+        [
+          entryName(shown.kind === "item" ? shown.instance : assert.fail("no item"), "RESPONSE"),
+          "ff",
+        ],
+        [intentName(session.instance), encodeIntent({ kind: "submit-item" })],
+      ];
+      const stored = ok(
+        step(test, items, ok(encodeSession(session), "encodeSession"), entries, configuration),
+        "the server action",
+      );
+      const [byte] = ok(decodeSession(stored, test), "decodeSession").items;
+
+      assert.deepStrictEqual(byte?.record.responses["RESPONSE"], integer(255n));
+      assert.deepStrictEqual(byte?.record.outcomes["SCORE"], integer(255n));
+    }),
+  );
 
   it("names the licence package.json declares, MIT", () => {
     const { license } = Schema.decodeUnknownSync(Manifest)(JSON.parse(packageFile("package.json")));

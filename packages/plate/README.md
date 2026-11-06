@@ -246,7 +246,8 @@ const form = useForm({
 
 Every recipe ends in this function. Your POST route or server action calls it with the posted
 entries, such as `[...formData]`, and the session it stored. The function decodes the current
-item's responses, carries out the posted intent, and returns the session to store:
+item's responses through `postings`, carries out the posted intent, and returns the session to
+store:
 
 ```ts
 import { Result } from "effect";
@@ -257,9 +258,8 @@ import {
   decodeIntent,
   decodeSession,
   encodeSession,
-  entryName,
-  isPosted,
   partition,
+  postings,
   redact,
 } from "@qti-pie/plate";
 import type { Accepted, AcceptedTest, Configuration, Entry, Value } from "@qti-pie/plate";
@@ -281,11 +281,9 @@ export const step = (
     const responses: Record<string, Value> = {};
     if (shown.kind === "item") {
       const { own } = partition(entries, shown.instance);
-      for (const { baseType, cardinality, identifier } of redact(items.get(shown.ref)!).responses) {
-        if (isPosted(baseType)) {
-          const name = entryName(shown.instance, identifier);
-          responses[identifier] = yield* decode(own, { baseType, cardinality, name });
-        }
+      const item = redact(items.get(shown.ref)!);
+      for (const { binding, identifier, options } of postings(item, shown.instance)) {
+        responses[identifier] = yield* decode(own, binding, options);
       }
     }
 
@@ -371,8 +369,11 @@ this split. A host that sends the accepted item to the browser sends what `redac
 A host composes these functions with its own page, form, routes and store.
 
 To decode a post, call `postings(redacted, instance)` with the instance you rendered with. It
-gives each response's binding and the options `decode` takes, so `decode` reads a posted Text
-Entry in the base its binding declares, not always in base 10.
+lists each response that an interaction binds, with the response's binding and the options
+`decode` takes. With those options, `decode` reads a posted Text Entry in the base its binding
+declares, not always in base 10. `postings` leaves out a response that no interaction binds. The
+form never posts one, so the response keeps the value its record holds, such as its declared
+default.
 
 [`src/hosts/html.ts`](src/hosts/html.ts) is a plain-HTML host, written as a Fetch handler. It
 serves one item inside its own `<form method="post" autocomplete="off">` and submit button, on a

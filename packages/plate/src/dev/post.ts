@@ -1,31 +1,22 @@
 /**
- * How the dev playground reads a post of an item's form: the post's entries, one posting per
- * response, and each response decoded through the item's own bindings.
+ * How the dev playground reads a post of an item's form: the post's entries, and each response
+ * decoded through the public `postings`, as any host decodes a post.
  *
  * The item page (`page.ts`) and the session page (`test-page.ts`) both read their posts through
- * this, so a response posts and decodes alike on both.
+ * this, so a response posts and decodes alike on both, and alike with every other host.
  *
  * Dev playground code outside the core: nothing reachable from `src/index.ts` imports it.
  *
  * @module
  */
 import { Effect, Option, Result } from "effect";
-import { decode, entryName, isPosted, Malformed, partition } from "#plate/form/encoding.ts";
-import type { Binding, DecodeOptions, Entry } from "#plate/form/encoding.ts";
-import { interactionsIn } from "#plate/model/interactions.ts";
+import { decode, Malformed, partition } from "#plate/form/encoding.ts";
+import type { Entry } from "#plate/form/encoding.ts";
 import type { Value } from "#plate/model/values.ts";
+import { postings } from "#plate/payload.ts";
+import { redact } from "#plate/render.ts";
 import type { Responses } from "#plate/session/session.ts";
 import type { Accepted } from "#plate/validate/verdict.ts";
-
-/**
- * How one response travels through the playground's form: its identifier, its binding under the
- * item instance's entry name, and the number base its Controls post in.
- */
-export interface Posting {
-  readonly binding: Binding;
-  readonly options: DecodeOptions;
-  readonly response: string;
-}
 
 /**
  * What one post carries for an item: each posted response decoded, the strings posted for each,
@@ -57,47 +48,11 @@ export const entriesOf = Effect.fnUntraced(function* entriesOf(
 });
 
 /**
- * Collect the postings of an item's interactions in document order, one per response: the
- * response's declared base type and cardinality under the entry name `render` gives its Controls
- * for the instance, and the number base a Text Entry or an Extended Text posts in, 10 for a
- * Choice.
- *
- * A response with no declaration, or of a base type no interaction posts, is left out, so the
- * post carries nothing for it: `checkResponses` treats it as NULL and `score` keeps its value.
- *
- * @param document The accepted item.
- * @param instance The item instance.
- * @returns The postings.
- */
-export const postingsOf = (document: Accepted, instance: string): readonly Posting[] => {
-  const seen = new Set<string>();
-
-  return interactionsIn(document.item.body).flatMap((interaction): readonly Posting[] => {
-    const { response } = interaction;
-    const declaration = document.item.responses.get(response);
-    if (seen.has(response) || declaration === undefined || !isPosted(declaration.baseType)) {
-      return [];
-    }
-
-    seen.add(response);
-
-    return [
-      {
-        binding: {
-          baseType: declaration.baseType,
-          cardinality: declaration.cardinality,
-          name: entryName(instance, response),
-        },
-        options: { base: interaction.kind === "choice" ? 10 : interaction.base },
-        response,
-      },
-    ];
-  });
-};
-
-/**
  * Read what a post carries for an item: its own entries, partitioned by the item's instance, each
- * response decoded through the item's bindings, with the strings posted for it.
+ * response decoded through the item's `postings`, with the strings posted for it.
+ *
+ * A response no interaction binds has no posting, so the post carries nothing for it:
+ * `checkResponses` treats it as NULL and `score` keeps its record value.
  *
  * @param document The accepted item.
  * @param instance The item instance.
@@ -106,10 +61,10 @@ export const postingsOf = (document: Accepted, instance: string): readonly Posti
  */
 export const postOf = (document: Accepted, instance: string, entries: readonly Entry[]): Post => {
   const { own } = partition(entries, instance);
-  const postings = postingsOf(document, instance);
+  const itemPostings = postings(redact(document), instance);
   const decoded = Object.fromEntries(
-    postings.map(({ binding, options, response }) => [
-      response,
+    itemPostings.map(({ binding, identifier, options }) => [
+      identifier,
       Result.merge(decode(own, binding, options)),
     ]),
   );
@@ -122,8 +77,8 @@ export const postOf = (document: Accepted, instance: string, entries: readonly E
       ),
     ),
     posted: Object.fromEntries(
-      postings.map(({ binding, response }) => [
-        response,
+      itemPostings.map(({ binding, identifier }) => [
+        identifier,
         own.flatMap(([name, value]) =>
           name !== binding.name || value instanceof Blob ? [] : [value],
         ),
