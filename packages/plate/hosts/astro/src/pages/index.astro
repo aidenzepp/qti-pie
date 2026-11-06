@@ -12,7 +12,12 @@
  *
  * It keeps the README's duty for a form that holds a Choice: the form carries `autocomplete="off"`
  * and the page sends `Cache-Control: no-store`.
+ *
+ * It imports plate's stylesheet, `@qti-pie/plate/styles.css`, which Astro bundles into a linked
+ * sheet in the page's head, never an inline `<style>`. The item Root's containment rule there keeps
+ * authored content inside the item.
  */
+import "#plate/styles.css";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { Config, Effect, Option, Result } from "effect";

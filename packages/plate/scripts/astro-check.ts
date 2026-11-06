@@ -1,6 +1,7 @@
 /**
  * The Astro host's check: it opens the host through `astroServer`, reads the page and posts
- * BG010's correct answer to it, and confirms port 5192 is free once the server's scope closes.
+ * BG010's correct answer to it, checks that both pages link plate's stylesheet, and confirms port
+ * 5192 is free once the server's scope closes.
  *
  * From the repository root:
  *
@@ -9,20 +10,25 @@
  * ```
  *
  * It prints one line per check, `ok` or `not ok`, then how many passed, and exits 1 when one
- * fails or the host cannot be served. The expected fragment and score text come from plate itself:
- * `render` over the same bytes and instance, and the score message in the default locale.
+ * fails or the host cannot be served. The expected fragment, score text and stylesheet rules come
+ * from plate itself: `render` over the same bytes and instance, the score message in the default
+ * locale, and the item Root's rules in `src/styles.css`.
  *
  * The post carries no `Origin` header, as a script's post does not. Astro's origin check refuses a
  * form post whose `Origin` is not matched by `Sec-Fetch-Site: same-origin`; the browser test
  * `src/hosts/astro.browser.test.ts` shows a browser's same-origin post is scored.
  */
-import { Console, Effect, Option, Schema } from "effect";
+import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+import { Console, Effect, Option, Result, Schema } from "effect";
 import { readCorpusFile } from "#plate/document/corpus.ts";
 import type { Element, Node } from "#plate/emit/node.ts";
 import { rowFor } from "#plate/emit/parts.ts";
 import { acceptedItem, configure, open, postings, redact, render } from "#plate/index.ts";
 import { message } from "#plate/messages.ts";
 import { textOf } from "#plate/test/accessibility.ts";
+import { scanSheet } from "#plate/test/css.ts";
+import type { Sheet } from "#plate/test/css.ts";
 import { dial } from "#plate/test/dial.ts";
 import { parseHtml } from "#plate/test/round-trip.ts";
 import { astroPort, astroServer } from "#scripts/astro-server.ts";
@@ -41,6 +47,11 @@ const instance = "q1";
  * BG010's correct answer, which its `map_response` maps to 1.
  */
 const correctAnswer = "York";
+
+/**
+ * The item Root's selector as plate's stylesheet writes it, the one its containment rule uses.
+ */
+const rootSelector = `:where([data-slot="${rowFor("item", "root").slot}"])`;
 
 /**
  * The failure of the check's own setup: plate could not give what the host is checked against.
@@ -74,8 +85,65 @@ class RequestFailed extends Schema.TaggedError<RequestFailed>()("RequestFailed",
 }
 
 /**
+ * Write a selector without its quotes, as a bundler may write an attribute value.
+ *
+ * @param selector The selector.
+ * @returns It with every `"` removed.
+ */
+const unquoted = (selector: string): string => selector.replaceAll('"', "");
+
+/**
+ * Write the declarations a sheet gives the item Root outside any `@media` or `@supports` block,
+ * each as `property: value`, with `!important` when it has it.
+ *
+ * A bundler may drop the quotes around an attribute value, so a selector matches
+ * {@link rootSelector} with or without them.
+ *
+ * @param sheet The scanned sheet.
+ * @returns The declarations, in the sheet's order.
+ */
+const rootDeclarations = (sheet: Sheet): readonly string[] =>
+  sheet.rules
+    .filter(
+      (rule) =>
+        rule.conditions.length === 0 &&
+        rule.selectors.some((selector) => unquoted(selector) === unquoted(rootSelector)),
+    )
+    .flatMap((rule) =>
+      rule.declarations.map(
+        ({ important, property, value }) =>
+          `${property}: ${value}${important ? " !important" : ""}`,
+      ),
+    );
+
+/**
+ * Read plate's stylesheet, the file `@qti-pie/plate/styles.css` exports, and give the item Root's
+ * declarations in it: the containment rule and the theme's block display.
+ */
+const plateRootRules = Effect.gen(function* plateRootRules() {
+  const file = fileURLToPath(import.meta.resolve("#plate/styles.css"));
+  const text = yield* Effect.tryPromise({
+    catch: (cause) =>
+      new CheckSetupFailed({
+        detail: `plate's stylesheet ${file} cannot be read (${cause instanceof Error ? cause.message : String(cause)}). Check that the file exists and that package.json's imports map #plate/* to ./src/*.`,
+      }),
+    try: () => readFile(file, "utf-8"),
+  });
+  const declarations = rootDeclarations(yield* scanSheet(text));
+
+  if (declarations.length === 0) {
+    return yield* new CheckSetupFailed({
+      detail: `plate's stylesheet ${file} has no rule for the item Root, ${rootSelector}. Restore the Root's containment rule there.`,
+    });
+  }
+
+  return declarations;
+});
+
+/**
  * What the host is checked against, all from plate: the fragment `render` writes for BG010 with
- * the host's instance, the entry name its Text Entry posts under, and the score text for 1.
+ * the host's instance, the entry name its Text Entry posts under, the score text for 1, and the
+ * declarations plate's stylesheet gives the item Root.
  */
 const expected = Effect.gen(function* expected() {
   const configuration = yield* configure({});
@@ -105,6 +173,7 @@ const expected = Effect.gen(function* expected() {
   return {
     fragment: rendered.success.html,
     name: posting.binding.name,
+    rootRules: yield* plateRootRules,
     score: message(configuration.locale, "score", { score: "1" }),
   };
 });
@@ -180,13 +249,62 @@ const check = (name: string, passed: boolean, seen = ""): Effect.Effect<void> =>
 };
 
 /**
- * The checks one page shares: its status, its `Cache-Control` and that it holds no script.
+ * Read the stylesheets a page links: each `<link rel="stylesheet">` target, fetched from the host,
+ * and the item Root's declarations in it.
+ *
+ * @param page The page.
+ * @param origin The host's origin, which a relative `href` resolves against.
+ * @returns One record per linked sheet: its `href`, its Root declarations, and why there are none
+ *   when it could not be read.
+ */
+const linkedSheets = (page: Page, origin: string) =>
+  Effect.forEach(
+    elementsOf(parseHtml(page.html)).filter(
+      (element) =>
+        element.tag === "link" &&
+        String(element.attrs["rel"] ?? "")
+          .toLowerCase()
+          .split(/\s+/u)
+          .includes("stylesheet"),
+    ),
+    (link) =>
+      Effect.gen(function* linkedSheet() {
+        const { href } = link.attrs;
+
+        if (href === undefined || href === true || href === "") {
+          return { declarations: [], href: String(href), problem: "it has no href" };
+        }
+
+        const served = yield* fetchPage(new Request(new URL(href, origin)));
+
+        if (served.status !== 200) {
+          return { declarations: [], href, problem: `answered ${String(served.status)}` };
+        }
+
+        const sheet = yield* Effect.result(scanSheet(served.html));
+
+        return Result.isFailure(sheet)
+          ? { declarations: [], href, problem: sheet.failure.message }
+          : { declarations: rootDeclarations(sheet.success), href, problem: "" };
+      }),
+  );
+
+/**
+ * The checks one page shares: its status, its `Cache-Control`, that it holds no script and no
+ * inline style, and that it links plate's stylesheet, so the item Root's rules apply to it.
  *
  * @param label Which request the page answered.
  * @param page The page.
- * @returns An effect that runs the three checks.
+ * @param origin The host's origin.
+ * @param rootRules The declarations plate's stylesheet gives the item Root.
+ * @returns An effect that runs the five checks.
  */
-const pageChecks = (label: string, page: Page): Effect.Effect<void> =>
+const pageChecks = (
+  label: string,
+  page: Page,
+  origin: string,
+  rootRules: readonly string[],
+): Effect.Effect<void, RequestFailed> =>
   Effect.gen(function* checkPage() {
     yield* check(`${label} answers 200`, page.status === 200, String(page.status));
     yield* check(
@@ -195,6 +313,26 @@ const pageChecks = (label: string, page: Page): Effect.Effect<void> =>
       String(page.cacheControl),
     );
     yield* check(`${label}'s page holds no <script`, !page.html.toLowerCase().includes("<script"));
+    yield* check(
+      `${label}'s page holds no inline <style`,
+      !page.html.toLowerCase().includes("<style"),
+    );
+
+    const sheets = yield* linkedSheets(page, origin);
+    const linked = new Set(sheets.flatMap((sheet) => sheet.declarations));
+
+    yield* check(
+      `${label}'s page links plate's stylesheet, which gives the item Root ${rootRules.join("; ")}`,
+      rootRules.every((rule) => linked.has(rule)),
+      sheets.length === 0
+        ? 'no <link rel="stylesheet">'
+        : sheets
+            .map(
+              ({ declarations, href, problem }) =>
+                `${href}: ${problem === "" ? declarations.join("; ") || "no Root rule" : problem}`,
+            )
+            .join(", "),
+    );
   });
 
 /**
@@ -211,7 +349,7 @@ const program = Effect.gen(function* astroCheck() {
       const forms = elementsOf(parseHtml(got.html)).filter((element) => element.tag === "form");
       const [form] = forms;
 
-      yield* pageChecks("GET /", got);
+      yield* pageChecks("GET /", got, origin, want.rootRules);
       yield* check(
         "GET /'s page holds render's BG010 fragment byte for byte",
         got.html.includes(want.fragment),
@@ -237,7 +375,7 @@ const program = Effect.gen(function* astroCheck() {
       const [status] = statuses;
       const shown = status === undefined ? "" : textOf(status);
 
-      yield* pageChecks(`POST / of ${correctAnswer}`, posted);
+      yield* pageChecks(`POST / of ${correctAnswer}`, posted, origin, want.rootRules);
       yield* check(
         `POST / of ${correctAnswer}'s Status part shows "${want.score}"`,
         statuses.length === 1 && shown.includes(want.score),
