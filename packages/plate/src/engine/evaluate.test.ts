@@ -335,6 +335,12 @@ const score: OutcomeDeclaration = {
   cardinality: "single",
   defaultValue: Option.none(),
   identifier: "SCORE",
+  interpretation: Option.none(),
+  longInterpretation: Option.none(),
+  masteryValue: Option.none(),
+  normalMaximum: Option.none(),
+  normalMinimum: Option.none(),
+  view: Option.none(),
 };
 
 /**

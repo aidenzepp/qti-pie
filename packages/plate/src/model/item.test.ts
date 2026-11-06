@@ -2049,6 +2049,116 @@ describe("buildItem", () => {
     }),
   );
 
+  it.effect(
+    "[I-2] reads an outcome declaration's six reporting attributes as the XSD types them, none when absent",
+    () =>
+      Effect.gen(function* readsReporting() {
+        const built = yield* buildItem(
+          item({
+            body: [],
+            declarations: [
+              el("qti-outcome-declaration", [
+                attr("base-type", "float"),
+                attr("cardinality", "single"),
+                attr("identifier", "SCORE"),
+                attr("view", " candidate\n\ttutor  scorer "),
+                attr("interpretation", " Points, out of 10 "),
+                attr("long-interpretation", " https://example.org/scales/points\n"),
+                attr("normal-maximum", " 10 "),
+                attr("normal-minimum", "-1.5"),
+                attr("mastery-value", "1e400"),
+              ]),
+              declaration("qti-outcome-declaration", "MAXSCORE", "float", "single"),
+            ],
+          }),
+        );
+        const score = built.outcomes.get("SCORE");
+        const bare = built.outcomes.get("MAXSCORE");
+
+        assert.deepStrictEqual(score?.view, Option.some(["candidate", "tutor", "scorer"]));
+        assert.deepStrictEqual(score?.interpretation, Option.some(" Points, out of 10 "));
+        assert.deepStrictEqual(
+          score?.longInterpretation,
+          Option.some("https://example.org/scales/points"),
+        );
+        assert.deepStrictEqual(score?.normalMaximum, Option.some(10));
+        assert.deepStrictEqual(score?.normalMinimum, Option.some(-1.5));
+        assert.deepStrictEqual(score?.masteryValue, Option.some(Number.MAX_VALUE));
+        assert.deepStrictEqual(
+          [
+            bare?.view,
+            bare?.interpretation,
+            bare?.longInterpretation,
+            bare?.normalMaximum,
+            bare?.normalMinimum,
+            bare?.masteryValue,
+          ],
+          [
+            Option.none(),
+            Option.none(),
+            Option.none(),
+            Option.none(),
+            Option.none(),
+            Option.none(),
+          ],
+        );
+      }),
+  );
+
+  it.effect("[I-2] refuses a malformed normal-maximum as value-type at the attribute", () =>
+    Effect.gen(function* refusesNormalMaximum() {
+      const refusal = yield* Effect.flip(
+        buildItem(
+          item({
+            body: [],
+            declarations: [
+              el("qti-outcome-declaration", [
+                attr("base-type", "float"),
+                attr("cardinality", "single"),
+                attr("identifier", "SCORE"),
+                attr("normal-maximum", "ten"),
+              ]),
+            ],
+          }),
+        ),
+      );
+
+      assert.strictEqual(refusal.rule, "value-type");
+      assert.deepStrictEqual(refusal.location, {
+        kind: "path",
+        path: `${root}/qti-outcome-declaration/@normal-maximum`,
+      });
+      assert.deepStrictEqual(refusal.detail, { baseType: "xs:double", lexical: "ten" });
+    }),
+  );
+
+  it.effect("[I-2] refuses a view that names no view as attribute-type at the attribute", () =>
+    Effect.gen(function* refusesView() {
+      const refusal = yield* Effect.flip(
+        buildItem(
+          item({
+            body: [],
+            declarations: [
+              el("qti-outcome-declaration", [
+                attr("base-type", "float"),
+                attr("cardinality", "single"),
+                attr("identifier", "SCORE"),
+                attr("view", "candidate learner"),
+              ]),
+            ],
+          }),
+        ),
+      );
+
+      assert.strictEqual(refusal.rule, "attribute-type");
+      assert.deepStrictEqual(refusal.location, {
+        kind: "path",
+        path: `${root}/qti-outcome-declaration/@view`,
+      });
+      assert.deepStrictEqual(refusal.detail, { attribute: "view", value: "candidate learner" });
+    }),
+  );
+
   it.effect('[Q-2] refuses max-choices="-1" as value-type, outside xs:nonNegativeInteger', () =>
     Effect.gen(function* refusesNegativeCount() {
       const refusal = yield* Effect.flip(buildItem(choiceItem([attr("max-choices", "-1")])));

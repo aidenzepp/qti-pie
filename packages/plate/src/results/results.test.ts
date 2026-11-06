@@ -220,6 +220,57 @@ const totalProcessing = [
 ].join("");
 
 /**
+ * The six attributes of an outcome declaration that Results Reporting mirrors, as written.
+ */
+const reportingMarkup = [
+  'view="candidate scorer"',
+  'interpretation="Points, out of 10"',
+  'long-interpretation="https://example.org/scales/points"',
+  'normal-maximum="10"',
+  'normal-minimum="0"',
+  'mastery-value="7.5"',
+].join(" ");
+
+/**
+ * {@link reportingMarkup} as an `outcomeVariable` carries it.
+ */
+const reportingWritten = {
+  interpretation: "Points, out of 10",
+  longInterpretation: "https://example.org/scales/points",
+  masteryValue: "7.5",
+  normalMaximum: "10",
+  normalMinimum: "0",
+  view: "candidate scorer",
+};
+
+/**
+ * An item written for this test: `SCORE` declares the six attributes Results Reporting mirrors,
+ * and `MAXSCORE` none of them.
+ */
+const reportingXml = [
+  '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="reporting"',
+  ' title="Reporting" adaptive="false" time-dependent="false">',
+  '<qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier"/>',
+  `<qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float" ${reportingMarkup}>`,
+  "<qti-default-value><qti-value>2</qti-value></qti-default-value>",
+  "</qti-outcome-declaration>",
+  '<qti-outcome-declaration identifier="MAXSCORE" cardinality="single" base-type="float"/>',
+  '<qti-item-body><qti-choice-interaction response-identifier="RESPONSE" max-choices="1">',
+  '<qti-simple-choice identifier="A">Yes</qti-simple-choice>',
+  '<qti-simple-choice identifier="B">No</qti-simple-choice>',
+  "</qti-choice-interaction></qti-item-body></qti-assessment-item>",
+].join("");
+
+/**
+ * A test outcome declaration with a default and the six attributes Results Reporting mirrors.
+ */
+const reportedDeclaration = [
+  `<qti-outcome-declaration identifier="TOTAL" cardinality="single" base-type="float" ${reportingMarkup}>`,
+  "<qti-default-value><qti-value>0.5</qti-value></qti-default-value>",
+  "</qti-outcome-declaration>",
+].join("");
+
+/**
  * Score one attempt over a record, as a session's submission does.
  *
  * @param accepted The item.
@@ -691,6 +742,75 @@ describe("results", () => {
       assert.deepStrictEqual(Object.keys(written.outcomes), []);
       assert.deepStrictEqual(Object.keys(written.responses), ["duration"]);
     }),
+  );
+
+  it.effect(
+    "[T-14] mirrors an item outcome's six reporting attributes on its outcomeVariable, and writes none an outcome does not declare",
+    () =>
+      Effect.gen(function* itemReporting() {
+        const accepted = yield* acceptItem(
+          "items/reporting.xml",
+          new TextEncoder().encode(reportingXml),
+        );
+        const record = yield* Effect.fromResult(score(accepted, { RESPONSE: identifiers("A") }));
+        const { report, xml } = yield* reported({
+          context,
+          datestamp: new Date(updated),
+          document: accepted,
+          kind: "item",
+          record,
+        });
+
+        yield* assertValid(xml);
+
+        const item = itemOf(report, "reporting");
+        assert.deepStrictEqual(item.outcomes["SCORE"], {
+          attributes: {
+            baseType: "float",
+            cardinality: "single",
+            identifier: "SCORE",
+            ...reportingWritten,
+          },
+          values: ["2"],
+        });
+        assert.deepStrictEqual(item.outcomes["MAXSCORE"]?.attributes, {
+          baseType: "float",
+          cardinality: "single",
+          identifier: "MAXSCORE",
+        });
+      }),
+  );
+
+  it.effect(
+    "[T-14] mirrors a test outcome's six reporting attributes on the test result's outcomeVariable",
+    () =>
+      Effect.gen(function* testReporting() {
+        const single = yield* fixtureItem("p1-single-choice.xml");
+        const test = yield* acceptTest("reporting", [
+          reportedDeclaration,
+          part("P1", individual, [ref("one", "p1-single-choice.xml")]),
+        ]);
+        const { report, xml } = yield* reported({
+          context,
+          items: new Map([["one", single]]),
+          kind: "test",
+          session: storedSession(test, [sessionItem(single, "one", 1)]),
+          test,
+        });
+
+        yield* assertValid(xml);
+
+        const written = Option.getOrElse(report.test, () => assert.fail("No testResult."));
+        assert.deepStrictEqual(written.outcomes["TOTAL"], {
+          attributes: {
+            baseType: "float",
+            cardinality: "single",
+            identifier: "TOTAL",
+            ...reportingWritten,
+          },
+          values: ["0.5"],
+        });
+      }),
   );
 
   it.effect(

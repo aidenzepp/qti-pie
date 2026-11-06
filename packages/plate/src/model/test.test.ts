@@ -294,6 +294,12 @@ describe("buildTest", () => {
                 values: [{ baseType: "float", value: 0 }],
               }),
               identifier: "SCORE",
+              interpretation: Option.none(),
+              longInterpretation: Option.none(),
+              masteryValue: Option.none(),
+              normalMaximum: Option.none(),
+              normalMinimum: Option.none(),
+              view: Option.none(),
             },
           ],
         );
@@ -497,6 +503,89 @@ describe("buildTest", () => {
         built.unsupported.map((feature) => feature.feature),
         ['base-type="duration"', "qti-match-table", 'cardinality="record"'],
       );
+    }),
+  );
+
+  it.effect("reads its outcome declarations' six reporting attributes as an item's", () =>
+    Effect.gen(function* readsReporting() {
+      const declarations = [
+        el(
+          "qti-outcome-declaration",
+          [
+            attr("base-type", "float"),
+            attr("cardinality", "single"),
+            attr("identifier", "TOTAL"),
+            attr("view", "candidate scorer"),
+            attr("interpretation", "Points, out of 10"),
+            attr("long-interpretation", " https://example.org/scales/points "),
+            attr("normal-maximum", "10"),
+            attr("normal-minimum", "0"),
+            attr("mastery-value", "7.5"),
+          ],
+          [defaultValue("0.5")],
+        ),
+        outcome("PASSED", "boolean"),
+      ];
+      const built = yield* buildTest(
+        test([...declarations, part("P1", "linear", "individual", [section("S1", [])])]),
+      );
+      const item = yield* buildItem(
+        doc(
+          "items/item.xml",
+          el(
+            "qti-assessment-item",
+            [attr("identifier", "item"), attr("title", "Item")],
+            declarations,
+          ),
+        ),
+      );
+      const total = built.outcomes.get("TOTAL");
+
+      assert.deepStrictEqual(built.outcomes, item.outcomes);
+      assert.deepStrictEqual(
+        [
+          total?.view,
+          total?.interpretation,
+          total?.longInterpretation,
+          total?.normalMaximum,
+          total?.normalMinimum,
+          total?.masteryValue,
+        ],
+        [
+          Option.some(["candidate", "scorer"]),
+          Option.some("Points, out of 10"),
+          Option.some("https://example.org/scales/points"),
+          Option.some(10),
+          Option.some(0),
+          Option.some(7.5),
+        ],
+      );
+      assert.deepStrictEqual(built.outcomes.get("PASSED")?.view, Option.none());
+    }),
+  );
+
+  it.effect("refuses a malformed normal-maximum on a test outcome at the attribute", () =>
+    Effect.gen(function* refusesNormalMaximum() {
+      const refusal = yield* Effect.flip(
+        buildTest(
+          test([
+            el("qti-outcome-declaration", [
+              attr("base-type", "float"),
+              attr("cardinality", "single"),
+              attr("identifier", "TOTAL"),
+              attr("normal-maximum", "ten"),
+            ]),
+            part("P1", "linear", "individual", [section("S1", [])]),
+          ]),
+        ),
+      );
+
+      assert.strictEqual(refusal.rule, "value-type");
+      assert.deepStrictEqual(refusal.location, {
+        kind: "path",
+        path: `${root}/qti-outcome-declaration/@normal-maximum`,
+      });
+      assert.deepStrictEqual(refusal.detail, { baseType: "xs:double", lexical: "ten" });
     }),
   );
 

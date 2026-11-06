@@ -21,7 +21,7 @@ import type { Configuration } from "#plate/configuration.ts";
 import { xmlnsNamespace } from "#plate/document/source.ts";
 import { writeDocument } from "#plate/document/write.ts";
 import { interactionsIn } from "#plate/model/interactions.ts";
-import type { Item, OutcomeDeclaration } from "#plate/model/item.ts";
+import type { Item, OutcomeDeclaration, OutcomeReporting } from "#plate/model/item.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
 import { isNcName, isNull, match, nullOf } from "#plate/model/values.ts";
 import type { ModelledBaseType, Value } from "#plate/model/values.ts";
@@ -321,10 +321,36 @@ const startingValue = (outcome: OutcomeDeclaration): Value =>
   });
 
 /**
+ * Write a double in the form a float value takes.
+ *
+ * @param value The double.
+ * @returns Its lexical form.
+ */
+const doubleText = (value: number): string => resultValue({ baseType: "float", value });
+
+/**
+ * The reporting attributes an outcome declaration carries, as its `outcomeVariable` writes them:
+ * `view` its views joined by spaces, `interpretation` and `longInterpretation` as the model holds
+ * them, and the three doubles in the form a float value takes. One the declaration lacks is not
+ * written.
+ *
+ * @param outcome The outcome's declaration.
+ * @returns The attributes, in the Results XSD's order.
+ */
+const reportingAttributes = (outcome: OutcomeReporting): readonly Attribute[] => [
+  ...optional("view", outcome.view.pipe(Option.map((views) => views.join(" ")))),
+  ...optional("interpretation", outcome.interpretation),
+  ...optional("longInterpretation", outcome.longInterpretation),
+  ...optional("normalMaximum", outcome.normalMaximum.pipe(Option.map(doubleText))),
+  ...optional("normalMinimum", outcome.normalMinimum.pipe(Option.map(doubleText))),
+  ...optional("masteryValue", outcome.masteryValue.pipe(Option.map(doubleText))),
+];
+
+/**
  * Write the outcome variables of some declarations.
  *
- * Each is written with its declaration's identifier, cardinality and base type, the attributes
- * the model holds of a declaration.
+ * Each is written with its declaration's identifier, cardinality and base type, then each of the
+ * six reporting attributes the declaration carries.
  *
  * @param declarations The outcome declarations, in document order.
  * @param values The values to report, by identifier; an outcome they lack is at its starting
@@ -338,7 +364,10 @@ const outcomeVariables = (
   Array.from(declarations.values(), (outcome) =>
     element(
       "outcomeVariable",
-      declared(outcome.identifier, outcome.cardinality, outcome.baseType),
+      [
+        ...declared(outcome.identifier, outcome.cardinality, outcome.baseType),
+        ...reportingAttributes(outcome),
+      ],
       resultValues(
         Option.getOrElse(own(values, outcome.identifier), () => startingValue(outcome)),
       ).map(valueElement),
