@@ -1,17 +1,28 @@
 /* oxlint-disable anti-slop/no-shape-in-symbol-names -- `shape` is the declaration column the rows under test carry; the shape here is the typed-or-record choice, not a structure. */
 import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
-import { assert, layer } from "@effect/vitest";
+import { assert, describe, it, layer } from "@effect/vitest";
 import { Effect, FileSystem, Option, Predicate } from "effect";
 import type { AnyRelation, Fact, Uuid } from "@bjornpagen/grizzle";
 import { inject } from "vitest";
 import { itemGuards, ItemGuardRefusal } from "#pantry/import/guards/item.ts";
-import { documentLangRows, itemRows, standardTemplate } from "#pantry/import/item.ts";
+import {
+  documentLangRows,
+  itemRows,
+  standardTemplate,
+  unboundChoiceRows,
+} from "#pantry/import/item.ts";
 import { manifestRows } from "#pantry/import/manifest.ts";
 import { ImportRefused } from "#pantry/import/refusal.ts";
 import { renderTree } from "#pantry/export/render.ts";
 import { canonicalize } from "@qti-pie/crust/canonical.ts";
-import { ItemRefusal, Rows, UnmodeledVocabulary, withParents } from "#pantry/import/tree.ts";
+import {
+  ItemRefusal,
+  Rows,
+  treeRows,
+  UnmodeledVocabulary,
+  withParents,
+} from "#pantry/import/tree.ts";
 import type { NodeIndex } from "#pantry/import/tree.ts";
 import {
   Declaration,
@@ -42,6 +53,7 @@ import {
   PackagePath,
   TemplateUri,
   ToolName,
+  XIncludeUri,
 } from "#pantry/schema/contracts.ts";
 import { Img, ImgHeight, ImgLongdesc, ImgWidth, P } from "#pantry/schema/html.ts";
 import {
@@ -65,6 +77,7 @@ import {
   DeclaredOrientation,
   DeclaredShuffle,
   InteractionBinding,
+  RecordBinding,
   SimpleChoice,
   TypedBinding,
 } from "#pantry/schema/interaction.ts";
@@ -87,6 +100,7 @@ import {
   ResponseProcessingTemplate,
   StandardTemplateReference,
 } from "#pantry/schema/processing.ts";
+import { XInclude, XIncludeHref, XIncludeParse } from "#pantry/schema/rule.ts";
 import * as value from "#pantry/schema/value.ts";
 import { listPackage, readEntry } from "#pantry/package/read.ts";
 import type { FixtureName } from "#pantry/test/fixtures.ts";
@@ -314,6 +328,29 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts", (suit
         assert.deepStrictEqual(Rows.of(rows, ImgHeight), []);
         assert.deepStrictEqual(Rows.of(rows, ImgWidth), []);
         assert.deepStrictEqual(Rows.of(rows, AttributeLexical), []);
+      }),
+  );
+
+  suite.effect(
+    "an include in a paragraph of the body writes one XInclude row with its attributes",
+    () =>
+      Effect.gen(function* includeItem() {
+        const doc = yield* readChoice(yield* materialize("simple"), (text) =>
+          text
+            .replace(
+              "<qti-assessment-item",
+              '<qti-assessment-item xmlns:xi="http://www.w3.org/2001/XInclude"',
+            )
+            .replace("<p>", '<p><xi:include href="f.xml" parse="xml"/>'),
+        );
+        const { nodes, rows } = yield* itemOf(doc);
+        const include = onlyId(nodes, "xi:include");
+
+        assert.deepStrictEqual(Rows.of(rows, XInclude), [{ id: include }]);
+        assert.deepStrictEqual(Rows.of(rows, XIncludeHref), [
+          { node: include, value: XIncludeUri("f.xml") },
+        ]);
+        assert.deepStrictEqual(Rows.of(rows, XIncludeParse), [{ node: include, value: "xml" }]);
       }),
   );
 
@@ -1139,7 +1176,9 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts root ro
     Effect.gen(function* nameOnlyTool() {
       const { documentId, rows } = yield* handWritten('tool-name="Authoring"', "");
 
-      assert.deepStrictEqual(Rows.of(rows, ItemTool), [{ shape: "nameOnly", tree: documentId }]);
+      assert.deepStrictEqual(Rows.of(rows, ItemTool), [
+        { root: "item", shape: "nameOnly", tree: documentId },
+      ]);
       assert.deepStrictEqual(Rows.of(rows, ItemToolName), [
         { toolName: ToolName("Authoring"), tree: documentId },
       ]);
@@ -1175,6 +1214,28 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts root ro
     }),
   );
 
+  suite.effect(
+    "tool attributes with a tab and a line feed are replaced and keep their lexical forms",
+    () =>
+      Effect.gen(function* replacedTools() {
+        const { rows } = yield* handWritten('tool-name="a&#9;b" tool-version="1&#10;2"', "");
+
+        assert.deepStrictEqual(
+          Rows.of(rows, ItemToolBoth).map((row) => [row.toolName, row.toolVersion]),
+          [["a b", "1 2"]],
+        );
+        assert.deepStrictEqual(
+          Rows.of(rows, AttributeLexical)
+            .filter((row) => row.attribute === "tool-name" || row.attribute === "tool-version")
+            .map((row) => [row.attribute, row.value]),
+          [
+            ["tool-name", "a\tb"],
+            ["tool-version", "1\n2"],
+          ],
+        );
+      }),
+  );
+
   suite.effect("a 3.0.0 root label is one AssessmentItemLabel row and no NodeLabel row", () =>
     Effect.gen(function* rootLabel() {
       const { documentId, nodes, rows } = yield* handWritten('label="L"', "");
@@ -1182,6 +1243,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts root ro
       assert.deepStrictEqual(Rows.of(rows, AssessmentItemLabel), [
         {
           node: onlyId(nodes, "qti-assessment-item"),
+          root: "item",
           tree: documentId,
           value: "L",
           version: "3.0.0",
@@ -1574,6 +1636,58 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/item.ts composi
         Rows.of(rows, DeclarationExternalScored).map((row) => row.value),
         ["externalMachine"],
       );
+    }),
+  );
+});
+
+describe("unboundChoiceRows", () => {
+  const stimulus = `<qti-assessment-stimulus xmlns="${itemNamespace}" identifier="hand" title="Hand"><qti-stimulus-body><div><qti-choice-interaction response-identifier="NOPE" max-choices="2"><qti-prompt>p</qti-prompt><qti-simple-choice identifier="A">A</qti-simple-choice></qti-choice-interaction></div></qti-stimulus-body></qti-assessment-stimulus>`;
+
+  it.effect("writes the choice arms of a stimulus with the identifier bare and no binding", () =>
+    Effect.gen(function* unbound() {
+      const doc = yield* readXml(new TextEncoder().encode(stimulus));
+      const tree = yield* treeRows(
+        doc,
+        {
+          charset: doc.charset,
+          id: "33333333-3333-4333-8333-333333333333",
+          kind: "document",
+          root: "stimulus",
+          version: "3.0.1",
+        },
+        Rows.empty(),
+      );
+
+      const built = yield* unboundChoiceRows(
+        tree.rows,
+        withParents(doc.root, Option.none()),
+        tree.nodes,
+      );
+
+      const choices = Rows.of(built, ChoiceInteraction);
+      assert.deepStrictEqual(
+        choices.map(({ maxChoicesN, responseIdentifier, rootKind }) => ({
+          maxChoicesN,
+          responseIdentifier,
+          rootKind,
+        })),
+        [{ maxChoicesN: 2n, responseIdentifier: "NOPE", rootKind: "stimulus" }],
+      );
+      assert.strictEqual(Rows.of(built, DeclaredMaxChoices).length, 1);
+      assert.deepStrictEqual(
+        Rows.of(built, SimpleChoice).map(({ identifier, interaction }) => ({
+          identifier,
+          interaction,
+        })),
+        [{ identifier: "A", interaction: choices[0]?.id }],
+      );
+      assert.deepStrictEqual(
+        Rows.of(built, Prompt).map((row) => row.parent),
+        [choices[0]?.id],
+      );
+      assert.strictEqual(Rows.of(built, InteractionBinding).length, 0);
+      assert.strictEqual(Rows.of(built, TypedBinding).length, 0);
+      assert.strictEqual(Rows.of(built, RecordBinding).length, 0);
     }),
   );
 });

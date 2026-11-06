@@ -1,0 +1,10 @@
+{
+	"meta": {
+		"kind": "custom",
+		"schema": "qti",
+		"schemaName": "Qti",
+		"source": "8ee41e56de680c40272603ca6887101793d7cc440e5313c4d95ed81c09dfea23",
+		"target": "8ee41e56de680c40272603ca6887101793d7cc440e5313c4d95ed81c09dfea23"
+	},
+	"seal": "21f8149bb679cf77ac68239b407f0c7bbd059f09b6e4dec090724e8431fd3944"
+}

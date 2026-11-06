@@ -1,9 +1,11 @@
 /**
- * The rows of the HTML elements an item holds: each element's arm with its own required columns,
- * the optional relation of every own optional attribute the element writes, the version copy of
- * the media booleans, and the markers of the defaults a `track` and a `param` take.
+ * The rows of the HTML elements a tree holds, for any root (item, test, section or stimulus): each
+ * element's arm with its own required columns, the optional relation of every own optional
+ * attribute the element writes, the version copy of the media booleans, and the markers of the
+ * defaults a `track` and a `param` take. `p` and `img` are written here too: the paragraph's arm,
+ * and the image's arm with its `longdesc`, `height` and `width` rows.
  *
- * `p` and `img` are written by the item pass and are not touched here. The family attributes
+ * The family attributes
  * (`class`, `id`, `lang`, `dir`, `label` and the rest) and a cell's `headers` belong to the
  * attribute pass.
  */
@@ -37,6 +39,8 @@ import {
   TrackKind,
   XsBoolean,
 } from "#pantry/schema/content/rosters.ts";
+import { EmbedSourceUri, LongDescriptionUri } from "#pantry/schema/contracts.ts";
+import { Img, ImgHeight, ImgLongdesc, ImgWidth, P } from "#pantry/schema/html.ts";
 import { entryOf } from "#pantry/schema/content/xsd-inventory.ts";
 import * as media from "#pantry/schema/html/media.ts";
 import * as structure from "#pantry/schema/html/structure.ts";
@@ -541,9 +545,88 @@ const unread = (
 };
 
 /**
- * Write the rows of every HTML element of an item's tree that has an arm in this module: the arm,
- * the optional rows of its own attributes, the version copy of the media booleans, and the markers
- * of the defaults.
+ * The text of the attribute `name` an element writes in no namespace, as written.
+ */
+const lexicalOf = (element: Element, name: string): Option.Option<string> =>
+  Option.fromNullishOr(
+    element.attributes.find((attribute) => attribute.namespace === "" && attribute.local === name),
+  ).pipe(Option.map((attribute) => attribute.value));
+
+/**
+ * One attribute of an element, processed under its whitespace class, with the rows its
+ * processing adds.
+ */
+const processed = (
+  rows: Rows,
+  element: Element,
+  node: IndexedNode,
+  name: AttributeNameHandle,
+  whiteSpace: WhiteSpace,
+): { readonly rows: Rows; readonly value: Option.Option<string> } =>
+  Option.match(lexicalOf(element, name), {
+    onNone: () => ({ rows, value: Option.none<string>() }),
+    onSome: (lexical) => {
+      const typed = typedAttribute(rows, node.id, node.kind, name, lexical, whiteSpace);
+
+      return { rows: typed.rows, value: Option.some(typed.value) };
+    },
+  });
+
+/**
+ * Write the rows of an `img`: its arm with the required `alt` and `src`, and the optional rows of
+ * `longdesc`, `height` and `width`.
+ *
+ * `src` and `longdesc` collapse; `alt`, `height` and `width` are kept as written.
+ *
+ * @param rows - The rows so far.
+ * @param element - The `img`.
+ * @param node - The node it became.
+ * @returns The rows with the image's added; `ItemRefusal` under `required-attribute` for an `img`
+ *   that omits `alt` or `src`.
+ */
+const imageRows = Effect.fn("import.html.imageRows")(function* imageRows(
+  rows: Rows,
+  element: Element,
+  node: IndexedNode,
+): Effect.fn.Return<Rows, ItemRefusal> {
+  const src = processed(rows, element, node, "src", "collapse");
+  const longdesc = processed(src.rows, element, node, "longdesc", "collapse");
+  const height = lexicalOf(element, "height");
+  const width = lexicalOf(element, "width");
+  const alt = yield* requiredAttribute(element, "alt", lexicalOf(element, "alt"));
+  const imgSrc = yield* requiredAttribute(element, "src", src.value);
+
+  let built = Rows.add(longdesc.rows, Img, [{ alt, id: node.id, src: EmbedSourceUri(imgSrc) }]);
+  built = Rows.add(
+    built,
+    ImgLongdesc,
+    Option.match(longdesc.value, {
+      onNone: () => [],
+      onSome: (value) => [{ node: node.id, value: LongDescriptionUri(value) }],
+    }),
+  );
+  built = Rows.add(
+    built,
+    ImgHeight,
+    Option.match(height, {
+      onNone: () => [],
+      onSome: (value) => [{ node: node.id, value: judgedLater(value) }],
+    }),
+  );
+
+  return Rows.add(
+    built,
+    ImgWidth,
+    Option.match(width, {
+      onNone: () => [],
+      onSome: (value) => [{ node: node.id, value: judgedLater(value) }],
+    }),
+  );
+});
+
+/**
+ * Write the rows of every HTML element of a tree that has an arm: the arm, the optional rows of
+ * its own attributes, the version copy of the media booleans, and the markers of the defaults.
  *
  * Every attribute passes through `typedAttribute` under the whitespace class its kind's inventory
  * entry gives it, except the media booleans and `track/@default`, whose class depends on the
@@ -552,11 +635,11 @@ const unread = (
  * @param root - The root element of the tree.
  * @param nodes - The node index of the tree, which the walk read.
  * @param rows - The rows so far, which hold the tree's `Node` rows.
- * @returns The rows with the HTML arms; `UnmodeledVocabulary` for an HTML element that is the
- *   tree's root or has no node above it, and for an own attribute of an element that this module
- *   does not model; `ItemRefusal` under `required-attribute` for an `a`, `track`, `object` or
- *   `param` that omits a required attribute; `ImportRefused` under `attribute-lexical` for a closed
- *   attribute whose value is outside its roster.
+ * @returns The rows with the HTML arms, `p` and `img` included; `UnmodeledVocabulary` for an HTML
+ *   element that is the tree's root or has no node above it, and for an own attribute of an element
+ *   that this module does not model; `ItemRefusal` under `required-attribute` for an `a`, `img`,
+ *   `track`, `object` or `param` that omits a required attribute; `ImportRefused` under
+ *   `attribute-lexical` for a closed attribute whose value is outside its roster.
  */
 export const htmlRows = Effect.fn("import.htmlRows")(function* htmlRows(
   root: Element,
@@ -567,6 +650,16 @@ export const htmlRows = Effect.fn("import.htmlRows")(function* htmlRows(
   let built = rows;
   for (const [element, parent] of withParents(root, Option.none())) {
     const node = nodes.get(element);
+    if (node?.kind === "p") {
+      built = Rows.add(built, P, [{ id: node.id }]);
+      continue;
+    }
+
+    if (node?.kind === "img") {
+      built = yield* imageRows(built, element, node);
+      continue;
+    }
+
     const pieces = node === undefined ? [] : piecesOf(node.kind);
     if (node === undefined || pieces.length === 0) {
       continue;

@@ -17,13 +17,17 @@ import { manifestRows } from "#pantry/import/manifest.ts";
 import { outcomeRows } from "#pantry/import/outcome.ts";
 import type { ImportLaw, ImportRefused, ImportWitness } from "#pantry/import/refusal.ts";
 import { refusalOfLaw, ruleOfError } from "#pantry/import/refusal.ts";
+import { packageStage } from "#pantry/import/reference.ts";
+import type { StagedDocument } from "#pantry/import/reference.ts";
 import { rptemplateRows } from "#pantry/import/rptemplate.ts";
+import { stimulusRows } from "#pantry/import/stimulus.ts";
+import { testRows } from "#pantry/import/test.ts";
 import { Rows, UnmodeledVocabulary, kindOf } from "#pantry/import/tree.ts";
 import { usageRows } from "#pantry/import/usage.ts";
 import { listPackage, readEntry } from "#pantry/package/read.ts";
 import { ResourceLomGeneral } from "#pantry/schema/lang.ts";
 import { AuthorApp } from "#pantry/schema/logins.ts";
-import type { RootKindHandle, SchemaVersionHandle } from "#pantry/schema/node.ts";
+import type { NodeKindHandle, RootKindHandle, SchemaVersionHandle } from "#pantry/schema/node.ts";
 import { Package } from "#pantry/schema/package.ts";
 import { Author } from "#pantry/schema/roles.ts";
 import { rootOfType } from "#pantry/schema/seed/root-of-type.ts";
@@ -163,19 +167,68 @@ export interface DocumentInput {
 }
 
 /**
- * Write the rows of one document the manifest lists, by the root kind its resource type maps to in
- * `RootOfType` for the `rptemplate` family, and by the root element the file holds for every other
- * document.
+ * The builder a document goes to.
+ */
+export type Route =
+  | "external"
+  | "item"
+  | "outcomes"
+  | "rptemplate"
+  | "stimulus"
+  | "test"
+  | "unmodeled"
+  | "usage";
+
+/**
+ * The builder each root kind goes to, for a document that is not of an `rptemplate` type.
+ */
+const rootRoutes: ReadonlyMap<string, Route> = new Map<string, Route>([
+  ["lom:lom", "external"],
+  ["qti-assessment-item", "item"],
+  ["qti-assessment-section", "test"],
+  ["qti-assessment-stimulus", "stimulus"],
+  ["qti-assessment-test", "test"],
+  ["qti-outcome-declaration", "outcomes"],
+  ["ud:usageData", "usage"],
+]);
+
+/**
+ * Choose the builder of one document, from the root element's kind and the resource type.
  *
- * First, a resource type whose root kind is `rptemplate` goes to {@link rptemplateRows}, never by
- * the type string, so a new `rptemplate` type reaches it with no edit here; a
- * `qti-response-processing` root listed under any other type has no element route and is
- * `UnmodeledVocabulary`. Then the root element decides: `qti-assessment-item` goes to `itemRows`,
+ * A resource type whose root kind is `rptemplate` goes to `rptemplate` whatever its root, so a new
+ * `rptemplate` type reaches it with no edit here. Then the root decides: an item root to `item`, a
+ * test or section root to `test`, a stimulus root to `stimulus`, an outcome declaration to
+ * `outcomes`, `lom:lom` to `external`, `ud:usageData` to `usage`. A file of the `qtiusagedata/xml`
+ * type whose root no kind names goes to `usage`, so that a root outside QTI 3 usage data is
+ * `NotQti3`. Any other root is `unmodeled`.
+ *
+ * @param root - The kind of the document's root element, `undefined` when no registry names it.
+ * @param resourceType - The manifest's type for the resource.
+ * @returns The route.
+ */
+export const routeOf = (root: NodeKindHandle | undefined, resourceType: string): Route => {
+  if (rootKindOfType(resourceType) === "rptemplate") {
+    return "rptemplate";
+  }
+
+  const named = rootRoutes.get(root ?? "");
+
+  if (named !== undefined) {
+    return named;
+  }
+
+  return root === undefined && resourceType === "qtiusagedata/xml" ? "usage" : "unmodeled";
+};
+
+/**
+ * Write the rows of one document the manifest lists, by the builder {@link routeOf} names: the
+ * `rptemplate` family by its resource type, every other document by the root element the file
+ * holds. `qti-assessment-test` and `qti-assessment-section` go to `testRows`,
+ * `qti-assessment-stimulus` to `stimulusRows`, `qti-assessment-item` to `itemRows`,
  * `qti-outcome-declaration` to `outcomeRows`, `lom:lom` to `externalRows`, and `ud:usageData` to
- * `usageRows`. A root no builder names is `UnmodeledVocabulary`, except in a `qtiusagedata/xml`
- * file, which goes to `usageRows` so that a root outside QTI 3 usage data is `NotQti3`. A root that
- * does not belong to its type is refused at commit by the `Document` containment into
- * `RootOfType`.
+ * `usageRows`. A `qti-response-processing` root listed under a type other than an `rptemplate`
+ * one, and a root no builder names, is `UnmodeledVocabulary`. A root that does not belong to its
+ * type is refused at commit by the `Document` containment into `RootOfType`.
  *
  * @param input - The decoded document and where its package lists it.
  * @param rows - The rows so far.
@@ -185,10 +238,6 @@ export const documentRows = Effect.fn("import.documentRows")(function* documentR
   input: DocumentInput,
   rows: Rows,
 ) {
-  if (rootKindOfType(input.resourceType) === "rptemplate") {
-    return yield* rptemplateRows(input, rows);
-  }
-
   const { doc } = input;
   const listed = {
     package: input.packageId,
@@ -199,22 +248,33 @@ export const documentRows = Effect.fn("import.documentRows")(function* documentR
   };
   const root = Option.getOrUndefined(kindOf(doc.root, Option.none()));
 
-  if (root === "qti-assessment-item") {
+  const route = routeOf(root, input.resourceType);
+
+  if (route === "rptemplate") {
+    return yield* rptemplateRows(input, rows);
+  }
+
+  if (route === "item") {
     return yield* itemRows(input, rows);
   }
 
-  if (root === "lom:lom") {
+  if (route === "test") {
+    return yield* testRows(input, rows);
+  }
+
+  if (route === "stimulus") {
+    return yield* stimulusRows(input, rows);
+  }
+
+  if (route === "external") {
     return yield* externalRows(doc, listed, rows);
   }
 
-  if (
-    root === "ud:usageData" ||
-    (root === undefined && input.resourceType === "qtiusagedata/xml")
-  ) {
+  if (route === "usage") {
     return yield* usageRows(doc, listed, rows);
   }
 
-  if (root === "qti-outcome-declaration") {
+  if (route === "outcomes") {
     return yield* outcomeRows(input, rows);
   }
 
@@ -235,6 +295,7 @@ export const readRows = Effect.fn("import.readRows")(function* readRows(dir: str
   const manifest = yield* readXml(yield* readEntry(dir, "imsmanifest.xml"));
   const built = yield* manifestRows(dir, entries, manifest, Rows.empty());
   let { rows } = built;
+  const decoded: StagedDocument[] = [];
 
   for (const document of built.documents) {
     const doc = yield* readXml(yield* readEntry(dir, document.path));
@@ -253,7 +314,10 @@ export const readRows = Effect.fn("import.readRows")(function* readRows(dir: str
       rows,
     );
     ({ rows } = item);
+    decoded.push({ doc, nodes: item.nodes });
   }
+
+  rows = yield* packageStage(rows, decoded);
 
   yield* guards(rows, entries);
 

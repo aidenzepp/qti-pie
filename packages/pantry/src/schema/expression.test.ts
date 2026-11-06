@@ -1,5 +1,7 @@
 import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
+import * as rosters from "#pantry/schema/content/rosters.ts";
+import { StructureHolder } from "#pantry/schema/content/rosters.ts";
 import * as contracts from "#pantry/schema/contracts.ts";
 import * as declaration from "#pantry/schema/declaration.ts";
 import * as document from "#pantry/schema/document.ts";
@@ -8,6 +10,7 @@ import * as item from "#pantry/schema/item.ts";
 import * as node from "#pantry/schema/node.ts";
 import * as pkg from "#pantry/schema/package.ts";
 import * as processing from "#pantry/schema/processing.ts";
+import * as testStructure from "#pantry/schema/test/structure.ts";
 import * as value from "#pantry/schema/value.ts";
 
 /**
@@ -98,7 +101,9 @@ const probe = () =>
       ...declaration.relations,
       ...value.relations,
       ...item.relations,
+      ...rosters.relations,
       ...processing.relations,
+      ...testStructure.relations,
       ...expression.relations,
     },
     [
@@ -109,6 +114,7 @@ const probe = () =>
       ...value.rules,
       ...item.rules,
       ...processing.rules,
+      ...testStructure.rules,
       ...expression.rules,
     ],
   );
@@ -135,10 +141,10 @@ describe("expression", () => {
     }
   });
 
-  it("adds exactly the 42 arms and the three filter relations", () => {
+  it("adds exactly the 42 arms, the three filter relations and the section identifier target", () => {
     assert.deepStrictEqual(
       Object.keys(expression.relations).toSorted(),
-      [...Object.values(thin), ...filters].toSorted(),
+      [...Object.values(thin), ...filters, "SectionIdentifierTarget"].toSorted(),
     );
   });
 
@@ -178,9 +184,10 @@ describe("expression", () => {
     }
   });
 
-  it("holds only containments, 42 into Expression, 3 more and 4 into VariableRef", () => {
-    assert.isTrue(expression.rules.every((rule) => rule.kind === "contained"));
-    assert.strictEqual(expression.rules.length, 42 + 3 + 4);
+  it("holds 42 containments into Expression, 3 more, 4 into VariableRef, and the target's four containments and check", () => {
+    const kinds = new Set(expression.rules.map((rule) => rule.kind));
+    assert.deepStrictEqual([...kinds].toSorted(), ["check", "contained"]);
+    assert.strictEqual(expression.rules.length, 42 + 3 + 4 + 4 + 1);
   });
 
   it("builds a schema over the leaves without refusal", () => {
@@ -204,10 +211,57 @@ describe("contracts (expression)", () => {
       contracts.CategoryList.name,
     );
   });
-  it("types ExpressionSectionIdentifier.value SectionReference", () => {
+  it("types ExpressionSectionIdentifier.value TestStructureIdentifier", () => {
     assert.strictEqual(
       expression.ExpressionSectionIdentifier.fields.value.name,
-      contracts.SectionReference.name,
+      contracts.TestStructureIdentifier.name,
     );
+  });
+});
+
+describe("expression: the section identifier target", () => {
+  it("declares SectionIdentifierTarget keyed by (node, test)", () => {
+    const target = expression.SectionIdentifierTarget;
+    assert.strictEqual(target.name, "SectionIdentifierTarget");
+    assert.deepStrictEqual(Object.keys(target.fields).toSorted(), [
+      "document",
+      "holderKind",
+      "identifier",
+      "node",
+      "test",
+    ]);
+    assert.deepStrictEqual([...target.primaryKey], ["node", "test"]);
+    assert.strictEqual(target.fields.identifier.name, contracts.TestStructureIdentifier.name);
+    assert.strictEqual(target.fields.holderKind.roster, StructureHolder);
+    assert.strictEqual(expression.relations.SectionIdentifierTarget, target);
+  });
+
+  it("contains (node, document) in Node.(id, tree), (test, document) in TestDocument, (test, identifier, holderKind) in TestReach and (node, identifier) in ExpressionSectionIdentifier.(node, value)", () => {
+    assert.deepStrictEqual(
+      expression.rules.flatMap((rule) =>
+        rule.kind === "contained" && rule.left.source === expression.SectionIdentifierTarget
+          ? [[rule.right.source, [...rule.left.fields], [...rule.right.fields]]]
+          : [],
+      ),
+      [
+        [node.relations.Node, ["node", "document"], ["id", "tree"]],
+        [testStructure.TestDocument, ["test", "document"], ["test", "document"]],
+        [
+          testStructure.TestReach,
+          ["test", "identifier", "holderKind"],
+          ["test", "identifier", "holderKind"],
+        ],
+        [expression.ExpressionSectionIdentifier, ["node", "identifier"], ["node", "value"]],
+      ],
+    );
+  });
+
+  it("checks that the holder kind is section or sectionRef", () => {
+    const checks = expression.rules.flatMap((rule) =>
+      rule.kind === "check" && rule.relation === expression.SectionIdentifierTarget
+        ? [rule.name]
+        : [],
+    );
+    assert.deepStrictEqual(checks, ["SectionIdentifierTargetHolderKind"]);
   });
 });

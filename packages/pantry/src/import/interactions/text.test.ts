@@ -152,6 +152,7 @@ const contextOf = (
     item: { adaptive: "false" },
     nodes: indexed([[root, "qti-assessment-item"], [body, "qti-item-body"], ...entries]),
     root,
+    rootKind: "item",
     shared,
   };
 };

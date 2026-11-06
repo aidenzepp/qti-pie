@@ -176,7 +176,7 @@ describe.skipIf(!hasLease)(
       );
 
       it.effect(
-        "holds 4,048 rows per version under the M3 hosts, the very rows the kinds files name",
+        "holds 4,110 rows in 3.0.0 and 4,111 in 3.0.1 under the M3 hosts, the very rows the kinds files name",
         () =>
           Effect.gen(function* holdsTheHostRows() {
             const db = yield* Db.open(AuthorApp.roles.author, {});
@@ -206,11 +206,13 @@ describe.skipIf(!hasLease)(
             ]);
             const expectedKeys = new Set(expected.map(keyOf));
 
+            const wantedCount = { "3.0.0": 4110, "3.0.1": 4111 } as const;
+
             assert.strictEqual(processingHosts.size, 90);
-            for (const version of ["3.0.0", "3.0.1"]) {
+            for (const version of ["3.0.0", "3.0.1"] as const) {
               const wanted = [...expectedKeys].filter((key) => key.startsWith(`${version} `));
 
-              assert.strictEqual(wanted.length, 4048, version);
+              assert.strictEqual(wanted.length, wantedCount[version], version);
               assert.deepStrictEqual(
                 rows
                   .filter((row) => row.version === version && expectedKeys.has(keyOf(row)))

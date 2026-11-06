@@ -192,9 +192,16 @@ interface LomFindings {
 }
 
 /**
- * The type of the resource whose record holds exactly one object identifier and one object title.
+ * The type of an item resource, whose record holds exactly one object identifier and one object
+ * title.
  */
 const itemType = "imsqti_item_xmlv3p0";
+
+/**
+ * The type of a test resource, whose record holds exactly one object identifier and one object
+ * title.
+ */
+const testType = "imsqti_test_xmlv3p0";
 
 /**
  * The facts of one element of a `lom:lom` subtree a kind's arm copies.
@@ -1073,7 +1080,7 @@ export const manifestRows = Effect.fn("import.manifestRows")(function* manifestR
       add(md.ResourceLomTitled, [bound]);
     }
 
-    if (resource.type !== itemType) {
+    if (resource.type !== itemType && resource.type !== testType) {
       return;
     }
 

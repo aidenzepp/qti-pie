@@ -149,6 +149,7 @@ const contextOf = (
     item: { adaptive: "false" },
     nodes: indexTree(root),
     root,
+    rootKind: "item",
     shared,
   };
 };
@@ -623,6 +624,7 @@ const sharedItem = (name: string) =>
       item: { adaptive: "false" },
       nodes: tree.nodes,
       root: doc.root,
+      rootKind: "item",
       shared,
     };
 

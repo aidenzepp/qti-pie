@@ -34,9 +34,16 @@ import * as declaration from "#pantry/schema/declaration.ts";
 import * as item from "#pantry/schema/item.ts";
 import * as node from "#pantry/schema/node.ts";
 import {
+  PrefixedSource,
+  SectionVariableTarget,
+  StructureHolder,
+} from "#pantry/schema/content/rosters.ts";
+import {
+  MappedVariableName,
   TemplateLocationUri,
   TemplateParameterName,
   TemplateUri,
+  TestStructureIdentifier,
 } from "#pantry/schema/contracts.ts";
 import * as patterns from "#pantry/schema/patterns.ts";
 import * as value from "#pantry/schema/value.ts";
@@ -186,6 +193,7 @@ export const RefKind = closed("RefKind", [
   "itemInstanceVariable",
   "sectionDuration",
   "templateParameter",
+  "sectionVariable",
 ]);
 
 /**
@@ -250,6 +258,181 @@ export const TemplateParameterRef = relation(
 );
 
 /**
+ * A reference to a variable of an item of a test, by the item reference's identifier and the
+ * variable's name (`ITEMREF.VAR`).
+ */
+export const ItemVariableRef = relation(
+  "ItemVariableRef",
+  {
+    document: uuid,
+    id: uuid,
+    prefix: TestStructureIdentifier,
+    root: closedId(node.RootKind),
+    variable: ncName,
+  },
+  ["id"],
+);
+
+/**
+ * A reference to a variable of one instance of an item of a test (`ITEMREF.N.VAR`), the instance
+ * as a number.
+ */
+export const ItemInstanceVariableRef = relation(
+  "ItemInstanceVariableRef",
+  {
+    document: uuid,
+    id: uuid,
+    instance: pg.bigint,
+    prefix: TestStructureIdentifier,
+    root: closedId(node.RootKind),
+    variable: ncName,
+  },
+  ["id"],
+);
+
+/**
+ * The instance of an instance reference as written, kept where it differs from the canonical
+ * spelling of its number.
+ */
+export const ItemInstanceSpelling = relation(
+  "ItemInstanceSpelling",
+  { ref: uuid, value: str.regex(patterns.nonCanonicalInteger) },
+  ["ref"],
+);
+
+/**
+ * A reference to the duration of a section or test (`ID.duration`).
+ */
+export const SectionDurationRef = relation(
+  "SectionDurationRef",
+  { document: uuid, id: uuid, prefix: TestStructureIdentifier, root: closedId(node.RootKind) },
+  ["id"],
+);
+
+/**
+ * A reference to a variable of a section's own test, by the identifier as written and the kind of
+ * node that refers.
+ */
+export const SectionVariableRef = relation(
+  "SectionVariableRef",
+  {
+    document: uuid,
+    id: uuid,
+    identifier: ncName,
+    referrerKind: closedId(node.NodeKind),
+    root: closedId(node.RootKind),
+  },
+  ["id"],
+);
+
+/**
+ * Where a prefixed reference's variable comes from, once per test that reaches the reference's
+ * document: the item reference its prefix names, that item's document and the kind of source.
+ */
+export const PrefixedVariableSource = relation(
+  "PrefixedVariableSource",
+  {
+    document: uuid,
+    itemDocument: uuid,
+    itemRef: uuid,
+    prefix: TestStructureIdentifier,
+    ref: uuid,
+    refKind: closedId(RefKind),
+    source: closedId(PrefixedSource),
+    test: uuid,
+  },
+  ["ref", "test"],
+);
+
+/**
+ * A prefixed variable the item itself declares.
+ */
+export const PrefixedDeclared = relation(
+  "PrefixedDeclared",
+  { itemDocument: uuid, ref: uuid, test: uuid, variable: ncName },
+  ["ref", "test"],
+);
+
+/**
+ * A prefixed variable the item reference maps under a new name.
+ */
+export const PrefixedMapped = relation(
+  "PrefixedMapped",
+  { itemRef: uuid, ref: uuid, test: uuid, variable: MappedVariableName },
+  ["ref", "test"],
+);
+
+/**
+ * A prefixed variable from the built-in set.
+ */
+export const PrefixedBuiltIn = relation(
+  "PrefixedBuiltIn",
+  { builtIn: closedId(BuiltIn), ref: uuid, test: uuid },
+  ["ref", "test"],
+);
+
+/**
+ * What a duration reference's prefix names, once per reaching test: the structure node that holds
+ * it and that node's kind.
+ */
+export const SectionDurationTarget = relation(
+  "SectionDurationTarget",
+  {
+    document: uuid,
+    holder: uuid,
+    holderKind: closedId(StructureHolder),
+    prefix: TestStructureIdentifier,
+    ref: uuid,
+    refKind: closedId(RefKind),
+    test: uuid,
+  },
+  ["ref", "test"],
+);
+
+/**
+ * What a section variable reference names, once per reaching test.
+ */
+export const SectionVariableResolution = relation(
+  "SectionVariableResolution",
+  { document: uuid, ref: uuid, target: closedId(SectionVariableTarget), test: uuid },
+  ["ref", "test"],
+);
+
+/**
+ * A section variable reference that names a declared variable, with the kind of declaration and of
+ * referring node.
+ */
+export const SectionVariableDeclared = relation(
+  "SectionVariableDeclared",
+  {
+    declarationKind: closedId(declaration.DeclarationKind),
+    identifier: ncName,
+    ref: uuid,
+    referrerKind: closedId(node.NodeKind),
+    test: uuid,
+  },
+  ["ref", "test"],
+);
+
+/**
+ * A section variable reference that names a prefixed variable.
+ */
+export const SectionVariablePrefixed = relation(
+  "SectionVariablePrefixed",
+  { ref: uuid, test: uuid },
+  ["ref", "test"],
+);
+
+/**
+ * A section variable reference that names a duration.
+ */
+export const SectionVariableDuration = relation(
+  "SectionVariableDuration",
+  { ref: uuid, test: uuid },
+  ["ref", "test"],
+);
+
+/**
  * The response processing kind's arm, keyed by its `NodeKind` handle.
  *
  * `ResponseProcessingItem` is a companion row, not an arm. The containment of the arm into `Node`
@@ -270,6 +453,9 @@ export const relations = {
   DeclaredRef,
   Expression,
   ExpressionMax,
+  ItemInstanceSpelling,
+  ItemInstanceVariableRef,
+  ItemVariableRef,
   Literal,
   LiteralBoolean: literalArms.boolean,
   LiteralDirectedPair: literalArms.directedPair,
@@ -286,16 +472,37 @@ export const relations = {
   OperatorArity,
   OperatorArityMax,
   OperatorArityUnbounded,
+  PrefixedBuiltIn,
+  PrefixedDeclared,
+  PrefixedMapped,
+  PrefixedVariableSource,
   RefKind,
   ResponseProcessing,
   ResponseProcessingItem,
   ResponseProcessingTemplate,
   ResponseProcessingTemplateLocation,
+  SectionDurationRef,
+  SectionDurationTarget,
+  SectionVariableDeclared,
+  SectionVariableDuration,
+  SectionVariablePrefixed,
+  SectionVariableRef,
+  SectionVariableResolution,
   StandardTemplate,
   StandardTemplateReference,
   TemplateParameterRef,
   VariableRef,
 };
+
+/**
+ * The three prefixed reference arms, each with the per-test relation that resolves its references
+ * in a test document's own test.
+ */
+const prefixedArms = [
+  [ItemVariableRef, PrefixedVariableSource],
+  [ItemInstanceVariableRef, PrefixedVariableSource],
+  [SectionDurationRef, SectionDurationTarget],
+] as const;
 
 /**
  * The statements over this module's relations: a processing node is item- or template-rooted; an
@@ -309,9 +516,20 @@ export const relations = {
  * reference is a node of its document's tree with a declared, a built-in or a template-parameter
  * arm, each naming the kind of node that refers.
  *
+ * A reference in a section document takes the as-written arm `SectionVariableRef`, whose root is a
+ * section and whose referrer is one of the five expressions a section document holds. Each test
+ * that reaches the document resolves it once, in `SectionVariableResolution`, to the test's
+ * declaration of the whole name, to a prefixed source or to a duration target. The two thin arms
+ * mirror the hub's and `SectionDurationTarget`'s section-variable rows, one selected side each
+ * (the law compiler refuses a containment selected on both).
+ *
  * The declared and built-in checks list the allowed pairs and refuse every other referring kind, so
  * they are also the check that the kind is one of the ten that refer; the template-parameter arm
  * has a check of its own for that.
+ *
+ * The prefixed arms, the hub and `SectionDurationTarget` are also bound to a test document, to its
+ * structure, to its item references and to its variable mappings. Those statements name relations
+ * of modules that import this one, so they are `rules` of `#pantry/schema/test/processing.ts`.
  */
 export const rules = [
   contained(on(ResponseProcessing, "id", "rootKind"), on(node.Node, "id", "rootKind")),
@@ -366,6 +584,10 @@ export const rules = [
   alternatives(VariableRef, "kind", RefKind, {
     builtIn: BuiltInRef,
     declared: DeclaredRef,
+    itemInstanceVariable: ItemInstanceVariableRef,
+    itemVariable: ItemVariableRef,
+    sectionDuration: SectionDurationRef,
+    sectionVariable: SectionVariableRef,
     templateParameter: TemplateParameterRef,
   }),
   contained(
@@ -420,5 +642,124 @@ export const rules = [
       "qti-set-default-value",
       "qti-set-correct-response",
     ]),
+  ),
+  ...prefixedArms.flatMap(([arm, target]) => [
+    contained(on(arm, "id", "document"), on(VariableRef, "id", "document")),
+    contained(on(select(arm, { root: "test" }), "id", "document"), on(target, "ref", "test")),
+  ]),
+  check("ItemVariableRoot", ItemVariableRef, (r) => r.eq(r.root, "test")),
+  check("ItemInstanceVariableRoot", ItemInstanceVariableRef, (r) => r.eq(r.root, "test")),
+  check("SectionDurationRoot", SectionDurationRef, (r) => r.eq(r.root, "test")),
+  check("ItemInstancePositive", ItemInstanceVariableRef, (r) => r.ge(r.instance, 1n)),
+  contained(on(ItemInstanceSpelling, "ref"), on(ItemInstanceVariableRef, "id")),
+  contained(
+    on(PrefixedVariableSource, "ref", "document", "refKind"),
+    on(VariableRef, "id", "document", "kind"),
+  ),
+  check("PrefixedVariableSourceKind", PrefixedVariableSource, (r) =>
+    r.in(r.refKind, ["itemVariable", "itemInstanceVariable", "sectionVariable"]),
+  ),
+  contained(
+    on(select(PrefixedVariableSource, { refKind: "itemVariable" }), "ref", "prefix"),
+    on(ItemVariableRef, "id", "prefix"),
+  ),
+  contained(
+    on(select(PrefixedVariableSource, { refKind: "itemInstanceVariable" }), "ref", "prefix"),
+    on(ItemInstanceVariableRef, "id", "prefix"),
+  ),
+  alternatives(PrefixedVariableSource, "source", PrefixedSource, {
+    builtIn: PrefixedBuiltIn,
+    declared: PrefixedDeclared,
+    mapped: PrefixedMapped,
+  }),
+  contained(
+    on(PrefixedDeclared, "ref", "test", "itemDocument"),
+    on(PrefixedVariableSource, "ref", "test", "itemDocument"),
+  ),
+  contained(
+    on(PrefixedDeclared, "itemDocument", "variable"),
+    on(declaration.Declaration, "document", "identifier"),
+  ),
+  contained(
+    on(PrefixedMapped, "ref", "test", "itemRef"),
+    on(PrefixedVariableSource, "ref", "test", "itemRef"),
+  ),
+  contained(on(PrefixedBuiltIn, "ref", "test"), on(PrefixedVariableSource, "ref", "test")),
+  check("PrefixedBuiltInName", PrefixedBuiltIn, (r) =>
+    r.in(r.builtIn, ["duration", "numAttempts", "completionStatus"]),
+  ),
+  contained(
+    on(SectionDurationTarget, "ref", "document", "refKind"),
+    on(VariableRef, "id", "document", "kind"),
+  ),
+  check("SectionDurationTargetKind", SectionDurationTarget, (r) =>
+    r.in(r.refKind, ["sectionDuration", "sectionVariable"]),
+  ),
+  contained(
+    on(select(SectionDurationTarget, { refKind: "sectionDuration" }), "ref", "document", "prefix"),
+    on(SectionDurationRef, "id", "document", "prefix"),
+  ),
+  check("SectionDurationTargetHolder", SectionDurationTarget, (r) =>
+    r.in(r.holderKind, ["part", "section"]),
+  ),
+  contained(on(SectionVariableRef, "id", "document"), on(VariableRef, "id", "document")),
+  check("SectionVariableRoot", SectionVariableRef, (r) => r.eq(r.root, "section")),
+  contained(on(SectionVariableRef, "id", "referrerKind"), on(node.Node, "id", "kind")),
+  check("SectionVariableReferrer", SectionVariableRef, (r) =>
+    r.in(r.referrerKind, [
+      "qti-variable",
+      "qti-default",
+      "qti-correct",
+      "qti-map-response",
+      "qti-map-response-point",
+    ]),
+  ),
+  contained(
+    on(SectionVariableResolution, "ref", "document"),
+    on(SectionVariableRef, "id", "document"),
+  ),
+  alternatives(SectionVariableResolution, "target", SectionVariableTarget, {
+    declared: SectionVariableDeclared,
+    duration: SectionVariableDuration,
+    prefixed: SectionVariablePrefixed,
+  }),
+  contained(
+    on(SectionVariableDeclared, "ref", "identifier", "referrerKind"),
+    on(SectionVariableRef, "id", "identifier", "referrerKind"),
+  ),
+  contained(
+    on(SectionVariableDeclared, "test", "identifier", "declarationKind"),
+    on(declaration.Declaration, "document", "identifier", "kind"),
+  ),
+  check("SectionVariableDeclaredKind", SectionVariableDeclared, (r) =>
+    r.or(
+      r.in(r.referrerKind, ["qti-variable", "qti-default"]),
+      r.and(
+        r.in(r.referrerKind, [
+          "qti-correct",
+          "qti-map-response",
+          "qti-map-response-point",
+          "qti-set-correct-response",
+        ]),
+        r.eq(r.declarationKind, "response"),
+      ),
+      r.and(
+        r.in(r.referrerKind, ["qti-set-outcome-value", "qti-lookup-outcome-value"]),
+        r.eq(r.declarationKind, "outcome"),
+      ),
+      r.and(r.eq(r.referrerKind, "qti-set-template-value"), r.eq(r.declarationKind, "template")),
+      r.and(
+        r.eq(r.referrerKind, "qti-set-default-value"),
+        r.in(r.declarationKind, ["response", "outcome"]),
+      ),
+    ),
+  ),
+  mirrors(
+    on(SectionVariablePrefixed, "ref", "test"),
+    on(select(PrefixedVariableSource, { refKind: "sectionVariable" }), "ref", "test"),
+  ),
+  mirrors(
+    on(SectionVariableDuration, "ref", "test"),
+    on(select(SectionDurationTarget, { refKind: "sectionVariable" }), "ref", "test"),
   ),
 ] as const;
