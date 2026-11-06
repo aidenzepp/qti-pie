@@ -14,6 +14,7 @@
  */
 import type { Addition, Uuid } from "@bjornpagen/grizzle";
 import { BaseType, interactionKinds, ResourceType } from "#pantry/grammar/install.ts";
+import { resourcePathsOf } from "#pantry/import/overlays/package.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { FlatRows, NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
@@ -27,6 +28,8 @@ import type {
   LomObjectTitle,
   LomRecord,
   LomResource,
+  LomResourceType,
+  LomResourceTypeSource,
   LomString,
   LomStringLanguage,
   LomTitle,
@@ -59,6 +62,8 @@ export interface MetadataRows {
   readonly LomGeneral: ReadonlyMap<string, Addition<typeof LomGeneral>>;
   readonly LomRecord: ReadonlyMap<string, Addition<typeof LomRecord>>;
   readonly LomResource: ReadonlyMap<string, Addition<typeof LomResource>>;
+  readonly LomResourceType: ReadonlyMap<string, Addition<typeof LomResourceType>>;
+  readonly LomResourceTypeSource: ReadonlyMap<string, Addition<typeof LomResourceTypeSource>>;
   readonly LomString: ReadonlyMap<string, Addition<typeof LomString>>;
   readonly LomStringLanguage: ReadonlyMap<string, Addition<typeof LomStringLanguage>>;
   readonly LomTitle: ReadonlyMap<string, Addition<typeof LomTitle>>;
@@ -581,6 +586,44 @@ const titleStringRowsOf = (
   );
 
 /**
+ * A LOM learning resource type's term as its two overlays hold it: the type's node, the term's own
+ * node and the term's string value. {@link LomResourceType} and {@link LomResourceTypeSource} share
+ * the shape.
+ */
+type TermRow = Addition<typeof LomResourceType> & Addition<typeof LomResourceTypeSource>;
+
+/**
+ * Build a document's rows for one term of its LOM learning resource types (spec reading 122): one
+ * per `lom:learningResourceType` that holds the term, its first in document order, with the term's
+ * node and string value. The binding's Schematron caps each term at one per type (N7), so a second
+ * names no row, and N7 refuses its document.
+ *
+ * @param tree - The document's tree.
+ * @param kind - The term's kind: `lom:value` for {@link LomResourceType}, `lom:source` for
+ *   {@link LomResourceTypeSource}.
+ * @returns The rows, by the type's node's id.
+ */
+const termRowsOf = (tree: Tree, kind: "lom:source" | "lom:value"): ReadonlyMap<string, TermRow> => {
+  const rows = new Map<string, TermRow>();
+
+  for (const node of tree.nodes) {
+    if (
+      node.kind === kind &&
+      tree.nodeOf(node.parent)?.kind === "lom:learningResourceType" &&
+      !rows.has(node.parent)
+    ) {
+      rows.set(node.parent, {
+        node: node.parent,
+        term: node.id,
+        text: tree.stringValueOf(node.id),
+      });
+    }
+  }
+
+  return rows;
+};
+
+/**
  * A document's root rows: an item's or test's {@link AssessmentObject}, and its
  * {@link ObjectLang} where it writes an `xml:lang`, each by its node's id.
  */
@@ -697,7 +740,9 @@ const usageValueRowsOf = (tree: Tree): ReadonlyMap<string, Addition<typeof Usage
  *
  * Every `lom:lom`, `lom:general`, `lom:entry`, `lom:title` and `lom:string` has its row, every
  * `cp:resource` its {@link LomResource}, every general category under a resource's `cp:metadata`
- * its {@link ResourceLomGeneral}, and every title's string its {@link LomTitleString}. An item's or
+ * its {@link ResourceLomGeneral}, every title's string its {@link LomTitleString}, and every
+ * learning resource type its {@link LomResourceType} where it holds a value and its
+ * {@link LomResourceTypeSource} where it writes a source. An item's or
  * test's root has its {@link AssessmentObject}, a usage statistic its {@link StatisticDate} where
  * it writes a `lastUpdated`, and a usage value its {@link UsageValue} where it writes a
  * `baseType`; an optional attribute's row exists where it is written.
@@ -721,6 +766,8 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: MetadataIds): MetadataRo
     LomGeneral: generals,
     LomRecord: records,
     LomResource: resources,
+    LomResourceType: termRowsOf(tree, "lom:value"),
+    LomResourceTypeSource: termRowsOf(tree, "lom:source"),
     LomString: strings.strings,
     LomStringLanguage: strings.languages,
     LomTitle: titles,
@@ -838,7 +885,8 @@ const titleRowOf = (
  * kind when none does, so the law refuses the record. A title with no string has no string to name,
  * so its row names the title itself, which no title string is. A resource whose `href` names no
  * document gets the manifest as its document, which the record's containments refuse. An href's
- * path is its text before its first `?` or `#` (reading 102, `ResourceHref.path`).
+ * path is the one its `ResourceHref` row compares it by, resolved as the package overlays resolve
+ * it (`resourcePathsOf`, readings 102 and 103).
  *
  * @param manifest - The manifest's tree, as shred gives it.
  * @param ids - The ids its rows are written under.
@@ -850,11 +898,7 @@ export const objectRowsOfPackage = (
   ids: MetadataIds,
   documents: ReadonlyMap<string, NamedDocument>,
 ): ObjectRows => {
-  const paths = new Map(
-    flatten(manifest, ids.idOf).attributes.flatMap(({ lexical, name, node }) =>
-      name === "href" ? [[node, /^[^?#]*/u.exec(lexical)?.[0] ?? ""] as const] : [],
-    ),
-  );
+  const paths = resourcePathsOf(flatten(manifest, ids.idOf));
   const metadata = rowsOf(manifest, ids);
   const generalEntries = [...metadata.LomEntry.values()].filter(
     ({ holderKind }) => holderKind === "lom:general",

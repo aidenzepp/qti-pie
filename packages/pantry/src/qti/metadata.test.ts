@@ -1,8 +1,9 @@
 /**
  * The metadata overlays' free tests: their statements build beside the layers they read, each check
  * is named by an oracle law, the pieces' patterns say what their names say, collapsed equality with
- * an identifier is trimmed equality, and a statistic's typed day admits exactly `DateDType`'s
- * values.
+ * an identifier is trimmed equality, a statistic's typed day admits exactly `DateDType`'s values,
+ * and over every learning resource type of a small box the law refuses exactly what QTI 3.0
+ * Metadata §2.7.5.1 forbids (spec reading 122).
  *
  * The database tests (`metadata.db.test.ts`) judge the laws through PostgreSQL, and the builder's
  * tests (`#pantry/import/overlays/metadata.test.ts`) its rows.
@@ -16,9 +17,13 @@ import { array, element, map } from "@grizzle/testing/gen";
 import type { Gen } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
 import { Array as Arr, Duration, Effect, Option } from "effect";
+import { readXml } from "@qti-pie/crust/read.ts";
 import { patternFlags } from "#pantry/grammar/domains.ts";
-import { AttributeGrammar, BaseType, grammar, ValueDomainOf } from "#pantry/grammar/install.ts";
+import { attributeRows, BaseType, grammar, ValueDomainOf } from "#pantry/grammar/install.ts";
 import { piecesOf } from "#pantry/import/overlays/metadata.ts";
+import { foldGrammarOf, shredGrammarOf } from "#pantry/model/composed.ts";
+import { fold } from "#pantry/model/folds.ts";
+import { shred } from "#pantry/model/shred.ts";
 import { attributeLaws } from "#pantry/qti/attributes.ts";
 import { chardataLaws } from "#pantry/qti/chardata.ts";
 import { BaseTypePattern, unjudgedBaseTypes } from "#pantry/qti/expression-types.ts";
@@ -32,6 +37,8 @@ import {
   LomObjectTitle,
   LomRecord,
   LomResource,
+  LomResourceType,
+  LomResourceTypeSource,
   LomString,
   LomStringLanguage,
   LomTitle,
@@ -50,7 +57,23 @@ import { Qti } from "#pantry/qti/schema.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import { materialize } from "#pantry/test/fixtures.ts";
 import type { FixtureName } from "#pantry/test/fixtures.ts";
-import { judge, lawNames, lawsOf, ruleOf, typedTextHolds } from "#pantry/test/oracle.ts";
+import {
+  databaseRefusals,
+  documentRowsOf,
+  readText,
+  termXml,
+  typeRefused,
+} from "#pantry/test/gen/lom-resource-type.ts";
+import type { TermSketch, TypeSketch } from "#pantry/test/gen/lom-resource-type.ts";
+import { idOf } from "#pantry/test/gen/xdm.ts";
+import {
+  documentBreaches,
+  judge,
+  lawNames,
+  lawsOf,
+  ruleOf,
+  typedTextHolds,
+} from "#pantry/test/oracle.ts";
 
 /**
  * The relations `metadata.ts` declares, by name.
@@ -64,6 +87,8 @@ const metadataRelations = {
   LomObjectTitle,
   LomRecord,
   LomResource,
+  LomResourceType,
+  LomResourceTypeSource,
   LomString,
   LomStringLanguage,
   LomTitle,
@@ -271,7 +296,7 @@ describe("qti/metadata.ts, the pieces", () => {
  */
 const dateDomains = [
   ...new Set(
-    AttributeGrammar.rows
+    attributeRows
       .filter(
         ({ governor, name }) =>
           name === "lastUpdated" && statisticKinds.some((kind) => kind === governor),
@@ -570,5 +595,210 @@ describe("qti/metadata.ts, the usage typed value by the law oracle", { timeout: 
           assert.lengthOf(found, breaks, name);
         }
       }).pipe(Effect.provide(NodeServices.layer)),
+  );
+});
+
+/**
+ * The sources of the learning resource type box: none, the empty source, one of whitespace alone,
+ * `LOMv1.0` bare and padded, another vocabulary, and two near misses of `LOMv1.0`.
+ */
+const boxSources = [
+  Option.none<string>(),
+  Option.some(""),
+  Option.some(" "),
+  Option.some("LOMv1.0"),
+  Option.some(" LOMv1.0\n"),
+  Option.some("MyVocab"),
+  Option.some("lomv1.0"),
+  Option.some("LOMv1.0x"),
+] as const;
+
+/**
+ * The values of the learning resource type box: none, the two forbidden values bare, padded and
+ * with their inner space doubled, the empty value, the value the binding advises, and near misses
+ * of the forbidden ones: another case, a hyphen and a repetition.
+ */
+const boxValues = [
+  Option.none<string>(),
+  Option.some("exam"),
+  Option.some("\texam "),
+  Option.some(" self  assessment "),
+  Option.some("self assessment"),
+  Option.some(""),
+  Option.some("exercise"),
+  Option.some("Exam"),
+  Option.some("self-assessment"),
+  Option.some("exam exam"),
+] as const;
+
+/**
+ * One case of the learning resource type box.
+ */
+interface ResourceTypeCase {
+  readonly order: TypeSketch["order"];
+  readonly source: Option.Option<string>;
+  readonly value: Option.Option<string>;
+}
+
+/**
+ * Every case of the box: each source, by each value, by each order of the two.
+ */
+const resourceTypeCases: readonly [ResourceTypeCase, ...ResourceTypeCase[]] = (() => {
+  const cases = boxSources.flatMap((source) =>
+    boxValues.flatMap((value) =>
+      (["value first", "source first"] as const).map((order): ResourceTypeCase => ({
+        order,
+        source,
+        value,
+      })),
+    ),
+  );
+  if (!Arr.isReadonlyArrayNonEmpty(cases)) {
+    throw new Error("The learning resource type box holds no case. Give it a source and a value.");
+  }
+
+  return cases;
+})();
+
+/**
+ * The law oracle's tables over the grammar, derived once.
+ */
+const laws = lawsOf(grammar);
+
+/**
+ * A term of the box, written once and plain.
+ *
+ * @param text - Its text.
+ * @returns The term.
+ */
+const plainTerm = (text: string): TermSketch => ({ copies: 1, spelling: "plain", text });
+
+/**
+ * Write the manifest of one box case: an item resource whose LOM record holds the case's one
+ * learning resource type.
+ *
+ * @param type - The type.
+ * @returns The manifest's text.
+ */
+const resourceTypeManifest = (type: TypeSketch): string => {
+  const terms =
+    type.order === "value first"
+      ? `${termXml("value", type.value)}${termXml("source", type.source)}`
+      : `${termXml("source", type.source)}${termXml("value", type.value)}`;
+
+  return `<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" identifier="M"><metadata><schema>QTI Package</schema><schemaversion>3.0.1</schemaversion></metadata><organizations/><resources><resource identifier="R" type="imsqti_item_xmlv3p0" href="item.xml"><metadata><imsmd:lom xmlns:imsmd="http://ltsc.ieee.org/xsd/LOM"><imsmd:educational><imsmd:learningResourceType>${terms}</imsmd:learningResourceType></imsmd:educational></imsmd:lom></metadata><file href="item.xml"/></resource></resources></manifest>`;
+};
+
+/**
+ * A situation the learning resource type box must reach.
+ */
+type ResourceTypeSituation =
+  | "refused, no source"
+  | "refused, empty source"
+  | "refused, LOMv1.0"
+  | "accepted, another vocabulary"
+  | "accepted, an allowed value"
+  | "accepted, no value";
+
+/**
+ * Name a box case's situation, for the box's coverage.
+ *
+ * @param type - The case's type.
+ * @param refused - Whether the specification refuses it.
+ * @returns Its situation.
+ */
+const resourceTypeSituation = (type: TypeSketch, refused: boolean): ResourceTypeSituation => {
+  const source = type.source.pipe(Option.map((term) => collapse(term.text)));
+  if (refused) {
+    return Option.match(source, {
+      onNone: () => "refused, no source",
+      onSome: (text) => (text === "" ? "refused, empty source" : "refused, LOMv1.0"),
+    });
+  }
+
+  if (Option.isNone(type.value)) {
+    return "accepted, no value";
+  }
+
+  return typeRefused({ ...type, source: Option.none() })
+    ? "accepted, another vocabulary"
+    : "accepted, an allowed value";
+};
+
+describe("qti/metadata.ts, the learning resource type", { timeout: 300_000 }, () => {
+  it.effect(
+    "refuses exactly the types of the LOM vocabulary whose value is exam or self assessment, as the specification, the database's laws over the rows and the law oracle each read them",
+    (ctx) =>
+      // Oracle: three at once. The specification as a checker, QTI 3.0 Metadata §2.7.5.1 over the
+      // case (`typeRefused`, written apart from the module's constants): a value collapsing to
+      // `exam` or `self assessment` under the LOM vocabulary, its source `LOMv1.0`, empty or not
+      // written (the binding's default, line 1288). A second implementation, the law oracle's
+      // `LOM learning resource type` over the folded manifest. And the database's statements
+      // restated over the builder's rows and the tree's insert (`databaseRefusals`): each term's
+      // row holds the string value the database folds from the host's `stringPiece`, and the
+      // law's containment refuses exactly the types the specification refuses.
+      // Bound: 8 sources by 10 values by 2 orders, 160 cases.
+      searched(
+        ctx,
+        exhaust(
+          {
+            box: "8 sources (none, empty, blank, LOMv1.0 bare and padded, MyVocab, lomv1.0, LOMv1.0x) by 10 values (none, exam, padded exam, self  assessment padded, self assessment, empty, exercise, Exam, self-assessment, exam exam) by 2 orders",
+            caseHang: Duration.seconds(30),
+            coverage: requiredInSpace<ResourceTypeSituation>([
+              "refused, no source",
+              "refused, empty source",
+              "refused, LOMv1.0",
+              "accepted, another vocabulary",
+              "accepted, an allowed value",
+              "accepted, no value",
+            ]),
+            generator: element(resourceTypeCases),
+            limit: 200,
+            literal: (value: ResourceTypeCase) => JSON.stringify(value),
+            oracle: {
+              kind: "specification",
+              name: "QTI 3.0 Metadata §2.7.5.1 over the case, against the law oracle and the database's statements over the rows",
+            },
+            suite: "qti/metadata-learning-resource-type",
+          },
+          ({ order, source, value }: ResourceTypeCase, c) =>
+            Effect.gen(function* resourceType() {
+              const type: TypeSketch = {
+                foreign: false,
+                order,
+                source: source.pipe(Option.map(plainTerm)),
+                value: value.pipe(Option.map(plainTerm)),
+              };
+              const refused = typeRefused(type);
+              c.note(resourceTypeSituation(type, refused));
+
+              const xml = resourceTypeManifest(type);
+              const document = yield* Effect.orDie(readXml(new TextEncoder().encode(xml)));
+              const tree = yield* Effect.orDie(shred(document, "3.0.1", shredGrammarOf(grammar)));
+              const rows = documentRowsOf(tree, idOf);
+              const judged = databaseRefusals(rows);
+              const folded = yield* Effect.orDie(
+                Effect.fromResult(fold(tree, idOf, foldGrammarOf(grammar))),
+              );
+              const oracle = documentBreaches("imsmanifest.xml", folded, laws).filter(
+                ({ law }) => law === "LOM learning resource type",
+              );
+
+              assert.deepStrictEqual(judged.derived, [], xml);
+              assert.strictEqual(judged.refused.size, refused ? 1 : 0, xml);
+              assert.lengthOf(oracle, refused ? 1 : 0, xml);
+              assert.deepStrictEqual(
+                [...rows.values.values()].map(({ text }) => text),
+                Option.toArray(type.value).map((term) => readText(term)),
+                xml,
+              );
+              assert.deepStrictEqual(
+                [...rows.sources.values()].map(({ text }) => text),
+                Option.toArray(type.source).map((term) => readText(term)),
+                xml,
+              );
+            }),
+        ),
+      ),
   );
 });

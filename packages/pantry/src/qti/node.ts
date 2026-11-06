@@ -354,16 +354,65 @@ export const copiedTitleText = (n: NodeRow) =>
   n.and(n.eq(n.parentKind, "lom:string"), n.eq(n.parentParentKind, "lom:title"));
 
 /**
+ * The two terms of a LOM learning resource type, its vocabulary's `source` and its `value`, whose
+ * text `lom-learning-resource-type` copies (spec reading 122, `#pantry/qti/metadata.ts`).
+ */
+export const vocabularyTermKinds = [
+  "lom:source",
+  "lom:value",
+] as const satisfies readonly (typeof NodeKind.handles)[number][];
+
+/**
+ * State that a member is a child of a LOM learning resource type's term, whose text Q5.12's
+ * `lom-learning-resource-type` copies (spec reading 122, QTI 3.0 Metadata §2.7.5.1): its parent is
+ * a `lom:source` or a `lom:value` ({@link vocabularyTermKinds}) and its grandparent a
+ * `lom:learningResourceType`. The terms of every other LOM vocabulary are not folded, since
+ * nothing reads their text.
+ *
+ * @param n - The row.
+ * @returns The predicate.
+ */
+export const copiedVocabularyText = (n: NodeRow) =>
+  n.and(
+    n.in(n.parentKind, vocabularyTermKinds),
+    n.eq(n.parentParentKind, "lom:learningResourceType"),
+  );
+
+/**
+ * Decide on the host what {@link copiedTitleText} and {@link copiedVocabularyText} state of a
+ * member, from its parent's kind and its grandparent's: whether an overlay copies its parent's
+ * text by the two kinds together. The walk that writes `stringPiece` reads it
+ * (`#pantry/import/write.ts`), so the host steps the rows the fold steps.
+ *
+ * @param parentKind - The member's parent's kind.
+ * @param parentParentKind - The member's grandparent's kind, `document` for a child of the root
+ *   element.
+ * @returns Whether the member's characters are copied into its parent's string value.
+ */
+export const copiedUnder = (parentKind: string, parentParentKind: string): boolean =>
+  (parentKind === "lom:string" && parentParentKind === "lom:title") ||
+  (vocabularyTermKinds.some((kind) => kind === parentKind) &&
+    parentParentKind === "lom:learningResourceType");
+
+/**
  * State that a member's characters make its parent's string value: it is a member, and its parent's
  * text is checked ({@link inCheckedText}) or copied ({@link copiedTextKinds},
- * {@link copiedTitleText}). The string value's fold steps these rows, and `E1_derived` gives
- * exactly these a `stringPiece`.
+ * {@link copiedTitleText}, {@link copiedVocabularyText}). The string value's fold steps these rows,
+ * and `E1_derived` gives exactly these a `stringPiece`.
  *
  * @param n - The row.
  * @returns The predicate.
  */
 const inStringValue = (n: NodeRow) =>
-  n.and(member(n), n.or(inCheckedText(n), n.in(n.parentKind, copiedTextKinds), copiedTitleText(n)));
+  n.and(
+    member(n),
+    n.or(
+      inCheckedText(n),
+      n.in(n.parentKind, copiedTextKinds),
+      copiedTitleText(n),
+      copiedVocabularyText(n),
+    ),
+  );
 
 /**
  * State that a foreign element is governed by a simple type: its governor under `GoverningOf` is

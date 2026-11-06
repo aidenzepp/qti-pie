@@ -5,8 +5,9 @@
  * and `lom-title` laws over the rows refuse exactly the records reading 62 refuses: the identifier
  * as the law oracle (`#pantry/test/oracle.ts`) judges it and as the spec reads the package's own
  * sketch, the title as the spec reads the sketch, in `xs:normalizedString`'s value space with tags
- * compared without regard to case; and a usage value has its typed row exactly where it writes a
- * `baseType` (reading 105).
+ * compared without regard to case; a usage value has its typed row exactly where it writes a
+ * `baseType` (reading 105); and each LOM learning resource type has its value's row and its
+ * source's row exactly where it holds them, each its first term's string value (reading 122).
  */
 import { NodeServices } from "@effect/platform-node";
 import type { Addition, Uuid } from "@bjornpagen/grizzle";
@@ -33,11 +34,22 @@ import type {
 import { shredGrammarOf } from "#pantry/model/composed.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { shred, versionOf } from "#pantry/model/shred.ts";
+import { flatten } from "#pantry/model/xdm.ts";
 import type { XdmDocument } from "#pantry/model/xdm.ts";
 import { readPackage } from "#pantry/package/read.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
 import type { AssessmentObject } from "#pantry/qti/metadata.ts";
 import { judge, lawsOf } from "#pantry/test/oracle.ts";
+import {
+  filesOf as resourceTypeFilesOf,
+  packageSketches as resourceTypeSketches,
+  readText,
+} from "#pantry/test/gen/lom-resource-type.ts";
+import type {
+  PackageSketch as ResourceTypeSketch,
+  TermSketch,
+  TypeSketch,
+} from "#pantry/test/gen/lom-resource-type.ts";
 import { caseHang, searchTimeout } from "#pantry/test/gen/xdm.ts";
 
 /**
@@ -1111,6 +1123,125 @@ describe("import/overlays/metadata.ts, usage values", () => {
                       },
                     ],
               );
+            }),
+        ),
+      ),
+  );
+});
+
+/**
+ * The learning resource types each file of a sketched package writes, in document order: the
+ * manifest's own records' and then its item resource's, and each external record's in its file.
+ *
+ * @param sketch - The package.
+ * @returns Each file's types, by its path.
+ */
+const typesByFile = (sketch: ResourceTypeSketch): ReadonlyMap<string, readonly TypeSketch[]> => {
+  const typesOf = (placement: string) =>
+    sketch.records
+      .filter((record) => record.placement === placement)
+      .flatMap(({ educational }) => educational.flat());
+
+  return new Map([
+    ["imsmanifest.xml", [...typesOf("manifest"), ...typesOf("resource")]],
+    ...sketch.records
+      .filter(({ placement }) => placement === "external")
+      .map((record, at) => [`meta/r${String(at)}.xml`, record.educational.flat()] as const),
+  ]);
+};
+
+/**
+ * Read a sketched term's string value, none where the type writes none.
+ *
+ * @param term - The term.
+ * @returns Its string value.
+ */
+const termText = (term: Option.Option<TermSketch>): Option.Option<string> =>
+  term.pipe(Option.map((written) => readText(written)));
+
+describe("import/overlays/metadata.ts, learning resource types", { timeout: searchTimeout }, () => {
+  it.effect(
+    "gives each learning resource type a value row and a source row exactly where it holds the term, each naming its first term and holding its string value",
+    (ctx) =>
+      // Oracle: the specification as a checker, the sketch each package is written from: each
+      // `lom:learningResourceType`'s first `lom:value` and first `lom:source` (the binding caps
+      // each at one, so a second is N7's), read as XML 1.0 reads its text through a comment, a
+      // CDATA section or a character reference, and no row for a term of another namespace.
+      // Bound: as `oracle.rv-m.test.ts`'s search, under each case's swarm; 150 cases.
+      searched(
+        ctx,
+        explore(
+          {
+            caseHang,
+            concurrency: 1,
+            coverage: required<"external" | "manifest" | "resource">(
+              ["external", "manifest", "resource"],
+              { cases: 100, sense: notesOnly },
+            ),
+            draw: drawn(resourceTypeSketches),
+            kept: [],
+            literal: Formatter.format,
+            oracle: { kind: "specification", name: "the package's sketch" },
+            runs: 150,
+            shrink: completeShrink,
+            steerEvery: 16,
+            suite: "import/overlays/metadata-learning-resource-types",
+          },
+          (sketch, c) =>
+            Effect.gen(function* resourceTypeRows() {
+              c.noteAll(sketch.records.map(({ placement }) => placement));
+
+              const files = resourceTypeFilesOf(sketch);
+              for (const [path, types] of typesByFile(sketch)) {
+                const file = files.find((entry) => entry.path === path);
+                assert.isDefined(file, path);
+                if (file === undefined) {
+                  return;
+                }
+
+                const xml = yield* Effect.orDie(readXml(file.bytes));
+                const tree = yield* Effect.orDie(shred(xml, "3.0.1", shredGrammar));
+                const ids = idsFor(1);
+                const rows = rowsOf(tree, ids);
+                const { nodes } = flatten(tree, ids.idOf);
+                const typeNodes = nodes.filter(({ kind }) => kind === "lom:learningResourceType");
+                const firstOf = (parent: string, kind: string) =>
+                  nodes.find((node) => node.parent === parent && node.kind === kind)?.id;
+
+                assert.lengthOf(typeNodes, types.length, path);
+                assert.strictEqual(
+                  rows.LomResourceType.size,
+                  types.filter(({ value }) => Option.isSome(value)).length,
+                  `${path}: one value row a type that holds a value`,
+                );
+                assert.strictEqual(
+                  rows.LomResourceTypeSource.size,
+                  types.filter(({ source }) => Option.isSome(source)).length,
+                  `${path}: one source row a type that writes a source`,
+                );
+                for (const [at, node] of typeNodes.entries()) {
+                  const type = types[at];
+                  assert.isDefined(type);
+                  if (type === undefined) {
+                    return;
+                  }
+
+                  const value = rows.LomResourceType.get(node.id);
+                  const source = rows.LomResourceTypeSource.get(node.id);
+                  assert.deepStrictEqual(
+                    Option.fromNullishOr(value).pipe(Option.map(({ text }) => text)),
+                    termText(type.value),
+                    `${path}: the value of type ${String(at)}`,
+                  );
+                  assert.deepStrictEqual(
+                    Option.fromNullishOr(source).pipe(Option.map(({ text }) => text)),
+                    termText(type.source),
+                    `${path}: the source of type ${String(at)}`,
+                  );
+                  assert.strictEqual(value?.term, value && firstOf(node.id, "lom:value"));
+                  assert.strictEqual(source?.term, source && firstOf(node.id, "lom:source"));
+                }
+              }
             }),
         ),
       ),

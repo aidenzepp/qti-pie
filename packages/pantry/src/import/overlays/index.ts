@@ -443,6 +443,14 @@ const mergedOf = (
       "LomResource",
       parts.map(({ LomResource: rows }) => rows),
     ),
+    LomResourceType: unionOf(
+      "LomResourceType",
+      parts.map(({ LomResourceType: rows }) => rows),
+    ),
+    LomResourceTypeSource: unionOf(
+      "LomResourceTypeSource",
+      parts.map(({ LomResourceTypeSource: rows }) => rows),
+    ),
     LomString: unionOf(
       "LomString",
       parts.map(({ LomString: rows }) => rows),
