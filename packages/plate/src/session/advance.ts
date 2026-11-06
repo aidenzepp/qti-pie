@@ -47,7 +47,9 @@ import type { Accepted, AcceptedTest } from "#plate/validate/verdict.ts";
  * - `skipping-not-allowed`: the item's `allow-skipping` is false and every response is NULL or its
  *   declared default.
  * - `responses-invalid`: the item's `validate-responses` is true and a response breaks a limit of its
- *   interaction; the refusal carries the messages.
+ *   interaction; or `score` refuses the responses of an item `submit-part` processes, which break a
+ *   limit the item sets whatever the configuration (tier (a)). The refusal carries the messages and
+ *   names the item they concern.
  */
 export type IntentRule =
   | "attempts-exhausted"
@@ -74,9 +76,11 @@ const requestOf = (intent: Intent): string =>
 /**
  * The failure of {@link advance} for an intent the test's rules forbid now.
  *
- * `rule` says which rule refuses it, and `sequenceIndex` names the current item, none once the
- * test has closed. `messages` holds what the item's interactions say about the responses for
- * `responses-invalid`, ready for `render`'s `messages` option, and is empty for every other rule.
+ * `rule` says which rule refuses it, and `sequenceIndex` names the item it concerns: the current
+ * item, except for a `submit-part` refused for another item's responses, where it is that item's;
+ * none once the test has closed. `messages` holds what the item's interactions say about the
+ * responses for `responses-invalid`, ready for `render`'s `messages` option with the instance of
+ * the item `sequenceIndex` names, and is empty for every other rule.
  * `refusal` is the move's or the submission's own refusal, with what it knows of the place, such as
  * the part's first and last items; it is none for the two refusals `advance` makes itself:
  * `test-closed`, and `end-part` in a linear, individual part. A refused intent changes nothing, the
@@ -115,13 +119,16 @@ export class IntentRefused extends Data.TaggedError("IntentRefused")<{
 /**
  * Why {@link advance} may fail.
  *
- * {@link IntentRefused} is the test's rules refusing the intent. `ResponsesRefused` and
- * `InvalidResponses` are `score` refusing the responses a submission processes, and
- * `EngineFailure` an item's processing failing. The rest pass through from the moves and the
- * submissions for what a host passes that does not fit: `InvalidTime` for an invalid `now`,
- * `ItemNotInSession` and `UnknownItemRef` for a session that is not the test's,
- * `TestNotDeliverable` for items that lack the one an intent reaches or hold another document's,
- * and `InvalidRecord` and `RecordMismatch` for an item record `score` cannot take.
+ * {@link IntentRefused} is the test's rules refusing the intent, a `submit-part` whose `score`
+ * refuses an item's responses among them (`responses-invalid`, naming the item).
+ * `ResponsesRefused` is `score` refusing the responses `submit-item`, or a `next` that submits
+ * first, processes on the current item; `InvalidResponses` is `score` refusing a response that does
+ * not fit its declaration; and `EngineFailure` is an item's processing failing. The rest pass
+ * through from the moves and the submissions for what a host passes that does not fit:
+ * `InvalidTime` for an invalid `now`, `ItemNotInSession` and `UnknownItemRef` for a session that is
+ * not the test's, `TestNotDeliverable` for items that lack the one an intent reaches or hold
+ * another document's, and `InvalidRecord` and `RecordMismatch` for an item record `score` cannot
+ * take.
  */
 export type AdvanceFailure =
   | EngineFailure

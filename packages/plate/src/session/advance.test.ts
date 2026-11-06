@@ -514,6 +514,46 @@ describe("advance", () => {
     }),
   );
 
+  it.effect(
+    "refuses a submit-part that score refuses on another item with responses-invalid, naming that item",
+    () =>
+      Effect.gen(function* refusedElsewhere() {
+        const given = yield* delivery({ navigation: "nonlinear", submission: "simultaneous" });
+        const configuration = yield* configure({});
+        const onTwo = accepted(
+          advance(
+            given.test,
+            given.items,
+            started(given, configuration),
+            { intent: { kind: "next" }, responses: { RESPONSE: chosen("Z") } },
+            configuration,
+            { now: after(1) },
+          ),
+        );
+        assert.strictEqual(onTwo.position, 1);
+        assert.include(allowedNow(given.test, onTwo), "submit-part");
+
+        const refusal = refused(
+          advance(
+            given.test,
+            given.items,
+            onTwo,
+            { intent: { kind: "submit-part" }, responses: answer },
+            configuration,
+            { now: after(2) },
+          ),
+        );
+        assert.strictEqual(refusal.rule, "responses-invalid");
+        assert.deepStrictEqual(refusal.intent, { kind: "submit-part" });
+        assert.deepStrictEqual(refusal.sequenceIndex, Option.some(1));
+        assert.instanceOf(Option.getOrUndefined(refusal.refusal), SubmissionRefused);
+        assert.deepStrictEqual(
+          refusal.messages.map((said) => said.response),
+          ["RESPONSE"],
+        );
+      }),
+  );
+
   it.effect("refuses every intent once the test has closed, which then lists none", () =>
     Effect.gen(function* closedTest() {
       const given = yield* delivery({ navigation: "nonlinear", submission: "individual" });

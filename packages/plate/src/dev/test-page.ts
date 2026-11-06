@@ -15,6 +15,12 @@
  * builds. The store holds each session only in its stored form, so every request decodes it
  * against its test, as a host that keeps sessions elsewhere would.
  *
+ * Submit part and End part are confirmed first: their post saves the responses with `go` to the
+ * current item, a save that stays, and sends the browser to `/sessions/<sid>/confirm`, which lists
+ * the part's unanswered and unsubmitted items with a Confirm button that posts the intent and a
+ * Return button back to the item. A confirmed part's end sends the browser to the next part's
+ * first item, whose Status says "Part submitted" and takes focus, or to the summary.
+ *
  * One URL per session: the browser's Back re-requests it and shows the item the stored session
  * makes current, so only the test's own Previous moves back. Every page carries the frame's
  * headers, which say `no-store`, and the form carries `autocomplete="off"`, so a browser restores
@@ -59,9 +65,11 @@ import type { Options } from "#plate/render.ts";
 import { checkResponses } from "#plate/responses.ts";
 import { advance } from "#plate/session/advance.ts";
 import type { AdvanceFailure, IntentRefused } from "#plate/session/advance.ts";
-import type { Responses, Step, TestSession } from "#plate/session/session.ts";
+import type { UnknownItemRef } from "#plate/session/control.ts";
+import { allowedIntents } from "#plate/session/intents.ts";
+import type { Intent, Responses, Step, TestSession } from "#plate/session/session.ts";
 import { current, startTest } from "#plate/session/start.ts";
-import type { ItemView } from "#plate/session/start.ts";
+import type { ItemNotInSession, ItemView } from "#plate/session/start.ts";
 import type { Accepted } from "#plate/validate/verdict.ts";
 
 /**
@@ -80,9 +88,10 @@ export interface SessionPlayground {
 
 /**
  * One request the session routes take: a package's Start post, by the package's id, or a session's
- * page, by its id; each id still percent-encoded.
+ * page or its confirm page, by the session's id; each id still percent-encoded.
  */
 type Target =
+  | { readonly id: string; readonly kind: "confirm" }
   | { readonly id: string; readonly kind: "session" }
   | { readonly id: string; readonly kind: "start" };
 
@@ -100,13 +109,20 @@ interface Sitting {
 
 /**
  * What one session page shows of its item besides the item: the state its title names, the Status
- * part's input when the page answers a refused post, and `render`'s view options.
+ * part's input when the page answers a refused post or follows a part's end, and `render`'s view
+ * options.
  */
 interface Shown {
   readonly options: Pick<Options, "messages" | "posted" | "values">;
-  readonly state: "answering" | "notAccepted";
+  readonly state: "answering" | "notAccepted" | "partSubmitted";
   readonly status: Option.Option<StatusInput>;
 }
+
+/**
+ * An intent that ends the current part: the session form's post of it saves and goes to the
+ * confirm page, and only the confirm page's Confirm carries it out.
+ */
+type PartIntent = Extract<Intent, { readonly kind: "end-part" | "submit-part" }>;
 
 /**
  * How one response travels through the session form: its identifier, its binding under the item
@@ -153,11 +169,18 @@ const titleId = "playground-title";
 const intentSegment = "intent";
 
 /**
+ * The query parameter, and its one value, by which the 303 after a confirmed part's end asks the
+ * session page for the Status that says the part is submitted.
+ */
+const notice = { name: "notice", partSubmitted: "part-submitted" } as const;
+
+/**
  * Read a request's path as a session route's target.
  *
  * @param pathname The request's path.
- * @returns `/packages/<id>/tests` as a Start post and `/sessions/<sid>` as a session's page, each
- *   with a non-empty id; none for any other path.
+ * @returns `/packages/<id>/tests` as a Start post, `/sessions/<sid>` as a session's page and
+ *   `/sessions/<sid>/confirm` as its confirm page, each with a non-empty id; none for any other
+ *   path.
  */
 const targetOf = (pathname: string): Option.Option<Target> => {
   const [root, base, id, view, ...rest] = pathname.split("/");
@@ -169,9 +192,15 @@ const targetOf = (pathname: string): Option.Option<Target> => {
     return Option.some({ id, kind: "start" });
   }
 
-  return base === "sessions" && view === undefined
-    ? Option.some({ id, kind: "session" })
-    : Option.none();
+  if (base !== "sessions") {
+    return Option.none();
+  }
+
+  if (view === undefined) {
+    return Option.some({ id, kind: "session" });
+  }
+
+  return view === "confirm" ? Option.some({ id, kind: "confirm" }) : Option.none();
 };
 
 /**
@@ -180,7 +209,8 @@ const targetOf = (pathname: string): Option.Option<Target> => {
  * 404, and a session's page, after the review routes, which own the paths below it.
  *
  * @param pathname The request's path.
- * @returns Whether the path is `/packages/<id>/tests` or `/sessions/<sid>`, whatever the ids hold.
+ * @returns Whether the path is `/packages/<id>/tests`, `/sessions/<sid>` or
+ *   `/sessions/<sid>/confirm`, whatever the ids hold.
  */
 export const sessionPath = (pathname: string): boolean => Option.isSome(targetOf(pathname));
 
@@ -193,14 +223,30 @@ export const sessionPath = (pathname: string): boolean => Option.isSome(targetOf
 const sessionHref = (id: string): string => `/sessions/${encodeURIComponent(id)}`;
 
 /**
- * Construct the 303 that sends a browser to a session's page after a post the page took, with the
- * page headers, so the page's address is the one the browser shows and re-requests.
+ * Give the path of a session's confirm page.
+ *
+ * @param id The session id.
+ * @returns `/sessions/<sid>/confirm`.
+ */
+const confirmHref = (id: string): string => `${sessionHref(id)}/confirm`;
+
+/**
+ * Construct the 303 that sends a browser to a page after a post the playground took, with the page
+ * headers, so the page's address is the one the browser shows and re-requests.
+ *
+ * @param location The page's path.
+ * @returns The redirect.
+ */
+const seeOther = (location: string): Response =>
+  new Response(null, { headers: { ...pageHeaders, location }, status: 303 });
+
+/**
+ * Construct the 303 that sends a browser to a session's page.
  *
  * @param id The session id.
  * @returns The redirect.
  */
-const seeSession = (id: string): Response =>
-  new Response(null, { headers: { ...pageHeaders, location: sessionHref(id) }, status: 303 });
+const seeSession = (id: string): Response => seeOther(sessionHref(id));
 
 /**
  * The links at the end of every session page.
@@ -247,6 +293,19 @@ const failurePage = (error: { readonly message: string }): Page =>
  */
 const notAForm = (): Page =>
   notePage(400, "Not a form post", "The post's body is not a form; post the page's own form.");
+
+/**
+ * Construct the page a post that carries no intent the session reads answers with.
+ *
+ * @param instance The session's instance, the store's id.
+ * @returns The 400 page.
+ */
+const noIntent = (instance: string): Page =>
+  notePage(
+    400,
+    "No intent",
+    `The post carries no intent the session reads under ${intentName(instance)}: none, more than one, or a value no button of the session's page posts. Post the page's form with one of its buttons.`,
+  );
 
 /**
  * Read a post's body as form entries.
@@ -632,23 +691,32 @@ const valuesOf = (post: Post): Responses =>
 /**
  * Compose the page of a post refused for its responses: the Status part headed "Not accepted"
  * with the messages, first in reading order and without `autofocus`, and the item with the
- * strings posted and its invalid Controls, the first of which takes the page's one `autofocus`
- * (spec §4.11, phase 3's `refusedPage`).
+ * strings posted, or its saved values when the refused post carried none, and its invalid
+ * Controls, the first of which takes the page's one `autofocus` (spec §4.11, phase 3's
+ * `refusedPage`).
  *
  * @param sitting The session and its test.
  * @param view The current item.
- * @param refused The post and the messages that refuse it.
+ * @param refused The post's strings and the messages that refuse it.
  * @param refused.messages The messages, each naming the response it concerns.
- * @param refused.post The post.
+ * @param refused.posted The strings posted for each response; none for a confirm page's post,
+ *   which carries no response.
  * @returns The page.
  */
 const refusedPage = (
   sitting: Sitting,
   view: ItemView,
-  refused: { readonly messages: readonly ValidationMessage[]; readonly post: Post },
+  refused: {
+    readonly messages: readonly ValidationMessage[];
+    readonly posted: Option.Option<Post["posted"]>;
+  },
 ): Page =>
   itemPage(sitting, view, {
-    options: { messages: refused.messages, posted: refused.post.posted, values: view.values },
+    options: {
+      messages: refused.messages,
+      values: view.values,
+      ...Option.match(refused.posted, { onNone: () => ({}), onSome: (posted) => ({ posted }) }),
+    },
     state: "notAccepted",
     status: Option.some({
       heading: "notAccepted",
@@ -661,7 +729,8 @@ const refusedPage = (
  * Give the words that say why an intent was refused, for a refusal that concerns no single
  * response: the locale's words for `skipping-not-allowed` and `end-of-part`, the two rules it
  * words, and the refusal's own message for the rest, which only a post of an intent the page's
- * buttons do not offer reaches.
+ * buttons do not offer reaches, or a confirmed part submission refused for an item the candidate
+ * cannot be taken back to, whose message names that item.
  *
  * @param configuration The configuration, which gives the locale.
  * @param refusal The refusal.
@@ -685,23 +754,28 @@ const refusalText = (configuration: Configuration, refusal: IntentRefused): stri
  *
  * A refused intent changes nothing, so the post's values are not saved; they stay in the item's
  * Controls, so the next post carries them again. A closed item posts nothing, so it shows the
- * values the session holds.
+ * values the session holds, as does a confirm page's post, which carries no response.
  *
  * @param sitting The session and its test.
  * @param view The current item.
  * @param refused The post and the refusal.
- * @param refused.post The post.
+ * @param refused.post The post; none for a confirm page's post.
  * @param refused.refusal The refusal.
  * @returns The page.
  */
 const intentRefusedPage = (
   sitting: Sitting,
   view: ItemView,
-  refused: { readonly post: Post; readonly refusal: IntentRefused },
+  refused: { readonly post: Option.Option<Post>; readonly refusal: IntentRefused },
 ): Page =>
   itemPage(sitting, view, {
     options: {
-      values: view.disabled ? view.values : { ...view.values, ...valuesOf(refused.post) },
+      values: view.disabled
+        ? view.values
+        : {
+            ...view.values,
+            ...Option.match(refused.post, { onNone: () => ({}), onSome: valuesOf }),
+          },
     },
     state: "notAccepted",
     status: Option.some({
@@ -729,28 +803,53 @@ const intentRefusedPage = (
  *
  * @param sitting The session and its test.
  * @param view The current item.
- * @param post The post.
+ * @param post The post; none for a confirm page's post.
  * @param failure What `advance`, or the store's encoding after it, failed with.
  * @returns The page.
  */
 const advanceRefused = (
   sitting: Sitting,
   view: ItemView,
-  post: Post,
+  post: Option.Option<Post>,
   failure: AdvanceFailure | InvalidSession,
 ): Page => {
+  const posted = post.pipe(Option.map((carried) => carried.posted));
   if (failure._tag === "ResponsesRefused") {
-    return refusedPage(sitting, view, { messages: failure.messages, post });
+    return refusedPage(sitting, view, { messages: failure.messages, posted });
   }
 
   if (failure._tag === "IntentRefused") {
     return failure.rule === "responses-invalid"
-      ? refusedPage(sitting, view, { messages: failure.messages, post })
+      ? refusedPage(sitting, view, { messages: failure.messages, posted })
       : intentRefusedPage(sitting, view, { post, refusal: failure });
   }
 
   return failurePage(failure);
 };
+
+/**
+ * Say whether an intent ends the current part.
+ *
+ * @param intent The intent.
+ * @returns Whether it is `submit-part` or `end-part`.
+ */
+const isPartIntent = (intent: Intent): intent is PartIntent =>
+  intent.kind === "end-part" || intent.kind === "submit-part";
+
+/**
+ * Give the intent that ends the current part, when the session takes one now: `submit-part` in a
+ * simultaneous part, `end-part` in a nonlinear, individual one, as `allowedIntents` lists them.
+ *
+ * @param sitting The session and its test.
+ * @returns The intent, or none when the session takes neither; a failure of `allowedIntents` for
+ *   a session that does not fit its test.
+ */
+const partIntentNow = (
+  sitting: Sitting,
+): Result.Result<Option.Option<PartIntent>, ItemNotInSession | UnknownItemRef> =>
+  Result.map(allowedIntents(sitting.test.test, sitting.session), (allowed) =>
+    Option.fromUndefinedOr(allowed.find(isPartIntent)),
+  );
 
 /**
  * Start a session from a package page's Start post: `startTest` with the playground's
@@ -821,11 +920,21 @@ const startSession = Effect.fn("playground.session.start")(function* startSessio
  * Answer a session's page: the current item while the test is open, the summary once it has
  * closed.
  *
+ * After a confirmed part's end, the item, the next part's first, comes with the Status part
+ * headed "Part submitted" with `autofocus`, the page's one: the form the browser posted named the
+ * Status region of an item of the part that ended, which this page does not hold, so the region's
+ * `autofocus` is what focuses it (spec §4.11).
+ *
  * @param playground The playground.
  * @param sitting The session and its test.
+ * @param partSubmitted Whether the request follows a confirmed part's end.
  * @returns The page.
  */
-const sessionPage = (playground: SessionPlayground, sitting: Sitting): Page => {
+const sessionPage = (
+  playground: SessionPlayground,
+  sitting: Sitting,
+  partSubmitted: boolean,
+): Page => {
   const shown = current(sitting.test.test, sitting.session, playground.configuration);
   if (Result.isFailure(shown)) {
     return failurePage(shown.failure);
@@ -841,8 +950,14 @@ const sessionPage = (playground: SessionPlayground, sitting: Sitting): Page => {
       )
     : itemPage(sitting, shown.success, {
         options: { values: shown.success.values },
-        state: "answering",
-        status: Option.none(),
+        state: partSubmitted ? "partSubmitted" : "answering",
+        status: partSubmitted
+          ? Option.some({
+              autofocus: true,
+              heading: "partSubmitted",
+              instance: shown.success.instance,
+            })
+          : Option.none(),
       });
 };
 
@@ -856,6 +971,11 @@ const sessionPage = (playground: SessionPlayground, sitting: Sitting): Page => {
  * closed item posts nothing, so its post carries no responses and the session keeps its own. A
  * post to a closed test goes back to the page, which shows the summary. A post that is not a form,
  * or carries no intent `decodeIntent` reads, is a 400.
+ *
+ * Submit part and End part, when the session takes them now, are not carried out here: the post's
+ * responses are saved with `go` to the current item, a save that stays, and the browser is sent to
+ * the confirm page, whose Confirm carries the intent out. Posted when the session does not take
+ * them, they go to `advance`, which refuses them on the item.
  *
  * @param playground The playground.
  * @param request The post.
@@ -886,11 +1006,7 @@ const postSession = Effect.fn("playground.session.post")(function* postSession(
 
   const intent = decodeIntent(entries.value, session.instance);
   if (Option.isNone(intent)) {
-    return notePage(
-      400,
-      "No intent",
-      `The post carries no intent the session reads under ${intentName(session.instance)}: none, more than one, or a value no button of the session's page posts. Post the page's form with one of its buttons.`,
-    );
+    return noIntent(session.instance);
   }
 
   const document = itemOf(sitting, view.ref);
@@ -904,12 +1020,23 @@ const postSession = Effect.fn("playground.session.post")(function* postSession(
       (said) => post.malformed.has(said.response),
     );
 
-    return refusedPage(sitting, view, { messages, post });
+    return refusedPage(sitting, view, { messages, posted: Option.some(post.posted) });
   }
 
+  const ending = isPartIntent(intent.value)
+    ? partIntentNow(sitting)
+    : Result.succeed(Option.none());
+  if (Result.isFailure(ending)) {
+    return failurePage(ending.failure);
+  }
+
+  const confirming = Option.exists(ending.success, (offered) => offered.kind === intent.value.kind);
+  const carried: Intent = confirming
+    ? { kind: "go", sequenceIndex: view.sequenceIndex }
+    : intent.value;
   const step: Step = view.disabled
-    ? { intent: intent.value }
-    : { intent: intent.value, responses: valuesOf(post) };
+    ? { intent: carried }
+    : { intent: carried, responses: valuesOf(post) };
   const now = DateTime.toDateUtc(yield* DateTime.now);
 
   return Result.match(
@@ -918,21 +1045,287 @@ const postSession = Effect.fn("playground.session.post")(function* postSession(
       encodeSession,
     ),
     {
-      onFailure: (failure) => advanceRefused(sitting, view, post, failure),
+      onFailure: (failure) => advanceRefused(sitting, view, Option.some(post), failure),
       onSuccess: (stored): Page | Response => {
         playground.sessions.set(sitting.id, { ...sitting.entry, session: stored });
 
-        return seeSession(sitting.id);
+        return confirming ? seeOther(confirmHref(sitting.id)) : seeSession(sitting.id);
       },
     },
   );
 });
 
 /**
+ * Compose a confirm page: its title as its heading, the part's unanswered and unsubmitted items,
+ * each as `Item n` with its state in words, then a form whose Confirm posts the intent and whose
+ * Return posts `go` to the current item, which the confirm route answers by sending the browser
+ * back to the session's page.
+ *
+ * The form posts to the confirm page with the same fragment as the session form, the Status
+ * region of the current item, which a refused Confirm's page holds; it is named by the heading.
+ * Every item of the part that is neither submitted nor closed is listed: in a part that submits
+ * its items together that is every open one, and in a part that submits each on its own an item
+ * the part's end leaves unscored. The list is left out when there is none.
+ *
+ * @param sitting The session and its test.
+ * @param view The current item.
+ * @param state The navigation, whose items give each item's state.
+ * @param intent The intent the page confirms.
+ * @returns The page.
+ */
+const confirmationPage = (
+  sitting: Sitting,
+  view: ItemView,
+  state: NavigationState,
+  intent: PartIntent,
+): Page => {
+  const { locale } = view.configuration;
+  const title = message(locale, "confirmTitle", {
+    intent: message(locale, intent.kind === "submit-part" ? "submitPart" : "endPart"),
+    test: sitting.test.test.test.title.trim(),
+  });
+  const pending = state.items.filter(
+    (item) => item.state === "answered" || item.state === "not-answered",
+  );
+  const button = (posted: Intent, label: "confirm" | "return"): Element =>
+    h(
+      "button",
+      { name: intentName(sitting.session.instance), type: "submit", value: encodeIntent(posted) },
+      [text(message(locale, label))],
+    );
+
+  return page(200, locale, title, [
+    h("h1", { id: titleId }, [text(title)]),
+    ...(pending.length === 0
+      ? []
+      : [
+          h("h2", {}, [text(message(locale, "confirmList"))]),
+          h(
+            "ul",
+            {},
+            pending.map((item) =>
+              h("li", {}, [
+                text(
+                  message(locale, "itemState", {
+                    item: message(locale, "item", { n: numeral(locale, item.sequenceIndex) }),
+                    state: message(
+                      locale,
+                      item.state === "answered" ? "itemAnswered" : "itemNotAnswered",
+                    ),
+                  }),
+                ),
+              ]),
+            ),
+          ),
+        ]),
+    h(
+      "form",
+      {
+        action: `${confirmHref(sitting.id)}#${scopedId(view.instance, "status")}`,
+        "aria-labelledby": titleId,
+        autocomplete: "off",
+        method: "post",
+        novalidate: true,
+      },
+      [
+        button(intent, "confirm"),
+        button({ kind: "go", sequenceIndex: view.sequenceIndex }, "return"),
+      ],
+    ),
+    home,
+  ]);
+};
+
+/**
+ * Answer a session's confirm page: the page for the intent that ends the current part, while the
+ * session takes one; otherwise, a closed test included, a 303 to the session's page.
+ *
+ * @param playground The playground.
+ * @param sitting The session and its test.
+ * @returns The page, or the redirect.
+ */
+const confirmPage = (playground: SessionPlayground, sitting: Sitting): Page | Response => {
+  const shown = current(sitting.test.test, sitting.session, playground.configuration);
+  if (Result.isFailure(shown)) {
+    return failurePage(shown.failure);
+  }
+
+  const view = shown.success;
+  if (view.kind === "summary") {
+    return seeSession(sitting.id);
+  }
+
+  return Result.match(navigationState(sitting.test.test, sitting.session), {
+    onFailure: failurePage,
+    onSuccess: (state) =>
+      Option.match(Option.fromUndefinedOr(state.allowed.find(isPartIntent)), {
+        onNone: () => seeSession(sitting.id),
+        onSome: (intent) => confirmationPage(sitting, view, state, intent),
+      }),
+  });
+};
+
+/**
+ * Answer a confirmed part submission that `score` refused for another item's responses: take the
+ * candidate to that item, so the page marks its responses and its form posts them, and answer
+ * with its refused page. The move is an intent of its own, `go` to the item, stored as any
+ * accepted move is; the refused submission changed nothing.
+ *
+ * Where the part does not take that move, as in a linear part, the refusal is answered on the
+ * current item with its message, which names the item, and no Control of the current item is
+ * marked.
+ *
+ * @param playground The playground.
+ * @param sitting The session and its test.
+ * @param view The current item.
+ * @param refusal The refusal, `responses-invalid` naming another item.
+ * @param target The sequence index of the item it names.
+ * @param now The time of the move.
+ * @returns The page.
+ */
+const refusedElsewhere = (
+  playground: SessionPlayground,
+  sitting: Sitting,
+  view: ItemView,
+  refusal: IntentRefused,
+  target: number,
+  now: Date,
+): Page => {
+  const onCurrent = (): Page => intentRefusedPage(sitting, view, { post: Option.none(), refusal });
+
+  return Result.match(
+    Result.gen(function* moveToRefused() {
+      const moved = yield* advance(
+        sitting.test.test,
+        sitting.test.items,
+        sitting.session,
+        { intent: { kind: "go", sequenceIndex: target } },
+        playground.configuration,
+        { now },
+      );
+      const stored = yield* encodeSession(moved);
+      const shown = yield* current(sitting.test.test, moved, playground.configuration);
+
+      return { moved, shown, stored };
+    }),
+    {
+      onFailure: onCurrent,
+      onSuccess: ({ moved, shown, stored }) => {
+        // A move keeps the test open, so the summary is never current after one.
+        if (shown.kind === "summary") {
+          return onCurrent();
+        }
+
+        playground.sessions.set(sitting.id, { ...sitting.entry, session: stored });
+
+        return refusedPage({ ...sitting, session: moved }, shown, {
+          messages: refusal.messages,
+          posted: Option.none(),
+        });
+      },
+    },
+  );
+};
+
+/**
+ * Carry out a confirm page's post: Confirm, which posts the intent that ends the current part,
+ * goes to `advance`, and its success is stored and answered with a 303 to the session's page,
+ * asking for the "Part submitted" Status unless the test has closed; Return, and any other intent,
+ * sends the browser back to the session's page and changes nothing.
+ *
+ * The responses were saved before the confirm page, so the post carries none. A refusal is
+ * answered on the current item as the session form's is, except that a `submit-part` refused for
+ * another item's responses is answered on that item ({@link refusedElsewhere}). A post that is not
+ * a form, or carries no intent `decodeIntent` reads, is a 400; a post to a closed test goes back to
+ * the session's page.
+ *
+ * @param playground The playground.
+ * @param request The post.
+ * @param sitting The session and its test.
+ * @returns The redirect, or the page that answers instead.
+ */
+const confirmPost = Effect.fn("playground.session.confirm")(function* confirmPost(
+  playground: SessionPlayground,
+  request: Request,
+  sitting: Sitting,
+): Effect.fn.Return<Page | Response> {
+  const { configuration } = playground;
+  const { session, test } = sitting;
+  const shown = current(test.test, session, configuration);
+  if (Result.isFailure(shown)) {
+    return failurePage(shown.failure);
+  }
+
+  const view = shown.success;
+  if (view.kind === "summary") {
+    return seeSession(sitting.id);
+  }
+
+  const entries = yield* entriesOf(request);
+  if (Option.isNone(entries)) {
+    return notAForm();
+  }
+
+  const intent = decodeIntent(entries.value, session.instance);
+  if (Option.isNone(intent)) {
+    return noIntent(session.instance);
+  }
+
+  const ending = partIntentNow(sitting);
+  if (Result.isFailure(ending)) {
+    return failurePage(ending.failure);
+  }
+
+  if (
+    !Option.exists(
+      ending.success,
+      (offered) => encodeIntent(offered) === encodeIntent(intent.value),
+    )
+  ) {
+    return seeSession(sitting.id);
+  }
+
+  const now = DateTime.toDateUtc(yield* DateTime.now);
+  const advanced = advance(
+    test.test,
+    test.items,
+    session,
+    { intent: intent.value },
+    configuration,
+    {
+      now,
+    },
+  );
+  if (Result.isFailure(advanced)) {
+    const { failure } = advanced;
+    const elsewhere =
+      failure._tag === "IntentRefused" && failure.rule === "responses-invalid"
+        ? failure.sequenceIndex.pipe(Option.filter((index) => index !== view.sequenceIndex))
+        : Option.none();
+
+    return failure._tag === "IntentRefused" && Option.isSome(elsewhere)
+      ? refusedElsewhere(playground, sitting, view, failure, elsewhere.value, now)
+      : advanceRefused(sitting, view, Option.none(), failure);
+  }
+
+  const stored = encodeSession(advanced.success);
+  if (Result.isFailure(stored)) {
+    return failurePage(stored.failure);
+  }
+
+  playground.sessions.set(sitting.id, { ...sitting.entry, session: stored.success });
+
+  return advanced.success.status === "closed"
+    ? seeSession(sitting.id)
+    : seeOther(`${sessionHref(sitting.id)}?${notice.name}=${notice.partSubmitted}`);
+});
+
+/**
  * Route one request for the playground's test sessions: `POST /packages/<id>/tests`, which starts
- * a session of the test a Start button names, and `GET` and `POST /sessions/<sid>`, a session's
- * page and its form's posts. Another method there is a 405; any other path, an unknown package or
- * session, and an id that does not decode are 404s.
+ * a session of the test a Start button names; `GET` and `POST /sessions/<sid>`, a session's page
+ * and its form's posts; and `GET` and `POST /sessions/<sid>/confirm`, the confirm page before a
+ * part's end and its Confirm and Return. Another method there is a 405; any other path, an unknown
+ * package or session, and an id that does not decode are 404s.
  *
  * @example
  *   const outcome = await Effect.runPromise(
@@ -969,14 +1362,29 @@ export const routeSessions = (
     return startSession(playground, request, id);
   }
 
+  const answer = (found: Sitting): Effect.Effect<Page | Response> => {
+    if (kind === "confirm") {
+      return request.method === "GET"
+        ? Effect.succeed(confirmPage(playground, found))
+        : confirmPost(playground, request, found);
+    }
+
+    return request.method === "GET"
+      ? Effect.succeed(
+          sessionPage(
+            playground,
+            found,
+            url.searchParams.get(notice.name) === notice.partSubmitted,
+          ),
+        )
+      : postSession(playground, request, found);
+  };
+
   return sittingOf(playground, id).pipe(
     Effect.flatMap((sitting) =>
       Result.match(sitting, {
         onFailure: (answered) => Effect.succeed<Page | Response>(answered),
-        onSuccess: (found) =>
-          request.method === "GET"
-            ? Effect.succeed<Page | Response>(sessionPage(playground, found))
-            : postSession(playground, request, found),
+        onSuccess: answer,
       }),
     ),
     Effect.withSpan("playground.session.page"),
