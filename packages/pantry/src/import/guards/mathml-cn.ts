@@ -15,7 +15,8 @@
  *   `real` (`c4#contm.cn.extended`: "If the type attribute is omitted, it defaults to real").
  * - `double`: the `xs:double` lexical space, which the Recommendation points to (XML Schema Part 2,
  *   3.2.5.1): a decimal with an optional exponent, `INF`, `-INF`, `+INF` or `NaN`.
- * - `hexdouble`: sixteen digits of `0-9` and `A-F` (`c4#contm.cn.strict`). The Recommendation's own
+ * - `hexdouble`: sixteen hex digits, `0-9` and `A-F` in either case (`c4#contm.cn.strict`; operator
+ *   ruling 346e70e2: the definition names digit values, not a spelling). The Recommendation's own
  *   example holds eight digits (`7F800000`), against its text; the text is the rule here.
  * - `e-notation`: two parts, a real significand and an integer exponent (`c4#contm.cn.extended`).
  * - `rational`: two integers, numerator and denominator.
@@ -83,9 +84,10 @@ const defaultBase = 10n;
 const doubleForm = /^(?:[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[Ee][+-]?[0-9]+)?|[+-]?INF|NaN)$/u;
 
 /**
- * The lexical space of `hexdouble`: sixteen digits of `0-9` and `A-F`.
+ * The lexical space of `hexdouble`: sixteen hex digits, `0-9` and `a-f` or `A-F` in either case
+ * (operator ruling 346e70e2). The guard only judges, so the source spelling is kept.
  */
-const hexdoubleForm = /^[0-9A-F]{16}$/u;
+const hexdoubleForm = /^[0-9A-Fa-f]{16}$/u;
 
 /**
  * Collapse a part's whitespace as the token rule states.

@@ -199,14 +199,13 @@ describe("cnFinding", () => {
     );
   });
 
-  it("holds a hexdouble to sixteen digits of 0-9 and A-F (c4#contm.cn.strict)", () => {
+  it("holds a hexdouble to sixteen hex digits in either case (c4#contm.cn.strict, operator ruling 346e70e2)", () => {
     assert.strictEqual(verdict({ type: "hexdouble" }, text("7F80000000000000")), "passes");
     assert.strictEqual(verdict({ type: "hexdouble" }, text("0123456789ABCDEF")), "passes");
     assert.strictEqual(verdict({ type: "hexdouble" }, text("7F800000")), "attribute-lexical");
-    assert.strictEqual(
-      verdict({ type: "hexdouble" }, text("7f80000000000000")),
-      "attribute-lexical",
-    );
+    assert.strictEqual(verdict({ type: "hexdouble" }, text("7ff8000000000000")), "passes");
+    assert.strictEqual(verdict({ type: "hexdouble" }, text("7Ff8000000000000")), "passes");
+    assert.strictEqual(verdict({ type: "hexdouble" }, text("7f800000")), "attribute-lexical");
     assert.strictEqual(
       verdict({ type: "hexdouble" }, text("7G80000000000000")),
       "attribute-lexical",
