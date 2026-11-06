@@ -1284,6 +1284,17 @@ const followed: ReadonlyMap<string, ReadonlySet<string>> = (() => {
 })();
 
 /**
+ * Add a kind to the kinds at a key.
+ *
+ * @param kinds - The kinds by key, added to.
+ * @param at - The key.
+ * @param kind - The kind.
+ */
+const addKind = (kinds: Map<string, Set<string>>, at: string, kind: string): void => {
+  kinds.set(at, new Set([...(kinds.get(at) ?? []), kind]));
+};
+
+/**
  * The kinds one position names, read from `Admission`'s rows directly, keyed `version parent
  * position`, and the kinds several name, from `Symbol`'s, keyed `shared-model position`.
  */
@@ -1291,17 +1302,14 @@ const positionKinds: {
   readonly admitted: ReadonlyMap<string, ReadonlySet<string>>;
   readonly shared: ReadonlyMap<string, ReadonlySet<string>>;
 } = (() => {
-  const add = (kinds: Map<string, Set<string>>, at: string, kind: string): void => {
-    kinds.set(at, new Set([...(kinds.get(at) ?? []), kind]));
-  };
   const admitted = new Map<string, Set<string>>();
   for (const { child, parent, position, version } of grammar.admission.rows) {
-    add(admitted, `${version} ${parent} ${position}`, child);
+    addKind(admitted, `${version} ${parent} ${position}`, child);
   }
 
   const shared = new Map<string, Set<string>>();
   for (const { kind, model, position } of grammar.content.symbol.rows) {
-    add(shared, `${model} ${position}`, kind);
+    addKind(shared, `${model} ${position}`, kind);
   }
 
   return { admitted, shared };

@@ -20,7 +20,7 @@ import { readXml } from "@qti-pie/crust/read.ts";
 import { openDomain } from "#pantry/grammar/attributes.ts";
 import { patternFlags } from "#pantry/grammar/domains.ts";
 import { openClasses, schemaVersions } from "#pantry/grammar/kinds.ts";
-import { AttributeGrammar, GoverningOf, grammar, ValueDomainOf } from "#pantry/grammar/install.ts";
+import { attributeRows, GoverningOf, grammar, ValueDomainOf } from "#pantry/grammar/install.ts";
 import { foldGrammarOf, shredGrammarOf } from "#pantry/model/composed.ts";
 import { fold } from "#pantry/model/folds.ts";
 import type { FoldedRows } from "#pantry/model/folds.ts";
@@ -72,7 +72,7 @@ const governing: ReadonlyMap<string, string> = new Map(
  * The installed `AttributeGrammar`'s slots, keyed `version governor name` by its rows.
  */
 const slots: ReadonlyMap<string, number> = new Map(
-  AttributeGrammar.rows.map(({ governor, name, position, version }) => [
+  attributeRows.map(({ governor, name, position, version }) => [
     `${version} ${governor} ${name}`,
     Number(position),
   ]),
@@ -230,10 +230,7 @@ describe("qti/attributes.ts, the host's view", { timeout: searchTimeout }, () =>
  * `AttributeGrammar`'s rows.
  */
 const alphabet = (() => {
-  const families = Map.groupBy(
-    AttributeGrammar.rows,
-    ({ governor, version }) => `${version} ${governor}`,
-  );
+  const families = Map.groupBy(attributeRows, ({ governor, version }) => `${version} ${governor}`);
   for (const rows of families.values()) {
     const closed = rows.filter(({ name }) => !isOpen(name)).slice(0, 2);
     const open = rows.filter(({ name }) => isOpen(name)).slice(0, 2);
@@ -347,7 +344,7 @@ describe("qti/attributes.ts, AL2's distinctness", () => {
  * Every (version, governor) that admits `coords`, with its domain's pattern as `ValueDomainOf`
  * installs it, read as a JavaScript host reads it (`patternFlags`).
  */
-const coordsDomains = AttributeGrammar.rows
+const coordsDomains = attributeRows
   .filter(({ name }) => name === "coords")
   .map(({ domain, governor, version }) => ({
     governor,
@@ -484,7 +481,7 @@ describe("qti/attributes.ts, XLink's globals (C30)", () => {
     // wildcard) judges nothing.
     // Bound: the 27 values of `xlinkValues` for each of the 10 names on every (version, governor)
     // that admits it, exhausted.
-    const admitted = AttributeGrammar.rows.filter(({ name }) => name.startsWith("xlink:"));
+    const admitted = attributeRows.filter(({ name }) => name.startsWith("xlink:"));
     const judged = new Set<string>();
     for (const { domain, governor, name, version } of admitted) {
       const local = name.slice("xlink:".length);
@@ -515,7 +512,7 @@ describe("qti/attributes.ts, a rubric block's view (spec reading 17)", () => {
     // Bound: 9 forms on every (version, governor) that admits view, exhausted.
     const views = ["author", "candidate", "proctor", "scorer", "testConstructor", "tutor"];
     const forms = ["", "  ", "candidate", " candidate  tutor ", "student", "Candidate"];
-    const rows = AttributeGrammar.rows.filter(({ name }) => name === "view");
+    const rows = attributeRows.filter(({ name }) => name === "view");
     const governors = new Set(rows.map(({ governor }) => governor));
 
     assert.includeMembers([...governors], ["qti-rubric-block", "qti-rubric-block.test"]);

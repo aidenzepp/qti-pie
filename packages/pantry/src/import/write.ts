@@ -29,7 +29,7 @@ import type { Addition, Uuid } from "@bjornpagen/grizzle";
 import { Array as Arr, Option, Order } from "effect";
 import { contentStep } from "#pantry/grammar/content.ts";
 import {
-  AttributeGrammar,
+  attributeRows,
   AttributeSlot,
   Enters,
   Flag,
@@ -111,7 +111,7 @@ import {
   Mapping,
   MatchTable,
 } from "#pantry/qti/mapping.ts";
-import { copiedTextKinds, Node, universalDomains } from "#pantry/qti/node.ts";
+import { copiedTextKinds, copiedUnder, Node, universalDomains } from "#pantry/qti/node.ts";
 import { Rounding, Tolerance } from "#pantry/qti/operators.ts";
 import {
   Dependency,
@@ -194,6 +194,8 @@ import {
   LomObjectTitle,
   LomRecord,
   LomResource,
+  LomResourceType,
+  LomResourceTypeSource,
   LomString,
   LomStringLanguage,
   LomTitle,
@@ -499,10 +501,11 @@ const textDomainAt: ReadonlyMap<string, string> = new Map(
 );
 
 /**
- * The installed `AttributeGrammar`, by `version governor name`.
+ * The attribute grammar `AttributeGrammar` and `AttributeSlotOf` install, by `version governor
+ * name`.
  */
 const attributeGrammarAt = new Map(
-  AttributeGrammar.rows.map((row) => [keyOf(row.version, row.governor, row.name), row] as const),
+  attributeRows.map((row) => [keyOf(row.version, row.governor, row.name), row] as const),
 );
 
 /**
@@ -733,6 +736,11 @@ interface Written {
   readonly nearest: NodeId;
   readonly nearestKind: KindHandle;
   /**
+   * Its parent's kind, `document` for the document node, which its members read as their
+   * grandparent's (`copiedUnder`).
+   */
+  readonly parentKind: string;
+  /**
    * The state of the member written last, 0 before the first.
    */
   was: number;
@@ -854,7 +862,10 @@ const memberOf = (
   const parentKind = parent.kind as KindHandle;
   const nearest = fromInteraction ? parent.id : parent.nearest;
   const nearestKind = fromInteraction ? parentKind : parent.nearestKind;
-  const inStringValue = checksText(version, parent.kind, parent.governs) || copied.has(parent.kind);
+  const inStringValue =
+    checksText(version, parent.kind, parent.governs) ||
+    copied.has(parent.kind) ||
+    copiedUnder(parent.kind, parent.parentKind);
   const ends = endsOf(own.chars);
   const children: NodeMember[] = [];
   const member: NodeMember = {
@@ -894,6 +905,7 @@ const memberOf = (
       namespace: own.namespace,
       nearest,
       nearestKind,
+      parentKind: parent.kind,
       was: 0,
     },
   };
@@ -978,6 +990,7 @@ export const rootInsertOf = (
     namespace: "",
     nearest: context.nearest,
     nearestKind: context.nearestKind,
+    parentKind: "document",
     was: 0,
   });
 
@@ -1219,6 +1232,8 @@ export const changeSetOf = (author: typeof Author, inputs: PackageInputs) =>
     .insert(LomObjectTitle, [...inputs.LomObjectTitle.values()])
     .insert(LomRecord, [...inputs.LomRecord.values()])
     .insert(LomResource, [...inputs.LomResource.values()])
+    .insert(LomResourceType, [...inputs.LomResourceType.values()])
+    .insert(LomResourceTypeSource, [...inputs.LomResourceTypeSource.values()])
     .insert(LomString, [...inputs.LomString.values()])
     .insert(LomStringLanguage, [...inputs.LomStringLanguage.values()])
     .insert(LomTitle, [...inputs.LomTitle.values()])

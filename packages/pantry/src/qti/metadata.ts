@@ -1,9 +1,9 @@
 /**
  * The metadata overlays (plan §1.7 O6; the W5 amendment's C2, C3, C17 and C18; the tier-1
- * addendum's G-concat, G-parse and "Text in keys"; UP's port audit, B33 and B34): the LOM records a
- * package's elements carry, the identifier, title and language of each assessment item and test,
- * and the day each usage statistic was last updated, with the three laws that read them across
- * rows.
+ * addendum's G-concat, G-parse and "Text in keys"; UP's port audit, B33 and B34; RV's B4): the LOM
+ * records a package's elements carry, the identifier, title and language of each assessment item
+ * and test, each LOM learning resource type's value and source, and the day each usage statistic
+ * was last updated, with the laws that read them across rows.
  *
  * A record names its document when it is a `lom:lom` child of the `cp:metadata` of a resource of
  * type `imsqti_item_xmlv3p0` or `imsqti_test_xmlv3p0` that has an `href` (reading 93): its
@@ -27,6 +27,16 @@
  *   with no `language`, or any string where the root states no `xml:lang`. An empty `xml:lang`, or
  *   one of whitespace alone, states none ("the absence of language information", XML 1.0 §2.12),
  *   and an empty `language` is read alike.
+ * - **`lom-learning-resource-type`** (law "LOM learning resource type", spec reading 122, §2.7.5.1:
+ *   "QTI objects are designed to be reusable in a variety of assessment scenarios. Therefore, the
+ *   LOM-defined values self assessment and exam are forbidden"): a `learningResourceType` of the
+ *   LOM vocabulary holds neither, compared collapsed. Its term is the LOM vocabulary's when its
+ *   `source` collapses to `LOMv1.0`, or to the empty source the binding's `default="LOMv1.0"`
+ *   fills, or when it writes no `source` (`imsmd_loose_v1p3p2.xsd` line 1288); a term of any other
+ *   source is another vocabulary's, which the binding does not enforce (§3.6), and is not refused
+ *   (reading 1). So the law is an existential, as `lom-identifier`'s is: a forbidden value's type
+ *   has a source of another vocabulary ({@link LomResourceTypeSource}), and a type that writes no
+ *   source has no row there to name.
  * - **`calendar`** (G-parse): every `lastUpdated` of a usage statistic, a `DateDType`, is a day of
  *   the Gregorian calendar, its value the typed `date` PostgreSQL derives from it
  *   ({@link StatisticDate}).
@@ -505,6 +515,51 @@ export const UsageValue = relation(
 );
 
 /**
+ * The LOM vocabulary's source: the `source` the loose binding writes for a vocabulary term that
+ * writes none, `default="LOMv1.0"` (`imsmd_loose_v1p3p2.xsd` line 1288,
+ * `LearningResourceType.Type`).
+ */
+export const lomVocabulary = "LOMv1.0";
+
+/**
+ * The sources, collapsed, under which a learning resource type is a term of the LOM vocabulary
+ * (spec reading 122): `LOMv1.0`, and the empty source the binding's default fills. A source of
+ * whitespace alone collapses to the empty one.
+ */
+export const lomVocabularySources = ["", lomVocabulary] as const;
+
+/**
+ * The learning resource types QTI 3.0 Metadata forbids of the LOM vocabulary (§2.7.5.1: "the
+ * LOM-defined values self assessment and exam are forbidden"), as their values collapse.
+ */
+export const forbiddenResourceTypes = ["exam", "self assessment"] as const;
+
+/**
+ * A LOM learning resource type's value, keyed by its `lom:learningResourceType` node: `term`, the
+ * `lom:value` it holds, and `text`, that value's string value, `Node.stringValue` folded by
+ * `copiedVocabularyText` (`#pantry/qti/node.ts`). A learning resource type that holds no value has
+ * no row. The binding's Schematron caps its values at one (`imsmd_loose_v1p3p2.xsd` line 533, N7,
+ * spec reading 130), so a row for each is a row for the type.
+ */
+export const LomResourceType = relation(
+  "LomResourceType",
+  { node: uuid, term: uuid, text: keyText },
+  ["node"],
+);
+
+/**
+ * A LOM learning resource type's source, keyed by its `lom:learningResourceType` node: `term`, the
+ * `lom:source` it holds, and `text`, that source's string value, folded as the value's is. A
+ * learning resource type that writes no source has no row; the Schematron caps its sources at one
+ * (line 529).
+ */
+export const LomResourceTypeSource = relation(
+  "LomResourceTypeSource",
+  { node: uuid, term: uuid, text: keyText },
+  ["node"],
+);
+
+/**
  * The relations this module declares, by name, as `schema.ts` composes them.
  */
 export const metadataRelations = {
@@ -516,6 +571,8 @@ export const metadataRelations = {
   LomObjectTitle,
   LomRecord,
   LomResource,
+  LomResourceType,
+  LomResourceTypeSource,
   LomString,
   LomStringLanguage,
   LomTitle,
@@ -556,6 +613,38 @@ const stringNodes = select(Node, (n) => n.eq(n.kind, "lom:string"));
  */
 const titleStringNodes = select(Node, (n) =>
   n.and(n.eq(n.kind, "lom:string"), n.eq(n.parentKind, "lom:title")),
+);
+
+/**
+ * The `lom:value` nodes of the learning resource types: each has its {@link LomResourceType},
+ * carrying its string value.
+ */
+const resourceTypeValues = select(Node, (n) =>
+  n.and(n.eq(n.kind, "lom:value"), n.eq(n.parentKind, "lom:learningResourceType")),
+);
+
+/**
+ * The `lom:source` nodes of the learning resource types: each has its
+ * {@link LomResourceTypeSource}, carrying its string value.
+ */
+const resourceTypeSources = select(Node, (n) =>
+  n.and(n.eq(n.kind, "lom:source"), n.eq(n.parentKind, "lom:learningResourceType")),
+);
+
+/**
+ * The learning resource types whose value, collapsed, QTI 3.0 Metadata §2.7.5.1 forbids of the LOM
+ * vocabulary: each needs a source of another vocabulary.
+ */
+const forbiddenResourceTypeValues = select(LomResourceType, (t) =>
+  t.in(Compute.collapse(t.text), forbiddenResourceTypes),
+);
+
+/**
+ * The sources that name another vocabulary than the LOM's: each collapses to neither `LOMv1.0` nor
+ * the empty source the binding's default fills.
+ */
+const otherVocabularySources = select(LomResourceTypeSource, (s) =>
+  s.not(s.in(Compute.collapse(s.text), lomVocabularySources)),
 );
 
 /**
@@ -666,6 +755,12 @@ const usageBaseTypes = attributesOf("baseType", [usageValueKind]);
  * - **`lom-title`:** a title of a naming record makes its record's {@link LomObjectTitle} exist,
  *   whose document, title value and language tag are its record's object's, and whose string is a
  *   title string of the record with that value, in the document's language ("LomObjectTitle").
+ * - **the learning resource types:** each `lom:value` and each `lom:source` of a
+ *   `lom:learningResourceType` is copied, with its string value, into its type's
+ *   {@link LomResourceType} or {@link LomResourceTypeSource}, and every such row names one, by a
+ *   key over its `term`, so no row stands for a term the type does not hold ("E1 derived").
+ * - **`lom-learning-resource-type`:** a type whose value collapses to `exam` or `self assessment` has
+ *   a source that names another vocabulary ("LOM learning resource type").
  * - **`calendar`:** each statistic's `lastUpdated` is copied into its {@link StatisticDate}, and
  *   every such row has its attribute; its pieces concatenate to the lexical form, and `day`'s type
  *   is the calendar's.
@@ -894,6 +989,22 @@ export const metadataLaws = [
   check("LomObjectTitle", LomObjectTitle, (l) =>
     l.or(l.eq(l.objectLang, ""), l.eq(l.stringLanguage, ""), l.eq(l.stringLanguage, l.objectLang)),
   ),
+
+  key(on(resourceTypeValues, "id")),
+  contained(
+    on(resourceTypeValues, "id", "parent", "stringValue"),
+    on(LomResourceType, "term", "node", "text"),
+  ),
+  contained(on(LomResourceType, "term"), on(resourceTypeValues, "id")),
+  key(on(LomResourceType, "term")),
+  key(on(resourceTypeSources, "id")),
+  contained(
+    on(resourceTypeSources, "id", "parent", "stringValue"),
+    on(LomResourceTypeSource, "term", "node", "text"),
+  ),
+  contained(on(LomResourceTypeSource, "term"), on(resourceTypeSources, "id")),
+  key(on(LomResourceTypeSource, "term")),
+  contained(on(forbiddenResourceTypeValues, "node"), on(otherVocabularySources, "node")),
 
   key(on(lastUpdateds, "node")),
   contained(on(lastUpdateds, "node", "lexical"), on(StatisticDate, "node", "lexical")),

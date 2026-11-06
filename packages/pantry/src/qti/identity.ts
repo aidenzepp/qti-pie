@@ -116,7 +116,9 @@ import {
 import type { RowScalars } from "@bjornpagen/grizzle";
 import {
   AttributeGrammar,
+  AttributeModelOf,
   AttributeName,
+  AttributeSlotOf,
   GoverningOf,
   NodeKind,
   ResourceType,
@@ -618,16 +620,18 @@ type AttributeRow = RowScalars<typeof Attribute>;
  * @param a - The row.
  * @returns The closed read.
  */
-const identityOf = (a: AttributeRow) =>
-  ValueIdentity.at(
-    "identity",
-    AttributeGrammar.at(
-      "domain",
-      a.version,
-      GoverningOf.at("governor", a.version, a.kind, a.governs),
-      a.name,
-    ),
+const identityOf = (a: AttributeRow) => {
+  const model = AttributeModelOf.at(
+    "model",
+    a.version,
+    GoverningOf.at("governor", a.version, a.kind, a.governs),
   );
+
+  return ValueIdentity.at(
+    "identity",
+    AttributeGrammar.at("domain", model, AttributeSlotOf.at("slot", model, a.name)),
+  );
+};
 
 /**
  * A `Node` or {@link IdentityText} row as a selection reads it: the fields an element's governor is

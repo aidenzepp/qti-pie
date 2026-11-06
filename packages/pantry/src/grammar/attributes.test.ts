@@ -7,10 +7,12 @@
  *   exactly those, with the XSD's use, beside the document layer's names.
  * - **The spec readings' text.** Each reading of `docs/spec-readings.md` that narrows a value is
  *   checked on every attribute it names, and the XSD's own reading of the same type is checked
- *   everywhere else; readings 10, 85 and 123, which add, take away and require an attribute, are
- *   restated beside the XSD reading, and reading 90 beside the document layer's `xml:` names, its
- *   covered elements from the Schematron's leaf, which its own test reads against the XSDs' raw
- *   text.
+ *   everywhere else; readings 10, 9 and 85, and 123, which add, take away and require an attribute,
+ *   are restated beside the XSD reading, and reading 90 beside the document layer's `xml:` names,
+ *   its covered elements from the Schematron's leaf, which its own test reads against the XSDs' raw
+ *   text. Reading 9's two ARIA role rules are read from the XSDs' raw text too, reading 135's MIME
+ *   types against an RFC 2045 reader by exhaustion and by a swarm-weighted search, and reading
+ *   136's `coords`, which follows the XSD, against a reader of `CoordsDType`.
  * - **The XSD's values, for the departures of the old grammar.** Each value the XSD admits and the
  *   old grammar refused is admitted, read from the leaf's own resolution of the XSD.
  * - **Structural laws:** positions a bijection onto 0..n−1 in `AttributeName` order; `TextDomain` a
@@ -19,7 +21,16 @@
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it } from "@effect/vitest";
-import { Effect, FileSystem, Option, Result } from "effect";
+import { drawn, explore } from "@grizzle/testing/explore";
+import { required } from "@grizzle/testing/features";
+import { array, element, int, weighted } from "@grizzle/testing/gen";
+import type { Gen } from "@grizzle/testing/gen";
+import { notesOnly } from "@grizzle/testing/sense";
+import { completeShrink } from "@grizzle/testing/shrink";
+import { swarm, swarmChoice } from "@grizzle/testing/swarm";
+import type { Swarm } from "@grizzle/testing/swarm";
+import { searched } from "@grizzle/testing/vitest";
+import { Duration, Effect, FileSystem, Formatter, Option, Result } from "effect";
 import {
   attributeCounts,
   baseTypes,
@@ -37,7 +48,7 @@ import { openClasses, schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import { noType } from "#pantry/grammar/xsi.ts";
 import { loadXsd, XsdOracleLayer, xsdContents } from "#pantry/test/gen/grammar.ts";
-import { checkCache } from "#pantry/vocab/derive/sources.ts";
+import { checkCache, xsdDirectory } from "#pantry/vocab/derive/sources.ts";
 import type { SourcePath } from "#pantry/vocab/derive/sources.ts";
 import { writeXsdOracle, xsdOracleDirectory } from "#pantry/test/xsd-catalog.ts";
 import {
@@ -139,67 +150,6 @@ const enumerationOf = (domain: Domain): readonly string[] =>
   domain.facets.flatMap(({ facet, value }) => (facet === "enumeration" ? [value] : []));
 
 describe("The departures from the XSD", () => {
-  it("are gone: h1@role takes every ARIA role, the same domain as h2 to h6", () => {
-    for (const version of schemaVersions) {
-      const h1 = Option.getOrThrow(domainAt(version, "h1", "role"));
-      const declared = attributeDeclarations.find(
-        ({ kind, name }) => kind === "h2" && name === "role",
-      );
-      const roles = declared === undefined ? [] : enumerationOf(declared.domain);
-
-      assert.isAbove(roles.length, 70);
-      for (const heading of ["h2", "h3", "h4", "h5", "h6"]) {
-        assert.strictEqual(
-          Option.getOrThrow(domainAt(version, heading, "role")).handle,
-          h1.handle,
-          heading,
-        );
-      }
-
-      for (const role of roles) {
-        assert.isTrue(matches(h1, role), role);
-      }
-    }
-  });
-
-  it("are gone: every MimeTypeDType attribute reads the XSD's pattern, as xmllint judged Appendix F's probes", () => {
-    const attributes = [
-      ["a", "type"],
-      ["object", "type"],
-      ["param", "type"],
-      ["source", "type"],
-      ["qti-stylesheet", "type"],
-      ["qti-calculator-info", "mime-type"],
-      ["qti-digital-material", "mime-type"],
-      ["qti-file-href.card", "mime-type"],
-    ] as const;
-    const valid = [
-      "a/b c",
-      `${"a".repeat(128)}/x`,
-      `x/${"b".repeat(256)}`,
-      " image/png ",
-      "image/png",
-      "a/b\tc",
-    ];
-    const invalid = ["a(b)/c", "a/b/c", "é/x", "a@b/c", "image", "/png", "a/"];
-    for (const [kind, name] of attributes) {
-      for (const { version } of declarersOf(name).filter((declarer) => declarer.kind === kind)) {
-        const domain = Option.getOrThrow(domainAt(version, kind, name));
-        for (const value of valid) {
-          assert.isTrue(matches(domain, value), `${kind}@${name} ${JSON.stringify(value)}`);
-        }
-
-        for (const value of invalid) {
-          assert.isFalse(matches(domain, value), `${kind}@${name} ${JSON.stringify(value)}`);
-        }
-      }
-    }
-
-    const upload = Option.getOrThrow(domainAt("3.0.1", "qti-upload-interaction", "type"));
-    assert.isTrue(matches(upload, " image/png  text/plain "));
-    assert.isFalse(matches(upload, "image/png a(b)/c"));
-  });
-
   it("are gone: a slider's step is NonNegativeDoubleDType, 0, INF and NaN its lexical forms and zero its bound", () => {
     for (const version of schemaVersions) {
       const step = Option.getOrThrow(domainAt(version, "qti-slider-interaction", "step"));
@@ -226,24 +176,13 @@ describe("The departures from the XSD", () => {
     }
   });
 
-  it("are gone: coords is required on every kind the XSD requires it on, param@valuetype is required, source@role is admitted, and xml:base is admitted on the three manifest kinds", () => {
+  it("are gone: param@valuetype is required, and xml:base is admitted on the three manifest kinds", () => {
     for (const version of schemaVersions) {
-      for (const kind of ["qti-area-map-entry", "qti-associable-hotspot", "qti-hotspot-choice"]) {
-        assert.strictEqual(
-          Option.getOrThrow(leafGrammar.admission.lookup({ kind, name: "coords", version })).use,
-          "required",
-          kind,
-        );
-      }
-
       assert.strictEqual(
         Option.getOrThrow(
           leafGrammar.admission.lookup({ kind: "param", name: "valuetype", version }),
         ).use,
         "required",
-      );
-      assert.isTrue(
-        Option.isSome(leafGrammar.admission.lookup({ kind: "source", name: "role", version })),
       );
       for (const kind of ["cp:manifest", "cp:resources", "cp:resource"]) {
         const base = Option.getOrThrow(domainAt(version, kind, "xml:base"));
@@ -425,6 +364,408 @@ const isPrintfFormat = (value: string): boolean => {
   }
 
   return true;
+};
+
+/**
+ * RFC 2045's tspecials (§5.1), as the RFC lists them.
+ */
+const tspecials = '()<>@,;:\\"/[]?=';
+
+/**
+ * The rules {@link mediaTypeFault} tells apart, `valid` first.
+ */
+const mediaTypeFaults = [
+  "valid",
+  "space",
+  "control",
+  "delete",
+  "non-ascii",
+  "tspecial",
+  "no-slash",
+  "two-slashes",
+  "empty-type",
+  "empty-subtype",
+] as const;
+
+/**
+ * A rule of RFC 2045's media type a value breaks, or `valid`.
+ */
+type MediaTypeFault = (typeof mediaTypeFaults)[number];
+
+/**
+ * The rule of RFC 2045's media type one code point breaks, wherever it stands: a space, a control
+ * (`U+0000` to `U+001F`, which XML admits as text only for tab, line feed and carriage return, and
+ * `U+007F`, which it admits, told apart as `delete`), a character outside US-ASCII, or a tspecial
+ * but the slash; none for a token's character or the slash.
+ *
+ * @param point - The code point.
+ * @returns The rule, if it breaks one.
+ */
+const pointFault = (point: string): MediaTypeFault | undefined => {
+  const code = point.codePointAt(0) ?? 0;
+  if (code === 0x20) {
+    return "space";
+  }
+
+  if (code < 0x20) {
+    return "control";
+  }
+
+  if (code === 0x7f) {
+    return "delete";
+  }
+
+  if (code > 0x7f) {
+    return "non-ascii";
+  }
+
+  return tspecials.includes(point) && point !== "/" ? "tspecial" : undefined;
+};
+
+/**
+ * The first rule of RFC 2045's media type that a value breaks, read code point by code point, or
+ * `valid`: `type "/" subtype`, each a token, "1*<any (US-ASCII) CHAR except SPACE, CTLs, or
+ * tspecials>" (§5.1). The value is read as `MimeTypeDType`'s `replace` leaves it, a tab or a line
+ * break a space.
+ *
+ * @param raw - The value as written.
+ * @returns The rule it breaks first: a character's ({@link pointFault}), then the slash's.
+ */
+const mediaTypeFault = (raw: string): MediaTypeFault => {
+  const points = Array.from(raw.replaceAll(/[\t\n\r]/gu, " "), String);
+  const slash = points.indexOf("/");
+  const first = points.map(pointFault).find((fault) => fault !== undefined);
+  if (first !== undefined) {
+    return first;
+  }
+
+  if (slash === -1) {
+    return "no-slash";
+  }
+
+  if (points.includes("/", slash + 1)) {
+    return "two-slashes";
+  }
+
+  if (slash === 0) {
+    return "empty-type";
+  }
+
+  return slash === points.length - 1 ? "empty-subtype" : "valid";
+};
+
+/**
+ * Collapse a value's whitespace as XML Schema's `collapse` does (Part 2, §4.3.6): each run of tab,
+ * line feed, carriage return and space one space, and none at either end. JavaScript's `trim`
+ * strips every Unicode space, `U+00A0` among them, which no XML whitespace class touches.
+ *
+ * @param raw - The value as written.
+ * @returns It collapsed.
+ */
+const collapseXml = (raw: string): string =>
+  raw
+    .replaceAll(/[\t\n\r ]+/gu, " ")
+    .replace(/^ /u, "")
+    .replace(/ $/u, "");
+
+/**
+ * Every rule of RFC 2045's media type a value breaks, where {@link mediaTypeFault} names the first:
+ * each character's ({@link pointFault}), and the slash's, none for a media type.
+ *
+ * @param raw - The value as written.
+ * @returns The rules, none for a media type.
+ */
+const mediaTypeFaultsOf = (raw: string): ReadonlySet<MediaTypeFault> => {
+  const points = Array.from(raw.replaceAll(/[\t\n\r]/gu, " "), String);
+  const slashes = points.flatMap((point, at) => (point === "/" ? [at] : []));
+  const [slash] = slashes;
+
+  return new Set([
+    ...points.flatMap((point) => Option.toArray(Option.fromNullishOr(pointFault(point)))),
+    ...(slash === undefined ? ["no-slash" as const] : []),
+    ...(slashes.length > 1 ? ["two-slashes" as const] : []),
+    ...(slashes.length === 1 && slash === 0 ? ["empty-type" as const] : []),
+    ...(slashes.length === 1 && slash === points.length - 1 ? ["empty-subtype" as const] : []),
+  ]);
+};
+
+/**
+ * What a generated value is, for the search's coverage: `valid`, the one rule it breaks alone, or
+ * `mixed` for more than one, so the search must reach each rule broken by itself, the value nearest
+ * a media type that breaks it.
+ */
+const mediaTypeNotes = [...mediaTypeFaults, "mixed"] as const;
+
+/**
+ * A {@link mediaTypeNotes} note.
+ */
+type MediaTypeNote = (typeof mediaTypeNotes)[number];
+
+/**
+ * Note a value for the search ({@link mediaTypeNotes}).
+ *
+ * @param raw - The value as written.
+ * @returns Its note.
+ */
+const mediaTypeNote = (raw: string): MediaTypeNote => {
+  const faults = [...mediaTypeFaultsOf(raw)];
+  const [only] = faults;
+  if (only === undefined) {
+    return "valid";
+  }
+
+  return faults.length === 1 ? only : "mixed";
+};
+
+/**
+ * What a generated list of media types is, for the search's coverage: `list-valid`, `list-empty`
+ * for no item, the one rule its items break alone, or `list-mixed`. A space never breaks an item,
+ * since spaces part the items.
+ */
+const mediaTypeListNotes = [
+  "list-valid",
+  "list-empty",
+  "list-control",
+  "list-delete",
+  "list-non-ascii",
+  "list-tspecial",
+  "list-no-slash",
+  "list-two-slashes",
+  "list-empty-type",
+  "list-empty-subtype",
+  "list-mixed",
+] as const;
+
+/**
+ * A {@link mediaTypeListNotes} note.
+ */
+type MediaTypeListNote = (typeof mediaTypeListNotes)[number];
+
+/**
+ * Note a list of media types for the search, as `MimeTypeListDType`'s list reads it: its
+ * whitespace collapsed, then every rule its items break ({@link mediaTypeFaultsOf}).
+ *
+ * @param raw - The value as written.
+ * @returns Its note.
+ */
+const mediaTypeListNote = (raw: string): MediaTypeListNote => {
+  const collapsed = collapseXml(raw);
+  const faults = [...new Set(collapsed.split(" ").flatMap((item) => [...mediaTypeFaultsOf(item)]))];
+  const [only] = faults;
+  if (collapsed === "") {
+    return "list-empty";
+  }
+
+  if (only === undefined || only === "valid" || only === "space") {
+    return faults.length <= 1 ? "list-valid" : "list-mixed";
+  }
+
+  return faults.length === 1 ? `list-${only}` : "list-mixed";
+};
+
+/**
+ * Whether a value is a list of RFC 2045 media types: no item, or items each a media type, as
+ * {@link mediaTypeFault} reads each item.
+ *
+ * @param raw - The value as written.
+ * @returns Whether it is.
+ */
+const isMediaTypeList = (raw: string): boolean => {
+  const collapsed = collapseXml(raw);
+
+  return collapsed === "" || collapsed.split(" ").every((item) => mediaTypeFault(item) === "valid");
+};
+
+/**
+ * The symbols the media type's small scope is drawn from: letters of both cases, a digit, token
+ * punctuation (`+`, `*`, `{`, `~`), the slash, a space, a tab, tspecials (`(`, `;`, `=`, `"`, `\`),
+ * `U+007F` and a letter outside US-ASCII.
+ */
+const mediaTypeSymbols = [
+  "a",
+  "Z",
+  "0",
+  "+",
+  "*",
+  "{",
+  "~",
+  "/",
+  " ",
+  "\t",
+  "(",
+  ";",
+  "=",
+  '"',
+  "\\",
+  "\u007F",
+  "é",
+] as const;
+
+/**
+ * Every string of at most four {@link mediaTypeSymbols}, 88,741 of them.
+ */
+const mediaTypeScope: readonly string[] = (() => {
+  const strings = [""];
+  let level: readonly string[] = [""];
+  for (let length = 1; length <= 4; length += 1) {
+    level = level.flatMap((head) => mediaTypeSymbols.map((symbol) => `${head}${symbol}`));
+    strings.push(...level);
+  }
+
+  return strings;
+})();
+
+/**
+ * The classes of character a generated MIME value is drawn from, each a swarm feature: token
+ * characters, upper-case letters, the space, the tab, a line break, the tspecials but the slash,
+ * the C0 controls a JavaScript string holds and XML does not, `U+007F`, the control XML admits,
+ * and characters outside US-ASCII. The slash
+ * that joins type and subtype is drawn apart, by the value's shape.
+ */
+const mediaTypeClasses = {
+  control: ["\u001F", "\u0000", "\u0001"],
+  delete: ["\u007F"],
+  lineBreak: ["\n", "\r"],
+  nonAscii: ["é", "\u00A0", "\u{1F600}", "ﬁ", "\u0430"],
+  space: [" "],
+  tab: ["\t"],
+  token: [
+    "a",
+    "z",
+    "0",
+    "9",
+    "-",
+    "+",
+    ".",
+    "!",
+    "#",
+    "$",
+    "%",
+    "&",
+    "'",
+    "*",
+    "^",
+    "_",
+    "`",
+    "{",
+    "|",
+    "}",
+    "~",
+  ],
+  tspecial: ["(", ")", "<", ">", "@", ",", ";", ":", "\\", '"', "[", "]", "?", "="],
+  upper: ["A", "Z", "X"],
+} as const;
+
+/**
+ * A {@link mediaTypeClasses} feature.
+ */
+type MediaTypeClass = keyof typeof mediaTypeClasses;
+
+/**
+ * The features in the order a swarm draws them, a token's characters first, the floor.
+ */
+const mediaTypeClassNames = [
+  "token",
+  "upper",
+  "space",
+  "tab",
+  "lineBreak",
+  "tspecial",
+  "control",
+  "delete",
+  "nonAscii",
+] as const satisfies readonly MediaTypeClass[];
+
+/**
+ * Draw one part of a MIME value, a type or subtype or a third: up to eight characters, each from a
+ * class the swarm turns on, at its weight.
+ *
+ * @param mix - The case's swarm.
+ * @returns The generator.
+ */
+const mediaTypePart =
+  (mix: Swarm<MediaTypeClass>): Gen<string> =>
+  (source) => {
+    const length = source.draw(int(0, 8));
+    let part = "";
+    for (let at = 0; at < length; at += 1) {
+      part += source.draw(
+        element(mediaTypeClasses[source.draw(swarmChoice(mix, mediaTypeClassNames))]),
+      );
+    }
+
+    return part;
+  };
+
+/**
+ * Draw a MIME value under a swarm: one to four parts joined by slashes, two, a type and a subtype,
+ * six times in eight.
+ *
+ * @param mix - The case's swarm.
+ * @returns The generator.
+ */
+const mediaTypeValue =
+  (mix: Swarm<MediaTypeClass>): Gen<string> =>
+  (source) => {
+    const partCount = source.draw(
+      weighted<number>([
+        [1, int(1, 1)],
+        [6, int(2, 2)],
+        [1, int(3, 4)],
+      ]),
+    );
+
+    return Array.from({ length: partCount }, () => source.draw(mediaTypePart(mix))).join("/");
+  };
+
+/**
+ * The whitespace a generated list puts between its items and around them.
+ */
+const listGap = element([" ", "  ", "\t", "\n", " \r\n "] as const);
+
+/**
+ * Draw a MIME value and a list of them under one swarm: the list is up to three values between
+ * runs of whitespace, with whitespace before and after at times.
+ */
+const mediaTypeCase: Gen<{ readonly list: string; readonly value: string }> = (source) => {
+  const mix = source.draw(swarm(mediaTypeClassNames));
+  const value = source.draw(mediaTypeValue(mix));
+  const items = source.draw(array(mediaTypeValue(mix), { max: 3, min: 0 }));
+  const inner = items.map((item, at) => (at === 0 ? item : `${source.draw(listGap)}${item}`));
+  const before = source.draw(element(["", " ", "\t"] as const));
+  const after = source.draw(element(["", " ", "\n"] as const));
+
+  return { list: `${before}${inner.join("")}${after}`, value };
+};
+
+/**
+ * Whether a token of a `CoordsDType` is one: digits and an optional `%`.
+ *
+ * @param token - The token.
+ * @returns Whether it is.
+ */
+const isCoordsToken = (token: string): boolean => {
+  const points = Array.from(token, String);
+  const digits = points.at(-1) === "%" ? points.slice(0, -1) : points;
+
+  return digits.length > 0 && digits.every((point) => point >= "0" && point <= "9");
+};
+
+/**
+ * Whether a value is a `CoordsDType`, read token by token: after `replace`, three, four, or an even
+ * number of six or more comma-separated tokens, each one {@link isCoordsToken} accepts (the XSD's
+ * pattern, and the information model's Coords, §7.9).
+ *
+ * @param raw - The value as written.
+ * @returns Whether it is.
+ */
+const isCoords = (raw: string): boolean => {
+  const tokens = raw.replaceAll(/[\t\n\r]/gu, " ").split(",");
+  const count = tokens.length;
+
+  return (
+    (count === 3 || count === 4 || (count >= 6 && count % 2 === 0)) && tokens.every(isCoordsToken)
+  );
 };
 
 /**
@@ -851,6 +1192,359 @@ describe("The spec readings", () => {
       );
     }
   });
+
+  it("read 9: an h1's role is heading, tab or presentation, and every other kind's ARIA role keeps each role the XSD lists, every declarer against every listed role and the near misses", () => {
+    // ASI binding §5.3.1, RULE ARIA ROLE 1b: "The 'h1' tag may have an ARIA role value of
+    // 'heading' or 'tab' or 'presentation' only". Oracle: the XSD's enumeration, from the leaf's
+    // own resolution, and the rule's three names restated here; the Schematron's text itself is
+    // the cached suite's below. SSML's `role` is a list of QNames, no enumeration, and is left out.
+    const allowed = new Set(["heading", "tab", "presentation"]);
+    const nearMisses = [
+      "Heading",
+      " heading",
+      "heading ",
+      "heading tab",
+      "",
+      "tab\t",
+      "none",
+      "h1",
+    ];
+    const declarers = attributeDeclarations.filter(
+      ({ domain, name }) => name === "role" && enumerationOf(domain).length > 0,
+    );
+    let checked = 0;
+    for (const { domain, kind, versions } of declarers) {
+      const roles = enumerationOf(domain);
+      for (const version of versions) {
+        const held = Option.getOrThrow(domainAt(version, kind, "role"));
+        const wrong = [...roles, ...nearMisses].filter(
+          (value) =>
+            matches(held, value) !==
+            (roles.includes(value) && (kind !== "h1" || allowed.has(value))),
+        );
+
+        assert.deepStrictEqual(wrong, [], `${version} ${kind}@role`);
+        checked += 1;
+      }
+    }
+
+    assert.isAbove(checked, 200);
+    assert.isTrue(declarers.some(({ kind }) => kind === "h1"));
+    assert.isTrue(
+      declarers.every(({ domain }) =>
+        [...allowed].every((role) => enumerationOf(domain).includes(role)),
+      ),
+    );
+  });
+
+  it("read 9: a source carries no role, and the only declarations the readings drop are it and reading 85's xpointer", () => {
+    // ASI binding §5.3.1, RULE ARIA ROLE 1a: "The 'source' tag must not have an ARIA role
+    // attribute", where the XSD declares it; information model §2.12 for `xpointer`. Oracle: the
+    // leaf's declarations, every one, against those `readDeclarations` keeps.
+    const kept = new Set(
+      readDeclarations(attributeDeclarations).map(({ kind, name }) => `${kind} ${name}`),
+    );
+    const dropped = [...new Set(attributeDeclarations.map(({ kind, name }) => `${kind} ${name}`))]
+      .filter((declared) => !kept.has(declared))
+      .toSorted();
+
+    assert.deepStrictEqual(dropped, ["source role", "xi:include xpointer"]);
+    assert.isTrue(kept.has("h1 role") && kept.has("video role") && kept.has("source type"));
+  });
+
+  it.effect(
+    "read 9: the composed grammar admits no role on a source, under its kind, any governor or any open class but data-*, in both versions",
+    () =>
+      // Oracle: the composed grammar's rows themselves, every governor's and every open class's,
+      // against the rule; spec reading 90 leaves `source`, which the Schematron's extension rules
+      // cover, the `data-*` class alone, so a `role` there is no name it admits.
+      Effect.gen(function* sourceHasNoRole() {
+        const { attributes } = yield* Effect.fromResult(composed());
+        for (const version of schemaVersions) {
+          assert.isTrue(
+            Option.isNone(attributes.admission.lookup({ kind: "source", name: "role", version })),
+            version,
+          );
+          assert.deepStrictEqual(
+            openClasses.filter((open) =>
+              Option.isSome(attributes.admission.lookup({ kind: "source", name: open, version })),
+            ),
+            ["data-*"],
+            version,
+          );
+          assert.isTrue(
+            Option.isSome(attributes.admission.lookup({ kind: "h1", name: "role", version })),
+            version,
+          );
+        }
+
+        assert.deepStrictEqual(
+          attributes.governed.rows.filter(
+            ({ governor, name }) => governor.startsWith("source ") && name === "role",
+          ),
+          [],
+        );
+      }),
+    300_000,
+  );
+
+  it("read 135: every MIME type is RFC 2045's two tokens and a slash, and each item of the upload's list, against an independent reader on every string of up to four symbols and the named cases", () => {
+    // Information model §7.25, MimeType: "The mime type (type and subtype), as defined by
+    // [RFC 2045]"; §5.1.2 and §5.135.2: "its value must be a valid MIME type". RFC 2045 §5.1:
+    // `type "/" subtype`, each a token, "1*<any (US-ASCII) CHAR except SPACE, CTLs, or
+    // tspecials>". Oracle: `mediaTypeFault`, a code-point walk of the RFC's sentence, not the
+    // pattern. Bound: every string of at most four of `mediaTypeSymbols` (88,741), each declarer,
+    // both versions, then the named cases with the verdicts the reading states.
+    const declarers = attributeDeclarations
+      .filter(({ type }) => type.type === "MimeTypeDType")
+      .map(({ kind, name }) => `${kind}@${name}`)
+      .toSorted();
+
+    assert.deepStrictEqual(declarers, [
+      "a@type",
+      "object@type",
+      "param@type",
+      "qti-calculator-info@mime-type",
+      "qti-digital-material@mime-type",
+      "qti-file-href.card@mime-type",
+      "qti-stylesheet@type",
+      "source@type",
+    ]);
+
+    const named: readonly (readonly [string, boolean])[] = [
+      ["image/png", true],
+      ["IMAGE/PNG", true],
+      ["image/svg+xml", true],
+      ["application/vnd.ms-excel", true],
+      ["x-world/x-vrml", true],
+      ["*/*", true],
+      ["text/x-{a}~|`'!#$%&^_.", true],
+      [`${"a".repeat(200)}/${"b".repeat(300)}`, true],
+      [" image/png", false],
+      ["image/png ", false],
+      ["image /png", false],
+      ["image/ png", false],
+      ["a b/c", false],
+      ["image/png\t", false],
+      ["\nimage/png", false],
+      ["image/png\r", false],
+      ["image/png\u007F", false],
+      ["image", false],
+      ["/png", false],
+      ["image/", false],
+      ["/", false],
+      ["", false],
+      ["a/b/c", false],
+      ["a//b", false],
+      ["text/html;charset=utf-8", false],
+      ["text/html; charset=utf-8", false],
+      ["é/x", false],
+      ["a(b)/c", false],
+      ["a@b/c", false],
+      ["[a]/b", false],
+      ["a/b=c", false],
+      ['a/"b"', false],
+      ["\u00A0", false],
+      ["image/png\u00A0", false],
+      ["\uFEFFimage/png", false],
+    ];
+    const checked = new Map<string, readonly string[]>();
+    for (const at of declarers) {
+      const [kind = "", name = ""] = at.split("@");
+      for (const { version } of declarersOf(name).filter((declarer) => declarer.kind === kind)) {
+        const domain = Option.getOrThrow(domainAt(version, kind, name));
+        const wrong =
+          checked.get(domain.handle) ??
+          mediaTypeScope.filter(
+            (value) => matches(domain, value) !== (mediaTypeFault(value) === "valid"),
+          );
+        checked.set(domain.handle, wrong);
+
+        assert.deepStrictEqual(wrong.slice(0, 20), [], `${version} ${at}`);
+        for (const [value, valid] of named) {
+          assert.strictEqual(
+            matches(domain, value),
+            valid,
+            `${version} ${at} ${JSON.stringify(value)}`,
+          );
+          assert.strictEqual(
+            mediaTypeFault(value) === "valid",
+            valid,
+            `the reader on ${JSON.stringify(value)}`,
+          );
+        }
+      }
+    }
+
+    for (const version of schemaVersions) {
+      const upload = Option.getOrThrow(domainAt(version, "qti-upload-interaction", "type"));
+      const lists = [
+        ...mediaTypeScope,
+        ...named.flatMap(([first]) => named.map(([second]) => `${first} ${second}`)),
+        " image/png  text/plain ",
+        "image/png\ttext/plain\n",
+        "\u00A0",
+        " \u00A0 ",
+        "image/png\u00A0text/plain",
+      ];
+      const wrong = lists.filter((value) => matches(upload, value) !== isMediaTypeList(value));
+
+      assert.deepStrictEqual(wrong.slice(0, 20), [], version);
+      assert.isTrue(matches(upload, " image/png  text/plain ") && matches(upload, ""), version);
+      assert.isFalse(
+        matches(upload, "image/png a(b)/c") || matches(upload, "image/png\u007F text/plain"),
+        version,
+      );
+    }
+  }, 60_000);
+
+  it.effect(
+    "read 135, searched: generated MIME values and lists, swarm-weighted over nine character classes, judged as the independent reader judges them, each rule of the reader reached alone",
+    (ctx) =>
+      // Oracle: `mediaTypeFault` and `isMediaTypeList`, the RFC 2045 reader, not the pattern. The
+      // search must reach each rule the reader tells apart broken alone, the inputs nearest a valid
+      // one, of a value (`mediaTypeNotes`) and of a list (`mediaTypeListNotes`).
+      searched(
+        ctx,
+        explore(
+          {
+            caseHang: Duration.minutes(1),
+            concurrency: 1,
+            coverage: required<MediaTypeNote | MediaTypeListNote>(
+              [...mediaTypeNotes, ...mediaTypeListNotes],
+              { cases: 600, sense: notesOnly },
+            ),
+            draw: drawn(mediaTypeCase),
+            kept: [],
+            literal: Formatter.format,
+            runs: 800,
+            shrink: completeShrink,
+            steerEvery: 16,
+            suite: "grammar/attributes/media-type",
+          },
+          ({ list, value }, c) =>
+            Effect.sync(() => {
+              const fault = mediaTypeFault(value);
+              const valid = isMediaTypeList(list);
+              c.note(mediaTypeNote(value));
+              c.note(mediaTypeListNote(list));
+
+              assert.strictEqual(
+                mediaTypeFaultsOf(value).size === 0,
+                fault === "valid",
+                "the reader's two readings agree",
+              );
+              for (const version of schemaVersions) {
+                const single = Option.getOrThrow(domainAt(version, "a", "type"));
+                const upload = Option.getOrThrow(
+                  domainAt(version, "qti-upload-interaction", "type"),
+                );
+
+                assert.strictEqual(
+                  matches(single, value),
+                  fault === "valid",
+                  `${version} ${JSON.stringify(value)}`,
+                );
+                assert.strictEqual(
+                  matches(upload, list),
+                  valid,
+                  `${version} ${JSON.stringify(list)}`,
+                );
+              }
+            }),
+        ),
+      ),
+    120_000,
+  );
+
+  it.effect(
+    "read 136: a default shape's coords is required and a CoordsDType, as every shape's is, every kind with a default shape in the composed grammar against an independent reader on every list of up to eight tokens",
+    () =>
+      // Information model §7.9, Coords: "(e) default: no coordinates should be given", a best
+      // practice (§1.3); coords has multiplicity [1] on every class with a shape (§5.7.6,
+      // §5.67.5, §5.75.2, §7.4.2), and "A value of a shape is always accompanied by coordinates"
+      // (§8.29). The grammar reads the XSD's required CoordsDType, by no reading of its own.
+      // Oracle: `isCoords`, the pattern's counts read token by token, and the XSD's use from the
+      // leaf. Bound: every list of one to eight tokens over four samples (87,380), each kind with
+      // a default shape, under its kind and every governor of it, both versions.
+      Effect.gen(function* defaultAreaCoords() {
+        const { attributes } = yield* Effect.fromResult(composed());
+        const byHandle = new Map(attributes.domains.map((domain) => [domain.handle, domain]));
+        const areaKinds = attributeDeclarations
+          .filter(
+            ({ domain, name }) => name === "shape" && enumerationOf(domain).includes("default"),
+          )
+          .map(({ kind }) => kind)
+          .toSorted();
+
+        assert.deepStrictEqual(areaKinds, [
+          "qti-area-map-entry",
+          "qti-associable-hotspot",
+          "qti-hotspot-choice",
+          "qti-inside",
+        ]);
+
+        const samples = ["15", "5%", "", " 1"] as const;
+        const levels: (readonly string[])[] = [samples];
+        for (let length = 2; length <= 8; length += 1) {
+          levels.push(
+            (levels.at(-1) ?? []).flatMap((head) => samples.map((sample) => `${head},${sample}`)),
+          );
+        }
+
+        const lists = [
+          ...levels.flat(),
+          "0 0 1 1",
+          "0,0,1,1,",
+          ",0,0,1",
+          "0,0,1\t",
+          "\t0,0,1",
+          "-1,0,1",
+          "1.5,0,1",
+          "0,0,1%%",
+        ];
+
+        assert.strictEqual(lists.length, 87_380 + 8);
+
+        const rows = [
+          ...attributes.admission.rows.map((row) => ({ ...row, at: row.kind })),
+          ...attributes.governed.rows.map((row) => ({ ...row, at: row.governor })),
+        ].filter(
+          ({ at, name }) =>
+            name === "coords" && areaKinds.some((kind) => at === kind || at.startsWith(`${kind} `)),
+        );
+        const checked = new Map<string, readonly string[]>();
+        for (const { at, domain: handle, use, version } of rows) {
+          const domain = byHandle.get(handle);
+          const wrong =
+            checked.get(handle) ??
+            lists.filter(
+              (value) => domain === undefined || matches(domain, value) !== isCoords(value),
+            );
+          checked.set(handle, wrong);
+
+          assert.strictEqual(use, "required", `${version} ${at}`);
+          assert.strictEqual(handle, "CoordsDType", `${version} ${at}`);
+          assert.deepStrictEqual(wrong.slice(0, 20), [], `${version} ${at}`);
+        }
+
+        assert.isAtLeast(rows.length, areaKinds.length * schemaVersions.length);
+        assert.isFalse(specReadings.some(({ name }) => name === "coords" || name === "shape"));
+        for (const version of schemaVersions) {
+          assert.strictEqual(
+            Option.getOrThrow(
+              attributes.admission.lookup({
+                kind: "qti-media-interaction",
+                name: "coords",
+                version,
+              }),
+            ).use,
+            "optional",
+          );
+        }
+      }),
+    300_000,
+  );
 });
 
 /**
@@ -1184,6 +1878,7 @@ describe.skipIf(!cached)("The XSD's attribute uses", () => {
 
             // Spec reading 10: ARIA's `aria-keyshortcuts` beside the XSD's `aria-keyshorts`, with
             // its use; spec reading 85: an `xi:include` carries no `xpointer` (§2.12); spec reading
+            // 9: a `source` carries no `role` (the Schematron's RULE ARIA ROLE 1a); spec reading
             // 123: a `bdo` carries `dir` (§5.11).
             const misspelled = expected.get("aria-keyshorts");
             if (misspelled !== undefined) {
@@ -1194,9 +1889,13 @@ describe.skipIf(!cached)("The XSD's attribute uses", () => {
               expected.delete("xpointer");
             }
 
-            for (const required of readingUses.filter((use) => use.kind === kind)) {
-              if (expected.has(required.name)) {
-                expected.set(required.name, "required");
+            if (kind === "source") {
+              expected.delete("role");
+            }
+
+            for (const readingUse of readingUses.filter((use) => use.kind === kind)) {
+              if (expected.has(readingUse.name)) {
+                expected.set(readingUse.name, "required");
               }
             }
 
@@ -1262,8 +1961,8 @@ describe.skipIf(!cached)("The document layer", () => {
         // Spec reading 90: on an element the Schematron's extension rules cover, an `xml:` name
         // the kind does not declare is no `data-` extension, so it is refused there.
         const covered = new Set(
-          coveredElements.flatMap(({ element, versions }) =>
-            versions.map((version) => `${version} {${element.namespace}}${element.local}`),
+          coveredElements.flatMap(({ element: covers, versions }) =>
+            versions.map((version) => `${version} {${covers.namespace}}${covers.local}`),
           ),
         );
         const coveredAt = (version: SchemaVersion, kind: string): boolean =>
@@ -1365,6 +2064,87 @@ describe.skipIf(!cached)("The document layer", () => {
           ),
         );
       }).pipe(Effect.provide(OracleLayer), Effect.provide(XsdOracleLayer)),
+    300_000,
+  );
+});
+
+/**
+ * The ASI XSDs whose embedded Schematron states `RULE_SET_ARIA_ROLES_1`, each with its version.
+ */
+const ariaRuleSources: readonly (readonly [SourcePath, SchemaVersion])[] = [
+  ["imsqti_asiv3p0_v1p0.xsd", "3.0.0"],
+  ["imsqti_asiv3p0p1_v1p0.xsd", "3.0.1"],
+];
+
+/**
+ * The rules of `RULE_SET_ARIA_ROLES_1` in an ASI XSD's raw text, from the pattern's start tag to
+ * the next `</sch:pattern>`: each rule's `//qti:<local>` context and its one assertion's test.
+ *
+ * @param text - The XSD's text.
+ * @returns The tests, by context's local name, in the text's order.
+ */
+const ariaRulesIn = (text: string): ReadonlyMap<string, string> => {
+  const start = text.indexOf('<sch:pattern abstract="false" id="RULE_SET_ARIA_ROLES_1">');
+  const body = start === -1 ? "" : text.slice(start, text.indexOf("</sch:pattern>", start));
+
+  return new Map(
+    [
+      ...body.matchAll(
+        /<sch:rule abstract="false" context="\/\/qti:(?<local>[a-z0-9-]+)">\s*<sch:assert test="(?<test>[^"]*)">/gu,
+      ),
+    ].map((found) => [found.groups?.["local"] ?? "", found.groups?.["test"] ?? ""] as const),
+  );
+};
+
+describe.skipIf(!cached)("The Schematron's ARIA role rules", () => {
+  it.effect(
+    "are what the composed grammar reads in each version, from the ASI XSD's own text: no role on a source, and an h1's role the values the rule's test names, of those the XSD lists",
+    () =>
+      // Oracle: the pinned XSDs as text, read by regular expressions and no XML reader (spec
+      // reading 9): RULE ARIA ROLE 1a's test, `count(@role)=0` on `//qti:source`, and RULE ARIA
+      // ROLE 1b's, `count(@role)=0 or (count(@role)=1 and (@role='…' or …))` on `//qti:h1`.
+      Effect.gen(function* ariaRolesFromTheText() {
+        const fs = yield* FileSystem.FileSystem;
+        const directory = yield* xsdDirectory;
+        const { attributes } = yield* Effect.fromResult(composed());
+        const byHandle = new Map(attributes.domains.map((domain) => [domain.handle, domain]));
+        for (const [file, version] of ariaRuleSources) {
+          const rules = ariaRulesIn(yield* fs.readFileString(`${directory}/${file}`));
+          const heading = rules.get("h1") ?? "";
+          const allowed = [...heading.matchAll(/@role='(?<role>[a-z]+)'/gu)].map(
+            (found) => found.groups?.["role"] ?? "",
+          );
+
+          assert.deepStrictEqual([...rules.keys()], ["source", "h1"], version);
+          assert.strictEqual(rules.get("source"), "count(@role)=0", version);
+          assert.match(
+            heading,
+            /^count\(@role\)=0 or \(count\(@role\)=1 and \(@role='[a-z]+'(?: or @role='[a-z]+')*\)\)$/u,
+            version,
+          );
+          assert.isTrue(
+            Option.isNone(attributes.admission.lookup({ kind: "source", name: "role", version })),
+            `${version}: RULE ARIA ROLE 1a`,
+          );
+
+          const row = Option.getOrThrow(
+            attributes.admission.lookup({ kind: "h1", name: "role", version }),
+          );
+          const domain = byHandle.get(row.domain);
+          const listed = attributeDeclarations.find(
+            ({ kind, name, versions }) =>
+              kind === "h1" && name === "role" && versions.includes(version),
+          );
+          const roles = listed === undefined ? [] : enumerationOf(listed.domain);
+          const wrong = roles.filter(
+            (role) => domain === undefined || matches(domain, role) !== allowed.includes(role),
+          );
+
+          assert.isAbove(roles.length, 70, version);
+          assert.deepStrictEqual(allowed.toSorted(), ["heading", "presentation", "tab"], version);
+          assert.deepStrictEqual(wrong, [], `${version}: RULE ARIA ROLE 1b`);
+        }
+      }).pipe(Effect.provide(NodeServices.layer)),
     300_000,
   );
 });

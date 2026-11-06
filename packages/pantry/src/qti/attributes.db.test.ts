@@ -32,8 +32,8 @@ import type { DatabaseError, QueryResultRow } from "pg";
 import { describe } from "vitest";
 import { loginConnection } from "#pantry/db/connection.ts";
 import {
-  AttributeGrammar,
   AttributeName,
+  attributeRows,
   AttributeSlot,
   GoverningOf,
   KindNamespace,
@@ -364,7 +364,7 @@ const governs =
  */
 const slotOf = (name: string, at: string = version, governor: string = kind): number =>
   Number(
-    AttributeGrammar.rows.find(
+    attributeRows.find(
       (row) => row.version === at && row.governor === governor && row.name === name,
     )?.position ?? assert.fail(`${governor} admits ${name} in ${at}`),
   );
@@ -476,7 +476,7 @@ describe.skipIf(!hasLease)("qti/attributes.db.test.ts, on the lease", () => {
         const unadmitted =
           AttributeName.handles.find(
             (name) =>
-              !AttributeGrammar.rows.some(
+              !attributeRows.some(
                 (row) => row.version === version && row.governor === kind && row.name === name,
               ),
           ) ?? assert.fail(`${kind} admits every name`);
@@ -594,7 +594,7 @@ describe.skipIf(!hasLease)("qti/attributes.db.test.ts, on the lease", () => {
         const kinds: ReadonlySet<string> = new Set(NodeKind.handles);
         const admittedIn = (at: string) =>
           new Set(
-            AttributeGrammar.rows
+            attributeRows
               .filter((row) => row.version === at && kinds.has(row.governor))
               .map(({ governor, name }) => `${governor}\u0000${name}`),
           );
@@ -606,7 +606,7 @@ describe.skipIf(!hasLease)("qti/attributes.db.test.ts, on the lease", () => {
         for (const key of differences) {
           const [governor = "", name = ""] = key.split("\u0000");
           for (const at of ["3.0.0", "3.0.1"]) {
-            const row = AttributeGrammar.rows.find(
+            const row = attributeRows.find(
               (held) => held.version === at && held.governor === governor && held.name === name,
             );
             const governing = GoverningOf.rows.find(

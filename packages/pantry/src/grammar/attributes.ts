@@ -464,6 +464,35 @@ const overrideDirection = (domain: Domain): Domain => ({
 });
 
 /**
+ * The roles the Schematron's RULE ARIA ROLE 1b leaves an `h1`: "The 'h1' tag may have an ARIA role
+ * value of 'heading' or 'tab' or 'presentation' only" (ASI binding §5.3.1, `RULE_SET_ARIA_ROLES_1`,
+ * which both ASI XSDs embed).
+ *
+ * @see {@link https://www.imsglobal.org/spec/qti/v3p0/bind | QTI 3.0 ASI binding, 5.3.1 RULE_SET_ARIA_ROLES_1}
+ */
+const headingRoles: ReadonlySet<string> = new Set(["heading", "tab", "presentation"]);
+
+/**
+ * An `h1`'s `role`, which the XSD types as an enumeration of 74 ARIA roles, its whitespace
+ * preserved: spec reading 9 keeps of them the three {@link headingRoles} names. The binding's
+ * section 5 "is NORMATIVE", and its explicit rules are those "used to enforce the features of the
+ * Information Model that are otherwise not enforced in the XSD" (§5.3), so where the rule is
+ * stricter than the XSD it is the rule. The rule's test compares `@role` with each name as
+ * written, as the XSD's `preserve` does, and a role the XSD does not list is refused by both. `h2`
+ * to `h6` keep every role the XSD lists.
+ *
+ * @param domain - The XSD's enumeration.
+ * @returns It with the three roles alone.
+ * @see {@link https://www.imsglobal.org/spec/qti/v3p0/bind | QTI 3.0 ASI binding, 5.3 The Explicit Rule Definitions}
+ */
+const headingRole = (domain: Domain): Domain => ({
+  ...domain,
+  facets: domain.facets.filter(
+    ({ facet, value }) => facet !== "enumeration" || headingRoles.has(value),
+  ),
+});
+
+/**
  * Spell a literal as an XSD pattern that matches it without regard to ASCII case, each letter a
  * class of its two cases.
  *
@@ -649,6 +678,80 @@ const nonEmptyUrl = (domain: Domain): Domain => withPattern(domain, ".*[^ ].*");
 const printfFormat = String.raw`([^%]|%%)*(%[#0 +\-]*[0-9]*(\.[0-9]*)?[EefGgrRioXx]([^%]|%%)*)?`;
 
 /**
+ * A token of RFC 2045's media type, "1*<any (US-ASCII) CHAR except SPACE, CTLs, or tspecials>"
+ * (§5.1), as an XSD pattern: the printable US-ASCII characters, `!` to `~`, less the fifteen
+ * tspecials `(`, `)`, `<`, `>`, `@`, `,`, `;`, `:`, `\`, `"`, `/`, `[`, `]`, `?` and `=`.
+ *
+ * @see {@link https://www.rfc-editor.org/rfc/rfc2045#section-5.1 | RFC 2045, 5.1 Syntax of the Content-Type Header Field}
+ */
+const mediaTypeToken = String.raw`[!-~-[()<>@,;:\\"/\[\]?=]]+`;
+
+/**
+ * A MIME type, which the XSD types `MimeTypeDType`, an `xs:normalizedString` whose pattern admits
+ * any Basic Latin character but RFC 2045's tspecials on either side of its one slash: spec reading
+ * 135 reads it as the information model's data type states it, "The mime type (type and subtype),
+ * as defined by [RFC 2045]" (§7.25, MimeType), which §5.1.2 (A) and §5.135.2 (Source) restate, "its
+ * value must be a valid MIME type". RFC 2045's type and subtype are each a token
+ * ({@link mediaTypeToken}), joined by `/` with nothing between (§5.1). So a space, written or a tab
+ * or line break `replace` makes one, and a control character, `U+007F` the one XML admits, are
+ * refused where the XSD admits them; a value meets the XSD's pattern too. The value is the type
+ * itself, not a header field, so the header's whitespace and comments between tokens have no place
+ * in it. A parameter is no part of "type and subtype", and the XSD refuses its `;` and `=`.
+ *
+ * The upload interaction's `type`, a list of MIME types (§5.165.1, MimeTypeList, which §9.1.3
+ * derives from MimeType), reads each item so.
+ *
+ * Only RFC 2045's tokens are a pattern. Its type is one it lists, an `X-` name, or "An extension
+ * token defined by a standards-track RFC and registered with IANA", and its subtype registered or
+ * `X-`: IANA's registry is a dated dataset no pinned source holds, so registration is spec reading
+ * 135's stated limit.
+ *
+ * @param domain - The XSD's definition, or the list of it.
+ * @returns It with RFC 2045's media type as a second pattern, on each item of a list.
+ * @see {@link https://www.imsglobal.org/spec/qti/v3p0/info#Derived_MimeType | QTI 3.0 information model, 7.25 MimeType}
+ * @see {@link https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_A.Attr_type | QTI 3.0 information model, 5.1.2 type}
+ * @see {@link https://www.rfc-editor.org/rfc/rfc2045#section-5.1 | RFC 2045, 5.1 Syntax of the Content-Type Header Field}
+ */
+const mediaType = (domain: Domain): Domain => {
+  if (domain._tag === "list") {
+    return { ...domain, item: mediaType(domain.item) };
+  }
+
+  return domain._tag === "atomic"
+    ? withPattern(domain, `${mediaTypeToken}/${mediaTypeToken}`)
+    : domain;
+};
+
+/**
+ * The XSD's names of the information model's MimeType and MimeTypeList: `MimeTypeDType`, and
+ * `MimeTypeListDType`, its restriction, the item of the upload interaction's anonymous list.
+ */
+const mediaTypeNames: ReadonlySet<string> = new Set(["MimeTypeDType", "MimeTypeListDType"]);
+
+/**
+ * Spec reading 135's attribute readings: each attribute the leaf types as a MIME type or a list of
+ * one ({@link mediaTypeNames}), on every kind that declares it, read by {@link mediaType}.
+ */
+const mediaTypeReadings: readonly SpecReading[] = [
+  ...Map.groupBy(
+    attributeDeclarations.filter(
+      ({ type }) =>
+        mediaTypeNames.has(type.type) ||
+        Option.exists(
+          type.inline,
+          (inline) =>
+            inline._tag === "list" &&
+            inline.item._tag === "named" &&
+            mediaTypeNames.has(inline.item.name),
+        ),
+    ),
+    ({ name }) => name,
+  ).entries(),
+].map(([name, declarations]) =>
+  on(135, [...new Set(declarations.map(({ kind }) => kind))], name, "xsd", mediaType),
+);
+
+/**
  * The counts spec reading 46 holds to the signed 64-bit range, on every kind that declares them.
  */
 const counts = [
@@ -803,6 +906,8 @@ const cnBaseReadings: readonly SpecReading[] = attributeDeclarations
  *   read no whitespace class.
  * - 8: a match table entry's `target-value` is a value of the outcome's base type, not a base-type
  *   name: any text, typed by the overlay.
+ * - 9: an `h1`'s `role` is `heading`, `tab` or `presentation`, the Schematron's RULE ARIA ROLE 1b
+ *   ({@link headingRole}).
  * - 15: a `variable-identifier-ref` names an outcome declaration, an identifier and not an `IDREF`.
  * - 16: `normal-maximum` is greater than zero.
  * - 17: an item's or a test's rubric block's `view` lists at least one view, the information model's
@@ -827,11 +932,14 @@ const cnBaseReadings: readonly SpecReading[] = attributeDeclarations
  *   ({@link languageOrEmpty}); a `track`'s `srclang` is a tag ({@link languageOnly}).
  * - 132: a `qti-printed-variable`'s `format` is a printf format string of at most one conversion,
  *   over the information model's conversion codes ({@link printfFormat}).
+ * - 135: a MIME type, and each item of a list of them, is RFC 2045's type and subtype, two tokens
+ *   joined by a slash ({@link mediaType}, {@link mediaTypeReadings}).
  *
  * Reading 14, restated, follows the XSD (a text-entry interaction's `response-identifier` and
- * `string-identifier` are `IDREF`s), so it states nothing here. The readings that add an attribute
- * to a kind, take one away or require one are {@link readingSpellings}, {@link readingRefusals}
- * and {@link readingUses}.
+ * `string-identifier` are `IDREF`s), and so does reading 136 (a `default` shape's `coords` is
+ * required and a `CoordsDType`, as every shape's is), so they state nothing here. The readings that
+ * add an attribute to a kind, take one away or require one are {@link readingSpellings},
+ * {@link readingRefusals} and {@link readingUses}.
  */
 export const specReadings: readonly SpecReading[] = [
   on(7, ["qti-map-entry"], "map-key", "exact"),
@@ -851,6 +959,7 @@ export const specReadings: readonly SpecReading[] = [
   on(7, ["ud:mapping"], "upperBound", "exact"),
   on(7, ["ud:mapEntry"], "mappedValue", "exact"),
   on(8, ["qti-match-table-entry"], "target-value", "exact", () => stringDomain),
+  on(9, ["h1"], "role", "xsd", headingRole),
   on(15, ["qti-outcome-declaration"], "variable-identifier-ref", "xsd", (domain) =>
     domain._tag === "atomic" && domain.builtin === "IDREF"
       ? { ...domain, builtin: "NCName" }
@@ -902,6 +1011,7 @@ export const specReadings: readonly SpecReading[] = [
   everywhere(129, "lang", languageOrEmpty),
   on(129, ["track"], "srclang", "xsd", languageOnly),
   on(132, ["qti-printed-variable"], "format", "xsd", (domain) => withPattern(domain, printfFormat)),
+  ...mediaTypeReadings,
 ];
 
 /**
@@ -952,15 +1062,24 @@ export interface ReadingRefusal {
 }
 
 /**
- * The declared attributes spec readings refuse: reading 85's `xpointer` on `xi:include`, which
- * `XInclude.xsd` declares and the information model forbids ("when using an XML binding, the
- * xpointer mechanism defined by the XInclude specification MUST NOT be used", §2.12). No wildcard
- * of `xi:include` admits a name in no namespace (`##other`), so a refused `xpointer` is refused
- * outright, never read as an open name.
+ * The declared attributes spec readings refuse:
  *
+ * - Reading 9's `role` on `source`, which both ASI XSDs declare and the Schematron's RULE ARIA ROLE
+ *   1a forbids ("The 'source' tag must not have an ARIA role attribute", ASI binding §5.3.1, whose
+ *   section 5 "is NORMATIVE"). The Schematron's extension rules cover `source` in both versions, so
+ *   spec reading 90 leaves it no open class in no namespace, and a `role` there is refused
+ *   outright, never read as an open name;
+ * - Reading 85's `xpointer` on `xi:include`, which `XInclude.xsd` declares and the information model
+ *   forbids ("when using an XML binding, the xpointer mechanism defined by the XInclude
+ *   specification MUST NOT be used", §2.12). No wildcard of `xi:include` admits a name in no
+ *   namespace (`##other`), so a refused `xpointer` is refused outright, never read as an open
+ *   name.
+ *
+ * @see {@link https://www.imsglobal.org/spec/qti/v3p0/bind | QTI 3.0 ASI binding, 5.3.1 RULE_SET_ARIA_ROLES_1}
  * @see {@link https://www.imsglobal.org/spec/qti/v3p0/info#Main2p12 | QTI 3.0 information model, 2.12 Items and Test Fragments}
  */
 export const readingRefusals: readonly ReadingRefusal[] = [
+  { kind: "source", name: "role", reading: 9 },
   { kind: "xi:include", name: "xpointer", reading: 85 },
 ];
 

@@ -1548,3 +1548,28 @@ messages, but nothing raises either one.
   `DbLayer.make` falls from 43.7 s to 8.0 s, and `grizzle migrate`'s time before it connects falls from 70.3 s to
   0.93 s. The reproduction above was not re-run at `f66c05b` here. It is not filed by qti-pie, and qti-pie took no
   workaround: building `AuthorApp` lazily would only have moved the cost to the first database use.
+
+## `GoverningOf` has no dense coordinate its readers hold (a documented limit, lane CGD)
+
+- **What.** `GoverningOf` is (version, kind, governs) → governor, keyed over 2 · |NodeKind| · |TypeName| = 2 · 644 · 444
+  = 571,872 cells. It holds 4,516 rows (0.8% dense), and its 11-bit cells come to 786,332 B, 1.57 MB as hex.
+- **Why it doesn't densify.** grizzle's remedy for a sparse closed relation is a dense coordinate such as a slot, whose
+  codes run 0 to n − 1 per owner (README "Limits", `README.md:2562` to `2565` at `f66c05b`: "choose coordinates that
+  make it dense, such as slots"). That needs the reader to hold the dense coordinate. `Follow`'s readers hold a
+  position, and AttributeGrammar's (after DK) a slot from `AttributeSlotOf`. Every reader of `GoverningOf` holds (kind,
+  governs), with `governs` a `TypeName` code, and a kind's lawful types are a sparse, kind-specific subset of TypeName:
+  - 1,256 of the 1,288 (version, kind) blocks of declared kinds have one row;
+  - 26 have 9 to 42;
+  - the three open element classes have all 444.
+
+  So no permutation of TypeName makes every kind's types a prefix. The index from (kind, type) to a slot would be the
+  same sparse product again.
+
+- **What would densify it.** `Node` would carry the type's slot among its kind's `XsiType` rows, `typeSlot`, written by
+  the host, and `Attribute` would copy it as it copies `governs`. `GoverningOf` would then be (version, kind, typeSlot)
+  → (governs, governor), 4,516 cells × 20 bits, about 11 KB. Its `governs` payload would also state N12's containment
+  of (version, kind, governs) in `XsiType`, which would make `XsiType` (71,492 B) unnecessary. That is a change to
+  `Node`, `Attribute`, the write path, the folds and every reader of `governs`, beyond DK's scope, so DK leaves
+  `GoverningOf` keyed as it is.
+- **Classification.** A documented limit, met by the model's coordinates: grizzle behaves as its README states, so
+  nothing is filed.
