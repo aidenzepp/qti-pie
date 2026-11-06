@@ -233,6 +233,51 @@ describe("the plain-HTML host", () => {
     }),
   );
 
+  it.effect(
+    'keeps the Choice duty: its form carries autocomplete="off" and every page it answers says no-store',
+    () =>
+      Effect.gen(function* choiceDuty() {
+        const handler = yield* hostOf();
+        const get = yield* Effect.promise(() => handler(new Request(`${origin}/`)));
+        const page = yield* pageOf(get);
+        const post = yield* Effect.promise(() =>
+          handler(formPost([[controlName(page.elements, "true"), "true"]])),
+        );
+        const posted = yield* pageOf(post);
+        const elsewhere = yield* Effect.promise(() => handler(new Request(`${origin}/other`)));
+        const put = yield* Effect.promise(() =>
+          handler(new Request(`${origin}/`, { body: "", method: "PUT" })),
+        );
+        const unencoded = yield* Effect.promise(() =>
+          handler(new Request(`${origin}/`, { body: "{}", method: "POST" })),
+        );
+
+        assert.isNotEmpty(slotted(page.elements, rowFor("choice-interaction", "control").slot));
+        for (const elements of [page.elements, posted.elements]) {
+          assert.deepStrictEqual(
+            elements.flatMap((element) =>
+              element.tag === "form" ? [element.attrs["autocomplete"]] : [],
+            ),
+            ["off"],
+          );
+        }
+
+        assert.deepStrictEqual(
+          [get, post, elsewhere, put, unencoded].map((response) => [
+            response.status,
+            response.headers.get("cache-control"),
+          ]),
+          [
+            [200, "no-store"],
+            [200, "no-store"],
+            [404, "no-store"],
+            [405, "no-store"],
+            [415, "no-store"],
+          ],
+        );
+      }),
+  );
+
   it.effect("answers another path with 404 and another method with 405", () =>
     Effect.gen(function* otherRequests() {
       const handler = yield* hostOf();
@@ -255,6 +300,7 @@ describe("the plain-HTML host", () => {
       const { elements } = yield* pageOf(response);
 
       assert.strictEqual(response.status, 500);
+      assert.strictEqual(response.headers.get("cache-control"), "no-store");
       assert.deepStrictEqual(
         elements.filter((element) => element.tag === "form"),
         [],

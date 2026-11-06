@@ -370,10 +370,15 @@ this split. A host that sends the accepted item to the browser sends what `redac
 
 A host composes these functions with its own page, form, routes and store.
 
+To decode a post, call `postings(redacted, instance)` with the instance you rendered with. It
+gives each response's binding and the options `decode` takes, so `decode` reads a posted Text
+Entry in the base its binding declares, not always in base 10.
+
 [`src/hosts/html.ts`](src/hosts/html.ts) is a plain-HTML host, written as a Fetch handler. It
-serves one item inside its own `<form method="post">` and submit button, on a page that links
-plate's sheet, and scores a post with `partition`, `decode`, `checkResponses` and `score`. It uses
-only what `@qti-pie/plate` exports.
+serves one item inside its own `<form method="post" autocomplete="off">` and submit button, on a
+page that links plate's sheet and sends `Cache-Control: no-store`. It scores a post with
+`partition`, `postings`, `decode`, `checkResponses` and `score`, and uses only what
+`@qti-pie/plate` exports.
 
 In Astro, render on an on-demand page and put the HTML in with `set:html`:
 

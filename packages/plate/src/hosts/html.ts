@@ -7,6 +7,11 @@
  * `score`, and the page comes back with the Status part above the form. The host is stateless: it
  * keeps no record, so each post is scored as a first attempt, and it sets no attempt limit.
  *
+ * It keeps the duty the README states for a form that holds a Choice: the form carries
+ * `autocomplete="off"` and every page it answers sends `Cache-Control: no-store`, so a browser
+ * restores no Choice's checked state from its form cache or its back-forward cache over what the
+ * host rendered.
+ *
  * It imports only `#plate/index.ts`, so it uses nothing a host outside the package could not. The
  * dev playground mounts it at `/hosts/html` and serves the sheet at `/styles.css`; the core never
  * reaches it (`src/boundary.test.ts` forbids `#plate/hosts/`).
@@ -56,9 +61,13 @@ const instance = "q1";
 const sheet = "/styles.css";
 
 /**
- * The headers of every page the host answers with.
+ * The headers of every page the host answers with: `no-store`, so a browser keeps no page to
+ * restore a Choice's checked state from.
  */
-const pageHeaders = { "content-type": "text/html; charset=utf-8" } as const;
+const pageHeaders = {
+  "cache-control": "no-store",
+  "content-type": "text/html; charset=utf-8",
+} as const;
 
 /**
  * Escape a string for HTML text or a double-quoted attribute value.
@@ -215,7 +224,10 @@ const itemHost = (accepted: Accepted, configuration: Configuration): HtmlHost =>
 
   /**
    * Construct the page around the item: the Status part when a post gave one, then the host's
-   * form around the rendered item and the host's submit button.
+   * form around the rendered item and the host's submit button. The form carries
+   * `autocomplete="off"`, which HTML does not allow on a Choice's radio or checkbox, so the
+   * browser restores none of their checked states; the Text Entry and Extended Text Controls say
+   * `off` on their own.
    *
    * @param options What `render` shows: the posted values, or a refused post's strings and
    *   messages.
@@ -237,7 +249,7 @@ const itemHost = (accepted: Accepted, configuration: Configuration): HtmlHost =>
       lang: configuration.locale,
       main: [
         ...(shown === undefined ? [] : [shown.success.html]),
-        '<form method="post">',
+        '<form method="post" autocomplete="off">',
         rendered.success.html,
         '<button type="submit">Submit</button>',
         "</form>",

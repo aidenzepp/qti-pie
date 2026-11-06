@@ -283,6 +283,24 @@ describe("README.md", () => {
     );
   });
 
+  it("says in Hosts that a host decodes a post through postings, which src/index.ts exports", () => {
+    const exported = readImports(packageFile("src/index.ts")).imports.flatMap(({ names }) =>
+      names.map(({ name }) => name),
+    );
+    const paragraphs = sectionOf("## Hosts")
+      .split(/\n{2,}/u)
+      .map((paragraph) => paragraph.replaceAll("\n", " "));
+
+    assert.include(exported, "postings");
+    assert.isTrue(
+      paragraphs.some(
+        (paragraph) =>
+          paragraph.includes("`postings(redacted, instance)`") && paragraph.includes("Text Entry"),
+      ),
+      "a paragraph of Hosts names postings(redacted, instance) for a posted Text Entry",
+    );
+  });
+
   it("names the licence package.json declares, MIT", () => {
     const { license } = Schema.decodeUnknownSync(Manifest)(JSON.parse(packageFile("package.json")));
 
