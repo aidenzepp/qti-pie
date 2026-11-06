@@ -21,18 +21,44 @@
  * The item form's action names the Status region as its fragment, so the page after a submit opens
  * at the result.
  *
+ * It also serves M2's routes, each composed in its own module: the packages at `/packages`
+ * (`#plate/dev/packages.ts`), the test sessions under `/sessions` and their Start posts
+ * (`#plate/dev/test-page.ts`), a session's review, solution and results
+ * (`#plate/dev/review-page.ts`), and the plain-HTML host (`#plate/hosts/html.ts`) around BG007 at
+ * `/hosts/html`, its prefix stripped. One store holds the test sessions; the index links the
+ * packages and resumes each session still in progress.
+ *
  * @module
  */
 /* oxlint-disable unicorn/throw-new-error -- `Schema.TaggedError<Self>()` is a class factory that is called once and extended, never thrown. */
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { Config, ConfigProvider, Effect, Option, Ref, Result, Schema } from "effect";
+import {
+  Config,
+  ConfigProvider,
+  Duration,
+  Effect,
+  Exit,
+  Option,
+  Ref,
+  Result,
+  Schema,
+} from "effect";
+import { decodeSession } from "#plate/codec/session.ts";
 import { decodeStoredFloat } from "#plate/codec/values.ts";
 import { assetHeaders, page, pageHeaders, pageHtml, slot } from "#plate/dev/frame.ts";
 import type { Appearance, Page } from "#plate/dev/frame.ts";
 import { groupVerdicts, verdictCache } from "#plate/dev/listing.ts";
 import type { OpenFailure, VerdictCache, VerdictGroup } from "#plate/dev/listing.ts";
+import { packageCache, packageHref, packageIds, routePackages } from "#plate/dev/packages.ts";
+import type { PackageCache, PackageEntry, PackagesFailure } from "#plate/dev/packages.ts";
+import { reviewPath, routeReview } from "#plate/dev/review-page.ts";
+import type { ReviewPlayground } from "#plate/dev/review-page.ts";
+import { sessionStore } from "#plate/dev/store.ts";
+import type { SessionEntry, SessionStore } from "#plate/dev/store.ts";
+import { routeSessions, sessionPath } from "#plate/dev/test-page.ts";
+import type { SessionPlayground } from "#plate/dev/test-page.ts";
 import { emptyTheme, parseTheme, themeCss } from "#plate/dev/theme.ts";
 import type { ThemeRefused } from "#plate/dev/theme.ts";
 import type { CorpusFileUnreadable, CorpusMissing } from "#plate/document/corpus.ts";
@@ -68,13 +94,17 @@ import type {
   ValidationMessage,
   Value,
 } from "#plate/index.ts";
+import { htmlHost } from "#plate/hosts/html.ts";
+import type { HtmlHost } from "#plate/hosts/html.ts";
 import { ledgerDirectory } from "#plate/ledger/directory.ts";
 import { Ledger } from "#plate/ledger/report.ts";
 import { ledgerHtml, verdictTable } from "#plate/ledger/view.ts";
-import { message } from "#plate/messages.ts";
+import { message, numeral } from "#plate/messages.ts";
 import type { BodyNode } from "#plate/model/item.ts";
+import type { PackageTest } from "#plate/package/open.ts";
+import { current } from "#plate/session/start.ts";
 import { acceptedItem, describeRefusal } from "#plate/validate/verdict.ts";
-import type { Verdict } from "#plate/validate/verdict.ts";
+import type { AcceptedKind, Verdict } from "#plate/validate/verdict.ts";
 
 /**
  * A Fetch handler: one request in, one response out.
@@ -87,12 +117,15 @@ export type Handler = (request: Request) => Promise<Response>;
  * `configuration` is the input `configure` decodes, every default when absent; `provider` is where
  * `readCorpusFile` reads `PLATE_CORPUS_DIR` and `HOME` and the ledger page reads
  * `PLATE_LEDGER_DIR`, the process environment when absent; `verdicts` is the cache that opens and
- * keeps the corpus's members, a new one over `openMember` when absent. Handlers given one cache
- * share its opens, and a test counts them through the cache's opener; the cache reads the corpus
- * root of the first handler that asks, so share one only between handlers over the same root.
+ * keeps the corpus's members, a new one over `openMember` when absent; `packages` is the cache
+ * that opens and keeps the packages, a new one over `openDirectory` when absent. Handlers given
+ * one cache share its opens, and a test counts them through the cache's opener; a cache reads the
+ * corpus root of the first handler that asks, so share one only between handlers over the same
+ * root.
  */
 export interface PlaygroundSettings {
   readonly configuration?: Partial<Configuration>;
+  readonly packages?: PackageCache;
   readonly provider?: ConfigProvider.ConfigProvider;
   readonly verdicts?: VerdictCache;
 }
@@ -101,6 +134,28 @@ export interface PlaygroundSettings {
  * The most sessions a playground keeps; the oldest is evicted first (OD-10's placeholder).
  */
 const sessionLimit = 100;
+
+/**
+ * The item the plain-HTML host serves at {@link hostMount}: BG007, read from the corpus cache
+ * (spec §4.12), never from a committed copy (rule `3ad87993`).
+ */
+const hostItem = "QTI3_BPIG_Examples/items/BG007.xml";
+
+/**
+ * The path the plain-HTML host is mounted at; the host sees each request's path with it stripped.
+ */
+const hostMount = "/hosts/html";
+
+/**
+ * The suffix of a directory phase 1's extraction unpacked a zip into: such a directory is a
+ * package, which `/packages` lists.
+ */
+const packageSuffix = ".zip.d";
+
+/**
+ * The id of the index's region of test sessions in progress.
+ */
+const inProgressId = "sessions-in-progress";
 
 /**
  * The media types `/assets/*` serves, by lower-case extension; any other file is refused.
@@ -229,14 +284,43 @@ interface Session {
 }
 
 /**
- * A playground's state and settings: its theme box's appearance, its sessions, oldest first, its
- * configuration input, and the verdicts of the corpus's members.
+ * The playground's store of test sessions, which also gives the ids it holds, so the index can
+ * resume each session.
+ */
+interface ListedStore extends SessionStore {
+  /**
+   * The ids the store holds, in the order their sessions were started.
+   */
+  readonly ids: () => readonly string[];
+}
+
+/**
+ * The failure of building the plain-HTML host: BG007 or the corpus cannot be read, or the host's
+ * configuration does not decode.
+ */
+type HostFailure = Config.ConfigError | CorpusFileUnreadable | CorpusMissing | InvalidConfiguration;
+
+/**
+ * A playground's state and settings: its theme box's appearance, its open items, oldest first, its
+ * configuration input, the verdicts of the corpus's members, its packages, its test sessions, and
+ * the plain-HTML host, built the first time it is asked for.
  */
 interface Playground {
   readonly appearance: Ref.Ref<Appearance>;
   readonly configuration: Partial<Configuration>;
+  readonly host: Effect.Effect<HtmlHost, HostFailure>;
+  readonly packages: PackageCache;
   readonly sessions: Map<string, Session>;
+  readonly tests: ListedStore;
   readonly verdicts: VerdictCache;
+}
+
+/**
+ * One session in progress as the index lists it: the link to its page and the link's text.
+ */
+interface Resume {
+  readonly href: string;
+  readonly label: string;
 }
 
 /**
@@ -394,6 +478,34 @@ const inOpenPackage = (playground: Playground, corpusPath: string): boolean =>
   });
 
 /**
+ * Construct an empty store of test sessions over `sessionStore`, which keeps the bound and evicts
+ * the oldest; this one also remembers the ids it was given, forgetting each the store evicted.
+ *
+ * @returns The store.
+ */
+const listedStore = (): ListedStore => {
+  const store = sessionStore();
+  const held = new Set<string>();
+
+  return {
+    get: (id) => store.get(id),
+    ids: () => [...held],
+    set: (id, entry) => {
+      store.set(id, entry);
+      held.add(id);
+      for (const kept of held) {
+        if (Option.isNone(store.get(kept))) {
+          held.delete(kept);
+        }
+      }
+    },
+    get size() {
+      return store.size;
+    },
+  };
+};
+
+/**
  * Keep a session, evicting the oldest past {@link sessionLimit}.
  *
  * An existing instance keeps its place, so eviction follows the order items were opened.
@@ -423,14 +535,16 @@ const remember = (playground: Playground, instance: string, session: Session): v
 const folderHeading = (folder: string): string => (folder === "." ? "Corpus root" : folder);
 
 /**
- * Construct the listing page: the playground's reports in a `nav`, then one region per verdict,
- * named by its heading with the verdict and its count, holding a heading per top folder and a list
- * of its members, each a link to its item page whose text is its corpus path.
+ * Construct the listing page: the packages and the playground's reports in a `nav`, the region of
+ * test sessions in progress, each a Resume link to its page, then one region per verdict, named by
+ * its heading with the verdict and its count, holding a heading per top folder and a list of its
+ * members, each a link to its item page whose text is its corpus path.
  *
  * @param groups The members, grouped by verdict and then by top folder.
+ * @param resumes The sessions in progress, newest first.
  * @returns The page.
  */
-const listing = (groups: readonly VerdictGroup[]): Page =>
+const listing = (groups: readonly VerdictGroup[], resumes: readonly Resume[]): Page =>
   page(200, "en", "plate dev playground", [
     h("h1", {}, [text("plate dev playground")]),
     h("p", {}, [
@@ -440,9 +554,24 @@ const listing = (groups: readonly VerdictGroup[]): Page =>
     ]),
     h("nav", {}, [
       h("ul", {}, [
+        h("li", {}, [h("a", { href: "/packages" }, [text("Packages")])]),
         h("li", {}, [h("a", { href: "/verdicts" }, [text("Verdicts")])]),
         h("li", {}, [h("a", { href: "/ledger" }, [text("Ledger")])]),
       ]),
+    ]),
+    h("section", { "aria-labelledby": inProgressId }, [
+      h("h2", { id: inProgressId }, [text("Sessions in progress")]),
+      resumes.length === 0
+        ? h("p", {}, [
+            text(
+              "No test session is in progress. Start one with a Start button on a package's page.",
+            ),
+          ])
+        : h(
+            "ul",
+            {},
+            resumes.map(({ href, label }) => h("li", {}, [h("a", { href }, [text(label)])])),
+          ),
     ]),
     ...groups.map(({ count, folders, verdict }) =>
       h("section", { "aria-labelledby": `verdict-${verdict}`, "data-verdict": verdict }, [
@@ -461,6 +590,56 @@ const listing = (groups: readonly VerdictGroup[]): Page =>
         ]),
       ]),
     ),
+  ]);
+
+/**
+ * What each root besides an item is, as the page of such a document names it.
+ */
+const rootNames: Readonly<Record<Exclude<AcceptedKind, "item">, string>> = {
+  section: "an assessment section",
+  stimulus: "an assessment stimulus",
+  test: "an assessment test",
+};
+
+/**
+ * Construct the page of a document `open` accepted whose root is not an item: what it is, and the
+ * page of the package it lies in, where its package's tests start, or the package listing when it
+ * lies in no package's directory. The playground opens only items on their own.
+ *
+ * @param corpusPath The document's corpus path.
+ * @param kind Its root's kind, which a data attribute also gives.
+ * @param packaged The id of the package whose directory holds it, none when no package's does.
+ * @returns The page.
+ */
+const rootPage = (
+  corpusPath: string,
+  kind: Exclude<AcceptedKind, "item">,
+  packaged: Option.Option<string>,
+): Page =>
+  page(200, "en", `Accepted ${kind}: ${corpusPath}`, [
+    h("h1", {}, [text(`Accepted ${kind}: ${corpusPath}`)]),
+    h("p", { "data-kind": kind }, [
+      text(
+        `plate accepts this document as ${rootNames[kind]}. The playground opens items on their own and delivers a test from its package.`,
+      ),
+    ]),
+    h(
+      "p",
+      {},
+      Option.match(packaged, {
+        onNone: () => [
+          text("It lies in no package's directory. The "),
+          h("a", { href: "/packages" }, [text("package listing")]),
+          text(" has every package the playground opens."),
+        ],
+        onSome: (id) => [
+          text("Its package's page lists the package's resources and starts its tests: "),
+          h("a", { href: packageHref(id) }, [text(id)]),
+          text("."),
+        ],
+      }),
+    ),
+    home,
   ]);
 
 /**
@@ -821,27 +1000,176 @@ const scoredPage = (
   );
 
 /**
+ * The failure of a route: the corpus, a package, a stylesheet or the ledger is missing or
+ * unreadable, or the settings are missing or invalid.
+ */
+type RouteFailure =
+  | Config.ConfigError
+  | CorpusFileUnreadable
+  | CorpusMissing
+  | InvalidConfiguration
+  | LedgerUnreadable
+  | PackagesFailure
+  | SheetUnreadable;
+
+/**
  * Construct the page a route's failure answers with: the 404 page for a path the corpus does not
- * hold, and a developer error's page when the corpus, a stylesheet or the ledger is missing or
- * unreadable or the settings are missing or invalid.
+ * hold, and a developer error's page when the corpus, a package, a stylesheet or the ledger is
+ * missing or unreadable or the settings are missing or invalid.
  *
  * @param error The failure.
  * @returns The page.
  */
-const routeFailure = (
-  error:
-    | Config.ConfigError
-    | CorpusFileUnreadable
-    | CorpusMissing
-    | InvalidConfiguration
-    | LedgerUnreadable
-    | SheetUnreadable,
-): Page => (error._tag === "CorpusFileUnreadable" ? notFound() : failurePage(error));
+const routeFailure = (error: RouteFailure): Page =>
+  error._tag === "CorpusFileUnreadable" ? notFound() : failurePage(error);
+
+/**
+ * Find the package at a location among the playground's packages, opening it alone.
+ *
+ * A package's id is its directory's name unless another package's directory has the same name,
+ * when it is its whole location (`packageIds`), so the location is tried under both.
+ *
+ * @param packages The packages.
+ * @param location The package's location.
+ * @returns The package, or none when no package is at the location.
+ */
+const packageAt = Effect.fnUntraced(function* packageAt(
+  packages: PackageCache,
+  location: string,
+): Effect.fn.Return<Option.Option<PackageEntry>, PackagesFailure> {
+  for (const id of new Set([...packageIds([location]), location])) {
+    const found = yield* packages.packageOf(id);
+    if (Option.isSome(found) && found.value.location === location) {
+      return found;
+    }
+  }
+
+  return Option.none();
+});
+
+/**
+ * Give the id of the package whose directory holds a member of the document set: the innermost
+ * `*.zip.d` directory on its path.
+ *
+ * @param playground The playground.
+ * @param corpusPath The member's corpus path.
+ * @returns The package's id, or none when no package's directory holds the member.
+ */
+const packageOfMember = Effect.fnUntraced(function* packageOfMember(
+  playground: Playground,
+  corpusPath: string,
+): Effect.fn.Return<Option.Option<string>, PackagesFailure> {
+  const directories = corpusPath.split("/").slice(0, -1);
+  const innermost = directories.findLastIndex((directory) => directory.endsWith(packageSuffix));
+  if (innermost === -1) {
+    return Option.none();
+  }
+
+  const found = yield* packageAt(
+    playground.packages,
+    directories.slice(0, innermost + 1).join("/"),
+  );
+
+  return found.pipe(Option.map(({ id }) => id));
+});
+
+/**
+ * Give the test at a path in a package.
+ *
+ * @param found The package.
+ * @param href The test's path from the package's root.
+ * @returns The test with its items, or none when the package is not accepted or holds no test
+ *   there.
+ */
+const testIn = (found: PackageEntry, href: string): Option.Option<PackageTest> => {
+  const { verdict } = found;
+
+  return verdict.verdict === "accepted" || verdict.verdict === "accepted-with-unsupported"
+    ? Option.fromUndefinedOr(verdict.accepted.tests.get(`${found.location}/${href}`))
+    : Option.none();
+};
+
+/**
+ * Give a stored test session's Resume link, named "Resume: {test}, Item n of N" for its current
+ * item.
+ *
+ * @param id The session id.
+ * @param entry The store's entry.
+ * @param test The test the session was started from.
+ * @param configuration The playground's configuration.
+ * @returns The link, or none when the session is closed or its stored form does not fit the test.
+ */
+const resumeOf = (
+  id: string,
+  entry: SessionEntry,
+  test: PackageTest,
+  configuration: Configuration,
+): Option.Option<Resume> => {
+  const session = decodeSession(entry.session, test.test);
+  if (Result.isFailure(session) || session.success.status === "closed") {
+    return Option.none();
+  }
+
+  const shown = current(test.test, session.success, configuration);
+  if (Result.isFailure(shown) || shown.success.kind !== "item") {
+    return Option.none();
+  }
+
+  const { count, sequenceIndex } = shown.success;
+  const { locale } = shown.success.configuration;
+
+  return Option.some({
+    href: `/sessions/${encodeURIComponent(id)}`,
+    label: message(locale, "resume", {
+      count: numeral(locale, count),
+      n: numeral(locale, sequenceIndex),
+      test: test.test.test.title.trim(),
+    }),
+  });
+};
+
+/**
+ * Give each test session in progress, newest first, as its Resume link.
+ *
+ * A session whose package, test or stored form no longer fits its entry is left out: its own page
+ * reports that developer error. A closed session is not in progress. The configuration is decoded
+ * only when the store holds a session, so the index of a playground that started none never
+ * decodes it.
+ *
+ * @param playground The playground.
+ * @returns The sessions' links.
+ */
+const sessionsInProgress = Effect.fnUntraced(function* sessionsInProgress(
+  playground: Playground,
+): Effect.fn.Return<readonly Resume[], InvalidConfiguration | PackagesFailure> {
+  const ids = playground.tests.ids().toReversed();
+  if (ids.length === 0) {
+    return [];
+  }
+
+  const configuration = yield* configure(playground.configuration);
+  const resumes: Resume[] = [];
+  for (const id of ids) {
+    const entry = playground.tests.get(id);
+    if (Option.isSome(entry)) {
+      const found = yield* packageAt(playground.packages, entry.value.packageLocation);
+      const resume = found.pipe(
+        Option.flatMap((held) => testIn(held, entry.value.testHref)),
+        Option.flatMap((test) => resumeOf(id, entry.value, test, configuration)),
+      );
+      if (Option.isSome(resume)) {
+        resumes.push(resume.value);
+      }
+    }
+  }
+
+  return resumes;
+});
 
 /**
  * Answer a member of the document set with its item page, or with its refusals or unchecked
- * reasons, from its cached verdict; a path that names no member, or a member whose accepted
- * document `acceptedItem` does not give as an item, is not found.
+ * reasons, from its cached verdict, or, for an accepted test, section or stimulus, with the page
+ * that says what it is and links its package; a path that names no member is not found.
  *
  * @param playground The playground.
  * @param corpusPath The document's corpus path, as the request named it.
@@ -850,7 +1178,7 @@ const routeFailure = (
 const openItem = Effect.fn("playground.openItem")(function* openItem(
   playground: Playground,
   corpusPath: string,
-): Effect.fn.Return<Page, InvalidConfiguration | OpenFailure> {
+): Effect.fn.Return<Page, InvalidConfiguration | OpenFailure | PackagesFailure> {
   const member = yield* playground.verdicts.verdictOf(corpusPath);
   if (Option.isNone(member)) {
     return notFound();
@@ -883,8 +1211,10 @@ const openItem = Effect.fn("playground.openItem")(function* openItem(
     case "accepted":
     case "accepted-with-unsupported": {
       const accepted = acceptedItem(verdict);
-      if (Option.isNone(accepted)) {
-        return notFound();
+      if (verdict.kind !== "item" || Option.isNone(accepted)) {
+        return verdict.kind === "item"
+          ? notFound()
+          : rootPage(corpusPath, verdict.kind, yield* packageOfMember(playground, corpusPath));
       }
 
       const instance = crypto.randomUUID();
@@ -935,10 +1265,10 @@ const submit = Effect.fn("playground.submit")(function* submit(
   }
 
   const configuration = yield* configure(playground.configuration);
-  const current = { instance: target.instance, session };
+  const opened = { instance: target.instance, session };
   const finished = configuration.maxAttempts > 0 && session.attempts >= configuration.maxAttempts;
   if (finished && Option.isSome(session.last)) {
-    return scoredPage(current, configuration, session.last.value);
+    return scoredPage(opened, configuration, session.last.value);
   }
 
   const form = yield* Effect.result(
@@ -974,7 +1304,7 @@ const submit = Effect.fn("playground.submit")(function* submit(
   );
   const messages = checkResponses(session.accepted, decoded, configuration);
   if (messages.length > 0) {
-    return refusedPage(current, configuration, messages, posted);
+    return refusedPage(opened, configuration, messages, posted);
   }
 
   const values = Object.fromEntries(
@@ -986,7 +1316,7 @@ const submit = Effect.fn("playground.submit")(function* submit(
   return Result.match(score(session.accepted, values, Option.getOrUndefined(session.record)), {
     onFailure: (error) =>
       error instanceof ResponsesRefused
-        ? refusedPage(current, configuration, error.messages, posted)
+        ? refusedPage(opened, configuration, error.messages, posted)
         : failurePage(error),
     onSuccess: (stored) => {
       const said = scoreText(session.accepted, stored, configuration.locale);
@@ -1078,6 +1408,61 @@ const serveAsset = Effect.fn("playground.serveAsset")(function* serveAsset(
   return new Response(new Uint8Array(bytes), {
     headers: { ...assetHeaders, "content-type": type.value },
   });
+});
+
+/**
+ * Read the path the plain-HTML host sees for a request's path: the path below {@link hostMount},
+ * `/` for the mount itself.
+ *
+ * @param pathname The request's path.
+ * @returns The host's path, or none when the path is not under the mount.
+ */
+const hostPath = (pathname: string): Option.Option<string> => {
+  if (pathname === hostMount) {
+    return Option.some("/");
+  }
+
+  return pathname.startsWith(`${hostMount}/`)
+    ? Option.some(pathname.slice(hostMount.length))
+    : Option.none();
+};
+
+/**
+ * Pass a request to the plain-HTML host with its mount's prefix stripped, its query, method,
+ * headers and body kept, and answer with the host's response, to which each page header the host
+ * does not set is added, so the host's page gets the playground's content-security headers too.
+ *
+ * @param playground The playground, whose host is built the first time it is asked for.
+ * @param request The request.
+ * @param pathname The host's path, from {@link hostPath}.
+ * @returns The host's response.
+ */
+const serveHost = Effect.fn("playground.serveHost")(function* serveHost(
+  playground: Playground,
+  request: Request,
+  pathname: string,
+): Effect.fn.Return<Response, HostFailure> {
+  const host = yield* playground.host;
+  const url = new URL(request.url);
+  url.pathname = pathname;
+  const hosted = yield* Effect.promise(() =>
+    host(
+      new Request(url, {
+        body: request.body,
+        duplex: "half",
+        headers: request.headers,
+        method: request.method,
+      }),
+    ),
+  );
+  const headers = new Headers(hosted.headers);
+  for (const [name, value] of Object.entries(pageHeaders)) {
+    if (!headers.has(name)) {
+      headers.set(name, value);
+    }
+  }
+
+  return new Response(hosted.body, { headers, status: hosted.status });
 });
 
 /**
@@ -1211,11 +1596,78 @@ const postTheme = Effect.fn("playground.postTheme")(function* postTheme(
 });
 
 /**
+ * Answer the index: the listing of the document set with the test sessions in progress. A member
+ * that cannot be read answers with a developer error's page, since the page's own address exists.
+ *
+ * @param playground The playground.
+ * @returns The page.
+ */
+const indexPage = (playground: Playground): Effect.Effect<Page, RouteFailure> =>
+  Effect.all({
+    resumes: sessionsInProgress(playground),
+    verdicts: playground.verdicts.verdicts,
+  }).pipe(
+    Effect.map(({ resumes, verdicts }) => listing(groupVerdicts(verdicts), resumes)),
+    Effect.catchTag("CorpusFileUnreadable", (unreadable) =>
+      Effect.succeed(failurePage(unreadable)),
+    ),
+  );
+
+/**
+ * Route one request for the test delivery routes, in this order: a session's review, solution and
+ * results (`reviewPath`), a Start post and a session's pages (`sessionPath`), the packages under
+ * `/packages`, and the plain-HTML host under `/hosts/html`, its prefix stripped; any other path is
+ * a 404. The session and review routes read one object, the playground's decoded configuration
+ * with its packages and its test sessions. BG007 missing from the corpus is a developer error,
+ * since the host's mount always serves it.
+ *
+ * @param playground The playground.
+ * @param request The request.
+ * @returns The response, or the page to answer with.
+ */
+const routeTests = (
+  playground: Playground,
+  request: Request,
+): Effect.Effect<Page | Response, RouteFailure> => {
+  const { pathname } = new URL(request.url);
+  const read = Effect.map(
+    configure(playground.configuration),
+    (configuration): ReviewPlayground & SessionPlayground => ({
+      configuration,
+      packages: playground.packages,
+      sessions: playground.tests,
+    }),
+  );
+
+  if (reviewPath(pathname)) {
+    return read.pipe(Effect.flatMap((sessions) => routeReview(sessions, request)));
+  }
+
+  if (sessionPath(pathname)) {
+    return read.pipe(Effect.flatMap((sessions) => routeSessions(sessions, request)));
+  }
+
+  if (pathname === "/packages" || pathname.startsWith("/packages/")) {
+    return routePackages(playground.packages, request);
+  }
+
+  return Option.match(hostPath(pathname), {
+    onNone: () => Effect.succeed(notFound()),
+    onSome: (hosted) =>
+      serveHost(playground, request, hosted).pipe(
+        Effect.catchTag("CorpusFileUnreadable", (unreadable) =>
+          Effect.succeed(failurePage(unreadable)),
+        ),
+      ),
+  });
+};
+
+/**
  * Route one request: the listing, the verdicts page, the ledger page, an item page, a post, an
- * asset, a stylesheet, or a theme box post; anything else is a 404, and a method a route does not
- * take is a 405. A member the listing or the verdicts page cannot read is a developer error there,
- * since the page's own address exists; so is a ledger that cannot be read, while a ledger not yet
- * written shows the command that writes it.
+ * asset, a stylesheet, or a theme box post; any other path goes to {@link routeTests}. A method a
+ * route does not take is a 405. A member the listing or the verdicts page cannot read is a
+ * developer error there, since the page's own address exists; so is a ledger that cannot be read,
+ * while a ledger not yet written shows the command that writes it.
  *
  * @param playground The playground.
  * @param request The request.
@@ -1224,15 +1676,7 @@ const postTheme = Effect.fn("playground.postTheme")(function* postTheme(
 const route = (
   playground: Playground,
   request: Request,
-): Effect.Effect<
-  Page | Response,
-  | Config.ConfigError
-  | CorpusFileUnreadable
-  | CorpusMissing
-  | InvalidConfiguration
-  | LedgerUnreadable
-  | SheetUnreadable
-> => {
+): Effect.Effect<Page | Response, RouteFailure> => {
   const url = new URL(request.url);
   const refusedMethod = Effect.succeed(
     notePage(405, "Method not allowed", `${request.method} is not taken at ${url.pathname}.`),
@@ -1255,7 +1699,7 @@ const route = (
       : refusedMethod;
 
   if (url.pathname === "/") {
-    return fromVerdicts((verdicts) => listing(groupVerdicts(verdicts)));
+    return request.method === "GET" ? indexPage(playground) : refusedMethod;
   }
 
   if (url.pathname === "/verdicts") {
@@ -1303,7 +1747,7 @@ const route = (
     return request.method === "POST" ? postTheme(playground, request) : refusedMethod;
   }
 
-  return Effect.succeed(notFound());
+  return routeTests(playground, request);
 };
 
 /**
@@ -1349,9 +1793,10 @@ const answer = (
       );
 
 /**
- * Construct a playground's Fetch handler, with its own sessions, theme and dark flag, and its own
- * verdict cache unless the settings give one: a member's verdict, once its open succeeds, is kept
- * for the handler's life.
+ * Construct a playground's Fetch handler, with its own open items, test sessions, theme and dark
+ * flag, its own plain-HTML host, built once its first build succeeds, and its own verdict and
+ * package caches unless the settings give them: a member's verdict and a package's, once its open
+ * succeeds, are kept for the handler's life.
  *
  * It runs `open`, `configure`, the corpus read and the ledger read with `Effect.runPromise`;
  * `render`, `renderStatus`, `decode`, `checkResponses` and `score` are plain functions. A failure
@@ -1371,7 +1816,17 @@ export const createHandler = (settings: PlaygroundSettings = {}): Handler => {
   const playground: Playground = {
     appearance: Ref.makeUnsafe<Appearance>({ dark: false, theme: emptyTheme }),
     configuration: settings.configuration ?? {},
+    host: Effect.runSync(
+      Effect.cachedWithTTL(
+        Effect.gen(function* builtHost() {
+          return yield* htmlHost(hostItem, yield* readCorpusFile(hostItem));
+        }),
+        (exit) => (Exit.isSuccess(exit) ? Duration.infinity : 0),
+      ),
+    ),
+    packages: settings.packages ?? Effect.runSync(packageCache()),
     sessions: new Map(),
+    tests: listedStore(),
     verdicts: settings.verdicts ?? Effect.runSync(verdictCache()),
   };
   /**

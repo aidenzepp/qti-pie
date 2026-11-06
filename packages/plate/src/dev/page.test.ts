@@ -5,6 +5,7 @@ import { ConfigProvider, Effect, Option } from "effect";
 import { defaultTreeAdapter, parse } from "parse5";
 import type { DefaultTreeAdapterTypes } from "parse5";
 import { groupVerdicts, openMember, verdictCache, verdictOrder } from "#plate/dev/listing.ts";
+import { testField } from "#plate/dev/packages.ts";
 import { createHandler } from "#plate/dev/page.ts";
 import type { Handler, PlaygroundSettings } from "#plate/dev/page.ts";
 import { corpusDocuments, readCorpusFile } from "#plate/document/corpus.ts";
@@ -12,6 +13,7 @@ import { h } from "#plate/emit/node.ts";
 import type { Element, Node } from "#plate/emit/node.ts";
 import { toHtml } from "#plate/emit/serialise.ts";
 import { entryName } from "#plate/form/encoding.ts";
+import { encodeIntent, intentName } from "#plate/form/intent.ts";
 import type { Ledger } from "#plate/ledger/report.ts";
 import { ledgerHtml } from "#plate/ledger/view.ts";
 import { message } from "#plate/messages.ts";
@@ -68,7 +70,7 @@ const playground = (settings: Pick<PlaygroundSettings, "configuration"> = {}): H
 
 /**
  * The headers every page carries, exactly (rule `723e580c`); `pageHeaders` in
- * `#plate/dev/page.ts` gives the reason for each directive.
+ * `#plate/dev/frame.ts` gives the reason for each directive.
  */
 const pageHeaders = {
   "cache-control": "no-store",
@@ -688,7 +690,7 @@ interface ListedSection {
 }
 
 /**
- * Read the listing's verdict sections: each `section` with its `data-verdict`, its heading's
+ * Read the listing's verdict sections: each `section` with a `data-verdict`, its heading's
  * `data-count`, its `h3` folder headings and its links.
  *
  * @param html The listing.
@@ -696,7 +698,7 @@ interface ListedSection {
  */
 const sectionsOf = (html: string): readonly ListedSection[] =>
   elementsOf(parseHtml(html)).flatMap((section): readonly ListedSection[] => {
-    if (section.tag !== "section") {
+    if (section.tag !== "section" || section.attrs["data-verdict"] === undefined) {
       return [];
     }
 
@@ -795,7 +797,7 @@ describe("dev/page.ts", () => {
           elementsOf(nav.children).flatMap((element) =>
             element.tag === "a" ? [element.attrs["href"]] : [],
           ),
-          ["/verdicts", "/ledger"],
+          ["/packages", "/verdicts", "/ledger"],
         );
         assert.deepStrictEqual(
           sections.map((section) => section.verdict),
@@ -1790,5 +1792,255 @@ describe("dev/page.ts: the verdicts page and the ledger page", () => {
         assert.include(textOf(row.children), "`<script>`");
         assert.include(textOf(article.children), hostileTest);
       }),
+  );
+});
+
+/**
+ * The repository's `fixtures/` directory. As a corpus root it holds no `*.zip.d` directory, so the
+ * M2 fixture package is its playground's one package, and its document set is the fixture's files.
+ */
+const fixturesRoot = path.resolve(import.meta.dirname, "..", "..", "fixtures");
+
+/**
+ * The M2 fixture's test as its package page's Start button names it: the package's id, the test's
+ * path from the package's root, its title, its number of items, and its corpus path when the
+ * fixtures directory is the corpus root.
+ */
+const fixtureTest = {
+  count: 5,
+  href: "test.xml",
+  id: "m2",
+  member: "m2/test.xml",
+  title: "Numbers check",
+} as const;
+
+/**
+ * The Beginner's Guide test, a member of the document set inside its package's directory, and that
+ * package's page.
+ */
+const guideTest = {
+  member: "QTI3_BeginnersGuide_Examples/BegGuide_March2025.zip.d/BGtest.xml",
+  packagePage: "/packages/BegGuide_March2025",
+} as const;
+
+/**
+ * Construct a handler over the fixtures directory as its corpus root, with its own sessions,
+ * verdicts and packages.
+ *
+ * @returns The handler.
+ */
+const fixturePlayground = (): Handler =>
+  createHandler({ provider: ConfigProvider.fromUnknown({ PLATE_CORPUS_DIR: fixturesRoot }) });
+
+/**
+ * Start the fixture's test as its Start button's post does.
+ *
+ * @param handle The handler.
+ * @returns The session's page, `/sessions/<sid>`, the 303 sends the browser to.
+ */
+const startFixture = Effect.fnUntraced(function* startFixture(handle: Handler) {
+  const started = yield* post(handle, `/packages/${fixtureTest.id}/tests`, [
+    [testField, fixtureTest.href],
+  ]);
+  const location = started.response.headers.get("location") ?? "";
+
+  assert.strictEqual(started.response.status, 303);
+  assert.match(location, /^\/sessions\/s-[\da-f-]{36}$/u);
+
+  return location;
+});
+
+/**
+ * Give the text of the fixture session's Resume link on the index.
+ *
+ * @param n The current item's position.
+ * @returns "Resume: Numbers check, Item n of 5".
+ */
+const resumeLabel = (n: number): string =>
+  message("en", "resume", {
+    count: String(fixtureTest.count),
+    n: String(n),
+    test: fixtureTest.title,
+  });
+
+/**
+ * Give the links of a page whose target is one path, with their text.
+ *
+ * @param html The page.
+ * @param href The target.
+ * @returns Each such link's text, in document order.
+ */
+const linksTo = (html: string, href: string): readonly string[] =>
+  elementsOf(parseHtml(html)).flatMap((element) =>
+    element.tag === "a" && element.attrs["href"] === href ? [textOf(element.children)] : [],
+  );
+
+/**
+ * Give the index's region of sessions in progress: the `section` its heading names.
+ *
+ * @param html The index.
+ * @returns The region.
+ */
+const sessionsRegion = (html: string): Element =>
+  find(
+    html,
+    (element) =>
+      element.tag === "section" &&
+      textOf(elementsOf(element.children).find((inside) => inside.tag === "h2")?.children ?? []) ===
+        "Sessions in progress",
+  );
+
+describe("dev/page.ts: M2's routes", () => {
+  it.effect(
+    "[T-4] the index links /packages and lists a started session's Resume link, named for its test and its current item",
+    () =>
+      Effect.gen(function* index() {
+        const handle = fixturePlayground();
+        const before = yield* get(handle, "/");
+        const location = yield* startFixture(handle);
+        const started = yield* get(handle, "/");
+        const sid = location.slice("/sessions/".length);
+        const moved = yield* post(handle, location, [
+          [intentName(sid), encodeIntent({ kind: "next" })],
+        ]);
+        const after = yield* get(handle, "/");
+
+        assert.strictEqual(before.response.status, 200);
+        assert.deepStrictEqual(linksTo(before.html, "/packages"), ["Packages"]);
+        assert.lengthOf(
+          elementsOf(sessionsRegion(before.html).children).filter((element) => element.tag === "a"),
+          0,
+        );
+        assert.deepStrictEqual(linksTo(started.html, location), [resumeLabel(1)]);
+        assert.strictEqual(moved.response.status, 303);
+        assert.deepStrictEqual(linksTo(after.html, location), [resumeLabel(2)]);
+        assert.deepStrictEqual(
+          elementsOf(sessionsRegion(after.html).children).flatMap((element) =>
+            element.tag === "a" ? [[element.attrs["href"], textOf(element.children)]] : [],
+          ),
+          [[location, resumeLabel(2)]],
+          "the Resume link sits in the region of sessions in progress",
+        );
+        assert.deepStrictEqual(pageViolations(after.html), []);
+        assertThemeBox(after.html);
+      }),
+  );
+
+  it.effect(
+    "each M2 route answers through the playground's handler, its pages with the page headers and the frame",
+    () =>
+      Effect.gen(function* routes() {
+        const handle = fixturePlayground();
+        const listing = yield* get(handle, "/packages");
+        const packagePage = yield* get(handle, `/packages/${fixtureTest.id}`);
+        const location = yield* startFixture(handle);
+        const session = yield* get(handle, location);
+        const confirm = yield* get(handle, `${location}/confirm`);
+        const results = yield* get(handle, `${location}/results.xml`);
+        const review = yield* get(handle, `${location}/review/1`);
+        const startGet = yield* get(handle, `/packages/${fixtureTest.id}/tests`);
+        const listingPost = yield* post(handle, "/packages", []);
+
+        for (const { html, response } of [listing, packagePage, session]) {
+          assert.strictEqual(response.status, 200);
+          for (const [name, value] of Object.entries(pageHeaders)) {
+            assert.strictEqual(response.headers.get(name), value, name);
+          }
+          assert.deepStrictEqual(linkedSheets(html), sheetOrder);
+          assertThemeBox(html);
+        }
+        assert.include(listing.html, `href="/packages/${fixtureTest.id}"`);
+        assert.include(packagePage.html, `action="/packages/${fixtureTest.id}/tests"`);
+        assert.strictEqual(
+          textOf(find(session.html, (element) => element.tag === "h1").children),
+          fixtureTest.title,
+        );
+        assert.strictEqual(confirm.response.status, 200);
+        assert.strictEqual(
+          textOf(find(confirm.html, (element) => element.tag === "title").children),
+          message("en", "confirmTitle", {
+            intent: message("en", "submitPart"),
+            test: fixtureTest.title,
+          }),
+        );
+        assert.strictEqual(results.response.status, 200);
+        assert.strictEqual(
+          results.response.headers.get("content-type"),
+          "application/xml; charset=utf-8",
+        );
+        assert.include(results.html, location.slice("/sessions/".length));
+        assert.strictEqual(review.response.status, 404, "an open item is not reviewed");
+        assert.strictEqual(startGet.response.status, 405, "a Start is a POST");
+        assert.strictEqual(listingPost.response.status, 405);
+      }),
+  );
+
+  it.effect(
+    "[Q-2] /hosts/html serves BG007 through the plain-HTML host with its prefix stripped, and a POST of the true choice scores 1",
+    () =>
+      Effect.gen(function* host() {
+        const handle = playground();
+        const opened = yield* get(handle, "/hosts/html");
+        const slashed = yield* get(handle, "/hosts/html/");
+        const elsewhere = yield* get(handle, "/hosts/html/other");
+        const near = yield* get(handle, "/hosts/htmlx");
+        const answered = yield* send(
+          handle,
+          new Request(`${origin}/hosts/html`, {
+            body: new URLSearchParams([[entryName("q1", "RESPONSE"), "true"]]),
+            method: "POST",
+          }),
+        );
+
+        for (const { html, response } of [opened, slashed, answered]) {
+          assert.strictEqual(response.status, 200);
+          assert.notInclude(html.toLowerCase(), "<script");
+          for (const [name, value] of Object.entries(pageHeaders)) {
+            assert.strictEqual(response.headers.get(name), value, name);
+          }
+        }
+        assert.strictEqual(
+          textOf(find(opened.html, (element) => element.tag === "title").children),
+          "BG true false example",
+        );
+        assert.strictEqual(
+          find(opened.html, (element) => element.tag === "form").attrs["method"],
+          "post",
+        );
+        assert.include(
+          textOf(find(answered.html, (element) => element.attrs["role"] === "status").children),
+          message("en", "score", { score: "1" }),
+        );
+        assert.strictEqual(elsewhere.response.status, 404);
+        assert.strictEqual(near.response.status, 404);
+      }),
+    corpusTimeoutMs,
+  );
+
+  it.effect(
+    "an accepted test's document page says what it is and links its package's page, or the package listing outside a package",
+    () =>
+      Effect.gen(function* nonItem() {
+        const packaged = yield* get(playground(), itemTarget(guideTest.member));
+        const loose = yield* get(fixturePlayground(), itemTarget(fixtureTest.member));
+
+        for (const { html, response } of [packaged, loose]) {
+          assert.strictEqual(response.status, 200);
+          assert.strictEqual(
+            find(html, (element) => element.attrs["data-kind"] !== undefined).attrs["data-kind"],
+            "test",
+          );
+          assert.isUndefined(
+            elementsOf(parseHtml(html)).find(
+              (element) =>
+                element.tag === "form" && String(element.attrs["action"]).startsWith("/item?"),
+            ),
+          );
+          assert.deepStrictEqual(pageViolations(html), []);
+        }
+        assert.lengthOf(linksTo(packaged.html, guideTest.packagePage), 1);
+        assert.lengthOf(linksTo(loose.html, "/packages"), 1);
+      }),
+    corpusTimeoutMs,
   );
 });

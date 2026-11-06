@@ -417,12 +417,20 @@ $ pnpm --filter @qti-pie/plate serve
 Then open `http://localhost:5190`. The playground, [`src/dev/page.ts`](src/dev/page.ts), lists every
 document in
 [1EdTech's QTI 3 examples](https://github.com/1EdTech/qti-examples/tree/0a92fbbb6d2e620a1f7fad19977be4c418246bc0)
-by its verdict, renders the ones `open` accepts inside its own form, and scores what you submit. Its
+by its verdict, renders the items `open` accepts inside its own form, and scores what you submit. Its
 Verdicts page shows every verdict, and its Ledger page shows the last [ledger](#conformance-ledger).
 It listens on `127.0.0.1` only. `PLATE_DEV_PORT` picks another port. `PLATE_CORPUS_DIR` names the
 directory that holds the extracted examples, and when that directory is missing, the page shows
 where it looked and the command that extracts them. To try a theme, paste a shadcn theme's `:root`
 and `.dark` blocks into the theme box.
+
+Its Packages page lists each package in the examples, and the fixture package `fixtures/m2/`, with
+its verdict. The page of an accepted package starts any of its tests. A test session shows one item
+at a time, asks you to confirm before a part is submitted, and ends on a summary. The summary links
+each item's review and solution where the item's session control allows them, and the results as a
+Results Reporting XML file. The playground keeps sessions in memory until it stops, and its first
+page lists each session in progress with a Resume link. `/hosts/html` serves BG007 through the
+[plain-HTML host](#hosts).
 
 ## Conformance ledger
 
