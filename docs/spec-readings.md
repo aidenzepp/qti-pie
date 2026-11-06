@@ -2167,23 +2167,25 @@ against it. A reading that is not an information-model-over-XSD case says which 
      comments between tokens (RFC 2045, section 5.1, after RFC 822's structured fields) have no place in it. A parameter
      is no part of "type and subtype", and the XSD refuses its `;` and `=` already, so `text/html;charset=utf-8` is
      refused as it was. Each item of the upload interaction's list is read the same way, the list's `collapse`
-     separating its items, so `type=" image/png  text/plain "` is admitted and `type="image/png a(b)/c"` is refused.
-     Main at 2b276d76 read these attributes as `^[^/ \t\r\n]{1,127}/[^ \t\r\n]{1,255}$` in place of the XSD's pattern:
-     the same refusal of whitespace, but it admitted `a/b/c`, `é/x` and `text/html;charset=utf-8`, which the XSD
-     refuses, and bounded the lengths, which no source does. RFC 2045's names are not bounded, so neither are these.
+     separating its items, so `type=" image/png text/plain "` is admitted and `type="image/png a(b)/c"` is refused. Main
+     at 2b276d76 read these attributes as `^[^/ \t\r\n]{1,127}/[^ \t\r\n]{1,255}$` in place of the XSD's pattern: the
+     same refusal of whitespace, but it admitted `a/b/c`, `é/x` and `text/html;charset=utf-8`, which the XSD refuses,
+     and bounded the lengths, which no source does. RFC 2045's names are not bounded, so neither are these.
 
      This reading's stated limit is registration. RFC 2045's type is one it lists (`text`, `image`, `audio`, `video`,
      `application`, `message`, `multipart`), an `X-` name, or "An extension token defined by a standards-track RFC and
      registered with IANA", and its subtype is registered with IANA or an `X-` name. So `foo/bar` is a well-formed type
      that is not a valid one, and it is admitted. The cause is that IANA's media type registry is a dated external
      dataset that no pinned source holds. What would lift it is a closed relation of a pinned registry's types and
-     subtypes, with each value split at its slash, as reading 129's limit would be lifted for language tags. A foreign
-     element whose `xsi:type` names `MimeTypeDType` is judged by XML Schema alone (reading 60): this reading reads the
-     information model's characteristics, not the type wherever an instance names it. No corpus package carries a MIME
-     type this refuses, so no verdict moves. This restores the rule that the ruling of 2026-11-05 that attributes follow
-     the XSD (reading 9) had removed; the operator's ruling of 2026-11-06 overrules that ruling wherever the information
-     model is stricter. (Decided 2026-11-06 by RV seat X, on the review of PR #46, under the operator's standing ruling
-     of 2026-11-05 that the spec wins.)
+     subtypes, with each value split at its slash, as reading 129's limit would be lifted for language tags. The reading
+     holds by the element's name, as reading 84 has every reading do: it reads the nine attributes on their own
+     elements, whatever type governs them, and the XSD's type alone elsewhere, so a `qti-null` or an exit element that
+     an `xsi:type` gives a `type` (24 governed rows in all), and a foreign element whose `xsi:type` names
+     `MimeTypeDType` (reading 60), are judged by XML Schema's pattern only. No corpus package carries a MIME type this
+     refuses, so no verdict moves. This restores the rule that the ruling of 2026-11-05 that attributes follow the XSD
+     (reading 9) had removed; the operator's ruling of 2026-11-06 overrules that ruling wherever the information model
+     is stricter. (Decided 2026-11-06 by RV seat X, on the review of PR #46, under the operator's standing ruling of
+     2026-11-05 that the spec wins.)
 
 136. **A `default` shape carries `coords`, as every shape does, and they are a `CoordsDType`.** The information model
      says of the Coords type "(e) default: no coordinates should be given" (section 7.9, and the Inside class's
