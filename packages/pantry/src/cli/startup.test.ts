@@ -146,6 +146,7 @@ const reachedModules = (
     }
 
     seen.add(file);
+
     const source = read(file);
     const dynamic = [
       ...source.matchAll(/\bimport\(\s*["'](?<specifier>#pantry\/[^"']+)["']\s*\)/gu),
