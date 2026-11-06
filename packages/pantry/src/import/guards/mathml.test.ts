@@ -1,12 +1,16 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect } from "effect";
+import type { Uuid } from "@bjornpagen/grizzle";
 
 import { mathmlGuards, modelFinding } from "#pantry/import/guards/mathml.ts";
+import { judgedLater } from "#pantry/import/judged.ts";
 import { Rows } from "#pantry/import/tree.ts";
 import { mathExpression, mathmlInventory } from "#pantry/schema/content/inventory/mathml.ts";
+import { MathmlCbytes } from "#pantry/schema/mathml/attributes.ts";
 import { headModel, models } from "#pantry/schema/mathml/models.ts";
 import type { Model, Particle } from "#pantry/schema/mathml/models.ts";
 import { operatorClass, qualifiersOf } from "#pantry/schema/mathml/operators.ts";
+import { Edge, Node, TextNode, Ws } from "#pantry/schema/node.ts";
 
 /**
  * Collect every handle a particle names, descending into sequences and choices.
@@ -468,6 +472,90 @@ describe("mathmlGuards", () => {
   it.effect("accepts rows that hold no MathML node", () =>
     Effect.gen(function* emptyRows() {
       yield* mathmlGuards(Rows.empty());
+    }),
+  );
+});
+
+/**
+ * A test id.
+ *
+ * @param hex - The last twelve hex digits.
+ * @returns The id.
+ */
+const idOf = (hex: string): Uuid => `00000000-0000-4000-8000-${hex.padStart(12, "0")}`;
+
+const tree = idOf("1");
+
+const cbytes = idOf("2");
+
+/**
+ * The rows of one `m:cbytes` node, its text children and the row that copies them.
+ *
+ * @param value - The `MathmlCbytes` value.
+ * @param texts - The children in order: text, or whitespace when it is only whitespace.
+ * @returns The rows.
+ */
+const cbytesRows = (value: string, texts: readonly string[]): Rows => {
+  const children = texts.map((text, index) => ({
+    id: idOf(`1${index}`),
+    kind: /\S/u.test(text) ? ("text" as const) : ("ws" as const),
+    text,
+  }));
+  const base = Rows.add(Rows.empty(), Node, [
+    {
+      ancestry: "root",
+      id: cbytes,
+      kind: "m:cbytes",
+      prefix: "m",
+      rootKind: "item",
+      tree,
+      version: "3.0.1",
+    },
+  ]);
+  const edged = Rows.add(
+    base,
+    Edge,
+    children.map((child, index) => ({
+      child: child.id,
+      childAncestry: "root",
+      childKind: child.kind,
+      parent: cbytes,
+      parentAncestry: "root",
+      parentKind: "m:cbytes",
+      position: BigInt(index),
+      tree,
+      version: "3.0.1",
+    })),
+  );
+  const texted = Rows.add(
+    edged,
+    TextNode,
+    children.filter((child) => child.kind === "text").map(({ id, text }) => ({ id, value: text })),
+  );
+  const spaced = Rows.add(
+    texted,
+    Ws,
+    children
+      .filter((child) => child.kind === "ws")
+      .map(({ id, text }) => ({ id, value: judgedLater(text) })),
+  );
+
+  return Rows.add(spaced, MathmlCbytes, [{ id: cbytes, value: judgedLater(value) }]);
+};
+
+describe("mathmlGuards on m:cbytes", () => {
+  it.effect("accepts a value that is the node's text with its whitespace removed", () =>
+    Effect.gen(function* copied() {
+      yield* mathmlGuards(cbytesRows("AQIDAQID", ["AQID AQID"]));
+      yield* mathmlGuards(cbytesRows("AQIDAQID", [" AQID", "\n\t", "AQID\r\n"]));
+    }),
+  );
+
+  it.effect("refuses a value that is not a copy of the text as text-copy", () =>
+    Effect.gen(function* notCopied() {
+      const error = yield* Effect.flip(mathmlGuards(cbytesRows("AQID", ["AQID AQID"])));
+      assert.strictEqual(error._tag, "ImportRefused");
+      assert.strictEqual(error.rule, "text-copy");
     }),
   );
 });
