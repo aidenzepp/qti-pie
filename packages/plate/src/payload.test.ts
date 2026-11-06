@@ -1392,16 +1392,16 @@ describe("postings", () => {
     const bound: Item = {
       ...item,
       body: [
+        { ...essay, base: 8 },
         choice,
         { ...textEntry("FIRST"), base: 16 },
         {
           attributes: [],
-          children: [{ ...textEntry("FIRST"), base: 2 }],
+          children: [{ ...textEntry("FIRST"), base: 2 }, textEntry("SECOND"), textEntry("NAMED")],
           kind: "element",
           path: "qti-assessment-item/qti-item-body/p",
           tag: "p",
         },
-        { ...essay, base: 8 },
       ],
       responses: new Map([
         ...item.responses,
@@ -1426,6 +1426,14 @@ describe("postings", () => {
       postingOf("SECOND", "string", 10),
       postingOf("NAMED", "string", 10),
       postingOf("ESSAY", "string", 8),
+    ]);
+  });
+
+  it("gives no posting to a declared response no interaction binds, so a post carries nothing over its record value", () => {
+    const unbound: Item = { ...item, body: [choice] };
+
+    assert.deepStrictEqual(postings(redactItem(unbound), instance), [
+      postingOf("CAPITAL", "identifier", 10),
     ]);
   });
 });
