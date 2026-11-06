@@ -1012,11 +1012,39 @@ const headersCopy = (rows: Rows): Finding => {
 };
 
 /**
+ * The refusal for the `xref` group of `key`, which is a single IDREF no typed row holds: exactly
+ * one row at position 0, equal to the collapsed lexical `spelled` value where the node has one.
+ */
+const xrefCopy = (
+  key: string,
+  group: readonly Reference[],
+  ordered: boolean,
+  spelled: string | undefined,
+): Finding => {
+  const [only] = group;
+  if (!ordered || group.length !== 1 || only === undefined) {
+    return refuse(
+      "idref-copy",
+      `The identifier references of ${key} are not the one row at position 0 of a single IDREF.`,
+    );
+  }
+
+  return spelled === undefined || only.target === spelled
+    ? undefined
+    : refuse(
+        "idref-copy",
+        `The identifier reference of ${key} is ${quoted(only.target)}; its value ${quoted(spelled)} is that one token.`,
+      );
+};
+
+/**
  * `idref-copy`: the `AttributeIdref` rows of a node and attribute are the tokens of the collapsed
  * value in order, from position 0, and `HeadersTarget` holds the `headers` rows and no other.
  *
  * The value is the typed column's where one holds the attribute, else, for `headers`, the lexical
- * row's when the source wrote a form that differs from the collapsed one.
+ * row's when the source wrote a form that differs from the collapsed one. An `xref` is a single
+ * IDREF no typed row holds: exactly one row at position 0, equal to its lexical row's collapsed
+ * value where the node has one.
  */
 const idrefCopy = (rows: Rows): Finding => {
   const groups = Map.groupBy(
@@ -1047,14 +1075,24 @@ const idrefCopy = (rows: Rows): Finding => {
     }
   }
 
+  const xrefSpelled = new Map(
+    Rows.of(rows, AttributeLexical)
+      .filter((row) => row.attribute === "xref")
+      .map((row): [string, string] => [`${row.node} xref`, collapse(row.value)]),
+  );
   for (const [key, group] of groups) {
     const ordered = group.every((row, index) => row.position === BigInt(index));
-    const headers = group.every((row) => row.attribute === "headers");
-    if (!ordered || (!headers && !expectations.has(key))) {
-      return refuse(
-        "idref-copy",
-        `The identifier references of ${key} ${ordered ? "belong to no attribute row" : "do not count from position 0 without a gap"}.`,
-      );
+    const unexplained = group.every((row) => row.attribute === "headers") || expectations.has(key);
+    const reason = ordered
+      ? "belong to no attribute row"
+      : "do not count from position 0 without a gap";
+    if (group.every((row) => row.attribute === "xref")) {
+      const found = xrefCopy(key, group, ordered, xrefSpelled.get(key));
+      if (found !== undefined) {
+        return found;
+      }
+    } else if (!ordered || !unexplained) {
+      return refuse("idref-copy", `The identifier references of ${key} ${reason}.`);
     }
   }
 
