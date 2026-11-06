@@ -545,6 +545,13 @@ export type SubmissionMode = (typeof submissionModes)[number];
 export const cpVersions = ["3.0.0", "3.0.1"] as const;
 
 /**
+ * The namespace of a QTI 3.0 package's manifest, under both content packaging profiles. A root in
+ * any other namespace, such as the plain IMS CP namespace of a QTI 2 package, is
+ * `not-qti3-package`.
+ */
+export const manifestNamespace = "http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1";
+
+/**
  * A Content Packaging profile version a manifest may name.
  */
 export type CpVersion = (typeof cpVersions)[number];
@@ -644,6 +651,24 @@ export const sessionControlDefaults = {
   "show-solution": false,
   "validate-responses": false,
 } as const;
+
+/**
+ * The views an outcome is reported to, the XSD's `ViewEnumDType`: an outcome declaration's `view`
+ * lists some of them, and the results report writes them back.
+ */
+export const outcomeViews = [
+  "author",
+  "candidate",
+  "proctor",
+  "scorer",
+  "testConstructor",
+  "tutor",
+] as const;
+
+/**
+ * One of {@link outcomeViews}.
+ */
+export type OutcomeView = (typeof outcomeViews)[number];
 
 /**
  * The item session statuses M2's engine gives an item, as Results Reporting's `sessionStatus`

@@ -29,6 +29,7 @@ import {
   baseTypes,
   cardinalities,
   interactionNames,
+  outcomeViews,
   renders,
   templateName,
 } from "#plate/vocabulary.ts";
@@ -38,6 +39,7 @@ import type {
   Condition,
   FeatureRule,
   InteractionName,
+  OutcomeView,
   TemplateName,
 } from "#plate/vocabulary.ts";
 
@@ -139,23 +141,6 @@ export interface ResponseDeclaration {
 }
 
 /**
- * The views an outcome is reported to, the XSD's `ViewEnumDType`.
- */
-export const views = [
-  "author",
-  "candidate",
-  "proctor",
-  "scorer",
-  "testConstructor",
-  "tutor",
-] as const;
-
-/**
- * One of {@link views}.
- */
-export type View = (typeof views)[number];
-
-/**
  * A `qti-outcome-declaration` of a modelled base type and cardinality (I-2).
  *
  * Its last six fields are the attributes Results Reporting mirrors on an `outcomeVariable`, each
@@ -192,10 +177,10 @@ export interface OutcomeDeclaration {
    */
   readonly normalMinimum: Option.Option<number>;
   /**
-   * `view`, a list of {@link views} in the order written. The structural check holds it to at
-   * least one view (reading 17).
+   * `view`, a list of {@link outcomeViews} in the order written. The structural check holds it to
+   * at least one view (reading 17).
    */
-  readonly view: Option.Option<readonly View[]>;
+  readonly view: Option.Option<readonly OutcomeView[]>;
 }
 
 /**
@@ -213,9 +198,8 @@ export type OutcomeReporting = Pick<
 
 /**
  * Construct the refusal of an attribute of the document being read, at that attribute's path.
- * Each model passes its own, so a refusal names the document and path it was found in.
  */
-export type AttributeRefusal = (
+type AttributeRefusal = (
   attribute: SourceAttribute,
   rule: RefusalRule,
   detail: Readonly<Record<string, string>>,
@@ -471,22 +455,34 @@ export interface Item {
 }
 
 /**
- * What one build reads and collects: the document, every element's path, and the unsupported
- * features found so far, in document order.
+ * What a model build reads a document through: the builder, the document, and every element's
+ * path. The item and the test model each build one, so the readers below serve both and a refusal
+ * names the document and path it was found in.
  */
-interface Build {
+export interface ModelWalk {
   /**
-   * The root's response declarations, keyed by their identifier as `identifierOf` reads it; the
-   * last one when two share an identifier. Built once, so binding an interaction does not rescan
-   * the root.
+   * The function that builds the model, which a {@link BuildDefect} names.
    */
-  readonly declarations: ReadonlyMap<string, SourceElement>;
+  readonly builder: "buildItem" | "buildTest";
   readonly document: SourceDocument;
   /**
    * Each element's path, keyed by the element itself. A reader builds a fresh object per element,
    * so no element sits at two places in one document.
    */
   readonly paths: ReadonlyMap<SourceElement, string>;
+}
+
+/**
+ * What one item build reads and collects: the walk, the response declarations, and the unsupported
+ * features found so far, in document order.
+ */
+interface Build extends ModelWalk {
+  /**
+   * The root's response declarations, keyed by their identifier as `identifierOf` reads it; the
+   * last one when two share an identifier. Built once, so binding an interaction does not rescan
+   * the root.
+   */
+  readonly declarations: ReadonlyMap<string, SourceElement>;
   /**
    * The paths each feature in `unsupported` was recorded at, keyed by the feature, so
    * {@link record} finds a repeat without scanning the features recorded so far.
@@ -543,7 +539,7 @@ const markedAttributes: ReadonlySet<string> = new Set(
  * @param element The element to name.
  * @returns The element's name.
  */
-const nameOf = (element: SourceElement): string =>
+export const nameOf = (element: SourceElement): string =>
   element.namespace === qtiNamespace ? element.local : `{${element.namespace}}${element.local}`;
 
 /**
@@ -570,7 +566,7 @@ const attributeName = (attribute: SourceAttribute): Option.Option<string> => {
  * @param name The attribute's name, `xml:` prefixed in the XML namespace.
  * @returns The attribute, or none when the element does not carry it.
  */
-const attributeOf = (element: SourceElement, name: string): Option.Option<SourceAttribute> =>
+export const attributeOf = (element: SourceElement, name: string): Option.Option<SourceAttribute> =>
   Arr.findFirst(element.attributes, (attribute) =>
     Option.exists(attributeName(attribute), (candidate) => candidate === name),
   );
@@ -582,7 +578,7 @@ const attributeOf = (element: SourceElement, name: string): Option.Option<Source
  * @param name The attribute's name.
  * @returns The value, or none when the element does not carry the attribute.
  */
-const valueOf = (element: SourceElement, name: string): Option.Option<string> =>
+export const valueOf = (element: SourceElement, name: string): Option.Option<string> =>
   Option.map(attributeOf(element, name), (attribute) => attribute.value);
 
 /**
@@ -592,7 +588,7 @@ const valueOf = (element: SourceElement, name: string): Option.Option<string> =>
  * @param local The local name it must have, any when absent.
  * @returns Whether `element` is that element.
  */
-const isQti = (element: SourceElement, local?: string): boolean =>
+export const isQti = (element: SourceElement, local?: string): boolean =>
   element.namespace === qtiNamespace && (local === undefined || element.local === local);
 
 /**
@@ -611,7 +607,7 @@ const elementsOf = (element: SourceElement): readonly SourceElement[] =>
  * @param local The children's local name.
  * @returns Those children, in document order.
  */
-const childrenNamed = (element: SourceElement, local: string): readonly SourceElement[] =>
+export const childrenNamed = (element: SourceElement, local: string): readonly SourceElement[] =>
   elementsOf(element).filter((child) => isQti(child, local));
 
 /**
@@ -620,25 +616,28 @@ const childrenNamed = (element: SourceElement, local: string): readonly SourceEl
  * @param element The element.
  * @returns Its text, as written.
  */
-const textOf = (element: SourceElement): string =>
+export const textOf = (element: SourceElement): string =>
   element.children.flatMap((child) => (child.kind === "text" ? [child.text] : [])).join("");
 
 /**
- * A broken invariant of {@link buildItem}'s own walk or parse, a defect of this module that no input
+ * A broken invariant of a model build's own walk or parse, a defect of this module that no input
  * can cause.
  *
- * It cannot occur: every element the build reads is in its walk, and a value {@link parseLexical}
- * gave for `float` or `integer` holds that base type. It is thrown, never returned, so
- * {@link buildItem}'s error channel holds only content refusals.
+ * It cannot occur: every element a build reads is in its walk, and a value {@link parseLexical}
+ * gave for `float` or `integer` holds that base type. It is thrown, never returned, so the error
+ * channels of {@link buildItem} and `buildTest` hold only content refusals.
  */
 export class BuildDefect extends Data.TaggedError("BuildDefect")<{
+  readonly builder: ModelWalk["builder"];
   readonly detail: string;
 }> {
   /**
    * The broken invariant, and what to do with it.
    */
   override get message(): string {
-    return `${this.detail} This is a defect in buildItem; report it with the item that caused it.`;
+    const document = this.builder === "buildItem" ? "item" : "test";
+
+    return `${this.detail} This is a defect in ${this.builder}; report it with the ${document} that caused it.`;
   }
 }
 
@@ -649,10 +648,11 @@ export class BuildDefect extends Data.TaggedError("BuildDefect")<{
  * @param element An element of the build's document.
  * @returns The element's path.
  */
-const pathOf = (build: Build, element: SourceElement): string => {
+export const pathOf = (build: ModelWalk, element: SourceElement): string => {
   const path = build.paths.get(element);
   if (path === undefined) {
     throw new BuildDefect({
+      builder: build.builder,
       detail: `The element ${nameOf(element)} is not part of the document being built.`,
     });
   }
@@ -684,8 +684,8 @@ const record = (build: Build, entry: UnsupportedFeature): void => {
  * @param detail The facts the verdict's wording names.
  * @returns The refusal.
  */
-const refusal = (
-  build: Build,
+export const refusal = (
+  build: ModelWalk,
   rule: RefusalRule,
   path: string,
   detail: Readonly<Record<string, string>>,
@@ -708,7 +708,7 @@ const refusal = (
  * @returns The parse, failing with the refusal.
  */
 const typed = <A>(
-  build: Build,
+  build: ModelWalk,
   path: string,
   parsed: Result.Result<A, InvalidValue>,
 ): Effect.Effect<A, Refusal> =>
@@ -727,7 +727,10 @@ const floatOf = (single: Single): number => {
     return single.value;
   }
 
-  throw new BuildDefect({ detail: `A ${single.baseType} value holds no float.` });
+  throw new BuildDefect({
+    builder: "buildItem",
+    detail: `A ${single.baseType} value holds no float.`,
+  });
 };
 
 /**
@@ -741,7 +744,10 @@ const integerOf = (single: Single): bigint => {
     return single.value;
   }
 
-  throw new BuildDefect({ detail: `A ${single.baseType} value holds no integer.` });
+  throw new BuildDefect({
+    builder: "buildItem",
+    detail: `A ${single.baseType} value holds no integer.`,
+  });
 };
 
 /**
@@ -752,8 +758,8 @@ const integerOf = (single: Single): bigint => {
  * @param name The attribute's name.
  * @returns The attribute, or the refusal `missing-attribute` at the element.
  */
-const requiredAttribute = (
-  build: Build,
+export const requiredAttribute = (
+  build: ModelWalk,
   element: SourceElement,
   name: string,
 ): Effect.Effect<SourceAttribute, Refusal> =>
@@ -776,8 +782,8 @@ const requiredAttribute = (
  * @param name The attribute's name.
  * @returns The value as written, or the refusal `missing-attribute`.
  */
-const required = (
-  build: Build,
+export const requiredValue = (
+  build: ModelWalk,
   element: SourceElement,
   name: string,
 ): Effect.Effect<string, Refusal> =>
@@ -809,8 +815,8 @@ const identifierOf = (written: string): string => trimXmlSpace(written);
  * @param name The attribute's name.
  * @returns The identifier, or the refusal `missing-attribute`.
  */
-const identifierAttribute = (
-  build: Build,
+export const identifierAttribute = (
+  build: ModelWalk,
   element: SourceElement,
   name: string,
 ): Effect.Effect<string, Refusal> =>
@@ -826,8 +832,8 @@ const identifierAttribute = (
  * @param allowed The values it may take.
  * @returns The value, or the refusal `attribute-type` when it is outside `allowed`.
  */
-const listed = <const T extends string>(
-  build: Build,
+export const listed = <const T extends string>(
+  build: ModelWalk,
   element: SourceElement,
   name: string,
   attribute: SourceAttribute,
@@ -858,7 +864,7 @@ const listed = <const T extends string>(
  *   `allowed`.
  */
 const enumerated = <const T extends string>(
-  build: Build,
+  build: ModelWalk,
   element: SourceElement,
   name: string,
   allowed: readonly T[],
@@ -919,12 +925,12 @@ const xsIntegerOf = (
 /**
  * The least `xs:int`, -2^31.
  */
-const leastInt = -2_147_483_648n;
+export const leastInt = -2_147_483_648n;
 
 /**
  * The greatest `xs:int`, 2^31-1.
  */
-const greatestInt = 2_147_483_647n;
+export const greatestInt = 2_147_483_647n;
 
 /**
  * The count attributes plate reads that reading 46 holds to the signed 64-bit range.
@@ -1000,7 +1006,7 @@ const countAttribute = (
  * @param written The value as written.
  * @returns The boolean, or none when the value is outside `xs:boolean`'s lexical space.
  */
-const xsBooleanOf = (written: string): Option.Option<boolean> => {
+export const xsBooleanOf = (written: string): Option.Option<boolean> => {
   const lexical = trimXmlSpace(written);
   if (lexical === "true" || lexical === "1") {
     return Option.some(true);
@@ -1018,8 +1024,8 @@ const xsBooleanOf = (written: string): Option.Option<boolean> => {
  * @param absent The value when the element does not carry it, the XSD's default.
  * @returns The boolean, or the refusal `value-type`.
  */
-const xsBoolean = (
-  build: Build,
+export const xsBoolean = (
+  build: ModelWalk,
   element: SourceElement,
   name: string,
   absent: boolean,
@@ -1197,7 +1203,7 @@ const markUnreadWithin = (build: Build, element: SourceElement): void => {
  *   `qti-value` outside the base type's lexical space.
  */
 const valueIn = (
-  build: Build,
+  build: ModelWalk,
   container: SourceElement,
   baseType: ModelledBaseType,
   cardinality: Value["cardinality"],
@@ -1219,7 +1225,7 @@ const valueIn = (
  * `value-type`.
  */
 const optionalValue = (
-  build: Build,
+  build: ModelWalk,
   declaration: SourceElement,
   local: string,
   declared: Declared,
@@ -1249,7 +1255,7 @@ interface Declared {
  *   list.
  */
 const declared = (
-  build: Build,
+  build: ModelWalk,
   declaration: SourceElement,
 ): Effect.Effect<Option.Option<Declared>, Refusal> =>
   Effect.gen(function* readDeclared() {
@@ -1437,7 +1443,7 @@ const responseDeclaration = (
 /**
  * A run of XML whitespace, which an XSD list or a collapsed value reads as one space.
  */
-const xmlWhitespaceRun = /[\t\n\r ]+/gu;
+export const xmlWhitespaceRun = /[\t\n\r ]+/gu;
 
 /**
  * Read an `xs:double` attribute as the XSD reads it (readings 7 and 56): outer whitespace goes,
@@ -1466,8 +1472,8 @@ const doubleAttribute = (
   );
 
 /**
- * Read an outcome declaration's `view`, an XSD list of {@link views}: its tokens are the runs
- * between XML whitespace.
+ * Read an outcome declaration's `view`, an XSD list of {@link outcomeViews}: its tokens are the
+ * runs between XML whitespace.
  *
  * @param declaration The declaration.
  * @param refuse The reader's refusal of an attribute.
@@ -1477,14 +1483,14 @@ const doubleAttribute = (
 const viewAttribute = (
   declaration: SourceElement,
   refuse: AttributeRefusal,
-): Effect.Effect<Option.Option<readonly View[]>, Refusal> =>
+): Effect.Effect<Option.Option<readonly OutcomeView[]>, Refusal> =>
   Effect.transposeOption(
     Option.map(attributeOf(declaration, "view"), (attribute) =>
       Effect.forEach(
         attribute.value.split(xmlWhitespaceRun).filter((token) => token !== ""),
         (token) =>
           Option.match(
-            Arr.findFirst(views, (view) => view === token),
+            Arr.findFirst(outcomeViews, (view) => view === token),
             {
               onNone: () =>
                 Effect.fail(
@@ -1502,15 +1508,14 @@ const viewAttribute = (
 
 /**
  * Read the six attributes of a `qti-outcome-declaration` that Results Reporting mirrors on an
- * `outcomeVariable`, each as the XSD types it. The item and the test model both read a
- * declaration's through this, so the two read them alike.
+ * `outcomeVariable`, each as the XSD types it.
  *
  * @param declaration The declaration.
  * @param refuse The reader's refusal of an attribute, at that attribute's path in its document.
  * @returns The six, each none when absent, or the refusal `value-type` at a double outside
  *   `xs:double`'s lexical space or `attribute-type` at a `view` naming something other than a view.
  */
-export const outcomeReporting = (
+const outcomeReporting = (
   declaration: SourceElement,
   refuse: AttributeRefusal,
 ): Effect.Effect<OutcomeReporting, Refusal> =>
@@ -1533,14 +1538,17 @@ export const outcomeReporting = (
   });
 
 /**
- * Read a `qti-outcome-declaration`.
+ * Read a `qti-outcome-declaration`, an item's or a test's: the item and the test model both read
+ * one through this, so the two read them alike.
  *
  * @param build The build.
  * @param declaration The declaration.
- * @returns The model, none when its base type or cardinality is not modelled, or a refusal.
+ * @returns The model, none when its base type is absent or not modelled or its cardinality is
+ *   `record`, or a refusal when `identifier` or `cardinality` is missing or a value is outside its
+ *   type.
  */
-const outcomeDeclaration = (
-  build: Build,
+export const outcomeDeclaration = (
+  build: ModelWalk,
   declaration: SourceElement,
 ): Effect.Effect<Option.Option<OutcomeDeclaration>, Refusal> =>
   Effect.gen(function* readOutcomeDeclaration() {
@@ -2801,7 +2809,7 @@ const runnable = (
  * @param document The document.
  * @returns Each element's path, keyed by the element.
  */
-const pathsOf = (document: SourceDocument): ReadonlyMap<SourceElement, string> =>
+export const pathsOf = (document: SourceDocument): ReadonlyMap<SourceElement, string> =>
   new Map(Array.from(walk(document), (visit) => [visit.element, visit.path]));
 
 /**
@@ -2849,6 +2857,7 @@ const declarationsOf = (document: SourceDocument): ReadonlyMap<string, SourceEle
 export const buildItem = (source: SourceDocument): Effect.Effect<Item, Refusal> =>
   Effect.gen(function* readItem() {
     const build: Build = {
+      builder: "buildItem",
       declarations: declarationsOf(source),
       document: source,
       paths: pathsOf(source),
@@ -2859,7 +2868,7 @@ export const buildItem = (source: SourceDocument): Effect.Effect<Item, Refusal> 
     markElement(build, root, false);
 
     const identifier = yield* identifierAttribute(build, root, "identifier");
-    const title = yield* required(build, root, "title");
+    const title = yield* requiredValue(build, root, "title");
     const responses = new Map<string, ResponseDeclaration>();
     const outcomes = new Map<string, OutcomeDeclaration>();
     const body: BodyNode[] = [];

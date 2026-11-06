@@ -1,6 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option } from "effect";
-import { manifestNamespace } from "#plate/package/manifest.ts";
 import { packageTables } from "#plate/package/tables.ts";
 import { growthFactor, growthLimit, growthRatio } from "#plate/test/growth.ts";
 import {
@@ -12,6 +11,7 @@ import {
   cardinalities,
   cpVersions,
   interactionNames,
+  manifestNamespace,
   messageAttributes,
   navigationModes,
   renders,

@@ -37,15 +37,8 @@ import { Refusal } from "#plate/validate/refusal.ts";
 import type { RefusalRule } from "#plate/validate/refusal.ts";
 import { checkStructure, governingTables } from "#plate/validate/structure.ts";
 import type { ChildOccurrence, ContentTable, Occurrences, Tables } from "#plate/validate/xsd.ts";
-import { cpVersions } from "#plate/vocabulary.ts";
+import { cpVersions, manifestNamespace } from "#plate/vocabulary.ts";
 import type { CpVersion } from "#plate/vocabulary.ts";
-
-/**
- * The namespace of a QTI 3.0 package's manifest, under both content packaging profiles. A root in
- * any other namespace, such as the plain IMS CP namespace of a QTI 2 package, is
- * `not-qti3-package`.
- */
-export const manifestNamespace = "http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1";
 
 /**
  * One `href` a manifest writes, on a `resource` or a `file`, with the package path it names.

@@ -4,7 +4,7 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
 import { corpusRoot, readCorpusFile } from "#plate/document/corpus.ts";
 import { readSource } from "#plate/document/read.ts";
-import { manifestNamespace, readManifest } from "#plate/package/manifest.ts";
+import { readManifest } from "#plate/package/manifest.ts";
 import { acceptPackageForTest, itemRefs, openPackage } from "#plate/package/open.ts";
 import type {
   AcceptedPackage,
@@ -14,6 +14,7 @@ import type {
 } from "#plate/package/open.ts";
 import { fileLocation, manifestFile } from "#plate/package/store.ts";
 import type { Location, Refusal } from "#plate/validate/refusal.ts";
+import { manifestNamespace } from "#plate/vocabulary.ts";
 
 /**
  * The location every hand-built package in these tests carries.

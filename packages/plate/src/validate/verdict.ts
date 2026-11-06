@@ -52,6 +52,7 @@ import {
 } from "#plate/validate/structure.ts";
 import { checkTestRules } from "#plate/validate/test-rules.ts";
 import type { ContentTable, Tables } from "#plate/validate/xsd.ts";
+import { cpVersions, manifestNamespace } from "#plate/vocabulary.ts";
 import type { TestMark } from "#plate/vocabulary.ts";
 
 /**
@@ -1440,7 +1441,7 @@ const wordings = {
 
     return sentence(
       refusal,
-      `The manifest's root ${code(named(refusal).element)} is ${where}, not QTI 3.0's content packaging namespace ${code("http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1")}.`,
+      `The manifest's root ${code(named(refusal).element)} is ${where}, not QTI 3.0's content packaging namespace ${code(manifestNamespace)}.`,
       "give the package a QTI 3.0 manifest, whose root is in that namespace",
     );
   },
@@ -1495,7 +1496,7 @@ const wordings = {
   },
   "package-profile": (refusal) => {
     const field = code("schemaversion");
-    const accepted = `${code("3.0.0")} or ${code("3.0.1")}`;
+    const accepted = cpVersions.map((version) => code(version)).join(" or ");
     const found = Option.match(optionalFact(refusal, "schemaversion"), {
       onNone: () => `The manifest gives no ${field}`,
       onSome: (version) => `The manifest's ${field} is ${code(version)}`,

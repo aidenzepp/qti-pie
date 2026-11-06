@@ -3,9 +3,10 @@ import { Effect, Option, Result } from "effect";
 import type { Array as Arr } from "effect";
 import { readCorpusFile } from "#plate/document/corpus.ts";
 import { readSource } from "#plate/document/read.ts";
-import { manifestNamespace, readManifest } from "#plate/package/manifest.ts";
+import { readManifest } from "#plate/package/manifest.ts";
 import type { Manifest, ManifestResource } from "#plate/package/manifest.ts";
 import type { Refusal, RefusalRule } from "#plate/validate/refusal.ts";
+import { manifestNamespace } from "#plate/vocabulary.ts";
 
 /**
  * A manifest's reading: the manifest, or every refusal of it.
