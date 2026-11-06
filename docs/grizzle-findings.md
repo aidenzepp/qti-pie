@@ -1302,9 +1302,10 @@ exports of it packed identical tarballs, and its testing tarball and its skill a
 - **Classification:** our misuse, a re-spelled bound. The fix is to hold `keyText` to grizzle's public
   `keyTextBytes(fields)`, which lane S-ORACLE's interim bound in `src/qti/limits.ts` does, with the octet contract to
   follow. `keyTextBytes` alone still leaves this axis 8 bytes over, by the null bitmap of its NULL-able hidden columns
-  (the next entry), so the tree holds `keyTextCodePoints` at 646. The fixing commit is recorded here when it lands.
+  (the next entry), so the tree holds `keyTextCodePoints` at 646, an interim until grizzle's fix. The fixing commit
+  is recorded here when it lands.
 
-### `keyTextBytes` leaves out the null bitmap of a tree axis's NULL-able hidden columns (grizzle `f66c05b`), triage pending
+### `keyTextBytes` leaves out a tree axis's null bitmap (grizzle defect, open at `f66c05b`, fixing before beta.1)
 
 - **Seen.** The schema refused at compile (`schemaArtifacts`, R87's `work/rv/r87/compile.ts`) with `UnrepresentableKey
   at fold Node at Node.fold.count (src/qti/node.ts:537:20): the UNIQUE of Node the predecessor axis of the tree of Node
@@ -1320,11 +1321,13 @@ exports of it packed identical tarballs, and its testing tarball and its skill a
   caveat, and an author can't declare a NULL-able field, so nothing in the fields passed shows the axis's bitmap.
 - **Workaround in this repo.** `src/qti/limits.ts` `keyTextCodePoints` is 646, the most for which `keyTextBytes` still
   leaves a byte. The further text it sizes costs 7 bytes (header and worst padding), and the bitmap costs 8, so the
-  key text fits exactly where a byte is left. `limits.test.ts` holds 646 to leave a byte and 647 to leave none.
-- **Classification:** pending. Either `keyTextBytes` should take the key it serves (and count a grizzle-added
-  NULL-able column), or the public doc should state that the bytes are for a key of no NULL-able column. Before any
-  issue: pull trunk, build a standalone reproduction (a tree with a `Monoid.concat` fold over a text bounded at
-  `keyTextBytes(widest)`), keep the control (one code point less), and get the independent check.
+  key text fits exactly where a byte is left. `limits.test.ts` holds 646 to leave a byte and 647 to leave none. The
+  646 is an interim: once grizzle's fix lands, the bound goes back to `keyTextBytes` directly.
+- **Classification:** a grizzle defect, confirmed by the grizzle session and fixing before beta.1; nothing to file.
+  The grizzle session took it in its lane K: `keyTextBytes(fields)` will promise the worst case over every index
+  grizzle plans over those fields, the null bitmap and hidden columns included, under a generated test that holds the
+  bound admitted and tight. The commit of qti-pie's 646 interim and grizzle's fixing commit are recorded here when
+  they land.
 
 ## A role lacked EXECUTE on what its CHECKs cast to (grizzle defect, fixed in `f66c05b`)
 
