@@ -13,6 +13,7 @@
  */
 import { Array as Arr, Data, Option, Result } from "effect";
 import type { Configuration } from "#plate/configuration.ts";
+import { appendSegments, decodeSegment } from "#plate/document/href.ts";
 import { checkInstance } from "#plate/form/encoding.ts";
 import type { InstanceRequirement } from "#plate/form/encoding.ts";
 import type { Item } from "#plate/model/item.ts";
@@ -284,27 +285,14 @@ const parseReference = (value: string): Reference => {
 };
 
 /**
- * Decode a path segment's percent escapes, leaving a segment whose escapes are malformed as it is
- * written, as the manifest reader decodes a file's `href`.
- *
- * @param segment The segment.
- * @returns The segment decoded.
- */
-const decodeSegment = (segment: string): string =>
-  Result.getOrElse(
-    Result.try(() => decodeURIComponent(segment)),
-    () => segment,
-  );
-
-/**
  * Remove the `.` and `..` segments of a path (RFC 3986 §5.2.4), each segment read through a
  * decoding first.
  *
  * A host may name a document by a relative path, such as `tests/a.xml`, which RFC 3986 never gives
  * a base. Such a path is read as though it began at a root, so a `..` that would rise above its
- * first segment is dropped, as one rising above a root is, and the result stays relative. Segments
- * are decoded before the dot segments are removed, as the manifest reader does, so `%2E%2E` climbs
- * as `..` does on both sides.
+ * first segment is dropped, as one rising above a root is, and the result stays relative.
+ * {@link appendSegments} decodes each segment before it removes the dot segments, as the manifest
+ * reader does, so `%2E%2E` climbs as `..` does on both sides.
  *
  * @param path The path.
  * @param decode How each segment is read.
@@ -313,21 +301,9 @@ const decodeSegment = (segment: string): string =>
  */
 const removeDotSegments = (path: string, decode: (segment: string) => string): string => {
   const rooted = path.startsWith("/");
-  const written = (rooted ? path.slice(1) : path).split("/").map(decode);
-  const output: string[] = [];
-  for (const [index, segment] of written.entries()) {
-    if (segment === "..") {
-      output.pop();
-    }
+  const { segments } = appendSegments([], (rooted ? path.slice(1) : path).split("/"), decode);
 
-    if (segment !== "." && segment !== "..") {
-      output.push(segment);
-    } else if (index === written.length - 1) {
-      output.push("");
-    }
-  }
-
-  return `${rooted ? "/" : ""}${output.join("/")}`;
+  return `${rooted ? "/" : ""}${segments.join("/")}`;
 };
 
 /**
@@ -853,13 +829,15 @@ export const itemView = (
   );
 
 /**
- * The configuration {@link permits} derives an item's attempt limit through.
+ * The configuration a reader of a session passes where the test and the session alone decide what
+ * it reads: {@link permits}' attempt limit, `allowedIntents`' current item view, and
+ * `navigationState`'s item views.
  *
- * `itemConfiguration` writes every session-control field over the configuration it is given, so
- * the limit it gives depends on the item's session control alone and none of these values reaches
- * the answer.
+ * `itemConfiguration` writes every session-control field over the configuration it is given, so an
+ * item's attempt limit, its closed state and its part's modes depend on the test and the session
+ * alone, and none of these values reaches what the reader gives.
  */
-const limitBase: Configuration = {
+export const readingBase: Configuration = {
   allowComment: false,
   allowReview: true,
   allowSkipping: true,
@@ -885,7 +863,7 @@ const permitsOf = (
   session: TestSession,
   item: SessionItem,
 ): Result.Result<Permits, UnknownItemRef> =>
-  Result.map(inspect(test, session, limitBase, item), ({ closed, control }) => ({
+  Result.map(inspect(test, session, readingBase, item), ({ closed, control }) => ({
     review: closed && control.allowReview,
     solution: closed && control.showSolution,
   }));

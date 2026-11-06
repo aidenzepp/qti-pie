@@ -29,6 +29,7 @@
  */
 import { Brand, Effect, Option, Result } from "effect";
 import type { Array as Arr } from "effect";
+import { resolveInside, schemePrefix } from "#plate/document/href.ts";
 import { readSource } from "#plate/document/read.ts";
 import { attributePath, qtiNamespace, walk } from "#plate/document/source.ts";
 import type { SourceDocument, SourceElement } from "#plate/document/source.ts";
@@ -248,14 +249,6 @@ const durationScopes: ReadonlySet<string> = new Set(["qti-assessment-section", "
 const occurrenceForm = /^\d+\.(?<variable>.+)$/su;
 
 /**
- * A scheme followed by its colon at the start of a URI reference, which makes the reference an
- * absolute URI (RFC 3986, section 3.1).
- *
- * @see https://www.rfc-editor.org/rfc/rfc3986#section-3.1
- */
-const schemePrefix = /^[A-Za-z][\d+.A-Za-z-]*:/u;
-
-/**
  * A run of XML whitespace inside an attribute value.
  */
 const xmlWhitespaceRun = /[\t\n\r ]+/gu;
@@ -339,57 +332,19 @@ const documentPath = (resource: ManifestResource): Option.Option<string> =>
   resource.href.pipe(Option.flatMap((href) => href.path));
 
 /**
- * Decode a path segment's percent escapes, leaving a segment whose escapes are malformed as it is
- * written, as the manifest decodes an `href`.
- *
- * @param segment The segment.
- * @returns The segment decoded.
- */
-const decodeSegment = (segment: string): string =>
-  Result.getOrElse(
-    Result.try(() => decodeURIComponent(segment)),
-    () => segment,
-  );
-
-/**
- * Resolve a reference a document makes against the document's own path, as the manifest resolves
- * an `href` against the package's root and `startTest` an item ref's: its query and fragment set
- * aside, a relative path merged with the document's directory, each segment's percent escapes
- * decoded, a malformed escape left as written, and then its dot segments removed, so `%2E%2E`
- * climbs a directory (RFC 3986, section 5.2).
+ * Resolve a reference a document makes against the document's own path through
+ * {@link resolveInside}, by the rule the manifest resolves an `href` by and `startTest` an item
+ * ref's.
  *
  * @param base The referring document's path from the package's root.
  * @param reference The reference as written.
  * @returns The path it names from the package's root; none for an absolute URI, a path from a
  *   host's root, or one whose `..` climbs above the package's root.
- * @see https://www.rfc-editor.org/rfc/rfc3986#section-5.2
  */
-const resolveReference = (base: string, reference: string): Option.Option<string> => {
-  const written = reference.split(/[#?]/u, 1)[0] ?? "";
-  if (schemePrefix.test(reference) || written.startsWith("/")) {
-    return Option.none();
-  }
-
-  const segments = base.split("/").slice(0, -1);
-  const steps = written.split("/").map(decodeSegment);
-  for (const [index, step] of steps.entries()) {
-    if (step === "..") {
-      if (segments.length === 0) {
-        return Option.none();
-      }
-
-      segments.pop();
-    }
-
-    if (step !== "." && step !== "..") {
-      segments.push(step);
-    } else if (index === steps.length - 1) {
-      segments.push("");
-    }
-  }
-
-  return Option.some(segments.join("/"));
-};
+const resolveReference = (base: string, reference: string): Option.Option<string> =>
+  schemePrefix.test(reference)
+    ? Option.none()
+    : Option.map(resolveInside(base.split("/"), reference), (segments) => segments.join("/"));
 
 /**
  * Give the verdict `open` gives a document from its reading: the reader's refusal as a refused

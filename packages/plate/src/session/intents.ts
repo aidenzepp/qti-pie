@@ -13,34 +13,13 @@
  * @module
  */
 import { Result } from "effect";
-import type { Configuration } from "#plate/configuration.ts";
 import type { UnknownItemRef } from "#plate/session/control.ts";
 import { moveTarget } from "#plate/session/navigate.ts";
 import type { MoveIntent } from "#plate/session/navigate.ts";
 import type { Intent, TestSession } from "#plate/session/session.ts";
-import { current } from "#plate/session/start.ts";
+import { current, readingBase } from "#plate/session/start.ts";
 import type { ItemNotInSession, ItemView } from "#plate/session/start.ts";
 import type { AcceptedTest } from "#plate/validate/verdict.ts";
-
-/**
- * The configuration {@link allowedIntents} reads the current item's view through.
- *
- * `itemConfiguration` writes every session-control field over the configuration it is given, so
- * the view's part modes and closed state depend on the test and the session alone, and none of
- * these values reaches the list.
- */
-const readingBase: Configuration = {
-  allowComment: false,
-  allowReview: true,
-  allowSkipping: true,
-  assetBase: "",
-  headingLevel: 2,
-  locale: "en",
-  maxAttempts: 1,
-  showFeedback: false,
-  showSolution: false,
-  validateResponses: false,
-};
 
 /**
  * Say whether `advance` takes a move from where a session stands.

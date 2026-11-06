@@ -22,6 +22,7 @@ import { xmlnsNamespace } from "#plate/document/source.ts";
 import { writeDocument } from "#plate/document/write.ts";
 import { interactionsIn } from "#plate/model/interactions.ts";
 import type { Item, OutcomeDeclaration, OutcomeReporting } from "#plate/model/item.ts";
+import { startingValue } from "#plate/model/record.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
 import { isNcName, isNull, match, nullOf } from "#plate/model/values.ts";
 import type { ModelledBaseType, Value } from "#plate/model/values.ts";
@@ -297,28 +298,6 @@ const builtInResponse = (identifier: string, single: ResultSingle): Element =>
  */
 const own = (values: Readonly<Record<string, Value>>, identifier: string): Option.Option<Value> =>
   Object.hasOwn(values, identifier) ? Option.fromUndefinedOr(values[identifier]) : Option.none();
-
-/**
- * Give the value an outcome holds before any processing: its declared default, else 0 for a
- * single integer or float, else NULL (`ea422814` §8.2).
- *
- * @param outcome The outcome's declaration.
- * @returns Its starting value.
- */
-const startingValue = (outcome: OutcomeDeclaration): Value =>
-  Option.getOrElse(outcome.defaultValue, (): Value => {
-    if (outcome.cardinality === "single" && outcome.baseType === "integer") {
-      return {
-        baseType: "integer",
-        cardinality: "single",
-        values: [{ baseType: "integer", value: 0n }],
-      };
-    }
-
-    return outcome.cardinality === "single" && outcome.baseType === "float"
-      ? { baseType: "float", cardinality: "single", values: [{ baseType: "float", value: 0 }] }
-      : nullOf(outcome.baseType, outcome.cardinality);
-  });
 
 /**
  * Write a double in the form a float value takes.

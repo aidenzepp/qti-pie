@@ -24,7 +24,7 @@ import type { Options } from "#plate/render.ts";
 import type { UnknownItemRef } from "#plate/session/control.ts";
 import { allowedIntents } from "#plate/session/intents.ts";
 import type { Intent, SessionItem, TestSession } from "#plate/session/session.ts";
-import { current, itemView } from "#plate/session/start.ts";
+import { current, itemView, readingBase } from "#plate/session/start.ts";
 import type { ItemNotInSession } from "#plate/session/start.ts";
 import type { AcceptedTest } from "#plate/validate/verdict.ts";
 import type { NavigationMode, SubmissionMode } from "#plate/vocabulary.ts";
@@ -93,26 +93,6 @@ export class PartlessTestDefect extends Data.TaggedError("PartlessTestDefect")<{
     return `The test ${this.test} holds no test part, so its navigation has no part to take its modes from. Pass the test check accepted, or build the test with at least one part.`;
   }
 }
-
-/**
- * The configuration {@link navigationState} reads item views through.
- *
- * `itemConfiguration` writes every session-control field over the configuration it is given, so
- * an item's closed state and its part's modes depend on the test and the session alone, and none
- * of these values reaches the navigation.
- */
-const readingBase: Configuration = {
-  allowComment: false,
-  allowReview: true,
-  allowSkipping: true,
-  assetBase: "",
-  headingLevel: 2,
-  locale: "en",
-  maxAttempts: 1,
-  showFeedback: false,
-  showSolution: false,
-  validateResponses: false,
-};
 
 /**
  * List the identifiers of the item refs among some section children, nested sections' included,

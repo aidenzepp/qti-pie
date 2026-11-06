@@ -243,7 +243,7 @@ const currentItem = (
  * @returns The accepted item, or {@link TestNotDeliverable}: `item-missing` when the items have no
  *   entry for its ref, `item-mismatch` when its entry is the item of another document.
  */
-const deliveredItem = (
+export const deliveredItem = (
   items: ReadonlyMap<string, Accepted>,
   session: TestSession,
   item: SessionItem,
