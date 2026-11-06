@@ -1,5 +1,5 @@
 import { defineConfig } from "@bjornpagen/grizzle";
-import { NodeFileSystem } from "@effect/platform-node";
+import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import { Effect } from "effect";
 import { migrationConnection } from "#pantry/db/connection.ts";
 import { AuthorApp } from "#pantry/qti/logins.ts";

@@ -2,7 +2,7 @@
 
 import { DbLayer } from "@bjornpagen/grizzle";
 import type { PoolBounds } from "@bjornpagen/grizzle";
-import { NodeFileSystem } from "@effect/platform-node";
+import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import { Effect, FileSystem, Layer, Schema } from "effect";
 import { fileURLToPath } from "node:url";
 import { loginConnection } from "#pantry/db/connection.ts";

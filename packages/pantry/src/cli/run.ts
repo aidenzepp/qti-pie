@@ -1,4 +1,5 @@
-import { NodeRuntime, NodeServices } from "@effect/platform-node";
+import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import { Cause, Effect, Exit, Option, Stdio } from "effect";
 import { CliConfig, CliError, CliOutput, Command } from "effect/cli";
 import { builtIns } from "#pantry/cli/config.ts";

@@ -27,6 +27,23 @@ const startupForbidden = [
 const loginForbidden = ["#pantry/qti/logins.ts"];
 
 /**
+ * `@effect/platform-node`'s barrel, which loads every module of the package, the Redis client's 648
+ * among them: `db/layer.ts` loaded 1,605 modules through it and loads 772 with its module imported
+ * by path (measured on 2026-11-06). Production imports each module it needs by its own path, such
+ * as `@effect/platform-node/NodeFileSystem`, which the package's `./*` export allows.
+ */
+const nodePlatformBarrel = "@effect/platform-node";
+
+/**
+ * The modules production starts from: the command line, and the grizzle configuration every
+ * `grizzle` command reads.
+ */
+const productionEntries = [
+  path.join(sourceRoot, "cli.ts"),
+  path.resolve(sourceRoot, "..", "grizzle.config.ts"),
+];
+
+/**
  * Read a module's text from the tree.
  */
 const readSource = (file: string): string => readFileSync(file, "utf-8");
@@ -103,6 +120,68 @@ export const forbiddenImports = (
 
   return offences;
 };
+
+/**
+ * Every module a set of entries reaches: through each static, non-type import, and through each
+ * dynamic `import("#pantry/…")`, which is how the command handlers load the engine and the
+ * database layer loads the author login. A dynamic import written in a comment is followed too, so
+ * the set errs toward more modules, never fewer.
+ *
+ * @param entries - The absolute paths of the modules to start from.
+ * @param read - Reads a module's text.
+ * @returns The absolute path of every module reached, the entries included.
+ */
+const reachedModules = (
+  entries: readonly string[],
+  read: (file: string) => string,
+): ReadonlySet<string> => {
+  const seen = new Set<string>();
+  const pending = [...entries];
+
+  while (pending.length > 0) {
+    const file = pending.pop() ?? "";
+
+    if (seen.has(file)) {
+      continue;
+    }
+
+    seen.add(file);
+    const source = read(file);
+    const dynamic = [
+      ...source.matchAll(/\bimport\(\s*["'](?<specifier>#pantry\/[^"']+)["']\s*\)/gu),
+    ].map(({ groups }) => groups?.["specifier"] ?? "");
+
+    for (const specifier of [
+      ...staticImports(source).map((found) => found.specifier),
+      ...dynamic,
+    ]) {
+      if (specifier.startsWith("#pantry/")) {
+        pending.push(path.join(sourceRoot, specifier.slice("#pantry/".length)));
+      }
+    }
+  }
+
+  return seen;
+};
+
+/**
+ * Every static, non-type import of exactly `specifier` in a set of modules, not of a subpath of it.
+ *
+ * @param modules - The absolute paths of the modules.
+ * @param specifier - The specifier.
+ * @param read - Reads a module's text.
+ * @returns Each offending module and import, as `module: import`.
+ */
+const importsOf = (
+  modules: Iterable<string>,
+  specifier: string,
+  read: (file: string) => string,
+): readonly string[] =>
+  [...modules].flatMap((file) =>
+    staticImports(read(file))
+      .filter((found) => found.specifier === specifier)
+      .map(({ text }) => `${path.relative(sourceRoot, file)}: ${text.replaceAll(/\s+/gu, " ")}`),
+  );
 
 describe("staticImports", () => {
   it("counts a multi-line named import", () => {
@@ -211,5 +290,43 @@ describe("the author login's place in the graph", () => {
     );
 
     assert.deepStrictEqual(offences, []);
+  });
+});
+
+describe("reachedModules", () => {
+  it("follows a static and a dynamic import, never a type import, and finds an exact barrel import", () => {
+    const files = {
+      [path.join(sourceRoot, "a.ts")]:
+        'import { b } from "#pantry/b.ts";\nimport type { C } from "#pantry/c.ts";\n',
+      [path.join(sourceRoot, "b.ts")]: 'const load = () => import("#pantry/d.ts");\n',
+      [path.join(sourceRoot, "c.ts")]: "",
+      [path.join(sourceRoot, "d.ts")]:
+        'import { NodeFileSystem } from "@effect/platform-node";\nimport * as NodePath from "@effect/platform-node/NodePath";\n',
+    };
+    const read = (file: string) => Object.entries(files).find(([name]) => name === file)?.[1] ?? "";
+    const modules = reachedModules([path.join(sourceRoot, "a.ts")], read);
+
+    assert.deepStrictEqual([...modules].map((file) => path.relative(sourceRoot, file)).toSorted(), [
+      "a.ts",
+      "b.ts",
+      "d.ts",
+    ]);
+    assert.deepStrictEqual(importsOf(modules, nodePlatformBarrel, read), [
+      'd.ts: import { NodeFileSystem } from "@effect/platform-node"',
+    ]);
+  });
+});
+
+describe("the production graph", () => {
+  it("imports @effect/platform-node's modules by path, never the barrel that loads the Redis client", () => {
+    const modules = reachedModules(productionEntries, readSource);
+
+    // The walk reaches each module that uses the platform; the database layer only through the
+    // command handlers' dynamic imports.
+    for (const file of ["cli/run.ts", "db/layer.ts", "../grizzle.config.ts"]) {
+      assert.isTrue(modules.has(path.resolve(sourceRoot, file)), file);
+    }
+
+    assert.deepStrictEqual(importsOf(modules, nodePlatformBarrel, readSource), []);
   });
 });
