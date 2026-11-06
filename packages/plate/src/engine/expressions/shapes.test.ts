@@ -36,6 +36,11 @@ describe("areaHolds", () => {
     assert.isTrue(areaHolds.ellipse([50, 50, 20, 10], 50, 60));
   });
 
+  it("circle and ellipse hold boundary points at fractional coordinates whose squares are exact", () => {
+    assert.isTrue(areaHolds.circle([0.5, 0.5, 0.25], 0.75, 0.5));
+    assert.isTrue(areaHolds.ellipse([0.5, 0.5, 0.25, 0.125], 0.5, 0.625));
+  });
+
   it("poly holds a point inside, and not one outside", () => {
     assert.isTrue(areaHolds.poly([0, 0, 10, 0, 0, 10], 2, 2));
     assert.isFalse(areaHolds.poly([0, 0, 10, 0, 0, 10], 6, 6));

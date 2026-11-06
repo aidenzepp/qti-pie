@@ -69,6 +69,16 @@ export const polygonHolds = (
   return inside;
 };
 
+/**
+ * Square a float as a product. ECMA-262 leaves `**` (Number::exponentiate) implementation-
+ * approximated, so a last-place difference between engines could move a point across an area's
+ * boundary (reading 52); a product is exact by definition in every engine.
+ *
+ * @param value The float.
+ * @returns `value * value`.
+ */
+const square = (value: number): number => value * value;
+
 /* oxlint-disable anti-slop/no-shape-in-symbol-names -- `shape` is the QTI attribute of `qti-area-map-entry` and names an area's geometry, not a structure. */
 /**
  * Report whether an area of each shape holds a point, its boundary included (9.15's default,
@@ -91,7 +101,7 @@ export const areaHolds: Readonly<
     centerY !== undefined &&
     radius !== undefined &&
     radius > 0 &&
-    (x - centerX) ** 2 + (y - centerY) ** 2 <= radius ** 2,
+    square(x - centerX) + square(y - centerY) <= square(radius),
   default: () => true,
   ellipse: ([centerX, centerY, across, down], x, y) =>
     centerX !== undefined &&
@@ -100,7 +110,7 @@ export const areaHolds: Readonly<
     down !== undefined &&
     across > 0 &&
     down > 0 &&
-    ((x - centerX) / across) ** 2 + ((y - centerY) / down) ** 2 <= 1,
+    square((x - centerX) / across) + square((y - centerY) / down) <= 1,
   poly: (coords, x, y) => {
     const vertices = Arr.chunksOf(coords, 2).flatMap(([vertexX, vertexY]) =>
       vertexY === undefined ? [] : [[vertexX, vertexY] as const],
