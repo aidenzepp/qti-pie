@@ -18,7 +18,8 @@ import { checkInstance } from "#plate/form/encoding.ts";
 import type { InstanceRequirement } from "#plate/form/encoding.ts";
 import type { Item } from "#plate/model/item.ts";
 import { fresh } from "#plate/model/record.ts";
-import type { ItemRef, SectionChild, Test, TestPart } from "#plate/model/test.ts";
+import { itemRefsIn } from "#plate/model/item-refs.ts";
+import type { ItemRef, Test, TestPart } from "#plate/model/test.ts";
 import { itemConfiguration, sessionControl, UnknownItemRef } from "#plate/session/control.ts";
 import type { SessionControl } from "#plate/session/control.ts";
 import type { Responses, SessionItem, Step, TestSession } from "#plate/session/session.ts";
@@ -220,15 +221,6 @@ interface Place {
 }
 
 /**
- * List the item refs among some section children, nested sections' included, in document order.
- *
- * @param children The children.
- * @returns Their item refs.
- */
-const refsOf = (children: readonly SectionChild[]): readonly ItemRef[] =>
-  children.flatMap((child) => (child.kind === "item-ref" ? [child] : refsOf(child.children)));
-
-/**
  * List a test's item refs in the order the candidate meets them, each with its part.
  *
  * The test model leaves out or holds inert every feature the session does not deliver, so the
@@ -238,7 +230,7 @@ const refsOf = (children: readonly SectionChild[]): readonly ItemRef[] =>
  * @returns Each item ref with its part.
  */
 const placesOf = (test: Test): readonly Place[] =>
-  test.parts.flatMap((part) => refsOf(part.children).map((ref) => ({ part, ref })));
+  test.parts.flatMap((part) => itemRefsIn(part.children).map((ref) => ({ part, ref })));
 
 /**
  * Find the place of an item ref in a test.
@@ -482,7 +474,11 @@ const itemAtPosition = (
  * @param item The item to put there.
  * @returns The session's items with `item` at `index`.
  */
-const withItem = (session: TestSession, index: number, item: SessionItem): readonly SessionItem[] =>
+export const withItem = (
+  session: TestSession,
+  index: number,
+  item: SessionItem,
+): readonly SessionItem[] =>
   session.items.map((existing, position) => (position === index ? item : existing));
 
 /**

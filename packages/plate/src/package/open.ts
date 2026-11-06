@@ -1,6 +1,6 @@
 /**
  * `openPackage`, the host's one entry from a QTI 3.0 content package's files to its verdict, and
- * the {@link AcceptedPackage} an accepting verdict holds (spec §4.3).
+ * the {@link AcceptedPackage} an accepting verdict holds.
  *
  * A package is judged whole (OD-4, per package). Its files are keyed by their normal form and its
  * manifest is read at `imsmanifest.xml`; a refusal of either ends the reading there. The file rules
@@ -35,7 +35,7 @@ import { attributePath, qtiNamespace, walk } from "#plate/document/source.ts";
 import type { SourceDocument, SourceElement } from "#plate/document/source.ts";
 import { trimXmlSpace } from "#plate/model/values.ts";
 import { readManifest } from "#plate/package/manifest.ts";
-import type { SectionChild } from "#plate/model/test.ts";
+import { itemRefsIn } from "#plate/model/item-refs.ts";
 import type { Manifest, ManifestResource } from "#plate/package/manifest.ts";
 import { checkFiles, fileLocation, manifestFile, packageFiles } from "#plate/package/store.ts";
 import { Refusal } from "#plate/validate/refusal.ts";
@@ -148,7 +148,7 @@ export interface PackageResource {
 }
 
 /**
- * The verdict on a package, by `verdict` (spec §4.3, OD-4: per package).
+ * The verdict on a package as a whole, by `verdict`.
  *
  * - `refused`: the manifest is refused, a file rule fails, a package rule fails or a document is
  *   refused. `refusals` holds every refusal that refuses it: the package's own, then each refused
@@ -886,7 +886,7 @@ const readPackage = Effect.fnUntraced(function* readPackage(
 
 /**
  * Open a package: read its manifest, then judge its files, its documents and its tests, into one
- * verdict over the whole package (spec §4.3).
+ * verdict over the whole package.
  *
  * It never fails, because a refusal is a verdict. A key that leaves the package's root, a package
  * without `imsmanifest.xml` at its root, a manifest the reader cannot read and a manifest
@@ -912,19 +912,6 @@ export const openPackage = Effect.fn("openPackage")(function* openPackage(
 });
 
 /**
- * List the item refs among a section's children and, in turn, its sections' children.
- *
- * @param children The children, in document order.
- * @returns Their item refs, in document order.
- */
-const refsOf = (children: readonly SectionChild[]): readonly ItemRefEntry[] =>
-  children.flatMap((child) =>
-    child.kind === "item-ref"
-      ? [{ href: child.href, identifier: child.identifier }]
-      : refsOf(child.children),
-  );
-
-/**
  * List a test's item refs in document order, each with its identifier and its `href`, the item refs
  * a session over the test delivers.
  *
@@ -932,7 +919,9 @@ const refsOf = (children: readonly SectionChild[]): readonly ItemRefEntry[] =>
  * @returns Its item refs, every part's and section's, in document order.
  */
 export const itemRefs = (test: AcceptedTest): readonly ItemRefEntry[] =>
-  test.test.parts.flatMap((part) => refsOf(part.children));
+  test.test.parts.flatMap((part) =>
+    itemRefsIn(part.children).map(({ href, identifier }) => ({ href, identifier })),
+  );
 
 /**
  * Brand a package's contents as accepted, the one named seam through which a test builds an

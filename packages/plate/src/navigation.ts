@@ -18,7 +18,8 @@ import { resolveOverrides } from "#plate/emit/parts.ts";
 import type { UnknownPart } from "#plate/emit/parts.ts";
 import { toHtml } from "#plate/emit/serialise.ts";
 import type { PartSwapRefused } from "#plate/emit/swap.ts";
-import type { SectionChild, Test, TestPart } from "#plate/model/test.ts";
+import { refIdentifiersIn } from "#plate/model/item-refs.ts";
+import type { Test, TestPart } from "#plate/model/test.ts";
 import { isNull } from "#plate/model/values.ts";
 import type { Options } from "#plate/render.ts";
 import type { UnknownItemRef } from "#plate/session/control.ts";
@@ -95,18 +96,6 @@ export class PartlessTestDefect extends Data.TaggedError("PartlessTestDefect")<{
 }
 
 /**
- * List the identifiers of the item refs among some section children, nested sections' included,
- * in document order.
- *
- * @param children The children.
- * @returns Their item refs' identifiers.
- */
-const refsOf = (children: readonly SectionChild[]): readonly string[] =>
-  children.flatMap((child) =>
-    child.kind === "item-ref" ? [child.identifier] : refsOf(child.children),
-  );
-
-/**
  * Find the test part that holds an item ref.
  *
  * @param test The test.
@@ -114,7 +103,7 @@ const refsOf = (children: readonly SectionChild[]): readonly string[] =>
  * @returns The part, or none when no part holds the ref.
  */
 const partOf = (test: Test, ref: string): Option.Option<TestPart> =>
-  Arr.findFirst(test.parts, (part) => refsOf(part.children).includes(ref));
+  Arr.findFirst(test.parts, (part) => refIdentifiersIn(part.children).includes(ref));
 
 /**
  * List the session items some test parts deliver, in the session's order.
@@ -124,7 +113,7 @@ const partOf = (test: Test, ref: string): Option.Option<TestPart> =>
  * @returns The items whose item ref one of the parts holds.
  */
 const itemsOf = (session: TestSession, parts: readonly TestPart[]): readonly SessionItem[] => {
-  const refs = new Set(parts.flatMap((part) => refsOf(part.children)));
+  const refs = new Set(parts.flatMap((part) => refIdentifiersIn(part.children)));
 
   return session.items.filter((item) => refs.has(item.ref));
 };

@@ -22,7 +22,7 @@ import type { ValidationMessage } from "#plate/payload.ts";
 import { score } from "#plate/score.ts";
 import type { InvalidResponses, RecordMismatch, ResponsesRefused } from "#plate/score.ts";
 import type { UnknownItemRef } from "#plate/session/control.ts";
-import { move } from "#plate/session/navigate.ts";
+import { move, requestOf } from "#plate/session/navigate.ts";
 import type { MoveRefused, MoveRule, MoveStep } from "#plate/session/navigate.ts";
 import type { Intent, Step, TestSession } from "#plate/session/session.ts";
 import { ItemNotInSession, current } from "#plate/session/start.ts";
@@ -67,15 +67,6 @@ export type IntentRule =
   | "start-of-part"
   | "test-closed"
   | "wrong-submission-mode";
-
-/**
- * Name an intent as a candidate's request.
- *
- * @param intent The intent.
- * @returns Its kind, or for `go`, `go to item <n>`.
- */
-const requestOf = (intent: Intent): string =>
-  intent.kind === "go" ? `go to item ${intent.sequenceIndex}` : intent.kind;
 
 /**
  * The failure of {@link advance} for an intent the test's rules forbid now.
