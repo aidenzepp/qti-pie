@@ -262,6 +262,55 @@ const recorded: readonly Recorded[] = [
     xsd: "valid",
   },
   {
+    domain: /\(reading [^)]*\b120\b/u,
+    reason: {
+      _tag: "reading",
+      reading: 120,
+      why: "the information model says \"'n' must be a positive integer\" (§5.72, Index), where the XSD's xs:int member admits 0 and negatives",
+    },
+    value: /^[\t\n\r ]*(?:[+-]?0+|-[0-9]+)[\t\n\r ]*$/u,
+    xsd: "valid",
+  },
+  {
+    domain: /\(reading [^)]*\b123\b/u,
+    reason: {
+      _tag: "reading",
+      reading: 123,
+      why: 'the information model says of bdo "The auto value must not be specified" (§5.11), which the XSD lists and defaults to',
+    },
+    value: /^auto$/u,
+    xsd: "valid",
+  },
+  {
+    domain: /\(reading [^)]*\b12[45]\b/u,
+    reason: {
+      _tag: "reading",
+      reading: 124,
+      why: 'a media URL "must contain a valid non-empty URL potentially surrounded by spaces" (information model §5.9.1, §5.135.1, §5.163.2, §5.166.1, §5.166.9; reading 125 for track), where the XSD\'s URLDType is any xs:normalizedString',
+    },
+    value: /^[\t\n\r ]*$/u,
+    xsd: "valid",
+  },
+  {
+    domain: /\(reading [^)]*\b129\b/u,
+    reason: {
+      _tag: "reading",
+      reading: 129,
+      why: "xml:lang, lang and srclang are BCP 47 language tags (XML 1.0 §2.12; information model §4.1.4, §5.15.3, §5.163.3), where the XSD types lang and srclang xs:normalizedString and xml:lang RFC 3066's xs:language or empty; the values set aside are those RFC 5646's ABNF refuses, which attributes.test.ts checks against its own recogniser",
+    },
+    xsd: "valid",
+  },
+  {
+    kind: /^m:cn$/u,
+    reason: {
+      _tag: "reading",
+      reading: 2,
+      why: 'MathML 3 says a cn\'s base "is a base 10 positive integer" (§4.2.1.3), the positive-integer notation of §2.1.5.1, where the XSD leaves the attribute untyped',
+    },
+    subject: /^base$/u,
+    xsd: "valid",
+  },
+  {
     reason: {
       _tag: "gap",
       gap: "RG2 (reading 47)",
@@ -339,7 +388,7 @@ const recorded: readonly Recorded[] = [
     reason: {
       _tag: "reading",
       reading: 2,
-      why: 'MathML 3 §2.1.5.1 writes positive-integer as "a string of decimal-digits" and integer as "an optional "-" ... followed by a string of decimal digits", with no +, which xs:positiveInteger and xs:integer admit; unsigned-integer\'s + and -0, which reading 73 would admit, libxml2 2.9.13 refuses too, so it records no difference',
+      why: 'MathML 3 §2.1.5.1 writes positive-integer as "a string of decimal-digits", integer as "an optional "-" ... followed by a string of decimal digits" and number as "an optional prefix of "-" ... followed by an unsigned number", with no +, which xs:positiveInteger, xs:integer and xs:decimal admit; unsigned-integer\'s + and -0, which reading 73 would admit, libxml2 2.9.13 refuses too, so it records no difference',
     },
     value: /^[\t\n\r ]*\+/u,
     xsd: "valid",

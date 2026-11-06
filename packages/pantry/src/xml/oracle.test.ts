@@ -47,7 +47,9 @@ const word: Gen<string> = (source) =>
   source.draw(element(["value", "expected", "attribute", "content", "pattern", "facet"]));
 
 /**
- * Draw a schema message of one severity on a file: an element, an optional attribute and a text.
+ * Draw a schema message of one severity on a file: an element, an optional attribute and a text,
+ * written with libxml2 2.12's `element NAME: ` prefix or without it, as 2.13 and later write a
+ * schema validity message.
  *
  * @param path - The file.
  * @param severity - Whether it is an error or a warning.
@@ -58,6 +60,7 @@ const schemaMessageOf =
   (source) => {
     const line = source.draw(int(1, 40));
     const local = source.draw(element(["item", "choice", "p"]));
+    const prefix = source.choose(0, 1) === 1 ? `element ${local}: ` : "";
     const attribute = source.choose(0, 1) === 1 ? Option.some(source.draw(word)) : Option.none();
     const text = `${source.draw(word)} ${source.draw(word)}.`;
     const named = Option.match(attribute, {
@@ -67,7 +70,7 @@ const schemaMessageOf =
 
     return {
       lines: [
-        `${path}:${String(line)}: element ${local}: Schemas validity ${severity} : Element '{urn:x}${local}'${named}: ${text}`,
+        `${path}:${String(line)}: ${prefix}Schemas validity ${severity} : Element '{urn:x}${local}'${named}: ${text}`,
       ],
       message: { attribute, element: Option.some(`{urn:x}${local}`), line, source: "schema", text },
     };
@@ -203,6 +206,44 @@ describe("xmllint's report, read back", () => {
           ),
       ),
     ),
+  );
+
+  it.effect(
+    "a schema message libxml2 2.13 writes, with no element prefix, reads with its element and attribute",
+    () =>
+      Effect.gen(function* unprefixed() {
+        const path = "work/xsd-report/case-0.xml";
+        const verdicts = yield* verdictsOf(
+          [path],
+          [
+            `${path}:3: Schemas validity error : Element '{urn:x}p', attribute 'v': [facet 'pattern'] The value 'x' is not accepted by the pattern 'y'.`,
+            `${path}:4: element q: Schemas validity error : Element '{urn:x}q': This element is not expected.`,
+            `${path} fails to validate`,
+          ].join("\n"),
+        );
+
+        assert.deepStrictEqual(verdicts, [
+          {
+            _tag: "Invalid",
+            messages: [
+              {
+                attribute: Option.some("v"),
+                element: Option.some("{urn:x}p"),
+                line: 3,
+                source: "schema",
+                text: "[facet 'pattern'] The value 'x' is not accepted by the pattern 'y'.",
+              },
+              {
+                attribute: Option.none(),
+                element: Option.some("{urn:x}q"),
+                line: 4,
+                source: "schema",
+                text: "This element is not expected.",
+              },
+            ],
+          },
+        ]);
+      }),
   );
 
   it.effect(

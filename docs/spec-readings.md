@@ -41,14 +41,23 @@ the spec wins, recorded in the pull request that lands it. A new reading lands h
      wildcard admits no MathML element but `math`, and no `math` sits inside another. With `anyElement`, this bars
      MathML anywhere inside foreign content in `annotation-xml`;
    - the notation types of §2.1.5.1 over the XSD's: `unsigned-integer` is "a string of decimal-digits",
-     `positive-integer` one "not consisting solely of "0"s", and `integer` "an optional "-" (U+002D), followed by a
-     string of decimal digits". The XSD types them `xs:unsignedLong`, `xs:positiveInteger` and `xs:integer`
-     (`mathml3-presentation.xsd` lines 93, 133 and 96), which admit a `+`, and `-0` for the first (reading 73). A value
-     meets both, so `length`, `columnspan`, `rowspan`, `selection`, `position`, `shift` and `index` take the notation's
-     lexical space within the type's bounds, whitespace collapsed as the type collapses it (§2.1.5.1 asks only that
-     outer whitespace "should be avoided"). `scriptlevel`, of the XSD's `m:integer` too, keeps its sign, because its
-     own row states `( "+" | "-" )? unsigned-integer` (§3.3.4.2). `number` is not one of the three, and stays the XSD's
-     `xs:decimal`;
+     `positive-integer` one "not consisting solely of "0"s", `integer` "an optional "-" (U+002D), followed by a string
+     of decimal digits", and `number` "an optional prefix of "-" (U+002D), followed by an unsigned number", an unsigned
+     number being "a string of decimal digits with up to one decimal point (U+002E)". The XSD types them
+     `xs:unsignedLong`, `xs:positiveInteger`, `xs:integer` and `xs:decimal` (`mathml3-presentation.xsd` lines 93, 133,
+     96 and 99, as `mathml3-presentation.rnc` does at lines 60, 75, 61 and 62), which admit a `+`, and `-0` for the
+     first (reading 73), where §2.1.5.1 says "An explicit plus sign ('+') is not allowed as part of a numerical value
+     except when it is specifically listed in the syntax". A value meets both, so `length`, `columnspan`, `rowspan`,
+     `selection`, `position`, `shift`, `index` and `scriptsizemultiplier` take the notation's lexical space within the
+     type's bounds, whitespace collapsed as the type collapses it (§2.1.5.1 asks only that outer whitespace "should be
+     avoided"): `scriptsizemultiplier="+0.5"` is refused, and `-0.5`, `.5` and `5.` are admitted. `scriptlevel`, of the
+     XSD's `m:integer` too, keeps its sign, because its own row states `( "+" | "-" )? unsigned-integer` (§3.3.4.2). A
+     content `cn`'s `base`, which the XSD leaves untyped and the RelaxNG types `text` (`mathml3-content.xsd` line 18,
+     `mathml3-content.rnc` line 34), "is a base 10 positive integer giving the value of base in which the text content
+     of the cn is to be interpreted" (§4.2.1.3), so it takes `positive-integer`'s notation over the XSD's
+     `m:positive-integer`, whitespace collapsed likewise: `base="16"` and `base=" 2 "` are admitted, and `base="+10"`
+     and `base="0"` refused. "The base attribute should only be used on elements with type "integer" or "real"" is
+     advice and is not read;
    - each operator's argument count under `apply`, by its class (MathML 3 §4.1.5, §4.3.4.5 and §4.3.4.6), for an
      `apply` that holds no qualifier but its operator's own. `moment` is left out, because the Recommendation's own
      example (§4.4.8.6) applies it to five arguments.
@@ -1748,3 +1757,118 @@ against it. A reading that is not an information-model-over-XSD case says which 
      XInclude's element and not refused: a known under-refusal, until a law holds a fallback to its parent. No corpus
      document holds an include. This binds pantry and plate alike. This is not a case of documents in conflict.
      (Operator ruling "the spec wins", 2026-11-06, from W5 seat IN.)
+
+<!-- Reading 119 is reserved. -->
+
+120. **A `qti-index`'s `n` is at least 1 where it is a number.** The information model says of Index "'n' must be a
+     positive integer. If 'n' exceeds the number of values in the container (or the sub-expression is NULL) then the
+     result of the index operator is NULL. If 'n' is an identifier, it is the value of 'n' at runtime that is used"
+     (section 5.72, in both versions), and types `n` as `IntOrIdentifier`, "The union consists of values of
+     data-type(s): NCName (Primitive-type), Int (Primitive-type)" (section 5.72.1). The XSD types it as a union of
+     `xs:NCName` and `xs:int`, which admits `0` and negative integers. This follows the information model and sets the
+     XSD aside, with the stricter source deciding where both are normative (readings 16 and 17): the union's `xs:int`
+     member is held to 1 and above, and keeps `xs:int`'s largest value (reading 46). An NCName never begins with a
+     digit or a sign, so `0`, `+0`, `-0` and `-1` meet only the integer member and are refused under
+     `attribute-lexical`, while `1`, `+1`, `n=" 2 "` and `2147483647` are admitted. An `n` that is an NCName names a
+     variable whose value is read at run time; that its value is positive is the renderer's, and pantry checks only
+     that the variable is declared. (Decided 2026-11-06 by RV seat G, on the review of PR #46, under the operator's
+     standing ruling of 2026-11-05 that the spec wins.)
+
+<!-- Readings 121 and 122 are reserved. -->
+
+123. **A `bdo` carries `dir`, and its value is `ltr` or `rtl`.** The information model says of BDO "Authors must
+     specify the dir attribute on this tag, with the value ltr to specify a left-to-right override and with the value
+     rtl to specify a right-to-left override. The auto value must not be specified" (section 5.11, in both versions).
+     The XSD declares `bdo`'s `dir` optional, with the values `ltr`, `rtl` and `auto` and the default `auto`. This
+     follows the information model and sets the XSD aside, the information model being the stricter source (readings
+     16 and 17): a `bdo` with no `dir` is refused under `required-attribute`, and `dir="auto"` under
+     `attribute-lexical`. The XSD's default is never read, since a valid `bdo` always writes the attribute. Every other
+     element's `dir` keeps `auto`. The rule holds by the element's name, so a `bdo` an `xsi:type` governs carries `dir`
+     too (reading 84). This restores the rule that the ruling of 2026-11-05 that attributes follow the XSD (reading 9)
+     had removed; the operator's ruling of 2026-11-06 overrules that ruling wherever the information model is stricter.
+     (Decided 2026-11-06 by RV seat G, on the review of PR #46, under the operator's standing ruling of 2026-11-05 that
+     the spec wins.)
+124. **A media URL holds a character other than a space.**
+     Each media URL the information model describes as "a valid non-empty URL potentially surrounded by spaces" holds
+     a character other than a space: an `audio`'s and a `video`'s `src` ("The attribute, if present, must contain a
+     valid non-empty URL potentially surrounded by spaces", sections 5.9.1 and 5.166.1), a `video`'s `poster` (the same
+     sentence, section 5.166.9), and a `source`'s `src` ("The value must be a valid non-empty URL potentially
+     surrounded by spaces", section 5.135.1). A `source`'s `srcset` holds one too: the information model says it
+     "specifies the URL of the image to use in different situations" (section 5.135.3), and the HTML Standard, which the
+     class restates, that a `srcset` "must consist of one or more image candidate strings", each holding "A valid
+     non-empty URL" (the HTML Standard, srcset attributes, as published 5 November 2026). The XSD types each of them
+     `URLDType`, an `xs:normalizedString`, so it admits the empty and the blank value; this follows the information
+     model and the HTML Standard, the stricter sources. Spaces around the URL are admitted, and a tab or a line break
+     counts as a space, since `replace` maps each to one before the value is read; so `src=""`, `src=" "` and
+     `poster="&#9;"` are refused under `attribute-lexical`, and `src=" v.mp4 "` is admitted. The URL Standard's syntax
+     of a valid URL string, and a `srcset`'s candidate strings and their descriptors, are not checked beyond what
+     readings 102 and 103 read of a file reference: that is this reading's stated limit. Its cause is that the URL
+     Standard and the HTML Standard are living documents that no pinned source holds. What would lift it is a dated
+     copy of each pinned beside the XSDs, with a domain for the valid URL string and a family of a `srcset`'s
+     candidates under its attribute, as `Idref` splits tokens. (Decided 2026-11-06 by RV seat G, on the review of
+     PR #46, under the operator's standing ruling of 2026-11-05 that the spec wins.)
+125. **A `track`'s `src` holds a character other than a space, and its `srclang` is a language tag.**
+     A `track`'s `src`, which the XSD already requires, holds a character other than a space: "The 'src'
+     characteristic gives the address of the text track data. The value must be a valid non-empty URL potentially
+     surrounded by spaces. This attribute must be present" (section 5.163.2). Its type is `URLDType`, read as reading
+     124 reads a media URL, with reading 124's limit on the URL's own syntax. A `track`'s `srclang`, where written, is
+     a BCP 47 language tag and never empty (reading 129), so `srclang="english language"` and `srclang=""` are refused
+     under `attribute-lexical`. (Decided 2026-11-06 by RV seat G, on the review of PR #46, under the operator's standing
+     ruling of 2026-11-05 that the spec wins.)
+
+<!-- Readings 126 to 128 are reserved. -->
+
+129. **`xml:lang`, `lang` and a track's `srclang` hold BCP 47 language tags, well-formed as RFC 5646 defines them.**
+     XML 1.0 says of `xml:lang` "The values of the attribute are language identifiers as defined by [IETF BCP 47], Tags
+     for the Identification of Languages; in addition, the empty string may be specified" (section 2.12). The
+     information model says of each `lang` "Its value must be a valid [BCP 47] language tag, or the empty string"
+     (sections 5.15.3 to 5.21.3), and the same of the deprecated `language` rows, which are `xml:lang` (sections 5.15.4
+     to 5.21.4, and 7.30.3); of the item's and the stimulus's `language`, their `xml:lang`, "Natural language
+     identifiers as defined by [BCP 47]" (sections 4.1.4 and 4.3.4); and of a track's `srclang` "The value must be a
+     valid ]BCP 47] language tag" (section 5.163.3). The XSD types `lang` and `srclang` as `xs:normalizedString`, which
+     admits any value, and `xml.xsd` types `xml:lang` as a union of `xs:language`, whose pattern is RFC 3066's (XML
+     Schema Part 2, section 3.3.3), and the empty string. Each is read as its stricter source states it:
+     - `xml:lang`, on every element, the document layer's included, is a tag or empty (XML 1.0, section 2.12), its
+       whitespace collapsed as `xs:language` collapses it. Under a `skip` wildcard, as MathML's are, no declaration
+       types it, and XML 1.0's sentence, a rule of XML itself, still holds: the value as written is a tag or empty;
+     - on `qti-assessment-item` and `qti-assessment-stimulus`, `xml:lang` is a tag and never empty, since sections
+       4.1.4 and 4.3.4 state no empty value;
+     - `lang`, on every element that declares it, is a tag or empty. Its `replace` whitespace stays, so `lang="en "` is
+       refused, since whitespace is no part of a tag;
+     - `srclang` on `track` is a tag and never empty, since section 5.163.3 states no empty value.
+
+     A tag is RFC 5646's `Language-Tag` (section 2.1, Figure 1): a `langtag`, a private-use tag, or one of the 26
+     grandfathered tags. Tags "are to be treated as case insensitive" (section 2.1.1), the ABNF's repetitions are
+     unbounded, and "Whitespace is not permitted in a language tag" (section 2.1). So `en`, `zh-Hant-TW`, `de-CH-1996`,
+     `x-none`, `i-klingon`, `en-GB-oed`, `sgn-BE-FR` and `EN-us` are admitted, and `en_US x`, `english language`,
+     `a-value` (section 2.2.6, rule 1), `en--x`, `1a` and `en-` are refused under `attribute-lexical`. RFC 5646 calls a
+     tag that conforms to the ABNF well-formed, and a well-formed tag valid when its subtags appear in the IANA Language
+     Subtag Registry as of a registry date and it repeats no variant and no singleton subtag (section 2.2.9).
+     Well-formedness is checked, and validity is this reading's stated limit, so `qq-ZZ` and `de-1996-1996` are
+     admitted. Its cause is that the registry is a dated external dataset that no pinned source holds, and a repeated
+     subtag is a comparison between a tag's subtags that no pattern over the value states. What would lift it is a
+     closed relation of a pinned registry's subtags, with each tag split into its subtags as `Idref` splits tokens, so
+     a law can look each subtag up and key a tag's variants and singletons. (Decided 2026-11-06 by RV seat G, on the
+     review of PR #46, under the operator's standing ruling of 2026-11-05 that the spec wins.)
+
+<!-- Readings 130 and 131 are reserved. -->
+
+132. **A printed variable's `format` is a printf format string of at most one conversion, over the information
+     model's conversion codes.** The information model says "The syntax of the format attribute is based on the format
+     conversion specifiers defined in the C programming language [ISO 9899] for use with printf and related functions.
+     Each conversion specifier starts with a '%' character and is followed by zero or more flag characters (#, 0, -, "
+     " [space] and +), an optional digit string indicating the minimum field width, an optional precision (consisting
+     of a "." followed by zero or more digits) and finally one of the conversion type codes: E, e, f, G, g, r, R, i, o,
+     X, or x" (section 2.3.4), and of `format` "The format conversion specifier to use when converting numerical values
+     to strings" (section 7.30.7). The XSD types `format` as `xs:normalizedString`, which admits any value. A format is
+     read as a C format string, whose conversion specifiers the information model restricts: characters other than
+     `%`, the escape `%%`, which is C's one way to write a `%`, and conversion specifiers with the listed codes. A
+     format holds at most one conversion specifier, and may hold none. C says of `fprintf` "If there are insufficient
+     arguments for the format, the behavior is undefined" (ISO/IEC 9899:2011, section 7.21.6.1), and a printed variable
+     formats its one value, so a second specifier would read an argument that is not there. `%%` converts no argument,
+     and a format of text alone prints its text. So `%.2f`, `%.f`, `%5.2e`, `Score: %i%%`, `%#x` and `100%%` are
+     admitted, and `%q`, `2f%`, `%`, `%d`, `%i of %i` and `%%%e%%%G` are refused under `attribute-lexical`: `d` is no
+     listed code, though the implementation guide's informative example writes `format="%d"`. "Float values should
+     only be formatted in the e, E, f, g, G, r or R styles" (section 7.30) is advice and is not read. (Decided
+     2026-11-06 by RV seat G, on the review of PR #46, under the operator's standing ruling of 2026-11-05 that the spec
+     wins; at most one conversion is the operator's decision of 2026-11-06 on item L4.)

@@ -174,6 +174,7 @@ describe("the test helpers", () => {
       "qti/tests.test.ts: #pantry/test/oracle.ts",
       "test/gen/xdm.ts: #pantry/test/oracle.ts",
       "test/locate.ts: #pantry/test/oracle.ts",
+      "test/oracle.rv-g.test.ts: #pantry/test/oracle.ts",
       "test/oracle.test.ts: #pantry/test/oracle.ts",
       "test/prewitness.corpus.test.ts: #pantry/test/oracle.ts",
       "test/xsd.corpus.test.ts: #pantry/test/oracle.ts",

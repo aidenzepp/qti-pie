@@ -159,11 +159,20 @@ export type XsdVerdict =
   | { readonly _tag: "Invalid"; readonly messages: readonly XsdMessage[] };
 
 /**
- * A schema message's shape after `file:line: `: `element NAME: Schemas validity error : `, then
- * `Element 'QNAME'`, an optional `, attribute 'NAME'`, and the message.
+ * A schema message's shape after `file:line: `: an optional `element NAME: `, then `Schemas
+ * validity error : ` or `warning`, `Element 'QNAME'`, an optional `, attribute 'NAME'`, and the
+ * message.
+ *
+ * Libxml2 2.12 and earlier write the `element NAME: ` prefix for every error on an element node;
+ * from 2.13 `xmlFormatError` leaves it out for a schema validity error (`domain !=
+ * XML_FROM_SCHEMASV`), so the `Element 'QNAME'` that follows is the message's one element either
+ * way, and the prefix is optional.
+ *
+ * @see {@link https://gitlab.gnome.org/GNOME/libxml2/-/blob/v2.13.0/error.c#L450-452 | libxml2 2.13.0, error.c, xmlFormatError}
+ * @see {@link https://gitlab.gnome.org/GNOME/libxml2/-/blob/v2.12.0/error.c#L289-290 | libxml2 2.12.0, error.c, xmlReportError}
  */
 const schemaMessage =
-  /^element [^:]+: Schemas validity (?:error|warning) : Element '(?<element>[^']+)'(?:, attribute '(?<attribute>[^']+)')?: (?<text>.*)$/su;
+  /^(?:element [^:]+: )?Schemas validity (?:error|warning) : Element '(?<element>[^']+)'(?:, attribute '(?<attribute>[^']+)')?: (?<text>.*)$/su;
 
 /**
  * The most files one `xmllint` process is given, so its argument list stays far below the

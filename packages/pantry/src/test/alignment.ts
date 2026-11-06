@@ -39,7 +39,7 @@
  * enumerations are `lexical.oracle.test.ts`'s, against `xmllint`.
  */
 import { Option } from "effect";
-import { readingRefusals, readingSpellings } from "#pantry/grammar/attributes.ts";
+import { readingRefusals, readingSpellings, readingUses } from "#pantry/grammar/attributes.ts";
 import type { Use, ValueDomain } from "#pantry/grammar/attributes.ts";
 import { coveredBy } from "#pantry/grammar/compose.ts";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
@@ -119,7 +119,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     2,
     {
       owner:
-        "the automaton's restated models (`m:bvar`, `m:piecewise`, the `interval` qualifier's eight, `m:annotation-xml`, `m:lambda`'s ending), `m:semantics.contexp` beside `m:ci`, MathML's root (`roots`), the `math` ancestry flag, the notation domains (`mathmlNotationReadings`) and the MathML arity law; the MathML foreign element law (QS); D12 for the Recommendation's other prose",
+        "the automaton's restated models (`m:bvar`, `m:piecewise`, the `interval` qualifier's eight, `m:annotation-xml`, `m:lambda`'s ending), `m:semantics.contexp` beside `m:ci`, MathML's root (`roots`), the `math` ancestry flag, the notation domains (`mathmlNotationReadings`, `number` among them, and `cnBaseReadings` for `m:cn`'s `base`) and the MathML arity law; the MathML foreign element law (QS); D12 for the Recommendation's other prose",
       status: "R",
     },
   ],
@@ -610,6 +610,46 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
       status: "G",
     },
   ],
+  [
+    120,
+    {
+      owner: "AL1 (`positiveIndex`, `qti-index`'s `n` at least 1 where it is a number)",
+      status: "G",
+    },
+  ],
+  [
+    123,
+    {
+      owner:
+        "AL1 (`overrideDirection`, `bdo`'s `dir` without `auto`) and AL3 (`readingUses` through `readDeclarations`, `bdo`'s `dir` required)",
+      status: "G",
+    },
+  ],
+  [
+    124,
+    {
+      owner:
+        "AL1 (`nonEmptyUrl` on `audio`, `video` and `source` `src`, `video` `poster` and `source` `srcset`); the URL Standard's syntax is a stated limit",
+      status: "G",
+    },
+  ],
+  [
+    125,
+    {
+      owner:
+        "AL1 (`nonEmptyUrl` on `track`'s `src`, and `languageOnly` on its `srclang`, reading 129)",
+      status: "G",
+    },
+  ],
+  [
+    129,
+    {
+      owner:
+        "AL1 (`languageTag`: `xmlLanguage` on every `xml:lang`, the document layer's and a `skip` wildcard's included, `rootLanguage` on the item and stimulus roots, `languageOrEmpty` on `lang`, `languageOnly` on `srclang`); RFC 5646 validity under the IANA registry is a stated limit",
+      status: "G",
+    },
+  ],
+  [132, { owner: "AL1 (`printfFormat` on `qti-printed-variable`'s `format`)", status: "G" }],
 ]);
 
 /**
@@ -672,13 +712,20 @@ const readingAdmissions: ReadonlyMap<string, number> = new Map([
 ]);
 
 /**
- * The attribute rules a spec reading departs from the XSD in, by `family parent subject`.
+ * The attribute rules a spec reading departs from the XSD in, by `family parent subject`: a
+ * value the XSD's enumeration lists that a reading refuses, an attribute a reading refuses
+ * (`readingRefusals`), and an optional attribute a reading requires (`readingUses`).
  */
 const readingDepartures: ReadonlyMap<string, number> = new Map([
+  ["attribute:type bdo dir", 123],
   ["attribute:type qti-match-table-entry target-value", 8],
   ["attribute:type xi:include parse", 85],
   ...readingRefusals.map(({ kind, name, reading }): readonly [string, number] => [
     `attribute:admission ${kind} ${name}`,
+    reading,
+  ]),
+  ...readingUses.map(({ kind, name, reading }): readonly [string, number] => [
+    `attribute:required ${kind} ${name}`,
     reading,
   ]),
 ]);
@@ -1104,7 +1151,8 @@ const countsBeyond = (grammar: ComposedGrammar): readonly Rule[] =>
  *
  * @param declared - The XSD's use.
  * @param stated - The grammar's.
- * @param key - The rule's `family parent subject`, which a planned owner is looked up by.
+ * @param key - The rule's `family parent subject`, which a planned owner and a reading that
+ *   requires the attribute are looked up by.
  * @returns The status.
  */
 const useStatus = (declared: Use, stated: Use, key: string): Status => {
@@ -1116,7 +1164,7 @@ const useStatus = (declared: Use, stated: Use, key: string): Status => {
     return planned.has(key) ? "P" : "U";
   }
 
-  return "X";
+  return readingDepartures.has(key) ? "reading" : "X";
 };
 
 /**
@@ -1206,12 +1254,13 @@ const attributeRules = (
       : [];
   const key = `attribute:required ${row.kind} ${row.name}`;
   const status = useStatus(row.use, held.use, key);
+  const requiredBy = readingDepartures.get(key);
   const uses: readonly Rule[] =
     row.use === "required" || held.use === "required"
       ? [
           {
             ...base,
-            detail: `XSD ${row.use}; grammar ${held.use}${status === "P" ? `; ${planned.get(key) ?? ""}` : ""}`,
+            detail: `XSD ${row.use}; grammar ${held.use}${status === "P" ? `; ${planned.get(key) ?? ""}` : ""}${status === "reading" && requiredBy !== undefined ? `; reading ${String(requiredBy)}` : ""}`,
             family: "attribute:required",
             owner: "Required",
             status,

@@ -260,6 +260,8 @@ const installedBytes = (relation: Installed): readonly [number, number] => {
  * installs a payload string beside its membership set. The products of the three slotted
  * relations are the rosters' arithmetic, 115 content models, 306 positions, 644 kinds and 25
  * shared models: Follow 115 · 306², Last 115 · 306 and Symbol 25 · 644 · 306 one-bit cells.
+ * `ValueDomainOf` and `ValueIdentity` are keyed by the 242 domains the attribute readings 2, 120,
+ * 123, 124, 125, 129 and 132 leave, taken by the same formula on 2026-11-06.
  */
 const measuredBytes = {
   AttributeGrammar: [2_178_996, 2_178_996],
@@ -308,8 +310,8 @@ const measuredBytes = {
   Symbol: [160_123, 615_833],
   TextDomain: [2646, 2646],
   TypeAvailable: [175, 175],
-  ValueDomainOf: [416, 416],
-  ValueIdentity: [96, 96],
+  ValueDomainOf: [432, 432],
+  ValueIdentity: [99, 99],
   VariableReference: [66_501, 66_501],
   XsiType: [71_492, 71_492],
 } as const satisfies Readonly<Record<string, readonly [number, number]>>;

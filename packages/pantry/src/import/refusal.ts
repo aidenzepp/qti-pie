@@ -409,7 +409,8 @@ export const lawTable = {
   },
   "AL3 required": {
     rule: "required-attribute",
-    source: "the XSDs' use=\"required\": AttributeAdmission's use side (Required)",
+    source:
+      "the XSDs' use=\"required\", and reading 123: https://www.imsglobal.org/spec/qti/v3p0/info#Data_BDO (§5.11: 'Authors must specify the dir attribute on this tag'), where the XSD declares bdo's dir optional (attributes.ts readingUses): AttributeAdmission's use side (Required)",
   },
   "AL4 open name key": {
     rule: "attribute-admission",
@@ -1113,7 +1114,7 @@ export const lawTable = {
   "value domain": {
     rule: "attribute-lexical",
     source:
-      "XML Schema Part 2, each attribute's simple type compiled with its whiteSpace and residual facets (domains.ts); readings 7, 45, 46, 56 and 71",
+      "XML Schema Part 2, each attribute's simple type compiled with its whiteSpace and residual facets (domains.ts); readings 7, 45, 46, 56 and 71; and the readings that hold a type to its stricter source (attributes.ts specReadings): 2 (MathML's number without a plus, and cn's base a positive integer), 120 (qti-index's n at least 1), 123 (bdo's dir without auto), 124 and 125 (a media URL non-empty), 129 (xml:lang, lang and srclang BCP 47 language tags) and 132 (a printed variable's format a printf format string of at most one conversion)",
   },
   "ws arm": {
     rule: "text-copy",

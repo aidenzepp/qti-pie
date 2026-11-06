@@ -7,9 +7,10 @@
  *   exactly those, with the XSD's use, beside the document layer's names.
  * - **The spec readings' text.** Each reading of `docs/spec-readings.md` that narrows a value is
  *   checked on every attribute it names, and the XSD's own reading of the same type is checked
- *   everywhere else; readings 10 and 85, which add and take away an attribute, are restated beside
- *   the XSD reading, and reading 90 beside the document layer's `xml:` names, its covered elements
- *   from the Schematron's leaf, which its own test reads against the XSDs' raw text.
+ *   everywhere else; readings 10, 85 and 123, which add, take away and require an attribute, are
+ *   restated beside the XSD reading, and reading 90 beside the document layer's `xml:` names, its
+ *   covered elements from the Schematron's leaf, which its own test reads against the XSDs' raw
+ *   text.
  * - **The XSD's values, for the departures of the old grammar.** Each value the XSD admits and the
  *   old grammar refused is admitted, read from the leaf's own resolution of the XSD.
  * - **Structural laws:** positions a bijection onto 0..n−1 in `AttributeName` order; `TextDomain` a
@@ -19,7 +20,13 @@
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, FileSystem, Option, Result } from "effect";
-import { baseTypes, generate, specReadings } from "#pantry/grammar/attributes.ts";
+import {
+  baseTypes,
+  generate,
+  readDeclarations,
+  readingUses,
+  specReadings,
+} from "#pantry/grammar/attributes.ts";
 import type { AttributeGrammar, Declared, ValueDomain } from "#pantry/grammar/attributes.ts";
 import { roster } from "#pantry/grammar/closed.ts";
 import type { Roster } from "#pantry/grammar/closed.ts";
@@ -131,25 +138,6 @@ const enumerationOf = (domain: Domain): readonly string[] =>
   domain.facets.flatMap(({ facet, value }) => (facet === "enumeration" ? [value] : []));
 
 describe("The departures from the XSD", () => {
-  it("are gone: bdo@dir is optional and takes every value the XSD lists, auto among them", () => {
-    for (const version of schemaVersions) {
-      const row = Option.getOrThrow(
-        leafGrammar.admission.lookup({ kind: "bdo", name: "dir", version }),
-      );
-      const declared = attributeDeclarations.find(
-        ({ kind, name }) => kind === "bdo" && name === "dir",
-      );
-      const values = declared === undefined ? [] : enumerationOf(declared.domain);
-      const domain = Option.getOrThrow(domainAt(version, "bdo", "dir"));
-
-      assert.strictEqual(row.use, "optional");
-      assert.include(values, "auto");
-      for (const value of values) {
-        assert.isTrue(matches(domain, value), value);
-      }
-    }
-  });
-
   it("are gone: h1@role takes every ARIA role, the same domain as h2 to h6", () => {
     for (const version of schemaVersions) {
       const h1 = Option.getOrThrow(domainAt(version, "h1", "role"));
@@ -262,6 +250,179 @@ describe("The departures from the XSD", () => {
 });
 
 /**
+ * RFC 5646's 26 grandfathered tags (§2.1, the `irregular` and `regular` productions), as the RFC
+ * writes them.
+ */
+const grandfathered = [
+  "en-GB-oed",
+  "i-ami",
+  "i-bnn",
+  "i-default",
+  "i-enochian",
+  "i-hak",
+  "i-klingon",
+  "i-lux",
+  "i-mingo",
+  "i-navajo",
+  "i-pwn",
+  "i-tao",
+  "i-tay",
+  "i-tsu",
+  "sgn-BE-FR",
+  "sgn-BE-NL",
+  "sgn-CH-DE",
+  "art-lojban",
+  "cel-gaulish",
+  "no-bok",
+  "no-nyn",
+  "zh-guoyu",
+  "zh-hakka",
+  "zh-min",
+  "zh-min-nan",
+  "zh-xiang",
+] as const;
+
+/**
+ * One subtag of each class RFC 5646's productions tell apart: singletons, `x` in both cases, two
+ * and three letters, three digits, four letters, a digit and three alphanumerics, five to eight
+ * alphanumerics, nine letters, and alphanumerics no production takes.
+ */
+const subtagSamples = [
+  "a",
+  "x",
+  "X",
+  "i",
+  "1",
+  "en",
+  "EN",
+  "12",
+  "a1",
+  "eng",
+  "123",
+  "419",
+  "Latn",
+  "1abc",
+  "abc1",
+  "US",
+  "variant",
+  "abcdefgh",
+  "abcdefghi",
+  "1996",
+  "ab",
+  "sgn",
+] as const;
+
+/**
+ * Whether a value is a well-formed BCP 47 language tag, RFC 5646's `Language-Tag` (§2.1, Figure
+ * 1), read subtag by subtag: a grandfathered tag in any case; or `x` and private-use subtags; or a
+ * language of two to eight letters, up to three three-letter extlangs after one of two or three, a
+ * script, a region, variants, extensions each a singleton other than `x` with subtags of two to
+ * eight, and a private-use tail. Each production is told apart by its subtags' lengths and
+ * classes, so the first that fits is the one, and no step looks back.
+ *
+ * @param value - The value.
+ * @returns Whether it is well-formed.
+ */
+const isLanguageTag = (value: string): boolean => {
+  if (grandfathered.some((tag) => tag.toLowerCase() === value.toLowerCase())) {
+    return true;
+  }
+
+  const subtags = value.split("-");
+  const at = (index: number): string => subtags[index] ?? "";
+  if (!subtags.every((subtag) => /^[A-Za-z0-9]{1,8}$/u.test(subtag))) {
+    return false;
+  }
+
+  if (/^[Xx]$/u.test(at(0))) {
+    return subtags.length > 1;
+  }
+
+  if (!/^[A-Za-z]{2,8}$/u.test(at(0))) {
+    return false;
+  }
+
+  let next = 1;
+  const take = (production: RegExp): boolean => {
+    const taken = next < subtags.length && production.test(at(next));
+    next += taken ? 1 : 0;
+
+    return taken;
+  };
+  for (let extlangs = 0; at(0).length <= 3 && extlangs < 3 && take(/^[A-Za-z]{3}$/u);) {
+    extlangs += 1;
+  }
+
+  take(/^[A-Za-z]{4}$/u);
+  take(/^(?:[A-Za-z]{2}|[0-9]{3})$/u);
+  while (take(/^(?:[A-Za-z0-9]{5,8}|[0-9][A-Za-z0-9]{3})$/u)) {
+    // Each variant is taken.
+  }
+
+  while (take(/^[0-9A-WY-Za-wy-z]$/u)) {
+    let held = 0;
+    while (take(/^[A-Za-z0-9]{2,8}$/u)) {
+      held += 1;
+    }
+
+    if (held === 0) {
+      return false;
+    }
+  }
+
+  if (take(/^[Xx]$/u)) {
+    return next < subtags.length;
+  }
+
+  return next === subtags.length;
+};
+
+/**
+ * Whether a value is a printf format string over the information model's conversion codes (§2.3.4)
+ * that converts at most one argument, read left to right: a character that is not `%`, or `%%`, or
+ * `%`, flags, a width, an optional precision of `.` and digits, and one of the codes, which may
+ * stand once.
+ *
+ * @param value - The value.
+ * @returns Whether it is a format.
+ */
+const isPrintfFormat = (value: string): boolean => {
+  const points = Array.from(value, String);
+  let next = 0;
+  let conversions = 0;
+  const takeWhile = (characters: string): void => {
+    while (next < points.length && characters.includes(points[next] ?? "")) {
+      next += 1;
+    }
+  };
+  while (next < points.length) {
+    if (points[next] === "%" && points[next + 1] === "%") {
+      next += 2;
+    } else if (points[next] === "%") {
+      next += 1;
+      takeWhile("#0 +-");
+      takeWhile("0123456789");
+      if (points[next] === ".") {
+        next += 1;
+        takeWhile("0123456789");
+      }
+
+      const code = points[next];
+      conversions += 1;
+      if (code === undefined || !"EefGgrRioXx".includes(code) || conversions > 1) {
+        return false;
+      }
+
+      next += 1;
+    } else {
+      next += 1;
+    }
+  }
+
+  return true;
+};
+
+/**
  * A word every domain of a numeric type accepts, and the same word with outer whitespace.
  */
 const spaced = [" 1", "1 ", "\t1\n"] as const;
@@ -363,7 +524,7 @@ describe("The spec readings", () => {
     }
   });
 
-  it("read 18 and 83: an order, graphic-order or position object interaction's min-choices is at least 1, every other kind's at least 0", () => {
+  it("read 18 and 92: an order, graphic-order or position object interaction's min-choices is at least 1, every other kind's at least 0", () => {
     // Reading 18: "If specified, min-choices must be 1 or greater" of the order interactions
     // (§5.97.2, §5.61.1); reading 92: the same sentence of the position object (§5.107.2).
     const floored = new Set([
@@ -397,7 +558,7 @@ describe("The spec readings", () => {
     }
   });
 
-  it("read 76: an xi:include's parse is xml alone, its whitespace collapsed as the XSD's token", () => {
+  it("read 85: an xi:include's parse is xml alone, its whitespace collapsed as the XSD's token", () => {
     // Information model §2.12: "all included fragments must be treated as parsed xml"; the XSD's
     // `xi:parseType` admits `xml` and `text` (`w3/XInclude.xsd` lines 31 to 36).
     for (const version of schemaVersions) {
@@ -440,6 +601,218 @@ describe("The spec readings", () => {
         assert.isFalse(matches(figures, "9223372036854775808"), kind);
         assert.isTrue(matches(figures, "FIGURES"), kind);
       }
+    }
+  });
+
+  it("read 2: a MathML number has no explicit +, and a content cn's base is a positive integer", () => {
+    // MathML 3 §2.1.5.1: number is "an optional prefix of "-" (U+002D), followed by an unsigned
+    // number", and "An explicit plus sign ('+') is not allowed as part of a numerical value";
+    // §4.2.1.3: base "is a base 10 positive integer". The XSD types number xs:decimal and leaves
+    // base untyped.
+    const numbers = declarersOf("scriptsizemultiplier");
+    assert.isAbove(numbers.length, 0);
+    for (const { kind, version } of numbers) {
+      const domain = Option.getOrThrow(domainAt(version, kind, "scriptsizemultiplier"));
+
+      for (const value of ["0.71", "-0.5", ".5", "5.", "2", " 0.6 "]) {
+        assert.isTrue(matches(domain, value), `${kind} ${value}`);
+      }
+
+      for (const value of ["+0.5", "+.5", "+2", ".", "-", "1e2", ""]) {
+        assert.isFalse(matches(domain, value), `${kind} ${value}`);
+      }
+    }
+
+    for (const version of schemaVersions) {
+      const base = Option.getOrThrow(domainAt(version, "m:cn", "base"));
+
+      for (const value of ["16", "2", " 2 ", "010"]) {
+        assert.isTrue(matches(base, value), value);
+      }
+
+      for (const value of ["+10", "0", "000", "-2", "1.0", "ten", ""]) {
+        assert.isFalse(matches(base, value), value);
+      }
+    }
+  });
+
+  it("read 120: a qti-index's n is at least 1 where it is a number, any NCName otherwise", () => {
+    // Information model §5.72, Index: "'n' must be a positive integer"; the XSD's xs:int member
+    // admits 0 and negatives, and reading 46 keeps no larger range for it.
+    for (const version of schemaVersions) {
+      const n = Option.getOrThrow(domainAt(version, "qti-index", "n"));
+
+      for (const value of ["1", "+1", "01", " 2 ", "2147483647", "N", "i", "INDEX_1"]) {
+        assert.isTrue(matches(n, value), value);
+      }
+
+      for (const value of ["0", "-0", "+0", "00", "-1", "2147483648", "1.5", ""]) {
+        assert.isFalse(matches(n, value), value);
+      }
+    }
+  });
+
+  it("read 123: a bdo's dir is required and is ltr or rtl, never auto; another kind's dir keeps auto", () => {
+    // Information model §5.11, BDO: "Authors must specify the dir attribute on this tag, with the
+    // value ltr ... or rtl ... The auto value must not be specified". The XSD declares dir
+    // optional, defaulting to auto (`readDeclarations` reads the use; the composed grammar's use
+    // is the XSD uses test's).
+    const bdo = attributeDeclarations.filter(({ kind }) => kind === "bdo");
+    const read = readDeclarations(bdo);
+
+    assert.deepStrictEqual(
+      read.filter(({ use }, at) => use !== bdo[at]?.use).map(({ name, use }) => `${name} ${use}`),
+      ["dir required"],
+    );
+    assert.deepStrictEqual(readingUses, [{ kind: "bdo", name: "dir", reading: 123 }]);
+    for (const version of schemaVersions) {
+      const dir = Option.getOrThrow(domainAt(version, "bdo", "dir"));
+      const span = Option.getOrThrow(domainAt(version, "span", "dir"));
+
+      assert.isTrue(matches(dir, "ltr") && matches(dir, "rtl"), version);
+      assert.isFalse(matches(dir, "auto") || matches(dir, "") || matches(dir, " rtl"), version);
+      assert.isTrue(matches(span, "auto"), version);
+    }
+  });
+
+  it("read 124 and 125: each media URL holds something other than spaces, every declaring kind against blank and spaced values", () => {
+    // Information model: audio and video src, video poster, source src and track src "must
+    // contain a valid non-empty URL potentially surrounded by spaces" (§5.9.1, §5.166.1,
+    // §5.166.9, §5.135.1, §5.163.2); HTML: a srcset "must consist of one or more image candidate
+    // strings", each a valid non-empty URL. Oracle: after replace, a character other than a space.
+    const urls = [
+      ["audio", "src"],
+      ["source", "src"],
+      ["source", "srcset"],
+      ["track", "src"],
+      ["video", "poster"],
+      ["video", "src"],
+    ] as const;
+    const values = ["", " ", "\t", " \n ", "\r\n", "a", " a ", "\ta", "a b.png 2x", "%20"];
+    for (const [kind, name] of urls) {
+      for (const version of schemaVersions) {
+        const domain = Option.getOrThrow(domainAt(version, kind, name));
+        const wrong = values.filter(
+          (value) => matches(domain, value) !== /[^ ]/u.test(value.replaceAll(/[\t\n\r]/gu, " ")),
+        );
+
+        assert.deepStrictEqual(wrong, [], `${version} ${kind}@${name}`);
+      }
+    }
+  });
+
+  it("read 129: xml:lang, lang and srclang hold BCP 47 tags, against an independent RFC 5646 recogniser on every tag of up to three subtags", () => {
+    // Oracle: RFC 5646 §2.1's ABNF walked subtag by subtag (`isLanguageTag`), not the pattern.
+    // Bound: every tag of one to three subtags over `subtagSamples`, the 26 grandfathered tags in
+    // two cases, and the named forms of the plan; an `xml:lang` or a `lang` may also be empty
+    // (XML 1.0 §2.12; information model §5.15.3), but not on an item or a stimulus (§4.1.4,
+    // §4.3.4) and never a `srclang` (§5.163.3).
+    const tags = [
+      ...subtagSamples.flatMap((first) => [
+        first,
+        ...subtagSamples.flatMap((second) => [
+          `${first}-${second}`,
+          ...subtagSamples.map((third) => `${first}-${second}-${third}`),
+        ]),
+      ]),
+      ...grandfathered.flatMap((tag) => [tag, tag.toUpperCase()]),
+      "zh-Hant-TW",
+      "de-CH-1996",
+      "EN-us",
+      "de-a-value",
+      "en--x",
+      "en-a",
+      "en-US-x",
+      "a-value",
+      "en_US x",
+      "english language",
+      "1a",
+      "en-",
+      "-en",
+      "zh-yue-HK",
+      "en-Latn-US-1996-a-bc-x-ab",
+      "en-abc-def-ghi",
+      "en-abc-def-ghi-jkl",
+      "en-US-US",
+      "de-1996-1996",
+      "en-a-bc-a-de",
+      "x-a-b-c",
+      "en-x",
+    ];
+    const roots = new Set(["qti-assessment-item", "qti-assessment-stimulus"]);
+    const attributes = [
+      ...declarersOf("xml:lang").map((at) => ({
+        ...at,
+        empty: !roots.has(at.kind),
+        name: "xml:lang",
+      })),
+      ...declarersOf("lang").map((at) => ({ ...at, empty: true, name: "lang" })),
+      ...declarersOf("srclang").map((at) => ({ ...at, empty: false, name: "srclang" })),
+    ];
+    const checked = new Map<string, readonly string[]>();
+
+    assert.isAbove(tags.length, 10_000);
+    assert.isAbove(attributes.length, 400);
+    for (const { empty, kind, name, version } of attributes) {
+      const domain = Option.getOrThrow(domainAt(version, kind, name));
+      const wrong =
+        checked.get(`${domain.handle} ${String(empty)}`) ??
+        [...tags, "", "en ", " en"].filter(
+          (value) =>
+            matches(domain, value) !==
+            (value === "" ? empty : isLanguageTag(name === "xml:lang" ? value.trim() : value)),
+        );
+      checked.set(`${domain.handle} ${String(empty)}`, wrong);
+
+      assert.deepStrictEqual(wrong.slice(0, 20), [], `${version} ${kind}@${name}`);
+    }
+  });
+
+  it("read 132: a printed variable's format is a printf format string of at most one conversion over the listed codes, against an independent recogniser on every string of one to four pieces", () => {
+    // Information model §2.3.4: each conversion specifier is "%", flags of "#", "0", "-", " " and
+    // "+", an optional width, an optional precision ("." and zero or more digits), and one of E, e,
+    // f, G, g, r, R, i, o, X or x; the rest of a C format string is text and "%%". C11 §7.21.6.1:
+    // "If there are insufficient arguments for the format, the behavior is undefined", and the
+    // variable is one argument, so a format holds at most one specifier, and may hold none.
+    // Oracle: `isPrintfFormat`, a left-to-right walk of the string that counts its conversions, not
+    // the pattern.
+    const pieces = ["%", "%%", "%i", "d", "f", ".", "5", " ", "#", "-", "x", "q", "é"];
+    const strings = [
+      "",
+      "%.2f",
+      "%.f",
+      "%5.2e",
+      "Score: %i%%",
+      "%#x",
+      "%-+ #012.3E",
+      "2f%",
+      "100%%",
+      "%i of %i",
+      "%%%e%%%G",
+    ];
+    let level: readonly string[] = [""];
+    for (let length = 1; length <= 4; length += 1) {
+      level = level.flatMap((head) => pieces.map((piece) => `${head}${piece}`));
+      strings.push(...level);
+    }
+
+    for (const version of schemaVersions) {
+      const format = Option.getOrThrow(domainAt(version, "qti-printed-variable", "format"));
+      const wrong = strings.filter((value) => matches(format, value) !== isPrintfFormat(value));
+
+      assert.deepStrictEqual(wrong.slice(0, 20), [], version);
+      assert.isTrue(
+        matches(format, "%.2f") && matches(format, "Score: %i%%") && matches(format, "100%%"),
+        version,
+      );
+      assert.isFalse(
+        matches(format, "%d") ||
+          matches(format, "%") ||
+          matches(format, "%q") ||
+          matches(format, "%i of %i") ||
+          matches(format, "%%%e%%%G"),
+        version,
+      );
     }
   });
 });
@@ -770,7 +1143,8 @@ describe.skipIf(!cached)("The XSD's attribute uses", () => {
             }
 
             // Spec reading 10: ARIA's `aria-keyshortcuts` beside the XSD's `aria-keyshorts`, with
-            // its use; spec reading 85: an `xi:include` carries no `xpointer` (§2.12).
+            // its use; spec reading 85: an `xi:include` carries no `xpointer` (§2.12); spec reading
+            // 123: a `bdo` carries `dir` (§5.11).
             const misspelled = expected.get("aria-keyshorts");
             if (misspelled !== undefined) {
               expected.set("aria-keyshortcuts", misspelled);
@@ -778,6 +1152,12 @@ describe.skipIf(!cached)("The XSD's attribute uses", () => {
 
             if (kind === "xi:include") {
               expected.delete("xpointer");
+            }
+
+            for (const required of readingUses.filter((use) => use.kind === kind)) {
+              if (expected.has(required.name)) {
+                expected.set(required.name, "required");
+              }
             }
 
             const admitted = new Map(
@@ -900,16 +1280,23 @@ describe.skipIf(!cached)("The document layer", () => {
         assert.isAbove(checked, 1000);
         assert.isAbove(refused, 0);
         assert.deepStrictEqual(missing, []);
+        // Spec reading 129: XML 1.0 §2.12 makes every xml:lang a BCP 47 tag or empty, under a
+        // lax wildcard (LOM's string) and a skip one (MathML's) alike.
         for (const version of schemaVersions) {
-          const lang = Option.getOrThrow(
-            attributes.admission.lookup({ kind: "lom:string", name: "xml:lang", version }),
-          );
-          const domain = byHandle.get(lang.domain);
+          for (const kind of ["lom:string", "m:mi"]) {
+            const lang = Option.getOrThrow(
+              attributes.admission.lookup({ kind, name: "xml:lang", version }),
+            );
+            const domain = byHandle.get(lang.domain);
 
-          assert.isTrue(
-            domain !== undefined && matches(domain, "en") && matches(domain, ""),
-            version,
-          );
+            assert.isTrue(
+              domain !== undefined &&
+                matches(domain, "en") &&
+                matches(domain, "") &&
+                !matches(domain, "en_US"),
+              `${version} ${kind}`,
+            );
+          }
         }
       }),
     300_000,

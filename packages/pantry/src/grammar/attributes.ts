@@ -204,6 +204,22 @@ const withFacets = (domain: Domain, replace: readonly Facet[]): Domain => {
 };
 
 /**
+ * Add one pattern to an atomic definition beside the patterns it states: a spec reading's
+ * narrowing of its lexical space. A value meets one pattern of each set (XML Schema Part 2,
+ * §4.3.4), so the value must match this one as well as the type's own, after the type's whitespace
+ * normalization.
+ *
+ * @param domain - The atomic definition.
+ * @param pattern - The pattern, in XSD's regular expression language.
+ * @returns The definition with it.
+ * @see {@link https://www.w3.org/TR/xmlschema-2/#rf-pattern | XML Schema Part 2, 4.3.4 pattern}
+ */
+const withPattern = (domain: Domain, pattern: string): Domain => ({
+  ...domain,
+  patterns: [...domain.patterns, [pattern]],
+});
+
+/**
  * Narrow an integer definition to the signed 64-bit range, keeping a tighter bound it states, and
  * every integer member of a union likewise.
  *
@@ -240,13 +256,16 @@ const toInt64 = (domain: Domain): Domain => {
 /**
  * One QTI spec reading of an attribute's value (`docs/spec-readings.md`): the reading's number, the
  * kinds it reads the attribute on (none for every kind that declares it), the attribute, how its
- * whitespace is read, and the definition it reads the XSD's as.
+ * whitespace is read, and the definition it reads the XSD's as. A reading that reads the attribute
+ * under another named type in place of its declared one names that type (`readAs`), and its domain
+ * is named after it ({@link handleOf}).
  */
 interface SpecReading {
   readonly kinds: Option.Option<readonly string[]>;
   readonly name: string;
   readonly reading: number;
   readonly read: (domain: Domain) => Domain;
+  readonly readAs?: string;
   readonly whiteSpace: Reading;
 }
 
@@ -267,6 +286,21 @@ const on = (
   whiteSpace: Reading,
   read: (domain: Domain) => Domain = (domain) => domain,
 ): SpecReading => ({ kinds: Option.some(kinds), name, read, reading, whiteSpace });
+
+/**
+ * A reading of the attribute on every kind that declares it, its whitespace read as its type reads
+ * it.
+ *
+ * @param reading - The reading's number.
+ * @param name - The attribute.
+ * @param read - The definition it reads the XSD's as.
+ * @returns The reading.
+ */
+const everywhere = (
+  reading: number,
+  name: string,
+  read: (domain: Domain) => Domain,
+): SpecReading => ({ kinds: Option.none(), name, read, reading, whiteSpace: "xsd" });
 
 /**
  * `xs:string`'s definition, every value with its whitespace preserved: what spec reading 8 reads a
@@ -390,6 +424,231 @@ const ssmlLanguages = (domain: Domain): Domain =>
     : domain;
 
 /**
+ * A `qti-index`'s `n`, which the XSD types as a union of `xs:NCName` and `xs:int`: spec reading 120
+ * holds its `xs:int` member to 1 and above, since "'n' must be a positive integer" (information
+ * model §5.72, Index). An NCName never starts with a digit or a sign, so `0`, `+0` and `-3` meet
+ * only that member, and fail it. An NCName names a variable whose value is read at run time ("If
+ * 'n' is an identifier, it is the value of 'n' at runtime that is used"), which the attribute
+ * cannot judge.
+ *
+ * @param domain - The XSD's union.
+ * @returns The union with its integer member at least 1.
+ * @see {@link https://www.imsglobal.org/spec/qti/v3p0/info#Data_Index | QTI 3.0 information model, 5.72 Index}
+ */
+const positiveIndex = (domain: Domain): Domain =>
+  domain._tag === "union"
+    ? {
+        ...domain,
+        members: domain.members.map((member) =>
+          member._tag === "atomic" && member.primitive === "decimal"
+            ? withFacets(member, [{ facet: "minInclusive", value: "1" }])
+            : member,
+        ),
+      }
+    : domain;
+
+/**
+ * A `bdo`'s `dir`, which the XSD types as `ltr`, `rtl` or `auto`, with `auto` its default: spec
+ * reading 123 takes `auto` away, since "Authors must specify the dir attribute on this tag, with
+ * the value ltr to specify a left-to-right override and with the value rtl to specify a
+ * right-to-left override. The auto value must not be specified" (information model §5.11, BDO).
+ * {@link readingUses} makes it required, so the XSD's default is never read.
+ *
+ * @param domain - The XSD's enumeration.
+ * @returns It without `auto`.
+ * @see {@link https://www.imsglobal.org/spec/qti/v3p0/info#Data_BDO | QTI 3.0 information model, 5.11 BDO}
+ */
+const overrideDirection = (domain: Domain): Domain => ({
+  ...domain,
+  facets: domain.facets.filter(({ facet, value }) => facet !== "enumeration" || value !== "auto"),
+});
+
+/**
+ * Spell a literal as an XSD pattern that matches it without regard to ASCII case, each letter a
+ * class of its two cases.
+ *
+ * @param literal - Letters, digits and hyphens.
+ * @returns The pattern.
+ */
+const caseless = (literal: string): string =>
+  Array.from(literal, (character) =>
+    /[A-Za-z]/u.test(character)
+      ? `[${character.toUpperCase()}${character.toLowerCase()}]`
+      : character,
+  ).join("");
+
+/**
+ * The 26 grandfathered tags of RFC 5646's `irregular` and `regular` productions (§2.1, Figure 1),
+ * "a fixed list that can never change".
+ */
+const grandfatheredTags = [
+  "en-GB-oed",
+  "i-ami",
+  "i-bnn",
+  "i-default",
+  "i-enochian",
+  "i-hak",
+  "i-klingon",
+  "i-lux",
+  "i-mingo",
+  "i-navajo",
+  "i-pwn",
+  "i-tao",
+  "i-tay",
+  "i-tsu",
+  "sgn-BE-FR",
+  "sgn-BE-NL",
+  "sgn-CH-DE",
+  "art-lojban",
+  "cel-gaulish",
+  "no-bok",
+  "no-nyn",
+  "zh-guoyu",
+  "zh-hakka",
+  "zh-min",
+  "zh-min-nan",
+  "zh-xiang",
+] as const;
+
+/**
+ * A well-formed BCP 47 language tag, RFC 5646's `Language-Tag` (§2.1, Figure 1), as an XSD
+ * pattern: a `langtag`, a `privateuse` tag or a grandfathered one. Tags "are to be treated as case
+ * insensitive" (§2.1.1), as ABNF strings are (RFC 5234, §2.3), so each production is written over
+ * the letters of both cases, and its repetitions are unbounded, as the ABNF's `*` is. Whitespace
+ * is never part of a tag ("Whitespace is not permitted in a language tag", §2.1).
+ *
+ * A tag is well-formed when it conforms to the ABNF, and valid when it is also free of duplicate
+ * variant and singleton subtags and its subtags are in the IANA Language Subtag Registry (§2.2.9).
+ * Only well-formedness is a pattern: the registry is a dated dataset no pinned source holds, and a
+ * repeated subtag is a comparison between subtags no pattern without backreferences states, so
+ * validity is spec reading 129's stated limit.
+ *
+ * @see {@link https://www.rfc-editor.org/rfc/rfc5646#section-2.1 | RFC 5646, 2.1 Syntax}
+ * @see {@link https://www.rfc-editor.org/rfc/rfc5646#section-2.2.9 | RFC 5646, 2.2.9 Classes of Conformance}
+ */
+const languageTag = (() => {
+  const language = "[A-Za-z]{2,3}(-[A-Za-z]{3}){0,3}|[A-Za-z]{4}|[A-Za-z]{5,8}";
+  const langtag = [
+    `(${language})`,
+    "(-[A-Za-z]{4})?",
+    "(-([A-Za-z]{2}|[0-9]{3}))?",
+    "(-([A-Za-z0-9]{5,8}|[0-9][A-Za-z0-9]{3}))*",
+    "(-[0-9A-WY-Za-wy-z](-[A-Za-z0-9]{2,8})+)*",
+    "(-[Xx](-[A-Za-z0-9]{1,8})+)?",
+  ].join("");
+  const privateuse = "[Xx](-[A-Za-z0-9]{1,8})+";
+
+  return [langtag, privateuse, ...grandfatheredTags.map(caseless)].join("|");
+})();
+
+/**
+ * An `xml:lang`, on every kind: spec reading 129 reads it as XML 1.0 states it, "language
+ * identifiers as defined by [IETF BCP 47] ...; in addition, the empty string may be specified"
+ * (§2.12). `xml.xsd` types it as a union of `xs:language`, whose pattern is RFC 3066's and admits
+ * values RFC 5646 refuses (`a-value` and `x` among them), and the empty string; its `xs:language`
+ * member takes {@link languageTag} beside its own pattern, collapsed as the type collapses it. Under
+ * a `skip` wildcard no declaration types it, so its value as written is a tag or empty: XML 1.0's
+ * sentence is XML's own rule, which holds whatever a schema's processing.
+ *
+ * @param domain - `xml.xsd`'s union, or the open type under a `skip` wildcard.
+ * @returns It with its language read as BCP 47.
+ * @see {@link https://www.w3.org/TR/xml/#sec-lang-tag | XML 1.0, 2.12 Language Identification}
+ */
+const xmlLanguage = (domain: Domain): Domain => {
+  if (domain._tag === "union") {
+    return {
+      ...domain,
+      members: domain.members.map((member) =>
+        member._tag === "atomic" && member.builtin === "language"
+          ? withPattern(member, languageTag)
+          : member,
+      ),
+    };
+  }
+
+  return domain._tag === "atomic" ? withPattern(domain, `(${languageTag})?`) : domain;
+};
+
+/**
+ * The item's and the stimulus's `xml:lang`, their default language, "Natural language identifiers
+ * as defined by [BCP 47]" (information model §4.1.4 and §4.3.4), which state no empty value where
+ * XML 1.0 and the `lang` rows do: spec reading 129 takes `xml.xsd`'s empty-string member away.
+ *
+ * @param domain - The union as {@link xmlLanguage} reads it.
+ * @returns The union of its members but the empty string's.
+ * @see {@link https://www.imsglobal.org/spec/qti/v3p0/info#RootCharacteristic_AssessmentItem.Attr_language | QTI 3.0 information model, 4.1.4 language}
+ */
+const rootLanguage = (domain: Domain): Domain =>
+  domain._tag === "union"
+    ? {
+        ...domain,
+        members: domain.members.filter(
+          (member) =>
+            !member.facets.some(({ facet, value }) => facet === "enumeration" && value === ""),
+        ),
+      }
+    : domain;
+
+/**
+ * A `lang`, on every kind that declares it, which the XSD types `xs:normalizedString`: spec reading
+ * 129 reads it as the information model's `lang` rows state it, "Its value must be a valid [BCP
+ * 47] language tag, or the empty string" (§5.15.3 to §5.21.3). The type's `replace` whitespace
+ * stays, so a space around the tag is no part of it, and refused.
+ *
+ * @param domain - The XSD's definition.
+ * @returns It with the pattern.
+ * @see {@link https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_BasePromptInteraction.Attr_lang | QTI 3.0 information model, 5.15.3 lang}
+ */
+const languageOrEmpty = (domain: Domain): Domain => withPattern(domain, `(${languageTag})?`);
+
+/**
+ * A `track`'s `srclang`, which the XSD types `xs:normalizedString`: spec reading 129 reads it as
+ * "The value must be a valid ]BCP 47] language tag" (information model §5.163.3, Track), which
+ * states no empty value.
+ *
+ * @param domain - The XSD's definition.
+ * @returns It with the pattern.
+ * @see {@link https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_Track.Attr_srclang | QTI 3.0 information model, 5.163.3 srclang}
+ */
+const languageOnly = (domain: Domain): Domain => withPattern(domain, languageTag);
+
+/**
+ * A media URL, which the XSD types `URLDType`, an `xs:normalizedString`: the information model says
+ * each "must contain a valid non-empty URL potentially surrounded by spaces" (audio and video
+ * `src`, §5.9.1 and §5.166.1; video `poster`, §5.166.9; source `src`, §5.135.1; track `src`,
+ * §5.163.2), and the HTML Standard that a `srcset` "must consist of one or more image candidate
+ * strings", each holding a valid non-empty URL. Spec readings 124 and 125 read the non-empty
+ * clause: after `replace` maps every tab and line break to a space, the value holds a character
+ * that is not a space. The URL's own syntax is the URL Standard's, which no pinned source holds, so
+ * the readings state it as a limit.
+ *
+ * @param domain - The XSD's definition.
+ * @returns It with the pattern.
+ * @see {@link https://html.spec.whatwg.org/multipage/images.html#srcset-attributes | HTML Standard, srcset attributes}
+ */
+const nonEmptyUrl = (domain: Domain): Domain => withPattern(domain, ".*[^ ].*");
+
+/**
+ * A `qti-printed-variable`'s `format`, which the XSD types `xs:normalizedString`: spec reading 132
+ * reads it as the information model's number format, "based on the format conversion specifiers
+ * defined in the C programming language [ISO 9899] for use with printf and related functions. Each
+ * conversion specifier starts with a '%' character and is followed by zero or more flag characters
+ * (#, 0, -, " " [space] and +), an optional digit string indicating the minimum field width, an
+ * optional precision (consisting of a "." followed by zero or more digits) and finally one of the
+ * conversion type codes: E, e, f, G, g, r, R, i, o, X, or x" (§2.3.4). So a format is a printf
+ * format string over those codes: characters but `%`, the escape `%%`, and at most one conversion
+ * specifier. C says "If there are insufficient arguments for the format, the behavior is undefined"
+ * (C11 §7.21.6.1), and a printed variable formats its one value, so a second specifier would read
+ * an argument that is not there; a format with none prints its text alone. `%%` converts no
+ * argument. A `%` that begins no specifier, and a code the sentence does not list (`d`), are
+ * refused.
+ *
+ * @see {@link https://www.imsglobal.org/spec/qti/v3p0/info#Variable | QTI 3.0 information model, 2.3.4 Variable Content}
+ * @see {@link https://www.open-std.org/jtc1/sc22/wg14/www/docs/n1570.pdf | C11 (N1570), 7.21.6.1 The fprintf function}
+ */
+const printfFormat = String.raw`([^%]|%%)*(%[#0 +\-]*[0-9]*(\.[0-9]*)?[EefGgrRioXx]([^%]|%%)*)?`;
+
+/**
  * The counts spec reading 46 holds to the signed 64-bit range, on every kind that declares them.
  */
 const counts = [
@@ -404,21 +663,25 @@ const counts = [
 ] as const;
 
 /**
- * MathML 3's notation for the three integer types (§2.1.5.1, "Syntax notation used in the MathML
- * specification"), as XSD patterns over the value after its whitespace is collapsed:
+ * MathML 3's notation for the three integer types and `number` (§2.1.5.1, "Syntax notation used in
+ * the MathML specification"), as XSD patterns over the value after its whitespace is collapsed:
  *
  * - `unsigned-integer`, "a string of decimal-digits, representing a non-negative integer";
  * - `positive-integer`, "a string of decimal-digits, but not consisting solely of "0"s (U+0030),
  *   representing a positive integer";
  * - `integer`, "an optional "-" (U+002D), followed by a string of decimal digits, and representing an
- *   integer".
+ *   integer";
+ * - `number`, "an optional prefix of "-" (U+002D), followed by an unsigned number", an
+ *   `unsigned-number` being "a string of decimal digits with up to one decimal point (U+002E)".
  *
- * Spec reading 2 follows them over the XSD's types, `m:unsigned-integer`, `m:positive-integer` and
- * `m:integer`, which are `xs:unsignedLong`, `xs:positiveInteger` and `xs:integer`
- * (`mathml3-presentation.xsd` lines 93, 133 and 96, as the RelaxNG's `mathml3-presentation.rnc`
- * lines 60, 75 and 61 are) and so admit a leading `+`, and `-0` for the first (spec reading 73). A
- * value meets both the notation and its type, so the pattern narrows the type's lexical space and
- * keeps its bounds and its `collapse`: §2.1.5.1 asks only that "leading and trailing whitespace in
+ * Spec reading 2 follows them over the XSD's types, `m:unsigned-integer`, `m:positive-integer`,
+ * `m:integer` and `m:number`, which are `xs:unsignedLong`, `xs:positiveInteger`, `xs:integer` and
+ * `xs:decimal` (`mathml3-presentation.xsd` lines 93, 133, 96 and 99, as the RelaxNG's
+ * `mathml3-presentation.rnc` lines 60, 75, 61 and 62 are) and so admit a leading `+`, which
+ * §2.1.5.1 forbids ("An explicit plus sign ('+') is not allowed as part of a numerical value except
+ * when it is specifically listed in the syntax"), and `-0` for the first (spec reading 73). A value
+ * meets both the notation and its type, so the pattern narrows the type's lexical space and keeps
+ * its bounds and its `collapse`: §2.1.5.1 asks only that "leading and trailing whitespace in
  * attribute values should be avoided".
  *
  * @see {@link https://www.w3.org/TR/MathML3/chapter2.html#id.2.1.5.1 | MathML 3, 2.1.5.1 Syntax notation used in the MathML specification}
@@ -427,6 +690,7 @@ const mathmlNotations: ReadonlyMap<string, string> = new Map([
   ["m:unsigned-integer", "[0-9]+"],
   ["m:positive-integer", "[0-9]*[1-9][0-9]*"],
   ["m:integer", "-?[0-9]+"],
+  ["m:number", String.raw`-?([0-9]+(\.[0-9]*)?|\.[0-9]+)`],
 ]);
 
 /**
@@ -459,20 +723,48 @@ const mathmlNotationReadings: readonly SpecReading[] = [
   return first === undefined || pattern === undefined
     ? []
     : [
-        on(2, [...new Set(declarations.map(({ kind }) => kind))], first.name, "xsd", (domain) => ({
-          ...domain,
-          patterns: [...domain.patterns, [pattern]],
-        })),
+        on(2, [...new Set(declarations.map(({ kind }) => kind))], first.name, "xsd", (domain) =>
+          withPattern(domain, pattern),
+        ),
       ];
 });
+
+/**
+ * A content `cn`'s `base`, which the XSD leaves untyped (`mathml3-content.xsd` line 18) and the
+ * RelaxNG types `text` (`mathml3-content.rnc` line 34): spec reading 2 reads it as MathML 3 states
+ * it, "a base 10 positive integer giving the value of base in which the text content of the cn is
+ * to be interpreted" (§4.2.1.3), the `positive-integer` notation over the XSD's
+ * `m:positive-integer` ({@link mathmlNotations}), collapsed as that type collapses it, and its
+ * domain is named after that type. The definition is the one the leaf resolves for an attribute
+ * of that type, so the two share a domain; none where no attribute of the leaf has it.
+ *
+ * @see {@link https://www.w3.org/TR/MathML3/chapter4.html#contm.cn | MathML 3, 4.2.1 Numbers <cn>}
+ */
+const cnBaseReadings: readonly SpecReading[] = attributeDeclarations
+  .filter(({ type }) => type.type === "m:positive-integer")
+  .slice(0, 1)
+  .flatMap(({ domain }) => {
+    const pattern = mathmlNotations.get("m:positive-integer");
+
+    return pattern === undefined
+      ? []
+      : [
+          {
+            ...on(2, ["m:cn"], "base", "xsd", () => withPattern(domain, pattern)),
+            readAs: "m:positive-integer",
+          },
+        ];
+  });
 
 /**
  * The attribute readings of `docs/spec-readings.md`, the only places the grammar departs from the
  * XSD's declarations, each stating its reading's number:
  *
- * - 2: a MathML attribute of an integer notation type takes the notation's pattern (MathML 3
- *   §2.1.5.1): `length` digits only, `columnspan`, `rowspan` and `selection` digits not all zero,
- *   `position`, `shift` and `index` an optional `-` and digits ({@link mathmlNotationReadings}).
+ * - 2: a MathML attribute of a notation type takes the notation's pattern (MathML 3 §2.1.5.1):
+ *   `length` digits only, `columnspan`, `rowspan` and `selection` digits not all zero, `position`,
+ *   `shift` and `index` an optional `-` and digits, `scriptsizemultiplier` a `number` with no `+`
+ *   ({@link mathmlNotationReadings}); and a content `cn`'s `base` is a positive integer
+ *   ({@link cnBaseReadings}).
  * - 7: a typed QTI value in an attribute is exact, outer whitespace invalid: its listed attributes
  *   read no whitespace class.
  * - 8: a match table entry's `target-value` is a value of the outcome's base type, not a base-type
@@ -487,14 +779,25 @@ const mathmlNotationReadings: readonly SpecReading[] = [
  * - 39: an SSML `speak/@version` is `1.1`.
  * - 42: an SSML `voice/@languages` holds language ranges, `und`, `zxx` and `*` refused.
  * - 46: a count, and `figures`, is a signed 64-bit integer.
- * - 76: an `xi:include`'s `parse` is `xml` ({@link xmlParse}).
- * - 111: an `xi:include`'s `accept` and `accept-language` hold characters from #x20 to #x7E alone
+ * - 85: an `xi:include`'s `parse` is `xml` ({@link xmlParse}).
+ * - 92: a position object interaction's `min-choices` is at least 1.
+ * - 118: an `xi:include`'s `accept` and `accept-language` hold characters from #x20 to #x7E alone
  *   ({@link httpHeaderText}).
- * - 83: a position object interaction's `min-choices` is at least 1.
+ * - 120: a `qti-index`'s `n`, where it is a number, is at least 1 ({@link positiveIndex}).
+ * - 123: a `bdo`'s `dir` is `ltr` or `rtl`, never `auto` ({@link overrideDirection}).
+ * - 124: an `audio`'s, a `video`'s and a `source`'s `src`, a `video`'s `poster` and a `source`'s
+ *   `srcset` hold something other than spaces ({@link nonEmptyUrl}).
+ * - 125: a `track`'s `src` holds something other than spaces ({@link nonEmptyUrl}).
+ * - 129: an `xml:lang` is a BCP 47 language tag or empty, but on an item or a stimulus, where it is a
+ *   tag ({@link xmlLanguage}, {@link rootLanguage}); a `lang` is a tag or empty
+ *   ({@link languageOrEmpty}); a `track`'s `srclang` is a tag ({@link languageOnly}).
+ * - 132: a `qti-printed-variable`'s `format` is a printf format string of at most one conversion,
+ *   over the information model's conversion codes ({@link printfFormat}).
  *
  * Reading 14, restated, follows the XSD (a text-entry interaction's `response-identifier` and
  * `string-identifier` are `IDREF`s), so it states nothing here. The readings that add an attribute
- * to a kind or take one away are {@link readingSpellings} and {@link readingRefusals}.
+ * to a kind, take one away or require one are {@link readingSpellings}, {@link readingRefusals}
+ * and {@link readingUses}.
  */
 export const specReadings: readonly SpecReading[] = [
   on(7, ["qti-map-entry"], "map-key", "exact"),
@@ -552,6 +855,18 @@ export const specReadings: readonly SpecReading[] = [
     whiteSpace: "xsd",
   })),
   ...mathmlNotationReadings,
+  ...cnBaseReadings,
+  on(120, ["qti-index"], "n", "xsd", positiveIndex),
+  on(123, ["bdo"], "dir", "xsd", overrideDirection),
+  on(124, ["audio", "source", "video"], "src", "xsd", nonEmptyUrl),
+  on(124, ["video"], "poster", "xsd", nonEmptyUrl),
+  on(124, ["source"], "srcset", "xsd", nonEmptyUrl),
+  on(125, ["track"], "src", "xsd", nonEmptyUrl),
+  everywhere(129, "xml:lang", xmlLanguage),
+  on(129, ["qti-assessment-item", "qti-assessment-stimulus"], "xml:lang", "xsd", rootLanguage),
+  everywhere(129, "lang", languageOrEmpty),
+  on(129, ["track"], "srclang", "xsd", languageOnly),
+  on(132, ["qti-printed-variable"], "format", "xsd", (domain) => withPattern(domain, printfFormat)),
 ];
 
 /**
@@ -615,20 +930,48 @@ export const readingRefusals: readonly ReadingRefusal[] = [
 ];
 
 /**
- * Apply the spec readings that change which attributes a kind admits to a vocabulary's
- * declarations: drop each one {@link readingRefusals} refuses, and add each spelling
- * {@link readingSpellings} admits beside a declaration of its declared name, as a copy of that
- * declaration under the new name, where the kind does not declare the new name itself.
+ * An attribute a spec reading requires on a kind whose XSD declares it optional, and the reading.
+ */
+export interface ReadingUse {
+  readonly kind: string;
+  readonly name: string;
+  readonly reading: number;
+}
+
+/**
+ * The declared attributes spec readings require: reading 123's `dir` on `bdo`, which the XSD
+ * declares optional with the default `auto` and the information model requires ("Authors must
+ * specify the dir attribute on this tag", §5.11). The reading holds by the element's name, so a
+ * `bdo` an `xsi:type` governs requires it too.
+ *
+ * @see {@link https://www.imsglobal.org/spec/qti/v3p0/info#Data_BDO | QTI 3.0 information model, 5.11 BDO}
+ */
+export const readingUses: readonly ReadingUse[] = [{ kind: "bdo", name: "dir", reading: 123 }];
+
+/**
+ * Apply the spec readings that change which attributes a kind admits, or must carry, to a
+ * vocabulary's declarations: drop each one {@link readingRefusals} refuses, make each one
+ * {@link readingUses} requires required, and add each spelling {@link readingSpellings} admits
+ * beside a declaration of its declared name, as a copy of that declaration under the new name,
+ * where the kind does not declare the new name itself.
  *
  * @param declarations - The declarations, each of a kind of the vocabulary.
  * @returns The declarations the attribute grammar admits, in their order, each added spelling after
  *   the declarations.
  */
 export const readDeclarations = <D extends Declared>(declarations: readonly D[]): readonly D[] => {
-  const kept = declarations.filter(
-    ({ kind, name }) =>
-      !readingRefusals.some((refused) => refused.kind === kind && refused.name === name),
-  );
+  const kept = declarations
+    .filter(
+      ({ kind, name }) =>
+        !readingRefusals.some((refused) => refused.kind === kind && refused.name === name),
+    )
+    .map((declared) =>
+      readingUses.some(
+        (required) => required.kind === declared.kind && required.name === declared.name,
+      )
+        ? { ...declared, use: "required" as const }
+        : declared,
+    );
   const named = new Set(kept.map(({ kind, name }) => `${kind}\u0000${name}`));
 
   return [
@@ -977,7 +1320,8 @@ const intern = (domains: DomainRoster, compiled: CompiledDomain, name: string): 
 
 /**
  * The handle a declaration's domain would take: its type's QName, or for an anonymous type the
- * declaration itself; with the spec readings that alter it.
+ * declaration itself, or the type the last reading that names one reads it as; with the spec
+ * readings that alter it.
  *
  * @param type - The declared type.
  * @param anonymous - The name of the declaration, for an anonymous type.
@@ -985,7 +1329,9 @@ const intern = (domains: DomainRoster, compiled: CompiledDomain, name: string): 
  * @returns The handle.
  */
 const handleOf = (type: ValueType, anonymous: string, readings: readonly SpecReading[]): string => {
-  const base = Option.isNone(type.inline) ? type.type : anonymous;
+  const base =
+    readings.findLast(({ readAs }) => readAs !== undefined)?.readAs ??
+    (Option.isNone(type.inline) ? type.type : anonymous);
 
   return readings.length === 0
     ? base
