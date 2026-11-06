@@ -5,7 +5,6 @@ import { h, text } from "#plate/emit/node.ts";
 import type { Attributes, Element, Node } from "#plate/emit/node.ts";
 import { rowFor } from "#plate/emit/parts.ts";
 import type { PartOf } from "#plate/emit/parts.ts";
-import { applyPart } from "#plate/emit/swap.ts";
 import { isPosted } from "#plate/form/encoding.ts";
 import {
   checkResponses,
@@ -26,6 +25,8 @@ import type {
   ValidationMessage,
   Verdict,
 } from "#plate/index.ts";
+import { renderNavigation } from "#plate/navigation.ts";
+import type { NavigationOptions, NavigationState } from "#plate/navigation.ts";
 import { compounds, scanSheet } from "#plate/test/css.ts";
 import type { AttributeTest, Compound, Sheet } from "#plate/test/css.ts";
 import { parseHtml } from "#plate/test/round-trip.ts";
@@ -463,8 +464,9 @@ const refusalsOf = (
 };
 
 /**
- * Open an item and render it as an author would: with no inputs, with every control disabled, and,
- * when it has one, with its refused answer's messages and posted entries.
+ * Open an item and render it as an author would: with no inputs, with every control disabled, in
+ * review and in solution, and, when it has one, with its refused answer's messages and posted
+ * entries.
  *
  * @param item The hand-written item.
  * @param configuration The configuration.
@@ -497,6 +499,8 @@ const rendersOf = Effect.fnUntraced(function* rendersOf(
   const states: readonly Options[] = [
     { instance },
     { disabled: true, instance },
+    { instance, mode: "review" },
+    { instance, mode: "solution" },
     ...(messages.length > 0 ? [{ instance, messages, posted: item.posted }] : []),
   ];
   const rendered = yield* Effect.fromResult(
@@ -507,72 +511,271 @@ const rendersOf = Effect.fnUntraced(function* rendersOf(
 });
 
 /**
- * Construct a navigation part on its default element, through its row and `applyPart`'s default
- * path, carrying its marker and the given attributes.
+ * A host's replacement that makes a navigation button its own submit button, posting the intent
+ * plate computed for it (rule `9af3809b`).
  *
- * @param part The navigation part.
- * @param props The attributes beside the marker.
- * @param children The nodes the part holds.
- * @returns The part's root element.
+ * @param props The attributes plate computed for the button.
+ * @param children The button's label.
+ * @returns A submit button named `s-1.intent` whose value is `props["data-intent"]`.
  */
-const navigationPart = (
-  part: PartOf<"test-navigation">,
-  props: Attributes,
-  children: readonly Node[],
-) => {
-  const row = rowFor("test-navigation", part);
+const submitting = (props: Attributes, children: readonly Node[]): Element =>
+  h("button", { name: "s-1.intent", type: "submit", value: props["data-intent"] ?? "" }, children);
 
-  return Effect.fromResult(applyPart(row, { "data-slot": row.slot, ...props }, children));
+/**
+ * The navigation parts that are buttons, each of which a host may swap for its own.
+ */
+const buttonParts = [
+  "previous",
+  "next",
+  "itemButton",
+  "submit",
+  "end",
+] as const satisfies readonly PartOf<"test-navigation">[];
+
+/**
+ * Every navigation button swapped for a host's submit button.
+ */
+const submitSwap: NavigationOptions = {
+  parts: { "test-navigation": Object.fromEntries(buttonParts.map((part) => [part, submitting])) },
 };
 
 /**
- * Construct a stand-in for the test navigation's markup, until the navigation renderer emits it:
- * the eight parts on their default elements, built through the part table, each button disabled.
- *
- * @returns The navigation Root, holding Previous, Next, the item list with one item, Submit and
- *   End.
+ * A navigation of a nonlinear, individual part of two items, at the first, which is current: the
+ * Root holds every part, and Previous, which the session does not take there, is disabled.
  */
-const navigationStandIn = Effect.fnUntraced(function* navigationStandIn() {
-  const button = (part: PartOf<"test-navigation">, label: string) =>
-    navigationPart(part, { disabled: true }, [text(label)]);
-  const itemButton = yield* button("itemButton", "Item 1 of 1");
-  const item = yield* navigationPart("item", {}, [itemButton]);
-  const items = yield* navigationPart("items", {}, [item]);
-  const previous = yield* button("previous", "Previous item");
-  const next = yield* button("next", "Next item");
-  const submit = yield* button("submit", "Submit answer");
-  const end = yield* button("end", "End part");
+const navigation: NavigationState = {
+  allowed: [
+    { kind: "next" },
+    { kind: "go", sequenceIndex: 1 },
+    { kind: "go", sequenceIndex: 2 },
+    { kind: "submit-item" },
+    { kind: "end-part" },
+  ],
+  count: 2,
+  items: [
+    { current: true, sequenceIndex: 1, state: "answered" },
+    { current: false, sequenceIndex: 2, state: "not-answered" },
+  ],
+  navigation: "nonlinear",
+  position: 1,
+  submission: "individual",
+};
 
-  return yield* navigationPart("root", {}, [previous, next, items, submit, end]);
+/**
+ * Render {@link navigation} as `renderNavigation` does, in its default order: Previous, the item
+ * list, Next, Submit, then End.
+ *
+ * @param configuration The configuration, which gives the locale.
+ * @param options The part overrides, none by default.
+ * @returns The navigation Root's trees.
+ */
+const navigationTrees = (configuration: Configuration, options: NavigationOptions = {}) =>
+  Effect.fromResult(renderNavigation(navigation, configuration, options)).pipe(
+    Effect.map(parseHtml),
+  );
+
+/**
+ * Read and scan the stylesheet through the package's own import alias.
+ */
+const readSheet = Effect.tryPromise(() =>
+  readFile(new URL(import.meta.resolve("#plate/styles.css")), "utf-8"),
+).pipe(Effect.flatMap(scanSheet));
+
+/**
+ * Render every markup the sheet styles: each authored item in every state, both Status headings,
+ * and the navigation.
+ *
+ * @param configuration The configuration.
+ * @returns The trees, and the refused answers' messages.
+ */
+const markupOf = Effect.fnUntraced(function* markupOf(configuration: Configuration) {
+  const renders = yield* Effect.all(authored.map((item) => rendersOf(item, configuration)));
+  const messages = renders.flatMap((entry) => entry.messages);
+  const status = yield* Effect.fromResult(
+    Result.all([
+      renderStatus({ heading: "scored", instance, score: "1" }, configuration),
+      renderStatus({ heading: "notAccepted", instance, messages }, configuration),
+    ]),
+  );
+
+  return {
+    messages,
+    trees: [
+      ...renders.flatMap((entry) => entry.trees),
+      ...status.flatMap((entry) => parseHtml(entry.html)),
+      ...(yield* navigationTrees(configuration)),
+    ],
+  };
 });
+
+/**
+ * A state M2's markup carries that the sheet styles: a part, by its marker, and an attribute the
+ * part carries in that state.
+ */
+interface PartState {
+  readonly name: string;
+  readonly slot: string;
+  /**
+   * The attribute's value in the state; none for a boolean attribute.
+   */
+  readonly value: Option.Option<string>;
+}
+
+/**
+ * The states the sheet styles: the current item's button, a Choice Root in review and in solution,
+ * and a readonly text Control.
+ */
+const partStates: readonly PartState[] = [
+  {
+    name: "aria-current",
+    slot: rowFor("test-navigation", "itemButton").slot,
+    value: Option.some("step"),
+  },
+  {
+    name: "data-mode",
+    slot: rowFor("choice-interaction", "root").slot,
+    value: Option.some("review"),
+  },
+  {
+    name: "data-mode",
+    slot: rowFor("choice-interaction", "root").slot,
+    value: Option.some("solution"),
+  },
+  {
+    name: "readonly",
+    slot: rowFor("text-entry-interaction", "control").slot,
+    value: Option.none(),
+  },
+  {
+    name: "readonly",
+    slot: rowFor("extended-text-interaction", "control").slot,
+    value: Option.none(),
+  },
+];
+
+/**
+ * Find the states no element of the trees carries, and those whose elements no compound of the
+ * sheet reaches by the state's attribute.
+ *
+ * @param sheet The scanned sheet.
+ * @param trees The markup.
+ * @returns Each such state, as `<marker> <attribute>[="<value>"]: no element` or `: no rule`.
+ */
+const unstyledStates = (sheet: Sheet, trees: readonly Node[]): readonly string[] => {
+  const elements = elementsOf(trees);
+  const held = matchable(sheet).map((entry) => entry.compound);
+
+  return partStates.flatMap((state) => {
+    const label = `${state.slot} ${state.name}${Option.match(state.value, {
+      onNone: () => "",
+      onSome: (value) => `="${value}"`,
+    })}`;
+    const carriers = elements.filter(
+      (element) =>
+        Option.contains(attribute(element, "data-slot"), state.slot) &&
+        Option.exists(
+          attribute(element, state.name),
+          (value) => Option.isNone(state.value) || Option.contains(state.value, value),
+        ),
+    );
+    const reached = carriers.filter((element) =>
+      held.some(
+        (compound) =>
+          has(element, compound) && compound.attributes.some((test) => test.name === state.name),
+      ),
+    );
+
+    if (carriers.length === 0) {
+      return [`${label}: no element`];
+    }
+
+    return reached.length < carriers.length ? [`${label}: no rule`] : [];
+  });
+};
+
+/**
+ * Read the places, in a sheet's matchable compounds, of the compounds an element has.
+ *
+ * @param held The sheet's matchable compounds.
+ * @param element The element.
+ * @returns The index of each compound the element has, ascending.
+ */
+const heldBy = (held: readonly SheetCompound[], element: Element): readonly number[] =>
+  held.flatMap((entry, index) => (has(element, entry.compound) ? [index] : []));
+
+/**
+ * Read the buttons of some trees.
+ *
+ * @param trees The trees.
+ * @returns Each `button` element, in document order.
+ */
+const buttonsOf = (trees: readonly Node[]): readonly Element[] =>
+  elementsOf(trees).filter((element) => element.tag === "button");
 
 describe("styles.css over emitted markup", () => {
   it.effect("every compound of every selector names something the emitted markup holds", () =>
     Effect.gen(function* witness() {
-      const configuration: Configuration = yield* configure({});
-      const renders = yield* Effect.all(authored.map((item) => rendersOf(item, configuration)));
-      const messages = renders.flatMap((entry) => entry.messages);
-      const status = yield* Effect.fromResult(
-        Result.all([
-          renderStatus({ heading: "scored", instance, score: "1" }, configuration),
-          renderStatus({ heading: "notAccepted", instance, messages }, configuration),
-        ]),
-      );
-      const navigation = yield* navigationStandIn();
-      const trees = [
-        ...renders.flatMap((entry) => entry.trees),
-        ...status.flatMap((entry) => parseHtml(entry.html)),
-        navigation,
-      ];
-      const sheet = yield* scanSheet(
-        yield* Effect.tryPromise(() =>
-          readFile(new URL(import.meta.resolve("#plate/styles.css")), "utf-8"),
-        ),
-      );
+      const { messages, trees } = yield* markupOf(yield* configure({}));
+      const sheet = yield* readSheet;
 
       assert.isNotEmpty(messages);
       assert.isAbove(matchable(sheet).length, 0);
       assert.deepStrictEqual(unmatched(sheet, trees), []);
     }),
+  );
+
+  it.effect(
+    "reaches each state M2's markup carries: the current item, a Choice in review and solution, a readonly text Control",
+    () =>
+      Effect.gen(function* states() {
+        const { trees } = yield* markupOf(yield* configure({}));
+        const sheet = yield* readSheet;
+
+        assert.deepStrictEqual(unstyledStates(sheet, trees), []);
+      }),
+  );
+
+  it.effect(
+    "styles a navigation button a host swaps to type=submit as the default one, its focus ring included",
+    () =>
+      Effect.gen(function* swapped() {
+        const configuration = yield* configure({});
+        const held = matchable(yield* readSheet);
+        const plain = buttonsOf(yield* navigationTrees(configuration));
+        const submits = buttonsOf(yield* navigationTrees(configuration, submitSwap));
+        const focusing = (indexes: readonly number[]) =>
+          indexes.some((index) =>
+            Option.exists(Option.fromUndefinedOr(held[index]), (entry) =>
+              entry.compound.pseudoClasses.some(
+                (pseudoClass) => pseudoClass.name === "focus-visible",
+              ),
+            ),
+          );
+
+        assert.lengthOf(plain, 4 + navigation.items.length);
+        assert.lengthOf(submits, plain.length);
+        for (const [index, button] of plain.entries()) {
+          const submit = submits[index] ?? assert.fail(`no swapped button at ${index}`);
+          const slot = Option.getOrElse(attribute(button, "data-slot"), () => "");
+
+          assert.isTrue(Option.contains(attribute(submit, "type"), "submit"), slot);
+          assert.deepStrictEqual(heldBy(held, submit), heldBy(held, button), slot);
+          assert.isTrue(focusing(heldBy(held, button)), `${slot}: a :focus-visible rule`);
+        }
+
+        const next = rowFor("test-navigation", "next").slot;
+        const typed = matchable(
+          yield* scanSheet(`:where([data-slot="${next}"][type="button"]) { opacity: 0.5 }`),
+        );
+        const [plainNext, submitNext] = [plain, submits].map((buttons) =>
+          buttons.find((button) => Option.contains(attribute(button, "data-slot"), next)),
+        );
+
+        assert.notDeepEqual(
+          heldBy(typed, plainNext ?? assert.fail("no Next")),
+          heldBy(typed, submitNext ?? assert.fail("no swapped Next")),
+          "the negative control: a rule keyed on type misses the swapped button",
+        );
+      }),
   );
 });
