@@ -711,8 +711,11 @@ const assertRestores = (delivery: Delivery, session: TestSession, state: string)
   assert.strictEqual(after.swapped, before.swapped, `${state}: the restored page is byte-equal`);
   assert.strictEqual(after.plain, before.plain, `${state}: the restored navigation is byte-equal`);
   for (const [index, item] of stored.items.entries()) {
+    const accepted =
+      delivery.items.get(item.ref) ?? assert.fail(`the delivery holds no item for ${item.ref}`);
+
     assert.deepStrictEqual(
-      ok(restore(item.record), "restore").values,
+      ok(restore(accepted, item.record), "restore").values,
       session.items[index]?.record.responses,
       `${state}: item ${String(index + 1)}'s stored record restores its responses`,
     );
@@ -861,7 +864,7 @@ const assertClosedPages = (delivery: Delivery, session: TestSession) => {
     const { accepted, redacted } = itemOf(delivery, view);
     const record =
       stored.items[item.sequenceIndex - 1]?.record ?? assert.fail("the stored session lacks it");
-    const { values } = ok(restore(record), "restore");
+    const { values } = ok(restore(accepted, record), "restore");
     const label = `item ${String(item.sequenceIndex)}`;
 
     assert.deepStrictEqual(values, view.values, `${label}: restore gives the values it shows`);

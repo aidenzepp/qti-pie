@@ -1,5 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
+import { decodeRecord, encodeRecord } from "#plate/codec/record.ts";
 import type { InvalidRecord } from "#plate/codec/record.ts";
 import { readCorpusFile } from "#plate/document/corpus.ts";
 import type { Value } from "#plate/model/values.ts";
@@ -26,15 +27,15 @@ const chosen: Value = {
 /**
  * Open BG007 from the corpus cache and score one attempt of it answered {@link chosen}.
  *
- * @returns The record `score` returned, in the form the host stores.
+ * @returns The accepted item and the record `score` returned, in the form the host stores.
  */
-const scoredRecord = Effect.fnUntraced(function* scoredRecord() {
+const scored = Effect.fnUntraced(function* scored() {
   const verdict = yield* open(bg007, yield* readCorpusFile(bg007));
   const accepted = Option.getOrElse(acceptedItem(verdict), () =>
     assert.fail(`${bg007} is ${verdict.verdict}, not accepted`),
   );
 
-  return yield* Effect.fromResult(score(accepted, { RESPONSE: chosen }));
+  return { accepted, stored: yield* Effect.fromResult(score(accepted, { RESPONSE: chosen })) };
 });
 
 /**
@@ -51,10 +52,10 @@ const failureOf = (
 describe("restore", () => {
   it.effect("[T-14] gives back the responses of the record score returned for BG007", () =>
     Effect.gen(function* restoresScored() {
-      const stored = yield* scoredRecord();
+      const { accepted, stored } = yield* scored();
 
       assert.deepStrictEqual(
-        Result.getSuccess(restore(stored)),
+        Result.getSuccess(restore(accepted, stored)),
         Option.some({ values: { RESPONSE: chosen } }),
       );
     }),
@@ -62,12 +63,63 @@ describe("restore", () => {
 
   it.effect("[T-14] refuses a record the renderer could not have written: InvalidRecord", () =>
     Effect.gen(function* refusesMalformed() {
-      const stored = yield* scoredRecord();
+      const { accepted, stored } = yield* scored();
 
       assert.deepStrictEqual(
-        failureOf(restore({ ...stored, numAttempts: -1 })),
+        failureOf(restore(accepted, { ...stored, numAttempts: -1 })),
         Option.some(["InvalidRecord", "decode"] as const),
       );
     }),
+  );
+
+  it.effect(
+    "refuses a record that does not fit the item's declarations, a response of two values where one is declared or an outcome of another base type, as score refuses the first",
+    () =>
+      Effect.gen(function* refusesMisfit() {
+        const { accepted, stored } = yield* scored();
+        const decoded = yield* Effect.fromResult(decodeRecord(stored));
+        const twoValues = yield* Effect.fromResult(
+          encodeRecord({
+            ...decoded,
+            responses: {
+              RESPONSE: {
+                baseType: "identifier",
+                cardinality: "multiple",
+                values: [
+                  { baseType: "identifier", value: "true" },
+                  { baseType: "identifier", value: "false" },
+                ],
+              },
+            },
+          }),
+        );
+        const fullScore = yield* Effect.fromResult(
+          encodeRecord({
+            ...decoded,
+            outcomes: {
+              SCORE: {
+                baseType: "identifier",
+                cardinality: "single",
+                values: [{ baseType: "identifier", value: "full" }],
+              },
+            },
+          }),
+        );
+
+        assert.deepStrictEqual(
+          Option.map(Result.getFailure(score(accepted, {}, twoValues)), ({ _tag }) => _tag),
+          Option.some("InvalidRecord"),
+        );
+        assert.deepStrictEqual(
+          failureOf(restore(accepted, twoValues)),
+          Option.some(["InvalidRecord", "decode"] as const),
+          "two values",
+        );
+        assert.deepStrictEqual(
+          failureOf(restore(accepted, fullScore)),
+          Option.some(["InvalidRecord", "decode"] as const),
+          "SCORE full",
+        );
+      }),
   );
 });

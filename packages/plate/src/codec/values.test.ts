@@ -206,6 +206,22 @@ describe("ValueSchema", () => {
     assert.isFalse(valid(singleInput("duration", [])));
     assert.isFalse(valid({ baseType: "identifier", cardinality: "record", values: [] }));
   });
+
+  it("refuses a string or a URI holding a character XML cannot carry, and keeps tab, line breaks and an astral character", () => {
+    const valid = Schema.is(ValueSchema);
+    for (const text of ["a\u0000b", "a\u000Bb", "a\u001Fb", "a\uFFFEb", "a\uFFFFb", "a\uD800b"]) {
+      const label = JSON.stringify(text);
+      assert.isFalse(valid(singleInput("string", [{ baseType: "string", value: text }])), label);
+      assert.isFalse(
+        valid(singleInput("uri", [{ baseType: "uri", value: `http://a/${text}` }])),
+        label,
+      );
+    }
+    assert.isTrue(
+      valid(singleInput("string", [{ baseType: "string", value: "a\tb\nc\rd\u{1F600}" }])),
+    );
+    assert.isTrue(valid(singleInput("uri", [{ baseType: "uri", value: "http://a/b?c=d" }])));
+  });
 });
 
 describe("decodeStoredFloat", () => {
