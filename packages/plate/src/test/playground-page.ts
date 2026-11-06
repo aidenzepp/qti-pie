@@ -206,13 +206,15 @@ export const correctOf = Effect.fn("correctOf")(function* correctOf(
 });
 
 /**
- * Open a probe of the {@link WalkCorpus} and find its one Text Entry, from the item `open`
- * accepted.
+ * Open a probe of the {@link WalkCorpus} and list its interactions, from the item `open` accepted.
  *
  * @param member The probe's path in the walk corpus.
- * @returns The Text Entry; the test fails when the probe is not accepted or holds another count.
+ * @returns The item's interactions in document order; the test fails when the probe is not
+ *   accepted.
  */
-export const textEntryOf = Effect.fn("textEntryOf")(function* textEntryOf(member: string) {
+const probeInteractions = Effect.fn("probeInteractions")(function* probeInteractions(
+  member: string,
+) {
   const { directory } = yield* WalkCorpus;
   const verdict = yield* openMember(member).pipe(
     Effect.provide(
@@ -224,7 +226,18 @@ export const textEntryOf = Effect.fn("textEntryOf")(function* textEntryOf(member
     return assert.fail(`${member} is ${verdict.verdict}, not accepted`);
   }
 
-  const entries = interactionsIn(accepted.value.item.body).flatMap((interaction) =>
+  return interactionsIn(accepted.value.item.body);
+});
+
+/**
+ * Open a probe of the {@link WalkCorpus} and find its one Text Entry, from the item `open`
+ * accepted.
+ *
+ * @param member The probe's path in the walk corpus.
+ * @returns The Text Entry; the test fails when the probe is not accepted or holds another count.
+ */
+export const textEntryOf = Effect.fn("textEntryOf")(function* textEntryOf(member: string) {
+  const entries = (yield* probeInteractions(member)).flatMap((interaction) =>
     interaction.kind === "text-entry" ? [interaction] : [],
   );
   const [entry] = entries;
@@ -233,6 +246,30 @@ export const textEntryOf = Effect.fn("textEntryOf")(function* textEntryOf(member
   assert.isDefined(entry);
 
   return entry;
+});
+
+/**
+ * Open a probe of the {@link WalkCorpus} and find its one Inline Choice bound to a response, from
+ * the item `open` accepted.
+ *
+ * @param member The probe's path in the walk corpus.
+ * @param response The response identifier the Inline Choice binds.
+ * @returns The Inline Choice; the test fails when the probe is not accepted or holds another count
+ *   bound to the response.
+ */
+export const inlineChoiceOf = Effect.fn("inlineChoiceOf")(function* inlineChoiceOf(
+  member: string,
+  response: string,
+) {
+  const choices = (yield* probeInteractions(member)).flatMap((interaction) =>
+    interaction.kind === "inline-choice" && interaction.response === response ? [interaction] : [],
+  );
+  const [choice] = choices;
+
+  assert.strictEqual(choices.length, 1, `${member} holds one Inline Choice bound to ${response}`);
+  assert.isDefined(choice);
+
+  return choice;
 });
 
 /**
