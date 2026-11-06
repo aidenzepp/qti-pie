@@ -110,6 +110,7 @@ import {
   Value,
   ValueSet,
 } from "#pantry/qti/declarations.ts";
+import { htmlLaws, htmlRelations } from "#pantry/qti/html.ts";
 import { identityLaws, identityRelations } from "#pantry/qti/identity.ts";
 import { interactionLaws, interactionRelations } from "#pantry/qti/interactions.ts";
 import {
@@ -408,6 +409,7 @@ export const Qti = schema(
     ...interactionRelations,
     ...expressionRelations,
     ...metadataRelations,
+    ...htmlRelations,
     ...quotationRelations,
   },
   [
@@ -422,6 +424,7 @@ export const Qti = schema(
     ...interactionLaws,
     ...expressionLaws,
     ...metadataLaws,
+    ...htmlLaws,
     ...quotationLaws,
   ],
 );

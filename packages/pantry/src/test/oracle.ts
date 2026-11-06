@@ -34,13 +34,15 @@
  * - **§1.6:** `resource-type`, `root-type-reverse`, `file-listed`, `href-listed`, `entry-kind` and
  *   `manifest-id-space`.
  * - **§1.7, the overlays the grammar's relations state today:** O1 `document-key` over reading 101's
- *   bindings, an ID-typed element text's id bound to its parent (a cell's `headers` is the XSD's
- *   identifier list, with no reference rule: HTML's same-table rule was a departure, deleted by the
- *   operator's ruling of 2026-11-05), and R26's `document-lang`; O2 `declaration-key`; O3
- *   `binding-declared`, `binding-fit` with `record-binding-fit`, `choice-bounds`,
- *   `choice-identifier-distinct` (reading 104), and the feedback, template and printed-variable
- *   references; O4 arity (`P2`) and undeclared references (`P8`); O5 `mapping-base-type`; O6
- *   `lom-identifier` and a usage value's base type (reading 105); O7 a selection's bound.
+ *   bindings, an ID-typed element text's id bound to its parent, a cell's `headers` naming the
+ *   `th`s of its own table (`table-headers`, reading 126: the information model states the rule
+ *   over the XSD's plain identifier list, and the stricter source is the rule), and R26's
+ *   `document-lang`; the HTML element laws `source-srcset`, `source-src` and `track-srclang`
+ *   (readings 124 and 125); O2 `declaration-key`; O3 `binding-declared`, `binding-fit` with
+ *   `record-binding-fit`, `choice-bounds`, `choice-identifier-distinct` (reading 104), and the
+ *   feedback, template and printed-variable references; O4 arity (`P2`) and undeclared references
+ *   (`P8`); O5 `mapping-base-type`; O6 `lom-identifier` and a usage value's base type (reading
+ *   105); O7 a selection's bound.
  *
  * The overlays' other laws have no statement yet beyond the rule each replaces, and the oracle
  * leaves them to their W5 slices: `lang-set-copy`, the reserved declarations, `mastery-range`, the
@@ -203,14 +205,18 @@ export const oracleRules = [
   "selection-required",
   "self-dependency",
   "slider-bounds",
+  "source-src",
+  "source-srcset",
   "ssml-fragment",
   "stimulus-ref-key",
   "stimulus-ref-target",
   "structure-identifier",
+  "table-headers",
   "template-default-target",
   "template-ref",
   "test-name-key",
   "text-copy",
+  "track-srclang",
   "typed-copy",
   "union-count",
   "unmodeled-vocabulary",
@@ -369,6 +375,7 @@ const lawRules = {
   "Mastery range": "mastery-range",
   "MathML arity": "math-arity",
   "MathML foreign element": "unmodeled-vocabulary",
+  "Media source src": "source-src",
   "N1 one document node": "reachability",
   "N1 sentinel": "reachability",
   "N2 key": "reachability",
@@ -392,6 +399,7 @@ const lawRules = {
   "OpenElementName canonical": "unmodeled-vocabulary",
   "Operand fit": "P23",
   "Outcome only": "P25",
+  "Picture source srcset": "source-srcset",
   "Prefixed reference": "prefixed-ref",
   "Printed variable reference": "printed-variable-ref",
   "Quotation punctuation": "q-punctuation",
@@ -420,12 +428,14 @@ const lawRules = {
   "T4 next sibling": "reachability",
   "T5 last child": "reachability",
   "T6 nonempty and leaf": "reachability",
+  "Table headers": "table-headers",
   "Template default target": "template-default-target",
   "Template default type": "P20",
   "Template reads": "P26",
   "Template reference": "template-ref",
   "Test name key": "test-name-key",
   TextDomain: "text-copy",
+  "Track srclang": "track-srclang",
   "Typed attribute value": "attribute-lexical",
   "Typed value": "typed-copy",
   "Usage typed value": "typed-copy",
@@ -576,6 +586,8 @@ export const lawSources = {
     "reading 2 (expression.ts mathArities): https://www.w3.org/TR/MathML3/chapter4.html#contm.unary (MathML 3 §4.3.4.6: 'Unary operators take a single argument') and #contm.binary (§4.3.4.5: 'Binary operators take two arguments'), each operator's class from its syntax table in §4.4 (§4.1.5: the Class row 'indicate[s] how many arguments the operator represented by this element takes'); an apply with a qualifier or an interval beside its operator is not judged, and moment is left out, since §4.4.8.6's own example applies it to five arguments",
   "MathML foreign element":
     "MathML 3 RelaxNG mathml3-common.rnc: start = math (line 15) and anyElement = element (* - m:*) (line 61); MathML 3 §2.2, 'All other MathML content must be contained in a math element'; reading 2",
+  "Media source src":
+    "reading 124: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_Source.Attr_src (§5.135.1: 'The value must be a valid non-empty URL potentially surrounded by spaces. This characteristic must be present'), read in a media element as the HTML Standard it restates splits it (https://html.spec.whatwg.org/multipage/embedded-content.html#the-source-element: where 'The source element's parent is a media element', 'This attribute must be present'; where it is a picture element, 'The src attribute must not be present'): a source whose parent is an audio or a video carries src (html.ts Media_source_src)",
   "N1 one document node": "XML 1.0 §2.1, one document entity; fin.md §12, entry 8",
   "N1 sentinel":
     "fin.md §12, entry 8: the document node is its own parent, document and nearest, at slot 0",
@@ -610,6 +622,8 @@ export const lawSources = {
     "https://www.imsglobal.org/spec/qti/v3p0/info#Expr3 (§2.11.3, each operator's sub-expression base types and cardinalities; Member's and Delete's first single and second a container), a type no declaration says aside (reading 4) (expression.ts expressionTypings, OperandBase, LeadCardinality and TailCardinality; the old checker's P23)",
   "Outcome only":
     "https://www.imsglobal.org/spec/qti/v3p0/info#ExprTestNumberCorrect (§2.11.4, the test operators NumberCorrect, NumberIncorrect, NumberPresented, NumberResponded, NumberSelected, OutcomeMaximum, OutcomeMinimum and TestVariables: 'can only be used in outcomes processing') (expressions.ts Outcome_only, its language Processing's; the old checker's P25)",
+  "Picture source srcset":
+    "reading 124: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_Source.Attr_srcset (§5.135.3: \"This attribute is required when 'source' is used in 'picture'\"); https://html.spec.whatwg.org/multipage/embedded-content.html#the-source-element (where 'The source element's parent is a picture element', 'The srcset attribute must be present'): a source whose parent is a picture carries srcset (html.ts Picture_source_srcset)",
   "Prefixed reference":
     "readings 48 and 88: https://www.imsglobal.org/spec/qti/v3p0/info#ExprVariable (§2.11.1.2: 'values taken from an individual item session can be looked up by prefixing the name of the item variable with the identifier assigned to the item in the qti-assessment-item-ref, separated by a period character'; under with-replacement 'a number that denotes the instance's place in the sequence of the item's instantiation is inserted between the item variable identifier and the item variable'), §2.2.2 ('The values of these durations can be refered to during outcome-processing by using the variable name duration prefixed with the identifier of the part or section followed by the period character', info.txt:9214), read over the assembled test (readings 4, 5 and 86): a test-level reference is accepted when exactly one of its readings, unsplit, split at a dot, or numbered at two dots, names a scope of the test and a variable of that scope, a numbered one only under a selection with replacement and only from 1, and none through a name two placements give (expressions.ts Reading: the key and the containment over its resolving readings, M3, and Prefixed_reference)",
   "Printed variable reference":
@@ -659,6 +673,8 @@ export const lawSources = {
   "T4 next sibling": "trees.md §2, T4",
   "T5 last child": "trees.md §2, T5",
   "T6 nonempty and leaf": "trees.md §2, T6",
+  "Table headers":
+    "reading 126: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_TDH.Attr_headers (§5.140.1: \"an unordered set of unique space-separated tokens that are case-sensitive, each of which must have the value of an ID of a 'th' tag taking part in the same table as the 'td' or 'th' tag\"); https://html.spec.whatwg.org/multipage/tables.html#attr-tdth-headers: a cell's headers tokens are unique, and each is the id of a th whose nearest table is the cell's, a cell no table holds taking part in none (html.ts TableScope, TableHeader, tableHeaders)",
   "Template default target":
     "the UP audit's A37: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_TemplateDefault.Attr_template-identifier (§5.152.1: 'The identifier of the template variable affected'; §5.152: 'The default value of a template variable in an item can be overridden based on the test context'): a template default names a template declaration of the item its item ref names, compared collapsed (expressions.ts TemplateDefault, through tests.ts ItemRefDocument); an item ref that names an LTI link names no item, so no template of it (reading 110)",
   "Template default type":
@@ -671,6 +687,8 @@ export const lawSources = {
     "reading 86: https://www.imsglobal.org/spec/qti/v3p0/info#RootCharacteristic_AssessmentSection.Attr_identifier (§4.2.1) and §5.159.1, read over the assembled test (reading 5): the test document and every section document its section refs and includes place; and §7.5.3 ('A test may refer to the same section multiple times within a test'), so a section document placed twice is one document and names nothing twice: no two written elements of one test share an identifier (tests.ts InstanceName, AssembledName)",
   TextDomain:
     "XML Schema Part 2, each simple-content kind's type compiled with its whiteSpace (domains.ts); reading 7; and https://www.w3.org/TR/xmlschema-2/#NOTATION (§3.2.19: 'The ·value space· of NOTATION is the set of QNames of notations declared in the current schema'), which no pinned XSD declares, so a text read in xs:NOTATION's empty domain is refused (reading 60, C47: attributes.ts emptyDomains)",
+  "Track srclang":
+    'reading 125: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_Track.Attr_srclang (§5.163.3: "This attribute must be present if the tag\'s kind attribute is in the subtitles state"); https://html.spec.whatwg.org/multipage/media.html#the-track-element (kind: "The attribute\'s missing value default is the subtitles state"): a track that writes no kind, or writes kind as subtitles, carries srclang (html.ts Track_srclang, subtitleTrackSrclang)',
   "Typed attribute value":
     "readings 7 and 8, and https://www.imsglobal.org/spec/qti/v3p0/info#Data_BaseType (§8.13, BaseTypeEnum, each base type's value set): a qti-map-entry's map-key is a value of its mapping's base type (§7.21.1, 'The source value'), and a lookup table entry's target-value and a table's default-value are values of its outcome's base type (§5.90.1, §5.78.1, §7.23.2, §7.18.3); each is written as its base type's lexical form with no whitespace around it unless the base type is string (mapping.ts Typed_attribute_value over expression-types.ts BaseTypePattern)",
   "Typed value":
@@ -1307,6 +1325,9 @@ export const nodeLawNames = [
   "Foreign attribute class",
   "Foreign simple content",
   "AL5 attribute count",
+  "Picture source srcset",
+  "Media source src",
+  "Track srclang",
   "MathML arity",
   "SSML lexicon reference",
   "SSML trim mark",
@@ -1351,6 +1372,7 @@ export const otherLawNames = [
   "Key text bound",
   "DocumentId key",
   "Label tools",
+  "Table headers",
   "Declaration key",
   "Declaration not reserved",
   "Reserved type",
@@ -1701,6 +1723,49 @@ const fragmentsOf = (view: View): ReadonlyMap<NodeId, Fragment> => {
   fragmentCache.set(view, fragments);
 
   return fragments;
+};
+
+/**
+ * Find the table a node takes part in (spec reading 126): its nearest `table`, itself included.
+ *
+ * @param view - The document.
+ * @param node - The node.
+ * @returns The id of its nearest `table`, none where no `table` holds it.
+ */
+const tableOf = (view: View, node: FoldedNode<Composed>): NodeId | undefined =>
+  [node, ...ancestorsOf(view, node)].find(({ kind }) => kind === "table")?.id;
+
+/**
+ * The header ids of each document's tables, computed once per document.
+ */
+const tableHeaderCache = new WeakMap<View, ReadonlyMap<NodeId, ReadonlySet<string>>>();
+
+/**
+ * Collect the ids of the `th`s that take part in each table of a document, by the table's id,
+ * each id collapsed (an `xs:ID`'s whiteSpace).
+ *
+ * @param view - The document.
+ * @returns Each table's header ids; a table no `th` with an `id` takes part in holds none.
+ */
+const tableHeadersOf = (view: View): ReadonlyMap<NodeId, ReadonlySet<string>> => {
+  const held = tableHeaderCache.get(view);
+  if (held !== undefined) {
+    return held;
+  }
+
+  const headers = new Map<NodeId, Set<string>>();
+  for (const node of view.members) {
+    const table = node.kind === "th" ? tableOf(view, node) : undefined;
+    if (table !== undefined) {
+      for (const id of Option.toArray(valueOf(view, node.id, "id"))) {
+        headers.set(table, (headers.get(table) ?? new Set()).add(collapsed(id)));
+      }
+    }
+  }
+
+  tableHeaderCache.set(view, headers);
+
+  return headers;
 };
 
 /**
@@ -2224,6 +2289,51 @@ const nodeLaws: readonly NodeLaw[] = [
         },
       ),
     law: "AL5 attribute count",
+    over: "members",
+  },
+  {
+    // Reading 124: "This attribute is required when 'source' is used in 'picture'" (info
+    // §5.135.3).
+    breaks: (node, view) =>
+      unless(
+        node.kind !== "source" ||
+          node.parentKind !== "picture" ||
+          Option.isSome(valueOf(view, node.id, "srcset")),
+        () => ({}),
+      ),
+    law: "Picture source srcset",
+    over: "members",
+  },
+  {
+    // Reading 124: a media element's source names its resource, §5.135.1's "This characteristic
+    // must be present" read where HTML states it, in an audio or a video.
+    breaks: (node, view) =>
+      unless(
+        node.kind !== "source" ||
+          (node.parentKind !== "audio" && node.parentKind !== "video") ||
+          Option.isSome(valueOf(view, node.id, "src")),
+        () => ({}),
+      ),
+    law: "Media source src",
+    over: "members",
+  },
+  {
+    // Reading 125: a track in the subtitles state carries srclang (info §5.163.3), a track that
+    // writes no kind being in it, HTML's missing value default.
+    breaks: (node, view) => {
+      if (node.kind !== "track") {
+        return Option.none();
+      }
+
+      const written = valueOf(view, node.id, "kind");
+
+      return unless(
+        Option.getOrElse(written, () => "subtitles") !== "subtitles" ||
+          Option.isSome(valueOf(view, node.id, "srclang")),
+        () => ({ trackKind: Option.getOrElse(written, () => "") }),
+      );
+    },
+    law: "Track srclang",
     over: "members",
   },
   {
@@ -3531,6 +3641,35 @@ const overlayLaws: readonly ((
   node: FoldedNode<Composed>,
   overlay: Overlay,
 ) => readonly Finding[])[] = [
+  (node, overlay) =>
+    // Reading 126: a cell's headers are "an unordered set of unique space-separated tokens ...,
+    // each of which must have the value of an ID of a 'th' tag taking part in the same table"
+    // (info §5.140.1), the table its nearest; a cell no table holds takes part in none.
+    node.kind === "td" || node.kind === "th"
+      ? Option.toArray(valueOf(overlay.view, node.id, "headers")).flatMap((headers) => {
+          const tokens = headers.split(/[\t\n\r ]+/u).filter((token) => token !== "");
+          const table = tableOf(overlay.view, node);
+          const held =
+            table === undefined
+              ? new Set<string>()
+              : (tableHeadersOf(overlay.view).get(table) ?? new Set<string>());
+          const unnamed = tokens.filter((token) => !held.has(token));
+          const repeated = tokens.filter((token, at) => tokens.indexOf(token) !== at);
+
+          return unnamed.length === 0 && repeated.length === 0
+            ? []
+            : [
+                {
+                  keys: {
+                    repeated: repeated.join(" "),
+                    table: table === undefined ? "" : pathOf(overlay.view, table),
+                    unnamed: unnamed.join(" "),
+                  },
+                  law: "Table headers",
+                },
+              ];
+        })
+      : [],
   (node, { view }) => {
     // Reading 127: "Quotation punctuation (such as quotation marks) that is quoting the contents
     // of the tag must not appear immediately before, after, or inside q tags" (§5.111), read at
@@ -5877,6 +6016,8 @@ const explainers: Readonly<Record<LawName, Explainer>> = {
     }),
   "MathML foreign element": (keys) =>
     `${field(keys, "node")} is a foreign element named {${field(keys, "namespace")}}${field(keys, "local")}, and no foreign element is in the MathML namespace: MathML content stands only inside m:math`,
+  "Media source src": (keys) =>
+    `a source in ${field(keys, "parentKind") || "a media element"} carries no src, where a source of an audio or a video names its media resource`,
   "N1 one document node": (keys) =>
     `${field(keys, "documentNodes")} nodes start at 0, where a document has one`,
   "N1 sentinel": (keys) =>
@@ -5994,6 +6135,8 @@ const explainers: Readonly<Record<LawName, Explainer>> = {
     `an operand of ${field(keys, "kind")} is ${field(keys, "baseType")} ${field(keys, "cardinality")}, which it does not take there`,
   "Outcome only": (keys) =>
     `${field(keys, "kind")} stands in ${field(keys, "language")} processing; only outcome processing admits it`,
+  "Picture source srcset": () =>
+    "a source in a picture carries no srcset, where a source of a picture names its image candidates",
   "Prefixed reference": (keys) =>
     `the test ${field(keys, "assembly")} reads the reference ${field(keys, "identifier")} in ${field(keys, "resolving")} ways, ${field(keys, "readings")}, where exactly one reading may name a scope of the test and a variable of it`,
   "Printed variable reference": (keys, grammar) => referenceExplained(keys, grammar),
@@ -6055,6 +6198,23 @@ const explainers: Readonly<Record<LawName, Explainer>> = {
     `ends at ${field(keys, "end")}, where its last child ends at ${field(keys, "lastEnd") || "no row"}`,
   "T6 nonempty and leaf": (keys) =>
     `holds [${field(keys, "start")}, ${field(keys, "end")}) over ${field(keys, "children")} children, where every interval is non-empty and a leaf's holds itself alone`,
+  "Table headers": (keys) => {
+    const unnamed = membersOf(keys["unnamed"]);
+    const repeated = membersOf(keys["repeated"]);
+    const table = field(keys, "table");
+    const broken = [
+      ...(unnamed.length === 0
+        ? []
+        : [
+            table === ""
+              ? `name ${inBraces(unnamed)}, though the cell takes part in no table, so no th is its header`
+              : `name ${inBraces(unnamed)}, which are the id of no th of its table ${table}`,
+          ]),
+      ...(repeated.length === 0 ? [] : [`repeat ${inBraces(repeated)}`]),
+    ];
+
+    return `the cell's headers ${broken.length === 0 ? "break no token rule" : broken.join(", and ")}, where each token is unique and names a th of the cell's own table`;
+  },
   "Template default target": (keys) =>
     `the template default of ${field(keys, "itemRef")} names ${field(keys, "template")}, which its item declares as no template variable`,
   "Template default type": (keys) =>
@@ -6076,6 +6236,8 @@ const explainers: Readonly<Record<LawName, Explainer>> = {
       ),
       field(keys, "value"),
     ),
+  "Track srclang": (keys) =>
+    `a track ${field(keys, "trackKind") === "" ? "that writes no kind, so in its missing value default, the subtitles state," : "whose kind is subtitles"} carries no srclang, where a track in the subtitles state names its language`,
   "Typed attribute value": (keys) =>
     `an attribute value of base type ${JSON.stringify(field(keys, "baseType"))} is written ${JSON.stringify(field(keys, "value"))}, which is no lexical form of it written without whitespace around it`,
   "Typed value": (keys) =>

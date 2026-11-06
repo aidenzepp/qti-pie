@@ -200,6 +200,7 @@ export const precedence = [
   // O1, identity.
   "document-key",
   "idref-target",
+  "table-headers",
   "label-tool",
   "document-lang",
   // O2, declarations.
@@ -228,6 +229,9 @@ export const precedence = [
   "varref-copy",
   "adaptive-feedback",
   // HTML content.
+  "source-srcset",
+  "source-src",
+  "track-srclang",
   "q-punctuation",
   // O4, expressions.
   "P2",
@@ -744,6 +748,11 @@ export const lawTable = {
     source:
       "https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_ExtendedTextInteraction.Attr_max-strings (§5.48.6: 'The max-strings characteristic is required when the interaction is bound to a response variable that is a container'): an extended text interaction bound to a multiple or ordered response writes max-strings, select(BoundVariable, response-identifier, extended text, multiple or ordered)(node, kind) contained in select(CountBound, maxWritten)(node, kind) (interactions.ts, Q5.09)",
   },
+  "Media source src": {
+    rule: "source-src",
+    source:
+      "reading 124: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_Source.Attr_src (§5.135.1: 'The value must be a valid non-empty URL potentially surrounded by spaces. This characteristic must be present'), read in a media element as the HTML Standard it restates splits it (https://html.spec.whatwg.org/multipage/embedded-content.html#the-source-element: where 'The source element's parent is a media element', 'This attribute must be present'; where it is a picture element, 'The src attribute must not be present'): a source whose parent is an audio or a video carries src (html.ts Media_source_src)",
+  },
   "N1 one document node": {
     rule: "reachability",
     source: "XML 1.0 §2.1, one document entity; fin.md §12, entry 8",
@@ -855,6 +864,11 @@ export const lawTable = {
     rule: "reachability",
     source:
       "plan §1.6: one Package row per imported package, keyed by the id the importer mints for it",
+  },
+  "Picture source srcset": {
+    rule: "source-srcset",
+    source:
+      "reading 124: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_Source.Attr_srcset (§5.135.3: \"This attribute is required when 'source' is used in 'picture'\"); https://html.spec.whatwg.org/multipage/embedded-content.html#the-source-element (where 'The source element's parent is a picture element', 'The srcset attribute must be present'): a source whose parent is a picture carries srcset (html.ts Picture_source_srcset)",
   },
   "Prefixed reference": {
     rule: "prefixed-ref",
@@ -994,6 +1008,11 @@ export const lawTable = {
     rule: "reachability",
     source: "trees.md §2, T6",
   },
+  "Table headers": {
+    rule: "table-headers",
+    source:
+      "reading 126: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_TDH.Attr_headers (§5.140.1: \"an unordered set of unique space-separated tokens that are case-sensitive, each of which must have the value of an ID of a 'th' tag taking part in the same table as the 'td' or 'th' tag\"); https://html.spec.whatwg.org/multipage/tables.html#attr-tdth-headers: a cell's headers tokens are unique, and each is the id of a th whose nearest table is the cell's, a cell no table holds taking part in none (html.ts TableScope, TableHeader, tableHeaders)",
+  },
   "Template default target": {
     rule: "template-default-target",
     source:
@@ -1028,6 +1047,11 @@ export const lawTable = {
     rule: "text-copy",
     source:
       "XML Schema Part 2, each simple-content kind's type compiled with its whiteSpace (domains.ts); reading 7; and https://www.w3.org/TR/xmlschema-2/#NOTATION (§3.2.19: 'The ·value space· of NOTATION is the set of QNames of notations declared in the current schema'), which no pinned XSD declares, so a text read in xs:NOTATION's empty domain is refused (reading 60, C47: attributes.ts emptyDomains)",
+  },
+  "Track srclang": {
+    rule: "track-srclang",
+    source:
+      'reading 125: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_Track.Attr_srclang (§5.163.3: "This attribute must be present if the tag\'s kind attribute is in the subtitles state"); https://html.spec.whatwg.org/multipage/media.html#the-track-element (kind: "The attribute\'s missing value default is the subtitles state"): a track that writes no kind, or writes kind as subtitles, carries srclang (html.ts Track_srclang, subtitleTrackSrclang)',
   },
   "Typed attribute value": {
     rule: "attribute-lexical",
@@ -2112,6 +2136,47 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
   ],
   [keyOver(sideOf("Attribute", "document")), "Label tools"],
   [containedIn(sideOf("LabelUse", "document"), sideOf("Attribute", "document")), "Label tools"],
+  [containedIn(sideOf("Attribute", "node"), sideOf("Attribute", "node")), "Track srclang"],
+  [primaryKeyOf("TableScope", "node"), "E1 derived"],
+  [primaryKeyOf("CellHeaders", "node"), "E1 derived"],
+  [primaryKeyOf("HeaderToken", "node", "at"), "E1 derived"],
+  [primaryKeyOf("TableHeader", "node"), "E1 derived"],
+  ...(
+    [
+      [
+        sideOf("TableScope", "node", "document", "kind", "start", "nearest", "version", "parent"),
+        sideOf("Node", "id", "document", "kind", "start", "nearest", "version", "parent"),
+      ],
+      [sideOf("TableScope", "parent", "table"), sideOf("TableScope", "node", "table")],
+      [sideOf("Attribute", "node", "lexical"), sideOf("CellHeaders", "node", "lexical")],
+      [sideOf("CellHeaders", "node"), sideOf("Attribute", "node")],
+      [sideOf("CellHeaders", "node", "table"), sideOf("TableScope", "node", "table")],
+      [sideOf("HeaderToken", "node", "table"), sideOf("CellHeaders", "node", "table")],
+      [sideOf("Attribute", "node", "document"), sideOf("TableHeader", "node", "document")],
+      [sideOf("TableHeader", "node"), sideOf("Attribute", "node")],
+      [
+        sideOf("TableHeader", "node", "document", "id", "owner"),
+        sideOf("DocumentId", "node", "document", "id", "owner"),
+      ],
+      [sideOf("TableHeader", "node", "table"), sideOf("TableScope", "node", "table")],
+    ] as const
+  ).map(([from, to]) => [containedIn(from, to), "E1 derived"] as const),
+  [familyOf("ordered", sideOf("HeaderToken", "node", "at"), "CellHeaders", "tokens"), "E1 derived"],
+  [
+    foldOf(
+      { count: "tokens", owner: "CellHeaders" },
+      "concat",
+      sideOf("HeaderToken", "node", "piece", "piecesWas", "piecesAfter"),
+      sideOf("CellHeaders", "node", "tokenText"),
+    ),
+    "E1 derived",
+  ],
+  [keyOver(sideOf("TableHeader", "table", "id")), "DocumentId key"],
+  [keyOver(sideOf("HeaderToken", "node", "token")), "Table headers"],
+  [
+    containedIn(sideOf("HeaderToken", "table", "token"), sideOf("TableHeader", "table", "id")),
+    "Table headers",
+  ],
   [keyOver(sideOf("Declaration", "document", "identifier")), "Declaration key"],
   ...(["Declaration", "ValueSet", "Value", "RecordField", "OutcomeRange"] as const).map(
     (overlay) => [primaryKeyOf(overlay, "node"), "Declaration overlay"] as const,

@@ -73,6 +73,7 @@ import {
   Value,
   ValueSet,
 } from "#pantry/qti/declarations.ts";
+import { CellHeaders, TableHeader, TableScope } from "#pantry/qti/html.ts";
 import {
   AssembledId,
   AssembledLang,
@@ -1179,6 +1180,7 @@ export const changeSetOf = (author: typeof Author, inputs: PackageInputs) =>
     .insert(BoundVariable, [...inputs.BoundVariable.values()])
     .insert(BranchResolution, [...inputs.BranchResolution.values()])
     .insert(BranchRule, [...inputs.BranchRule.values()])
+    .insert(CellHeaders, [...inputs.CellHeaders.values()])
     .insert(Choice, [...inputs.Choice.values()])
     .insert(ChoiceVariableName, [...inputs.ChoiceVariableName.values()])
     .insert(ContextRef, [...inputs.ContextRef.values()])
@@ -1268,6 +1270,8 @@ export const changeSetOf = (author: typeof Author, inputs: PackageInputs) =>
     .insert(Slider, [...inputs.Slider.values()])
     .insert(StatisticDate, [...inputs.StatisticDate.values()])
     .insert(StimulusRef, [...inputs.StimulusRef.values()])
+    .insert(TableHeader, [...inputs.TableHeader.values()])
+    .insert(TableScope, [...inputs.TableScope.values()])
     .insert(TemplateRef, [...inputs.TemplateRef.values()])
     .insert(TestDocument, [...inputs.TestDocument.values()])
     .insert(TestFlag, [...inputs.TestFlag.values()])

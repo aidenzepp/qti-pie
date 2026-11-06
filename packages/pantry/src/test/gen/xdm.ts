@@ -12,7 +12,8 @@
  * bound where it is used, no two runs of character data are adjacent, a doctype with an external
  * subset precedes every unexpanded entity reference, and no name repeats on one element. Laws the
  * model does not read (ancestry bans, child sets, required attributes, value domains) are left to
- * fall where they fall.
+ * fall where they fall, but for the HTML element laws that require an attribute of an element by
+ * its parent ({@link requiredUnder}), which a tree holding such an element would break by chance.
  *
  * Each case draws its own swarm over the kinds of node it builds ({@link xdmFeatures}), and its own
  * bounds on depth, width and attributes (rule 10), so runs explore lopsided corners. A case also
@@ -1255,10 +1256,38 @@ const openNamesOf = (
 };
 
 /**
+ * The closed attributes an HTML element law requires of an element under its parent (spec readings
+ * 124 and 125, `#pantry/qti/html.ts`), which the generator writes whatever its bound and swarm
+ * draw: a `source` in a `picture` carries `srcset`, a `source` in an `audio` or a `video` carries
+ * `src`, and a `track` carries `srclang`, which a track in the subtitles state needs and any other
+ * track may carry. Each is written only where the element admits it.
+ *
+ * @param kind - The element's kind.
+ * @param parent - Its parent's kind.
+ * @returns The names, as closed handles.
+ */
+const requiredUnder = (kind: Kind, parent: Kind): readonly string[] => {
+  if (kind === "track") {
+    return ["srclang"];
+  }
+
+  if (kind !== "source") {
+    return [];
+  }
+
+  if (parent === "picture") {
+    return ["srcset"];
+  }
+
+  return parent === "audio" || parent === "video" ? ["src"] : [];
+};
+
+/**
  * Draw an element's attributes: first its governing type, then a subset of the closed names the
  * element admits under it and open names under the classes it admits there, up to the case's
  * attribute bound or two where the bound is lower, two of them of one class where the swarm draws
- * `repeatedOpenClass`, each name once, in a drawn order. An `own-namespace` name is in the
+ * `repeatedOpenClass`, each name once, in a drawn order, and beyond them the closed names
+ * {@link requiredUnder} requires of it under its parent. An `own-namespace` name is in the
  * element's namespace under its own prefix, so an element in no namespace draws none.
  *
  * The governing type is the declared one, or the type a drawn `xsi:type` names, which then governs
@@ -1269,6 +1298,7 @@ const openNamesOf = (
  * @param context - The case.
  * @param kind - The element's kind, a foreign kind for a foreign element.
  * @param namespace - The element's namespace.
+ * @param parent - Its parent's kind.
  * @returns A generator of the attributes, the governing type and the prefixed namespaces they need
  *   declared.
  */
@@ -1277,6 +1307,7 @@ const attributesOf =
     context: Context,
     kind: Kind,
     namespace: string,
+    parent: Kind,
   ): Gen<{
     readonly attributes: readonly XdmAttribute<Composed>[];
     readonly governs: string;
@@ -1312,14 +1343,18 @@ const attributesOf =
       drawn.push({ lexical: `${typePrefix}:${name.local}`, name: typeName, references: [] });
     }
 
-    if (keeping) {
-      const chosen = source.draw(shuffled(closed, { max: Math.min(bound, closed.length), min: 0 }));
-      for (const handle of chosen) {
-        drawn.push({
-          name: source.draw(closedNameOf(handle, context, needed)),
-          ...source.draw(lexicalOf(context.references)),
-        });
-      }
+    const kept = keeping
+      ? source.draw(shuffled(closed, { max: Math.min(bound, closed.length), min: 0 }))
+      : [];
+    const required = requiredUnder(kind, parent);
+    for (const handle of [
+      ...kept,
+      ...closed.filter((held) => required.includes(held) && !kept.includes(held)),
+    ]) {
+      drawn.push({
+        name: source.draw(closedNameOf(handle, context, needed)),
+        ...source.draw(lexicalOf(context.references)),
+      });
     }
 
     if (source.draw(keep(context.swarm, "openName"))) {
@@ -1699,6 +1734,17 @@ interface Site {
 }
 
 /**
+ * Read the kind of the element a node is drawn under from the model, the document node's for the
+ * root element.
+ *
+ * @param context - The case.
+ * @param site - Where the node is drawn.
+ * @returns The parent's kind.
+ */
+const parentKindOf = (context: Context, site: Site): Kind =>
+  context.model[site.parent]?.kind ?? "document";
+
+/**
  * Draw a character-data child at a slot, placing it in the model.
  *
  * @param context - The case.
@@ -1821,7 +1867,7 @@ const foreignOf =
     const entry = place(context, { at: site.at, kind, parent: site.parent });
     const name = source.draw(element(names));
     const { attributes, governs, needed } = source.draw(
-      attributesOf(context, kind, name.namespace),
+      attributesOf(context, kind, name.namespace, parentKindOf(context, site)),
     );
     const declared = source.draw(declarationsOf(context, site.scope, name.namespace, needed));
     const owner = {
@@ -1867,7 +1913,9 @@ const closedOf =
       onNone: () => "",
       onSome: (name) => name.namespace,
     });
-    const { attributes, governs, needed } = source.draw(attributesOf(context, kind, namespace));
+    const { attributes, governs, needed } = source.draw(
+      attributesOf(context, kind, namespace, parentKindOf(context, site)),
+    );
     const declared = source.draw(declarationsOf(context, site.scope, namespace, needed));
     const owner = { kind, namespace, number: entry.start, scope: declared.scope, simple: false };
     const children = source.draw(familyUnder(context, owner, site.depth, completing));

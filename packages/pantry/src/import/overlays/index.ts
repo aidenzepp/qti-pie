@@ -29,6 +29,8 @@ import type {
   ExpressionRows,
   PlacedVariableRows,
 } from "#pantry/import/overlays/expressions.ts";
+import { rowsOf as htmlRowsOf } from "#pantry/import/overlays/html.ts";
+import type { HtmlRows } from "#pantry/import/overlays/html.ts";
 import {
   languageRowsOf,
   placedIdRowsOf,
@@ -76,6 +78,7 @@ export type OverlayRows = AssembledExpressionRows &
   AssembledRows &
   DeclarationRows &
   ExpressionRows &
+  HtmlRows &
   IdentityRows &
   InteractionRows &
   LanguageRows &
@@ -98,6 +101,7 @@ export type OverlayRows = AssembledExpressionRows &
 interface DocumentRows {
   readonly declarations: DeclarationRows;
   readonly expressions: ExpressionRows;
+  readonly html: HtmlRows;
   readonly identity: IdentityRows;
   readonly interactions: InteractionRows;
   readonly mapping: MappingRows;
@@ -126,6 +130,7 @@ const documentRowsOf = ({
 }): DocumentRows => ({
   declarations: declarationRowsOf(tree, ids),
   expressions: expressionRowsOf(tree, ids),
+  html: htmlRowsOf(tree, ids),
   identity: identityRowsOf(tree, ids),
   interactions: interactionRowsOf(tree, ids),
   mapping: mappingRowsOf(tree, ids),
@@ -256,6 +261,10 @@ const mergedOf = (
     BranchRule: unionOf(
       "BranchRule",
       parts.map(({ BranchRule: rows }) => rows),
+    ),
+    CellHeaders: unionOf(
+      "CellHeaders",
+      parts.map(({ CellHeaders: rows }) => rows),
     ),
     Choice: unionOf(
       "Choice",
@@ -701,6 +710,14 @@ const mergedOf = (
       "StimulusRef",
       parts.map(({ StimulusRef: rows }) => rows),
     ),
+    TableHeader: unionOf(
+      "TableHeader",
+      parts.map(({ TableHeader: rows }) => rows),
+    ),
+    TableScope: unionOf(
+      "TableScope",
+      parts.map(({ TableScope: rows }) => rows),
+    ),
     TemplateDefault: unionOf(
       "TemplateDefault",
       parts.map(({ TemplateDefault: rows }) => rows),
@@ -815,6 +832,7 @@ export const overlayRowsOf = (
     ...built.flatMap(({ rows }) => [
       rows.declarations,
       rows.expressions,
+      rows.html,
       rows.identity,
       rows.interactions,
       rows.mapping,

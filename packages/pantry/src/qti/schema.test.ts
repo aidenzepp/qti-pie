@@ -17,6 +17,8 @@ import { declarationLaws } from "#pantry/qti/declarations.ts";
 import * as expressionTypes from "#pantry/qti/expression-types.ts";
 import * as expressions from "#pantry/qti/expressions.ts";
 import { expressionLaws } from "#pantry/qti/expressions.ts";
+import * as html from "#pantry/qti/html.ts";
+import { htmlLaws } from "#pantry/qti/html.ts";
 import * as identity from "#pantry/qti/identity.ts";
 import { identityLaws } from "#pantry/qti/identity.ts";
 import * as interactions from "#pantry/qti/interactions.ts";
@@ -52,6 +54,7 @@ const composedLaws: readonly (readonly [string, readonly Statement[]])[] = [
   ["src/qti/interactions.ts interactionLaws", interactionLaws],
   ["src/qti/metadata.ts metadataLaws", metadataLaws],
   ["src/qti/expressions.ts expressionLaws", expressionLaws],
+  ["src/qti/html.ts htmlLaws", htmlLaws],
   ["src/qti/quotation.ts quotationLaws", quotationLaws],
 ];
 
@@ -73,6 +76,7 @@ const composedModules = [
   ["src/qti/metadata.ts", metadata],
   ["src/qti/expressions.ts", expressions],
   ["src/qti/expression-types.ts", expressionTypes],
+  ["src/qti/html.ts", html],
   ["src/qti/quotation.ts", quotation],
 ] as const;
 

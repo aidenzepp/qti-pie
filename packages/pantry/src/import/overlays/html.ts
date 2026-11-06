@@ -1,0 +1,254 @@
+/**
+ * The HTML overlays' rows (spec reading 126, §C's `rowsOf`): from one document's XDM tree and the
+ * ids its nodes are written under, the rows of every relation `#pantry/qti/html.ts` declares, each
+ * a keyed set.
+ *
+ * The rows restate what the tree says and nothing else: each table cell's `headers` as written,
+ * split into its tokens; each `th`'s `id`, its value as `DocumentId` holds it; and each element on
+ * the way from those cells up to the table they take part in. The database proves every one of
+ * them (`htmlLaws`), so a row this builder gets wrong is refused, never accepted. Readings 124 and
+ * 125 read `Node` and `Attribute` alone, so they have no rows here.
+ */
+import type { Addition } from "@bjornpagen/grizzle";
+import type { DocumentContext } from "#pantry/import/context.ts";
+import { interactionKinds } from "#pantry/grammar/install.ts";
+import type { Composed } from "#pantry/model/composed.ts";
+import { flatten } from "#pantry/model/xdm.ts";
+import type { NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
+import { cellKinds } from "#pantry/qti/html.ts";
+import type { CellHeaders, HeaderToken, TableHeader, TableScope } from "#pantry/qti/html.ts";
+import { keyTextPattern } from "#pantry/qti/limits.ts";
+
+/**
+ * The ids a document's rows are written under: each of its tree's nodes' and attributes', drawn by
+ * the number `flatten` gives it, and the document's context (spec reading 117), its own where none
+ * is given, whose interaction an included fragment's nodes take as their nearest.
+ *
+ * It is the part of the importer's `NodeIds` (Q5.15) this builder reads, so the overlay rows and
+ * the tree's rows name each node by one id.
+ */
+export interface HtmlIds {
+  readonly context?: DocumentContext;
+  readonly idOf: (index: number) => NodeId;
+}
+
+/**
+ * One token of a cell's `headers` as its cell's family nests it: without the `node` the nesting
+ * supplies, nor the `at` the family draws.
+ */
+export type HeaderTokenInsert = Omit<Addition<typeof HeaderToken>, "node">;
+
+/**
+ * A cell's `headers`, with its tokens nested at its count field.
+ */
+export type CellHeadersRow = Addition<typeof CellHeaders> & {
+  readonly tokens: readonly HeaderTokenInsert[];
+};
+
+/**
+ * A document's HTML rows, one keyed set per relation: each map from the text of a row's key, its
+ * node's id, to the row as its writer writes it.
+ */
+export interface HtmlRows {
+  readonly CellHeaders: ReadonlyMap<string, CellHeadersRow>;
+  readonly TableHeader: ReadonlyMap<string, Addition<typeof TableHeader>>;
+  readonly TableScope: ReadonlyMap<string, Addition<typeof TableScope>>;
+}
+
+/**
+ * `keyText`'s language: a copied text outside it has no overlay row, and its copy's foreign key
+ * refuses it beside the schema's one limit law.
+ */
+const keyTextForm = new RegExp(keyTextPattern, "su");
+
+/**
+ * The interaction kinds, whose children take them as their nearest interaction (N8).
+ */
+const interactions: ReadonlySet<string> = new Set(interactionKinds);
+
+/**
+ * The table cell kinds, whose `headers` reading 126 reads.
+ */
+const cells: ReadonlySet<string> = new Set(cellKinds);
+
+/**
+ * The text `HeaderToken.before` and `after` hold: XML whitespace, possibly none.
+ */
+type Spacing = HeaderTokenInsert["before"];
+
+/**
+ * Decide whether a text is XML whitespace, possibly none, the language of {@link Spacing}.
+ *
+ * @param text - The text.
+ * @returns Whether every character of it is a tab, a line feed, a carriage return or a space.
+ */
+const isSpacing = (text: string): text is Spacing => /^[\t\n\r ]*$/u.test(text);
+
+/**
+ * Split a `headers` value into its tokens, each with the whitespace written before it, and the
+ * last with the whitespace after it, so the pieces concatenate to the value and every token but
+ * the first follows whitespace (`E1_derived` on `HeaderToken`).
+ *
+ * @param lexical - The attribute's lexical form.
+ * @returns Its pieces, in order; none for a value of whitespace alone, an empty list.
+ */
+export const headerPiecesOf = (lexical: string): readonly HeaderTokenInsert[] => {
+  const runs = [...lexical.matchAll(/(?<before>[\t\n\r ]*)(?<token>[^\t\n\r ]+)/gu)];
+  const tail = runs.reduce((end, run) => end + run[0].length, 0);
+
+  return runs.flatMap((run, at): readonly HeaderTokenInsert[] => {
+    const before = run.groups?.["before"] ?? "";
+    const token = run.groups?.["token"] ?? "";
+    const after = at === runs.length - 1 ? lexical.slice(tail) : "";
+
+    return isSpacing(before) && isSpacing(after)
+      ? [{ after, before, piece: `${before}${token}${after}`, token }]
+      : [];
+  });
+};
+
+/**
+ * Compute each node's nearest interaction (N8), as the tree's rows hold it: the document node's is
+ * its context's; a child of an interaction's is that interaction; every other node's is its
+ * parent's.
+ *
+ * @param nodes - A document's node rows, in document order, so each parent precedes its children.
+ * @param rootNearest - The document node's own, its context's; itself where none is given.
+ * @returns Each node's nearest interaction, by its id.
+ */
+const nearestOf = (
+  nodes: readonly NodeRow<Composed>[],
+  rootNearest: NodeId | undefined,
+): ReadonlyMap<NodeId, NodeId> => {
+  const kinds = new Map<NodeId, string>();
+  const nearest = new Map<NodeId, NodeId>();
+
+  for (const node of nodes) {
+    kinds.set(node.id, node.kind);
+    if (node.parent === node.id) {
+      nearest.set(node.id, rootNearest ?? node.id);
+      continue;
+    }
+
+    nearest.set(
+      node.id,
+      interactions.has(kinds.get(node.parent) ?? "")
+        ? node.parent
+        : (nearest.get(node.parent) ?? node.parent),
+    );
+  }
+
+  return nearest;
+};
+
+/**
+ * The walk from a cell up to the table it takes part in, the cell first, and the table it ends at:
+ * a `table`, or the document node where no `table` holds the cell.
+ */
+interface TableWalk {
+  readonly table: NodeId;
+  readonly walk: readonly NodeRow<Composed>[];
+}
+
+/**
+ * Walk from an element up to its nearest `table`: the element, then each parent, ending at the
+ * first `table` or at the document's root.
+ *
+ * @param byId - The document's nodes by id.
+ * @param document - The document node.
+ * @param element - The element.
+ * @returns The walk, the element first, and its table.
+ */
+const tableWalkOf = (
+  byId: ReadonlyMap<NodeId, NodeRow<Composed>>,
+  document: NodeId,
+  element: NodeRow<Composed>,
+): TableWalk => {
+  const walk: NodeRow<Composed>[] = [];
+  let at: NodeRow<Composed> | undefined = element;
+  while (at !== undefined) {
+    walk.push(at);
+    if (at.kind === "table") {
+      return { table: at.id, walk };
+    }
+
+    at = at.parent === document ? undefined : byId.get(at.parent);
+  }
+
+  return { table: document, walk };
+};
+
+/**
+ * Build a document's HTML rows.
+ *
+ * Each cell that writes `headers` within `keyText` has its {@link CellHeadersRow}, and each `th`
+ * that writes an `id` within it its `TableHeader`, the ID's value its lexical form with its outer
+ * whitespace set apart, as `DocumentId` holds it; each element on the walk up from either to its
+ * nearest `table` has its `TableScope`. A document with no such cell gives no row.
+ *
+ * @param doc - The document's tree, as shred gives it.
+ * @param ids - The ids its rows are written under.
+ * @returns Every HTML relation's rows.
+ */
+export const rowsOf = (doc: XdmDocument<Composed>, ids: HtmlIds): HtmlRows => {
+  const rows = flatten(doc, ids.idOf);
+  const document = rows.document.node;
+  const lexicals = new Map(rows.attributes.map((row) => [`${row.node} ${row.name}`, row.lexical]));
+  const keyedOf = (node: NodeRow<Composed>, name: string): string | undefined => {
+    const lexical = lexicals.get(`${node.id} ${name}`);
+
+    return lexical !== undefined && keyTextForm.test(lexical) ? lexical : undefined;
+  };
+  const scopes = new Map<string, Addition<typeof TableScope>>();
+  const headers = new Map<string, CellHeadersRow>();
+  const headerIds = new Map<string, Addition<typeof TableHeader>>();
+  const cellNodes = rows.nodes.filter(({ kind }) => cells.has(kind));
+  if (cellNodes.length === 0) {
+    return { CellHeaders: headers, TableHeader: headerIds, TableScope: scopes };
+  }
+
+  const byId = new Map(rows.nodes.map((node) => [node.id, node] as const));
+  const nearest = nearestOf(rows.nodes, ids.context?.nearest);
+  const tableOf = (cell: NodeRow<Composed>): NodeId => {
+    const { table, walk } = tableWalkOf(byId, document, cell);
+    for (const node of walk) {
+      scopes.set(node.id, {
+        document,
+        kind: node.kind,
+        nearest: nearest.get(node.id) ?? document,
+        node: node.id,
+        parent: node.parent,
+        start: node.start,
+        table,
+        version: node.version,
+      });
+    }
+
+    return table;
+  };
+
+  for (const cell of cellNodes) {
+    const lexical = keyedOf(cell, "headers");
+    if (lexical !== undefined) {
+      headers.set(cell.id, {
+        lexical,
+        node: cell.id,
+        table: tableOf(cell),
+        tokens: headerPiecesOf(lexical),
+      });
+    }
+
+    const id = cell.kind === "th" ? keyedOf(cell, "id") : undefined;
+    if (id !== undefined) {
+      headerIds.set(cell.id, {
+        document,
+        id: id.replace(/^[\t\n\r ]+/u, "").replace(/[\t\n\r ]+$/u, ""),
+        node: cell.id,
+        owner: cell.id,
+        table: tableOf(cell),
+      });
+    }
+  }
+
+  return { CellHeaders: headers, TableHeader: headerIds, TableScope: scopes };
+};

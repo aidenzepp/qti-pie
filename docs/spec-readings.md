@@ -1796,7 +1796,22 @@ against it. A reading that is not an information-model-over-XSD case says which 
      had removed; the operator's ruling of 2026-11-06 overrules that ruling wherever the information model is stricter.
      (Decided 2026-11-06 by RV seat G, on the review of PR #46, under the operator's standing ruling of 2026-11-05 that
      the spec wins.)
-124. **A media URL holds a character other than a space.**
+124. **A `source` in a `picture` carries `srcset`, and one in an `audio` or a `video` carries `src`.** The information
+     model's Source class says of `srcset` "This attribute is required when 'source' is used in 'picture'" (§5.135.3),
+     and of `src` "The value must be a valid non-empty URL potentially surrounded by spaces. This characteristic must
+     be present" (§5.135.1), while it gives `src` the multiplicity `[0..1]` and the class the parents Audio, Picture
+     and Video. Read alone, §5.135.1's last sentence contradicts §5.135.3, since a `picture`'s source then needs both.
+     The HTML Standard the class restates splits the two by the parent: where "The source element's parent is a
+     picture element", "The srcset attribute must be present" and "The src attribute must not be present"; where it
+     "is a media element", `src` "must be present" (HTML, the source element). So §5.135.1's sentence is read in a
+     media element alone: a `source` whose parent is an `audio` or a `video` carries `src`, and one whose parent is a
+     `picture` carries `srcset`. A `source` QTI admits elsewhere, in a `template`'s content or an open wildcard, is
+     bound by neither. HTML's two prohibitions, no `src` in a `picture` and no `srcset` or `sizes` in a media element,
+     are not stated by the information model and are not read. This follows the information model, with the HTML
+     Standard deciding §5.135.1 by context, and sets aside the XSD, whose `src` and `srcset` are both optional
+     `URLDType` (an `xs:normalizedString`). Laws "Picture source srcset" (rule `source-srcset`, main's) and "Media
+     source src" (rule `source-src`), each a check on `Node` that the attribute's slot is in `attrs`
+     (`src/qti/html.ts`).
      Each media URL the information model describes as "a valid non-empty URL potentially surrounded by spaces" holds
      a character other than a space: an `audio`'s and a `video`'s `src` ("The attribute, if present, must contain a
      valid non-empty URL potentially surrounded by spaces", sections 5.9.1 and 5.166.1), a `video`'s `poster` (the same
@@ -1813,19 +1828,44 @@ against it. A reading that is not an information-model-over-XSD case says which 
      readings 102 and 103 read of a file reference: that is this reading's stated limit. Its cause is that the URL
      Standard and the HTML Standard are living documents that no pinned source holds. What would lift it is a dated
      copy of each pinned beside the XSDs, with a domain for the valid URL string and a family of a `srcset`'s
-     candidates under its attribute, as `Idref` splits tokens. (Decided 2026-11-06 by RV seat G, on the review of
+     candidates under its attribute, as `Idref` splits tokens. (Decided 2026-11-06 by RV seats H and G, on the review of
      PR #46, under the operator's standing ruling of 2026-11-05 that the spec wins.)
-125. **A `track`'s `src` holds a character other than a space, and its `srclang` is a language tag.**
+125. **A `track` in the subtitles state carries `srclang`, and a `track` with no `kind` is in that state.** The
+     information model's Track class says of `srclang` "This attribute must be present if the tag's kind attribute is
+     in the subtitles state" (§5.163.3), and maps `kind`'s keywords to HTML's states with no default of its own
+     (§5.163.1). The HTML Standard it restates gives the state of a `track` that writes no `kind`: "The attribute's
+     missing value default is the subtitles state, and its invalid value default is the metadata state" (HTML, the
+     track element). So a `track` that writes no `kind`, or writes `kind="subtitles"`, carries `srclang`, and one of
+     any other state need not. `kind`'s value domain is an enumeration under whiteSpace `preserve`, so a written `kind`
+     is in the subtitles state exactly where its lexical form is `subtitles`, and an invalid keyword, HTML's metadata
+     state, is refused by its domain before its state is read. This follows the information model with HTML's missing
+     value default, and sets aside the XSD's optional `srclang` and its `kind` with no default. Law "Track srclang"
+     (rule `track-srclang`, main's): a check on `Node` for a `track` that writes no `kind`, and a containment of the
+     `track`s whose `kind` is `subtitles` in those that write `srclang`, by element (`src/qti/html.ts`).
      A `track`'s `src`, which the XSD already requires, holds a character other than a space: "The 'src'
      characteristic gives the address of the text track data. The value must be a valid non-empty URL potentially
      surrounded by spaces. This attribute must be present" (section 5.163.2). Its type is `URLDType`, read as reading
      124 reads a media URL, with reading 124's limit on the URL's own syntax. A `track`'s `srclang`, where written, is
      a BCP 47 language tag and never empty (reading 129), so `srclang="english language"` and `srclang=""` are refused
-     under `attribute-lexical`. (Decided 2026-11-06 by RV seat G, on the review of PR #46, under the operator's standing
-     ruling of 2026-11-05 that the spec wins.)
-
-<!-- Reading 126 is reserved. -->
-
+     under `attribute-lexical`. (Decided 2026-11-06 by RV seats H and G, on the review of PR #46, under the operator's
+     standing ruling of 2026-11-05 that the spec wins.)
+126. **Each token of a `td`'s or a `th`'s `headers` is the `id` of a `th` of the cell's own table, and no token is
+     written twice.** The information model's TDH class says of `headers`: "This is a string consisting of an
+     unordered set of unique space-separated tokens that are case-sensitive, each of which must have the value of an
+     ID of a 'th' tag taking part in the same table as the 'td' or 'th' tag" (§5.140.1). The XSD types it a list of
+     `IdentifierDType`, an `xs:NCName`, with no reference rule. A cell takes part in its nearest `table`, a nested
+     table's cell in the nested table, as the HTML Standard's table model reads them; a cell no `table` holds, which
+     QTI admits in a custom interaction's open content or in a `template`, takes part in no table, so no `th` is its
+     header and every token it writes is refused. A token names a `th` by the value of its `id` (an `xs:ID`, collapsed),
+     compared case-sensitively; a token that names no element, a `td`, any other element or a `th` of another table,
+     enclosing or nested, is refused, and so is a token written twice. This follows the information model and sets
+     aside the XSD's plain identifier list, the stricter source being the rule (readings 16 and 17); it restores the
+     rule the operator's ruling of 2026-11-05 (question 3) removed, which the operator's ruling of 2026-11-06 on
+     Aiden's review reverses. HTML's further rule, "A th element must not be targeted by itself", is not stated by the
+     information model and is not read. Law "Table headers" (rule `table-headers`): each `HeaderToken(table, token)` is
+     a `(table, id)` of the `th`s that take part in a table, and `HeaderToken` is keyed by `(node, token)`
+     (`src/qti/html.ts`: `TableScope`, `CellHeaders`, `HeaderToken`, `TableHeader`). (Decided 2026-11-06 by RV seat H,
+     on the review of PR #46, under the operator's standing ruling of 2026-11-05 that the spec wins.)
 127. **No quotation punctuation stands immediately before, after or inside a `q`.** The information model says of Q:
      "Quotation punctuation (such as quotation marks) that is quoting the contents of the tag must not appear
      immediately before, after, or inside q tags; they will be inserted into the rendering by the user agent" (section

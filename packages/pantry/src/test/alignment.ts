@@ -638,7 +638,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     124,
     {
       owner:
-        "AL1 (`nonEmptyUrl` on `audio`, `video` and `source` `src`, `video` `poster` and `source` `srcset`); the URL Standard's syntax is a stated limit",
+        "H's `Picture_source_srcset` and `Media_source_src`, checks on `Node` over `attrs` (`src/qti/html.ts`); AL1 (`nonEmptyUrl` on `audio`, `video` and `source` `src`, `video` `poster` and `source` `srcset`); the URL Standard's syntax is a stated limit",
       status: "G",
     },
   ],
@@ -646,7 +646,15 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     125,
     {
       owner:
-        "AL1 (`nonEmptyUrl` on `track`'s `src`, and `languageOnly` on its `srclang`, reading 129)",
+        "H's `Track_srclang`, a check on `Node` for a track that writes no kind, and `subtitleTrackSrclang`, a containment between two `Attribute` selections (`src/qti/html.ts`); AL1 (`nonEmptyUrl` on `track`'s `src`, and `languageOnly` on its `srclang`, reading 129)",
+      status: "G",
+    },
+  ],
+  [
+    126,
+    {
+      owner:
+        "H's `TableScope`, `CellHeaders`, `HeaderToken` and `TableHeader` (`src/qti/html.ts`, rows from `src/import/overlays/html.ts`): `tableHeaders` and `HeaderToken`'s key on (node, token)",
       status: "G",
     },
   ],
