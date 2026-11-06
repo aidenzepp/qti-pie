@@ -6,6 +6,7 @@ import {
   configure,
   decode,
   entryName,
+  h,
   Malformed,
   open,
   partition,
@@ -17,6 +18,7 @@ import {
 } from "#plate/index.ts";
 import type {
   Accepted,
+  Attributes,
   Configuration,
   Element,
   Node,
@@ -28,13 +30,13 @@ import type {
 } from "#plate/index.ts";
 import { message } from "#plate/messages.ts";
 import { interactionsIn } from "#plate/model/interactions.ts";
-import type { InlineChoiceInteraction } from "#plate/model/item.ts";
-import { choiceOrder } from "#plate/payload.ts";
+import type { BodyNode, InlineChoiceInteraction, Item } from "#plate/model/item.ts";
+import { choiceOrder, redactItem } from "#plate/payload.ts";
 import { attribute, checkTree } from "#plate/test/accessibility.ts";
 import { keyboardWalk, tabOrder } from "#plate/test/keyboard.ts";
 import type { Key } from "#plate/test/keyboard.ts";
 import { parseHtml } from "#plate/test/round-trip.ts";
-import { acceptedItem } from "#plate/validate/verdict.ts";
+import { acceptForTest, acceptedItem } from "#plate/validate/verdict.ts";
 
 /**
  * A case reads one corpus document, which takes well under a second here; the bound leaves room
@@ -83,6 +85,80 @@ interface Opened {
   readonly accepted: Accepted;
   readonly redacted: Redacted;
 }
+
+/**
+ * Construct a text node of the body.
+ *
+ * @param value The text.
+ * @returns The node.
+ */
+const words = (value: string): BodyNode => ({ kind: "text", text: value });
+
+/**
+ * A hand-built Inline Choice of three fruits, `A`, `B` and `C`, unshuffled, with a Label that
+ * gives text and no Placeholder text, bound to `RESPONSE`.
+ */
+const fruits: InlineChoiceInteraction = {
+  ariaLabel: Option.none(),
+  ariaLabelledby: Option.none(),
+  choices: [
+    { content: [words("apples")], fixed: false, identifier: "A" },
+    { content: [words("pears")], fixed: false, identifier: "B" },
+    { content: [words("plums")], fixed: false, identifier: "C" },
+  ],
+  class: "",
+  kind: "inline-choice",
+  label: Option.some([words("Fruit")]),
+  messages: { min: Option.none() },
+  minChoices: 0n,
+  path: "qti-assessment-item/qti-item-body/p/qti-inline-choice-interaction",
+  placeholder: Option.none(),
+  required: false,
+  response: "RESPONSE",
+  shuffle: false,
+};
+
+/**
+ * A hand-built item whose body is one sentence holding {@link fruits}, its response a single
+ * identifier with no default value and no processing, accepted and redacted through the test
+ * seams, as no corpus document holds a host replacement.
+ */
+const fruitItem: Opened = (() => {
+  const item: Item = {
+    body: [
+      {
+        attributes: [],
+        children: [words("I would like "), fruits, words(".")],
+        kind: "element",
+        path: "qti-assessment-item/qti-item-body/p",
+        tag: "p",
+      },
+    ],
+    document: "items/fruit.xml",
+    identifier: "fruit",
+    lang: Option.none(),
+    outcomes: new Map(),
+    processing: Option.none(),
+    responses: new Map([
+      [
+        fruits.response,
+        {
+          areaMapping: Option.none(),
+          baseType: "identifier",
+          cardinality: "single",
+          correct: Option.none(),
+          defaultValue: Option.none(),
+          identifier: fruits.response,
+          mapping: Option.none(),
+        },
+      ],
+    ]),
+    title: "Fruit",
+    unsupported: [],
+  };
+
+  return { accepted: acceptForTest(item), redacted: redactItem(item) };
+})();
 
 /**
  * Open a corpus document as a host opens one it read from storage, and require a verdict that
@@ -425,5 +501,41 @@ describe("the Inline Choice witness: open, redact, render, keys, postings, decod
         );
       }),
     corpusTimeoutMs,
+  );
+
+  it.effect(
+    "[Q-12] [keyboard] a host Option replacement that selects C, with nothing restored, leaves the Placeholder selected: Tab then Enter posts its empty value, not C, and the record holds no response",
+    () =>
+      Effect.gen(function* unprompted() {
+        const configuration = yield* configure({});
+
+        for (const extra of [{ selected: true }, { SELECTED: "" }] as const) {
+          const selectingC = (props: Attributes, children: readonly Node[]): Element =>
+            h("option", props["value"] === "C" ? { ...props, ...extra } : props, children);
+          const page = pageOf(
+            yield* Effect.fromResult(
+              render(fruitItem.redacted, configuration, {
+                instance,
+                parts: { "inline-choice-interaction": { option: selectingC } },
+              }),
+            ),
+            Option.none(),
+          );
+
+          assert.deepStrictEqual(valuesIn(page, fruits.response), ["", "A", "B", "C"]);
+
+          const taken = take(fruitItem, configuration, walk(page, ["Tab", "Enter"]));
+
+          assert.deepStrictEqual(
+            taken.sent,
+            { [fruits.response]: [""] },
+            `under ${Object.keys(extra).join(", ")}, the select posts its Placeholder`,
+          );
+
+          const record = yield* scored(fruitItem, taken);
+
+          assert.deepStrictEqual(valuesOf(record.responses, fruits.response), []);
+        }
+      }),
   );
 });

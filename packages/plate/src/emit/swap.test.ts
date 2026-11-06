@@ -1,10 +1,16 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
+import { configure } from "#plate/configuration.ts";
 import { h, text } from "#plate/emit/node.ts";
 import type { Attributes, Element, Node } from "#plate/emit/node.ts";
 import { rowFor } from "#plate/emit/parts.ts";
 import type { PartRow } from "#plate/emit/parts.ts";
 import { applyPart } from "#plate/emit/swap.ts";
+import type { BodyNode, InlineChoiceInteraction, Item } from "#plate/model/item.ts";
+import { redactItem } from "#plate/payload.ts";
+import { render } from "#plate/render.ts";
+import type { Options } from "#plate/render.ts";
+import { parseHtml } from "#plate/test/round-trip.ts";
 
 /**
  * The Choice parts' markers, read from the part table as an emitter reads them.
@@ -918,6 +924,458 @@ describe("applyPart, the select joint rule", () => {
         for (const [index, child] of result.children.entries()) {
           assert.strictEqual(child, options[index]);
         }
+      }),
+  );
+});
+
+/**
+ * Construct a replacement that returns a `tag` element holding the props it is handed with
+ * `extra` laid over them, and the children it is handed.
+ *
+ * @param tag The element the replacement returns.
+ * @param extra The attributes the replacement adds.
+ * @returns A part function returning a `tag` element.
+ */
+const adding = (tag: string, extra: Attributes) => (props: Attributes, children: readonly Node[]) =>
+  h(tag, { ...props, ...extra }, children);
+
+describe("applyPart, the state attributes plate leaves off", () => {
+  /**
+   * The Inline Choice Control's row.
+   */
+  const selectRow = rowFor("inline-choice-interaction", "control");
+
+  /**
+   * The Inline Choice Control's attributes in answering, as its connect function computes them:
+   * no `disabled` and no `aria-describedby`.
+   */
+  const selectProps: Attributes = {
+    "aria-label": "Answer",
+    autocomplete: "off",
+    "data-slot": selectRow.slot,
+    id: "i1-RESPONSE-control-0",
+    name: "RESPONSE",
+  };
+
+  /**
+   * The Inline Choice Option's row.
+   */
+  const optionRow = rowFor("inline-choice-interaction", "option");
+
+  /**
+   * An Option's attributes for a choice that is not restored: no `selected`.
+   */
+  const optionProps: Attributes = { "data-slot": optionRow.slot, value: "A" };
+
+  /**
+   * The Text Entry Control's row.
+   */
+  const textRow = rowFor("text-entry-interaction", "control");
+
+  /**
+   * The Text Entry Control's attributes in answering: no `readonly` and no `disabled`.
+   */
+  const textProps: Attributes = {
+    "aria-label": "Answer",
+    autocomplete: "off",
+    "data-slot": textRow.slot,
+    id: "i1-RESPONSE-control-0",
+    name: "RESPONSE",
+    type: "text",
+  };
+
+  /**
+   * The Extended Text Control's row.
+   */
+  const essayRow = rowFor("extended-text-interaction", "control");
+
+  /**
+   * The Extended Text Control's attributes in answering: no `readonly` and no `disabled`.
+   */
+  const essayProps: Attributes = {
+    "aria-label": "Answer",
+    "data-slot": essayRow.slot,
+    id: "i1-RESPONSE-control-0",
+    name: "RESPONSE",
+  };
+
+  it.effect(
+    "[Q-12] drops an Option replacement's selected, in any case, on a choice plate leaves unselected",
+    () =>
+      Effect.gen(function* optionSelectedDropped() {
+        for (const extra of [{ selected: true }, { SELECTED: "" }] as const) {
+          const result = yield* Effect.fromResult(
+            applyPart(optionRow, optionProps, [text("Apple")], adding("option", extra)),
+          );
+          assert.deepStrictEqual(spelledAs(result.attrs, "selected"), [], Object.keys(extra)[0]);
+          assert.strictEqual(result.attrs["value"], "A");
+        }
+      }),
+  );
+
+  it.effect(
+    "[Q-12] drops disabled and hidden, in any case, from an Option or Placeholder replacement",
+    () =>
+      Effect.gen(function* optionHiddenDropped() {
+        for (const part of ["option", "placeholder"] as const) {
+          const row = rowFor("inline-choice-interaction", part);
+          const props: Attributes = { "data-slot": row.slot, value: part === "option" ? "A" : "" };
+          for (const extra of [
+            { disabled: true },
+            { hidden: true },
+            { DISABLED: "", HIDDEN: "hidden" },
+          ] as const) {
+            const result = yield* Effect.fromResult(
+              applyPart(row, props, [text("Apple")], adding("option", extra)),
+            );
+            const named = Object.keys(extra).join(" ");
+            assert.deepStrictEqual(spelledAs(result.attrs, "disabled"), [], `${part} ${named}`);
+            assert.deepStrictEqual(spelledAs(result.attrs, "hidden"), [], `${part} ${named}`);
+          }
+        }
+      }),
+  );
+
+  it.effect(
+    "drops a Choice Control replacement's checked, in any case, on an unchecked choice",
+    () =>
+      Effect.gen(function* choiceCheckedDropped() {
+        for (const extra of [{ checked: true }, { CHECKED: "checked" }] as const) {
+          const result = yield* Effect.fromResult(
+            applyPart(
+              rowFor("choice-interaction", "control"),
+              controlProps,
+              [],
+              adding("input", extra),
+            ),
+          );
+          assert.deepStrictEqual(spelledAs(result.attrs, "checked"), [], Object.keys(extra)[0]);
+          assert.strictEqual(result.attrs["value"], "A");
+        }
+      }),
+  );
+
+  it.effect(
+    "drops a text Control replacement's readonly or disabled while plate leaves it editable",
+    () =>
+      Effect.gen(function* textStateDropped() {
+        for (const [row, props, tag] of [
+          [textRow, textProps, "input"],
+          [essayRow, essayProps, "textarea"],
+        ] as const) {
+          for (const extra of [{ readonly: true }, { disabled: true }, { READONLY: "" }] as const) {
+            const result = yield* Effect.fromResult(applyPart(row, props, [], adding(tag, extra)));
+            const named = `${row.slot} ${Object.keys(extra)[0]}`;
+            assert.deepStrictEqual(spelledAs(result.attrs, "readonly"), [], named);
+            assert.deepStrictEqual(spelledAs(result.attrs, "disabled"), [], named);
+            assert.strictEqual(result.attrs["name"], "RESPONSE", named);
+          }
+        }
+      }),
+  );
+
+  it.effect(
+    "[Q-12] drops a select Control replacement's disabled while plate leaves it enabled",
+    () =>
+      Effect.gen(function* selectDisabledDropped() {
+        const result = yield* Effect.fromResult(
+          applyPart(selectRow, selectProps, [], adding("select", { DISABLED: "" })),
+        );
+        assert.deepStrictEqual(spelledAs(result.attrs, "disabled"), []);
+      }),
+  );
+
+  it.effect("drops a navigation button replacement's disabled where plate leaves it enabled", () =>
+    Effect.gen(function* navigationDisabledDropped() {
+      for (const part of ["previous", "next", "itemButton", "submit", "end"] as const) {
+        const row = rowFor("test-navigation", part);
+        const props: Attributes = { "data-intent": part, "data-slot": row.slot };
+        const result = yield* Effect.fromResult(
+          applyPart(row, props, [text(part)], adding("button", { disabled: true })),
+        );
+        assert.deepStrictEqual(spelledAs(result.attrs, "disabled"), [], part);
+        assert.strictEqual(result.attrs["type"], "button", part);
+      }
+    }),
+  );
+
+  it.effect(
+    "[Q-12] keeps a replacement's data attribute, title and aria-describedby where plate writes none, beside a dropped state",
+    () =>
+      Effect.gen(function* othersStand() {
+        const result = yield* Effect.fromResult(
+          applyPart(
+            selectRow,
+            selectProps,
+            [],
+            adding("select", {
+              "aria-describedby": "host-hint",
+              "data-host": "1",
+              disabled: true,
+              title: "Fruit",
+            }),
+          ),
+        );
+        assert.strictEqual(result.attrs["aria-describedby"], "host-hint");
+        assert.strictEqual(result.attrs["data-host"], "1");
+        assert.strictEqual(result.attrs["title"], "Fruit");
+        assert.deepStrictEqual(spelledAs(result.attrs, "disabled"), []);
+      }),
+  );
+
+  it.effect(
+    "[Q-12] keeps plate's selected on a restored Option and plate's disabled in review, over a replacement's in another case",
+    () =>
+      Effect.gen(function* plateStateStands() {
+        const option = yield* Effect.fromResult(
+          applyPart(
+            optionRow,
+            { ...optionProps, selected: true },
+            [text("Apple")],
+            adding("option", { SELECTED: "host" }),
+          ),
+        );
+        assert.deepStrictEqual(spelledAs(option.attrs, "selected"), [["selected", true]]);
+
+        const select = yield* Effect.fromResult(
+          applyPart(
+            selectRow,
+            { ...selectProps, disabled: true },
+            [],
+            adding("select", { DISABLED: "host" }),
+          ),
+        );
+        assert.deepStrictEqual(spelledAs(select.attrs, "disabled"), [["disabled", true]]);
+      }),
+  );
+});
+
+describe("applyPart, a Label that is not a label", () => {
+  it.effect("writes no for onto a Label replacement whose root is a span, and keeps its id", () =>
+    Effect.gen(function* labelAsSpan() {
+      for (const interaction of ["choice-interaction", "inline-choice-interaction"] as const) {
+        const row = rowFor(interaction, "label");
+        const props: Attributes = {
+          "data-slot": row.slot,
+          for: "i1-RESPONSE-control",
+          id: "i1-RESPONSE-label",
+        };
+        const result = yield* Effect.fromResult(applyPart(row, props, [text("Fruit")], as("span")));
+        assert.strictEqual(result.tag, "span", interaction);
+        assert.deepStrictEqual(spelledAs(result.attrs, "for"), [], interaction);
+        assert.strictEqual(result.attrs["id"], "i1-RESPONSE-label", interaction);
+      }
+    }),
+  );
+
+  it.effect(
+    "writes for onto a Label replacement whose root is a label, over the replacement's",
+    () =>
+      Effect.gen(function* labelKeepsFor() {
+        const row = rowFor("inline-choice-interaction", "label");
+        const props: Attributes = {
+          "data-slot": row.slot,
+          for: "i1-RESPONSE-control",
+          id: "i1-RESPONSE-label",
+        };
+        const result = yield* Effect.fromResult(
+          applyPart(row, props, [text("Fruit")], adding("label", { FOR: "elsewhere" })),
+        );
+        assert.deepStrictEqual(spelledAs(result.attrs, "for"), [["for", "i1-RESPONSE-control"]]);
+      }),
+  );
+});
+
+/**
+ * The instance every render here uses.
+ */
+const instance = "swap-0";
+
+/**
+ * Construct a text node of the body.
+ *
+ * @param value The text.
+ * @returns The node.
+ */
+const words = (value: string): BodyNode => ({ kind: "text", text: value });
+
+/**
+ * An Inline Choice of three fruits, `A`, `B` and `C`, with a Label that gives text.
+ */
+const fruits: InlineChoiceInteraction = {
+  ariaLabel: Option.none(),
+  ariaLabelledby: Option.none(),
+  choices: [
+    { content: [words("apples")], fixed: false, identifier: "A" },
+    { content: [words("pears")], fixed: false, identifier: "B" },
+    { content: [words("plums")], fixed: false, identifier: "C" },
+  ],
+  class: "",
+  kind: "inline-choice",
+  label: Option.some([words("Fruit")]),
+  messages: { min: Option.none() },
+  minChoices: 0n,
+  path: "qti-assessment-item/qti-item-body/p/qti-inline-choice-interaction",
+  placeholder: Option.none(),
+  required: false,
+  response: "RESPONSE",
+  shuffle: false,
+};
+
+/**
+ * An item whose body is one sentence holding {@link fruits}, bound to a single identifier response.
+ */
+const fruitItem: Item = {
+  body: [
+    {
+      attributes: [],
+      children: [words("I would like "), fruits, words(".")],
+      kind: "element",
+      path: "qti-assessment-item/qti-item-body/p",
+      tag: "p",
+    },
+  ],
+  document: "items/fruit.xml",
+  identifier: "fruit",
+  lang: Option.none(),
+  outcomes: new Map(),
+  processing: Option.none(),
+  responses: new Map([
+    [
+      fruits.response,
+      {
+        areaMapping: Option.none(),
+        baseType: "identifier",
+        cardinality: "single",
+        correct: Option.none(),
+        defaultValue: Option.none(),
+        identifier: fruits.response,
+        mapping: Option.none(),
+      },
+    ],
+  ]),
+  title: "Fruit",
+  unsupported: [],
+};
+
+/**
+ * Render {@link fruitItem} and place it in a form, as a host composes one.
+ *
+ * @param options The render's options, beside its instance.
+ * @returns The form holding the rendered item.
+ */
+const fruitForm = (options: Options) =>
+  Effect.gen(function* renderFruitForm() {
+    const configuration = yield* configure({});
+    const { html } = yield* Effect.fromResult(
+      render(redactItem(fruitItem), configuration, { ...options, instance }),
+    );
+    const [form] = parseHtml(`<form method="post">${html}</form>`);
+
+    return form?.kind === "element" ? form : assert.fail("The render placed no form.");
+  });
+
+/**
+ * List an element and every element below it, in document order.
+ *
+ * @param element The subtree's root.
+ * @returns The elements, `element` first.
+ */
+const elementsIn = (element: Element): readonly Element[] => [
+  element,
+  ...element.children.flatMap((child) => (child.kind === "element" ? elementsIn(child) : [])),
+];
+
+/**
+ * Give the values of the options a form's elements hold that carry `selected` in any case.
+ *
+ * @param form The form.
+ * @returns Each selected option's `value`, in document order.
+ */
+const selectedValues = (form: Element): readonly (string | true | undefined)[] =>
+  elementsIn(form)
+    .filter(
+      (element) => element.tag === "option" && spelledAs(element.attrs, "selected").length > 0,
+    )
+    .map((element) => element.attrs["value"]);
+
+describe("render, a host replacement and the state plate leaves off", () => {
+  /**
+   * An Option replacement that marks every choice selected, in each spelling.
+   */
+  const selecting = [{ selected: true }, { SELECTED: "" }] as const;
+
+  it.effect(
+    "[Q-12] selects only the Placeholder, whose value is empty, when nothing is restored, under an Option replacement that selects every choice",
+    () =>
+      Effect.gen(function* nothingRestored() {
+        for (const extra of selecting) {
+          const form = yield* fruitForm({
+            parts: { "inline-choice-interaction": { option: adding("option", extra) } },
+          });
+          assert.deepStrictEqual(selectedValues(form), [""], Object.keys(extra)[0]);
+        }
+      }),
+  );
+
+  it.effect(
+    "[Q-12] selects only the restored Option under an Option replacement that selects every choice",
+    () =>
+      Effect.gen(function* restored() {
+        for (const extra of selecting) {
+          const form = yield* fruitForm({
+            parts: { "inline-choice-interaction": { option: adding("option", extra) } },
+            values: {
+              [fruits.response]: {
+                baseType: "identifier",
+                cardinality: "single",
+                values: [{ baseType: "identifier", value: "B" }],
+              },
+            },
+          });
+          assert.deepStrictEqual(selectedValues(form), ["B"], Object.keys(extra)[0]);
+        }
+      }),
+  );
+
+  it.effect(
+    "[Q-12] keeps the way back to no answer under a Placeholder replacement that disables or hides it",
+    () =>
+      Effect.gen(function* placeholderKept() {
+        const form = yield* fruitForm({
+          parts: {
+            "inline-choice-interaction": {
+              placeholder: adding("option", { disabled: true, hidden: true }),
+            },
+          },
+        });
+        const placeholder = elementsIn(form).find(
+          (element) =>
+            element.attrs["data-slot"] === rowFor("inline-choice-interaction", "placeholder").slot,
+        );
+        assert.strictEqual(placeholder?.attrs["value"], "");
+        assert.deepStrictEqual(spelledAs(placeholder?.attrs ?? {}, "disabled"), []);
+        assert.deepStrictEqual(spelledAs(placeholder?.attrs ?? {}, "hidden"), []);
+      }),
+  );
+
+  it.effect(
+    "[Q-12] writes no for onto a Label swapped to a span, and the Control's aria-labelledby still names it",
+    () =>
+      Effect.gen(function* spanLabel() {
+        const form = yield* fruitForm({
+          parts: { "inline-choice-interaction": { label: as("span") } },
+        });
+        const elements = elementsIn(form);
+        const span = elements.find(
+          (element) =>
+            element.attrs["data-slot"] === rowFor("inline-choice-interaction", "label").slot,
+        );
+        const select = elements.find((element) => element.tag === "select");
+        assert.strictEqual(span?.tag, "span");
+        assert.deepStrictEqual(spelledAs(span?.attrs ?? {}, "for"), []);
+        assert.isDefined(span?.attrs["id"]);
+        assert.strictEqual(select?.attrs["aria-labelledby"], span?.attrs["id"]);
       }),
   );
 });
