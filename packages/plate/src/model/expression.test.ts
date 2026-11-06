@@ -1,4 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
+import { evaluators } from "#plate/engine/evaluate.ts";
 import { arithmeticEvaluators } from "#plate/engine/expressions/arithmetic.ts";
 import { comparisonEvaluators } from "#plate/engine/expressions/comparison.ts";
 import { containersEvaluators } from "#plate/engine/expressions/containers.ts";
@@ -17,6 +18,7 @@ import {
   isUnlanded,
   stringOrRefOf,
 } from "#plate/model/expression.ts";
+import type { DeclarationFacet, ExpressionKind, ReferenceEntry } from "#plate/model/expression.ts";
 import { arithmeticReaders, arithmeticRules } from "#plate/model/expressions/arithmetic.ts";
 import { comparisonReaders, comparisonRules } from "#plate/model/expressions/comparison.ts";
 import { containersReaders, containersRules } from "#plate/model/expressions/containers.ts";
@@ -112,6 +114,84 @@ const kindCounts = (families: readonly object[]): ReadonlyMap<string, number> =>
  * Each of the 64 kinds, counted once.
  */
 const once = Object.fromEntries(expressionKinds.map((kind) => [kind, 1]));
+
+/**
+ * Report whether a kind is landed in all three of its tables: its rule is not the unlanded rule,
+ * its reader spec is not the stub, and its evaluator is not the stub marker.
+ *
+ * @param kind The kind.
+ * @returns Whether every table holds a landed entry for the kind.
+ */
+const landedEverywhere = (kind: ExpressionKind): boolean =>
+  !isUnlanded(kindRules[kind]) &&
+  kindReaders[kind]._tag !== "unlanded" &&
+  evaluators[kind] !== "unlanded";
+
+/**
+ * The declaration facet of each kind whose `identifier` names a declaration, by kind: a variable
+ * for `qti-variable` and `qti-default`, a response for the three that read a response. Every
+ * other kind declares none.
+ */
+const declarationFacets: Partial<Record<ExpressionKind, DeclarationFacet>> = {
+  correct: { attribute: "identifier", expected: "response" },
+  default: { attribute: "identifier", expected: "variable" },
+  "map-response": { attribute: "identifier", expected: "response" },
+  "map-response-point": { attribute: "identifier", expected: "response" },
+  variable: { attribute: "identifier", expected: "variable" },
+};
+
+/**
+ * The reference facet of each kind with an attribute whose XSD type admits a variable's name, by
+ * kind: the attribute, its field, the base type the named variable must have, whether a reference
+ * there is checked, and whether the attribute is a list. Every other kind declares none.
+ */
+const referenceFacets: Partial<Record<ExpressionKind, readonly ReferenceEntry[]>> = {
+  "any-n": [
+    { attribute: "max", baseType: "integer", checked: true, field: "max", list: false },
+    { attribute: "min", baseType: "integer", checked: true, field: "min", list: false },
+  ],
+  equal: [
+    { attribute: "tolerance", baseType: "float", checked: false, field: "tolerance", list: true },
+  ],
+  "equal-rounded": [
+    { attribute: "figures", baseType: "integer", checked: true, field: "figures", list: false },
+  ],
+  index: [{ attribute: "n", baseType: "integer", checked: true, field: "n", list: false }],
+  "pattern-match": [
+    { attribute: "pattern", baseType: "string", checked: true, field: "pattern", list: false },
+  ],
+  "random-float": [
+    { attribute: "max", baseType: "float", checked: true, field: "max", list: false },
+    { attribute: "min", baseType: "float", checked: true, field: "min", list: false },
+  ],
+  "random-integer": [
+    { attribute: "max", baseType: "integer", checked: true, field: "max", list: false },
+    { attribute: "min", baseType: "integer", checked: true, field: "min", list: false },
+    { attribute: "step", baseType: "integer", checked: true, field: "step", list: false },
+  ],
+  repeat: [
+    {
+      attribute: "number-repeats",
+      baseType: "integer",
+      checked: true,
+      field: "numberRepeats",
+      list: false,
+    },
+  ],
+  "round-to": [
+    { attribute: "figures", baseType: "integer", checked: true, field: "figures", list: false },
+  ],
+};
+
+/**
+ * Order a reference facet's entries by attribute, so two facets compare by their entries and not
+ * by the order a family declares them in.
+ *
+ * @param entries The facet's entries.
+ * @returns The entries, by attribute.
+ */
+const byAttribute = (entries: readonly ReferenceEntry[]): readonly ReferenceEntry[] =>
+  entries.toSorted((left, right) => left.attribute.localeCompare(right.attribute));
 
 describe("expressionKinds", () => {
   it("holds 64 kinds, none repeated", () => {
@@ -231,44 +311,48 @@ describe("the expression families", () => {
 });
 
 describe("kindRules", () => {
-  it("holds a landed rule for each of M1's eight kinds and the unlanded rule for every other kind", () => {
-    const landed = expressionKinds.filter((kind) => !isUnlanded(kindRules[kind]));
-    const stubbed = expressionKinds.filter((kind) => isUnlanded(kindRules[kind]));
+  it("holds the unlanded rule for exactly the kinds whose reader spec is the stub and whose evaluator is the stub marker", () => {
+    const unlanded = expressionKinds.filter((kind) => isUnlanded(kindRules[kind]));
 
-    assert.deepStrictEqual(landed, [
-      "base-value",
-      "correct",
-      "equal",
-      "is-null",
-      "map-response",
-      "map-response-point",
-      "match",
-      "variable",
-    ]);
-    assert.lengthOf(stubbed, 56);
-  });
-
-  it("declares the declaration facet of variable, correct, map-response and map-response-point", () => {
-    const declarations = Object.fromEntries(
-      expressionKinds.flatMap((kind) => {
-        const facet = kindRules[kind].declaration;
-
-        return facet === undefined ? [] : [[kind, facet.expected]];
-      }),
-    );
-
-    assert.deepStrictEqual(declarations, {
-      correct: "response",
-      "map-response": "response",
-      "map-response-point": "response",
-      variable: "variable",
-    });
-  });
-
-  it("declares no reference facet for any kind yet", () => {
     assert.deepStrictEqual(
-      expressionKinds.filter((kind) => kindRules[kind].references.length > 0),
-      [],
+      {
+        evaluators: expressionKinds.filter((kind) => evaluators[kind] === "unlanded"),
+        readers: expressionKinds.filter((kind) => kindReaders[kind]._tag === "unlanded"),
+      },
+      { evaluators: unlanded, readers: unlanded },
+    );
+  });
+
+  it("declares the declaration facet of each kind landed in all three tables that names a declaration, and none on any other kind", () => {
+    assert.deepStrictEqual(
+      Object.fromEntries(
+        expressionKinds.flatMap((kind) => {
+          const facet = kindRules[kind].declaration;
+
+          return facet === undefined ? [] : [[kind, facet]];
+        }),
+      ),
+      Object.fromEntries(
+        expressionKinds.flatMap((kind) => {
+          const facet = declarationFacets[kind];
+
+          return facet === undefined || !landedEverywhere(kind) ? [] : [[kind, facet]];
+        }),
+      ),
+    );
+  });
+
+  it("declares a reference facet only on a kind landed in all three tables, with the entries its attributes give", () => {
+    const declaring = expressionKinds.filter((kind) => kindRules[kind].references.length > 0);
+
+    assert.deepStrictEqual(
+      Object.fromEntries(declaring.map((kind) => [kind, byAttribute(kindRules[kind].references)])),
+      Object.fromEntries(
+        declaring.map((kind) => [
+          kind,
+          landedEverywhere(kind) ? byAttribute(referenceFacets[kind] ?? []) : [],
+        ]),
+      ),
     );
   });
 
@@ -326,26 +410,11 @@ describe("kindRules", () => {
 });
 
 describe("kindReaders", () => {
-  it("reads M1's eight kinds, base-value and equal by their custom readers, and stubs every other kind", () => {
-    const tags = Object.fromEntries(
-      expressionKinds.flatMap((kind) => {
-        const tag = kindReaders[kind]._tag;
-
-        return tag === "unlanded" ? [] : [[kind, tag]];
-      }),
+  it("lists as landed exactly the kinds whose rule is landed, in the order of the kinds", () => {
+    assert.deepStrictEqual(
+      landedKinds,
+      expressionKinds.filter((kind) => !isUnlanded(kindRules[kind])),
     );
-
-    assert.deepStrictEqual(tags, {
-      "base-value": "custom",
-      correct: "generic",
-      equal: "custom",
-      "is-null": "generic",
-      "map-response": "generic",
-      "map-response-point": "generic",
-      match: "generic",
-      variable: "generic",
-    });
-    assert.deepStrictEqual<readonly string[]>(landedKinds, Object.keys(tags));
   });
 
   it("stubs a kind's reader exactly when its rule is the unlanded rule", () => {

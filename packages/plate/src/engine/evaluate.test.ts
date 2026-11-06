@@ -1231,27 +1231,14 @@ describe("map-response-point", () => {
 });
 
 describe("evaluators", () => {
-  it("holds an evaluator for each of M1's eight kinds and the stub marker for every other kind", () => {
-    const landed = expressionKinds.filter((kind) => evaluators[kind] !== "unlanded");
-    const stubbed = expressionKinds.filter((kind) => evaluators[kind] === "unlanded");
-    for (const kind of landed) {
-      assert.isFunction(evaluators[kind], kind);
+  it("holds one entry for each of the 64 kinds, each an evaluator or the stub marker", () => {
+    const entries = Object.entries(evaluators);
+    for (const [kind, entry] of entries) {
+      if (entry !== "unlanded") {
+        assert.isFunction(entry, kind);
+      }
     }
 
-    assert.deepStrictEqual(landed, [
-      "base-value",
-      "correct",
-      "equal",
-      "is-null",
-      "map-response",
-      "map-response-point",
-      "match",
-      "variable",
-    ]);
-    assert.deepStrictEqual(
-      stubbed,
-      expressionKinds.filter((kind) => !landed.includes(kind)),
-    );
-    assert.lengthOf(stubbed, 56);
+    assert.deepStrictEqual(entries.map(([kind]) => kind).toSorted(), expressionKinds.toSorted());
   });
 });
