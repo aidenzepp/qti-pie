@@ -14,8 +14,8 @@
  *   and its neighbours are the closed relations that replace the seeded ones.
  * - `within` and `ref` are erased as grizzle's old API, a name imported from `@bjornpagen/grizzle`.
  *   `ref(` is the vocabulary IR's type-reference helper (`vocab/inventory/attributes.ts`, which
- *   `vocab/derive/declarations.ts` emits), `within(` is `vocab/sequencing.ts`'s and a facets test's
- *   own helper, and `Compute.within` is grizzle's current guard.
+ *   `vocab/derive/declarations.ts` emits), `within(` is a facets test's own helper, and
+ *   `Compute.within` is grizzle's current guard.
  */
 import { globSync, readFileSync } from "node:fs";
 import path from "node:path";
@@ -226,7 +226,7 @@ const erasures: readonly Erasure[] = [
     erases: "grizzle's old within statement, as a grizzle import",
     find: importedFromGrizzle("within"),
     kept: [
-      "within(names, held.names)",
+      'within("length", (size, held) => size === held)(n)',
       "Compute.within(x, 0n, 9n)",
       'import { Compute } from "@bjornpagen/grizzle";',
     ],
