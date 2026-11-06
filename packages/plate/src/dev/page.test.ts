@@ -1128,6 +1128,61 @@ describe("dev/page.ts", () => {
     }),
   );
 
+  it.effect("the /item form turns autocomplete off, as opened and after a post", () =>
+    Effect.gen(function* autocompleteOff() {
+      const handle = playground();
+      const opened = yield* get(handle, itemTarget(paths.bg007));
+      const answered = yield* post(handle, actionOf(opened.html), [
+        [entryName(instanceOf(opened.html), "RESPONSE"), "true"],
+      ]);
+
+      for (const { html, url } of [opened, answered]) {
+        assert.strictEqual(
+          find(html, (element) => element.tag === "form").attrs["autocomplete"],
+          "off",
+          url,
+        );
+      }
+    }),
+  );
+
+  it.effect(
+    "a method a route of the playground's own does not take answers 405, with Allow naming the methods the route takes, on a page with the page headers and the theme box",
+    () =>
+      Effect.gen(function* refusedMethods() {
+        const handle = playground();
+        const opened = yield* get(handle, itemTarget(paths.bg007));
+        const refused = [
+          ["POST", "/", "GET"],
+          ["POST", "/verdicts", "GET"],
+          ["POST", "/ledger", "GET"],
+          ["PUT", itemTarget(paths.bg007), "GET"],
+          ["POST", itemTarget(paths.bg007), "GET"],
+          ["PUT", actionOf(opened.html), "GET, POST"],
+          ["POST", "/assets/QTI3_BPIG_Examples/items/images/airplane.png", "GET"],
+          ["POST", "/styles.css", "GET"],
+          ["POST", "/playground.css", "GET"],
+          ["POST", "/theme.css", "GET"],
+          ["GET", "/theme", "POST"],
+        ] as const;
+
+        for (const [method, target, allow] of refused) {
+          const asked = `${method} ${target}`;
+          const { html, response } = yield* send(
+            handle,
+            new Request(new URL(target, origin), { method }),
+          );
+
+          assert.strictEqual(response.status, 405, asked);
+          assert.strictEqual(response.headers.get("allow"), allow, asked);
+          for (const [name, value] of Object.entries(pageHeaders)) {
+            assert.strictEqual(response.headers.get(name), value, `${asked}: ${name}`);
+          }
+          assertThemeBox(html);
+        }
+      }),
+  );
+
   it.effect(
     "an item's HTML and SVG objects are allowed as nested documents (frame-src 'self'), and each document keeps the asset headers",
     () =>
@@ -1971,6 +2026,7 @@ describe("dev/page.ts: M2's routes", () => {
         assert.include(results.html, location.slice("/sessions/".length));
         assert.strictEqual(review.response.status, 404, "an open item is not reviewed");
         assert.strictEqual(startGet.response.status, 405, "a Start is a POST");
+        assert.strictEqual(startGet.response.headers.get("allow"), "POST");
         assert.strictEqual(listingPost.response.status, 405);
       }),
   );

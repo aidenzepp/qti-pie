@@ -1055,8 +1055,9 @@ const confirmPost = Effect.fn("playground.session.confirm")(function* confirmPos
  * Route one request for the playground's test sessions: `POST /packages/<id>/tests`, which starts
  * a session of the test a Start button names; `GET` and `POST /sessions/<sid>`, a session's page
  * and its form's posts; and `GET` and `POST /sessions/<sid>/confirm`, the confirm page before a
- * part's end and its Confirm and Return. Another method there is a 405; any other path, an unknown
- * package or session, and an id that does not decode are 404s.
+ * part's end and its Confirm and Return. Another method there is a 405 whose `Allow` names the
+ * methods the path takes; any other path, an unknown package or session, and an id that does not
+ * decode are 404s.
  *
  * @example
  *   const outcome = await Effect.runPromise(
@@ -1085,7 +1086,9 @@ export const routeSessions = (
   const allowed = kind === "start" ? ["POST"] : ["GET", "POST"];
   if (!allowed.includes(request.method)) {
     return Effect.succeed(
-      notePage(405, "Method not allowed", `${request.method} is not taken at ${url.pathname}.`),
+      notePage(405, "Method not allowed", `${request.method} is not taken at ${url.pathname}.`, {
+        allow: allowed.join(", "),
+      }),
     );
   }
 

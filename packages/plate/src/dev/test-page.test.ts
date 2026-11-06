@@ -630,7 +630,10 @@ describe("routeSessions", () => {
           404,
         );
         assert.strictEqual(statusAt(yield* send(bench, `/packages/${fixture.id}/tests`, [])), 400);
-        assert.strictEqual(statusAt(yield* send(bench, `/packages/${fixture.id}/tests`)), 405);
+
+        const startGet = yield* send(bench, `/packages/${fixture.id}/tests`);
+        assert.strictEqual(statusAt(startGet), 405);
+        assert.deepStrictEqual(shown(bench, startGet, "/packages").page.headers, { allow: "POST" });
         assert.strictEqual(bench.playground.sessions.size, 1);
       }),
   );
@@ -991,13 +994,18 @@ describe("routeSessions", () => {
   );
 
   it.effect(
-    "answers 404 for an unknown session or path, 400 for a post with no form or no intent, and 405 for another method",
+    "answers 404 for an unknown session or path, 400 for a post with no form or no intent, and 405 with Allow naming GET and POST for another method",
     () =>
       Effect.gen(function* refusedRequests() {
         const bench = yield* benchOf(caches.fixture, fixture, fixturesRoot);
         const id = yield* start(bench);
         const statusAt = (outcome: Page | Response): number =>
           shown(bench, outcome, `/sessions/${id}`).page.status;
+        const headersAt = (outcome: Page | Response) =>
+          shown(bench, outcome, `/sessions/${id}`).page.headers;
+        const unknown = yield* send(bench, "/sessions/s-unknown");
+        const confirmPut = yield* send(bench, `/sessions/${id}/confirm`, undefined, "PUT");
+        const sessionPut = yield* send(bench, `/sessions/${id}`, undefined, "PUT");
         const notAForm = bench.provide(
           routeSessions(
             bench.playground,
@@ -1009,22 +1017,22 @@ describe("routeSessions", () => {
           ),
         );
 
-        assert.strictEqual(statusAt(yield* send(bench, "/sessions/s-unknown")), 404);
+        assert.strictEqual(statusAt(unknown), 404);
+        assert.deepStrictEqual(headersAt(unknown), {});
         assert.strictEqual(statusAt(yield* send(bench, "/sessions/s-unknown", [])), 404);
         assert.strictEqual(statusAt(yield* send(bench, "/sessions/%E0%A4%A")), 404);
         assert.strictEqual(statusAt(yield* send(bench, `/sessions/${id}/elsewhere`)), 404);
         assert.strictEqual(statusAt(yield* send(bench, "/sessions/s-unknown/confirm")), 404);
-        assert.strictEqual(
-          statusAt(yield* send(bench, `/sessions/${id}/confirm`, undefined, "PUT")),
-          405,
-        );
+        assert.strictEqual(statusAt(confirmPut), 405);
+        assert.deepStrictEqual(headersAt(confirmPut), { allow: "GET, POST" });
         assert.strictEqual(statusAt(yield* notAForm), 400);
         assert.strictEqual(statusAt(yield* send(bench, `/sessions/${id}`, [])), 400);
         assert.strictEqual(
           statusAt(yield* send(bench, `/sessions/${id}`, [[intentName(id), "jump"]])),
           400,
         );
-        assert.strictEqual(statusAt(yield* send(bench, `/sessions/${id}`, undefined, "PUT")), 405);
+        assert.strictEqual(statusAt(sessionPut), 405);
+        assert.deepStrictEqual(headersAt(sessionPut), { allow: "GET, POST" });
       }),
   );
 

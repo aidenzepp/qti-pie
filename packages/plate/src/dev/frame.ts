@@ -135,12 +135,14 @@ export interface Appearance {
 }
 
 /**
- * An HTML page before its chrome is added: its status, its language and title, the nodes inside
- * `main`, the HTML of each part its markers hold, and where its theme box returns when the page's
- * own address is not the place to go back to.
+ * An HTML page before its chrome is added: its status, the headers it carries besides
+ * {@link pageHeaders} (a 405's `Allow`), its language and title, the nodes inside `main`, the HTML
+ * of each part its markers hold, and where its theme box returns when the page's own address is
+ * not the place to go back to.
  */
 export interface Page {
   readonly back: Option.Option<string>;
+  readonly headers: Readonly<Record<string, string>>;
   readonly locale: string;
   readonly main: readonly Node[];
   readonly parts: readonly string[];
@@ -178,6 +180,7 @@ export const slot = (index: number): Element => h("plate-slot", { "data-index": 
  * @param title The page's title, as the candidate reads it.
  * @param main The nodes inside `main`.
  * @param parts The HTML of each part, in marker order.
+ * @param headers The headers the page carries besides {@link pageHeaders}, none by default.
  * @returns The page.
  */
 export const page = (
@@ -186,7 +189,8 @@ export const page = (
   title: string,
   main: readonly Node[],
   parts: readonly string[] = [],
-): Page => ({ back: Option.none(), locale, main, parts, status, title });
+  headers: Readonly<Record<string, string>> = {},
+): Page => ({ back: Option.none(), headers, locale, main, parts, status, title });
 
 /**
  * The stylesheets every page links, in cascade order: plate's default theme, the playground's own

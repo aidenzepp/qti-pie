@@ -301,10 +301,23 @@ const home: Element = h("p", {}, [h("a", { href: "/" }, [text("All documents")])
  * @param status The status code.
  * @param title The page's title and heading.
  * @param said What the page says, a developer error's message included.
+ * @param headers The headers the page carries besides the page headers, such as a 405's `Allow`.
  * @returns The page.
  */
-const notePage = (status: number, title: string, said: string): Page =>
-  page(status, "en", title, [h("h1", {}, [text(title)]), h("p", {}, [text(said)]), home]);
+const notePage = (
+  status: number,
+  title: string,
+  said: string,
+  headers: Readonly<Record<string, string>> = {},
+): Page =>
+  page(
+    status,
+    "en",
+    title,
+    [h("h1", {}, [text(title)]), h("p", {}, [text(said)]), home],
+    [],
+    headers,
+  );
 
 /**
  * Construct the 404 page every refused path answers with, a traversal included.
@@ -669,6 +682,7 @@ const itemPage = (
         {
           action: `${itemTarget(session.path, session.instance)}#${resultId(session.instance)}`,
           "aria-labelledby": titleId,
+          autocomplete: "off",
           method: "post",
           novalidate: true,
         },
@@ -1405,9 +1419,10 @@ const routeTests = (
 /**
  * Route one request: the listing, the verdicts page, the ledger page, an item page, a post, an
  * asset, a stylesheet, or a theme box post; any other path goes to {@link routeTests}. A method a
- * route does not take is a 405. A member the listing or the verdicts page cannot read is a
- * developer error there, since the page's own address exists; so is a ledger that cannot be read,
- * while a ledger not yet written shows the command that writes it.
+ * route does not take is a 405 whose `Allow` names the methods it takes. A member the listing or
+ * the verdicts page cannot read is a developer error there, since the page's own address exists;
+ * so is a ledger that cannot be read, while a ledger not yet written shows the command that
+ * writes it.
  *
  * @param playground The playground.
  * @param request The request.
@@ -1418,9 +1433,19 @@ const route = (
   request: Request,
 ): Effect.Effect<Page | Response, RouteFailure> => {
   const url = new URL(request.url);
-  const refusedMethod = Effect.succeed(
-    notePage(405, "Method not allowed", `${request.method} is not taken at ${url.pathname}.`),
-  );
+  /**
+   * Answer a method the route does not take with the 405 page, whose `Allow` names the methods it
+   * takes (RFC 9110 §15.5.6).
+   *
+   * @param allowed The methods the route takes at the request's target.
+   * @returns The 405 page.
+   */
+  const refusedMethod = (allowed: readonly string[]) =>
+    Effect.succeed(
+      notePage(405, "Method not allowed", `${request.method} is not taken at ${url.pathname}.`, {
+        allow: allowed.join(", "),
+      }),
+    );
   /**
    * Answer a GET with a page built from every member's verdict, and any other method with the 405
    * page. A member that cannot be read answers with a developer error's page.
@@ -1436,10 +1461,10 @@ const route = (
             Effect.succeed(failurePage(unreadable)),
           ),
         )
-      : refusedMethod;
+      : refusedMethod(["GET"]);
 
   if (url.pathname === "/") {
-    return request.method === "GET" ? indexPage(playground) : refusedMethod;
+    return request.method === "GET" ? indexPage(playground) : refusedMethod(["GET"]);
   }
 
   if (url.pathname === "/verdicts") {
@@ -1452,7 +1477,7 @@ const route = (
           Effect.map(ledgerPage),
           Effect.catchTag("LedgerMissing", (missing) => Effect.succeed(noLedgerPage(missing))),
         )
-      : refusedMethod;
+      : refusedMethod(["GET"]);
   }
 
   if (url.pathname === "/item") {
@@ -1463,28 +1488,32 @@ const route = (
       return openItem(playground, corpusPath);
     }
 
-    return request.method === "POST" && instance !== null
+    if (instance === null) {
+      return refusedMethod(["GET"]);
+    }
+
+    return request.method === "POST"
       ? submit(playground, request, { instance, path: corpusPath })
-      : refusedMethod;
+      : refusedMethod(["GET", "POST"]);
   }
 
   if (url.pathname.startsWith("/assets/")) {
-    return request.method === "GET" ? serveAsset(playground, url.pathname) : refusedMethod;
+    return request.method === "GET" ? serveAsset(playground, url.pathname) : refusedMethod(["GET"]);
   }
 
   const sheet = sheets.get(url.pathname);
   if (sheet !== undefined) {
-    return request.method === "GET" ? serveSheet(sheet) : refusedMethod;
+    return request.method === "GET" ? serveSheet(sheet) : refusedMethod(["GET"]);
   }
 
   if (url.pathname === "/theme.css") {
     return request.method === "GET"
       ? Effect.map(Ref.get(playground.appearance), ({ theme }) => cssResponse(themeCss(theme)))
-      : refusedMethod;
+      : refusedMethod(["GET"]);
   }
 
   if (url.pathname === "/theme") {
-    return request.method === "POST" ? postTheme(playground, request) : refusedMethod;
+    return request.method === "POST" ? postTheme(playground, request) : refusedMethod(["POST"]);
   }
 
   return routeTests(playground, request);
@@ -1506,7 +1535,7 @@ const ownTarget = (request: Request): string => {
 /**
  * Answer with a route's outcome: a response as it is, or a page written with its chrome, the
  * stored appearance read now and the theme box returning to the page's own path and query unless
- * the page names another, with the page headers.
+ * the page names another, with the page headers and then the page's own.
  *
  * @param playground The playground.
  * @param request The request.
@@ -1528,7 +1557,7 @@ const answer = (
               appearance,
               back: Option.getOrElse(outcome.back, () => ownTarget(request)),
             }),
-            { headers: pageHeaders, status: outcome.status },
+            { headers: { ...pageHeaders, ...outcome.headers }, status: outcome.status },
           ),
       );
 
