@@ -355,6 +355,7 @@ const keyRules = new Map<string, Rule>([
   ["DocumentIdentifier.(package,resource)", "root-identifier"],
   ["DocumentTitle.(package,resource)", "root-title"],
   ["Edge.(child)", "edge-parent"],
+  ["ForeignAttribute.(node,prefix,local)", "wildcard-attribute"],
   ["InteractionBinding.(document,responseIdentifier)", "binding-key"],
   ["ItemBody.(item)", "body-single"],
   ["ItemStimulusRef.(document,identifier)", "stimulus-ref-key"],

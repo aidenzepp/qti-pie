@@ -288,9 +288,9 @@ const negatives: readonly Negative[] = [
     },
     base: "operator-foreign-content",
     laws: ["primaryKey ForeignAttribute(node,prefix,local)"],
-    mapped: false,
+    mapped: true,
     name: "W9: two foreign attributes of one qualified name on a node are refused by the key",
-    rule: "document-key",
+    rule: "wildcard-attribute",
   },
   {
     alter: (draft) => {
