@@ -1253,15 +1253,20 @@ against it. A reading that is not an information-model-over-XSD case says which 
       their order is drawn at delivery and is not judged here, in either direction. `fixed`, which holds some orders
       under a shuffle, is not read, so a pair it would hold backward is accepted: a recorded limit, as reading 50's
       are (decision 227).
-    - From outside a section document a ref places, no target lies inside it: the ref is the leaf. A branch rule
-      written inside that document may name what the document holds.
+    - From outside a section document a ref places, no target lies inside it: the ref is the leaf. The information
+      model both says "branching rules should treat referred sections as leaf nodes" and binds: "Adaptive test branch
+      rules can only refer to included or directly referenced sections, they can not refer to sections that are in
+      their turn included or referenced within the referenced section" (section 7.5, `info.txt:67325`). A branch rule
+      written inside that document resolves within its own placement and may name what the document holds.
     - No target is an item ref under a section whose `qti-selection` has `with-replacement` true, anywhere above it.
     - The target names exactly one element that meets these conditions; one that two placements of a section document
-      supply twice (reading 86) is refused as ambiguous.
+      supply twice (reading 86) is refused as ambiguous. This applies only to a rule outside the section document,
+      whose target two placements can supply; a rule inside the document resolves within its own placement.
 
     Pre-conditions and branch rules are ignored in nonlinear mode (section 2.8.3), but the target rules are stated
     without that condition, so they hold in every mode. This binds pantry and plate alike. This is not a case of
-    documents in conflict. (Operator ruling "the spec wins", 2026-11-05.)
+    documents in conflict. (Operator ruling "the spec wins", 2026-11-05; amended in phase 15, 2026-11-06, for the
+    operator; decision 321.)
 
 88. **A numbered reference such as `Q01.2.SCORE` names an instance of an item ref that a selection with replacement can
     repeat, and nothing else.** The information model says "In adaptive tests that contain items that are allowed to
@@ -2270,3 +2275,9 @@ stand only beside an operator whose §4.4 syntax table lists them (`degree` besi
 none of the Recommendation's own examples, `diff` and `partialdiff`; `momentabout` beside `moment`; `logbase` beside
 `log`); beside any head that is no built-in operator (`apply`, `ci`, `csymbol`, `fn`, `semantics`, `lambda`) nothing is
 judged; `BvarQ` and `DomainQ` are the RelaxNG's on every `apply`. This binds pantry and plate alike.
+
+**Element attributes follow the Schematron's per-element lists.** On an element the Schematron's extension-attribute
+lists cover, an attribute its XSD does not declare is a `data-` attribute or the document is refused, as readings 9 and
+90 state: the Schematron is normative. Where the XSD's attribute wildcard admits an attribute the lists do not,
+readings 16 and 17 take the stricter normative source. This binds pantry and plate alike. (Label R15-j; proposed in
+phase 15, 2026-11-06, for the operator; decision 327.)

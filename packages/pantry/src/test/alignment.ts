@@ -384,7 +384,13 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     },
   ],
   [86, { owner: "Q5.13's `TestName`; the oracle's test name key", status: "P" }],
-  [87, { owner: "Q5.13's branch targets over `Instance`", status: "P" }],
+  [
+    87,
+    {
+      owner: "Q5.13's branch targets over `Instance`; p15-48 (a rule inside a section document)",
+      status: "P",
+    },
+  ],
   [
     88,
     {
