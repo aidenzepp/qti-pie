@@ -56,7 +56,7 @@ interface BodyTextJson {
 }
 
 /**
- * A `qti-simple-choice` in the JSON form.
+ * A `qti-simple-choice` or a `qti-inline-choice` in the JSON form.
  */
 interface SimpleChoiceJson {
   readonly content: readonly BodyNodeJson[];

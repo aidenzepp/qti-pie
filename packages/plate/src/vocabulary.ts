@@ -358,8 +358,8 @@ export const renders = {
       on: textInteractions,
       when: { cardinality: "record", kind: "cardinality" },
     },
-    // A choice a native option cannot show keeps the whole Inline Choice as its notice, as it was
-    // before plate rendered one (I8). Nothing is refused for it.
+    // An Inline Choice with a choice a native option cannot show is shown whole as this notice
+    // (I8); nothing is refused for it.
     {
       feature: "qti-inline-choice-interaction",
       on: ["qti-inline-choice-interaction"],

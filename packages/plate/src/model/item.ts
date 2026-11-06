@@ -239,13 +239,14 @@ export interface BodyText {
 }
 
 /**
- * A `qti-simple-choice`: its identifier, its content, and whether it is fixed.
+ * A `qti-simple-choice` of a Choice, or a `qti-inline-choice` of an Inline Choice, which carries
+ * the same fields: its identifier, its content, and whether it is fixed.
  */
 export interface SimpleChoice {
   readonly content: readonly BodyNode[];
   /**
    * `fixed`, an `xs:boolean`, false when absent: a fixed choice keeps its document position when
-   * its Choice is shuffled.
+   * its interaction is shuffled.
    */
   readonly fixed: boolean;
   readonly identifier: string;
