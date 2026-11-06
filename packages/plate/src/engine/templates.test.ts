@@ -71,8 +71,8 @@ const pointItems = [
 ] as const;
 
 /**
- * The point items whose inline processing maps a point through `qti-inside`, outside M1's engine,
- * by corpus path.
+ * The point items whose inline processing maps a point through `qti-inside`, which the engine runs
+ * since the text family landed, by corpus path.
  */
 const insideItems = [
   "qtiv3-examples/packaging/BBQsTest/BBQsTest.zip.d/id-992e8bd3c9ac/hotspot-maximum.xml",
@@ -566,17 +566,37 @@ describe("the built-in templates over named corpus items", { tags: ["corpus"] },
 
   for (const location of insideItems) {
     it.effect(
-      `${location} is accepted with its qti-inside processing marked and not run`,
+      `[I-9a] ${location} runs its qti-inside processing: no response scores 0, its correct point is Correct and a point outside its area Incorrect`,
       () =>
         Effect.gen(function* inside() {
           const { accepted } = yield* openAccepted(location);
+          const { item } = accepted;
+          const declaration = declarationOf(item);
+          const correct = Option.getOrElse(declaration.correct, () =>
+            assert.fail(`${location} declares no correct response`),
+          );
+          const mapping = Option.getOrElse(declaration.areaMapping, () =>
+            assert.fail(`${location} declares no area mapping`),
+          );
+          const outside: Value = {
+            baseType: "point",
+            cardinality: declaration.cardinality,
+            values: [{ baseType: "point", value: pointOutside(mapping) }],
+          };
 
-          assert.isTrue(Option.isNone(accepted.item.processing));
-          assert.isTrue(
-            accepted.unsupported.some(
-              (feature) => feature.feature === "qti-inside" && feature.shown === "mark",
-            ),
-            "qti-inside is a mark",
+          assert.isTrue(Option.isSome(item.processing));
+          assert.isFalse(
+            accepted.unsupported.some((feature) => feature.feature === "qti-inside"),
+            "qti-inside is no mark",
+          );
+          assert.strictEqual(numberOf(outcomesAfter(accepted, {})["SCORE"], "SCORE"), 0);
+          assert.strictEqual(
+            identifierOf(outcomesAfter(accepted, { [response]: correct })["FEEDBACK"], "FEEDBACK"),
+            "Correct",
+          );
+          assert.strictEqual(
+            identifierOf(outcomesAfter(accepted, { [response]: outside })["FEEDBACK"], "FEEDBACK"),
+            "Incorrect",
           );
         }),
       corpusTimeoutMs,
