@@ -185,6 +185,7 @@ describe("the test helpers", () => {
       "test/oracle.rv-k.test.ts: #pantry/test/oracle.ts",
       "test/oracle.rv-m.test.ts: #pantry/test/oracle.ts",
       "test/oracle.rv-o.test.ts: #pantry/test/oracle.ts",
+      "test/oracle.rv-p.test.ts: #pantry/test/oracle.ts",
       "test/oracle.rv-q.test.ts: #pantry/test/oracle.ts",
       "test/oracle.rv-x.test.ts: #pantry/test/oracle.ts",
       "test/oracle.test.ts: #pantry/test/oracle.ts",
