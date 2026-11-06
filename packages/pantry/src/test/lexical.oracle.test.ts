@@ -641,6 +641,20 @@ const familiesOf = (domain: ValueDomain, xsd: Option.Option<Domain>): readonly s
 const drawablePattern = 400;
 
 /**
+ * Whether a pattern repeats without a bound outside its classes and escapes (`*`, `+` or `{n,}`),
+ * which the pattern generator refuses: every repetition it draws states its bound (`matching`,
+ * `@grizzle/testing/pattern`). It refuses only after building every class the pattern names, and
+ * XML's `Char` class, astral plane included, is over a million characters, so a refusal took
+ * seconds per domain (xs:anySimpleType, xs:normalizedString, URLDType and alphabet.datatype). Such
+ * a domain is probed by its families and enumerations alone, as a refused draw left it.
+ *
+ * @param pattern - A domain's compiled pattern.
+ * @returns Whether it repeats without a bound.
+ */
+const repeatsUnbounded = (pattern: string): boolean =>
+  /[*+]|\{\d+,\}/u.test(pattern.replaceAll(/\\.|\[(?:\\.|[^\\\]])*\]/gsu, ""));
+
+/**
  * Read a numeric literal as a number: `INF`, `+INF` and `-INF` as the infinities, anything else as
  * JavaScript's `Number` reads it after trimming, so `NaN` and every non-number read `NaN`.
  *
@@ -766,7 +780,7 @@ const drawnOf = (domain: ValueDomain): readonly string[] => {
   }
 
   const drawn =
-    domain.pattern.length > drawablePattern
+    domain.pattern.length > drawablePattern || repeatsUnbounded(domain.pattern)
       ? []
       : Result.getOrElse(
           Result.try(() =>
@@ -1513,6 +1527,7 @@ describe.skipIf(!cached)("lexical.oracle.test.ts, the domains against xmllint", 
 
           const { declarations, probes, unprobed } = yield* probesOf(grammar);
           const oracle = yield* writeXsdOracle(`${outputRoot}/oracle`, declarations);
+          // Each version's batch is its own xmllint process, so the two run at once.
           const judged = yield* Effect.all(
             schemaVersions.map((version) =>
               judgeBatch(
@@ -1521,6 +1536,7 @@ describe.skipIf(!cached)("lexical.oracle.test.ts, the domains against xmllint", 
                 probes.filter((probe) => probe.version === version),
               ),
             ),
+            { concurrency: "unbounded" },
           );
           const disagreements = judged.flatMap((held) => held.disagreements);
           const matches = disagreements.map(recordOf);
