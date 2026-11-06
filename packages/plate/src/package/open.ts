@@ -85,8 +85,16 @@ export interface PackageTest {
  */
 export interface PackageContents {
   /**
-   * Every file the manifest lists by a path inside the package, by that path from the package's
-   * root: the files a host may serve from it. The manifest itself is not one.
+   * The files a host may serve from the package, by their paths from its root: every file the
+   * manifest lists by a path inside the package, except the document of each item, test, section
+   * and stimulus resource, and never the manifest.
+   *
+   * A QTI document holds what a candidate must not read, an item's correct responses and mappings
+   * among them, whatever its file is named, so it is left out by the resource that names it, not by
+   * its extension; a host reads those documents through the package and serves only what `render`
+   * writes. What stays is what an item embeds, its images, media, stylesheets and package
+   * documents, which a host serves as live documents (from another origin or under the CSP
+   * `sandbox` directive).
    */
   readonly files: ReadonlySet<string>;
   /**
@@ -735,10 +743,18 @@ const contentsOf = (
   const itemAt = (path: string): Option.Option<Accepted> =>
     verdictAt(documents, path).pipe(Option.flatMap(acceptedItem));
 
+  const documentPaths = new Set(
+    manifest.resources.flatMap((resource) =>
+      judgedTypes.has(resource.type) ? Option.toArray(documentPath(resource)) : [],
+    ),
+  );
+
   return {
     files: new Set(
       manifest.resources.flatMap((resource) =>
-        resource.files.flatMap((file) => Option.toArray(file.path)),
+        resource.files.flatMap((file) =>
+          Option.toArray(file.path).filter((path) => !documentPaths.has(path)),
+        ),
       ),
     ),
     items: byDocument(

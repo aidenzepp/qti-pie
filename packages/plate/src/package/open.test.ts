@@ -121,6 +121,31 @@ const documentVerdict = (resource: PackageResource): Option.Option<string> =>
   resource.verdict.pipe(Option.map((document) => document.verdict));
 
 /**
+ * The resource types whose document a host never serves: an item, a test, a section and a
+ * stimulus, the four QTI resources ruling R3 names.
+ */
+const qtiDocumentTypes: ReadonlySet<string> = new Set([
+  "imsqti_item_xmlv3p0",
+  "imsqti_section_xmlv3p0",
+  "imsqti_stimulus_xmlv3p0",
+  "imsqti_test_xmlv3p0",
+]);
+
+/**
+ * Give the paths of the documents a package verdict's QTI resources name, read from each
+ * resource's declared type.
+ *
+ * @param verdict The package verdict.
+ * @returns The path of each item, test, section and stimulus resource's document.
+ */
+const qtiDocumentsOf = (verdict: PackageVerdict): ReadonlySet<string> =>
+  new Set(
+    verdict.resources.flatMap((resource) =>
+      qtiDocumentTypes.has(resource.type) ? Option.toArray(resource.path) : [],
+    ),
+  );
+
+/**
  * Hold a hand-built package's files as bytes, keyed by path.
  *
  * @param files Each file's text, keyed by its path.
@@ -319,9 +344,11 @@ describe("package/open.ts", () => {
           assert.deepStrictEqual(
             [...accepted.files].toSorted(),
             [...(yield* corpusPackage(directory)).keys()]
-              .filter((file) => file !== manifestFile)
+              .filter((file) => file !== manifestFile && !qtiDocumentsOf(verdict).has(file))
               .toSorted(),
           );
+          assert.includeMembers([...qtiDocumentsOf(verdict)], ["BGtest.xml", "items/BG007.xml"]);
+          assert.isTrue(accepted.files.has("items/resources/crows.jpg"));
           assert.deepStrictEqual(documentKind(resourceOf(verdict, "BGtest")), Option.some("test"));
           assert.isTrue(Option.isNone(resourceOf(verdict, "image_resource_1").verdict));
         }),
@@ -525,10 +552,7 @@ describe("package/open.ts", () => {
               fileLocation(location, "items/a b.xml"),
             ],
           );
-          assert.deepStrictEqual([...accepted.files].toSorted(), [
-            "items/a b.xml",
-            "tests/test.xml",
-          ]);
+          assert.deepStrictEqual([...accepted.files], []);
         }),
     );
 
@@ -565,6 +589,38 @@ describe("package/open.ts", () => {
           unresolvedRef(3, { href: "https://example.org/c.xml", identifier: "c" }),
         ]);
       }),
+    );
+
+    it.effect(
+      "files lists every file a host may serve and no QTI resource's document: an item named *.html is accepted, and its document, the test's and the stimulus's stay out while the item's image and a web page stay in",
+      () =>
+        Effect.gen(function* servable() {
+          const verdict = yield* openPackage(
+            location,
+            packageOf({
+              [manifestFile]: manifestXml(
+                resourceXml("T", "imsqti_test_xmlv3p0", "tests/test.xml"),
+                '<resource identifier="Q" type="imsqti_item_xmlv3p0" href="items/q.html"><file href="items/q.html"/><file href="items/img.png"/></resource>',
+                resourceXml("S", "imsqti_stimulus_xmlv3p0", "stimuli/s.xml"),
+                resourceXml("W", "webcontent", "shared/page.html"),
+              ),
+              "items/img.png": "PNG",
+              "items/q.html": itemXml("q", "SCORE"),
+              "shared/page.html": "<p>page</p>",
+              "stimuli/s.xml": `<qti-assessment-stimulus xmlns="${qti}" identifier="s" title="s"><qti-stimulus-body><p>s</p></qti-stimulus-body></qti-assessment-stimulus>`,
+              "tests/test.xml": testXml("q.SCORE", ["q", "../items/q.html"]),
+            }),
+          );
+          const accepted = acceptedOf(verdict);
+
+          assert.deepStrictEqual(documentKind(resourceOf(verdict, "Q")), Option.some("item"));
+          assert.isTrue(accepted.items.has(fileLocation(location, "items/q.html")));
+          assert.lengthOf(accepted.stimuli, 1);
+          assert.deepStrictEqual([...accepted.files].toSorted(), [
+            "items/img.png",
+            "shared/page.html",
+          ]);
+        }),
     );
 
     it.effect("refuses a hand-built map holding ../x as package-path-outside", () =>
