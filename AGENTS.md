@@ -48,6 +48,10 @@ scripts/db.sh migrate   # grizzle migrate, then give each login its local passwo
 scripts/db.sh reset     # drop the database and this package's roles, then create and migrate
 ```
 
+Both servers run `max_locks_per_transaction = 512`, set with `ALTER SYSTEM` (so it sits in each data directory's
+`postgresql.auto.conf`), because grizzle's drift check takes one lock per relation in one transaction and the Qti chain
+exceeds PostgreSQL's default lock table (`docs/grizzle-findings.md`, the drift-check lock row).
+
 Login passwords live outside the repo in `~/.local/var/gr8des/<database>/<role>.password`. PostgreSQL roles are
 cluster-wide, so a grizzle schema name is one installation per cluster: each server holds at most one installation of
 the Qti schema at a time, a database name is never reused across the two servers, and no schema name is one grizzle's
