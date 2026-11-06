@@ -40,11 +40,19 @@ import type { InvalidSession } from "#plate/codec/session.ts";
 import type { Configuration } from "#plate/configuration.ts";
 import { page, pageHeaders, slot } from "#plate/dev/frame.ts";
 import type { Page } from "#plate/dev/frame.ts";
-import { packageAssetBase, testField, testIn } from "#plate/dev/packages.ts";
+import { testField, testIn } from "#plate/dev/packages.ts";
 import type { PackageCache, PackagesFailure } from "#plate/dev/packages.ts";
 import { entriesOf, postOf, valuesOf } from "#plate/dev/post.ts";
 import type { Post } from "#plate/dev/post.ts";
-import { failurePage, home, notePage, sessionHref, sittingOf } from "#plate/dev/sitting.ts";
+import {
+  failurePage,
+  home,
+  itemAssetBase,
+  itemOf,
+  notePage,
+  sessionHref,
+  sittingOf,
+} from "#plate/dev/sitting.ts";
 import type { Sitting } from "#plate/dev/sitting.ts";
 import { summaryPage } from "#plate/dev/review-page.ts";
 import { newSessionId } from "#plate/dev/store.ts";
@@ -70,7 +78,6 @@ import { allowedIntents } from "#plate/session/intents.ts";
 import type { Intent, Step } from "#plate/session/session.ts";
 import { current, startTest } from "#plate/session/start.ts";
 import type { ItemNotInSession, ItemView } from "#plate/session/start.ts";
-import type { Accepted } from "#plate/validate/verdict.ts";
 
 /**
  * What the session pages read and write: the playground's configuration, its packages and its
@@ -250,18 +257,6 @@ const fieldOf = (entries: readonly Entry[], name: string): Option.Option<string>
   );
 
 /**
- * Give the accepted item a session item delivers.
- *
- * @param sitting The session and its test.
- * @param ref The item ref's identifier.
- * @returns The item, or the developer error of a test that has no item for the ref.
- */
-const itemOf = (sitting: Sitting, ref: string): Result.Result<Accepted, { message: string }> =>
-  Result.fromOption(Option.fromUndefinedOr(sitting.test.items.get(ref)), () => ({
-    message: `The test ${sitting.test.test.test.title.trim()} has no item for its item ref ${ref}. Restore the package at ${sitting.package.location}.`,
-  }));
-
-/**
  * Construct the playground's replacement for every navigation button: its own submit button, named
  * for the session's intent and posting the intent the button is handed. The swap keeps everything
  * plate computed, `disabled` and `aria-current` included.
@@ -347,7 +342,7 @@ const itemTitle = (view: ItemView, state: Shown["state"], testTitle: string): st
  *
  * The form posts to the session's page with, as its fragment, the id of the Status region the
  * current item's instance gives, which the page answering a refused post holds first in reading
- * order, as phase 3's item form does: a browser opens that page at the region. The form carries
+ * order, as the item page's form does: a browser opens that page at the region. The form carries
  * `autocomplete="off"`, so a browser restores no checked Choice control over the stored values,
  * and `novalidate`, so every check is the server's; it is named by the page's heading. The item is
  * rendered with the current item's instance, configuration and disabled state, and the navigation
@@ -373,11 +368,9 @@ const itemPage = (sitting: Sitting, view: ItemView, shown: Shown): Page => {
         onSome: (input) =>
           Result.map(renderStatus(input, view.configuration), (rendered) => [rendered.html]),
       });
-      // A package item's document is `<package location>/<path from the package's root>`.
-      const documentPath = document.document.slice(sitting.package.location.length + 1);
       const item = yield* render(redact(document), view.configuration, {
         ...shown.options,
-        assetBase: packageAssetBase(sitting.package.id, documentPath),
+        assetBase: itemAssetBase(sitting, document),
         disabled: view.disabled,
         instance: view.instance,
       });
@@ -813,6 +806,13 @@ const confirmationPage = (
   const pending = state.items.filter(
     (item) => item.state === "answered" || item.state === "not-answered",
   );
+  /**
+   * Construct one of the form's submit buttons, named for the session's intent.
+   *
+   * @param posted The intent the button posts.
+   * @param label The key of the button's text.
+   * @returns The button.
+   */
   const button = (posted: Intent, label: "confirm" | "return"): Element =>
     h(
       "button",
@@ -917,6 +917,11 @@ const refusedElsewhere = (
   target: number,
   now: Date,
 ): Page => {
+  /**
+   * Answer the refusal on the current item, where the move to the item it names cannot be made.
+   *
+   * @returns The current item's page, its Status holding the refusal's message.
+   */
   const onCurrent = (): Page => intentRefusedPage(sitting, view, { post: Option.none(), refusal });
 
   return Result.match(
@@ -1088,6 +1093,12 @@ export const routeSessions = (
     return startSession(playground, request, id);
   }
 
+  /**
+   * Answer a request for a stored session's page or its confirm page, by the request's method.
+   *
+   * @param found The session and its test.
+   * @returns The page, or the redirect a post the session took answers with.
+   */
   const answer = (found: Sitting): Effect.Effect<Page | Response> => {
     if (kind === "confirm") {
       return request.method === "GET"

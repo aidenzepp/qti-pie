@@ -128,6 +128,12 @@ interface Page {
 const fetchPage = Effect.fnUntraced(function* fetchPage(
   request: Request,
 ): Effect.fn.Return<Page, RequestFailed> {
+  /**
+   * Construct the failure of this request from what the request or the read rejected with.
+   *
+   * @param cause What it rejected with.
+   * @returns The failure.
+   */
   const failed = (cause: unknown) =>
     new RequestFailed({
       detail: cause instanceof Error ? cause.message : String(cause),

@@ -1,6 +1,7 @@
 /**
  * What the dev playground's session pages and read-only views share: a stored session read back
- * with its package and test, the path of a session's page, and the pages that say one thing.
+ * with its package and test, a session item's accepted document and the asset base it renders
+ * with, the path of a session's page, and the pages that say one thing.
  *
  * `test-page.ts` answers a session's own pages and `review-page.ts` its read-only views; both read
  * a request's session through {@link sittingOf} and answer a 404 or a developer error through
@@ -14,13 +15,14 @@ import { Effect, Option, Result } from "effect";
 import { decodeSession } from "#plate/codec/session.ts";
 import { page } from "#plate/dev/frame.ts";
 import type { Page } from "#plate/dev/frame.ts";
-import { packageAt, testIn } from "#plate/dev/packages.ts";
+import { packageAssetBase, packageAt, testIn } from "#plate/dev/packages.ts";
 import type { PackageCache, PackageEntry, PackagesFailure } from "#plate/dev/packages.ts";
 import type { SessionEntry, SessionStore } from "#plate/dev/store.ts";
 import { h, text } from "#plate/emit/node.ts";
 import type { Element } from "#plate/emit/node.ts";
 import type { PackageTest } from "#plate/package/open.ts";
 import type { TestSession } from "#plate/session/session.ts";
+import type { Accepted } from "#plate/validate/verdict.ts";
 
 /**
  * One stored session with everything its pages read: its id, its store entry, its package, its
@@ -80,6 +82,38 @@ export const notePage = (status: number, title: string, said: string): Page =>
  */
 export const failurePage = (error: { readonly message: string }): Page =>
   notePage(500, "Playground error", error.message);
+
+/**
+ * Give the accepted item a session item delivers.
+ *
+ * @param sitting The session and its test.
+ * @param ref The item ref's identifier.
+ * @returns The item, or the developer error of a test that has no item for the ref.
+ */
+export const itemOf = (
+  sitting: Sitting,
+  ref: string,
+): Result.Result<Accepted, { readonly message: string }> =>
+  Result.fromOption(Option.fromUndefinedOr(sitting.test.items.get(ref)), () => ({
+    message: `The test ${sitting.test.test.test.title.trim()} has no item for its item ref ${ref}. Restore the package at ${sitting.package.location}.`,
+  }));
+
+/**
+ * Give the asset base a sitting's item renders with: its directory under its package's files
+ * route, which {@link packageAssetBase} writes.
+ *
+ * A package item's document is `<package location>/<path from the package's root>`, so the path
+ * from the package's root is what follows the location and its `/`.
+ *
+ * @param sitting The session and its test.
+ * @param document The item, one of the test's items.
+ * @returns The base `render` rebases the item's package paths onto.
+ */
+export const itemAssetBase = (sitting: Sitting, document: Accepted): string =>
+  packageAssetBase(
+    sitting.package.id,
+    document.document.slice(sitting.package.location.length + 1),
+  );
 
 /**
  * Read a stored session with its package and test: the entry the store holds under the id, the

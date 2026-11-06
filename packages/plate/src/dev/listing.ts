@@ -74,7 +74,7 @@ export interface VerdictCache {
 
 /**
  * Keep an effect's result for the cache's life when it succeeds, and none of a failure. The
- * verdict cache and the package cache keep their entries by it.
+ * playground's caches keep their entries by it.
  *
  * @param effect The effect.
  * @returns The effect that runs it once while it succeeds.

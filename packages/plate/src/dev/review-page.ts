@@ -25,9 +25,15 @@ import { Effect, Option, Result } from "effect";
 import type { Configuration } from "#plate/configuration.ts";
 import { page, slot } from "#plate/dev/frame.ts";
 import type { Page } from "#plate/dev/frame.ts";
-import { packageAssetBase } from "#plate/dev/packages.ts";
 import type { PackageCache, PackagesFailure } from "#plate/dev/packages.ts";
-import { failurePage, notePage, sessionHref, sittingOf } from "#plate/dev/sitting.ts";
+import {
+  failurePage,
+  itemAssetBase,
+  itemOf,
+  notePage,
+  sessionHref,
+  sittingOf,
+} from "#plate/dev/sitting.ts";
 import type { Sitting } from "#plate/dev/sitting.ts";
 import type { SessionStore } from "#plate/dev/store.ts";
 import { h, text } from "#plate/emit/node.ts";
@@ -192,20 +198,13 @@ const itemPage = (
   return Result.match(
     Result.gen(function* composeItem() {
       const view = yield* itemView(sitting.test.test, sitting.session, playground.configuration, n);
-      const document = yield* Result.fromOption(
-        Option.fromUndefinedOr(sitting.test.items.get(view.ref)),
-        () => ({
-          message: `The test ${testTitle} has no item for its item ref ${view.ref}. Restore the package at ${sitting.package.location}.`,
-        }),
-      );
-      // A package item's document is `<package location>/<path from the package's root>`.
-      const documentPath = document.document.slice(sitting.package.location.length + 1);
+      const document = yield* itemOf(sitting, view.ref);
       const status = yield* renderStatus(
         { heading: mode, instance: view.instance },
         view.configuration,
       );
       const item = yield* render(redact(document), view.configuration, {
-        assetBase: packageAssetBase(sitting.package.id, documentPath),
+        assetBase: itemAssetBase(sitting, document),
         instance: view.instance,
         mode,
         values: mode === "review" ? view.values : solution(document),

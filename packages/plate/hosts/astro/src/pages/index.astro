@@ -31,6 +31,9 @@ import {
 } from "#plate/index.ts";
 import type { Entry, Options, StatusInput, StoredRecord, ValidationMessage, Value } from "#plate/index.ts";
 
+/**
+ * Render the page on each request, never at build time: it reads the corpus and takes posts.
+ */
 export const prerender = false;
 
 /**
@@ -54,7 +57,7 @@ const namedFloats = {
 } as const;
 
 /**
- * A page that says one thing instead of serving the item.
+ * Construct the model of a page that says one thing instead of serving the item.
  *
  * @param status The HTTP status.
  * @param title The page's title and heading.
@@ -106,7 +109,8 @@ const program = Effect.gen(function* astroPage() {
   const redacted = redact(item);
 
   /**
-   * The item's page: the Status part when a post gave one, then the form around the item.
+   * Construct the item's page: the Status part when a post gave one, then the form around the
+   * item.
    *
    * @param options What `render` shows: the posted values, or a refused post's strings and
    *   messages.
@@ -203,6 +207,13 @@ const program = Effect.gen(function* astroPage() {
     ),
     configuration,
   );
+  /**
+   * Construct the page of a refused post: the item with the post's strings and the messages, and
+   * the Status part headed "Not accepted" with `autofocus`.
+   *
+   * @param refusals The messages that refuse the post.
+   * @returns The page's model.
+   */
   const refused = (refusals: readonly ValidationMessage[]) =>
     itemPage(
       { messages: refusals, posted },

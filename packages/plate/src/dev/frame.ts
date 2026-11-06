@@ -3,13 +3,14 @@
  * own content. It gives the page headers and the asset headers of rule `723e580c`, the shape of a
  * page before its chrome is added, and the writer that wraps a page in the document, links the
  * three stylesheets, ends `main` with the theme box and puts each part's HTML where its marker
- * stands.
+ * stands. The two routes that serve files, `/assets/*` and a package's files, also share their
+ * media types and how they decode a file's path from the request.
  *
  * Dev playground code outside the core: nothing reachable from `src/index.ts` imports it.
  *
  * @module
  */
-import { Option } from "effect";
+import { Option, Result } from "effect";
 import { themeText } from "#plate/dev/theme.ts";
 import type { Theme } from "#plate/dev/theme.ts";
 import { h, text } from "#plate/emit/node.ts";
@@ -89,6 +90,40 @@ export const assetTypes: ReadonlyMap<string, string> = new Map([
   [".webm", "video/webm"],
   [".webp", "image/webp"],
 ]);
+
+/**
+ * Decode the path of a file a route serves below a root, each segment of the request path on its
+ * own: none may fail to decode, be empty, `.` or `..`, or hold a separator, a backslash or NUL.
+ *
+ * A segment that decodes to a separator or a dot segment (`..%2Fx`, `%2e%2e%2f`) is refused, so the
+ * decoded path holds exactly the directories the request path names and cannot climb out of the
+ * root. A path that climbs and comes back is refused too, so a path names its file one way only.
+ * `/assets/*` and a package's files route both read a file's path through it.
+ *
+ * @param segments The request path's segments below the route, still percent-encoded.
+ * @returns The file's path from the root, its segments joined with `/`, or none when there is no
+ *   segment or a segment does not decode or is refused.
+ */
+export const servedFilePath = (segments: readonly string[]): Option.Option<string> =>
+  Result.match(
+    Result.all(segments.map((segment) => Result.try(() => decodeURIComponent(segment)))),
+    {
+      onFailure: () => Option.none(),
+      onSuccess: (decoded) =>
+        decoded.length > 0 &&
+        decoded.every(
+          (segment) =>
+            segment !== "" &&
+            segment !== "." &&
+            segment !== ".." &&
+            !segment.includes("/") &&
+            !segment.includes("\\") &&
+            !segment.includes("\0"),
+        )
+          ? Option.some(decoded.join("/"))
+          : Option.none(),
+    },
+  );
 
 /**
  * What the theme box last stored: the accepted theme and the dark flag, `emptyTheme` and off at
