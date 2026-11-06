@@ -5,6 +5,9 @@ import { Config, Effect, FileSystem, Match, Option, Schema, Stream } from "effec
 import type { PlatformError } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import type { Uuid } from "@bjornpagen/grizzle";
+import type { Rule } from "#pantry/import/refusal.ts";
+import { annotationXmlBlock, mathmlGroups } from "#pantry/test/mathml-blocks.ts";
+import type { MathmlBlock, MathmlGroup } from "#pantry/test/mathml-blocks.ts";
 
 /**
  * The version of this module's own extraction code, one of the four inputs of every fixture's hash.
@@ -218,6 +221,9 @@ const cutNames = [
 const corpusMembers = {
   BBQsTest: "qtiv3-examples/packaging/BBQsTest/BBQsTest.zip",
   BPIG_22April: "QTI3_BPIG_Examples/BPIG_22April.zip",
+  items: "qtiv3-examples/packaging/items/items.zip",
+  "shared-vocabulary-imsmanifest":
+    "qtiv3-examples/items/shared-vocabulary/shared-vocabulary-imsmanifest.zip",
 } as const;
 
 /**
@@ -427,6 +433,163 @@ const wildcardNames = [
 ] as const;
 
 /**
+ * The names of the 12 cut MathML positives of phase 6 (spec 4.11's first table): each a cut of one
+ * corpus item that carries `m:math`, `math-alttext` and `math-class` with the one vocabulary of a
+ * later phase edited out.
+ */
+const mathmlNames = [
+  "math-mathml",
+  "math-stat2",
+  "math-calc5",
+  "math-solution",
+  "math-template-block",
+  "math-alttext",
+  "math-polynomials",
+  "math-order",
+  "math-associate",
+  "math-either-or",
+  "math-inline-choice",
+  "math-class",
+] as const;
+
+/**
+ * The names of the 18 generated MathML positives of phase 6 (spec 4.11's second table): one for
+ * each group of `mathmlGroups`, the group's blocks inserted into one base document of its version.
+ * Groups 1 to 16 are items, over `math-inline-choice`'s item (3.0.0) or `math-mathml`'s (3.0.1);
+ * group 17 is an assessment test over `test-template-default`'s test, and group 18 an assessment
+ * stimulus over `stimulus-shared`'s passage, both 3.0.0, because three hosts sit only in a test or
+ * a stimulus.
+ */
+const generatedMathmlNames = [
+  "math-gen-1",
+  "math-gen-2",
+  "math-gen-3",
+  "math-gen-4",
+  "math-gen-5",
+  "math-gen-6",
+  "math-gen-7",
+  "math-gen-8",
+  "math-gen-9",
+  "math-gen-10",
+  "math-gen-11",
+  "math-gen-12",
+  "math-gen-13",
+  "math-gen-14",
+  "math-gen-15",
+  "math-gen-16",
+  "math-gen-17",
+  "math-gen-18",
+] as const;
+
+/**
+ * The names of the nine MathML positives J6 admits (spec 4.9's list, with decisions 214, 217 and
+ * 218): the content of `m:annotation-xml` and a foreign attribute on a MathML kind. Seven are
+ * `math-mathml` with one `ReplaceText` that inserts the block the name says, one is a cut of
+ * `SineRule-001.xml` (a printed variable inside a formula inside a custom operator, decision
+ * 218's form) and one is p6-18's `annotationXmlBlock` in a base item.
+ */
+const mathmlAnnotationNames = [
+  "math-annotation-xml-html",
+  "math-annotation-xml-kind",
+  "math-annotation-xml-printed-variable",
+  "math-annotation-xml-qti-deep",
+  "math-annotation-xml-qti-direct",
+  "math-annotation-xml-qti-root",
+  "math-annotation-xml-semantics",
+  "math-custom-operator-printed-variable",
+  "math-foreign-attribute",
+] as const;
+
+/**
+ * The names of the 47 MathML negatives of phase 6 (spec 4.11's negatives table, then the seven of
+ * J6, spec 4.9's list), in the table's order: each a cut positive, `math-mathml`, with one
+ * `ReplaceText` that inserts the block the negative's name says, so nothing else is refused first.
+ * Fourteen are refused at commit and the database judges them; the other 33 are refused by
+ * `readRows` (the importer's refusals and the guards').
+ */
+const mathmlNegativeNames = [
+  "math-in-blockquote",
+  "math-mi-in-p",
+  "math-text-in-mfrac",
+  "math-space-in-mspace",
+  "math-printed-variable",
+  "math-mfrac-three",
+  "math-semantics-order",
+  "math-prescripts-twice",
+  "math-display-center",
+  "math-bad-color",
+  "math-bad-href",
+  "math-display-on-mi",
+  "math-maction-bare",
+  "math-duplicate-id",
+  "math-unnamespaced",
+  "math-data-attribute",
+  "math-xref-dangling",
+  "math-apply-binary-one",
+  "math-apply-unary-two",
+  "math-apply-selector-bare",
+  "math-partialdiff-one",
+  "math-qualifier-order",
+  "math-logbase-on-sin",
+  "math-bvar-two-ci",
+  "math-bvar-two-degree",
+  "math-piecewise-two-otherwise",
+  "math-mscarries-last",
+  "math-maligngroup-placement",
+  "math-maligngroup-first",
+  "math-maction-selection",
+  "math-mglyph-bare",
+  "math-condition-no-bvar",
+  "math-cn-rational-one",
+  "math-share-dangling",
+  "math-share-cycle",
+  "math-cn-base",
+  "math-interval-closure",
+  "math-bind-no-bvar",
+  "math-position-plus",
+  "math-rowspan-plus",
+  "math-annotation-xml-math",
+  "math-annotation-xml-annotation",
+  "math-annotation-xml-sep",
+  "math-annotation-xml-unknown",
+  "math-annotation-xml-nested-math",
+  "math-annotation-xml-nested-interaction",
+  "math-annotation-xml-gap",
+] as const;
+
+/**
+ * The 14 MathML negatives the database refuses at commit, each with the rule that refuses it (spec
+ * 4.11's negatives table, "refused by: commit", then J6's two): `admission` for the five edges
+ * outside MathML's content models and the two MathML elements `m:annotation-xml` does not admit
+ * (`m:annotation` and `m:sep`, each a typed global with a kind but no row there),
+ * `attribute-lexical` for the three pattern laws, `uri-syntax`, `document-key` and `idref-target`
+ * for the one each. `readRows` passes thirteen of them, so the database judges those
+ * (the leased round trip, p6-40). `math-printed-variable` is the exception: `readRows`'s MathML
+ * guard refuses it first under `union-count`, because `m:mrow`'s model names no
+ * `qti-printed-variable`, so the database never sees it from an import (decision 133's firing
+ * order).
+ */
+export const mathmlCommitNegatives: readonly (readonly [
+  (typeof mathmlNegativeNames)[number],
+  Rule,
+])[] = [
+  ["math-in-blockquote", "admission"],
+  ["math-mi-in-p", "admission"],
+  ["math-text-in-mfrac", "admission"],
+  ["math-space-in-mspace", "admission"],
+  ["math-printed-variable", "admission"],
+  ["math-bad-color", "attribute-lexical"],
+  ["math-cn-base", "attribute-lexical"],
+  ["math-position-plus", "attribute-lexical"],
+  ["math-rowspan-plus", "attribute-lexical"],
+  ["math-bad-href", "uri-syntax"],
+  ["math-duplicate-id", "document-key"],
+  ["math-xref-dangling", "idref-target"],
+  ["math-annotation-xml-annotation", "admission"],
+  ["math-annotation-xml-sep", "admission"],
+];
+
+/**
  * The names `materialize` accepts: `simple`, its seven variants and the eleven hand-edited
  * packages, each the same package with the edits of its row in the spec table, `sharedMedia`, the
  * examples' shared-media package unedited, `quoted-q`, phase 2's hand-broken package,
@@ -434,7 +597,9 @@ const wildcardNames = [
  * hand-written HTML positives of {@link htmlElements}, the 14 XML copies of {@link copyNames}, and
  * the packaging phase's metadata and content cuts with their negatives, and the 11 positive
  * fixtures of phase 5's tests, sections and stimuli ({@link testNames}), and its 63 negatives
- * ({@link negativeNames}).
+ * ({@link negativeNames}), the ten wildcard fixtures of {@link wildcardNames}, the 12 cut MathML
+ * positives of {@link mathmlNames}, the 18 generated ones of {@link generatedMathmlNames}, the nine
+ * of J6 ({@link mathmlAnnotationNames}) and the 47 negatives of {@link mathmlNegativeNames}.
  */
 export const fixtureNames = [
   "simple",
@@ -521,6 +686,10 @@ export const fixtureNames = [
   "usage3-bad-context",
   "usage3-bad-name",
   ...wildcardNames,
+  ...mathmlNames,
+  ...generatedMathmlNames,
+  ...mathmlAnnotationNames,
+  ...mathmlNegativeNames,
 ] as const;
 
 /**
@@ -4202,6 +4371,637 @@ const wildcardSpecs: Record<(typeof wildcardNames)[number], FixtureSpec> = {
 };
 
 /**
+ * The item `math-alttext` is cut from, its path in `BPIG_22April`.
+ */
+const alttextItem = "items/qti3-choice-aria-mathml-catalog.xml";
+
+/**
+ * The item `math-class` is cut from, its path in `shared-vocabulary-imsmanifest`.
+ */
+const classItem = "Items/Item_QTI3_RichardTake2_01/inline_choice_qti3.xml";
+
+/**
+ * The `qti-catalog-info` of `qti3-choice-aria-mathml-catalog.xml`, the lines {@link mathmlSpecs}
+ * removes from `math-alttext` (the catalog is phase 9's, and its `data-reading-type` phase 8's).
+ */
+const alttextCatalog = [
+  "<qti-catalog-info>",
+  '    <qti-catalog id="cat01">',
+  '      <qti-card support="glossary-on-screen">',
+  "        <qti-html-content>",
+  "          <p>inspect (someone or something) in detail to determine their nature or condition</p>",
+  "        </qti-html-content>",
+  "      </qti-card>",
+  '      <qti-card support="keyword-translation">',
+  '        <qti-card-entry xml:lang="es">',
+  "          <qti-html-content>",
+  "            <p>inspeccionar, revisar, examinar</p>",
+  "          </qti-html-content>",
+  "        </qti-card-entry>",
+  "      </qti-card>",
+  "    </qti-catalog>",
+  '    <qti-catalog id="cat02">',
+  '      <qti-card support="spoken">',
+  '        <qti-card-entry data-reading-type="computer-read-aloud">',
+  "          <qti-html-content>",
+  "            <p>Two surveyors, designated Ah and Pea, stand some distance apart on",
+  "            the south bank of a river, looking at a tree, designated Tea, that is on the ",
+  "            north bank of the river. Points Ah, Pea, and Tea form a triangle.",
+  "            At points Ah and Pea, there are two parallel sight lines pointing",
+  "            North and forming angles outside of the triangle. At point Pea, ",
+  "            angle Tea Pea A is fifty-three degrees. The adjacent angle between Pea Tea",
+  "            and the northern sight line is thirty-seven degrees. At point A, angle Tea-Ah-Pea ",
+  "            is not labeled, and the adjacent angle formed between A Tea and that northern sight ",
+  "            line is thirty-two degrees. </p>",
+  "          </qti-html-content>",
+  "        </qti-card-entry>",
+  "      </qti-card>",
+  "    </qti-catalog>",
+  "  </qti-catalog-info>",
+].join("\n");
+
+/**
+ * The specs of {@link mathmlNames}, each the cut of the item spec 4.11's table names under the
+ * version it gives (`BPIG_22April` items are 3.0.1, the others 3.0.0).
+ *
+ * - `math-alttext` also has the catalog, the two `data-catalog-idref` attributes and its
+ *   `data-reading-type` removed, edits that apply before the cut.
+ * - `math-class` has the `data-prompt` of its inline choice interaction removed.
+ */
+const mathmlSpecs: Record<(typeof mathmlNames)[number], FixtureSpec> = {
+  "math-alttext": {
+    ...cutItem("math-alttext", "BPIG_22April", alttextItem, "3.0.1"),
+    edits: [
+      replaceIn(alttextItem, alttextCatalog, ""),
+      replaceIn(alttextItem, '<span data-catalog-idref="cat01">Examine</span>', "Examine"),
+      replaceIn(alttextItem, ' data-catalog-idref="cat02"', ""),
+      { _tag: "cut", item: alttextItem, schemaversion: "3.0.1" },
+    ],
+  },
+  "math-associate": cutItem(
+    "math-associate",
+    "BBQsTest",
+    "id-200e2c3f7d76/matching-associate-trigDeriv.xml",
+    "3.0.0",
+  ),
+  "math-calc5": cutItem("math-calc5", "BPIG_22April", "items/mc_calc5.xml", "3.0.1"),
+  "math-class": {
+    ...cutItem("math-class", "shared-vocabulary-imsmanifest", classItem, "3.0.0"),
+    edits: [
+      replaceIn(classItem, ' data-prompt="Select an Answer"', ""),
+      { _tag: "cut", item: classItem, schemaversion: "3.0.0" },
+    ],
+  },
+  "math-either-or": cutItem("math-either-or", "BBQsTest", "id-5c1b1e2d56bd/either-or.xml", "3.0.0"),
+  "math-inline-choice": cutItem("math-inline-choice", "items", "inline_choice_math.xml", "3.0.0"),
+  "math-mathml": cutItem("math-mathml", "BPIG_22April", "items/MathML.xml", "3.0.1"),
+  "math-order": cutItem("math-order", "BBQsTest", "id-e475c3c922f6/order-maths.xml", "3.0.0"),
+  "math-polynomials": cutItem(
+    "math-polynomials",
+    "BBQsTest",
+    "id-371b0f88774a/MultipleChoice-choice-polynomials.xml",
+    "3.0.0",
+  ),
+  "math-solution": cutItem(
+    "math-solution",
+    "BPIG_22April",
+    "items/Example03-feedbackBlock-solution.xml",
+    "3.0.1",
+  ),
+  "math-stat2": cutItem("math-stat2", "BPIG_22April", "items/stat2.xml", "3.0.1"),
+  "math-template-block": cutItem(
+    "math-template-block",
+    "BPIG_22April",
+    "items/Example04-feedbackBlock-templateBlock.xml",
+    "3.0.1",
+  ),
+};
+
+/**
+ * The MathML namespace, which a generated fixture's base document declares as `m`.
+ */
+const mathmlNamespace = "http://www.w3.org/1998/Math/MathML";
+
+/**
+ * The response declarations of the host blocks' interactions, each with the `cardinality` and
+ * `base-type` its interaction takes: a gap match and an associate interaction bind several pairs,
+ * the others one identifier.
+ */
+const generatedResponses = [
+  ["RESPONSE_AS", "multiple", "pair"],
+  ["RESPONSE_CH", "single", "identifier"],
+  ["RESPONSE_GM", "multiple", "directedPair"],
+  ["RESPONSE_HT", "single", "identifier"],
+  ["RESPONSE_IC", "single", "identifier"],
+] as const;
+
+/**
+ * The fragment of a generated group at one of its sites, the blocks in group order.
+ *
+ * @param group - The generated group.
+ * @param site - The site of {@link MathmlBlock}.
+ * @returns The blocks' XML written one after the other, empty when no block is for the site.
+ */
+const generatedAt = (group: MathmlGroup, site: MathmlBlock["site"]): string =>
+  group.blocks
+    .filter((block) => block.site === site)
+    .map((block) => block.xml)
+    .join("");
+
+/**
+ * The declaration of the `FEEDBACK` outcome the group's feedback blocks name, an identifier
+ * outcome, or nothing when no block of the group names it.
+ *
+ * @param group - The generated group.
+ * @returns The declaration's text.
+ */
+const generatedOutcome = (group: MathmlGroup): string =>
+  group.blocks.some((block) => block.xml.includes('outcome-identifier="FEEDBACK"'))
+    ? '<qti-outcome-declaration identifier="FEEDBACK" cardinality="single" base-type="identifier"/>'
+    : "";
+
+/**
+ * The edits that put a generated group into its base item: the response declarations of the
+ * interactions the group's blocks hold, the `FEEDBACK` outcome and the `TPL` template variable they
+ * name, the blocks of the body site at the start of the item body and those of the item site last
+ * in the item, after its response processing. Each is a `ReplaceText` at an exact anchor of the
+ * base, which both base items share.
+ *
+ * @param item - The base item's path in its zip.
+ * @param group - The generated group.
+ * @returns The edits, which apply before the cut.
+ */
+const generatedItemEdits = (item: string, group: MathmlGroup): readonly TextEdit[] => {
+  const responses = generatedResponses
+    .filter(([identifier]) =>
+      group.blocks.some((block) => block.xml.includes(`response-identifier="${identifier}"`)),
+    )
+    .map(
+      ([identifier, cardinality, baseType]) =>
+        `<qti-response-declaration identifier="${identifier}" cardinality="${cardinality}" base-type="${baseType}"/>`,
+    )
+    .join("");
+  const template = group.blocks.some((block) => block.xml.includes('template-identifier="TPL"'))
+    ? '<qti-template-declaration identifier="TPL" cardinality="single" base-type="identifier"/>'
+    : "";
+  const scoreOutcome =
+    '<qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/>';
+
+  return [
+    replaceIn(item, "</qti-response-declaration>", `</qti-response-declaration>${responses}`),
+    replaceIn(item, scoreOutcome, `${scoreOutcome}${generatedOutcome(group)}${template}`),
+    replaceIn(item, "<qti-item-body>", `<qti-item-body>${generatedAt(group, "body")}`),
+    replaceIn(
+      item,
+      "</qti-assessment-item>",
+      `${generatedAt(group, "item")}</qti-assessment-item>`,
+    ),
+  ];
+};
+
+/**
+ * The files a generated group's blocks name by a relative `altimg`, `data`, `href` or `src`: the
+ * `a.html` of an anchor, the `o.png` of an object and the like. The package holds each, so that
+ * every file reference the importer reads names a `PackageEntry` (the file-exists law).
+ *
+ * @param group - The generated group.
+ * @returns The distinct paths, relative to the group's document, in block order.
+ */
+const generatedFiles = (group: MathmlGroup): readonly string[] => [
+  ...new Set(
+    group.blocks.flatMap((block) =>
+      [...block.xml.matchAll(/\s(?:altimg|data|href|src)="(?<file>[^"#]+)"/gu)]
+        .map((match) => match.groups?.["file"] ?? "")
+        .filter((value) => value !== "" && !/^(?:[A-Za-z][A-Za-z0-9+.-]*:|\/)/u.test(value)),
+    ),
+  ),
+];
+
+/**
+ * The spec of a generated group over a base item.
+ *
+ * @param base - The cut spec of the base item, `math-inline-choice` (3.0.0) or `math-mathml`
+ *   (3.0.1).
+ * @param item - The base item's path in its zip.
+ * @param group - The generated group, of the base's version.
+ * @returns The spec: the base's cut with the group's files and edits before it.
+ */
+const generatedItem = (base: FixtureSpec, item: string, group: MathmlGroup): FixtureSpec => ({
+  edits: [
+    ...generatedFiles(group).map((file) =>
+      addText(path.posix.join(path.posix.dirname(item), file), "x"),
+    ),
+    ...generatedItemEdits(item, group),
+    ...base.edits,
+  ],
+  member: base.member,
+  name: group.name,
+});
+
+/**
+ * The spec of the generated test group: `test-template-default`'s test with `xmlns:m` on its root,
+ * the `FEEDBACK` outcome the test feedback names and the group's rubric block before its test part
+ * and test feedback after it, which has no outcome processing for them to follow.
+ *
+ * @param group - The generated group whose blocks are for the test.
+ * @returns The spec.
+ */
+const generatedTest = (group: MathmlGroup): FixtureSpec => {
+  const base = testSpecs["test-template-default"];
+  const file = "template-default-test.xml";
+  const part = '<qti-test-part identifier="PART"';
+
+  return {
+    edits: [
+      ...base.edits,
+      replaceIn(
+        file,
+        ' identifier="TEMPLATE-DEFAULT"',
+        ` xmlns:m="${mathmlNamespace}" identifier="TEMPLATE-DEFAULT"`,
+      ),
+      replaceIn(file, part, `${generatedOutcome(group)}${generatedAt(group, "test-head")}${part}`),
+      replaceIn(file, "</qti-test-part>", `</qti-test-part>${generatedAt(group, "test-tail")}`),
+    ],
+    member: base.member,
+    name: group.name,
+  };
+};
+
+/**
+ * The spec of the generated stimulus group: `stimulus-shared`'s passage with `xmlns:m` on its root
+ * and the group's blocks first in its stimulus body.
+ *
+ * @param group - The generated group whose blocks are for the stimulus body.
+ * @returns The spec.
+ */
+const generatedStimulus = (group: MathmlGroup): FixtureSpec => {
+  const base = testSpecs["stimulus-shared"];
+  const file = "passages/unbelievableNight.xml";
+
+  return {
+    edits: [
+      ...base.edits,
+      replaceIn(
+        file,
+        'identifier="Stimulus1"',
+        `xmlns:m="${mathmlNamespace}" identifier="Stimulus1"`,
+      ),
+      replaceIn(
+        file,
+        "<qti-stimulus-body>",
+        `<qti-stimulus-body>${generatedAt(group, "stimulus-body")}`,
+      ),
+    ],
+    member: base.member,
+    name: group.name,
+  };
+};
+
+/**
+ * The spec of one generated group, over the base document its first block's site names.
+ *
+ * @param group - A group of `mathmlGroups`.
+ * @returns The spec.
+ */
+const generatedSpec = (group: MathmlGroup): FixtureSpec => {
+  const site = group.blocks[0]?.site;
+
+  if (site === "test-head" || site === "test-tail") {
+    return generatedTest(group);
+  }
+
+  if (site === "stimulus-body") {
+    return generatedStimulus(group);
+  }
+
+  return group.version === "3.0.1"
+    ? generatedItem(mathmlSpecs["math-mathml"], "items/MathML.xml", group)
+    : generatedItem(mathmlSpecs["math-inline-choice"], "inline_choice_math.xml", group);
+};
+
+/**
+ * The generated group of a fixture name.
+ *
+ * @param name - One of {@link generatedMathmlNames}.
+ * @returns The group of `mathmlGroups` of that name.
+ */
+const generatedGroup = (name: (typeof generatedMathmlNames)[number]): MathmlGroup => {
+  const group = mathmlGroups.find((found) => found.name === name);
+
+  if (group === undefined) {
+    throw new Error(`mathmlGroups has no group ${name}`);
+  }
+
+  return group;
+};
+
+/**
+ * The specs of {@link generatedMathmlNames}: one for each group of `mathmlGroups`, by the group's
+ * name.
+ */
+const generatedMathmlSpecs: Record<(typeof generatedMathmlNames)[number], FixtureSpec> = {
+  "math-gen-1": generatedSpec(generatedGroup("math-gen-1")),
+  "math-gen-10": generatedSpec(generatedGroup("math-gen-10")),
+  "math-gen-11": generatedSpec(generatedGroup("math-gen-11")),
+  "math-gen-12": generatedSpec(generatedGroup("math-gen-12")),
+  "math-gen-13": generatedSpec(generatedGroup("math-gen-13")),
+  "math-gen-14": generatedSpec(generatedGroup("math-gen-14")),
+  "math-gen-15": generatedSpec(generatedGroup("math-gen-15")),
+  "math-gen-16": generatedSpec(generatedGroup("math-gen-16")),
+  "math-gen-17": generatedSpec(generatedGroup("math-gen-17")),
+  "math-gen-18": generatedSpec(generatedGroup("math-gen-18")),
+  "math-gen-2": generatedSpec(generatedGroup("math-gen-2")),
+  "math-gen-3": generatedSpec(generatedGroup("math-gen-3")),
+  "math-gen-4": generatedSpec(generatedGroup("math-gen-4")),
+  "math-gen-5": generatedSpec(generatedGroup("math-gen-5")),
+  "math-gen-6": generatedSpec(generatedGroup("math-gen-6")),
+  "math-gen-7": generatedSpec(generatedGroup("math-gen-7")),
+  "math-gen-8": generatedSpec(generatedGroup("math-gen-8")),
+  "math-gen-9": generatedSpec(generatedGroup("math-gen-9")),
+};
+
+/**
+ * The spec of a fixture that is `math-mathml`'s cut with `block` inserted first in its prompt, the
+ * one edit that makes it (`math-mathml`'s prompt is a MathML host, in a choice interaction).
+ *
+ * @param name - The fixture's name.
+ * @param block - The XML the edit inserts after `<qti-prompt>`, in the `m` prefix the item
+ *   declares.
+ * @returns The spec.
+ */
+const mathmlInPrompt = (name: string, block: string): FixtureSpec => {
+  const base = mathmlSpecs["math-mathml"];
+
+  return {
+    edits: [replaceIn("items/MathML.xml", "<qti-prompt>", `<qti-prompt>${block}`), ...base.edits],
+    member: base.member,
+    name,
+  };
+};
+
+/**
+ * The spec of one MathML negative: `math-mathml`'s cut with `block` inserted first in its prompt,
+ * the one edit that makes the negative (`math-mathml`'s prompt is a MathML host, so the host is
+ * not what is refused unless the block says so).
+ *
+ * @param name - One of {@link mathmlNegativeNames}.
+ * @param block - The XML the edit inserts after `<qti-prompt>`, in the `m` prefix the item
+ *   declares.
+ * @returns The spec.
+ */
+const mathmlNegative = (name: (typeof mathmlNegativeNames)[number], block: string): FixtureSpec =>
+  mathmlInPrompt(name, block);
+
+/**
+ * A formula whose `m:semantics` holds an `m:mi` and an `m:annotation-xml` with `content` inside it:
+ * the one place J6 admits more than MathML (spec 4.9).
+ *
+ * @param content - The XML inside the annotation.
+ * @returns The `m:math` element's text, in the `m` prefix the base items declare.
+ */
+const annotationOf = (content: string): string =>
+  `<m:math><m:semantics><m:mi>x</m:mi><m:annotation-xml encoding="application/xhtml+xml">${content}</m:annotation-xml></m:semantics></m:math>`;
+
+/**
+ * The SVG namespace, declared where a J6 positive puts an SVG element inside an annotation.
+ */
+const svgNamespace = "http://www.w3.org/2000/svg";
+
+/**
+ * The specs of {@link mathmlAnnotationNames}, by name.
+ *
+ * - `math-annotation-xml-html` puts a `div` under `m:annotation-xml`, and
+ *   `math-annotation-xml-semantics` an `m:semantics` of an `m:mi` and an `m:annotation`.
+ * - `math-foreign-attribute` is an `xlink:href` on an `m:mi`.
+ * - `math-annotation-xml-printed-variable` is `m:annotation-xml > div > qti-printed-variable`, and
+ *   `math-custom-operator-printed-variable` the same under a `qti-custom-operator`, through an
+ *   `m:math` (decision 218: decision 110 admits only `m:math` from MathML there).
+ * - `math-annotation-xml-qti-direct`, `-qti-deep` and `-qti-root` put a `qti-printed-variable`, a
+ *   `qti-prompt` inside an `svg:g` and a `qti-assessment-item` in the annotation, which are foreign
+ *   content (decisions 217 and 218).
+ * - `math-annotation-xml-kind` is p6-18's `annotationXmlBlock` in `math-inline-choice`'s item.
+ */
+const mathmlAnnotationSpecs: Record<(typeof mathmlAnnotationNames)[number], FixtureSpec> = {
+  "math-annotation-xml-html": mathmlInPrompt(
+    "math-annotation-xml-html",
+    annotationOf("<div>text</div>"),
+  ),
+  "math-annotation-xml-kind": generatedItem(
+    mathmlSpecs["math-inline-choice"],
+    "inline_choice_math.xml",
+    { blocks: [annotationXmlBlock], name: "math-annotation-xml-kind", version: "3.0.0" },
+  ),
+  "math-annotation-xml-printed-variable": mathmlInPrompt(
+    "math-annotation-xml-printed-variable",
+    annotationOf('<div><qti-printed-variable identifier="SCORE"/></div>'),
+  ),
+  "math-annotation-xml-qti-deep": mathmlInPrompt(
+    "math-annotation-xml-qti-deep",
+    annotationOf(`<svg:g xmlns:svg="${svgNamespace}"><qti-prompt>text</qti-prompt></svg:g>`),
+  ),
+  "math-annotation-xml-qti-direct": mathmlInPrompt(
+    "math-annotation-xml-qti-direct",
+    annotationOf('<qti-printed-variable identifier="SCORE"/>'),
+  ),
+  "math-annotation-xml-qti-root": mathmlInPrompt(
+    "math-annotation-xml-qti-root",
+    annotationOf("<qti-assessment-item/>"),
+  ),
+  "math-annotation-xml-semantics": mathmlInPrompt(
+    "math-annotation-xml-semantics",
+    annotationOf(
+      '<m:semantics><m:mi>y</m:mi><m:annotation encoding="text/plain">y</m:annotation></m:semantics>',
+    ),
+  ),
+  "math-custom-operator-printed-variable": overOperator("math-custom-operator-printed-variable", [
+    afterOperand(annotationOf('<div><qti-printed-variable identifier="SCORE"/></div>')),
+  ]),
+  "math-foreign-attribute": mathmlInPrompt(
+    "math-foreign-attribute",
+    `<m:math><m:mi xmlns:xlink="${xlinkNamespace}" xlink:href="https://example.org/a">x</m:mi></m:math>`,
+  ),
+};
+
+/**
+ * The specs of {@link mathmlNegativeNames}, by name.
+ */
+const mathmlNegativeSpecs: Record<(typeof mathmlNegativeNames)[number], FixtureSpec> = {
+  "math-annotation-xml-annotation": mathmlNegative(
+    "math-annotation-xml-annotation",
+    annotationOf('<m:annotation encoding="text/plain">y</m:annotation>'),
+  ),
+  "math-annotation-xml-gap": mathmlNegative(
+    "math-annotation-xml-gap",
+    annotationOf('<div><p><qti-gap identifier="G"/></p></div>'),
+  ),
+  "math-annotation-xml-math": mathmlNegative(
+    "math-annotation-xml-math",
+    annotationOf("<m:math><m:mi>y</m:mi></m:math>"),
+  ),
+  "math-annotation-xml-nested-interaction": mathmlNegative(
+    "math-annotation-xml-nested-interaction",
+    annotationOf('<div><qti-text-entry-interaction response-identifier="RESPONSE"/></div>'),
+  ),
+  "math-annotation-xml-nested-math": mathmlNegative(
+    "math-annotation-xml-nested-math",
+    annotationOf("<div><m:math><m:mi>y</m:mi></m:math></div>"),
+  ),
+  "math-annotation-xml-sep": mathmlNegative("math-annotation-xml-sep", annotationOf("<m:sep/>")),
+  "math-annotation-xml-unknown": mathmlNegative(
+    "math-annotation-xml-unknown",
+    annotationOf("<m:notanelement/>"),
+  ),
+  "math-apply-binary-one": mathmlNegative(
+    "math-apply-binary-one",
+    "<m:math><m:apply><m:divide/><m:cn>1</m:cn></m:apply></m:math>",
+  ),
+  "math-apply-selector-bare": mathmlNegative(
+    "math-apply-selector-bare",
+    "<m:math><m:apply><m:selector/></m:apply></m:math>",
+  ),
+  "math-apply-unary-two": mathmlNegative(
+    "math-apply-unary-two",
+    "<m:math><m:apply><m:sin/><m:ci>x</m:ci><m:ci>y</m:ci></m:apply></m:math>",
+  ),
+  "math-bad-color": mathmlNegative(
+    "math-bad-color",
+    '<m:math><m:mi mathcolor="notacolor">x</m:mi></m:math>',
+  ),
+  "math-bad-href": mathmlNegative("math-bad-href", '<m:math><m:mi href="%zz">x</m:mi></m:math>'),
+  "math-bind-no-bvar": mathmlNegative(
+    "math-bind-no-bvar",
+    "<m:math><m:bind><m:forall/><m:ci>x</m:ci></m:bind></m:math>",
+  ),
+  "math-bvar-two-ci": mathmlNegative(
+    "math-bvar-two-ci",
+    "<m:math><m:apply><m:int/><m:bvar><m:ci>x</m:ci><m:ci>y</m:ci></m:bvar><m:ci>f</m:ci></m:apply></m:math>",
+  ),
+  "math-bvar-two-degree": mathmlNegative(
+    "math-bvar-two-degree",
+    "<m:math><m:apply><m:diff/><m:bvar><m:ci>x</m:ci><m:degree><m:cn>2</m:cn></m:degree><m:degree><m:cn>3</m:cn></m:degree></m:bvar><m:ci>f</m:ci></m:apply></m:math>",
+  ),
+  "math-cn-base": mathmlNegative("math-cn-base", '<m:math><m:cn base="abc">1</m:cn></m:math>'),
+  "math-cn-rational-one": mathmlNegative(
+    "math-cn-rational-one",
+    '<m:math><m:cn type="rational">12</m:cn></m:math>',
+  ),
+  "math-condition-no-bvar": mathmlNegative(
+    "math-condition-no-bvar",
+    "<m:math><m:apply><m:sum/><m:condition><m:apply><m:gt/><m:ci>x</m:ci><m:cn>0</m:cn></m:apply></m:condition><m:ci>x</m:ci></m:apply></m:math>",
+  ),
+  "math-data-attribute": mathmlNegative(
+    "math-data-attribute",
+    '<m:math><m:mi data-foo="x">x</m:mi></m:math>',
+  ),
+  "math-display-center": mathmlNegative(
+    "math-display-center",
+    '<m:math display="center"><m:mi>x</m:mi></m:math>',
+  ),
+  "math-display-on-mi": mathmlNegative(
+    "math-display-on-mi",
+    '<m:math><m:mi display="block">x</m:mi></m:math>',
+  ),
+  "math-duplicate-id": mathmlNegative(
+    "math-duplicate-id",
+    '<div id="dup"/><m:math id="dup"><m:mi>x</m:mi></m:math>',
+  ),
+  "math-in-blockquote": mathmlNegative(
+    "math-in-blockquote",
+    "<blockquote><m:math><m:mi>x</m:mi></m:math></blockquote>",
+  ),
+  "math-interval-closure": mathmlNegative(
+    "math-interval-closure",
+    '<m:math><m:interval closure="half"><m:cn>1</m:cn><m:cn>2</m:cn></m:interval></m:math>',
+  ),
+  "math-logbase-on-sin": mathmlNegative(
+    "math-logbase-on-sin",
+    "<m:math><m:apply><m:sin/><m:logbase><m:cn>2</m:cn></m:logbase><m:ci>x</m:ci></m:apply></m:math>",
+  ),
+  "math-maction-bare": mathmlNegative(
+    "math-maction-bare",
+    "<m:math><m:maction><m:mi>x</m:mi></m:maction></m:math>",
+  ),
+  "math-maction-selection": mathmlNegative(
+    "math-maction-selection",
+    '<m:math><m:maction actiontype="toggle" selection="3"><m:mi>a</m:mi><m:mi>b</m:mi></m:maction></m:math>',
+  ),
+  "math-maligngroup-first": mathmlNegative(
+    "math-maligngroup-first",
+    "<m:math><m:mtable><m:mtr><m:mtd><m:mi>a</m:mi><m:maligngroup/><m:mi>b</m:mi></m:mtd></m:mtr></m:mtable></m:math>",
+  ),
+  "math-maligngroup-placement": mathmlNegative(
+    "math-maligngroup-placement",
+    "<m:math><m:mtable><m:mtr><m:mtd><m:mfrac><m:mrow><m:maligngroup/><m:mi>a</m:mi></m:mrow><m:mi>b</m:mi></m:mfrac></m:mtd></m:mtr></m:mtable></m:math>",
+  ),
+  "math-mfrac-three": mathmlNegative(
+    "math-mfrac-three",
+    "<m:math><m:mfrac><m:mi>a</m:mi><m:mi>b</m:mi><m:mi>c</m:mi></m:mfrac></m:math>",
+  ),
+  "math-mglyph-bare": mathmlNegative(
+    "math-mglyph-bare",
+    "<m:math><m:mi><m:mglyph/></m:mi></m:math>",
+  ),
+  "math-mi-in-p": mathmlNegative("math-mi-in-p", "<p><m:mi>x</m:mi></p>"),
+  "math-mscarries-last": mathmlNegative(
+    "math-mscarries-last",
+    "<m:math><m:mstack><m:mn>1</m:mn><m:mscarries/></m:mstack></m:math>",
+  ),
+  "math-partialdiff-one": mathmlNegative(
+    "math-partialdiff-one",
+    "<m:math><m:apply><m:partialdiff/><m:ci>f</m:ci></m:apply></m:math>",
+  ),
+  "math-piecewise-two-otherwise": mathmlNegative(
+    "math-piecewise-two-otherwise",
+    "<m:math><m:piecewise><m:otherwise><m:ci>a</m:ci></m:otherwise><m:otherwise><m:ci>b</m:ci></m:otherwise></m:piecewise></m:math>",
+  ),
+  "math-position-plus": mathmlNegative(
+    "math-position-plus",
+    '<m:math><m:mstack><m:msrow position="+1"><m:mn>1</m:mn></m:msrow></m:mstack></m:math>',
+  ),
+  "math-prescripts-twice": mathmlNegative(
+    "math-prescripts-twice",
+    "<m:math><m:mmultiscripts><m:mi>x</m:mi><m:mprescripts/><m:mi>a</m:mi><m:mi>b</m:mi><m:mprescripts/><m:mi>c</m:mi><m:mi>d</m:mi></m:mmultiscripts></m:math>",
+  ),
+  "math-printed-variable": mathmlNegative(
+    "math-printed-variable",
+    '<m:math><m:mrow><qti-printed-variable identifier="SCORE"/></m:mrow></m:math>',
+  ),
+  "math-qualifier-order": mathmlNegative(
+    "math-qualifier-order",
+    "<m:math><m:apply><m:int/><m:bvar><m:ci>x</m:ci></m:bvar><m:condition><m:apply><m:gt/><m:ci>x</m:ci><m:cn>0</m:cn></m:apply></m:condition><m:lowlimit><m:cn>0</m:cn></m:lowlimit><m:ci>f</m:ci></m:apply></m:math>",
+  ),
+  "math-rowspan-plus": mathmlNegative(
+    "math-rowspan-plus",
+    '<m:math><m:mtable><m:mtr><m:mtd rowspan="+2"><m:mi>x</m:mi></m:mtd></m:mtr></m:mtable></m:math>',
+  ),
+  "math-semantics-order": mathmlNegative(
+    "math-semantics-order",
+    '<m:math><m:semantics><m:annotation encoding="text/plain">x</m:annotation><m:mi>x</m:mi></m:semantics></m:math>',
+  ),
+  "math-share-cycle": mathmlNegative(
+    "math-share-cycle",
+    '<m:math><m:apply id="a"><m:plus/><m:share src="#a"/><m:cn>1</m:cn></m:apply></m:math>',
+  ),
+  "math-share-dangling": mathmlNegative(
+    "math-share-dangling",
+    '<m:math><m:share src="#nowhere"/></m:math>',
+  ),
+  "math-space-in-mspace": mathmlNegative(
+    "math-space-in-mspace",
+    "<m:math><m:mspace> </m:mspace></m:math>",
+  ),
+  "math-text-in-mfrac": mathmlNegative(
+    "math-text-in-mfrac",
+    "<m:math><m:mfrac>text<m:mi>a</m:mi><m:mi>b</m:mi></m:mfrac></m:math>",
+  ),
+  "math-unnamespaced": mathmlNegative("math-unnamespaced", "<math><mi>x</mi></math>"),
+  "math-xref-dangling": mathmlNegative(
+    "math-xref-dangling",
+    '<m:math><m:mi xref="nowhere">x</m:mi></m:math>',
+  ),
+};
+
+/**
  * The spec table: one row per {@link FixtureName}, so adding a name without its row does not
  * compile.
  *
@@ -4253,6 +5053,10 @@ const specs: Record<FixtureName, FixtureSpec> = {
   ...testSpecs,
   ...negativeSpecs,
   ...wildcardSpecs,
+  ...mathmlSpecs,
+  ...generatedMathmlSpecs,
+  ...mathmlAnnotationSpecs,
+  ...mathmlNegativeSpecs,
   "bad-identifier-value": {
     edits: [
       replaceIn("choice.xml", "<qti-value>ChoiceA</qti-value>", "<qti-value>Choice A</qti-value>"),

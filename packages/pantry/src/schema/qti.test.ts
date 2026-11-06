@@ -6,6 +6,7 @@ import { Predicate } from "effect";
 import { inventory } from "#pantry/schema/content/xsd-inventory.ts";
 import * as asi from "#pantry/schema/kinds/asi.ts";
 import * as html from "#pantry/schema/kinds/html.ts";
+import * as mathml from "#pantry/schema/kinds/mathml.ts";
 import * as xi from "#pantry/schema/kinds/xi.ts";
 import { AuthorApp } from "#pantry/schema/logins.ts";
 import { Ancestry, Node, NodeKind } from "#pantry/schema/node.ts";
@@ -264,7 +265,7 @@ describe("qti", () => {
   it("composes the Admission rows of p, div, qti-item-body and qti-modal-feedback per host", () => {
     for (const host of ["p", "div", "qti-item-body", "qti-modal-feedback"]) {
       for (const version of ["3.0.0", "3.0.1"]) {
-        const included = xi.admission
+        const included = [...xi.admission, ...mathml.admission]
           .filter((row) => row.parent === host && row.version === version)
           .map((row) => row.child);
         const expected = [...modelOf(host), ...included].toSorted();

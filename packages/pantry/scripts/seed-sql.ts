@@ -17,6 +17,7 @@ import type { AdmissionRow } from "#pantry/schema/kinds/generic.ts";
 import { AttributeName, Ancestry, NodeKind, RootKind } from "#pantry/schema/node.ts";
 import { admission, ancestryStep, attributeAdmission } from "#pantry/schema/seed/admission.ts";
 import { mappableBaseType } from "#pantry/schema/seed/mappable-base-type.ts";
+import { mathmlAttributeType } from "#pantry/schema/seed/mathml-attribute-type.ts";
 import { recordBindingFit } from "#pantry/schema/seed/record-binding-fit.ts";
 import type { BindingFitRow } from "#pantry/schema/seed/binding-fit.ts";
 import { bindingFit } from "#pantry/schema/seed/binding-fit.ts";
@@ -264,6 +265,16 @@ const tables: readonly Rendered[] = [
     declared: "MappableBaseType",
     name: "mappable_base_type",
     rows: mappableBaseType,
+  }),
+  renderTable<(typeof mathmlAttributeType)[number]>({
+    columns: [
+      handle("kind", "node_kind", (row) => row.kind),
+      handle("attribute", "attribute_name", (row) => row.attribute),
+      handle("type", "mathml_value_type", (row) => row.type),
+    ],
+    declared: "MathmlAttributeType",
+    name: "mathml_attribute_type",
+    rows: mathmlAttributeType,
   }),
   renderTable<(typeof recordBindingFit)[number]>({
     columns: [handle("interaction_kind", "node_kind", (row) => row.interactionKind)],

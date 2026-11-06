@@ -20,6 +20,7 @@ import {
   EntityReference,
   NamespaceDeclaration,
   Node,
+  NodeKind,
   Pi,
   SchemaLocation,
   TextNode,
@@ -31,8 +32,10 @@ import {
   TreeXmlEncoding,
   TreeXmlStandalone,
   TreeXmlVersion,
+  vocabularies,
   Ws,
 } from "#pantry/schema/node.ts";
+import type { RegistryRow } from "#pantry/schema/kinds/generic.ts";
 import { NodeXmlBase, NodeXmlLang } from "#pantry/schema/attributes.ts";
 import { attributeRows } from "#pantry/import/attributes.ts";
 import { ImportRefused } from "#pantry/import/refusal.ts";
@@ -510,6 +513,30 @@ layer(NodeServices.layer, { excludeTestServices: true })("import/tree.ts", (suit
     }),
   );
 
+  suite.effect(
+    "a nesting of entering kinds hands each depth the union of what its ancestors enter",
+    () =>
+      Effect.gen(function* nestedAncestry() {
+        const doc = yield* readChoice(inject("fixtures").simple, [
+          "<qti-prompt>",
+          '<qti-prompt><qti-hottext identifier="h">x</qti-hottext>',
+        ]);
+        const { nodes, rows } = yield* treeRows(doc, itemInput(doc.charset), Rows.empty());
+        const byId = new Map(Rows.of(rows, Node).map((row) => [row.id, row]));
+        const hottext = [...nodes.values()].find((entry) => entry.kind === "qti-hottext");
+
+        // The interaction and the prompt enter `int` and `choice`: the hottext sits in `int.choice`
+        // and enters `htx`, so its text child sits in `int.choice.htx`.
+        assert.strictEqual(hottext?.ancestry, "int.choice");
+
+        const children = Rows.of(rows, Edge).filter((edge) => edge.parent === hottext?.id);
+        assert.isAbove(children.length, 0);
+        for (const edge of children) {
+          assert.strictEqual(byId.get(edge.child)?.ancestry, "int.choice.htx");
+        }
+      }),
+  );
+
   suite.effect("a choice interaction inside a feedback block gives its children fb.int", () =>
     Effect.gen(function* feedbackAncestry() {
       const text = new TextDecoder().decode(
@@ -906,6 +933,34 @@ it("kindOf resolves a dotted handle by the parent's kind", () => {
     kindOf(duration, Option.some("lom:duration")),
     Option.some("lom:duration.string"),
   );
+});
+
+const mathmlNamespace = "http://www.w3.org/1998/Math/MathML";
+
+it("kindOf keeps m:semantics.ci under its own kind and no other dotted handle nests in itself", () => {
+  const semantics = bare(mathmlNamespace, "semantics");
+
+  assert.deepStrictEqual(kindOf(semantics, Option.some("m:bvar")), Option.some("m:semantics.ci"));
+  assert.deepStrictEqual(
+    kindOf(semantics, Option.some("m:semantics.ci")),
+    Option.some("m:semantics.ci"),
+  );
+  assert.deepStrictEqual(kindOf(semantics, Option.some("m:mrow")), Option.some("m:semantics"));
+
+  const rows = new Map(
+    vocabularies.flatMap((vocabulary) => Object.entries<RegistryRow>(vocabulary.registry)),
+  );
+  const nesting = NodeKind.handles.filter((handle) => {
+    const row = rows.get(handle);
+
+    return (
+      row !== undefined &&
+      row.local !== "" &&
+      Option.isSome(row.parent) &&
+      Option.getOrNull(kindOf(bare(row.namespace, row.local), Option.some(handle))) === handle
+    );
+  });
+  assert.deepStrictEqual(nesting, ["m:semantics.ci"]);
 });
 
 const spaces = ["integer", "nonNegativeInteger", "positiveInteger"] as const;

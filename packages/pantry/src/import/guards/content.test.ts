@@ -51,7 +51,7 @@ const declarations = [
  */
 const rowsOf = (version: SchemaVersionHandle, body: string, extra = "") =>
   Effect.gen(function* handWrittenRows() {
-    const text = `<qti-assessment-item xmlns="${itemNamespace}" identifier="hand" title="Hand" time-dependent="false">${declarations}${extra}<qti-item-body>${body}</qti-item-body></qti-assessment-item>`;
+    const text = `<qti-assessment-item xmlns="${itemNamespace}" xmlns:m="http://www.w3.org/1998/Math/MathML" identifier="hand" title="Hand" time-dependent="false">${declarations}${extra}<qti-item-body>${body}</qti-item-body></qti-assessment-item>`;
     const doc = yield* readXml(new TextEncoder().encode(text));
     const built = yield* itemRows(
       {
@@ -568,6 +568,52 @@ describe("contentGuards idref-copy", () => {
         "idref-copy",
         edited(rows, HeadersTarget, () => []),
         "HeadersTarget",
+      );
+    }),
+  );
+});
+
+describe("contentGuards idref-copy for xref", () => {
+  const math = `<p><m:math><m:ci id="a">x</m:ci><m:ci xref="a">y</m:ci></m:math></p>`;
+
+  it.effect("admits an xref that is one AttributeIdref row at position 0", () =>
+    Effect.gen(function* oneXrefRow() {
+      yield* contentGuards(yield* rowsOf("3.0.1", math));
+    }),
+  );
+
+  it.effect("admits an xref whose source spelling differs from the collapsed value", () =>
+    Effect.gen(function* spelledXref() {
+      yield* contentGuards(
+        yield* rowsOf(
+          "3.0.1",
+          `<p><m:math><m:ci id="a">x</m:ci><m:ci xref=" a ">y</m:ci></m:math></p>`,
+        ),
+      );
+    }),
+  );
+
+  it.effect("refuses a second xref row at position 1", () =>
+    Effect.gen(function* twoXrefRows() {
+      const rows = yield* rowsOf("3.0.1", math);
+      yield* refusalOfRows(
+        "idref-copy",
+        edited(rows, AttributeIdref, (facts) => [
+          ...facts,
+          ...facts.map((fact) => ({ ...fact, position: 1n, target: "b" })),
+        ]),
+        "xref",
+      );
+    }),
+  );
+
+  it.effect("refuses an xref row at position 1 alone", () =>
+    Effect.gen(function* shiftedXref() {
+      const rows = yield* rowsOf("3.0.1", math);
+      yield* refusalOfRows(
+        "idref-copy",
+        edited(rows, AttributeIdref, (facts) => facts.map((fact) => ({ ...fact, position: 1n }))),
+        "xref",
       );
     }),
   );
