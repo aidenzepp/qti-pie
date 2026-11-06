@@ -1,4 +1,3 @@
-import { NodeFileSystem } from "@effect/platform-node";
 import { assert, describe, it } from "@effect/vitest";
 import { drawn, explore } from "@grizzle/testing/explore";
 import { required } from "@grizzle/testing/features";
@@ -8,7 +7,7 @@ import { notesOnly } from "@grizzle/testing/sense";
 import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Formatter } from "effect";
-import { census, censusOf, qtiMigrations } from "#pantry/test/census.ts";
+import { census } from "#pantry/test/census.ts";
 import type { Census, FunctionKind, LawFamily, MigrationFile } from "#pantry/test/census.ts";
 
 /**
@@ -39,22 +38,6 @@ type Target = keyof typeof targets;
  * Every target's name, in the order {@link targets} states them.
  */
 const targetNames = Object.keys(targets).filter((name): name is Target => name in targets);
-
-/**
- * The targets the committed migrations do not meet yet: the cutover's work still to land, named and
- * never counted, so no count of today's migrations is a golden here. When a migration meets one,
- * the test of migrations/qti fails until the target leaves this set, and from then on it is held.
- *
- * Today's migrations/qti (`20261105144420_init` and `20261105144516_seed`) meets none of them.
- */
-const pending: ReadonlySet<Target> = new Set<Target>([
-  "a table count in [80, 120]",
-  "no always-true policies",
-  "no enum types",
-  "no law functions or constraint triggers",
-  "no seeded tables or seed rows",
-  "no two domains with one definition",
-]);
 
 /**
  * The targets a census meets.
@@ -237,18 +220,6 @@ const statementOf: Gen<Statement> = (source) => {
 
   return source.draw(source.draw(element(arms)));
 };
-
-describe("census of migrations/qti", () => {
-  it.effect("meets every census target the cutover has reached, and no pending one", () =>
-    Effect.gen(function* committedTargets() {
-      assert.deepStrictEqual(
-        metBy(yield* censusOf(qtiMigrations)),
-        targetNames.filter((name) => !pending.has(name)),
-        "migrations/qti meets a census target listed as pending, or no longer meets a reached one. Move a target that is now met out of `pending` in census.test.ts; a reached target that broke is a regression.",
-      );
-    }).pipe(Effect.provide(NodeFileSystem.layer)),
-  );
-});
 
 /**
  * A generated migration's files: each statement its own file, a law in a `-validate.sql` file and

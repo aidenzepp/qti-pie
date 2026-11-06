@@ -1,1112 +1,1544 @@
-import { assert, describe, it } from "@effect/vitest";
-import { Schema } from "effect";
 import {
+  accumulated,
+  Bits,
+  bits,
+  check,
+  closed,
+  closedId,
+  Compute,
+  contained,
+  counted,
+  drawn,
+  fin,
+  fold,
+  key,
+  Monoid,
+  mirrors,
+  natural,
+  on,
+  ordered,
+  pred,
+  relation,
+  select,
+  str,
+  tree,
+  uuid,
+} from "@bjornpagen/grizzle";
+import type { AnySchema, Law, LawSide, Statement } from "@bjornpagen/grizzle";
+import { globSync } from "node:fs";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+import { assert, describe, it } from "@effect/vitest";
+import { exhaust } from "@grizzle/testing/explore";
+import { requiredInSpace } from "@grizzle/testing/features";
+import { array, element } from "@grizzle/testing/gen";
+import type { Gen } from "@grizzle/testing/gen";
+import { searched } from "@grizzle/testing/vitest";
+import { Array as Arr, Duration, Effect, Option, pipe, Predicate, Result, Schema } from "effect";
+import { ReaderRefusal, WellFormednessError } from "@qti-pie/crust/errors.ts";
+import { composed } from "#pantry/grammar/compose.ts";
+import {
+  checkNameOf,
+  contestedIdentities,
+  explain,
   ImportRefused,
   ImportRule,
-  isMappedLaw,
-  patternRuleSources,
+  lawIdentity,
+  lawNameOf,
+  lawNames,
+  lawOfCheck,
+  lawGroups,
+  lawRules,
+  lawTable,
+  limitRules,
+  owedRules,
+  precedence,
+  refusalOfLaws,
   ruleOfError,
-  ruleOfLaw,
+  ruleOfLaws,
+  statedLaws,
 } from "#pantry/import/refusal.ts";
-import type { ImportLaw } from "#pantry/import/refusal.ts";
-import * as contracts from "#pantry/schema/contracts.ts";
-import * as patterns from "#pantry/schema/patterns.ts";
-import * as valueContracts from "#pantry/schema/value-contracts.ts";
-import { Qti } from "#pantry/schema/qti.ts";
-import * as reference from "#pantry/schema/reference.ts";
-import * as stimulus from "#pantry/schema/stimulus.ts";
-import * as testContent from "#pantry/schema/test/content.ts";
-import * as testControl from "#pantry/schema/test/control.ts";
-import * as testRules from "#pantry/schema/test/rules.ts";
-import * as testStructure from "#pantry/schema/test/structure.ts";
-import * as valueContexts from "#pantry/schema/value-contexts.ts";
-
-const phase5Rules = [
-  "structure-count",
-  "section-empty",
-  "structure-identifier",
-  "reach-copy",
-  "section-ref-cycle",
-  "section-ref-target",
-  "item-ref-target",
-  "stimulus-ref-target",
-  "stimulus-ref-key",
-  "resolution-copy",
-  "document-reference",
-  "selection-bounds",
-  "selection-required",
-  "branch-target",
-  "branch-forward",
-  "variable-mapping-source",
-  "variable-mapping-target",
-  "template-default-target",
-  "prefixed-ref",
-  "prefixed-root",
-  "prefixed-copy",
-  "item-duration",
-  "section-identifier-target",
-  "section-root-copy",
-  "include-xpointer",
-  "include-parse",
-  "section-variable-ref",
-  "section-copy",
-];
-
-it("holds the 28 rule names of the phase-5 spec 4.16 in ImportRule", () => {
-  const held = new Set<string>(ImportRule.members.map((member) => member.literal));
-
-  assert.strictEqual(phase5Rules.length, 28);
-  for (const rule of phase5Rules) {
-    assert.isTrue(held.has(rule), rule);
-  }
-});
-
-it("sends a contract no row names to value-lexical, unmapped", () => {
-  const law: ImportLaw = { contract: "NoSuchContract", kind: "contract" };
-
-  assert.strictEqual(ruleOfLaw(law), "value-lexical");
-  assert.isFalse(isMappedLaw(law));
-});
-
-it("sends a numericBound law to the check nearest rule, unmapped", () => {
-  const law: ImportLaw = { field: "position", kind: "numericBound", relation: "Edge" };
-
-  assert.isFalse(isMappedLaw(law));
-  assert.strictEqual(
-    ruleOfLaw(law),
-    ruleOfLaw({ kind: "check", name: "NoSuchCheck", relation: "Edge" }),
-  );
-});
-
-it("passes an ImportRefused through ruleOfError as itself", () => {
-  const refused = new ImportRefused({
-    detail: "the max-choices attribute of qti-choice-interaction is not a non-negative integer",
-    rule: "attribute-lexical",
-  });
-
-  assert.strictEqual(ruleOfError(refused), refused);
-});
+import type { ReadRefusal, Rule } from "#pantry/import/refusal.ts";
+import {
+  NotQti3,
+  notQti3Reasons,
+  UnmodeledVocabulary,
+  unmodeledReasons,
+} from "#pantry/model/shred.ts";
+import { PackageReadError } from "#pantry/package/read.ts";
+import { ZipRefusal } from "#pantry/package/zip.ts";
+import { lawNames as oracleLawNames, lawSources, ruleOf } from "#pantry/test/oracle.ts";
 
 /**
- * A synthetic containment law between two sides, by relation and fields.
+ * The composed grammar of production, whose rows `install.ts` installs: the constants an
+ * explanation reads.
  */
-const contained = (
-  from: string,
-  fromFields: readonly string[],
-  to: string,
-  toFields: readonly string[],
-  selection: readonly { readonly field: string; readonly value: string }[] = [],
-): ImportLaw => ({
-  from: { fields: fromFields, relation: from, selection: [] },
-  kind: "contained",
-  to: { fields: toFields, relation: to, selection },
-});
+const grammar = Result.getOrThrow(composed());
 
 /**
- * A synthetic capacity law of `target` by `from`, the target selected on `selection`.
+ * A term of a side as a statement value holds it: a field's name, or `pred` of one.
  */
-const capacity = (
-  target: string,
-  targetFields: readonly string[],
-  from: string,
-  fromFields: readonly string[],
-  selection: readonly { readonly field: string; readonly value: string }[] = [],
-): ImportLaw => ({
-  from: { fields: fromFields, relation: from, selection: [] },
-  kind: "capacity",
-  target: { fields: targetFields, relation: target, selection },
-});
-
-const check = (relation: string, name: string): ImportLaw => ({ kind: "check", name, relation });
-
-/**
- * Assert a law is recognized and refused under `rule`.
- */
-const assertMapped = (law: ImportLaw, rule: string): void => {
-  assert.strictEqual(ruleOfLaw(law), rule);
-  assert.isTrue(isMappedLaw(law));
-};
-
-describe("the rules of the canonical wave's new laws", () => {
-  it("keys ForeignAttribute(node,prefix,local) wildcard-attribute", () => {
-    assertMapped(
-      { fields: ["node", "prefix", "local"], kind: "primaryKey", relation: "ForeignAttribute" },
-      "wildcard-attribute",
-    );
-  });
-
-  it("keys AttributeSpelling attribute-lexical, as AttributeLexical is", () => {
-    const spelling: ImportLaw = {
-      fields: ["node", "attribute"],
-      kind: "key",
-      relation: "AttributeSpelling",
-    };
-
-    assertMapped(spelling, "attribute-lexical");
-    assert.strictEqual(
-      ruleOfLaw(spelling),
-      ruleOfLaw({ ...spelling, relation: "AttributeLexical" }),
-    );
-  });
-
-  it("gives AttributeSpelling's containments the rules AttributeLexical's get", () => {
-    const pairs = [
-      [["node", "kind"], "Node", ["id", "kind"]],
-      [["kind", "attribute"], "AttributeAdmission", ["kind", "attribute"]],
-    ] as const;
-
-    for (const [fields, to, toFields] of pairs) {
-      const lexical = contained("AttributeLexical", fields, to, toFields);
-      const spelling = contained("AttributeSpelling", fields, to, toFields);
-
-      assertMapped(spelling, ruleOfLaw(lexical));
-      assert.isTrue(isMappedLaw(lexical));
-      assert.strictEqual(ruleOfLaw(spelling), "attribute-admission");
-    }
-  });
-
-  it("names the four Order*ChoicesN containments typed-copy", () => {
-    const pairs = [
-      ["OrderMinChoicesN", "OrderInteraction", "minChoicesN"],
-      ["OrderMaxChoicesN", "OrderInteraction", "maxChoicesN"],
-      ["GraphicOrderMinChoicesN", "GraphicOrderInteraction", "minChoicesN"],
-      ["GraphicOrderMaxChoicesN", "GraphicOrderInteraction", "maxChoicesN"],
-    ] as const;
-
-    for (const [from, to, column] of pairs) {
-      assertMapped(contained(from, ["node", "value"], to, ["id", column]), "typed-copy");
-    }
-  });
-
-  it("names the two minimum-choices checks attribute-lexical", () => {
-    assertMapped(check("OrderMinChoicesN", "OrderMinChoicesPositive"), "attribute-lexical");
-    assertMapped(
-      check("GraphicOrderMinChoicesN", "GraphicOrderMinChoicesPositive"),
-      "attribute-lexical",
-    );
-  });
-
-  const arms = [
-    ["EqualRoundedFiguresRef", "EqualRounded", "figuresKind"],
-    ["RoundToFiguresRef", "RoundTo", "figuresKind"],
-    ["IndexNRef", "Index", "nKind"],
-    ["RepeatNumberRepeatsRef", "Repeat", "numberRepeatsKind"],
-  ] as const;
-
-  it("names each *Ref arm's containment P32", () => {
-    for (const [arm, parent, kind] of arms) {
-      assertMapped(
-        contained(arm, ["node"], parent, ["id"], [{ field: kind, value: "ref" }]),
-        "P32",
-      );
-    }
-  });
-
-  it("names each *Ref arm's capacity P32", () => {
-    for (const [arm, parent, kind] of arms) {
-      assertMapped(capacity(parent, ["id"], arm, ["node"], [{ field: kind, value: "ref" }]), "P32");
-    }
-  });
-
-  it("names each *RefZero check P32", () => {
-    assertMapped(check("EqualRounded", "EqualRoundedFiguresRefZero"), "P32");
-    assertMapped(check("RoundTo", "RoundToFiguresRefZero"), "P32");
-    assertMapped(check("Index", "IndexNRefZero"), "P32");
-    assertMapped(check("Repeat", "RepeatNumberRepeatsRefZero"), "P32");
-  });
-
-  it("names ManifestSchemaVersion's two new containments typed-copy", () => {
-    assertMapped(
-      contained("ManifestSchemaVersion", ["metadata", "package"], "ManifestMetadata", [
-        "id",
-        "manifest",
-      ]),
-      "typed-copy",
-    );
-    assertMapped(
-      contained("ManifestSchemaVersion", ["package", "version"], "Package", [
-        "id",
-        "schemaversion",
-      ]),
-      "typed-copy",
-    );
-  });
-
-  it("keeps a resource's own schemaversion containment schema-version", () => {
-    assertMapped(
-      contained("Resource", ["package", "schemaversion"], "Package", ["id", "schemaversion"]),
-      "schema-version",
-    );
-  });
-});
-
-/**
- * A synthetic pattern law over one regex source.
- */
-const pattern = (source: string): ImportLaw => ({ flags: "u", kind: "pattern", source });
-
-describe("the rules of a pattern", () => {
-  const sources = new Set<string>(
-    Object.entries(patterns)
-      .filter(([name]) => !name.endsWith("Flags"))
-      .map(([, source]) => source),
-  );
-
-  it("keeps a row only for a source the schema still exports", () => {
-    assert.isAbove(patternRuleSources.length, 0);
-    for (const source of patternRuleSources) {
-      assert.isTrue(sources.has(source), source);
-    }
-  });
-
-  it("keeps the DRD and rubric-use rows", () => {
-    const drd = [
-      patterns.drdAccessMode,
-      patterns.drdAdaptationDetail,
-      patterns.drdAdaptationMediaType,
-      patterns.drdAdaptationType,
-      patterns.drdApiInteroperable,
-      patterns.drdControlFlexibility,
-      patterns.drdDisplayTransformability,
-      patterns.drdEducationalComplexityOfAdaptation,
-      patterns.drdHazard,
-    ];
-
-    for (const source of drd) {
-      assertMapped(pattern(source), "drd-value");
-    }
-    assertMapped(pattern(patterns.useEnumExt), "attribute-lexical");
-    assertMapped(pattern(patterns.viewList), "attribute-lexical");
-    assertMapped(pattern(patterns.ariaRelevantList), "attribute-lexical");
-  });
-});
-
-/**
- * A synthetic contract law.
- */
-const contractLaw = (name: string): ImportLaw => ({ contract: name, kind: "contract" });
-
-/**
- * The rule of each written-out contract, from the contracts document's per-contract sections. The
- * four pairs of one language told apart by contract are `CategoryList` and `MatchGroupList`,
- * `ExpressionIntegerOrVariable` and `PrintedVariableIntegerOrVariable`, `ExpressionCoords` and
- * `ShapeCoords`, and `ClassList` and `LomToken`.
- */
-const writtenRules = {
-  P6: ["CategoryList", "ExpressionCoords", "ExpressionIntegerOrVariable"],
-  "attribute-lexical": [
-    "SliderBound",
-    "TimeLimitSeconds",
-    "AriaInteger",
-    "AriaPositiveInteger",
-    "ChoiceCount",
-    "ClassList",
-    "ContainerWidth",
-    "ContentLanguage",
-    "ContentMediaType",
-    "ExpectedLength",
-    "ExpectedLines",
-    "IdReference",
-    "InterpolationSourceValue",
-    "MappingScore",
-    "MatchGroupList",
-    "MatchSourceValue",
-    "MediaRectCoords",
-    "PrintedVariableIntegerOrVariable",
-    "RectCoords",
-    "ShapeCoords",
-    "ShowHideIdentifier",
-    "StringCount",
-    "TableSpan",
-    "TrackLanguage",
-  ],
-  "drd-value": ["AccessMode", "AccessModeAdapted"],
-  "href-path": ["PackagePath", "ResourceEntryHref"],
-  "manifest-identifier": ["ManifestIdentifier"],
-  "tool-string-length": ["ToolName", "ToolVendor", "ToolVersion"],
-  "uri-syntax": [
-    "AdaptiveRefHref",
-    "CaseItemUri",
-    "CitationUri",
-    "CustomOperatorDefinitionUri",
-    "DrdAdaptationUri",
-    "EmbedSourceUri",
-    "GlossaryUri",
-    "HyperlinkUri",
-    "ItemRefHref",
-    "LongDescriptionUri",
-    "LongInterpretationUri",
-    "NamespaceUri",
-    "SectionRefHref",
-    "StatisticContextUri",
-    "StimulusRefHref",
-    "StylesheetUri",
-    "TemplateLocationUri",
-    "TemplateUri",
-    "XIncludeUri",
-    "XlinkArcroleUri",
-    "XlinkHrefUri",
-    "XlinkRoleUri",
-    "XmlBaseUri",
-  ],
-  "usage-lexical": [
-    "StatisticMeasure",
-    "StatisticName",
-    "UsageCaseCount",
-    "UsageFieldIdentifier",
-    "UsageMappingScore",
-    "UsagePartIdentifier",
-    "UsageValueToken",
-  ],
-  "value-lexical": [
-    "AdaptiveRefIdentifier",
-    "ChoiceIdentifier",
-    "CustomOperatorClassName",
-    "FileMediaType",
-    "LangStringLanguage",
-    "LomToken",
-    "LomVocabularySource",
-    "LomVocabularyValue",
-    "MappedVariableName",
-    "NamespacePrefix",
-    "OutcomeScaleValue",
-    "PiTarget",
-    "RecordFieldIdentifier",
-    "StimulusRefIdentifier",
-    "TemplateParameterName",
-    "TestStructureIdentifier",
-    "VariableReference",
-    "WeightReference",
-    "WeightValue",
-    "XlinkLabelName",
-    "XmlEntityName",
-    "XmlLocalName",
-  ],
-} satisfies Record<string, readonly string[]>;
-
-/**
- * The five contexts whose Uri arm refuses under `uri-syntax` (decision 150).
- */
-const uriContexts: ReadonlySet<string> = new Set([
-  "Declared",
-  "InterpolationDefault",
-  "InterpolationTarget",
-  "MatchDefault",
-  "MatchTarget",
+const TermValue = Schema.Union([
+  Schema.String,
+  Schema.Struct({ field: Schema.String, kind: Schema.Literal("pred") }),
 ]);
 
 /**
- * The value-arm contracts, built once: `valueArmContracts()` makes all 64 on each call.
+ * A relation as a statement value names it.
  */
-const armContracts = valueContracts.valueArmContracts();
+const Named = Schema.Struct({ name: Schema.String });
 
 /**
- * Every contract name of the schema with the rule it maps to: the written-out contracts, then the
- * arms, each of which takes its context's rule from `valueContexts`.
+ * A side as a statement value holds it: its source, a relation or a selection of one, and its
+ * terms. A selection's predicate is no part of the value a statement exposes.
  */
-const makeExpectedRules = (): ReadonlyMap<string, string> => {
-  const expected = new Map<string, string>();
-
-  for (const [rule, names] of Object.entries(writtenRules)) {
-    for (const name of names) {
-      expected.set(name, rule);
-    }
-  }
-  for (const { context, rule } of valueContexts.valueContexts) {
-    for (const arm of Object.values<Named>(armContracts[context])) {
-      expected.set(
-        arm.name,
-        uriContexts.has(context) && arm.name.endsWith("UriValue") ? "uri-syntax" : rule,
-      );
-    }
-  }
-
-  return expected;
-};
-
-/**
- * The table of {@link makeExpectedRules}, built once.
- */
-const expectedRules: ReadonlyMap<string, string> = makeExpectedRules();
-
-/**
- * A contract as the tests read it: its name.
- */
-interface Named {
-  readonly name: string;
-}
-
-/**
- * The name of every contract the schema makes.
- */
-const makeEveryContract = (): readonly string[] => {
-  const arms = Object.values(armContracts).flatMap((byBase) =>
-    Object.values<Named>(byBase).map((made) => made.name),
-  );
-
-  return [...Object.values<Named>(contracts).map((made) => made.name), ...arms];
-};
-
-/**
- * The names of {@link makeEveryContract}, built once.
- */
-const everyContract: readonly string[] = makeEveryContract();
-
-describe("the rules of a contract", () => {
-  it("names 151 contracts, each in the expected table once", () => {
-    const names = everyContract;
-
-    assert.strictEqual(names.length, 151);
-    assert.strictEqual(expectedRules.size, 151);
-    assert.deepStrictEqual([...expectedRules.keys()].toSorted(), names.toSorted());
-  });
-
-  it("maps every contract of the schema to its rule, mapped", () => {
-    const expected = expectedRules;
-
-    for (const name of everyContract) {
-      const law = contractLaw(name);
-
-      assert.isTrue(isMappedLaw(law), `${name} has no entry`);
-      assert.strictEqual(ruleOfLaw(law), expected.get(name), name);
-    }
-  });
-
-  it("makes the Literal arms P7, the usage arms usage-typed-value and the MapKey arms map-key-lexical", () => {
-    assertMapped(contractLaw("LiteralIdentifierValue"), "P7");
-    assertMapped(contractLaw("LiteralUriValue"), "P7");
-    assertMapped(contractLaw("UsageIntegerValue"), "usage-typed-value");
-    assertMapped(contractLaw("UsageUriValue"), "usage-typed-value");
-    assertMapped(contractLaw("MapKeyFloatValue"), "map-key-lexical");
-    assertMapped(contractLaw("StatisticName"), "usage-lexical");
-  });
-
-  it("sends the Uri arm of the five URI value contexts to uri-syntax, the others to their context's rule", () => {
-    for (const name of [
-      "DeclaredUriValue",
-      "MatchDefaultUriValue",
-      "MatchTargetUriValue",
-      "InterpolationDefaultUriValue",
-      "InterpolationTargetUriValue",
-    ]) {
-      assertMapped(contractLaw(name), "uri-syntax");
-    }
-    assertMapped(contractLaw("DeclaredIntegerValue"), "value-lexical");
-    assertMapped(contractLaw("MatchTargetIdentifierValue"), "attribute-lexical");
-    assertMapped(contractLaw("MapKeyUriValue"), "map-key-lexical");
-  });
-
-  it("tells apart the four languages two contracts share", () => {
-    assertMapped(contractLaw("CategoryList"), "P6");
-    assertMapped(contractLaw("MatchGroupList"), "attribute-lexical");
-    assertMapped(contractLaw("ExpressionIntegerOrVariable"), "P6");
-    assertMapped(contractLaw("PrintedVariableIntegerOrVariable"), "attribute-lexical");
-    assertMapped(contractLaw("ExpressionCoords"), "P6");
-    assertMapped(contractLaw("ShapeCoords"), "attribute-lexical");
-    assertMapped(contractLaw("ClassList"), "attribute-lexical");
-    assertMapped(contractLaw("LomToken"), "value-lexical");
-  });
+const SideValue = Schema.Struct({
+  source: Schema.Union([Named, Schema.Struct({ relation: Named })]),
+  terms: Schema.NonEmptyArray(TermValue),
 });
 
 /**
- * The relations of the phase-5 test layer's six modules and the fifteen of its processing
- * headings, by name. A statement that names one of them is the phase's.
+ * A family statement's value: `ordered`, `counted` or `tree`, its member side and its slots.
  */
-const phaseRelations: ReadonlySet<string> = new Set([
-  ...Object.keys(testStructure.relations),
-  ...Object.keys(testControl.relations),
-  ...Object.keys(testRules.relations),
-  ...Object.keys(testContent.relations),
-  ...Object.keys(stimulus.relations),
-  ...Object.keys(reference.relations),
-  "ItemInstanceSpelling",
-  "ItemInstanceVariableRef",
-  "ItemVariableRef",
-  "PrefixedBuiltIn",
-  "PrefixedDeclared",
-  "PrefixedMapped",
-  "PrefixedVariableSource",
-  "SectionDurationRef",
-  "SectionDurationTarget",
-  "SectionIdentifierTarget",
-  "SectionVariableDeclared",
-  "SectionVariableDuration",
-  "SectionVariablePrefixed",
-  "SectionVariableRef",
-  "SectionVariableResolution",
-]);
+const FamilyValue = Schema.Struct({
+  family: SideValue,
+  kind: Schema.Literals(["counted", "ordered", "tree"]),
+  root: Schema.optional(Schema.String),
+  slots: Schema.Struct({ count: Schema.String, owner: Named }),
+});
 
-type LawSideOf = Extract<ImportLaw, { readonly kind: "contained" }>["from"];
-
-const RelationName = Schema.Struct({ name: Schema.String });
-
-const Side = Schema.Struct({
-  fields: Schema.Array(Schema.String),
-  source: Schema.Union([
-    Schema.Struct({
-      bindings: Schema.Record(
-        Schema.String,
-        Schema.Union([Schema.String, Schema.Number, Schema.BigInt, Schema.Boolean]),
-      ),
-      relation: RelationName,
+/**
+ * Every statement value a schema of this package holds, as `schema()` keeps it in `statements`.
+ */
+const StatementValue = Schema.Union([
+  Schema.Struct({ kind: Schema.Literal("check"), name: Schema.String, relation: Named }),
+  Schema.Struct({ kind: Schema.Literal("key"), side: SideValue }),
+  Schema.Struct({
+    kind: Schema.Literals(["contained", "mirrors"]),
+    left: SideValue,
+    right: SideValue,
+  }),
+  FamilyValue,
+  Schema.Struct({
+    end: SideValue,
+    family: FamilyValue,
+    kind: Schema.Literal("fold"),
+    monoid: Schema.Struct({
+      name: Schema.Literals(["count", "sum", "or", "twos", "max", "concat"]),
     }),
-    RelationName,
-  ]),
-});
-
-/**
- * The statements of `Qti` as this test reads them: the kind, the relations and the fields each
- * names, and a selection's bindings.
- */
-const Statement = Schema.Union([
-  Schema.Struct({
-    fields: Schema.Array(Schema.String),
-    kind: Schema.Literal("key"),
-    relation: RelationName,
+    step: SideValue,
   }),
-  Schema.Struct({ kind: Schema.Literal("check"), name: Schema.String, relation: RelationName }),
-  Schema.Struct({ kind: Schema.Literal("contained"), left: Side, right: Side }),
-  Schema.Struct({ kind: Schema.Literal("mirrors"), left: Side, right: Side }),
-  Schema.Struct({ from: Side, kind: Schema.Literal("capacity"), target: Side }),
-  Schema.Struct({
-    arms: Schema.Record(Schema.String, RelationName),
-    discriminator: Schema.String,
-    kind: Schema.Literal("alternatives"),
-    parent: RelationName,
-  }),
+  Schema.Struct({ kind: Schema.Literal("mutable") }),
 ]);
 
-const readStatement = Schema.decodeUnknownSync(Statement);
+type SideRead = typeof SideValue.Type;
+
+type FamilyRead = typeof FamilyValue.Type;
 
 /**
- * A containment, mirrors or capacity side as the engine reports it: the relation, the fields and
- * the values a selection binds.
+ * A side read from a statement: the side as a law names it, and whether its source is a selection.
  */
-const sideOf = (side: typeof Side.Type): LawSideOf =>
-  "bindings" in side.source
-    ? {
-        fields: [...side.fields],
-        relation: side.source.relation.name,
-        selection: Object.entries(side.source.bindings).map(([field, value]) => ({ field, value })),
-      }
-    : { fields: [...side.fields], relation: side.source.name, selection: [] };
-
-const sideText = (side: typeof Side.Type): string =>
-  "bindings" in side.source
-    ? `${side.source.relation.name}(${side.fields.join(",")})[${Object.entries(side.source.bindings)
-        .map(([field, value]) => `${field}=${String(value)}`)
-        .join(",")}]`
-    : `${side.source.name}(${side.fields.join(",")})`;
-
-/**
- * One law of the composed schema's statements, with its signature (the kind, then each side as
- * `Relation(fields)[selection]`, a capacity as `target < filler`) and the relations it names.
- */
-interface Signed {
-  readonly law: ImportLaw;
-  readonly relations: readonly string[];
-  readonly signature: string;
+interface ReadSide {
+  readonly law: LawSide;
+  readonly selected: boolean;
 }
 
 /**
- * The laws one statement of `Qti` states. An `alternatives` states itself and one arm law per arm.
+ * Read a side as a law names it, and whether it selects: the selection is no part of a law's
+ * identity, but which axis end a side is depends on it.
+ *
+ * @param side - The side's value.
+ * @returns The law side, and whether its source is a selection.
  */
-const lawsOfStatement = (statement: (typeof Qti.statements)[number]): readonly Signed[] => {
-  const read = readStatement(statement);
+const sideRead = (side: SideRead): ReadSide => {
+  const selected = "relation" in side.source;
+  const terms = pipe(
+    side.terms,
+    Arr.map((t): LawSide["terms"][number] =>
+      Predicate.isString(t) ? { field: t, kind: "field" } : t,
+    ),
+  );
 
-  if (read.kind === "key") {
-    return [
-      {
-        law: { fields: read.fields, kind: "key", relation: read.relation.name },
-        relations: [read.relation.name],
-        signature: `key ${read.relation.name}(${read.fields.join(",")})`,
-      },
-    ];
-  }
-
-  if (read.kind === "check") {
-    return [
-      {
-        law: { kind: "check", name: read.name, relation: read.relation.name },
-        relations: [read.relation.name],
-        signature: `check ${read.relation.name}.${read.name}`,
-      },
-    ];
-  }
-
-  if (read.kind === "contained" || read.kind === "mirrors") {
-    const from = sideOf(read.left);
-    const to = sideOf(read.right);
-
-    return [
-      {
-        law: { from, kind: read.kind, to },
-        relations: [from.relation, to.relation],
-        signature: `${read.kind} ${sideText(read.left)} > ${sideText(read.right)}`,
-      },
-    ];
-  }
-
-  if (read.kind === "capacity") {
-    const from = sideOf(read.from);
-    const target = sideOf(read.target);
-
-    return [
-      {
-        law: { from, kind: "capacity", target },
-        relations: [target.relation, from.relation],
-        signature: `capacity ${sideText(read.target)} < ${sideText(read.from)}`,
-      },
-    ];
-  }
-
-  const relation = read.parent.name;
-  const field = read.discriminator;
-  const arms: readonly Signed[] = Object.entries(read.arms).map(([handle, arm]) => ({
-    law: { arm: arm.name, field, handles: [handle], kind: "alternativesArm", relation },
-    relations: [arm.name, relation],
-    signature: `altArm ${arm.name} of ${relation} ${handle}`,
-  }));
-
-  return [
-    {
-      law: { field, kind: "alternatives", relation },
-      relations: [relation],
-      signature: `alt ${relation}.${field}`,
+  return {
+    law: {
+      relation: "relation" in side.source ? side.source.relation.name : side.source.name,
+      selection: { conjuncts: [] },
+      terms,
     },
-    ...arms,
-  ];
+    selected,
+  };
 };
 
 /**
- * A `Node` selection's `mirrors` into its arm: the `Node` law, one per `NodeKind` handle, which no
- * phase maps (the first kind's is unmapped too), so it is not among the phase's statements.
+ * Read a family statement's law, as grizzle's outcome names it (README, "Every rule an outcome can
+ * name": `family` by its order, member and slots; `tree` by its member, slots and root).
+ *
+ * @param family - The family's value.
+ * @returns The law.
  */
-const isNodeLaw = (signature: string): boolean => signature.startsWith("mirrors Node(id)[kind=");
+const familyLawOf = (family: FamilyRead): Law => {
+  const member = sideRead(family.family).law;
+  const slots = { count: family.slots.count, owner: family.slots.owner.name };
+
+  return family.kind === "tree"
+    ? { kind: "tree", member, root: family.root ?? "", slots }
+    : { kind: "family", member, order: family.kind, slots };
+};
 
 /**
- * The capacities the 3.0.0 stimulus body's shared attributes fill collapse to one signature.
+ * Read the laws a statement states, as an `invariant-rejected` outcome names them: a mirrors is its
+ * two containments and a `mutable` states none (README, "Errors and outcomes").
+ *
+ * @param statement - A statement value of a schema.
+ * @returns Its laws, or the refusal of a statement value no law reads.
  */
-const collapse = (signature: string): string =>
-  signature.startsWith("capacity StimulusBody(id)[version=3.0.0] < ")
-    ? "capacity StimulusBody(id)[version=3.0.0] < *"
-    : signature;
+const lawsOfStatement = (statement: Statement): Result.Result<readonly Law[], string> =>
+  Result.map(
+    Result.mapError(Schema.decodeUnknownResult(StatementValue)(statement), String),
+    (read): readonly Law[] => {
+      if (read.kind === "check") {
+        return [{ kind: "check", name: read.name, relation: read.relation.name }];
+      }
 
-const composed: readonly Signed[] = Qti.statements.flatMap(lawsOfStatement);
+      if (read.kind === "key") {
+        return [{ kind: "key", side: sideRead(read.side).law }];
+      }
+
+      if (read.kind === "contained" || read.kind === "mirrors") {
+        const left = sideRead(read.left).law;
+        const right = sideRead(read.right).law;
+        const there: Law = { from: left, kind: "contained", to: right };
+
+        return read.kind === "contained"
+          ? [there]
+          : [there, { from: right, kind: "contained", to: left }];
+      }
+
+      if (read.kind === "fold") {
+        return [
+          {
+            end: sideRead(read.end).law,
+            family: { count: read.family.slots.count, owner: read.family.slots.owner.name },
+            kind: "fold",
+            monoid: read.monoid.name,
+            step: sideRead(read.step).law,
+          },
+        ];
+      }
+
+      return "slots" in read ? [familyLawOf(read)] : [];
+    },
+  );
 
 /**
- * The statements the phase added or edited, each with the name of its 4.16 rule. A statement the
- * brief names by a relation's family is one row per statement, so that a new statement has to be
- * added here and mapped.
+ * The primary key of every stored relation of a schema, as its law.
+ *
+ * @param relations - The schema's `relations`.
+ * @returns The laws.
  */
-const phaseRules: readonly (readonly [string, readonly string[]])[] = [
-  ["P12", ["contained Weight(id,itemRef) > Edge(child,parent)"]],
-  [
-    "P3",
-    [
-      "contained BranchRule(id) > RuleOperand(rule)",
-      "contained PreCondition(id) > RuleOperand(rule)",
-      "contained TemplateDefault(id) > RuleOperand(rule)",
+const primaryKeysOf = (relations: AnySchema["relations"]): readonly Law[] =>
+  Object.values(relations).flatMap((value) =>
+    Option.toArray(
+      Option.map(
+        Schema.decodeUnknownOption(
+          Schema.Struct({
+            kind: Schema.Literal("relation"),
+            name: Schema.String,
+            primaryKey: Schema.Array(Schema.String),
+          }),
+        )(value),
+        ({ name, primaryKey }): Law => ({ fields: primaryKey, kind: "primaryKey", relation: name }),
+      ),
+    ),
+  );
+
+/**
+ * One axis of a family and every law its foreign key carries.
+ */
+interface Axis {
+  readonly label: string;
+  readonly laws: Arr.NonEmptyReadonlyArray<Law>;
+}
+
+/**
+ * Whether a side's terms begin with `prefix`, each a field or `pred` of the same field.
+ *
+ * @param side - The side.
+ * @param prefix - The terms.
+ * @returns Whether they begin it.
+ */
+const beginsWith = (side: LawSide, prefix: readonly LawSide["terms"][number][]): boolean =>
+  prefix.every((term, at) => {
+    const own = side.terms[at];
+
+    return own !== undefined && own.kind === term.kind && own.field === term.field;
+  });
+
+/**
+ * Read the axes of every family of a schema, each with the laws its foreign key carries: the
+ * family's own law, every containment that rides the axis, and on the predecessor and last axes
+ * every fold over the family.
+ *
+ * It restates grizzle's riding rule (`analysis/theory/families.ts` `axisShapes` and `ridesOf`, at
+ * 4016b69): the owner axis is member `F(g…)` to owner `O(k…)`; the predecessor axis
+ * `F(g…, pred(i))` to `F(g…, i)` and the last axis `O(k…, pred(n))` to `F(g…, i)` for a family
+ * whose index is a field. A tree's member ends read its members, a selection, and every other end
+ * reads every fact; a statement value shows a selection but not its predicate, so the reader takes
+ * any selection of a tree's member for the members.
+ *
+ * @param statements - The schema's statement values.
+ * @param relations - Its relations, for each owner's primary key.
+ * @returns The axes.
+ */
+const mergedAxes = (
+  statements: readonly Statement[],
+  relations: AnySchema["relations"],
+): readonly Axis[] => {
+  const decoded = statements.flatMap((s) =>
+    Option.toArray(Schema.decodeUnknownOption(StatementValue)(s)),
+  );
+  const keys = new Map(
+    primaryKeysOf(relations).flatMap((law) =>
+      law.kind === "primaryKey" ? [[law.relation, law.fields] as const] : [],
+    ),
+  );
+  const containments = decoded.flatMap((read) =>
+    read.kind === "contained" ? [{ left: sideRead(read.left), right: sideRead(read.right) }] : [],
+  );
+
+  return decoded.flatMap((read): readonly Axis[] => {
+    if (read.kind !== "counted" && read.kind !== "ordered" && read.kind !== "tree") {
+      return [];
+    }
+
+    const own = familyLawOf(read);
+    const member = sideRead(read.family);
+    const owner = read.slots.owner.name;
+    const isTree = read.kind === "tree";
+    const { terms } = member.law;
+    const group = read.kind === "counted" ? [...terms] : terms.slice(0, -1);
+    const index = read.kind === "counted" ? undefined : terms.at(-1);
+    const ownerKey = (keys.get(owner) ?? []).map((field) => ({ field, kind: "field" as const }));
+    const folds = decoded.flatMap((other): readonly Law[] =>
+      other.kind === "fold" &&
+      other.family.slots.owner.name === owner &&
+      other.family.slots.count === read.slots.count
+        ? Result.getOrElse(lawsOfStatement(other), () => [])
+        : [],
+    );
+    const riding = (
+      from: { readonly relation: string; readonly members: boolean },
+      to: { readonly relation: string; readonly members: boolean },
+      fromKey: readonly LawSide["terms"][number][],
+      toKey: readonly LawSide["terms"][number][],
+    ): readonly Law[] =>
+      containments
+        .filter(
+          ({ left, right }) =>
+            left.law.relation === from.relation &&
+            right.law.relation === to.relation &&
+            left.selected === (from.members && isTree) &&
+            right.selected === (to.members && isTree) &&
+            beginsWith(left.law, fromKey) &&
+            beginsWith(right.law, toKey),
+        )
+        .map(({ left, right }): Law => ({ from: left.law, kind: "contained", to: right.law }));
+    const ownerAxis: Axis = {
+      label: `${member.law.relation} owner`,
+      laws: [
+        own,
+        ...riding(
+          { members: true, relation: member.law.relation },
+          { members: false, relation: owner },
+          group,
+          ownerKey,
+        ),
+      ],
+    };
+    if (index === undefined) {
+      return [
+        ownerAxis,
+        { label: `${member.law.relation} predecessor and last`, laws: [own, ...folds] },
+      ];
+    }
+
+    return [
+      ownerAxis,
+      {
+        label: `${member.law.relation} predecessor`,
+        laws: [
+          own,
+          ...riding(
+            { members: true, relation: member.law.relation },
+            { members: true, relation: member.law.relation },
+            [...group, { field: index.field, kind: "pred" }],
+            [...group, index],
+          ),
+          ...folds,
+        ],
+      },
+      {
+        label: `${member.law.relation} last`,
+        laws: [
+          own,
+          ...riding(
+            { members: false, relation: owner },
+            { members: true, relation: member.law.relation },
+            [...ownerKey, { field: read.slots.count, kind: "pred" }],
+            [...group, index],
+          ),
+          ...folds,
+        ],
+      },
+    ];
+  });
+};
+
+/**
+ * A scratch schema's statements, in the shapes `node.ts` and `attributes.ts` state, built with
+ * grizzle's own constructors: a tree with its parent copy, predecessor copy, last slot, `Follow`
+ * step and two count folds, an ordered family with its owner copy and `or` fold, and a counted
+ * family whose owner copy rides its owner axis.
+ *
+ * `grizzle generate` compiled this schema at 4016b69, with no database, and its foreign keys carry
+ * exactly: the tree's owner axis (parent, ‹n›, document, parentKind, parentNearest, ‹ps›, version);
+ * its predecessor axis (pred(at), elementsWas, start, was, the hidden count fold's before); its
+ * last axis (pred(children), elementChildren, end, lastState, countedChildren); the attribute
+ * family's owner axis (‹n›, document, kind), predecessor axis (pred(at), attrsWas) and last axis
+ * (pred(attributes), attrs); and the counted family's owner axis (‹n›, the containment into
+ * `Binding.node`).
+ */
+const scratch = (() => {
+  const Kind = closed("Kind", ["document", "e", "text"]);
+  const Version = closed("Version", ["v"]);
+  const Pos = closed("Pos", ["0", "1", "2"]);
+  const Slot = closed("Slot", ["0", "1"]);
+  const Name = closed("Name", ["x", "data-*"]);
+  const Follow = closed.relation(
+    "Follow",
+    { from: closedId(Pos), parent: closedId(Kind), to: closedId(Pos), version: closedId(Version) },
+    ["version", "parent", "from", "to"],
+    [{ from: "0", parent: "document", to: "1", version: "v" }],
+  );
+  const nil = "00000000-0000-0000-0000-000000000000";
+  const Node = relation(
+    "Node",
+    {
+      at: drawn(natural),
+      attributes: drawn(natural),
+      attrs: accumulated(bits(Slot), Bits.of(Slot, [])),
+      children: drawn(natural),
+      countedChildren: accumulated(natural, 0n),
+      document: uuid,
+      elementChildren: accumulated(natural, 0n),
+      elements: accumulated(natural, 0n),
+      elementsWas: accumulated(natural, 0n),
+      end: drawn(natural),
+      id: uuid,
+      kind: closedId(Kind),
+      lastState: accumulated(closedId(Pos), "0"),
+      nearest: uuid,
+      parent: uuid,
+      parentKind: accumulated(closedId(Kind), "document"),
+      parentNearest: accumulated(uuid, nil),
+      start: drawn(natural),
+      state: closedId(Pos),
+      version: closedId(Version),
+      was: accumulated(closedId(Pos), "0"),
+    },
+    ["id"],
+  );
+  const Attribute = relation(
+    "Attribute",
+    {
+      at: drawn(natural),
+      attrsAfter: accumulated(bits(Slot), Bits.of(Slot, [])),
+      attrsWas: accumulated(bits(Slot), Bits.of(Slot, [])),
+      document: accumulated(uuid, nil),
+      kind: accumulated(closedId(Kind), "document"),
+      name: closedId(Name),
+      node: uuid,
+      slot: bits(Slot),
+    },
+    ["node", "at"],
+  );
+  const Binding = relation("Binding", { choices: drawn(natural), node: uuid }, ["node"]);
+  const Choice = relation(
+    "Choice",
+    { identifier: str.regex("^[a-z]{1,8}$"), interaction: uuid, node: uuid },
+    ["node"],
+  );
+  const members = select(Node, (n) => n.gt(n.start, 0n));
+  const nodeTree = tree(on(Node, "parent", "at"), fin(Node, "children"), { root: "document" });
+  const attributeFamily = ordered(on(Attribute, "node", "at"), fin(Node, "attributes"));
+  const choiceFamily = counted(on(Choice, "interaction"), fin(Binding, "choices"));
+
+  return {
+    relations: { Attribute, Binding, Choice, Follow, Kind, Name, Node, Pos, Slot, Version },
+    statements: [
+      nodeTree,
+      contained(
+        on(members, "parent", "version", "parentKind", "parentNearest"),
+        on(Node, "id", "version", "kind", "nearest"),
+      ),
+      contained(
+        on(members, "version", "parentKind", "was", "state"),
+        on(Follow, "version", "parent", "from", "to"),
+      ),
+      contained(on(members, "parent", pred("at"), "was"), on(members, "parent", "at", "state")),
+      contained(
+        on(Node, "id", pred("children"), "lastState"),
+        on(members, "parent", "at", "state"),
+      ),
+      fold(
+        nodeTree,
+        Monoid.count,
+        on(members, "parent", "elementsWas", "elements"),
+        on(Node, "id", "elementChildren"),
+      ),
+      fold(
+        nodeTree,
+        Monoid.count,
+        on(
+          select(Node, (n) => n.and(n.gt(n.start, 0n), n.eq(n.state, "2"))),
+          "parent",
+        ),
+        on(Node, "id", "countedChildren"),
+      ),
+      check("N1_sentinel", Node, (n) => n.or(n.gt(n.start, 0n), n.eq(n.state, "0"))),
+      attributeFamily,
+      contained(on(Attribute, "node", "kind", "document"), on(Node, "id", "kind", "document")),
+      fold(
+        attributeFamily,
+        Monoid.or,
+        on(
+          select(Attribute, (a) => Compute.not(Compute.in(a.name, ["data-*"]))),
+          "node",
+          "slot",
+          "attrsWas",
+          "attrsAfter",
+        ),
+        on(Node, "id", "attrs"),
+      ),
+      choiceFamily,
+      contained(on(Choice, "interaction"), on(Binding, "node")),
+      mirrors(on(Choice, "node"), on(Node, "id")),
+      key(on(Choice, "interaction", "identifier")),
     ],
-  ],
+  } as const;
+})();
+
+/**
+ * Build a law side over every fact, as an outcome names one.
+ *
+ * @param name - The relation.
+ * @param terms - Its terms: a field's name, or `pred:field`.
+ * @returns The side.
+ */
+const sideOf = (name: string, ...terms: readonly [string, ...string[]]): LawSide => {
+  const read = pipe(
+    terms,
+    Arr.map((t): LawSide["terms"][number] =>
+      t.startsWith("pred:") ? { field: t.slice(5), kind: "pred" } : { field: t, kind: "field" },
+    ),
+  );
+
+  return { relation: name, selection: { conjuncts: [] }, terms: read };
+};
+
+/**
+ * Read the laws a list of statement values states, failing the test on a value no law reads.
+ *
+ * @param statements - The values.
+ * @returns The laws, in statement order.
+ */
+const lawsOf = (statements: readonly Statement[]) =>
+  Effect.all(statements.map((statement) => Effect.fromResult(lawsOfStatement(statement)))).pipe(
+    Effect.map((laws) => laws.flat()),
+  );
+
+/**
+ * Collect the laws of {@link statedLaws} named `name` whose identity holds `part`.
+ *
+ * @param name - The law's name.
+ * @param part - A part of the identity, empty for every law of the name.
+ * @returns The laws.
+ */
+const statedNamed = (name: keyof typeof lawTable, part = ""): readonly Law[] =>
+  statedLaws.flatMap(([law, owner]) =>
+    owner === name && lawIdentity(law).includes(part) ? [law] : [],
+  );
+
+/**
+ * The rules of each tier of the spec's order, from QTI's own rules to the representation's (the
+ * plan's §1.3 to §1.7): a refusal that names laws of several tiers names one of the most specific
+ * tier's.
+ */
+const tiers: readonly (readonly Rule[])[] = [
   [
-    "P8",
-    [
-      "check SectionVariableDeclared.SectionVariableDeclaredKind",
-      "contained SectionVariableDeclared(ref,identifier,referrerKind) > SectionVariableRef(id,identifier,referrerKind)",
-      "contained SectionVariableDeclared(test,identifier,declarationKind) > Declaration(document,identifier,kind)",
-    ],
-  ],
-  [
-    "attribute-admission",
-    [
-      "capacity StimulusBody(id)[version=3.0.0] < *",
-      "check ItemTool.ItemToolRoot",
-      "contained AttributeFileReference(kind,attribute) > AttributeAdmission(kind,attribute)",
-      "contained AttributeFileReference(node,kind) > Node(id,kind)",
-      "contained DeclaredAllowComment(node) > ItemSessionControl(id)",
-      "contained DeclaredAllowLateSubmission(node) > TimeLimits(id)",
-      "contained DeclaredAllowReview(node) > ItemSessionControl(id)",
-      "contained DeclaredAllowSkipping(node) > ItemSessionControl(id)",
-      "contained DeclaredOrderingShuffle(node) > Ordering(id)",
-      "contained DeclaredShowFeedback(node) > ItemSessionControl(id)",
-      "contained DeclaredShowSolution(node) > ItemSessionControl(id)",
-      "contained DeclaredValidateResponses(node) > ItemSessionControl(id)",
-      "contained DeclaredWithReplacement(node) > Selection(id)",
-      "contained ItemRefCategory(node) > ItemRef(id)",
-      "contained ItemSessionMaxAttempts(node) > ItemSessionControl(id)",
-      "contained ItemStimulusRefTitle(node) > ItemStimulusRef(id)",
-      "contained ItemTool(tree)[root=item] > AssessmentItem(tree)",
-      "contained ItemTool(tree,root) > Tree(id,root)",
-      "contained StimulusBody(id,version) > Node(id,version)",
-      "contained TestFeedbackTitle(node) > TestFeedback(id)",
-      "contained TestPartTitle(node) > TestPart(id)",
-      "contained TestRubricBlockUse(node) > TestRubricBlock(id)",
-      "contained TimeLimitMax(node) > TimeLimits(id)",
-      "contained TimeLimitMin(node) > TimeLimits(id)",
-    ],
-  ],
-  [
-    "attribute-lexical",
-    ["check ItemSessionMaxAttempts.MaxAttemptsInt", "check Selection.SelectionSelectInt"],
-  ],
-  [
-    "branch-target",
-    [
-      "alt BranchRule.targetKind",
-      "altArm BranchRuleExit of BranchRule exit",
-      "altArm BranchRuleTarget of BranchRule ref",
-      "check BranchRuleTarget.BranchTargetKind",
-      "contained BranchRule(id,owner) > Edge(child,parent)",
-      "contained BranchRule(owner)[ownerKind=itemRef] > ItemRef(id)",
-      "contained BranchRule(owner)[ownerKind=part] > TestPart(id)",
-      "contained BranchRule(owner)[ownerKind=section] > AssessmentSection(id)",
-      "contained BranchRuleTarget(rule,ownerKind) > BranchRule(id,ownerKind)",
-      "contained BranchRuleTarget(rule,scope) > BranchRule(id,document)",
-      "contained BranchRuleTarget(scope,identifier,holderKind) > TestIdentifier(scope,identifier,holderKind)",
-    ],
-  ],
-  [
-    "document-lang",
-    ["contained NodeXmlLang(tree,value)[rootKind=test] > DocumentLang(document,value)"],
-  ],
-  [
-    "feedback-ref",
-    [
-      "check SectionFeedbackOutcomeRef.SectionFeedbackOutcomeRefType",
-      "contained SectionFeedbackOutcomeRef(node,document) > Node(id,tree)",
-      "contained SectionFeedbackOutcomeRef(test,document) > TestDocument(test,document)",
-      "contained SectionFeedbackOutcomeRef(test,identifier) > Declaration(document,identifier)[kind=outcome]",
-      "contained SectionFeedbackOutcomeRef(test,identifier,baseType,cardinality) > TypedDeclaration(document,identifier,baseType,cardinality)",
-    ],
-  ],
-  [
-    "file-exists",
-    [
-      "contained AttributeFileReference(document,package) > Document(id,package)",
-      "contained AttributeFileReference(node,document) > Node(id,tree)",
-      "contained AttributeFileReference(package,path) > PackageEntry(package,path)",
-    ],
-  ],
-  ["include-parse", ["check XIncludeParse.XIncludeParseXml"]],
-  ["include-xpointer", ["capacity XInclude(id) < XIncludeXpointer(node)"]],
-  [
-    "item-ref-target",
-    [
-      "alt ItemRefResolution.targetKind",
-      "altArm ItemRefDocument of ItemRefResolution item",
-      "altArm ItemRefLti of ItemRefResolution lti",
-      "check ItemRefLti.ItemRefLtiType",
-      "contained ItemRef(id) > ItemRefResolution(itemRef)",
-      "contained ItemRefDocument(package,path,document) > Document(package,path,id)[root=item]",
-      "contained ItemRefLti(package,resource,type) > Resource(package,identifier,type)",
-    ],
-  ],
-  [
+    "document-key",
+    "idref-target",
     "label-tool",
-    [
-      "check AssessmentItemLabel.AssessmentItemLabelRoot",
-      "contained AssessmentItemLabel(tree)[root=item,version=3.0.1] > ItemToolBoth(tree)",
-      "contained AssessmentItemLabel(tree,root) > Tree(id,root)",
-    ],
-  ],
-  [
-    "lom-identifier",
-    ["capacity ResourceLomIdentified(lom)[type=imsqti_test_xmlv3p0] < LomObjectIdentifier(lom)"],
-  ],
-  [
-    "lom-title",
-    ["capacity ResourceLomTitled(lom)[type=imsqti_test_xmlv3p0] < LomObjectTitle(lom)"],
-  ],
-  [
-    "prefixed-ref",
-    [
-      "alt PrefixedVariableSource.source",
-      "altArm ItemInstanceVariableRef of VariableRef itemInstanceVariable",
-      "altArm ItemVariableRef of VariableRef itemVariable",
-      "altArm PrefixedBuiltIn of PrefixedVariableSource builtIn",
-      "altArm PrefixedDeclared of PrefixedVariableSource declared",
-      "altArm PrefixedMapped of PrefixedVariableSource mapped",
-      "altArm SectionDurationRef of VariableRef sectionDuration",
-      "check PrefixedBuiltIn.PrefixedBuiltInName",
-      "check PrefixedVariableSource.PrefixedVariableSourceKind",
-      "check SectionDurationTarget.SectionDurationTargetHolder",
-      "check SectionDurationTarget.SectionDurationTargetKind",
-      "contained ItemInstanceVariableRef(id,document)[root=test] > PrefixedVariableSource(ref,test)",
-      "contained ItemVariableRef(id,document)[root=test] > PrefixedVariableSource(ref,test)",
-      "contained PrefixedBuiltIn(ref,test) > PrefixedVariableSource(ref,test)",
-      "contained PrefixedDeclared(itemDocument,variable) > Declaration(document,identifier)",
-      "contained PrefixedDeclared(ref,test,itemDocument) > PrefixedVariableSource(ref,test,itemDocument)",
-      "contained PrefixedMapped(itemRef,variable) > VariableMapping(itemRef,target)",
-      "contained PrefixedMapped(ref,test,itemRef) > PrefixedVariableSource(ref,test,itemRef)",
-      "contained PrefixedVariableSource(itemRef,itemDocument) > ItemRefDocument(itemRef,document)",
-      "contained PrefixedVariableSource(ref,document,refKind) > VariableRef(id,document,kind)",
-      "contained PrefixedVariableSource(ref,prefix)[refKind=itemInstanceVariable] > ItemInstanceVariableRef(id,prefix)",
-      "contained PrefixedVariableSource(ref,prefix)[refKind=itemVariable] > ItemVariableRef(id,prefix)",
-      "contained PrefixedVariableSource(test,document) > TestDocument(test,document)",
-      "contained PrefixedVariableSource(test,prefix,itemRef) > TestReach(test,identifier,holder)[holderKind=itemRef]",
-      "contained SectionDurationRef(id,document)[root=test] > SectionDurationTarget(ref,test)",
-      "contained SectionDurationTarget(ref,document,prefix)[refKind=sectionDuration] > SectionDurationRef(id,document,prefix)",
-      "contained SectionDurationTarget(ref,document,refKind) > VariableRef(id,document,kind)",
-      "contained SectionDurationTarget(test,document) > TestDocument(test,document)",
-      "contained SectionDurationTarget(test,prefix,holder,holderKind) > TestReach(test,identifier,holder,holderKind)",
-    ],
-  ],
-  [
-    "prefixed-root",
-    [
-      "check ItemInstanceVariableRef.ItemInstanceVariableRoot",
-      "check ItemVariableRef.ItemVariableRoot",
-      "check SectionDurationRef.SectionDurationRoot",
-      "contained ItemInstanceVariableRef(document,root) > Document(id,root)",
-      "contained ItemVariableRef(document,root) > Document(id,root)",
-      "contained SectionDurationRef(document,root) > Document(id,root)",
-    ],
-  ],
-  [
+    "document-lang",
+    "declaration-key",
+    "declaration-reserved",
+    "reserved-type",
+    "declaration-type",
+    "value-cardinality",
+    "typed-copy",
+    "mastery-range",
+    "binding-declared",
+    "binding-fit",
+    "record-binding-fit",
+    "binding-unique",
+    "choice-bounds",
+    "choice-identifier-distinct",
+    "hotspot-default",
+    "feedback-ref",
+    "template-ref",
     "printed-variable-ref",
-    [
-      "check SectionPrintedVariableRef.SectionPrintedVariableRefKind",
-      "check SectionPrintedVariableVarRef.SectionPrintedVariableVarRefType",
-      "contained SectionPrintedVariableRef(node) > PrintedVariable(id)",
-      "contained SectionPrintedVariableRef(node,document) > Node(id,tree)",
-      "contained SectionPrintedVariableRef(test,document) > TestDocument(test,document)",
-      "contained SectionPrintedVariableRef(test,identifier,kind) > Declaration(document,identifier,kind)",
-      "contained SectionPrintedVariableVarRef(node) > PrintedVariable(id)",
-      "contained SectionPrintedVariableVarRef(node,document) > Node(id,tree)",
-      "contained SectionPrintedVariableVarRef(test,document) > TestDocument(test,document)",
-      "contained SectionPrintedVariableVarRef(test,identifier,baseType,cardinality) > TypedDeclaration(document,identifier,baseType,cardinality)",
-      "contained SectionPrintedVariableVarRef(test,identifier,kind) > Declaration(document,identifier,kind)",
-    ],
-  ],
-  [
-    "reach-copy",
-    [
-      "contained TestDocument(document) > Document(id)",
-      "contained TestDocument(test) > Document(id)[root=test]",
-    ],
-  ],
-  [
-    "ref-exists",
-    [
-      "contained ItemInstanceVariableRef(id,document) > VariableRef(id,document)",
-      "contained ItemVariableRef(id,document) > VariableRef(id,document)",
-      "contained SectionDurationRef(id,document) > VariableRef(id,document)",
-      "contained SectionVariableRef(id,document) > VariableRef(id,document)",
-    ],
-  ],
-  ["section-empty", ["capacity AssessmentSection(id) < StructureChild(parent)"]],
-  [
-    "section-identifier-target",
-    [
-      "check SectionIdentifierTarget.SectionIdentifierTargetHolderKind",
-      "contained SectionIdentifierTarget(node,identifier) > ExpressionSectionIdentifier(node,value)",
-      "contained SectionIdentifierTarget(node,document) > Node(id,tree)",
-      "contained SectionIdentifierTarget(test,document) > TestDocument(test,document)",
-      "contained SectionIdentifierTarget(test,identifier,holderKind) > TestReach(test,identifier,holderKind)",
-    ],
-  ],
-  [
-    "section-ref-target",
-    [
-      "contained SectionRef(id) > SectionRefResolution(sectionRef)",
-      "contained SectionRefResolution(package,path,document) > Document(package,path,id)[root=section]",
-    ],
-  ],
-  [
-    "section-variable-ref",
-    [
-      "alt SectionVariableResolution.target",
-      "altArm SectionVariableDeclared of SectionVariableResolution declared",
-      "altArm SectionVariableDuration of SectionVariableResolution duration",
-      "altArm SectionVariablePrefixed of SectionVariableResolution prefixed",
-      "altArm SectionVariableRef of VariableRef sectionVariable",
-      "check SectionVariableRef.SectionVariableReferrer",
-      "check SectionVariableRef.SectionVariableRoot",
-      "contained SectionVariableRef(document,root) > Document(id,root)",
-      "contained SectionVariableRef(id,referrerKind) > Node(id,kind)",
-      "contained SectionVariableResolution(ref,document) > SectionVariableRef(id,document)",
-      "contained SectionVariableResolution(test,document) > TestDocument(test,document)",
-      "mirrors SectionVariableDuration(ref,test) > SectionDurationTarget(ref,test)[refKind=sectionVariable]",
-      "mirrors SectionVariablePrefixed(ref,test) > PrefixedVariableSource(ref,test)[refKind=sectionVariable]",
-    ],
-  ],
-  [
+    "context-variable-ref",
+    "slider-bounds",
+    "max-strings-required",
+    "aria-value-range",
+    "varref-copy",
+    "adaptive-feedback",
+    "P2",
+    "P8",
+    "prefixed-ref",
+    "variable-kind",
+    "P20",
+    "P21",
+    "P22",
+    "P23",
+    "P24",
+    "P25",
+    "P26",
+    "P27",
+    "P29",
+    "item-duration",
+    "mapping-base-type",
+    "lookup-cardinality",
+    "map-key-unique",
+    "lom-identifier",
+    "lom-title",
+    "calendar",
     "selection-bounds",
-    [
-      "capacity SelectionBounded(section) < StructureChild(parent)",
-      "check SelectionBounded.SelectionBoundedWithoutReplacement",
-      "contained Selection(section)[withReplacement=0] > SelectionBounded(section)",
-      "contained Selection(section)[withReplacement=false] > SelectionBounded(section)",
-      "contained SelectionBounded(section,select,withReplacement) > Selection(section,select,withReplacement)",
-    ],
-  ],
-  [
     "selection-required",
-    [
-      "capacity Selection(section) < RequiredChild(parent)",
-      "check RequiredChild.RequiredChildRequired",
-      "contained AssessmentSection(id)[required=1] > RequiredChild(child)",
-      "contained AssessmentSection(id)[required=true] > RequiredChild(child)",
-      "contained ItemRef(id)[required=1] > RequiredChild(child)",
-      "contained ItemRef(id)[required=true] > RequiredChild(child)",
-      "contained RequiredChild(child,parent) > StructureChild(child,parent)",
-    ],
-  ],
-  [
-    "stimulus-ref-key",
-    [
-      "contained ItemStimulusRef(id,document) > Node(id,tree)",
-      "key ItemStimulusRef(document,identifier)",
-    ],
-  ],
-  [
-    "stimulus-ref-target",
-    [
-      "contained ItemStimulusRef(id) > StimulusRefResolution(stimulusRef)",
-      "contained StimulusRefResolution(package,path,document) > Document(package,path,id)[root=stimulus]",
-    ],
-  ],
-  [
-    "structure-count",
-    [
-      "capacity AdaptiveSelection(id) < Edge(parent)[childKind=qti-adaptive-engine-ref,parentKind=qti-adaptive-selection]",
-      "capacity AdaptiveSelection(id) < Edge(parent)[childKind=qti-adaptive-settings-ref,parentKind=qti-adaptive-selection]",
-      "capacity AdaptiveSelection(id) < Edge(parent)[childKind=qti-metadata-ref,parentKind=qti-adaptive-selection]",
-      "capacity AdaptiveSelection(id) < Edge(parent)[childKind=qti-usagedata-ref,parentKind=qti-adaptive-selection]",
-      "capacity AssessmentSection(id) < Edge(parent)[childKind=qti-adaptive-selection,parentKind=qti-assessment-section]",
-      "capacity AssessmentSection(id) < Edge(parent)[childKind=qti-item-session-control,parentKind=qti-assessment-section]",
-      "capacity AssessmentSection(id) < Edge(parent)[childKind=qti-ordering,parentKind=qti-assessment-section]",
-      "capacity AssessmentSection(id) < Edge(parent)[childKind=qti-selection,parentKind=qti-assessment-section]",
-      "capacity AssessmentSection(id) < Edge(parent)[childKind=qti-time-limits,parentKind=qti-assessment-section]",
-      "capacity AssessmentStimulus(id) < Edge(parent)[childKind=qti-stimulus-body,parentKind=qti-assessment-stimulus]",
-      "capacity AssessmentTest(id) < Edge(parent)[childKind=qti-outcome-processing,parentKind=qti-assessment-test]",
-      "capacity AssessmentTest(id) < Edge(parent)[childKind=qti-test-part,parentKind=qti-assessment-test]",
-      "capacity AssessmentTest(id) < Edge(parent)[childKind=qti-time-limits,parentKind=qti-assessment-test]",
-      "capacity ItemRef(id) < Edge(parent)[childKind=qti-item-session-control,parentKind=qti-assessment-item-ref]",
-      "capacity ItemRef(id) < Edge(parent)[childKind=qti-time-limits,parentKind=qti-assessment-item-ref]",
-      "capacity TestFeedback(id) < Edge(parent)[childKind=qti-content-body.testFeedback,parentKind=qti-test-feedback]",
-      "capacity TestPart(id) < Edge(parent)[childKind=qti-item-session-control,parentKind=qti-test-part]",
-      "capacity TestPart(id) < Edge(parent)[childKind=qti-time-limits,parentKind=qti-test-part]",
-      "capacity TestPart(id) < StructureChild(parent)",
-      "capacity TestRubricBlock(id) < Edge(parent)[childKind=qti-content-body.testRubric,parentKind=qti-rubric-block.test]",
-      "contained Edge(child,parent)[childKind=qti-assessment-item-ref,parentKind=qti-assessment-section] > StructureChild(child,parent)",
-      "contained Edge(child,parent)[childKind=qti-assessment-section,parentKind=qti-assessment-section] > StructureChild(child,parent)",
-      "contained Edge(child,parent)[childKind=qti-assessment-section,parentKind=qti-test-part] > StructureChild(child,parent)",
-      "contained Edge(child,parent)[childKind=qti-assessment-section-ref,parentKind=qti-assessment-section] > StructureChild(child,parent)",
-      "contained Edge(child,parent)[childKind=qti-assessment-section-ref,parentKind=qti-test-part] > StructureChild(child,parent)",
-      "contained Edge(child,parent)[childKind=xi:include,parentKind=qti-assessment-section] > StructureChild(child,parent)",
-      "contained Selection(id,section) > Edge(child,parent)",
-      "contained Selection(section) > AssessmentSection(id)",
-      "contained StructureChild(child,parent) > Edge(child,parent)",
-      "key Selection(section)",
-    ],
-  ],
-  [
     "structure-identifier",
-    [
-      "contained AssessmentSection(id,document) > Node(id,tree)",
-      "contained AssessmentSection(id,document,identifier) > TestIdentifier(holder,scope,identifier)[holderKind=section]",
-      "contained ItemRef(id,document) > Node(id,tree)",
-      "contained ItemRef(id,document,identifier) > TestIdentifier(holder,scope,identifier)[holderKind=itemRef]",
-      "contained SectionRef(id,document) > Node(id,tree)",
-      "contained SectionRef(id,document,identifier) > TestIdentifier(holder,scope,identifier)[holderKind=sectionRef]",
-      "contained TestIdentifier(holder)[holderKind=itemRef] > ItemRef(id)",
-      "contained TestIdentifier(holder)[holderKind=part] > TestPart(id)",
-      "contained TestIdentifier(holder)[holderKind=sectionRef] > SectionRef(id)",
-      "contained TestIdentifier(holder)[holderKind=section] > AssessmentSection(id)",
-      "contained TestPart(id,document) > Node(id,tree)",
-      "contained TestPart(id,document,identifier) > TestIdentifier(holder,scope,identifier)[holderKind=part]",
-      "contained TestReach(holder,identifier,holderKind) > TestIdentifier(holder,identifier,holderKind)",
-      "key TestIdentifier(scope,identifier)",
-      "key TestReach(test,identifier)",
-    ],
-  ],
-  [
-    "template-default-target",
-    [
-      "contained TemplateDefault(id,itemRef) > Edge(child,parent)",
-      "contained TemplateDefault(itemDocument,templateIdentifier) > Declaration(document,identifier)[kind=template]",
-      "contained TemplateDefault(itemRef,itemDocument) > ItemRefDocument(itemRef,document)",
-    ],
-  ],
-  [
-    "value-lexical",
-    [
-      "check ItemInstanceVariableRef.ItemInstancePositive",
-      "contained ItemInstanceSpelling(ref) > ItemInstanceVariableRef(id)",
-    ],
-  ],
-  [
+    "test-name-key",
+    "section-identifier-target",
+    "branch-target",
+    "branch-forward",
+    "section-empty",
+    "stimulus-ref-key",
+    "variable-mapping-target",
     "variable-mapping-source",
-    [
-      "contained VariableMapping(id,itemRef) > Edge(child,parent)",
-      "contained VariableMapping(itemDocument,source) > Declaration(document,identifier)[kind=outcome]",
-      "contained VariableMapping(itemRef,itemDocument) > ItemRefDocument(itemRef,document)",
-    ],
+    "template-default-target",
+    "item-ref-target",
+    "stimulus-ref-target",
+    "include-target",
+    "include-root",
+    "inclusion-cycle",
+    "resource-type",
+    "root-type-reverse",
+    "entry-kind",
+    "file-listed",
+    "file-exists",
+    "href-listed",
+    "self-dependency",
+    "manifest-id-space",
   ],
-  ["variable-mapping-target", ["key VariableMapping(itemRef,target)"]],
+  ["math-arity", "ssml-fragment", "include-href"],
+  [
+    "xsi-type",
+    "required-attribute",
+    "attribute-count",
+    "attribute-lexical",
+    "text-copy",
+    "attribute-admission",
+  ],
+  ["ancestry-ban", "owner-copy", "ordering", "child-set", "union-count", "admission"],
+  [
+    "key-text-bound",
+    "href-form",
+    "fragment-context",
+    "well-formedness",
+    "unmodeled-vocabulary",
+    "derived",
+    "reachability",
+  ],
 ];
 
 /**
- * A side of the thin arms' mirrors: `ref` and `test` of one relation, selected or not.
+ * Read the tier of a rule: its place in {@link tiers}.
+ *
+ * @param rule - The rule.
+ * @returns Its tier, from 0, or the number of tiers for a rule of none.
  */
-const lawSide = (relation: string, selection: LawSideOf["selection"] = []): LawSideOf => ({
-  fields: ["ref", "test"],
-  relation,
-  selection,
+const tierOf = (rule: Rule): number => {
+  const at = tiers.findIndex((tier) => tier.includes(rule));
+
+  return at === -1 ? tiers.length : at;
+};
+
+/**
+ * Read the rule of each law of a set by its name.
+ *
+ * @param laws - The laws.
+ * @returns Their rules, one per law the table owns.
+ */
+const rulesOf = (laws: readonly Law[]): readonly Rule[] =>
+  laws.flatMap((law) => Option.toArray(Option.map(lawNameOf(law), (name) => lawTable[name].rule)));
+
+/**
+ * Check one set of laws one native object carries: it resolves to exactly one rule, one of its
+ * laws', of the most specific tier among them, whatever their order or repeats.
+ *
+ * @param laws - The laws, in any order, with any repeats.
+ */
+const assertResolves = (laws: Arr.NonEmptyReadonlyArray<Law>): void => {
+  const identities = laws.map(lawIdentity).join(" & ");
+  const rule = ruleOfLaws(laws);
+  const reversed = Arr.reverse(laws);
+  const once = Arr.dedupeWith(laws, (a, b) => lawIdentity(a) === lawIdentity(b));
+
+  assert.isTrue(Option.isSome(rule), identities);
+  assert.deepStrictEqual(ruleOfLaws(reversed), rule, identities);
+  assert.deepStrictEqual(ruleOfLaws(once), rule, identities);
+  if (Option.isSome(rule)) {
+    const rules = rulesOf(laws);
+    assert.include(rules, rule.value, identities);
+    assert.strictEqual(tierOf(rule.value), Math.min(...rules.map(tierOf)), identities);
+  }
+};
+
+/**
+ * The axes {@link plannedAxes} names, the features the precedence's exhaustion must reach.
+ */
+const axisLabels = [
+  "Node owner",
+  "Node predecessor",
+  "Node last",
+  "Attribute owner",
+  "Attribute predecessor and last",
+  "OpenAttributeName owner",
+  "Idref owner",
+  "Idref predecessor and last",
+  "Namespace",
+  "Choice",
+] as const;
+
+/**
+ * One of {@link axisLabels}.
+ */
+type AxisLabel = (typeof axisLabels)[number];
+
+/**
+ * Hold a list of laws nonempty, failing the suite where a planned group lost its laws.
+ *
+ * @param what - What the laws are, for the failure.
+ * @param laws - The laws.
+ * @returns The laws.
+ */
+const nonEmpty = <A>(what: string, laws: readonly A[]): Arr.NonEmptyReadonlyArray<A> =>
+  Arr.isReadonlyArrayNonEmpty(laws) ? laws : assert.fail(`${what}: no stated law`);
+
+/**
+ * Build a planned axis from groups of stated laws, with the rule the spec's order names for it.
+ *
+ * @param label - The axis.
+ * @param rule - Its rule.
+ * @param groups - Its laws, by group.
+ * @returns The axis.
+ */
+const plannedAxis = (
+  label: AxisLabel,
+  rule: Rule,
+  ...groups: readonly (readonly Law[])[]
+): Axis & { readonly label: AxisLabel; readonly rule: Rule } => ({
+  label,
+  laws: nonEmpty(label, groups.flat()),
+  rule,
 });
 
-describe("the rules of the phase-5 statements", () => {
-  for (const [rule, signatures] of phaseRules) {
-    it(`maps ${signatures.length} statement(s) to ${rule}, none to the fallback`, () => {
-      for (const signature of signatures) {
-        const found = composed.filter((signed) => collapse(signed.signature) === signature);
+/**
+ * The merged axes of the schema's families as `node.ts`, `chardata.ts` and `attributes.ts` state
+ * them, each with the rule its refusal names under the spec's order: a content-order law over the
+ * tree's own, and an attribute law over its family's.
+ */
+const plannedAxes = nonEmpty("the planned axes", [
+  plannedAxis("Node owner", "reachability", statedNamed("N2 tree"), statedNamed("T3 first child")),
+  plannedAxis(
+    "Node predecessor",
+    "ordering",
+    statedNamed("N2 tree"),
+    statedNamed("N5 fold"),
+    statedNamed("N7 Counted"),
+    statedNamed("N7 barred by"),
+    statedNamed("E1 derived", "fold over Node.children"),
+  ),
+  plannedAxis(
+    "Node last",
+    "ordering",
+    statedNamed("N2 tree"),
+    statedNamed("N7 last slot"),
+    statedNamed("N5 fold", "fold over"),
+    statedNamed("N7 Counted"),
+    statedNamed("N7 barred by"),
+    statedNamed("E1 derived", "fold over Node.children"),
+  ),
+  plannedAxis(
+    "Attribute owner",
+    "attribute-admission",
+    statedNamed("AL2 count", "family"),
+    statedNamed("AL1 owner", "Attribute(node, kind"),
+  ),
+  plannedAxis(
+    "Attribute predecessor and last",
+    "attribute-admission",
+    statedNamed("AL2 count", "family"),
+    statedNamed("AL2 fold"),
+  ),
+  plannedAxis(
+    "OpenAttributeName owner",
+    "attribute-admission",
+    statedNamed("AL4 open names", "family"),
+    statedNamed("AL1 owner", "OpenAttributeName"),
+  ),
+  plannedAxis(
+    "Idref owner",
+    "attribute-admission",
+    statedNamed("E1 derived", "family Attribute.idrefs"),
+    statedNamed("AL1 owner", "Idref"),
+  ),
+  plannedAxis(
+    "Idref predecessor and last",
+    "derived",
+    statedNamed("E1 derived", "family Attribute.idrefs"),
+    statedNamed("E1 derived", "fold over Attribute.idrefs"),
+  ),
+  plannedAxis("Namespace", "reachability", statedNamed("Namespace family", "family")),
+  plannedAxis("Choice", "owner-copy", statedNamed("N8 nearest", "counted family Binding.choices")),
+]);
 
-        assert.isAbove(found.length, 0, `${signature} is a statement of Qti`);
-        for (const { law } of found) {
-          assert.strictEqual(ruleOfLaw(law), rule, signature);
-          assert.isTrue(isMappedLaw(law), signature);
+/**
+ * The laws one refusal may name together across the tiers: a law of each tier, a family law of
+ * the QTI tier among them, so a set drawn from it meets every pair of tiers.
+ */
+const crossTier = nonEmpty("the cross-tier laws", [
+  ...statedNamed("Binding declared"),
+  ...statedNamed("Choice bounds"),
+  { kind: "check", name: checkNameOf("MathML arity"), relation: "Node" } satisfies Law,
+  ...statedNamed("AL1 owner", "Attribute(node, kind"),
+  ...statedNamed("N5 Follow"),
+  ...statedNamed("N7 last slot"),
+  ...statedNamed("N2 tree"),
+  ...statedNamed("E1 derived", "fold over Node.children"),
+]);
+
+describe("the law table", () => {
+  it("keeps every law of the oracle under its name, with the oracle's rule and source", () => {
+    for (const name of oracleLawNames) {
+      assert.isTrue(Object.hasOwn(lawTable, name), name);
+
+      const entry = lawTable[name];
+      assert.strictEqual(entry.rule, ruleOf(name), name);
+      assert.strictEqual(entry.source, lawSources[name], name);
+    }
+  });
+
+  it("names every law's check by a bijection with check names, over every law of the table and the oracle", () => {
+    const names = [...new Set([...lawNames, ...oracleLawNames])];
+    const checks = new Set(names.map((name) => checkNameOf(name)));
+
+    assert.strictEqual(checks.size, names.length, "two laws share a check name");
+    for (const name of names) {
+      assert.match(checkNameOf(name), /^[A-Za-z0-9_]+$/u, name);
+      assert.deepStrictEqual(lawOfCheck(checkNameOf(name)), Option.some(name), name);
+    }
+
+    assert.isTrue(Option.isNone(lawOfCheck("No_such_law")));
+  });
+
+  it.effect(
+    "ranks every rule a law keeps once, and owes each rule no law keeps yet to the slice that states it",
+    (ctx) =>
+      Effect.gen(function* ranks() {
+        const owned: ReadonlySet<Rule> = new Set(Object.values(lawTable).map(({ rule }) => rule));
+        const owed: readonly Rule[] = Object.keys(owedRules).filter((rule): rule is Rule =>
+          Schema.is(ImportRule)(rule),
+        );
+
+        assert.strictEqual(new Set(precedence).size, precedence.length, "a rule ranks twice");
+        assert.deepStrictEqual(
+          [...owned, ...owed].toSorted(),
+          [...precedence].toSorted(),
+          "the precedence is exactly the owned and the owed rules",
+        );
+        assert.deepStrictEqual(
+          owed.filter((rule) => owned.has(rule)),
+          [],
+          "an owed rule has a law",
+        );
+        for (const rule of precedence) {
+          assert.isTrue(Schema.is(ImportRule)(rule), rule);
+        }
+
+        for (const rule of limitRules) {
+          assert.include(precedence, rule, "a limit's rule ranks among the laws'");
+        }
+
+        yield* Effect.promise(() =>
+          ctx.annotate(
+            Object.entries<string>(owedRules)
+              .map(([rule, slice]) => `${rule} (${slice})`)
+              .join(", "),
+            "rules with no law yet",
+          ),
+        );
+      }),
+  );
+
+  it("states each law once, and no stated law's identity is a check's", () => {
+    const identities = statedLaws.map(([law]) => lawIdentity(law));
+
+    assert.strictEqual(new Set(identities).size, identities.length, "a law is stated twice");
+    assert.deepStrictEqual(
+      identities.filter((identity) => identity.startsWith("check ")),
+      [],
+    );
+    assert.strictEqual(lawRules.size, lawNames.length + identities.length);
+  });
+
+  it.effect(
+    "names every law of a group by the group's name, but the laws Q5.13 names otherwise",
+    () =>
+      Effect.gen(function* groups() {
+        const otherwise: ReadonlyMap<string, ReadonlySet<string>> = new Map([
+          [
+            "E1 derived",
+            new Set([
+              "LomObjectIdentifier",
+              "LomObjectTitle",
+              "Node key",
+              "DocumentId key",
+              "Binding declared",
+              "BindingFit",
+              "RecordBindingFit",
+              "Binding unique",
+              "Binding cardinality",
+              "Max strings required",
+              "Adaptive feedback",
+              "N8 nearest",
+              "Choice identifier key",
+              "Feedback reference",
+              "Template reference",
+              "Printed variable reference",
+              "Context variable reference",
+              "Variable reference copy",
+              "Variable declared",
+              "Prefixed reference",
+              "Variable kind",
+              "Template default target",
+              "Variable mapping source",
+              "Arity",
+            ]),
+          ],
+          ["Mapping overlay", new Set(["Map key", "MappableBaseType", "DocumentId key"])],
+          ["Item ref target", new Set(["E1 derived"])],
+          [
+            "Test overlay",
+            new Set([
+              "Structure identifier",
+              "Document entry",
+              "Selection required",
+              "DocumentId key",
+              "Variable mapping target",
+              "Stimulus ref key",
+              "Include target",
+              "Include root",
+              "E1 derived",
+            ]),
+          ],
+          ["Inclusion cycle", new Set(["E1 derived", "Test overlay"])],
+        ]);
+        for (const [statements, name] of lawGroups) {
+          for (const law of yield* lawsOf(statements)) {
+            const named = lawNameOf(law);
+            if (law.kind === "check" || contestedIdentities.has(lawIdentity(law))) {
+              continue;
+            }
+
+            assert.isTrue(Option.isSome(named), lawIdentity(law));
+
+            const owner = Option.getOrElse(named, () => "");
+            assert.isTrue(
+              owner === name || (otherwise.get(name)?.has(owner) ?? false),
+              `${lawIdentity(law)}: ${owner}, in the group of ${name}`,
+            );
+          }
+        }
+      }),
+  );
+
+  it("gives every stated law alone its own name's rule", () => {
+    for (const [law, name] of statedLaws) {
+      assert.deepStrictEqual(ruleOfLaws([law]), Option.some(lawTable[name].rule), name);
+      assert.deepStrictEqual(lawRules.get(lawIdentity(law)), lawTable[name].rule, name);
+    }
+  });
+});
+
+describe("a law's identity, read from a statement as the outcome names it", () => {
+  it.effect(
+    "reads every statement of a scratch schema as the README's outcome table names its law",
+    () =>
+      Effect.gen(function* identities() {
+        const laws = yield* lawsOf(scratch.statements);
+
+        assert.deepStrictEqual(laws.map(lawIdentity), [
+          "tree Node.children by document",
+          "contained Node(parent, version, parentKind, parentNearest) in Node(id, version, kind, nearest)",
+          "contained Node(version, parentKind, was, state) in Follow(version, parent, from, to)",
+          "contained Node(parent, pred(at), was) in Node(parent, at, state)",
+          "contained Node(id, pred(children), lastState) in Node(parent, at, state)",
+          "count fold over Node.children into Node(id, elementChildren)",
+          "count fold over Node.children into Node(id, countedChildren)",
+          "check N1_sentinel",
+          "ordered family Node.attributes",
+          "contained Attribute(node, kind, document) in Node(id, kind, document)",
+          "or fold over Node.attributes into Node(id, attrs)",
+          "counted family Binding.choices",
+          "contained Choice(interaction) in Binding(node)",
+          "contained Choice(node) in Node(id)",
+          "contained Node(id) in Choice(node)",
+          "key Choice(interaction, identifier)",
+        ]);
+        assert.deepStrictEqual(primaryKeysOf(scratch.relations).map(lawIdentity).toSorted(), [
+          "primary key Attribute(node, at)",
+          "primary key Binding(node)",
+          "primary key Choice(node)",
+          "primary key Node(id)",
+        ]);
+      }),
+  );
+
+  it("reads every merged axis of the scratch schema as grizzle generates its foreign key", () => {
+    const axes = mergedAxes(scratch.statements, scratch.relations);
+
+    assert.deepStrictEqual(
+      Object.fromEntries(axes.map(({ label, laws }) => [label, laws.map(lawIdentity)])),
+      {
+        "Attribute last": [
+          "ordered family Node.attributes",
+          "or fold over Node.attributes into Node(id, attrs)",
+        ],
+        "Attribute owner": [
+          "ordered family Node.attributes",
+          "contained Attribute(node, kind, document) in Node(id, kind, document)",
+        ],
+        "Attribute predecessor": [
+          "ordered family Node.attributes",
+          "or fold over Node.attributes into Node(id, attrs)",
+        ],
+        "Choice owner": [
+          "counted family Binding.choices",
+          "contained Choice(interaction) in Binding(node)",
+        ],
+        "Choice predecessor and last": ["counted family Binding.choices"],
+        "Node last": [
+          "tree Node.children by document",
+          "contained Node(id, pred(children), lastState) in Node(parent, at, state)",
+          "count fold over Node.children into Node(id, elementChildren)",
+          "count fold over Node.children into Node(id, countedChildren)",
+        ],
+        "Node owner": [
+          "tree Node.children by document",
+          "contained Node(parent, version, parentKind, parentNearest) in Node(id, version, kind, nearest)",
+        ],
+        "Node predecessor": [
+          "tree Node.children by document",
+          "contained Node(parent, pred(at), was) in Node(parent, at, state)",
+          "count fold over Node.children into Node(id, elementChildren)",
+          "count fold over Node.children into Node(id, countedChildren)",
+        ],
+      },
+    );
+  });
+
+  it("keys a host-side key conflict as the database's: the key law, whatever its witness", () => {
+    const law: Law = { kind: "key", side: sideOf("Namespace", "node", "prefix") };
+    const witnesses = [
+      { kind: "key", relation: "Namespace", values: { node: "n", prefix: "p" } },
+      { kind: "unreported" },
+    ] as const;
+
+    for (const witness of witnesses) {
+      const refused = refusalOfLaws([law], witness, grammar);
+      assert.isTrue(Result.isSuccess(refused), witness.kind);
+      if (Result.isSuccess(refused)) {
+        assert.strictEqual(refused.success.rule, "reachability");
+      }
+    }
+
+    const keyed = refusalOfLaws([law], witnesses[0], grammar);
+    if (Result.isSuccess(keyed)) {
+      assert.include(keyed.success.detail, "prefix=p");
+    }
+  });
+
+  it("refuses to name a rule for laws no row states, naming each law", () => {
+    const law: Law = { from: sideOf("Nowhere", "x"), kind: "contained", to: sideOf("Node", "id") };
+    const refused = refusalOfLaws([law], { kind: "unreported" }, grammar);
+
+    assert.isTrue(Result.isFailure(refused));
+    if (Result.isFailure(refused)) {
+      assert.deepStrictEqual(refused.failure.laws, [lawIdentity(law)]);
+    }
+
+    assert.isTrue(Option.isNone(ruleOfLaws([law])));
+  });
+});
+
+/**
+ * One set of laws a native object carries: its axis and the laws, in drawn order, with repeats.
+ */
+interface Carried {
+  readonly axis: string;
+  readonly laws: Arr.NonEmptyReadonlyArray<Law>;
+}
+
+/**
+ * Every nonempty sequence of at most `max` of one axis's laws, repeats allowed: each order and
+ * repeat of each subset.
+ *
+ * @param axes - The axes, the first the simplest.
+ * @param max - The longest sequence.
+ * @returns The generator.
+ */
+const carriedOf =
+  (axes: Arr.NonEmptyReadonlyArray<Axis>, max: number): Gen<Carried> =>
+  (source) => {
+    const axis = source.draw(element(axes));
+    const laws = source.draw(array(element(axis.laws), { max, min: 1 }));
+    const [first, ...rest] = laws;
+
+    return { axis: axis.label, laws: first === undefined ? axis.laws : [first, ...rest] };
+  };
+
+/**
+ * Write a drawn set of laws as an exhaustion reports it.
+ *
+ * @param carried - The set.
+ * @returns Its axis and its laws' identities.
+ */
+const carriedText = ({ axis, laws }: Carried): string =>
+  `${axis}: ${laws.map(lawIdentity).join(" & ")}`;
+
+describe("the precedence over the laws one native object carries", () => {
+  it("resolves each planned axis whole to the rule the spec's order names", () => {
+    for (const { label, laws, rule } of plannedAxes) {
+      assert.isAbove(laws.length, 0, label);
+      assert.deepStrictEqual(ruleOfLaws(laws), Option.some(rule), label);
+    }
+  });
+
+  it.effect(
+    "resolves every sequence of at most 4 of each planned axis's laws, any order and repeats, to one rule of its most specific tier",
+    (ctx) =>
+      searched(
+        ctx,
+        exhaust(
+          {
+            box: "every nonempty sequence of at most 4 laws, repeats allowed, of each of the 10 planned axes (at most 6 laws each)",
+            caseHang: Duration.seconds(10),
+            coverage: requiredInSpace<AxisLabel>(axisLabels),
+            generator: carriedOf(plannedAxes, 4),
+            limit: 20_000,
+            literal: carriedText,
+            oracle: {
+              kind: "specification",
+              name: "the plan's tiers (§1.3 to §1.7): a QTI rule over a tree law, a content-order law over a family law",
+            },
+            suite: "import/refusal/precedence-axes",
+          },
+          (carried, c) =>
+            Effect.sync(() => {
+              const label = axisLabels.find((known) => known === carried.axis);
+              if (label !== undefined) {
+                c.note(label);
+              }
+
+              assertResolves(carried.laws);
+            }),
+        ),
+      ),
+  );
+
+  it.effect(
+    "resolves every sequence of at most 3 laws across the tiers to one rule of its most specific tier",
+    (ctx) =>
+      searched(
+        ctx,
+        exhaust(
+          {
+            box: "every nonempty sequence of at most 3 of 8 laws spanning the five tiers, repeats allowed",
+            caseHang: Duration.seconds(10),
+            coverage: requiredInSpace<"cross-tier">(["cross-tier"]),
+            generator: carriedOf([{ label: "cross-tier", laws: crossTier }], 3),
+            limit: 1000,
+            literal: carriedText,
+            oracle: {
+              kind: "specification",
+              name: "the plan's tiers (§1.3 to §1.7): a QTI rule over a tree law, a content-order law over a family law",
+            },
+            suite: "import/refusal/precedence-tiers",
+          },
+          (carried, c) =>
+            Effect.sync(() => {
+              c.note("cross-tier");
+              assertResolves(carried.laws);
+            }),
+        ),
+      ),
+  );
+});
+
+/**
+ * One state of a content model: its version, its kind and the state.
+ */
+interface ModelState {
+  readonly parent: string;
+  readonly state: string;
+  readonly version: string;
+}
+
+/**
+ * Every state of every content model `Follow` or `Last` holds, keyed once each.
+ */
+const modelStates: Arr.NonEmptyReadonlyArray<ModelState> = (() => {
+  const states = new Map<string, ModelState>();
+  for (const { from, parent, version } of grammar.content.follow.rows) {
+    states.set(`${version} ${parent} ${from}`, { parent, state: from, version });
+  }
+
+  for (const { parent, position, version } of grammar.content.last.rows) {
+    states.set(`${version} ${parent} ${position}`, { parent, state: position, version });
+  }
+
+  return nonEmpty("the content models' states", [...states.values()]);
+})();
+
+/**
+ * Every content model `Follow` or `Last` holds, with its states: the exhaustion's space, one case
+ * per model.
+ */
+const models: Arr.NonEmptyReadonlyArray<Arr.NonEmptyReadonlyArray<ModelState>> = nonEmpty(
+  "the content models",
+  [...Map.groupBy(modelStates, ({ parent, version }) => `${version} ${parent}`).values()].map(
+    (states) => nonEmpty("a model's states", states),
+  ),
+);
+
+/**
+ * The positions `Follow` holds after each state, read from its rows directly.
+ */
+const followed: ReadonlyMap<string, ReadonlySet<string>> = (() => {
+  const next = new Map<string, Set<string>>();
+  for (const { from, parent, to, version } of grammar.content.follow.rows) {
+    const at = `${version} ${parent} ${from}`;
+    next.set(at, new Set([...(next.get(at) ?? []), to]));
+  }
+
+  return next;
+})();
+
+/**
+ * The kinds at each position of each model, read from `Admission`'s and `Symbol`'s rows directly,
+ * keyed `version parent position`.
+ */
+const positionKinds: ReadonlyMap<string, ReadonlySet<string>> = (() => {
+  const kinds = new Map<string, Set<string>>();
+  const add = (version: string, parent: string, position: string, kind: string): void => {
+    const at = `${version} ${parent} ${position}`;
+    kinds.set(at, new Set([...(kinds.get(at) ?? []), kind]));
+  };
+  for (const { child, parent, position, version } of grammar.admission.rows) {
+    add(version, parent, position, child);
+  }
+
+  for (const { kind, parent, position, version } of grammar.content.symbol.rows) {
+    add(version, parent, position, kind);
+  }
+
+  return kinds;
+})();
+
+/**
+ * Read the kinds at a position of a model.
+ *
+ * @param state - The model.
+ * @param position - The position.
+ * @returns The kinds, as a set.
+ */
+const kindsAt = (state: ModelState, position: string): ReadonlySet<string> =>
+  positionKinds.get(`${state.version} ${state.parent} ${position}`) ?? new Set();
+
+describe("the explanation of a content-order refusal", () => {
+  const follow = statedNamed("N5 Follow");
+  const last = statedNamed("N7 Last");
+
+  it.effect(
+    "names exactly the positions Follow allows after every state of every model, for N5's step and N7's end",
+    (ctx) =>
+      searched(
+        ctx,
+        exhaust(
+          {
+            box: `every state of every content model Follow or Last holds (${String(models.length)} models, ${String(modelStates.length)} states)`,
+            caseHang: Duration.seconds(30),
+            coverage: requiredInSpace<"allows next" | "allows nothing">([
+              "allows next",
+              "allows nothing",
+            ]),
+            generator: element<Arr.NonEmptyReadonlyArray<ModelState>>(models),
+            limit: 2000,
+            literal: ([{ parent, version }]) => `${version} ${parent}`,
+            oracle: { kind: "second-implementation", name: "Follow's rows grouped directly" },
+            suite: "import/refusal/explain-follow",
+          },
+          (states, c) =>
+            Effect.sync(() => {
+              for (const state of states) {
+                const expected = followed.get(`${state.version} ${state.parent} ${state.state}`);
+                c.note(expected === undefined ? "allows nothing" : "allows next");
+
+                const rows = [
+                  {
+                    laws: follow,
+                    values: {
+                      kind: "x",
+                      parentKind: state.parent,
+                      version: state.version,
+                      was: state.state,
+                    },
+                  },
+                  {
+                    laws: last,
+                    values: { kind: state.parent, lastState: state.state, version: state.version },
+                  },
+                ];
+                for (const { laws, values } of rows) {
+                  const [first, ...rest] = laws;
+                  if (first === undefined) {
+                    assert.fail("no content-order law is stated");
+                  }
+
+                  const at = `${state.version} ${state.parent} ${state.state}`;
+                  const explained = explain(
+                    [first, ...rest],
+                    { kind: "row", relation: "Node", values },
+                    grammar,
+                  );
+                  const next = Option.getOrElse(explained.next, () => []);
+                  const sources = new Set(explained.sources);
+                  const positions = next.map(({ position }) => position);
+
+                  assert.isTrue(Option.isSome(explained.next), at);
+                  assert.strictEqual(
+                    positions.join(" "),
+                    [...(expected ?? [])].toSorted((a, b) => Number(a) - Number(b)).join(" "),
+                    at,
+                  );
+                  for (const { kinds, position, source } of next) {
+                    const sourceText = Option.getOrElse(source, () => "");
+
+                    assert.strictEqual(
+                      kinds.toSorted().join(" "),
+                      [...kindsAt(state, position)].toSorted().join(" "),
+                      `${at} ${position}`,
+                    );
+                    assert.isTrue(sources.has(sourceText), `${at} ${position}: ${sourceText}`);
+                  }
+
+                  assert.isTrue(
+                    sources.has(lawTable[Option.getOrThrow(lawNameOf(first))].source),
+                    at,
+                  );
+                }
+              }
+            }),
+        ),
+      ),
+    120_000,
+  );
+
+  it("names no positions where the witness gives no row, and every law's source", () => {
+    for (const laws of [follow, last]) {
+      const [first, ...rest] = laws;
+      if (first === undefined) {
+        assert.fail("no content-order law is stated");
+      }
+
+      const explained = explain([first, ...rest], { kind: "unreported" }, grammar);
+      assert.isTrue(Option.isNone(explained.next));
+      assert.include(explained.detail, "the database names no row");
+      assert.include(explained.sources, lawTable[Option.getOrThrow(lawNameOf(first))].source);
+    }
+  });
+});
+
+describe("the refusals made before the database", () => {
+  it("names each reader, container and codec refusal by the rule the law oracle states for it", () => {
+    const cases: readonly (readonly [ReadRefusal, Rule])[] = [
+      ...(["element", "attribute"] as const).flatMap((kind) =>
+        unmodeledReasons.map(
+          (reason) =>
+            [
+              new UnmodeledVocabulary({ kind, name: "x", parent: Option.none(), reason }),
+              reason === "unadmitted" ? "attribute-admission" : "unmodeled-vocabulary",
+            ] as const,
+        ),
+      ),
+      ...notQti3Reasons.map(
+        (reason) =>
+          [new NotQti3({ expected: "3.0.0", found: Option.none(), reason }), "not-qti3"] as const,
+      ),
+      [new PackageReadError({ dir: "d", path: "p", rule: "manifest-root" }), "manifest-root"],
+      [new PackageReadError({ dir: "d", path: "p", rule: "entry-path" }), "href-path"],
+      ...(["manifest-root", "href-path", "zip-format"] as const).map(
+        (rule) => [new ZipRefusal({ entry: "e", feature: "f", rule }), rule] as const,
+      ),
+      ...(
+        [
+          "decode",
+          "bare-utf16",
+          "nul-or-surrogate",
+          "undeclared-entity",
+          "entity-cycle",
+          "entity-expansion",
+        ] as const
+      ).map((rule) => [new ReaderRefusal({ detail: "d", rule }), "reader-refusal"] as const),
+      [
+        new WellFormednessError({ afterSubstitution: false, column: 1, line: 1, message: "m" }),
+        "well-formedness",
+      ],
+    ];
+
+    for (const [error, rule] of cases) {
+      assert.strictEqual(ruleOfError(error).rule, rule, error._tag);
+    }
+
+    const refused = new ImportRefused({ detail: "x", rule: "admission" });
+    assert.strictEqual(ruleOfError(refused), refused);
+  });
+});
+
+/**
+ * The stored relations each module of `src/qti/` exports, by relation name, read from the modules
+ * themselves, so the census names the module that owes a pattern's export whatever lands there.
+ */
+const modulesOf = Effect.gen(function* modulesOf() {
+  const root = path.resolve(import.meta.dirname, "..");
+  const files = globSync("qti/*.ts", { cwd: root }).filter((file) => !file.endsWith(".test.ts"));
+  const Exported = Schema.Record(Schema.String, Schema.Unknown);
+  const Stored = Schema.Struct({ kind: Schema.Literal("relation"), name: Schema.String });
+  const owners = new Map<string, string>();
+  for (const file of files.toSorted()) {
+    const loaded: unknown = yield* Effect.promise(
+      () => import(pathToFileURL(path.join(root, file)).href),
+    );
+    for (const value of Object.values(
+      Option.getOrElse(Schema.decodeUnknownOption(Exported)(loaded), () => ({})),
+    )) {
+      for (const { name } of Option.toArray(Schema.decodeUnknownOption(Stored)(value))) {
+        if (!owners.has(name)) {
+          owners.set(name, `src/${file}`);
         }
       }
-    });
+    }
   }
 
-  it("lists every statement that names a relation of the phase's modules", () => {
-    const listed = new Set(phaseRules.flatMap(([, signatures]) => signatures));
-    const missing = composed
-      .filter(
-        (signed) =>
-          !isNodeLaw(signed.signature) &&
-          signed.relations.some((name) => phaseRelations.has(name)) &&
-          !listed.has(collapse(signed.signature)),
-      )
-      .map((signed) => signed.signature);
+  return owners;
+});
 
-    assert.deepStrictEqual([...new Set(missing)], []);
+/**
+ * Every text field of a schema's stored relations, with its pattern law.
+ *
+ * @param relations - The schema's `relations`.
+ * @returns Each relation's text fields.
+ */
+const patternFields = (
+  relations: AnySchema["relations"],
+): readonly { readonly field: string; readonly law: Law; readonly relation: string }[] => {
+  const Pattern = Schema.Struct({ flags: Schema.Literals(["u", "su"]), source: Schema.String });
+  const Stored = Schema.Struct({
+    fields: Schema.Record(Schema.String, Schema.Struct({ pattern: Schema.optional(Pattern) })),
+    kind: Schema.Literal("relation"),
+    name: Schema.String,
   });
 
-  it("maps both halves of the two thin arms' mirrors to section-variable-ref", () => {
-    const pairs = [
-      [
-        lawSide("SectionVariablePrefixed"),
-        lawSide("PrefixedVariableSource", [{ field: "refKind", value: "sectionVariable" }]),
-      ],
-      [
-        lawSide("SectionVariableDuration"),
-        lawSide("SectionDurationTarget", [{ field: "refKind", value: "sectionVariable" }]),
-      ],
-    ] as const;
+  return Object.values(relations).flatMap((value) =>
+    Option.toArray(Schema.decodeUnknownOption(Stored)(value)).flatMap(({ fields, name }) =>
+      Object.entries(fields).flatMap(([field, { pattern }]) =>
+        pattern === undefined
+          ? []
+          : [{ field, law: { ...pattern, kind: "pattern" } satisfies Law, relation: name }],
+      ),
+    ),
+  );
+};
 
-    for (const [thin, hub] of pairs) {
-      assertMapped({ from: thin, kind: "mirrors", to: hub }, "section-variable-ref");
-      assertMapped({ from: hub, kind: "mirrors", to: thin }, "section-variable-ref");
-    }
-  });
+/**
+ * The composed `Qti` schema, loaded by the census alone: it composes every `src/qti/` module that
+ * has landed, and reading it runs `install.ts`'s generators.
+ */
+const composedQti = Effect.promise(() => import("#pantry/qti/schema.ts")).pipe(
+  Effect.map(({ Qti }) => Qti),
+);
 
-  it("holds each listed signature once", () => {
-    const signatures = phaseRules.flatMap(([, listed]) => listed);
+describe("the census of the composed Qti schema", () => {
+  it.effect(
+    "owns every statement and primary key of Qti, and resolves every merged axis of its families to one rule",
+    (ctx) =>
+      Effect.gen(function* census() {
+        const Qti = yield* composedQti;
+        const laws = [...(yield* lawsOf(Qti.statements)), ...primaryKeysOf(Qti.relations)];
+        const unowned = laws.map(lawIdentity).filter((identity) => !lawRules.has(identity));
 
-    assert.strictEqual(new Set(signatures).size, signatures.length);
-  });
+        assert.deepStrictEqual(unowned, [], "laws Qti states that no row of the table owns");
+
+        const axes = mergedAxes(Qti.statements, Qti.relations);
+        for (const { laws: carried } of axes) {
+          assertResolves(carried);
+        }
+
+        yield* Effect.promise(() =>
+          ctx.annotate(
+            `${String(laws.length)} laws, ${String(axes.length)} merged axes`,
+            "the census",
+          ),
+        );
+      }),
+    120_000,
+  );
+
+  it.effect(
+    "owns the pattern law of every text field of Qti's stored relations, naming the module that owes an export",
+    () =>
+      Effect.gen(function* patterns() {
+        const Qti = yield* composedQti;
+        const moduleOf = yield* modulesOf;
+        const unowned = patternFields(Qti.relations)
+          .filter(({ law }) => !lawRules.has(lawIdentity(law)))
+          .map(
+            ({ field, relation: owner }) =>
+              `${owner}.${field}, in ${moduleOf.get(owner) ?? "an unlisted module"}: export its text type and give its pattern a row of statedLaws`,
+          );
+
+        assert.deepStrictEqual(unowned, [], "text fields whose pattern no row of the table owns");
+      }),
+    120_000,
+  );
 });
