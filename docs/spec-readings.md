@@ -527,7 +527,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
     7.40.3). This binds pantry and plate alike, so the two never read the same file differently, and both accept such a
     document today. Neither enforces a time limit yet: plate accepts `qti-time-limits` and marks it unsupported, and
     pantry stores both limits as written. This is not a case of documents in conflict: the sources are silent on how the
-    two limits relate. (head-cto's pick, under the operator's delegation; 2026-11-04.)
+    two limits relate. (The renderer's pick, under the operator's delegation; 2026-11-04.)
 65. **A section's rubric is shown with each item the section holds.** The information model says section rubric "is
     presented to the candidate with each item contained (directly or indirectly) by the section", and, as sections nest,
     that "the rubric presented for each item is the concatenation of the rubric blocks from the top-most section down to
@@ -609,4 +609,4 @@ against it. A reading that is not an information-model-over-XSD case says which 
     as an item with no response variables: it is never skipped, so it never blocks moving on or submitting. This binds
     plate, which delivers tests; pantry delivers nothing. This is not a case of documents in conflict: the information
     model is silent on responses a candidate cannot give, and this follows its own rule for an item with none. (The
-    Mind's ruling in the renderer's phase-4 repair, applied in plate; 2026-11-06.)
+    renderer's ruling in its phase-4 repair, applied in plate; 2026-11-06.)
