@@ -1,7 +1,9 @@
 import {
+  CompileError,
   CredentialError,
   CursorError,
   EncodingFailure,
+  ExecutionFailure,
   OpenError,
   TokenError,
   TransportFailure,
@@ -180,6 +182,48 @@ describe("describeFailure, the defects qti names", () => {
     });
     assert.isTrue(Option.isNone(namedFailureOf(new Error("x"))));
     assert.isTrue(Option.isNone(namedFailureOf({ _tag: "ImportRefused" })));
+  });
+});
+
+/**
+ * Grizzle's refusal to compile the import's ChangeSet, as `db.apply` reported it on the migrated
+ * schema before R87: the write filler's `UnsupportedOperation` for an owner-axis copy of a column
+ * the owner fills only after its members.
+ */
+const uncompiled = CompileError.make({
+  _tag: "UnsupportedOperation",
+  at: { label: "ChangeSet.insert", path: [], site: undefined },
+  capability:
+    "BranchResolution.instanceEnd copies Instance's end along the owner axis of Instance.rules, a column its owner fills only after its members",
+});
+
+describe("describeFailure, a program grizzle refused to compile", () => {
+  it("an ExecutionFailure or an OpenError carrying a CompileError exits 70 as internal, with a help that blames qti and keeps the database", () => {
+    // Oracle: the failure's carrier and its reason's tag, read from its fields: grizzle refused
+    // the program before any SQL, so neither the package nor the cluster is at fault, and the
+    // database holds what it held. Bound: both carriers of a CompileError, and each carrier with a
+    // reason of another tag, exhausted; residual none.
+    for (const failure of [
+      new ExecutionFailure({ reason: uncompiled }),
+      new OpenError({ reason: uncompiled }),
+    ]) {
+      const { exitCode, help, kind } = describeFailure(failure);
+
+      assert.deepStrictEqual({ exitCode, kind }, { exitCode: 70, kind: "internal" }, failure._tag);
+      assert.include(help, "a defect in qti, not in the package or the database", failure._tag);
+      assert.include(help, "before sending any SQL, so the database is as it was", failure._tag);
+      assert.notInclude(help, "cluster", failure._tag);
+      assert.isTrue(Option.isNone(namedFailureOf(failure)), failure._tag);
+    }
+
+    assert.deepStrictEqual(
+      identity({ _tag: "ExecutionFailure", reason: { _tag: "ServerError" } }),
+      database,
+    );
+    assert.deepStrictEqual(
+      identity(new OpenError({ reason: new TokenError({ cause: new Error("refused") }) })),
+      database,
+    );
   });
 });
 

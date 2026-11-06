@@ -110,7 +110,8 @@ const grizzleTags = [
 
 /**
  * The tags of grizzle's public errors (`adapter/public/errors.ts`), which {@link describeFailure}
- * maps to `database` without importing grizzle, so the program starts without loading it.
+ * maps to `database` without importing grizzle, so the program starts without loading it, except a
+ * program grizzle refused to compile, which is `internal`.
  */
 export const grizzleErrorTags: ReadonlySet<string> = new Set(grizzleTags);
 
@@ -347,6 +348,26 @@ const isCredentialFailure = (failure: unknown): boolean =>
   tagOf(failure.reason) === "CredentialError";
 
 /**
+ * Whether `failure` is grizzle refusing to compile one of qti's programs, before any SQL is sent:
+ * an `ExecutionFailure` (a ChangeSet that `db.apply` compiles) or an `OpenError` (the schema and
+ * the workload that `DbLayer.make` and `Db.open` compile) whose `reason` is a `CompileError`, such
+ * as the `UnsupportedOperation` of a value grizzle's write filler cannot fill. The cause is qti's
+ * schema or program, the same for every package, so retrying or checking the cluster cannot help.
+ * It is matched by tag, so this module imports neither grizzle nor its engine.
+ */
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- A failure can be any value; see `describeFailure`.
+const isUncompiled = (failure: unknown): boolean =>
+  (tagOf(failure) === "ExecutionFailure" || tagOf(failure) === "OpenError") &&
+  Predicate.hasProperty(failure, "reason") &&
+  tagOf(failure.reason) === "CompileError";
+
+/**
+ * What to do next after grizzle refused to compile one of qti's programs ({@link isUncompiled}).
+ */
+const uncompiledHelp =
+  "This is a defect in qti, not in the package or the database: grizzle refused to compile qti's program before sending any SQL, so the database is as it was. Report it with the command you ran and everything it printed.";
+
+/**
  * Name the kind of a failure by what it is.
  */
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- A failure can be any value; see `describeFailure`.
@@ -379,13 +400,18 @@ const kindOf = (failure: unknown): Kind => {
     return "config";
   }
 
+  if (isUncompiled(failure)) {
+    return "internal";
+  }
+
   return tag !== undefined && grizzleErrorTags.has(tag) ? "database" : "internal";
 };
 
 /**
  * What to do next: the failure's own `help` when this program defined it and it has one; for a
- * named failure (`namedFailureOf`) the help of its own; for a refusal the database gave, the help
- * of a law's refusal by the kind of its witness; else the help of its kind.
+ * named failure (`namedFailureOf`) the help of its own; for a program grizzle refused to compile
+ * (`isUncompiled`), that a defect of qti left the database as it was; for a refusal the database
+ * gave, the help of a law's refusal by the kind of its witness; else the help of its kind.
  */
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- A failure can be any value; see `describeFailure`.
 const helpOf = (failure: unknown, kind: Kind): string => {
@@ -405,6 +431,10 @@ const helpOf = (failure: unknown, kind: Kind): string => {
     return named.value;
   }
 
+  if (isUncompiled(failure)) {
+    return uncompiledHelp;
+  }
+
   return Option.match(Option.filter(refusalFieldsOf(failure), refusedByDatabase), {
     onNone: () => kindHelp[kind],
     onSome: ({ witness }) => databaseRefusalHelp[witness ?? "unreported"],
@@ -418,9 +448,10 @@ const helpOf = (failure: unknown, kind: Kind): string => {
  * mapped by what it is, without importing the module that defines it, so the program starts
  * without loading the engine: Effect's CLI errors are `cli-usage`, an `ImportRefused` is
  * `import-refused`, a `PackageNotFound` is `not-found`, a `PlatformError` is `io`, a missing or
- * unreadable local set-up is `config` and grizzle's other errors are `database`. Anything else, a
- * defect included, is `internal`; the export's and the import's defects that {@link namedFailureOf}
- * names keep that kind, with a help of their own.
+ * unreadable local set-up is `config`, a program grizzle refused to compile before sending any SQL
+ * is `internal`, and grizzle's other errors are `database`. Anything else, a defect included, is
+ * `internal`; the export's and the import's defects that {@link namedFailureOf} names keep that
+ * kind, with a help of their own.
  *
  * @param failure - What a run failed with: the squashed cause of its exit.
  * @returns The kind, the exit code of that kind, and what to do next.
