@@ -2,14 +2,16 @@
  * The test layer's laws on the lease, PostgreSQL itself the judge (testing doctrine, rule 3): each
  * refused state is one the law's model refuses, named by the constraint the law installs.
  *
- * Every case writes one row no stored node names, through a direct SQL writer: the author login,
- * `SET ROLE` to the author role, at SERIALIZABLE, every foreign key deferred, then the one under
- * test set immediate where a case reads one. A row CHECK is judged as the row is inserted, before
- * any deferred key, so its SQLSTATE (23514) and its constraint, the check's name, are the verdict;
- * a foreign key's is 23503 and one of the constraints its containment installs. The transaction
- * rolls back. The rows below are none of a family's members, so no hidden column of grizzle's
- * needs filling: `SectionSelection`, `TestToken`, `TestFlag`, `Href` and `Section`, an owner whose
- * drawn count and fold end are its own columns.
+ * Every case writes one row no stored node names into its table, through a direct SQL writer
+ * (grizzle's README, "Direct SQL access"): the author login, `SET ROLE` to the author role, at
+ * SERIALIZABLE, every foreign key deferred. A role writes a table, never its own view of it, which
+ * it holds SELECT on alone (README, "Security model"). A row CHECK is judged as the row is
+ * inserted, before any deferred key, so its SQLSTATE (23514) and its constraint, the check's name,
+ * are the verdict. The transaction rolls back. The rows below are none of a family's members, so no
+ * hidden column of grizzle's needs filling: `SectionSelection`, `TestToken`, `TestFlag` and
+ * `Section`, an owner whose drawn count and fold end are its own columns; each row fills exactly
+ * its table's written columns, which the catalogue lists, or the case fails before any statement
+ * runs. An href's own laws are `#pantry/qti/package.ts`'s, judged in `package.db.test.ts`.
  *
  * The cases over whole packages need the importer's ChangeSet (Q5.15), and are listed for it and
  * for the network seat's probe:
@@ -24,9 +26,9 @@
  *   before it is refused by `Branch_forward` unless their section's `qti-ordering` shuffles, and
  *   one naming its own owner or its section is refused by `Branch_forward` either way; one naming
  *   an item ref under a selection with replacement is refused by `Branch_target`;
- * - An item ref whose href names no entry is refused by `Href(package, path) → Entry(package, path)`,
- *   and a section ref whose href names an item document by the site's containment into the section
- *   documents;
+ * - An item ref whose href names no entry is refused by `ReferencePath(package, path) →
+ *   Entry(package, path)`, and a section ref whose href names an item document by the site's
+ *   containment into the section documents;
  * - A section holding three parts, two of them required, under a selection of `select="1"` is refused
  *   by `Selection_required`, and under `select="2"` accepted.
  */
@@ -116,45 +118,48 @@ const isServerError = (error: unknown): error is DatabaseError =>
   error instanceof Error && "code" in error && "constraint" in error;
 
 /**
- * A row a direct writer inserts into one of the author role's views: its columns as the view names
- * them, a closed id by its code.
+ * A row a direct writer inserts into one of `Qti`'s tables: every column it fills by name, a closed
+ * id by its code.
  */
 type SqlRow = Readonly<Record<string, string | number | boolean>>;
 
 /**
- * The foreign keys from one of `Qti`'s tables into another, by constraint name, read from the
- * catalogue: the constraints a containment between the two relations installs.
- *
- * @param client - The session, before `SET ROLE`.
- * @param from - The referencing table.
- * @param to - The referenced table.
- * @returns The constraint names.
- */
-const foreignKeys = (client: Client, from: string, to: string) =>
-  rowsOf<{ readonly conname: string }>(
-    client,
-    `SELECT con.conname FROM pg_constraint con
-       JOIN pg_class src ON src.oid = con.conrelid
-       JOIN pg_class dst ON dst.oid = con.confrelid
-       JOIN pg_namespace n ON n.oid = src.relnamespace
-      WHERE con.contype = 'f' AND n.nspname = $1 AND src.relname = $2 AND dst.relname = $3`,
-    [qtiSchema, from, to],
-  ).pipe(Effect.map((rows) => rows.map(({ conname }) => conname)));
-
-/**
- * Insert one row as the author role, every foreign key deferred, then set the given ones
- * immediate, and roll back: the server's verdict on the row by its own laws and those constraints.
+ * Read the columns of one of `Qti`'s tables a direct writer fills: every live column PostgreSQL
+ * does not generate, a family's hidden ones among them (README, "Direct SQL access": a family's
+ * values are a direct writer's to fill).
  *
  * @param client - The session.
- * @param view - The author role's view to insert into.
- * @param row - The row.
- * @param immediate - The constraints to check at once after the insert.
+ * @param table - The table.
+ * @returns The columns' names, none for a table the schema does not hold.
+ */
+const writtenColumnsOf = (client: Client, table: string) =>
+  rowsOf<{ readonly name: string }>(
+    client,
+    `SELECT a.attname AS name FROM pg_catalog.pg_attribute a
+      WHERE a.attrelid = pg_catalog.to_regclass($1) AND a.attnum > 0 AND NOT a.attisdropped
+        AND a.attgenerated = ''
+      ORDER BY a.attnum`,
+    [`${qtiSchema}.${table}`],
+  ).pipe(Effect.map((rows) => rows.map(({ name }) => name)));
+
+/**
+ * Insert one row into its table as the author role, every foreign key deferred, and roll back: the
+ * server's verdict on the row by its own CHECKs, keys and domains.
+ *
+ * @param client - The session.
+ * @param table - The table to insert into.
+ * @param row - The row, exactly the table's written columns.
  * @returns The server's error, or none when every statement succeeded; fails with any other
  *   failure.
  */
-const deferredInsert = (client: Client, view: string, row: SqlRow, immediate: readonly string[]) =>
+const deferredInsert = (client: Client, table: string, row: SqlRow) =>
   Effect.gen(function* insertDeferred() {
     const columns = Object.keys(row);
+    assert.sameMembers(
+      columns,
+      yield* writtenColumnsOf(client, table),
+      `${table}: the row fills every column a direct writer fills`,
+    );
     yield* rowsOf(client, "BEGIN ISOLATION LEVEL SERIALIZABLE");
 
     const outcome = yield* Effect.gen(function* statements() {
@@ -162,14 +167,11 @@ const deferredInsert = (client: Client, view: string, row: SqlRow, immediate: re
       yield* rowsOf(client, "SET CONSTRAINTS ALL DEFERRED");
       yield* rowsOf(
         client,
-        `INSERT INTO ${authorRole}.${view} (${columns.join(", ")}) VALUES (${columns
+        `INSERT INTO ${qtiSchema}.${table} (${columns.join(", ")}) VALUES (${columns
           .map((_, at) => `$${String(at + 1)}`)
           .join(", ")})`,
         Object.values(row),
       );
-      for (const name of immediate) {
-        yield* rowsOf(client, `SET CONSTRAINTS ${qtiSchema}."${name}" IMMEDIATE`);
-      }
     }).pipe(
       Effect.as(Option.none<DatabaseError>()),
       Effect.catch((error) =>
@@ -196,12 +198,11 @@ const codeOf = (handles: readonly string[], handle: string): number => {
 };
 
 /**
- * Uuids no stored row holds: the node, its document, its parent and its package.
+ * Uuids no stored row holds: the node, its document and its parent.
  */
 const stray = {
   document: "00000000-0000-4000-8000-0000000013d0",
   node: "00000000-0000-4000-8000-0000000013f0",
-  package: "00000000-0000-4000-8000-0000000013a0",
   parent: "00000000-0000-4000-8000-0000000013e0",
 } as const;
 
@@ -247,22 +248,6 @@ const selection = (fields: {
     select_lexical: String(fields.select),
     select_trail: "",
     with_replacement: fields.withReplacement,
-  }) satisfies SqlRow;
-
-/**
- * An href of an item ref in a test at `tests/`, as written and as resolved.
- *
- * @param href - The collapsed href.
- * @param path - The entry it names.
- * @returns The row.
- */
-const hrefRow = (href: string, path: string) =>
-  ({
-    ...tupleOf("qti-assessment-item-ref"),
-    directory: "tests/",
-    href,
-    package: stray.package,
-    path,
   }) satisfies SqlRow;
 
 /**
@@ -324,16 +309,11 @@ describe.skipIf(!hasLease)("qti/tests.db.test.ts, on the lease", () => {
             const at = { members: 3, required: 0, select: 3, withReplacement: false } as const;
 
             assert.isTrue(
-              Option.isNone(yield* deferredInsert(client, "section_selection", selection(at), [])),
+              Option.isNone(yield* deferredInsert(client, "section_selection", selection(at))),
               "select = members",
             );
             assertRefused(
-              yield* deferredInsert(
-                client,
-                "section_selection",
-                selection({ ...at, select: 4 }),
-                [],
-              ),
+              yield* deferredInsert(client, "section_selection", selection({ ...at, select: 4 })),
               "23514",
               ["selection_bound"],
               "select = members + 1",
@@ -344,7 +324,6 @@ describe.skipIf(!hasLease)("qti/tests.db.test.ts, on the lease", () => {
                   client,
                   "section_selection",
                   selection({ ...at, select: 4, withReplacement: true }),
-                  [],
                 ),
               ),
               "select = members + 1 with replacement",
@@ -367,18 +346,12 @@ describe.skipIf(!hasLease)("qti/tests.db.test.ts, on the lease", () => {
                   client,
                   "section_selection",
                   selection({ ...base, select: 2 }),
-                  [],
                 ),
               ),
               "select = required",
             );
             assertRefused(
-              yield* deferredInsert(
-                client,
-                "section_selection",
-                selection({ ...base, select: 1 }),
-                [],
-              ),
+              yield* deferredInsert(client, "section_selection", selection({ ...base, select: 1 })),
               "23514",
               ["selection_required"],
               "select = required − 1",
@@ -401,16 +374,11 @@ describe.skipIf(!hasLease)("qti/tests.db.test.ts, on the lease", () => {
             };
 
             assert.isTrue(
-              Option.isNone(yield* deferredInsert(client, "section_selection", padded, [])),
+              Option.isNone(yield* deferredInsert(client, "section_selection", padded)),
               "a padded select split around its integer",
             );
             assertRefused(
-              yield* deferredInsert(
-                client,
-                "section_selection",
-                { ...padded, select_lead: "" },
-                [],
-              ),
+              yield* deferredInsert(client, "section_selection", { ...padded, select_lead: "" }),
               "23514",
               ["e_1_derived"],
               "a split that drops the lead",
@@ -443,72 +411,19 @@ describe.skipIf(!hasLease)("qti/tests.db.test.ts, on the lease", () => {
               value: true,
             };
 
-            assert.isTrue(Option.isNone(yield* deferredInsert(client, "test_token", token, [])));
+            assert.isTrue(Option.isNone(yield* deferredInsert(client, "test_token", token)));
             assertRefused(
-              yield* deferredInsert(
-                client,
-                "test_token",
-                { ...token, lead: "", value: " Q01" },
-                [],
-              ),
+              yield* deferredInsert(client, "test_token", { ...token, lead: "", value: " Q01" }),
               "23514",
               ["e_1_derived"],
               "a value with whitespace at its start",
             );
-            assert.isTrue(Option.isNone(yield* deferredInsert(client, "test_flag", flag, [])));
+            assert.isTrue(Option.isNone(yield* deferredInsert(client, "test_flag", flag)));
             assertRefused(
-              yield* deferredInsert(client, "test_flag", { ...flag, value: false }, []),
+              yield* deferredInsert(client, "test_flag", { ...flag, value: false }),
               "23514",
               ["e_1_derived"],
               "1 read as false",
-            );
-          }).pipe(Effect.scoped),
-      );
-
-      it.effect(
-        "refuses an href outside the resolved form by Href_form, a path that is not its directory and href by E1_derived, and an href that names no entry by its containment into Entry",
-        () =>
-          // Oracle: PostgreSQL: the `href_form` and `e_1_derived` CHECKs, and the foreign keys
-          // `Href(package, path) → Entry(package, path)` installs (23503). Bound: one plain href
-          // and each named way to break it.
-          Effect.gen(function* hrefs() {
-            const client = yield* loginSession;
-            const entryKeys = yield* foreignKeys(client, "href", "entry");
-            assert.isNotEmpty(entryKeys, "href references entry");
-
-            assert.isTrue(
-              Option.isNone(
-                yield* deferredInsert(
-                  client,
-                  "href",
-                  hrefRow("items/a.xml", "tests/items/a.xml"),
-                  [],
-                ),
-              ),
-              "a plain href",
-            );
-            assertRefused(
-              yield* deferredInsert(client, "href", hrefRow("../a.xml", "tests/../a.xml"), []),
-              "23514",
-              ["href_form"],
-              "a dot segment",
-            );
-            assertRefused(
-              yield* deferredInsert(client, "href", hrefRow("items/a.xml", "items/a.xml"), []),
-              "23514",
-              ["e_1_derived"],
-              "a path that drops the directory",
-            );
-            assertRefused(
-              yield* deferredInsert(
-                client,
-                "href",
-                hrefRow("items/a.xml", "tests/items/a.xml"),
-                entryKeys,
-              ),
-              "23503",
-              entryKeys,
-              "an href that names no entry",
             );
           }).pipe(Effect.scoped),
       );
@@ -519,9 +434,9 @@ describe.skipIf(!hasLease)("qti/tests.db.test.ts, on the lease", () => {
         Effect.gen(function* sectionParts() {
           const client = yield* loginSession;
 
-          assert.isTrue(Option.isNone(yield* deferredInsert(client, "section", sectionRow(1), [])));
+          assert.isTrue(Option.isNone(yield* deferredInsert(client, "section", sectionRow(1))));
           assertRefused(
-            yield* deferredInsert(client, "section", sectionRow(0), []),
+            yield* deferredInsert(client, "section", sectionRow(0)),
             "23514",
             ["section_parts"],
             "an empty section",

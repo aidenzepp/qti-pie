@@ -13,10 +13,10 @@
  * A `Node` tree commits only with its package (the document node's `Document` row, the character
  * arms, the attribute family): those laws are deferred to COMMIT and belong to other slices, so
  * every case is judged at its INSERT's end and rolled back. A law that is itself deferred, the
- * tree's last axis, is made immediate for the case (`SET CONSTRAINTS … IMMEDIATE`). A lawful
- * document's INSERT raises nothing; a corruption's raises the SQLSTATE and a constraint that maps
- * to its law (C22: membership, since one row may break several laws whose constraints PostgreSQL
- * checks in an order it does not promise).
+ * tree's last axis, is made immediate for the case (`SET CONSTRAINTS "qti".… IMMEDIATE`, named with
+ * its schema). A lawful document's INSERT raises nothing; a corruption's raises the SQLSTATE and a
+ * constraint that maps to its law (C22: membership, since one row may break several laws whose
+ * constraints PostgreSQL checks in an order it does not promise).
  *
  * The census (C12) reads the catalog: Node's foreign keys into Node are exactly the tree's three
  * axes, so N3, N5's predecessor copy and N7's last slot merged; the rest are the other slices'
@@ -72,9 +72,17 @@ const authorAppRole = "qti__author_app";
 const authorRole = "qti__author";
 
 /**
+ * The PostgreSQL schema of `Qti`'s tables and their constraints. `SET CONSTRAINTS` looks a bare
+ * name up on the session's search path, which grizzle never relies on and which leads to no
+ * constraint of `Qti`'s (PostgreSQL answers 42704), so a direct writer names each constraint with
+ * this schema.
+ */
+const qtiSchema = "qti";
+
+/**
  * `Node`'s table, as a direct writer names it.
  */
-const nodeTable = `"qti"."node"`;
+const nodeTable = `"${qtiSchema}"."node"`;
 
 /**
  * The accepted corpus packages (`verdicts/qti-examples-0a92fbb.tsv`), by their zip's name.
@@ -799,7 +807,7 @@ const judged = (
     yield* query(client, "BEGIN ISOLATION LEVEL SERIALIZABLE");
     yield* query(client, `SET LOCAL ROLE ${authorRole}`);
     for (const { name } of deferred) {
-      yield* query(client, `SET CONSTRAINTS "${name}" IMMEDIATE`);
+      yield* query(client, `SET CONSTRAINTS "${qtiSchema}"."${name}" IMMEDIATE`);
     }
 
     const answered = yield* Effect.result(
@@ -820,6 +828,25 @@ const judged = (
       onSuccess: (): Verdict => Option.none(),
     });
   });
+
+/**
+ * Read the indexes of `Node`'s table whose first two key columns are T1's (document, start): each
+ * reads a document's nodes in document order, T1's UNIQUE among them.
+ *
+ * @param client - The session.
+ * @returns The indexes' names.
+ */
+const documentOrderIndexes = (client: Client) =>
+  query<{ readonly name: string }>(
+    client,
+    `SELECT c.relname AS name
+       FROM pg_catalog.pg_index i
+       JOIN pg_catalog.pg_class c ON c.oid = i.indexrelid
+       JOIN pg_catalog.pg_attribute d ON d.attrelid = i.indrelid AND d.attnum = i.indkey[0]
+       JOIN pg_catalog.pg_attribute s ON s.attrelid = i.indrelid AND s.attnum = i.indkey[1]
+      WHERE i.indrelid = '${qtiSchema}.node'::regclass AND i.indnkeyatts >= 2
+        AND d.attname = 'document' AND s.attname = 'start'`,
+  ).pipe(Effect.map((rows) => rows.map(({ name }) => name)));
 
 /**
  * The namespace of the content package's elements, which a manifest's `schemaversion` is in.
@@ -1463,9 +1490,13 @@ describe.skipIf(!hasLease)("qti/node.db.test.ts, on the lease", () => {
         "serves T1's descendant range and a node's ordered children by an index scan, with no sort",
         () =>
           // Oracle: PostgreSQL's planner, asked for a plan with sequential and bitmap scans set off:
-          // a plan exists over T1's UNIQUE (document, start) that reads the range in order, so the
-          // index serves both reads. (An estimate over a small table may prefer a sequential scan,
-          // which says nothing of the index.)
+          // a plan exists over an index of Node's that leads with T1's (document, start), so it
+          // reads the range in order and serves both reads. Such an index is T1's UNIQUE, and any
+          // index a workload's query adds over the same leading columns: on grizzle `64f0427` the
+          // planner takes the workload's `btree index Node(document, start, id)`
+          // (`__node_ix_document_start_id_…`) for an index-only scan of the range, so the plan is
+          // held to the indexes that lead with the pair, not to one name. (An estimate over a small
+          // table may prefer a sequential scan, which says nothing of the index.)
           // Bound: the two reads.
           Effect.gen(function* plans() {
             const client = yield* loginSession;
@@ -1473,6 +1504,9 @@ describe.skipIf(!hasLease)("qti/node.db.test.ts, on the lease", () => {
             const order = catalogue.constraints.find(
               (constraint) => roleOf(constraint) === "document order",
             );
+            const ordered = yield* documentOrderIndexes(client);
+            assert.include(ordered, order?.name, "T1's UNIQUE leads with (document, start)");
+
             const reads = [
               `SELECT id, start FROM ${authorRole}.node WHERE document = $1 AND start > $2 AND start < $3 ORDER BY start`,
               `SELECT id, at FROM ${authorRole}.node WHERE document = $1 AND start > $2 AND start < $3 AND parent = $4 ORDER BY start`,
@@ -1495,8 +1529,14 @@ describe.skipIf(!hasLease)("qti/node.db.test.ts, on the lease", () => {
             yield* query(client, "ROLLBACK");
             for (const plan of explained) {
               const shown = JSON.stringify(plan);
+              const scanned = [...shown.matchAll(/"Index Name":"(?<name>[^"]+)"/gu)].map(
+                (match) => match.groups?.["name"] ?? "",
+              );
 
-              assert.include(shown, `"Index Name":"${order?.name ?? ""}"`);
+              assert.isTrue(
+                scanned.some((name) => ordered.includes(name)),
+                `${shown}: a scan of an index that leads with (document, start)`,
+              );
               assert.notInclude(shown, `"Node Type":"Sort"`);
             }
           }),

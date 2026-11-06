@@ -2,12 +2,15 @@
  * The metadata overlays' laws on the lease, PostgreSQL itself the judge (testing doctrine, rule 3):
  * each refused state is one the law's model refuses, named by the constraint that states the law.
  *
- * Every case is a direct SQL writer's, as the rules file's rule 8 states it: the author login, `SET
- * ROLE` to the author role, at SERIALIZABLE, every deferrable foreign key deferred, the case's rows
- * inserted into the author role's views with every column a writer fills (each closed id by its
- * code; generated columns PostgreSQL computes), then the one constraint under test set immediate,
- * and a rollback. The rows are the builder's (`#pantry/import/overlays/metadata.ts`) over the
- * fixture's own documents, so a case restates its setup as a fixture and an edit of it:
+ * Every case is a direct SQL writer's, as the rules file's rule 8 and grizzle's README ("Direct SQL
+ * access") state it: the author login, `SET ROLE` to the author role, at SERIALIZABLE, every
+ * deferrable foreign key deferred, the case's rows inserted into `Qti`'s tables with every column a
+ * writer fills (each closed id by its code; generated columns PostgreSQL computes), then the one
+ * constraint under test set immediate, and a rollback. A role writes a table, never its own view of
+ * it: it holds INSERT on each table it writes and only SELECT on its views (README, "Security
+ * model"), so a read back goes through the view. The rows are the builder's
+ * (`#pantry/import/overlays/metadata.ts`) over the fixture's own documents, so a case restates its
+ * setup as a fixture and an edit of it:
  *
  * - **`lom-identifier`** on `metaData`: its record's entry names `qti_v2_item_01` and its item is
  *   `choice`, so `LomObjectIdentifier`'s witness containment into the general entries refuses it
@@ -141,18 +144,37 @@ const isServerError = (error: unknown): error is DatabaseError =>
   error instanceof Error && "code" in error && "constraint" in error;
 
 /**
- * A row a direct writer inserts into one of the author role's views: its columns as the view names
- * them, a closed id by its code, a natural as its decimal text.
+ * A row a direct writer inserts into one of `Qti`'s tables: every column it fills by name, a closed
+ * id by its code, a natural as its decimal text.
  */
 type SqlRow = Readonly<Record<string, string | number>>;
 
 /**
- * One row of a case, with the view it is inserted into.
+ * One row of a case, with the table it is inserted into.
  */
 interface Insert {
   readonly row: SqlRow;
-  readonly view: string;
+  readonly table: string;
 }
+
+/**
+ * Read the columns of one of `Qti`'s tables a direct writer fills: every live column PostgreSQL
+ * does not generate, a family's hidden ones among them (README, "Direct SQL access": a family's
+ * values are a direct writer's to fill).
+ *
+ * @param client - The session.
+ * @param table - The table.
+ * @returns The columns' names, none for a table the schema does not hold.
+ */
+const writtenColumnsOf = (client: Client, table: string) =>
+  rowsOfQuery<{ readonly name: string }>(
+    client,
+    `SELECT a.attname AS name FROM pg_catalog.pg_attribute a
+      WHERE a.attrelid = pg_catalog.to_regclass($1) AND a.attnum > 0 AND NOT a.attisdropped
+        AND a.attgenerated = ''
+      ORDER BY a.attnum`,
+    [`${qtiSchema}.${table}`],
+  ).pipe(Effect.map((rows) => rows.map(({ name }) => name)));
 
 /**
  * The foreign keys from one of `Qti`'s tables into another, by constraint name, read from the
@@ -175,8 +197,9 @@ const foreignKeys = (client: Client, from: string, to: string) =>
   ).pipe(Effect.map((rows) => rows.map(({ conname }) => conname)));
 
 /**
- * Insert a case's rows as the author role, every foreign key deferred, then set the given ones
- * immediate, read what the case reads, and roll back.
+ * Insert a case's rows into their tables as the author role, every foreign key deferred, then set
+ * the given ones immediate, read what the case reads, and roll back. Each row fills exactly its
+ * table's written columns, or the case fails before any statement runs.
  *
  * @param client - The session.
  * @param inserts - The rows, in order.
@@ -191,16 +214,24 @@ const deferredInserts = (
   read: Option.Option<{ readonly text: string; readonly values: readonly unknown[] }>,
 ) =>
   Effect.gen(function* insertDeferred() {
+    for (const { row, table } of inserts) {
+      assert.sameMembers(
+        Object.keys(row),
+        yield* writtenColumnsOf(client, table),
+        `${table}: the row fills every column a direct writer fills`,
+      );
+    }
+
     yield* rowsOfQuery(client, "BEGIN ISOLATION LEVEL SERIALIZABLE");
 
     const outcome = yield* Effect.gen(function* statements() {
       yield* rowsOfQuery(client, `SET ROLE ${authorRole}`);
       yield* rowsOfQuery(client, "SET CONSTRAINTS ALL DEFERRED");
-      for (const { row, view } of inserts) {
+      for (const { row, table } of inserts) {
         const columns = Object.keys(row);
         yield* rowsOfQuery(
           client,
-          `INSERT INTO ${authorRole}.${view} (${columns.join(", ")}) VALUES (${columns
+          `INSERT INTO ${qtiSchema}.${table} (${columns.join(", ")}) VALUES (${columns
             .map((_, at) => `$${String(at + 1)}`)
             .join(", ")})`,
           Object.values(row),
@@ -325,10 +356,10 @@ const builtOf = Effect.fn("test.metadata.db.builtOf")(function* builtOf(
 });
 
 /**
- * Write a `LomEntry` row as the author role's view names its columns.
+ * Write a `LomEntry` row as its table names its columns.
  *
  * @param row - The row.
- * @returns The view's row.
+ * @returns The table's row.
  */
 const entryRow = (row: Addition<typeof LomEntry>) =>
   ({
@@ -353,22 +384,24 @@ const entryRow = (row: Addition<typeof LomEntry>) =>
   }) satisfies SqlRow;
 
 /**
- * Write a `LomTitleString` row as the author role's view names its columns.
+ * Write a `LomTitleString` row as its table names its columns.
  *
  * @param row - The row.
- * @returns The view's row.
+ * @returns The table's row.
  */
 const titleStringRow = (row: Addition<typeof LomTitleString>) =>
   ({
     document: row.document,
     kind: codeOf(NodeKind.handles, row.kind),
     language: row.language,
+    language_tag: row.languageTag,
     nearest: row.nearest,
     node: row.node,
     parent: row.parent,
     record: row.record,
     start: String(row.start),
     text: row.text,
+    text_value: row.textValue,
     version: codeOf(SchemaVersion.handles, row.version),
   }) satisfies SqlRow;
 
@@ -407,8 +440,7 @@ const metaDataEntry = "<imsmd:entry>qti_v2_item_01</imsmd:entry>";
 const metaDataTitle = '<imsmd:string language="en">Metadata Example Item #1</imsmd:string>';
 
 /**
- * A `UsageValue` row as a direct writer inserts it into the author role's view, its code by its
- * code.
+ * A `UsageValue` row as a direct writer inserts it into its table, its base type by its code.
  *
  * @param row - The row.
  * @returns The insert.
@@ -420,7 +452,7 @@ const usageRow = (row: Addition<typeof UsageValue>) => ({
     node: row.node,
     text: row.text,
   },
-  view: "usage_value",
+  table: "usage_value",
 });
 
 describe.skipIf(!hasLease)("qti/metadata.db.test.ts, on the lease", () => {
@@ -460,7 +492,7 @@ describe.skipIf(!hasLease)("qti/metadata.db.test.ts, on the lease", () => {
             [
               ...[...built.manifest.LomEntry.values()].map((row) => ({
                 row: entryRow(row),
-                view: "lom_entry",
+                table: "lom_entry",
               })),
               {
                 row: {
@@ -470,7 +502,7 @@ describe.skipIf(!hasLease)("qti/metadata.db.test.ts, on the lease", () => {
                   identifier: named.identifier,
                   record: named.record,
                 },
-                view: "lom_object_identifier",
+                table: "lom_object_identifier",
               },
             ],
             keys,
@@ -522,7 +554,7 @@ describe.skipIf(!hasLease)("qti/metadata.db.test.ts, on the lease", () => {
             [
               ...[...built.manifest.LomTitleString.values()].map((row) => ({
                 row: titleStringRow(row),
-                view: "lom_title_string",
+                table: "lom_title_string",
               })),
               {
                 row: {
@@ -533,7 +565,7 @@ describe.skipIf(!hasLease)("qti/metadata.db.test.ts, on the lease", () => {
                   string_language: named.stringLanguage,
                   title: named.title,
                 },
-                view: "lom_object_title",
+                table: "lom_object_title",
               },
             ],
             keys,
@@ -591,7 +623,7 @@ describe.skipIf(!hasLease)("qti/metadata.db.test.ts, on the lease", () => {
                     node: row.node,
                     trail: row.trail,
                   },
-                  view: "statistic_date",
+                  table: "statistic_date",
                 },
               ],
               [],

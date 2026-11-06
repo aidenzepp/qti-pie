@@ -5,14 +5,20 @@
  * made lawful.
  *
  * - A key the host finds is written through the author role (`db.apply`): two declarations of one
- *   identifier in one document are refused before any SQL, `invariant-rejected` with the key law
- *   among its `laws` (membership, C22).
- * - A row's own CHECKs are judged by a direct SQL writer, as the rules file's rule 8 states it: the
- *   author login, `SET ROLE` to the author role, SERIALIZABLE, every deferrable foreign key
- *   deferred, the row inserted with every column a writer fills, and a rollback. A refused case's
- *   verdict is SQLSTATE 23514 and the constraint that states the law; a control's is no error. Each
- *   row breaks at most the one check under test, so the constraint PostgreSQL names is that
- *   check's.
+ *   identifier in one document, inserted with their owner, are refused before any SQL,
+ *   `invariant-rejected` with the key law among its `laws` (membership, C22). A `Declaration` is a
+ *   member of its identifier's family, `ChoiceVariableName.declarations`, whose owner is immutable,
+ *   so the change inserts that owner beside its members (README, "Families": "An immutable owner's
+ *   family is fixed when the owner is inserted").
+ * - A row's own CHECKs are judged by a direct SQL writer, as the rules file's rule 8 and grizzle's
+ *   README ("Direct SQL access") state it: the author login, `SET ROLE` to the author role,
+ *   SERIALIZABLE, every deferrable foreign key deferred, the row inserted into its table with every
+ *   column a writer fills (a declaration's hidden index and copy of its owner's count by the
+ *   comment grizzle installs on each, its owner inserted first, since a counted family's owner axis
+ *   is judged at the INSERT), and a rollback. A role writes a table, never its own view of it,
+ *   which it holds SELECT on alone (README, "Security model"). A refused case's verdict is SQLSTATE
+ *   23514 and the constraint that states the law; a control's is no error. Each row breaks at most
+ *   the one check under test, so the constraint PostgreSQL names is that check's.
  *
  * The cases over a stored document (a value set or value with no row, a copy that disagrees with
  * its attribute, a value whose text is not its node's string value, and a reference to
@@ -20,7 +26,7 @@
  * package written first, and arrive with the importer (Q5.15); probe P2 restates them.
  */
 import { ChangeSet, Db, lexicalForm, pg } from "@bjornpagen/grizzle";
-import type { DbConnection, Fact, Law } from "@bjornpagen/grizzle";
+import type { Addition, DbConnection, Fact, Law } from "@bjornpagen/grizzle";
 import { NodeFileSystem } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect, Option, Redacted } from "effect";
@@ -43,6 +49,7 @@ import {
   reservedBaseTypes,
   sessionVariables,
 } from "#pantry/qti/declarations.ts";
+import { ChoiceVariableName } from "#pantry/qti/interactions.ts";
 import { AuthorApp } from "#pantry/qti/logins.ts";
 import { Author } from "#pantry/qti/roles.ts";
 import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
@@ -56,6 +63,11 @@ const authorAppRole = "qti__author_app";
  * The author role's PostgreSQL role, which is also the schema of its views.
  */
 const authorRole = "qti__author";
+
+/**
+ * The PostgreSQL schema of `Qti`'s tables.
+ */
+const qtiSchema = "qti";
 
 /**
  * The password a connection authenticates with, read once.
@@ -116,36 +128,92 @@ const isServerError = (error: unknown): error is DatabaseError =>
   error instanceof Error && "code" in error && "constraint" in error;
 
 /**
- * A row a direct writer inserts into one of the author role's views: its columns as the view names
- * them, a closed id by its code.
+ * A row a direct writer inserts into one of `Qti`'s tables: its declared columns by name, a closed
+ * id by its code.
  */
 type SqlRow = Readonly<Record<string, string | number>>;
 
 /**
- * Insert one row as the author role, every deferrable foreign key deferred, and roll back: the
- * server's verdict on the row by its own CHECKs, keys and domains.
+ * One row of a case, with its table and its hidden columns by the comment grizzle installs on each.
+ */
+interface Insert {
+  readonly hidden?: Readonly<Record<string, number>>;
+  readonly row: SqlRow;
+  readonly table: string;
+}
+
+/**
+ * Read the columns of one of `Qti`'s tables a direct writer fills, with grizzle's comment on each:
+ * every live column PostgreSQL does not generate, a family's hidden ones among them (README,
+ * "Direct SQL access": a family's values are a direct writer's to fill).
  *
  * @param client - The session.
- * @param view - The author role's view to insert into.
- * @param row - The row.
- * @returns The server's error, or none when the row's own laws accept it; fails with any other
+ * @param table - The table.
+ * @returns The columns, in order, none for a table the schema does not hold.
+ */
+const writtenColumnsOf = (client: Client, table: string) =>
+  rowsOf<{ readonly comment: string | null; readonly name: string }>(
+    client,
+    `SELECT a.attname AS name, pg_catalog.col_description(a.attrelid, a.attnum) AS comment
+       FROM pg_catalog.pg_attribute a
+      WHERE a.attrelid = pg_catalog.to_regclass($1) AND a.attnum > 0 AND NOT a.attisdropped
+        AND a.attgenerated = ''
+      ORDER BY a.attnum`,
+    [`${qtiSchema}.${table}`],
+  );
+
+/**
+ * Write one statement of a case: its row's value for each written column of its table, a declared
+ * column by name and a hidden one by its comment.
+ *
+ * @param client - The session.
+ * @param insert - The row and its table.
+ * @returns The statement and its parameters; a column the row does not fill, or a field its table
+ *   lacks, fails the case, since every written column is the case's to state.
+ */
+const statementOf = (client: Client, { hidden = {}, row, table }: Insert) =>
+  Effect.gen(function* statement() {
+    const columns = yield* writtenColumnsOf(client, table);
+    assert.includeMembers(
+      columns.map(({ name }) => name),
+      Object.keys(row),
+      `${table}: every field the row states is a column of its table`,
+    );
+
+    return {
+      text: `INSERT INTO ${qtiSchema}.${table} (${columns.map(({ name }) => `"${name}"`).join(", ")}) VALUES (${columns
+        .map((_, at) => `$${String(at + 1)}`)
+        .join(", ")})`,
+      values: columns.map(
+        ({ comment, name }) =>
+          row[name] ??
+          hidden[comment ?? ""] ??
+          assert.fail(`${table}: no value for ${name} (${comment ?? "a declared field"})`),
+      ),
+    };
+  });
+
+/**
+ * Insert a case's rows, in order, as the author role, every deferrable foreign key deferred, and
+ * roll back: the server's verdict on the rows by their own CHECKs, keys, domains and
+ * non-deferrable foreign keys.
+ *
+ * @param client - The session.
+ * @param inserts - The rows, each with its table.
+ * @returns The server's error, or none when the rows' own laws accept them; fails with any other
  *   failure.
  */
-const judged = (client: Client, view: string, row: SqlRow) =>
+const judged = (client: Client, inserts: readonly Insert[]) =>
   Effect.gen(function* insertDeferred() {
-    const columns = Object.keys(row);
+    const statements = yield* Effect.all(inserts.map((insert) => statementOf(client, insert)));
     yield* rowsOf(client, "BEGIN ISOLATION LEVEL SERIALIZABLE");
 
-    const outcome = yield* Effect.gen(function* statements() {
+    const outcome = yield* Effect.gen(function* statementsInOrder() {
       yield* rowsOf(client, `SET ROLE ${authorRole}`);
       yield* rowsOf(client, "SET CONSTRAINTS ALL DEFERRED");
-      yield* rowsOf(
-        client,
-        `INSERT INTO ${authorRole}.${view} (${columns.join(", ")}) VALUES (${columns
-          .map((_, at) => `$${String(at + 1)}`)
-          .join(", ")})`,
-        Object.values(row),
-      );
+      for (const { text, values } of statements) {
+        yield* rowsOf(client, text, values);
+      }
     }).pipe(
       Effect.as(Option.none<DatabaseError>()),
       Effect.catch((error) =>
@@ -252,6 +320,56 @@ const declarationRow = (fields: {
     start: 1,
     version: codeOf(SchemaVersion.handles, "3.0.1"),
   } satisfies SqlRow;
+};
+
+/**
+ * The family whose owner is each identifier a document's declarations use,
+ * `ChoiceVariableName.declarations` over `Declaration`.
+ */
+const declarationFamily = "ChoiceVariableName.declarations";
+
+/**
+ * A declaration row's statements, its owner first: the `ChoiceVariableName` row of its document and
+ * identifier, counting it as its one declaration and bearing no choice or hottext, so "Choice not
+ * variable" holds whatever the identifier, then the declaration at slot 0 of 1 of its family. A
+ * counted family's owner axis is not deferrable, so the declaration is judged against its owner at
+ * its INSERT; the owner's own foreign keys are deferred.
+ *
+ * @param row - The declaration's row.
+ * @returns The two statements' rows.
+ */
+const declared = (row: SqlRow): readonly Insert[] => [
+  {
+    row: {
+      choices: 0,
+      declarations: 1,
+      document: row["document"] ?? strayDocument,
+      hottexts: 0,
+      identifier: row["identifier"] ?? "",
+      placed_choices: 0,
+      placed_hottexts: 0,
+      root_kind: codeOf(NodeKind.handles, "qti-assessment-item"),
+    },
+    table: "choice_variable_name",
+  },
+  {
+    hidden: {
+      [`the index of the family ${declarationFamily}`]: 0,
+      [`the owner's count of the family ${declarationFamily}`]: 1,
+    },
+    row,
+    table: "declaration",
+  },
+];
+
+/**
+ * The `ChoiceVariableName` fact of the one identifier a key case's declarations use, the owner the
+ * change inserts beside its members: its counts are the family's to draw.
+ */
+const declaredName: Addition<typeof ChoiceVariableName> = {
+  document: strayDocument,
+  identifier: "A",
+  rootKind: "qti-assessment-item",
 };
 
 /**
@@ -398,16 +516,17 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
         () =>
           // Oracle: the specification as a checker, reading 74: no two declarations of a document
           // share an identifier, compared collapsed (XML Schema Part 2, §4.3.6).
-          // Bound: two declarations, the second's lexical form `A` and ` A`; the host finds the
-          // key, so `laws` holds it whether or not any SQL ran.
+          // Bound: two declarations, the second's lexical form `A` and ` A`, with the owner of their
+          // identifier's family, which an insert of a member of an immutable owner's family needs
+          // in its own change; the host finds the key, so `laws` holds it whether or not any SQL
+          // ran.
           Effect.gen(function* declarationKey() {
             const db = yield* Db.open(AuthorApp.roles.author, {});
             for (const second of ["A", " A"]) {
               const outcome = yield* db.apply(
-                ChangeSet.empty(Author).insert(Declaration, [
-                  declarationFact(1, "A"),
-                  declarationFact(2, second),
-                ]),
+                ChangeSet.empty(Author)
+                  .insert(ChoiceVariableName, [declaredName])
+                  .insert(Declaration, [declarationFact(1, "A"), declarationFact(2, second)]),
                 {},
               );
 
@@ -443,12 +562,13 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
                 assertVerdict(
                   yield* judged(
                     client,
-                    "declaration",
-                    declarationRow({
-                      baseType: identifier === "SCORE" ? "float" : "identifier",
-                      identifier,
-                      kind,
-                    }),
+                    declared(
+                      declarationRow({
+                        baseType: identifier === "SCORE" ? "float" : "identifier",
+                        identifier,
+                        kind,
+                      }),
+                    ),
                   ),
                   "declaration_not_reserved",
                   refused,
@@ -475,11 +595,7 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
               for (const kind of declarationKinds) {
                 for (const baseType of BaseType.handles.filter((handle) => handle !== "none")) {
                   assertVerdict(
-                    yield* judged(
-                      client,
-                      "declaration",
-                      declarationRow({ baseType, identifier, kind }),
-                    ),
+                    yield* judged(client, declared(declarationRow({ baseType, identifier, kind }))),
                     "reserved_type",
                     kind === typedKind && baseType !== kept,
                     `${kind} ${identifier} ${baseType}`,
@@ -497,7 +613,7 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
                   kind,
                 });
                 assertVerdict(
-                  yield* judged(client, "declaration", row),
+                  yield* judged(client, declared(row)),
                   "reserved_type",
                   kind !== contextVariable.kind || cardinality !== contextVariable.cardinality,
                   `QTI_CONTEXT ${kind} ${cardinality}`,
@@ -565,12 +681,7 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
               },
             ];
             for (const { label, refused, row } of cases) {
-              assertVerdict(
-                yield* judged(client, "declaration", row),
-                "e_1_derived",
-                refused,
-                label,
-              );
+              assertVerdict(yield* judged(client, declared(row)), "e_1_derived", refused, label);
             }
           }).pipe(Effect.scoped),
         { timeout: leaseTestTimeoutMs },
@@ -588,7 +699,7 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
             for (const cardinality of Cardinality.handles) {
               for (const baseType of ["none", "float"]) {
                 assertVerdict(
-                  yield* judged(client, "declaration", declarationRow({ baseType, cardinality })),
+                  yield* judged(client, declared(declarationRow({ baseType, cardinality }))),
                   "declaration_base_type",
                   (cardinality === "record") !== (baseType === "none"),
                   `${cardinality} ${baseType}`,
@@ -616,22 +727,30 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
                     (cardinality !== "single" || values === 1) &&
                     (record ? fields === values : fields === 0);
                   assertVerdict(
-                    yield* judged(client, "value_set", {
-                      base_type: codeOf(BaseType.handles, record ? "none" : "float"),
-                      cardinality: codeOf(Cardinality.handles, cardinality),
-                      declaration_kind: codeOf(DeclarationKind.handles, "qti-outcome-declaration"),
-                      document: strayDocument,
-                      element_children: values,
-                      elements: 1,
-                      fields,
-                      identifier: "A",
-                      kind: codeOf(NodeKind.handles, "qti-default-value"),
-                      nearest: strayDocument,
-                      node: strayNode(2),
-                      parent: strayNode(1),
-                      start: 2,
-                      version: codeOf(SchemaVersion.handles, "3.0.1"),
-                    }),
+                    yield* judged(client, [
+                      {
+                        row: {
+                          base_type: codeOf(BaseType.handles, record ? "none" : "float"),
+                          cardinality: codeOf(Cardinality.handles, cardinality),
+                          declaration_kind: codeOf(
+                            DeclarationKind.handles,
+                            "qti-outcome-declaration",
+                          ),
+                          document: strayDocument,
+                          element_children: values,
+                          elements: 1,
+                          fields,
+                          identifier: "A",
+                          kind: codeOf(NodeKind.handles, "qti-default-value"),
+                          nearest: strayDocument,
+                          node: strayNode(2),
+                          parent: strayNode(1),
+                          start: 2,
+                          version: codeOf(SchemaVersion.handles, "3.0.1"),
+                        },
+                        table: "value_set",
+                      },
+                    ]),
                     "value_cardinality",
                     !lawful,
                     `${cardinality} ${String(values)} values ${String(fields)} fields`,
@@ -656,18 +775,23 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
             for (const baseType of [...judgedBaseTypes, "string"]) {
               for (const { text, values } of typedTexts) {
                 assertVerdict(
-                  yield* judged(client, "value", {
-                    base_type: codeOf(BaseType.handles, baseType),
-                    document: strayDocument,
-                    kind: codeOf(NodeKind.handles, "qti-value"),
-                    nearest: strayDocument,
-                    node: strayNode(3),
-                    parent: strayNode(2),
-                    set_base_type: codeOf(BaseType.handles, baseType),
-                    start: 3,
-                    text,
-                    version: codeOf(SchemaVersion.handles, "3.0.1"),
-                  }),
+                  yield* judged(client, [
+                    {
+                      row: {
+                        base_type: codeOf(BaseType.handles, baseType),
+                        document: strayDocument,
+                        kind: codeOf(NodeKind.handles, "qti-value"),
+                        nearest: strayDocument,
+                        node: strayNode(3),
+                        parent: strayNode(2),
+                        set_base_type: codeOf(BaseType.handles, baseType),
+                        start: 3,
+                        text,
+                        version: codeOf(SchemaVersion.handles, "3.0.1"),
+                      },
+                      table: "value",
+                    },
+                  ]),
                   "typed_value",
                   baseType !== "string" && !values.includes(baseType),
                   `${baseType} ${JSON.stringify(text)}`,
@@ -692,12 +816,17 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
               for (const mastery of scaleTexts) {
                 for (const maximum of scaleTexts) {
                   assertVerdict(
-                    yield* judged(client, "outcome_range", {
-                      mastery_value: mastery,
-                      node: strayNode(1),
-                      normal_maximum: maximum,
-                      normal_minimum: minimum,
-                    }),
+                    yield* judged(client, [
+                      {
+                        row: {
+                          mastery_value: mastery,
+                          node: strayNode(1),
+                          normal_maximum: maximum,
+                          normal_minimum: minimum,
+                        },
+                        table: "outcome_range",
+                      },
+                    ]),
                     "mastery_range",
                     outOfRange(minimum, mastery, maximum),
                     JSON.stringify([minimum, mastery, maximum]),

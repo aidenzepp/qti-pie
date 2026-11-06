@@ -1,22 +1,27 @@
+/* oxlint-disable unicorn/text-encoding-identifier-case -- A `Document` row spells its XML encoding labels (`UTF-8`) as crust's reader reports them and `Document` stores them. */
 /**
  * The identity overlays' laws on the lease, PostgreSQL itself the judge (testing doctrine, rule 3),
  * written to run at N1 and never by a hand: each refused state is one the law's model refuses,
  * named by the constraint that states the law.
  *
- * Every case is a direct SQL writer's, as the rules file's rule 8 states it: the author login,
- * `SET ROLE` to the author role, SERIALIZABLE, every deferrable foreign key deferred, the case's
- * rows inserted with every column a writer fills (a family's hidden ones by the comment grizzle
- * installs on each), then the one deferred constraint under test set immediate, and a rollback.
- * A row's CHECKs, keys and non-deferrable foreign keys (a counted family's owner axis) are judged
- * as it is inserted, so a refused case's verdict is its SQLSTATE and the constraint that states the
+ * Every case is a direct SQL writer's, as the rules file's rule 8 and grizzle's README ("Direct SQL
+ * access") state it: the author login, `SET ROLE` to the author role, SERIALIZABLE, every
+ * deferrable foreign key deferred, the case's rows inserted into `Qti`'s tables with every column a
+ * writer fills (a family's hidden ones, each member's index and its copy of its owner's count, by
+ * the comment grizzle installs on each), then the one deferred constraint under test set
+ * immediate, and a rollback. A row's CHECKs, keys and non-deferrable foreign keys (a counted
+ * family's owner axis, and a key whose target holds no field beyond the ones it names) are judged
+ * as it is inserted, so each member's owners are inserted before it, with the counts its members
+ * copy: a `DocumentId`'s and an `XmlLang`'s document is a `Document` row (`Document.ids`,
+ * `Document.langs`). A refused case's verdict is its SQLSTATE and the constraint that states the
  * law, and a control's is that the same constraint passes.
  *
  * The cases that need a whole stored document arrive with the importer (Q5.15), and probe P2
  * restates them over a package: a dangling IDREF token, refused at COMMIT by `foreign key
- * Idref(document, token) to IdBinding(document, id)` (23503), and a text's by `TextIdref`'s, which
- * this file holds to their fields by the catalogue, since a token's owner axis into `Attribute` or
- * `IdentityText` is not deferrable; the copies between `Attribute`, `Node` and each overlay, both
- * ways; and R26 over a manifest and an item.
+ * Idref(document, token) to IdrefTarget(document, id)` (23503), and a text's by `TextIdref`'s,
+ * which this file holds to their fields by the catalogue, since a token's owner axis into
+ * `Attribute` or `IdentityText` is not deferrable; the copies between `Attribute`, `Node` and each
+ * overlay, both ways; and R26 over a manifest and an item.
  */
 import type { DbConnection } from "@bjornpagen/grizzle";
 import { NodeFileSystem } from "@effect/platform-node";
@@ -26,7 +31,15 @@ import { Client } from "pg";
 import type { DatabaseError, QueryResultRow } from "pg";
 import { describe } from "vitest";
 import { loginConnection } from "#pantry/db/connection.ts";
-import { AttributeName, NodeKind, SchemaVersion, TypeName } from "#pantry/grammar/install.ts";
+import {
+  AttributeName,
+  Flag,
+  NodeKind,
+  ResourceType,
+  SchemaVersion,
+  TypeName,
+} from "#pantry/grammar/install.ts";
+import { XmlStandalone } from "#pantry/qti/chardata.ts";
 import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 
 /**
@@ -324,9 +337,42 @@ const [first, second] = [uuidOf(1), uuidOf(2)] as const;
 const bindingFamily = "IdBinding.carriers";
 
 /**
- * A `DocumentId` row of an element, a member of its binding's family at its slot: its lexical form
- * split around its value as the builder splits it, or as the case corrupts it, and its owner, the
- * element itself for an attribute's ID.
+ * The family whose owner is each document, counting its IDs, `Document.ids` over `DocumentId`.
+ */
+const documentIdsFamily = "Document.ids";
+
+/**
+ * A member's slot in one family: its index and its owner's count.
+ */
+interface Slot {
+  readonly at: number;
+  readonly count: number;
+}
+
+/**
+ * The one member of a family of one.
+ */
+const onlySlot: Slot = { at: 0, count: 1 };
+
+/**
+ * A member's two hidden columns of one family, by the comments grizzle installs on them: its index
+ * and its copy of its owner's count, which the direct writer fills as grizzle's filler does
+ * (README, "Direct SQL access": "each member's hidden index, its copy of its owner's count").
+ *
+ * @param family - The family, `<owner>.<count>`.
+ * @param slot - The member's slot.
+ * @returns The hidden columns' values, by comment.
+ */
+const slotted = (family: string, { at, count }: Slot) =>
+  ({
+    [`the index of the family ${family}`]: at,
+    [`the owner's count of the family ${family}`]: count,
+  }) satisfies SqlRow["hidden"];
+
+/**
+ * A `DocumentId` row of an element, a member of its binding's family and of its document's at its
+ * slots: its lexical form split around its value as the builder splits it, or as the case
+ * corrupts it, and its owner, the element itself for an attribute's ID.
  *
  * @param node - The element's number.
  * @param document - Its document.
@@ -336,9 +382,9 @@ const bindingFamily = "IdBinding.carriers";
  * @param pieces.after - The whitespace after the value.
  * @param pieces.lexical - The lexical form; by default the pieces concatenated.
  * @param pieces.owner - The number of the element its binding names; by default its own.
- * @param place - Its slot in its binding's family and its binding's count; by default the one.
- * @param place.at - Its slot.
- * @param place.count - Its binding's count.
+ * @param place - Its slots, each the only one by default.
+ * @param place.binding - Its slot in its binding's family, `IdBinding.carriers`.
+ * @param place.document - Its slot in its document's, `Document.ids`.
  * @returns The row.
  */
 const documentIdRow = (
@@ -357,13 +403,16 @@ const documentIdRow = (
     readonly lexical?: string;
     readonly owner?: number;
   },
-  place?: { readonly at: number; readonly count: number },
+  {
+    binding = onlySlot,
+    document: inDocument = onlySlot,
+  }: {
+    readonly binding?: Slot;
+    readonly document?: Slot;
+  } = {},
 ): SqlRow => ({
   fields: { after, before, document, id, lexical, node: uuidOf(node), owner: uuidOf(owner) },
-  hidden: {
-    [`the index of the family ${bindingFamily}`]: place?.at ?? 0,
-    [`the owner's count of the family ${bindingFamily}`]: place?.count ?? 1,
-  },
+  hidden: { ...slotted(bindingFamily, binding), ...slotted(documentIdsFamily, inDocument) },
 });
 
 /**
@@ -394,12 +443,95 @@ const codeOf = (handles: readonly string[], handle: string): number => {
 };
 
 /**
- * The family of one projection and its members, by their tables, its count field and the comment
- * prefix grizzle gives a member's hidden columns: `DocumentLang` over `XmlLang`, and
- * `ResourceLomLanguageSet` over `LomLanguage`.
+ * The package every case's documents are entries of: no stored row holds it.
+ */
+const casePackage = uuidOf(255);
+
+/**
+ * A `Document` row of an item document, the owner of its IDs' and its `xml:lang` carriers'
+ * families, with each count as a case states it: a counted family's owner axis is not deferrable,
+ * so a `DocumentId` or `XmlLang` row is judged against its document's row at its INSERT. Every
+ * other field is lawful on the row's own CHECKs: no XML declaration, no site naming the document
+ * (so its context is the empty set and its nearest context the document node), and an item's
+ * resource type over an item root (`RootOfType`). Its foreign keys are deferred and never judged.
+ *
+ * @param document - The document's node.
+ * @param counts - Its counts of IDs and of `xml:lang` carriers, none by default.
+ * @param counts.ids - Its IDs, `Document.ids`.
+ * @param counts.langs - Its `xml:lang` carriers, `Document.langs`.
+ * @returns The row.
+ */
+const documentRow = (
+  document: string,
+  { ids = 0, langs = 0 }: { readonly ids?: number; readonly langs?: number } = {},
+): SqlRow => ({
+  fields: {
+    assembled: "false",
+    bindings: 0,
+    charset: "UTF-8",
+    choices: 0,
+    context: "0".repeat(Flag.handles.length),
+    context_nearest: document,
+    context_nearest_kind: codeOf(NodeKind.handles, "document"),
+    encoding: "",
+    export_charset: "UTF-8",
+    hottexts: 0,
+    idref_targets: 0,
+    ids,
+    langs,
+    node: document,
+    node_children: 1,
+    node_document: document,
+    node_governs: codeOf(TypeName.handles, "none"),
+    node_kind: codeOf(NodeKind.handles, "document"),
+    node_parent_kind: codeOf(NodeKind.handles, "document"),
+    node_start: 0,
+    package: casePackage,
+    path: `${document}.xml`,
+    resource_type: codeOf(ResourceType.handles, "imsqti_item_xmlv3p0"),
+    root_kind: codeOf(NodeKind.handles, "qti-assessment-item"),
+    standalone: codeOf(XmlStandalone.handles, "none"),
+    targeted_by: 0,
+    variables: 0,
+    version: codeOf(SchemaVersion.handles, "3.0.1"),
+    xml_version: "none",
+  },
+});
+
+/**
+ * The statement of a case's `Document` rows.
+ *
+ * @param rows - The rows.
+ * @returns The statement's rows.
+ */
+const documents = (...rows: readonly SqlRow[]): Insert => ({ rows, table: "document" });
+
+/**
+ * A document's `DocumentGenerals` row, its count of describing categories written as a case
+ * states it.
+ *
+ * @param generals - The count.
+ * @returns The statement's rows.
+ */
+const described = (generals: number): Insert => ({
+  rows: [{ fields: { document: first, generals } }],
+  table: "document_generals",
+});
+
+/**
+ * The family of one projection and its members, by their tables: `DocumentLang` over `XmlLang`, and
+ * `ResourceLomLanguageSet` over `LomLanguage`. `count` is the projection's family, and `families`
+ * every family a member is in, each slotted alike in a case, whose members share one owner in each:
+ * an `XmlLang` is its document's too (`Document.langs`). `beside` writes the other rows a case's
+ * owner and members are judged against at their INSERT, each owner axis and a foreign key whose
+ * target holds no field beyond the ones it names being immediate: the document's `Document` row,
+ * holding the members' count, and its `DocumentGenerals` row, the one a form's `generals` of 0
+ * names.
  */
 interface Projection {
+  readonly beside: (members: number) => readonly Insert[];
   readonly count: string;
+  readonly families: readonly string[];
   readonly member: (node: number, owner: string, lang: string) => SqlRow["fields"];
   readonly memberTable: string;
   readonly owner: (owner: string, lang: string, carriers: number) => SqlRow["fields"];
@@ -407,19 +539,24 @@ interface Projection {
 }
 
 /**
- * The two projections, each over its owner field: a document, or a LOM general category.
+ * The two projections, each over its owner field: a document, or a LOM general category. A LOM
+ * language's tag is its value case-folded, so a lower-case value is its own tag.
  */
 const projections: readonly Projection[] = [
   {
+    beside: (members) => [documents(documentRow(first, { langs: members })), described(0)],
     count: "DocumentLang.carriers",
+    families: ["DocumentLang.carriers", "Document.langs"],
     member: (node, document, lang) => ({ document, lang, node: uuidOf(node) }),
     memberTable: "xml_lang",
     owner: (document, lang, carriers) => ({ carriers, document, generals: 0, lang }),
     ownerTable: "document_lang",
   },
   {
+    beside: () => [],
     count: "ResourceLomLanguageSet.carriers",
-    member: (node, general, lang) => ({ general, lang, node: uuidOf(node) }),
+    families: ["ResourceLomLanguageSet.carriers"],
+    member: (node, general, lang) => ({ general, lang, node: uuidOf(node), tag: lang }),
     memberTable: "lom_language",
     owner: (general, lang, carriers) => ({ carriers, general, lang }),
     ownerTable: "resource_lom_language_set",
@@ -427,26 +564,19 @@ const projections: readonly Projection[] = [
 ];
 
 /**
- * A member of a projection's family at its slot of its owner's count, its hidden columns as
- * grizzle's filler sets them.
+ * A member of a projection at its slot in each of its families, its hidden columns as grizzle's
+ * filler sets them.
  *
  * @param projection - The projection.
  * @param fields - The member's fields.
- * @param place - Its slot and its owner's count.
- * @param place.at - Its slot.
- * @param place.count - Its owner's count.
+ * @param slot - Its slot and its owners' count, one in each family.
  * @returns The row.
  */
-const memberRow = (
-  projection: Projection,
-  fields: SqlRow["fields"],
-  { at, count }: { readonly at: number; readonly count: number },
-): SqlRow => ({
+const memberRow = (projection: Projection, fields: SqlRow["fields"], slot: Slot): SqlRow => ({
   fields,
-  hidden: {
-    [`the index of the family ${projection.count}`]: at,
-    [`the owner's count of the family ${projection.count}`]: count,
-  },
+  hidden: Object.fromEntries(
+    projection.families.flatMap((family) => Object.entries(slotted(family, slot))),
+  ),
 });
 
 /**
@@ -469,18 +599,6 @@ const labelled = (rootKind: string): Insert => ({
 });
 
 /**
- * A document's `DocumentGenerals` row, its count of describing categories written as a case
- * states it.
- *
- * @param generals - The count.
- * @returns The statement's rows.
- */
-const described = (generals: number): Insert => ({
-  rows: [{ fields: { document: first, generals } }],
-  table: "document_generals",
-});
-
-/**
  * A `DocumentLang` row of the first document, carried once, its count of listing categories
  * written as a case states it.
  *
@@ -495,28 +613,22 @@ const form = (lang: string, generals: number): Insert => ({
 
 /**
  * One R26 witness of the first document's form, its one listing category's, beside the form's
- * `DocumentLang` row, its family's hidden columns as grizzle's filler sets them.
+ * `DocumentLang` row and the document's `DocumentGenerals` row of one category, which a stated
+ * form's foreign key names at its INSERT, the witness's hidden columns as grizzle's filler sets
+ * them.
  *
  * @param lang - The `xml:lang` form.
- * @param pieces - The form's pieces as the case writes them.
- * @param pieces.lead - The whitespace before the value.
- * @param pieces.trail - The whitespace after it.
- * @param pieces.value - The value.
- * @returns The two statements' rows.
+ * @param value - The witness's value, as the case writes it.
+ * @returns The three statements' rows.
  */
-const witness = (
-  lang: string,
-  pieces: { readonly lead: string; readonly trail: string; readonly value: string },
-): readonly Insert[] => [
+const witness = (lang: string, value: string): readonly Insert[] => [
+  described(1),
   form(lang, 1),
   {
     rows: [
       {
-        fields: { document: first, general: uuidOf(9), lang, ...pieces },
-        hidden: {
-          "the index of the family DocumentLang.generals": 0,
-          "the owner's count of the family DocumentLang.generals": 1,
-        },
+        fields: { document: first, general: uuidOf(9), lang, value },
+        hidden: slotted("DocumentLang.generals", onlySlot),
       },
     ],
     table: "general_lang",
@@ -618,18 +730,13 @@ const ssmlAttribute = (
       fields: {
         fragment: uuidOf(fragment),
         kind: codeOf(NodeKind.handles, read.kind),
-        lead: "",
         lexical: read.value,
         name: codeOf(AttributeName.handles, read.name),
         node: uuidOf(node),
         refers: codeOf(NodeKind.handles, read.refers),
-        trail: "",
         value: read.value,
       },
-      hidden: {
-        [`the index of the family ${fragmentFamily}`]: 0,
-        [`the owner's count of the family ${fragmentFamily}`]: 1,
-      },
+      hidden: slotted(fragmentFamily, onlySlot),
     },
   ],
   table: "ssml_attribute",
@@ -691,15 +798,21 @@ describe.skipIf(!hasLease)("qti/identity.db.test.ts, on the lease", () => {
         );
         assertAccepted(
           yield* verdictOf(client, [
+            documents(documentRow(first, { ids: 2 })),
             { rows: [bindingRow(first, "a", 3, 2)], table: "id_binding" },
             {
               rows: [
-                documentIdRow(4, first, { id: "a", owner: 3 }, { at: 0, count: 2 }),
+                documentIdRow(
+                  4,
+                  first,
+                  { id: "a", owner: 3 },
+                  { binding: { at: 0, count: 2 }, document: { at: 0, count: 2 } },
+                ),
                 documentIdRow(
                   5,
                   first,
                   { after: " ", before: "\t", id: "a", owner: 3 },
-                  { at: 1, count: 2 },
+                  { binding: { at: 1, count: 2 }, document: { at: 1, count: 2 } },
                 ),
               ],
               table: "document_id",
@@ -709,6 +822,7 @@ describe.skipIf(!hasLease)("qti/identity.db.test.ts, on the lease", () => {
         );
         assertAccepted(
           yield* verdictOf(client, [
+            documents(documentRow(first, { ids: 1 }), documentRow(second, { ids: 1 })),
             { rows: [bindingRow(first, "a", 3), bindingRow(second, "a", 4)], table: "id_binding" },
             {
               rows: [documentIdRow(3, first, { id: "a" }), documentIdRow(4, second, { id: "a" })],
@@ -741,6 +855,7 @@ describe.skipIf(!hasLease)("qti/identity.db.test.ts, on the lease", () => {
         for (const [label, pieces] of cases) {
           assertRefusedBy(
             yield* verdictOf(client, [
+              documents(documentRow(first, { ids: 1 })),
               { rows: [bindingRow(first, pieces.id, 3)], table: "id_binding" },
               { rows: [documentIdRow(3, first, pieces)], table: "document_id" },
             ]),
@@ -752,6 +867,7 @@ describe.skipIf(!hasLease)("qti/identity.db.test.ts, on the lease", () => {
 
         assertAccepted(
           yield* verdictOf(client, [
+            documents(documentRow(first, { ids: 1 })),
             { rows: [bindingRow(first, "a", 3)], table: "id_binding" },
             {
               rows: [documentIdRow(3, first, { after: "\n", before: " ", id: "a" })],
@@ -770,7 +886,9 @@ describe.skipIf(!hasLease)("qti/identity.db.test.ts, on the lease", () => {
       // Oracle: PostgreSQL, each counted family's owner-axis foreign key (not deferrable, so judged
       // at its INSERT) and the owner's `E1_derived` CHECK, `carriers > 0`, against the
       // specification of a projection (sets ruling 2): its rows are exactly the values its members
-      // carry, each once. These are the `lang-set-copy` fixtures, both ways.
+      // carry, each once. These are the `lang-set-copy` fixtures, both ways. Each case writes the
+      // projection's other owners first (`beside`), holding the case's members, so the one owner
+      // axis that can break is the projection's.
       // Bound: each projection's missing owner, its uncarried owner, and its value carried by two
       // members.
       Effect.gen(function* langSetCopy() {
@@ -785,10 +903,9 @@ describe.skipIf(!hasLease)("qti/identity.db.test.ts, on the lease", () => {
 
           assertRefusedBy(
             yield* verdictOf(client, [
+              ...projection.beside(1),
               {
-                rows: [
-                  memberRow(projection, projection.member(3, first, "fr"), { at: 0, count: 1 }),
-                ],
+                rows: [memberRow(projection, projection.member(3, first, "fr"), onlySlot)],
                 table: projection.memberTable,
               },
             ]),
@@ -798,6 +915,7 @@ describe.skipIf(!hasLease)("qti/identity.db.test.ts, on the lease", () => {
           );
           assertRefusedBy(
             yield* verdictOf(client, [
+              ...projection.beside(0),
               {
                 rows: [{ fields: projection.owner(first, "fr", 0) }],
                 table: projection.ownerTable,
@@ -809,6 +927,7 @@ describe.skipIf(!hasLease)("qti/identity.db.test.ts, on the lease", () => {
           );
           assertAccepted(
             yield* verdictOf(client, [
+              ...projection.beside(2),
               {
                 rows: [{ fields: projection.owner(first, "fr", 2) }],
                 table: projection.ownerTable,
@@ -864,12 +983,15 @@ describe.skipIf(!hasLease)("qti/identity.db.test.ts, on the lease", () => {
   );
 
   it.effect(
-    "holds Idref target as the foreign keys from Idref's and TextIdref's (document, token) into IdBinding's (document, id)",
+    "holds Idref target as the foreign keys from Idref's and TextIdref's (document, token) into IdrefTarget's (document, id)",
     () =>
       // Oracle: the catalogue, against the statements `contained(on(Idref, "document", "token"),
-      // on(IdBinding, "document", "id"))` and its `TextIdref` twin: XML Schema's Validation Root, an
-      // IDREF, an attribute's or an element text's (reading 101), names an ID of its document. The
-      // dangling token itself is refused over a whole stored document (Q5.15, P2).
+      // on(IdrefTarget, "document", "id"))` and its `TextIdref` twin (`#pantry/qti/identity.ts`,
+      // identityLaws): XML Schema's Validation Root, an IDREF, an attribute's or an element
+      // text's (reading 101), names an ID of its document, through the projection of the ids its
+      // tokens name (spec reading 117), which `unassembledTargets` holds to `IdBinding` in a
+      // document of no assembly. The dangling token itself is refused over a whole stored
+      // document (Q5.15, P2).
       // Bound: the two foreign keys.
       Effect.gen(function* idrefTarget() {
         const client = yield* loginSession;
@@ -880,12 +1002,12 @@ describe.skipIf(!hasLease)("qti/identity.db.test.ts, on the lease", () => {
           const name = yield* constraintDescribed(
             client,
             table,
-            `foreign key ${relation}(document, token) to IdBinding(document, id)`,
+            `foreign key ${relation}(document, token) to IdrefTarget(document, id)`,
           );
 
           assert.deepStrictEqual(
             yield* foreignKeyOf(client, name),
-            { columns: "document token", target: "id_binding", targets: "document id" },
+            { columns: "document token", target: "idref_target", targets: "document id" },
             relation,
           );
         }
@@ -896,12 +1018,16 @@ describe.skipIf(!hasLease)("qti/identity.db.test.ts, on the lease", () => {
   it.effect(
     "refuses a stated xml:lang form whose listing categories fall short of its document's, by Document lang, and accepts an equal count, an unstated form and a document no category describes",
     () =>
-      // Oracle: PostgreSQL, the deferred foreign key of `documentLang` set immediate, against QTI
-      // 3.0 Metadata §2.7.1.3 ("There must be one value for each of the languages referred to by
-      // the language attributes"), counted: a form that states a language is listed by as many
-      // general categories (`DocumentLang.generals`, its witnesses) as describe its document
+      // Oracle: PostgreSQL, the foreign key of `documentLang`, against QTI 3.0 Metadata §2.7.1.3
+      // ("There must be one value for each of the languages referred to by the language
+      // attributes"), counted: a form that states a language is listed by as many general
+      // categories (`DocumentLang.generals`, its witnesses) as describe its document
       // (`DocumentGenerals.generals`), and an empty or all-whitespace form states none (XML 1.0
-      // §2.12).
+      // §2.12). Its target holds no field beyond the two it names, so PostgreSQL judges it at the
+      // form's INSERT (README, "Direct SQL access": a foreign key is deferred to COMMIT only as a
+      // family's proof needs, or when its target has another field or it lies on a cycle); it is
+      // set immediate too, which PostgreSQL takes as a no-op on a key it does not defer, so the
+      // case holds wherever grizzle places it.
       // Bound: a stated form listed by none of one category; listed by it; the empty form and a
       // form of whitespace alone beside one category; a stated form of a document no category
       // describes.
@@ -910,7 +1036,7 @@ describe.skipIf(!hasLease)("qti/identity.db.test.ts, on the lease", () => {
         const law = yield* constraintDescribed(
           client,
           "document_lang",
-          "foreign key DocumentLang(document, generals where %) to DocumentGenerals(document, generals)%",
+          "foreign key DocumentLang(document where %, generals where %) to DocumentGenerals(document, generals)",
         );
         assertRefusedBy(
           yield* verdictOf(client, [described(1), form("en", 0)], [law]),
@@ -931,31 +1057,30 @@ describe.skipIf(!hasLease)("qti/identity.db.test.ts, on the lease", () => {
   );
 
   it.effect(
-    "refuses an R26 witness whose value is not its form's collapsed value, by E1_derived, and accepts the builder's split",
+    "refuses an R26 witness whose value is not its form's collapsed value, by E1_derived, and accepts the collapsed value",
     () =>
-      // Oracle: PostgreSQL, `GeneralLang`'s `E1_derived` CHECK, against XML Schema 1.0 Part 2
-      // §3.3.3: an xs:language's value is its form collapsed, outer whitespace removed, and a form
-      // that states a language has a nonempty one.
+      // Oracle: PostgreSQL, `GeneralLang`'s `E1_derived` CHECK, `value = lowerAscii(collapse(lang))`
+      // and nonempty, against XML Schema 1.0 Part 2 §3.3.3: an xs:language's value is its form
+      // collapsed, outer whitespace removed, and a form that states a language has a nonempty
+      // one. Each case writes its document's one category and its form first, so the witness's
+      // owner axis and the form's own key hold at their INSERTs and the CHECK is the verdict.
       // Bound: another value, whitespace kept in the value, an empty value, and the control.
       Effect.gen(function* witnessSplit() {
         const client = yield* loginSession;
-        for (const [label, lang, pieces] of [
-          ["another value", "en", { lead: "", trail: "", value: "fr" }],
-          ["whitespace kept in the value", " en", { lead: "", trail: "", value: " en" }],
-          ["an empty value", " ", { lead: " ", trail: "", value: "" }],
+        for (const [label, lang, value] of [
+          ["another value", "en", "fr"],
+          ["whitespace kept in the value", " en", " en"],
+          ["an empty value", " ", ""],
         ] as const) {
           assertRefusedBy(
-            yield* verdictOf(client, witness(lang, pieces)),
+            yield* verdictOf(client, witness(lang, value)),
             derivedCheck,
             "23514",
             label,
           );
         }
 
-        assertAccepted(
-          yield* verdictOf(client, witness(" fr\n", { lead: " ", trail: "\n", value: "fr" })),
-          "the split",
-        );
+        assertAccepted(yield* verdictOf(client, witness(" fr\n", "fr")), "the collapsed value");
       }).pipe(Effect.scoped),
     leaseTestTimeoutMs,
   );
@@ -992,18 +1117,23 @@ describe.skipIf(!hasLease)("qti/identity.db.test.ts, on the lease", () => {
   it.effect(
     "refuses a startmark whose mark its fragment defines other than once, by SSML trim mark, and a lookup whose lexicon its fragment lacks, by SSML lexicon reference, and accepts each named once",
     () =>
-      // Oracle: PostgreSQL, the deferred foreign keys of `ssmlTrimMark` and `ssmlLexiconReference`
-      // set immediate, against SSML 1.1 §3.1.1.1 ("Only markers defined once in the document … are
+      // Oracle: PostgreSQL, the foreign keys of `ssmlTrimMark` and `ssmlLexiconReference`, each set
+      // immediate, against SSML 1.1 §3.1.1.1 ("Only markers defined once in the document … are
       // permitted as the value of either startmark or endmark") and §3.1.5.1 (a lexicon's name is
-      // scoped to "the current SSML document") under spec reading 3, each fragment a speak.
+      // scoped to "the current SSML document") under spec reading 3, each fragment a speak. The
+      // trim's key names every field of `FragmentValue` (its `carriers = 1` a tag column), so
+      // PostgreSQL judges it at the trim's INSERT (README, "Direct SQL access"); the lookup's
+      // target holds `carriers` beyond the fields it names, so it is deferred until set immediate.
+      // grizzle describes each key's side term by term, a selected term as `<field> where <its
+      // selection>`.
       // Bound: a startmark whose mark the fragment holds twice, none, or once; a lookup whose
       // lexicon the fragment holds or not.
       Effect.gen(function* ssmlFragment() {
         const client = yield* loginSession;
         const [trim, lookup] = yield* Effect.forEach(
           [
-            "foreign key SsmlAttribute(node, refers, value where %) to FragmentValue(fragment, kind, value where %",
-            "foreign key SsmlAttribute(fragment, refers, value where %) to FragmentValue(fragment, kind, value)%",
+            "foreign key SsmlAttribute(node where %, refers where %, value where %, tag FragmentValue.carriers = 1) to FragmentValue(fragment, kind, value, carriers)",
+            "foreign key SsmlAttribute(fragment where %, refers where %, value where %) to FragmentValue(fragment, kind, value)",
           ],
           (pattern) => constraintDescribed(client, "ssml_attribute", pattern),
         );
