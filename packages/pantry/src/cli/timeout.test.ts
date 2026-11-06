@@ -13,13 +13,15 @@ import {
   withTimeout,
 } from "#pantry/cli/timeout.ts";
 import { captureCli, preloadEngine } from "#pantry/test/cli.ts";
+import { fileScratchDirectory } from "#pantry/test/scratch.ts";
 
 const fixtures = inject("fixtures");
 
 /**
- * The scratch folder this file owns: the home and the cluster state of the run on the real root.
+ * The scratch folder this file owns, `work/cli-timeout-*`, the run's own: the home and the cluster
+ * state of the run on the real root.
  */
-const scratch = path.resolve(import.meta.dirname, "..", "..", "work", "cli-timeout");
+const scratch = fileScratchDirectory("cli-timeout-");
 
 /**
  * A command whose handler waits one second, wired as the root is: the setting, then the bound.

@@ -25,7 +25,6 @@
  * Under the union driver a `strict` wildcard would find a declaration no XSD of the document's
  * set imports, as a DRD element under an item's `qti-companion-materials-info`.
  */
-import path from "node:path";
 import { Array as Arr, Effect, FileSystem, Option } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
@@ -39,18 +38,6 @@ import {
 } from "#pantry/vocab/derive/sources.ts";
 import type { SourcePath } from "#pantry/vocab/derive/sources.ts";
 import type { XsdMessage, XsdVerdict } from "#pantry/xml/oracle.ts";
-
-/**
- * The folder the oracle's inputs are written to, `packages/pantry/work/xsd-oracle`, git-ignored
- * like the rest of `work/`.
- */
-export const xsdOracleDirectory = path.resolve(
-  import.meta.dirname,
-  "..",
-  "..",
-  "work",
-  "xsd-oracle",
-);
 
 /**
  * The namespace the driver schemas and their probe elements are in, which no pinned XSD uses.

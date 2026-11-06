@@ -1,4 +1,3 @@
-import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { assert, beforeAll, inject, layer } from "@effect/vitest";
 import { Cause, Effect, Exit, Predicate, Schema } from "effect";
@@ -7,16 +6,16 @@ import { ImportData } from "#pantry/cli/import.ts";
 import { ErrorObject, successEnvelope } from "#pantry/cli/output.ts";
 import { exitCodeOf } from "#pantry/cli/run.ts";
 import { captureCli, matchesCommitted, preloadEngine } from "#pantry/test/cli.ts";
-import { makeScratch, scratchEnv } from "#pantry/test/scratch.ts";
+import { fileScratchDirectory, makeScratch, scratchEnv } from "#pantry/test/scratch.ts";
 import { cliProcessTestTimeoutMs, engineLoadHookTimeoutMs } from "#pantry/test/settings.ts";
 
 const fixtures = inject("fixtures");
 
 /**
- * The folder the run's home and cluster state live under, `packages/pantry/work/cli-import`. No
- * other test file writes there.
+ * The folder the run's home and cluster state live under, `packages/pantry/work/cli-import-*`, the
+ * run's own.
  */
-const root = path.resolve(import.meta.dirname, "..", "..", "work", "cli-import");
+const root = fileScratchDirectory("cli-import-");
 
 /**
  * The environment of a run: a scratch home, a cluster state folder that is empty and a port nothing

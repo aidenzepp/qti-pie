@@ -46,6 +46,7 @@ import {
   openAttribute,
   textTypes,
 } from "#pantry/vocab/inventory/attributes.ts";
+import { scratchDirectory } from "#pantry/test/scratch.ts";
 import { builtinDomainOf } from "#pantry/vocab/derive/domains.ts";
 import type { Domain, Facet } from "#pantry/vocab/inventory/types.ts";
 import { OracleLayer, xmllintValidate } from "#pantry/xml/oracle.ts";
@@ -746,8 +747,7 @@ describe.skipIf(!hasXmllint)("The translation of XSD regular expressions", () =>
     () =>
       Effect.gen(function* translationAgrees() {
         const fs = yield* FileSystem.FileSystem;
-        const directory = `${import.meta.dirname}/../../work/domains-translation`;
-        yield* fs.makeDirectory(directory, { recursive: true });
+        const directory = yield* scratchDirectory("domains-translation-");
 
         const probes = leafPatterns.flatMap((pattern, index) => {
           const words = sample(
@@ -816,7 +816,7 @@ describe.skipIf(!hasXmllint)("The translation of XSD regular expressions", () =>
 
         assert.isAbove(probes.length, leafPatterns.length * 10);
         assert.deepStrictEqual(disagreements, []);
-      }).pipe(Effect.provide(OracleLayer), Effect.provide(NodeServices.layer)),
+      }).pipe(Effect.scoped, Effect.provide(OracleLayer), Effect.provide(NodeServices.layer)),
     120_000,
   );
 

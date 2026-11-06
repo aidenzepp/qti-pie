@@ -1,16 +1,15 @@
-import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Cause, Effect, Exit } from "effect";
 import { CliError } from "effect/cli";
 import { captureCli } from "#pantry/test/cli.ts";
-import { scratchEnv } from "#pantry/test/scratch.ts";
+import { fileScratchDirectory, scratchEnv } from "#pantry/test/scratch.ts";
 
 /**
- * The folder the run's home and cluster state live under, `packages/pantry/work/cli-completions`.
- * No other test file writes there.
+ * The folder the run's home and cluster state live under, `packages/pantry/work/cli-completions-*`,
+ * the run's own.
  */
-const root = path.resolve(import.meta.dirname, "..", "..", "work", "cli-completions");
+const root = fileScratchDirectory("cli-completions-");
 
 /**
  * The environment of a run, with the database pointed at nothing: `completions` reads no
