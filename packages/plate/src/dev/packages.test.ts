@@ -293,7 +293,8 @@ const scratch = path.resolve(
 
 /**
  * The crafted corpus root: the package `htmlitem`, whose item document is named `items/q.html`,
- * and the package `evil`, which holds `foo\secret.png` beside a link `foo` to the folder outside.
+ * the package `evil`, which holds `foo\secret.png` beside a link `foo` to the folder outside, and
+ * a link `linked` to the folder outside, which holds the directory `hidden.zip.d`.
  */
 const craftedRoot = path.join(scratch, "corpus");
 
@@ -371,6 +372,12 @@ beforeAll(() => {
   writeFileSync(path.join(evil, "item.xml"), craftedItem);
   writeFileSync(path.join(evil, "foo\\secret.png"), heldBytes);
   symlinkSync(path.join("..", "..", "outside"), path.join(evil, "foo"));
+  mkdirSync(path.join(outsideRoot, "hidden.zip.d"));
+  writeFileSync(
+    path.join(outsideRoot, "hidden.zip.d", "imsmanifest.xml"),
+    craftedManifest("item.xml"),
+  );
+  symlinkSync(path.join("..", "outside"), path.join(craftedRoot, "linked"));
   writeFileSync(path.join(htmlItem, "imsmanifest.xml"), craftedManifest("items/q.html"));
   writeFileSync(path.join(htmlItem, "items", "q.html"), craftedItem);
 });
@@ -601,6 +608,24 @@ describe("dev/packages.ts", () => {
           assert.strictEqual(outside, outsideBytes);
           assert.strictEqual(answer.response.status, 200);
           assert.strictEqual(answer.html, heldBytes);
+        }),
+    );
+
+    it.effect(
+      "the packages are found without following links: a *.zip.d under a linked directory, or under a link inside a package, is not a package",
+      () =>
+        Effect.gen(function* unlinked() {
+          const listed = yield* inCrafted(
+            Effect.flatMap(
+              packageCache((source) => Effect.succeed(uncheckedOf(source))),
+              (found) => found.packages,
+            ),
+          );
+
+          assert.deepStrictEqual(
+            listed.map((entry) => entry.location),
+            ["evil.zip.d", "htmlitem.zip.d", "fixtures/m2"],
+          );
         }),
     );
 

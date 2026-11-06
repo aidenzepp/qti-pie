@@ -121,11 +121,15 @@ const documentVerdict = (resource: PackageResource): Option.Option<string> =>
   resource.verdict.pipe(Option.map((document) => document.verdict));
 
 /**
- * The resource types whose document a host never serves: an item, a test, a section and a
- * stimulus, the four QTI resources ruling R3 names.
+ * The resource types whose document a host never serves: the eight QTI types of the profile's
+ * `type` enumeration (ruling R3, widened to every QTI resource).
  */
 const qtiDocumentTypes: ReadonlySet<string> = new Set([
+  "imsqti_fragment_xmlv3p0",
   "imsqti_item_xmlv3p0",
+  "imsqti_outcomes_xmlv3p0",
+  "imsqti_resprocessing_xmlv3p0",
+  "imsqti_rptemplate_xmlv3p0",
   "imsqti_section_xmlv3p0",
   "imsqti_stimulus_xmlv3p0",
   "imsqti_test_xmlv3p0",
@@ -136,7 +140,7 @@ const qtiDocumentTypes: ReadonlySet<string> = new Set([
  * resource's declared type.
  *
  * @param verdict The package verdict.
- * @returns The path of each item, test, section and stimulus resource's document.
+ * @returns The path of each QTI resource's document.
  */
 const qtiDocumentsOf = (verdict: PackageVerdict): ReadonlySet<string> =>
   new Set(
@@ -620,6 +624,34 @@ describe("package/open.ts", () => {
             "items/img.png",
             "shared/page.html",
           ]);
+        }),
+    );
+
+    it.effect(
+      "files leaves out the document of every QTI resource type, outcome declarations, response processing, a response-processing template and a fragment among them, and keeps a file such a resource lists besides its document",
+      () =>
+        Effect.gen(function* everyQtiDocument() {
+          const verdict = yield* openPackage(
+            location,
+            packageOf({
+              [manifestFile]: manifestXml(
+                resourceXml("A", "imsqti_item_xmlv3p0", "items/a.xml"),
+                resourceXml("O", "imsqti_outcomes_xmlv3p0", "shared/outcomes.xml"),
+                '<resource identifier="R" type="imsqti_resprocessing_xmlv3p0" href="shared/rp.xml"><file href="shared/rp.xml"/><file href="shared/rp.css"/></resource>',
+                resourceXml("RT", "imsqti_rptemplate_xmlv3p0", "shared/template.xml"),
+                resourceXml("F", "imsqti_fragment_xmlv3p0", "shared/fragment.xml"),
+              ),
+              "items/a.xml": itemXml("a", "SCORE"),
+              "shared/fragment.xml": `<p xmlns="${qti}">fragment</p>`,
+              "shared/outcomes.xml": `<qti-outcome-declaration xmlns="${qti}" identifier="SCORE" cardinality="single" base-type="float"/>`,
+              "shared/rp.css": "p {}",
+              "shared/rp.xml": `<qti-response-processing xmlns="${qti}"><qti-set-outcome-value identifier="SCORE"><qti-base-value base-type="float">1</qti-base-value></qti-set-outcome-value></qti-response-processing>`,
+              "shared/template.xml": `<qti-response-processing xmlns="${qti}"/>`,
+            }),
+          );
+          const accepted = acceptedOf(verdict);
+
+          assert.deepStrictEqual([...accepted.files], ["shared/rp.css"]);
         }),
     );
 

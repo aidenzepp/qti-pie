@@ -179,28 +179,42 @@ export const packageIds = (locations: readonly string[]): readonly string[] => {
 };
 
 /**
- * List the files of a directory, at any depth, by their POSIX paths from it.
+ * One entry a walk of a directory meets: a real file or a real directory.
+ */
+interface WalkEntry {
+  /**
+   * Whether it is a directory; a file when not.
+   */
+  readonly directory: boolean;
+  /**
+   * Its POSIX path from the walk's root.
+   */
+  readonly path: string;
+}
+
+/**
+ * List the files and directories under a directory, at any depth, by their POSIX paths from it.
  *
  * Symbolic links are not followed: the walk reads one directory at a time and descends only into
- * real directories, so a link, to a file or to a directory, is never a package file, and no file
- * outside the directory is listed through one. Node's recursive `readdir` descends into a linked
+ * real directories, so a link, to a file or to a directory, is never an entry, and nothing outside
+ * the directory is listed through one. Node's recursive `readdir` descends into a linked
  * directory, which is why the walk does not use it.
  *
  * @param root The directory.
  * @param fix What to change when it cannot be listed.
- * @returns Each file's path from the directory, sorted.
+ * @returns Each entry, a directory before what it holds, in the order the walk meets them.
  */
-const filesUnder = (
+const walkUnder = (
   root: string,
   fix: string,
-): Effect.Effect<readonly string[], PackageUnreadable> => {
+): Effect.Effect<readonly WalkEntry[], PackageUnreadable> => {
   /**
-   * List the files under one directory of the walk.
+   * List the entries under one directory of the walk.
    *
    * @param relative The directory's POSIX path from the root, empty for the root itself.
-   * @returns Each file's path from the root, in the order the walk meets them.
+   * @returns Each entry under it, by its path from the root.
    */
-  const walk = (relative: string): Effect.Effect<readonly string[], PackageUnreadable> => {
+  const walk = (relative: string): Effect.Effect<readonly WalkEntry[], PackageUnreadable> => {
     const directory = path.join(root, relative);
 
     return Effect.tryPromise({
@@ -214,8 +228,10 @@ const filesUnder = (
             const child = relative === "" ? entry.name : `${relative}/${entry.name}`;
 
             return entry.isDirectory()
-              ? walk(child)
-              : Effect.succeed(entry.isFile() ? [child] : []);
+              ? walk(child).pipe(
+                  Effect.map((under) => [{ directory: true, path: child }, ...under]),
+                )
+              : Effect.succeed(entry.isFile() ? [{ directory: false, path: child }] : []);
           }),
         ),
       ),
@@ -223,8 +239,29 @@ const filesUnder = (
     );
   };
 
-  return walk("").pipe(Effect.map((paths) => paths.toSorted()));
+  return walk("");
 };
+
+/**
+ * List the files of a directory, at any depth, by their POSIX paths from it, through
+ * {@link walkUnder}, so no link is followed and no link is a file.
+ *
+ * @param root The directory.
+ * @param fix What to change when it cannot be listed.
+ * @returns Each file's path from the directory, sorted.
+ */
+const filesUnder = (
+  root: string,
+  fix: string,
+): Effect.Effect<readonly string[], PackageUnreadable> =>
+  walkUnder(root, fix).pipe(
+    Effect.map((entries) =>
+      entries
+        .filter((entry) => !entry.directory)
+        .map((entry) => entry.path)
+        .toSorted(),
+    ),
+  );
 
 /**
  * Construct the failure of a file-system call on a path in a package's directory.
@@ -344,25 +381,22 @@ export const openDirectory: PackageOpener = Effect.fn("packages.openDirectory")(
  * Find the packages: every `*.zip.d` directory under the corpus root, at any depth, in the order of
  * their locations, then the fixture package, each with its id.
  *
- * Fails with {@link PackageUnreadable} when the corpus root cannot be listed, and a `ConfigError`
- * when neither `PLATE_CORPUS_DIR` nor `HOME` is set.
+ * The corpus is walked through {@link walkUnder}, so a `*.zip.d` reached only through a link, a
+ * linked directory or a link inside a package, is not a package.
+ *
+ * Fails with {@link PackageUnreadable} when a directory under the corpus root cannot be listed, and
+ * a `ConfigError` when neither `PLATE_CORPUS_DIR` nor `HOME` is set.
  */
 const packageSources: Effect.Effect<readonly PackageSource[], PackagesFailure> = Effect.gen(
   function* packageSources() {
     const corpus = yield* corpusRoot;
-    const entries = yield* Effect.tryPromise({
-      catch: (cause) =>
-        new PackageUnreadable({
-          detail: `${causeText(cause)}; extract the 1EdTech QTI 3 examples once under ~/.cache/gr8des/qti3-examples, each nested zip into the X.zip.d/ folder beside it, or set PLATE_CORPUS_DIR to the directory that holds them`,
-          path: corpus,
-        }),
-      try: () => readdir(corpus, { recursive: true, withFileTypes: true }),
-    });
+    const entries = yield* walkUnder(
+      corpus,
+      "extract the 1EdTech QTI 3 examples once under ~/.cache/gr8des/qti3-examples, each nested zip into the X.zip.d/ folder beside it, or set PLATE_CORPUS_DIR to the directory that holds them",
+    );
     const corpusLocations = entries
-      .filter((entry) => entry.isDirectory() && entry.name.endsWith(packageSuffix))
-      .map((entry) =>
-        path.relative(corpus, path.join(entry.parentPath, entry.name)).split(path.sep).join("/"),
-      )
+      .filter((entry) => entry.directory && entry.path.endsWith(packageSuffix))
+      .map((entry) => entry.path)
       .toSorted();
     const locations = [...corpusLocations, fixtureLocation];
     const ids = packageIds(locations);
