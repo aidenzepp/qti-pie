@@ -51,13 +51,9 @@ export const widestTextKey = [
 ] as const;
 
 /**
- * The most code points a key text holds: the most a text bounded by its pattern holds beside
- * {@link widestTextKey} where grizzle's `keyTextBytes` still leaves a byte, 646 at the vendored
- * grizzle. `keyTextBytes` measures a key with none of its fields NULL and counts the further text
- * it sizes at 7 bytes, its header and worst padding; the widest key, the tree's predecessor axis
- * on `Node`, holds NULL-able hidden columns (the first child has no predecessor), whose null bitmap
- * moves the entry's datums 8 bytes, so the key text fits there exactly where a byte is left. At 647
- * the axis's UNIQUE reaches 2,712 bytes. `limits.test.ts` holds 646 to leave a byte and 647 none.
+ * The most code points a key text holds: the most whose UTF-8 form, at most four bytes a code point
+ * (RFC 3629, §3), fits the bytes grizzle's `keyTextBytes` leaves beside {@link widestTextKey}, 2,587
+ * at the vendored grizzle, so 646. `limits.test.ts` holds 646 to fit and 647 not to.
  */
 export const keyTextCodePoints = 646;
 
@@ -70,13 +66,14 @@ export const keyTextCodePoints = 646;
 export const localNameCodePoints = repetitionMax;
 
 /**
- * The most code points a namespace name holds: the most a text bounded by its pattern holds beside
- * the widest key it rides, `OpenAttributeName`'s `(node, uri, local)`, where a uuid and a local
- * name of {@link localNameCodePoints} share the entry, 409 at the vendored grizzle;
+ * The most code points a namespace name holds: the most whose UTF-8 form fits the bytes grizzle's
+ * `keyTextBytes` leaves beside the widest key it rides, `OpenAttributeName`'s `(node, uri, local)`,
+ * where a uuid and a local name of {@link localNameCodePoints} share the entry: 1,638 bytes at the
+ * vendored grizzle, so 409;
  * `OpenElementName(node, namespace)`, the containment of an open attribute's element namespace into
  * it, and the foreign class checks are narrower. One bound for every one of them keeps a namespace
  * name one relation holds from being refused by another. `limits.test.ts` holds 409 to fit and 410
- * to be refused.
+ * not to.
  */
 export const namespaceCodePoints = 409;
 
