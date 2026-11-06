@@ -233,6 +233,52 @@ export interface ChoicePayload extends ModePayload, ValidationPayload {
 }
 
 /**
+ * An Inline Choice as the page may know it (Q-12): its binding, its Label, its placeholder, its
+ * choices in the order they are presented, how its Control is named and the identifier it restores.
+ */
+export interface InlineChoicePayload extends ModePayload, ValidationPayload {
+  /**
+   * The choices in presented order, as {@link ChoicePayload.choices} orders a Choice's.
+   */
+  readonly choices: readonly {
+    readonly content: readonly PayloadNode[];
+    readonly identifier: string;
+  }[];
+  /**
+   * The author's `class` value, empty when absent.
+   */
+  readonly class: string;
+  /**
+   * The name its Control posts under: the view's name for the response, else
+   * `entryName(instance, response)`.
+   */
+  readonly formName: string;
+  readonly kind: "inline-choice";
+  /**
+   * The content of the first `qti-label`, none when the interaction has none.
+   */
+  readonly label: Option.Option<readonly PayloadNode[]>;
+  /**
+   * How the Control is named for assistive technology when no Label gives it a name, as a text
+   * control's is.
+   */
+  readonly name: TextName;
+  /**
+   * The author's `data-prompt`, the text of the option that stands for no answer.
+   */
+  readonly placeholder: Option.Option<string>;
+  /**
+   * The identifier of the response it binds.
+   */
+  readonly response: string;
+  /**
+   * The identifier the Control shows as chosen: the string posted when the view has messages,
+   * else the view's value; empty for NULL.
+   */
+  readonly restore: string;
+}
+
+/**
  * Where a text control's first Control stands among the Controls the renderer names (Q10): `n`,
  * from 1, among the `count` of the item.
  */

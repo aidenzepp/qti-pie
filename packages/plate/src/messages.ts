@@ -68,6 +68,7 @@ const en = {
   reviewNotAllowed: "review not allowed",
   score: "Score: {score}",
   scored: "Scored",
+  selectPrompt: "Select an answer",
   skippingNotAllowed: "Answer this item before you submit it.",
   solution: "Solution",
   solutionItem: "Solution: Item {n}",

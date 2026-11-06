@@ -297,6 +297,65 @@ export interface ChoiceInteraction {
 }
 
 /**
+ * A `qti-inline-choice-interaction` (Q-12), bound to an identifier response of single
+ * cardinality, which stands inside the author's sentence. The model keeps its choices in document
+ * order whatever `shuffle` says; the payload presents a shuffled Inline Choice's choices in the
+ * seeded order, each fixed choice at its own place, as a Choice's.
+ */
+export interface InlineChoiceInteraction {
+  /**
+   * The author's `aria-label`, which names the Control when no Label gives a name.
+   */
+  readonly ariaLabel: Option.Option<string>;
+  /**
+   * The author's `aria-labelledby`, an IDREFS value as written, which names the Control when no
+   * Label gives a name.
+   */
+  readonly ariaLabelledby: Option.Option<string>;
+  /**
+   * Each `qti-inline-choice` in document order, which has a `qti-simple-choice`'s identifier,
+   * content and `fixed`; the identifiers are unique within the interaction (info model 5.73.1).
+   */
+  readonly choices: readonly SimpleChoice[];
+  /**
+   * The author's `class` value, empty when absent.
+   */
+  readonly class: string;
+  readonly kind: "inline-choice";
+  /**
+   * The content of the interaction's first `qti-label`, none when it has none.
+   */
+  readonly label: Option.Option<readonly BodyNode[]>;
+  /**
+   * The author's replacement for the too-few message, `data-min-selections-message`.
+   */
+  readonly messages: { readonly min: Option.Option<string> };
+  /**
+   * `min-choices`, 0 when absent: a count, 0 to 2^63-1, held exactly (reading 46). One above 1 is
+   * kept as written, so under `validateResponses` no response of a single binding meets it.
+   */
+  readonly minChoices: bigint;
+  readonly path: string;
+  /**
+   * The author's `data-prompt`, the text of the option that stands for no answer.
+   */
+  readonly placeholder: Option.Option<string>;
+  /**
+   * `required`, an `xs:boolean`, false when absent: under `validateResponses`, a NULL response is
+   * refused even when `min-choices` is 0.
+   */
+  readonly required: boolean;
+  /**
+   * The identifier of the response it binds, `response-identifier`.
+   */
+  readonly response: string;
+  /**
+   * `shuffle`, an `xs:boolean`, false when absent.
+   */
+  readonly shuffle: boolean;
+}
+
+/**
  * A `qti-text-entry-interaction` (Q-20), bound to a single `string`, `integer` or `float` response.
  */
 export interface TextEntryInteraction {
