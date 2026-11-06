@@ -469,6 +469,16 @@ describe("allows", () => {
     assert.isFalse(allows(row, h("input", {})));
   });
 
+  it("[Q-12] merges onto the Inline Choice Placeholder and each Option their value, selected, disabled and hidden", () => {
+    for (const part of ["placeholder", "option"] as const) {
+      assert.deepStrictEqual(
+        rowFor("inline-choice-interaction", part).merged,
+        ["value", "selected", "disabled", "hidden"],
+        part,
+      );
+    }
+  });
+
   it("[Q-12] keeps the Inline Choice Placeholder and each Option an option, refusing a span", () => {
     for (const part of ["placeholder", "option"] as const) {
       const row = rowFor("inline-choice-interaction", part);
@@ -604,6 +614,18 @@ const instance = "merged-0";
  * and the Root state (`data-mode`, `data-disabled`).
  */
 const markerAndState: ReadonlySet<string> = new Set(["data-disabled", "data-mode", "data-slot"]);
+
+/**
+ * The names a row's `merged` column holds that its connect function never computes, by marker:
+ * the Inline Choice Option's and Placeholder's `disabled` and `hidden`, which plate owns by their
+ * absence alone.
+ */
+const ownedAbsent: ReadonlyMap<string, readonly string[]> = new Map(
+  (["option", "placeholder"] as const).map((part) => [
+    rowFor("inline-choice-interaction", part).slot,
+    ["disabled", "hidden"],
+  ]),
+);
 
 /**
  * Every state an item is rendered in. Each writes attributes the others may not, such as the text
@@ -931,7 +953,7 @@ const rowKey = (row: PartRow): string =>
 
 describe("the merged column", () => {
   it.effect(
-    "records, for every row render emits in answering, review and solution, the attributes its connect function computes beyond the marker and the Root state",
+    "records, for every row render emits in answering, review and solution, the attributes its connect function computes beyond the marker and the Root state, and the states it owns only by their absence",
     () =>
       Effect.gen(function* mergedColumn() {
         const configuration = yield* configure({});
@@ -1002,7 +1024,11 @@ describe("the merged column", () => {
           const names = observed.get(rowKey(row));
 
           assert.isDefined(names, `${rowKey(row)} was never rendered`);
-          assert.deepStrictEqual([...(names ?? [])].toSorted(), row.merged.toSorted(), rowKey(row));
+
+          const computed = row.merged.filter(
+            (name) => !(ownedAbsent.get(row.slot) ?? []).includes(name),
+          );
+          assert.deepStrictEqual([...(names ?? [])].toSorted(), computed.toSorted(), rowKey(row));
         }
       }),
   );

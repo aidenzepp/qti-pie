@@ -125,12 +125,19 @@ export interface PartRow {
    */
   readonly listOwner: boolean;
   /**
-   * The attributes the interaction's connect function computes for this part, beyond the
-   * `data-slot` marker and the Root state (`data-mode`, `data-disabled`), which I1
-   * writes over a replacement's: every one the part can carry, some only in some states.
+   * The attributes plate owns on this part, which I1 writes over a replacement's: every one the
+   * interaction's connect function computes beyond the `data-slot` marker and the Root state
+   * (`data-mode`, `data-disabled`), some only in some states, and on the Inline Choice Option and
+   * Placeholder also `disabled` and `hidden`, which plate never writes there.
    *
-   * This records what the connect function computes, and `parts.test.ts` renders every row to
-   * hold the two equal; the merge itself writes whatever the props carry.
+   * A state attribute among them (`name`, `value`, `type`, `checked`, `selected`, `disabled`,
+   * `readonly`, `hidden`) is plate's whether plate writes it or leaves it off: the swap drops a
+   * replacement's, in any case, when the props do not carry it, so a host cannot set what plate
+   * computed absent. Every other name keeps the replacement's value when plate writes none.
+   *
+   * `parts.test.ts` renders every row to hold this list equal to what the connect function
+   * computes, the Option's and Placeholder's `disabled` and `hidden` aside; the merge itself
+   * writes whatever the props carry.
    */
   readonly merged: readonly string[];
   readonly part: PartKey;
@@ -441,7 +448,12 @@ const admits = {
  * The five navigation buttons are plain buttons (rule `9af3809b`): each defaults `type` to
  * `button`, and no navigation row merges `type`, `name`, `value` or a `form*` attribute, so a
  * host's replacement may give a button its own submit semantics while every attribute plate
- * computes still stands.
+ * computes still stands. Each merges `disabled`, so a replacement cannot disable a button plate
+ * leaves enabled.
+ *
+ * The Inline Choice Option and Placeholder merge `disabled` and `hidden`, which plate never writes
+ * on them, so plate owns their absence: every choice, and the way back to no answer, stays
+ * choosable whatever a replacement writes.
  */
 const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
   {
@@ -648,7 +660,7 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
     element: "option",
     interaction: "inline-choice-interaction",
     listOwner: false,
-    merged: ["value", "selected"],
+    merged: ["value", "selected", "disabled", "hidden"],
     part: "placeholder",
     tagClass: "option",
   },
@@ -657,7 +669,7 @@ const rows: readonly Omit<PartRow, "legendOwner" | "slot">[] = [
     element: "option",
     interaction: "inline-choice-interaction",
     listOwner: false,
-    merged: ["value", "selected"],
+    merged: ["value", "selected", "disabled", "hidden"],
     part: "option",
     tagClass: "option",
   },

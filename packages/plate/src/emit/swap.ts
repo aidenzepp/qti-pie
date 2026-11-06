@@ -412,27 +412,82 @@ const overDefaults = (defaults: PartRow["defaults"], attrs: Attributes): Attribu
   Object.keys(defaults).length === 0 ? attrs : overlay(defaults, attrs);
 
 /**
+ * The state attributes: the names whose presence is what a control posts, shows chosen or lets
+ * the candidate change. Where a row's `merged` list names one, it is plate's whether plate writes
+ * it or leaves it off, so a replacement can neither pre-answer a control nor take a choice or the
+ * Placeholder away.
+ *
+ * `hidden` is merged only on the Inline Choice Option and Placeholder, where hiding an option
+ * would take it from the candidate as `disabled` does.
+ */
+const stateAttributes: ReadonlySet<string> = new Set([
+  "checked",
+  "disabled",
+  "hidden",
+  "name",
+  "readonly",
+  "selected",
+  "type",
+  "value",
+]);
+
+/**
+ * Name the attributes a swapped part must not carry beyond what its props write: each state
+ * attribute the row merges that the props leave off, and, on a Label whose root is not a `label`,
+ * `for`, which HTML gives a `label` alone (as the Choice's `labelAsSpan` leaves it off).
+ *
+ * @param row The part's row.
+ * @param root The replacement's root.
+ * @param props The attributes the part's connect function computed.
+ * @returns The names, in lower case; the props' names are compared in ASCII lower case.
+ * @see https://html.spec.whatwg.org/multipage/forms.html#attr-label-for
+ */
+const unwritten = (row: PartRow, root: Element, props: Attributes): ReadonlySet<string> => {
+  const written = new Set(Object.keys(props).map((name) => asciiLower(name)));
+  const names = row.merged.filter((name) => stateAttributes.has(name) && !written.has(name));
+
+  return new Set(
+    row.part === "label" && asciiLower(root.tag) !== "label" ? [...names, "for"] : names,
+  );
+};
+
+/**
+ * Leave out of a set of attributes those whose names, in ASCII lower case, are among `names`.
+ *
+ * @param attrs The attributes.
+ * @param names The names to leave out, in lower case.
+ * @returns `attrs` itself when `names` is empty, else a copy without them.
+ */
+const without = (attrs: Attributes, names: ReadonlySet<string>): Attributes =>
+  names.size === 0
+    ? attrs
+    : Object.fromEntries(Object.entries(attrs).filter(([name]) => !names.has(asciiLower(name))));
+
+/**
  * Apply I1: write every attribute of `props` onto the replacement's root, `props` winning a
  * conflict, and join `class`; under both, write the row's defaults the root leaves out.
  *
  * Every attribute the connect function computes is in `props`, so "required" means everything in
  * `props`; whatever else the root carries (`data-*`, `title`, further classes, a `type` over a
- * defaulted one) stands. Names are compared in ASCII lower case, so a root attribute spelled
- * `NAME` gives way to the props' `name` rather than standing beside it.
+ * defaulted one, an `aria-describedby` plate writes only when invalid) stands. Absence is a prop
+ * for the state attributes: a root attribute that names one of {@link stateAttributes} the row
+ * merges is dropped when the props leave it off, so plate's unchecked radio, unselected option,
+ * editable field and enabled button stay so. A Label whose root is not a `label` carries no `for`,
+ * from the props or its own. Names are compared in ASCII lower case, so a root attribute spelled
+ * `NAME` or `SELECTED` gives way to the props' or is dropped, rather than standing beside them.
  *
  * @param root The replacement's root.
  * @param props The attributes the part carries.
- * @param defaults The row's defaulted attributes, which the root's own attributes override.
+ * @param row The part's row: its defaults, which the root's own attributes override, and the
+ *   `merged` list whose state attributes the props own by their absence.
  * @returns A copy of `root` with the defaults, then its own attributes, then the props, one
- *   attribute of each name, and the same children: `class` holds the props' tokens and then the
- *   root's (its `class` in any case), each once, and is absent when neither side has one.
+ *   attribute of each name and none of those {@link unwritten} names, and the same children:
+ *   `class` holds the props' tokens and then the root's (its `class` in any case), each once, and
+ *   is absent when neither side has one.
  */
-const mergeRequired = (
-  root: Element,
-  props: Attributes,
-  defaults: PartRow["defaults"],
-): Element => {
-  const merged = overlay(defaults, root.attrs, props);
+const mergeRequired = (root: Element, props: Attributes, row: PartRow): Element => {
+  const dropped = unwritten(row, root, props);
+  const merged = overlay(row.defaults, without(root.attrs, dropped), without(props, dropped));
   const rootClass = attributeOf(root.attrs, "class");
   if (props["class"] === undefined && rootClass === undefined) {
     return h(root.tag, merged, root.children);
@@ -537,7 +592,7 @@ const swapIn = (
     (holdsHandedOnly.has(row.tagClass) ? checkHandedOnly(root, children) : undefined);
 
   return breach === undefined
-    ? Result.succeed(mergeRequired(root, props, row.defaults))
+    ? Result.succeed(mergeRequired(root, props, row))
     : Result.fail(refuse(row, breach));
 };
 
@@ -549,7 +604,9 @@ const swapIn = (
  * defaults and then `props`, and `children` by identity, with no walk. With one, the replacement's
  * root must be an element of the row's tag class (I3) and hold every handed child once, in order
  * (I2); the row's defaults go under its attributes and `props` over them (I1), so a replacement may
- * override a default but never a prop. A legend owner (the Choice Root under the `legend` markup)
+ * override a default but never a prop, nor set a state attribute the row merges and the props leave
+ * off (`checked`, `selected`, `disabled`, `readonly`, an Option's `hidden`), and a Label whose root
+ * is not a `label` carries no `for`. A legend owner (the Choice Root under the `legend` markup)
  * must keep the legend Prompt its first element child; the fast path holds it as handed. A `select`
  * or `option` part (the Inline Choice Control, Placeholder and Option) must hold exactly the nodes
  * handed to it, directly and in order, wrapping none and adding nothing beside them; the fast path
