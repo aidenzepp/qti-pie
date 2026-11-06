@@ -117,6 +117,10 @@ export type Intent =
 /**
  * What one request carries: the intent, and the responses to save on the current item with it,
  * when it carries any.
+ *
+ * The responses are saved only while the current item is open. A closed item, one whose view is
+ * `disabled`, takes no responses: `advance` carries out the step's intent and ignores its
+ * responses, so a host may post a closed item's form as rendered, or pass what it decoded from it.
  */
 export interface Step {
   readonly intent: Intent;

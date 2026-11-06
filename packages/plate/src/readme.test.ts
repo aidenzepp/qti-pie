@@ -16,6 +16,7 @@ import {
   entryName,
   intentName,
   open,
+  results,
   startTest,
 } from "#plate/index.ts";
 import type {
@@ -130,13 +131,15 @@ const byteItemXml = [
 
 /**
  * The test the server action's recipe runs on: one nonlinear part with individual submission that
- * holds the byte item, its ref naming the document `byte.xml` beside the test.
+ * holds the byte item twice, as `byte` and then `again`, each ref naming the document `byte.xml`
+ * beside the test.
  */
 const byteTestXml = [
   '<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="readme" title="README">',
   '<qti-test-part identifier="part" navigation-mode="nonlinear" submission-mode="individual">',
   '<qti-assessment-section identifier="section" title="Section" visible="true">',
   '<qti-assessment-item-ref identifier="byte" href="byte.xml"/>',
+  '<qti-assessment-item-ref identifier="again" href="byte.xml"/>',
   "</qti-assessment-section></qti-test-part></qti-assessment-test>",
 ].join("");
 
@@ -314,7 +317,7 @@ const serverAction = Effect.fnUntraced(function* serverAction() {
  * Open the byte item and its test, each by `open`, the test at `tests/readme.xml` and the item
  * beside it.
  *
- * @returns The test and its items, keyed by item ref.
+ * @returns The test and its items, keyed by item ref: the byte item under both refs.
  */
 const byteDelivery = Effect.fnUntraced(function* byteDelivery() {
   const encoder = new TextEncoder();
@@ -329,7 +332,13 @@ const byteDelivery = Effect.fnUntraced(function* byteDelivery() {
     assert.fail(`the item is ${opened.verdict}, not an accepted item`),
   );
 
-  return { items: new Map([["byte", item]]), test };
+  return {
+    items: new Map([
+      ["byte", item],
+      ["again", item],
+    ]),
+    test,
+  };
 });
 
 afterAll(() => {
@@ -483,6 +492,66 @@ describe("README.md", () => {
       assert.deepStrictEqual(byte?.record.responses["RESPONSE"], integer(255n));
       assert.deepStrictEqual(byte?.record.outcomes["SCORE"], integer(255n));
     }),
+  );
+
+  it.effect(
+    "runs the plain server action through submit-item and a next that posts only the intent, and results report the submitted ff",
+    () =>
+      Effect.gen(function* keepsSubmitted() {
+        const step = yield* serverAction();
+        const configuration = yield* configure({});
+        const { items, test } = yield* byteDelivery();
+        const session = ok(
+          startTest(test, items, configuration, {
+            instance: "readme",
+            now: new Date("2026-11-01T09:00:00.000Z"),
+          }),
+          "startTest",
+        );
+        const shown = ok(current(test, session, configuration), "current");
+        const submitted = ok(
+          step(
+            test,
+            items,
+            ok(encodeSession(session), "encodeSession"),
+            [
+              [
+                entryName(
+                  shown.kind === "item" ? shown.instance : assert.fail("no item"),
+                  "RESPONSE",
+                ),
+                "ff",
+              ],
+              [intentName(session.instance), encodeIntent({ kind: "submit-item" })],
+            ],
+            configuration,
+          ),
+          "the server action's submit-item",
+        );
+        // The submitted item renders disabled, and a browser posts no entry for a disabled control.
+        const moved = ok(
+          step(
+            test,
+            items,
+            submitted,
+            [[intentName(session.instance), encodeIntent({ kind: "next" })]],
+            configuration,
+          ),
+          "the server action's next",
+        );
+        const xml = ok(
+          results({ context: {}, items, kind: "test", session: moved, test }),
+          "results",
+        );
+        const reported =
+          /<itemResult identifier="byte"[^>]*>[\s\S]*?<responseVariable identifier="RESPONSE"(?<tag>[^>]*)>(?<body>[\s\S]*?)<\/responseVariable>/u.exec(
+            xml,
+          )?.groups ?? assert.fail("the results hold no RESPONSE for byte");
+
+        assert.strictEqual(ok(decodeSession(moved, test), "decodeSession").position, 1);
+        assert.include(reported["tag"], 'answeredStatus="answered"');
+        assert.include(reported["body"], "<value>255</value>");
+      }),
   );
 
   it("names the licence package.json declares, MIT", () => {
