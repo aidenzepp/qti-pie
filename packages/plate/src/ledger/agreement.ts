@@ -14,9 +14,10 @@
  * The test holds the disagreements and the rows equal both ways, so a new disagreement, or a row
  * whose disagreement is gone, fails it.
  *
- * A ruling ({@link Ruling}) holds while the state it was made on holds: it records the commit of
- * the verdicts copy and both sides of its row, and {@link staleRulings} flags it once either moves
- * or the row agrees, so a ruling is never kept past the state of the package it is tied to.
+ * A ruling ({@link Ruling}) holds while the state it was made on holds: it records both sides of
+ * its row, and {@link staleRulings} flags it once either side moves or the row agrees, so a ruling
+ * is never kept past the state of the package it is tied to. It records the copy's commit too, as
+ * provenance only, so re-pointing the copy at a commit with the same rows keeps it.
  *
  * @module
  */
@@ -38,7 +39,7 @@ export const verdictsSource = "packages/pantry/verdicts/qti-examples-0a92fbb.tsv
 
 /**
  * The commit of `main` whose {@link verdictsSource} `qti-verdicts.tsv` copies byte for byte: the
- * `main` the agreement was last run on, which every {@link Ruling} records as its state's commit.
+ * `main` the agreement was last run on.
  */
 export const verdictsCommit = "69dfc1a";
 
@@ -113,6 +114,9 @@ export interface Disagreement {
 /**
  * The Schema of the state a ruling was made on: the commit of the verdicts copy
  * ({@link verdictsCommit}) and both sides of its row at that commit.
+ *
+ * The sides are what {@link staleRulings} compares; the commit is provenance, never compared, so a
+ * newer copy whose row is unchanged leaves the ruling standing.
  */
 // oxlint-disable-next-line eslint/no-redeclare -- `RulingState` is the Schema and the type of a ruling's state under one name, so a decoder and a signature read as one thing.
 export const RulingState = Schema.Struct({
@@ -131,7 +135,7 @@ export type RulingState = typeof RulingState.Type;
  *
  * `expectedWhile` ties the ruling to the state of the other package, never to all time ("pantry
  * does not yet model this vocabulary (its phases 6 to 11)"); `group` is the ruling's group, 1 to
- * 3; `source` names where it was ruled; and `state` is the state it was made on, which
+ * 3; `source` names where it was ruled; and `state` is the state it was made on, whose sides
  * {@link staleRulings} compares with the agreement's run.
  */
 // oxlint-disable-next-line eslint/no-redeclare -- `Ruling` is the Schema and the type of a ruling under one name, so a decoder and a signature read as one thing.
@@ -272,8 +276,8 @@ export const agrees = (plate: PlateSide, pantry: PantrySide): boolean =>
 
 /**
  * A ruled finding row whose ruling no longer holds: `agrees` when its package's verdicts now
- * agree, and `state-changed` when the agreement's run differs from the state the ruling records,
- * in the copy's commit or in either side.
+ * agree, and `state-changed` when either side the agreement's run found differs from the state the
+ * ruling records.
  */
 export interface StaleRuling {
   readonly file: string;
@@ -296,19 +300,18 @@ const sameSides = (state: RulingState, entry: Disagreement): boolean =>
   state.plate.rules.every((rule, index) => rule === entry.plate.rules[index]);
 
 /**
- * Find every ruled finding row whose ruling is stale: its package now agrees, or the agreement's
- * run is not the state the ruling was made on. A pending row is never stale.
+ * Find every ruled finding row whose ruling is stale: its package now agrees, or either side of its
+ * disagreement is not the state the ruling was made on. The state's commit is not compared, and a
+ * pending row is never stale.
  *
  * @param rows The findings file's rows.
  * @param seen The disagreements the agreement's run found.
- * @param commit The commit of the verdicts copy the run read, {@link verdictsCommit}.
  * @returns One entry per stale ruling, naming its row, in the rows' order; none when every ruling
  *   holds.
  */
 export const staleRulings = (
   rows: readonly Finding[],
   seen: readonly Disagreement[],
-  commit: string,
 ): readonly StaleRuling[] =>
   rows.flatMap((row): StaleRuling[] => {
     if (row.ruling === "pending") {
@@ -320,9 +323,7 @@ export const staleRulings = (
       return [{ file: row.file, reason: "agrees" }];
     }
 
-    return row.ruling.state.commit === commit && sameSides(row.ruling.state, now)
-      ? []
-      : [{ file: row.file, reason: "state-changed" }];
+    return sameSides(row.ruling.state, now) ? [] : [{ file: row.file, reason: "state-changed" }];
   });
 
 /**

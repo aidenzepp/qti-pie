@@ -106,7 +106,7 @@ describe("ledger/agreement.ts", () => {
     () =>
       Effect.gen(function* rulingsHold() {
         assert.deepStrictEqual(
-          staleRulings(yield* findings, yield* disagreements, verdictsCommit),
+          staleRulings(yield* findings, yield* disagreements),
           [],
           "stale rulings",
         );
@@ -120,15 +120,14 @@ describe("ledger/agreement.ts", () => {
       Effect.gen(function* staleFlagged() {
         const rows = yield* findings;
         const seen = rows.map(recordedDisagreement);
-        const ruled = rows.filter((row) => row.ruling !== "pending");
-        const [row] = ruled;
+        const row = rows.find((entry) => entry.ruling !== "pending");
 
         assert.isDefined(row, "the findings file holds a ruled row");
         if (row === undefined || row.ruling === "pending") {
           return;
         }
 
-        assert.deepStrictEqual(staleRulings(rows, seen, verdictsCommit), [], "the recorded state");
+        assert.deepStrictEqual(staleRulings(rows, seen), [], "the recorded state");
 
         const changed: Finding = {
           ...row,
@@ -141,7 +140,6 @@ describe("ledger/agreement.ts", () => {
           staleRulings(
             rows.map((entry) => (entry === row ? changed : entry)),
             seen,
-            verdictsCommit,
           ),
           [{ file: row.file, reason: "state-changed" }],
         );
@@ -149,15 +147,33 @@ describe("ledger/agreement.ts", () => {
           staleRulings(
             rows,
             seen.filter((entry) => entry.file !== row.file),
-            verdictsCommit,
           ),
           [{ file: row.file, reason: "agrees" }],
         );
-        assert.deepStrictEqual(
-          staleRulings(rows, seen, "0000000"),
-          ruled.map((entry) => ({ file: entry.file, reason: "state-changed" })),
-        );
       }),
+  );
+
+  it.effect("a ruling whose recorded commit alone differs from the copy's is not stale", () =>
+    Effect.gen(function* commitOnly() {
+      const rows = yield* findings;
+      const seen = rows.map(recordedDisagreement);
+      const recommitted = rows.map((row): Finding =>
+        row.ruling === "pending"
+          ? row
+          : {
+              ...row,
+              ruling: { ...row.ruling, state: { ...row.ruling.state, commit: "0000000" } },
+            },
+      );
+
+      assert.isTrue(
+        recommitted.some(
+          (row) => row.ruling !== "pending" && row.ruling.state.commit !== verdictsCommit,
+        ),
+        "a ruled row records another commit",
+      );
+      assert.deepStrictEqual(staleRulings(recommitted, seen), []);
+    }),
   );
 
   it.effect("the copy's header row is the verdict file's columns", () =>
