@@ -1797,9 +1797,20 @@ against it. A reading that is not an information-model-over-XSD case says which 
      XInclude's element and not refused: a known under-refusal, until a law holds a fallback to its parent. No corpus
      document holds an include. This binds pantry and plate alike. This is not a case of documents in conflict.
      (Decided 2026-11-06 by W5 seat IN under the operator's standing ruling of 2026-11-05 that the spec wins.)
-
-<!-- Reading 119 is reserved. -->
-
+119. **A rounding operator's integer `figures` is at least 1 under significant figures and at least 0 under decimal
+     places.** The information model says of EqualRounded's `figures` "If roundingMode= 'significantFigures', the
+     value of figures must be a non-zero positive integer. If roundingMode='decimalPlaces', the value of figures must
+     be an integer greater than or equal to zero" (§5.47.2; the 3.0.1 model's the same), and of RoundTo's the same
+     with `rounding-mode` (§5.119.2). `rounding-mode` defaults to `significantFigures` on `qti-equal-rounded`
+     (§5.47.1) and is required on `qti-round-to` (§5.119.1, `[1]`, where AL3 refuses its absence and this reading
+     reads no mode). `figures` is `IntegerOrVariableRef`, a union of `xs:integer` and a variable's name (the XSD's
+     `VariableStringDType`, an NCName): an integer is read collapsed, as the union's `xs:integer` member collapses
+     whitespace, so `" 0 "` is 0, within reading 46's signed 64-bit range, and `-0` is 0; a name is read at run time
+     and is not judged. A mode outside the enumeration is AL1's and binds neither bound. The XSD types `figures` as
+     that union and does not decide this. This follows the information model and sets the XSD aside (readings 16 and
+     17). Law "Rounding figures" (rule `P10`, main's), a check on `Rounding`, one row per rounding operator that copies
+     its `figures` and its `rounding-mode` and holds the mode in force (`src/qti/operators.ts`). (Decided 2026-11-06 by
+     RV seat O, on the review of PR #46, under the operator's standing ruling of 2026-11-05 that the spec wins.)
 120. **A `qti-index`'s `n` is at least 1 where it is a number.** The information model says of Index "'n' must be a
      positive integer. If 'n' exceeds the number of values in the container (or the sub-expression is NULL) then the
      result of the index operator is NULL. If 'n' is an identifier, it is the value of 'n' at runtime that is used"
@@ -1813,8 +1824,30 @@ against it. A reading that is not an information-model-over-XSD case says which 
      variable whose value is read at run time; that its value is positive is the renderer's, and pantry checks only
      that the variable is declared. (Decided 2026-11-06 by RV seat G, on the review of PR #46, under the operator's
      standing ruling of 2026-11-05 that the spec wins.)
+121. **Under `tolerance-mode` absolute or relative, a `qti-equal` carries a `tolerance`; every `tolerance` is one or two
+     values, each number among them above 0.** The information model says of Equal's `tolerance` "If the tolerance
+     mode is absolute or relative then the tolerance must be specified. The tolerance consists of two positive
+     numbers, t0 and t1, that define the lower and upper bounds. If only one value is given it is used for both"
+     (§5.46.2; the 3.0.1 model's the same), with `tolerance-mode` `exact` by default (§5.46.1). Its type,
+     ToleranceList, is "a space separated list of either strings (must not contain a space) or numbers. Each value
+     must either be of primitiveType String or primitiveType double" (§9.1.5). A value written in `xs:double`'s lexical
+     space (XML Schema 1.0 Part 2 §3.2.5.1) is a number; any other value is a string, which names a variable read at
+     run time and is not judged. "Positive" excludes zero, as reading 16 reads `normal-maximum`, so `0`, `-0` and
+     `0e5` are refused, and so are `NaN` and `-INF`; `INF` is a positive number, and `+INF` is no `xs:double` under
+     XML Schema 1.0, so a string. Positivity is read off the number as written, its sign and a mantissa digit other
+     than 0, not off its nearest double: `-0.1234567890123456` is refused though a double precision holds fewer
+     significant digits, and `1e-400` is accepted though binary64 rounds it to 0. The count and the values bind every
+     `tolerance`, in exact mode too, since the sentence says what a tolerance is, so `tolerance=""` holds no value and
+     is refused. Both modes are `xs:string` enumerations under whiteSpace `preserve`, read as written. The XSD types
+     `tolerance` as an unbounded list of a union of `xs:string` and `xs:double`, which admits any value, and does not
+     decide this; main bounded neither the count nor the sign. This follows the information model and sets the XSD
+     aside (readings 16 and 17). Law "Equal tolerance" (rule `P36`, main's): the containment of an `absolute` or
+     `relative` mode's `Attribute` selection in `Tolerance(node)`, a check on `Tolerance` for the count, and a check
+     on `ToleranceToken` for each value's sign, the values split as `TextIdref` splits a text
+     (`src/qti/operators.ts`). (Decided 2026-11-06 by RV seat O, on the review of PR #46, under the operator's standing
+     ruling of 2026-11-05 that the spec wins.)
 
-<!-- Readings 121 and 122 are reserved. -->
+<!-- Reading 122 is reserved. -->
 
 123. **A `bdo` carries `dir`, and its value is `ltr` or `rtl`.** The information model says of BDO "Authors must
      specify the dir attribute on this tag, with the value ltr to specify a left-to-right override and with the value

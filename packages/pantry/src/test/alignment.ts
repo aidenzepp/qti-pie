@@ -620,9 +620,25 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     },
   ],
   [
+    119,
+    {
+      owner:
+        "O's `Rounding` and `Rounding_figures`, one row per qti-equal-rounded and qti-round-to (`src/qti/operators.ts`, rows from `src/import/overlays/operators.ts`)",
+      status: "G",
+    },
+  ],
+  [
     120,
     {
       owner: "AL1 (`positiveIndex`, `qti-index`'s `n` at least 1 where it is a number)",
+      status: "G",
+    },
+  ],
+  [
+    121,
+    {
+      owner:
+        "O's `Tolerance` and `ToleranceToken`, `toleranceRequired` (a containment from the absolute or relative mode's `Attribute` selection into `Tolerance`) and the two `Equal_tolerance` checks (`src/qti/operators.ts`, rows from `src/import/overlays/operators.ts`)",
       status: "G",
     },
   ],
