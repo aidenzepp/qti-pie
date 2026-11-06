@@ -2,10 +2,11 @@
  * Results Reporting: {@link results} writes one `assessmentResult` document for an item or a test
  * session, in the Results namespace with its camelCase names, through `writeDocument`.
  *
- * Nothing new is stored for a result. The built-in `numAttempts`, `completionStatus` and
- * `sessionStatus` are derived from whether an item was presented, its record's count of processed
- * attempts and its effective attempt limit; `answeredStatus` from its values, its declarations
- * and `checkResponses`. Every value is written in the lexical form `#plate/results/values.ts`
+ * Nothing new is stored for a result. The built-in `numAttempts` and `sessionStatus` are derived
+ * from whether an item was presented, its record's count of processed attempts and its effective
+ * attempt limit; `answeredStatus` from its values, its declarations and `checkResponses`. The
+ * built-in `completionStatus` is the record's once an attempt is processed, and derived like the
+ * others before. Every value is written in the lexical form `#plate/results/values.ts`
  * fixes, and no `correctResponse` is written. A result names its item's or test's outcomes, so a
  * page that writes one holds the candidate's scores. A test result resolves every item's session
  * control in one walk of the test, so it takes time linear in the test's item refs.
@@ -24,7 +25,12 @@ import { writeDocument } from "#plate/document/write.ts";
 import { isXmlText } from "#plate/form/encoding.ts";
 import { interactionsIn } from "#plate/model/interactions.ts";
 import type { Interaction, Item, OutcomeDeclaration, OutcomeReporting } from "#plate/model/item.ts";
-import { startingValue } from "#plate/model/record.ts";
+import {
+  completionStatus,
+  completionValue,
+  holdsCompletionStatus,
+  startingValue,
+} from "#plate/model/record.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
 import { isNcName, isNull, match, nullOf } from "#plate/model/values.ts";
 import type { ModelledBaseType, Value } from "#plate/model/values.ts";
@@ -194,6 +200,10 @@ interface ItemReport {
    */
   readonly outcomes: ItemRecord["outcomes"];
   readonly presented: boolean;
+  /**
+   * The attempts processed: its record's `numAttempts`.
+   */
+  readonly processed: number;
   /**
    * The order each shuffled Choice and Inline Choice was presented in, by response identifier.
    */
@@ -416,12 +426,37 @@ const answeredStatusOf = (
 };
 
 /**
+ * Give the value an item result reports for the built-in `completionStatus`.
+ *
+ * Once an attempt is processed it is the value the reported outcomes hold, where the item holds
+ * the built-in ({@link holdsCompletionStatus}) and the value is a single identifier: `unknown`,
+ * the value the first attempt starts it at and later ones keep, or the one processing set.
+ * Otherwise it is derived:
+ * `not_attempted` until an attempt starts and `unknown` after. So a presented item whose attempt
+ * is not processed reports `unknown`, though its record still holds `not_attempted`, and a record
+ * written before the built-in was held reads as derived.
+ *
+ * @param report What the result says about the item.
+ * @returns The value.
+ */
+const completionOf = (report: ItemReport): Value => {
+  const derived = completionValue(report.session.started === 0 ? "not_attempted" : "unknown");
+  if (report.processed === 0 || !holdsCompletionStatus(report.item.item)) {
+    return derived;
+  }
+
+  return own(report.outcomes, completionStatus).pipe(
+    Option.filter((value) => value.baseType === "identifier" && value.cardinality === "single"),
+    Option.getOrElse(() => derived),
+  );
+};
+
+/**
  * Write an item result.
  *
- * The built-ins come first: `numAttempts`, `duration` when it is known and `completionStatus`,
- * `not_attempted` until an attempt starts and `unknown` after, since no M2 item's processing may
- * set it. Then one response variable per declared response with its answered status, and one
- * outcome variable per declared outcome.
+ * The built-ins come first: `numAttempts`, `duration` when it is known and `completionStatus`
+ * ({@link completionOf}). Then one response variable per declared response with its answered
+ * status, and one outcome variable per declared outcome.
  *
  * @param report What the result says about the item.
  * @returns The `itemResult`.
@@ -455,7 +490,6 @@ const itemResult = (report: ItemReport): Element => {
       [element("candidateResponse", [], resultValues(value).map(valueElement))],
     );
   });
-  const completion = report.session.started === 0 ? "not_attempted" : "unknown";
 
   return element(
     "itemResult",
@@ -474,9 +508,11 @@ const itemResult = (report: ItemReport): Element => {
         onNone: () => [],
         onSome: (seconds) => [builtInResponse("duration", { baseType: "float", value: seconds })],
       }),
-      element("outcomeVariable", declared("completionStatus", "single", "identifier"), [
-        valueElement(completion),
-      ]),
+      element(
+        "outcomeVariable",
+        declared(completionStatus, "single", "identifier"),
+        resultValues(completionOf(report)).map(valueElement),
+      ),
       ...responses,
       ...outcomeVariables(item.outcomes, report.outcomes),
     ],
@@ -628,6 +664,7 @@ const itemResults = (
         item: input.document,
         outcomes: record.outcomes,
         presented,
+        processed: record.numAttempts,
         sequenceIndex: Option.none(),
         sequences: new Map(),
         session: attemptsOf(presented, record.numAttempts, 1),
@@ -852,6 +889,7 @@ const sessionItemReport = (
           ? Option.getOrElse(entry.firstOutcomes, () => entry.record.outcomes)
           : entry.record.outcomes,
       presented: entry.presented,
+      processed: entry.record.numAttempts,
       sequenceIndex: Option.some(entry.sequenceIndex),
       sequences: entry.presented
         ? choiceSequences(

@@ -13,11 +13,12 @@ import type {
   TextEntryInteraction,
 } from "#plate/model/item.ts";
 import { fresh } from "#plate/model/record.ts";
+import type { ItemRecord } from "#plate/model/record.ts";
 import type { Value } from "#plate/model/values.ts";
 import { render } from "#plate/render.ts";
 import { checkResponses } from "#plate/responses.ts";
-import { score, tierA } from "#plate/score.ts";
-import { float } from "#plate/test/fixtures.ts";
+import { fitting, score, tierA } from "#plate/score.ts";
+import { float, integer } from "#plate/test/fixtures.ts";
 import { acceptForTest } from "#plate/validate/verdict.ts";
 
 /**
@@ -410,6 +411,49 @@ describe("score", () => {
     );
   });
 
+  it("[I-9a] carries a stored completionStatus into the attempt, and fails InvalidRecord at decode, naming it, when it is not a single identifier", () => {
+    const stored = Result.getOrThrow(encodeRecord(fresh(item, "")));
+    const completed: StoredRecord = {
+      ...stored,
+      attempt: "submitted",
+      numAttempts: 1,
+      outcomes: {
+        ...stored.outcomes,
+        completionStatus: {
+          baseType: "identifier",
+          cardinality: "single",
+          values: [{ baseType: "identifier", value: "completed" }],
+        },
+      },
+    };
+    const counted: StoredRecord = {
+      ...stored,
+      outcomes: {
+        ...stored.outcomes,
+        completionStatus: {
+          baseType: "integer",
+          cardinality: "single",
+          values: [{ baseType: "integer", value: "1" }],
+        },
+      },
+    };
+
+    assert.deepStrictEqual(
+      Option.map(Result.getSuccess(score(accepted, {}, completed)), (after) =>
+        outcomeOf(after, "completionStatus"),
+      ),
+      Option.some(["completed"]),
+    );
+    assert.deepStrictEqual(
+      Option.map(failureOf(score(accepted, {}, counted)), (failure) =>
+        failure._tag === "InvalidRecord"
+          ? [failure._tag, failure.stage, failure.issue.includes('"completionStatus"')]
+          : [failure._tag],
+      ),
+      Option.some(["InvalidRecord", "decode", true]),
+    );
+  });
+
   it("fails RecordMismatch when the record belongs to another item", () => {
     const stored = Result.getOrThrow(encodeRecord(fresh(other.item, "")));
 
@@ -504,6 +548,31 @@ describe("score", () => {
     );
   });
 
+  it.effect(
+    "[I-9a] scores a record stored without completionStatus, as one written before it was held, and holds it after",
+    () =>
+      Effect.gen(function* scoresWithoutCompletion() {
+        const stored = yield* Effect.fromResult(encodeRecord(fresh(item, "")));
+        const lacking: StoredRecord = {
+          ...stored,
+          outcomes: Object.fromEntries(
+            Object.entries(stored.outcomes).filter(
+              ([identifier]) => identifier !== "completionStatus",
+            ),
+          ),
+        };
+
+        const after = yield* Effect.fromResult(
+          score(accepted, { RESPONSE: identifiers("single", "A") }, lacking),
+        );
+
+        assert.isTrue(Object.hasOwn(stored.outcomes, "completionStatus"));
+        assert.isFalse(Object.hasOwn(lacking.outcomes, "completionStatus"));
+        assert.deepStrictEqual(outcomeOf(after, "SCORE"), [1]);
+        assert.deepStrictEqual(outcomeOf(after, "completionStatus"), ["unknown"]);
+      }),
+  );
+
   it("refuses a hand-built item in its type", () => {
     assert.isFunction(scoreUnchecked);
   });
@@ -512,6 +581,33 @@ describe("score", () => {
     assert.deepStrictEqual(
       tierA,
       Schema.decodeSync(Configuration)({ locale: "en", validateResponses: false }),
+    );
+  });
+});
+
+describe("fitting", () => {
+  it("[I-9a] accepts a record that holds the built-in completionStatus and one that lacks it, and refuses one of another type", () => {
+    const record = fresh(item, "");
+    const lacking: ItemRecord = {
+      ...record,
+      outcomes: Object.fromEntries(
+        Object.entries(record.outcomes).filter(([identifier]) => identifier !== "completionStatus"),
+      ),
+    };
+    const counted: ItemRecord = {
+      ...record,
+      outcomes: { ...record.outcomes, completionStatus: integer(1n) },
+    };
+
+    assert.isTrue(Object.hasOwn(record.outcomes, "completionStatus"));
+    assert.deepStrictEqual(Result.getSuccess(fitting(item, record)), Option.some(record));
+    assert.deepStrictEqual(Result.getSuccess(fitting(item, lacking)), Option.some(lacking));
+    assert.deepStrictEqual(
+      Option.map(Result.getFailure(fitting(item, counted)), (failure) => [
+        failure._tag,
+        failure.stage,
+      ]),
+      Option.some(["InvalidRecord", "decode"]),
     );
   });
 });

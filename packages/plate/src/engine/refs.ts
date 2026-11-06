@@ -41,8 +41,12 @@ export const own = (
   Object.hasOwn(values, identifier) ? Option.fromUndefinedOr(values[identifier]) : Option.none();
 
 /**
- * Give the value of the built-in variable an identifier names, when the variables carry it: for
- * `numAttempts`, the attempt count as a single integer.
+ * Give the value of the built-in variable an identifier names that the variables carry apart from
+ * the record's responses and outcomes: for `numAttempts`, the attempt count as a single integer.
+ *
+ * The built-in outcome `completionStatus` is not among them: the record holds it among its
+ * outcomes, where the item holds it (`holdsCompletionStatus` in `#plate/model/record.ts`), so
+ * {@link variableValue} gives the record's value, as it gives any outcome's.
  *
  * @param variables The variables of the attempt.
  * @param identifier The variable's identifier.
@@ -58,8 +62,9 @@ export const builtInValue = (variables: Variables, identifier: string): Option.O
     : Option.none();
 
 /**
- * Give the value of a `qti-variable`: the response or the outcome of that identifier, else the
- * built-in variable of that name.
+ * Give the value of a `qti-variable`: the response or the outcome of that identifier, the built-in
+ * `completionStatus` among the outcomes, else the built-in variable of that name
+ * ({@link builtInValue}).
  *
  * A declared variable wins over a built-in of the same name, as the prose rules read a reference
  * (`variableType` in `#plate/validate/rules.ts`).

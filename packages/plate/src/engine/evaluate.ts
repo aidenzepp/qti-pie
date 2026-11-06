@@ -4,13 +4,14 @@
  *
  * {@link runRules} runs response rules in order, and {@link evaluateExpression} gives the value of
  * one expression. They take rules the item model ({@link Item}) built and variables that hold a
- * value for every modelled declaration, as the session record does, and the attempt count the
- * built-in `numAttempts` reads. A rule that names an identifier outside them, sets an outcome to a
- * value of another type, or maps a response that has no mapping is a failure of what the caller
- * passed, and the caller can cause each one: the variables come from a record the host hands back.
- * An identifier the variables hold no value of is the record's gap, and one the item declares
- * nothing of is the item's; the failure says which. So the functions stay plain and synchronous and
- * return each failure, an {@link EngineFailure}, in a `Result`; the first failure ends the run.
+ * value for every modelled declaration and the built-in `completionStatus`, as the session record
+ * does, and the attempt count the built-in `numAttempts` reads. A rule that names an identifier
+ * outside them, sets an outcome to a value of another type, or maps a response that has no mapping
+ * is a failure of what the caller passed, and the caller can cause each one: the variables come
+ * from a record the host hands back. An identifier the variables hold no value of is the record's
+ * gap, and one the item declares nothing of is the item's; the failure says which. So the functions
+ * stay plain and synchronous and return each failure, an {@link EngineFailure}, in a `Result`; the
+ * first failure ends the run.
  *
  * Each expression kind's evaluator lives in its family's table under `#plate/engine/expressions/`,
  * and this module dispatches through the one table the ten make ({@link evaluators}). A family
@@ -35,7 +36,12 @@ import { textEvaluators } from "#plate/engine/expressions/text.ts";
 import { numberOf, sameNumber } from "#plate/engine/numbers.ts";
 import type { NumberSingle } from "#plate/engine/numbers.ts";
 import type { ExpressionKind } from "#plate/model/expression.ts";
-import type { Expression, Item, LookupTable, Rule } from "#plate/model/item.ts";
+import type { Expression, Item, LookupTable, OutcomeDeclaration, Rule } from "#plate/model/item.ts";
+import {
+  completionStatus,
+  completionStatusType,
+  holdsCompletionStatus,
+} from "#plate/model/record.ts";
 import { isNull, nullOf } from "#plate/model/values.ts";
 import type { Single, Value } from "#plate/model/values.ts";
 
@@ -52,7 +58,10 @@ export type { EngineFailure } from "#plate/engine/failures.ts";
  * count.
  *
  * Responses and outcomes share one identifier space, because declaration identifiers are unique
- * together, so a `qti-variable` names at most one of them.
+ * together, so a `qti-variable` names at most one of them. The outcomes hold the built-in outcome
+ * `completionStatus` beside the declared ones where the item holds it (`holdsCompletionStatus` in
+ * `#plate/model/record.ts`), since it is "declared implicitly" (`info.txt:8488`): no response or
+ * outcome then shares its name.
  */
 export interface Variables {
   /**
@@ -245,7 +254,27 @@ export const evaluateExpression = (
 ): Result.Result<Value, EngineFailure> => evaluate(expression, { item, variables });
 
 /**
- * Set an outcome, as `qti-set-outcome-value` and `qti-lookup-outcome-value` do.
+ * Give the type of an outcome a rule sets: its modelled declaration's, else the built-in
+ * `completionStatus`'s, a single identifier, where the item holds the built-in.
+ *
+ * @param item The item.
+ * @param identifier The outcome's identifier.
+ * @returns The outcome's base type and cardinality, none when the item holds no outcome by that
+ *   name.
+ */
+const outcomeType = (
+  item: Item,
+  identifier: string,
+): Option.Option<Pick<OutcomeDeclaration, "baseType" | "cardinality">> =>
+  Option.orElse(Option.fromUndefinedOr(item.outcomes.get(identifier)), () =>
+    identifier === completionStatus && holdsCompletionStatus(item)
+      ? Option.some(completionStatusType)
+      : Option.none(),
+  );
+
+/**
+ * Set an outcome, as `qti-set-outcome-value` and `qti-lookup-outcome-value` do: a modelled
+ * outcome, or the built-in `completionStatus`, which a rule sets as an identifier.
  *
  * A NULL is stored as the outcome's own NULL, of its base type and cardinality, whatever type the
  * NULL came with (spec §4.5): NULL is the absence of a value, so it has no type to differ from the
@@ -256,9 +285,9 @@ export const evaluateExpression = (
  * @param identifier The outcome's identifier.
  * @param value The value to set.
  * @returns The variables with the outcome set and everything else as it was; or an
- *   {@link UnknownIdentifierError} when the item declares no modelled outcome by that name, or an
- *   {@link OutcomeMismatchError} when the value is not NULL and its base type or cardinality
- *   differs from the outcome's.
+ *   {@link UnknownIdentifierError} when the item declares no modelled outcome by that name and it
+ *   is not the built-in `completionStatus` the item holds, or an {@link OutcomeMismatchError} when
+ *   the value is not NULL and its base type or cardinality differs from the outcome's.
  */
 const setOutcome = (
   item: Item,
@@ -268,7 +297,7 @@ const setOutcome = (
 ): Result.Result<Variables, OutcomeMismatchError | UnknownIdentifierError> =>
   Result.gen(function* setOneOutcome() {
     const declaration = yield* Result.fromOption(
-      Option.fromUndefinedOr(item.outcomes.get(identifier)),
+      outcomeType(item, identifier),
       () => new UnknownIdentifierError({ holder: "item", identifier, role: "outcome" }),
     );
     if (isNull(value)) {

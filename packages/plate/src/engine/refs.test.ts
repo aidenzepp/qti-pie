@@ -94,7 +94,21 @@ describe("variableValue", () => {
     assert.deepStrictEqual(Result.getOrThrow(variableValue(declared, "numAttempts")), score);
   });
 
-  for (const identifier of ["MISSING", "numAttempts", "constructor"]) {
+  it("[I-9a] reads the built-in completionStatus from the outcomes the record holds", () => {
+    const status: Value = {
+      baseType: "identifier",
+      cardinality: "single",
+      values: [{ baseType: "identifier", value: "completed" }],
+    };
+    const held: Variables = {
+      ...variables,
+      outcomes: { ...variables.outcomes, completionStatus: status },
+    };
+
+    assert.deepStrictEqual(Result.getOrThrow(variableValue(held, "completionStatus")), status);
+  });
+
+  for (const identifier of ["MISSING", "numAttempts", "completionStatus", "constructor"]) {
     it(`fails for ${identifier}, which the record holds no value of`, () => {
       const failure = failureOf(variableValue(variables, identifier));
 

@@ -2126,12 +2126,30 @@ const declaredIdentifiers = (root: SourceElement): ReadonlySet<string> =>
   );
 
 /**
- * Give the built-in variables the engine holds a value of for an item: `numAttempts`, the attempt
- * count `runAttempt` in `#plate/engine/attempt.ts` passes, unless a declaration of the item names
- * a variable `numAttempts`. A declared variable wins over a built-in of the same name, as the prose
- * rules read a reference (`variableType` in `#plate/validate/rules.ts`), so such a rule reads the
- * declared variable: the engine reads it when the model holds it, and otherwise the rule is
- * marked. `duration` and `completionStatus` are never held.
+ * The built-in variables the engine can hold a value of, each with its type: `numAttempts`, the
+ * attempt count `runAttempt` in `#plate/engine/attempt.ts` passes, a single integer; and the
+ * built-in outcome `completionStatus`, which the session record holds among its outcomes
+ * (`outcomeDefaults` in `#plate/model/record.ts`), a single identifier.
+ */
+const builtInTypes: ReadonlyMap<string, ValueType> = new Map<string, ValueType>([
+  ["completionStatus", { baseType: "identifier", cardinality: "single" }],
+  ["numAttempts", { baseType: "integer", cardinality: "single" }],
+]);
+
+/**
+ * The built-in variables a rule may set as it sets an outcome: `completionStatus`, as the prose
+ * rules let `qti-set-outcome-value` and `qti-lookup-outcome-value` name it (`builtInsNamed` in
+ * `#plate/validate/rules.ts`).
+ */
+const settableBuiltIns: ReadonlySet<string> = new Set(["completionStatus"]);
+
+/**
+ * Give the built-in variables the engine holds a value of for an item: each of
+ * {@link builtInTypes}, `numAttempts` and `completionStatus`, unless a declaration of the item
+ * names a variable by that name. A declared variable wins over a built-in of the same name, as the
+ * prose rules read a reference (`variableType` in `#plate/validate/rules.ts`), so such a rule reads
+ * the declared variable: the engine reads it when the model holds it, and otherwise the rule is
+ * marked. `duration` is never held.
  *
  * @param root The item's root.
  * @returns The built-in variables' identifiers the engine holds.
@@ -2139,7 +2157,7 @@ const declaredIdentifiers = (root: SourceElement): ReadonlySet<string> =>
 const heldBuiltIns = (root: SourceElement): ReadonlySet<string> => {
   const named = declaredIdentifiers(root);
 
-  return new Set(["numAttempts"].filter((identifier) => !named.has(identifier)));
+  return new Set([...builtInTypes.keys()].filter((identifier) => !named.has(identifier)));
 };
 
 /**
@@ -2222,9 +2240,10 @@ const referencesOf = (operand: Expression, kindRule: KindRule): readonly NamedRe
  * first names it.
  *
  * The evaluator holds only the item's modelled responses and outcomes and the built-in
- * `numAttempts` (`Variables` in `#plate/engine/evaluate.ts`) and returns `UnknownIdentifierError`
- * for any other identifier a rule names, so `buildItem` runs no tree this walk finds a name in, and
- * that failure stays unreachable. The walk reads each expression through its kind's rule in the
+ * `numAttempts` and `completionStatus` ({@link heldBuiltIns}; `Variables` in
+ * `#plate/engine/evaluate.ts`) and returns `UnknownIdentifierError` for any other identifier a rule
+ * names, so `buildItem` runs no tree this walk finds a name in, and that failure stays
+ * unreachable. The walk reads each expression through its kind's rule in the
  * registry (`kindRules` in `#plate/model/expressions/read.ts`), in place of a case per kind:
  *
  * - The declaration facet: the `identifier` of a kind that expects a response, such as `qti-correct`,
@@ -2238,15 +2257,16 @@ const referencesOf = (operand: Expression, kindRule: KindRule): readonly NamedRe
  * - The operands, which every kind holds in `operands`, so the walk recurses without a case per
  *   operator.
  *
- * `qti-set-outcome-value` sets an outcome. The names it finds are valid content, never refused
- * (reading 1): a response the model does not hold (base type `duration` or `file`, cardinality
- * `record`, or no base type), a template variable, an outcome the model does not hold, and the
- * built-in variables `duration` and `completionStatus`, read or set, which the engine holds no
- * value for. Reading 29 makes an item's `duration` a single float, so it is a valid name in an
- * item's rules. An identifier nothing declares is refused before the model is built when
- * inline rules name it; the walk finds it too. One a built-in template names, such as `MAXSCORE`
- * or `FEEDBACK` in a `CC2_*` template, is not in the document, so nothing refuses it: the walk
- * finds it, and the processing is marked.
+ * `qti-set-outcome-value` and `qti-lookup-outcome-value` set an outcome, or the built-in
+ * `completionStatus` where the engine holds it ({@link settableBuiltIns}). The names it finds are
+ * valid content, never refused (reading 1): a response the model does not hold (base type
+ * `duration` or `file`, cardinality `record`, or no base type), a template variable, an outcome the
+ * model does not hold, the built-in variable `duration`, read or set, which the engine holds no
+ * value for, and the built-in `completionStatus` where a declaration names it. Reading 29 makes an
+ * item's `duration` a single float, so it is a valid name in an item's rules. An identifier nothing
+ * declares is refused before the model is built when inline rules name it; the walk finds it too.
+ * One a built-in template names, such as `MAXSCORE` or `FEEDBACK` in a `CC2_*` template, is not in
+ * the document, so nothing refuses it: the walk finds it, and the processing is marked.
  *
  * @param tree The rule tree.
  * @param responses The responses the model holds.
@@ -2304,6 +2324,16 @@ const unheldIdentifiers = (
   };
 
   /**
+   * Report whether the engine holds a variable a rule may set by a name: a modelled outcome, or a
+   * built-in it holds that a rule may set ({@link settableBuiltIns}).
+   *
+   * @param identifier The name.
+   * @returns Whether a set or a lookup of it runs.
+   */
+  const isSettable = (identifier: string): boolean =>
+    outcomes.has(identifier) || (builtIns.has(identifier) && settableBuiltIns.has(identifier));
+
+  /**
    * Add each identifier a rule sequence names, nested branches included, that the engine does not
    * hold: each outcome it sets or looks up, and each identifier its expressions read. An exit
    * names none.
@@ -2321,7 +2351,7 @@ const unheldIdentifiers = (
           run(each.otherwise.value);
         }
       } else if (each.kind !== "exit") {
-        if (!outcomes.has(each.identifier)) {
+        if (!isSettable(each.identifier)) {
           unheld.add(each.identifier);
         }
 
@@ -2432,9 +2462,9 @@ const valueTypeOf = (type: ExpressionType): Option.Option<ValueType> => {
 /**
  * Give the type of the declaration an expression's declaration facet names, as the engine reads
  * its value: among the responses for a kind that expects a response; among the responses, the
- * outcomes and the built-in variables the engine holds for one that expects any variable. The one
- * built-in the engine holds, `numAttempts` ({@link heldBuiltIns}), is a single integer
- * (`builtInValue` in `#plate/engine/refs.ts`).
+ * outcomes and the built-in variables the engine holds for one that expects any variable. The
+ * built-ins the engine holds ({@link heldBuiltIns}) have the types {@link builtInTypes} gives:
+ * `numAttempts` a single integer, `completionStatus` a single identifier.
  *
  * @param identifier The identifier the expression names.
  * @param expected The kind of variable the facet expects.
@@ -2458,7 +2488,7 @@ const declarationType = (
   return Option.fromUndefinedOr(response ?? outcomes.get(identifier)).pipe(
     Option.orElse(() =>
       builtIns.has(identifier)
-        ? Option.some<ValueType>({ baseType: "integer", cardinality: "single" })
+        ? Option.fromUndefinedOr(builtInTypes.get(identifier))
         : Option.none(),
     ),
   );
