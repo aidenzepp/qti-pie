@@ -1,9 +1,9 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Effect, Option, Predicate } from "effect";
+import { Effect, Option, Predicate, Result } from "effect";
 import { configure } from "#plate/configuration.ts";
 import type { Element, Node } from "#plate/emit/node.ts";
 import { shuffleOrder } from "#plate/engine/random.ts";
-import { entryName } from "#plate/form/encoding.ts";
+import { decode, entryName } from "#plate/form/encoding.ts";
 import type {
   BodyNode,
   ChoiceInteraction,
@@ -12,6 +12,7 @@ import type {
   Item,
   TextEntryInteraction,
 } from "#plate/model/item.ts";
+import { nullOf } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
 import { choiceOrder, identifyMessages, payload, postings, redactItem } from "#plate/payload.ts";
 import type {
@@ -1614,6 +1615,34 @@ describe("postings", () => {
       postingOf("NAMED", "string", 10),
       postingOf("ESSAY", "string", 8),
     ]);
+  });
+
+  it("[Q-12] gives an Inline Choice's response its posting in base 10, which decodes an empty entry as NULL and refuses two entries", () => {
+    const [posting, ...others] = postings(riverRedacted, instance);
+    assert.deepStrictEqual(posting, postingOf("RIVER", "identifier", 10));
+    assert.lengthOf(others, 0);
+
+    const { binding, options } = posting ?? assert.fail("RIVER has no posting.");
+    assert.deepStrictEqual(
+      Result.getSuccess(decode([[binding.name, ""]], binding, options)),
+      Option.some(nullOf("identifier", "single")),
+    );
+    assert.deepStrictEqual(
+      Option.map(
+        Result.getFailure(
+          decode(
+            [
+              [binding.name, "S"],
+              [binding.name, "L"],
+            ],
+            binding,
+            options,
+          ),
+        ),
+        (malformed) => [malformed._tag, malformed.reason],
+      ),
+      Option.some(["Malformed", "single-many"]),
+    );
   });
 
   it("gives no posting to a declared response no interaction binds, so a post carries nothing over its record value", () => {

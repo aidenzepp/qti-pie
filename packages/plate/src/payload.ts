@@ -1124,10 +1124,34 @@ export interface Posting {
   readonly identifier: string;
   /**
    * The number base its integer is written in: the `base` of the first Text Entry or Extended
-   * Text, in document order, that binds the response, and 10 when only a Choice binds it.
+   * Text, in document order, that binds the response, and 10 when only a Choice or an Inline
+   * Choice binds it.
    */
   readonly options: DecodeOptions;
 }
+
+/**
+ * Give the number base an interaction's posted text is read in: a Text Entry's or an Extended
+ * Text's `base`, and none for a Choice or an Inline Choice, which post identifiers.
+ *
+ * @param interaction The interaction.
+ * @returns Its base, or none.
+ */
+const baseOf = (interaction: Interaction): Option.Option<number> => {
+  switch (interaction.kind) {
+    case "extended-text":
+    case "text-entry": {
+      return Option.some(interaction.base);
+    }
+    case "choice":
+    case "inline-choice": {
+      return Option.none();
+    }
+    default: {
+      return interaction satisfies never;
+    }
+  }
+};
 
 /**
  * Give the postings of a redacted item in one instance: one for each response of a posted base
@@ -1170,17 +1194,11 @@ export const postings = (redacted: Redacted, instance: string): readonly Posting
       return [];
     }
 
-    const typed = Arr.findFirst(
-      bound,
-      (interaction): interaction is ExtendedTextInteraction | TextEntryInteraction =>
-        interaction.kind !== "choice",
-    );
-
     return [
       {
         binding: { baseType, cardinality, name: entryName(instance, identifier) },
         identifier,
-        options: { base: Option.match(typed, { onNone: () => 10, onSome: ({ base }) => base }) },
+        options: { base: Option.getOrElse(Arr.findFirst(bound, baseOf), () => 10) },
       },
     ];
   });
