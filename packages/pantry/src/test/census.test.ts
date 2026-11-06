@@ -11,22 +11,23 @@ import { census } from "#pantry/test/census.ts";
 import type { Census, FunctionKind, LawFamily, MigrationFile } from "#pantry/test/census.ts";
 
 /**
- * The census targets of the cutover (fin.md §13 and its exit, "the census is a test, and it meets
- * §13's targets"; plan-qti-pie Q6.02), each as the predicate over a census that states it: no enum
- * types, no seeded tables or seed rows, no law functions or constraint triggers, no always-true
- * policies, no two domains with one definition, and a table count in [80, 120].
+ * The census's zero targets (fin.md §13 and its exit, "the census is a test, and it meets §13's
+ * targets"; plan-qti-pie Q6.02), each as the predicate over a census that states it: no enum
+ * types; no seeded tables, seed rows or `INSERT INTO`; no validate files, law functions or
+ * constraint triggers; no policies (G6); and no two domains with one definition (G6).
+ *
+ * §13's table count, an estimate below 80, is no target: the committed migration's measured count
+ * is asserted instead, one table per stored relation (`census.migration.test.ts`).
  */
 const targets = {
-  "a table count in [80, 120]": (held: Census) =>
-    held.tables.total >= 80 && held.tables.total <= 120,
-  "no always-true policies": (held: Census) => held.policies.alwaysTrue === 0,
   "no enum types": (held: Census) => held.enums === 0,
-  "no law functions or constraint triggers": (held: Census) =>
-    held.functions.law === 0 && held.laws.constraintTriggers === 0,
-  "no seeded tables or seed rows": (held: Census) =>
+  "no policies": (held: Census) => held.policies.total === 0,
+  "no seeded tables, seed rows or INSERT INTO": (held: Census) =>
     held.seed.folders === 0 && held.seed.inserts === 0 && Object.keys(held.seed.rows).length === 0,
   "no two domains with one definition": (held: Census) =>
     held.domains.distinct === held.domains.total,
+  "no validate files, law functions or constraint triggers": (held: Census) =>
+    held.laws.validateFiles === 0 && held.functions.law === 0 && held.laws.constraintTriggers === 0,
 } as const satisfies Readonly<Record<string, (held: Census) => boolean>>;
 
 /**
@@ -87,15 +88,19 @@ const LAW_NAMES: Readonly<Record<LawFamily, string>> = {
  */
 const FUNCTION_HEADS: Readonly<Record<FunctionKind, (name: string) => string>> = {
   constant: (name) =>
-    `CREATE FUNCTION "qti"."${name}__c"() RETURNS bit varying LANGUAGE sql IMMUTABLE PARALLEL SAFE RETURN B'10'::bit varying;`,
+    `DO $$\nBEGIN\n  EXECUTE "pg_catalog"."format"('CREATE FUNCTION "qti"."${name}__c"() RETURNS bit varying LANGUAGE sql IMMUTABLE PARALLEL SAFE RETURN %L::bit varying'::"pg_catalog"."text", B'10');\nEND\n$$;`,
   decode: (name) =>
     `CREATE FUNCTION "qti"."${name}_name"(code int2) RETURNS text LANGUAGE sql IMMUTABLE PARALLEL SAFE\n  RETURN 'x';`,
   law: (name) =>
     `CREATE OR REPLACE FUNCTION "qti"."__law_${name}"() RETURNS "pg_catalog"."trigger"\nLANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END $$;`,
+  live: (name) =>
+    `CREATE FUNCTION "qti"."__${name}_live_x"() RETURNS bit varying\n  LANGUAGE sql IMMUTABLE PARALLEL SAFE RETURN B'11'::bit varying;`,
   names: (name) =>
-    `CREATE FUNCTION "qti"."${name}__names"() RETURNS name[] LANGUAGE sql IMMUTABLE PARALLEL SAFE RETURN '{a}'::name[];`,
+    `CREATE FUNCTION "qti"."${name}__names"() RETURNS "pg_catalog"."name"[] LANGUAGE sql IMMUTABLE PARALLEL SAFE RETURN '{a}'::name[];`,
   other: (name) =>
     `CREATE OR REPLACE FUNCTION "qti"."${name}_refuse"("state" "pg_catalog"."text") RETURNS boolean\nLANGUAGE plpgsql AS $$ BEGIN RETURN true; END $$;`,
+  payload: (name) =>
+    `CREATE FUNCTION "qti"."${name}__p"() RETURNS "pg_catalog"."text"[] LANGUAGE sql IMMUTABLE PARALLEL SAFE RETURN '{a}'::text[];`,
 };
 
 /**
@@ -167,6 +172,7 @@ const statementOf: Gen<Statement> = (source) => {
           "text CHECK (VALUE <> '')",
           "text CHECK (VALUE ~ '[0-9]+')",
           "int8 CHECK (VALUE >= 0)",
+          "bit(5) CHECK (VALUE & B'11000' = VALUE)",
         ] as const),
       );
 
@@ -179,7 +185,7 @@ const statementOf: Gen<Statement> = (source) => {
     },
     tableOf(name),
     (inner) => {
-      const columns = [...inner.draw(subarray(["node", "value", "kind"])), "id"];
+      const columns = [...inner.draw(subarray(["node", "value", "__pred_at_x", "kind"])), "id"];
 
       return {
         columns,
@@ -189,7 +195,9 @@ const statementOf: Gen<Statement> = (source) => {
       };
     },
     (inner) => {
-      const kind = inner.draw(element(["constant", "decode", "law", "names", "other"] as const));
+      const kind = inner.draw(
+        element(["constant", "decode", "law", "live", "names", "other", "payload"] as const),
+      );
 
       return { form: "function", kind, name, sql: FUNCTION_HEADS[kind](name) };
     },
@@ -236,6 +244,19 @@ const countOf = <T>(values: readonly T[], keep: (value: T) => boolean): number =
   values.filter(keep).length;
 
 /**
+ * Count each table's members of a list, keyed and ordered by table.
+ *
+ * @param named - A table name per member.
+ * @returns How many members each table has.
+ */
+const tallied = (named: readonly string[]): Readonly<Record<string, number>> =>
+  Object.fromEntries(
+    [...new Set(named)]
+      .toSorted()
+      .map((table) => [table, named.filter((held) => held === table).length]),
+  );
+
+/**
  * What the census must report for a generated migration, counted from its statements.
  */
 const modelOf = (statements: readonly Statement[]): Census => {
@@ -264,6 +285,7 @@ const modelOf = (statements: readonly Statement[]): Census => {
 
   return {
     domains: {
+      bits: countOf(definitions, (definition) => definition.startsWith("bit(")),
       distinct: distinct.length,
       repeatedBytes:
         encoder.encode(definitions.join("")).length - encoder.encode(distinct.join("")).length,
@@ -271,6 +293,12 @@ const modelOf = (statements: readonly Statement[]): Census => {
     },
     enums: pick("enum").length,
     foreignKeys: {
+      axes: tallied(
+        pick("foreignKey")
+          .filter((key) => key.columns.some((column) => column.startsWith("__pred_")))
+          .map((key) => key.table),
+      ),
+      byTable: tallied(pick("foreignKey").map((key) => key.table)),
       composite: countOf(keys, (width) => width > 1),
       total: keys.length,
       widest: Math.max(0, ...keys),
@@ -279,8 +307,10 @@ const modelOf = (statements: readonly Statement[]): Census => {
       constant: countOf(functions, (f) => f.kind === "constant"),
       decode: countOf(functions, (f) => f.kind === "decode"),
       law: countOf(functions, (f) => f.kind === "law"),
+      live: countOf(functions, (f) => f.kind === "live"),
       names: countOf(functions, (f) => f.kind === "names"),
       other: countOf(functions, (f) => f.kind === "other"),
+      payload: countOf(functions, (f) => f.kind === "payload"),
     },
     laws: {
       byFamily: {
@@ -347,20 +377,18 @@ const targetsOf = (statements: readonly Statement[]): readonly Target[] => {
   const definitions = statements.flatMap((statement) =>
     statement.form === "domain" ? [`${statement.definition};`] : [],
   );
-  const tables = countOf(statements, (statement) => statement.form === "table");
   const meets: Readonly<Record<Target, boolean>> = {
-    "a table count in [80, 120]": tables >= 80 && tables <= 120,
-    "no always-true policies": statements.every(
-      (statement) => statement.form !== "policy" || !statement.alwaysTrue,
-    ),
     "no enum types": statements.every((statement) => statement.form !== "enum"),
-    "no law functions or constraint triggers": statements.every(
-      (statement) =>
-        !(statement.form === "function" && statement.kind === "law") &&
-        !(statement.form === "law" && statement.trigger),
+    "no policies": statements.every((statement) => statement.form !== "policy"),
+    "no seeded tables, seed rows or INSERT INTO": statements.every(
+      (statement) => statement.form !== "insert",
     ),
-    "no seeded tables or seed rows": statements.every((statement) => statement.form !== "insert"),
     "no two domains with one definition": new Set(definitions).size === definitions.length,
+    // A law is written into a validate file, so a migration holds one exactly when it holds a law.
+    "no validate files, law functions or constraint triggers": statements.every(
+      (statement) =>
+        statement.form !== "law" && !(statement.form === "function" && statement.kind === "law"),
+    ),
   };
 
   return targetNames.filter((name) => meets[name]);

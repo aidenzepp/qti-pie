@@ -22,22 +22,30 @@ export interface MigrationFile {
 export type LawFamily = "alternatives" | "capacity" | "mirror" | "other" | "selectedSource";
 
 /**
- * The kind of an installed function: a law's trigger function, a closed side's constant (no
- * arguments, a `bit varying`), a roster's names constant (no arguments, a `name[]`), a roster's
- * decode function (`<roster>_name`, a `text`), or another, which today is grizzle's own runtime.
+ * The kind of an installed function: a law's trigger function; a roster's `live` set, the bits of
+ * its live handles that its bits domain admits (no arguments, a `bit varying`, `…_live_…`); a
+ * closed side's constant (no arguments, a `bit varying`); a roster's names constant (no arguments,
+ * a `name[]`); a closed relation's payload of open-typed values (no arguments, any other array); a
+ * roster's decode function (`<roster>_name`, a `text`); or another, which today is grizzle's own
+ * runtime.
  */
-export type FunctionKind = "constant" | "decode" | "law" | "names" | "other";
+export type FunctionKind = "constant" | "decode" | "law" | "live" | "names" | "other" | "payload";
 
 /**
  * What a schema's migrations create, counted from their SQL: the objects each representation
  * choice costs.
  *
  * The counts add up the `CREATE` and `INSERT` statements of every migration, so they describe the
- * installed schema while every migration only adds, which holds for one `_init` folder and its
- * `_seed`. Statements are read as grizzle prints them: one per line start, in the `qti` schema.
+ * installed schema while every migration only adds, which holds for one `_init` folder. Statements
+ * are read as grizzle prints them: one per line start, in the `qti` schema, but a function's head,
+ * which a `DO` block's `EXECUTE` may hold, and an `INSERT INTO`, counted wherever it stands.
  */
 export interface Census {
   readonly domains: {
+    /**
+     * The `bit(n)` domains, one per roster whose sets a field holds.
+     */
+    readonly bits: number;
     /**
      * Distinct definitions, with the constraint's name left out.
      */
@@ -50,6 +58,16 @@ export interface Census {
   };
   readonly enums: number;
   readonly foreignKeys: {
+    /**
+     * The keys over a family's hidden columns (`__pred_…`, `__copy_…`, `__index_…`,
+     * `__predecessor_…`, `__before_…`, `__after_…`), each family's axes, by the table that holds
+     * them.
+     */
+    readonly axes: Readonly<Record<string, number>>;
+    /**
+     * The keys each table holds, by its SQL name.
+     */
+    readonly byTable: Readonly<Record<string, number>>;
     /**
      * Keys over more than one column.
      */
@@ -95,6 +113,9 @@ export interface Census {
      * The migration folders that are a seed (`…_seed`).
      */
     readonly folders: number;
+    /**
+     * Every `INSERT INTO`, wherever a migration's text holds one.
+     */
     readonly inserts: number;
     /**
      * The rows inserted into each relation, keyed by its SQL name.
@@ -157,6 +178,17 @@ const uniquePattern = /(?:PRIMARY KEY|UNIQUE) \((?<columns>[^)]*)\)/gu;
 const foreignKeyPattern = /CONSTRAINT "[^"]+" FOREIGN KEY \((?<columns>[^)]*)\)/gu;
 
 /**
+ * A foreign key added to a `qti` table, with the table and its referencing column list.
+ */
+const addedForeignKeyPattern =
+  /^ALTER TABLE "qti"\."(?<table>[a-z0-9_]+)" ADD CONSTRAINT "[^"]+" FOREIGN KEY \((?<columns>[^)]*)\)/gmu;
+
+/**
+ * A family's hidden column, which grizzle fills on every write: its axes' keys hold one.
+ */
+const familyColumnPattern = /"__(?:pred|copy|index|predecessor|before|after)_/u;
+
+/**
  * The header line grizzle opens each validate file with, naming its law.
  */
 const lawPattern = /^-- Validate law (?<law>__[a-z0-9_]+):/gmu;
@@ -173,10 +205,11 @@ const lawFamilies: readonly (readonly [LawFamily, RegExp])[] = [
 
 /**
  * A function's head: its name, its parameter list, and its return type up to the first clause that
- * follows it.
+ * follows it. A head is read wherever it stands, since a closed relation's constant is created by
+ * an `EXECUTE` inside the `DO` block that packs it.
  */
 const functionPattern =
-  /^CREATE (?:OR REPLACE )?FUNCTION "qti"\."(?<name>[^"]+)"\((?<parameters>[^)]*)\) RETURNS (?<returns>.+?)(?=\s+(?:AS|BEGIN|IMMUTABLE|LANGUAGE|PARALLEL|RETURN|SECURITY|SET|STABLE|STRICT|VOLATILE)\b|$)/gmu;
+  /(?<![\w"])CREATE (?:OR REPLACE )?FUNCTION "qti"\."(?<name>[^"]+)"\((?<parameters>[^)]*)\) RETURNS (?<returns>.+?)(?=\s+(?:AS|BEGIN|IMMUTABLE|LANGUAGE|PARALLEL|RETURN|SECURITY|SET|STABLE|STRICT|VOLATILE)\b|$)/gmu;
 
 /**
  * A function's head, with its return type unqualified and unquoted (`"pg_catalog"."trigger"` reads
@@ -198,11 +231,19 @@ interface FunctionHead {
 const functionKinds: readonly (readonly [FunctionKind, (head: FunctionHead) => boolean])[] = [
   ["law", (head) => head.name.startsWith("__law_")],
   [
+    "live",
+    (head) =>
+      head.parameters === "" &&
+      head.name.includes("_live_") &&
+      (head.returns === "bit varying" || head.returns === "varbit"),
+  ],
+  [
     "constant",
     (head) =>
       head.parameters === "" && (head.returns === "bit varying" || head.returns === "varbit"),
   ],
   ["names", (head) => head.parameters === "" && head.returns === "name[]"],
+  ["payload", (head) => head.parameters === "" && head.returns.endsWith("[]")],
   ["decode", (head) => head.name.endsWith("_name") && head.returns === "text"],
 ];
 
@@ -247,6 +288,21 @@ const occurrences = (sql: string, pattern: RegExp): number => [...sql.matchAll(p
  */
 const tally = <T>(values: readonly T[], value: T): number =>
   values.filter((candidate) => candidate === value).length;
+
+/**
+ * Count each distinct value's members, keyed and ordered by the value.
+ *
+ * @param values - The values.
+ * @returns How many members each value has, its keys sorted.
+ */
+const tallyBy = (values: readonly string[]): Readonly<Record<string, number>> => {
+  const counts = new Map<string, number>();
+  for (const value of values) {
+    counts.set(value, (counts.get(value) ?? 0) + 1);
+  }
+
+  return Object.fromEntries([...counts].toSorted(([a], [b]) => (a < b ? -1 : 1)));
+};
 
 /**
  * Split an `INSERT`'s value list into its row tuples.
@@ -371,7 +427,7 @@ const countRows = (sql: string): Omit<Census["seed"], "folders"> => {
       inEveryVersion: [...versionsOf.values()].filter((held) => held.size === versions.size).length,
       pairs: versionsOf.size,
     },
-    inserts: occurrences(sql, /^INSERT INTO /gmu),
+    inserts: occurrences(sql, /\bINSERT\s+INTO\b/giu),
     rows: Object.fromEntries([...rows].toSorted(([a], [b]) => (a < b ? -1 : 1))),
   };
 };
@@ -403,10 +459,15 @@ export const census = (files: readonly MigrationFile[]): Census => {
   const keys = [...sql.matchAll(foreignKeyPattern)].map(
     ({ groups }) => (groups?.["columns"] ?? "").split(",").length,
   );
+  const added = [...sql.matchAll(addedForeignKeyPattern)].map(({ groups }) => ({
+    columns: groups?.["columns"] ?? "",
+    table: groups?.["table"] ?? "",
+  }));
   const policies = [...sql.matchAll(policyPattern)].map(([statement]) => statement);
 
   return {
     domains: {
+      bits: definitions.filter((definition) => definition.startsWith("bit(")).length,
       distinct: firsts.size,
       repeatedBytes:
         encoder.encode(definitions.join("")).length - encoder.encode([...firsts].join("")).length,
@@ -414,6 +475,10 @@ export const census = (files: readonly MigrationFile[]): Census => {
     },
     enums: occurrences(sql, /^CREATE TYPE "qti"\."[^"]+" AS ENUM /gmu),
     foreignKeys: {
+      axes: tallyBy(
+        added.filter(({ columns }) => familyColumnPattern.test(columns)).map(({ table }) => table),
+      ),
+      byTable: tallyBy(added.map(({ table }) => table)),
       composite: keys.filter((columns) => columns > 1).length,
       total: keys.length,
       widest: Math.max(0, ...keys),
@@ -422,8 +487,10 @@ export const census = (files: readonly MigrationFile[]): Census => {
       constant: tally(kinds, "constant"),
       decode: tally(kinds, "decode"),
       law: tally(kinds, "law"),
+      live: tally(kinds, "live"),
       names: tally(kinds, "names"),
       other: tally(kinds, "other"),
+      payload: tally(kinds, "payload"),
     },
     laws: {
       byFamily: {
