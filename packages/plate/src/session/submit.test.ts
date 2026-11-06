@@ -141,11 +141,17 @@ const caseDelivery = Effect.fnUntraced(function* caseDelivery(
  * @param options What the item adds.
  * @param options.defaultValue The choice `RESPONSE` declares as its default, when it declares one.
  * @param options.minChoices The Choice's `min-choices`, when it sets one.
+ * @param options.unbound The identifier of a second single identifier response the item declares
+ *   and no interaction binds, when it declares one.
  * @returns The item's text.
  */
 const choiceItemXml = (
   identifier: string,
-  options: { readonly defaultValue?: string; readonly minChoices?: number } = {},
+  options: {
+    readonly defaultValue?: string;
+    readonly minChoices?: number;
+    readonly unbound?: string;
+  } = {},
 ): string =>
   [
     `<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="${identifier}" title="${identifier}" adaptive="false" time-dependent="false">`,
@@ -155,6 +161,9 @@ const choiceItemXml = (
       : `<qti-default-value><qti-value>${options.defaultValue}</qti-value></qti-default-value>`,
     "<qti-correct-response><qti-value>A</qti-value></qti-correct-response>",
     "</qti-response-declaration>",
+    options.unbound === undefined
+      ? ""
+      : `<qti-response-declaration identifier="${options.unbound}" cardinality="single" base-type="identifier"/>`,
     '<qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/>',
     "<qti-item-body>",
     `<qti-choice-interaction response-identifier="RESPONSE" shuffle="false" max-choices="1"${options.minChoices === undefined ? "" : ` min-choices="${options.minChoices}"`}>`,
@@ -578,6 +587,47 @@ describe("submitItem", () => {
 
         assert.strictEqual(itemAt(passed, 2).record.numAttempts, 1);
         assert.strictEqual(itemAt(passed, 2).record.instance, `${instance}.2`);
+      }),
+  );
+
+  it.effect(
+    "[T-4] under allow-skipping false counts only the responses a page can post: a value for a response no interaction binds does not answer the item",
+    () =>
+      Effect.gen(function* postedOnly() {
+        const delivery = yield* builtDelivery(
+          "posted",
+          [partOf("part", ["mixed"], { control: 'allow-skipping="false"' })],
+          [["mixed", choiceItemXml("mixed", { unbound: "HIDDEN" })]],
+        );
+        const configuration = yield* configure({});
+        const begun = started(delivery, configuration);
+
+        assert.strictEqual(
+          refusedRule(
+            submitItem(
+              delivery.test,
+              delivery.items,
+              begun,
+              stepOf("submit-item", { HIDDEN: chosen("A") }),
+              configuration,
+              { now: after(5) },
+            ),
+          ),
+          "skipping-not-allowed",
+        );
+
+        const answered = accepted(
+          submitItem(
+            delivery.test,
+            delivery.items,
+            begun,
+            stepOf("submit-item", { RESPONSE: chosen("C") }),
+            configuration,
+            { now: after(6) },
+          ),
+        );
+
+        assert.strictEqual(itemAt(answered, 1).record.numAttempts, 1);
       }),
   );
 
