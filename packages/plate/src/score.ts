@@ -247,23 +247,32 @@ const unlessMisfit = (
   });
 
 /**
- * Check that each response a decoded record holds is one the item scores, of its declaration's
- * base type and cardinality: the check {@link score} runs on the record it is handed.
+ * Check what an attempt carries from a decoded record into the rules: each response the record
+ * holds is one the item scores, of its declaration's base type and cardinality, and the built-in
+ * `completionStatus`, where the item holds it, is a single identifier. It is the check
+ * {@link score} runs on the record it is handed.
  *
  * A declared response the record lacks is left to the engine, which fails
- * `UnknownIdentifierError` if the processing reads it. Outcomes are not checked: the attempt resets
- * them to the item's defaults before the rules run, so no record outcome reaches the engine.
+ * `UnknownIdentifierError` if the processing reads it, and a record that lacks `completionStatus`
+ * reads as `fresh`. The declared outcomes are not checked: the attempt resets them to the item's
+ * defaults before the rules run, so none the record holds reaches the engine.
  *
  * @param item The item.
  * @param record The decoded record, which belongs to the item.
- * @returns The record, or {@link InvalidRecord} at stage `decode` naming the first response that
- *   does not fit.
+ * @returns The record, or {@link InvalidRecord} at stage `decode` naming the first response, then
+ *   the built-in, that does not fit.
  */
-const responsesFitting = (
-  item: Item,
-  record: ItemRecord,
-): Result.Result<ItemRecord, InvalidRecord> =>
-  unlessMisfit(record, firstMisfit("response", item.responses, record.responses));
+const carriedFitting = (item: Item, record: ItemRecord): Result.Result<ItemRecord, InvalidRecord> =>
+  unlessMisfit(
+    record,
+    Option.orElse(firstMisfit("response", item.responses, record.responses), () =>
+      holdsCompletionStatus(item)
+        ? Option.flatMap(Option.fromUndefinedOr(record.outcomes[completionStatus]), (value) =>
+            storedMisfit("outcome", completionStatus, Option.some(completionStatusType), value),
+          )
+        : Option.none(),
+    ),
+  );
 
 /**
  * Give the type of each outcome a record of an item may hold: each outcome the item declares, and
@@ -290,12 +299,13 @@ const recordOutcomes = (
  * cardinality.
  *
  * `restore` and `results` run it, so a record that does not fit is refused rather than given back
- * or written into a result. It checks the responses as `score` checks the record it is handed, and
- * the outcomes too, which `score` leaves alone because an attempt resets them; every record `score`
+ * or written into a result. It checks the responses and the built-in as `score` checks the record
+ * it is handed, and the declared outcomes too, which `score` leaves alone because an attempt resets
+ * them; every record `score`
  * writes fits, since the engine sets only declared outcomes and the built-in `completionStatus`,
  * each to a value of its type. A declared variable the record lacks is not refused, nor is a
  * record that lacks `completionStatus`, as one written before the built-in was held does: it reads
- * as `fresh` and the attempt start it.
+ * as `fresh` gives it.
  *
  * @param item The item.
  * @param record The decoded record, which belongs to the item.
@@ -377,9 +387,10 @@ const checkedResponses = (
  * Score one attempt of an item: run its response processing over the responses and return the
  * record the host stores.
  *
- * In order: it decodes the record the host handed back, checks that it belongs to the item and
- * that each response it holds is one the item scores, of its declaration's base type and
- * cardinality, or starts a fresh record when there is none; it checks each response as a value of
+ * In order: it decodes the record the host handed back, checks that it belongs to the item, that
+ * each response it holds is one the item scores, of its declaration's base type and cardinality,
+ * and that the built-in `completionStatus`, which the attempt carries over, is a single identifier,
+ * or starts a fresh record when there is none; it checks each response as a value of
  * its declaration; it refuses responses that break a tier (a) limit, under the default
  * configuration; then it runs the attempt and writes the record. It sets no attempt limit:
  * `maxAttempts` is the author's flow.
@@ -392,13 +403,14 @@ const checkedResponses = (
  * @param responses The candidate's responses by identifier, each a value of its declaration's base
  *   type and cardinality, an integer as a `bigint`. A response left out keeps the record's value.
  * @param record The record the last `score` of this item returned, none for the first attempt.
- * @returns The record after the attempt, in the form the host stores, or {@link InvalidRecord} for a
- *   record the renderer did not write (or could not write), such as one that holds a response the
- *   item does not score or one of another base type or cardinality than its declaration,
- *   {@link RecordMismatch} for another item's record, {@link InvalidResponses} for a response that
- *   does not fit its declaration, {@link ResponsesRefused} for responses that break a tier (a)
- *   limit, or an {@link EngineFailure} when the record lacks a response the processing reads or the
- *   processing sets an outcome to a value of another type.
+ * @returns The record after the attempt, in the form the host stores, or {@link InvalidRecord} for
+ *   a record the renderer did not write (or could not write), such as one that holds a response the
+ *   item does not score, one of another base type or cardinality than its declaration, or a
+ *   `completionStatus` that is not a single identifier, {@link RecordMismatch} for another item's
+ *   record, {@link InvalidResponses} for a response that does not fit its declaration,
+ *   {@link ResponsesRefused} for responses that break a tier (a) limit, or an {@link EngineFailure}
+ *   when the record lacks a response the processing reads or the processing sets an outcome to a
+ *   value of another type.
  */
 export const score = (
   document: Accepted,
@@ -413,7 +425,7 @@ export const score = (
     const before =
       record === undefined
         ? fresh(item, "")
-        : yield* responsesFitting(item, yield* belonging(item, yield* decodeRecord(record)));
+        : yield* carriedFitting(item, yield* belonging(item, yield* decodeRecord(record)));
     const checked = yield* checkedResponses(item, responses);
     const messages = checkResponses(document, checked, tierA);
     if (messages.length > 0) {

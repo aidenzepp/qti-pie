@@ -430,7 +430,8 @@ const answeredStatusOf = (
  *
  * Once an attempt is processed it is the value the reported outcomes hold, where the item holds
  * the built-in ({@link holdsCompletionStatus}) and the value is a single identifier: `unknown`,
- * the value each attempt starts it at, or the one processing set. Otherwise it is derived:
+ * the value the first attempt starts it at and later ones keep, or the one processing set.
+ * Otherwise it is derived:
  * `not_attempted` until an attempt starts and `unknown` after. So a presented item whose attempt
  * is not processed reports `unknown`, though its record still holds `not_attempted`, and a record
  * written before the built-in was held reads as derived.

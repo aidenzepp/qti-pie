@@ -233,15 +233,22 @@ const readsCompletion = itemDocument(
 );
 
 /**
- * An item that sets the built-in `completionStatus` to `completed` when `RESPONSE` is correct and
- * leaves it alone otherwise.
+ * The parts of an item that copies the built-in `completionStatus` into `STATUS`, as its rules
+ * first read it, then sets the built-in to `completed` when `RESPONSE` is correct and leaves it
+ * alone otherwise.
  */
-const completesWhenCorrect = itemDocument(
+const readsThenCompletes: readonly SourceElement[] = [
   trueFalse,
+  declaration("qti-outcome-declaration", "STATUS", "identifier"),
   el(
     "qti-response-processing",
     [],
     [
+      el(
+        "qti-set-outcome-value",
+        [attr("identifier", "STATUS")],
+        [el("qti-variable", [attr("identifier", "completionStatus")])],
+      ),
       el(
         "qti-response-condition",
         [],
@@ -269,7 +276,26 @@ const completesWhenCorrect = itemDocument(
       ),
     ],
   ),
-);
+];
+
+/**
+ * {@link readsThenCompletes} in a non-adaptive item and in an adaptive one, which plate marks and
+ * still runs: the built-in carries over in both.
+ */
+const completing: readonly (readonly [string, SourceDocument])[] = [
+  ["a non-adaptive", itemDocument(...readsThenCompletes)],
+  [
+    "an adaptive",
+    doc(
+      "items/attempt.xml",
+      el(
+        "qti-assessment-item",
+        [attr("adaptive", "true"), attr("identifier", "attempt"), attr("title", "Attempt")],
+        readsThenCompletes,
+      ),
+    ),
+  ],
+];
 
 /**
  * The instance every record here is opened under.
@@ -425,7 +451,7 @@ describe("runAttempt", () => {
   );
 
   it.effect(
-    "[I-9a] sets completionStatus from not_attempted to unknown when the attempt starts, before the rules read it",
+    "[I-9a] sets completionStatus from not_attempted to unknown when the first attempt starts, before the rules read it",
     () =>
       Effect.gen(function* startsUnknown() {
         const item = yield* buildItem(readsCompletion);
@@ -447,22 +473,48 @@ describe("runAttempt", () => {
       }),
   );
 
-  it.effect(
-    "[I-9a] keeps the completionStatus a rule sets, completed, and starts the next attempt at unknown again",
-    () =>
-      Effect.gen(function* setsCompleted() {
-        const item = yield* buildItem(completesWhenCorrect);
-        const first = yield* Effect.fromResult(
-          runAttempt(item, fresh(item, instance), { RESPONSE: identifierValue("true") }),
-        );
-        const second = yield* Effect.fromResult(
-          runAttempt(item, first, { RESPONSE: identifierValue("false") }),
-        );
+  for (const [label, document] of completing) {
+    it.effect(
+      `[I-9a] keeps the completed a rule sets in attempt 1, so attempt 2's rules start from it, in ${label} item`,
+      () =>
+        Effect.gen(function* carriesCompleted() {
+          const item = yield* buildItem(document);
+          const first = yield* Effect.fromResult(
+            runAttempt(item, fresh(item, instance), { RESPONSE: identifierValue("true") }),
+          );
+          const second = yield* Effect.fromResult(
+            runAttempt(item, first, { RESPONSE: identifierValue("false") }),
+          );
 
-        assert.isTrue(Option.isSome(item.processing));
-        assert.deepStrictEqual(first.outcomes["completionStatus"], identifierValue("completed"));
-        assert.deepStrictEqual(second.outcomes["completionStatus"], identifierValue("unknown"));
-      }),
+          assert.isTrue(Option.isSome(item.processing));
+          assert.deepStrictEqual(first.outcomes, {
+            STATUS: identifierValue("unknown"),
+            completionStatus: identifierValue("completed"),
+          });
+          assert.deepStrictEqual(second.outcomes, {
+            STATUS: identifierValue("completed"),
+            completionStatus: identifierValue("completed"),
+          });
+        }),
+    );
+  }
+
+  it.effect("[I-9a] keeps unknown into attempt 2 when no rule sets completionStatus", () =>
+    Effect.gen(function* keepsUnknown() {
+      const item = yield* buildItem(readsCompletion);
+      const first = yield* Effect.fromResult(
+        runAttempt(item, fresh(item, instance), { RESPONSE: identifierValue("true") }),
+      );
+      const second = yield* Effect.fromResult(
+        runAttempt(item, first, { RESPONSE: identifierValue("false") }),
+      );
+
+      assert.deepStrictEqual(first.outcomes["completionStatus"], identifierValue("unknown"));
+      assert.deepStrictEqual(second.outcomes, {
+        STATUS: identifierValue("unknown"),
+        completionStatus: identifierValue("unknown"),
+      });
+    }),
   );
 
   it.effect("returns the evaluator's failure and leaves the record it was given unchanged", () =>

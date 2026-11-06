@@ -411,6 +411,49 @@ describe("score", () => {
     );
   });
 
+  it("[I-9a] carries a stored completionStatus into the attempt, and fails InvalidRecord at decode, naming it, when it is not a single identifier", () => {
+    const stored = Result.getOrThrow(encodeRecord(fresh(item, "")));
+    const completed: StoredRecord = {
+      ...stored,
+      attempt: "submitted",
+      numAttempts: 1,
+      outcomes: {
+        ...stored.outcomes,
+        completionStatus: {
+          baseType: "identifier",
+          cardinality: "single",
+          values: [{ baseType: "identifier", value: "completed" }],
+        },
+      },
+    };
+    const counted: StoredRecord = {
+      ...stored,
+      outcomes: {
+        ...stored.outcomes,
+        completionStatus: {
+          baseType: "integer",
+          cardinality: "single",
+          values: [{ baseType: "integer", value: "1" }],
+        },
+      },
+    };
+
+    assert.deepStrictEqual(
+      Option.map(Result.getSuccess(score(accepted, {}, completed)), (after) =>
+        outcomeOf(after, "completionStatus"),
+      ),
+      Option.some(["completed"]),
+    );
+    assert.deepStrictEqual(
+      Option.map(failureOf(score(accepted, {}, counted)), (failure) =>
+        failure._tag === "InvalidRecord"
+          ? [failure._tag, failure.stage, failure.issue.includes('"completionStatus"')]
+          : [failure._tag],
+      ),
+      Option.some(["InvalidRecord", "decode", true]),
+    );
+  });
+
   it("fails RecordMismatch when the record belongs to another item", () => {
     const stored = Result.getOrThrow(encodeRecord(fresh(other.item, "")));
 

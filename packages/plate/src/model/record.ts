@@ -66,7 +66,8 @@ export const startingValue = (outcome: OutcomeDeclaration): Value =>
  * delivery engine maintains and no outcome declaration may name. It "starts with the reserved
  * value 'not_attempted'", "at the start of the first attempt it changes to the reserved value
  * 'unknown'", and response processing may set it (`info.txt:8488`). `runAttempt` in
- * `#plate/engine/attempt.ts` starts each attempt's processing with it at `unknown`.
+ * `#plate/engine/attempt.ts` starts the first attempt's processing with it at `unknown` and every
+ * later attempt's at the value the record holds.
  *
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#IV_Outcome
  */
@@ -82,8 +83,8 @@ export const completionStatusType: Pick<OutcomeDeclaration, "baseType" | "cardin
 
 /**
  * The two values the engine gives the built-in {@link completionStatus} itself: `not_attempted`
- * before any attempt, and `unknown` at the start of one. Response processing may set any
- * identifier.
+ * before any attempt, and `unknown` at the start of the first. Response processing may set any
+ * identifier, which later attempts keep.
  */
 export type CompletionStart = "not_attempted" | "unknown";
 
@@ -118,8 +119,8 @@ export const holdsCompletionStatus = (item: Item): boolean =>
 /**
  * Give each outcome of an item its starting value, the value a non-adaptive attempt resets it to,
  * and, where the item holds it ({@link holdsCompletionStatus}), the built-in
- * {@link completionStatus} at `not_attempted`, the value it holds before any attempt; an attempt
- * starts it at `unknown`.
+ * {@link completionStatus} at `not_attempted`, the value it holds before any attempt; the first
+ * attempt starts it at `unknown`.
  *
  * @param item The item.
  * @returns Each outcome at {@link startingValue}, keyed by identifier, and the built-in.
