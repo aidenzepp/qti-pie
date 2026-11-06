@@ -986,6 +986,8 @@ export interface Posting {
  * when the item is first presented, and processing would read NULL instead.
  *
  * It reads only a {@link Redacted}, so a host needs no type of the item's body to decode a post.
+ * It walks the body once and indexes its interactions by the response each binds, keeping
+ * document order, so its time grows with the item, not with its responses times its interactions.
  *
  * @example
  *   const values = postings(redact(accepted), instance).map(({ binding, options }) =>
@@ -998,10 +1000,18 @@ export interface Posting {
  *   interaction posts, has none.
  */
 export const postings = (redacted: Redacted, instance: string): readonly Posting[] => {
-  const interactions = interactionsIn(redacted.body);
+  const byResponse = new Map<string, Interaction[]>();
+  for (const interaction of interactionsIn(redacted.body)) {
+    const others = byResponse.get(interaction.response);
+    if (others === undefined) {
+      byResponse.set(interaction.response, [interaction]);
+    } else {
+      others.push(interaction);
+    }
+  }
 
   return redacted.responses.flatMap(({ baseType, cardinality, identifier }): readonly Posting[] => {
-    const bound = interactions.filter(({ response }) => response === identifier);
+    const bound = byResponse.get(identifier) ?? [];
     if (!isPosted(baseType) || bound.length === 0) {
       return [];
     }
