@@ -35,6 +35,15 @@ const walks: ReadonlyMap<string, readonly string[]> = new Map([
     ],
   ],
   [
+    "src/dev/keyboard-inline-choice.browser.test.ts",
+    [
+      "[Q-12] [keyboard] Tab order: QTI3-inline-choice.xml's item form, from its first control to its Submit, is the Node walk's tabOrder",
+      "[Q-12] [keyboard] QTI3-inline-choice.xml answered by keys: Tab to the select, type Y, Tab to Submit and Enter choose York and score 1",
+      "[Q-12] [keyboard] Tab order: inline.xml's item form, from its first control to its Submit, is the Node walk's tabOrder",
+      '[Q-12] [keyboard] inline.xml answered by keys: Submit with nothing chosen shows "Pick a planet first." in the Status region and keeps the shuffled order, "None of these" last; then J typed and Submit record Jupiter, scoring 1, with RESPONSE2 left NULL',
+    ],
+  ],
+  [
     "src/dev/keyboard-text.browser.test.ts",
     [
       "${tag} [keyboard] Tab order: ${label}'s item form, from its first control to its Submit, is the Node walk's tabOrder",
