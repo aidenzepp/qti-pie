@@ -24,7 +24,7 @@
  * ({@link attributeFields}, {@link nodeFields}).
  */
 import type { Law, LawSide } from "@bjornpagen/grizzle";
-import { Array as Arr, Option, Predicate, Result, Schema } from "effect";
+import { Array as Arr, Option, pipe, Predicate, Result, Schema } from "effect";
 import { keyText } from "#pantry/qti/limits.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 
@@ -866,8 +866,13 @@ const fieldsOf = (side: StoredSide): readonly string[] =>
 const lawSideOf = (side: StoredSide): LawSide => ({
   relation: sourceOf(side).name,
   selection: { conjuncts: [] },
-  terms: Arr.map(side.terms, (term): LawSide["terms"][number] =>
-    Predicate.isString(term) ? { field: term, kind: "field" } : { field: term.field, kind: "pred" },
+  terms: pipe(
+    side.terms,
+    Arr.map((term): LawSide["terms"][number] =>
+      Predicate.isString(term)
+        ? { field: term, kind: "field" }
+        : { field: term.field, kind: "pred" },
+    ),
   ),
 });
 

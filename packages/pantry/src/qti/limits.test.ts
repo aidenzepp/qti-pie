@@ -197,25 +197,6 @@ const isField = (value: unknown): value is FieldBase =>
   Predicate.hasProperty(value, "sql") && Predicate.isString(value.sql);
 
 /**
- * Read the type a relation's field is stored as: an accumulated or generated field's own type, a
- * drawn field's natural, and any other field itself.
- *
- * @param field - The field as grizzle keeps it.
- * @returns Its type, none for a value that is no field.
- */
-const fieldTypeOf = (field: unknown): Option.Option<FieldBase> => {
-  if (Predicate.hasProperty(field, "writing") && field.writing === "drawn") {
-    return Option.some(natural);
-  }
-
-  if (Predicate.hasProperty(field, "field") && isField(field.field)) {
-    return Option.some(field.field);
-  }
-
-  return isField(field) ? Option.some(field) : Option.none();
-};
-
-/**
  * The field descriptors of each stored relation of the composed schema, by relation and name.
  */
 const descriptors: ReadonlyMap<string, ReadonlyMap<string, FieldBase>> = new Map(
@@ -225,8 +206,19 @@ const descriptors: ReadonlyMap<string, ReadonlyMap<string, FieldBase>> = new Map
           [
             member.name,
             new Map(
-              Object.entries(member.fields).flatMap(([name, field]) =>
-                Option.toArray(Option.map(fieldTypeOf(field), (type) => [name, type] as const)),
+              Object.entries(member.fields).flatMap(
+                ([name, field]): (readonly [string, FieldBase])[] => {
+                  // An accumulated or generated field is stored as its own type, a drawn one as a natural.
+                  if (Predicate.hasProperty(field, "writing") && field.writing === "drawn") {
+                    return [[name, natural]];
+                  }
+
+                  const stored: unknown = Predicate.hasProperty(field, "field")
+                    ? field.field
+                    : field;
+
+                  return isField(stored) ? [[name, stored]] : [];
+                },
               ),
             ),
           ] as const,
@@ -243,7 +235,7 @@ const descriptors: ReadonlyMap<string, ReadonlyMap<string, FieldBase>> = new Map
  */
 const roomBeside = (fields: readonly FieldBase[]): Result.Result<number, string> =>
   Result.try({
-    catch: (refusal) => String(refusal),
+    catch: String,
     try: () => keyTextBytes(fields),
   });
 
