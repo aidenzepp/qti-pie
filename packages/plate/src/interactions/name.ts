@@ -10,15 +10,17 @@
  * ({@link resolvedLabelledby}); the payload keeps those ids alone, so no reference the renderer
  * writes names nothing.
  *
- * The renderer names a control only when the author gave it no name, by Q10's rule: each Control
- * of a text control with no Prompt and no `aria-label` or `aria-labelledby` (a blank `aria-label`,
- * and an `aria-labelledby` none of whose ids an element of the item carries, each counting as
- * none) is "Answer", or "Answer n of count", `n` its position among every Control the renderer
- * names in the item and `count` their number ({@link textControlName}); a Choice whose content
- * gives no text is "Choice n of count", `n` its position among the Choices as emitted and `count`
- * their number ({@link choiceControlName}). A Choice's content gives text when its text nodes, an
- * `img`'s `alt`, an element's `aria-label` or a notice hold anything but whitespace,
- * `aria-hidden="true"` content left out ({@link givesText}).
+ * The renderer names a control only when the author gave it no name, by Q10's rule. The text
+ * controls Q10 counts are a Text Entry's `input`, an Extended Text's `textarea`s and an Inline
+ * Choice's `select`: each Control of a text control with no Prompt, no Label whose content gives
+ * text (an Inline Choice's), and no `aria-label` or `aria-labelledby` (a blank `aria-label`, and an
+ * `aria-labelledby` none of whose ids an element of the item carries, each counting as none) is
+ * "Answer", or "Answer n of count", `n` its position among every Control the renderer names in the
+ * item and `count` their number ({@link textControlName}); a Choice whose content gives no text is
+ * "Choice n of count", `n` its position among the Choices as emitted and `count` their number
+ * ({@link choiceControlName}). A Choice's content gives text when its text nodes, an `img`'s
+ * `alt`, an element's `aria-label` or a notice hold anything but whitespace, `aria-hidden="true"`
+ * content left out ({@link givesText}).
  *
  * @module
  */
@@ -175,7 +177,8 @@ export const authorsName = (
 });
 
 /**
- * Name a Control of a text control that no Prompt names (§4.8, Q10).
+ * Name a Control of a text control that no Prompt or Label names (§4.8, Q10): a Text Entry's
+ * `input`, an Extended Text's `textarea` or an Inline Choice's `select`.
  *
  * The author's `aria-label` and `aria-labelledby` win ({@link authorsName}). A control with
  * neither, a blank `aria-label` and an `aria-labelledby` that names no id an element of the item
@@ -186,7 +189,8 @@ export const authorsName = (
  * @param name How the control is named, from the payload.
  * @param instance The item instance key, which scopes the author's ids.
  * @param locale The locale of the renderer's own text.
- * @param index The Control's index, from 0, among its text control's Controls: 0 for a Text Entry.
+ * @param index The Control's index, from 0, among its text control's Controls: 0 for a Text Entry
+ *   and an Inline Choice, which have one.
  * @returns The naming attributes.
  */
 export const textControlName = (

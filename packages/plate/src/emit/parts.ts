@@ -30,7 +30,7 @@ interface PartsOf {
 }
 
 /**
- * The owner of a group of parts: the item chrome, one of the interactions phase 1 renders, or the
+ * The owner of a group of parts: the item chrome, one of the interactions plate renders, or the
  * test chrome's navigation, `test-navigation`.
  *
  * It is also the first key of {@link PartOverrides}.
