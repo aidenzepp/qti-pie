@@ -396,7 +396,7 @@ const runLedger = (results: readonly TestResult[]): Ledger =>
   });
 
 /**
- * Give each engine of a ledger's browser runs with the browser results it passed and failed.
+ * List each engine of a ledger's browser runs with how many browser results it passed and failed.
  *
  * @param built The ledger.
  * @returns Each engine's name, passed count and failed count, in the runs' order.
@@ -693,10 +693,9 @@ describe("ledger/report.ts", () => {
     () =>
       Effect.gen(function* inPageCounts() {
         const browsers = yield* decodeReport(browserReportText, root);
-        const inPage = [
-          inPageResult("chromium", "has the DOM that Node lacks", "passed"),
-          inPageResult("webkit", "has the DOM that Node lacks", "passed"),
-        ];
+        const inPage = browserRun.engines.map(({ engine }) =>
+          inPageResult(engine, "has the DOM that Node lacks", "passed"),
+        );
 
         assert.deepStrictEqual(
           engineCounts(runLedger([...browsers, ...inPage])),

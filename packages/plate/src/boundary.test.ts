@@ -51,9 +51,9 @@ interface Crossing {
  * The specifiers the core may not load (rules `b454bdf7` and `6f47762b`, and the composition ruling
  * `a9d04969` points 1 and 5, so the one `"."` entry stays callable anywhere): the dev playground,
  * the example hosts, the conformance ledger, test support, the Node-only corpus reader, every Node
- * built-in, the HTML parser the tests use, the browser driver the browser tests use, the QTI
- * database package and grizzle. One that ends in `/` or `:` forbids every specifier it begins; any
- * other forbids itself and its subpaths.
+ * built-in, the HTML parser the tests use, the browser drivers and the Vitest provider the browser
+ * tests use, the QTI database package and grizzle. One that ends in `/` or `:` forbids every
+ * specifier it begins; any other forbids itself and its subpaths.
  */
 const forbiddenSpecifiers: readonly string[] = [
   "#plate/dev/",
@@ -63,7 +63,9 @@ const forbiddenSpecifiers: readonly string[] = [
   "#plate/document/corpus.ts",
   "node:",
   "parse5",
+  "playwright",
   "playwright-core",
+  "@vitest/browser-playwright",
   "@qti-pie/pantry",
   "@bjornpagen/grizzle",
 ];
@@ -181,8 +183,11 @@ describe("the core boundary's scanner", () => {
       "parse5/dist/index.js",
       "@qti-pie/pantry",
       "@bjornpagen/grizzle/schema",
+      "playwright",
+      "playwright/test",
       "playwright-core",
       "playwright-core/lib/server",
+      "@vitest/browser-playwright",
     ];
     const allowed = [
       "effect",
@@ -238,7 +243,7 @@ const readManifest = (): typeof Manifest.Type =>
   );
 
 describe("the core, from src/index.ts", () => {
-  it("loads no dev playground, example host, ledger, test support, corpus reader, Node built-in, parse5, playwright-core, pantry or grizzle", () => {
+  it("loads no dev playground, example host, ledger, test support, corpus reader, Node built-in, parse5, playwright, playwright-core, the Vitest provider, pantry or grizzle", () => {
     assert.deepStrictEqual(crossings(modules, ["src/index.ts"]), []);
   });
 
@@ -282,10 +287,14 @@ describe("the core, from src/index.ts", () => {
     );
   });
 
-  it("holds playwright-core at exactly 1.64.1 among the devDependencies, never the dependencies", () => {
+  it("holds playwright-core and playwright at exactly 1.64.1 and @vitest/browser-playwright at exactly 5.0.1 among the devDependencies, never the dependencies", () => {
     const { dependencies, devDependencies } = readManifest();
 
     assert.strictEqual(devDependencies["playwright-core"], "1.64.1");
+    assert.strictEqual(devDependencies["playwright"], "1.64.1");
+    assert.strictEqual(devDependencies["@vitest/browser-playwright"], "5.0.1");
     assert.notProperty(dependencies, "playwright-core");
+    assert.notProperty(dependencies, "playwright");
+    assert.notProperty(dependencies, "@vitest/browser-playwright");
   });
 });
