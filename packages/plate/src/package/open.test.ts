@@ -37,6 +37,8 @@ const cp = `{${manifestNamespace}}`;
 const corpusPackages = {
   begGuide: "QTI3_BeginnersGuide_Examples/BegGuide_March2025.zip.d",
   bpig: "QTI3_BPIG_Examples/BPIG_22April.zip.d",
+  caseWithOutcome: "qtiv3-examples/packaging/CASEWithOutcome/CASEWithOutcome.zip.d",
+  metaData: "qtiv3-examples/packaging/metaData/metaData.zip.d",
 } as const;
 
 /**
@@ -186,6 +188,64 @@ const resourceXml = (identifier: string, type: string, href: string): string =>
 const soleResource = `${cp}manifest/${cp}resources/${cp}resource`;
 
 /**
+ * LOM's namespace, which a resource's own metadata describes it in.
+ */
+const lomNamespace = "http://ltsc.ieee.org/xsd/LOM";
+
+/**
+ * The path step of an element in LOM's namespace, as a location spells it.
+ */
+const lomStep = `{${lomNamespace}}`;
+
+/**
+ * Write one resource whose own metadata holds one LOM record, and whose `href` names its one file.
+ *
+ * @param identifier The resource's identifier.
+ * @param type Its declared type.
+ * @param href Its document's path.
+ * @param general What the LOM record's `general` holds.
+ * @returns The resource's text.
+ */
+const describedXml = (identifier: string, type: string, href: string, general: string): string =>
+  `<resource identifier="${identifier}" type="${type}" href="${href}"><metadata><lom xmlns="${lomNamespace}"><general>${general}</general></lom></metadata><file href="${href}"/></resource>`;
+
+/**
+ * Write a LOM `general`'s identifiers, one `identifier` for each entry.
+ *
+ * @param entries Each identifier's entry.
+ * @returns The identifiers' text.
+ */
+const lomIdentifiers = (...entries: readonly string[]): string =>
+  entries.map((entry) => `<identifier><entry>${entry}</entry></identifier>`).join("");
+
+/**
+ * Write a LOM `general`'s title, one `string` for each value.
+ *
+ * @param strings The title's strings.
+ * @returns The title's text.
+ */
+const lomTitle = (...strings: readonly string[]): string =>
+  `<title>${strings.map((value) => `<string>${value}</string>`).join("")}</title>`;
+
+/**
+ * The path of a hand-built manifest's resource at a position among several.
+ *
+ * @param position The resource's 1-based position.
+ * @returns Its path.
+ */
+const resourceAt = (position: number): string =>
+  `${cp}manifest/${cp}resources/${cp}resource[${position}]`;
+
+/**
+ * The path of the LOM `general` in the own metadata of a resource at a path.
+ *
+ * @param resource The resource's path.
+ * @returns The `general`'s path.
+ */
+const generalAt = (resource: string): string =>
+  `${resource}/${cp}metadata/${lomStep}lom/${lomStep}general`;
+
+/**
  * Write an item that declares the given outcome variables, each a single float.
  *
  * @param identifier The item's identifier.
@@ -304,6 +364,25 @@ const corpusPackage = (directory: string) =>
 
     return new Map(paths.map((file, index) => [file, contents[index] ?? new Uint8Array()]));
   });
+
+/**
+ * Open an extracted corpus package from the cache.
+ *
+ * @param directory The package's directory under the corpus root, also its location.
+ * @returns Its verdict.
+ */
+const openCorpusPackage = (directory: string) =>
+  Effect.flatMap(corpusPackage(directory), (files) => openPackage(directory, files));
+
+/**
+ * Take the rule, document and detail of every refusal of a package verdict, none when it is not
+ * refused, for a refusal whose location these tests do not compare.
+ *
+ * @param verdict The package verdict.
+ * @returns The refusals' facts, in order.
+ */
+const unlocated = (verdict: PackageVerdict): Omit<Seen, "location">[] =>
+  refusalsOf(verdict).map(({ detail, document, rule }) => ({ detail, document, rule }));
 
 describe("package/open.ts", () => {
   describe("openPackage", () => {
@@ -667,6 +746,172 @@ describe("package/open.ts", () => {
           ["package-path-outside"],
         );
       }),
+    );
+
+    it.effect(
+      "refuses an item none of whose LOM identifier entries is its identifier as lom-identifier, at the LOM identifier (reading 62)",
+      () =>
+        Effect.gen(function* lomIdentifier() {
+          const open = (general: string) =>
+            openPackage(
+              location,
+              packageOf({
+                [manifestFile]: manifestXml(
+                  describedXml("A", "imsqti_item_xmlv3p0", "items/a.xml", general),
+                ),
+                "items/a.xml": itemXml("a"),
+              }),
+            );
+          const facts = { identifier: "a", path: "items/a.xml", reading: "62", resource: "A" };
+
+          assert.deepStrictEqual(refusalsOf(yield* open(lomIdentifiers("other"))), [
+            {
+              detail: { ...facts, metadata: "other" },
+              document: fileLocation(location, manifestFile),
+              location: { kind: "path", path: `${generalAt(soleResource)}/${lomStep}identifier` },
+              rule: "lom-identifier",
+            },
+          ]);
+          assert.deepStrictEqual(refusalsOf(yield* open(lomIdentifiers(" x\n y ", "b"))), [
+            {
+              detail: { ...facts, metadata: "x y", others: "1" },
+              document: fileLocation(location, manifestFile),
+              location: {
+                kind: "path",
+                path: `${generalAt(soleResource)}/${lomStep}identifier[1]`,
+              },
+              rule: "lom-identifier",
+            },
+          ]);
+          assert.deepStrictEqual(
+            documentVerdict(resourceOf(yield* open(lomIdentifiers("other")), "A")),
+            Option.some("accepted"),
+          );
+        }),
+    );
+
+    it.effect(
+      "refuses an item's and a test's LOM title that is not their title as lom-title (reading 62)",
+      () =>
+        Effect.gen(function* lomTitles() {
+          const verdict = yield* openPackage(
+            location,
+            packageOf({
+              [manifestFile]: manifestXml(
+                describedXml("T", "imsqti_test_xmlv3p0", "test.xml", lomTitle("Test", "Prüfung")),
+                describedXml("A", "imsqti_item_xmlv3p0", "items/a.xml", lomTitle("Item A")),
+              ),
+              "items/a.xml": itemXml("a", "SCORE"),
+              "test.xml": testXml("a.SCORE", ["a", "items/a.xml"]),
+            }),
+          );
+          assert.deepStrictEqual(refusalsOf(verdict), [
+            {
+              detail: {
+                metadata: "Test",
+                others: "1",
+                path: "test.xml",
+                reading: "62",
+                resource: "T",
+                title: "T",
+              },
+              document: fileLocation(location, manifestFile),
+              location: { kind: "path", path: `${generalAt(resourceAt(1))}/${lomStep}title` },
+              rule: "lom-title",
+            },
+            {
+              detail: {
+                metadata: "Item A",
+                path: "items/a.xml",
+                reading: "62",
+                resource: "A",
+                title: "a",
+              },
+              document: fileLocation(location, manifestFile),
+              location: { kind: "path", path: `${generalAt(resourceAt(2))}/${lomStep}title` },
+              rule: "lom-title",
+            },
+          ]);
+        }),
+    );
+
+    it.effect(
+      "opens a package whose LOM gives a matching entry and string, or no identifier or title, and passes over a stimulus's LOM (reading 62)",
+      () =>
+        Effect.gen(function* lomOutside() {
+          const verdict = yield* openPackage(
+            location,
+            packageOf({
+              [manifestFile]: manifestXml(
+                describedXml(
+                  "A",
+                  "imsqti_item_xmlv3p0",
+                  "items/a.xml",
+                  `${lomIdentifiers("x", " a\t")}${lomTitle("x", "  a ")}`,
+                ),
+                describedXml(
+                  "B",
+                  "imsqti_item_xmlv3p0",
+                  "items/b.xml",
+                  "<description><string>No identifier or title</string></description>",
+                ),
+                '<resource identifier="C" type="imsqti_item_xmlv3p0" href="items/c.xml"><metadata/><file href="items/c.xml"/></resource>',
+                describedXml(
+                  "S",
+                  "imsqti_stimulus_xmlv3p0",
+                  "passages/s.xml",
+                  `${lomIdentifiers("other")}${lomTitle("Other")}`,
+                ),
+              ),
+              "items/a.xml": itemXml("a"),
+              "items/b.xml": itemXml("b"),
+              "items/c.xml": itemXml("c"),
+              "passages/s.xml": `<qti-assessment-stimulus xmlns="${qti}" identifier="s" title="s"><qti-stimulus-body><p>s</p></qti-stimulus-body></qti-assessment-stimulus>`,
+            }),
+          );
+
+          assert.lengthOf(acceptedOf(verdict).items, 3);
+        }),
+    );
+
+    it.effect(
+      "refuses metaData by both rules and CASEWithOutcome by lom-title at its one item (reading 62)",
+      () =>
+        Effect.gen(function* lomCorpus() {
+          const { metaData } = corpusPackages;
+          const metaDataItem = { path: "choice.xml", reading: "62", resource: "choice" };
+          const { caseWithOutcome } = corpusPackages;
+
+          assert.deepStrictEqual(unlocated(yield* openCorpusPackage(metaData)), [
+            {
+              detail: { ...metaDataItem, identifier: "choice", metadata: "qti_v2_item_01" },
+              document: fileLocation(metaData, manifestFile),
+              rule: "lom-identifier",
+            },
+            {
+              detail: {
+                ...metaDataItem,
+                metadata: "Metadata Example Item #1",
+                title: "Unattended Luggage",
+              },
+              document: fileLocation(metaData, manifestFile),
+              rule: "lom-title",
+            },
+          ]);
+          assert.deepStrictEqual(unlocated(yield* openCorpusPackage(caseWithOutcome)), [
+            {
+              detail: {
+                metadata: "Item Using Curriculum Metadata Standards Anotation",
+                path: "A_403910368.xml",
+                reading: "62",
+                resource: "A_403910368",
+                title: "films - to watch (Simple Present)",
+              },
+              document: fileLocation(caseWithOutcome, manifestFile),
+              rule: "lom-title",
+            },
+          ]);
+        }),
     );
   });
 

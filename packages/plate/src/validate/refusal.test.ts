@@ -126,10 +126,33 @@ const addedRules = [
     path: "manifest/resources/resource/@type",
     rule: "resource-type-mismatch",
   },
+  {
+    detail: {
+      identifier: "choice",
+      metadata: "qti_v2_item_01",
+      path: "choice.xml",
+      reading: "62",
+      resource: "choice",
+    },
+    path: "manifest/resources/resource/metadata/{http://ltsc.ieee.org/xsd/LOM}lom/{http://ltsc.ieee.org/xsd/LOM}general/{http://ltsc.ieee.org/xsd/LOM}identifier",
+    rule: "lom-identifier",
+  },
+  {
+    detail: {
+      metadata: "Metadata Example Item #1",
+      others: "1",
+      path: "choice.xml",
+      reading: "62",
+      resource: "choice",
+      title: "Unattended Luggage",
+    },
+    path: "manifest/resources/resource/metadata/{http://ltsc.ieee.org/xsd/LOM}lom/{http://ltsc.ieee.org/xsd/LOM}general/{http://ltsc.ieee.org/xsd/LOM}title",
+    rule: "lom-title",
+  },
 ] as const;
 
 describe("refusalRules", () => {
-  it("lists the validator's, the verdict's and the reader's nineteen rules, then M2's eleven", () => {
+  it("lists the validator's, the verdict's and the reader's nineteen rules, then M2's thirteen", () => {
     assert.deepStrictEqual(
       [...refusalRules],
       [
@@ -163,6 +186,8 @@ describe("refusalRules", () => {
         "item-ref-unresolved",
         "ambiguous-reference",
         "resource-type-mismatch",
+        "lom-identifier",
+        "lom-title",
       ],
     );
   });

@@ -1173,10 +1173,15 @@ describe("the M2 witness: the packages a test is delivered from", () => {
 
         const minFiles = yield* openCorpusPackage(corpusPackages.minFiles);
 
-        // Its adaptive item sets `completion_status`, which it never declares and which is not the
-        // built-in `completionStatus` (info.txt:8488), so the package is refused for that item while
-        // its test and its hotspot item are accepted with their unsupported features marked.
+        // Its manifest's LOM gives its test another title, and its adaptive item another identifier
+        // and title, than their documents have (reading 62). That item also sets
+        // `completion_status`, which it never declares and which is not the built-in
+        // `completionStatus` (info.txt:8488), so the item is refused, while its test and its
+        // hotspot item are accepted with their unsupported features marked.
         assert.deepStrictEqual(refusalsOf(minFiles), [
+          ["lom-title", "imsmanifest.xml"],
+          ["lom-identifier", "imsmanifest.xml"],
+          ["lom-title", "imsmanifest.xml"],
           ["undeclared-variable", "example/adaptive.xml"],
           ["undeclared-variable", "example/adaptive.xml"],
         ]);

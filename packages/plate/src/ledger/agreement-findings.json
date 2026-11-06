@@ -56,34 +56,6 @@
     }
   },
   {
-    "file": "qtiv3-examples/packaging/CASEWithOutcome/CASEWithOutcome.zip",
-    "finding": "plate accepts the test and its 19 items, marking unsupported the test's selection, ordering, rubric blocks and outcome processing and the and, not and sum expressions of each item's response processing; it reads the outcome declarations resource for its root only. pantry refuses it lom-title: its model binds an item resource's LOM general title to the item's own title, and here item A_403910368's LOM title is not its title. plate reads no LOM metadata in M2, so it has no such rule; whether QTI 3 requires the two to match is a reading neither side has settled.",
-    "pantry": {
-      "rule": "lom-title",
-      "verdict": "refused"
-    },
-    "plate": {
-      "rules": [],
-      "verdict": "accepted-with-unsupported"
-    },
-    "ruling": {
-      "expectedWhile": "plate does not read LOM in M2",
-      "group": 2,
-      "source": "rule 43e7092f, the addendum to rule 564d5592 (operator, 2026-11-06)",
-      "state": {
-        "commit": "69dfc1a",
-        "pantry": {
-          "rule": "lom-title",
-          "verdict": "refused"
-        },
-        "plate": {
-          "rules": [],
-          "verdict": "accepted-with-unsupported"
-        }
-      }
-    }
-  },
-  {
     "file": "qtiv3-examples/packaging/basicFeedbackTest/basicFeedbackTest.zip",
     "finding": "plate leaves 1 of its 4 items unchecked for its MathML and accepts the test and the other 3 items, with unsupported features (test, modal, block and inline feedback, an adaptive item, a rubric block and outcome processing among them); a package with an unchecked document agrees with no verdict. pantry refuses it unmodeled-vocabulary: an element or attribute in it has no kinds file in pantry's model yet, which marks what pantry does not model, not a QTI rule the package breaks; its verdict file does not name which.",
     "pantry": {
@@ -107,34 +79,6 @@
         "plate": {
           "rules": [],
           "verdict": "unchecked"
-        }
-      }
-    }
-  },
-  {
-    "file": "qtiv3-examples/packaging/metaData/metaData.zip",
-    "finding": "plate accepts its one item, choice.xml. pantry refuses it lom-identifier: its model binds an item resource's LOM general identifier to the item's own identifier, and here the entry is qti_v2_item_01 while the item's identifier is choice. plate reads no LOM metadata in M2, so it has no such rule; whether QTI 3 requires the two to match is a reading neither side has settled.",
-    "pantry": {
-      "rule": "lom-identifier",
-      "verdict": "refused"
-    },
-    "plate": {
-      "rules": [],
-      "verdict": "accepted"
-    },
-    "ruling": {
-      "expectedWhile": "plate does not read LOM in M2",
-      "group": 2,
-      "source": "rule 564d5592 (operator, 2026-11-06)",
-      "state": {
-        "commit": "69dfc1a",
-        "pantry": {
-          "rule": "lom-identifier",
-          "verdict": "refused"
-        },
-        "plate": {
-          "rules": [],
-          "verdict": "accepted"
         }
       }
     }

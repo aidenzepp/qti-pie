@@ -14,7 +14,9 @@
  * `file` entries, a `dependency` names a resource, and every `href` stays inside the package's
  * root. The walk's refusals, the counts' and the rules' are reported together, in that order. What
  * needs the package's files or documents, which files exist and what each document's root is,
- * belongs to the package reader.
+ * belongs to the package reader. {@link resourceLom} reads what each resource's own LOM metadata
+ * gives as its object's identifier and title, which the package reader compares with the object's
+ * document (reading 62).
  *
  * The readings the manifest binds: `qtiMetadata` is admitted as a `cp:metadata` child or inside
  * `lom` (reading 32), a `controlfile` resource and a packaged XSD listed as a file are admitted
@@ -86,6 +88,31 @@ export interface ManifestResource {
 }
 
 /**
+ * What one LOM `general` gives as its object's identifier or its title: each value as written, in
+ * document order, and where the first element holding one is.
+ */
+export interface LomValues {
+  /**
+   * The path of the first `identifier`, or `title`, of the `general` that holds a value, where a
+   * refusal of the values points.
+   */
+  readonly location: string;
+  /**
+   * The text of each `identifier`'s `entry`, or of each `title`'s `string`.
+   */
+  readonly values: Arr.NonEmptyReadonlyArray<string>;
+}
+
+/**
+ * The identifier and title one LOM `general` in a resource's own metadata gives the object its
+ * document is, each none when the `general` gives none.
+ */
+export interface LomGeneral {
+  readonly identifier: Option.Option<LomValues>;
+  readonly title: Option.Option<LomValues>;
+}
+
+/**
  * A manifest {@link readManifest} read: the profile its `schemaversion` names and its resources in
  * document order.
  */
@@ -110,6 +137,11 @@ export class ManifestDefect extends Data.TaggedError("ManifestDefect")<{
  * content and passes over it, and so does the walk.
  */
 const noQtiTables: Tables = { elements: {}, types: {} };
+
+/**
+ * LOM's namespace, the IEEE LOM binding both profiles import for metadata.
+ */
+const lomNamespace = "http://ltsc.ieee.org/xsd/LOM";
 
 /**
  * Where an `href` leads: a path inside the package, as its segments, an absolute URI with its query
@@ -687,4 +719,83 @@ export const readManifest = (
     })),
     version,
   });
+};
+
+/**
+ * Take an element's children in LOM's namespace with one local name.
+ *
+ * @param element The element.
+ * @param local The children's local name.
+ * @returns The children, in document order.
+ */
+const lomChildren = (element: SourceElement, local: string): readonly SourceElement[] =>
+  element.children.filter(
+    (child): child is SourceElement =>
+      child.kind === "element" && child.namespace === lomNamespace && child.local === local,
+  );
+
+/**
+ * Gather the values a LOM `general` gives through its children of one name: the text of each of
+ * their children of another name, as written.
+ *
+ * @param general The `general`.
+ * @param holder The local name of the children that hold the values, `identifier` or `title`.
+ * @param value The local name of each value's element, `entry` or `string`.
+ * @param paths Each element's path, as the walk spells it.
+ * @returns The values with the path of the first holder that holds one, none when none does.
+ */
+const lomValues = (
+  general: SourceElement,
+  holder: string,
+  value: string,
+  paths: ReadonlyMap<SourceElement, string>,
+): Option.Option<LomValues> => {
+  const [first, ...rest] = lomChildren(general, holder).flatMap((element) =>
+    lomChildren(element, value).map(
+      (child) => [element, child.children.map((part) => writtenText(part)).join("")] as const,
+    ),
+  );
+
+  return first === undefined
+    ? Option.none()
+    : Option.some({
+        location: paths.get(first[0]) ?? "",
+        values: [first[1], ...rest.map(([, text]) => text)],
+      });
+};
+
+/**
+ * Read the LOM `general` of each resource's own metadata, which reading 62 compares with the
+ * resource's document.
+ *
+ * Every resource of the manifest's `resources` is keyed by its location, the path its
+ * {@link ManifestResource} holds as `location`, with each `general` of each `lom` its `metadata`
+ * holds, in document order, none when it holds no LOM. The manifest's own metadata and a file's are
+ * not read: the metadata binding ties only a resource's to the object its document is. Values stay
+ * as written; comparing them is the package reader's.
+ *
+ * @param source A manifest {@link readManifest} read.
+ * @returns Each resource's LOM generals, keyed by its location.
+ */
+export const resourceLom = (source: SourceDocument): ReadonlyMap<string, readonly LomGeneral[]> => {
+  const paths = new Map(Array.from(walk(source), (visit) => [visit.element, visit.path]));
+
+  return new Map(
+    childrenNamed(source.root, "resources").flatMap((resources) =>
+      childrenNamed(resources, "resource").map(
+        (resource) =>
+          [
+            paths.get(resource) ?? "",
+            childrenNamed(resource, "metadata").flatMap((metadata) =>
+              lomChildren(metadata, "lom").flatMap((lom) =>
+                lomChildren(lom, "general").map((general): LomGeneral => ({
+                  identifier: lomValues(general, "identifier", "entry", paths),
+                  title: lomValues(general, "title", "string", paths),
+                })),
+              ),
+            ),
+          ] as const,
+      ),
+    ),
+  );
 };

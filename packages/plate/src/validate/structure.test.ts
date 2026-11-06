@@ -838,13 +838,12 @@ const markupTemplate =
   "qti-assessment-item/qti-item-body/qti-portable-custom-interaction/qti-interaction-markup/template";
 
 /**
- * Construct a test whose one section's `qti-ordering`, with its `##other` `lax` element wildcard,
- * holds the given children.
+ * Construct a test of one part whose one section holds the given child.
  *
- * @param children The ordering's children.
+ * @param child The section's child.
  * @returns The test as a source document.
  */
-const ordered = (...children: readonly SourceChild[]): SourceDocument =>
+const sectioned = (child: SourceElement): SourceDocument =>
   doc(
     location,
     el(
@@ -862,7 +861,7 @@ const ordered = (...children: readonly SourceChild[]): SourceDocument =>
             el(
               "qti-assessment-section",
               [attr("identifier", "section"), attr("title", "Section"), attr("visible", "true")],
-              [el("qti-ordering", [], children)],
+              [child],
             ),
           ],
         ),
@@ -871,9 +870,34 @@ const ordered = (...children: readonly SourceChild[]): SourceDocument =>
   );
 
 /**
+ * Construct a test whose one section's `qti-ordering`, with its `##other` `lax` element wildcard,
+ * holds the given children.
+ *
+ * @param children The ordering's children.
+ * @returns The test as a source document.
+ */
+const ordered = (...children: readonly SourceChild[]): SourceDocument =>
+  sectioned(el("qti-ordering", [], children));
+
+/**
  * The path of the ordering {@link ordered} builds.
  */
 const ordering = "qti-assessment-test/qti-test-part/qti-assessment-section/qti-ordering";
+
+/**
+ * Construct a test whose one section's `qti-selection`, with its `##other` `lax` element wildcard,
+ * selects one child and holds the given children.
+ *
+ * @param children The selection's children.
+ * @returns The test as a source document.
+ */
+const selected = (...children: readonly SourceChild[]): SourceDocument =>
+  sectioned(el("qti-selection", [attr("select", "1")], children));
+
+/**
+ * The path of the selection {@link selected} builds.
+ */
+const selection = "qti-assessment-test/qti-test-part/qti-assessment-section/qti-selection";
 
 /**
  * An `id` that is no `NCName`, which every table under test declares as one.
@@ -2591,6 +2615,35 @@ describe("checkStructure", () => {
           elementAt(nested, `${custom}/qti-assessment-item`),
         ),
       );
+    });
+  });
+
+  describe("reading 61: QTI's own elements in qti-ordering's extension slot", () => {
+    it("relies on the committed tables: qti-weight is declared only locally, and qti-selection's slot is ##other lax too", () => {
+      assert.isFalse(generatedTables.elements["qti-weight"]?.global ?? true);
+      assert.deepStrictEqual(generatedTables.elements["qti-selection"]?.anyElement, {
+        namespace: "##other",
+        process: "lax",
+      });
+    });
+
+    it("accepts a QTI element in qti-ordering's slot as extension content, walking nothing below it", () => {
+      const weight = el("qti-weight", [attr("identifier", "W"), attr("value", "2")]);
+      const holding = ordered(el("qti-weight", [attr("identifier", "W")], [badDiv, looseChoice]));
+      const governing = governingTables(holding, generatedTables);
+
+      assert.deepStrictEqual(found(ordered(weight), generatedTables), []);
+      assert.deepStrictEqual(found(holding, generatedTables), []);
+      assert.isFalse(governing.has(elementAt(holding, `${ordering}/qti-weight`)));
+      assert.isFalse(governing.has(elementAt(holding, `${ordering}/qti-weight/div`)));
+    });
+
+    it("still refuses a QTI element in qti-selection's slot, which reading 61 does not cover", () => {
+      const weight = el("qti-weight", [attr("identifier", "W"), attr("value", "2")]);
+
+      assert.deepStrictEqual(found(selected(weight), generatedTables), [
+        ["unknown-element", at(`${selection}/qti-weight`)],
+      ]);
     });
   });
 

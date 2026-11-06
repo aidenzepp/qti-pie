@@ -3,8 +3,8 @@ import { Effect, Option, Result } from "effect";
 import type { Array as Arr } from "effect";
 import { readCorpusFile } from "#plate/document/corpus.ts";
 import { readSource } from "#plate/document/read.ts";
-import { readManifest } from "#plate/package/manifest.ts";
-import type { Manifest, ManifestResource } from "#plate/package/manifest.ts";
+import { readManifest, resourceLom } from "#plate/package/manifest.ts";
+import type { LomValues, Manifest, ManifestResource } from "#plate/package/manifest.ts";
 import type { Refusal, RefusalRule } from "#plate/validate/refusal.ts";
 import { manifestNamespace } from "#plate/vocabulary.ts";
 
@@ -22,6 +22,11 @@ const imsCpNamespace = "http://www.imsglobal.org/xsd/imscp_v1p1";
  * The path step of an element in the manifest's namespace, as a refusal's location spells it.
  */
 const cp = `{${manifestNamespace}}`;
+
+/**
+ * The path step of an element in LOM's namespace, as a location spells it.
+ */
+const lom = "{http://ltsc.ieee.org/xsd/LOM}";
 
 /**
  * The location every hand-built manifest in these tests carries.
@@ -724,4 +729,61 @@ describe("package/manifest.ts", () => {
       );
     }),
   );
+
+  describe("resourceLom", () => {
+    it.effect(
+      "gives each resource the identifier entries and title strings of its own LOM's general, as written, with where the first of each is (reading 62)",
+      () =>
+        Effect.gen(function* ownLom() {
+          const general =
+            '<lom:general><lom:identifier><lom:catalog>c</lom:catalog><lom:entry> a </lom:entry></lom:identifier><lom:identifier><lom:entry>other</lom:entry></lom:identifier><lom:title><lom:string language="en">Item  A</lom:string><lom:string language="de">Aufgabe A</lom:string></lom:title></lom:general>';
+          const titleOnly =
+            "<lom:general><lom:title><lom:string>Item B</lom:string></lom:title></lom:general>";
+          const manifestLom =
+            "<lom:lom><lom:general><lom:identifier><lom:entry>M</lom:entry></lom:identifier></lom:general></lom:lom>";
+          const source = yield* readSource(
+            location,
+            new TextEncoder().encode(
+              manifestXml(
+                "3.0.0",
+                [
+                  `<resource identifier="a" type="imsqti_item_xmlv3p0" href="items/a.xml"><metadata><lom:lom>${general}</lom:lom></metadata><file href="items/a.xml"/></resource>`,
+                  `<resource identifier="b" type="imsqti_item_xmlv3p0" href="items/b.xml"><metadata><lom:lom>${titleOnly}</lom:lom></metadata><file href="items/b.xml"/></resource>`,
+                  `<resource identifier="c" type="imsqti_item_xmlv3p0" href="items/c.xml"><file href="items/c.xml"><metadata>${manifestLom}</metadata></file></resource>`,
+                ].join(""),
+                manifestLom,
+              ),
+            ),
+          );
+          const manifest = manifestOf(readManifest(source));
+          const lomOf = resourceLom(source);
+          const generalOf = (resource: string) =>
+            `${resourceOf(manifest, resource).location}/${cp}metadata/${lom}lom/${lom}general`;
+
+          assert.deepStrictEqual(lomOf.get(resourceOf(manifest, "a").location), [
+            {
+              identifier: Option.some<LomValues>({
+                location: `${generalOf("a")}/${lom}identifier[1]`,
+                values: [" a ", "other"],
+              }),
+              title: Option.some<LomValues>({
+                location: `${generalOf("a")}/${lom}title`,
+                values: ["Item  A", "Aufgabe A"],
+              }),
+            },
+          ]);
+          assert.deepStrictEqual(lomOf.get(resourceOf(manifest, "b").location), [
+            {
+              identifier: Option.none(),
+              title: Option.some<LomValues>({
+                location: `${generalOf("b")}/${lom}title`,
+                values: ["Item B"],
+              }),
+            },
+          ]);
+          assert.deepStrictEqual(lomOf.get(resourceOf(manifest, "c").location), []);
+          assert.strictEqual(lomOf.size, 3);
+        }),
+    );
+  });
 });

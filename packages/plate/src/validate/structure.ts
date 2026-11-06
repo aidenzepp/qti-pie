@@ -18,12 +18,14 @@
  * tables define is kept unchecked (reading 50), foreign content whose `xsi:type` names a simple
  * type, built in or in the tables, has its attributes and element children refused and its text
  * accepted unchecked (reading 60), and any other element is passed over while its children are
- * admitted laxly in turn. On every element it walks it judges `xsi:type` and `xsi:nil` as XML
- * Schema judges them (reading 47), and no attribute wildcard admits either: a type is valid when it
- * names the element's declared type or a type derived from it, and `xsi:nil` never is, because no
- * table records a nillable element. After a valid `xsi:type` naming a type of the tables, that
- * type's own table governs the element's attributes, text and children in place of its name's
- * (AD-9); {@link governingTables} gives the table that governs each element the walk checks.
+ * admitted laxly in turn. A QTI element in `qti-ordering`'s `##other` slot, which the XSD refuses,
+ * is kept as extension content and passed over with everything below it (reading 61). On every
+ * element it walks it judges `xsi:type` and `xsi:nil` as XML Schema judges them (reading 47), and
+ * no attribute wildcard admits either: a type is valid when it names the element's declared type or
+ * a type derived from it, and `xsi:nil` never is, because no table records a nillable element.
+ * After a valid `xsi:type` naming a type of the tables, that type's own table governs the element's
+ * attributes, text and children in place of its name's (AD-9); {@link governingTables} gives the
+ * table that governs each element the walk checks.
  *
  * Over the XSD's rules it applies the shared readings that set the XSD aside where the walk can see
  * them, each a row of {@link readingRows}: attributes narrowed or retyped, `data-*` names,
@@ -1102,6 +1104,15 @@ const describeInstanceTypes = (table: ElementTable): string => {
 };
 
 /**
+ * The QTI elements whose `##other` element wildcard also admits QTI's own namespace, by local name
+ * (reading 61): `qti-ordering`, whose extension tags the information model allows to be "reused QTI
+ * ASI tags" (section 5.98.3) where the XSD admits only other namespaces. Such a child is extension
+ * content, never read as QTI. `qti-selection` is not one: its extension tags "must be new tags"
+ * (section 5.129.4), so a QTI element there stays refused.
+ */
+const ownNamespaceSlots: ReadonlySet<string> = new Set(["qti-ordering"]);
+
+/**
  * The QTI roots reading 6 keeps as foreign content when lax wildcard content holds one: the item,
  * test, section and stimulus roots and the two processing roots, by local name.
  */
@@ -1826,8 +1837,10 @@ const admitLaxly = (
  * parent's table names is checked when it is tabled and has a table, refused when it is tabled and
  * has none, and passed over in any other namespace. A child only the parent's element wildcard
  * matches, `##other` read against the namespace of the parent's tables, is admitted laxly when the
- * wildcard is `lax`, and passed over with everything below it when it is `strict` or `skip`. Any
- * other child is refused.
+ * wildcard is `lax`, and passed over with everything below it when it is `strict` or `skip`. A QTI
+ * child of one of {@link ownNamespaceSlots} that its table does not name sits in the wildcard's
+ * slot, so it is passed over with everything below it as extension content (reading 61). Any other
+ * child is refused.
  *
  * @param element The element.
  * @param parent Its parent, none for the root.
@@ -1887,6 +1900,15 @@ const admit = (
   }
 
   const wildcard = governed.table.anyElement;
+  if (
+    wildcard !== undefined &&
+    element.namespace === qtiNamespace &&
+    parent.value.namespace === qtiNamespace &&
+    ownNamespaceSlots.has(parent.value.local)
+  ) {
+    return { kind: "pass" };
+  }
+
   if (wildcard === undefined || !wildcardAdmits(wildcard, element.namespace, governed.namespace)) {
     return { kind: "unknown", reading: Option.none() };
   }

@@ -15,7 +15,10 @@
  *   templates;
  * - Each test's item refs resolve against the test's own path to an item resource the manifest lists
  *   (`item-ref-unresolved`), and each dotted reference in it is judged by reading 48 against the
- *   items they resolve to and its parts and sections (`ambiguous-reference`).
+ *   items they resolve to and its parts and sections (`ambiguous-reference`);
+ * - An item or test resource whose own LOM metadata gives identifier entries or title strings gives
+ *   one equal to its document's `identifier` and `title` (`lom-identifier` and `lom-title`, reading
+ *   62).
  *
  * A resource with no `href`, or with an absolute one (reading 35), names no document the package
  * holds, so nothing of it is read. The package's verdict follows from its parts: `refused` when
@@ -35,8 +38,8 @@ import { attributePath, qtiNamespace, walk } from "#plate/document/source.ts";
 import type { SourceDocument, SourceElement } from "#plate/document/source.ts";
 import { itemRefsIn } from "#plate/model/item-refs.ts";
 import { trimXmlSpace } from "#plate/model/values.ts";
-import { readManifest } from "#plate/package/manifest.ts";
-import type { Manifest, ManifestResource } from "#plate/package/manifest.ts";
+import { readManifest, resourceLom } from "#plate/package/manifest.ts";
+import type { LomGeneral, LomValues, Manifest, ManifestResource } from "#plate/package/manifest.ts";
 import { checkFiles, fileLocation, manifestFile, packageFiles } from "#plate/package/store.ts";
 import { Refusal } from "#plate/validate/refusal.ts";
 import type { Location, RefusalRule } from "#plate/validate/refusal.ts";
@@ -227,6 +230,12 @@ const qtiTypes: ReadonlySet<string> = new Set(
 const rootOfType: ReadonlyMap<string, string> = new Map<string, string>(resourceRoots);
 
 /**
+ * The resource types whose document reading 62 ties to the resource's LOM metadata: an item and a
+ * test.
+ */
+const lomBoundTypes: ReadonlySet<string> = new Set(["imsqti_item_xmlv3p0", "imsqti_test_xmlv3p0"]);
+
+/**
  * The variables every item has besides those it declares (QTI's built-in item variables).
  */
 const itemBuiltIns: ReadonlySet<string> = new Set(["completionStatus", "duration", "numAttempts"]);
@@ -271,6 +280,15 @@ const occurrenceForm = /^\d+\.(?<variable>.+)$/su;
  * A run of XML whitespace inside an attribute value.
  */
 const xmlWhitespaceRun = /[\t\n\r ]+/gu;
+
+/**
+ * Collapse a value's XML whitespace: its outer whitespace removed and each inner run of it one
+ * space.
+ *
+ * @param value The value as written.
+ * @returns The value collapsed.
+ */
+const collapse = (value: string): string => trimXmlSpace(value).replaceAll(xmlWhitespaceRun, " ");
 
 /**
  * Construct a refusal the package reader gives.
@@ -474,6 +492,99 @@ const checkRoots = (
   });
 
 /**
+ * Compare each item and test resource's own LOM metadata with its document's `identifier` and
+ * `title` (reading 62).
+ *
+ * Each `general` of the resource's LOM that gives identifier entries must give one equal to the
+ * document's `identifier`, or the resource is `lom-identifier` at the `general`'s first
+ * `identifier`; one that gives title strings must give one equal to its `title`, or it is
+ * `lom-title` at its first `title`. Both sides are compared with their whitespace collapsed. The
+ * detail names the `resource`, the document's `path`, its `identifier` or `title`, the first LOM
+ * value as `metadata`, how many other values there are as `others` when there are any, and the
+ * `reading`, each value collapsed. A `general` that gives neither is outside the rule, and so is a
+ * document the reader cannot read, one whose root is not the one its type names (`checkRoots`
+ * refuses it) and one that lacks the attribute (its own verdict refuses it).
+ *
+ * @param manifest The manifest.
+ * @param lom Each resource's LOM generals, keyed by its location.
+ * @param documents The package's documents.
+ * @param manifestLocation The manifest's location, which each refusal carries.
+ * @returns The refusals, in the manifest's order, each `general`'s identifier before its title.
+ */
+const checkLom = (
+  manifest: Manifest,
+  lom: ReadonlyMap<string, readonly LomGeneral[]>,
+  documents: ReadonlyMap<string, Document>,
+  manifestLocation: string,
+): readonly Refusal[] =>
+  manifest.resources.flatMap((resource) => {
+    const expected = lomBoundTypes.has(resource.type) ? rootOfType.get(resource.type) : undefined;
+    const path = Option.getOrUndefined(documentPath(resource));
+    const source = path === undefined ? undefined : documents.get(path)?.source;
+    if (
+      expected === undefined ||
+      path === undefined ||
+      source === undefined ||
+      Result.isFailure(source)
+    ) {
+      return [];
+    }
+
+    const { root } = source.success;
+    if (root.namespace !== qtiNamespace || root.local !== expected) {
+      return [];
+    }
+
+    /**
+     * Refuse the values one LOM `general` gives for an attribute when none equals the document's.
+     *
+     * @param rule The rule a mismatch breaks.
+     * @param attribute The document's attribute the values describe.
+     * @param given The values the `general` gives, none when it gives none.
+     * @returns The refusal, or none when a value matches, the `general` gives none or the
+     *   document has no such attribute.
+     */
+    const compare = (
+      rule: "lom-identifier" | "lom-title",
+      attribute: "identifier" | "title",
+      given: Option.Option<LomValues>,
+    ): readonly Refusal[] => {
+      const own = Option.getOrUndefined(Option.map(attributeOf(root, attribute), collapse));
+      const values = Option.getOrUndefined(given);
+      if (
+        own === undefined ||
+        values === undefined ||
+        values.values.some((value) => collapse(value) === own)
+      ) {
+        return [];
+      }
+
+      const facts = {
+        [attribute]: own,
+        metadata: collapse(values.values[0]),
+        path,
+        reading: "62",
+        resource: resource.identifier,
+      };
+      const others = values.values.length - 1;
+
+      return [
+        refuse(
+          manifestLocation,
+          rule,
+          values.location,
+          others > 0 ? { ...facts, others: others.toString() } : facts,
+        ),
+      ];
+    };
+
+    return (lom.get(resource.location) ?? []).flatMap((general) => [
+      ...compare("lom-identifier", "identifier", general.identifier),
+      ...compare("lom-title", "title", general.title),
+    ]);
+  });
+
+/**
  * The variables an item's document declares and the built-ins every item has, which a reading of
  * a dotted reference may name.
  *
@@ -596,7 +707,7 @@ const judgeTest = (
     if (identifier !== undefined && isQti(element, durationScopes)) {
       durations.add(identifier);
     } else if (identifier !== undefined && href !== undefined && isQti(element, itemRefElements)) {
-      const written = trimXmlSpace(href).replaceAll(xmlWhitespaceRun, " ");
+      const written = collapse(href);
       const resolved = resolveReference(testPath, written);
       if (Option.isSome(resolved) && itemPaths.has(resolved.value)) {
         refs.set(identifier, resolved.value);
@@ -803,10 +914,11 @@ const contentsOf = (
 };
 
 /**
- * Judge a package whose manifest is read: the file rules, the documents, the roots and the tests,
- * then the verdict over them.
+ * Judge a package whose manifest is read: the file rules, the documents, the roots, the LOM
+ * metadata and the tests, then the verdict over them.
  *
  * @param manifest The manifest.
+ * @param lom Each resource's LOM generals, keyed by its location.
  * @param files The package's files, as the host gave them.
  * @param held The package's files, keyed by normal form.
  * @param location The package's location.
@@ -814,6 +926,7 @@ const contentsOf = (
  */
 const judgeContents = Effect.fnUntraced(function* judgeContents(
   manifest: Manifest,
+  lom: ReadonlyMap<string, readonly LomGeneral[]>,
   files: ReadonlyMap<string, Uint8Array>,
   held: ReadonlyMap<string, Uint8Array>,
   location: string,
@@ -853,6 +966,7 @@ const judgeContents = Effect.fnUntraced(function* judgeContents(
   const [first, ...rest] = [
     ...(Result.isFailure(fileRules) ? fileRules.failure : []),
     ...checkRoots(manifest, documents, fileLocation(location, manifestFile)),
+    ...checkLom(manifest, lom, documents, fileLocation(location, manifestFile)),
     ...testRefusals,
     ...verdicts.flatMap((verdict) => (verdict.verdict === "refused" ? verdict.refusals : [])),
   ];
@@ -914,7 +1028,13 @@ const readPackage = Effect.fnUntraced(function* readPackage(
     return refusedUnread(location, manifest.failure);
   }
 
-  return yield* judgeContents(manifest.success, files, held.success, location);
+  return yield* judgeContents(
+    manifest.success,
+    resourceLom(source.success),
+    files,
+    held.success,
+    location,
+  );
 });
 
 /**
