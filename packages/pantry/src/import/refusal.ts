@@ -77,6 +77,9 @@ export const ImportRule = Schema.Literals([
   "resource-file-present",
   "lom-general-single",
   "lom-title-single",
+  // lom-identifier and lom-title are backed by normative text (decision 307; reading 62): the
+  // ASI Information Model 4.1.1 and 4.4.1 (identifier) and 4.1.2 (title), "MUST be the same", and
+  // the metadata binding 2.7.1.1 (#Gen1) and 2.7.1.2 (#Gen2).
   "lom-identifier",
   "lom-title",
   "qti-metadata-single",
@@ -1019,6 +1022,8 @@ const fileReferenceRule = (from: LawSide, to: LawSide): Rule | undefined => {
 };
 
 const containedRule = (from: LawSide, to: LawSide): Rule | undefined => {
+  // The next two rules enforce "MUST be the same" (ASI Information Model 4.1.1, 4.4.1 and 4.1.2;
+  // metadata binding 2.7.1.1 #Gen1 and 2.7.1.2 #Gen2; decision 307, reading 62).
   if (from.relation === "LomObjectIdentifier") {
     return "lom-identifier";
   }
