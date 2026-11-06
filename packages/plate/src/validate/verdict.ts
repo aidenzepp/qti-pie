@@ -1414,6 +1414,44 @@ const wordings = {
       `point the item ref's ${code("href")} at an item resource the manifest lists, or list the item as a resource of the package`,
     );
   },
+  /**
+   * Reading 62's identifier rule. Its facts are the package reader's: the `resource`, its
+   * document's `path` and `identifier`, the first LOM identifier entry as `metadata`, how many
+   * other entries there are as `others` when there are any, and the `reading`.
+   */
+  "lom-identifier": (refusal) => {
+    const identifier = code(fact(refusal, "identifier", ""));
+    const metadata = code(fact(refusal, "metadata", ""));
+    const others = Option.match(optionalFact(refusal, "others"), {
+      onNone: () => "",
+      onSome: (count) => ` and ${count} other ${count === "1" ? "entry" : "entries"}`,
+    });
+
+    return sentence(
+      refusal,
+      `The document ${code(fact(refusal, "path", ""))} has the identifier ${identifier}, and the LOM metadata of its resource ${code(fact(refusal, "resource", ""))} gives ${metadata}${others} instead; an item's or test's identifier must be one its LOM metadata gives${citation(refusal)}.`,
+      `make one of the resource's LOM identifier entries ${identifier}, or change the document's ${code("identifier")} to ${metadata}`,
+    );
+  },
+  /**
+   * Reading 62's title rule. Its facts are the package reader's: the `resource`, its document's
+   * `path` and `title`, the first LOM title string as `metadata`, how many other strings there are
+   * as `others` when there are any, and the `reading`.
+   */
+  "lom-title": (refusal) => {
+    const title = code(fact(refusal, "title", ""));
+    const metadata = code(fact(refusal, "metadata", ""));
+    const others = Option.match(optionalFact(refusal, "others"), {
+      onNone: () => "",
+      onSome: (count) => ` and ${count} other ${count === "1" ? "string" : "strings"}`,
+    });
+
+    return sentence(
+      refusal,
+      `The document ${code(fact(refusal, "path", ""))} has the title ${title}, and the LOM metadata of its resource ${code(fact(refusal, "resource", ""))} gives ${metadata}${others} instead; an item's or test's title must be one its LOM metadata gives${citation(refusal)}.`,
+      `make one of the resource's LOM title strings ${title}, or change the document's ${code("title")} to ${metadata}`,
+    );
+  },
   "misplaced-element": (refusal) => {
     const { cite, element } = named(refusal);
 

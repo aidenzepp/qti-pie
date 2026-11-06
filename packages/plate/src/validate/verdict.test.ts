@@ -1645,6 +1645,55 @@ const m2Wordings: readonly {
       "imsqti_stimulus_xmlv3p0",
     ],
   },
+  {
+    args: [
+      "lom-identifier",
+      "package/imsmanifest.xml",
+      { kind: "path", path: "manifest/resources/resource/metadata/lom/general/identifier" },
+      {
+        identifier: "choice",
+        metadata: "qti_v2_item_01",
+        path: "choice.xml",
+        reading: "62",
+        resource: "item-choice",
+      },
+    ],
+    name: "lom-identifier",
+    spans: ["choice.xml", "choice", "item-choice", "qti_v2_item_01", "identifier"],
+  },
+  {
+    args: [
+      "lom-identifier",
+      "package/imsmanifest.xml",
+      { kind: "path", path: "manifest/resources/resource/metadata/lom/general/identifier[1]" },
+      {
+        identifier: "choice",
+        metadata: "qti_v2_item_01",
+        others: "2",
+        path: "choice.xml",
+        reading: "62",
+        resource: "item-choice",
+      },
+    ],
+    name: "lom-identifier with other entries",
+    spans: ["choice.xml", "choice", "item-choice", "qti_v2_item_01", "identifier"],
+  },
+  {
+    args: [
+      "lom-title",
+      "package/imsmanifest.xml",
+      { kind: "path", path: "manifest/resources/resource/metadata/lom/general/title" },
+      {
+        metadata: "Metadata Example Item #1",
+        path: "choice.xml",
+        reading: "62",
+        resource: "choice",
+        title: "Unattended Luggage",
+      },
+    ],
+    name: "lom-title",
+    spans: ["choice.xml", "choice", "Unattended Luggage", "Metadata Example Item #1", "title"],
+  },
 ];
 
 describe("describeRefusal", () => {
