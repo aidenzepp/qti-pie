@@ -31,6 +31,7 @@ import type { QueryResultRow } from "pg";
 import { describe } from "vitest";
 import { readXml } from "@qti-pie/crust/read.ts";
 import {
+  AttributeName,
   AttributeSlot,
   Banned,
   BarredOf,
@@ -46,6 +47,7 @@ import {
   TypeName,
 } from "#pantry/grammar/install.ts";
 import { loginConnection } from "#pantry/db/connection.ts";
+import { rowsOf as identityRowsOf } from "#pantry/import/overlays/identity.ts";
 import { foldGrammarOf, shredGrammarOf } from "#pantry/model/composed.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { fold } from "#pantry/model/folds.ts";
@@ -905,6 +907,207 @@ const foldedOf = (xml: string) =>
   });
 
 /**
+ * Read a document's text as shred and the host's fold read it, in a schema version, with the tree
+ * shred gives, which the overlays' builders read.
+ *
+ * @param xml - The document.
+ * @param version - Its schema version, as its manifest would declare it.
+ * @returns Its tree and its folded rows.
+ */
+const foldedAt = (xml: string, version: (typeof schemaVersions)[number]) =>
+  Effect.gen(function* folded() {
+    const document = yield* Effect.orDie(readXml(new TextEncoder().encode(xml)));
+    const tree = yield* Effect.orDie(shred(document, version, shredGrammarOf(grammar)));
+
+    return {
+      rows: yield* Effect.orDie(Effect.fromResult(fold(tree, idOf, foldGrammarOf(grammar)))),
+      tree,
+    };
+  });
+
+/**
+ * The comment on an `Attribute` row's copy of its element's attribute count.
+ */
+const attributeCount = "the owner's count of the family Node.attributes";
+
+/**
+ * A document's `Attribute` rows as a direct writer sends them, each column's SQL literal by its
+ * name, and the copy of the owner's count as `copy`: the fold's fields, the slot the fold steps
+ * (`attrs` without the slots before it), and the counts of the families an attribute owns, its
+ * entity references and its open name from the document's rows; no witness of these cases holds an
+ * IDREF attribute, so each has no token and the empty concatenation.
+ *
+ * @param rows - The document's folded rows.
+ * @returns Each attribute's row, in the fold's order.
+ */
+const attributeSqlRowsOf = (rows: FoldedRows<Composed>): SqlRow[] => {
+  const owners = new Map(rows.nodes.map((node) => [node.id, node]));
+
+  return rows.attributes.map((attribute) => {
+    const was = new Set([...attribute.attrsWas].map(String));
+
+    return {
+      at: String(attribute.at),
+      attrs_after: bitsOf(AttributeSlot, new Set([...attribute.derived.attrs].map(String))),
+      attrs_was: bitsOf(AttributeSlot, was),
+      copy: String(owners.get(attribute.node)?.attributes ?? 0n),
+      document: text(attribute.document),
+      entities: String(
+        rows.attributeEntities.filter((row) => row.attribute === attribute.id).length,
+      ),
+      governs: code(TypeName, attribute.governs),
+      id: text(attribute.id),
+      idref_text: text(""),
+      idrefs: "0",
+      kind: code(NodeKind, attribute.kind),
+      lexical: text(attribute.lexical),
+      name: code(AttributeName, attribute.name),
+      node: text(attribute.node),
+      open_name: String(rows.openNames.filter((row) => row.attribute === attribute.id).length),
+      prefix: text(attribute.prefix),
+      slot: bitsOf(
+        AttributeSlot,
+        new Set([...attribute.derived.attrs].map(String).filter((slot) => !was.has(slot))),
+      ),
+      version: code(SchemaVersion, attribute.version),
+    };
+  });
+};
+
+/**
+ * Read one of `Qti`'s tables' written columns, each with grizzle's comment, and write the INSERT of
+ * rows keyed by column name, the owner's count copy of `Node.attributes` keyed as `copy`.
+ *
+ * @param client - The session.
+ * @param table - The table.
+ * @param rows - The rows, each column's SQL literal.
+ * @returns The statement; a column a row does not fill fails the case.
+ */
+const tableInsertOf = (client: Client, table: string, rows: readonly SqlRow[]) =>
+  query<{ readonly comment: string | null; readonly name: string }>(
+    client,
+    `SELECT a.attname AS name, pg_catalog.col_description(a.attrelid, a.attnum) AS comment
+       FROM pg_catalog.pg_attribute a
+      WHERE a.attrelid = pg_catalog.to_regclass($1) AND a.attnum > 0 AND NOT a.attisdropped
+        AND a.attgenerated = ''
+      ORDER BY a.attnum`,
+    [`${qtiSchema}.${table}`],
+  ).pipe(
+    Effect.map((columns) => {
+      const roles = columns.map(({ comment, name }) =>
+        comment === attributeCount ? "copy" : name,
+      );
+
+      return `INSERT INTO "${qtiSchema}"."${table}" (${columns.map(({ name }) => `"${name}"`).join(", ")}) VALUES ${rows
+        .map(
+          (row) =>
+            `(${roles.map((role) => row[role] ?? assert.fail(`${table}: no value for ${role}`)).join(", ")})`,
+        )
+        .join(", ")}`;
+    }),
+  );
+
+/**
+ * Read the one constraint of a table whose comment matches a `LIKE` pattern.
+ *
+ * @param client - The session.
+ * @param table - The table.
+ * @param pattern - The comment's pattern.
+ * @returns The constraint's name.
+ */
+const constraintDescribed = (client: Client, table: string, pattern: string) =>
+  query<{ readonly conname: string }>(
+    client,
+    `SELECT c.conname FROM pg_catalog.pg_constraint c
+      WHERE c.conrelid = pg_catalog.to_regclass($1)
+        AND pg_catalog.obj_description(c.oid, 'pg_constraint') LIKE $2`,
+    [`${qtiSchema}.${table}`, pattern],
+  ).pipe(
+    Effect.map((rows) => {
+      assert.lengthOf(rows, 1, `${table}: one constraint described ${pattern}`);
+
+      return rows[0]?.conname ?? "";
+    }),
+  );
+
+/**
+ * Judge a whole document's `Node`, `Attribute` and `LabelUse` rows, three INSERTs as the author
+ * role at SERIALIZABLE, then the named deferred constraints set immediate, and roll back.
+ *
+ * @param client - The session.
+ * @param catalogue - Node's table.
+ * @param document - The document's rows.
+ * @param document.attributes - Its `Attribute` rows.
+ * @param document.labels - Its `LabelUse` rows.
+ * @param document.nodes - Its `Node` rows.
+ * @param immediate - The deferred constraints to check before the rollback, by name.
+ * @returns PostgreSQL's verdict.
+ */
+const judgedDocument = (
+  client: Client,
+  catalogue: Catalogue,
+  document: {
+    readonly attributes: readonly SqlRow[];
+    readonly labels: readonly SqlRow[];
+    readonly nodes: readonly SqlRow[];
+  },
+  immediate: readonly string[],
+) =>
+  Effect.gen(function* judge() {
+    const statements = [
+      insertOf(writtenColumns(catalogue), document.nodes),
+      yield* tableInsertOf(client, "attribute", document.attributes),
+      ...(document.labels.length === 0
+        ? []
+        : [yield* tableInsertOf(client, "label_use", document.labels)]),
+    ];
+    yield* query(client, "BEGIN ISOLATION LEVEL SERIALIZABLE");
+    yield* query(client, `SET LOCAL ROLE ${authorRole}`);
+
+    const answered = yield* Effect.result(
+      Effect.forEach(
+        [
+          ...statements,
+          ...immediate.map((name) => `SET CONSTRAINTS "${qtiSchema}"."${name}" IMMEDIATE`),
+        ],
+        (statement) =>
+          Effect.tryPromise({ catch: (cause) => cause, try: () => client.query(statement) }),
+        { discard: true },
+      ),
+    );
+    yield* query(client, "ROLLBACK");
+
+    return Result.match(answered, {
+      onFailure: (cause): Verdict =>
+        Option.some(
+          cause instanceof DatabaseError
+            ? { code: cause.code ?? "", constraint: cause.constraint ?? "" }
+            : { code: "", constraint: String(cause) },
+        ),
+      onSuccess: (): Verdict => Option.none(),
+    });
+  });
+
+/**
+ * An item whose root may carry a `label`, a `tool-name` and a `tool-version`, and whose body's
+ * paragraph may carry a `label`: the scope of Label tools (spec reading 128).
+ *
+ * @param on - What the item carries.
+ * @param on.bodyLabel - A label on the body's paragraph.
+ * @param on.rootLabel - The root's own label.
+ * @param on.toolName - The root's `tool-name`.
+ * @param on.toolVersion - The root's `tool-version`.
+ * @returns The item's text.
+ */
+const labelledItemOf = (on: {
+  readonly bodyLabel: boolean;
+  readonly rootLabel: boolean;
+  readonly toolName: boolean;
+  readonly toolVersion: boolean;
+}): string =>
+  `<qti-assessment-item xmlns="${asi}" identifier="item" title="Item" time-dependent="false" adaptive="false"${on.rootLabel ? ' label="root"' : ""}${on.toolName ? ' tool-name="t"' : ""}${on.toolVersion ? ' tool-version="1"' : ""}><qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier"/><qti-item-body><p${on.bodyLabel ? ' label="body"' : ""}>Text</p></qti-item-body></qti-assessment-item>`;
+
+/**
  * The node laws a document's rows break, by the host oracle.
  *
  * @param rows - The rows.
@@ -1392,6 +1595,98 @@ describe.skipIf(!hasLease)("qti/node.db.test.ts, on the lease", () => {
                 new Set([law]),
                 name,
               );
+            }
+          }),
+        leaseTestTimeoutMs,
+      );
+
+      it.effect(
+        "refuses a 3.0.1 item root's own label without tool-name and tool-version, by Label tools, and accepts a 3.0.0 one, as the law oracle judges every labelled item of the box (spec reading 128)",
+        () =>
+          // Oracle: the law oracle's Label tools over each folded item (`documentBreaches`), against
+          // QTI 3.0.1's §4.1.3, the item's `label`: "If an item uses labels then values for the
+          // associated toolName and toolVersion attributes must also be provided", where 3.0.0's
+          // §4.1.3 states no such sentence; a body element's label asks for them in both
+          // (§5.16.5). PostgreSQL judges the item's `Node` and `Attribute` rows with the
+          // `LabelUse` rows the import's builder writes (`#pantry/import/overlays/identity.ts`),
+          // by the four foreign keys of Label tools, set immediate: each label in
+          // `labelAttributes` is a use and each use such a label (both ways), and an item's use
+          // finds the root's `tool-name` and `tool-version`. A breach is 23503 on one of them.
+          // Bound: the small scope exhausted, both versions by the root's label, tool-name and
+          // tool-version and the body's label, 32 items; the two named cases among them.
+          Effect.gen(function* labelTools() {
+            const client = yield* loginSession;
+            const catalogue = yield* catalogueOf(client);
+            const keys = [
+              yield* constraintDescribed(
+                client,
+                "label_use",
+                `foreign key LabelUse(document where %"tool-name"%`,
+              ),
+              yield* constraintDescribed(
+                client,
+                "label_use",
+                `foreign key LabelUse(document where %"tool-version"%`,
+              ),
+              yield* constraintDescribed(
+                client,
+                "label_use",
+                "foreign key LabelUse(node) to Attribute(node where %",
+              ),
+              yield* constraintDescribed(
+                client,
+                "attribute",
+                "foreign key Attribute(node where %) to LabelUse(node, document)",
+              ),
+            ];
+            const flags = [false, true] as const;
+            for (const version of ["3.0.0", "3.0.1"] as const) {
+              for (const rootLabel of flags) {
+                for (const toolName of flags) {
+                  for (const toolVersion of flags) {
+                    for (const bodyLabel of flags) {
+                      const on = { bodyLabel, rootLabel, toolName, toolVersion };
+                      const label = `${version} ${JSON.stringify(on)}`;
+                      const { rows, tree } = yield* foldedAt(labelledItemOf(on), version);
+                      const breached = documentBreaches("item.xml", rows, laws).some(
+                        ({ law }) => law === "Label tools",
+                      );
+                      if (rootLabel && !toolName && !toolVersion && !bodyLabel) {
+                        assert.strictEqual(breached, version === "3.0.1", `the oracle: ${label}`);
+                      }
+
+                      const uses = identityRowsOf(tree, {
+                        documentAt: () => Option.none(),
+                        idOf,
+                      }).LabelUse.values();
+                      const verdict = yield* judgedDocument(
+                        client,
+                        catalogue,
+                        {
+                          attributes: attributeSqlRowsOf(rows),
+                          labels: [...uses].map((use) => ({
+                            document: text(use.document),
+                            node: text(use.node),
+                            root_kind: code(NodeKind, use.rootKind),
+                          })),
+                          nodes: sqlRowsOf(rows),
+                        },
+                        keys,
+                      );
+                      if (breached) {
+                        const refusal = Option.getOrUndefined(verdict);
+                        assert.strictEqual(refusal?.code, "23503", label);
+                        assert.include(keys, refusal?.constraint, label);
+                      } else {
+                        assert.isTrue(
+                          Option.isNone(verdict),
+                          `${label}: ${JSON.stringify(verdict)}`,
+                        );
+                      }
+                    }
+                  }
+                }
+              }
             }
           }),
         leaseTestTimeoutMs,
