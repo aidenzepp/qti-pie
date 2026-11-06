@@ -272,19 +272,30 @@ const shown = (bench: Bench, outcome: Page | Response, target: string): Shown =>
 };
 
 /**
+ * Require a route's outcome to be a 303 with the page headers.
+ *
+ * @param outcome The route's outcome.
+ * @returns The location it sends the browser to.
+ */
+const seeOther = (outcome: Page | Response): string => {
+  if (!(outcome instanceof Response)) {
+    return assert.fail(`The post answered with a ${outcome.status} page: ${outcome.title}.`);
+  }
+
+  assert.strictEqual(outcome.status, 303);
+  assert.strictEqual(outcome.headers.get("cache-control"), "no-store");
+
+  return outcome.headers.get("location") ?? assert.fail("The 303 names no location.");
+};
+
+/**
  * Require a route's outcome to be the 303 to a session's page that a saved post answers with.
  *
  * @param outcome The route's outcome.
  * @returns The session id the location names.
  */
 const redirected = (outcome: Page | Response): string => {
-  if (!(outcome instanceof Response)) {
-    return assert.fail(`The post answered with a ${outcome.status} page: ${outcome.title}.`);
-  }
-
-  const location = outcome.headers.get("location") ?? "";
-  assert.strictEqual(outcome.status, 303);
-  assert.strictEqual(outcome.headers.get("cache-control"), "no-store");
+  const location = seeOther(outcome);
   assert.match(location, /^\/sessions\/s-[\da-f-]{36}$/u);
 
   return location.slice("/sessions/".length);
@@ -311,6 +322,16 @@ const start = (bench: Bench) =>
  */
 const open = (bench: Bench, id: string) =>
   Effect.map(send(bench, `/sessions/${id}`), (outcome) => shown(bench, outcome, `/sessions/${id}`));
+
+/**
+ * Read the page a 303 sends the browser to.
+ *
+ * @param bench The bench.
+ * @param location The 303's location.
+ * @returns The page as the handler writes it.
+ */
+const follow = (bench: Bench, location: string) =>
+  Effect.map(send(bench, location), (outcome) => shown(bench, outcome, location));
 
 /**
  * Post a session's form as a press of one of its buttons does: the button's entry, then the
@@ -352,6 +373,46 @@ const sessionForm = (page: Shown, id: string): Element =>
     (element) =>
       element.tag === "form" && String(element.attrs["action"]).startsWith(`/sessions/${id}#`),
   ) ?? assert.fail("The page holds no session form.");
+
+/**
+ * Give a confirm page's form.
+ *
+ * @param page The page.
+ * @param id The session id.
+ * @returns The form, the one whose action is the session's confirm page.
+ */
+const confirmForm = (page: Shown, id: string): Element =>
+  page.elements.find(
+    (element) =>
+      element.tag === "form" &&
+      String(element.attrs["action"]).startsWith(`/sessions/${id}/confirm#`),
+  ) ?? assert.fail("The page holds no confirm form.");
+
+/**
+ * Give a confirm page's button by its label.
+ *
+ * @param page The page.
+ * @param id The session id.
+ * @param label The button's text.
+ * @returns The button.
+ */
+const confirmButton = (page: Shown, id: string, label: string): Element =>
+  elementsOf(confirmForm(page, id).children).find(
+    (element) => element.tag === "button" && textOf(element) === label,
+  ) ?? assert.fail(`The confirm form has no ${label} button.`);
+
+/**
+ * Post a confirm page's form as a press of one of its buttons does.
+ *
+ * @param bench The bench.
+ * @param id The session id.
+ * @param button The pressed button.
+ * @returns The route's outcome.
+ */
+const pressConfirm = (bench: Bench, id: string, button: Element) =>
+  send(bench, `/sessions/${id}/confirm`, [
+    [String(button.attrs["name"]), String(button.attrs["value"])],
+  ]);
 
 /**
  * Give the submit buttons of a page's session form, in document order.
@@ -437,10 +498,27 @@ const statusOf = (page: Shown, instance: string): Element =>
  * @param n The item's sequence index.
  * @returns `{state}: Item n of N, {test title}`.
  */
-const itemTitle = (sitting: Sitting, state: "answering" | "notAccepted", n: number): string =>
+const itemTitle = (
+  sitting: Sitting,
+  state: "answering" | "notAccepted" | "partSubmitted",
+  n: number,
+): string =>
   message("en", "title", {
     state: message("en", state),
     title: `${message("en", "itemOf", { count: String(sitting.count), n: String(n) })}, ${sitting.title}`,
+  });
+
+/**
+ * Give an item's line on a confirm page: `Item n` and its state in words.
+ *
+ * @param n The item's sequence index.
+ * @param state The key of its state's words.
+ * @returns The line.
+ */
+const confirmLine = (n: number, state: "itemAnswered" | "itemNotAnswered"): string =>
+  message("en", "itemState", {
+    item: message("en", "item", { n: String(n) }),
+    state: message("en", state),
   });
 
 /**
@@ -481,10 +559,37 @@ const storedSession = Effect.fnUntraced(function* storedSession(bench: Bench, id
   return { entry, session, test };
 });
 
+/**
+ * Submit the current part through its confirm page: press the page's Submit part button with the
+ * fields, read the confirm page it is sent to, and press Confirm there.
+ *
+ * @param bench The bench.
+ * @param id The session id.
+ * @param from The session page the part is submitted from.
+ * @param fields The session form's other fields.
+ * @returns The location Confirm's 303 sends the browser to.
+ */
+const confirmed = Effect.fnUntraced(function* confirmed(
+  bench: Bench,
+  id: string,
+  from: Shown,
+  fields: Fields = [],
+) {
+  const confirm = yield* follow(
+    bench,
+    seeOther(yield* press(bench, id, buttonFor(from, { kind: "submit-part" }), fields)),
+  );
+
+  return seeOther(
+    yield* pressConfirm(bench, id, confirmButton(confirm, id, message("en", "confirm"))),
+  );
+});
+
 describe("sessionPath", () => {
-  it("names a package's Start post and a session's page, and no other path", () => {
+  it("names a package's Start post, a session's page and its confirm page, and no other path", () => {
     assert.isTrue(sessionPath("/packages/m2/tests"));
     assert.isTrue(sessionPath("/sessions/s-1"));
+    assert.isTrue(sessionPath("/sessions/s-1/confirm"));
     assert.isFalse(sessionPath("/packages/m2"));
     assert.isFalse(sessionPath("/packages//tests"));
     assert.isFalse(sessionPath("/packages/m2/tests/x"));
@@ -492,7 +597,8 @@ describe("sessionPath", () => {
     assert.isFalse(sessionPath("/sessions"));
     assert.isFalse(sessionPath("/sessions/"));
     assert.isFalse(sessionPath("/sessions/s-1/review/1"));
-    assert.isFalse(sessionPath("/sessions/s-1/confirm"));
+    assert.isFalse(sessionPath("/sessions/s-1/confirm/1"));
+    assert.isFalse(sessionPath("/sessions//confirm"));
   });
 });
 
@@ -708,24 +814,169 @@ describe("routeSessions", () => {
   );
 
   it.effect(
-    "submits both parts through posts, then answers the session's page with the summary and a post to it with a 303 there",
+    "[T-4] completes the fixture's P1 through posts: Submit part saves the posted responses and answers its confirm page, which lists the unanswered item; Return shows the saved values; Confirm answers P2's first item, its Status Part submitted holding the page's one autofocus",
+    () =>
+      Effect.gen(function* partSubmit() {
+        const bench = yield* benchOf(caches.fixture, fixture, fixturesRoot);
+        const id = yield* start(bench);
+        const choice = entryName(`${id}.1`, "RESPONSE");
+        const typed = entryName(`${id}.2`, "RESPONSE");
+        const confirmAt = `/sessions/${id}/confirm`;
+
+        redirected(
+          yield* press(bench, id, buttonFor(yield* open(bench, id), { kind: "next" }), [
+            [choice, "B"],
+          ]),
+        );
+
+        const second = yield* open(bench, id);
+        assert.strictEqual(
+          seeOther(
+            yield* press(bench, id, buttonFor(second, { kind: "submit-part" }), [[typed, "eight"]]),
+          ),
+          confirmAt,
+        );
+
+        const confirm = yield* follow(bench, confirmAt);
+        const form = confirmForm(confirm, id);
+        const title = message("en", "confirmTitle", {
+          intent: message("en", "submitPart"),
+          test: fixture.title,
+        });
+        const confirmPress = confirmButton(confirm, id, message("en", "confirm"));
+        const returnPress = confirmButton(confirm, id, message("en", "return"));
+
+        assert.strictEqual(confirm.page.status, 200);
+        assert.strictEqual(confirm.page.title, title);
+        assert.strictEqual(
+          textOf(confirm.elements.find((element) => element.tag === "h1") ?? form),
+          title,
+        );
+        assert.deepStrictEqual(
+          confirm.elements.filter((element) => element.tag === "li").map(textOf),
+          [
+            confirmLine(1, "itemAnswered"),
+            confirmLine(2, "itemAnswered"),
+            confirmLine(3, "itemNotAnswered"),
+          ],
+        );
+        assert.strictEqual(form.attrs["method"], "post");
+        assert.strictEqual(form.attrs["autocomplete"], "off");
+        assert.strictEqual(form.attrs["action"], `${confirmAt}#${scopedId(`${id}.2`, "status")}`);
+        for (const button of [confirmPress, returnPress]) {
+          assert.strictEqual(button.attrs["type"], "submit");
+          assert.strictEqual(button.attrs["name"], intentName(id));
+        }
+        assert.strictEqual(confirmPress.attrs["value"], encodeIntent({ kind: "submit-part" }));
+        assert.lengthOf(autofocused(confirm), 0);
+
+        assert.strictEqual(redirected(yield* pressConfirm(bench, id, returnPress)), id);
+
+        const back = yield* open(bench, id);
+        assert.strictEqual(back.page.title, itemTitle(fixture, "answering", 2));
+        assert.strictEqual(controlsNamed(back, typed)[0]?.attrs["value"], "eight");
+
+        const location = yield* confirmed(bench, id, back, [[typed, "eight"]]);
+        const fourth = yield* follow(bench, location);
+        const status = statusOf(fourth, `${id}.4`);
+
+        assert.strictEqual(fourth.page.status, 200);
+        assert.strictEqual(fourth.page.title, itemTitle(fixture, "partSubmitted", 4));
+        assert.include(textOf(status), message("en", "partSubmitted"));
+        assert.deepStrictEqual(autofocused(fourth), [status]);
+
+        const { session } = yield* storedSession(bench, id);
+        assert.deepStrictEqual(
+          session.parts.map((part) => part.status),
+          ["ended", "current"],
+        );
+        assert.deepStrictEqual(
+          session.items.map((item) => item.record.numAttempts),
+          [1, 1, 0, 0, 0],
+        );
+      }),
+  );
+
+  it.effect(
+    "[T-4] answers a confirmed Submit part that score refuses on another item with that item's page: it becomes current, its Controls invalid and described by the message, the page's one autofocus on the first",
+    () =>
+      Effect.gen(function* refusedElsewhere() {
+        const bench = yield* benchOf(caches.fixture, fixture, fixturesRoot);
+        const id = yield* start(bench);
+        const instance = `${id}.3`;
+        const ticked = entryName(instance, "RESPONSE");
+        const first = entryName(`${id}.1`, "RESPONSE");
+
+        redirected(yield* postIntent(bench, id, { kind: "go", sequenceIndex: 3 }));
+        redirected(
+          yield* postIntent(
+            bench,
+            id,
+            { kind: "go", sequenceIndex: 1 },
+            ["A", "B", "C"].map((value) => [ticked, value] as const),
+          ),
+        );
+
+        const one = yield* open(bench, id);
+        const confirm = yield* follow(
+          bench,
+          seeOther(
+            yield* press(bench, id, buttonFor(one, { kind: "submit-part" }), [[first, "B"]]),
+          ),
+        );
+        const target = `/sessions/${id}/confirm`;
+        const page = shown(
+          bench,
+          yield* pressConfirm(bench, id, confirmButton(confirm, id, message("en", "confirm"))),
+          target,
+        );
+        const status = statusOf(page, instance);
+        const said = message("en", "atMost", { n: "2" });
+        const note =
+          elementsOf(status.children).find(
+            (element) => element.tag === "li" && textOf(element) === said,
+          ) ?? assert.fail("The Status holds no atMost message.");
+        const controls = controlsNamed(page, ticked);
+
+        assert.strictEqual(page.page.status, 200);
+        assert.strictEqual(page.page.title, itemTitle(fixture, "notAccepted", 3));
+        assert.include(textOf(status), message("en", "notAccepted"));
+        assert.isUndefined(status.attrs["autofocus"]);
+        assert.isAbove(controls.length, 0);
+        for (const control of controls) {
+          assert.strictEqual(control.attrs["aria-invalid"], "true");
+          assert.include(
+            String(control.attrs["aria-describedby"]).split(" "),
+            String(note.attrs["id"]),
+          );
+        }
+        assert.deepStrictEqual(autofocused(page), controls.slice(0, 1));
+        assert.deepStrictEqual(checkedValues(controls).toSorted(), ["A", "B", "C"]);
+        assert.lengthOf(controlsNamed(page, first), 0);
+
+        const { session } = yield* storedSession(bench, id);
+        assert.strictEqual(session.position, 2);
+        assert.strictEqual(session.parts[0]?.status, "current");
+        assert.isTrue(session.items.every((item) => item.record.numAttempts === 0));
+      }),
+  );
+
+  it.effect(
+    "submits both parts through their confirm pages, then answers the session's page with the summary, its confirm page and a post to the page with a 303 there",
     () =>
       Effect.gen(function* closed() {
         const bench = yield* benchOf(caches.fixture, fixture, fixturesRoot);
         const id = yield* start(bench);
 
-        redirected(yield* postIntent(bench, id, { kind: "submit-part" }));
-
-        const fourth = yield* open(bench, id);
+        const fourth = yield* follow(bench, yield* confirmed(bench, id, yield* open(bench, id)));
         const [text] = controlsNamed(fourth, entryName(`${id}.4`, "RESPONSE"));
-        assert.strictEqual(fourth.page.title, itemTitle(fixture, "answering", 4));
+        assert.strictEqual(fourth.page.title, itemTitle(fixture, "partSubmitted", 4));
         assert.strictEqual(text?.tag, "textarea");
         assert.strictEqual(text?.attrs["autocomplete"], "off");
 
         redirected(yield* press(bench, id, buttonFor(fourth, { kind: "next" })));
 
-        const fifth = yield* open(bench, id);
-        redirected(yield* press(bench, id, buttonFor(fifth, { kind: "submit-part" })));
+        assert.strictEqual(yield* confirmed(bench, id, yield* open(bench, id)), `/sessions/${id}`);
 
         const summary = yield* open(bench, id);
 
@@ -734,6 +985,7 @@ describe("routeSessions", () => {
           message("en", "title", { state: message("en", "finished"), title: fixture.title }),
         );
         assert.deepStrictEqual(autofocused(summary), [statusOf(summary, id)]);
+        assert.strictEqual(redirected(yield* send(bench, `/sessions/${id}/confirm`)), id);
         assert.strictEqual(redirected(yield* postIntent(bench, id, { kind: "next" })), id);
       }),
   );
@@ -761,6 +1013,11 @@ describe("routeSessions", () => {
         assert.strictEqual(statusAt(yield* send(bench, "/sessions/s-unknown", [])), 404);
         assert.strictEqual(statusAt(yield* send(bench, "/sessions/%E0%A4%A")), 404);
         assert.strictEqual(statusAt(yield* send(bench, `/sessions/${id}/elsewhere`)), 404);
+        assert.strictEqual(statusAt(yield* send(bench, "/sessions/s-unknown/confirm")), 404);
+        assert.strictEqual(
+          statusAt(yield* send(bench, `/sessions/${id}/confirm`, undefined, "PUT")),
+          405,
+        );
         assert.strictEqual(statusAt(yield* notAForm), 400);
         assert.strictEqual(statusAt(yield* send(bench, `/sessions/${id}`, [])), 400);
         assert.strictEqual(
@@ -845,6 +1102,38 @@ describe("routeSessions", () => {
         assert.isAbove(controls.length, 0);
         assert.isTrue(controls.every((control) => control.attrs["aria-invalid"] === "true"));
         assert.deepStrictEqual(autofocused(page), controls.slice(0, 1));
+      }),
+    corpusTimeoutMs,
+  );
+
+  it.effect(
+    "titles an individual part's confirm page End part, listing its unanswered items, and its Confirm ends the part, here closing the test",
+    () =>
+      Effect.gen(function* partEnd() {
+        const bench = yield* benchOf(caches.guide, guide);
+        const id = yield* start(bench);
+        const confirmAt = `/sessions/${id}/confirm`;
+
+        assert.strictEqual(seeOther(yield* postIntent(bench, id, { kind: "end-part" })), confirmAt);
+
+        const confirm = yield* follow(bench, confirmAt);
+        const end = confirmButton(confirm, id, message("en", "confirm"));
+
+        assert.strictEqual(
+          confirm.page.title,
+          message("en", "confirmTitle", { intent: message("en", "endPart"), test: guide.title }),
+        );
+        assert.deepStrictEqual(
+          confirm.elements.filter((element) => element.tag === "li").map(textOf),
+          Array.from({ length: guide.count }, (_, index) =>
+            confirmLine(index + 1, "itemNotAnswered"),
+          ),
+        );
+        assert.strictEqual(end.attrs["value"], encodeIntent({ kind: "end-part" }));
+        assert.strictEqual(redirected(yield* pressConfirm(bench, id, end)), id);
+
+        const { session } = yield* storedSession(bench, id);
+        assert.strictEqual(session.status, "closed");
       }),
     corpusTimeoutMs,
   );

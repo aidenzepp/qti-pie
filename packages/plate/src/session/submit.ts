@@ -54,7 +54,9 @@ export type SubmissionIntent = "end-part" | "submit-item" | "submit-part";
  * - `skipping-not-allowed`: the item's `allow-skipping` is false and every response is NULL or its
  *   declared default.
  * - `responses-invalid`: the item's `validate-responses` is true and a response breaks a limit of its
- *   interaction; the refusal carries the messages.
+ *   interaction; or, for `submit-part`, `score` refuses a presented item's responses, which break a
+ *   limit the item sets whatever the configuration (tier (a)). The refusal carries the messages and
+ *   names the item they concern.
  */
 export type SubmissionRule =
   | "attempts-exhausted"
@@ -80,9 +82,11 @@ const modeRemedies: Readonly<Record<SubmissionIntent, string>> = {
 /**
  * A submission the test's rules refuse now, with the rule it breaks.
  *
- * `intent` is the intent refused. `sequenceIndex` is the current item's, none when the test has
- * closed. `messages` holds what the item's interactions say about its responses for
- * `responses-invalid`, ready for `render`'s `messages` option, and is empty for every other rule.
+ * `intent` is the intent refused. `sequenceIndex` names the item the refusal concerns: the current
+ * item, except for a `submit-part` whose `score` refuses another item's responses, where it is that
+ * item's; none when the test has closed. `messages` holds what the item's interactions say about
+ * its responses for `responses-invalid`, ready for `render`'s `messages` option with that item's
+ * instance, and is empty for every other rule.
  */
 export class SubmissionRefused extends Data.TaggedError("SubmissionRefused")<{
   readonly intent: SubmissionIntent;
@@ -109,7 +113,9 @@ export class SubmissionRefused extends Data.TaggedError("SubmissionRefused")<{
       case "responses-invalid": {
         const said = this.messages.map((entry) => `${entry.response}: ${entry.text}`).join("; ");
 
-        return `${item} validates its responses (validate-responses is true), and they break its interactions' limits (${said}). Show these messages, for example through render's messages option, and submit the corrected responses.`;
+        return this.intent === "submit-part"
+          ? `${item}'s saved responses break limits the item sets whatever the configuration (${said}), so score refuses them and the part is not submitted. Show these messages on that item, for example through render's messages option with its instance, and submit the part again once its responses are corrected.`
+          : `${item} validates its responses (validate-responses is true), and they break its interactions' limits (${said}). Show these messages, for example through render's messages option, and submit the corrected responses.`;
       }
       case "skipping-not-allowed": {
         return `${item} may not be skipped (allow-skipping is false), and every response posted for it is NULL or its declared default. Give at least one response another value, then submit again.`;
@@ -150,8 +156,9 @@ export type PartEndFailure =
 
 /**
  * Why {@link submitItem} or {@link submitPart} may fail: a refusal, a part end's failures, or an
- * attempt `score` cannot run, its `ResponsesRefused` for responses that break a tier (a) limit
- * among them.
+ * attempt `score` cannot run. For responses that break a tier (a) limit, {@link submitItem} passes
+ * `score`'s `ResponsesRefused` through, and {@link submitPart} refuses with `responses-invalid`
+ * naming the item.
  */
 export type SubmissionFailure = PartEndFailure | ScoreFailure;
 
@@ -356,6 +363,33 @@ const processed = (
   });
 
 /**
+ * Process one attempt of a session item as part of a part's submission: as {@link processed}, but
+ * `score`'s refusal of the item's responses becomes a {@link SubmissionRefused} that names the
+ * item, since the part's other items, the current one among them, are not the item it concerns.
+ *
+ * @param accepted The item the session item delivers.
+ * @param item The session item.
+ * @param datestamp The time of the transition, in ISO 8601.
+ * @returns The session item after the attempt; `responses-invalid` naming the item with `score`'s
+ *   messages; or what `score` or the record's codec failed with otherwise.
+ */
+const processedInPart = (
+  accepted: Accepted,
+  item: SessionItem,
+  datestamp: string,
+): Result.Result<SessionItem, ScoreFailure | SubmissionRefused> =>
+  Result.mapError(processed(accepted, item, valuesOf(item), datestamp), (failure) =>
+    failure._tag === "ResponsesRefused"
+      ? new SubmissionRefused({
+          intent: "submit-part",
+          messages: failure.messages,
+          rule: "responses-invalid",
+          sequenceIndex: Option.some(item.sequenceIndex),
+        })
+      : failure,
+  );
+
+/**
  * End a test part: move to the next part that holds an item, whose first item is presented, or
  * close the test when no such part follows.
  *
@@ -495,11 +529,13 @@ export const submitItem = (
  * it.
  *
  * The step is saved first. A closed test is `test-closed`; an individual part is
- * `wrong-submission-mode`. Each presented item of the part is processed once, with its saved
- * responses over its record's; `allow-skipping` and `validate-responses` do not apply in a
+ * `wrong-submission-mode`. Each presented item of the part is processed once, in sequence, with its
+ * saved responses over its record's; `allow-skipping` and `validate-responses` do not apply in a
  * simultaneous part. An item the candidate never saw is not processed: it closes as it is, with
  * NULL responses, its default outcomes and `numAttempts` 0. The part then ends as
- * {@link endPart} ends one. An attempt `score` cannot run fails the whole submission.
+ * {@link endPart} ends one. An attempt `score` cannot run fails the whole submission: where `score`
+ * refuses an item's responses (tier (a)), the refusal is `responses-invalid` naming that item,
+ * which need not be the current one, with `score`'s messages.
  *
  * @param test The test the session was started from.
  * @param items The test's items, keyed by item ref identifier, as `startTest` took them.
@@ -536,7 +572,7 @@ export const submitPart = (
       saved.items.map((entry) =>
         members.has(entry.ref) && entry.presented
           ? Result.flatMap(deliveredItem(items, saved, entry), (accepted) =>
-              processed(accepted, entry, valuesOf(entry), saved.updated),
+              processedInPart(accepted, entry, saved.updated),
             )
           : Result.succeed(entry),
       ),

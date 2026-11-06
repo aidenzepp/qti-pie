@@ -7,8 +7,9 @@ import { fresh } from "#plate/model/record.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
 import { nullOf } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
+import { ResponsesRefused, score as scoreResponses } from "#plate/score.ts";
 import type { Responses, SessionItem, Step, TestSession } from "#plate/session/session.ts";
-import { itemView, present, startTest } from "#plate/session/start.ts";
+import { itemView, present, recordStep, startTest } from "#plate/session/start.ts";
 import { SubmissionRefused, endPart, submitItem, submitPart } from "#plate/session/submit.ts";
 import type { SubmissionRule } from "#plate/session/submit.ts";
 import { open } from "#plate/validate/open.ts";
@@ -782,6 +783,53 @@ describe("submitPart", () => {
           instancesOf(submitted),
           [1, 2, 3, 4].map((index) => `${instance}.${index}`),
         );
+      }),
+  );
+
+  it.effect(
+    "[T-4] refuses submit-part when score refuses a presented item's saved responses, naming that item with score's messages: responses-invalid",
+    () =>
+      Effect.gen(function* refusedElsewhere() {
+        const delivery = yield* builtDelivery(
+          "together",
+          [partOf("together", ["one", "two"], { submission: "simultaneous" })],
+          [
+            ["one", choiceItemXml("one")],
+            ["two", choiceItemXml("two")],
+          ],
+        );
+        const configuration = yield* configure({});
+        const unlisted: Responses = { RESPONSE: chosen("Z") };
+        const savedOnOne = accepted(
+          recordStep(
+            started(delivery, configuration),
+            { intent: { kind: "go", sequenceIndex: 1 }, responses: unlisted },
+            after(2),
+          ),
+        );
+        const one = delivery.items.get("one") ?? assert.fail("item one is not delivered");
+        const said = Option.getOrElse(
+          Option.flatMap(Result.getFailure(scoreResponses(one, unlisted)), (failure) =>
+            failure instanceof ResponsesRefused ? Option.some(failure.messages) : Option.none(),
+          ),
+          () => assert.fail("score does not refuse a choice item one does not list"),
+        );
+
+        const refused = refusal(
+          submitPart(
+            delivery.test,
+            delivery.items,
+            shown(delivery, savedOnOne, 2, after(3)),
+            stepOf("submit-part", { RESPONSE: chosen("A") }),
+            { now: after(8) },
+          ),
+        );
+
+        assert.strictEqual(refused.rule, "responses-invalid");
+        assert.strictEqual(refused.intent, "submit-part");
+        assert.deepStrictEqual(refused.sequenceIndex, Option.some(1));
+        assert.isAbove(said.length, 0);
+        assert.deepStrictEqual(refused.messages, said);
       }),
   );
 
