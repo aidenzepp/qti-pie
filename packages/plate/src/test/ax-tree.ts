@@ -6,8 +6,8 @@
  * `browserContext.newCDPSession` is "only supported on Chromium-based browsers"
  * (`playwright-core` 1.64.1, `types.d.ts`). Through that session the protocol's `Accessibility`
  * domain answers `getFullAXTree` and `queryAXTree` with the nodes Chromium itself computed: role,
- * name, description and properties such as `checked`, `focused`, `invalid` and `describedby`. In
- * WebKit both readers fail with {@link ChromiumOnly}.
+ * name, description, value and properties such as `checked`, `focused`, `invalid` and
+ * `describedby`. In WebKit both readers fail with {@link ChromiumOnly}.
  *
  * The domain is marked experimental, so every answer is decoded with a Schema, and an answer that
  * does not fit is {@link CdpFailed}, never a silent empty tree. Its property list has no position
@@ -80,6 +80,7 @@ const RawAxNodeSchema = Schema.Struct({
     Schema.Array(Schema.Struct({ name: Schema.String, value: AxValueSchema })),
   ),
   role: Schema.optionalKey(AxTextSchema),
+  value: Schema.optionalKey(AxValueSchema),
 });
 
 /**
@@ -101,6 +102,11 @@ const DocumentReply = Schema.Struct({ root: Schema.Struct({ backendNodeId: Schem
  * (`checked`, `focused`, `invalid`, `describedby` and the rest). `childIds` lists the `nodeId`s
  * of its children in order, and `backendDOMNodeId` names the DOM node it stands for, when it
  * stands for one. An `ignored` node is in the tree but hidden from assistive technology.
+ *
+ * `value` is the node's own value, when Chromium computed one: a `select`'s combobox gives the
+ * text it shows, its chosen option's, as a string, and a range such as a slider its current value
+ * as a number. A `select`'s value is read here only: no property carries it, and Playwright's
+ * computed tree gives a combobox none.
  */
 export interface AxNode {
   readonly backendDOMNodeId: Option.Option<number>;
@@ -111,6 +117,7 @@ export interface AxNode {
   readonly nodeId: string;
   readonly properties: ReadonlyMap<string, AxValue>;
   readonly role: string;
+  readonly value: Option.Option<boolean | number | string>;
 }
 
 /**
@@ -148,7 +155,8 @@ export class CdpFailed extends Schema.TaggedError<CdpFailed>()("CdpFailed", {
  * Reduce a decoded protocol node to an {@link AxNode}.
  *
  * @param node The node, as {@link RawAxNodeSchema} decoded it.
- * @returns The node, its absent role, name and description empty and its properties by name.
+ * @returns The node, its absent role, name and description empty, its properties by name, and its
+ *   value when it has one.
  */
 const toAxNode = (node: typeof RawAxNodeSchema.Type): AxNode => ({
   backendDOMNodeId: Option.fromUndefinedOr(node.backendDOMNodeId),
@@ -159,6 +167,7 @@ const toAxNode = (node: typeof RawAxNodeSchema.Type): AxNode => ({
   nodeId: node.nodeId,
   properties: new Map((node.properties ?? []).map((property) => [property.name, property.value])),
   role: node.role?.value ?? "",
+  value: Option.fromUndefinedOr(node.value?.value),
 });
 
 /**

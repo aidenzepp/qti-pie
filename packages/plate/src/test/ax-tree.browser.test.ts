@@ -7,13 +7,24 @@ import { attribute, nameOf } from "#plate/test/accessibility.ts";
 import { axQuery, byNodeId, chromiumTree, descendantsOf, propertyOf } from "#plate/test/ax-tree.ts";
 import type { AxNode } from "#plate/test/ax-tree.ts";
 import { eachEngine, playgroundLayer, withPage } from "#plate/test/browsers.ts";
-import { elementsOf, openItem } from "#plate/test/playground-page.ts";
+import { count, elementsOf, openItem, snapshotOf, treesRead } from "#plate/test/playground-page.ts";
 
 /**
  * The corpus item the tests open: a shuffled Choice of four, the last fixed, its Prompt a
  * `legend`.
  */
 const item = "qtiv3-examples/packaging/items/choice_fixed.xml";
+
+/**
+ * The page the value test reads, hand-built: a `select` named House by its `label`, its first
+ * option an empty prompt, and a slider named Level at 4 of 0 to 10.
+ */
+const valuePage = [
+  "<!doctype html><title>Values</title>",
+  '<label for="house">House</label>',
+  '<select id="house"><option value="">Select an answer</option><option value="L">Lancaster</option><option value="Y">York</option></select>',
+  '<input type="range" min="0" max="10" value="4" aria-label="Level">',
+].join("");
 
 /**
  * The Choice's Root, Control and Label markers, read through the part table.
@@ -101,6 +112,61 @@ const choiceIn = (nodes: readonly AxNode[], prompt: string): ExposedChoice => {
 const openChoice = (page: Page) => openItem(page, item).pipe(Effect.map(presentedIn));
 
 eachEngine((it, name) => {
+  it.effect(
+    `A node's value: the select's is the text of its chosen option, before and after a choice, and the slider's is its number, in ${treesRead(name)}`,
+    () =>
+      withPage({ javaScriptEnabled: false }, (page) =>
+        Effect.gen(function* nodeValue() {
+          const select = page.locator("#house");
+          const chosen = (option: string) =>
+            count(select.getByRole("option", { exact: true, name: option, selected: true }));
+          const ownValues = Effect.fn("ownValues")(function* ownValues() {
+            const nodes = yield* chromiumTree(page, name);
+            const valueOf = (role: string, label: string) => {
+              const found = nodes.filter(
+                (node) => !node.ignored && node.role === role && node.name === label,
+              );
+
+              assert.strictEqual(found.length, 1, `one ${role} named ${label}`);
+
+              return Option.getOrUndefined(found[0]?.value ?? Option.none());
+            };
+
+            return {
+              root: nodes
+                .filter((node) => node.role === "RootWebArea")
+                .map((node) => Option.getOrUndefined(node.value)),
+              select: valueOf("combobox", "House"),
+              slider: valueOf("slider", "Level"),
+            };
+          });
+
+          yield* Effect.promise(() => page.setContent(valuePage));
+
+          assert.strictEqual((yield* snapshotOf(select)).role, "combobox");
+          assert.strictEqual(yield* chosen("Select an answer"), 1);
+          if (name === "chromium") {
+            assert.deepStrictEqual(yield* ownValues(), {
+              root: [undefined],
+              select: "Select an answer",
+              slider: 4,
+            });
+          }
+
+          yield* Effect.promise(() => select.selectOption("L"));
+
+          assert.strictEqual(yield* chosen("Lancaster"), 1);
+          if (name === "chromium") {
+            assert.deepStrictEqual(yield* ownValues(), {
+              root: [undefined],
+              select: "Lancaster",
+              slider: 4,
+            });
+          }
+        }),
+      ),
+  );
+
   if (name === "chromium") {
     it.effect(
       "Chromium's own tree holds the Choice group named by its Prompt, its radios below it in the presented order and unchecked, and a clicked radio checked and focused",
