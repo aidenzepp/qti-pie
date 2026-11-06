@@ -1174,6 +1174,23 @@ const citation = (refusal: Refusal): string =>
   });
 
 /**
+ * Cite what settles a refusal: the reading its detail names, or else the line of QTI's information
+ * model its `source` names, for a rule the information model states and no shared reading carries.
+ *
+ * @param refusal The refusal.
+ * @returns ` (reading <n>)`, ` (<source>)`, or nothing.
+ */
+const settled = (refusal: Refusal): string =>
+  Option.match(optionalFact(refusal, "reading"), {
+    onNone: () =>
+      Option.match(optionalFact(refusal, "source"), {
+        onNone: () => "",
+        onSome: (line) => ` (${line})`,
+      }),
+    onSome: (reading) => ` (reading ${reading})`,
+  });
+
+/**
  * Open a content refusal's sentence: the document and where in it, each name the document controls
  * in a code span.
  *
@@ -1528,6 +1545,11 @@ const templateRequirements = (refusal: Refusal): string => {
  * and `secondPrefix` with `secondVariable`, and the `reading`; `resource-type-mismatch` the
  * declared `type`, the resource's `path`, the `root` its document has and, when known, the type
  * that root names, `expected`.
+ *
+ * `attribute-type` and `missing-attribute` cite the `reading` that settles them, or else the
+ * `source`, a line of QTI's information model, for the floor of a literal `figures` or `n` and the
+ * `tolerance` an absolute or relative `qti-equal` must carry. `missing-attribute` names the mode
+ * that requires the attribute, `whenAttribute` with `whenValue`, when one does.
  */
 const wordings = {
   "ambiguous-reference": (refusal) => {
@@ -1549,12 +1571,12 @@ const wordings = {
     );
   },
   "attribute-type": (refusal) => {
-    const { attribute, cite, element } = named(refusal);
+    const { attribute, element } = named(refusal);
     const expected = optionalFact(refusal, "expected");
 
     return sentence(
       refusal,
-      `${code(element)}'s attribute ${code(attribute)} is ${code(fact(refusal, "value", ""))}, which is not ${Option.getOrElse(expected, () => "a value its type allows")}${cite}.`,
+      `${code(element)}'s attribute ${code(attribute)} is ${code(fact(refusal, "value", ""))}, which is not ${Option.getOrElse(expected, () => "a value its type allows")}${settled(refusal)}.`,
       `write a value that is ${Option.getOrElse(expected, () => "of the attribute's type")}`,
     );
   },
@@ -1697,10 +1719,14 @@ const wordings = {
   },
   "missing-attribute": (refusal) => {
     const { attribute, element } = named(refusal);
+    const when = Option.match(optionalFact(refusal, "whenAttribute"), {
+      onNone: () => "",
+      onSome: (mode) => ` when ${code(mode)} is ${code(fact(refusal, "whenValue", ""))}`,
+    });
 
     return sentence(
       refusal,
-      `${code(element)} must carry the attribute ${code(attribute)}, and it has none.`,
+      `${code(element)} must carry the attribute ${code(attribute)}${when}, and it has none${settled(refusal)}.`,
       `add ${code(attribute)} to ${code(element)}`,
     );
   },

@@ -29,7 +29,9 @@
  *
  * Over the XSD's rules it applies the shared readings that set the XSD aside where the walk can see
  * them, each a row of {@link readingRows}: attributes narrowed or retyped, `data-*` names,
- * placements, child counts and the range of the count attributes. The XSD's own order and counts of
+ * placements, child counts and the range of the count attributes, and beside them the information
+ * model's own sentences the XSD does not hold: the floor of a literal `figures` or `n`, and the
+ * `tolerance` an absolute or relative `qti-equal` must carry. The XSD's own order and counts of
  * children are not checked.
  *
  * @module
@@ -62,6 +64,7 @@ import { Refusal } from "#plate/validate/refusal.ts";
 import type { RefusalRule } from "#plate/validate/refusal.ts";
 import { patternEquivalents } from "#plate/validate/xsd.ts";
 import type {
+  AttributeTable,
   AttributeType,
   BuiltinName,
   ChildName,
@@ -386,12 +389,54 @@ interface CountRange {
 }
 
 /**
- * One reading applied over the XSD's rules.
+ * A row's condition on its element: the attribute in no namespace that sets a mode, and the value
+ * it must have. The value is read collapsed, or as the default the element's table declares when
+ * the element does not write it; a value that holds an unexpanded entity reference is unknown and
+ * meets no condition.
+ */
+interface Condition {
+  readonly attribute: string;
+  readonly value: string;
+}
+
+/**
+ * A floor the information model sets on an attribute the XSD types as an integer or a variable's
+ * name: on `element`, when `when` holds, a value the XSD's own type admits that is an integer
+ * after collapse must be at least `least`, compared exactly, or it is `attribute-type`, citing
+ * `source`, the information model's line. A variable's name is not compared: its value is known
+ * only at run time.
+ */
+interface IntegerFloor {
+  readonly attribute: string;
+  readonly element: string;
+  readonly kind: "integer-floor";
+  readonly least: bigint;
+  readonly source: string;
+  readonly when: Option.Option<Condition>;
+}
+
+/**
+ * An attribute the information model requires where the XSD makes it optional: on `element`, when
+ * `when` holds, `attribute` in no namespace must be written, or it is `missing-attribute` at the
+ * element, citing `source`, the information model's line.
+ */
+interface ConditionalAttribute {
+  readonly attribute: string;
+  readonly element: string;
+  readonly kind: "conditional-attribute";
+  readonly source: string;
+  readonly when: Condition;
+}
+
+/**
+ * One reading applied over the XSD's rules, or one sentence of the information model.
  */
 type ReadingRow =
   | AttributeName
   | ChildCount
+  | ConditionalAttribute
   | CountRange
+  | IntegerFloor
   | NarrowedAttribute
   | Placement
   | RetypedAttribute;
@@ -451,7 +496,7 @@ const isSingleDeclaration = (parent: Option.Option<SourceElement>): boolean =>
  *
  * Every refusal a row gives carries the row's reading in its detail, as `reading`, which the
  * verdict's wording cites; a `child-count` refusal carries `source`, a reading or a specification
- * line, instead.
+ * line, instead, and so does the refusal of an information-model row, its line of `info.txt`.
  */
 const readingRows: readonly ReadingRow[] = [
   // Reading 8 (spec-readings.md:65): a match table entry's `target-value` is a value of the
@@ -607,6 +652,74 @@ const readingRows: readonly ReadingRow[] = [
     least: leastCount,
     reading: "46",
   },
+  // The information model's `figures` (info.txt:25131 for `qti-equal-rounded`, info.txt:39732 for
+  // `qti-round-to`): "If rounding-mode="significantFigures", the value of figures must be a non-zero
+  // positive integer. If rounding-mode="decimalPlaces", the value of figures must be an integer
+  // greater than or equal to zero", as pantry's `EqualRoundedFigures` and `RoundToFigures` (P10)
+  // refuse. `qti-equal-rounded`'s mode defaults to `significantFigures`; `qti-round-to`'s has no
+  // default, so one it lacks is `missing-attribute` and its `figures` is not compared.
+  {
+    attribute: "figures",
+    element: "qti-equal-rounded",
+    kind: "integer-floor",
+    least: 0n,
+    source: "info.txt:25131",
+    when: Option.some({ attribute: "rounding-mode", value: "decimalPlaces" }),
+  },
+  {
+    attribute: "figures",
+    element: "qti-equal-rounded",
+    kind: "integer-floor",
+    least: 1n,
+    source: "info.txt:25131",
+    when: Option.some({ attribute: "rounding-mode", value: "significantFigures" }),
+  },
+  {
+    attribute: "figures",
+    element: "qti-round-to",
+    kind: "integer-floor",
+    least: 0n,
+    source: "info.txt:39732",
+    when: Option.some({ attribute: "rounding-mode", value: "decimalPlaces" }),
+  },
+  {
+    attribute: "figures",
+    element: "qti-round-to",
+    kind: "integer-floor",
+    least: 1n,
+    source: "info.txt:39732",
+    when: Option.some({ attribute: "rounding-mode", value: "significantFigures" }),
+  },
+  // The information model's `qti-index` (info.txt:9426): "n must be a positive integer", as
+  // pantry's `IndexPositive` (P11) refuses. `qti-repeat`'s `number-repeats` (pantry's `RepeatInt`,
+  // P6) needs no row: its XSD type, an NCName or an `xs:int`, already refuses an integer outside
+  // `xs:int` as `attribute-type`.
+  {
+    attribute: "n",
+    element: "qti-index",
+    kind: "integer-floor",
+    least: 1n,
+    source: "info.txt:9426",
+    when: Option.none(),
+  },
+  // The information model's `qti-equal` (info.txt:24946): "If the tolerance mode is absolute or
+  // relative then the tolerance must be specified", as pantry (P36) refuses an absolute or relative
+  // `Equal` with no `EqualTolerance` row. A `tolerance` written empty is specified, as pantry's
+  // `toleranceList` admits it; `tolerance-mode` defaults to `exact`, which needs none.
+  {
+    attribute: "tolerance",
+    element: "qti-equal",
+    kind: "conditional-attribute",
+    source: "info.txt:24946",
+    when: { attribute: "tolerance-mode", value: "absolute" },
+  },
+  {
+    attribute: "tolerance",
+    element: "qti-equal",
+    kind: "conditional-attribute",
+    source: "info.txt:24946",
+    when: { attribute: "tolerance-mode", value: "relative" },
+  },
   // Single cardinality is "a single value" (info.txt:73049, the information model's
   // `CardinalityEnum`), so the default or correct value of a single declaration holds one
   // `qti-value`, where the XSD admits one or more. Only more than one is refused here: none is the
@@ -663,6 +776,74 @@ const childCounts = rowsOf("child-count");
  * The rows that bound counts.
  */
 const countRanges = rowsOf("count-range");
+
+/**
+ * The rows that set a floor under an integer literal.
+ */
+const integerFloors = rowsOf("integer-floor");
+
+/**
+ * The rows that require an attribute under a mode.
+ */
+const conditionalAttributes = rowsOf("conditional-attribute");
+
+/**
+ * Read the value an element gives an attribute in no namespace, for a row's condition: the value
+ * it writes, collapsed, or the default its table declares when it writes none.
+ *
+ * @param element The element.
+ * @param declared The attributes the element's table declares.
+ * @param local The attribute's local name.
+ * @returns The value, or none when the element writes none and its table declares no default, or
+ *   when the value written holds an unexpanded entity reference, whose value is unknown.
+ */
+const modeOf = (
+  element: SourceElement,
+  declared: readonly AttributeTable[],
+  local: string,
+): Option.Option<string> => {
+  const written = element.attributes.find(
+    (attribute) => attribute.namespace === "" && attribute.local === local,
+  );
+  if (written !== undefined) {
+    return written.references.length === 0 ? Option.some(collapse(written.value)) : Option.none();
+  }
+
+  return Option.fromUndefinedOr(
+    declared.find((declaration) => declaration.namespace === "" && declaration.local === local)
+      ?.default,
+  );
+};
+
+/**
+ * Report whether a row's condition holds on an element.
+ *
+ * @param condition The condition.
+ * @param element The element.
+ * @param declared The attributes the element's table declares, for a default.
+ * @returns Whether the element gives the condition's attribute the condition's value.
+ */
+const meets = (
+  condition: Condition,
+  element: SourceElement,
+  declared: readonly AttributeTable[],
+): boolean =>
+  Option.exists(
+    modeOf(element, declared, condition.attribute),
+    (value) => value === condition.value,
+  );
+
+/**
+ * The facts a refusal gives the condition its row met: the attribute that sets the mode and the
+ * value it has.
+ *
+ * @param condition The condition.
+ * @returns `whenAttribute` and `whenValue`.
+ */
+const conditionFacts = (condition: Condition) => ({
+  whenAttribute: condition.attribute,
+  whenValue: condition.value,
+});
 
 /**
  * Report whether an attribute's type admits a value.
@@ -1298,14 +1479,16 @@ const checkUndeclared = (
 
 /**
  * Check a declared attribute's value: against the XSD's type, unless a reading retypes it, and then
- * against the readings that narrow it and the count ranges. The readings are QTI's, so an
- * attribute of an element in another namespace is checked against its type alone.
+ * against the readings that narrow it, the count ranges and the information model's integer
+ * floors. The readings are QTI's, so an attribute of an element in another namespace is checked
+ * against its type alone.
  *
  * @param source The document.
  * @param element The attribute's element.
  * @param path The element's path.
  * @param type The attribute's type, as its declaration gives it.
  * @param attribute The attribute, whose value holds no unexpanded entity reference.
+ * @param declared The attributes the element's table declares, for the default of a floor's mode.
  * @returns Its `attribute-type` and `count-range` refusals.
  */
 const checkValue = (
@@ -1314,6 +1497,7 @@ const checkValue = (
   path: string,
   type: AttributeType,
   attribute: SourceAttribute,
+  declared: readonly AttributeTable[],
 ): readonly Refusal[] => {
   const name = attributeName(attribute);
   const local = attribute.namespace === "" && element.namespace === qtiNamespace;
@@ -1363,9 +1547,73 @@ const checkValue = (
         reading: row.reading,
       }),
     );
+  const floored = integerFloors
+    .filter(
+      (row) =>
+        local &&
+        row.element === element.local &&
+        row.attribute === attribute.local &&
+        integerLexical.test(lexical) &&
+        BigInt(lexical) < row.least &&
+        Option.match(row.when, {
+          onNone: () => true,
+          onSome: (condition) => meets(condition, element, declared),
+        }),
+    )
+    .map((row) => {
+      const mode = Option.match(row.when, {
+        onNone: () => "",
+        onSome: (condition) => ` when ${condition.attribute} is ${condition.value}`,
+      });
 
-  return [...narrowed, ...ranged];
+      return refuse(source, "attribute-type", at, {
+        ...detail,
+        expected: `an integer at least ${row.least.toString()}${mode}`,
+        least: row.least.toString(),
+        source: row.source,
+        ...Option.match(row.when, { onNone: () => ({}), onSome: conditionFacts }),
+      });
+    });
+
+  return [...narrowed, ...ranged, ...floored];
 };
+
+/**
+ * Check the attributes the information model requires of an element under a mode it sets, where
+ * the XSD makes them optional.
+ *
+ * @param source The document.
+ * @param element The element.
+ * @param path The element's path.
+ * @param declared The attributes the element's table declares, for the default of a mode.
+ * @returns Its `missing-attribute` refusals, one per row whose condition the element meets and
+ *   whose attribute it does not write.
+ */
+const checkConditional = (
+  source: SourceDocument,
+  element: SourceElement,
+  path: string,
+  declared: readonly AttributeTable[],
+): readonly Refusal[] =>
+  element.namespace === qtiNamespace
+    ? conditionalAttributes
+        .filter(
+          (row) =>
+            row.element === element.local &&
+            meets(row.when, element, declared) &&
+            !element.attributes.some(
+              (attribute) => attribute.namespace === "" && attribute.local === row.attribute,
+            ),
+        )
+        .map((row) =>
+          refuse(source, "missing-attribute", path, {
+            attribute: row.attribute,
+            element: elementName(element),
+            source: row.source,
+            ...conditionFacts(row.when),
+          }),
+        )
+    : [];
 
 /**
  * Report whether an element sits where a placement row requires.
@@ -1570,15 +1818,15 @@ const namedType = (
 /**
  * Check the attributes and the text of one element the walk admitted.
  *
- * A required attribute that is absent is `missing-attribute` at the element. `xsi:type` and
- * `xsi:nil` go to {@link checkInstance}, before any other attribute. A declared attribute
- * goes to {@link checkValue} and is checked for `padded-attribute`, unless its value holds an
- * unexpanded entity reference, whose value is unknown. An undeclared one goes to
- * {@link checkUndeclared}. Non-whitespace text in an element whose table admits none is
- * `text-not-allowed`. The placement and child-count rows go to {@link checkPlacement} and
- * {@link checkChildCounts}. The attributes and the text are checked by the table that governs the
- * element, and its `xsi:type` by the types its name is declared with. The readings' rows name QTI's
- * elements and attributes only.
+ * A required attribute that is absent is `missing-attribute` at the element, and so is one the
+ * information model requires under a mode the element sets ({@link checkConditional}). `xsi:type`
+ * and `xsi:nil` go to {@link checkInstance}, before any other attribute. A declared attribute goes
+ * to {@link checkValue} and is checked for `padded-attribute`, unless its value holds an unexpanded
+ * entity reference, whose value is unknown. An undeclared one goes to {@link checkUndeclared}.
+ * Non-whitespace text in an element whose table admits none is `text-not-allowed`. The placement
+ * and child-count rows go to {@link checkPlacement} and {@link checkChildCounts}. The attributes and
+ * the text are checked by the table that governs the element, and its `xsi:type` by the types its
+ * name is declared with. The readings' rows name QTI's elements and attributes only.
  *
  * @param source The document.
  * @param element The element.
@@ -1621,7 +1869,10 @@ const checkElement = (
     }
   }
 
-  refusals.push(...checkInstance(source, element, path, name, parents, schemas));
+  refusals.push(
+    ...checkConditional(source, element, path, declared),
+    ...checkInstance(source, element, path, name, parents, schemas),
+  );
   for (const attribute of element.attributes) {
     if (isAllowance(attribute) || isInstanceAttribute(attribute)) {
       continue;
@@ -1640,7 +1891,7 @@ const checkElement = (
       continue;
     }
 
-    refusals.push(...checkValue(source, element, path, declaration.type, attribute));
+    refusals.push(...checkValue(source, element, path, declaration.type, attribute, declared));
     if (isPadded(element, attribute, parents)) {
       refusals.push(
         refuse(source, "padded-attribute", attributePath(path, attribute), {

@@ -1887,6 +1887,67 @@ describe("describeRefusal", () => {
     assert.include(schema, "`p` may not hold `b`; QTI 3.0's schema allows no such child there.");
   });
 
+  it("[I-9a] cites the information model's line for an attribute-type refusal no reading settles, and the reading where one does", () => {
+    const sourced = describeRefusal(
+      refusalOf("attribute-type", {
+        attribute: "figures",
+        element: "qti-round-to",
+        expected: "an integer at least 1 when rounding-mode is significantFigures",
+        least: "1",
+        source: "info.txt:39732",
+        value: "0",
+        whenAttribute: "rounding-mode",
+        whenValue: "significantFigures",
+      }),
+    );
+    const read = describeRefusal(
+      refusalOf("attribute-type", {
+        attribute: "min-choices",
+        element: "qti-order-interaction",
+        expected: "an integer at least 1",
+        reading: "18",
+        source: "info.txt:1",
+        value: "0",
+      }),
+    );
+
+    assert.include(
+      sourced,
+      "`qti-round-to`'s attribute `figures` is `0`, which is not an integer at least 1 when rounding-mode is significantFigures (info.txt:39732).",
+    );
+    assert.include(
+      sourced,
+      "To make it valid: write a value that is an integer at least 1 when rounding-mode is significantFigures.",
+    );
+    assert.include(read, "which is not an integer at least 1 (reading 18).");
+    assert.notInclude(read, "info.txt");
+  });
+
+  it("[I-9a] names the mode under which a qti-equal must carry a tolerance, and cites the information model's line", () => {
+    const sentence = describeRefusal(
+      refusalOf("missing-attribute", {
+        attribute: "tolerance",
+        element: "qti-equal",
+        source: "info.txt:24946",
+        whenAttribute: "tolerance-mode",
+        whenValue: "relative",
+      }),
+    );
+    const unconditional = describeRefusal(
+      refusalOf("missing-attribute", { attribute: "identifier", element: "qti-simple-choice" }),
+    );
+
+    assert.include(
+      sentence,
+      "`qti-equal` must carry the attribute `tolerance` when `tolerance-mode` is `relative`, and it has none (info.txt:24946).",
+    );
+    assert.include(sentence, "To make it valid: add `tolerance` to `qti-equal`.");
+    assert.include(
+      unconditional,
+      "`qti-simple-choice` must carry the attribute `identifier`, and it has none.",
+    );
+  });
+
   it("names which operand of a qti-equal is not a single integer or float", () => {
     const sentence = describeRefusal(
       refusalOf("expression-type", {
