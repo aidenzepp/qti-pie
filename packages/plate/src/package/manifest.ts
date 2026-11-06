@@ -427,7 +427,20 @@ const resourcesOf = (
   root: SourceElement,
   paths: ReadonlyMap<SourceElement, string>,
 ): readonly ResourceEntry[] => {
+  /**
+   * Give an element's path, as the walk spells it.
+   *
+   * @param element An element of the manifest.
+   * @returns Its path.
+   */
   const pathOf = (element: SourceElement): string => paths.get(element) ?? "";
+  /**
+   * Read an element's `href`, resolved against a base.
+   *
+   * @param base The base its `xml:base` values give the element.
+   * @param element A `resource` or a `file`.
+   * @returns The `href` with its target and its attribute's path, or none when it has no `href`.
+   */
   const located = (base: Target, element: SourceElement): Option.Option<Located> =>
     Option.map(attributeOf(element, "href"), (attribute) => ({
       at: attributePath(pathOf(element), attribute),
@@ -484,6 +497,12 @@ const checkResources = (
       Option.toArray(Option.map(attributeOf(entry.element, "identifier"), (id) => id.value)),
     ),
   );
+  /**
+   * Refuse a reference that leaves the package's root.
+   *
+   * @param reference The reference.
+   * @returns Its `package-path-outside` refusal at its attribute, or none when it stays inside.
+   */
   const outside = (reference: Located): readonly Refusal[] =>
     reference.target.kind === "outside"
       ? [refuse(source, "package-path-outside", reference.at, { path: reference.href })]
@@ -603,12 +622,12 @@ const profileOf = (
  * A root outside {@link manifestNamespace} is refused `not-qti3-package` alone, and a
  * `schemaversion` other than `3.0.0` or `3.0.1`, or none, `package-profile` alone. Otherwise the
  * manifest is walked against its profile's tables with `checkStructure`, each refusal of the walk
- * carrying the profile it was judged against as `schemaversion` in its detail; its elements'
- * child counts are checked against the profile's occurrences (`child-count`, also carrying
+ * carrying the profile it was judged against as `schemaversion` in its detail; its elements' child
+ * counts are checked against the profile's occurrences (`child-count`, also carrying
  * `schemaversion`); and it is checked by the manifest's own rules: `package-path-outside`,
  * `child-count` for a resource whose `href` no `file` entry references, and
- * `dependency-unresolved`. All are reported, in that order.
- * Nothing is read or fetched beyond the document given.
+ * `dependency-unresolved`. All are reported, in that order. Nothing is read or fetched beyond the
+ * document given.
  *
  * @param source The manifest, as the reader adapter built it, whose location every refusal carries.
  * @returns The manifest, or every refusal of it in the order above.

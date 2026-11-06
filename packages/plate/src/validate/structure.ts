@@ -82,8 +82,7 @@ interface Misspelling {
 }
 
 /**
- * The table of misspellings, which gives an `unknown-attribute` refusal its
- * suggestion.
+ * The table of misspellings, which gives an `unknown-attribute` refusal its suggestion.
  *
  * A name with no row is refused with no suggestion, and its wording says to remove the attribute.
  */
@@ -1851,8 +1850,8 @@ const admit = (
   schemas: Schemas,
 ): Admission => {
   /**
-   * Admit a tabled element by its own table: checked when its namespace's tables declare its local
-   * name, otherwise unknown, and passed over when the element is not tabled.
+   * Admit the element by its own table: passed over when it is not tabled, checked when its
+   * namespace's tables declare its local name, and unknown when they do not.
    *
    * @returns The element's admission.
    */
