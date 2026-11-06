@@ -24,6 +24,7 @@ import type { ExternalRefusal } from "#pantry/import/record.ts";
 import type { ItemRefusal, UnmodeledVocabulary } from "#pantry/import/tree.ts";
 import type { PackageReadError } from "#pantry/package/read.ts";
 import type { ZipRefusal } from "#pantry/package/zip.ts";
+import { families } from "#pantry/schema/mathml/values.ts";
 import * as patterns from "#pantry/schema/patterns.ts";
 import type { ReaderRefusal, WellFormednessError } from "@qti-pie/crust/errors.ts";
 
@@ -468,6 +469,8 @@ const checkRules = new Map<string, Rule>([
   ["MatchBounds", "choice-bounds"],
   ["MaxAttemptsInt", "attribute-lexical"],
   ["MediaPlays", "choice-bounds"],
+  ["NodeClassNotMathml", "attribute-admission"],
+  ["NodeDirNotMathml", "attribute-admission"],
   ["NoDefaultHotspotInGraphicGapMatch", "hotspot-default"],
   ["NodeLabelNotRoot", "attribute-admission"],
   ["OrderChoiceBounds", "choice-bounds"],
@@ -548,6 +551,9 @@ const capacityRules = new Map<string, Rule>([
   ["ManifestMetadata<ManifestSchema", "schema-single"],
   ["ManifestMetadata<ManifestSchemaVersion", "schema-single"],
   ["MatchInteraction<Edge", "match-sets"],
+  ["MathmlBvar<Edge", "union-count"],
+  ["MathmlMmultiscripts<Edge", "union-count"],
+  ["MathmlPiecewise<Edge", "union-count"],
   ["ModalFeedback<Edge", "modal-body"],
   ["Node<NodeDir", "bdo-dir"],
   ["OrderInteraction<SimpleChoice", "order-choice-count"],
@@ -739,12 +745,26 @@ const attributeValueHosts: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * The two containments of each of the 67 MathML attribute families, built from `values.ts`'s
+ * `families` and not written out: the family's `(kind, attribute)` into the type matrix and its
+ * `(node, kind)` into `Node`. Both state that the host carries the attribute with that value type,
+ * `attribute-admission`, the rule phase 2's family containments into `Node` have (spec 4.13).
+ */
+const mathmlFamilyContainedEntries: readonly (readonly [string, Rule])[] = families.flatMap(
+  (family): readonly (readonly [string, Rule])[] => [
+    [`${family.relation}>MathmlAttributeType`, "attribute-admission"],
+    [`${family.relation}>Node`, "attribute-admission"],
+  ],
+);
+
+/**
  * The rule of a containment, by the relation it leaves and the one it enters, as `from>to`.
  */
 const containedRules = new Map<string, Rule>([
   ...testContainedEntries.flatMap(([rule, pairs]) =>
     pairs.map((pair): [string, Rule] => [pair, rule]),
   ),
+  ...mathmlFamilyContainedEntries,
   ["AssessmentItemLabel>ItemToolBoth", "label-tool"],
   ["AttributeIdref>DocumentId", "idref-target"],
   ["AttributeIdref>Node", "idref-target"],
@@ -765,6 +785,7 @@ const containedRules = new Map<string, Rule>([
   ["InteractionBinding>Declaration", "binding-declared"],
   ["ItemBodyId>Node", "document-key"],
   ["Mapping>MappableBaseType", "mapping-base-type"],
+  ["MathmlAttributeType>AttributeAdmission", "attribute-admission"],
   ["Node>AncestryStep", "ancestry-ban"],
   ["PrintedVariableId>Node", "document-key"],
   ["RecordBinding>RecordBindingFit", "record-binding-fit"],
@@ -1061,7 +1082,9 @@ const containedRule = (from: LawSide, to: LawSide): Rule | undefined => {
  * A source shared with an earlier phase's columns keeps that phase's rule, since the law carries no
  * relation to tell the columns apart: `ncName`, `xsInteger`, `xsDouble`, `pair` and `point` name
  * `value-lexical`, never `drd-value`, `usage-lexical` or `usage-typed-value`. Only a source no
- * earlier column spells names the new rule: the nine DRD vocabularies and the usage date.
+ * earlier column spells names the new rule: the nine DRD vocabularies and the usage date. The 28
+ * `mathml*` sources, written last, are no earlier column's: each is `attribute-lexical` (spec
+ * 4.13).
  */
 const patternRules = new Map<string, Rule>([
   [patterns.anyUri, "uri-syntax"],
@@ -1112,6 +1135,34 @@ const patternRules = new Map<string, Rule>([
   [patterns.xsInt, "attribute-lexical"],
   [patterns.xsInteger, "value-lexical"],
   [patterns.xsNonNegativeInteger, "attribute-lexical"],
+  [patterns.mathmlLength, "attribute-lexical"],
+  [patterns.mathmlMpaddedLength, "attribute-lexical"],
+  [patterns.mathmlColor, "attribute-lexical"],
+  [patterns.mathmlCharacter, "attribute-lexical"],
+  [patterns.mathmlAlign, "attribute-lexical"],
+  [patterns.mathmlClass, "attribute-lexical"],
+  [patterns.mathmlNumber, "attribute-lexical"],
+  [patterns.mathmlUnsignedInteger, "attribute-lexical"],
+  [patterns.mathmlInteger, "attribute-lexical"],
+  [patterns.mathmlPositiveInteger, "attribute-lexical"],
+  [patterns.mathmlMathsize, "attribute-lexical"],
+  [patterns.mathmlIndentshiftLine, "attribute-lexical"],
+  [patterns.mathmlLineThickness, "attribute-lexical"],
+  [patterns.mathmlCharspacing, "attribute-lexical"],
+  [patterns.mathmlMaxsize, "attribute-lexical"],
+  [patterns.mathmlAltimgValign, "attribute-lexical"],
+  [patterns.mathmlTableWidth, "attribute-lexical"],
+  [patterns.mathmlBackground, "attribute-lexical"],
+  [patterns.mathmlLinestyleList, "attribute-lexical"],
+  [patterns.mathmlLengthList, "attribute-lexical"],
+  [patterns.mathmlColumnalign, "attribute-lexical"],
+  [patterns.mathmlRowalign, "attribute-lexical"],
+  [patterns.mathmlCrossout, "attribute-lexical"],
+  [patterns.mathmlAlignmentscope, "attribute-lexical"],
+  [patterns.mathmlColumnwidth, "attribute-lexical"],
+  [patterns.mathmlFramespacing, "attribute-lexical"],
+  [patterns.mathmlGroupAlignmentList, "attribute-lexical"],
+  [patterns.mathmlGroupAlignmentListList, "attribute-lexical"],
 ]);
 
 /**
@@ -1451,6 +1502,17 @@ const writtenContractRules: readonly (readonly [Rule, readonly string[]])[] = [
       "MappingScore",
       "MatchGroupList",
       "MatchSourceValue",
+      "MathmlBaseValue",
+      "MathmlCbytesValue",
+      "MathmlCdValue",
+      "MathmlIndexValue",
+      "MathmlNameValue",
+      "MathmlNargsValue",
+      "MathmlPositionValue",
+      "MathmlScriptlevelValue",
+      "MathmlSelectionValue",
+      "MathmlShiftValue",
+      "MathmlSpanValue",
       "MediaRectCoords",
       "PrintedVariableIntegerOrVariable",
       "RectCoords",
@@ -1482,6 +1544,9 @@ const writtenContractRules: readonly (readonly [Rule, readonly string[]])[] = [
       "ItemRefHref",
       "LongDescriptionUri",
       "LongInterpretationUri",
+      "MathmlCdgroupValue",
+      "MathmlDefinitionUrlValue",
+      "MathmlSrcValue",
       "NamespaceUri",
       "SectionRefHref",
       "StatisticContextUri",

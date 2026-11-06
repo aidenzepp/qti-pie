@@ -3,6 +3,11 @@ import { Option } from "effect";
 import type { SchemaVersionHandle } from "#pantry/schema/kinds/generic.ts";
 import * as foreign from "#pantry/schema/kinds/foreign.ts";
 import * as generic from "#pantry/schema/kinds/generic.ts";
+import {
+  annotationXmlAdmits,
+  isMathmlKind,
+  kinds as mathmlKinds,
+} from "#pantry/schema/kinds/mathml.ts";
 import { admission, attributeAdmission, registries } from "#pantry/schema/seed/admission.ts";
 import { globalElement, namespaces, wildcardHost } from "#pantry/schema/seed/wildcard.ts";
 import { wildcardAdmissionRows } from "#pantry/schema/seed/wildcard-admission.ts";
@@ -75,6 +80,69 @@ describe("the Admission rows that name foreign", () => {
   });
 });
 
+describe("the Admission rows under m:annotation-xml (J6)", () => {
+  const host = "m:annotation-xml";
+  const childrenIn = (version: SchemaVersionHandle) =>
+    admission.filter((row) => row.version === version && row.parent === host);
+
+  it("admits foreign and a QTI global in both versions (the probe of phase 11's 3.3 under the host)", () => {
+    for (const version of versions) {
+      assert.isTrue(has(version, host, "foreign"), `${version}: foreign`);
+      assert.isTrue(has(version, host, "p"), `${version}: p`);
+      assert.isTrue(has(version, host, "div"), `${version}: div`);
+      assert.isTrue(has(version, host, "m:mi"), `${version}: m:mi`);
+    }
+  });
+
+  it("admits the 168 expression kinds in each version and none of the other 26", () => {
+    const expected = [...annotationXmlAdmits].toSorted();
+    const others: readonly string[] = mathmlKinds.filter(
+      (kind) => !annotationXmlAdmits.includes(kind),
+    );
+
+    assert.strictEqual(expected.length, 168);
+    assert.strictEqual(others.length, 26);
+    assert.isTrue(
+      ["m:math", "m:annotation", "m:sep", "m:semantics.ci"].every((k) => others.includes(k)),
+    );
+    for (const version of versions) {
+      const mathml = childrenIn(version)
+        .map((row) => row.child)
+        .filter((child) => isMathmlKind(child));
+
+      assert.deepStrictEqual(mathml.toSorted(), expected, version);
+      for (const kind of others) {
+        assert.isFalse(has(version, host, kind), `${version}: (${host}, ${kind})`);
+      }
+    }
+  });
+
+  it("holds 336 MathML rows, and every non-MathML kind foreign admits", () => {
+    const mathml = admission.filter((row) => row.parent === host && isMathmlKind(row.child));
+
+    const named = new Set(
+      registries.flatMap((registry) =>
+        Object.entries(registry)
+          .filter(([, row]) => row.local !== "")
+          .map(([kind]) => kind),
+      ),
+    );
+
+    assert.strictEqual(mathml.length, 336);
+    for (const version of versions) {
+      const children = new Set(childrenIn(version).map((row) => row.child));
+      const underForeign = admission
+        .filter((row) => row.version === version && row.parent === "foreign")
+        .map((row) => row.child)
+        .filter((child) => !isMathmlKind(child) && named.has(child));
+
+      for (const child of underForeign) {
+        assert.isTrue(children.has(child), `${version}: (${host}, ${child})`);
+      }
+    }
+  });
+});
+
 describe("wildcardAdmissionRows", () => {
   const registry = {
     math: {
@@ -100,6 +168,34 @@ describe("wildcardAdmissionRows", () => {
       [...new Set(rows.filter((row) => row.parent === parent).map((row) => row.child))].toSorted();
     assert.deepStrictEqual(children("xi:fallback"), ["foreign", "math"]);
     assert.deepStrictEqual(children("foreign"), ["foreign", "math"]);
+  });
+
+  it("admits under a MathML host the kinds annotationXmlAdmits names, named by no global or registry", () => {
+    const rows = wildcardAdmissionRows({
+      globals: [{ local: "math", namespace: namespaces.mathml, set: "asi" }],
+      hosts: wildcardHost.filter((candidate) => candidate.host === "m:annotation-xml"),
+      registries: [
+        {
+          "m:annotation-xml": {
+            local: "annotation-xml",
+            namespace: namespaces.mathml,
+            parent: Option.none(),
+          },
+          "m:math": registry.math,
+        },
+      ],
+    });
+
+    for (const version of versions) {
+      assert.deepStrictEqual(
+        rows
+          .filter((row) => row.version === version)
+          .map((row) => row.child)
+          .toSorted(),
+        ["foreign", ...annotationXmlAdmits].toSorted(),
+        version,
+      );
+    }
   });
 
   it("derives a row for each version of each host", () => {

@@ -4,15 +4,15 @@ QTI3_BeginnersGuide_Examples/BegGuide_March2025.zip	accepted
 qtiv3-examples/CAT/CAT_Test01_Adaptive_EchoAdapt.zip	refused	not-qti3
 qtiv3-examples/PCI/sample_pci.zip	refused	not-qti3
 qtiv3-examples/items/shared-vocabulary/shared-vocabulary-imsmanifest.zip	refused	unmodeled-vocabulary
-qtiv3-examples/packaging/BBQsTest/BBQsTest.zip	refused	unmodeled-vocabulary
+qtiv3-examples/packaging/BBQsTest/BBQsTest.zip	refused	file-exists
 qtiv3-examples/packaging/CASE/CASE.zip	accepted	
 qtiv3-examples/packaging/CASEWithOutcome/CASEWithOutcome.zip	refused	lom-title
-qtiv3-examples/packaging/basicFeedbackTest/basicFeedbackTest.zip	refused	unmodeled-vocabulary
+qtiv3-examples/packaging/basicFeedbackTest/basicFeedbackTest.zip	accepted	
 qtiv3-examples/packaging/ccPackage/ccPackage.zip	accepted	
 qtiv3-examples/packaging/englishBasicLevelV2/englishBasicLevelV2.zip	accepted	
 qtiv3-examples/packaging/englishHighLevelV2/englishHighLevelV2.zip	refused	section-empty
 qtiv3-examples/packaging/externalMetadata/externalMetadata.zip	accepted	
-qtiv3-examples/packaging/feedbackTest/feedbackTest.zip	refused	unmodeled-vocabulary
+qtiv3-examples/packaging/feedbackTest/feedbackTest.zip	refused	item-ref-target
 qtiv3-examples/packaging/interactionMixSaxonyV3/interactionMixSaxonyV3.zip	accepted	
 qtiv3-examples/packaging/items/items.zip	refused	unmodeled-vocabulary
 qtiv3-examples/packaging/lti/lti.zip	refused	resource-type
