@@ -48,6 +48,8 @@ import {
 } from "#pantry/schema/mathml/attributes.ts";
 import { Edge, Node, TextNode } from "#pantry/schema/node.ts";
 import * as patterns from "#pantry/schema/patterns.ts";
+import { FLAGS, handleOf, KindEnters, stepOf } from "#pantry/schema/seed/ancestry.ts";
+import type { Flag } from "#pantry/schema/seed/ancestry.ts";
 import { materialize } from "#pantry/test/fixtures.ts";
 import { hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 
@@ -246,18 +248,29 @@ const armOf = (kind: string): AnyRelation => {
 };
 
 /**
+ * The ancestry a child of `parent` takes: the walk's step (`stepOf`, which the importer calls too)
+ * from the parent's own ancestry across the parent's kind. Inside a formula that is `math`, since
+ * `m:math` enters and absorbs `math`.
+ */
+const childAncestryOf = (parent: Placed): string => {
+  const held = FLAGS.filter((flag: Flag) => parent.ancestry.split(".").includes(flag));
+
+  return handleOf(stepOf(held, parent.kind, KindEnters));
+};
+
+/**
  * Add a node of `kind` as the last child of `parent`, with the edge into it and its arm row `row`.
- * MathML and HTML kinds enter no ancestry flag, so the child is at its parent's ancestry. Positions
- * start at 1000, clear of the fixture's own.
+ * The child takes the ancestry the walk gives it (`childAncestryOf`). Positions start at 1000,
+ * clear of the fixture's own.
  *
  * @returns The new node, placed.
  */
 const attach = (draft: Draft, parent: Placed, kind: string, row: Row = {}): Placed => {
   const like = find(draft, Node, (node) => text(node, "id") === parent.id);
   const id = crypto.randomUUID();
-  const child = { ancestry: parent.ancestry, id, kind };
+  const child = { ancestry: childAncestryOf(parent), id, kind };
 
-  of(draft, Node).push({ ...like, ancestry: parent.ancestry, id, kind });
+  of(draft, Node).push({ ...like, ancestry: child.ancestry, id, kind });
   of(draft, armOf(kind)).push({ ...row, id });
   of(draft, Edge).push({
     child: id,
@@ -319,6 +332,20 @@ const edgeAdmission = containedLaw(side(Edge, ["version", "parentKind", "childKi
   relation: "Admission",
   selection: [],
 });
+
+/**
+ * The containment of an edge's `(parentAncestry, parentKind, childAncestry)` into `AncestryStep`.
+ * An edge into a kind the parent does not admit can break it beside `Admission` (decision 133: both
+ * laws can name the one refusal, and which one grizzle reports can depend on the rows present).
+ */
+const edgeAncestryStep = containedLaw(
+  side(Edge, ["parentAncestry", "parentKind", "childAncestry"]),
+  {
+    fields: ["ancestry", "kind", "next"],
+    relation: "AncestryStep",
+    selection: [],
+  },
+);
 
 /**
  * The containment of a family's `(kind, attribute)` into the matrix rows of its own type.
@@ -455,7 +482,10 @@ const negatives: readonly Negative[] = [
 
       attach(draft, fraction, "text", { value: "x" });
     },
-    laws: [[edgeAdmission, "admission"]],
+    laws: [
+      [edgeAdmission, "admission"],
+      [edgeAncestryStep, "ancestry-step"],
+    ],
     name: "a text node under an m:mfrac is refused by Admission (text only in mixed kinds)",
   },
   {
