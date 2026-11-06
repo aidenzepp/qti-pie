@@ -20,6 +20,7 @@ import {
   EntityReference,
   NamespaceDeclaration,
   Node,
+  NodeKind,
   Pi,
   SchemaLocation,
   TextNode,
@@ -31,8 +32,10 @@ import {
   TreeXmlEncoding,
   TreeXmlStandalone,
   TreeXmlVersion,
+  vocabularies,
   Ws,
 } from "#pantry/schema/node.ts";
+import type { RegistryRow } from "#pantry/schema/kinds/generic.ts";
 import { NodeXmlBase, NodeXmlLang } from "#pantry/schema/attributes.ts";
 import { attributeRows } from "#pantry/import/attributes.ts";
 import { ImportRefused } from "#pantry/import/refusal.ts";
@@ -906,6 +909,34 @@ it("kindOf resolves a dotted handle by the parent's kind", () => {
     kindOf(duration, Option.some("lom:duration")),
     Option.some("lom:duration.string"),
   );
+});
+
+const mathmlNamespace = "http://www.w3.org/1998/Math/MathML";
+
+it("kindOf keeps m:semantics.ci under its own kind and no other dotted handle nests in itself", () => {
+  const semantics = bare(mathmlNamespace, "semantics");
+
+  assert.deepStrictEqual(kindOf(semantics, Option.some("m:bvar")), Option.some("m:semantics.ci"));
+  assert.deepStrictEqual(
+    kindOf(semantics, Option.some("m:semantics.ci")),
+    Option.some("m:semantics.ci"),
+  );
+  assert.deepStrictEqual(kindOf(semantics, Option.some("m:mrow")), Option.some("m:semantics"));
+
+  const rows = new Map(
+    vocabularies.flatMap((vocabulary) => Object.entries<RegistryRow>(vocabulary.registry)),
+  );
+  const nesting = NodeKind.handles.filter((handle) => {
+    const row = rows.get(handle);
+
+    return (
+      row !== undefined &&
+      row.local !== "" &&
+      Option.isSome(row.parent) &&
+      Option.getOrNull(kindOf(bare(row.namespace, row.local), Option.some(handle))) === handle
+    );
+  });
+  assert.deepStrictEqual(nesting, ["m:semantics.ci"]);
 });
 
 const spaces = ["integer", "nonNegativeInteger", "positiveInteger"] as const;
