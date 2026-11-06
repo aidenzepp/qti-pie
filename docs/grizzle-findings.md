@@ -1310,9 +1310,11 @@ closed-relation constant now always one hex literal.
   `keyTextBytes(fields)`, which lane S-ORACLE's interim bound in `src/qti/limits.ts` does (`e0fcddbf`, "bound keyText
   by grizzle's own keyTextBytes, 646 code points"). `keyTextBytes` alone still leaves this axis 8 bytes over, by the
   null bitmap of its NULL-able hidden columns (the next entry), so the tree holds `keyTextCodePoints` at 646, an
-  interim until grizzle's fix. The octet contract follows at grizzle `a2ff5eb`: there the bound is N = 2,587 bytes,
-  the largest for which `keyTextBytes([...widestTextKey, keyText])` still leaves a byte, and it needs no `proves`,
-  because `a2ff5eb`'s bound analysis reads `octetLength` off the predicate.
+  interim until grizzle's fix. The octet contract was to follow at grizzle `a2ff5eb`: there the bound would be N =
+  2,587 bytes, the largest for which `keyTextBytes([...widestTextKey, keyText])` still leaves a byte, with no `proves`
+  needed, because `a2ff5eb`'s bound analysis reads `octetLength` off the predicate. A containment cannot copy a text
+  into a contract field, though (the entry after next), so `keyText` stays the 646-code-point pattern until that is
+  settled.
 
 ### `keyTextBytes` leaves out a tree axis's null bitmap (grizzle defect, open at `f66c05b`, fixing before beta.1)
 
@@ -1337,6 +1339,26 @@ closed-relation constant now always one hex literal.
   grizzle plans over those fields, the null bitmap and hidden columns included, under a generated test that holds the
   bound admitted and tight. qti-pie's 646 interim is `e0fcddbf`, and grizzle's fixing commit is recorded here when it
   lands.
+
+### A text contract can't be the target of a copy (a limit at grizzle `f66c05b` and `a2ff5eb`, feature request pending)
+
+- **Seen.** keyText as the ruled octet contract, `contract("KeyText", str.regex("^.*$", "su"), (v) =>
+  Compute.octetLength(v).le(N))`, typechecked in a scratch copy of pantry. The 54 containments that copy a document's
+  text into a keyText field were refused with `Refusal<"the sides' field types differ">`, e.g. `declarations.ts:537`,
+  `contained(on(identifiers, "node", "lexical"), on(Declaration, "node", "identifierLexical"))`: `Attribute.lexical` is
+  a text, `Lexical`, and the target is `Contract<"KeyText", …>`. The same containments type-check while keyText is a
+  pattern, since a pattern is no part of a text's type (`src/qti/limits.ts`).
+- **Why no workaround.** A containment's side is a list of fields, so no `Compute.base` can read through it. The
+  source can't be keyText either, since `Attribute.lexical` is unbounded by design. Branding at the host (`keyText(v)`)
+  fixes only the 460 host-side type errors, not these.
+- **Standalone reproduction:** `~/.cache/gr8des/integration/grizzle-repros/contract-containment/` (`repro.ts` and its
+  `tsc.out`): a containment from a plain text field into a field of a text contract is refused, and the control into a
+  pattern-bounded field (`^.{0,100}$`) passes. At run time `own(schemaDescOf(S))` succeeds (`run.out`), so the refusal
+  is grizzle's types alone, and its runtime admission disagrees with them; grizzle should settle which one is meant.
+- **Classification: a limit, with a feature request.** Containment's one-type rule is grizzle's documented typing, so
+  this is no defect. The ask is a byte bound that, like a pattern, is no part of a text's type: `octet_length(VALUE) <=
+  N`, read exactly by the bound analysis. The coordinator has sent it to the grizzle session (pending its answer).
+  Until it lands, keyText stays the 646-code-point pattern held to `keyTextBytes` (e0fcddbf).
 
 ## A role lacked EXECUTE on what its CHECKs cast to (grizzle defect, fixed in `f66c05b`)
 
