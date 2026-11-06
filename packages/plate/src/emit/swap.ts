@@ -112,12 +112,15 @@ const mayBecome = {
   "flow-container":
     "a flow container such as <div>, <section> or <span>, or a custom element, and never a control, link or list",
   heading: "a heading, <h1> to <h6>",
+  "inline-label": "a <label>, or a phrasing container such as <span>, or a custom element",
   legend: "a <legend>, which names its <fieldset> natively",
   li: "an <li>",
   list: "a <ul>, <ol> or <menu>",
   "native-input": 'an <input>, whose "type" the interaction writes',
+  option: "an <option>",
   "phrasing-container": "a phrasing container such as <span>, or a custom element",
   prompt: "a <p>, or a flow or phrasing container such as <div> or <span>",
+  select: "a <select>",
   "text-input": 'an <input> of type "text"',
   textarea: "a <textarea>",
 } satisfies { readonly [C in TagClass]: string };

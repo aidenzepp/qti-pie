@@ -22,6 +22,8 @@ import {
   splitTokens,
 } from "#plate/emit/parts.ts";
 import type { PartRow } from "#plate/emit/parts.ts";
+import { toHtml } from "#plate/emit/serialise.ts";
+import { renderInlineChoice } from "#plate/interactions/inline-choice.ts";
 import type {
   BodyNode,
   ChoiceInteraction,
@@ -30,7 +32,7 @@ import type {
   TextEntryInteraction,
 } from "#plate/model/item.ts";
 import { redactItem } from "#plate/payload.ts";
-import type { RenderMode } from "#plate/payload.ts";
+import type { InlineChoicePayload, RenderMode } from "#plate/payload.ts";
 import { render, renderStatus } from "#plate/render.ts";
 import { parseHtml } from "#plate/test/round-trip.ts";
 
@@ -55,6 +57,16 @@ const specRows = [
   ["choice-interaction", "label", "choice-interaction-label", "label"],
   ["text-entry-interaction", "root", "text-entry-interaction", "qti-text-entry-interaction"],
   ["text-entry-interaction", "control", "text-entry-interaction-control", "input"],
+  [
+    "inline-choice-interaction",
+    "root",
+    "inline-choice-interaction",
+    "qti-inline-choice-interaction",
+  ],
+  ["inline-choice-interaction", "label", "inline-choice-interaction-label", "label"],
+  ["inline-choice-interaction", "control", "inline-choice-interaction-control", "select"],
+  ["inline-choice-interaction", "placeholder", "inline-choice-interaction-placeholder", "option"],
+  ["inline-choice-interaction", "option", "inline-choice-interaction-option", "option"],
   [
     "extended-text-interaction",
     "root",
@@ -449,6 +461,32 @@ describe("allows", () => {
     }
   });
 
+  it("[Q-12] keeps the Inline Choice Control a select, refusing a div and an input", () => {
+    const row = rowFor("inline-choice-interaction", "control");
+    assert.isTrue(allows(row, h("select", {})));
+    assert.isFalse(allows(row, h("div", {})));
+    assert.isFalse(allows(row, h("input", {})));
+  });
+
+  it("[Q-12] keeps the Inline Choice Placeholder and each Option an option, refusing a span", () => {
+    for (const part of ["placeholder", "option"] as const) {
+      const row = rowFor("inline-choice-interaction", part);
+      assert.isTrue(allows(row, h("option", {})), part);
+      assert.isFalse(allows(row, h("span", {})), part);
+    }
+  });
+
+  it("[Q-12] lets the Inline Choice Label be a label, a span or a custom element, never a div or a p", () => {
+    const row = rowFor("inline-choice-interaction", "label");
+    for (const tag of ["label", "span", "my-label"]) {
+      assert.isTrue(allows(row, h(tag, {})), tag);
+    }
+
+    for (const tag of ["div", "p"]) {
+      assert.isFalse(allows(row, h(tag, {})), tag);
+    }
+  });
+
   it("keeps a legend Prompt a legend, and lets a labelledby Prompt become a p or a div", () => {
     const legend = rowFor("choice-interaction", "prompt", { promptMarkup: "legend" });
     const labelled = rowFor("choice-interaction", "prompt", { promptMarkup: "labelledby" });
@@ -759,6 +797,44 @@ const itemOf = (
 });
 
 /**
+ * An Inline Choice whose Label gives text, which names its Control, with the author's class, a
+ * restored choice, two messages and `autofocus`; no `payload()` path builds one yet, so it is
+ * built here and rendered through `renderInlineChoice`.
+ */
+const labelledInlineChoice: InlineChoicePayload = {
+  autofocus: true,
+  choices: [
+    { content: [{ kind: "text", text: "red" }], identifier: "R" },
+    { content: [{ kind: "text", text: "blue" }], identifier: "B" },
+  ],
+  class: "colour",
+  editable: true,
+  formName: "colour-entry",
+  invalid: true,
+  kind: "inline-choice",
+  label: Option.some([{ kind: "text", text: "Colour" }]),
+  messageIds: [
+    scopedId(instance, "RESPONSE", "message", 0),
+    scopedId(instance, "RESPONSE", "message", 1),
+  ],
+  name: { ariaLabel: Option.none(), ariaLabelledby: Option.none(), unnamed: Option.none() },
+  placeholder: Option.none(),
+  response: "RESPONSE",
+  restore: "B",
+};
+
+/**
+ * The Inline Choice with no Label, which the renderer names, restoring an identifier no choice
+ * has, so its Placeholder is the option selected.
+ */
+const unnamedInlineChoice: InlineChoicePayload = {
+  ...labelledInlineChoice,
+  label: Option.none(),
+  name: { ...labelledInlineChoice.name, unnamed: Option.some({ count: 1, n: 1 }) },
+  restore: "Z",
+};
+
+/**
  * List an element and every element below it, in document order.
  *
  * @param nodes The nodes to walk.
@@ -840,10 +916,42 @@ describe("the merged column", () => {
             configuration,
           ),
         ];
+        const inlineChoices = yield* Effect.fromResult(
+          Result.all(
+            modes.flatMap((mode) =>
+              [labelledInlineChoice, unnamedInlineChoice].map((interaction) =>
+                renderInlineChoice(
+                  { ...interaction, editable: mode === "answering" },
+                  {
+                    body: [],
+                    finished: false,
+                    instance,
+                    lang: "en",
+                    messages: [],
+                    mode,
+                    notices: [],
+                    title: "Merged",
+                  },
+                  {
+                    assetBase: "",
+                    headingLevel: 2,
+                    locale: "en",
+                    parts: Result.getOrThrow(resolveOverrides()),
+                  },
+                ),
+              ),
+            ),
+          ),
+        );
+        const htmls = [
+          ...(yield* Effect.all(rendered.map((result) => Effect.fromResult(result)))).map(
+            ({ html }) => html,
+          ),
+          ...inlineChoices.map(toHtml),
+        ];
         const observed = new Map<string, Set<string>>();
 
-        for (const result of rendered) {
-          const { html } = yield* Effect.fromResult(result);
+        for (const html of htmls) {
           for (const element of elementsOf(parseHtml(html))) {
             const slot = element.attrs["data-slot"];
             if (slot !== undefined && slot !== true) {

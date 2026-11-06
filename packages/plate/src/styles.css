@@ -678,23 +678,47 @@
   display: inline-block;
 }
 
+/* The Inline Choice Root: inline, in the run of the item's text. */
+:where([data-slot="inline-choice-interaction"]) {
+  display: inline-block;
+}
+
+/* The Inline Choice Label: inline before its Control, a little apart from it. */
+:where([data-slot="inline-choice-interaction-label"]) {
+  margin-inline-end: 0.25em;
+}
+
 /* The Extended Text Root: a block. */
 :where([data-slot="extended-text-interaction"]) {
   display: block;
 }
 
 /*
- * The text Controls: the host's font, and the card's surface and text, so a dark host theme reads
- * (a browser draws its own light field otherwise, under text the Control would inherit).
+ * The text Controls and the Inline Choice Control: the host's font, and the card's surface and
+ * text, so a dark host theme reads (a browser draws its own light field otherwise, under text the
+ * Control would inherit).
  */
 :where(
   input[data-slot="text-entry-interaction-control"],
-  textarea[data-slot="extended-text-interaction-control"]
+  textarea[data-slot="extended-text-interaction-control"],
+  [data-slot="inline-choice-interaction-control"]
 ) {
   padding: 0.25rem 0.75rem;
   border: 1px solid var(--input, oklch(0.922 0 0));
   border-radius: calc(var(--radius, 0.625rem) * 0.8);
   font: inherit;
+  background-color: var(--card, oklch(1 0 0));
+  color: var(--card-foreground, oklch(0.145 0 0));
+}
+
+/*
+ * The Inline Choice's Placeholder and Options: the card's surface and text, so the open list reads
+ * in a dark host theme too.
+ */
+:where(
+  [data-slot="inline-choice-interaction-placeholder"],
+  [data-slot="inline-choice-interaction-option"]
+) {
   background-color: var(--card, oklch(1 0 0));
   color: var(--card-foreground, oklch(0.145 0 0));
 }
