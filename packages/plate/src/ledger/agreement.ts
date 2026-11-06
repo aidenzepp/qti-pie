@@ -14,6 +14,11 @@
  * The test holds the disagreements and the rows equal both ways, so a new disagreement, or a row
  * whose disagreement is gone, fails it.
  *
+ * A ruling ({@link Ruling}) holds while the state it was made on holds: it records both sides of
+ * its row, and {@link staleRulings} flags it once either side moves or the row agrees, so a ruling
+ * is never kept past the state of the package it is tied to. It records the copy's commit too, as
+ * provenance only, so re-pointing the copy at a commit with the same rows keeps it.
+ *
  * @module
  */
 import { readdir, readFile } from "node:fs/promises";
@@ -34,9 +39,9 @@ export const verdictsSource = "packages/pantry/verdicts/qti-examples-0a92fbb.tsv
 
 /**
  * The commit of `main` whose {@link verdictsSource} `qti-verdicts.tsv` copies byte for byte: the
- * last commit that changed the file on the `main` phase 4 was cut from.
+ * `main` the agreement was last run on.
  */
-export const verdictsCommit = "4d1c37e";
+export const verdictsCommit = "69dfc1a";
 
 /**
  * The copy's path, beside this module.
@@ -107,8 +112,49 @@ export interface Disagreement {
 }
 
 /**
+ * The Schema of the state a ruling was made on: the commit of the verdicts copy
+ * ({@link verdictsCommit}) and both sides of its row at that commit.
+ *
+ * The sides are what {@link staleRulings} compares; the commit is provenance, never compared, so a
+ * newer copy whose row is unchanged leaves the ruling standing.
+ */
+// oxlint-disable-next-line eslint/no-redeclare -- `RulingState` is the Schema and the type of a ruling's state under one name, so a decoder and a signature read as one thing.
+export const RulingState = Schema.Struct({
+  commit: Schema.String,
+  pantry: PantrySide,
+  plate: PlateSide,
+});
+
+/**
+ * The state a ruling was made on.
+ */
+export type RulingState = typeof RulingState.Type;
+
+/**
+ * The Schema of the operator's ruling that a disagreement is an expected difference.
+ *
+ * `expectedWhile` ties the ruling to the state of the other package, never to all time ("pantry
+ * does not yet model this vocabulary (its phases 6 to 11)"); `group` is the ruling's group, 1 to
+ * 3; `source` names where it was ruled; and `state` is the state it was made on, whose sides
+ * {@link staleRulings} compares with the agreement's run.
+ */
+// oxlint-disable-next-line eslint/no-redeclare -- `Ruling` is the Schema and the type of a ruling under one name, so a decoder and a signature read as one thing.
+export const Ruling = Schema.Struct({
+  expectedWhile: Schema.NonEmptyString,
+  group: Schema.Literals([1, 2, 3]),
+  source: Schema.NonEmptyString,
+  state: RulingState,
+});
+
+/**
+ * The operator's ruling on one disagreement.
+ */
+export type Ruling = typeof Ruling.Type;
+
+/**
  * The Schema of one row of `agreement-findings.json`: a disagreement, with `finding`, what each
- * side saw and why they differ, in words, and `ruling`, `pending` until the operator rules on it.
+ * side saw and why they differ, in words, and `ruling`, `pending` until the operator rules on it
+ * and a {@link Ruling} after.
  */
 // oxlint-disable-next-line eslint/no-redeclare -- `Finding` is the Schema and the type of a row under one name, so a decoder and a signature read as one thing.
 export const Finding = Schema.Struct({
@@ -116,7 +162,7 @@ export const Finding = Schema.Struct({
   finding: Schema.NonEmptyString,
   pantry: PantrySide,
   plate: PlateSide,
-  ruling: Schema.NonEmptyString,
+  ruling: Schema.Union([Schema.Literal("pending"), Ruling]),
 });
 
 /**
@@ -227,6 +273,58 @@ export const plateSide = (verdict: PackageVerdict): PlateSide => ({
 export const agrees = (plate: PlateSide, pantry: PantrySide): boolean =>
   plate.verdict !== "unchecked" &&
   pantry.verdict === (plate.verdict === "refused" ? "refused" : "accepted");
+
+/**
+ * A ruled finding row whose ruling no longer holds: `agrees` when its package's verdicts now
+ * agree, and `state-changed` when either side the agreement's run found differs from the state the
+ * ruling records.
+ */
+export interface StaleRuling {
+  readonly file: string;
+  readonly reason: "agrees" | "state-changed";
+}
+
+/**
+ * Report whether a disagreement is the one a ruling was made on: the same sides, verdicts and
+ * rules alike, plate's rules in the same order.
+ *
+ * @param state The state the ruling records.
+ * @param entry The disagreement the agreement's run found for the ruling's package.
+ * @returns Whether both sides are the state's.
+ */
+const sameSides = (state: RulingState, entry: Disagreement): boolean =>
+  state.pantry.verdict === entry.pantry.verdict &&
+  state.pantry.rule === entry.pantry.rule &&
+  state.plate.verdict === entry.plate.verdict &&
+  state.plate.rules.length === entry.plate.rules.length &&
+  state.plate.rules.every((rule, index) => rule === entry.plate.rules[index]);
+
+/**
+ * Find every ruled finding row whose ruling is stale: its package now agrees, or either side of its
+ * disagreement is not the state the ruling was made on. The state's commit is not compared, and a
+ * pending row is never stale.
+ *
+ * @param rows The findings file's rows.
+ * @param seen The disagreements the agreement's run found.
+ * @returns One entry per stale ruling, naming its row, in the rows' order; none when every ruling
+ *   holds.
+ */
+export const staleRulings = (
+  rows: readonly Finding[],
+  seen: readonly Disagreement[],
+): readonly StaleRuling[] =>
+  rows.flatMap((row): StaleRuling[] => {
+    if (row.ruling === "pending") {
+      return [];
+    }
+
+    const now = seen.find((entry) => entry.file === row.file);
+    if (now === undefined) {
+      return [{ file: row.file, reason: "agrees" }];
+    }
+
+    return sameSides(row.ruling.state, now) ? [] : [{ file: row.file, reason: "state-changed" }];
+  });
 
 /**
  * Read every file of a corpus package's extracted folder, keyed by its path from the folder.
