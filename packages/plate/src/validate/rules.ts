@@ -63,6 +63,12 @@ const requirements = {
     baseTypes: ["string", "integer", "float"],
     cardinalities: ["single", "multiple", "ordered", "record"],
   },
+  // "The qti-inline-choice-interaction must be bound to a response variable with a base-type of
+  // identifier and single cardinality only." (info.txt:8818)
+  "qti-inline-choice-interaction": {
+    baseTypes: ["identifier"],
+    cardinalities: ["single"],
+  },
   // "The qti-text-entry-interaction must be bound to a response variable with either single or
   // record cardinality only. For single cardinality the base-type must be one of string, integer or
   // float." (info.txt:8826)

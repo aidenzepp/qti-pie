@@ -176,6 +176,34 @@ const interaction = (
 ): SourceElement => el(local, [attr("response-identifier", responseIdentifier), ...attributes]);
 
 /**
+ * An item whose paragraph holds an Inline Choice of two choices bound to `RESPONSE`.
+ *
+ * @param cardinality The declaration's cardinality.
+ * @param baseType The declaration's base type.
+ * @returns The item.
+ */
+const inlineChoiceItem = (cardinality: string, baseType: string) =>
+  item(
+    [response("RESPONSE", cardinality, baseType)],
+    [
+      el(
+        "p",
+        [],
+        [
+          el(
+            "qti-inline-choice-interaction",
+            [attr("response-identifier", "RESPONSE")],
+            [
+              el("qti-inline-choice", [attr("identifier", "A")], [text("Ant")]),
+              el("qti-inline-choice", [attr("identifier", "B")], [text("Bee")]),
+            ],
+          ),
+        ],
+      ),
+    ],
+  );
+
+/**
  * Construct an item whose float `SCORE` holds a match table with one entry.
  *
  * @param target The entry's `target-value`, as written.
@@ -588,6 +616,34 @@ describe("checkRules", () => {
         ),
         [],
       );
+    });
+
+    it("[Q-12] refuses an Inline Choice bound to a multiple identifier or a single string declaration", () => {
+      for (const [cardinality, baseType] of [
+        ["multiple", "identifier"],
+        ["single", "string"],
+      ] as const) {
+        assert.deepStrictEqual(
+          judged(inlineChoiceItem(cardinality, baseType)),
+          [
+            {
+              detail: {
+                baseType,
+                cardinality,
+                interaction: "qti-inline-choice-interaction",
+                response: "RESPONSE",
+              },
+              path: "qti-assessment-item/qti-item-body/p/qti-inline-choice-interaction",
+              rule: "binding",
+            },
+          ],
+          `${cardinality} ${baseType}`,
+        );
+      }
+    });
+
+    it("[Q-12] accepts an Inline Choice bound to a single identifier declaration", () => {
+      assert.deepStrictEqual(judged(inlineChoiceItem("single", "identifier")), []);
     });
 
     it("[I-1] reads the declaration the interaction names, not any declaration in the item", () => {
