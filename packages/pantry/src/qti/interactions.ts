@@ -41,9 +41,11 @@
  *   document, and in an item no built-in variable's (reading 104, "Choice not variable").
  * - {@link Hotspot}: the hotspot choices and associable hotspots, their shape, and their element
  *   ranks beside their parent's element count, through `nodeCounts` (reading 80).
- * - {@link CountBound}: every element whose counts `ChoiceBound` pairs, its least and most, each
- *   written or its XSD default, typed by G-parse; "Choice bounds" (readings 18 and 76), "Binding
- *   cardinality" (reading 92) and `max-strings-required` (reading 19) read it.
+ * - {@link CountBound}: every element whose counts `ChoiceBound` pairs, and whether it writes each;
+ *   its least and most, where each has a value, written as an integer or its XSD default, typed by
+ *   G-parse ({@link LeastCount}, {@link MostCount}, and {@link CountRange} where both have one);
+ *   "Choice bounds" (readings 18 and 76) and "Binding cardinality" (reading 92) read the values,
+ *   and `max-strings-required` (reading 19) whether `max-strings` is written.
  * - {@link Slider} (reading 9, the Schematron's 14Ba), {@link AriaRange} (§5.2.31: "Authors MUST
  *   ensure the value of 'aria-valuemax' is greater than or equal to the value of 'aria-valuemin'"),
  *   and {@link ItemMode}, an item's `adaptive`, which "AdaptiveFeedback" reads (§5.49, §5.52: "A
@@ -587,7 +589,10 @@ export const BoundVariable = relation(
  * - `node`, `attribute`, `kind`, `document` and `identifier`, its binding's, copied from
  *   {@link BoundVariable};
  * - `declaration`, `declarationKind`, `baseType` and `cardinality`, the declaration's, copied through
- *   `declarationRef`.
+ *   `declarationRef`;
+ * - `mosts`, its interaction's count of most values, its {@link CountBound}'s `mosts` where
+ *   `ChoiceBound` pairs the kind's counts, and 0 on any other kind, which has none: "Binding
+ *   cardinality" judges a binding only where its interaction's most has a value.
  */
 export const BindingDeclaration = relation(
   "BindingDeclaration",
@@ -600,6 +605,7 @@ export const BindingDeclaration = relation(
     document: uuid,
     identifier: keyText,
     kind: closedId(NodeKind),
+    mosts: natural,
     node: uuid,
   },
   ["node", "attribute"],
@@ -659,7 +665,7 @@ export const PlacedBinding = relation(
  * Its fields, every one written by the host: `instance`, `node`, `attribute`, `assembly`,
  * `document`, `kind` and `identifier`, its binding's, copied from `PlacedBinding`; and
  * `declaration`, `declarationKind`, `baseType` and `cardinality`, the declaration's, copied through
- * `declarationRef`.
+ * `declarationRef`; and `mosts`, as {@link BindingDeclaration}'s.
  */
 export const PlacedBindingDeclaration = relation(
   "PlacedBindingDeclaration",
@@ -674,6 +680,7 @@ export const PlacedBindingDeclaration = relation(
     identifier: keyText,
     instance: uuid,
     kind: closedId(NodeKind),
+    mosts: natural,
     node: uuid,
   },
   ["instance", "node", "attribute"],
@@ -914,16 +921,14 @@ export const Hotspot = relation(
 
 /**
  * An element whose least and most counts `ChoiceBound` pairs, keyed by its node: its
- * {@link nodeRef} tuple and its two counts.
+ * {@link nodeRef} tuple and what it writes of its two counts.
  *
- * - `minName` and `maxName`, the attributes `ChoiceBound` names for its kind;
- * - `least` and `most`, each count's value, collapsed, where written (`minWritten`, `maxWritten`),
- *   else its XSD default, else `0`; `leastValue` and `mostValue`, their integers, which
- *   `E1_derived` proves by G-parse's cast, written so a selection may read them;
- * - `choices`, its interaction's choices (`Binding.choices`), and 0 on a choice.
- *
- * A count is an `xs:nonNegativeInteger` held to the signed 64-bit range (reading 46), so its value
- * is in `lexicalForm(pg.bigint)`, which `E1_derived` requires.
+ * - `minName` and `maxName`, the attributes `ChoiceBound` names for its kind, and `minWritten` and
+ *   `maxWritten`, whether it writes each;
+ * - `choices`, its interaction's choices (`Binding.choices`), and 0 on a choice;
+ * - `leasts` and `mosts`, its counts of {@link LeastCount} and {@link MostCount} rows: 1 where the
+ *   count has a value, and 0 where it has none (lane NIL's audit, B8: a missing value is a row of
+ *   its own relation, never a sentinel).
  */
 export const CountBound = relation(
   "CountBound",
@@ -931,14 +936,12 @@ export const CountBound = relation(
     choices: natural,
     document: uuid,
     kind: closedId(NodeKind),
-    least: keyText,
-    leastValue: pg.bigint,
+    leasts: drawn(natural),
     maxName: closedId(AttributeName),
     maxWritten: pg.boolean,
     minName: closedId(AttributeName),
     minWritten: pg.boolean,
-    most: keyText,
-    mostValue: pg.bigint,
+    mosts: drawn(natural),
     nearest: uuid,
     node: uuid,
     parent: uuid,
@@ -947,6 +950,80 @@ export const CountBound = relation(
   },
   ["node"],
 );
+
+/**
+ * A bound's least count, where it has a value, keyed by its node: `least`, the count's value
+ * collapsed where written, else its XSD default, and `leastValue`, its integer, which `E1_derived`
+ * proves by G-parse's cast, written so a selection may read it. It copies the fields its laws read
+ * from its {@link CountBound}.
+ *
+ * A count has a value where it writes an integer or, unwritten, has an XSD default. A count written
+ * as no integer (`max-choices="1abc"`) has none, and its attribute's value domain refuses it alone;
+ * an unwritten count with no default has none, and no law reads it (the law oracle's
+ * `countAttribute`). A count is an `xs:nonNegativeInteger` held to the signed 64-bit range (reading
+ * 46), so its value is in `lexicalForm(pg.bigint)`, which `E1_derived` requires.
+ */
+export const LeastCount = relation(
+  "LeastCount",
+  {
+    choices: natural,
+    kind: closedId(NodeKind),
+    least: keyText,
+    leastValue: pg.bigint,
+    minName: closedId(AttributeName),
+    minWritten: pg.boolean,
+    node: uuid,
+    version: closedId(SchemaVersion),
+  },
+  ["node"],
+);
+
+/**
+ * A bound's most count, where it has a value, keyed by its node, as {@link LeastCount} is the
+ * least's: `most` and `mostValue`, and the fields its laws read, `minWritten` among them, copied
+ * from its {@link CountBound}.
+ */
+export const MostCount = relation(
+  "MostCount",
+  {
+    choices: natural,
+    kind: closedId(NodeKind),
+    maxName: closedId(AttributeName),
+    maxWritten: pg.boolean,
+    minWritten: pg.boolean,
+    most: keyText,
+    mostValue: pg.bigint,
+    node: uuid,
+    version: closedId(SchemaVersion),
+  },
+  ["node"],
+);
+
+/**
+ * A bound both of whose counts have a value, keyed by its node: the two integers, copied from its
+ * {@link LeastCount} and {@link MostCount}, and the fields "Choice bounds" reads beside them.
+ */
+export const CountRange = relation(
+  "CountRange",
+  {
+    kind: closedId(NodeKind),
+    leastValue: pg.bigint,
+    minWritten: pg.boolean,
+    mostValue: pg.bigint,
+    node: uuid,
+  },
+  ["node"],
+);
+
+/**
+ * Each bound's least count, counted by `CountBound.leasts`: one row or none.
+ */
+export const leastCountFamily = counted(on(LeastCount, "node"), fin(CountBound, "leasts"));
+
+/**
+ * Each bound's most count, counted by `CountBound.mosts`: one row or none.
+ */
+export const mostCountFamily = counted(on(MostCount, "node"), fin(CountBound, "mosts"));
 
 /**
  * A slider interaction's bounds, keyed by its node: its `lower-bound` and `upper-bound`, collapsed.
@@ -1267,12 +1344,15 @@ export const interactionRelations = {
   ChoiceVariableName,
   ContextRef,
   CountBound,
+  CountRange,
   FeedbackRef,
   Hotspot,
   Hottext,
   Interaction,
   InteractionAttribute,
   ItemMode,
+  LeastCount,
+  MostCount,
   PlacedBinding,
   PlacedBindingDeclaration,
   PlacedChoice,
@@ -1298,9 +1378,19 @@ export const interactionRelations = {
 type AttributeRow = RowScalars<typeof InteractionAttribute>;
 
 /**
- * A `CountBound` row as a row check reads it.
+ * A `LeastCount` row as a row check reads it.
  */
-type BoundRow = RowScalars<typeof CountBound>;
+type LeastRow = RowScalars<typeof LeastCount>;
+
+/**
+ * A `MostCount` row as a row check reads it.
+ */
+type MostRow = RowScalars<typeof MostCount>;
+
+/**
+ * A `CountRange` row as a row check reads it.
+ */
+type RangeRow = RowScalars<typeof CountRange>;
 
 /**
  * A `Hotspot` row as a row check reads it.
@@ -1431,112 +1521,104 @@ export const countDefault = (version: string, kind: Kind, name: Name): Option.Op
   Option.fromNullishOr(defaults.get(`${version} ${kind} ${name}`));
 
 /**
- * The value a count left unwritten reads, per version and kind: its XSD default, or `0` where the
- * XSD gives none (the oracle's least of an unwritten count; a most of no default is no bound).
+ * The XSD defaults of one count of the pair, per version: each default's value, with the kinds
+ * whose count it is. A kind whose count has no default is in none, so its count, left unwritten,
+ * has no value (the law oracle's `countAttribute`).
  *
  * @param side - Which count of the pair.
  * @returns One entry per (version, value), with the kinds that read it.
  */
-const unwrittenValues = (side: "max" | "min") =>
+const defaultedValues = (side: "max" | "min") =>
   versions.flatMap((version) =>
     [
-      ...Map.groupBy(ChoiceBound.rows, (row) =>
-        Option.getOrElse(countDefault(version, row.kind, row[side]), () => "0"),
+      ...Map.groupBy(
+        ChoiceBound.rows.flatMap((row) =>
+          Option.toArray(countDefault(version, row.kind, row[side])).map((value) => ({
+            kind: row.kind,
+            value,
+          })),
+        ),
+        ({ value }) => value,
       ),
     ].map(([value, rows]) => ({ kinds: rows.map(({ kind }) => kind), value, version })),
   );
 
 /**
- * The least each kind's unwritten least count reads, per version.
+ * The least each kind's unwritten least count reads, per version, where the XSD gives one.
  */
-const unwrittenLeast = unwrittenValues("min");
+const defaultedLeast = defaultedValues("min");
 
 /**
- * The most each kind's unwritten most count reads, per version.
+ * The most each kind's unwritten most count reads, per version, where the XSD gives one.
  */
-const unwrittenMost = unwrittenValues("max");
+const defaultedMost = defaultedValues("max");
 
 /**
- * The kinds whose most count has an XSD default, per version: a most is known where it is written
- * or defaulted.
- */
-const defaultedMost = versions.map((version) => ({
-  kinds: ChoiceBound.rows
-    .filter((row) => Option.isSome(countDefault(version, row.kind, row.max)))
-    .map(({ kind }) => kind),
-  version,
-}));
-
-/**
- * State that a bound's unwritten count reads its default: the least's or the most's, per
- * version and kind.
+ * State that an unwritten count of a bound has an XSD default: its version's and kind's.
  *
- * @param b - The row.
- * @param side - Which count of the pair.
+ * @param b - The bound's row.
+ * @param defaulted - The count's defaults ({@link defaultedLeast} or {@link defaultedMost}).
  * @returns The predicate.
  */
-const readsDefault = (b: BoundRow, side: "max" | "min") =>
-  side === "min"
-    ? b.or(
-        b.eq(b.minWritten, true),
-        ...unwrittenLeast.map(({ kinds, value, version }) =>
-          b.and(b.eq(b.version, version), b.in(b.kind, kinds), b.eq(b.least, value)),
-        ),
-      )
-    : b.or(
-        b.eq(b.maxWritten, true),
-        ...unwrittenMost.map(({ kinds, value, version }) =>
-          b.and(b.eq(b.version, version), b.in(b.kind, kinds), b.eq(b.most, value)),
-        ),
-      );
-
-/**
- * State that a bound's most count is known: written, or defaulted by the XSD.
- *
- * @param b - The row.
- * @returns The predicate.
- */
-const mostKnown = (b: BoundRow) =>
+const hasDefault = (b: RowScalars<typeof CountBound>, defaulted: typeof defaultedLeast) =>
   b.or(
-    b.eq(b.maxWritten, true),
-    ...defaultedMost
-      .filter(({ kinds }) => kinds.length > 0)
-      .map(({ kinds, version }) => b.and(b.eq(b.version, version), b.in(b.kind, kinds))),
+    ...defaulted.map(({ kinds, version }) => b.and(b.eq(b.version, version), b.in(b.kind, kinds))),
   );
 
 /**
- * State "Choice bounds" over one bound, as the oracle reads readings 18 and 76:
+ * State "Choice bounds" over a least count where the law reads it alone (reading 18): a counted
+ * bound whose least is written, of a kind `ChoiceCount` names, has a least of at most its choices.
  *
- * - Where `ChoiceBound`'s zero is `unbounded`, a known most of 0 bounds nothing, and otherwise the
- *   least is at most the most;
- * - Where it is `counted` (the order interactions, reading 18), the law binds only where the least is
- *   written, and then the least is at most a known most, and both are at most the choices where
- *   `ChoiceCount` names the kind.
- *
- * @param b - The row.
+ * @param l - The row.
  * @returns The predicate.
  */
-const choiceBounds = (b: BoundRow) =>
-  b.or(
-    b.and(
-      b.eq(ChoiceBound.at("zero", b.kind), "unbounded"),
-      b.or(b.not(mostKnown(b)), b.eq(b.mostValue, 0n), b.le(b.leastValue, b.mostValue)),
+const leastBounds = (l: LeastRow) =>
+  l.or(
+    l.ne(ChoiceBound.at("zero", l.kind), "counted"),
+    l.eq(l.minWritten, false),
+    l.not(l.in(l.kind, choiceCountKinds)),
+    l.le(l.leastValue, Compute.base(l.choices)),
+  );
+
+/**
+ * State "Choice bounds" over a most count where the law reads it alone (reading 18): a counted
+ * bound whose least is written, of a kind `ChoiceCount` names, has a most of at most its choices.
+ *
+ * @param m - The row.
+ * @returns The predicate.
+ */
+const mostBounds = (m: MostRow) =>
+  m.or(
+    m.ne(ChoiceBound.at("zero", m.kind), "counted"),
+    m.eq(m.minWritten, false),
+    m.not(m.in(m.kind, choiceCountKinds)),
+    m.le(m.mostValue, Compute.base(m.choices)),
+  );
+
+/**
+ * State "Choice bounds" over a bound both of whose counts have a value, as the oracle reads
+ * readings 18 and 76:
+ *
+ * - Where `ChoiceBound`'s zero is `unbounded`, a most of 0 bounds nothing, and otherwise the least is
+ *   at most the most;
+ * - Where it is `counted` (the order interactions, reading 18), the law binds only where the least is
+ *   written, and then the least is at most the most.
+ *
+ * A bound one of whose counts has no value is judged by neither arm: an unwritten least with no
+ * default is no bound, and a count written as no integer is its value domain's.
+ *
+ * @param r - The row.
+ * @returns The predicate.
+ */
+const rangeBounds = (r: RangeRow) =>
+  r.or(
+    r.and(
+      r.eq(ChoiceBound.at("zero", r.kind), "unbounded"),
+      r.or(r.eq(r.mostValue, 0n), r.le(r.leastValue, r.mostValue)),
     ),
-    b.and(
-      b.eq(ChoiceBound.at("zero", b.kind), "counted"),
-      b.or(
-        b.eq(b.minWritten, false),
-        b.and(
-          b.or(b.not(mostKnown(b)), b.le(b.leastValue, b.mostValue)),
-          b.or(
-            b.not(b.in(b.kind, choiceCountKinds)),
-            b.and(
-              b.le(b.leastValue, Compute.base(b.choices)),
-              b.or(b.not(mostKnown(b)), b.le(b.mostValue, Compute.base(b.choices))),
-            ),
-          ),
-        ),
-      ),
+    r.and(
+      r.eq(ChoiceBound.at("zero", r.kind), "counted"),
+      r.or(r.eq(r.minWritten, false), r.le(r.leastValue, r.mostValue)),
     ),
   );
 
@@ -1547,6 +1629,35 @@ const choiceBounds = (b: BoundRow) =>
  * guarded by the form and the form is required beside it.
  */
 const bigintForm = lexicalForm(pg.bigint);
+
+/**
+ * The sign a count's form may carry beside {@link bigintForm}: none, a `+`, or a `-` before a zero
+ * alone (`-0`, `-00`), which XML Schema 1.1 Part 2 §3.3.20 reads as 0. The two together are the
+ * database's reading of which counts have a value: an `xs:nonNegativeInteger` within the signed
+ * 64-bit range (reading 46). A count written as no such form, `1abc`, `-1` or past the range, has
+ * none: its value domain is its law, and no other law reads it. The import reads the same forms by
+ * its own map (`countValueOf` in `#pantry/import/overlays/interactions.ts`), and the law oracle by
+ * its own (`integerOf` in `#pantry/test/oracle-view.ts`).
+ */
+const countSign = "^(?:[^-]|-0+$)";
+
+/**
+ * Select the read count attributes of some names, on the kinds whose counts `ChoiceBound` pairs,
+ * that write an integer: each is its bound's {@link LeastCount} or {@link MostCount} value, and a
+ * count written as no integer has none.
+ *
+ * @param names - The counts' attributes.
+ * @returns The selection of `InteractionAttribute`.
+ */
+const integerReadOf = (names: readonly Name[]) =>
+  select(InteractionAttribute, (v) =>
+    v.and(
+      v.in(v.name, names),
+      v.in(v.kind, boundKinds),
+      Compute.matches(v.value, countSign),
+      Compute.matches(v.value, bigintForm),
+    ),
+  );
 
 /**
  * The lexical form of an `xs:double` that `Compute.cast` reads exactly: XML Schema's, cut to the
@@ -1734,10 +1845,11 @@ const sectionPlacements = select(Instance, (i) =>
  *   declaration of a type `BindingFit` or `RecordBindingFit` admits, the custom and portable custom
  *   interactions of any type, and a string binding's of base type string ("BindingFit"), each fit
  *   law over the declaration rows alone; "Binding unique" (`key(document, identifier)`); "Binding
- *   cardinality" (a single response takes a most of 1); `max-strings-required`, which carries
- *   `kind` beside `node` so that its containment into `CountBound` is a statement of its own, not
- *   "Binding cardinality"'s: a refusal names a law by its relations and terms, never its selection
- *   (C22); and "AdaptiveFeedback", an interaction inside feedback is in an adaptive item.
+ *   cardinality" (a single response takes a most of 1, where its interaction's most has a value);
+ *   `max-strings-required`, which carries `kind` beside `node` so that its containment into
+ *   `CountBound` is a statement of its own, not "Binding cardinality"'s: a refusal names a law by
+ *   its relations and terms, never its selection (C22); and "AdaptiveFeedback", an interaction
+ *   inside feedback is in an adaptive item.
  * - **choices:** each choice's {@link ChoiceInteraction}, which every choice has ("N8 nearest"), its
  *   interaction the choice's nearest, the counted family under `Interaction`; its identifier
  *   distinct among its document's choices of its kind; each hottext's nearest kind, and its
@@ -1753,8 +1865,8 @@ const sectionPlacements = select(Instance, (i) =>
  * - **the default hotspot** (reading 80): `default_hotspot_last_slot` and
  *   `Graphic_gap_match_default_hotspot` over each hotspot's shape, its rank and its parent's
  *   count.
- * - **counts:** each bound's counts written or defaulted, typed by G-parse (`E1_derived`), and
- *   "Choice bounds".
+ * - **counts:** each bound's counts written or defaulted, a row of its own where it has a value,
+ *   typed by G-parse (`E1_derived`), and "Choice bounds" over the values a count has.
  * - **ranges:** "Slider bounds", and "Aria value range" over the elements that carry both ARIA
  *   bounds.
  * - **section documents' and fragments' references:** each one's row, counted per document and class;
@@ -1815,12 +1927,13 @@ export const interactionLawsByName = {
             r.eq(r.attribute, "response-identifier"),
             r.in(r.kind, cardinalityKinds),
             r.eq(r.cardinality, "single"),
+            r.eq(r.mosts, 1n),
           ),
         ),
         "node",
       ),
       on(
-        select(CountBound, (b) => b.eq(b.mostValue, 1n)),
+        select(MostCount, (m) => m.eq(m.mostValue, 1n)),
         "node",
       ),
     ),
@@ -1831,12 +1944,13 @@ export const interactionLawsByName = {
             r.eq(r.attribute, "response-identifier"),
             r.in(r.kind, cardinalityKinds),
             r.eq(r.cardinality, "single"),
+            r.eq(r.mosts, 1n),
           ),
         ),
         "node",
       ),
       on(
-        select(CountBound, (b) => b.eq(b.mostValue, 1n)),
+        select(MostCount, (m) => m.eq(m.mostValue, 1n)),
         "node",
       ),
     ),
@@ -1941,7 +2055,11 @@ export const interactionLawsByName = {
       r.or(r.ne(r.attribute, "string-identifier"), r.eq(r.baseType, "string")),
     ),
   ],
-  "Choice bounds": [check("Choice_bounds", CountBound, choiceBounds)],
+  "Choice bounds": [
+    check("Choice_bounds", LeastCount, leastBounds),
+    check("Choice_bounds", MostCount, mostBounds),
+    check("Choice_bounds", CountRange, rangeBounds),
+  ],
   "Choice identifier key": [
     key(on(Choice, "document", "kind", "identifier")),
     key(on(Hottext, "document", "identifier")),
@@ -2170,41 +2288,21 @@ export const interactionLawsByName = {
       ),
       on(CountBound, "node"),
     ),
-    contained(
-      on(readOf(minNames, boundKinds), "node", "name", "value"),
+    mirrors(
+      on(readOf(minNames, boundKinds), "node", "name"),
       on(
         select(CountBound, (b) => b.eq(b.minWritten, true)),
         "node",
         "minName",
-        "least",
       ),
     ),
-    contained(
-      on(
-        select(CountBound, (b) => b.eq(b.minWritten, true)),
-        "node",
-        "minName",
-        "least",
-      ),
-      on(InteractionAttribute, "node", "name", "value"),
-    ),
-    contained(
-      on(readOf(maxNames, boundKinds), "node", "name", "value"),
+    mirrors(
+      on(readOf(maxNames, boundKinds), "node", "name"),
       on(
         select(CountBound, (b) => b.eq(b.maxWritten, true)),
         "node",
         "maxName",
-        "most",
       ),
-    ),
-    contained(
-      on(
-        select(CountBound, (b) => b.eq(b.maxWritten, true)),
-        "node",
-        "maxName",
-        "most",
-      ),
-      on(InteractionAttribute, "node", "name", "value"),
     ),
     contained(
       on(
@@ -2218,28 +2316,124 @@ export const interactionLawsByName = {
       b.and(
         b.eq(b.minName, ChoiceBound.at("min", b.kind)),
         b.eq(b.maxName, ChoiceBound.at("max", b.kind)),
-        Compute.matches(b.least, bigintForm),
-        b.eq(
-          b.leastValue,
+        b.or(b.in(b.kind, interactionKinds), b.eq(b.choices, 0n)),
+      ),
+    ),
+    leastCountFamily,
+    contained(
+      on(LeastCount, "node", "kind", "version", "minName", "minWritten", "choices"),
+      on(CountBound, "node", "kind", "version", "minName", "minWritten", "choices"),
+    ),
+    mirrors(
+      on(integerReadOf(minNames), "node", "name", "value"),
+      on(
+        select(LeastCount, (l) => l.eq(l.minWritten, true)),
+        "node",
+        "minName",
+        "least",
+      ),
+    ),
+    contained(
+      on(
+        select(CountBound, (b) => b.and(b.eq(b.minWritten, false), hasDefault(b, defaultedLeast))),
+        "node",
+      ),
+      on(LeastCount, "node"),
+    ),
+    check("E1_derived", LeastCount, (l) =>
+      l.and(
+        Compute.matches(l.least, countSign),
+        Compute.matches(l.least, bigintForm),
+        l.eq(
+          l.leastValue,
           Compute.when(
-            Compute.matches(b.least, bigintForm),
+            Compute.matches(l.least, bigintForm),
             (least) => Compute.cast(least, pg.bigint),
             0n,
           ),
         ),
-        Compute.matches(b.most, bigintForm),
-        b.eq(
-          b.mostValue,
+        l.or(
+          l.eq(l.minWritten, true),
+          ...defaultedLeast.map(({ kinds, value, version }) =>
+            l.and(l.eq(l.version, version), l.in(l.kind, kinds), l.eq(l.least, value)),
+          ),
+        ),
+      ),
+    ),
+    mostCountFamily,
+    contained(
+      on(MostCount, "node", "kind", "version", "maxName", "maxWritten", "minWritten", "choices"),
+      on(CountBound, "node", "kind", "version", "maxName", "maxWritten", "minWritten", "choices"),
+    ),
+    mirrors(
+      on(integerReadOf(maxNames), "node", "name", "value"),
+      on(
+        select(MostCount, (m) => m.eq(m.maxWritten, true)),
+        "node",
+        "maxName",
+        "most",
+      ),
+    ),
+    contained(
+      on(
+        select(CountBound, (b) => b.and(b.eq(b.maxWritten, false), hasDefault(b, defaultedMost))),
+        "node",
+      ),
+      on(MostCount, "node"),
+    ),
+    check("E1_derived", MostCount, (m) =>
+      m.and(
+        Compute.matches(m.most, countSign),
+        Compute.matches(m.most, bigintForm),
+        m.eq(
+          m.mostValue,
           Compute.when(
-            Compute.matches(b.most, bigintForm),
+            Compute.matches(m.most, bigintForm),
             (most) => Compute.cast(most, pg.bigint),
             0n,
           ),
         ),
-        readsDefault(b, "min"),
-        readsDefault(b, "max"),
-        b.or(b.in(b.kind, interactionKinds), b.eq(b.choices, 0n)),
+        m.or(
+          m.eq(m.maxWritten, true),
+          ...defaultedMost.map(({ kinds, value, version }) =>
+            m.and(m.eq(m.version, version), m.in(m.kind, kinds), m.eq(m.most, value)),
+          ),
+        ),
       ),
+    ),
+    contained(
+      on(
+        select(CountBound, (b) => b.and(b.eq(b.leasts, 1n), b.eq(b.mosts, 1n))),
+        "node",
+      ),
+      on(CountRange, "node"),
+    ),
+    contained(on(CountRange, "node", "leastValue"), on(LeastCount, "node", "leastValue")),
+    contained(
+      on(CountRange, "node", "mostValue", "kind", "minWritten"),
+      on(MostCount, "node", "mostValue", "kind", "minWritten"),
+    ),
+    contained(
+      on(
+        select(BindingDeclaration, (r) => r.in(r.kind, boundKinds)),
+        "node",
+        "mosts",
+      ),
+      on(CountBound, "node", "mosts"),
+    ),
+    check("E1_derived", BindingDeclaration, (r) =>
+      r.or(r.in(r.kind, boundKinds), r.eq(r.mosts, 0n)),
+    ),
+    contained(
+      on(
+        select(PlacedBindingDeclaration, (r) => r.in(r.kind, boundKinds)),
+        "node",
+        "mosts",
+      ),
+      on(CountBound, "node", "mosts"),
+    ),
+    check("E1_derived", PlacedBindingDeclaration, (r) =>
+      r.or(r.in(r.kind, boundKinds), r.eq(r.mosts, 0n)),
     ),
     contained(
       on(readOf(["lower-bound"], [sliderKind]), "node", "value"),

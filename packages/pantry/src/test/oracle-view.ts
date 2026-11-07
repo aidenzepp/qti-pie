@@ -313,6 +313,44 @@ export const typedValueOf = (view: View, node: NodeId, name: string): Option.Opt
   Option.fromNullishOr(view.typedValuesOf.get(node)?.get(name));
 
 /**
+ * The decimal digits, each with its value.
+ */
+const digitValues: ReadonlyMap<string, bigint> = new Map(
+  Array.from({ length: 10 }, (_, value) => [String(value), BigInt(value)] as const),
+);
+
+/**
+ * Read an `xs:integer` form as its value: the oracle's own lexical mapping, apart from the
+ * import's. XML Schema 1.1 Part 2 §3.3.13 states the lexical space, an optional sign and one or
+ * more digits, and the value the digits name, negated after a `-`. A zero is zero whatever its sign
+ * or its leading zeros, so `0`, `+0`, `-0` and `00` all read 0 (§3.3.20, nonNegativeInteger's
+ * lexical space admits `-0`). The form is the one {@link typedValueOf} gives, after the type's
+ * whitespace class.
+ *
+ * @param form - The form.
+ * @returns Its value, or none where the form is no `xs:integer`'s.
+ */
+export const integerOf = (form: string): Option.Option<bigint> => {
+  const negative = form.startsWith("-");
+  const body = negative || form.startsWith("+") ? form.slice(1) : form;
+  let magnitude = 0n;
+  for (const digit of body) {
+    const value = digitValues.get(digit);
+    if (value === undefined) {
+      return Option.none();
+    }
+
+    magnitude = magnitude * 10n + value;
+  }
+
+  if (body.length === 0) {
+    return Option.none();
+  }
+
+  return Option.some(negative ? -magnitude : magnitude);
+};
+
+/**
  * Read an element's closed attribute as its type reads it ({@link typedValueOf}), and a value
  * where the element does not write it: what a law past AL1 reads of an attribute that has a
  * meaning when unwritten.

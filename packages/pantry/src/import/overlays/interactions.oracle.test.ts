@@ -39,6 +39,7 @@ import type { Declaration } from "#pantry/qti/declarations.ts";
 import { choiceKinds, hottextInteraction, hottextKind, nilUuid } from "#pantry/qti/interactions.ts";
 import { idOf } from "#pantry/test/gen/xdm.ts";
 import { lawsOf } from "#pantry/test/oracle.ts";
+import { integerOf } from "#pantry/test/oracle-view.ts";
 
 /**
  * The ids every case writes its rows under: each node's by its number.
@@ -577,13 +578,14 @@ interface CountCase {
 }
 
 /**
- * Every count case: each `ChoiceBound` kind, its least unwritten, written or padded, and its most
- * unwritten or written.
+ * Every count case: each `ChoiceBound` kind, its least unwritten, written, padded or written as no
+ * count, and its most unwritten, written, signed or written as no count (GEN-A's
+ * `max-choices="1abc"`, and a negative).
  */
 const countCases: Gen<CountCase> = (source) => ({
   kind: source.draw(element(boundElementKinds)),
-  max: source.draw(element([undefined, "3"])),
-  min: source.draw(element([undefined, "2", " 0 "])),
+  max: source.draw(element([undefined, "3", "+2", "1abc", "-1"])),
+  min: source.draw(element([undefined, "2", " 0 ", "x"])),
 });
 
 /**
@@ -591,6 +593,8 @@ const countCases: Gen<CountCase> = (source) => ({
  */
 type CountSituation =
   | "defaulted most"
+  | "least written as no count"
+  | "most written as no count"
   | "padded least"
   | "unwritten most without default"
   | "written";
@@ -621,6 +625,8 @@ const countSituationsOf = (input: CountCase, max: string): readonly CountSituati
       input.max === undefined && defaultOf(input.kind, max) === undefined,
     ],
     ["written", input.max !== undefined && input.min !== undefined],
+    ["least written as no count", input.min === "x"],
+    ["most written as no count", input.max === "1abc" || input.max === "-1"],
   ];
 
   return situations.flatMap(([situation, holds]) => (holds ? [situation] : []));
@@ -657,31 +663,59 @@ const countTreeOf = (
   ),
 });
 
+/**
+ * Read one count of a case as the law oracle does: its collapsed form where written, else its XSD
+ * default, and its value by the oracle's own map (`integerOf`), where that is an
+ * `xs:nonNegativeInteger`'s.
+ *
+ * @param written - The count's lexical form, none where unwritten.
+ * @param fallback - Its XSD default, none where the XSD gives none.
+ * @returns The form and its integer, or none where the count has no value.
+ */
+const oracleCountOf = (written: string | undefined, fallback: string | undefined) => {
+  const form = written === undefined ? fallback : written.trim();
+
+  return Option.getOrUndefined(
+    Option.flatMap(Option.fromUndefinedOr(form), (lexical) =>
+      integerOf(lexical).pipe(
+        Option.filter((integer) => integer >= 0n),
+        Option.map((integer) => ({ form: lexical, integer })),
+      ),
+    ),
+  );
+};
+
 describe("import/overlays/interactions.ts, counts", () => {
   it.effect(
-    "reads each count as written, collapsed, else its XSD default, else 0, as the oracle reads it",
+    "gives each count a row of its own exactly where it has a value, written as a count or its XSD default, as the oracle reads it",
     (ctx) =>
       // Oracle: the oracle's own table of the declared attributes' XSD defaults
-      // (`#pantry/test/oracle.ts` lawsOf, from the inventory leaf), and its reading of an unwritten
-      // least as 0.
-      // Bound: every ChoiceBound kind, with its least unwritten, written or padded and its most
-      // unwritten or written, 18 × 3 × 2 = 108 cases.
+      // (`#pantry/test/oracle.ts` lawsOf, from the inventory leaf), and its reading of a count:
+      // its own map of an integer's form (`integerOf`), a value only where it is a nonNegativeInteger's
+      // (lane NIL's audit, B8; GEN-A's max-choices="1abc").
+      // Bound: every ChoiceBound kind, with its least unwritten, written, padded or no count and
+      // its most unwritten, written, signed or no count, 18 × 4 × 5 = 360 cases.
       searched(
         ctx,
         exhaust(
           {
-            box: "every ChoiceBound kind with its least unwritten, written or padded and its most unwritten or written",
+            box: "every ChoiceBound kind with its least unwritten, written, padded or no count and its most unwritten, written, signed or no count",
             caseHang: Duration.seconds(10),
             coverage: requiredInSpace<CountSituation>([
               "defaulted most",
+              "least written as no count",
+              "most written as no count",
               "padded least",
               "unwritten most without default",
               "written",
             ]),
             generator: countCases,
-            limit: 200,
+            limit: 400,
             literal: Formatter.format,
-            oracle: { kind: "specification", name: "the XSDs' attribute defaults, by the oracle" },
+            oracle: {
+              kind: "specification",
+              name: "the XSDs' attribute defaults and the oracle's reading of a count",
+            },
             suite: "pantry/import/overlays-interactions-counts",
           },
           (input: CountCase, c) =>
@@ -691,30 +725,35 @@ describe("import/overlays/interactions.ts, counts", () => {
               const max = closedName(bound?.max ?? "");
               c.noteAll(countSituationsOf(input, max));
 
-              const [row] = rowsOf(countTreeOf(input, { max, min }), ids).CountBound.values();
-              const least = input.min?.trim() ?? defaultOf(input.kind, min) ?? "0";
-              const most = input.max ?? defaultOf(input.kind, max) ?? "0";
+              const rows = rowsOf(countTreeOf(input, { max, min }), ids);
+              const least = oracleCountOf(input.min, defaultOf(input.kind, min));
+              const most = oracleCountOf(input.max, defaultOf(input.kind, max));
+              const [counted] = rows.CountBound.values();
+              const [leastRow] = rows.LeastCount.values();
+              const [mostRow] = rows.MostCount.values();
+              const [range] = rows.CountRange.values();
 
               assert.deepStrictEqual(
-                row === undefined
-                  ? undefined
-                  : [
-                      row.least,
-                      row.leastValue,
-                      row.minWritten,
-                      row.most,
-                      row.mostValue,
-                      row.maxWritten,
-                    ],
-                [
-                  least,
-                  BigInt(least),
-                  input.min !== undefined,
-                  most,
-                  BigInt(most),
-                  input.max !== undefined,
-                ],
+                [counted?.minWritten, counted?.maxWritten],
+                [input.min !== undefined, input.max !== undefined],
                 input.kind,
+              );
+              assert.deepStrictEqual(
+                leastRow === undefined ? undefined : [leastRow.least, leastRow.leastValue],
+                least === undefined ? undefined : [least.form, least.integer],
+                `${input.kind}'s least ${String(input.min)}`,
+              );
+              assert.deepStrictEqual(
+                mostRow === undefined ? undefined : [mostRow.most, mostRow.mostValue],
+                most === undefined ? undefined : [most.form, most.integer],
+                `${input.kind}'s most ${String(input.max)}`,
+              );
+              assert.deepStrictEqual(
+                range === undefined ? undefined : [range.leastValue, range.mostValue],
+                least === undefined || most === undefined
+                  ? undefined
+                  : [least.integer, most.integer],
+                `${input.kind}'s range`,
               );
             }),
         ),

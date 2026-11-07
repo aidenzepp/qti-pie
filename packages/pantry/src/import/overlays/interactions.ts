@@ -55,12 +55,15 @@ import type {
   ChoiceVariableName,
   ContextRef,
   CountBound,
+  CountRange,
   FeedbackRef,
   Hotspot,
   Hottext,
   Interaction,
   InteractionAttribute,
   ItemMode,
+  LeastCount,
+  MostCount,
   PlacedBinding,
   PlacedBindingDeclaration,
   PlacedChoice,
@@ -114,12 +117,15 @@ export interface InteractionRows {
   readonly ChoiceVariableName: ReadonlyMap<string, Addition<typeof ChoiceVariableName>>;
   readonly ContextRef: ReadonlyMap<string, Addition<typeof ContextRef>>;
   readonly CountBound: ReadonlyMap<string, Addition<typeof CountBound>>;
+  readonly CountRange: ReadonlyMap<string, Addition<typeof CountRange>>;
   readonly FeedbackRef: ReadonlyMap<string, Addition<typeof FeedbackRef>>;
   readonly Hotspot: ReadonlyMap<string, Addition<typeof Hotspot>>;
   readonly Hottext: ReadonlyMap<string, Addition<typeof Hottext>>;
   readonly Interaction: ReadonlyMap<string, Addition<typeof Interaction>>;
   readonly InteractionAttribute: ReadonlyMap<string, Addition<typeof InteractionAttribute>>;
   readonly ItemMode: ReadonlyMap<string, Addition<typeof ItemMode>>;
+  readonly LeastCount: ReadonlyMap<string, Addition<typeof LeastCount>>;
+  readonly MostCount: ReadonlyMap<string, Addition<typeof MostCount>>;
   readonly PrintedVariableRef: ReadonlyMap<string, Addition<typeof PrintedVariableRef>>;
   readonly ReferringDocument: ReadonlyMap<string, Addition<typeof ReferringDocument>>;
   readonly SectionContextName: ReadonlyMap<string, Addition<typeof SectionContextName>>;
@@ -168,9 +174,32 @@ const leading = /^[\t\n\r ]*/u;
 const trailing = /[\t\n\r ]*$/u;
 
 /**
- * An `xs:integer` lexical form, the one a count's value is parsed from.
+ * An `xs:integer` form, split into its sign and its digits (XML Schema 1.1 Part 2 §3.3.13).
  */
-const integerForm = /^[+-]?[0-9]+$/u;
+const integerParts = /^(?<sign>[+-]?)(?<digits>[0-9]+)$/u;
+
+/**
+ * The largest count a package holds, the signed 64-bit integer's (spec reading 46).
+ */
+const countMost = 2n ** 63n - 1n;
+
+/**
+ * Read a count's form as its value: the import's own lexical mapping, apart from the law oracle's.
+ * An `xs:integer` form is an optional sign and its digits, whose value is the digits' negated after
+ * a `-` (XML Schema 1.1 Part 2 §3.3.13), so `0`, `+0`, `-0` and `00` all read 0 (§3.3.20). A count
+ * is an `xs:nonNegativeInteger` held to the signed 64-bit range (reading 46), so a form whose value
+ * lies outside it, `-1` or past 2^63 − 1, has none, as a form that is no integer's has none: its
+ * value domain is its law. The database's own reading of the same forms is `integerReadOf` in
+ * `#pantry/qti/interactions.ts`.
+ *
+ * @param form - The count's collapsed form.
+ * @returns Its value, or none.
+ */
+const countValueOf = (form: string): Option.Option<bigint> =>
+  Option.fromNullishOr(integerParts.exec(form)?.groups).pipe(
+    Option.map(({ digits = "", sign }) => (sign === "-" ? -BigInt(digits) : BigInt(digits))),
+    Option.filter((value) => value >= 0n && value <= countMost),
+  );
 
 /**
  * A printed variable's `base` or `index` that is an integer, not a variable's name
@@ -534,62 +563,6 @@ const interactionAttributesOf = (context: Context) =>
   );
 
 /**
- * Build each interaction's binding, and in an item each of its bound variables and the response
- * declaration each names, where one does.
- *
- * @param context - The document.
- * @returns The `Binding` rows, keyed by node, and the `BindingName` rows of every document and
- *   the `BoundVariable` and `BindingDeclaration` rows of an item, each keyed by (node, attribute).
- */
-const bindingsOf = (context: Context) => {
-  const bindings = new Map<string, Addition<typeof Binding>>();
-  const names = new Map<string, Addition<typeof BindingName>>();
-  const bound = new Map<string, Addition<typeof BoundVariable>>();
-  const declarations = new Map<string, Addition<typeof BindingDeclaration>>();
-  for (const node of context.rows.nodes.filter(({ kind }) => interactions.has(kind))) {
-    if (Option.isSome(valueOf(context, node.id, "response-identifier"))) {
-      bindings.set(node.id, tupleOf(context, node));
-    }
-
-    for (const attribute of bindingAttributes) {
-      for (const identifier of Option.toArray(valueOf(context, node.id, attribute))) {
-        names.set(keyOf([node.id, attribute]), {
-          attribute,
-          document: context.document,
-          identifier,
-          kind: node.kind,
-          node: node.id,
-        });
-      }
-    }
-
-    for (const attribute of context.rootKind === itemKind ? bindingAttributes : []) {
-      for (const identifier of Option.toArray(valueOf(context, node.id, attribute))) {
-        const binding = {
-          attribute,
-          document: context.document,
-          identifier,
-          kind: node.kind,
-          node: node.id,
-        };
-        bound.set(keyOf([node.id, attribute]), { ...binding, adaptive: context.adaptive });
-        for (const variable of Option.toArray(responseIn(context.declared, identifier))) {
-          declarations.set(keyOf([node.id, attribute]), {
-            ...binding,
-            baseType: variable.baseType,
-            cardinality: variable.cardinality,
-            declaration: variable.node,
-            declarationKind: variable.declarationKind,
-          });
-        }
-      }
-    }
-  }
-
-  return { bindings, bound, declarations, names };
-};
-
-/**
  * Build each interaction's row, every interaction element's, whether or not it writes a
  * `response-identifier`: the owner of its choices.
  *
@@ -742,25 +715,101 @@ const hotspotsOf = (context: Context) =>
   );
 
 /**
- * Read one count of a bound: its value as written, else its XSD default, else `0`, and its integer.
+ * Read one count of a bound: whether it is written, and its value where it has one. A written count
+ * has the value its form names where it has one ({@link countValueOf}); an unwritten one has its
+ * XSD default where the XSD gives one. Any other count has none, and no row holds it (lane NIL's
+ * audit, B8: a missing value is a row of its own relation, never a sentinel).
  *
  * @param context - The document.
  * @param node - The element.
  * @param name - The count's attribute.
- * @returns The value, its integer (0 for a form no integer reads, which `E1_derived` refuses), and
- *   whether it is written.
+ * @returns Whether it is written, and its value's form and integer, where it has one.
  */
 const countOf = (context: Context, node: NodeRow<Composed>, name: CountName) => {
   const written = valueOf(context, node.id, name);
-  const value = Option.getOrElse(written, () =>
-    Option.getOrElse(countDefault(node.version, node.kind, name), () => "0"),
-  );
+  const form = Option.isSome(written) ? written : countDefault(node.version, node.kind, name);
 
   return {
-    integer: integerForm.test(value) ? BigInt(value) : 0n,
-    value,
+    value: form.pipe(
+      Option.flatMap((lexical) =>
+        countValueOf(lexical).pipe(Option.map((integer) => ({ form: lexical, integer }))),
+      ),
+    ),
     written: Option.isSome(written),
   };
+};
+
+/**
+ * Read the count of most values a binding's interaction has: 1 where `ChoiceBound` pairs its kind's
+ * counts and its most has a value ({@link countOf}), else 0, which `BindingDeclaration.mosts` and
+ * `PlacedBindingDeclaration.mosts` copy.
+ *
+ * @param context - The document.
+ * @param node - The interaction.
+ * @returns The count.
+ */
+const mostsOf = (context: Context, node: NodeRow<Composed>): bigint =>
+  ChoiceBound.rows.some(
+    ({ kind, max }) => kind === node.kind && Option.isSome(countOf(context, node, max).value),
+  )
+    ? 1n
+    : 0n;
+
+/**
+ * Build each interaction's binding, and in an item each of its bound variables and the response
+ * declaration each names, where one does.
+ *
+ * @param context - The document.
+ * @returns The `Binding` rows, keyed by node, and the `BindingName` rows of every document and
+ *   the `BoundVariable` and `BindingDeclaration` rows of an item, each keyed by (node, attribute).
+ */
+const bindingsOf = (context: Context) => {
+  const bindings = new Map<string, Addition<typeof Binding>>();
+  const names = new Map<string, Addition<typeof BindingName>>();
+  const bound = new Map<string, Addition<typeof BoundVariable>>();
+  const declarations = new Map<string, Addition<typeof BindingDeclaration>>();
+  for (const node of context.rows.nodes.filter(({ kind }) => interactions.has(kind))) {
+    if (Option.isSome(valueOf(context, node.id, "response-identifier"))) {
+      bindings.set(node.id, tupleOf(context, node));
+    }
+
+    for (const attribute of bindingAttributes) {
+      for (const identifier of Option.toArray(valueOf(context, node.id, attribute))) {
+        names.set(keyOf([node.id, attribute]), {
+          attribute,
+          document: context.document,
+          identifier,
+          kind: node.kind,
+          node: node.id,
+        });
+      }
+    }
+
+    for (const attribute of context.rootKind === itemKind ? bindingAttributes : []) {
+      for (const identifier of Option.toArray(valueOf(context, node.id, attribute))) {
+        const binding = {
+          attribute,
+          document: context.document,
+          identifier,
+          kind: node.kind,
+          node: node.id,
+        };
+        bound.set(keyOf([node.id, attribute]), { ...binding, adaptive: context.adaptive });
+        for (const variable of Option.toArray(responseIn(context.declared, identifier))) {
+          declarations.set(keyOf([node.id, attribute]), {
+            ...binding,
+            baseType: variable.baseType,
+            cardinality: variable.cardinality,
+            declaration: variable.node,
+            declarationKind: variable.declarationKind,
+            mosts: mostsOf(context, node),
+          });
+        }
+      }
+    }
+  }
+
+  return { bindings, bound, declarations, names };
 };
 
 /**
@@ -779,45 +828,75 @@ const choiceCountsOf = (owned: Iterable<Addition<typeof ChoiceInteraction>>) => 
 };
 
 /**
- * Build each bound's row, an interaction's choices the count of the choices it owns in its own
- * document: {@link withPackageChoices} adds those a fragment placed in it holds.
+ * Build each bound's rows, an interaction's choices the count of the choices it owns in its own
+ * document: {@link withPackageChoices} adds those a fragment placed in it holds. Each bound has
+ * its {@link CountBound}, and each of its counts that has a value ({@link countOf}) its
+ * {@link LeastCount} or {@link MostCount}, and a bound both of whose counts have one its
+ * {@link CountRange}.
  *
  * @param context - The document.
  * @param owned - The document's choices' interactions.
- * @returns The rows, keyed by node.
+ * @returns The rows, each relation's keyed by node.
  */
 const boundsOf = (
   context: Context,
   owned: ReadonlyMap<string, Addition<typeof ChoiceInteraction>>,
 ) => {
   const counts = choiceCountsOf(owned.values());
+  const bounds = new Map<string, Addition<typeof CountBound>>();
+  const leasts = new Map<string, Addition<typeof LeastCount>>();
+  const mosts = new Map<string, Addition<typeof MostCount>>();
+  const ranges = new Map<string, Addition<typeof CountRange>>();
+  for (const node of context.rows.nodes) {
+    for (const { max, min } of ChoiceBound.rows.filter(({ kind }) => kind === node.kind)) {
+      const least = countOf(context, node, min);
+      const most = countOf(context, node, max);
+      const choices = interactions.has(node.kind) ? (counts.get(node.id) ?? 0n) : 0n;
+      const copied = { choices, kind: node.kind, node: node.id, version: node.version };
+      bounds.set(node.id, {
+        ...tupleOf(context, node),
+        choices,
+        maxName: max,
+        maxWritten: most.written,
+        minName: min,
+        minWritten: least.written,
+      });
+      for (const { form, integer } of Option.toArray(least.value)) {
+        leasts.set(node.id, {
+          ...copied,
+          least: form,
+          leastValue: integer,
+          minName: min,
+          minWritten: least.written,
+        });
+      }
 
-  return new Map(
-    context.rows.nodes.flatMap((node) =>
-      ChoiceBound.rows
-        .filter(({ kind }) => kind === node.kind)
-        .map(({ max, min }) => {
-          const least = countOf(context, node, min);
-          const most = countOf(context, node, max);
+      for (const { form, integer } of Option.toArray(most.value)) {
+        mosts.set(node.id, {
+          ...copied,
+          maxName: max,
+          maxWritten: most.written,
+          minWritten: least.written,
+          most: form,
+          mostValue: integer,
+        });
+      }
 
-          return [
-            node.id,
-            {
-              ...tupleOf(context, node),
-              choices: interactions.has(node.kind) ? (counts.get(node.id) ?? 0n) : 0n,
-              least: least.value,
-              leastValue: least.integer,
-              maxName: max,
-              maxWritten: most.written,
-              minName: min,
-              minWritten: least.written,
-              most: most.value,
-              mostValue: most.integer,
-            } satisfies Addition<typeof CountBound>,
-          ] as const;
-        }),
-    ),
-  );
+      for (const [leastValue, mostValue] of Option.toArray(
+        Option.all([least.value, most.value]),
+      ).map(([lower, upper]) => [lower.integer, upper.integer] as const)) {
+        ranges.set(node.id, {
+          kind: node.kind,
+          leastValue,
+          minWritten: least.written,
+          mostValue,
+          node: node.id,
+        });
+      }
+    }
+  }
+
+  return { bounds, leasts, mosts, ranges };
 };
 
 /**
@@ -1037,6 +1116,7 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: InteractionIds): Interac
   const owned = choiceInteractionsOf(context, choices);
   const hottexts = hottextsOf(context);
   const aria = ariaOf(context);
+  const counts = boundsOf(context, owned);
 
   return {
     AriaElement: aria.elements,
@@ -1050,7 +1130,8 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: InteractionIds): Interac
     ChoiceInteraction: owned,
     ChoiceVariableName: choiceNamesOf(context, choices, hottexts),
     ContextRef: referencesOf(context, read, references.context, always),
-    CountBound: boundsOf(context, owned),
+    CountBound: counts.bounds,
+    CountRange: counts.ranges,
     FeedbackRef: referencesOf(context, read, references.feedback, always),
     Hotspot: hotspotsOf(context),
     Hottext: hottexts,
@@ -1061,6 +1142,8 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: InteractionIds): Interac
         ? [[context.document, { adaptive: context.adaptive, document: context.document }]]
         : [],
     ),
+    LeastCount: counts.leasts,
+    MostCount: counts.mosts,
     PrintedVariableRef: new Map([
       ...referencesOf(context, read, references.printed, always),
       ...referencesOf(context, read, references.variable, namesVariable),
@@ -1092,24 +1175,34 @@ export const packageChoicesOf = (parts: Iterable<InteractionRows>): ReadonlyMap<
 
 /**
  * Give each interaction's bound in one document's rows its package count of choices, which
- * `CountBound.choices` copies from `Interaction.choices`.
+ * `CountBound.choices` copies from `Interaction.choices`, and its `LeastCount` and `MostCount`
+ * from `CountBound`.
  *
  * @param rows - A document's interaction rows.
  * @param counts - The package's counts ({@link packageChoicesOf}).
- * @returns The same rows, each interaction's bound recounted.
+ * @returns The same rows, each interaction's bound and counts recounted.
  */
 export const withPackageChoices = (
   rows: InteractionRows,
   counts: ReadonlyMap<string, bigint>,
-): InteractionRows => ({
-  ...rows,
-  CountBound: new Map(
-    [...rows.CountBound].map(([key, bound]) => [
-      key,
-      interactions.has(bound.kind) ? { ...bound, choices: counts.get(bound.node) ?? 0n } : bound,
-    ]),
-  ),
-});
+): InteractionRows => {
+  const recounted = <Row extends Pick<Addition<typeof CountBound>, "choices" | "kind" | "node">>(
+    bounds: ReadonlyMap<string, Row>,
+  ): ReadonlyMap<string, Row> =>
+    new Map(
+      [...bounds].map(([key, bound]) => [
+        key,
+        interactions.has(bound.kind) ? { ...bound, choices: counts.get(bound.node) ?? 0n } : bound,
+      ]),
+    );
+
+  return {
+    ...rows,
+    CountBound: recounted(rows.CountBound),
+    LeastCount: recounted(rows.LeastCount),
+    MostCount: recounted(rows.MostCount),
+  };
+};
 
 /**
  * A package's section and fragment placements and their resolved references, one keyed set per
@@ -1290,6 +1383,8 @@ export interface PlacedBindingRows {
  * @param input.hottexts - Every document's hottexts ({@link rowsOf}'s `Hottext`).
  * @param input.instances - Every assembly's root instance, its tree nested (Q5.13's
  *   `assembledRowsOf`).
+ * @param input.mosts - Every document's most counts that have a value ({@link rowsOf}'s
+ *   `MostCount`), whose nodes a placed binding's `mosts` counts.
  * @param input.names - Every document's binding attributes ({@link rowsOf}'s `BindingName`).
  * @returns The rows.
  */
@@ -1299,8 +1394,10 @@ export const placedBindingRowsOf = (input: {
   readonly declarations: Iterable<Addition<typeof Declaration>>;
   readonly hottexts: Iterable<Addition<typeof Hottext>>;
   readonly instances: Iterable<InstanceRoot>;
+  readonly mosts: Iterable<Addition<typeof MostCount>>;
   readonly names: Iterable<Addition<typeof BindingName>>;
 }): PlacedBindingRows => {
+  const counted = new Set([...input.mosts].map(({ node }) => node));
   const declared = Map.groupBy(input.declarations, ({ document }) => document);
   const names = Map.groupBy(input.names, ({ document }) => document);
   const adaptive = new Map([...input.adaptive].map((row) => [row.document, row.adaptive] as const));
@@ -1368,6 +1465,7 @@ export const placedBindingRowsOf = (input: {
             cardinality: variable.cardinality,
             declaration: variable.node,
             declarationKind: variable.declarationKind,
+            mosts: counted.has(name.node) ? 1n : 0n,
           });
         }
       }
