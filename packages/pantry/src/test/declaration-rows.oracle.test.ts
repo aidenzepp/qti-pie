@@ -18,9 +18,9 @@
  *
  * - The oracle raises AL3's required attribute or the attribute's value domain at the declaration,
  *   and where only its cardinality or base type changed, nothing else;
- * - The importer writes no `Declaration` row for it, and no row anywhere names it: no outcome range,
- *   value set, table, declaration table, binding declaration or reference whose `declaration` is
- *   its node;
+ * - The importer writes no `Declaration` row for it, and no row anywhere names it: no base type,
+ *   scale attribute or pair of them, value set, table, declaration table, binding declaration or
+ *   reference whose `declaration` is its node;
  * - No family member names an owner the import writes no row of (`#pantry/test/family-owners.ts`),
  *   and every `ChoiceVariableName` row counts at least one choice, hottext or declaration, as its
  *   `E1_derived` requires, so no row of a relation grizzle writes before `Node` breaks a CHECK.
@@ -81,7 +81,16 @@ const readRow = Schema.decodeUnknownSync(ReadSchema);
 /**
  * The relations a declaration's own rows sit in, each keyed by the declaration's node.
  */
-const ownRows = ["Declaration", "OutcomeRange", "DeclarationTable"] as const;
+const ownRows = [
+  "Declaration",
+  "DeclarationBaseType",
+  "MasteryValue",
+  "NormalMinimum",
+  "NormalMaximum",
+  "MasteryFloor",
+  "MasteryCeiling",
+  "DeclarationTable",
+] as const;
 
 /**
  * Hold one case: the oracle's rules at the declaration, and the importer's rows.

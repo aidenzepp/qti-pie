@@ -647,9 +647,21 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
   [primaryKeyOf("Rounding", "node"), "E1 derived"],
   [primaryKeyOf("Tolerance", "node"), "E1 derived"],
   [primaryKeyOf("ToleranceToken", "node", "at"), "E1 derived"],
-  ...(["Declaration", "ValueSet", "Value", "RecordField", "OutcomeRange"] as const).map(
-    (overlay) => [primaryKeyOf(overlay, "node"), "Declaration overlay"] as const,
-  ),
+  ...(
+    [
+      "Declaration",
+      "DeclarationBaseType",
+      "ValueSet",
+      "Value",
+      "ValueBaseType",
+      "RecordField",
+      "MasteryValue",
+      "NormalMinimum",
+      "NormalMaximum",
+      "MasteryFloor",
+      "MasteryCeiling",
+    ] as const
+  ).map((overlay) => [primaryKeyOf(overlay, "node"), "Declaration overlay"] as const),
   // An operand's type bits read `ValueBaseBit.row` and `ValueCardinalityBit.row`, closed reads of
   // a set keyed by the row's own NOT NULL `baseType` and `cardinality`: ∅ where the diagonal holds
   // no row (`any`, `unknown`), never NULL, which only a NULL key, an absent `C.at`, reads

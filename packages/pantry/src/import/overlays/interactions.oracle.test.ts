@@ -23,6 +23,7 @@ import {
   nonElementKinds,
 } from "#pantry/grammar/install.ts";
 import { isForeignKind, openClasses } from "#pantry/grammar/kinds.ts";
+import { ownContext } from "#pantry/import/fold.ts";
 import { pieces, rowsOf, sectionRowsOf } from "#pantry/import/overlays/interactions.ts";
 import type { InstanceMember, InstanceRoot } from "#pantry/import/overlays/tests.ts";
 import type { InteractionIds } from "#pantry/import/overlays/interactions.ts";
@@ -42,9 +43,10 @@ import { lawsOf } from "#pantry/test/oracle.ts";
 import { integerOf } from "#pantry/test/oracle-view.ts";
 
 /**
- * The ids every case writes its rows under: each node's by its number.
+ * The ids every case writes its rows under: each node's by its number, in the context of a
+ * document no site names.
  */
-const ids: InteractionIds = { idOf };
+const ids: InteractionIds = { context: ownContext(idOf(0)), idOf };
 
 /**
  * The kinds the choice generator places: three interactions whose choices sit at different depths
@@ -869,7 +871,6 @@ const assemblyOf = (tree: readonly Placement[]) => {
  */
 const scored: Addition<typeof Declaration> = {
   baseType: "identifier",
-  baseTypeLexical: "identifier",
   cardinality: "single",
   cardinalityLexical: "single",
   declarationKind: "qti-outcome-declaration",

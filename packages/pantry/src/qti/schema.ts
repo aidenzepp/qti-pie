@@ -104,10 +104,16 @@ import {
 } from "#pantry/qti/chardata.ts";
 import {
   Declaration,
+  DeclarationBaseType,
   declarationLaws,
-  OutcomeRange,
+  MasteryCeiling,
+  MasteryFloor,
+  MasteryValue,
+  NormalMaximum,
+  NormalMinimum,
   RecordField,
   Value,
+  ValueBaseType,
   ValueSet,
 } from "#pantry/qti/declarations.ts";
 import { htmlLaws, htmlRelations } from "#pantry/qti/html.ts";
@@ -329,10 +335,23 @@ const packageRelations = {
 };
 
 /**
- * `declarations.ts`'s relations: each variable's declaration, its value sets and values, a record's
- * fields, and an outcome's normal range and mastery value.
+ * `declarations.ts`'s relations: each variable's declaration and its base type, its value sets and
+ * values, a value's own base type, a record's fields, and an outcome's mastery value and normal
+ * range, each end and each pair of them.
  */
-const declarationRelations = { Declaration, OutcomeRange, RecordField, Value, ValueSet };
+const declarationRelations = {
+  Declaration,
+  DeclarationBaseType,
+  MasteryCeiling,
+  MasteryFloor,
+  MasteryValue,
+  NormalMaximum,
+  NormalMinimum,
+  RecordField,
+  Value,
+  ValueBaseType,
+  ValueSet,
+};
 
 /**
  * `mapping.ts`'s relations: each response mapping and its map keys, with the typed values of its

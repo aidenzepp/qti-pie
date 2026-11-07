@@ -12,19 +12,25 @@
 import type { Addition } from "@bjornpagen/grizzle";
 import { Option } from "effect";
 import type { DocumentContext } from "#pantry/import/context.ts";
-import { foldOf, ownContext } from "#pantry/import/fold.ts";
+import { foldAt, foldOf } from "#pantry/import/fold.ts";
 import type { Folded } from "#pantry/import/fold.ts";
 import { spelledBaseTypes } from "#pantry/grammar/attributes.ts";
-import { recordCardinality, spelledCardinalities } from "#pantry/grammar/compose.ts";
+import { spelledCardinalities } from "#pantry/grammar/compose.ts";
 import { DeclarationKind } from "#pantry/grammar/install.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { FlatRows, NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
 import type {
   Declaration,
-  OutcomeRange,
+  DeclarationBaseType,
+  MasteryCeiling,
+  MasteryFloor,
+  MasteryValue,
+  NormalMaximum,
+  NormalMinimum,
   RecordField,
   Value,
+  ValueBaseType,
   ValueSet,
 } from "#pantry/qti/declarations.ts";
 
@@ -37,10 +43,10 @@ import type {
  */
 export interface DocumentIds {
   /**
-   * The document's context (spec reading 117), its own where none is given: an included
-   * fragment's nodes take the interaction their includes stand in as their nearest.
+   * The document's context (spec reading 117), its own (`ownContext`) or, for an included
+   * fragment, the interaction its includes stand in, which its nodes take as their nearest.
    */
-  readonly context?: DocumentContext;
+  readonly context: DocumentContext;
   readonly idOf: (index: number) => NodeId;
 }
 
@@ -50,11 +56,23 @@ export interface DocumentIds {
  */
 export interface DeclarationRows {
   readonly Declaration: ReadonlyMap<string, Addition<typeof Declaration>>;
-  readonly OutcomeRange: ReadonlyMap<string, Addition<typeof OutcomeRange>>;
+  readonly DeclarationBaseType: ReadonlyMap<string, Addition<typeof DeclarationBaseType>>;
+  readonly MasteryCeiling: ReadonlyMap<string, Addition<typeof MasteryCeiling>>;
+  readonly MasteryFloor: ReadonlyMap<string, Addition<typeof MasteryFloor>>;
+  readonly MasteryValue: ReadonlyMap<string, Addition<typeof MasteryValue>>;
+  readonly NormalMaximum: ReadonlyMap<string, Addition<typeof NormalMaximum>>;
+  readonly NormalMinimum: ReadonlyMap<string, Addition<typeof NormalMinimum>>;
   readonly RecordField: ReadonlyMap<string, Addition<typeof RecordField>>;
   readonly Value: ReadonlyMap<string, Addition<typeof Value>>;
+  readonly ValueBaseType: ReadonlyMap<string, Addition<typeof ValueBaseType>>;
   readonly ValueSet: ReadonlyMap<string, Addition<typeof ValueSet>>;
 }
+
+/**
+ * A row of one of the builder's relations, as its writer writes it.
+ */
+type RowOf<Relation extends keyof DeclarationRows> =
+  DeclarationRows[Relation] extends ReadonlyMap<string, infer Row> ? Row : never;
 
 /**
  * A `BaseType` handle.
@@ -87,7 +105,12 @@ export interface Pieces {
 }
 
 /**
- * The null object of `BaseType`: a record's base type, and one no lexical form spells.
+ * The `BaseType` a declaration that writes no `base-type` holds, `none`, which no lexical form
+ * spells: a record's ("Variables with record cardinality have no base-type", QTI 3.0 information
+ * model, tables 4.5.3, 5.34.3, 5.115.3 and 5.151.3), which `Declaration_base_type` refuses on any
+ * other cardinality. It is the one sentinel this builder writes: `declarationRef` copies a
+ * declaration's base type into every row that names it, so it is open until those rows read
+ * {@link DeclarationBaseType} instead (lane NIL's audit, B12).
  */
 const noBaseType: BaseTypeHandle = "none";
 
@@ -99,9 +122,25 @@ const declarationKinds: ReadonlyMap<string, DeclarationKindHandle> = new Map(
 );
 
 /**
+ * The declaration kind that writes a normal scale, `mastery-value`, `normal-minimum` and
+ * `normal-maximum` (QTI 3.0 information model §4.5.7 to §4.5.9, OutcomeDeclaration).
+ */
+const outcomeKind = "qti-outcome-declaration";
+
+/**
  * The kinds that hold a declaration's values.
  */
 const valueSetKinds: ReadonlySet<string> = new Set(["qti-default-value", "qti-correct-response"]);
+
+/**
+ * Whether a character is XML whitespace, `S` (XML 1.0, §2.3): a tab, a line feed, a carriage return
+ * or a space.
+ *
+ * @param char - The character.
+ * @returns Whether it is.
+ */
+const isSpaceCharacter = (char: string): boolean =>
+  char === "\t" || char === "\n" || char === "\r" || char === " ";
 
 /**
  * Whether a text is XML whitespace alone, possibly none: the language of an identifier's pieces.
@@ -112,31 +151,64 @@ const valueSetKinds: ReadonlySet<string> = new Set(["qti-default-value", "qti-co
 const isSpace = (text: string): text is Space => /^[\t\n\r ]*$/u.test(text);
 
 /**
+ * Read a run of a lexical form that holds whitespace alone, as a piece.
+ *
+ * @param lexical - The lexical form.
+ * @param from - The run's first unit.
+ * @param to - The unit past its last.
+ * @returns The run.
+ * @throws {Error} When the run holds a character that is no whitespace, which {@link piecesOf}'s
+ *   bounds rule out: a defect of the caller, never of the document.
+ */
+const spaceRunOf = (lexical: string, from: number, to: number): Space => {
+  const run = lexical.slice(from, to);
+  if (!isSpace(run)) {
+    throw new Error(
+      `The run ${JSON.stringify(run)} of ${JSON.stringify(lexical)} holds a character that is no XML whitespace. Bound an identifier's pieces at its first and last non-whitespace characters.`,
+    );
+  }
+
+  return run;
+};
+
+/**
  * Split an identifier's lexical form into its pieces: its outer whitespace and the name between,
- * its collapsed form (XML Schema Part 2, §4.3.6), since a name holds no whitespace.
+ * its collapsed form (XML Schema Part 2, §4.3.6), since a name holds no whitespace. A form of
+ * whitespace alone is its lead, and names nothing.
+ *
+ * Each whitespace character is one UTF-16 unit, so the name's bounds are read by unit.
  *
  * @param lexical - The lexical form, as written.
  * @returns The pieces, which concatenate to it.
  */
 export const piecesOf = (lexical: string): Pieces => {
-  const {
-    lead = "",
-    name = "",
-    trail = "",
-  } = /^(?<lead>[\t\n\r ]*)(?<name>.*?)(?<trail>[\t\n\r ]*)$/su.exec(lexical)?.groups ?? {};
+  let start = 0;
+  while (start < lexical.length && isSpaceCharacter(lexical.charAt(start))) {
+    start += 1;
+  }
 
-  return { lead: isSpace(lead) ? lead : "", name, trail: isSpace(trail) ? trail : "" };
+  let end = lexical.length;
+  while (end > start && isSpaceCharacter(lexical.charAt(end - 1))) {
+    end -= 1;
+  }
+
+  return {
+    lead: spaceRunOf(lexical, 0, start),
+    name: lexical.slice(start, end),
+    trail: spaceRunOf(lexical, end, lexical.length),
+  };
 };
 
 /**
- * Read the code of a `base-type` from its lexical form (C17).
+ * Read the code a `base-type` spells (C17): its lexical form, where that is one of
+ * `BaseTypeLexical`'s, since each code is spelled as its lexical form.
  *
  * @param lexical - The lexical form, none where the attribute is unwritten.
- * @returns The handle it spells; `none` where it is unwritten or spells none, which
- *   `Declaration_base_type` or `E1_derived` refuses.
+ * @returns The handle it spells, none where it is unwritten or spells none, which its value domain
+ *   refuses alone.
  */
-export const baseTypeOf = (lexical: string | undefined): BaseTypeHandle =>
-  lexical === undefined || !spelledBaseTypes.has(lexical) ? noBaseType : lexical;
+export const spelledBaseTypeOf = (lexical: string | undefined): Option.Option<BaseTypeHandle> =>
+  lexical !== undefined && spelledBaseTypes.has(lexical) ? Option.some(lexical) : Option.none();
 
 /**
  * The lexical forms of the three attributes a declaration's row reads, each none where unwritten.
@@ -148,13 +220,12 @@ export interface DeclarationLexicals {
 }
 
 /**
- * A declaration as its row holds it: its identifier as written and in its pieces, and the codes its
- * `base-type` and `cardinality` spell, with their lexical forms (`""` for a `base-type` it does not
- * write, whose code is `none`, a record's).
+ * A declaration as its rows hold it: its identifier as written and in its pieces, the code its
+ * `cardinality` spells with its lexical form, and the code its `base-type` spells, none where it
+ * writes none, each code spelled as its lexical form (`BaseTypeLexical`, `CardinalityLexical`).
  */
 export interface TypedDeclaration {
-  readonly baseType: BaseTypeHandle;
-  readonly baseTypeLexical: string;
+  readonly baseType: Option.Option<BaseTypeHandle>;
   readonly cardinality: CardinalityHandle;
   readonly cardinalityLexical: string;
   readonly identifier: Pieces;
@@ -178,29 +249,47 @@ export interface TypedDeclaration {
  * @param lexical - The lexical forms of its `identifier`, `base-type` and `cardinality`.
  * @returns The declaration, or none where it has no row.
  */
-export const typedDeclarationOf = (
-  lexical: DeclarationLexicals,
-): Option.Option<TypedDeclaration> => {
-  const identifier = piecesOf(lexical.identifier ?? "");
+export const typedDeclarationOf = ({
+  baseType,
+  cardinality,
+  identifier,
+}: DeclarationLexicals): Option.Option<TypedDeclaration> => {
+  const spelled = spelledBaseTypeOf(baseType);
+  if (
+    identifier === undefined ||
+    cardinality === undefined ||
+    !spelledCardinalities.has(cardinality) ||
+    (baseType !== undefined && Option.isNone(spelled))
+  ) {
+    return Option.none();
+  }
 
-  return lexical.identifier === undefined ||
-    identifier.name === "" ||
-    lexical.cardinality === undefined ||
-    !spelledCardinalities.has(lexical.cardinality) ||
-    (lexical.baseType !== undefined && !spelledBaseTypes.has(lexical.baseType))
+  const pieces = piecesOf(identifier);
+
+  return pieces.name === ""
     ? Option.none()
     : Option.some({
-        baseType: lexical.baseType ?? noBaseType,
-        baseTypeLexical: lexical.baseType ?? "",
-        cardinality: lexical.cardinality,
-        cardinalityLexical: lexical.cardinality,
-        identifier,
-        identifierLexical: lexical.identifier,
+        baseType: spelled,
+        cardinality,
+        cardinalityLexical: cardinality,
+        identifier: pieces,
+        identifierLexical: identifier,
       });
 };
 
 /**
- * The fields a declaration gives every row that copies it, and its kind's `DeclarationKind`.
+ * Read the base type a declaration's row holds, and every row that copies it: the code its
+ * `base-type` spells, or {@link noBaseType} where it writes none.
+ *
+ * @param declared - The declaration.
+ * @returns The base type.
+ */
+export const heldBaseTypeOf = (declared: TypedDeclaration): BaseTypeHandle =>
+  Option.getOrElse(declared.baseType, () => noBaseType);
+
+/**
+ * The fields a declaration gives every row that copies it, and its kind's `DeclarationKind`: its
+ * base type as {@link heldBaseTypeOf} reads it.
  */
 export interface DeclaredFields {
   readonly baseType: BaseTypeHandle;
@@ -236,7 +325,7 @@ export const declaredFieldsOf = (
         identifier: attribute("identifier"),
       }),
       (declared) => ({
-        baseType: declared.baseType,
+        baseType: heldBaseTypeOf(declared),
         cardinality: declared.cardinality,
         declarationKind,
         identifier: declared.identifier.name,
@@ -250,19 +339,13 @@ export const declaredFieldsOf = (
  * @param rows - The document's flat rows.
  * @returns Each element's attributes' lexical forms, by the element's id and the attribute's name.
  */
-const attributesOf = (
-  rows: FlatRows<Composed>,
-): ReadonlyMap<NodeId, ReadonlyMap<string, string>> => {
-  const byNode = new Map<NodeId, Map<string, string>>();
-
-  for (const { lexical, name, node } of rows.attributes) {
-    const named = byNode.get(node) ?? new Map<string, string>();
-    named.set(name, lexical);
-    byNode.set(node, named);
-  }
-
-  return byNode;
-};
+const attributesOf = (rows: FlatRows<Composed>): ReadonlyMap<NodeId, ReadonlyMap<string, string>> =>
+  new Map(
+    [...Map.groupBy(rows.attributes, ({ node }) => node)].map(
+      ([node, attributes]) =>
+        [node, new Map(attributes.map(({ lexical, name }) => [name, lexical] as const))] as const,
+    ),
+  );
 
 /**
  * Read each node's characters as `Node.chars` holds them: a text or whitespace node's text, an
@@ -280,7 +363,8 @@ const charsOf = (rows: FlatRows<Composed>): ReadonlyMap<NodeId, string> =>
 
 /**
  * What a node's rows give the overlays besides its own row: its fold (`#pantry/import/fold.ts`),
- * which holds its nearest interaction (N8) and its element counts, and its children's characters.
+ * which holds its nearest interaction (N8) and its element counts, and its children's characters,
+ * for each node one of whose children holds any.
  */
 interface Derived {
   readonly folds: ReadonlyMap<NodeId, Folded>;
@@ -288,22 +372,36 @@ interface Derived {
 }
 
 /**
+ * The string value of a node none of whose children holds characters: the concatenation of none,
+ * the empty text (`Node.stringValue`, Q5.03's fold over its children's characters).
+ */
+const noCharacters = "";
+
+/**
  * Compute what the tree gives each node, as `Node`'s laws hold it: its fold, and the string value
  * of its children's characters, concatenated in order.
  *
  * @param rows - A document's flat rows, its nodes in document order, so each parent precedes its
  *   children.
- * @param context - The document's context (spec reading 117), its own where none is given.
+ * @param context - The document's context (spec reading 117).
  * @returns The derived values, by node id.
  */
-const derivedOf = (rows: FlatRows<Composed>, context: DocumentContext | undefined): Derived => {
+const derivedOf = (rows: FlatRows<Composed>, context: DocumentContext): Derived => {
   const chars = charsOf(rows);
-  const text = new Map<NodeId, string>();
-  for (const node of rows.nodes.filter(({ id, parent }) => parent !== id)) {
-    text.set(node.parent, (text.get(node.parent) ?? "") + (chars.get(node.id) ?? ""));
-  }
+  const pieces = rows.nodes.flatMap(({ id, parent }) =>
+    parent === id
+      ? []
+      : Option.toArray(
+          Option.map(Option.fromUndefinedOr(chars.get(id)), (value) => ({ parent, value })),
+        ),
+  );
+  const text = new Map(
+    [...Map.groupBy(pieces, ({ parent }) => parent)].map(
+      ([parent, held]) => [parent, held.map(({ value }) => value).join("")] as const,
+    ),
+  );
 
-  return { folds: foldOf(rows.nodes, context ?? ownContext(rows.document.node)), text };
+  return { folds: foldOf(rows.nodes, context), text };
 };
 
 /**
@@ -314,13 +412,7 @@ interface Reading {
   readonly attributes: ReadonlyMap<NodeId, ReadonlyMap<string, string>>;
   readonly derived: Derived;
   readonly document: NodeId;
-  readonly rows: {
-    readonly Declaration: Map<string, Addition<typeof Declaration>>;
-    readonly OutcomeRange: Map<string, Addition<typeof OutcomeRange>>;
-    readonly RecordField: Map<string, Addition<typeof RecordField>>;
-    readonly Value: Map<string, Addition<typeof Value>>;
-    readonly ValueSet: Map<string, Addition<typeof ValueSet>>;
-  };
+  readonly rows: { readonly [Relation in keyof DeclarationRows]: Map<string, RowOf<Relation>> };
 }
 
 /**
@@ -344,7 +436,7 @@ const valueOf = (reading: Reading, node: NodeRow<Composed>, name: string): strin
 const tupleOf = (reading: Reading, node: NodeRow<Composed>) => ({
   document: reading.document,
   kind: node.kind,
-  nearest: reading.derived.folds.get(node.id)?.nearest ?? reading.document,
+  nearest: foldAt(reading.derived.folds, node.id).nearest,
   node: node.id,
   parent: node.parent,
   start: node.start,
@@ -352,9 +444,45 @@ const tupleOf = (reading: Reading, node: NodeRow<Composed>) => ({
 });
 
 /**
- * Add a declaration's row, and its outcome range where it writes a scale attribute, where it has a
- * row ({@link typedDeclarationOf}): one whose identifier or cardinality is unwritten or spells
- * nothing has neither, nor any value set, value or field below it.
+ * Add an outcome declaration's scale rows: each of its `mastery-value`, `normal-minimum` and
+ * `normal-maximum` it writes, and each pair of them `Mastery_range` orders where it writes both
+ * (spec reading 9: "each pair judged where both are written"). An attribute it does not write has
+ * no row, and no pair holds it.
+ *
+ * @param reading - The document.
+ * @param node - The declaration's node.
+ */
+const addScale = (reading: Reading, node: NodeRow<Composed>): void => {
+  const written = (name: string) => Option.fromUndefinedOr(valueOf(reading, node, name));
+  const mastery = written("mastery-value");
+  const minimum = written("normal-minimum");
+  const maximum = written("normal-maximum");
+  for (const lexical of Option.toArray(mastery)) {
+    reading.rows.MasteryValue.set(node.id, { lexical, node: node.id });
+  }
+
+  for (const lexical of Option.toArray(minimum)) {
+    reading.rows.NormalMinimum.set(node.id, { lexical, node: node.id });
+  }
+
+  for (const lexical of Option.toArray(maximum)) {
+    reading.rows.NormalMaximum.set(node.id, { lexical, node: node.id });
+  }
+
+  for (const [normalMinimum, masteryValue] of Option.toArray(Option.all([minimum, mastery]))) {
+    reading.rows.MasteryFloor.set(node.id, { masteryValue, node: node.id, normalMinimum });
+  }
+
+  for (const [masteryValue, normalMaximum] of Option.toArray(Option.all([mastery, maximum]))) {
+    reading.rows.MasteryCeiling.set(node.id, { masteryValue, node: node.id, normalMaximum });
+  }
+};
+
+/**
+ * Add a declaration's row, its base type's where it writes one, and an outcome declaration's scale
+ * rows ({@link addScale}), where it has a row ({@link typedDeclarationOf}): one whose identifier or
+ * cardinality is unwritten or spells nothing has none of them, nor any value set, value or field
+ * below it.
  *
  * @param reading - The document.
  * @param node - The declaration's node.
@@ -377,8 +505,7 @@ const addDeclaration = (
   const declared = typed.value;
   reading.rows.Declaration.set(node.id, {
     ...tupleOf(reading, node),
-    baseType: declared.baseType,
-    baseTypeLexical: declared.baseTypeLexical,
+    baseType: heldBaseTypeOf(declared),
     cardinality: declared.cardinality,
     cardinalityLexical: declared.cardinalityLexical,
     declarationKind,
@@ -387,22 +514,16 @@ const addDeclaration = (
     identifierLexical: declared.identifierLexical,
     identifierTrail: declared.identifier.trail,
   });
-
-  const scale = {
-    masteryValue: valueOf(reading, node, "mastery-value"),
-    normalMaximum: valueOf(reading, node, "normal-maximum"),
-    normalMinimum: valueOf(reading, node, "normal-minimum"),
-  };
-  if (
-    node.kind === "qti-outcome-declaration" &&
-    Object.values(scale).some((lexical) => lexical !== undefined)
-  ) {
-    reading.rows.OutcomeRange.set(node.id, {
-      masteryValue: scale.masteryValue ?? "",
+  for (const baseType of Option.toArray(declared.baseType)) {
+    reading.rows.DeclarationBaseType.set(node.id, {
+      baseType,
+      baseTypeLexical: baseType,
       node: node.id,
-      normalMaximum: scale.normalMaximum ?? "",
-      normalMinimum: scale.normalMinimum ?? "",
     });
+  }
+
+  if (node.kind === outcomeKind) {
+    addScale(reading, node);
   }
 };
 
@@ -424,18 +545,21 @@ const addValueSet = (
     baseType: declaration.baseType,
     cardinality: declaration.cardinality,
     declarationKind: declaration.declarationKind,
-    elementChildren: reading.derived.folds.get(node.id)?.elementChildren ?? 0n,
-    elements: reading.derived.folds.get(node.id)?.elements ?? 0n,
+    elementChildren: foldAt(reading.derived.folds, node.id).elementChildren,
+    elements: foldAt(reading.derived.folds, node.id).elements,
     identifier: declaration.identifier,
   });
 };
 
 /**
- * Add a value's row, and its field's where it is one.
+ * Add a value's row, its own base type's where it writes one that spells a code, and its field's
+ * where it writes both a `field-identifier` and a `base-type`.
  *
- * A value is a record's field where its set is a record's or it writes a `field-identifier` or a
- * `base-type` of its own, so a field the specification places only in a record is refused by
- * `Value_cardinality` rather than dropped.
+ * A value writes either only as a record's field (information model §7.46.1 and §7.46.2: each "is
+ * only used for" a value "that forms part of a record"). The rows hold what it writes and nothing
+ * else, so `Value_cardinality` refuses a record's value that writes either alone or neither, and
+ * any other set's value that writes either, through its count of fields and each attribute's copy
+ * into {@link RecordField}.
  *
  * @param reading - The document.
  * @param node - The value's node.
@@ -446,29 +570,34 @@ const addValue = (
   node: NodeRow<Composed>,
   set: Addition<typeof ValueSet>,
 ): void => {
-  const fieldIdentifier = valueOf(reading, node, "field-identifier");
-  const fieldBaseType = valueOf(reading, node, "base-type");
-  const ownBaseType = baseTypeOf(fieldBaseType);
+  const text = reading.derived.text.get(node.id) ?? noCharacters;
   reading.rows.Value.set(node.id, {
     ...tupleOf(reading, node),
-    baseType: set.baseType === noBaseType ? ownBaseType : set.baseType,
-    setBaseType: set.baseType,
-    text: reading.derived.text.get(node.id) ?? "",
+    baseType: set.baseType,
+    cardinality: set.cardinality,
+    text,
   });
 
-  if (
-    set.cardinality === recordCardinality ||
-    fieldIdentifier !== undefined ||
-    fieldBaseType !== undefined
-  ) {
-    const { lead, name, trail } = piecesOf(fieldIdentifier ?? "");
+  const fieldIdentifier = valueOf(reading, node, "field-identifier");
+  const fieldBaseType = valueOf(reading, node, "base-type");
+  for (const baseType of Option.toArray(spelledBaseTypeOf(fieldBaseType))) {
+    reading.rows.ValueBaseType.set(node.id, {
+      baseType,
+      baseTypeLexical: baseType,
+      cardinality: set.cardinality,
+      node: node.id,
+      text,
+    });
+  }
+
+  if (fieldIdentifier !== undefined && fieldBaseType !== undefined) {
+    const { lead, name, trail } = piecesOf(fieldIdentifier);
     reading.rows.RecordField.set(node.id, {
       ...tupleOf(reading, node),
-      baseType: ownBaseType,
-      baseTypeLexical: fieldBaseType ?? "",
+      baseTypeLexical: fieldBaseType,
       identifier: name,
       identifierLead: lead,
-      identifierLexical: fieldIdentifier ?? "",
+      identifierLexical: fieldIdentifier,
       identifierTrail: trail,
     });
   }
@@ -476,9 +605,9 @@ const addValue = (
 
 /**
  * Build the O2 overlay rows of a document: a row per declaration that has one
- * ({@link typedDeclarationOf}), per value set of such a declaration, per value of a value set and
- * per record field, and an outcome range per such outcome declaration that writes a scale
- * attribute.
+ * ({@link typedDeclarationOf}) and per base type it writes, per value set of such a declaration,
+ * per value of a value set, per value's own base type and per record field, and per scale
+ * attribute of such an outcome declaration and per pair of them it writes.
  *
  * @param doc - The document's tree, as shred gives it.
  * @param ids - The ids its rows are written under.
@@ -492,9 +621,15 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: DocumentIds): Declaratio
     document: flat.document.node,
     rows: {
       Declaration: new Map(),
-      OutcomeRange: new Map(),
+      DeclarationBaseType: new Map(),
+      MasteryCeiling: new Map(),
+      MasteryFloor: new Map(),
+      MasteryValue: new Map(),
+      NormalMaximum: new Map(),
+      NormalMinimum: new Map(),
       RecordField: new Map(),
       Value: new Map(),
+      ValueBaseType: new Map(),
       ValueSet: new Map(),
     },
   };
