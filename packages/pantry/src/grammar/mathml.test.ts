@@ -1140,16 +1140,20 @@ const withFormula = (formula: string) =>
   );
 
 describe("MathML 3 §4.3.3 and §4.2.6.1: qualifiers in order, a condition after a bvar, a bind with a bvar", () => {
-  const refused: readonly (readonly [string, string])[] = [
+  // Each case's laws in order. The oracle sets the child N5 refuses aside and judges the rest, so
+  // a bind left with its operator alone also ends where its model cannot (N7).
+  const refused: readonly (readonly [string, string, readonly string[]])[] = [
     [
       "a condition before a lowlimit",
       "<m:apply><m:int/><m:bvar><m:ci>x</m:ci></m:bvar><m:condition><m:apply><m:gt/><m:ci>x</m:ci><m:cn>0</m:cn></m:apply></m:condition><m:lowlimit><m:cn>0</m:cn></m:lowlimit><m:ci>f</m:ci></m:apply>",
+      ["N5 Follow"],
     ],
     [
       "a condition with no bvar before it",
       "<m:apply><m:sum/><m:condition><m:apply><m:gt/><m:ci>x</m:ci><m:cn>0</m:cn></m:apply></m:condition><m:ci>f</m:ci></m:apply>",
+      ["N5 Follow"],
     ],
-    ["a bind with no bvar", "<m:bind><m:forall/><m:ci>p</m:ci></m:bind>"],
+    ["a bind with no bvar", "<m:bind><m:forall/><m:ci>p</m:ci></m:bind>", ["N5 Follow", "N7 Last"]],
   ];
   const accepted: readonly (readonly [string, string])[] = [
     [
@@ -1178,7 +1182,7 @@ describe("MathML 3 §4.3.3 and §4.2.6.1: qualifiers in order, a condition after
     ],
   ];
 
-  it.effect.each(refused)("refuses %s", ([, formula]) =>
+  it.effect.each(refused)("refuses %s", ([, formula, laws]) =>
     // Oracle: §4.3.3 ("they appear in the order bvar, lowlimit, uplimit, interval, condition,
     // domainofapplication, degree, momentabout, logbase"), §4.3.3.2 ("condition qualifiers ...
     // require a preceding bvar") and §4.2.6.1 ("followed by a non-empty list of bvar elements"),
@@ -1188,7 +1192,7 @@ describe("MathML 3 §4.3.3 and §4.2.6.1: qualifiers in order, a condition after
 
       assert.deepStrictEqual(
         breaches.map(({ law }) => law),
-        ["N5 Follow"],
+        laws,
         shown(breaches),
       );
       assert.match(shown(breaches), /^N5 Follow \(ordering\) at item\.xml/u);
