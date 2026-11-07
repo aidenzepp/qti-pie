@@ -256,8 +256,9 @@ describe("the oracle's key-text list", () => {
   it("leaves out only the copies whose source is no document row, each bounded where it is written", () => {
     // Oracle: the law table's copies into a keyText field from a relation the oracle has no rows
     // of, each bounded by its own type where its row is written: a document's path and an entry's
-    // are `EntryPath`, which the oracle bounds as `Document.path`, and a float map key's host
-    // value mirrors `MapKey.key`, which copies the attribute.
+    // are `EntryPath`, which the oracle bounds as `Document.path`, and a float map key's typed
+    // value mirrors `MapKeyType.key`, the key beside its mapping's base type where it has one
+    // (reading 153), which copies `MapKey.key`, which copies the attribute.
     // Bound: every law the schema states that is no check.
     assert.deepStrictEqual(
       [
@@ -270,7 +271,7 @@ describe("the oracle's key-text list", () => {
       [
         "Document.path → NamedHref.path",
         "Entry.path → FileHref.path",
-        "MapKeyFloat.key → MapKey.key",
+        "MapKeyFloat.key → MapKeyType.key",
       ],
     );
   });
@@ -340,7 +341,10 @@ const freeSites: ReadonlySet<Site> = new Set(["free attribute", "free text"]);
 
 /**
  * The scripts a text is written in, by the UTF-8 bytes of their one character: `a`, `é`, `中` and
- * U+10000, each a name start character of XML 1.0, so every place an NCName goes takes it.
+ * U+10000. The first three are name characters of XML 1.0 Second Edition, so every place an NCName
+ * goes takes them; U+10000 is none (reading 94), so a text in it past its leading letter names
+ * nothing at any length, and its import writes no row of the name (reading 152), as its twin's
+ * does ({@link twinOf}).
  */
 const scripts = ["1-byte", "2-byte", "3-byte", "4-byte"] as const;
 
@@ -809,13 +813,14 @@ type Situation =
   | "refused";
 
 /**
- * The relations an import writes fewer rows of for a package than for its twin with every place
- * short: each a copy an overlay leaves out because its text is past `keyText` (as
- * `#pantry/import/overlays/identity.ts` leaves out a long ID's `DocumentId`), which the copy's
- * containment then refuses for the row it lacks.
+ * The relations an import writes fewer rows of for a package than for its twin ({@link twinOf}):
+ * each a copy an overlay leaves out because its text is past `keyText`, which the copy's
+ * containment then refuses for the row it lacks. The twin differs from the package in its texts'
+ * lengths alone, so a row an overlay leaves out of both, a name's that names nothing (reading
+ * 152), is no copy the bound left out.
  *
  * @param long - The package's rows, counted by relation.
- * @param short - Its short twin's.
+ * @param short - Its twin's.
  * @returns The relations, each as `Relation.*`.
  */
 const leftOut = (
@@ -855,14 +860,44 @@ const databaseRules = (refused: ReadonlySet<string>): ReadonlySet<string> =>
   );
 
 /**
- * Count the rows the import writes for the package with every place short, by relation: the twin
- * every case's rows are compared with.
+ * The most characters a twin's text holds: its place's letter and one character of its script, so
+ * the twin keeps what each drawn text names, and no twin's text is near the bound.
  */
-const shortTwin = Effect.gen(function* shortTwin() {
-  const dir = yield* scopedPackage(packageOf({}));
+const twinCount = 2;
 
-  return rowCountsOf(yield* readProgram(dir));
-}).pipe(Effect.scoped);
+/**
+ * A package's twin: each drawn text at {@link twinCount} characters of its own script, or as it is
+ * where it is shorter. An NCName's production states no length (reading 94), so a text and its
+ * twin name the same, and only the bound tells their imports apart.
+ *
+ * @param sketch - The package.
+ * @returns Its twin.
+ */
+const twinOf = (sketch: Sketch): Sketch => {
+  const twin: Partial<Record<Site, Drawn>> = {};
+  for (const site of sites) {
+    const held = sketch[site];
+    if (held !== undefined) {
+      twin[site] = { count: Math.min(held.count, twinCount), script: held.script };
+    }
+  }
+
+  return twin;
+};
+
+/**
+ * Count the rows the import writes for a package's twin ({@link twinOf}), by relation: the rows
+ * the package's own are compared with.
+ *
+ * @param sketch - The package.
+ * @returns Its twin's rows, counted by relation.
+ */
+const twinRows = (sketch: Sketch) =>
+  Effect.gen(function* twinRowsOf() {
+    const dir = yield* scopedPackage(packageOf(twinOf(sketch)));
+
+    return rowCountsOf(yield* readProgram(dir));
+  }).pipe(Effect.scoped);
 
 /**
  * Judge one generated package both ways: the oracle's "Key text bound" breaches against the
@@ -871,15 +906,10 @@ const shortTwin = Effect.gen(function* shortTwin() {
  * rule each would refuse it under ({@link databaseRules}) against the rules the oracle names.
  *
  * @param sketch - The package.
- * @param short - The rows its short twin writes, counted by relation ({@link shortTwin}).
  * @param note - Notes the situations it reaches.
  * @returns Nothing; fails on a disagreement.
  */
-const judged = (
-  sketch: Sketch,
-  short: ReadonlyMap<string, number>,
-  note: (situation: Situation) => void,
-) =>
+const judged = (sketch: Sketch, note: (situation: Situation) => void) =>
   Effect.gen(function* judgedCase() {
     const literal = Formatter.format(sketch);
     const dir = yield* scopedPackage(packageOf(sketch));
@@ -895,7 +925,7 @@ const judged = (
     const program = yield* readProgram(dir);
     const refused = new Set([
       ...refusedFields(program.inputs),
-      ...leftOut(rowCountsOf(program), short),
+      ...leftOut(rowCountsOf(program), yield* twinRows(sketch)),
     ]);
     for (const site of sites) {
       const held = sketch[site];
@@ -1000,7 +1030,6 @@ layer(NodeServices.layer, { excludeTestServices: true })(
         // Bound: every place alone at the edge and one past it in each of four scripts, and the
         // package with every place short.
         Effect.gen(function* box() {
-          const short = yield* shortTwin;
           const exhausted = yield* searched(
             ctx,
             exhaust(
@@ -1026,7 +1055,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                 suite: "pantry/test/oracle-keys-box",
               },
               (sketch, c) =>
-                judged(sketch, short, (situation) => {
+                judged(sketch, (situation) => {
                   c.note(situation);
                 }),
             ),
@@ -1042,36 +1071,32 @@ layer(NodeServices.layer, { excludeTestServices: true })(
       (ctx) =>
         // Oracle: as the box's. Bound: each case under its own swarm of the 13 places and 4 scripts,
         // each place at 1, one short of the edge, the edge, one past it or twice it; 60 runs.
-        shortTwin.pipe(
-          Effect.flatMap((short) =>
-            searched(
-              ctx,
-              explore(
-                {
-                  caseHang: Duration.seconds(120),
-                  concurrency: 1,
-                  coverage: required<Situation>(["accepted", "refused"], {
-                    cases: 30,
-                    sense: notesOnly,
-                  }),
-                  draw: drawn(swarmedSketch),
-                  kept: [],
-                  literal: ({ sketch }) => Formatter.format(sketch),
-                  oracle: {
-                    kind: "second-implementation",
-                    name: "the import's rows under keyText",
-                  },
-                  runs: 60,
-                  shrink: completeShrink,
-                  steerEvery: 16,
-                  suite: "pantry/test/oracle-keys-swarm",
-                },
-                ({ sketch }, c) =>
-                  judged(sketch, short, (situation) => {
-                    c.note(situation);
-                  }),
-              ),
-            ),
+        searched(
+          ctx,
+          explore(
+            {
+              caseHang: Duration.seconds(120),
+              concurrency: 1,
+              coverage: required<Situation>(["accepted", "refused"], {
+                cases: 30,
+                sense: notesOnly,
+              }),
+              draw: drawn(swarmedSketch),
+              kept: [],
+              literal: ({ sketch }) => Formatter.format(sketch),
+              oracle: {
+                kind: "second-implementation",
+                name: "the import's rows under keyText",
+              },
+              runs: 60,
+              shrink: completeShrink,
+              steerEvery: 16,
+              suite: "pantry/test/oracle-keys-swarm",
+            },
+            ({ sketch }, c) =>
+              judged(sketch, (situation) => {
+                c.note(situation);
+              }),
           ),
         ),
       { timeout: testTimeoutMs },
