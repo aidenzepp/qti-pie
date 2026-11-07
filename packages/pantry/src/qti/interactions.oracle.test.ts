@@ -376,35 +376,57 @@ const choiceInteraction = `<qti-choice-interaction response-identifier="RESPONSE
 const moduleElement = `<qti-interaction-modules><qti-interaction-module id="m" primary-path="m.js"/></qti-interaction-modules>`;
 
 /**
+ * Which forms of its module a portable custom interaction writes.
+ */
+interface ModuleForms {
+  /**
+   * Whether it writes `module`.
+   */
+  readonly attribute: boolean;
+  /**
+   * Whether it writes `qti-interaction-modules`.
+   */
+  readonly element: boolean;
+}
+
+/**
  * A portable custom interaction of the base item, with or without each form of its module.
  *
  * @param forms - Which forms it writes.
- * @param forms.attribute - Whether it writes `module`.
- * @param forms.element - Whether it writes `qti-interaction-modules`.
+ * @param content - What follows its module element, as written: by default its empty markup.
  * @returns The interaction's text.
  */
-const pciOf = ({
-  attribute,
-  element,
-}: {
-  readonly attribute: boolean;
-  readonly element: boolean;
-}) =>
-  `<qti-portable-custom-interaction response-identifier="RESPONSE"${attribute ? ` module="m"` : ""} custom-interaction-type-identifier="t">${element ? moduleElement : ""}<qti-interaction-markup/></qti-portable-custom-interaction>`;
+const pciOf = ({ attribute, element }: ModuleForms, content = "<qti-interaction-markup/>") =>
+  `<qti-portable-custom-interaction response-identifier="RESPONSE"${attribute ? ` module="m"` : ""} custom-interaction-type-identifier="t">${element ? moduleElement : ""}${content}</qti-portable-custom-interaction>`;
+
+/**
+ * The base item with its choice interaction replaced.
+ *
+ * @param interaction - The text that replaces the choice interaction.
+ * @returns The item's text.
+ */
+const itemWith = (interaction: string) => edit(item, choiceInteraction, interaction);
+
+/**
+ * The breaches of one law among a judgment's.
+ *
+ * @param law - The law's name.
+ * @returns A function from a judgment to its breaches of the law.
+ */
+const breachesOfLaw = (law: string) => (judgment: Parameters<typeof breachesOf>[0]) =>
+  breachesOf(judgment).filter((breach) => breach.law === law);
 
 /**
  * The breaches of "PCI module source" in the base item with its choice interaction replaced by a
  * PCI.
  *
  * @param forms - Which forms of its module the PCI writes.
- * @param forms.attribute - Whether it writes `module`.
- * @param forms.element - Whether it writes `qti-interaction-modules`.
  * @returns The breaches.
  */
-const pciBreachesOf = (forms: { readonly attribute: boolean; readonly element: boolean }) =>
+const pciBreachesOf = (forms: ModuleForms) =>
   Effect.map(
-    judged({ ...base, "item.xml": edit(item, choiceInteraction, pciOf(forms)) }),
-    (judgment) => breachesOf(judgment).filter(({ law }) => law === "PCI module source"),
+    judged({ ...base, "item.xml": itemWith(pciOf(forms)) }),
+    breachesOfLaw("PCI module source"),
   );
 
 describe("qti/interactions.ts, PCI module source", () => {
@@ -446,13 +468,9 @@ const customBreachesOf = (version: string) =>
   Effect.map(
     judged({
       "imsmanifest.xml": manifestOf(itemResource, version),
-      "item.xml": edit(
-        item,
-        choiceInteraction,
-        '<qti-custom-interaction response-identifier="RESPONSE"/>',
-      ),
+      "item.xml": itemWith('<qti-custom-interaction response-identifier="RESPONSE"/>'),
     }),
-    (judgment) => breachesOf(judgment).filter(({ law }) => law === "Custom interaction version"),
+    breachesOfLaw("Custom interaction version"),
   );
 
 describe("qti/interactions.ts, Custom interaction version", () => {
@@ -472,9 +490,9 @@ describe("qti/interactions.ts, Custom interaction version", () => {
 
   it.effect("is not broken by a 3.0.0 package that holds no custom interaction", () =>
     Effect.gen(function* withoutCustom() {
-      const breaches = breachesOf(
+      const breaches = breachesOfLaw("Custom interaction version")(
         yield* judged({ ...base, "imsmanifest.xml": manifestOf(itemResource, "3.0.0") }),
-      ).filter(({ law }) => law === "Custom interaction version");
+      );
       assert.lengthOf(breaches, 0, shown(breaches));
     }),
   );
@@ -494,7 +512,10 @@ describe("qti/interactions.ts, Custom interaction version", () => {
  * @returns The interaction's text.
  */
 const contextPci = (identifier: string, markup = ""): string =>
-  `<qti-portable-custom-interaction response-identifier="RESPONSE" module="m" custom-interaction-type-identifier="t"><qti-interaction-modules><qti-interaction-module id="m" primary-path="m.js"/></qti-interaction-modules><qti-interaction-markup>${markup}</qti-interaction-markup><qti-context-variable identifier="${identifier}"/></qti-portable-custom-interaction>`;
+  pciOf(
+    { attribute: true, element: true },
+    `<qti-interaction-markup>${markup}</qti-interaction-markup><qti-context-variable identifier="${identifier}"/>`,
+  );
 
 /**
  * The laws a package breaches, in the base item with its choice interaction replaced.
@@ -509,7 +530,7 @@ const lawsBreachedBy = (version: string, interaction: string, declarations = "")
     judged({
       "imsmanifest.xml": manifestOf(itemResource, version),
       "item.xml": edit(
-        edit(item, choiceInteraction, interaction),
+        itemWith(interaction),
         "<qti-response-declaration",
         `${declarations}<qti-response-declaration`,
       ),

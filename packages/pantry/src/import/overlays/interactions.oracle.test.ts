@@ -1115,6 +1115,25 @@ describe("import/overlays/interactions.ts, choice names", () => {
 });
 
 /**
+ * A portable custom interaction's `qti-interaction-modules` child, holding one module.
+ */
+const modulesOf = () =>
+  elementOf(
+    "qti-interaction-modules",
+    [],
+    [
+      elementOf(
+        "qti-interaction-module",
+        [
+          ["id", "m"],
+          ["primary-path", "m.js"],
+        ],
+        [],
+      ),
+    ],
+  );
+
+/**
  * A document holding one portable custom interaction, with each form of its module it writes.
  *
  * @param forms - Which forms it writes.
@@ -1136,27 +1155,7 @@ const pciTreeOf = ({
       ["custom-interaction-type-identifier", "t"],
       ...(attribute ? [["module", "m"] as const] : []),
     ],
-    [
-      ...(modules
-        ? [
-            elementOf(
-              "qti-interaction-modules",
-              [],
-              [
-                elementOf(
-                  "qti-interaction-module",
-                  [
-                    ["id", "m"],
-                    ["primary-path", "m.js"],
-                  ],
-                  [],
-                ),
-              ],
-            ),
-          ]
-        : []),
-      elementOf("qti-interaction-markup", [], []),
-    ],
+    [...(modules ? [modulesOf()] : []), elementOf("qti-interaction-markup", [], [])],
   );
 
   return {
