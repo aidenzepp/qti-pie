@@ -79,6 +79,10 @@ type CaseKind =
   | "m:share"
   | "qti-assessment-item"
   | "qti-assessment-stimulus"
+  | "qti-card"
+  | "qti-card-entry"
+  | "qti-catalog"
+  | "qti-catalog-info"
   | "qti-description"
   | "ssml:lexicon"
   | "ssml:lookup"
@@ -1360,6 +1364,84 @@ describe("import/overlays/identity.ts, SSML's rows (reading 3)", { timeout: sear
         ),
       ),
   );
+});
+
+/**
+ * An item whose catalog holds a card entry that writes `es`, beside a body `div` that writes
+ * `en`. Document order numbers the nodes: the root 1, its `qti-catalog-info` 2, its catalog 3,
+ * the card 4, the entry 5 and the `div` 6.
+ */
+const catalogued = () =>
+  rowsOf(
+    documentOf(
+      elementOf(
+        "qti-assessment-item",
+        [],
+        [
+          elementOf(
+            "qti-catalog-info",
+            [],
+            [
+              elementOf(
+                "qti-catalog",
+                [attribute("id", "C")],
+                [
+                  elementOf(
+                    "qti-card",
+                    [],
+                    [elementOf("qti-card-entry", [attribute("xml:lang", "es")], [])],
+                  ),
+                ],
+              ),
+            ],
+          ),
+          elementOf("div", [attribute("xml:lang", "en")], []),
+        ],
+      ),
+    ),
+    ids,
+  );
+
+describe("import/overlays/identity.ts, a catalog's scope rows (R9-c)", () => {
+  it("gives each element on the way from an xml:lang carrier to its scope root a CatalogScope, a catalog's reaching its qti-catalog-info and stopping there, a body's reaching the document", () => {
+    // Oracle: the information model's catalog (§5.28: "outside the content body node") as a
+    // checker, over the nodes numbered in document order; R9-c.
+    const rows = catalogued();
+
+    assert.deepStrictEqual(
+      asSet([...rows.CatalogScope.values()].map(({ node, scope }) => `${node} ${scope}`)),
+      [
+        `${idOf(5)} ${idOf(2)}`,
+        `${idOf(4)} ${idOf(2)}`,
+        `${idOf(3)} ${idOf(2)}`,
+        `${idOf(2)} ${idOf(2)}`,
+        `${idOf(6)} ${documentNode}`,
+        `${idOf(1)} ${documentNode}`,
+      ].toSorted(),
+    );
+  });
+
+  it("keeps every xml:lang its XmlLang row and gives it the scope its element is read in", () => {
+    // Oracle: the same model; the copy laws hold both ways, so no carrier loses its row.
+    const rows = catalogued();
+
+    assert.deepStrictEqual(
+      asSet([...rows.XmlLang.values()].map(({ lang, node, scope }) => `${node} ${lang} ${scope}`)),
+      [`${idOf(5)} es ${idOf(2)}`, `${idOf(6)} en ${documentNode}`].toSorted(),
+    );
+  });
+
+  it("gives an item with no catalog the document as every scope", () => {
+    const rows = rowsOf(
+      documentOf(elementOf("qti-assessment-item", [attribute("xml:lang", "en")], [])),
+      ids,
+    );
+
+    assert.deepStrictEqual(
+      [...rows.CatalogScope.values()].map(({ node, scope }) => `${node} ${scope}`),
+      [`${idOf(1)} ${documentNode}`],
+    );
+  });
 });
 
 /**

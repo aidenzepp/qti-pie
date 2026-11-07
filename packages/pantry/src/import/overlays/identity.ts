@@ -6,7 +6,8 @@
  *
  * The rows restate what the tree says and nothing else: each ID's lexical form as written and split
  * around its value, with the element its binding names; each element's text of an identity type and
- * its IDREF tokens; each `xml:lang`'s and each `label`'s element, each LOM general language's
+ * its IDREF tokens; each `xml:lang`'s and each `label`'s element, each `xml:lang`'s catalog scope
+ * and each element on the way up to it (reading R9-c), each LOM general language's
  * string value, each resource's general category with the type its record names and the document it
  * describes, each SSML attribute reading 3 reads with its fragment and each element on the way up
  * to that fragment, and the projections those rows carry, each value once (sets ruling 2). The
@@ -32,6 +33,8 @@ import { flatten } from "#pantry/model/xdm.ts";
 import type { AttributeRow, FlatRows, NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
 import type {
   AssembledLang,
+  BodyXmlLang,
+  CatalogScope,
   DocumentGenerals,
   DocumentId,
   DocumentLang,
@@ -45,6 +48,7 @@ import type {
   IdrefTarget,
   LabelUse,
   LomLanguage,
+  PlacedBodyXmlLang,
   PlacedGeneralLang,
   PlacedId,
   PlacedIdref,
@@ -102,6 +106,8 @@ export type IdentityTextRow = Addition<typeof IdentityText> & {
  * is its heading's values in key order, as a JSON array.
  */
 export interface IdentityRows {
+  readonly BodyXmlLang: ReadonlyMap<string, Addition<typeof BodyXmlLang>>;
+  readonly CatalogScope: ReadonlyMap<string, Addition<typeof CatalogScope>>;
   readonly DocumentGenerals: ReadonlyMap<string, Addition<typeof DocumentGenerals>>;
   readonly DocumentId: ReadonlyMap<string, Addition<typeof DocumentId>>;
   readonly DocumentLang: ReadonlyMap<string, Addition<typeof DocumentLang>>;
@@ -143,6 +149,7 @@ export interface LanguageRows {
  */
 export interface PlacedLanguageRows {
   readonly AssembledLang: ReadonlyMap<string, Addition<typeof AssembledLang>>;
+  readonly PlacedBodyXmlLang: ReadonlyMap<string, Addition<typeof PlacedBodyXmlLang>>;
   readonly PlacedGeneralLang: ReadonlyMap<string, Addition<typeof PlacedGeneralLang>>;
   readonly PlacedXmlLang: ReadonlyMap<string, Addition<typeof PlacedXmlLang>>;
 }
@@ -435,19 +442,15 @@ const documentIdOf = (
   }));
 
 /**
- * Build the rows a document's attributes give: each attribute ID's `DocumentId`, each `xml:lang`'s
- * `XmlLang` and form, and the `LabelUse` of each `label` that asks for its tool.
+ * Build the rows a document's attributes give: each attribute ID's `DocumentId` and the `LabelUse`
+ * of each `label` that asks for its tool.
  *
  * @param tree - The document's tree.
  * @returns The rows, each by its key text.
  */
-const attributeRowsOf = (
-  tree: Tree,
-): Pick<IdentityRows, "DocumentId" | "DocumentLang" | "LabelUse" | "XmlLang"> => {
+const attributeRowsOf = (tree: Tree): Pick<IdentityRows, "DocumentId" | "LabelUse"> => {
   const { document, rootKind } = tree;
   const documentIds = new Map<string, Addition<typeof DocumentId>>();
-  const xmlLangs = new Map<string, Addition<typeof XmlLang>>();
-  const documentLangs = new Map<string, Addition<typeof DocumentLang>>();
   const labels = new Map<string, Addition<typeof LabelUse>>();
 
   for (const attribute of tree.rows.attributes) {
@@ -457,11 +460,6 @@ const attributeRowsOf = (
       for (const row of Option.toArray(documentIdOf(tree, node, lexical, node))) {
         documentIds.set(node, documentIds.get(node) ?? row);
       }
-    }
-
-    if (element !== undefined && name === "xml:lang") {
-      xmlLangs.set(node, { document, lang: lexical, node });
-      documentLangs.set(headingKey([document, lexical]), { document, lang: lexical });
     }
 
     if (
@@ -474,12 +472,7 @@ const attributeRowsOf = (
     }
   }
 
-  return {
-    DocumentId: documentIds,
-    DocumentLang: documentLangs,
-    LabelUse: labels,
-    XmlLang: xmlLangs,
-  };
+  return { DocumentId: documentIds, LabelUse: labels };
 };
 
 /**
@@ -665,36 +658,38 @@ const nearestOf = (
 };
 
 /**
- * The walk from an element up to its SSML fragment, the element first, and the fragment it ends
- * at: a `speak`, or the document node where no `speak` holds the element.
+ * The walk from an element up to its scope root, the element first, and the scope it ends at: the
+ * scope root, or the document node where none holds the element.
  */
 interface ScopeWalk {
-  readonly fragment: NodeId;
+  readonly scope: NodeId;
   readonly walk: readonly NodeRow<Composed>[];
 }
 
 /**
- * Walk from an element up to its SSML fragment (spec reading 3): the element, then each parent,
- * ending at the first `ssml:speak` or at the document's root.
+ * Walk from an element up to its scope: the element, then each parent, ending at the first element
+ * of the scope's kind or at the document's root. A fragment is an SSML `speak`'s (spec reading 3),
+ * a catalog a `qti-catalog-info`'s (reading R9-c).
  *
  * @param tree - The document's tree.
  * @param element - The element.
- * @returns The walk, the element first, and its fragment: the `speak` it ends at, or the document
- *   node where no `speak` holds the element.
+ * @param scopeKind - The kind of element that is its own scope.
+ * @returns The walk, the element first, and its scope: the element of that kind it ends at, or the
+ *   document node where none holds the element.
  */
-const scopeWalkOf = (tree: Tree, element: NodeRow<Composed>): ScopeWalk => {
+const scopeWalkOf = (tree: Tree, element: NodeRow<Composed>, scopeKind: string): ScopeWalk => {
   const walk: NodeRow<Composed>[] = [];
   let at: NodeRow<Composed> | undefined = element;
   while (at !== undefined) {
     walk.push(at);
-    if (at.kind === "ssml:speak") {
-      return { fragment: at.id, walk };
+    if (at.kind === scopeKind) {
+      return { scope: at.id, walk };
     }
 
     at = at.parent === tree.document ? undefined : tree.byId.get(at.parent);
   }
 
-  return { fragment: tree.document, walk };
+  return { scope: tree.document, walk };
 };
 
 /**
@@ -720,7 +715,7 @@ const ssmlRowsOf = (
       continue;
     }
 
-    const { fragment, walk } = scopeWalkOf(tree, element);
+    const { scope: fragment, walk } = scopeWalkOf(tree, element, "ssml:speak");
     for (const name of read.names) {
       const lexical = tree.valueOf(element.id, name);
       if (lexical === undefined) {
@@ -759,6 +754,60 @@ const ssmlRowsOf = (
   }
 
   return { FragmentValue: values, SsmlAttribute: attributes, SsmlScope: scopes };
+};
+
+/**
+ * Build the rows a document's `xml:lang`s give: each one's `XmlLang`, its `scope` its nearest
+ * `qti-catalog-info` or the document (reading R9-c); each element on the walk up to that scope its
+ * `CatalogScope`; and each form once, as a `DocumentLang`, where an element outside every catalog
+ * carries it, since R26 counts no other.
+ *
+ * @param tree - The document's tree.
+ * @returns The rows, each by its key text.
+ */
+const langRowsOf = (
+  tree: Tree,
+): Pick<IdentityRows, "BodyXmlLang" | "CatalogScope" | "DocumentLang" | "XmlLang"> => {
+  const { document } = tree;
+  const nearest = nearestOf(tree.rows.nodes, tree.rootNearest);
+  const scopes = new Map<string, Addition<typeof CatalogScope>>();
+  const xmlLangs = new Map<string, Addition<typeof XmlLang>>();
+  const bodyLangs = new Map<string, Addition<typeof BodyXmlLang>>();
+  const documentLangs = new Map<string, Addition<typeof DocumentLang>>();
+
+  for (const { lexical, name, node } of tree.rows.attributes) {
+    const element = tree.byId.get(node);
+    if (element === undefined || name !== "xml:lang") {
+      continue;
+    }
+
+    const { scope, walk } = scopeWalkOf(tree, element, "qti-catalog-info");
+    xmlLangs.set(node, { document, lang: lexical, node, scope });
+    if (scope === document) {
+      bodyLangs.set(node, { document, lang: lexical, node });
+      documentLangs.set(headingKey([document, lexical]), { document, lang: lexical });
+    }
+
+    for (const at of walk) {
+      scopes.set(at.id, {
+        document,
+        kind: at.kind,
+        nearest: nearest.get(at.id) ?? document,
+        node: at.id,
+        parent: at.parent,
+        scope,
+        start: at.start,
+        version: at.version,
+      });
+    }
+  }
+
+  return {
+    BodyXmlLang: bodyLangs,
+    CatalogScope: scopes,
+    DocumentLang: documentLangs,
+    XmlLang: xmlLangs,
+  };
 };
 
 /**
@@ -813,6 +862,7 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: IdentityIds): IdentityRo
   return {
     ...attributed,
     ...lomRowsOf(tree, ids),
+    ...langRowsOf(tree),
     ...ssmlRowsOf(tree),
     DocumentGenerals: new Map([[tree.document, { document: tree.document }]]),
     DocumentId: documentIds,
@@ -988,19 +1038,30 @@ export const placedLanguageRowsOf = (
     ({ document }) => document,
   );
   const placed = new Map<string, Addition<typeof PlacedXmlLang>>();
+  const placedBody = new Map<string, Addition<typeof PlacedBodyXmlLang>>();
   const assembled = new Map<string, Addition<typeof AssembledLang>>();
   const witnesses = new Map<string, Addition<typeof PlacedGeneralLang>>();
   for (const root of instances) {
     for (const instance of root.assemblyKind === itemRoot ? instancesOf(root) : []) {
-      for (const { lang, node } of carriersOf.get(instance.document) ?? []) {
+      for (const { lang, node, scope } of carriersOf.get(instance.document) ?? []) {
         placed.set(headingKey([instance.id, node]), {
           assembly: root.assembly,
           document: instance.document,
           instance: instance.id,
           lang,
           node,
+          scope,
         });
-        assembled.set(headingKey([root.assembly, lang]), { assembly: root.assembly, lang });
+        if (scope === instance.document) {
+          placedBody.set(headingKey([instance.id, node]), {
+            assembly: root.assembly,
+            document: instance.document,
+            instance: instance.id,
+            lang,
+            node,
+          });
+          assembled.set(headingKey([root.assembly, lang]), { assembly: root.assembly, lang });
+        }
       }
     }
   }
@@ -1014,5 +1075,10 @@ export const placedLanguageRowsOf = (
     }
   }
 
-  return { AssembledLang: assembled, PlacedGeneralLang: witnesses, PlacedXmlLang: placed };
+  return {
+    AssembledLang: assembled,
+    PlacedBodyXmlLang: placedBody,
+    PlacedGeneralLang: witnesses,
+    PlacedXmlLang: placed,
+  };
 };

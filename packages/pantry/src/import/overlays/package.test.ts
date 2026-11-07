@@ -1111,4 +1111,82 @@ describe("import/overlays/package.ts, hrefs and references", () => {
         ),
       ),
   );
+
+  it("writes a TextReference for each card file and resource icon, resolved as an attribute is, and none for a calculator's or digital material's file", () => {
+    // Oracle: a second implementation, the nodes numbered by hand (the document node 0, the root 1,
+    // then each whitespace node, element and its text in turn), each string value split by RFC
+    // 3986's Appendix B and resolved by the law oracle's own resolver with the xml:base in scope,
+    // under the whitespace class of its text's type (`xs:anyURI` collapses, `URLDType` replaces).
+    // Bound: one card file padded and percent-encoded, one icon under an xml:base, one icon of a
+    // same-document fragment, one file of a digital material, and an empty card file.
+    const textOf = (
+      kind: "qti-file-href" | "qti-file-href.card" | "qti-resource-icon",
+      value: string,
+      base?: string,
+    ) => [
+      { _tag: "ws", value: "\n" } as const,
+      elementOf(kind, baseAttribute(base), value === "" ? [] : [{ _tag: "text", value }]),
+    ];
+    const cases = [
+      { base: undefined, kind: "qti-file-href.card", value: " my%20clip.mp4 " },
+      { base: "x/", kind: "qti-resource-icon", value: "img/b.svg" },
+      { base: undefined, kind: "qti-resource-icon", value: "#top" },
+      { base: undefined, kind: "qti-file-href", value: "absent.png" },
+      { base: undefined, kind: "qti-file-href.card", value: "" },
+    ] as const;
+    const tree: XdmDocument<Composed> = {
+      ...referenceTreeOf({ base: undefined, elements: [], path: "items/item.xml" }),
+      root: elementOf(
+        "qti-assessment-item",
+        [],
+        cases.flatMap(({ base, kind, value }) => textOf(kind, value, base)),
+      ),
+    };
+    const documentIds: DocumentIds = { ...ids, path: "items/item.xml" };
+    const rows = referenceRowsOf(tree, documentIds, census);
+
+    const expectedTexts = new Map<string, object>();
+    const expectedPaths = new Map<string, object>();
+    let next = 2;
+    for (const { base, kind, value } of cases) {
+      const node = documentIds.idOf(next + 1);
+      next += value === "" ? 2 : 3;
+      if (kind === "qti-file-href") {
+        continue;
+      }
+
+      const resolution = resolveAttribute({
+        bases: base === undefined ? [] : [base],
+        document: documentIds.path,
+        lexical: value,
+        srcset: false,
+        whiteSpace: kind === "qti-resource-icon" ? "replace" : "collapse",
+      });
+      expectedTexts.set(JSON.stringify([node]), {
+        document: documentIds.idOf(0),
+        kind,
+        lexical: value,
+        node,
+        scope: resolution.scope,
+        ...appendixPieces(value),
+      });
+      if (resolution.scope === "entry") {
+        expectedPaths.set(JSON.stringify([node]), {
+          document: documentIds.idOf(0),
+          kind,
+          node,
+          package: documentIds.package,
+          path: resolution.path,
+        });
+      }
+    }
+
+    assert.strictEqual(expectedTexts.size, 4);
+    assert.deepStrictEqual(sortedEntries(rows.TextReference), sortedEntries(expectedTexts));
+    assert.deepStrictEqual(sortedEntries(rows.TextReferencePath), sortedEntries(expectedPaths));
+    assert.deepStrictEqual(
+      [...rows.TextReferencePath.values()].map(({ path: at }) => at),
+      ["items/my clip.mp4", "items/x/img/b.svg"],
+    );
+  });
 });

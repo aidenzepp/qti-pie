@@ -10,6 +10,8 @@ import { Predicate } from "effect";
 import * as install from "#pantry/grammar/install.ts";
 import * as attributes from "#pantry/qti/attributes.ts";
 import { attributeLaws } from "#pantry/qti/attributes.ts";
+import * as catalog from "#pantry/qti/catalog.ts";
+import { catalogLaws } from "#pantry/qti/catalog.ts";
 import * as chardata from "#pantry/qti/chardata.ts";
 import { chardataLaws } from "#pantry/qti/chardata.ts";
 import * as declarations from "#pantry/qti/declarations.ts";
@@ -62,6 +64,7 @@ const composedLaws: readonly (readonly [string, readonly Statement[]])[] = [
   ["src/qti/quotation.ts quotationLaws", quotationLaws],
   ["src/qti/operators.ts operatorLaws", operatorLaws],
   ["src/qti/mathml.ts mathmlLaws", mathmlLaws],
+  ["src/qti/catalog.ts catalogLaws", catalogLaws],
 ];
 
 /**
@@ -86,6 +89,7 @@ const composedModules = [
   ["src/qti/quotation.ts", quotation],
   ["src/qti/operators.ts", operators],
   ["src/qti/mathml.ts", mathml],
+  ["src/qti/catalog.ts", catalog],
 ] as const;
 
 /**

@@ -166,6 +166,7 @@ import {
 } from "#pantry/qti/metadata.ts";
 import { EndCharacter, nodeLawsByName, prefixPattern } from "#pantry/qti/node.ts";
 import { declarationLawsByName } from "#pantry/qti/declarations.ts";
+import { catalogLawsByName } from "#pantry/qti/catalog.ts";
 import { htmlLawsByName } from "#pantry/qti/html.ts";
 import { identityLawsByName } from "#pantry/qti/identity.ts";
 import { operatorLawsByName } from "#pantry/qti/operators.ts";
@@ -175,6 +176,8 @@ import {
   packageLawsByName,
   Reference,
   ReferencePath,
+  TextReference,
+  TextReferencePath,
 } from "#pantry/qti/package.ts";
 import { mathmlLaws } from "#pantry/qti/mathml.ts";
 import { headQualifierLaw } from "#pantry/qti/mathml-apply.ts";
@@ -218,6 +221,8 @@ export const precedence = [
   "idref-target",
   "table-headers",
   "label-tool",
+  "card-support",
+  "card-default",
   "document-lang",
   // O2, declarations.
   "declaration-key",
@@ -518,6 +523,21 @@ export const lawTable = {
     source:
       "reading 87: https://www.imsglobal.org/spec/qti/v3p0/info#Data_BranchRule (§5.23: 'In the case of an item or section, the target must refer to an item or section in the same test-part … For test-parts, the target must refer to another test-part'; §5.23.1, the reserved EXIT_SECTION, EXIT_TESTPART and EXIT_TEST), §7.5 ('branching rules should treat referred sections as leaf nodes') and §5.98 ('It is therefore an error to make such an item the target of a branch-rule', of an item a selection with replacement can repeat): a target is an exit, or a part of its source's kind in its source's test part, in an instance that holds its source's, never a replaceable item ref (tests.ts Branch_target)",
   },
+  "Card default entry": {
+    rule: "card-default",
+    source:
+      "reading R9-a: https://www.imsglobal.org/spec/qti/v3p0/info#Data_CardEntry (§5.27.2, CardEntry's default: 'Only one of the CardEntry instances can have a default designation'): a card holds at most one entry whose default, an xs:boolean collapsed, is true or 1 (catalog.ts DefaultEntry)",
+  },
+  "Card support": {
+    rule: "card-support",
+    source:
+      "reading R9-a: https://www.imsglobal.org/spec/qti/v3p0/info#Data_Card (§5.26.1, Card's support: 'Use only one card for any particular named support in a catalog'): a catalog holds one card for each support, compared by its collapsed value (catalog.ts CardSupport)",
+  },
+  "Catalog reference": {
+    rule: "idref-target",
+    source:
+      "reading R9-a: https://www.imsglobal.org/spec/qti/v3p0/info#Data_Catalog (§5.28.1, a catalog's id, which §5.15.9's data-catalog-idref names): a data-catalog-idref, an xs:IDREF collapsed, is the id of a qti-catalog of its document, and no other ID of it (catalog.ts CatalogRef, CatalogId)",
+  },
   "Choice bounds": {
     rule: "choice-bounds",
     source:
@@ -580,7 +600,7 @@ export const lawTable = {
   "Document lang": {
     rule: "document-lang",
     source:
-      "https://www.imsglobal.org/sites/default/files/spec/qti/v3/md-bind/index.html (QTI 3.0 Metadata §2.7.1.3, Language: 'There must be one value for each of the languages referred to by the language attributes on the associated assessmentItem, test or object bank and its 'bodyElements'', normative by its §1.2; ~/.cache/gr8des/qti-md-bind/index.txt:1509 and :388): each language an item's or a test's xml:lang states (XML 1.0 §2.12, the empty one stating none) is listed by every general category of each record of the resource whose href names the document (identity.ts documentLang, through metadata.ts LomObject); xml:lang compared by its collapsed xs:language value and the LOM language as written, both as tags without regard to case (RFC 5646 §2.1.1)",
+      "https://www.imsglobal.org/sites/default/files/spec/qti/v3/md-bind/index.html (QTI 3.0 Metadata §2.7.1.3, Language: 'There must be one value for each of the languages referred to by the language attributes on the associated assessmentItem, test or object bank and its 'bodyElements'', normative by its §1.2; ~/.cache/gr8des/qti-md-bind/index.txt:1509 and :388): each language an item's or a test's xml:lang states (XML 1.0 §2.12, the empty one stating none) is listed by every general category of each record of the resource whose href names the document (identity.ts documentLang, through metadata.ts LomObject); xml:lang compared by its collapsed xs:language value and the LOM language as written, both as tags without regard to case (RFC 5646 §2.1.1); reading R9-c: a catalog is outside the content body (information model §5.28: 'outside the content body node'), so the xml:lang of a catalog's cards, entries and HTML content is not counted (identity.ts CatalogScope)",
   },
   "DocumentId key": {
     rule: "document-key",
@@ -615,7 +635,7 @@ export const lawTable = {
   "File exists": {
     rule: "file-exists",
     source:
-      "imscp_infov1p2pd2.txt:409 and :411 (IMS Content Packaging 1.2, InterchangePackage (b): 'Any file described in the Manifest using a URI that resolves to a location within the InterchangePackage shall be included in the InterchangePackage'; (d): 'When a file contained in an InterchangePackage references another file using a URI that resolves to a location within the InterchangePackage, the referenced file shall be described in the InterchangePackage's Manifest'): a cp:file's href that resolves in the package names an entry, an external one left out (reading 35), and so does each reference a document resolves in the package (readings 102 and 103, package.ts ReferencePath)",
+      "imscp_infov1p2pd2.txt:409 and :411 (IMS Content Packaging 1.2, InterchangePackage (b): 'Any file described in the Manifest using a URI that resolves to a location within the InterchangePackage shall be included in the InterchangePackage'; (d): 'When a file contained in an InterchangePackage references another file using a URI that resolves to a location within the InterchangePackage, the referenced file shall be described in the InterchangePackage's Manifest'): a cp:file's href that resolves in the package names an entry, an external one left out (reading 35), and so does each reference a document resolves in the package (readings 102 and 103, package.ts ReferencePath), and each card file and resource icon a document resolves in the package (reading R9-b, package.ts TextReferencePath)",
   },
   "File listed": {
     rule: "file-listed",
@@ -1629,16 +1649,23 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
   [primaryKeyOf("GeneralObject", "general"), "E1 derived"],
   [primaryKeyOf("DocumentGenerals", "document"), "E1 derived"],
   [primaryKeyOf("GeneralLang", "general", "lang"), "E1 derived"],
+  [primaryKeyOf("PlacedBodyXmlLang", "instance", "node"), "E1 derived"],
   [primaryKeyOf("PlacedXmlLang", "instance", "node"), "E1 derived"],
   [primaryKeyOf("AssembledLang", "assembly", "lang"), "E1 derived"],
   [primaryKeyOf("PlacedGeneralLang", "general", "lang"), "E1 derived"],
   [primaryKeyOf("SsmlAttribute", "node", "name"), "E1 derived"],
+  [primaryKeyOf("BodyXmlLang", "node"), "E1 derived"],
+  [primaryKeyOf("CatalogScope", "node"), "E1 derived"],
   [primaryKeyOf("SsmlScope", "node"), "E1 derived"],
   [primaryKeyOf("FragmentValue", "fragment", "kind", "value"), "E1 derived"],
   [primaryKeyOf("LomLanguage", "node"), "E1 derived"],
   [primaryKeyOf("ResourceLomLanguageSet", "general", "lang"), "E1 derived"],
   [primaryKeyOf("Quotation", "node"), "E1 derived"],
   [primaryKeyOf("LabelUse", "node"), "Label tools"],
+  [primaryKeyOf("CardSupport", "node"), "E1 derived"],
+  [primaryKeyOf("DefaultEntry", "node"), "E1 derived"],
+  [primaryKeyOf("CatalogRef", "node"), "E1 derived"],
+  [primaryKeyOf("CatalogId", "node"), "E1 derived"],
   [primaryKeyOf("TableScope", "node"), "E1 derived"],
   [primaryKeyOf("CellHeaders", "node"), "E1 derived"],
   [primaryKeyOf("HeaderToken", "node", "at"), "E1 derived"],
@@ -1906,7 +1933,7 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
         "E1 derived",
       ] as const,
   ),
-  ...[Reference, ReferencePath].map(
+  ...[Reference, ReferencePath, TextReference, TextReferencePath].map(
     ({ name, primaryKey }) =>
       [
         { fields: primaryKey, kind: "primaryKey", relation: name } satisfies Law,
@@ -2129,6 +2156,7 @@ export const namedLaws: readonly LawsByName[] = [
   htmlLawsByName,
   quotationLawsByName,
   operatorLawsByName,
+  catalogLawsByName,
 ];
 
 /**

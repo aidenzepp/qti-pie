@@ -92,6 +92,7 @@ import {
 import { booleanOf, compile, patternFlags } from "#pantry/grammar/domains.ts";
 import type { ValueFacet } from "#pantry/grammar/domains.ts";
 import { foreignKinds, isForeignKind, openClasses } from "#pantry/grammar/kinds.ts";
+import { textReferenceKinds } from "#pantry/grammar/references.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import type { Spelling } from "#pantry/grammar/references.ts";
 import { expandedText } from "#pantry/grammar/names.ts";
@@ -172,6 +173,8 @@ export const oracleRules = [
   "body-empty",
   "branch-forward",
   "branch-target",
+  "card-default",
+  "card-support",
   "child-set",
   "choice-bounds",
   "choice-identifier-distinct",
@@ -4146,6 +4149,48 @@ const overlayBreaches = (view: View, laws: Laws): readonly Breach[] => {
             (id === root?.id ? version === "3.0.1" : !readerLabels.has(kind)) &&
             Option.isSome(valueOf(view, id, "label")),
         );
+  // Reading R9-a: "Use only one card for any particular named support in a catalog" (§5.26.1), a
+  // support compared by its collapsed value, and "Only one of the CardEntry instances can have a
+  // default designation" (§5.27.2), an entry designating where its collapsed `default` is true or 1.
+  const cards = Map.groupBy(
+    view.members.flatMap((node) =>
+      node.kind === "qti-card"
+        ? Option.toArray(collapsedOf(overlay, node, "support")).map((support) => ({
+            node,
+            support,
+          }))
+        : [],
+    ),
+    ({ node, support }) => `${node.parent} ${support}`,
+  );
+  const designated = Map.groupBy(
+    view.members.filter(
+      (node) =>
+        node.kind === "qti-card-entry" &&
+        (Option.contains(collapsedOf(overlay, node, "default"), "true") ||
+          Option.contains(collapsedOf(overlay, node, "default"), "1")),
+    ),
+    ({ parent }) => parent,
+  );
+  // Reading R9-a: a `data-catalog-idref` names a `qti-catalog` of its document (§5.28.1, §5.15.9),
+  // the token compared collapsed, as an IDREF is; an ID of any other element does not serve. Only
+  // an attribute with an IDREF token is read, as "Idref target" reads it: one the schema does not
+  // check, or an empty one, names nothing.
+  const catalogIds = new Set(
+    [...ids].flatMap(([id, held]) =>
+      held.some(({ node }) => view.byId.get(node)?.kind === "qti-catalog") ? [id] : [],
+    ),
+  );
+  const catalogRefs = view.members.flatMap((node) =>
+    (view.attributesOf.get(node.id) ?? [])
+      .filter(
+        (attribute) =>
+          attribute.name === "data-catalog-idref" &&
+          referencesOf(attribute, compiledOf(laws, attribute)).length > 0,
+      )
+      .map((attribute) => ({ node, token: collapsed(attribute.lexical) }))
+      .filter(({ token }) => !catalogIds.has(token)),
+  );
   // Reading 92: "Each response variable declared may be bound to one and only one interaction",
   // so in an item no two of the interactions Binding declared reads name one response.
   const bindings = overlay.isItem
@@ -4210,6 +4255,25 @@ const overlayBreaches = (view: View, laws: Laws): readonly Breach[] => {
     }),
     ...labelled.map(({ id }) =>
       at(id, { keys: { missing: missingTools.join(" ") }, law: "Label tools" }),
+    ),
+    ...[...cards.values()].flatMap((held) =>
+      held.slice(1).map(({ node, support }) =>
+        at(node.id, {
+          keys: { first: pathOf(view, held[0]?.node.id ?? node.id), support },
+          law: "Card support",
+        }),
+      ),
+    ),
+    ...[...designated.values()].flatMap((held) =>
+      held.slice(1).map((node) =>
+        at(node.id, {
+          keys: { first: pathOf(view, held[0]?.id ?? node.id) },
+          law: "Card default entry",
+        }),
+      ),
+    ),
+    ...catalogRefs.map(({ node, token }) =>
+      at(node.id, { keys: { token }, law: "Catalog reference" }),
     ),
     ...[...bindings].flatMap(([identifier, held]) =>
       held.slice(1).map(({ node }) =>
@@ -4551,11 +4615,12 @@ const oneCandidate = (lexical: string): boolean => {
 
 /**
  * Evaluate R6 and the reference half of the stated limit over each listed document (readings 102
- * and 103): every attribute of the grammar's reference census is resolved with the `xml:base`
- * values in scope ({@link resolvedAt}); one the representation reads no name from, and a `srcset`
- * of more than one candidate or with a descriptor, breaks "Href form"; and each that resolves in
- * the package names an entry ("File exists", IMS Content Packaging 1.2, InterchangePackage (d)), a
- * stimulus ref's a stimulus.
+ * and 103): every attribute of the grammar's reference census, and the string value of every
+ * element of its text census (`textReferenceKinds`, spec reading R9-b), is resolved with the
+ * `xml:base` values in scope ({@link resolvedAt}); one the representation reads no name from, and a
+ * `srcset` of more than one candidate or with a descriptor, breaks "Href form"; and each that
+ * resolves in the package names an entry ("File exists", IMS Content Packaging 1.2,
+ * InterchangePackage (d)), a stimulus ref's a stimulus.
  *
  * @param documents - The documents the manifest lists, read.
  * @param entries - The package's entry paths.
@@ -4580,6 +4645,20 @@ const referenceBreaches = (
       keys: { node: "", ...keys },
       law,
     });
+    const textReferences = view.members.flatMap((member) =>
+      textReferenceKinds
+        .filter(({ kind }) => kind === member.kind)
+        .map(({ whiteSpace }) => {
+          const lexical = stringValueOf(view, member);
+
+          return {
+            form: "uri" as const,
+            lexical,
+            member,
+            resolution: resolvedAt(view, member.id, lexical, { whiteSpace }).resolution,
+          };
+        }),
+    );
     const references = view.members.flatMap((member) =>
       [...(view.valuesOf.get(member.id) ?? new Map<string, string>())].flatMap(([name, lexical]) =>
         Option.toArray(
@@ -4600,9 +4679,10 @@ const referenceBreaches = (
         })),
       ),
     );
+    const resolved = [...references, ...textReferences];
 
     return [
-      ...references
+      ...resolved
         .filter(
           ({ form, lexical, resolution }) =>
             resolution.scope === "unresolved" || (form === "srcset" && !oneCandidate(lexical)),
@@ -4614,12 +4694,12 @@ const referenceBreaches = (
             node: pathOf(view, member.id),
           }),
         ),
-      ...references.flatMap(({ member, resolution }) =>
+      ...resolved.flatMap(({ member, resolution }) =>
         resolution.scope !== "entry" || entries.has(resolution.path)
           ? []
           : [breach("File exists", { from: pathOf(view, member.id), path: resolution.path })],
       ),
-      ...references.flatMap(({ member, resolution }) =>
+      ...resolved.flatMap(({ member, resolution }) =>
         member.kind !== "qti-assessment-stimulus-ref" ||
         resolution.scope !== "entry" ||
         rootKinds.get(resolution.path) === "qti-assessment-stimulus"
@@ -5110,6 +5190,23 @@ const mergedDocumentsOf = (
 };
 
 /**
+ * Whether an element is a `qti-catalog-info` or sits under one: catalog content is outside the
+ * content body (information model §5.28), so R26 does not count its `xml:lang` (reading R9-c).
+ *
+ * @param view - The document.
+ * @param id - The element's node.
+ * @returns Whether the element is in a catalog.
+ */
+const inCatalog = (view: View, id: NodeId): boolean => {
+  const element = view.byId.get(id);
+
+  return (
+    element !== undefined &&
+    [element, ...ancestorsOf(view, element)].some(({ kind }) => kind === "qti-catalog-info")
+  );
+};
+
+/**
  * Evaluate R26, `document-lang` (law "Document lang"; QTI 3.0 Metadata §2.7.1.3: "There must be
  * one value for each of the languages referred to by the language attributes on the associated
  * assessmentItem, test or object bank and its 'bodyElements'"): each language an item's or a test's
@@ -5173,9 +5270,9 @@ const documentLangBreaches = (
     const forms = new Set(
       merged.flatMap(({ folded }) =>
         Result.isSuccess(folded)
-          ? [...folded.success.valuesOf.values()].flatMap((named) =>
-              Option.toArray(Option.fromNullishOr(named.get("xml:lang"))),
-            )
+          ? [...folded.success.valuesOf]
+              .filter(([id]) => !inCatalog(folded.success, id))
+              .flatMap(([, named]) => Option.toArray(Option.fromNullishOr(named.get("xml:lang"))))
           : [],
       ),
     );
@@ -6165,6 +6262,27 @@ const ownLaws = {
     source:
       "reading 87: https://www.imsglobal.org/spec/qti/v3p0/info#Data_BranchRule (§5.23: 'In the case of an item or section, the target must refer to an item or section in the same test-part … For test-parts, the target must refer to another test-part'; §5.23.1, the reserved EXIT_SECTION, EXIT_TESTPART and EXIT_TEST), §7.5 ('branching rules should treat referred sections as leaf nodes') and §5.98 ('It is therefore an error to make such an item the target of a branch-rule', of an item a selection with replacement can repeat): a target is an exit, or a part of its source's kind in its source's test part, in an instance that holds its source's, never a replaceable item ref (tests.ts Branch_target)",
   },
+  "Card default entry": {
+    explain: (keys) =>
+      `the entry ${field(keys, "node")} designates itself the default of its card, which ${field(keys, "first")} already does`,
+    rule: "card-default",
+    source:
+      "reading R9-a: https://www.imsglobal.org/spec/qti/v3p0/info#Data_CardEntry (§5.27.2, CardEntry's default: 'Only one of the CardEntry instances can have a default designation'): a card holds at most one entry whose default, an xs:boolean collapsed, is true or 1 (catalog.ts DefaultEntry)",
+  },
+  "Card support": {
+    explain: (keys) =>
+      `the card ${field(keys, "node")} names the support ${JSON.stringify(field(keys, "support"))}, which ${field(keys, "first")} already names in its catalog`,
+    rule: "card-support",
+    source:
+      "reading R9-a: https://www.imsglobal.org/spec/qti/v3p0/info#Data_Card (§5.26.1, Card's support: 'Use only one card for any particular named support in a catalog'): a catalog holds one card for each support, compared by its collapsed value (catalog.ts CardSupport)",
+  },
+  "Catalog reference": {
+    explain: (keys) =>
+      `the element ${field(keys, "node")} names ${JSON.stringify(field(keys, "token"))} as its catalog, which no catalog of its document is called`,
+    rule: "idref-target",
+    source:
+      "reading R9-a: https://www.imsglobal.org/spec/qti/v3p0/info#Data_Catalog (§5.28.1, a catalog's id, which §5.15.9's data-catalog-idref names): a data-catalog-idref, an xs:IDREF collapsed, is the id of a qti-catalog of its document, and no other ID of it (catalog.ts CatalogRef, CatalogId)",
+  },
   "Choice bounds": {
     explain: (keys) =>
       field(keys, "choices") === ""
@@ -6238,7 +6356,7 @@ const ownLaws = {
       `the document's xml:lang ${JSON.stringify(field(keys, "lang"))} states a language that its resource's LOM general categories ${inBraces(membersOf(keys["generals"]))} do not all list`,
     rule: "document-lang",
     source:
-      "https://www.imsglobal.org/sites/default/files/spec/qti/v3/md-bind/index.html (QTI 3.0 Metadata §2.7.1.3, Language: 'There must be one value for each of the languages referred to by the language attributes on the associated assessmentItem, test or object bank and its 'bodyElements'', normative by its §1.2; ~/.cache/gr8des/qti-md-bind/index.txt:1509 and :388): each language an item's or a test's xml:lang states (XML 1.0 §2.12, the empty one stating none) is listed by every general category of each record of the resource whose href names the document (identity.ts documentLang, through metadata.ts LomObject); xml:lang compared by its collapsed xs:language value and the LOM language as written, both as tags without regard to case (RFC 5646 §2.1.1)",
+      "https://www.imsglobal.org/sites/default/files/spec/qti/v3/md-bind/index.html (QTI 3.0 Metadata §2.7.1.3, Language: 'There must be one value for each of the languages referred to by the language attributes on the associated assessmentItem, test or object bank and its 'bodyElements'', normative by its §1.2; ~/.cache/gr8des/qti-md-bind/index.txt:1509 and :388): each language an item's or a test's xml:lang states (XML 1.0 §2.12, the empty one stating none) is listed by every general category of each record of the resource whose href names the document (identity.ts documentLang, through metadata.ts LomObject); xml:lang compared by its collapsed xs:language value and the LOM language as written, both as tags without regard to case (RFC 5646 §2.1.1); reading R9-c: a catalog is outside the content body (information model §5.28: 'outside the content body node'), so the xml:lang of a catalog's cards, entries and HTML content is not counted (identity.ts CatalogScope)",
   },
   "DocumentId key": {
     explain: (keys) =>
@@ -6286,7 +6404,7 @@ const ownLaws = {
       `${field(keys, "path")} is named by ${field(keys, "from")} and is no entry of the package`,
     rule: "file-exists",
     source:
-      "imscp_infov1p2pd2.txt:409 and :411 (IMS Content Packaging 1.2, InterchangePackage (b): 'Any file described in the Manifest using a URI that resolves to a location within the InterchangePackage shall be included in the InterchangePackage'; (d): 'When a file contained in an InterchangePackage references another file using a URI that resolves to a location within the InterchangePackage, the referenced file shall be described in the InterchangePackage's Manifest'): a cp:file's href that resolves in the package names an entry, an external one left out (reading 35), and so does each reference a document resolves in the package (readings 102 and 103, package.ts ReferencePath)",
+      "imscp_infov1p2pd2.txt:409 and :411 (IMS Content Packaging 1.2, InterchangePackage (b): 'Any file described in the Manifest using a URI that resolves to a location within the InterchangePackage shall be included in the InterchangePackage'; (d): 'When a file contained in an InterchangePackage references another file using a URI that resolves to a location within the InterchangePackage, the referenced file shall be described in the InterchangePackage's Manifest'): a cp:file's href that resolves in the package names an entry, an external one left out (reading 35), and so does each reference a document resolves in the package (readings 102 and 103, package.ts ReferencePath), and each card file and resource icon a document resolves in the package (reading R9-b, package.ts TextReferencePath)",
   },
   "File listed": {
     explain: (keys) => `${field(keys, "path")} is the href of no cp:file`,

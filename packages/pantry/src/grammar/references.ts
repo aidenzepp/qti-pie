@@ -29,13 +29,14 @@ import type {
   ValueField,
 } from "#pantry/grammar/closed.ts";
 import type { KindSet, SchemaVersion } from "#pantry/grammar/kinds.ts";
-import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
+import { attributeDeclarations, textTypes } from "#pantry/vocab/inventory/attributes.ts";
 import { contentModels } from "#pantry/vocab/inventory/models.ts";
 import type {
   AttributeDeclaration,
   ContentModel,
   Particle,
   TypeReading,
+  WhiteSpace,
 } from "#pantry/vocab/inventory/types.ts";
 
 /**
@@ -272,6 +273,56 @@ export const asiCensus: readonly CensusEntry[] = [
     "long-interpretation",
     ["qti-outcome-declaration"],
     "information model §5.115: a URI that points to a fuller interpretation of the outcome",
+  ),
+];
+
+/**
+ * One element whose text names a file of its package, and the whitespace class its text is read
+ * under before it resolves.
+ */
+export interface TextReferenceKind {
+  readonly kind: string;
+  readonly source: string;
+  readonly whiteSpace: Exclude<WhiteSpace, "union">;
+}
+
+/**
+ * A text reference's kind, its whitespace class read from the simple type of its text.
+ *
+ * @param kind - The element's kind.
+ * @param source - What makes its text a reference to a file.
+ * @returns The entry; a union's class reads as `preserve`, as an attribute's does, and a kind no
+ *   inventory declaration types reads as `collapse`, an `xs:anyURI`'s.
+ */
+const textKind = (kind: string, source: string): TextReferenceKind => {
+  const whiteSpace = textTypes.find((declared) => declared.kind === kind)?.type.whiteSpace;
+
+  return {
+    kind,
+    source,
+    whiteSpace: whiteSpace === "union" ? "preserve" : (whiteSpace ?? "collapse"),
+  };
+};
+
+/**
+ * Spec reading R9-b's census of element text: the elements whose text, as an attribute's value does
+ * in {@link asiCensus}, names a file the package must hold (IMS Content Packaging 1.2,
+ * InterchangePackage (d), `imscp_infov1p2pd2.txt:411`): a card's or a card entry's `qti-file-href`
+ * (the kind `qti-file-href.card`, an `xs:anyURI`) and a `qti-resource-icon` (a `URLDType`, an
+ * `xs:normalizedString`). An element's text is its string value, read as a URI reference under its
+ * type's whitespace class, and resolved against the `xml:base` in scope at the element.
+ *
+ * Left out: the `qti-file-href` of a calculator and of a digital material (kind `qti-file-href`),
+ * which the information model does not state the package must hold (§5.80.3).
+ */
+export const textReferenceKinds: readonly TextReferenceKind[] = [
+  textKind(
+    "qti-file-href.card",
+    "information model §6.6: a card's file, which the package must hold",
+  ),
+  textKind(
+    "qti-resource-icon",
+    "information model §5.80.4: a resource icon, a file of the package",
   ),
 ];
 

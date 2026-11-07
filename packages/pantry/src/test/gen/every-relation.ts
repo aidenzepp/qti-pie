@@ -21,8 +21,12 @@
  *   a `logbase` and an argument, a table whose cell's `headers` names its header, a printed
  *   variable whose base names a variable, a `q` with no quotation mark beside or inside it,
  *   template and feedback content, choice, hottext, hotspot, slider, custom (holding a foreign
- *   element) and portable custom interactions, and response processing that holds a
- *   `qti-equal-rounded`, a `qti-round-to` and a `qti-equal` with a `tolerance`;
+ *   element) and portable custom interactions, a catalog whose keyword-translation card holds two
+ *   entries (the first its default, in `es`, the second in `de`, languages the item's LOM does not
+ *   list, since a catalog sits outside the body) and whose sign-language card names the image as
+ *   its file, a span in the body whose `data-catalog-idref` names the catalog, and response
+ *   processing that holds a `qti-equal-rounded`, a `qti-round-to` and a `qti-equal` with a
+ *   `tolerance`;
  * - **a second item** whose response processing is a published template, which the test places three
  *   times;
  * - **the stimulus** has a doctype, a processing instruction, a comment, an `xml:base` and an
@@ -33,7 +37,7 @@
  * - **the section document** holds a printed variable whose index names a test variable, a feedback
  *   element, and a precondition, each resolved under its placement;
  * - **the usage data** holds a dated statistic with a typed value;
- * - **an image**, which two elements of the item reference.
+ * - **an image**, which two elements of the item reference, and its card's file.
  *
  * A {@link Bulk} adds identical binary entries, listed by a web content resource, so the package
  * passes one statement's transport bounds (`#pantry/import/package.large.db.test.ts`).
@@ -231,6 +235,7 @@ const itemOf = (members: MemberCounts): string =>
     '    <p>N is <qti-printed-variable identifier="N" base="DIGITS"/>, and <qti-template-inline template-identifier="SHOWN" identifier="yes" show-hide="show">this shows</qti-template-inline>.</p>',
     "    <p>It says <q>read this</q> and stops.</p>",
     '    <p><qti-feedback-inline outcome-identifier="FEEDBACK" identifier="RIGHT" show-hide="show">Right.</qti-feedback-inline></p>',
+    '    <p>See <span data-catalog-idref="cat1">the glossary</span>.</p>',
     '    <qti-choice-interaction response-identifier="RESPONSE" shuffle="false" max-choices="1" min-choices="0">',
     "      <qti-prompt>Which one?</qti-prompt>",
     ...choiceIds
@@ -260,6 +265,21 @@ const itemOf = (members: MemberCounts): string =>
     '      <qti-context-variable identifier="CTX"/>',
     "    </qti-portable-custom-interaction>",
     "  </qti-item-body>",
+    "  <qti-catalog-info>",
+    '    <qti-catalog id="cat1">',
+    '      <qti-card support="keyword-translation">',
+    '        <qti-card-entry default="true" xml:lang="es">',
+    "          <qti-html-content><p>cuadro</p></qti-html-content>",
+    "        </qti-card-entry>",
+    '        <qti-card-entry xml:lang="de">',
+    "          <qti-html-content><p>Bild</p></qti-html-content>",
+    "        </qti-card-entry>",
+    "      </qti-card>",
+    '      <qti-card support="sign-language">',
+    '        <qti-file-href mime-type="image/png">media/pic.png</qti-file-href>',
+    "      </qti-card>",
+    "    </qti-catalog>",
+    "  </qti-catalog-info>",
     "  <qti-response-processing>",
     '    <qti-set-outcome-value identifier="SCORE">',
     "      <qti-sum>",

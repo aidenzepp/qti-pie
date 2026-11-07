@@ -17,6 +17,8 @@
  */
 /* oxlint-disable unicorn/throw-new-error -- Schema.TaggedError is a schema class factory. */
 import { Equal, Formatter, Result, Schema } from "effect";
+import { rowsOf as catalogRowsOf } from "#pantry/import/overlays/catalog.ts";
+import type { CatalogRows } from "#pantry/import/overlays/catalog.ts";
 import { rowsOf as declarationRowsOf } from "#pantry/import/overlays/declarations.ts";
 import type { DeclarationRows } from "#pantry/import/overlays/declarations.ts";
 import {
@@ -85,6 +87,7 @@ import { manifestPath } from "#pantry/qti/package.ts";
  */
 export type OverlayRows = AssembledExpressionRows &
   AssembledRows &
+  CatalogRows &
   DeclarationRows &
   ExpressionRows &
   HtmlRows &
@@ -110,6 +113,7 @@ export type OverlayRows = AssembledExpressionRows &
  * One document's rows from every document builder.
  */
 interface DocumentRows {
+  readonly catalog: CatalogRows;
   readonly declarations: DeclarationRows;
   readonly expressions: ExpressionRows;
   readonly html: HtmlRows;
@@ -143,6 +147,7 @@ const documentRowsOf = ({
   readonly ids: NodeIds;
   readonly listed: ListedDocument;
 }): DocumentRows => ({
+  catalog: catalogRowsOf(tree, ids),
   declarations: declarationRowsOf(tree, ids),
   expressions: expressionRowsOf(tree, ids),
   html: htmlRowsOf(tree, ids),
@@ -295,6 +300,7 @@ export const overlayPartsOf = (
 
   return [
     ...built.flatMap(({ rows }) => [
+      rows.catalog,
       rows.declarations,
       rows.expressions,
       rows.html,

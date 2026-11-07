@@ -73,6 +73,7 @@ import {
 } from "#pantry/grammar/install.ts";
 import { Attribute, Space } from "#pantry/qti/attributes.ts";
 import { Document, EntryPath } from "#pantry/qti/chardata.ts";
+import { textReferenceKinds } from "#pantry/grammar/references.ts";
 import { keyText } from "#pantry/qti/limits.ts";
 import { Node, nodeRef } from "#pantry/qti/node.ts";
 
@@ -395,6 +396,51 @@ export const ReferencePath = relation(
 );
 
 /**
+ * An element's text as a reference to a file, keyed by its element: every element of a kind of
+ * `textReferenceKinds` (spec reading R9-b), its string value, `Node.stringValue`, and its document
+ * and kind copied from `Node` (C18), and the split of its string value, which `E1_derived` proves
+ * as it does a {@link Reference}'s: `lexical = lead ‖ target ‖ params ‖ trail` (reading 102). The
+ * census names elements, not attributes, so no attribute name keys it, and no `srcset` form
+ * applies.
+ *
+ * Its {@link HrefScope} is the importer's resolution of its text (readings 102 and 103): a text
+ * reference in the package has its {@link TextReferencePath}, and no other has one.
+ */
+export const TextReference = relation(
+  "TextReference",
+  {
+    document: uuid,
+    kind: closedId(NodeKind),
+    lead: Space,
+    lexical: keyText,
+    node: uuid,
+    params: HrefParams,
+    scope: closedId(HrefScope),
+    target: keyText,
+    trail: Space,
+  },
+  ["node"],
+);
+
+/**
+ * A text reference resolved in the package, keyed by its element: its {@link TextReference}'s
+ * document and element kind, its document's package, and `path`, the entry path the importer
+ * resolved it to (RFC 3986, §5.2 and §2.1; readings 102 and 103), which rides the containment into
+ * `Entry` as a {@link ReferencePath}'s does.
+ */
+export const TextReferencePath = relation(
+  "TextReferencePath",
+  {
+    document: uuid,
+    kind: closedId(NodeKind),
+    node: uuid,
+    package: uuid,
+    path: keyText,
+  },
+  ["node"],
+);
+
+/**
  * The paths a package's files name, counted per (scope, path): each file names its owner by
  * `(package, scope, path)`.
  */
@@ -518,6 +564,24 @@ const censusAttributes = select(Attribute, (a) =>
 const entryReferences = select(Reference, (r) => r.eq(r.scope, "entry"));
 
 /**
+ * The elements of the text census (`textReferenceKinds`, spec reading R9-b): each a
+ * {@link TextReference}'s copy (C18). The key over its `id`, true since `Node` is keyed by it,
+ * serves the copy's reverse probe, so no index holds the string value.
+ */
+const textReferenceNodes = select(Node, (n) =>
+  n.in(
+    n.kind,
+    NodeKind.handles.filter((handle) => textReferenceKinds.some(({ kind }) => kind === handle)),
+  ),
+);
+
+/**
+ * The text references the importer resolved in the package, a constant selection keyed by its
+ * `node`: each has its {@link TextReferencePath}, and every {@link TextReferencePath} is one's.
+ */
+const entryTextReferences = select(TextReference, (r) => r.eq(r.scope, "entry"));
+
+/**
  * The resolved hrefs of stimulus refs: each names a stimulus document (the UP audit's B5).
  */
 const stimulusPaths = select(ReferencePath, (p) => p.eq(p.kind, "qti-assessment-stimulus-ref"));
@@ -567,10 +631,12 @@ export const hrefPaths = select(ReferencePath, (p) => p.eq(p.name, "href"));
  *   is admitted and names no other file (reading 102).
  * - **the references:** every attribute of the reference census (`ReferenceAttribute`, spec reading 103)
  *   is one {@link Reference}, copied from `Attribute` both ways; each resolved in the package has
- *   its {@link ReferencePath} and no other has one.
+ *   its {@link ReferencePath} and no other has one. Every element of the text census
+ *   (`textReferenceKinds`, spec reading R9-b) is one {@link TextReference}, copied from `Node` both
+ *   ways, with its {@link TextReferencePath} the same way.
  * - **`file-exists` ("File exists"):** a file's path resolved in the package is an entry's path (IMS
- *   Content Packaging 1.2, InterchangePackage (b)), and so is every resolved reference's path (d,
- *   R6).
+ *   Content Packaging 1.2, InterchangePackage (b)), and so is every resolved reference's path, an
+ *   attribute's and a text's (d, R6).
  * - **`stimulus-ref-target` ("Stimulus ref target"):** a stimulus ref's href that resolves in the
  *   package names a document whose root is a stimulus (information model §7.6: the structure
  *   "enables reference to a 'qti-assessment-stimulus' instance", its href "The uri used to refer to
@@ -635,11 +701,30 @@ export const packageLawsByName = {
       ),
     ),
     check("E1_derived", ReferencePath, (p) => Compute.matches(p.path, resolvedPathPattern)),
+    check("E1_derived", TextReference, (r) =>
+      r.and(
+        r.eq(
+          r.lexical,
+          Compute.concat(
+            Compute.concat(
+              Compute.concat(Compute.base(r.lead), Compute.base(r.target)),
+              Compute.base(r.params),
+            ),
+            Compute.base(r.trail),
+          ),
+        ),
+        Compute.matches(r.target, hrefPathPattern),
+        r.or(r.not(Compute.matches(r.target, externalHrefPattern)), r.eq(r.scope, "external")),
+        r.or(r.ne(r.scope, "document"), r.eq(r.target, "")),
+      ),
+    ),
+    check("E1_derived", TextReferencePath, (p) => Compute.matches(p.path, resolvedPathPattern)),
   ],
   "Entry family": [entryFamily, key(on(Entry, "package", "path"))],
   "File exists": [
     contained(on(entryFiles, "package", "path"), on(Entry, "package", "path")),
     contained(on(ReferencePath, "package", "path"), on(Entry, "package", "path")),
+    contained(on(TextReferencePath, "package", "path"), on(Entry, "package", "path")),
   ],
   "File listed": [
     fileHrefFamily,
@@ -656,6 +741,7 @@ export const packageLawsByName = {
         r.or(r.ne(r.name, "srcset"), Compute.matches(r.lexical, srcsetCandidatePattern)),
       ),
     ),
+    check("Href_form", TextReference, (r) => r.ne(r.scope, "unresolved")),
   ],
   "Href listed": [
     contained(
@@ -714,6 +800,7 @@ export const packageLawsByName = {
     ),
     contained(on(dependencyRefs, "node", "lexical"), on(Dependency, "node", "ref")),
   ],
+  "Node key": [key(on(textReferenceNodes, "id"))],
   "Reference overlay": [
     contained(
       on(censusAttributes, "node", "name", "lexical", "document", "kind"),
@@ -731,6 +818,21 @@ export const packageLawsByName = {
     ),
     key(on(hrefPaths, "node")),
     contained(on(ReferencePath, "document", "package"), on(Document, "node", "package")),
+    contained(
+      on(textReferenceNodes, "id", "document", "kind", "stringValue"),
+      on(TextReference, "node", "document", "kind", "lexical"),
+    ),
+    contained(on(TextReference, "node"), on(textReferenceNodes, "id")),
+    key(on(entryTextReferences, "node")),
+    contained(
+      on(entryTextReferences, "node", "document", "kind"),
+      on(TextReferencePath, "node", "document", "kind"),
+    ),
+    contained(
+      on(TextReferencePath, "node", "document", "kind"),
+      on(entryTextReferences, "node", "document", "kind"),
+    ),
+    contained(on(TextReferencePath, "document", "package"), on(Document, "node", "package")),
   ],
   RootOfType: [
     namedHrefFamily,
