@@ -401,6 +401,12 @@ const printedVariable = "qti-printed-variable" satisfies Kind;
 const contextVariableKind = "qti-context-variable" satisfies Kind;
 
 /**
+ * The portable custom interaction's template variable kind (§7.38.1), the one element that names a
+ * template variable without stating its type: "Template variable type" leaves it free.
+ */
+const templateVariableKind = "qti-template-variable" satisfies Kind;
+
+/**
  * Each content reference relation's attributes and kinds, as `ContentReference` lists them. A
  * printed variable's `base` and `index` hold an integer or a variable's name (the XSD's union of
  * `xs:integer` and `VariableStringDType`); each other attribute is an `IdentifierDType` and always
@@ -1040,7 +1046,9 @@ export const FeedbackRef = relation("FeedbackRef", referenceFields, ["node", "at
 /**
  * A template element's or a choice's template variable, keyed by its node and
  * `template-identifier` (§2.7.2: "A references must match the identifier in a corresponding
- * template declaration").
+ * template declaration"). Of a template element or a choice the variable is of base type
+ * identifier and of single or multiple cardinality (reading R15-l, "Template variable type"); a
+ * portable custom interaction's `qti-template-variable` states no type.
  */
 export const TemplateRef = relation("TemplateRef", referenceFields, ["node", "attribute"]);
 
@@ -1787,13 +1795,16 @@ const sectionPlacements = select(Instance, (i) =>
  *   under an item (spec reading 117), counting as many resolutions of each class as its document
  *   has references; each resolution its placement's and its reference's, resolved in the assembly's
  *   declarations or to a built-in, under "Feedback reference" and "Feedback outcome type", "Printed
- *   variable reference", "Template reference" or "Context variable reference".
+ *   variable reference", "Template reference" and "Template variable type" or "Context variable
+ *   reference".
  * - **content references:** each relation's rows are its source's; the declaration kind each name
  *   resolves to is one `ContentReference` allows for its kind and attribute; a name that is no
  *   built-in's is a declaration's, through `declarationRef`; and a built-in's resolves to the
  *   built-in, under its reference's law ("Feedback reference", "Template reference", "Printed
- *   variable reference", "Context variable reference"); and "Feedback outcome type" (reading 77: an
- *   outcome of base type identifier, single or multiple).
+ *   variable reference", "Context variable reference"); "Feedback outcome type" (reading 77: an
+ *   outcome of base type identifier, single or multiple); and "Template variable type" (reading
+ *   R15-l: a template element's or a choice's template variable of base type identifier, single or
+ *   multiple, a portable custom interaction's free).
  */
 export const interactionLaws = [
   key(on(read, "node", "name")),
@@ -2429,6 +2440,12 @@ export const interactionLaws = [
       ),
     ),
   ),
+  check("Template_variable_type", TemplateRef, (r) =>
+    r.or(
+      r.eq(r.kind, templateVariableKind),
+      r.and(r.eq(r.baseType, "identifier"), r.in(r.cardinality, ["single", "multiple"])),
+    ),
+  ),
 
   contained(
     on(referenceSources.printed, "node", "name", "kind", "document", "value"),
@@ -2686,6 +2703,12 @@ export const interactionLaws = [
           r.eq(r.cardinality, builtIn.cardinality),
         ),
       ),
+    ),
+  ),
+  check("Template_variable_type", SectionTemplateRef, (r) =>
+    r.or(
+      r.eq(r.kind, templateVariableKind),
+      r.and(r.eq(r.baseType, "identifier"), r.in(r.cardinality, ["single", "multiple"])),
     ),
   ),
   contained(

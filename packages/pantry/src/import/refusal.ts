@@ -1073,6 +1073,11 @@ export const lawTable = {
     source:
       "https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_TemplateBlock.Attr_template-identifier (§5.145.1, §5.155.1; §2.7.2: 'A references must match the identifier in a corresponding template declaration') (references.ts ContentReference)",
   },
+  "Template variable type": {
+    rule: "template-ref",
+    source:
+      "reading R15-l: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_TemplateBlock.Attr_template-identifier (§5.145.1, and §5.7.2, §5.67.2, §5.122.1, §5.124.1, §5.155.1: 'The identifier of a template variable that must have a base-type of identifier and be of either single or multiple cardinality') and #DataCharacteristic_SimpleChoice.Attr_template-identifier (§5.132.3, and §5.55.2, §5.56.2, §5.58.2, §5.65.2, §5.73.3, §5.131.3: the same rule, written 'be either single of multiple cardinality'); a portable custom interaction's template variable (§7.38.1) states no type (interactions.ts Template_variable_type)",
+  },
   "Test name key": {
     rule: "test-name-key",
     source:

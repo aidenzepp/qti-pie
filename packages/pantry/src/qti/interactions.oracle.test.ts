@@ -118,6 +118,7 @@ describe("qti/interactions.ts, declared", () => {
       "Printed variable reference",
       "Slider bounds",
       "Template reference",
+      "Template variable type",
       "default hotspot last slot",
     ]);
   });

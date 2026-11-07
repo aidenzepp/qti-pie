@@ -2529,6 +2529,20 @@ that matches a declared variable of the wrong kind or base type, one that is no 
 type string and single cardinality, is still refused (P24), as a name that resolves more than one way in a test is.
 This binds pantry and plate alike. (Label R15-k; proposed in phase 15, 2026-11-06, for the operator; decision 331.)
 
+**A template element or a choice names a template variable of base type identifier, of single or multiple
+cardinality.** The information model says of the template identifier of a template block (section 5.145.1), a template
+inline (section 5.155.1), their rubric forms (sections 5.122.1 and 5.124.1) and the two hotspots (sections 5.67.2 and
+5.7.2): "The identifier of a template variable that must have a base-type of identifier and be of either single or
+multiple cardinality"; and of the other seven choices (sections 5.132.3, 5.131.3, 5.73.3, 5.65.2, 5.55.2, 5.56.2 and
+5.58.2) the same rule, written "be either single of multiple cardinality". Pantry therefore refuses a template
+identifier that names a template variable of another base type or of record or ordered cardinality, under "Template
+variable type", beside "Template reference", which refuses a name that is no template variable. The type binds whatever
+`show-hide` says or defaults to. A portable custom interaction's `qti-template-variable` (section 7.38.1: "the
+identifier of a template variable defined in the item whose value should be passed to the PCI module on
+initialization") states no type and may name any template variable, and a test's template default (section 5.152.1) is
+"Template default type"'s. This is stated, and is not a case of documents in conflict. This binds pantry and plate
+alike. (Label R15-l; proposed in phase 15, 2026-11-07, for the operator; decision 383; the law `Template variable type`.)
+
 R9-a. **The catalog sentences of the information model hold as written.** A catalog holds one card per support ("Use
 only one card for any particular named support in a catalog", section 5.26.1); a card holds at most one entry with
 `default` true ("Only one of the CardEntry instances can have a default designation", section 5.27.2); and a

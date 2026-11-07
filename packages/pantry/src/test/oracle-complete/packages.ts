@@ -441,6 +441,10 @@ export const packageMutations = {
   "Template reference": passageAt(item, '<qti-template-inline template-identifier="SHOWN"', [
     '<qti-template-inline template-identifier="ABSENT"',
   ]),
+  // Template variable type: the template inline naming the item's single integer template.
+  "Template variable type": passageAt(item, '<qti-template-inline template-identifier="SHOWN"', [
+    '<qti-template-inline template-identifier="N"',
+  ]),
   // Track srclang (reading 125): a subtitles track that names no language.
   "Track srclang": passageAt(item, "    <p>It says <q>read this</q> and stops.</p>", [
     '    <video src="media/pic.png"><track src="media/pic.png"/></video>\n    <p>It says <q>read this</q> and stops.</p>',
