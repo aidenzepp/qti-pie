@@ -19,6 +19,9 @@
  *   state (unjudged under an `maction` but at the selected child, else what it received), its
  *   direction and what it passes on. An element outside every cell has no row.
  * - **`MathAlignGroup`**, one row for every `m:maligngroup` whose state is `open`.
+ * - **`MathDir`**, one row for every element that writes a `dir`, in a cell or not, its lexical form
+ *   as written (not `dirLexical`'s filtered form: `auto` has a row, while its scope's `dirLexical`
+ *   is empty).
  * - **`CellLeaf`**, one row for every complete element of a cell, an element with no element child,
  *   in document order within its cell, which the database numbers by the order the rows are
  *   inserted in. An `m:mtd` is no leaf: an empty cell nested in another is its own cell with no
@@ -48,6 +51,7 @@ import type {
   MathAlignGroup,
   MathAlignScope,
   MathCell,
+  MathDir,
 } from "#pantry/qti/mathml-align.ts";
 import { integerForm } from "#pantry/qti/operators.ts";
 
@@ -60,6 +64,7 @@ export interface MathmlAlignRows {
   readonly MathAlignGroup: ReadonlyMap<string, Addition<typeof MathAlignGroup>>;
   readonly MathAlignScope: ReadonlyMap<string, Addition<typeof MathAlignScope>>;
   readonly MathCell: ReadonlyMap<string, Addition<typeof MathCell>>;
+  readonly MathDir: ReadonlyMap<string, Addition<typeof MathDir>>;
 }
 
 /**
@@ -405,6 +410,26 @@ const scopeOf = (
 };
 
 /**
+ * The {@link MathDir} rows: one for every element that writes a `dir`, its lexical form as written.
+ *
+ * @param attributes - Each element's written `dir` and `selection`, by its id.
+ * @returns The rows, keyed by the element's id.
+ */
+const dirRowsOf = (
+  attributes: ReadonlyMap<NodeId, ReadonlyMap<string, string>>,
+): ReadonlyMap<string, Addition<typeof MathDir>> => {
+  const dirs = new Map<string, Addition<typeof MathDir>>();
+  for (const [node, values] of attributes) {
+    const lexical = values.get("dir");
+    if (lexical !== undefined) {
+      dirs.set(node, { lexical, node });
+    }
+  }
+
+  return dirs;
+};
+
+/**
  * The align rows of one document.
  *
  * @param tree - The document's XDM tree.
@@ -483,5 +508,6 @@ export const rowsOf = (
     MathAlignGroup: groups,
     MathAlignScope: scopes,
     MathCell: cells,
+    MathDir: dirRowsOf(reading.attributes),
   };
 };

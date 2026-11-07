@@ -560,6 +560,10 @@ const mergedOf = (
       "MathCn",
       parts.map(({ MathCn: rows }) => rows),
     ),
+    MathDir: unionOf(
+      "MathDir",
+      parts.map(({ MathDir: rows }) => rows),
+    ),
     MathQualifier: unionOf(
       "MathQualifier",
       parts.map(({ MathQualifier: rows }) => rows),
