@@ -57,13 +57,12 @@ import { manifestPath } from "#pantry/qti/package.ts";
 import { Author } from "#pantry/qti/roles.ts";
 import {
   assertVerdict,
-  familySlot,
   judged,
   loginSession,
   rowsOf,
-  sqlRowOf,
+  statedInserts,
 } from "#pantry/test/direct-sql.ts";
-import type { Insert } from "#pantry/test/direct-sql.ts";
+import type { Stated } from "#pantry/test/direct-sql.ts";
 import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 
 /**
@@ -328,26 +327,28 @@ const referencingDocument = nodeOf(90);
 const allDigits = /^[0-9]+$/u;
 
 /**
- * The rows a direct writer states for one reference's readings, owners first, each owner lawful on
- * its own CHECKs:
+ * The facts a case states for one reference's readings, each owner lawful on its own CHECKs; the
+ * writer orders them and fills their families' slots (`#pantry/test/direct-sql.ts`
+ * `statedInserts`):
  *
  * - The test document's `ReferenceDocument` row, owning the one reference;
- * - The reference's `TestReference` row in a test, at slot 0 of 1 (`E1_derived`: a
- *   `section-identifier` reads a section, every other attribute a variable);
+ * - The reference's `TestReference` row in a test (`E1_derived`: a `section-identifier` reads a
+ *   section, every other attribute a variable);
  * - Its `AssembledReference` row, placed once, with its name's counts (`E1_derived`: a variable's
  *   name is its segments joined and is read once unsplit and once at each dot, a numbered segment
- *   once less where it is the last; a section's has no segments and is read once);
- * - The readings, at slots 0 to n − 1 of that count.
+ *   once less where it is the last; a section's has no segments and is read once), stated since the
+ *   case states fewer readings than the name has;
+ * - The readings.
  *
  * Every other row they name (the segments, the placements, the lookups, the test's nodes) is
  * absent, its foreign keys deferred and never checked before the rollback.
  *
  * @param readings - The reference's readings, one at least, all of one reference.
- * @returns The rows, in the order the non-deferrable keys need.
+ * @returns The facts.
  */
-const readingInserts = (
+const readingFacts = (
   readings: readonly [Addition<typeof Reading>, ...Addition<typeof Reading>[]],
-): readonly Insert[] => {
+): readonly Stated[] => {
   const [{ assembly, attribute, identifier, kind, node, role }] = readings;
   const pieces = identifier.split(".");
   const variable = role === "variable";
@@ -364,33 +365,24 @@ const readingInserts = (
     role,
     rootKind: "qti-assessment-test",
   };
-  const assembled: Fact<typeof AssembledReference> = {
-    ...reference,
-    assembly,
-    digits: BigInt(digits),
-    joined: variable ? identifier : "",
-    lastDigit,
-    placements: 1n,
-    readings: BigInt(count),
-    segments: BigInt(segments),
-  };
 
   return [
+    { fact: { document: referencingDocument }, relation: ReferenceDocument },
+    { fact: reference, relation: TestReference },
     {
-      row: sqlRowOf(ReferenceDocument, { document: referencingDocument, references: 1n }),
-      table: "reference_document",
+      fact: {
+        ...reference,
+        assembly,
+        digits: BigInt(digits),
+        joined: variable ? identifier : "",
+        lastDigit,
+        placements: 1n,
+        readings: BigInt(count),
+        segments: BigInt(segments),
+      },
+      relation: AssembledReference,
     },
-    {
-      hidden: familySlot("ReferenceDocument.references", 0, 1),
-      row: sqlRowOf(TestReference, reference),
-      table: "test_reference",
-    },
-    { row: sqlRowOf(AssembledReference, assembled), table: "assembled_reference" },
-    ...readings.map((reading, at) => ({
-      hidden: familySlot("AssembledReference.readings", at, count),
-      row: sqlRowOf(Reading, reading),
-      table: "reading",
-    })),
+    ...readings.map((reading) => ({ fact: reading, relation: Reading })),
   ];
 };
 
@@ -827,13 +819,13 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
             ] as const;
             for (const { broken, check, repaired } of cases) {
               assertVerdict(
-                yield* judged(client, readingInserts([broken])),
+                yield* judged(client, statedInserts(readingFacts([broken]))),
                 check,
                 true,
                 `${check}, broken`,
               );
               assertVerdict(
-                yield* judged(client, readingInserts([{ ...broken, ...repaired }])),
+                yield* judged(client, statedInserts(readingFacts([{ ...broken, ...repaired }]))),
                 check,
                 false,
                 `${check}, repaired`,
@@ -931,7 +923,7 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
             });
 
             assertVerdict(
-              yield* judged(client, readingInserts([first, second])),
+              yield* judged(client, statedInserts(readingFacts([first, second]))),
               key,
               true,
               "two resolving readings",
@@ -940,16 +932,18 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
             assertVerdict(
               yield* judged(
                 client,
-                readingInserts([
-                  first,
-                  {
-                    ...second,
-                    declBaseType: "none",
-                    declaration: nodeOf(70),
-                    declared: false,
-                    source: "none",
-                  },
-                ]),
+                statedInserts(
+                  readingFacts([
+                    first,
+                    {
+                      ...second,
+                      declBaseType: "none",
+                      declaration: nodeOf(70),
+                      declared: false,
+                      source: "none",
+                    },
+                  ]),
+                ),
               ),
               key,
               false,

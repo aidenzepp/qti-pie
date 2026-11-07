@@ -48,7 +48,13 @@ import {
 import { ChoiceVariableName } from "#pantry/qti/interactions.ts";
 import { AuthorApp } from "#pantry/qti/logins.ts";
 import { Author } from "#pantry/qti/roles.ts";
-import { assertVerdict, codeOf, judged, loginSession } from "#pantry/test/direct-sql.ts";
+import {
+  assertVerdict,
+  codeOf,
+  judged,
+  loginSession,
+  statedInserts,
+} from "#pantry/test/direct-sql.ts";
 import type { Insert, SqlRow } from "#pantry/test/direct-sql.ts";
 import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 
@@ -113,44 +119,28 @@ const declarationRow = (fields: {
 };
 
 /**
- * The family whose owner is each identifier a document's declarations use,
- * `ChoiceVariableName.declarations` over `Declaration`.
- */
-const declarationFamily = "ChoiceVariableName.declarations";
-
-/**
- * A declaration row's statements, its owner first: the `ChoiceVariableName` row of its document and
- * identifier, counting it as its one declaration and bearing no choice or hottext, so "Choice not
- * variable" holds whatever the identifier, then the declaration at slot 0 of 1 of its family. A
- * counted family's owner axis is not deferrable, so the declaration is judged against its owner at
- * its INSERT; the owner's own foreign keys are deferred.
+ * A declaration row with its owner: the `ChoiceVariableName` row of its document and identifier,
+ * which states no choice, hottext or placement and so counts it as its one declaration, and
+ * "Choice not variable" holds whatever the identifier. The writer orders them and fills the
+ * declaration's slot in its family (`#pantry/test/direct-sql.ts` `statedInserts`): a counted
+ * family's owner axis is not deferrable, so the declaration is judged against its owner at its
+ * INSERT, and the owner's own foreign keys are deferred.
  *
  * @param row - The declaration's row.
- * @returns The two statements' rows.
+ * @returns The rows, in writing order.
  */
-const declared = (row: SqlRow): readonly Insert[] => [
-  {
-    row: {
-      choices: 0,
-      declarations: 1,
-      document: row["document"] ?? strayDocument,
-      hottexts: 0,
-      identifier: row["identifier"] ?? "",
-      placed_choices: 0,
-      placed_hottexts: 0,
-      root_kind: codeOf(NodeKind.handles, "qti-assessment-item"),
+const declared = (row: SqlRow): readonly Insert[] =>
+  statedInserts([
+    {
+      fact: {
+        document: row["document"] ?? strayDocument,
+        identifier: row["identifier"] ?? "",
+        rootKind: "qti-assessment-item",
+      },
+      relation: ChoiceVariableName,
     },
-    table: "choice_variable_name",
-  },
-  {
-    hidden: {
-      [`the index of the family ${declarationFamily}`]: 0,
-      [`the owner's count of the family ${declarationFamily}`]: 1,
-    },
-    row,
-    table: "declaration",
-  },
-];
+    { fact: row, relation: Declaration },
+  ]);
 
 /**
  * The `ChoiceVariableName` fact of the one identifier a key case's declarations use, the owner the
