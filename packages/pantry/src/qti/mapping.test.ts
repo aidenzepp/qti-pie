@@ -385,12 +385,20 @@ const oracleLaws = lawsOf(grammar);
  * @param target - The match table entry's target value.
  * @returns The item's text.
  */
-const mappedItem = (baseType: string, keys: readonly string[], target: string): string =>
+const mappedItem = (
+  baseType: string,
+  keys: readonly string[],
+  target: string,
+  caseSensitive: readonly string[] = [],
+): string =>
   [
     '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="item" title="Item" time-dependent="false">',
     `<qti-response-declaration identifier="RESPONSE" cardinality="multiple" base-type="${baseType}">`,
     '<qti-mapping default-value="0">',
-    ...keys.map((key) => `<qti-map-entry map-key="${key}" mapped-value="1"/>`),
+    ...keys.map(
+      (key, at) =>
+        `<qti-map-entry map-key="${key}"${caseSensitive[at] === undefined ? "" : ` case-sensitive="${caseSensitive[at]}"`} mapped-value="1"/>`,
+    ),
     "</qti-mapping>",
     "</qti-response-declaration>",
     '<qti-outcome-declaration identifier="GRADE" cardinality="single" base-type="integer">',
@@ -443,7 +451,12 @@ describe("qti/mapping.ts, the oracle's mapping laws", { timeout: searchTimeout }
             name: "float outside the form spelling a typed value",
             type: "float",
           },
-          { breaks: [], keys: ["York", "york"], name: "string by code point", type: "string" },
+          {
+            breaks: ["Map key"],
+            keys: ["York", "york"],
+            name: "string folded by the default",
+            type: "string",
+          },
           { breaks: ["Map key"], keys: ["A B", "B A"], name: "pair undirected", type: "pair" },
           { breaks: [], keys: ["A B", "B A"], name: "directed pair", type: "directedPair" },
           { breaks: ["Map key"], keys: ["A B", "A\tB"], name: "tab", type: "directedPair" },
@@ -469,6 +482,11 @@ describe("qti/mapping.ts, the oracle's mapping laws", { timeout: searchTimeout }
             `${name}: ${found.join("; ")}`,
           );
         }
+
+        const kinds = yield* mappingBreachesOf(
+          mappedItem("string", ["York", "york"], "7", ["true"]),
+        );
+        assert.deepStrictEqual(kinds, [], "a case-sensitive York beside a default york");
 
         const target = yield* mappingBreachesOf(mappedItem("string", ["a"], "x"));
         assert.deepStrictEqual(

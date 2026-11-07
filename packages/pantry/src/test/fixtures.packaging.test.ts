@@ -342,7 +342,7 @@ const usageMember = "qtiv3-examples/packaging/usageData/usageData.zip";
 const usageNamespace = "http://www.imsglobal.org/xsd/imsqti_usagedata_v3p0";
 
 /**
- * The three positives of the usage-data cut and the hand-broken copies of the first, each a copy of
+ * The four positives of the usage-data cut and the hand-broken copies of the first, each a copy of
  * `usage3` with one edit.
  */
 const usageCuts: readonly ContentCut[] = [
@@ -350,7 +350,6 @@ const usageCuts: readonly ContentCut[] = [
     member: usageMember,
     name: "usage3",
     negatives: [
-      "usage3-integer-float",
       "usage3-no-target",
       "usage3-two-values",
       "usage3-ordinary-mapping",
@@ -365,6 +364,7 @@ const usageCuts: readonly ContentCut[] = [
   { member: usageMember, name: "usage3-typed", negatives: [], resources: 1 },
   { member: usageMember, name: "usage3-padded", negatives: [], resources: 1 },
   { member: usageMember, name: "usage3-float-padded", negatives: [], resources: 1 },
+  { member: usageMember, name: "usage3-integer-float", negatives: [], resources: 1 },
 ];
 
 /**
