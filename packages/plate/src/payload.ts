@@ -104,10 +104,10 @@ export interface View {
   readonly names: ReadonlyMap<string, string>;
   readonly posted: Option.Option<ReadonlyMap<string, readonly string[]>>;
   /**
-   * The configuration's `seed`, which keys a shuffled Choice's or Inline Choice's order with the
-   * instance and the response; keyed as the empty string when absent.
+   * The configuration's `seed`, a string written as given, which keys a shuffled Choice's or Inline
+   * Choice's order with the instance and the response; keyed as the empty string when absent.
    */
-  readonly seed?: number;
+  readonly seed?: string;
   /**
    * The value each response's controls show, such as its `defaultValue` or a value the author's
    * flow recorded; NULL when absent.
@@ -517,7 +517,7 @@ interface Build {
   /**
    * The view's seed, none when the view has none.
    */
-  readonly seed: Option.Option<number>;
+  readonly seed: Option.Option<string>;
   /**
    * Each interaction the renderer names, with where its first Control stands among the Controls
    * the renderer names ({@link TextName}).
@@ -697,8 +697,9 @@ const copyNodes = (nodes: readonly BodyNode[], build: Build): readonly PayloadNo
   nodes.map((node) => copyNode(node, build));
 
 /**
- * The separator of a shuffle key's three fields, U+001F INFORMATION SEPARATOR ONE, which no number
- * written with `String`, checked instance token or identifier holds.
+ * The separator of a shuffle key's three fields, U+001F INFORMATION SEPARATOR ONE, which no
+ * checked instance token or identifier holds. A seed is the host's string and may hold it, but the
+ * fields after it never do, so a key still splits from the right.
  */
 const keySeparator = "\u001F";
 
@@ -707,16 +708,16 @@ const keySeparator = "\u001F";
  * them: the one function that presents both kinds and reports their order.
  *
  * An interaction with `shuffle` true is presented in {@link shuffleOrder}'s order under the key
- * `<seed>\u001F<instance>\u001F<response>`, where the seed is written with `String` and an absent
- * seed is the empty string: its non-fixed choices are permuted among the non-fixed positions, and
- * each fixed choice keeps its document position. Any other keeps document order. The same
- * interaction, seed and instance always give the same order, the one `render` presents, so a host
- * can report it, such as a result's `choiceSequence`. The order is presentation only: scores,
- * records and validation read identifiers, never positions.
+ * `<seed>\u001F<instance>\u001F<response>`, where the seed is written as given and an absent seed
+ * is the empty string: its non-fixed choices are permuted among the non-fixed positions, and each
+ * fixed choice keeps its document position. Any other keeps document order. The same interaction,
+ * seed and instance always give the same order, the one `render` presents, so a host can report
+ * it, such as a result's `choiceSequence`. The order is presentation only: scores, records and
+ * validation read identifiers, never positions.
  *
  * @example
  *   // A shuffled Choice of choices A, B and C, none fixed, bound to RESPONSE:
- *   choiceOrder(interaction, Option.some(7), "_r_1_"); // ["B", "A", "C"]
+ *   choiceOrder(interaction, Option.some("7"), "_r_1_"); // ["B", "A", "C"]
  *   choiceOrder(interaction, Option.none(), "_r_1_"); // ["A", "C", "B"]
  *
  * @param interaction The Choice or Inline Choice: its choices, its response and its `shuffle`.
@@ -726,16 +727,12 @@ const keySeparator = "\u001F";
  */
 export const choiceOrder = (
   interaction: Pick<ChoiceInteraction, "choices" | "response" | "shuffle">,
-  seed: Option.Option<number>,
+  seed: Option.Option<string>,
   instance: string,
 ): readonly string[] =>
   interaction.shuffle
     ? shuffleOrder(
-        [
-          Option.match(seed, { onNone: () => "", onSome: String }),
-          instance,
-          interaction.response,
-        ].join(keySeparator),
+        [Option.getOrElse(seed, () => ""), instance, interaction.response].join(keySeparator),
         interaction.choices.map((choice) => choice.fixed),
       ).flatMap((index) => interaction.choices[index]?.identifier ?? [])
     : interaction.choices.map((choice) => choice.identifier);

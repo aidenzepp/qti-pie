@@ -37,9 +37,9 @@ const firstOutcomes: Equals<
 > = true;
 
 /**
- * The stored seed is optional, a number when present.
+ * The stored seed is a string, always present: the host's, or the one `startTest` drew.
  */
-const seed: Equals<TestSession["seed"], Option.Option<number>> = true;
+const seed: Equals<TestSession["seed"], string> = true;
 
 /**
  * Responses map an identifier to a value.

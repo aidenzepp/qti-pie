@@ -638,7 +638,7 @@ describe(
           const accepted = Option.getOrElse(acceptedItem(verdict), () =>
             assert.fail(`${location} is ${verdict.verdict}, not accepted`),
           );
-          const stored = yield* Effect.fromResult(begin(accepted, { instance, seed: 20_251_107 }));
+          const stored = yield* Effect.fromResult(begin(accepted, { instance, seed: "20251107" }));
           const { record } = yield* Effect.fromResult(restore(accepted, stored));
           const correct = Option.getOrElse(Option.fromUndefinedOr(record.correct["RESPONSE"]), () =>
             assert.fail("begin's record holds no correct response for RESPONSE"),

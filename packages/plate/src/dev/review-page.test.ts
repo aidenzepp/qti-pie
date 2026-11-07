@@ -192,7 +192,7 @@ const checkedValues = (controls: readonly Element[]): readonly string[] =>
  * second session and leave it open, and store both as the playground's session pages do.
  */
 const delivered = Effect.gen(function* delivered() {
-  const configuration = yield* configure({ seed: 7 });
+  const configuration = yield* configure({ seed: "7" });
   const found = yield* provided(cache.packageOf("m2"));
   const entry = Option.getOrElse(found, () => assert.fail("The fixture package is not listed."));
   const { verdict } = entry;

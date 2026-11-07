@@ -741,10 +741,23 @@ describe("score", () => {
   );
 
   it.effect(
+    "[I-5] starts an item whose template processing does not run, scored with no record, under a drawn seed of 32 lowercase hex digits, another each call",
+    () =>
+      Effect.gen(function* drawsSeed() {
+        const first = yield* Effect.fromResult(score(defaulted, {}));
+        const second = yield* Effect.fromResult(score(defaulted, {}));
+
+        assert.match(first.seed, /^[0-9a-f]{32}$/u);
+        assert.match(second.seed, /^[0-9a-f]{32}$/u);
+        assert.notStrictEqual(second.seed, first.seed);
+      }),
+  );
+
+  it.effect(
     "[I-5] scores against begin's record, its template-set correct response, and gives its seed, template values, correct responses and defaults back unchanged",
     () =>
       Effect.gen(function* carriesRecord() {
-        const started = yield* Effect.fromResult(begin(templated, { instance: "q1", seed: 7 }));
+        const started = yield* Effect.fromResult(begin(templated, { instance: "q1", seed: "7" }));
         const right = yield* Effect.fromResult(
           score(templated, { RESPONSE: identifiers("single", "B") }, started),
         );

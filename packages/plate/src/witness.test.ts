@@ -107,7 +107,7 @@ const fixedItem = "qtiv3-examples/packaging/items/choice_fixed.xml";
  * `ChoiceC`, `ChoiceA`, `ChoiceB`, then the fixed `ChoiceD`, so its correct choice is not where the
  * document puts it.
  */
-const seed = 3;
+const seed = "3";
 
 /**
  * The six elements each Choice of {@link limitedItem} offers, in document order.

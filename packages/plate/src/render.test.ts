@@ -932,7 +932,7 @@ describe("render, the mode", () => {
 describe("render, a shuffled Choice", () => {
   it.effect("[Q-2] gives byte-equal HTML for two renders with the same instance and seed", () =>
     Effect.gen(function* seededTwice() {
-      const configuration = yield* configure({ seed: 7 });
+      const configuration = yield* configure({ seed: "7" });
       const first = yield* Effect.fromResult(render(shuffled, configuration, { instance }));
       const second = yield* Effect.fromResult(render(shuffled, configuration, { instance }));
 
@@ -942,7 +942,7 @@ describe("render, a shuffled Choice", () => {
   );
 
   it.effect(
-    "[Q-2] keys the order by the instance alone when no seed is set, and seed 7 presents another",
+    '[Q-2] keys the order by the instance alone when no seed is set, and seed "7" presents another',
     () =>
       Effect.gen(function* unseededOrder() {
         const unseeded = yield* configure({});
@@ -953,7 +953,7 @@ describe("render, a shuffled Choice", () => {
         assert.strictEqual(first.html, second.html);
 
         const seeded = yield* Effect.fromResult(
-          render(shuffled, yield* configure({ seed: 7 }), { instance }),
+          render(shuffled, yield* configure({ seed: "7" }), { instance }),
         );
         assert.deepStrictEqual(presentedIn(first), ["P3", "P1", "P0", "P4", "P2"]);
         assert.deepStrictEqual(presentedIn(seeded), ["P2", "P4", "P3", "P1", "P0"]);
@@ -966,7 +966,7 @@ describe("render, a shuffled Choice", () => {
     () =>
       Effect.gen(function* shuffledWalk() {
         const rendered = yield* Effect.fromResult(
-          render(shuffled, yield* configure({ seed: 7 }), { instance }),
+          render(shuffled, yield* configure({ seed: "7" }), { instance }),
         );
         const [root] = parseHtml(rendered.html);
         const page = h("div", { lang: "en" }, [

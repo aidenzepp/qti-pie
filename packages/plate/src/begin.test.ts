@@ -148,7 +148,7 @@ const untemplated = accepted(
  * Give the value {@link templated}'s template processing draws for `N` under a seed: the first
  * `drawBelow` over the stream keyed by the seed under the item's template label.
  *
- * @param seed The record's seed, the host's seed written with `String`, `""` when it gave none.
+ * @param seed The record's seed.
  * @returns The integer.
  */
 const drawnUnder = (seed: string): bigint =>
@@ -161,7 +161,7 @@ const drawnUnder = (seed: string): bigint =>
  * @param seed The host's seed, none by default.
  * @returns The stored record and the record it decodes to.
  */
-const begun = Effect.fnUntraced(function* begun(document: Accepted, seed?: number) {
+const begun = Effect.fnUntraced(function* begun(document: Accepted, seed?: string) {
   const stored = yield* Effect.fromResult(
     begin(document, seed === undefined ? { instance } : { instance, seed }),
   );
@@ -174,13 +174,14 @@ describe("begin", () => {
     "[I-5] stores the record of the first attempt: the seed, the template values drawn under the template label and each response at its default",
     () =>
       Effect.gen(function* storesFirstAttempt() {
-        const { record } = yield* begun(templated, 42);
+        const { record } = yield* begun(templated, "42");
         const drawn = integer(drawnUnder("42"));
         const started = yield* Effect.fromResult(
           firstAttempt(templated.item, { instance, seed: "42" }),
         );
 
-        // The draw is neither the declared default nor the unseeded draw, so the record shows both.
+        // The draw is neither the declared default nor the draw under the empty seed, so the record
+        // shows both.
         assert.strictEqual(new Set([drawnUnder("42"), drawnUnder(""), 7n]).size, 3);
         assert.strictEqual(record.seed, "42");
         assert.deepStrictEqual(record.templates, { N: drawn });
@@ -193,9 +194,28 @@ describe("begin", () => {
       }),
   );
 
-  it.effect("[I-5] keys an absent seed as the empty string", () =>
-    Effect.gen(function* keysAbsentSeed() {
-      const { record } = yield* begun(templated);
+  it.effect(
+    "[I-5] draws a seed of 32 lowercase hex digits when none is given, another each begin, and draws the template values under it",
+    () =>
+      Effect.gen(function* drawsAbsentSeed() {
+        const first = yield* begun(templated);
+        const second = yield* begun(templated);
+
+        assert.match(first.record.seed, /^[0-9a-f]{32}$/u);
+        assert.match(second.record.seed, /^[0-9a-f]{32}$/u);
+        assert.notStrictEqual(second.record.seed, first.record.seed);
+        assert.deepStrictEqual(first.record.templates, {
+          N: integer(drawnUnder(first.record.seed)),
+        });
+        assert.deepStrictEqual(second.record.templates, {
+          N: integer(drawnUnder(second.record.seed)),
+        });
+      }),
+  );
+
+  it.effect("[I-5] uses a given empty seed as given", () =>
+    Effect.gen(function* keysEmptySeed() {
+      const { record } = yield* begun(templated, "");
 
       assert.strictEqual(record.seed, "");
       assert.deepStrictEqual(record.templates, { N: integer(drawnUnder("")) });
@@ -206,9 +226,9 @@ describe("begin", () => {
     "[I-5] gives the same record for the same instance and seed, and other values for another seed",
     () =>
       Effect.gen(function* repeatsUnderSeed() {
-        const first = yield* begun(templated, 42);
-        const again = yield* begun(templated, 42);
-        const reseeded = yield* begun(templated, 43);
+        const first = yield* begun(templated, "42");
+        const again = yield* begun(templated, "42");
+        const reseeded = yield* begun(templated, "43");
 
         assert.deepStrictEqual(again.stored, first.stored);
         assert.notDeepEqual(reseeded.record.templates, first.record.templates);
@@ -218,7 +238,7 @@ describe("begin", () => {
 
   it.effect("[I-5] gives an item with no template declaration three empty maps", () =>
     Effect.gen(function* startsUntemplated() {
-      const { record } = yield* begun(untemplated, 42);
+      const { record } = yield* begun(untemplated, "42");
 
       assert.deepStrictEqual(record, { ...fresh(untemplated.item, instance), seed: "42" });
       assert.deepStrictEqual([record.templates, record.correct, record.defaults], [{}, {}, {}]);
@@ -227,7 +247,7 @@ describe("begin", () => {
 
   it.effect("[I-5] stores a record restore takes back, its responses the values to render", () =>
     Effect.gen(function* restoresBegun() {
-      const { record, stored } = yield* begun(templated, 42);
+      const { record, stored } = yield* begun(templated, "42");
 
       assert.deepStrictEqual(Result.getOrThrow(restore(templated, stored)), {
         record,

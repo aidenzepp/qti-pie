@@ -734,14 +734,14 @@ const secondsBetween = (from: string, to: string): number =>
  */
 const choiceSequence = (
   interaction: Interaction,
-  seed: Option.Option<number>,
+  seed: string,
   instance: string,
 ): Option.Option<string> => {
   switch (interaction.kind) {
     case "choice":
     case "inline-choice": {
       return interaction.shuffle
-        ? Option.some(choiceOrder(interaction, seed, instance).join(" "))
+        ? Option.some(choiceOrder(interaction, Option.some(seed), instance).join(" "))
         : Option.none();
     }
     case "extended-text":
@@ -763,11 +763,7 @@ const choiceSequence = (
  * @param instance The item instance it was rendered under.
  * @returns The choice identifiers, space-separated, by the interaction's response identifier.
  */
-const choiceSequences = (
-  item: Item,
-  seed: Option.Option<number>,
-  instance: string,
-): ReadonlyMap<string, string> =>
+const choiceSequences = (item: Item, seed: string, instance: string): ReadonlyMap<string, string> =>
   new Map(
     interactionsIn(item.body).flatMap((interaction) =>
       Option.match(choiceSequence(interaction, seed, instance), {

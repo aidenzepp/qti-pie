@@ -109,6 +109,7 @@ const notRoots = {
   "src/messages.ts": "reached from the roots, so the scan checks it",
   "src/restore.ts": "the Schema side: decodes the stored record through Schema",
   "src/score.ts": "value-imports Schema to decode and encode the stored record",
+  "src/seed.ts": "reached from the roots, so the scan checks it",
   "src/vocabulary.ts":
     "the tables the validators, the model builders and the package reader read; no root reaches it, since session/control.ts reads sessionControlDefaults from session/control-defaults.ts, which vocabulary.ts re-exports",
 } satisfies Readonly<Record<string, string>>;

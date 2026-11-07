@@ -174,7 +174,7 @@ interface Bench {
  * @returns The bench.
  */
 const benchOf = (packages: PackageCache, sitting: Sitting, root?: string) =>
-  Effect.map(configure({ seed: 7 }), (configuration): Bench => ({
+  Effect.map(configure({ seed: "7" }), (configuration): Bench => ({
     playground: { configuration, packages, sessions: sessionStore() },
     provide: (effect) =>
       root === undefined

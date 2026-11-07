@@ -414,7 +414,7 @@ const viewAt = (
  * @param ref The item ref's identifier.
  * @param start The item's instance and the seed, as `firstAttempt` takes them.
  * @param start.instance The item's instance.
- * @param start.seed The seed, written with `String`, `""` when none.
+ * @param start.seed The seed.
  * @returns The record.
  */
 const startedRecord = (
@@ -720,21 +720,21 @@ describe("current", () => {
     () =>
       Effect.gen(function* storedSeed() {
         const delivery = yield* guideDelivery();
-        const session = started(delivery, yield* configure({ seed: 7 }));
+        const session = started(delivery, yield* configure({ seed: "7" }));
 
-        assert.deepStrictEqual(session.seed, Option.some(7));
+        assert.strictEqual(session.seed, "7");
         assert.strictEqual(
-          currentItem(delivery, session, yield* configure({ seed: 9 })).configuration.seed,
-          7,
+          currentItem(delivery, session, yield* configure({ seed: "9" })).configuration.seed,
+          "7",
         );
       }),
     { tags: ["corpus"] },
   );
 
   it.effect(
-    "[T-14] renders a shuffled Choice byte-equal after a JSON round trip of a session started with no seed, whatever seed the host passes",
+    "[T-14] renders a shuffled Choice byte-equal after a JSON round trip, in the order of the seed the session stored, whatever seed the host passes",
     () =>
-      Effect.gen(function* unseededRoundTrip() {
+      Effect.gen(function* storedSeedRoundTrip() {
         const delivery = yield* builtDelivery("shuffle", [
           [
             "shuffled",
@@ -748,8 +748,8 @@ describe("current", () => {
         const item = redact(
           delivery.items.get("shuffled") ?? assert.fail("the shuffled item is missing"),
         );
-        const hostConfiguration = yield* configure({ seed: 9 });
-        const session = started(delivery, yield* configure({}));
+        const hostConfiguration = yield* configure({ seed: "9" });
+        const session = started(delivery, yield* configure({ seed: "7" }));
         const restored = throughHost(delivery.test, session);
         const htmlOf = (view: ItemView): string =>
           Result.getOrElse(
@@ -764,9 +764,9 @@ describe("current", () => {
         const restoredView = currentItem(delivery, restored, hostConfiguration);
         const underHostSeed = htmlOf({ ...before, configuration: hostConfiguration });
 
-        assert.isFalse(Object.hasOwn(before.configuration, "seed"));
-        assert.isFalse(Object.hasOwn(restoredView.configuration, "seed"));
-        assert.notStrictEqual(underHostSeed, htmlOf(before), "seed 9 presents another order");
+        assert.strictEqual(before.configuration.seed, session.seed);
+        assert.strictEqual(restoredView.configuration.seed, session.seed);
+        assert.notStrictEqual(underHostSeed, htmlOf(before), 'seed "9" presents another order');
         assert.strictEqual(htmlOf(restoredView), htmlOf(before));
       }),
   );
@@ -902,7 +902,7 @@ describe("a templated item in a session", () => {
     () =>
       Effect.gen(function* presentsTemplated() {
         const delivery = yield* templatedDelivery();
-        const configuration = yield* configure({ seed: 11 });
+        const configuration = yield* configure({ seed: "11" });
         const session = started(delivery, configuration);
         const first = startedRecord(delivery, "first", { instance: `${instance}.1`, seed: "11" });
 
@@ -928,20 +928,44 @@ describe("a templated item in a session", () => {
       }),
   );
 
-  it.effect(
-    '[I-5] gives two sessions started with two seeds two template values, and one started with no seed the seed ""',
-    () =>
-      Effect.gen(function* seedsDiffer() {
-        const delivery = yield* templatedDelivery();
-        const eleven = recordUnder(started(delivery, yield* configure({ seed: 11 })));
-        const twelve = recordUnder(started(delivery, yield* configure({ seed: 12 })));
-        const unseeded = recordUnder(started(delivery, yield* configure({})));
+  it.effect("[I-5] gives two sessions started with two seeds two template values", () =>
+    Effect.gen(function* seedsDiffer() {
+      const delivery = yield* templatedDelivery();
+      const eleven = recordUnder(started(delivery, yield* configure({ seed: "11" })));
+      const twelve = recordUnder(started(delivery, yield* configure({ seed: "12" })));
 
-        assert.notDeepEqual(eleven.templates["T"], twelve.templates["T"]);
-        assert.deepStrictEqual([eleven.seed, twelve.seed, unseeded.seed], ["11", "12", ""]);
+      assert.notDeepEqual(eleven.templates["T"], twelve.templates["T"]);
+      assert.deepStrictEqual([eleven.seed, twelve.seed], ["11", "12"]);
+    }),
+  );
+
+  it.effect(
+    "[I-5] draws a seed of 32 lowercase hex digits for a session started with no seed, another each session, which every presented item's record and the item configuration carry",
+    () =>
+      Effect.gen(function* drawsSessionSeed() {
+        const delivery = yield* templatedDelivery();
+        const configuration = yield* configure({});
+        const session = started(delivery, configuration);
+        const other = started(delivery, configuration);
+        const presented = Result.getOrElse(
+          present(delivery.items, session, 2, after(1000)),
+          (failure) => assert.fail(failure.message),
+        );
+
+        assert.match(session.seed, /^[0-9a-f]{32}$/u);
+        assert.match(other.seed, /^[0-9a-f]{32}$/u);
+        assert.notStrictEqual(other.seed, session.seed);
         assert.deepStrictEqual(
-          unseeded,
-          startedRecord(delivery, "first", { instance: `${instance}.1`, seed: "" }),
+          presented.items.map((item) => item.record.seed),
+          [session.seed, session.seed],
+        );
+        assert.deepStrictEqual(
+          recordUnder(session),
+          startedRecord(delivery, "first", { instance: `${instance}.1`, seed: session.seed }),
+        );
+        assert.strictEqual(
+          currentItem(delivery, session, configuration).configuration.seed,
+          session.seed,
         );
       }),
   );
@@ -949,7 +973,7 @@ describe("a templated item in a session", () => {
   it.effect("[I-5] gives each view the record of the item it shows", () =>
     Effect.gen(function* viewsCarryRecords() {
       const delivery = yield* templatedDelivery();
-      const configuration = yield* configure({ seed: 11 });
+      const configuration = yield* configure({ seed: "11" });
       const session = Result.getOrElse(
         present(delivery.items, started(delivery, configuration), 2, after(1000)),
         (failure) => assert.fail(failure.message),
@@ -973,7 +997,7 @@ describe("a templated item in a session", () => {
     () =>
       Effect.gen(function* templatedRoundTrip() {
         const delivery = yield* templatedDelivery();
-        const configuration = yield* configure({ seed: 11 });
+        const configuration = yield* configure({ seed: "11" });
         const session = started(delivery, configuration);
         const restored = throughHost(delivery.test, session);
         const shown = currentItem(delivery, session, configuration);

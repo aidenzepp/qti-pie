@@ -29,10 +29,16 @@ describe("configure", () => {
     }),
   );
 
-  it.effect("holds no seed unless one is given, and decodes seed 7 as 7", () =>
+  it.effect('holds no seed unless one is given, and decodes seed "7" as "7"', () =>
     Effect.gen(function* seedKey() {
       assert.isFalse(Object.hasOwn(yield* configure({}), "seed"));
-      assert.strictEqual((yield* configure({ seed: 7 })).seed, 7);
+      assert.strictEqual((yield* configure({ seed: "7" })).seed, "7");
+    }),
+  );
+
+  it.effect("reads an empty seed as no seed", () =>
+    Effect.gen(function* emptySeed() {
+      assert.isFalse(Object.hasOwn(yield* configure({ seed: "" }), "seed"));
     }),
   );
 

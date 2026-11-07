@@ -4,7 +4,8 @@
  * {@link recordStep} saves what one request carries, and {@link current}, {@link itemView} and
  * {@link permits} say what to render.
  *
- * Every function is pure: time is the `now` the host passes, and nothing is kept between calls.
+ * Nothing is kept between calls, and time is the `now` the host passes. Every function is pure but
+ * {@link startTest}, which draws the session's seed (`drawSeed`) when the configuration has none.
  * Item session control, part modes and titles are not stored in the session: each read recomputes
  * them from the accepted test. This is a browser module: it value-imports from `effect` only
  * `Option`, `Array`, `Data` and `Result`.
@@ -22,6 +23,7 @@ import { fresh } from "#plate/model/record.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
 import { itemRefsIn } from "#plate/model/item-refs.ts";
 import type { ItemRef, Test, TestPart } from "#plate/model/test.ts";
+import { drawSeed } from "#plate/seed.ts";
 import { itemConfiguration, sessionControls, UnknownItemRef } from "#plate/session/control.ts";
 import type { SessionControl } from "#plate/session/control.ts";
 import type { Responses, SessionItem, Step, TestSession } from "#plate/session/session.ts";
@@ -149,8 +151,8 @@ export interface ItemView {
   readonly count: number;
   /**
    * The configuration to render and check the item with: the host's, with the item's session
-   * control written in by `itemConfiguration`, and the session's seed in place of the host's, no
-   * seed when the session stores none.
+   * control written in by `itemConfiguration`, and the session's seed in place of the host's, so
+   * the item's shuffle is keyed by the seed its record started under.
    */
   readonly configuration: Configuration;
   /**
@@ -517,15 +519,6 @@ class FirstAttemptDefect extends Data.TaggedError("FirstAttemptDefect")<{
 }
 
 /**
- * Write a session's seed as an item record holds it.
- *
- * @param seed The session's seed, none when it stores none.
- * @returns The seed written with `String`, `""` when none.
- */
-const seedOf = (seed: Option.Option<number>): string =>
-  Option.match(seed, { onNone: () => "", onSome: String });
-
-/**
  * Find a session item by its sequence index.
  *
  * @param session The session.
@@ -589,7 +582,7 @@ export const withItem = (
  * @param item The session item, not yet presented.
  * @param accepted The item it delivers.
  * @param datestamp The time of the transition, in ISO 8601.
- * @param seed The session's seed, written as {@link seedOf} writes it.
+ * @param seed The session's seed.
  * @returns The item, presented.
  * @throws {FirstAttemptDefect} When `firstAttempt` fails, which no checked item can cause.
  */
@@ -612,11 +605,11 @@ const presented = (
  *
  * An attempt starts when the item's session first enters interacting: at its first presentation
  * in answering mode. Its record becomes the one `firstAttempt` starts: the item's template
- * processing runs once, under the template key of the session's seed, the item's instance and the
- * item, and each response then holds its default (`info.txt:8462`), the one template processing
- * set, else its `qti-default-value`, else NULL. An item never presented keeps a fresh record, with
- * no template value. Presenting an item already presented changes nothing. The moves and a part's
- * end call this for the item they show.
+ * processing runs once, drawing from the stream keyed by the session's seed under the template
+ * label of the item's instance and the item, and each response then holds its default
+ * (`info.txt:8462`), the one template processing set, else its `qti-default-value`, else NULL. An
+ * item never presented keeps a fresh record, with no template value. Presenting an item already
+ * presented changes nothing. The moves and a part's end call this for the item they show.
  *
  * @example
  *   present(items, session, 2, new Date()); // item 2 presented, its template values and defaults written
@@ -646,7 +639,7 @@ export const present = (
 
     return {
       ...session,
-      items: withItem(session, index, presented(item, accepted, datestamp, seedOf(session.seed))),
+      items: withItem(session, index, presented(item, accepted, datestamp, session.seed)),
     };
   });
 
@@ -695,9 +688,12 @@ const checkedInstance = (token: string): Result.Result<string, InvalidSessionIns
  * The items are the test's item refs in document order, numbered from 1, each starting from a
  * fresh record whose instance is `<instance>.<sequenceIndex>`. The first part that holds an item
  * is current and its first item is presented, which starts its first attempt as {@link present}
- * does. The session stores `configuration.seed`, under which each item's first attempt draws its
- * template values, so a restored session presents the choice order it showed whatever seed the
- * host passes later. A test with no item at all starts closed.
+ * does. The session stores `configuration.seed`, used as given, or, when the configuration has
+ * none, a seed `startTest` draws: 128 random bits written as 32 lowercase hex digits. Each item's
+ * first attempt draws its template values under it, and each item's shuffle is keyed by it, so a
+ * restored session presents the choice order and the values it showed whatever seed the host
+ * passes later. The seed keys every value processing draws, so the stored session, which holds it,
+ * is server data. A test with no item at all starts closed.
  *
  * @example
  *   startTest(test, items, configuration, { instance: crypto.randomUUID(), now: new Date() });
@@ -705,7 +701,8 @@ const checkedInstance = (token: string): Result.Result<string, InvalidSessionIns
  * @param test The test, as `check` accepted it.
  * @param items The test's items, each as `check` accepted it, keyed by the identifier of the item
  *   ref that names its document.
- * @param configuration The host's configuration, whose `seed` the session keeps.
+ * @param configuration The host's configuration, whose `seed` the session keeps; with none, the
+ *   session keeps a drawn seed.
  * @param context The sitting.
  * @param context.instance The host's name for this sitting, which scopes every item's ids: a token
  *   `checkInstance` passes, such as a lowercase UUID.
@@ -725,7 +722,7 @@ export const startTest = (
     const instance = yield* checkedInstance(context.instance);
     const datestamp = yield* datestampOf(context.now, "context.now");
     const places = placesOf(test.test);
-    const seed = Option.fromUndefinedOr(configuration.seed);
+    const seed = configuration.seed ?? drawSeed();
     const delivered = yield* Result.all(
       places.map(({ ref }, index) =>
         Result.map(
@@ -742,7 +739,7 @@ export const startTest = (
               sequenceIndex: index + 1,
             };
 
-            return index === 0 ? presented(item, accepted, datestamp, seedOf(seed)) : item;
+            return index === 0 ? presented(item, accepted, datestamp, seed) : item;
           },
         ),
       ),
@@ -857,17 +854,14 @@ const inspect = (
   Result.gen(function* inspectItem() {
     const place = yield* lookUp(index, index.places, item.ref);
     const control = yield* lookUp(index, index.controls, item.ref);
-    const { seed: _hostSeed, ...withControl } = itemConfiguration(configuration, control);
+    const configured = { ...itemConfiguration(configuration, control), seed: session.seed };
     const ended = index.ended.has(place.part.identifier);
-    const limit = withControl.maxAttempts;
+    const limit = configured.maxAttempts;
 
     return {
       closed:
         session.status === "closed" || ended || (limit > 0 && item.record.numAttempts >= limit),
-      configuration: Option.match(session.seed, {
-        onNone: () => withControl,
-        onSome: (seed) => ({ ...withControl, seed }),
-      }),
+      configuration: configured,
       control,
       place,
     };
