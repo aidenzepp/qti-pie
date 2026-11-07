@@ -238,6 +238,19 @@ const readPair = (text: string, from: number, stand: Stand): Step<string | typeo
 };
 
 /**
+ * Read what follows a pair's value: a `,`, consumed and leaving the reader after a comma, or a `}`,
+ * left for {@link readPair} to close the object and leaving the reader after a value.
+ */
+const readSeparator = (text: string, from: number): Step<Stand> => {
+  const at = skipSpace(text, from);
+  if (text[at] === ",") {
+    return { next: at + 1, value: "comma" };
+  }
+
+  return text[at] === "}" ? { next: at, value: "value" } : brokenAt(text, at, "',' or '}'");
+};
+
+/**
  * Whether a decoded string is in a property's domain, and if not what the domain is.
  */
 const outsideDomain = (domain: Domain, value: string): string | undefined => {
@@ -318,13 +331,13 @@ const readMember = (
 
     seen.add(property.name);
 
-    const after = skipSpace(text, value.next);
-    if (text[after] === "," || text[after] === "}") {
-      from = text[after] === "," ? after + 1 : after;
-      stand = text[after] === "," ? "comma" : "value";
-    } else {
-      return brokenAt(text, after, "',' or '}'");
+    const separator = readSeparator(text, value.next);
+    if (isFault(separator)) {
+      return separator;
     }
+
+    from = separator.next;
+    stand = separator.value;
   }
 };
 
@@ -375,13 +388,13 @@ export const dataSsmlFaultOf = (text: string): DataSsmlFault | undefined => {
       return member;
     }
 
-    const after = skipSpace(text, member.next);
-    if (text[after] === "," || text[after] === "}") {
-      from = text[after] === "," ? after + 1 : after;
-      stand = text[after] === "," ? "comma" : "value";
-    } else {
-      return brokenAt(text, after, "',' or '}'");
+    const separator = readSeparator(text, member.next);
+    if (isFault(separator)) {
+      return separator;
     }
+
+    from = separator.next;
+    stand = separator.value;
   }
 };
 
