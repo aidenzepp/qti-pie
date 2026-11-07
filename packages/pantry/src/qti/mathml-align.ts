@@ -284,6 +284,17 @@ const selectionAttributes = select(Attribute, (a) =>
 const dirAttributes = select(Attribute, (a) => a.eq(a.name, "dir"));
 
 /**
+ * The keys of one `selection` per `m:maction` and one `dir` per element, over the attributes the
+ * module copies. `mathmlLawsByName` (`#pantry/qti/mathml.ts`) names them "DocumentId key", the name
+ * the refusal table gave a key over one attribute per node before PR #46's 6caa20ef, so each keeps
+ * the law it had.
+ */
+export const attributeKeyLaws = {
+  dir: key(on(dirAttributes, "node")),
+  selection: key(on(selectionAttributes, "node")),
+};
+
+/**
  * The {@link MathAction} rows of an action that writes its `selection`.
  */
 const writtenSelections = select(MathAction, (m) => m.eq(m.selectionWritten, true));
@@ -372,7 +383,7 @@ export const leafStartFold = fold(
 export const alignLaws = [
   mirrors(on(MathAction, "node"), on(actions, "id")),
   contained(on(MathAction, "node", "elements", "elementChildren"), nodeCounts),
-  key(on(selectionAttributes, "node")),
+  attributeKeyLaws.selection,
   contained(
     on(selectionAttributes, "node", "lexical"),
     on(writtenSelections, "node", "selectionLexical"),
@@ -412,7 +423,7 @@ export const alignLaws = [
     nodeRef,
   ),
   contained(on(MathAlignScope, "node", "elements", "elementChildren"), nodeCounts),
-  key(on(dirAttributes, "node")),
+  attributeKeyLaws.dir,
   contained(on(dirAttributes, "node", "lexical"), on(MathDir, "node", "lexical")),
   contained(on(MathDir, "node"), on(dirAttributes, "node")),
   contained(

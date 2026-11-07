@@ -6,7 +6,7 @@
  * {@link mathmlRelations} and {@link mathmlLaws} are `#pantry/qti/schema.ts`'s MathML members: the
  * four families' relations and laws, spread in that order; {@link mathmlLawsByName} names each law.
  */
-import { alignLaws, alignRelations } from "#pantry/qti/mathml-align.ts";
+import { alignLaws, alignRelations, attributeKeyLaws } from "#pantry/qti/mathml-align.ts";
 import { applyLaws, applyRelations, headQualifierLaw } from "#pantry/qti/mathml-apply.ts";
 import { cnCountLaws, cnLaws, cnRelations } from "#pantry/qti/mathml-cn.ts";
 import { shareLaws, shareRelations } from "#pantry/qti/mathml-share.ts";
@@ -35,13 +35,18 @@ export const mathmlLaws = [...applyLaws, ...cnLaws, ...alignLaws, ...shareLaws];
  *   arity", named by the check itself);
  * - **MathML cn form:** a `cn`'s four part count containments, over the judged `cn`s and over every
  *   typed `cn` ({@link cnCountLaws}): a wrong part count is a `cn` of the wrong form;
+ * - **DocumentId key:** the align family's keys of one `selection` per `m:maction` and one `dir`
+ *   per element ({@link attributeKeyLaws}), the name a key over one attribute per node had before
+ *   PR #46's 6caa20ef;
  * - **E1 derived:** every other statement of the four families, a restatement of the tree.
  */
 export const mathmlLawsByName = {
+  "DocumentId key": Object.values(attributeKeyLaws),
   "E1 derived": mathmlLaws.filter(
     (statement) =>
       statement !== headQualifierLaw &&
-      !Object.values(cnCountLaws).some((count) => count === statement),
+      !Object.values(cnCountLaws).some((count) => count === statement) &&
+      !Object.values(attributeKeyLaws).some((attributeKey) => attributeKey === statement),
   ),
   "MathML cn form": Object.values(cnCountLaws),
   "MathML head qualifier": [headQualifierLaw],
