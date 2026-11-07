@@ -70,8 +70,8 @@ import { automatonOf } from "#pantry/vocab/sequencing.ts";
 import type { Automaton } from "#pantry/vocab/sequencing.ts";
 
 /**
- * A spec reading that edits a content model where it says more than the XSD: a particle's group
- * required; a kind admitted beside another in every particle that names it; kinds that come
+ * A spec reading that edits a content model where it says more than the XSD: a kind admitted beside
+ * another in every particle that names it; kinds that come
  * before every other element of the model and before its text that is not whitespace; the model
  * restated whole, where the language the reading follows is not the XSD's and no edit of a particle
  * states it, narrower or wider (spec reading 2, MathML's RelaxNG); the kinds a family's last
@@ -83,12 +83,6 @@ import type { Automaton } from "#pantry/vocab/sequencing.ts";
 export type ModelEdit =
   | {
       readonly _tag: "cap";
-      readonly kind: string;
-      readonly parent: string;
-      readonly source: string;
-    }
-  | {
-      readonly _tag: "require";
       readonly kind: string;
       readonly parent: string;
       readonly source: string;
@@ -536,7 +530,7 @@ const edited = (particle: Particle, edit: ModelEdit): Edited => {
   const walk = (node: Particle): Particle => {
     switch (node._tag) {
       case "element": {
-        if (edit._tag === "beside" && node.kinds.includes(edit.with)) {
+        if (node.kinds.includes(edit.with)) {
           found = true;
 
           return {
@@ -555,25 +549,7 @@ const edited = (particle: Particle, edit: ModelEdit): Edited => {
         return node;
       }
       case "group": {
-        const holds =
-          edit._tag === "require" &&
-          node.particles.some(
-            (child) => child._tag === "element" && child.kinds.includes(edit.kind),
-          );
-        found ||= holds;
-
-        return {
-          ...node,
-          occurs: holds ? { ...node.occurs, min: Math.max(1, node.occurs.min) } : node.occurs,
-          particles: node.particles.map(walk),
-          // The group a reading requires takes the reading as its source.
-          sources: holds
-            ? pipe(
-                node.sources,
-                Arr.map((): Source => ({ _tag: "spec", cite: edit.source })),
-              )
-            : node.sources,
-        };
+        return { ...node, particles: node.particles.map(walk) };
       }
       default: {
         return node satisfies never;
@@ -1046,8 +1022,7 @@ export const contentOf = (input: {
                 ].join(", ");
               }
               case "beside":
-              case "cap":
-              case "require": {
+              case "cap": {
                 return unused.kind;
               }
               default: {

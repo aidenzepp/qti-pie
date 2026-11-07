@@ -1229,7 +1229,6 @@ export const testOverlayLaws = [
   ),
 
   sectionFamily,
-  check("Section_parts", Section, (s) => s.gt(s.members, 0n)),
   contained(
     on(SectionMember, "node", "document", "kind", "start", "nearest", "version", "section"),
     nodeRef,
@@ -1941,10 +1940,11 @@ export const itemRefLaws = [
  *   collapsed identifier and its scope in its document, no two of one document sharing an
  *   identifier (A4, "Structure identifier");
  * - **the sections** ({@link Section}, {@link SectionMember}, {@link SectionSelection},
- *   {@link SectionOrdering}): their parts counted (C15), at least one (reading 26,
- *   `Section_parts`), their required parts folded ({@link requiredFold}), their flags and scope;
- *   reading 79's `Selection_bound`, `select ≤ members` unless the selection is with replacement,
- *   and info §4.2.2's `Selection_required`, `required ≤ select`;
+ *   {@link SectionOrdering}): their parts counted (C15), any number of them, none included (spec
+ *   reading 26: §4.2.15's `sectionPart` is [0..unbounded]), their required parts folded
+ *   ({@link requiredFold}), their flags and scope; reading 79's `Selection_bound`, `select ≤
+ *   members` unless the selection is with replacement, and info §4.2.2's `Selection_required`,
+ *   `required ≤ select`;
  * - **the hrefs:** each item ref and site has its href's `ReferencePath` (`#pantry/qti/package.ts`
  *   `hrefPaths`), an entry of the package, under the stated limit `Href_form`;
  * - **the sites** ({@link Site}): each section ref and section-level include names a section

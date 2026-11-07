@@ -10,7 +10,7 @@ qtiv3-examples/packaging/CASEWithOutcome/CASEWithOutcome.zip	refused	lom-title
 qtiv3-examples/packaging/basicFeedbackTest/basicFeedbackTest.zip	refused	unmodeled-vocabulary
 qtiv3-examples/packaging/ccPackage/ccPackage.zip	accepted	
 qtiv3-examples/packaging/englishBasicLevelV2/englishBasicLevelV2.zip	accepted	
-qtiv3-examples/packaging/englishHighLevelV2/englishHighLevelV2.zip	refused	section-empty
+qtiv3-examples/packaging/englishHighLevelV2/englishHighLevelV2.zip	refused	lom-title
 qtiv3-examples/packaging/externalMetadata/externalMetadata.zip	accepted	
 qtiv3-examples/packaging/feedbackTest/feedbackTest.zip	refused	unmodeled-vocabulary
 qtiv3-examples/packaging/interactionMixSaxonyV3/interactionMixSaxonyV3.zip	accepted	

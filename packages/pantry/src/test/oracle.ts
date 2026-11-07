@@ -223,7 +223,6 @@ export const oracleRules = [
   "reserved-type",
   "resource-type",
   "root-type-reverse",
-  "section-empty",
   "section-identifier-target",
   "selection-bounds",
   "selection-required",
@@ -441,7 +440,6 @@ const lawRules = {
   "SSML lexicon reference": "ssml-fragment",
   "SSML trim mark": "ssml-fragment",
   "Section identifier target": "section-identifier-target",
-  "Section parts": "section-empty",
   "Selection bound": "selection-bounds",
   "Selection required": "selection-required",
   "Self dependency": "self-dependency",
@@ -685,10 +683,8 @@ export const lawSources = {
     "reading 3: https://www.w3.org/TR/speech-synthesis11/#S3.1.1.1 (SSML 1.1 §3.1.1.1: 'Only markers defined once in the document, i.e. that are unique, are permitted as the value of either startmark or endmark'; 'It is an error if the value given for either startmark or endmark is not a valid mark in the document'), the document being the speak, each name an xs:token (§3.3.2) compared by its collapsed value (identity.ts ssmlTrimMark)",
   "Section identifier target":
     "readings 5 and 86: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_Number.Attr_section-identifier (§7.27.1, and §7.28.1, §7.39.1: 'If specified, only variables from items in the qti-assessment-section with matching identifier are matched', info.txt:69115), resolved over each test that places the document: a section-identifier names exactly one section or section ref of the assembled test (expressions.ts Reading, form name; the UP audit's A61)",
-  "Section parts":
-    "reading 26: https://www.imsglobal.org/spec/qti/v3p0/info#Root_AssessmentSection (§4.2: a section holds 'at least one other Section or Item'): a section holds at least one part, an item ref, section, section ref or include standing for one (references.ts SectionPart; tests.ts Section_parts)",
   "Selection bound":
-    "reading 79: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_Selection.Attr_select (§5.129.1: 'The number of children to select may exceed the number of child elements defined only if with-replacement is true'; 'Sub-sections always count as 1') (references.ts SectionPart); reading 26",
+    "reading 79: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_Selection.Attr_select (§5.129.1: 'The number of children to select may exceed the number of child elements defined only if with-replacement is true'; 'Sub-sections always count as 1') (references.ts SectionPart)",
   "Selection required":
     "https://www.imsglobal.org/spec/qti/v3p0/info#RootCharacteristic_AssessmentSection.Attr_required (§4.2.2, and §5.6.2 of the item ref: 'If a child element is required it must appear (at least once) in the selection. It is an error if a section contains a selection rule that selects fewer child elements than the number of required elements it contains'): a section's parts whose required is true are at most its selection's select (tests.ts Selection_required)",
   "Self dependency":
@@ -1488,7 +1484,6 @@ export const otherLawNames = [
   "Branch target",
   "Branch forward",
   "Href form",
-  "Section parts",
   "Stimulus ref key",
   "Stimulus ref target",
   "Variable mapping target",
@@ -6525,8 +6520,6 @@ const explainers: Readonly<Record<LawName, Explainer>> = {
     `ssml:speak trims at ${inBraces(membersOf(keys["unmarked"]))} (attribute=name:marks of that name in the speak), where each names exactly one of its marks`,
   "Section identifier target": (keys) =>
     `the section-identifier ${field(keys, "identifier")} names no single section or section ref of the test ${field(keys, "assembly")}`,
-  "Section parts": (keys) =>
-    `the section ${field(keys, "identifier")} holds no item ref, section, section ref or include`,
   "Selection bound": (keys) =>
     `selects ${field(keys, "select")} of the section's ${field(keys, "parts")} parts without replacement`,
   "Selection required": (keys) =>

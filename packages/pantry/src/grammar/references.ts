@@ -551,7 +551,7 @@ const orderedChoices: ReadonlyMap<string, string> = new Map([
 
 /**
  * The kind whose parts a selection selects among: the assessment section (information model,
- * §4.2.15, `sectionPart`; spec reading 26, a section holds at least one).
+ * §4.2.15, `sectionPart`, of which a section holds any number, none included).
  */
 const sectionKind = "qti-assessment-section";
 

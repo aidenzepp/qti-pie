@@ -428,20 +428,23 @@ describe.skipIf(!hasLease)("qti/tests.db.test.ts, on the lease", () => {
           }).pipe(Effect.scoped),
       );
 
-      it.effect("refuses a section that holds no part, by Section_parts", () =>
-        // Oracle: PostgreSQL, the `section_parts` CHECK; reading 26 says which states it holds.
-        // Bound: members 1, accepted, and 0, refused.
-        Effect.gen(function* sectionParts() {
-          const client = yield* loginSession;
+      it.effect(
+        "accepts a section that holds no part, and one that holds one (spec reading 26)",
+        () =>
+          // Oracle: the information model's §4.2.15, a section's `sectionPart` of multiplicity
+          // [0..unbounded], and both XSDs' minOccurs="0" (spec reading 26): no CHECK of `section`
+          // reads its count of parts.
+          // Bound: members 0 and 1, each accepted.
+          Effect.gen(function* sectionParts() {
+            const client = yield* loginSession;
 
-          assert.isTrue(Option.isNone(yield* deferredInsert(client, "section", sectionRow(1))));
-          assertRefused(
-            yield* deferredInsert(client, "section", sectionRow(0)),
-            "23514",
-            ["section_parts"],
-            "an empty section",
-          );
-        }).pipe(Effect.scoped),
+            for (const members of [0, 1]) {
+              assert.isTrue(
+                Option.isNone(yield* deferredInsert(client, "section", sectionRow(members))),
+                `a section of ${String(members)} parts`,
+              );
+            }
+          }).pipe(Effect.scoped),
       );
     },
   );

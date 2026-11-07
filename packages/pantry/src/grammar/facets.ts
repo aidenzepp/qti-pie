@@ -263,8 +263,7 @@ const orderingModel: Particle = {
  * - Its 22 interactions, and the expression kinds' arities, both projected from the IR;
  * - The ancestry blocks of an item's content, and a test's rubric block and feedback entering `test`,
  *   under which no template sits (spec reading 25);
- * - Spec reading 26, a section holds at least one part; spec reading 61, `qti-ordering`'s extension
- *   slot admits any namespace ({@link orderingModel});
+ * - Spec reading 61, `qti-ordering`'s extension slot admits any namespace ({@link orderingModel});
  * - HTML's `colgroup` with `span` holding no `col`, and the default hotspot that ends its
  *   interaction;
  * - The response bindings, the package roots and the references.
@@ -330,12 +329,6 @@ export const asi: Facets = {
   },
   content: {
     edits: [
-      {
-        _tag: "require",
-        kind: "qti-assessment-item-ref",
-        parent: "qti-assessment-section",
-        source: "spec reading 26",
-      },
       { _tag: "restate", parent: "qti-ordering", particle: orderingModel, source: orderingSource },
     ],
     models: [],

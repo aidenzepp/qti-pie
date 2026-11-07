@@ -37,7 +37,7 @@ import { readPackage } from "#pantry/package/read.ts";
 import { AuthorApp } from "#pantry/qti/logins.ts";
 import { Package } from "#pantry/qti/package.ts";
 import { Author } from "#pantry/qti/roles.ts";
-import { materialize, materializeSpec } from "#pantry/test/fixtures.ts";
+import { materialize, materializeSpec, specOf } from "#pantry/test/fixtures.ts";
 import type { FixtureName, TextEdit } from "#pantry/test/fixtures.ts";
 import { materializeProcessing, processingFixtureNames } from "#pantry/test/processing-fixtures.ts";
 import { processingVerdicts } from "#pantry/test/processing-verdicts.ts";
@@ -534,6 +534,40 @@ describe.skipIf(!hasLease)(
                 );
               }
             }
+          }),
+      );
+
+      it.effect(
+        "accepts a test whose section holds a rubric block and no part, as the law oracle judges it (spec reading 26)",
+        () =>
+          // Oracle: the law oracle's verdict on the same package (`judge`), and the information
+          // model's §4.2.15 behind both: a section's sectionPart is [0..unbounded], as both XSDs'
+          // minOccurs="0" are, so no law counts a section's parts but reading 79's selection.
+          // Bound: test-linear with one more section in its test part, of a rubric block alone.
+          Effect.gen(function* emptySection() {
+            const grammar = Result.getOrThrow(composed());
+            const linear = specOf("test-linear");
+            const dir = yield* materializeSpec({
+              ...linear,
+              edits: [
+                ...linear.edits,
+                {
+                  _tag: "ReplaceText",
+                  file: "rtest13.xml",
+                  replacement: `<qti-assessment-section identifier="bare" title="Bare" visible="true"><qti-rubric-block view="candidate" use="instructions"><qti-content-body><p>Only a rubric</p></qti-content-body></qti-rubric-block></qti-assessment-section></qti-test-part>`,
+                  search: "    </qti-test-part>",
+                },
+              ],
+              name: "empty-section",
+            });
+            const judgment = yield* judge(yield* readPackage(dir), grammar, lawsOf(grammar));
+            const { outcome } = yield* applyEdited(dir);
+
+            assert.isTrue(
+              judgment._tag === "Judged" && judgment.breaches.length === 0,
+              "the oracle's verdict",
+            );
+            assert.strictEqual(outcome.kind, "accepted", JSON.stringify(outcome));
           }),
       );
 

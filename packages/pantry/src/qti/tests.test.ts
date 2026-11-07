@@ -88,7 +88,6 @@ describe("qti/tests.ts, declared", () => {
       "E1 derived",
       "Fragment context",
       "Item ref target",
-      "Section parts",
       "Selection bound",
       "Selection required",
       "Test name key",

@@ -182,6 +182,7 @@ describe("the test helpers", () => {
       "test/locate.ts: #pantry/test/oracle.ts",
       "test/oracle-laws.differential.test.ts: #pantry/test/oracle.ts",
       "test/oracle.complete.test.ts: #pantry/test/oracle.ts",
+      "test/oracle.empty-section.test.ts: #pantry/test/oracle.ts",
       "test/oracle.keys.test.ts: #pantry/test/oracle.ts",
       "test/oracle.label-tools.test.ts: #pantry/test/oracle.ts",
       "test/oracle.rv-g.test.ts: #pantry/test/oracle.ts",
