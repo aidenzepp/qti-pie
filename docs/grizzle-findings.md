@@ -1117,10 +1117,16 @@ limits the README does not yet state, recorded as limits.
   named check, `AL1_admission`, beside the generated column, so the refusal names its law.
 - **`db.explain` drops index names** (not in the README, whose "Reading" says it returns the estimated plans as
   data), so the plan audits assert node types (Q5.16).
-- **A CHECK's or a foreign key's refusal has the witness `unreported`** ("Errors and outcomes"). The importer takes an
-  injected locator (`ImportOptions.locate`): tests locate the row by the law oracle's verdicts (`src/test/locate.ts`),
-  production keeps `unreported` and says the database names no row, and `ImportRefused` carries the witness kind for
-  the command line (Q5.15, Q5.17, PS).
+- **A CHECK's or a foreign key's refusal has the witness `unreported`** ("Errors and outcomes"; workaround removed in
+  `bcedf884`). The importer took an injected locator (`ImportOptions.locate`): tests located the row by the law
+  oracle's verdicts (`src/test/locate.ts`), production kept `unreported` and said the database names no row, and
+  `refusedBy` died with `LocateDisagreement` where the locator found no breach (Q5.15, Q5.17, PS). grizzle `a08a099`,
+  the pin, judges each row the refused statement wrote that the ChangeSet states, as the write fills it, and names the
+  key of the first that breaks the law (grizzle-engine `src/write/program/witness.ts` `hostJudgement`). The witness
+  stays `unreported` for a foreign key and where no stated row breaks the law as the host judges it. `bcedf884` deletes
+  the locator, `LocateDisagreement` and the tests' wiring; the importer passes grizzle's witness through
+  `refusalOfLaws` as it is, and `ImportRefused` still carries its kind for the command line. The oracle's verdict
+  helpers moved to `src/test/oracle-verdict.ts`.
 - **A nested family's rows keep the nesting's order** ("Families": an ordered member's "order is the nesting's"), so the regex-cache ordering of a statement's rows by
   pattern input reaches flat relations only (Q5.15). See the ideas below.
 - **`db.apply` compiles its ChangeSet for the call** ("Reading": a program outside the workloads is compiled "for the
