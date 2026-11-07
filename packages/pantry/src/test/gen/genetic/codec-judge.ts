@@ -505,7 +505,9 @@ const bytesDifference = (left: Uint8Array, right: Uint8Array): Option.Option<Tre
   const construct = constructAt(a.slice(0, at));
   // A namespace declaration one side writes and the other does not is its own class.
   const declaration =
-    construct === "tag" && [a, b].some((text) => /^\s?xmlns/u.test(text.slice(at)));
+    construct === "tag" &&
+    ([a, b].some((text) => /^\s?xmlns/u.test(text.slice(at))) ||
+      /(?:^|\s)xmlns\S*$/u.test(a.slice(0, at)));
 
   return Option.some({
     detail: `${window(a)} against ${window(b)}`,
@@ -939,7 +941,7 @@ const wellFormedness = Effect.fnUntraced(function* wellFormedness(
         ? `O1 crust ${crustVerdict}, libxml2 accepts`
         : `O1 crust accepts, libxml2 refuses: ${libxml2Class(linted.stderr, linted.code)}`,
     onSome: () =>
-      `O1 encoding declared against the bytes: crust ${Result.isSuccess(read) ? "accepts" : "refuses"}, libxml2 ${libxml2Accepts ? "accepts" : "refuses"}`,
+      `O1 crust ${Result.isSuccess(read) ? "accepts" : "refuses"}, libxml2 ${libxml2Accepts ? "accepts" : "refuses"}`,
   });
   const detail = `${Option.getOrElse(
     mismatch.pipe(Option.map((held) => `${held}: `)),
@@ -955,16 +957,11 @@ const wellFormedness = Effect.fnUntraced(function* wellFormedness(
 /**
  * O2: crust's tree written in its own label, read again, and its bytes decoded independently.
  *
- * @param bytes - The document.
  * @param tree - The tree crust read.
  * @returns What O2 found.
  */
-const crustCycle = Effect.fnUntraced(function* crustCycle(bytes: Uint8Array, tree: XmlDocument) {
-  // On a document whose declaration names another encoding than its bytes', crust's cycle is
-  // judged by its own class, the defect of reading it at all.
-  const prefix = Option.isSome(declaredAgainstBytes(bytes))
-    ? "O2 encoding declared against the bytes:"
-    : "O2";
+const crustCycle = Effect.fnUntraced(function* crustCycle(tree: XmlDocument) {
+  const prefix = "O2";
   const written = yield* Effect.result(encode(tree, tree.charset));
   const relabelled: XmlDocument = Result.isSuccess(written)
     ? tree
@@ -1262,6 +1259,12 @@ const decodeDifferential = Effect.fnUntraced(function* decodeDifferential(
 type TreeClass = "defaulted name in no namespace" | "namespace name holds a reference";
 
 /**
+ * A class of input whose every disagreement has one cause: a {@link TreeClass}, or a document
+ * whose declaration names another encoding than its bytes are in.
+ */
+export type InputClass = TreeClass | "encoding declared against the bytes";
+
+/**
  * Find the class of input a tree crust read falls in, if any.
  *
  * @param tree - The tree.
@@ -1283,6 +1286,37 @@ const treeClassOf = (tree: XmlDocument): TreeClass | undefined => {
 };
 
 /**
+ * Find the class of input a document falls in: a declaration naming another encoding than its
+ * bytes' first, as XML 1.0 section 4.3.3 makes it a fatal error, so whatever crust makes of it is
+ * that defect's; else the class of the tree crust read.
+ *
+ * @param bytes - The document.
+ * @param read - What crust read from it.
+ * @returns The class, undefined for none.
+ */
+const inputClassOf = (
+  bytes: Uint8Array,
+  read: Result.Result<XmlDocument, ReaderRefusal | WellFormednessError>,
+): InputClass | undefined => {
+  if (Option.isSome(declaredAgainstBytes(bytes))) {
+    return "encoding declared against the bytes";
+  }
+
+  return Result.isSuccess(read) ? treeClassOf(read.success) : undefined;
+};
+
+/**
+ * Whether a disagreement's signature already names its input's class.
+ *
+ * @param held - The disagreement.
+ * @returns Whether it does.
+ */
+const isClassed = (held: CodecDisagreement): boolean =>
+  /^O\d (?:defaulted name in no namespace|namespace name holds a reference|encoding declared against the bytes): /u.test(
+    held.signature,
+  );
+
+/**
  * Key a disagreement by its input's class, where the tree falls in one: the class follows the
  * oracle's name in its signature.
  *
@@ -1290,7 +1324,10 @@ const treeClassOf = (tree: XmlDocument): TreeClass | undefined => {
  * @param inputClass - The input's class, undefined for none.
  * @returns The disagreement.
  */
-const classed = (held: CodecDisagreement, inputClass: TreeClass | undefined): CodecDisagreement =>
+export const classed = (
+  held: CodecDisagreement,
+  inputClass: InputClass | undefined,
+): CodecDisagreement =>
   inputClass === undefined
     ? held
     : {
@@ -1318,14 +1355,10 @@ export const judgeBytes = Effect.fnUntraced(function* judgeBytes(
   const { found: formed, libxml2Accepts } = yield* wellFormedness(bytes, file, read);
   const decoded = yield* decodeDifferential(bytes, read);
   const parts: Found[] = [formed, decoded];
-  // On a document whose declaration names another encoding than its bytes', the codec's round
-  // trip is judged by its own class, the defect of reading it at all.
-  const codecPrefix = Option.isSome(declaredAgainstBytes(bytes))
-    ? "O4 encoding declared against the bytes:"
-    : "O4";
+  const codecPrefix = "O4";
   if (Result.isSuccess(read)) {
     parts.push(
-      yield* crustCycle(bytes, read.success),
+      yield* crustCycle(read.success),
       yield* canonicalDifferential(read.success, file, libxml2Accepts),
     );
     for (const version of schemaVersions) {
@@ -1333,7 +1366,9 @@ export const judgeBytes = Effect.fnUntraced(function* judgeBytes(
     }
   }
 
-  const inputClass = Result.isSuccess(read) ? treeClassOf(read.success) : undefined;
+  // A document whose declaration names another encoding than its bytes' is that class first: XML
+  // 1.0 section 4.3.3 makes it a fatal error, so whatever crust makes of it is that defect's.
+  const inputClass = inputClassOf(bytes, read);
 
   return {
     disagreements: parts
@@ -1499,6 +1534,26 @@ const referenceDifferential = Effect.fnUntraced(function* referenceDifferential(
 });
 
 /**
+ * Whether a genome's internal subset declares a default for an attribute named with a prefix or
+ * as `xmlns`, which crust adds in no namespace (GEN-B/codec's N1).
+ *
+ * @param genome - The genome.
+ * @returns Whether it does.
+ */
+const namespacedDefault = (genome: CodecGenome): boolean =>
+  genome.doctype
+    .pipe(
+      Option.flatMap(({ subset }) => subset),
+      Option.getOrElse((): readonly Declaration[] => []),
+    )
+    .some(
+      (declaration) =>
+        declaration._tag === "attlist" &&
+        declaration.default._tag === "value" &&
+        (declaration.attribute.includes(":") || declaration.attribute === "xmlns"),
+    );
+
+/**
  * Whether a genome's internal subset references a parameter entity that no declaration before the
  * reference declares, which a non-validating processor does not read (XML 1.0 section 5.1).
  *
@@ -1553,19 +1608,25 @@ const judgeOne = Effect.fnUntraced(function* judgeOne(
   return {
     disagreements: [
       ...judged.disagreements,
-      ...references.disagreements.map((held) =>
-        classed(held, Result.isSuccess(read) ? treeClassOf(read.success) : undefined),
+      ...references.disagreements.map((held) => classed(held, inputClassOf(bytes, read))),
+    ]
+      .map((held) =>
+        // A default named with a prefix or as xmlns, which crust adds in no namespace, is that
+        // class even where crust refused the document over it and left no tree to see it in.
+        namespacedDefault(genome) && Result.isFailure(read) && !isClassed(held)
+          ? classed(held, "defaulted name in no namespace")
+          : held,
+      )
+      .map((held) =>
+        unread &&
+        held.signature.startsWith("O1 crust accepts, libxml2 refuses") &&
+        held.signature !== "O1 crust accepts, libxml2 refuses: PEReference: %_; not found"
+          ? {
+              ...held,
+              signature: "O1 crust accepts after an unread parameter entity, libxml2 refuses",
+            }
+          : held,
       ),
-    ].map((held) =>
-      unread &&
-      held.signature.startsWith("O1 crust accepts, libxml2 refuses") &&
-      held.signature !== "O1 crust accepts, libxml2 refuses: PEReference: %_; not found"
-        ? {
-            ...held,
-            signature: "O1 crust accepts after an unread parameter entity, libxml2 refuses",
-          }
-        : held,
-    ),
     features: new Set([...genomeFeatures(genome), ...judged.features, ...references.features]),
   } satisfies Judgment<string, CodecDisagreement>;
 });
