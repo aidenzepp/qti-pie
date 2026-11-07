@@ -1730,6 +1730,24 @@ PostgreSQL's DETAIL, in its lane OPEN as "witness a CHECK refusal on the host". 
 - **Status:** under triage, not yet through the six-step gate. Lane AR is computing whether the immediate keys alone
   make a cycle, and grizzle-c5 has the text. It blocks repin F.
 
+### A nested write's dedupe signature concatenates every member's full content text, so a lawful write past V8's string limit dies in the host (grizzle defect, confirmed; lane N2)
+
+- **Checked at:** `1bf3dbb` and grizzle's newest `main`, `e9227af`, with identical results.
+- **Cause:**
+  - `nestedRows`' signature is a `textsKey` of every reached row's identity (`write/family/nesting.ts:326-332`);
+  - `textsKey` concatenates `${length}:${text}` and throws `RangeError` at line 53 once the string passes V8's
+    `MAX_STRING_LENGTH`, 536,870,888 (`write/family/draw.ts:50-56`);
+  - the call path is `normalize.ts:498`, then `bind.ts:182`, then `adapter/apply/run.ts:239`, all before any SQL.
+- **Reproduction:** `~/.cache/gr8des/integration/grizzle-repros/texts-key/` (`run-1bf3dbb.out`, `run-e9227af.out`):
+  - **case:** 7 members of 80,000,000 characters each, 560,000,000 together: `failure: RangeError: Invalid string
+    length`, `at textsKey (@bjornpagen/grizzle-engine/dist/write/family/draw.js:53:30)`, from `nestedRows`
+    (`nesting.js:330:21`), `normalizeChangeSet` (`normalize.js:498:20`) and `bindWrite` (`bind.js:182:24`);
+  - **control:** 6 members of 80,000,000 characters, 480,000,000 together: `outcome: accepted`.
+- **Effect in qti-pie:** `src/import/package.large.db.test.ts`, 13 bulk entries of 64 MiB each, dies in the host.
+- **Status:** relayed to grizzle-c5 under the operator's standing order: a root fix (a digest or a structural
+  identity), a guard search past the limit, a cost gate, a planted concatenation, and this case kept. Nothing is filed,
+  and qti-pie carries no workaround.
+
 ## A role lacked EXECUTE on what its CHECKs cast to (grizzle defect, fixed in `f66c05b`)
 
 - **Found by:** seat N1's database tier on server A at `64f0427` (`docs/rfc/swarm-ledger.md`, 14:05 on 2026-11-06).
