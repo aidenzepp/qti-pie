@@ -26,25 +26,20 @@
  */
 import { Bits, ChangeSet } from "@bjornpagen/grizzle";
 import type { Addition, AnyRelation, Uuid } from "@bjornpagen/grizzle";
-import { Array as Arr, Match, Option, Order } from "effect";
-import { placedStep, placementOf } from "#pantry/grammar/content.ts";
-import type { Placement } from "#pantry/grammar/content.ts";
+import { Array as Arr, Option, Order } from "effect";
 import {
   attributeRows,
   AttributeSlot,
-  Enters,
   Flag,
-  GoverningOf,
-  grammar,
-  interactionKinds,
   KindNamespace,
   openElementClasses,
   Position,
-  TextDomain,
   ValueIdentity,
 } from "#pantry/grammar/install.ts";
 import { openClasses } from "#pantry/grammar/kinds.ts";
 import { contextAt, contextsOf, ownContext } from "#pantry/import/context.ts";
+import { foldOf, governorOf } from "#pantry/import/fold.ts";
+import type { Folded } from "#pantry/import/fold.ts";
 import type { DocumentContext, ListedTarget } from "#pantry/import/context.ts";
 import type { PackageRecord } from "#pantry/import/record.ts";
 import type { OverlayRows } from "#pantry/import/overlays/index.ts";
@@ -68,7 +63,6 @@ import type {
   OpenAttributeName,
 } from "#pantry/qti/attributes.ts";
 import type { Document, Namespace } from "#pantry/qti/chardata.ts";
-import { copiedTextKinds, copiedUnder, universalDomains } from "#pantry/qti/node.ts";
 import type { Node } from "#pantry/qti/node.ts";
 import type { Author } from "#pantry/qti/roles.ts";
 import { Qti } from "#pantry/qti/schema.ts";
@@ -326,11 +320,6 @@ export type PackageInputs = DocumentLayerRows &
   };
 
 /**
- * A `NodeKind` handle.
- */
-type KindHandle = Addition<typeof Node>["kind"];
-
-/**
  * A `Position` handle, a node's content-automaton state.
  */
 type PositionHandle = Addition<typeof Node>["state"];
@@ -342,23 +331,6 @@ type PositionHandle = Addition<typeof Node>["state"];
  * @returns The text.
  */
 const keyOf = (...values: readonly string[]): string => values.join(" ");
-
-/**
- * The installed `GoverningOf`, by `version kind governs`.
- */
-const governorAt: ReadonlyMap<string, string> = new Map(
-  GoverningOf.rows.map(({ governor, governs, kind, version }) => [
-    keyOf(version, kind, governs),
-    governor,
-  ]),
-);
-
-/**
- * The installed `TextDomain`, by `version governor`.
- */
-const textDomainAt: ReadonlyMap<string, string> = new Map(
-  TextDomain.rows.map(({ domain, governor, version }) => [keyOf(version, governor), domain]),
-);
 
 /**
  * The attribute grammar `AttributeGrammar` and `AttributeSlotOf` install, by `version governor
@@ -383,20 +355,6 @@ const namespaceAt: ReadonlyMap<string, string> = new Map(
 );
 
 /**
- * The flags each kind enters for its descendants, the installed `Enters`.
- */
-const entersAt: ReadonlyMap<string, readonly (typeof Flag.handles)[number][]> = new Map(
-  [...Map.groupBy(Enters.rows, ({ kind }) => kind)].map(
-    ([kind, rows]) => [kind, rows.map(({ flag }) => flag)] as const,
-  ),
-);
-
-/**
- * The interaction kinds, whose children take them as their nearest interaction (N8).
- */
-const interactions: ReadonlySet<string> = new Set(interactionKinds);
-
-/**
  * The foreign element kinds, whose namespace their `OpenElementName` row holds.
  */
 const foreignKinds: ReadonlySet<string> = new Set(openElementClasses);
@@ -405,16 +363,6 @@ const foreignKinds: ReadonlySet<string> = new Set(openElementClasses);
  * The open attribute classes, each of whose attributes has its exact name nested under it (AL4).
  */
 const openNames: ReadonlySet<string> = new Set(openClasses);
-
-/**
- * The domains whose text TextDomain never judges (`universalDomains` of `#pantry/qti/node.ts`).
- */
-const universal: ReadonlySet<string> = new Set(universalDomains);
-
-/**
- * The kinds whose text an overlay copies though no domain judges it (`copiedTextKinds`).
- */
-const copied: ReadonlySet<string> = new Set(copiedTextKinds);
 
 /**
  * The `Position` handles, by their code's number.
@@ -440,70 +388,6 @@ const positionHandle = (state: number): PositionHandle => {
   }
 
   return handle;
-};
-
-/**
- * The state a member claims by its placement: an `at` member's one position, a `shared` member's
- * first, a `carries` member's predecessor's. It is the state written where no position follows, so
- * that `N5_Follow` refuses the member by name; a `carries` member always steps to it.
- *
- * @param placement - The member's placement.
- * @param was - Its predecessor's state, 0 for the first member.
- * @returns The state.
- */
-const claimedState = (placement: Placement, was: number): number =>
-  Match.valueTags(placement, {
-    at: ({ position }) => position,
-    carries: () => was,
-    shared: ({ positions }) => positions[0],
-  });
-
-/**
- * Compute a member's content-automaton state (C5), the value N5 holds it to.
- *
- * `placedStep` gives the lawful state where there is one. Where there is none, the state is still
- * written, and a law refuses the node by name: an unadmitted kind keeps its predecessor's state,
- * which `N5_admitted` refuses; a kind whose position does not follow keeps the state its placement
- * claims ({@link claimedState}), which `N5_Follow` refuses.
- *
- * @param key - The version, the parent's kind and the member's.
- * @param key.child - The member's kind.
- * @param key.parent - The parent's kind.
- * @param key.version - The version.
- * @param was - Its predecessor's state, 0 for the first member.
- * @returns The state.
- */
-const stateOf = (
-  key: {
-    readonly child: string;
-    readonly parent: string;
-    readonly version: Composed["version"];
-  },
-  was: number,
-): number =>
-  Option.match(placementOf(grammar, key), {
-    onNone: () => was,
-    onSome: (placement) =>
-      Option.getOrElse(placedStep(grammar.content, key, placement, was), () =>
-        claimedState(placement, was),
-      ),
-  });
-
-/**
- * Decide whether an element's text is one TextDomain judges: its domain under its governor is
- * none of the universal domains (`checkedText` of `#pantry/qti/node.ts`, on the host).
- *
- * @param version - The element's version.
- * @param kind - Its kind.
- * @param governs - Its governing type.
- * @returns Whether its text is checked; false where `GoverningOf` or `TextDomain` holds no row,
- *   which PostgreSQL reads as NULL and so passes.
- */
-const checksText = (version: string, kind: string, governs: string): boolean => {
-  const governor = governorAt.get(keyOf(version, kind, governs));
-  const domain = governor === undefined ? undefined : textDomainAt.get(keyOf(version, governor));
-
-  return domain !== undefined && !universal.has(domain);
 };
 
 /**
@@ -577,29 +461,6 @@ export const idrefPiecesOf = (lexical: string): readonly IdrefInsert[] => {
 };
 
 /**
- * What the walk keeps of a node it has written, for its children's copies.
- */
-interface Written {
-  readonly ancestry: ReadonlySet<(typeof Flag.handles)[number]>;
-  readonly governs: string;
-  readonly id: NodeId;
-  readonly kind: string;
-  readonly members: NodeMember[];
-  readonly namespace: string;
-  readonly nearest: NodeId;
-  readonly nearestKind: KindHandle;
-  /**
-   * Its parent's kind, `document` for the document node, which its members read as their
-   * grandparent's (`copiedUnder`).
-   */
-  readonly parentKind: string;
-  /**
-   * The state of the member written last, 0 before the first.
-   */
-  was: number;
-}
-
-/**
  * Index one list of rows by the node or attribute it belongs to, keeping the list's order within
  * each group.
  *
@@ -642,11 +503,13 @@ const attributeOf = (
     readonly openNames: ReadonlyMap<string, readonly OpenNameRow[]>;
   },
 ): AttributeInsert => {
-  const governor = governorAt.get(keyOf(element.version, element.kind, element.governs));
-  const admitted =
-    governor === undefined
-      ? undefined
-      : attributeGrammarAt.get(keyOf(element.version, governor, attribute.name));
+  const admitted = Option.getOrUndefined(
+    Option.flatMap(governorOf(element.version, element.kind, element.governs), (governor) =>
+      Option.fromNullishOr(
+        attributeGrammarAt.get(keyOf(element.version, governor, attribute.name)),
+      ),
+    ),
+  );
   const identity = admitted === undefined ? undefined : identityAt.get(admitted.domain);
 
   return {
@@ -668,20 +531,19 @@ const attributeOf = (
 };
 
 /**
- * One member as the walk writes it: the nested row, its state, which its next sibling's `was`
- * reads, and what its own children copy from it.
+ * A member as the walk writes it: its insert, and the list its children are nested in.
  */
 interface WrittenMember {
-  readonly node: NodeMember;
-  readonly state: number;
-  readonly written: Written;
+  readonly children: NodeMember[];
+  readonly member: NodeMember;
 }
 
 /**
- * Write one node below the document node, and what its children copy from it.
+ * Write one node below the document node from its row, its fold and its own rows.
  *
  * @param node - Its row, as `flatten` writes it.
- * @param parent - What the walk kept of its parent.
+ * @param folded - Its fold (`foldOf`): its ancestry, its nearest interaction, its state, and
+ *   whether its characters are its `stringPiece`.
  * @param own - Its own rows: its attributes and declarations, its characters, its namespace name
  *   and the document's version, with the attribute families' rows indexed.
  * @param own.attributes - Its attributes, in slot order.
@@ -692,11 +554,11 @@ interface WrittenMember {
  * @param own.namespace - Its namespace name, empty for a node that is no element.
  * @param own.namespaces - Its namespace declarations, in slot order.
  * @param own.version - The document's version.
- * @returns The nested member, its state, and what the walk keeps of it.
+ * @returns The member, with the list its children are nested in.
  */
 const memberOf = (
   node: NodeRow<Composed>,
-  parent: Written,
+  folded: Folded,
   own: {
     readonly attributes: readonly AttributeRow<Composed>[];
     readonly chars: string;
@@ -707,59 +569,34 @@ const memberOf = (
   },
 ): WrittenMember => {
   const { kind, version } = node;
-  const state = stateOf({ child: kind, parent: parent.kind, version }, parent.was);
-  const ancestry = new Set([...parent.ancestry, ...(entersAt.get(kind) ?? [])]);
-  const fromInteraction = interactions.has(parent.kind);
-  // SAFETY: `parent.kind` is the kind the walk wrote on the parent's own row, a `NodeKind` handle.
-  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
-  const parentKind = parent.kind as KindHandle;
-  const nearest = fromInteraction ? parent.id : parent.nearest;
-  const nearestKind = fromInteraction ? parentKind : parent.nearestKind;
-  const inStringValue =
-    checksText(version, parent.kind, parent.governs) ||
-    copied.has(parent.kind) ||
-    copiedUnder(parent.kind, parent.parentKind);
   const ends = endsOf(own.chars);
   const children: NodeMember[] = [];
-  const member: NodeMember = {
-    ancestry: Bits.of(Flag, [...ancestry]),
-    attributes: own.attributes.map((attribute) =>
-      attributeOf(
-        attribute,
-        { governs: node.governs, kind, namespace: own.namespace, version },
-        own.indexed,
-      ),
-    ),
-    chars: own.chars,
-    children,
-    first: ends.first,
-    governs: node.governs,
-    id: node.id,
-    kind,
-    last: ends.last,
-    namespaces: own.namespaces.map(({ prefix, uri }) => ({ prefix, uri })),
-    nearest,
-    nearestKind,
-    prefix: node.prefix,
-    state: positionHandle(state),
-    stringPiece: inStringValue ? own.chars : "",
-    version,
-  };
 
   return {
-    node: member,
-    state,
-    written: {
-      ancestry,
+    children,
+    member: {
+      ancestry: Bits.of(Flag, [...folded.ancestry]),
+      attributes: own.attributes.map((attribute) =>
+        attributeOf(
+          attribute,
+          { governs: node.governs, kind, namespace: own.namespace, version },
+          own.indexed,
+        ),
+      ),
+      chars: own.chars,
+      children,
+      first: ends.first,
       governs: node.governs,
       id: node.id,
       kind,
-      members: children,
-      namespace: own.namespace,
-      nearest,
-      nearestKind,
-      parentKind: parent.kind,
-      was: 0,
+      last: ends.last,
+      namespaces: own.namespaces.map(({ prefix, uri }) => ({ prefix, uri })),
+      nearest: folded.nearest,
+      nearestKind: folded.nearestKind,
+      prefix: node.prefix,
+      state: positionHandle(folded.state),
+      stringPiece: folded.copiesText ? own.chars : "",
+      version,
     },
   };
 };
@@ -772,19 +609,15 @@ const memberOf = (
  * No row names `parent`, only the root names `document`, and no row carries a drawn, accumulated
  * or generated field. The host's fields are the ones the laws prove:
  *
- * - `state` by `placedStep` (C5), the document node's 0;
- * - `ancestry`, its parent's with the flags its kind enters (`E1_derived`);
- * - `nearest` and `nearestKind`, its parent where the parent is an interaction, else its parent's
- *   (N8), the document node's its document's context's (spec reading 117), itself where no site
- *   names the document from inside an interaction;
- * - The document node's `ancestry`, its context's, empty where no site names the document;
+ * - `state`, `ancestry`, `nearest` and `nearestKind`, and whether `stringPiece` holds `chars`, from
+ *   the document's fold (`foldOf` of `#pantry/import/fold.ts`, under the document's context: C5,
+ *   E1, N8 and spec reading 117); the document node's are its context's, its state 0;
  * - `chars`, a text or whitespace node's characters and an entity reference's `&name;`, empty
- *   elsewhere, `first` and `last`, the first and last code points of `chars` (`endsOf`), and
- *   `stringPiece`, its `chars` where its parent's text is checked or copied (`inStringValue` of
- *   `#pantry/qti/node.ts`), empty elsewhere;
+ *   elsewhere, `first` and `last`, the first and last code points of `chars` (`endsOf`);
  * - `governs` and `prefix`, an element's own, `none` and empty for any other node.
  *
- * The walk keeps its own stack, so a tree of any depth is written without recursion.
+ * The walk reads `flatten`'s rows in document order, each node nested in its parent's list, so a
+ * tree of any depth is written without recursion.
  *
  * @param doc - The document's tree, as shred gives it.
  * @param ids - The ids its rows are written under.
@@ -812,7 +645,7 @@ export const rootInsertOf = (
   );
   const self = rows.document.node;
   const context = ids.context ?? ownContext(self);
-  const written = new Map<NodeId, Written>();
+  const folds = foldOf(rows.nodes, context);
   const root: NodeRoot = {
     ancestry: Bits.of(Flag, [...context.ancestry]),
     attributes: [],
@@ -832,30 +665,22 @@ export const rootInsertOf = (
     stringPiece: "",
     version,
   };
-  written.set(self, {
-    ancestry: context.ancestry,
-    governs: "none",
-    id: self,
-    kind: "document",
+  const children = new Map<NodeId, NodeMember[]>([
     // SAFETY: `root.children` is the array this map's entry fills, built here as a fresh empty array; its readonly type is the nested write's, and only this walk appends to it.
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- The invariant is the SAFETY note above.
-    members: root.children as NodeMember[],
-    namespace: "",
-    nearest: context.nearest,
-    nearestKind: context.nearestKind,
-    parentKind: "document",
-    was: 0,
-  });
+    [self, root.children as NodeMember[]],
+  ]);
 
   for (const node of rows.nodes.slice(1)) {
-    const parent = written.get(node.parent);
-    if (parent === undefined) {
+    const siblings = children.get(node.parent);
+    const folded = folds.get(node.id);
+    if (siblings === undefined || folded === undefined) {
       throw new Error(
         `flatten wrote node ${node.id} before its parent ${node.parent}, and it writes nodes in document order. Correct flatten.`,
       );
     }
 
-    const member = memberOf(node, parent, {
+    const written = memberOf(node, folded, {
       attributes: attributes.get(node.id) ?? [],
       chars: chars.get(node.id) ?? "",
       indexed,
@@ -865,9 +690,8 @@ export const rootInsertOf = (
       namespaces: namespaces.get(node.id) ?? [],
       version,
     });
-    parent.members.push(member.node);
-    parent.was = member.state;
-    written.set(node.id, member.written);
+    siblings.push(written.member);
+    children.set(node.id, written.children);
   }
 
   return root;
@@ -893,14 +717,7 @@ export const documentRowsOf = (
   const foreignNamespace = new Map(
     rows.openElementNames.map(({ namespace, node }) => [node, namespace] as const),
   );
-  const nearest = new Map<NodeId, NodeId>([[self, context.nearest]]);
-  for (const node of rows.nodes.slice(1)) {
-    const parentKind = byId.get(node.parent)?.kind ?? "document";
-    nearest.set(
-      node.id,
-      interactions.has(parentKind) ? node.parent : (nearest.get(node.parent) ?? node.parent),
-    );
-  }
+  const folds = foldOf(rows.nodes, context);
 
   return {
     Comment: new Map(rows.comments.map(({ node, value }) => [node, { node, value }] as const)),
@@ -933,7 +750,8 @@ export const documentRowsOf = (
       rows.openElementNames.flatMap(({ local, namespace, node }) => {
         const row = byId.get(node);
         const parent = row === undefined ? undefined : byId.get(row.parent);
-        if (row === undefined || parent === undefined) {
+        const folded = folds.get(node);
+        if (row === undefined || parent === undefined || folded === undefined) {
           return [];
         }
 
@@ -946,7 +764,7 @@ export const documentRowsOf = (
               kind: row.kind,
               local,
               namespace,
-              nearest: nearest.get(node) ?? self,
+              nearest: folded.nearest,
               node,
               parent: parent.id,
               parentKind: parent.kind,
