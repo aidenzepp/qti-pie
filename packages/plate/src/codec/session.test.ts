@@ -29,9 +29,9 @@ type Equals<A, B> =
 const sessionPinned: Equals<typeof TestSessionSchema.Type, TestSession> = true;
 
 /**
- * The stored form carries version 1; `tsc` refuses this line when it carries another.
+ * The stored form carries version 2; `tsc` refuses this line when it carries another.
  */
-const versionPinned: Equals<StoredTestSession["version"], 1> = true;
+const versionPinned: Equals<StoredTestSession["version"], 2> = true;
 
 /**
  * The test the sessions below belong to, as `decodeSession` checks them against it.
@@ -139,7 +139,7 @@ const fieldsOf = (failure: InvalidSession | SessionMismatch): readonly unknown[]
     : [failure._tag, failure.field, failure.found, failure.expected];
 
 describe("the plain type", () => {
-  it("is the Schema's type, and the stored form carries version 1", () => {
+  it("is the Schema's type, and the stored form carries version 2", () => {
     assert.isTrue(sessionPinned && versionPinned);
   });
 });
@@ -152,7 +152,7 @@ describe("encodeSession and decodeSession", () => {
         const stored = yield* Effect.fromResult(encodeSession(seeded));
         const [first, second] = stored.items;
 
-        assert.strictEqual(stored.version, 1);
+        assert.strictEqual(stored.version, 2);
         assert.strictEqual(stored.seed, 7);
         assert.strictEqual(first?.saved?.["COUNT"]?.values[0]?.value, "9007199254740993");
         assert.isTrue(first !== undefined && "firstOutcomes" in first);
@@ -182,13 +182,13 @@ describe("encodeSession and decodeSession", () => {
 });
 
 describe("decodeSession", () => {
-  it.effect("[T-14] refuses a stored session of version 2: InvalidSession naming 2", () =>
-    Effect.gen(function* refusesVersionTwo() {
+  it.effect("[T-14] [I-5] refuses a stored session of version 1: InvalidSession naming 1", () =>
+    Effect.gen(function* refusesVersionOne() {
       const stored = yield* Effect.fromResult(encodeSession(seeded));
 
       assert.deepStrictEqual(
-        Option.map(failureOf({ ...stored, version: 2 }), fieldsOf),
-        Option.some(["InvalidSession", "decode", Option.some(2)]),
+        Option.map(failureOf({ ...stored, version: 1 }), fieldsOf),
+        Option.some(["InvalidSession", "decode", Option.some(1)]),
       );
     }),
   );
@@ -212,7 +212,7 @@ describe("decodeSession", () => {
 
       assert.deepStrictEqual(
         Option.map(failureOf({ ...stored, items: [first, ...unversioned] }), fieldsOf),
-        Option.some(["InvalidSession", "decode", Option.some(1)]),
+        Option.some(["InvalidSession", "decode", Option.some(2)]),
       );
     }),
   );
@@ -230,7 +230,7 @@ describe("decodeSession", () => {
         ]) {
           assert.deepStrictEqual(
             Option.map(failureOf(malformed), fieldsOf),
-            Option.some(["InvalidSession", "decode", Option.some(1)]),
+            Option.some(["InvalidSession", "decode", Option.some(2)]),
             JSON.stringify(malformed),
           );
         }

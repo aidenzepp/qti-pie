@@ -47,6 +47,8 @@ describe("fresh", () => {
   it("[I-1] [I-2] starts responses at NULL and outcomes at their defaults, else 0, else NULL", () => {
     assert.deepStrictEqual(fresh(bg007Item, "i1"), {
       attempt: "none",
+      correct: {},
+      defaults: {},
       document: "items/BG007.xml",
       instance: "i1",
       item: "beginnersguide007",
@@ -61,7 +63,18 @@ describe("fresh", () => {
         completionStatus: identifierValue("not_attempted"),
       },
       responses: { RESPONSE: { baseType: "identifier", cardinality: "single", values: [] } },
+      seed: "",
+      templates: {},
     });
+  });
+
+  it("[I-5] starts with the seed empty and no template value, correct response or default set", () => {
+    const record = fresh(bg007Item, "i1");
+
+    assert.deepStrictEqual(
+      [record.seed, record.templates, record.correct, record.defaults],
+      ["", {}, {}, {}],
+    );
   });
 
   it("[I-2] gives the same outcomes as outcomeDefaults", () => {

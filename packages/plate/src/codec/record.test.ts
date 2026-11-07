@@ -4,6 +4,7 @@ import { decodeRecord, encodeRecord } from "#plate/codec/record.ts";
 import type { InvalidRecord, ItemRecordSchema } from "#plate/codec/record.ts";
 import { fresh } from "#plate/model/record.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
+import { nullOf } from "#plate/model/values.ts";
 import { bg007Item, float, integer } from "#plate/test/fixtures.ts";
 
 /**
@@ -35,6 +36,29 @@ const throughHost = (record: ItemRecord): Result.Result<ItemRecord, InvalidRecor
 
     return decodeRecord(handedBack);
   });
+
+/**
+ * BG007's fresh record as template processing would leave it, started under seed 7: template
+ * values that are an integer beyond 2^53, a negative-zero float and a NULL, a correct response and
+ * a default it set.
+ */
+const templated: ItemRecord = {
+  ...fresh(bg007Item, "i1"),
+  correct: {
+    RESPONSE: {
+      baseType: "identifier",
+      cardinality: "single",
+      values: [{ baseType: "identifier", value: "A" }],
+    },
+  },
+  defaults: { SCORE: float(2) },
+  seed: "7",
+  templates: {
+    HUGE: integer(2n ** 53n + 1n),
+    MISSING: nullOf("integer", "single"),
+    ZERO: float(-0),
+  },
+};
 
 describe("the plain type", () => {
   it("is the Schema's type", () => {
@@ -122,6 +146,22 @@ describe("decodeRecord", () => {
     }),
   );
 
+  it.effect(
+    "[I-5] round-trips the seed, the template values, the correct responses and the defaults exactly",
+    () =>
+      Effect.gen(function* templatesExact() {
+        const stored = yield* Effect.fromResult(encodeRecord(templated));
+        const handedBack = yield* Effect.fromResult(throughHost(templated));
+
+        assert.strictEqual(stored.seed, "7");
+        assert.strictEqual(stored.templates["HUGE"]?.values[0]?.value, "9007199254740993");
+        assert.strictEqual(stored.templates["ZERO"]?.values[0]?.value, "-0");
+        assert.deepStrictEqual(stored.templates["MISSING"]?.values, []);
+        assert.deepStrictEqual(handedBack, templated);
+        assert.isTrue(Object.is(handedBack.templates["ZERO"]?.values[0]?.value, -0));
+      }),
+  );
+
   it.effect('refuses a stored integer written as the number 5 or as "1.5"', () =>
     Effect.gen(function* refusesInexactIntegers() {
       const stored = yield* Effect.fromResult(encodeRecord(fresh(bg007Item, "i1")));
@@ -178,11 +218,11 @@ describe("decodeRecord", () => {
 });
 
 describe("the stored record's version", () => {
-  it.effect("[T-14] is written as version 1 and read back", () =>
+  it.effect("[T-14] [I-5] is written as version 2 and read back", () =>
     Effect.gen(function* writesVersion() {
       const stored = yield* Effect.fromResult(encodeRecord(fresh(bg007Item, "i1")));
 
-      assert.strictEqual(stored.version, 1);
+      assert.strictEqual(stored.version, 2);
       assert.deepStrictEqual(
         yield* Effect.fromResult(throughHost(fresh(bg007Item, "i1"))),
         fresh(bg007Item, "i1"),
@@ -204,14 +244,29 @@ describe("the stored record's version", () => {
       }),
   );
 
-  it.effect("[T-14] must be 1: a stored record of version 2 is InvalidRecord at stage decode", () =>
-    Effect.gen(function* refusesOtherVersion() {
-      const stored = yield* Effect.fromResult(encodeRecord(fresh(bg007Item, "i1")));
-      const error = yield* Effect.flip(Effect.fromResult(decodeRecord({ ...stored, version: 2 })));
+  it.effect(
+    "[T-14] [I-5] must be 2: a stored record of version 1, with or without the fields version 2 adds, is InvalidRecord at stage decode",
+    () =>
+      Effect.gen(function* refusesOtherVersion() {
+        const stored = yield* Effect.fromResult(encodeRecord(templated));
+        const {
+          correct: _correct,
+          defaults: _defaults,
+          seed: _seed,
+          templates: _templates,
+          ...earlier
+        } = stored;
 
-      assert.strictEqual(error._tag, "InvalidRecord");
-      assert.strictEqual(error.stage, "decode");
-    }),
+        for (const versionOne of [
+          { ...earlier, version: 1 },
+          { ...stored, version: 1 },
+        ]) {
+          const error = yield* Effect.flip(Effect.fromResult(decodeRecord(versionOne)));
+
+          assert.strictEqual(error._tag, "InvalidRecord");
+          assert.strictEqual(error.stage, "decode");
+        }
+      }),
   );
 });
 
