@@ -1395,6 +1395,52 @@ describe("the foreign namespace classes, every class against every URI", () => {
         }
       }),
   );
+
+  it.effect(
+    "an open attribute breaks the declared data name law exactly when a data-* name is one its element declares: every class and host against every name",
+    () =>
+      // Oracle: the specification as a checker, goal part E: a data- name QTI declares on an
+      // element is that attribute, never a custom one; `p` declares `data-catalog-idref` and
+      // `data-ssml`, `qti-assessment-item` declares neither, and a name no element declares is
+      // custom anywhere. Only a `data-*` name is held to it.
+      // Bound: 2 classes, 3 hosts and 4 names, 24 rows.
+      Effect.gen(function* declaredDataName() {
+        const rows = yield* foldedText(edit(item, `<p id="intro">`, `<p data-x="1" id="intro">`));
+        const target = rows.attributes.find((attribute) => attribute.name === "data-*");
+        const host = rows.nodes.find(({ id }) => id === target?.node);
+        const declaredNames = new Set(["data-catalog-idref", "data-ssml"]);
+
+        assert.isDefined(target, "the item carries a data-* attribute");
+        assert.isDefined(host, "the data-* attribute has a host");
+        for (const name of ["data-*", "no-namespace"] as const) {
+          for (const kind of [
+            host?.kind ?? "div",
+            "qti-assessment-item",
+            "foreign-element",
+          ] as const) {
+            for (const local of ["data-catalog-idref", "data-ssml", "data-x", "data-é"] as const) {
+              const tampered: FoldedRows<Composed> = {
+                ...tamperNodes(
+                  tamperAttributes(rows, (attribute) =>
+                    attribute === target ? { ...attribute, name } : attribute,
+                  ),
+                  (node) => (node === host ? { ...node, kind } : node),
+                ),
+                openNames: rows.openNames.map((open) =>
+                  open.attribute === target?.id ? { ...open, local } : open,
+                ),
+              };
+
+              assert.strictEqual(
+                lawsBroken(tampered).includes("AL4 declared data name"),
+                name === "data-*" && kind === host?.kind && declaredNames.has(local),
+                `${name} ${local} on ${kind}`,
+              );
+            }
+          }
+        }
+      }),
+  );
 });
 
 describe("the tree laws, on the named corruptions of trees.md §7", () => {

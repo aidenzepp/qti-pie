@@ -43,7 +43,11 @@
  *   local)`); and `Foreign_attribute_class` holds each open name's stored namespace to its class
  *   against its element's namespace (XML Schema 1.0 Part 1 §3.10.4); and `AL4_data_name` holds a
  *   `data-*` name to reading 13's language (`dataName` of `#pantry/vocab/open.ts`, matched by its
- *   source) and a no-namespace name of an element that is not foreign to not begin `data-`.
+ *   source) and a no-namespace name of an element that is not foreign to not begin `data-`; and
+ *   `AL4_declared_data_name` keeps a `data-*` name from being a custom one where the element's
+ *   governor admits it as a declared attribute (goal part E): a declared name is its closed
+ *   attribute, never an open name beside or instead of it. An element an `xsi:type` governs is
+ *   judged by the governor its kind and `governs` read.
  * - **The prefix** (`Attribute_prefix`, C54): every attribute keeps the prefix its name is written
  *   with, so the export writes it back byte for byte (spec reading 47), and the prefix agrees with
  *   the namespace its name is in: none for a name in no namespace, `xml` for the XML namespace's,
@@ -234,8 +238,9 @@ export const Attribute = relation(
  *   name, which the class is read against. Its prefix is its attribute's (`Attribute.prefix`);
  * - **the family's group:** `node` and `attribute`, its attribute's key;
  * - **drawn:** `at`, always 0;
- * - **accumulated** along the owner axis: `class`, its attribute's name (the open class), and `kind`,
- *   its element's kind.
+ * - **accumulated** along the owner axis: `class`, its attribute's name (the open class), and its
+ *   element's `kind`, `version` and `governs`, which `AL4_declared_data_name` reads its governor
+ *   by.
  */
 export const OpenAttributeName = relation(
   "OpenAttributeName",
@@ -244,10 +249,12 @@ export const OpenAttributeName = relation(
     attribute: uuid,
     class: accumulated(closedId(AttributeName), "data-*"),
     elementNamespace: namespaceText,
+    governs: accumulated(closedId(TypeName), "none"),
     kind: accumulated(closedId(NodeKind), "document"),
     local: OpenLocal,
     node: uuid,
     uri: namespaceText,
+    version: accumulated(closedId(SchemaVersion), "3.0.0"),
   },
   ["node", "attribute", "at"],
 );
@@ -331,6 +338,14 @@ export const idrefFamily = ordered(on(Idref, "node", "attribute", "at"), fin(Att
 export const entityFamily = ordered(
   on(AttributeEntity, "node", "attribute", "at"),
   fin(Attribute, "entities"),
+);
+
+/**
+ * The data- names the schemas declare as closed attributes: every `AttributeName` handle that
+ * begins `data-`, but the open class `data-*`.
+ */
+const declaredDataNames = AttributeName.handles.filter(
+  (name) => name.startsWith("data-") && name !== "data-*",
 );
 
 /**
@@ -480,8 +495,8 @@ export const attributeLaws = [
     on(Node, "id", "kind", "version", "document", "governs"),
   ),
   contained(
-    on(OpenAttributeName, "node", "attribute", "class", "kind"),
-    on(Attribute, "node", "id", "name", "kind"),
+    on(OpenAttributeName, "node", "attribute", "class", "kind", "version", "governs"),
+    on(Attribute, "node", "id", "name", "kind", "version", "governs"),
   ),
   contained(on(Idref, "node", "attribute", "document"), on(Attribute, "node", "id", "document")),
   check("AL1_admission", Attribute, admitted),
@@ -560,6 +575,31 @@ export const attributeLaws = [
         o.ne(o.class, "no-namespace"),
         o.in(o.kind, openElementClasses),
         o.eq(Compute.startsWith(o.local, "data-"), false),
+      ),
+    ),
+  ),
+  check("AL4_declared_data_name", OpenAttributeName, (o) =>
+    o.or(
+      o.ne(o.class, "data-*"),
+      o.and(
+        ...declaredDataNames.map((name) =>
+          o.or(
+            o.ne(o.local, name),
+            o.eq(
+              Compute.subset(
+                AttributeNameSelf.row(name),
+                AttributeSlotOf.row(
+                  AttributeModelOf.at(
+                    "model",
+                    o.version,
+                    GoverningOf.at("governor", o.version, o.kind, o.governs),
+                  ),
+                ),
+              ),
+              false,
+            ),
+          ),
+        ),
       ),
     ),
   ),
