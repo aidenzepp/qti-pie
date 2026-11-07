@@ -904,7 +904,7 @@ describe("submitItem", () => {
   );
 
   it.effect(
-    "[I-5] under validate-responses true refuses a choice the item's record hides (responses-invalid), and a choice it shows passes the session's own check",
+    "[I-5] under validate-responses true refuses a choice the item's record hides (responses-invalid), and accepts and scores a choice it shows",
     () =>
       Effect.gen(function* shownChoice() {
         const delivery = yield* builtDelivery(
@@ -943,16 +943,60 @@ describe("submitItem", () => {
           hidden.messages.map((message) => message.response),
           ["RESPONSE"],
         );
-        // `score`'s own tier (a) check judges a templated choice under the record from p8-07d on;
-        // the session's check, which this slice pins, refuses only what the page hid.
-        assert.isFalse(
-          Option.exists(
-            Result.getFailure(post("B", 6)),
-            (failure) => failure instanceof SubmissionRefused,
-          ),
-          "the session refuses a choice the item's record shows",
-        );
+
+        const shownAnswer = itemAt(accepted(post("B", 6)), 1).record;
+
+        assert.strictEqual(shownAnswer.numAttempts, 1);
+        assert.deepStrictEqual(scoreOf(shownAnswer), scored(0));
         assert.deepStrictEqual(scoreOf(itemAt(accepted(post("A", 7)), 1).record), scored(1));
+      }),
+  );
+
+  it.effect(
+    "[I-5] under allow-skipping false counts a template block's interaction the item's record shows: an empty submit is skipping-not-allowed, and an answer is accepted",
+    () =>
+      Effect.gen(function* shownBlockSkipped() {
+        const delivery = yield* builtDelivery(
+          "unskippable",
+          [partOf("part", ["unskippable"], { control: 'allow-skipping="false"' })],
+          [
+            [
+              "unskippable",
+              templatedItemXml("unskippable", "X", {
+                body: blockShownByT(
+                  "X",
+                  choiceXml("RESPONSE", ["A", "B", "C"].map(plainChoice).join("")),
+                ),
+              }),
+            ],
+          ],
+        );
+        const configuration = yield* configure({});
+        const begun = started(delivery, configuration);
+
+        assert.deepStrictEqual(itemAt(begun, 1).record.templates["T"], chosen("X"));
+        assert.strictEqual(
+          refusedRule(
+            submitItem(delivery.test, delivery.items, begun, stepOf("submit-item"), configuration, {
+              now: after(5),
+            }),
+          ),
+          "skipping-not-allowed",
+        );
+
+        const answered = accepted(
+          submitItem(
+            delivery.test,
+            delivery.items,
+            begun,
+            stepOf("submit-item", { RESPONSE: chosen("A") }),
+            configuration,
+            { now: after(6) },
+          ),
+        );
+
+        assert.strictEqual(itemAt(answered, 1).record.numAttempts, 1);
+        assert.deepStrictEqual(scoreOf(itemAt(answered, 1).record), scored(1));
       }),
   );
 

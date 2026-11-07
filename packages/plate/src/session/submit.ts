@@ -21,6 +21,7 @@ import type { Configuration } from "#plate/configuration.ts";
 import type { EngineFailure } from "#plate/engine/evaluate.ts";
 import type { Item } from "#plate/model/item.ts";
 import { refIdentifiersIn } from "#plate/model/item-refs.ts";
+import type { RedactRecord } from "#plate/model/record.ts";
 import type { Test, TestPart } from "#plate/model/test.ts";
 import { isNull, match } from "#plate/model/values.ts";
 import { postings, redactItem } from "#plate/payload.ts";
@@ -294,21 +295,31 @@ const valuesOf = (item: SessionItem): Responses =>
  * 7.19.6, `allow-skipping`). A response is at its default when it `match`es the declaration's
  * `qti-default-value`.
  *
- * Only the responses a rendered page can post count: those `postings` lists (ruling R2 of phase
- * 4's repair, 2026-11-06). A response no interaction binds, one bound only to an interaction shown
- * as a notice, or one of a base type no interaction posts never takes another value from the
- * candidate, so counting it would leave an item under `allow-skipping` false that can never be
- * submitted and, in a linear part, never left. An item with no response a page can post is
- * treated as an item with no response variable: never skipped. A value a step carries for a
- * response that is not counted does not answer the item either.
+ * Only the responses a rendered page can post count: those `postings` lists for the item redacted
+ * under its record (ruling R2 of phase 4's repair, 2026-11-06), so the template values the page was
+ * shown with decide which interactions count, as they decide what `checkResponses` judges. A
+ * response no interaction binds, one bound only to an interaction shown as a notice or held by a
+ * template block the record hides, or one of a base type no interaction posts never takes another
+ * value from the candidate, so counting it would leave an item under `allow-skipping` false that
+ * can never be submitted and, in a linear part, never left. An item with no response a page can
+ * post is treated as an item with no response variable: never skipped. A value a step carries for
+ * a response that is not counted does not answer the item either.
  *
  * @param item The item.
+ * @param record The item's record, whose template values its page was shown with.
  * @param instance The item's instance, which names its postings.
  * @param values The responses, by identifier; one left out is NULL.
  * @returns Whether the item is skipped.
  */
-const skipped = (item: Item, instance: string, values: Responses): boolean => {
-  const posted = new Set(postings(redactItem(item), instance).map(({ identifier }) => identifier));
+const skipped = (
+  item: Item,
+  record: RedactRecord,
+  instance: string,
+  values: Responses,
+): boolean => {
+  const posted = new Set(
+    postings(redactItem(item, record), instance).map(({ identifier }) => identifier),
+  );
   const declarations = [...item.responses.values()].filter(({ identifier }) =>
     posted.has(identifier),
   );
@@ -511,7 +522,10 @@ export const submitItem = (
 
     const accepted = yield* deliveredItem(items, saved, item);
     const values = valuesOf(item);
-    if (!view.configuration.allowSkipping && skipped(accepted.item, view.instance, values)) {
+    if (
+      !view.configuration.allowSkipping &&
+      skipped(accepted.item, item.record, view.instance, values)
+    ) {
       return yield* refuse("skipping-not-allowed");
     }
 
