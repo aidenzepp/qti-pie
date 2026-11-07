@@ -11,46 +11,38 @@
  * attribute's is therefore refused by the forward containment alone, and a copy with no attribute
  * at all by the reverse alone.
  *
- * Every case is a direct SQL writer's (grizzle's README, "Direct SQL access"): the author login,
- * `SET ROLE` to the author role, at SERIALIZABLE, every deferrable foreign key deferred. It reads
- * a stored copy of the every-relation package, writes one variant of it, sets exactly one of the
- * two containments' foreign keys `IMMEDIATE`, and rolls back. So the server judges the variant by
- * that one law and no other, as if the other containment were dropped.
+ * Every case is a direct SQL writer's (grizzle's README, "Direct SQL access"), through the one
+ * direct writer (`#pantry/test/direct-sql.ts`): the author login, `SET ROLE` to the author role, at
+ * SERIALIZABLE, every deferrable foreign key deferred. It reads a stored copy of the every-relation
+ * package, removes it unless the variant is an orphan beside it, writes one variant of it, sets
+ * exactly one of the two containments' foreign keys `IMMEDIATE`, and rolls back. So the server
+ * judges the variant by that one law and no other, as if the other containment were dropped. A
+ * copy is a value the program fills itself, so its variant is the stored row by column, every
+ * written column the stored one's but the ones the variant overrides.
  */
-import type { DbConnection } from "@bjornpagen/grizzle";
-import { NodeFileSystem, NodeServices } from "@effect/platform-node";
+import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { exhaust } from "@grizzle/testing/explore";
 import { requiredInSpace } from "@grizzle/testing/features";
 import { element } from "@grizzle/testing/gen";
 import type { Gen } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
-import { Duration, Effect, Layer, Option, Redacted } from "effect";
-import { Client } from "pg";
-import type { DatabaseError, QueryResultRow } from "pg";
+import { Duration, Effect, Layer, Option } from "effect";
 import { describe } from "vitest";
-import { loginConnection } from "#pantry/db/connection.ts";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { importPackage } from "#pantry/import/package.ts";
 import { ValueBase } from "#pantry/qti/expression-types.ts";
+import {
+  constraintDescribed,
+  judgedCase,
+  loginSession,
+  qtiSchema,
+  rowsOf,
+  writtenColumnsOf,
+} from "#pantry/test/direct-sql.ts";
+import type { SqlRow } from "#pantry/test/direct-sql.ts";
 import { everyRelationPackage, scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
-
-/**
- * The author login's PostgreSQL role, `<schema>__<login>`.
- */
-const authorAppRole = "qti__author_app";
-
-/**
- * The author role's PostgreSQL role, which holds SELECT, INSERT and DELETE on every table of `Qti`
- * it writes whole (grizzle's README, "Exactly what a role holds").
- */
-const authorRole = "qti__author";
-
-/**
- * The PostgreSQL schema of `Qti`'s tables.
- */
-const qtiSchema = "qti";
 
 /**
  * A node no stored row holds: an orphan copy's.
@@ -170,11 +162,6 @@ const copies = {
 >;
 
 /**
- * A stored row as node-postgres decodes it, by column.
- */
-type SqlRow = Readonly<Record<string, string | number | boolean>>;
-
-/**
  * The columns a variant of a stored copy writes, keeping every row CHECK of its table.
  *
  * - `ExpressionAttribute`'s wrong lexical form is `integer` under the base type `integer`, which
@@ -213,162 +200,23 @@ const overridesOf = (
 };
 
 /**
- * The password a connection authenticates with, read once.
+ * How a foreign key's comment is recognized, as the `LIKE` pattern `constraintDescribed` matches:
+ * its start, then the part it holds.
  *
- * @param password - The connection's password.
- * @returns The password's text.
- */
-const passwordText = (password: DbConnection["password"]) =>
-  (Redacted.isRedacted(password) ? Effect.succeed(password) : password).pipe(
-    Effect.map(Redacted.value),
-  );
-
-/**
- * A session of the author login on the lease, over verify-full TLS against the cluster's CA,
- * closed with its scope: a direct SQL writer.
- */
-const loginSession = Effect.gen(function* loginSession() {
-  const connection = yield* loginConnection(authorAppRole);
-  const password = yield* passwordText(connection.password);
-  const client = new Client({
-    database: connection.database,
-    host: connection.transport.host,
-    password,
-    port: connection.transport.port,
-    ssl: { ca: [connection.transport.ca].flat(), servername: connection.transport.servername },
-    user: authorAppRole,
-  });
-
-  return yield* Effect.acquireRelease(
-    Effect.tryPromise(() => client.connect()).pipe(Effect.as(client)),
-    () => Effect.promise(() => client.end()),
-  );
-}).pipe(Effect.provide(NodeFileSystem.layer));
-
-/**
- * Run one statement on a session and return its rows.
- *
- * @param client - The session.
- * @param text - The statement.
- * @param values - Its parameters.
- * @returns The rows, each as node-postgres decodes it.
- */
-const rowsOf = <R extends QueryResultRow>(
-  client: Client,
-  text: string,
-  values: readonly unknown[] = [],
-) =>
-  Effect.tryPromise(() => client.query<R>(text, [...values])).pipe(Effect.map(({ rows }) => rows));
-
-/**
- * Whether a failure is a server error of node-postgres's, which carries a SQLSTATE and the
- * constraint it names.
- *
- * @param error - The failure's cause.
- * @returns Whether it is one.
- */
-const isServerError = (error: unknown): error is DatabaseError =>
-  error instanceof Error && "code" in error && "constraint" in error;
-
-/**
- * The columns of a table a writer fills, in order: every live column PostgreSQL does not generate.
- *
- * @param client - The session.
- * @param table - The table.
- * @returns Their names.
- */
-const writtenColumnsOf = (client: Client, table: string) =>
-  rowsOf<{ readonly name: string }>(
-    client,
-    `SELECT a.attname AS name FROM pg_catalog.pg_attribute a
-      WHERE a.attrelid = pg_catalog.to_regclass($1) AND a.attnum > 0 AND NOT a.attisdropped
-        AND a.attgenerated = ''
-      ORDER BY a.attnum`,
-    [`${qtiSchema}.${table}`],
-  ).pipe(Effect.map((rows) => rows.map(({ name }) => name)));
-
-/**
- * The one foreign key of a table whose comment, the law grizzle writes on each constraint, starts
- * and holds as given.
- *
- * @param client - The session.
- * @param table - The referencing table.
  * @param comment - How its comment is recognized.
- * @returns Its name.
+ * @returns The pattern.
  */
-const foreignKeyOf = (client: Client, table: string, comment: Commented) =>
-  rowsOf<{ readonly conname: string }>(
-    client,
-    `SELECT c.conname FROM pg_catalog.pg_constraint c
-      WHERE c.contype = 'f' AND c.conrelid = pg_catalog.to_regclass($1)
-        AND pg_catalog.starts_with(pg_catalog.obj_description(c.oid, 'pg_constraint'), $2)
-        AND pg_catalog.strpos(pg_catalog.obj_description(c.oid, 'pg_constraint'), $3) > 0`,
-    [`${qtiSchema}.${table}`, comment.starts, comment.holds],
-  ).pipe(
-    Effect.map((rows) => {
-      assert.strictEqual(
-        rows.length,
-        1,
-        `${table}: one foreign key commented "${comment.starts}…${comment.holds}"`,
-      );
-
-      return rows[0]?.conname ?? "";
-    }),
-  );
+const patternOf = (comment: Commented): string => `${comment.starts}%${comment.holds}%`;
 
 /**
- * Write one variant of a stored copy as the author role, every deferrable foreign key deferred,
- * set one foreign key immediate, and roll back: the server's verdict by that one law.
+ * A column of a stored copy.
  *
- * @param client - The session.
- * @param of - The case.
  * @param stored - The stored copy.
- * @param columns - The copy's table's written columns.
- * @param constraint - The foreign key the case judges by.
- * @returns The server's error, or none when it accepted the variant.
+ * @param name - The column.
+ * @returns Its value.
  */
-const judged = (
-  client: Client,
-  of: Case,
-  stored: SqlRow,
-  columns: readonly string[],
-  constraint: string,
-) =>
-  Effect.gen(function* judgedByOne() {
-    const { key, table } = copies[of.copy];
-    const overrides = overridesOf(of.copy, of.variant, stored);
-
-    yield* rowsOf(client, "BEGIN ISOLATION LEVEL SERIALIZABLE");
-
-    const outcome = yield* Effect.gen(function* statements() {
-      yield* rowsOf(client, `SET ROLE ${authorRole}`);
-      yield* rowsOf(client, "SET CONSTRAINTS ALL DEFERRED");
-      if (of.variant !== "orphan") {
-        yield* rowsOf(
-          client,
-          `DELETE FROM ${qtiSchema}.${table} WHERE ${key.map((name, at) => `"${name}" = $${String(at + 1)}`).join(" AND ")}`,
-          key.map((name) => stored[name]),
-        );
-      }
-
-      yield* rowsOf(
-        client,
-        `INSERT INTO ${qtiSchema}.${table} (${columns.map((name) => `"${name}"`).join(", ")}) VALUES (${columns
-          .map((_, at) => `$${String(at + 1)}`)
-          .join(", ")})`,
-        columns.map((name) => overrides.get(name) ?? stored[name]),
-      );
-      yield* rowsOf(client, `SET CONSTRAINTS ${qtiSchema}."${constraint}" IMMEDIATE`);
-    }).pipe(
-      Effect.as(Option.none<DatabaseError>()),
-      Effect.catch((error) =>
-        isServerError(error.cause) ? Effect.succeed(Option.some(error.cause)) : Effect.fail(error),
-      ),
-    );
-    yield* rowsOf(client, "ROLLBACK");
-
-    return Option.getOrUndefined(outcome);
-  });
+const columnOf = (stored: SqlRow, name: string) =>
+  stored[name] ?? assert.fail(`the stored copy holds no ${name}`);
 
 describe.skipIf(!hasLease)(
   "qti/copyback.db.test.ts, on the lease",
@@ -409,7 +257,7 @@ describe.skipIf(!hasLease)(
                 },
                 (of, c) =>
                   Effect.gen(function* oneCase() {
-                    const { stored: query, table } = copies[of.copy];
+                    const { key, stored: query, table } = copies[of.copy];
                     const [stored] = yield* rowsOf<SqlRow>(client, query, [id]);
 
                     assert.isDefined(
@@ -417,21 +265,46 @@ describe.skipIf(!hasLease)(
                       `${of.copy}: the every-relation package stores a copy`,
                     );
 
-                    const columns = yield* writtenColumnsOf(client, table);
-                    const constraint = yield* foreignKeyOf(
+                    const overrides = overridesOf(of.copy, of.variant, stored);
+                    const constraint = yield* constraintDescribed(
                       client,
                       of.direction === "forward" ? "attribute" : table,
-                      copies[of.copy][of.direction],
+                      patternOf(copies[of.copy][of.direction]),
                     );
-                    const refused = yield* judged(client, of, stored ?? {}, columns, constraint);
-                    const label = `${JSON.stringify(of)}: ${refused?.code ?? "accepted"} ${refused?.constraint ?? ""} ${refused?.message ?? ""}`;
+                    const { refused } = yield* judgedCase(client, {
+                      immediate: [constraint],
+                      inserts: [
+                        {
+                          row: Object.fromEntries(
+                            (yield* writtenColumnsOf(client, table)).map(({ name }) => [
+                              name,
+                              overrides.get(name) ?? columnOf(stored, name),
+                            ]),
+                          ),
+                          table,
+                        },
+                      ],
+                      removed:
+                        of.variant === "orphan"
+                          ? []
+                          : [
+                              {
+                                key: Object.fromEntries(
+                                  key.map((name) => [name, columnOf(stored, name)]),
+                                ),
+                                table,
+                              },
+                            ],
+                    });
+                    const error = Option.getOrUndefined(refused);
+                    const label = `${JSON.stringify(of)}: ${error?.code ?? "accepted"} ${error?.constraint ?? ""} ${error?.message ?? ""}`;
 
-                    c.note(refused === undefined ? "accepted" : "refused");
+                    c.note(error === undefined ? "accepted" : "refused");
                     if (refusedByLaw(of)) {
-                      assert.strictEqual(refused?.code, "23503", label);
-                      assert.strictEqual(refused?.constraint, constraint, label);
+                      assert.strictEqual(error?.code, "23503", label);
+                      assert.strictEqual(error?.constraint, constraint, label);
                     } else {
-                      assert.isUndefined(refused, label);
+                      assert.isUndefined(error, label);
                     }
                   }),
               ),
