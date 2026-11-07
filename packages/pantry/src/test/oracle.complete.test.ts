@@ -50,6 +50,7 @@ import type { Mutation } from "#pantry/test/oracle-complete/mutation.ts";
 import { overlayMutations } from "#pantry/test/oracle-complete/overlays.ts";
 import { rowMutations } from "#pantry/test/oracle-complete/layer-rows.ts";
 import { rowEdits } from "#pantry/test/oracle-complete/row-edits.ts";
+import { nodeEdits } from "#pantry/test/oracle-complete/row-edits-nodes.ts";
 import { packageMutations } from "#pantry/test/oracle-complete/packages.ts";
 import { testMutations } from "#pantry/test/oracle-complete/tests.ts";
 import { hostlessLaws, statedInParts } from "#pantry/test/oracle-laws.ts";
@@ -82,6 +83,7 @@ const mutations: Readonly<Partial<Record<LawName, Mutation>>> = {
   ...packageMutations,
   ...rowMutations,
   ...rowEdits,
+  ...nodeEdits,
   ...documentMutations,
   ...expressionMutations,
   ...testMutations,
@@ -92,8 +94,6 @@ const mutations: Readonly<Partial<Record<LawName, Mutation>>> = {
  */
 const owed: Readonly<Partial<Record<LawName, string>>> = {
   "AL5 attribute count": "its mutation is not written yet",
-  Document: "its mutation is not written yet",
-  "E1 derived": "its mutation is not written yet",
   "Foreign simple content": "its mutation is not written yet",
   "Fragment context": "its mutation is not written yet",
   "Graphic gap match default hotspot": "its mutation is not written yet",
@@ -101,15 +101,9 @@ const owed: Readonly<Partial<Record<LawName, string>>> = {
   "Manifest id space":
     "every resource identifier and the manifest's are xs:ID values of one document, so a resource named as its manifest breaks DocumentId key, which ranks first, and the database names document-key: the law is shadowed (lane OL's finding)",
   "MathML foreign element": "its mutation is not written yet",
-  "N1 one document node": "its mutation is not written yet",
-  "N2 key": "its mutation is not written yet",
   "N2 mirrors":
     "each of xdm.ts's mirror corruptions (gap, duplicateSlot, countOffByOne) also leaves a family's last slot unread, which N7 last slot (union-count) refuses ahead of reachability; folds.test.ts holds each variant to its law",
-  "N4 kinds": "its mutation is not written yet",
-  "N5 admitted": "its mutation is not written yet",
   "N7 Last": "its mutation is not written yet",
-  "N7 last slot": "its mutation is not written yet",
-  "N8 nearest": "its mutation is not written yet",
   "Namespace name": "its mutation is not written yet",
   "Node key":
     "a second row of one id (xdm.ts secondParent) also moves the slots and intervals the fold laws read, N5 fold and N7 last slot among them, which rank ahead of reachability; folds.test.ts holds the variant to its law",
@@ -123,13 +117,7 @@ const owed: Readonly<Partial<Record<LawName, string>>> = {
   TextDomain: "its mutation is not written yet",
   "XsiType available": "its mutation is not written yet",
   "XsiType derived": "its mutation is not written yet",
-  "comment arm": "its mutation is not written yet",
   "default hotspot last slot": "its mutation is not written yet",
-  "doctype arm": "its mutation is not written yet",
-  "entityRef arm": "its mutation is not written yet",
-  "pi arm": "its mutation is not written yet",
-  "text arm": "its mutation is not written yet",
-  "ws arm": "its mutation is not written yet",
 };
 
 /**
