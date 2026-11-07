@@ -6608,6 +6608,8 @@ const specs: Record<FixtureName, FixtureSpec> = {
     "usage3-float-padded",
     replaceIn("example.xml", "<value>0.87</value>", '<value baseType="float"> 0.87 </value>'),
   ),
+  // `<value baseType="integer">0.87</value>`, outside a record: a `baseType` is no base type
+  // there (reading 105), so the value is untyped text, and the package imports and round-trips.
   "usage3-integer-float": overUsage(
     "usage3-integer-float",
     replaceIn("example.xml", "<value>0.87</value>", '<value baseType="integer">0.87</value>'),

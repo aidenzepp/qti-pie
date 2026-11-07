@@ -706,9 +706,10 @@ const dateRowsOf = (tree: Tree): ReadonlyMap<string, Addition<typeof StatisticDa
   );
 
 /**
- * Build a document's {@link UsageValue} rows: one per usage value that writes a `baseType`, its
- * code the handle its lexical form spells (`none` where it spells none, which `E1_derived`
- * refuses) and its text its string value.
+ * Build a document's {@link UsageValue} rows: one per usage value that forms part of a record, that
+ * is, writes a `fieldIdentifier` and a `baseType` (spec reading 105), its code the handle its
+ * lexical form spells (`none` where it spells none, which `E1_derived` refuses) and its text its
+ * string value. A `baseType` outside a record states no base type, so its value has no row.
  *
  * @param tree - The document's tree.
  * @returns The rows, by their node's id.
@@ -717,7 +718,7 @@ const usageValueRowsOf = (tree: Tree): ReadonlyMap<string, Addition<typeof Usage
   new Map(
     tree.nodes.flatMap((node) => {
       const lexical = node.kind === usageValueKind ? tree.valueOf(node, "baseType") : undefined;
-      if (lexical === undefined) {
+      if (lexical === undefined || tree.valueOf(node, "fieldIdentifier") === undefined) {
         return [];
       }
 
@@ -744,8 +745,8 @@ const usageValueRowsOf = (tree: Tree): ReadonlyMap<string, Addition<typeof Usage
  * learning resource type its {@link LomResourceType} where it holds a value and its
  * {@link LomResourceTypeSource} where it writes a source. An item's or
  * test's root has its {@link AssessmentObject}, a usage statistic its {@link StatisticDate} where
- * it writes a `lastUpdated`, and a usage value its {@link UsageValue} where it writes a
- * `baseType`; an optional attribute's row exists where it is written.
+ * it writes a `lastUpdated`, and a usage value its {@link UsageValue} where it writes a `baseType`
+ * and a `fieldIdentifier`; an optional attribute's row exists where it is written.
  *
  * @param doc - The document's tree, as shred gives it.
  * @param ids - The ids its rows are written under.

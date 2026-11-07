@@ -40,11 +40,12 @@
  * - **`calendar`** (G-parse): every `lastUpdated` of a usage statistic, a `DateDType`, is a day of
  *   the Gregorian calendar, its value the typed `date` PostgreSQL derives from it
  *   ({@link StatisticDate}).
- * - **Usage typed value** (G-match, spec reading 105): a usage statistic's `ud:value` that writes a
- *   `baseType` holds a value of that base type ("A class that can represent a single value of any
- *   baseType", the usage data binding's Value class, §2.6.5), its text read as a `qti-value`'s is,
- *   by `BaseTypePattern`; one that writes none is the XSD's `xs:normalizedString` text
- *   ({@link UsageValue}).
+ * - **Usage typed value** (G-match, spec reading 105): a usage statistic's `ud:value` that forms part
+ *   of a record, that is, writes a `fieldIdentifier`, and writes a `baseType` holds a value of that
+ *   base type ("A class that can represent a single value of any baseType", the usage data
+ *   binding's Value class, §2.6.5), its text read as a `qti-value`'s is, by `BaseTypePattern`; one
+ *   outside a record, or that writes no `baseType`, is the XSD's `xs:normalizedString` text, a
+ *   `baseType` outside a record being no base type to state ({@link UsageValue}).
  *
  * **`lom-title`'s comparisons.** The binding compares a title in `xs:normalizedString`'s value
  * space, where a tab, a line feed and a carriage return each read as a space (XML Schema 1.0 Part 2
@@ -105,12 +106,17 @@ import {
   str,
   uuid,
 } from "@bjornpagen/grizzle";
+import type { RowScalars } from "@bjornpagen/grizzle";
 import {
+  AttributeModelOf,
+  AttributeSlotOf,
   BaseType,
   BaseTypeLexical,
+  GoverningOf,
   NodeKind,
   ResourceType,
   SchemaVersion,
+  SlotSelf,
 } from "#pantry/grammar/install.ts";
 import { Attribute } from "#pantry/qti/attributes.ts";
 import { Document } from "#pantry/qti/chardata.ts";
@@ -500,13 +506,15 @@ export const StatisticDate = relation.generated(
 );
 
 /**
- * A usage statistic's value that names its base type, keyed by its `ud:value` node: its `baseType`
- * as written, `baseTypeLexical`, the `BaseType` code that lexical form spells (C17), and `text`,
- * its string value, `Node.stringValue` folded by `copiedTextKinds` (`#pantry/qti/node.ts`).
+ * A usage statistic's value that forms part of a record and names its base type, keyed by its
+ * `ud:value` node: its `baseType` as written, `baseTypeLexical`, the `BaseType` code that lexical
+ * form spells (C17), and `text`, its string value, `Node.stringValue` folded by `copiedTextKinds`
+ * (`#pantry/qti/node.ts`).
  *
- * A value that writes no `baseType` has no row: the usage data binding has no declaration to type
- * it, so it is its governing type's `xs:normalizedString` text, which every text is (spec reading
- * 105).
+ * A value forms part of a record where it writes a `fieldIdentifier` (usage data binding §2.6.5.1).
+ * A value outside a record, or one that writes no `baseType`, has no row: the binding has no base
+ * type to state for the one and no declaration to type the other, so it is its governing type's
+ * `xs:normalizedString` text, which every text is (spec reading 105).
  */
 export const UsageValue = relation(
   "UsageValue",
@@ -726,6 +734,48 @@ const lastUpdateds = attributesOf("lastUpdated", statisticKinds);
 const usageBaseTypes = attributesOf("baseType", [usageValueKind]);
 
 /**
+ * One {@link Node} row, as a selection or a check reads it.
+ */
+type NodeRow = RowScalars<typeof Node>;
+
+/**
+ * State that an element carries a closed attribute: the name's slot under its governor is in its
+ * `attrs`, the fold of its attributes' slots (AL2), as `html.ts`'s laws read one.
+ *
+ * `ud:value` declares both names under its one governor in both versions, so the read is total.
+ *
+ * @param n - The row.
+ * @param name - The attribute's name.
+ * @returns The predicate.
+ */
+const carries = (n: NodeRow, name: "baseType" | "fieldIdentifier") =>
+  n.eq(
+    Compute.subset(
+      SlotSelf.row(
+        AttributeSlotOf.at(
+          "slot",
+          AttributeModelOf.at(
+            "model",
+            n.version,
+            GoverningOf.at("governor", n.version, n.kind, n.governs),
+          ),
+          name,
+        ),
+      ),
+      n.attrs,
+    ),
+    true,
+  );
+
+/**
+ * The usage statistic's values that form part of a record and name a base type: those that write a
+ * `fieldIdentifier` and a `baseType` (spec reading 105).
+ */
+const usageRecordValues = select(Node, (n) =>
+  n.and(n.eq(n.kind, usageValueKind), carries(n, "baseType"), carries(n, "fieldIdentifier")),
+);
+
+/**
  * Every statement over the metadata overlays, each `check` named by its oracle law:
  *
  * - **the resources:** each `Resource` has its {@link LomResource}, both ways, with its type; its
@@ -764,10 +814,10 @@ const usageBaseTypes = attributesOf("baseType", [usageValueKind]);
  * - **`calendar`:** each statistic's `lastUpdated` is copied into its {@link StatisticDate}, and
  *   every such row has its attribute; its pieces concatenate to the lexical form, and `day`'s type
  *   is the calendar's.
- * - **Usage typed value:** each usage value's `baseType` is copied into its {@link UsageValue}, and
- *   every such row has its attribute; its `text` is its node's string value; its code is the one
- *   its lexical form spells ("E1 derived"); and its text is a lexical form of that base type
- *   ("Usage typed value").
+ * - **Usage typed value:** each usage value that writes a `baseType` and a `fieldIdentifier` has its
+ *   {@link UsageValue}, and every such row is one, with its `baseType` copied; its `text` is its
+ *   node's string value; its code is the one its lexical form spells ("E1 derived"); and its text
+ *   is a lexical form of that base type ("Usage typed value").
  */
 export const metadataLaws = [
   mirrors(on(LomResource, "node", "type"), on(Resource, "node", "type")),
@@ -1014,8 +1064,9 @@ export const metadataLaws = [
   ),
 
   key(on(usageBaseTypes, "node")),
-  contained(on(usageBaseTypes, "node", "lexical"), on(UsageValue, "node", "baseTypeLexical")),
-  contained(on(UsageValue, "node"), on(usageBaseTypes, "node")),
+  contained(on(UsageValue, "node", "baseTypeLexical"), on(usageBaseTypes, "node", "lexical")),
+  contained(on(usageRecordValues, "id"), on(UsageValue, "node")),
+  contained(on(UsageValue, "node"), on(usageRecordValues, "id")),
   contained(on(UsageValue, "node", "text"), on(Node, "id", "stringValue")),
   check("E1_derived", UsageValue, (u) =>
     u.and(
