@@ -122,10 +122,10 @@ export const shredGrammarOf = (grammar: ComposedGrammar): ShredGrammar<Composed>
       grammar.kinds.resolve(namespace, local, parent).pipe(Option.flatMap(elementKindOf)),
     strictlyHeld: (version, parent, kind) =>
       Option.isSome(grammar.content.strictlyHeld.lookup({ child: kind, parent, version })),
-    typeName: (name) => {
+    typeName: (version, name) => {
       const handle = typeHandle(name);
 
-      return grammar.xsi.typeName.has(handle) ? Option.some(handle) : Option.none();
+      return grammar.xsi.definedIn(version, handle) ? Option.some(handle) : Option.none();
     },
   };
 };

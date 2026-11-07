@@ -224,7 +224,8 @@ interface Directory {
 const hasFlag = (flags: number, bit: number): boolean => Math.floor(flags / bit) % 2 === 1;
 
 /**
- * Decode an entry's name: UTF-8 when general-purpose bit 11 is set, otherwise code page 437.
+ * Decode an entry's name: UTF-8 when general-purpose bit 11 is set, otherwise code page 437. The
+ * table holds a character for each of the 256 byte values, so every byte finds its cell.
  *
  * @param bytes - The name's bytes.
  * @param flags - The entry's general-purpose flags.
@@ -233,7 +234,7 @@ const hasFlag = (flags: number, bit: number): boolean => Math.floor(flags / bit)
 const decodeName = (bytes: Uint8Array, flags: number): string =>
   hasFlag(flags, FLAG_UTF8)
     ? new TextDecoder("utf-8").decode(bytes)
-    : Array.from(bytes, (byte) => CP437[byte] ?? "").join("");
+    : Array.from(bytes, (byte) => CP437[byte]).join("");
 
 /**
  * Why a path cannot be a package entry's path, or `undefined` when it can: the one rule a zip's
@@ -603,8 +604,13 @@ const checkBudget = Effect.fn("package.checkBudget")(function* checkBudget(
  * local entry overlap, and so does a record that points into another's data. A data descriptor
  * lies after the range.
  *
+ * The ranges are walked by offset alone. Records of one offset keep the order `files` gives them,
+ * by name, because `toSorted` is stable (ECMA-262 has required `Array.prototype.sort` to be stable
+ * since ES2019, and `toSorted` sorts as it does), so which record a refusal names is fixed without
+ * a tiebreak.
+ *
  * @param view - The whole file.
- * @param files - The non-directory records.
+ * @param files - The non-directory records, sorted by name, no two of one name.
  * @param limit - Where the central directory starts.
  * @returns Each file's span, keyed by name, or a {@link ZipRefusal}.
  */
@@ -622,9 +628,7 @@ const checkSpans = Effect.fn("package.checkSpans")(function* checkSpans(
     spans.set(record.name, yield* dataSpan(view, record, limit));
   }
 
-  const ordered = files.toSorted(
-    (left, right) => left.offset - right.offset || (left.name < right.name ? -1 : 1),
-  );
+  const ordered = files.toSorted((left, right) => left.offset - right.offset);
   let previous: CentralRecord | undefined;
 
   for (const record of ordered) {

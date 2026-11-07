@@ -141,9 +141,13 @@ const renderLeaf = (node: Leaf): string => {
 };
 
 /**
- * The scope above the root element: no namespace declared.
+ * The scope above the root element: the `xml` prefix, which Namespaces in XML 1.0 section 3 binds
+ * to its namespace by definition, and nothing else. So an element's written declaration of `xml`
+ * to that name gives no name its parent's scope lacks, and is never rendered, as Canonical XML 1.0
+ * section 2.3 omits the namespace node "with local name xml, which defines the xml prefix, if its
+ * string value is http://www.w3.org/XML/1998/namespace".
  */
-const outermost: Scope = new Map();
+const outermost: Scope = new Map([["xml", "http://www.w3.org/XML/1998/namespace"]]);
 
 /**
  * Render an element, its namespace axis, its attribute axis and its children, always with a

@@ -952,7 +952,7 @@ describe("shred's governing type", () => {
 
               const handle = typeHandle({ local: parts["local"] ?? "", namespace });
 
-              return grammar.xsi.typeName.has(handle)
+              return grammar.xsi.definedIn("3.0.1", handle)
                 ? Result.succeed(handle)
                 : Result.fail("type-unknown");
             },

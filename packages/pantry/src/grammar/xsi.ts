@@ -143,8 +143,23 @@ export interface XsiTypes {
    */
   readonly declaredType: (version: SchemaVersion, kind: string) => string;
   /**
-   * The `TypeName` roster: {@link noType}, then every named type of the pinned XSDs, built-ins
-   * included, each as {@link typeHandle} spells it, in the order the derivations first name it.
+   * Whether a version's pinned schemas define a type: the names its derivations list, built-ins
+   * included. An `xsi:type` resolves only against its document's version (XML Schema 1.0 Part 1,
+   * §3.3.4, Element Locally Valid (Element), clause 4.2: the QName must resolve "to a type
+   * definition" of the schemas the document is assessed against), so a type of 3.0.1 alone names
+   * none in 3.0.0. Every lookup of a type by name asks this; {@link XsiTypes.typeName} is the code
+   * space, never a lookup.
+   *
+   * @param version - The document's version.
+   * @param handle - The type's handle, as {@link typeHandle} spells it.
+   * @returns Whether the version defines it.
+   */
+  readonly definedIn: (version: SchemaVersion, handle: string) => boolean;
+  /**
+   * The `TypeName` roster, the code space of every governing-type field: {@link noType}, then every
+   * named type of the pinned XSDs of every version, built-ins included, each as {@link typeHandle}
+   * spells it, in the order the derivations first name it. It is no lookup: a name is a type of a
+   * version only where {@link XsiTypes.definedIn} says so.
    */
   readonly typeName: Roster<string>;
   readonly xsiType: XsiType;
@@ -182,12 +197,13 @@ export type XsiTypeError = ClosedRelationError | UnderivedType;
 const sourceIn = (sources: Sources, at: number): Source => sources[at] ?? sources[0];
 
 /**
- * The derivations read for lookup: each (version, type)'s derived names, and the `TypeName`
- * roster's handles, {@link noType} first.
+ * The derivations read for lookup: each (version, type)'s derived names, the `TypeName` roster's
+ * handles, {@link noType} first, and the handles each version's schemas name.
  */
 interface DerivationIndex {
   readonly derivedFrom: ReadonlyMap<string, readonly ExpandedName[]>;
   readonly names: readonly string[];
+  readonly namesIn: ReadonlyMap<SchemaVersion, ReadonlySet<string>>;
 }
 
 /**
@@ -219,6 +235,16 @@ const derivationIndexOf = (derivations: readonly TypeDerivation[]): DerivationIn
       noType,
       ...new Set(derivations.flatMap(({ derived, type }) => [type, ...derived].map(typeHandle))),
     ],
+    namesIn: new Map(
+      [...new Set(derivations.flatMap(({ versions }) => versions))].map((version) => [
+        version,
+        new Set(
+          derivations
+            .filter(({ versions }) => versions.includes(version))
+            .flatMap(({ derived, type }) => [type, ...derived].map(typeHandle)),
+        ),
+      ]),
+    ),
   };
   derivationIndexes.set(derivations, index);
 
@@ -247,7 +273,7 @@ export const xsiTypesOf = (input: {
   readonly versions: Roster<SchemaVersion>;
 }): Result.Result<XsiTypes, XsiTypeError> =>
   Result.gen(function* generateXsiTypes() {
-    const { derivedFrom, names } = derivationIndexOf(input.derivations);
+    const { derivedFrom, names, namesIn } = derivationIndexOf(input.derivations);
     const rows: {
       readonly kind: string;
       readonly source: Source;
@@ -303,6 +329,7 @@ export const xsiTypesOf = (input: {
 
     return {
       declaredType: (version, kind) => declared.get(`${version} ${kind}`) ?? noType,
+      definedIn: (version, handle) => namesIn.get(version)?.has(handle) ?? false,
       typeName,
       // Every row is stated with its model's source, so a row without one is a defect here.
       xsiType: sourced(relation, ({ kind, type, version }) =>

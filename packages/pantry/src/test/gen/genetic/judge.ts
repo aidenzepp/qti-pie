@@ -22,6 +22,7 @@
  */
 import { Cause, Effect, Exit, FileSystem, Option, Result } from "effect";
 import type { Path, PlatformError } from "effect";
+import type { Law } from "@bjornpagen/grizzle";
 import { admissionOf } from "#pantry/grammar/attributes.ts";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
@@ -580,8 +581,11 @@ const unreported = { kind: "unreported" } as const;
 
 /**
  * Judge the refusal the import names for a package whose oracle breaks one law alone: the import's
- * rows break laws on the host, and `refusalOfLaws` names the refusal over them as it names the
- * database's outcome. Its rule must be the lone law's, and its witness the outcome's.
+ * rows break laws on the host, and `refusalOfLaws` names the refusal over them and the lone law
+ * (which the database breaks too, by a statement the host may not evaluate, so it stands as its
+ * check, named by the law) as it names the database's outcome. Its rule must be the lone law's,
+ * and its witness the outcome's: a rule some other broken law ranks before in precedence is a
+ * refusal the oracle does not predict.
  *
  * @param breaches - The oracle's breaches.
  * @param host - The host's verdict over the import's rows.
@@ -595,13 +599,15 @@ const loneRefusal = (
   grammar: ComposedGrammar,
 ): readonly Disagreement[] => {
   const [lone, ...others] = [...new Set(breaches.map(({ law }) => law))];
-  const [first, ...rest] = host.brokenLaws;
-  if (lone === undefined || others.length > 0 || first === undefined) {
+  if (lone === undefined || others.length > 0 || host.brokenLaws.length === 0) {
     return [];
   }
 
   const rule = ruleOf(lone);
-  const laws = [first, ...rest] as const;
+  const laws = [
+    { kind: "check", name: lone.replaceAll(" ", "_"), relation: "Node" } satisfies Law,
+    ...host.brokenLaws,
+  ] as const;
 
   return Result.match(refusalOfLaws(laws, unreported, grammar), {
     onFailure: (unowned): readonly Disagreement[] => [
