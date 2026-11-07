@@ -16,7 +16,7 @@ import { ChoiceBound, ContentReference, interactionKinds } from "#pantry/grammar
 import { booleanOf } from "#pantry/grammar/domains.ts";
 import type { DocumentContext } from "#pantry/import/context.ts";
 import { foldAt, foldOf } from "#pantry/import/fold.ts";
-import type { Folded } from "#pantry/import/fold.ts";
+import type { Folds } from "#pantry/import/fold.ts";
 import { declaredFieldsOf } from "#pantry/import/overlays/declarations.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { Composed } from "#pantry/model/composed.ts";
@@ -320,7 +320,7 @@ interface Context {
   readonly attributes: ReadonlyMap<NodeId, ReadonlyMap<string, string>>;
   readonly declared: readonly (DeclaredVariable & { readonly identifier: string })[];
   readonly document: NodeId;
-  readonly folds: ReadonlyMap<NodeId, Folded>;
+  readonly folds: Folds;
   readonly itemMode: Option.Option<boolean>;
   readonly kinds: ReadonlyMap<NodeId, KindOfNode>;
   readonly rootKind: KindOfNode;
