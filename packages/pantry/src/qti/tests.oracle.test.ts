@@ -85,6 +85,7 @@ describe("qti/tests.ts, declared", () => {
       "Branch forward",
       "Branch target",
       "E1 derived",
+      "File exists",
       "Fragment context",
       "Inclusion cycle",
       "Item ref target",

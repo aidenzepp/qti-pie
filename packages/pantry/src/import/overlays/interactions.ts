@@ -28,7 +28,7 @@ import type { Composed } from "#pantry/model/composed.ts";
 import type { FlatRows, NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
 import type { Declaration } from "#pantry/qti/declarations.ts";
 import { declarationKinds } from "#pantry/qti/declarations.ts";
-import { sectionKind, testKind } from "#pantry/qti/tests.ts";
+import { itemKind, sectionKind, testKind } from "#pantry/qti/tests.ts";
 import type { InstanceMember, InstanceRoot } from "#pantry/import/overlays/tests.ts";
 import {
   adaptiveName,
@@ -39,7 +39,7 @@ import {
   countDefault,
   hotspotKinds,
   hottextKind,
-  itemRoot,
+  integerStartPattern,
   nilUuid,
   readAttributes,
   references,
@@ -199,10 +199,10 @@ const trailing = /[\t\n\r ]*$/u;
 const integerForm = /^[+-]?[0-9]+$/u;
 
 /**
- * A printed variable's `base` or `index` that is an integer, not a variable's name: its first
- * character is a digit or a sign, which no `VariableStringDType` name starts with.
+ * A printed variable's `base` or `index` that is an integer, not a variable's name
+ * (`integerStartPattern`).
  */
-const integerStart = /^[+\-0-9]/u;
+const integerStart = new RegExp(integerStartPattern, "u");
 
 /**
  * XML whitespace `S`, possibly none, as the `lead` and `trail` of a read attribute are typed.
@@ -335,8 +335,11 @@ interface Context {
  * @param name - The attribute's name.
  * @returns Its lexical form, or none where the element does not carry it.
  */
-const lexicalOf = (context: Context, node: NodeId, name: string): Option.Option<string> =>
-  Option.fromNullishOr(context.attributes.get(node)?.get(name));
+const lexicalOf = (
+  context: Pick<Context, "attributes">,
+  node: NodeId,
+  name: string,
+): Option.Option<string> => Option.fromNullishOr(context.attributes.get(node)?.get(name));
 
 /**
  * Read an element's attribute collapsed.
@@ -346,7 +349,11 @@ const lexicalOf = (context: Context, node: NodeId, name: string): Option.Option<
  * @param name - The attribute's name.
  * @returns Its value, or none where the element does not carry it.
  */
-const valueOf = (context: Context, node: NodeId, name: string): Option.Option<string> =>
+const valueOf = (
+  context: Pick<Context, "attributes">,
+  node: NodeId,
+  name: string,
+): Option.Option<string> =>
   Option.map(lexicalOf(context, node, name), (lexical) => pieces(lexical).value);
 
 /**
@@ -377,19 +384,18 @@ const tupleOf = (context: Context, node: NodeRow<Composed>) => ({
 const declaredOf = (context: Omit<Context, "adaptive" | "declared">): Context["declared"] =>
   context.rows.nodes.flatMap((node) => {
     const declarationKind = declarationKinds.find((kind) => kind === node.kind);
-    const reading = { ...context, adaptive: false, declared: [] };
 
     return declarationKind === undefined
       ? []
-      : Option.toArray(valueOf(reading, node.id, "identifier")).map((identifier) => ({
+      : Option.toArray(valueOf(context, node.id, "identifier")).map((identifier) => ({
           baseType: Option.getOrElse(
-            Option.flatMap(lexicalOf(reading, node.id, "base-type"), (lexical) =>
+            Option.flatMap(lexicalOf(context, node.id, "base-type"), (lexical) =>
               Option.fromNullishOr(baseTypes.get(lexical)),
             ),
             () => "none" as const,
           ),
           cardinality: Option.getOrElse(
-            Option.flatMap(lexicalOf(reading, node.id, "cardinality"), (lexical) =>
+            Option.flatMap(lexicalOf(context, node.id, "cardinality"), (lexical) =>
               Option.fromNullishOr(cardinalities.get(lexical)),
             ),
             () => "single" as const,
@@ -423,17 +429,37 @@ const contextOf = (doc: XdmDocument<Composed>, ids: InteractionIds): Context => 
     rootKind: doc.root.kind,
     rows,
   };
-  const item = rows.nodes.find((node) => node.kind === itemRoot);
-  const reading = { ...base, adaptive: false, declared: [] };
+  const item = rows.nodes.find((node) => node.kind === itemKind);
 
   return {
     ...base,
     adaptive:
       item !== undefined &&
-      Option.contains(Option.flatMap(valueOf(reading, item.id, adaptiveName), booleanOf), true),
+      Option.contains(Option.flatMap(valueOf(base, item.id, adaptiveName), booleanOf), true),
     declared: declaredOf(base),
   };
 };
+
+/**
+ * The declaration kinds a content reference of each attribute on each kind may name, by
+ * `<attribute> <kind>` (`ContentReference`).
+ */
+const allowedKinds: ReadonlyMap<string, readonly ReferenceRow["declarationKind"][]> = new Map(
+  [...Map.groupBy(ContentReference.rows, ({ attribute, kind }) => `${attribute} ${kind}`)].map(
+    ([key, rows]) => [key, rows.map(({ declaration }) => declaration)],
+  ),
+);
+
+/**
+ * Read the declaration kinds a content reference may name.
+ *
+ * @param attribute - The reference's attribute.
+ * @param kind - The kind of the element that carries it.
+ * @returns The kinds, in `ContentReference`'s order; none for an attribute no row names on the
+ *   kind.
+ */
+const allowedOf = (attribute: string, kind: string): readonly ReferenceRow["declarationKind"][] =>
+  allowedKinds.get(`${attribute} ${kind}`) ?? [];
 
 /**
  * Resolve a name a binding or a reference makes: a built-in variable to its type under the nil
@@ -472,20 +498,6 @@ const resolveIn = (
     }
   );
 };
-
-/**
- * Resolve a name among one document's own declarations, as {@link resolveIn} does.
- *
- * @param context - The document.
- * @param identifier - The name, collapsed.
- * @param allowed - The declaration kinds the name may resolve to.
- * @returns The variable.
- */
-const resolve = (
-  context: Context,
-  identifier: string,
-  allowed: readonly ReferenceRow["declarationKind"][],
-): DeclaredVariable => resolveIn(context.declared, identifier, allowed);
 
 /**
  * Find the response declaration a binding names among its item's declarations. A built-in
@@ -571,7 +583,7 @@ const bindingsOf = (context: Context) => {
       }
     }
 
-    for (const attribute of context.rootKind === itemRoot ? bindingAttributes : []) {
+    for (const attribute of context.rootKind === itemKind ? bindingAttributes : []) {
       for (const identifier of Option.toArray(valueOf(context, node.id, attribute))) {
         const binding = {
           attribute,
@@ -915,13 +927,7 @@ const referencesOf = (
               names(row.value),
           )
           .map((row) => {
-            const variable = resolve(
-              context,
-              row.value,
-              ContentReference.rows
-                .filter(({ attribute, kind }) => attribute === row.name && kind === row.kind)
-                .map(({ declaration }) => declaration),
-            );
+            const variable = resolveIn(context.declared, row.value, allowedOf(row.name, row.kind));
 
             return [
               keyOf([row.node, row.name]),
@@ -1070,7 +1076,7 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: InteractionIds): Interac
     Interaction: interactionsOf(context),
     InteractionAttribute: read,
     ItemMode: new Map(
-      context.rootKind === itemRoot
+      context.rootKind === itemKind
         ? [[context.document, { adaptive: context.adaptive, document: context.document }]]
         : [],
     ),
@@ -1172,13 +1178,7 @@ const placedOf = (
   placement: { readonly assembly: NodeId; readonly instance: NodeId },
 ): readonly (readonly [string, Addition<typeof SectionFeedbackRef>])[] =>
   names.map((name) => {
-    const variable = resolveIn(
-      declared,
-      name.identifier,
-      ContentReference.rows
-        .filter(({ attribute, kind }) => attribute === name.attribute && kind === name.kind)
-        .map(({ declaration }) => declaration),
-    );
+    const variable = resolveIn(declared, name.identifier, allowedOf(name.attribute, name.kind));
 
     return [
       keyOf([placement.instance, name.node, name.attribute]),
@@ -1205,7 +1205,7 @@ const placedOf = (
  */
 const resolvesUnder = (root: InstanceRoot, instance: InstanceMember | InstanceRoot): boolean =>
   (root.assemblyKind === testKind && instance.rootKind === sectionKind) ||
-  (root.assemblyKind === itemRoot && instance.rootKind !== itemRoot);
+  (root.assemblyKind === itemKind && instance.rootKind !== itemKind);
 
 /**
  * Build a package's placements: one per instance of a section document under a test and of an
@@ -1366,7 +1366,7 @@ export const placedBindingRowsOf = (input: {
   }
 
   for (const root of roots) {
-    for (const { assembly, instance } of root.assemblyKind === itemRoot ? instancesOf(root) : []) {
+    for (const { assembly, instance } of root.assemblyKind === itemKind ? instancesOf(root) : []) {
       for (const name of names.get(instance.document) ?? []) {
         const binding = {
           ...name,

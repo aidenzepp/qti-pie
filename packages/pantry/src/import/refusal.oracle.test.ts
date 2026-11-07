@@ -1682,6 +1682,7 @@ describe("the refusals made before the database", () => {
       ...(
         [
           "decode",
+          "unsupported-encoding",
           "encoding-mismatch",
           "nul",
           "undeclared-entity",
@@ -1963,24 +1964,50 @@ describe("the census of the composed Qti schema", () => {
     "refuses a site that names no document by its kind's law: an include under include-target, a section ref under entry-kind",
     () =>
       // Oracle: the specification as a checker, reading 115 and information model §7.5: an
-      // include whose href names no document the manifest lists breaks "Include target", the
-      // oracle's law for includes alone, and a section ref whose href names no section document
-      // breaks "Document entry" on its path. Each is a law Qti states, under its own rule, so a
-      // dangling site of either kind is refused under one rule.
+      // include whose path an entry holds but that names no document the manifest lists, or that
+      // writes no href that names a path of the package, breaks "Include target", the oracle's law
+      // for includes alone; a section ref whose path names no section document breaks "Document
+      // entry" on its path, its SitePath, which every section ref has; and a site whose path no
+      // entry holds breaks "File exists", its SitePath's check, which gates both. Each is a law Qti
+      // states, under its own rule, so a dangling site of either kind is refused under one rule.
       Effect.gen(function* siteKinds() {
         const Qti = yield* composedQti;
         const stated = new Set((yield* lawsOf(Qti.statements)).map(lawIdentity));
         const kinds: readonly (readonly [Law, Rule])[] = [
           [
-            { from: sideOf("Site", "node"), kind: "contained", to: sideOf("SiteTarget", "node") },
+            {
+              from: sideOf("SitePath", "node"),
+              kind: "contained",
+              to: sideOf("SiteTarget", "node"),
+            },
             "include-target",
           ],
           [
             {
-              from: sideOf("Site", "package", "path"),
+              from: sideOf("Site", "node", "kind"),
+              kind: "contained",
+              to: sideOf("SitePath", "node", "kind"),
+            },
+            "include-target",
+          ],
+          [
+            {
+              from: sideOf("SitePath", "package", "path"),
+              kind: "contained",
+              to: sideOf("Entry", "package", "path"),
+            },
+            "file-exists",
+          ],
+          [
+            {
+              from: sideOf("SitePath", "package", "path"),
               kind: "contained",
               to: sideOf("TestDocument", "package", "path"),
             },
+            "entry-kind",
+          ],
+          [
+            { from: sideOf("Site", "node"), kind: "contained", to: sideOf("SitePath", "node") },
             "entry-kind",
           ],
         ];

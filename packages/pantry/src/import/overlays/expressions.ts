@@ -79,6 +79,7 @@ import type {
   VariableRef,
 } from "#pantry/qti/expressions.ts";
 import {
+  itemKind,
   itemRefKind,
   itemResourceType,
   linkResourceTypes,
@@ -672,8 +673,7 @@ const documentOf = (tree: XdmDocument<Composed>, ids: ExpressionIds): Document =
     rows,
     timeDependent: trueForm.test(
       rows.attributes.find(
-        ({ name, node }) =>
-          name === "time-dependent" && byId.get(node)?.kind === "qti-assessment-item",
+        ({ name, node }) => name === "time-dependent" && byId.get(node)?.kind === itemKind,
       )?.lexical ?? "",
     ),
     ...walk(rows, byId, ids.context?.nearest),
@@ -1003,8 +1003,7 @@ const expressionRowsOf = (
  */
 const itemTimingOf = (doc: Document): Map<string, Addition<typeof ItemTiming>> => {
   const attribute = doc.rows.attributes.find(
-    ({ name, node }) =>
-      name === "time-dependent" && doc.byId.get(node)?.kind === "qti-assessment-item",
+    ({ name, node }) => name === "time-dependent" && doc.byId.get(node)?.kind === itemKind,
   );
 
   return attribute === undefined
@@ -1407,9 +1406,7 @@ const testBuiltInNames: ReadonlySet<string> = new Set(builtInsByRoot.get(testKin
 /**
  * The built-in names an item ref's prefix reaches: its item's.
  */
-const itemBuiltInNames: ReadonlySet<string> = new Set(
-  builtInsByRoot.get("qti-assessment-item")?.keys(),
-);
+const itemBuiltInNames: ReadonlySet<string> = new Set(builtInsByRoot.get(itemKind)?.keys());
 
 /**
  * The kinds a prefix names a `duration` of (spec reading 86 for the section ref).
@@ -1701,7 +1698,7 @@ const builtInRootOf = (text: ReadingText, itemScoped: boolean): string => {
     return testKind;
   }
 
-  return itemScoped ? "qti-assessment-item" : sectionKind;
+  return itemScoped ? itemKind : sectionKind;
 };
 
 /**
@@ -2214,11 +2211,6 @@ export interface PlacedVariableRows {
 }
 
 /**
- * The root kind of an item's assembly, whose built-in variables its references may name.
- */
-const itemAssembly = "qti-assessment-item";
-
-/**
  * Resolve a name among an item's declarations, else its built-in variables, else to nothing, with
  * the declaration fields a placed reference carries.
  *
@@ -2243,7 +2235,7 @@ const placedResolutionOf = (
     };
   }
 
-  const builtIn = builtInKindsByRoot.get(itemAssembly)?.get(name);
+  const builtIn = builtInKindsByRoot.get(itemKind)?.get(name);
 
   return {
     declBaseType: "none",
@@ -2280,7 +2272,7 @@ export const placedVariableRowsOf = (input: {
   const placed = new Map<string, Addition<typeof PlacedVariableRef>>();
   const lookups = new Map<string, Addition<typeof VariableLookup>>();
   for (const root of input.instances) {
-    for (const instance of root.assemblyKind === itemAssembly ? instancesIn(root) : []) {
+    for (const instance of root.assemblyKind === itemKind ? instancesIn(root) : []) {
       for (const reference of referencesOf.get(instance.document) ?? []) {
         const declaration = declared.get(keyOf([root.assembly, reference.identifier]));
         placed.set(keyOf([instance.id, reference.node, reference.attribute]), {
@@ -2292,7 +2284,7 @@ export const placedVariableRowsOf = (input: {
           instance: instance.id,
           kind: reference.kind,
           node: reference.node,
-          rootKind: itemAssembly,
+          rootKind: itemKind,
         });
         if (declaration === undefined) {
           lookups.set(

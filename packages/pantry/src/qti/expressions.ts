@@ -151,6 +151,7 @@ import {
   InstanceName,
   ItemRefDocument,
   ItemRefTarget,
+  itemKind,
   itemRefKind,
   itemResourceType,
   linkResourceTypes,
@@ -926,7 +927,7 @@ const typingAttributes = select(Attribute, (a) =>
  * The `time-dependent` of each item, `ItemTiming`'s source.
  */
 const itemTimes = select(Attribute, (a) =>
-  a.and(a.eq(a.kind, "qti-assessment-item"), a.eq(a.name, "time-dependent")),
+  a.and(a.eq(a.kind, itemKind), a.eq(a.name, "time-dependent")),
 );
 
 /**
@@ -1267,7 +1268,7 @@ const testBuiltIns = builtInNamesOf(testKind);
  * "QTI_CONTEXT is a built-in variable and so any references within an item or an assessment to
  * the QTI_CONTEXT variable ... must succeed"; spec reading 106).
  */
-const itemBuiltIns = builtInNamesOf("qti-assessment-item");
+const itemBuiltIns = builtInNamesOf(itemKind);
 
 /**
  * The kinds whose `duration` a part's or a section's prefix names (information model §2.2.2,
@@ -1367,7 +1368,7 @@ const builtInKindOfScope = (r: ReadingRow) =>
         r.eq(r.declarationKind, declaration),
       ),
     ),
-    ...builtInKindsOf("qti-assessment-item").map(([variable, declaration]) =>
+    ...builtInKindsOf(itemKind).map(([variable, declaration]) =>
       r.and(itemScoped(r), r.eq(r.variable, variable), r.eq(r.declarationKind, declaration)),
     ),
     ...builtInKindsOf(sectionKind).map(([variable, declaration]) =>
@@ -2584,7 +2585,7 @@ export const expressionLawsByName = {
     ),
     contained(
       on(
-        select(VariableRef, (v) => v.eq(v.rootKind, "qti-assessment-item")),
+        select(VariableRef, (v) => v.eq(v.rootKind, itemKind)),
         "document",
         "timeDependent",
       ),
@@ -2676,7 +2677,7 @@ export const expressionLawsByName = {
   "Item duration": [
     check("Item_duration", VariableRef, (v) =>
       v.or(
-        v.ne(v.rootKind, "qti-assessment-item"),
+        v.ne(v.rootKind, itemKind),
         v.ne(v.resolution, "builtIn"),
         v.ne(v.identifier, "duration"),
         v.eq(v.timeDependent, true),
@@ -2825,7 +2826,7 @@ export const expressionLawsByName = {
     ),
     check("Variable_declared", VariableRef, (v) =>
       v.or(
-        v.not(v.in(v.rootKind, ["qti-assessment-item", "qti-assessment-test"])),
+        v.not(v.in(v.rootKind, [itemKind, testKind])),
         v.ne(v.resolution, "unresolved"),
         // A braced reference is a string attribute's: where it names no variable it is a string
         // value, not a reference to one nothing declares (reading R15-k; information model §2.7.2
@@ -2834,10 +2835,10 @@ export const expressionLawsByName = {
         // string value"). A numeric attribute's stand-in is bare, and an unresolved one stays
         // refused.
         v.and(
-          v.eq(v.rootKind, "qti-assessment-item"),
+          v.eq(v.rootKind, itemKind),
           v.eq(VariableReference.at("spelling", v.kind, v.attribute), "braced"),
         ),
-        v.and(v.eq(v.rootKind, "qti-assessment-test"), Compute.matches(v.identifier, prefixedName)),
+        v.and(v.eq(v.rootKind, testKind), Compute.matches(v.identifier, prefixedName)),
       ),
     ),
     contained(
@@ -2854,7 +2855,7 @@ export const expressionLawsByName = {
     ),
     check("Variable_declared", PlacedVariableRef, (v) =>
       v.or(
-        v.ne(v.rootKind, "qti-assessment-item"),
+        v.ne(v.rootKind, itemKind),
         v.ne(v.resolution, "unresolved"),
         // A braced reference that names none is a string value (reading R15-k), as `VariableRef`'s.
         v.eq(VariableReference.at("spelling", v.kind, v.attribute), "braced"),

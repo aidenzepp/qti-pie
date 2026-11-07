@@ -2257,21 +2257,31 @@ CREATE TABLE "qti"."site" (
   "nearest" "pg_catalog"."uuid" NOT NULL,
   "nearest_kind" "qti"."node_kind" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
-  "package" "pg_catalog"."uuid" NOT NULL,
   "parent" "pg_catalog"."uuid" NOT NULL,
   "parent_kind" "qti"."node_kind" NOT NULL,
   "parent_loose_chain" boolean NOT NULL,
   "parent_mixes" boolean NOT NULL,
   "part" "pg_catalog"."uuid" NOT NULL,
-  "path" "qti"."__text_pwaizaq6lx" NOT NULL,
   "replaced" boolean NOT NULL,
   "start" "qti"."__domain_gfw43vigph" NOT NULL,
   "version" "qti"."schema_version" NOT NULL,
   CONSTRAINT "__site_pk_j2vhpivheb" PRIMARY KEY ("node"),
   CONSTRAINT "e_1_derived" CHECK (((NOT "parent_kind" IN (300::smallint, 112::smallint) AND "document" = "part" AND "parent_loose_chain" = false AND "parent_mixes" = false AND "replaced" = false OR "parent" = "part" AND "parent_kind" = 112::smallint AND "parent_loose_chain" = false AND "parent_mixes" = false AND "replaced" = false OR "parent_kind" = 300::smallint) AND ("parent_kind" IN (223::smallint, 224::smallint, 225::smallint, 226::smallint, 227::smallint, 228::smallint, 230::smallint, 233::smallint, 236::smallint, 237::smallint, 238::smallint, 241::smallint, 243::smallint, 244::smallint, 246::smallint, 247::smallint, 248::smallint, 250::smallint, 251::smallint, 252::smallint, 253::smallint, 254::smallint, 255::smallint, 256::smallint, 257::smallint, 259::smallint, 261::smallint, 262::smallint, 263::smallint, 264::smallint, 265::smallint, 267::smallint, 269::smallint, 270::smallint, 300::smallint, 152::smallint, 171::smallint, 199::smallint, 202::smallint, 208::smallint, 219::smallint, 220::smallint, 14::smallint, 119::smallint, 153::smallint, 11::smallint, 129::smallint, 162::smallint, 184::smallint, 95::smallint, 161::smallint, 175::smallint, 174::smallint, 173::smallint, 271::smallint, 179::smallint, 134::smallint, 192::smallint, 191::smallint, 190::smallint, 304::smallint, 197::smallint, 114::smallint, 143::smallint, 111::smallint, 15::smallint, 201::smallint, 277::smallint, 278::smallint, 279::smallint, 281::smallint, 282::smallint, 283::smallint, 285::smallint, 288::smallint, 291::smallint, 295::smallint, 297::smallint) AND "kind" = 642::smallint OR "parent_kind" IN (300::smallint, 112::smallint) AND "kind" = 110::smallint)) IS TRUE),
   CONSTRAINT "__site_key_document_node_parent_loose_chain_parent_elcngsbb3i" UNIQUE NULLS DISTINCT ("document", "node", "parent_loose_chain", "parent_mixes", "part", "replaced", "start"),
-  CONSTRAINT "__site_key_node_ancestry_document_kind_nearest_7ytwmdj7sq" UNIQUE NULLS DISTINCT ("node", "ancestry", "document", "kind", "nearest", "nearest_kind", "parent_kind", "version"),
-  CONSTRAINT "__site_key_node_package_path_srqgiymhy5" UNIQUE NULLS DISTINCT ("node", "package", "path")
+  CONSTRAINT "__site_key_node_kind_7anje2xktj" UNIQUE NULLS DISTINCT ("node", "kind"),
+  CONSTRAINT "__site_key_node_ancestry_document_kind_nearest_7ytwmdj7sq" UNIQUE NULLS DISTINCT ("node", "ancestry", "document", "kind", "nearest", "nearest_kind", "parent_kind", "version")
+);
+
+CREATE TABLE "qti"."site_path" (
+  "entry" boolean NOT NULL,
+  "kind" "qti"."node_kind" NOT NULL,
+  "node" "pg_catalog"."uuid" NOT NULL,
+  "package" "pg_catalog"."uuid" NOT NULL,
+  "path" "qti"."__text_pwaizaq6lx" NOT NULL,
+  CONSTRAINT "__site_path_pk_6ywav3eq35" PRIMARY KEY ("node"),
+  CONSTRAINT "file_exists" CHECK (("entry" = true) IS TRUE),
+  CONSTRAINT "__site_path_key_node_kind_glh2blntvb" UNIQUE NULLS DISTINCT ("node", "kind"),
+  CONSTRAINT "__site_path_key_node_package_path_flas46ytjq" UNIQUE NULLS DISTINCT ("node", "package", "path")
 );
 
 CREATE TABLE "qti"."site_target" (
@@ -4478,11 +4488,11 @@ ALTER TABLE "qti"."section_template_ref" ADD COLUMN "__declaration_kind_cxvq2cbr
 
 ALTER TABLE "qti"."section_template_ref" ADD COLUMN "__identifier_gausqms2f7" "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" GENERATED ALWAYS AS (CASE WHEN NOT "identifier" IN ('QTI_CONTEXT'::"pg_catalog"."text", 'completionStatus'::"pg_catalog"."text", 'duration'::"pg_catalog"."text", 'numAttempts'::"pg_catalog"."text") THEN "identifier" END) STORED;
 
-ALTER TABLE "qti"."site" ADD COLUMN "__tag_name_href_uly3pfxknv" smallint GENERATED ALWAYS AS (103::smallint) STORED NOT NULL;
+ALTER TABLE "qti"."site" ADD COLUMN "__kind_spdt2q7edi" smallint GENERATED ALWAYS AS (CASE WHEN "kind" = 642::smallint THEN "kind" END) STORED;
+
+ALTER TABLE "qti"."site" ADD COLUMN "__node_csw7mjednz" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "kind" = 110::smallint THEN "node" END) STORED;
 
 ALTER TABLE "qti"."site" ADD COLUMN "__node_b42646p2al" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "kind" = 642::smallint THEN "node" END) STORED;
-
-ALTER TABLE "qti"."site" ADD COLUMN "__package_oln4z5vtzj" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "kind" = 110::smallint THEN "package" END) STORED;
 
 ALTER TABLE "qti"."site" ADD COLUMN "__parent_zqp2kyzm2y" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "parent_kind" = 300::smallint THEN "parent" END) STORED;
 
@@ -4492,9 +4502,19 @@ ALTER TABLE "qti"."site" ADD COLUMN "__parent_mixes_zz36usjkro" boolean GENERATE
 
 ALTER TABLE "qti"."site" ADD COLUMN "__part_kpnf72dr2e" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "parent_kind" = 300::smallint THEN "part" END) STORED;
 
-ALTER TABLE "qti"."site" ADD COLUMN "__path_b6icxxemyg" "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" GENERATED ALWAYS AS (CASE WHEN "kind" = 110::smallint THEN "path" END) STORED;
-
 ALTER TABLE "qti"."site" ADD COLUMN "__replaced_icpgimu5lm" boolean GENERATED ALWAYS AS (CASE WHEN "parent_kind" = 300::smallint THEN "replaced" END) STORED;
+
+ALTER TABLE "qti"."site_path" ADD COLUMN "__tag_name_href_uly3pfxknv" smallint GENERATED ALWAYS AS (103::smallint) STORED NOT NULL;
+
+ALTER TABLE "qti"."site_path" ADD COLUMN "__node_4l4rxqy5ka" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "entry" = true AND "kind" = 642::smallint THEN "node" END) STORED;
+
+ALTER TABLE "qti"."site_path" ADD COLUMN "__package_osevq7lhy5" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "entry" = true THEN "package" END) STORED;
+
+ALTER TABLE "qti"."site_path" ADD COLUMN "__package_4u77hcfcfr" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "entry" = true AND "kind" = 110::smallint THEN "package" END) STORED;
+
+ALTER TABLE "qti"."site_path" ADD COLUMN "__path_vpc2zw6qyf" "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" GENERATED ALWAYS AS (CASE WHEN "entry" = true THEN "path" END) STORED;
+
+ALTER TABLE "qti"."site_path" ADD COLUMN "__path_hvkgesn5nq" "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" GENERATED ALWAYS AS (CASE WHEN "entry" = true AND "kind" = 110::smallint THEN "path" END) STORED;
 
 ALTER TABLE "qti"."site_target" ADD COLUMN "__after_targeted_by_0_aep2yjlbgs" bigint NOT NULL;
 
@@ -5834,6 +5854,10 @@ CREATE TRIGGER "__isolation"
 
 CREATE TRIGGER "__isolation"
   BEFORE INSERT OR UPDATE OR DELETE OR TRUNCATE ON "qti"."site"
+  FOR EACH STATEMENT EXECUTE FUNCTION "qti"."__require_serializable"();
+
+CREATE TRIGGER "__isolation"
+  BEFORE INSERT OR UPDATE OR DELETE OR TRUNCATE ON "qti"."site_path"
   FOR EACH STATEMENT EXECUTE FUNCTION "qti"."__require_serializable"();
 
 CREATE TRIGGER "__isolation"
@@ -7212,15 +7236,23 @@ ALTER TABLE "qti"."section_template_ref" ADD CONSTRAINT "__section_template_ref_
 
 ALTER TABLE "qti"."site" ADD CONSTRAINT "__site_fk_node_children_ancestry_document_governs_joppgidqd5" FOREIGN KEY ("node", "children", "ancestry", "document", "governs", "kind", "nearest", "nearest_kind", "parent_kind", "start", "version") REFERENCES "qti"."node" ("id", "children", "ancestry", "document", "governs", "kind", "nearest", "nearest_kind", "parent_kind", "start", "version") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."site" ADD CONSTRAINT "__site_fk_node_package_path_tag_name_href_gy4frrsncx" FOREIGN KEY ("node", "package", "path", "__tag_name_href_uly3pfxknv") REFERENCES "qti"."reference_path" ("node", "package", "path", "name") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
-
 ALTER TABLE "qti"."site" ADD CONSTRAINT "__site_fk_node_parent_hjpmqzvjk4" FOREIGN KEY ("node", "parent") REFERENCES "qti"."node" ("id", "parent") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."site" ADD CONSTRAINT "__site_fk_node_y6gzl2tkiq" FOREIGN KEY ("__node_b42646p2al") REFERENCES "qti"."site_target" ("node") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE "qti"."site" ADD CONSTRAINT "__site_fk_node_n4grbpvk55" FOREIGN KEY ("__node_csw7mjednz") REFERENCES "qti"."site_path" ("node") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."site" ADD CONSTRAINT "__site_fk_package_path_4zfaxqxety" FOREIGN KEY ("__package_oln4z5vtzj", "__path_b6icxxemyg") REFERENCES "qti"."test_document" ("__package_wmb66a5rru", "__path_3zs6iyyad2") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE "qti"."site" ADD CONSTRAINT "__site_fk_node_kind_eqwitxgnr5" FOREIGN KEY ("__node_b42646p2al", "__kind_spdt2q7edi") REFERENCES "qti"."site_path" ("node", "kind") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."site" ADD CONSTRAINT "__site_fk_parent_part_replaced_parent_mixes_parent_ilvrrp6dxx" FOREIGN KEY ("__parent_zqp2kyzm2y", "__part_kpnf72dr2e", "__replaced_icpgimu5lm", "__parent_mixes_zz36usjkro", "__parent_loose_chain_3w4mtgnsow") REFERENCES "qti"."section" ("node", "part", "replacing", "mixes", "loose_chain") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+
+ALTER TABLE "qti"."site_path" ADD CONSTRAINT "__site_path_fk_node_kind_g4upynyxt2" FOREIGN KEY ("node", "kind") REFERENCES "qti"."site" ("node", "kind") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+
+ALTER TABLE "qti"."site_path" ADD CONSTRAINT "__site_path_fk_node_package_path_tag_name_href_fuiwgqwqfa" FOREIGN KEY ("node", "package", "path", "__tag_name_href_uly3pfxknv") REFERENCES "qti"."reference_path" ("node", "package", "path", "name") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+
+ALTER TABLE "qti"."site_path" ADD CONSTRAINT "__site_path_fk_node_ooktzki3mm" FOREIGN KEY ("__node_4l4rxqy5ka") REFERENCES "qti"."site_target" ("node") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+
+ALTER TABLE "qti"."site_path" ADD CONSTRAINT "__site_path_fk_package_path_yfbylef4ua" FOREIGN KEY ("__package_osevq7lhy5", "__path_vpc2zw6qyf") REFERENCES "qti"."entry" ("package", "path") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+
+ALTER TABLE "qti"."site_path" ADD CONSTRAINT "__site_path_fk_package_path_ex4zefqeyp" FOREIGN KEY ("__package_4u77hcfcfr", "__path_hvkgesn5nq") REFERENCES "qti"."test_document" ("__package_wmb66a5rru", "__path_3zs6iyyad2") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."site_target" ADD CONSTRAINT "__site_target_fk_document_copy_sites_gsuw7ch3uc" FOREIGN KEY ("document", "__copy_sites_nyxjgjnrfd") REFERENCES "qti"."test_document" ("node", "sites") MATCH SIMPLE ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED;
 
@@ -7228,7 +7260,7 @@ ALTER TABLE "qti"."site_target" ADD CONSTRAINT "__site_target_fk_document_predec
 
 ALTER TABLE "qti"."site_target" ADD CONSTRAINT "__site_target_fk_node_ancestry_document_kind_nearest_d2oaj65kci" FOREIGN KEY ("node", "ancestry", "document", "kind", "nearest", "nearest_kind", "parent_kind", "version") REFERENCES "qti"."site" ("node", "ancestry", "document", "kind", "nearest", "nearest_kind", "parent_kind", "version") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."site_target" ADD CONSTRAINT "__site_target_fk_node_package_path_tkxfyyo3oz" FOREIGN KEY ("node", "package", "path") REFERENCES "qti"."site" ("node", "package", "path") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE "qti"."site_target" ADD CONSTRAINT "__site_target_fk_node_package_path_mqsfz7ohml" FOREIGN KEY ("node", "package", "path") REFERENCES "qti"."site_path" ("node", "package", "path") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."site_target" ADD CONSTRAINT "__site_target_fk_package_path_target_target_root_upowqu3pxa" FOREIGN KEY ("package", "path", "target", "target_root", "target_nearest", "target_nearest_kind") REFERENCES "qti"."document" ("package", "path", "node", "root_kind", "context_nearest", "context_nearest_kind") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 

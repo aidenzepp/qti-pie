@@ -67,7 +67,7 @@ export interface TableRow {
  *
  * @see {@link https://www.w3.org/TR/2008/REC-xml-20081126/#sec-guessing-no-ext-info | XML 1.0 (Fifth Edition), Appendix F.1}
  */
-export const appendixF: readonly TableRow[] = [
+export const appendixF = [
   {
     encoding: "UCS-4, big-endian machine (1234 order)",
     pattern: "00 00 FE FF",
@@ -139,7 +139,12 @@ export const appendixF: readonly TableRow[] = [
     pattern: "4C 6F A7 94",
     reading: { kind: "unreadable" },
   },
-];
+] as const satisfies readonly TableRow[];
+
+/**
+ * A pattern of the table, as printed.
+ */
+export type Pattern = (typeof appendixF)[number]["pattern"];
 
 /**
  * Test whether a printed pattern matches the opening of `bytes`: each hexadecimal pair the byte at
@@ -166,7 +171,7 @@ export const matches = (pattern: string, bytes: Uint8Array): boolean => {
  * @param bytes - The document.
  * @returns The row; fails the test when two rows match, which the table's `##` rule rules out.
  */
-export const rowOf = (bytes: Uint8Array): TableRow | undefined => {
+export const rowOf = (bytes: Uint8Array): (typeof appendixF)[number] | undefined => {
   const found = appendixF.filter(({ pattern }) => matches(pattern, bytes));
   if (found.length > 1) {
     throw new Error(
@@ -302,7 +307,7 @@ const asciiBody = (named: Named, body: Uint8Array): Result.Result<string, Refuse
     }
     case "remapped":
     case "unknown": {
-      return refused("decode");
+      return refused("unsupported-encoding");
     }
     case "UTF-16":
     case "UTF-16BE":
@@ -318,19 +323,19 @@ const asciiBody = (named: Named, body: Uint8Array): Result.Result<string, Refuse
 /**
  * Read a document's bytes as XML 1.0 section 4.3.3 and Appendix F say.
  *
- * The row decides the reading. UCS-4 and EBCDIC are refused as `decode`, an encoding the processor
- * "is unable to process". A UTF-16 mark is UTF-16, whose label is `UTF-16`, since "The terms
- * "UTF-8" and "UTF-16" in this specification do not apply to related character encodings,
- * including but not limited to UTF-16BE, UTF-16LE", under which an initial `FE FF` or `FF FE` is
- * U+FEFF, a character (Unicode 16.0 section 3.10, D96 and D97; RFC 2781 sections 4.1 and 4.2). `<?`
- * in UTF-16 with no mark is UTF-16BE or UTF-16LE in that order, the one label the row reads, since
- * UTF-16 "MUST" begin with the mark; and with no encoding declaration it would be UTF-8, which "an
- * entity which begins with neither a Byte Order Mark nor an encoding declaration" must use. The
- * UTF-8 mark is UTF-8. Anything else is read one byte per ASCII character, as the label it declares
- * or as UTF-8, and is no UTF-16. A label the bytes rule out is "a fatal error for an entity
- * including an encoding declaration to be presented to the XML processor in an encoding other than
- * that named in the declaration", refused as `encoding-mismatch`. The body is decoded fatally, and
- * text holding U+0000 is refused (section 2.2).
+ * The row decides the reading. UCS-4 and EBCDIC are refused as `unsupported-encoding`, an encoding
+ * the processor "is unable to process". A UTF-16 mark is UTF-16, whose label is `UTF-16`, since
+ * "The terms "UTF-8" and "UTF-16" in this specification do not apply to related character
+ * encodings, including but not limited to UTF-16BE, UTF-16LE", under which an initial `FE FF` or
+ * `FF FE` is U+FEFF, a character (Unicode 16.0 section 3.10, D96 and D97; RFC 2781 sections 4.1 and
+ * 4.2). `<?` in UTF-16 with no mark is UTF-16BE or UTF-16LE in that order, the one label the row
+ * reads, since UTF-16 "MUST" begin with the mark; and with no encoding declaration it would be
+ * UTF-8, which "an entity which begins with neither a Byte Order Mark nor an encoding declaration"
+ * must use. The UTF-8 mark is UTF-8. Anything else is read one byte per ASCII character, as the
+ * label it declares or as UTF-8, and is no UTF-16. A label the bytes rule out is "a fatal error for
+ * an entity including an encoding declaration to be presented to the XML processor in an encoding
+ * other than that named in the declaration", refused as `encoding-mismatch`. The body is decoded
+ * fatally, and text holding U+0000 is refused (section 2.2).
  *
  * @param bytes - The document.
  * @returns The reading.
@@ -339,7 +344,7 @@ const asciiBody = (named: Named, body: Uint8Array): Result.Result<string, Refuse
 export const readingOf = (bytes: Uint8Array): Reading => {
   const reading = rowOf(bytes)?.reading ?? { kind: "ascii" };
   if (reading.kind === "unreadable") {
-    return { _tag: "refused", rule: "decode" };
+    return { _tag: "refused", rule: "unsupported-encoding" };
   }
 
   const markLength = { ascii: 0, "utf16 mark": 2, "utf16 pattern": 0, "utf8 mark": 3 }[

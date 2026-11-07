@@ -104,8 +104,8 @@ import {
   ContentReference,
   DeclarationKind,
   Enters,
-  grammar,
   interactionKinds,
+  lastWhereRules,
   NodeKind,
   RecordBindingFit,
   SchemaVersion,
@@ -117,7 +117,7 @@ import { Document } from "#pantry/qti/chardata.ts";
 import { Declaration, declarationRef } from "#pantry/qti/declarations.ts";
 import { keyText } from "#pantry/qti/limits.ts";
 import { Node, nodeCounts, nodeRef } from "#pantry/qti/node.ts";
-import { Instance, itemKind, sectionKind, testKind } from "#pantry/qti/tests.ts";
+import { Instance, itemInstances, itemKind, sectionKind, testKind } from "#pantry/qti/tests.ts";
 import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
 
 /**
@@ -160,21 +160,11 @@ const Space = str.regex("^[\\t\\n\\r ]*$");
 export const atomicValuePattern = "^[^\\t\\n\\r ]*$";
 
 /**
- * Decide whether a generator's text is a `NodeKind` handle.
- *
- * @param kind - The text.
- * @returns Whether the roster holds it.
+ * A printed variable's `base` or `index` that is an integer, not a variable's name: its first
+ * character is a digit or a sign, which no `VariableStringDType` name starts with. The laws read it
+ * as a POSIX pattern and the overlay's builder as a JavaScript one; the two agree on it.
  */
-const isKind = (kind: string): kind is Kind => NodeKind.handles.some((handle) => handle === kind);
-
-/**
- * Decide whether a generator's text is a `SchemaVersion` handle.
- *
- * @param version - The text.
- * @returns Whether the roster holds it.
- */
-const isVersion = (version: string): version is (typeof SchemaVersion.handles)[number] =>
-  SchemaVersion.handles.some((handle) => handle === version);
+export const integerStartPattern = "^[+\\-0-9]";
 
 /**
  * The nil uuid: the declaration a reference to a built-in variable names, since no declaration of
@@ -183,24 +173,15 @@ const isVersion = (version: string): version is (typeof SchemaVersion.handles)[n
 export const nilUuid = "00000000-0000-0000-0000-000000000000";
 
 /**
- * The root kind of an item document: the documents whose bindings and references the item-only
- * laws read, as the oracle reads them.
- */
-export const itemRoot = "qti-assessment-item" satisfies Kind;
-
-/**
- * The root kind of a test document, whose feedback and printed variables name the test's own
- * declarations (the port audit's A43 and A44: a test feedback's `outcome-identifier` names an
- * outcome the test declares; a test rubric's printed variable a variable the test declares).
- */
-export const testRoot = "qti-assessment-test" satisfies Kind;
-
-/**
  * The root kinds of the documents whose content references resolve in their own declarations: an
- * item's, and a test's. Every other document's resolve once per assembly that places it: a section
- * document's in each test's declarations, an included fragment's in each item's (spec reading 117).
+ * item's (`itemKind` of `#pantry/qti/tests.ts`), whose bindings and references the item-only laws
+ * read, and a test's (`testKind`), whose feedback and printed variables name the test's own
+ * declarations (the port audit's A43 and A44: a test feedback's `outcome-identifier` names an
+ * outcome the test declares; a test rubric's printed variable a variable the test declares). Every
+ * other document's resolve once per assembly that places it: a section document's in each test's
+ * declarations, an included fragment's in each item's (spec reading 117).
  */
-export const referringRoots = [itemRoot, testRoot] as const satisfies readonly Kind[];
+export const referringRoots = [itemKind, testKind] as const satisfies readonly Kind[];
 
 /**
  * The root kinds of the documents that are no included fragment's content: an item, a test, and a
@@ -209,8 +190,8 @@ export const referringRoots = [itemRoot, testRoot] as const satisfies readonly K
  * references resolve once per item that places it, as its feedback and printed variables do.
  */
 export const unfragmentedRoots = [
-  itemRoot,
-  testRoot,
+  itemKind,
+  testKind,
   sectionKind,
 ] as const satisfies readonly Kind[];
 
@@ -499,7 +480,7 @@ export const readAttributes: ReadonlyMap<Name, readonly Kind[]> = (() => {
   }
   add("lower-bound", [sliderKind]);
   add("upper-bound", [sliderKind]);
-  add(adaptiveName, [itemRoot]);
+  add(adaptiveName, [itemKind]);
   for (const { attributes, kinds } of Object.values(references)) {
     for (const attribute of attributes) {
       add(attribute, kinds);
@@ -1350,7 +1331,7 @@ type NameRow = RowScalars<typeof ChoiceVariableName>;
  */
 const itemBuiltInNames: readonly string[] = [
   ...new Set(
-    BuiltInVariable.rows.filter(({ root }) => root === itemRoot).map(({ variable }) => variable),
+    BuiltInVariable.rows.filter(({ root }) => root === itemKind).map(({ variable }) => variable),
   ),
 ];
 
@@ -1373,7 +1354,7 @@ const choiceNotVariable = (n: NameRow) =>
     ),
     n.and(
       n.eq(n.declarations, 0n),
-      n.or(n.ne(n.rootKind, itemRoot), n.not(n.in(n.identifier, itemBuiltInNames))),
+      n.or(n.ne(n.rootKind, itemKind), n.not(n.in(n.identifier, itemBuiltInNames))),
     ),
   );
 
@@ -1409,7 +1390,7 @@ const readOf = (names: readonly Name[], kinds: readonly Kind[]) =>
  */
 const itemReadOf = (names: readonly Name[], kinds: readonly Kind[]) =>
   select(InteractionAttribute, (v) =>
-    v.and(v.in(v.name, names), v.in(v.kind, kinds), v.eq(v.rootKind, itemRoot)),
+    v.and(v.in(v.name, names), v.in(v.kind, kinds), v.eq(v.rootKind, itemKind)),
   );
 
 /**
@@ -1610,13 +1591,13 @@ const decimalForm = lexicalForm(AriaDecimal);
  */
 const lastWhere = (h: HotspotRow) =>
   h.and(
-    ...grammar.lastWhere
-      .filter(({ attribute, kind }) => attribute === "shape" && isKind(kind))
+    ...lastWhereRules
+      .filter(({ attribute }) => attribute === "shape")
       .map(({ kind, parents, value, versions: held }) =>
         h.or(
-          h.ne(h.kind, isKind(kind) ? kind : "document"),
-          h.not(h.in(h.parentKind, parents.filter(isKind))),
-          h.not(h.in(h.version, held.filter(isVersion))),
+          h.ne(h.kind, kind),
+          h.not(h.in(h.parentKind, parents)),
+          h.not(h.in(h.version, held)),
           h.ne(h.area, value),
           h.eq(h.elements, h.parentElementChildren),
         ),
@@ -1640,7 +1621,7 @@ const outsideFeedback = select(Node, (n) =>
  * The read `adaptive` of each item whose value is true.
  */
 const adaptiveTrue = select(InteractionAttribute, (v) =>
-  v.and(v.eq(v.name, adaptiveName), v.eq(v.kind, itemRoot), v.in(v.value, booleanTrue)),
+  v.and(v.eq(v.name, adaptiveName), v.eq(v.kind, itemKind), v.in(v.value, booleanTrue)),
 );
 
 /**
@@ -1657,7 +1638,7 @@ const referenceSources = {
       v.in(v.name, references.variable.attributes),
       v.in(v.kind, references.variable.kinds),
       v.in(v.rootKind, referringRoots),
-      v.not(Compute.matches(v.value, "^[+\\-0-9]")),
+      v.not(Compute.matches(v.value, integerStartPattern)),
     ),
   ),
 };
@@ -1686,7 +1667,7 @@ const sectionPrintedSource = select(InteractionAttribute, (v) =>
       v.and(
         v.in(v.name, references.variable.attributes),
         v.in(v.kind, references.variable.kinds),
-        v.not(Compute.matches(v.value, "^[+\\-0-9]")),
+        v.not(Compute.matches(v.value, integerStartPattern)),
       ),
     ),
   ),
@@ -1718,12 +1699,6 @@ const fragmentSources = {
   context: fragmentReferenceOf(references.context),
   template: fragmentReferenceOf(references.template),
 };
-
-/**
- * The instances of an item's assembly: its root, and each fragment it places, whose bindings each
- * resolve in the item's declarations (spec reading 117).
- */
-const itemInstances = select(Instance, (i) => i.eq(i.assemblyKind, itemKind));
 
 /**
  * The placements `SectionScope` holds: a section document's under a test, one per test that

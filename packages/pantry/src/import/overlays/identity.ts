@@ -61,7 +61,7 @@ import type {
   XmlLang,
 } from "#pantry/qti/identity.ts";
 import { objectTypes } from "#pantry/qti/metadata.ts";
-import { testKind } from "#pantry/qti/tests.ts";
+import { itemKind, testKind } from "#pantry/qti/tests.ts";
 import type { InstanceMember, InstanceRoot } from "#pantry/import/overlays/tests.ts";
 
 /**
@@ -208,12 +208,6 @@ const namingTypes: ReadonlyMap<string, ResourceTypeHandle> = new Map(
  * The kind of a resource's `cp:metadata`, the owner whose records name the resource.
  */
 const resourceMetadata = "cp:metadata.resource";
-
-/**
- * The kind of an item document's root, whose own `label` asks for no tool but in a QTI 3.0.1
- * document ({@link labelledRootVersion}).
- */
-const itemRoot = "qti-assessment-item";
 
 /**
  * The schema version whose item root's own `label` is a `LabelUse` (spec reading 128, 3.0.1's
@@ -466,7 +460,7 @@ const attributeRowsOf = (tree: Tree): Pick<IdentityRows, "DocumentId" | "LabelUs
       element !== undefined &&
       name === "label" &&
       (toolLabelled.has(element.kind) ||
-        (element.kind === itemRoot && element.version === labelledRootVersion))
+        (element.kind === itemKind && element.version === labelledRootVersion))
     ) {
       labels.set(node, { document, node, rootKind });
     }
@@ -1042,7 +1036,7 @@ export const placedLanguageRowsOf = (
   const assembled = new Map<string, Addition<typeof AssembledLang>>();
   const witnesses = new Map<string, Addition<typeof PlacedGeneralLang>>();
   for (const root of instances) {
-    for (const instance of root.assemblyKind === itemRoot ? instancesOf(root) : []) {
+    for (const instance of root.assemblyKind === itemKind ? instancesOf(root) : []) {
       for (const { lang, node, scope } of carriersOf.get(instance.document) ?? []) {
         placed.set(headingKey([instance.id, node]), {
           assembly: root.assembly,

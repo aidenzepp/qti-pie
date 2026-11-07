@@ -97,6 +97,13 @@ export interface NodeIds {
    */
   readonly documentAt: (path: string) => Option.Option<NodeId>;
   /**
+   * Whether the package holds an entry at a path, which a site's href names (`SitePath.entry`).
+   *
+   * @param path - A path in the package.
+   * @returns Whether an entry is there.
+   */
+  readonly entryAt: (path: string) => boolean;
+  /**
    * The id of the node or attribute numbered `index` by `flatten`: the nodes in document order from
    * the document node's 0, then the attributes, so every caller that flattens the document under
    * it names each node by one id. The same index always gives the same id.
@@ -160,13 +167,17 @@ export interface PackageIds {
  * to it names no target, and "Include target" refuses an include of it.
  *
  * @param documents - The package's documents, in the listing's order.
+ * @param entries - The paths of the package's entries.
  * @param mint - Draws a fresh uuid. Defaults to `crypto.randomUUID`.
  * @returns The package's id and each document's ids, in the order given.
  */
 export const nodeIdsOf = (
   documents: readonly ListedDocument[],
+  entries: Iterable<string>,
   mint: () => NodeId = () => crypto.randomUUID(),
 ): PackageIds => {
+  const entryPaths: ReadonlySet<string> = new Set(entries);
+  const entryAt = (path: string): boolean => entryPaths.has(path);
   const packageId = mint();
   const idOfs = documents.map(() => {
     const drawn = new Map<number, NodeId>();
@@ -223,6 +234,7 @@ export const nodeIdsOf = (
               assembled: assembled.has(idOf(0)),
               context: contextAt(contexts, idOf(0)),
               documentAt,
+              entryAt,
               idOf,
               package: packageId,
               path,

@@ -24,8 +24,10 @@ import {
   breachAt,
   collapsedOf,
   elementsOf,
-  valueOf,
   field,
+  typedOr,
+  typedValueOf,
+  valueOf,
 } from "#pantry/test/oracle-view.ts";
 import type { LawBreach, PackageRows, Row, View } from "#pantry/test/oracle-view.ts";
 import type { OracleLaw } from "#pantry/test/oracle.ts";
@@ -216,8 +218,14 @@ const valueSetLawsOf = (
     (cardinality === "record"
       ? BigInt(whole.length) === set.elementChildren
       : fields.length === 0 && baseTyped.length === 0);
-  const named = Map.groupBy(fields, ({ id }) =>
-    Option.getOrElse(collapsedOf(rows, id, "field-identifier"), () => ""),
+  const named = Map.groupBy(
+    fields.flatMap((value) =>
+      Option.toArray(typedOr(rows, value.id, "field-identifier", "")).map((identifier) => ({
+        identifier,
+        value,
+      })),
+    ),
+    ({ identifier }) => identifier,
   );
 
   return [
@@ -232,7 +240,7 @@ const valueSetLawsOf = (
           }),
         ]),
     ...[...named].flatMap(([identifier, held]) =>
-      held.slice(1).map((value) => breachAt(rows, value, "Record field key", { identifier })),
+      held.slice(1).map(({ value }) => breachAt(rows, value, "Record field key", { identifier })),
     ),
     ...values.flatMap((value): readonly Breach[] => {
       if (value.kind !== "qti-value") {
@@ -269,7 +277,7 @@ const declarationLawsOf = (
 ): readonly Breach[] => {
   const written = {
     cardinality: collapsedOf(rows, node.id, "cardinality"),
-    identifier: collapsedOf(rows, node.id, "identifier"),
+    identifier: typedValueOf(rows, node.id, "identifier"),
   };
   // A declaration that writes no identifier or no cardinality is refused by AL3
   // ("required-attribute") alone: an absent attribute is no empty one, and these laws do not read
@@ -330,7 +338,7 @@ const interactionLawsOf = (rows: View, grammar: ComposedGrammar): readonly Breac
   const declared = new Map(
     rows.members.flatMap((node) =>
       grammar.references.declarationKind.has(node.kind)
-        ? Option.toArray(collapsedOf(rows, node.id, "identifier")).map(
+        ? Option.toArray(typedValueOf(rows, node.id, "identifier")).map(
             (identifier) => [identifier, node] as const,
           )
         : [],
@@ -342,7 +350,7 @@ const interactionLawsOf = (rows: View, grammar: ComposedGrammar): readonly Breac
       return [];
     }
 
-    return Option.toArray(collapsedOf(rows, node.id, "response-identifier")).flatMap(
+    return Option.toArray(typedValueOf(rows, node.id, "response-identifier")).flatMap(
       (identifier) => {
         const declaration = declared.get(identifier);
         // The cardinality as written, which max-strings judges only where it spells a container
@@ -526,7 +534,7 @@ const lomTitleLawsOf = (input: PackageRows): readonly Breach[] => {
       return [];
     }
 
-    const type = Option.getOrElse(collapsedOf(manifest, resource.id, "type"), () => "");
+    const type = Option.getOrElse(typedValueOf(manifest, resource.id, "type"), () => "");
     const rootKind = namedTypes.get(type);
     const href = valueOf(manifest, resource.id, "href");
     const document = input.documents.find(
@@ -540,9 +548,12 @@ const lomTitleLawsOf = (input: PackageRows): readonly Breach[] => {
     }
 
     const title = replaced(Option.getOrElse(valueOf(document.rows, root.id, "title"), () => ""));
-    const lang = folded(
-      Option.getOrElse(collapsedOf(document.rows, root.id, "xml:lang"), () => ""),
-    );
+    const written = typedOr(document.rows, root.id, "xml:lang", "");
+    if (Option.isNone(written)) {
+      return [];
+    }
+
+    const lang = folded(written.value);
 
     return manifest.members
       .filter((lom) => {
@@ -605,14 +616,14 @@ const dependencyLawsOf = (manifest: View): readonly Breach[] => {
   const resources = new Set(
     manifest.members.flatMap((node) =>
       node.kind === "cp:resource"
-        ? Option.toArray(collapsedOf(manifest, node.id, "identifier"))
+        ? Option.toArray(typedValueOf(manifest, node.id, "identifier"))
         : [],
     ),
   );
 
   return manifest.members.flatMap((node) =>
     node.kind === "cp:dependency"
-      ? Option.toArray(collapsedOf(manifest, node.id, "identifierref"))
+      ? Option.toArray(typedValueOf(manifest, node.id, "identifierref"))
           .filter((identifier) => !resources.has(identifier))
           .map((identifier) => breachAt(manifest, node, "Dependency target", { identifier }))
       : [],

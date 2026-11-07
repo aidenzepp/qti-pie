@@ -32,7 +32,7 @@ import {
   expressionPackageBreaches,
 } from "#pantry/test/oracle-laws/expressions.ts";
 import { viewOf } from "#pantry/test/oracle-view.ts";
-import type { LawBreach } from "#pantry/test/oracle-view.ts";
+import type { LawBreach, TypedReading } from "#pantry/test/oracle-view.ts";
 import {
   testDocumentBreaches,
   testLaws,
@@ -79,14 +79,16 @@ export interface LawPackage {
  * @param path - The document's path in its package.
  * @param rows - Its folded rows.
  * @param grammar - The composed grammar.
+ * @param typed - How an attribute's type reads its value.
  * @returns The breaches, module by module.
  */
 export const lawDocumentBreaches = (
   path: string,
   rows: FoldedRows<Composed>,
   grammar: ComposedGrammar,
+  typed: TypedReading,
 ): readonly LawBreach<ProducedLaw>[] => {
-  const indexed = viewOf(path, rows);
+  const indexed = viewOf(path, rows, typed);
 
   return [
     ...documentDocumentBreaches(indexed, grammar),
@@ -100,20 +102,22 @@ export const lawDocumentBreaches = (
  *
  * @param input - The package.
  * @param grammar - The composed grammar.
+ * @param typed - How an attribute's type reads its value.
  * @returns The breaches, module by module.
  */
 export const lawPackageBreaches = (
   input: LawPackage,
   grammar: ComposedGrammar,
+  typed: TypedReading,
 ): readonly LawBreach<ProducedLaw>[] => {
   const rows = {
     documents: input.documents.map(({ path, resourceType, rows: folded }) => ({
       path,
       resourceType,
-      rows: viewOf(path, folded),
+      rows: viewOf(path, folded, typed),
     })),
     entries: new Set(input.entries),
-    manifest: viewOf(input.manifest.path, input.manifest.rows),
+    manifest: viewOf(input.manifest.path, input.manifest.rows, typed),
   };
 
   return [

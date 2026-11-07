@@ -3957,7 +3957,7 @@ describe("reading 117: an included fragment judged in place", () => {
   );
 
   it.effect(
-    "names each include law by its own variant: no listed target, a fragment identifier, two interactions, a chain back to itself, a fragment's hottext that repeats its item's or names its item's variable, and a fragment's template and feedback references its item does not declare, a fragment's language its item's record does not list, and a rule fragment's variable its item does not declare",
+    "names each include law by its own variant: no listed target, an absent file under File exists alone, a fragment identifier, two interactions, a chain back to itself, a fragment's hottext that repeats its item's or names its item's variable, and a fragment's template and feedback references its item does not declare, a fragment's language its item's record does not list, and a rule fragment's variable its item does not declare",
     (ctx) =>
       searched(
         ctx,
@@ -4084,7 +4084,9 @@ describe("reading 117: an included fragment judged in place", () => {
                 "fragment identifier": "Include fragment identifier",
                 "fragment language": "Document lang",
                 "hottext key": "Choice identifier key",
-                missing: "Include target",
+                // An href naming a file the package does not hold is "File exists"'s alone, which
+                // the import's SitePath refuses as its row is inserted (reading 115).
+                missing: "File exists",
                 "rule variable": "Variable declared",
                 "template reference": "Template reference",
                 "two interactions": "Fragment context",

@@ -8,15 +8,15 @@
 import { assert, describe, it } from "@effect/vitest";
 import { exhaust } from "@grizzle/testing/explore";
 import { requiredInSpace } from "@grizzle/testing/features";
-import { element } from "@grizzle/testing/gen";
+import { element, int } from "@grizzle/testing/gen";
 import type { Gen } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
 import { Effect, Formatter, Result } from "effect";
 import { decode } from "#crust/decode.ts";
 import { encode } from "#crust/encode.ts";
 import { readXml } from "#crust/read.ts";
-import { knownLabels, readingOf } from "#crust/test/appendix-f.ts";
-import type { Reading } from "#crust/test/appendix-f.ts";
+import { appendixF, knownLabels, readingOf, rowOf } from "#crust/test/appendix-f.ts";
+import type { Pattern, Reading } from "#crust/test/appendix-f.ts";
 import { caseHang, GENERATED_TIMEOUT_MS } from "#crust/test/trees.ts";
 
 /**
@@ -199,6 +199,106 @@ const documentOf = ({ body, declaration, opening }: Detection): Uint8Array => {
 };
 
 /**
+ * The byte values Appendix F.1's patterns are printed in, and one byte none of them is. `decode`
+ * compares an opening byte only for equality with a pattern's, so the one byte outside the table's
+ * own, `41`, stands for every other.
+ */
+const tableBytes = [
+  0x00, 0x3c, 0x3f, 0x41, 0x4c, 0x6d, 0x6f, 0x78, 0x94, 0xa7, 0xbb, 0xbf, 0xef, 0xfe, 0xff,
+] as const;
+
+/**
+ * The declarations a near case writes: none, one naming no encoding, the writing's own label, and
+ * another.
+ */
+const nearDeclarations = ["no declaration", "no encoding", "own label", "another label"] as const;
+
+/**
+ * The bodies a near case writes, as raw bytes between `<a>` and `</a>`: a pair that is valid UTF-8
+ * (`C3 A9`, `é`) and a pair that is not (`80 80`), each also a whole UTF-16 code unit, so the body
+ * keeps a UTF-16 writing's units aligned.
+ */
+const nearBodies = { "invalid UTF-8": [0x80, 0x80], "valid UTF-8": [0xc3, 0xa9] } as const;
+
+/**
+ * The label each writing names itself by, UTF-8 for those no decoder here reads.
+ */
+const ownLabels: Readonly<Record<Opening, string>> = {
+  EBCDIC: "UTF-8",
+  "UCS-4 1234": "UTF-8",
+  "UCS-4 1234 marked": "UTF-8",
+  "UCS-4 2143": "UTF-8",
+  "UCS-4 2143 marked": "UTF-8",
+  "UCS-4 3412": "UTF-8",
+  "UCS-4 3412 marked": "UTF-8",
+  "UCS-4 4321": "UTF-8",
+  "UCS-4 4321 marked": "UTF-8",
+  "UTF-16BE": "UTF-16BE",
+  "UTF-16BE marked": "UTF-16",
+  "UTF-16LE": "UTF-16LE",
+  "UTF-16LE marked": "UTF-16",
+  "UTF-8": "UTF-8",
+  "UTF-8 marked": "UTF-8",
+  "single bytes": "ISO-8859-1",
+};
+
+/**
+ * One near case: a writing's document with one of its first four bytes replaced.
+ */
+interface Near {
+  readonly body: keyof typeof nearBodies;
+  readonly declaration: (typeof nearDeclarations)[number];
+  readonly opening: Opening;
+  readonly place: number;
+  readonly value: (typeof tableBytes)[number];
+}
+
+/**
+ * Every near case: each writing, declaration and body, with each of its first four bytes replaced
+ * by each byte of {@link tableBytes}, its own value among them.
+ */
+const near: Gen<Near> = (source) => ({
+  body: source.draw(element(["valid UTF-8", "invalid UTF-8"] as const)),
+  declaration: source.draw(element(nearDeclarations)),
+  opening: source.draw(element(openingNames)),
+  place: source.draw(int(0, 3)),
+  value: source.draw(element(tableBytes)),
+});
+
+/**
+ * The size of {@link near}'s box.
+ */
+const NEARS = openingNames.length * nearDeclarations.length * 2 * 4 * tableBytes.length;
+
+/**
+ * Write a near case's document: the writing's opening, its declaration, `<a>`, the raw body and
+ * `</a>`, then the byte at `place` replaced by `value`.
+ *
+ * @param nearby - The case.
+ * @returns The bytes.
+ */
+const nearDocument = (nearby: Near): Uint8Array => {
+  const writing = openings[nearby.opening];
+  const own = ownLabels[nearby.opening];
+  const prologs: Readonly<Record<Near["declaration"], string>> = {
+    "another label": `<?xml version="1.0" encoding="${own === "UTF-8" ? "UTF-16LE" : "UTF-8"}"?>`,
+    "no declaration": "",
+    "no encoding": '<?xml version="1.0"?>',
+    "own label": `<?xml version="1.0" encoding="${own}"?>`,
+  };
+  const prolog = prologs[nearby.declaration];
+  const bytes = Uint8Array.from([
+    ...writing.opening,
+    ...writing.units(`${prolog}<a>`),
+    ...nearBodies[nearby.body],
+    ...writing.units("</a>"),
+  ]);
+  bytes[nearby.place] = nearby.value;
+
+  return bytes;
+};
+
+/**
  * What `decode` made of a document, in the oracle's terms.
  *
  * @param bytes - The document.
@@ -288,7 +388,7 @@ describe("decode reads the encoding XML 1.0 section 4.3.3 and Appendix F give a 
               assert.strictEqual(done.cases, DETECTIONS);
               assert.deepStrictEqual(
                 [...outcomes.keys()].toSorted(),
-                ["decode", "encoding-mismatch", "nul", "read"],
+                ["decode", "encoding-mismatch", "nul", "read", "unsupported-encoding"],
                 "the box reaches every reading and every refusal",
               );
             }),
@@ -296,6 +396,55 @@ describe("decode reads the encoding XML 1.0 section 4.3.3 and Appendix F give a 
         )
       );
     },
+    GENERATED_TIMEOUT_MS,
+  );
+
+  it.effect(
+    `for every opening one byte away from a pattern of the table, exhausted: ${String(NEARS)} documents, each read as the table says`,
+    (ctx) =>
+      // Oracle: Appendix F.1 transcribed as printed (`#crust/test/appendix-f.ts`), section 4.3.3 and
+      // the fatal TextDecoder, as above. Bound: each way of writing, each of 4 declarations and 2
+      // bodies, with each of its first four bytes replaced by each of the table's 14 byte values
+      // and one byte outside them, which stands for the rest: so every row's pattern is met, and
+      // each byte of it is met wrong.
+      searched(
+        ctx,
+        exhaust(
+          {
+            box: "every writing's document with one of its first four bytes replaced by a byte of the table or one outside it, under 4 declarations and 2 bodies",
+            caseHang,
+            coverage: requiredInSpace<Pattern | "Other">([
+              "Other",
+              ...appendixF.map(({ pattern }) => pattern),
+            ]),
+            generator: near,
+            limit: NEARS,
+            literal: Formatter.format,
+            oracle: {
+              kind: "specification",
+              name: "XML 1.0 (Fifth Edition) Appendix F.1 as printed, section 4.3.3, and the fatal TextDecoder",
+            },
+            suite: "crust/decode/appendix-f",
+          },
+          (nearby, c) =>
+            Effect.gen(function* readsAsTheTableSays() {
+              const bytes = nearDocument(nearby);
+              c.note(rowOf(bytes)?.pattern ?? "Other");
+
+              assert.deepStrictEqual(
+                yield* decoded(bytes),
+                readingOf(bytes),
+                Formatter.format(nearby),
+              );
+            }),
+        ),
+      ).pipe(
+        Effect.tap((done) =>
+          Effect.sync(() => {
+            assert.strictEqual(done.cases, NEARS);
+          }),
+        ),
+      ),
     GENERATED_TIMEOUT_MS,
   );
 });
