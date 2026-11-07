@@ -5,7 +5,7 @@ import { configure } from "#plate/configuration.ts";
 import type { Configuration } from "#plate/configuration.ts";
 import { readCorpusFile } from "#plate/document/corpus.ts";
 import { firstAttempt } from "#plate/engine/attempt.ts";
-import { drawBelow, drawStream, templateLabel } from "#plate/engine/random.ts";
+import { defaultLabel, drawBelow, drawStream, templateLabel } from "#plate/engine/random.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
 import { nullOf } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
@@ -29,6 +29,7 @@ import { float, integer } from "#plate/test/fixtures.ts";
 import { acceptedItem, acceptForTest } from "#plate/validate/verdict.ts";
 import type { Accepted, AcceptedTest } from "#plate/validate/verdict.ts";
 import { manifestNamespace } from "#plate/vocabulary.ts";
+import type { NavigationMode } from "#plate/vocabulary.ts";
 
 /**
  * The folder of the Beginner's Guide examples under the corpus root.
@@ -1640,30 +1641,32 @@ const defaultXml = (target: string, expression: string): string =>
 const read = (identifier: string): string => `<qti-variable identifier="${identifier}"/>`;
 
 /**
- * One item ref of a hand-built linear test: its identifier, its template defaults' text, and its
+ * One item ref of a hand-built one-part test: its identifier, its template defaults' text, and its
  * item's text.
  */
-type LinearRef = readonly [ref: string, defaults: string, item: string];
+type DefaultedRef = readonly [ref: string, defaults: string, item: string];
 
 /**
- * Write the text of a hand-built test: its outcome declarations, then one linear, individual part
- * with one section that holds each item ref, each naming `<ref>.xml` beside the test and holding
- * its template defaults.
+ * Write the text of a hand-built test: its outcome declarations, then one individual part in the
+ * navigation mode given, with one section that holds each item ref, each naming `<ref>.xml` beside
+ * the test and holding its template defaults.
  *
  * @param identifier The test's identifier.
+ * @param navigation The part's navigation mode.
  * @param refs The item refs, in document order.
  * @param declarations The test's outcome declarations' text, in document order.
  * @returns The test's text.
  */
-const linearTestXml = (
+const onePartTestXml = (
   identifier: string,
-  refs: readonly LinearRef[],
+  navigation: NavigationMode,
+  refs: readonly DefaultedRef[],
   declarations: readonly string[],
 ): string =>
   [
     `<qti-assessment-test xmlns="${qtiNamespace}" identifier="${identifier}" title="${identifier}">`,
     ...declarations,
-    '<qti-test-part identifier="part" navigation-mode="linear" submission-mode="individual">',
+    `<qti-test-part identifier="part" navigation-mode="${navigation}" submission-mode="individual">`,
     '<qti-assessment-section identifier="section" title="Section" visible="true">',
     ...refs.map(
       ([ref, defaults]) =>
@@ -1673,23 +1676,25 @@ const linearTestXml = (
   ].join("");
 
 /**
- * Open a hand-built linear test and its items, each through `open` on its own and never as a
+ * Open a hand-built one-part test and its items, each through `open` on its own and never as a
  * package, the test at `tests/<identifier>.xml` and each item beside it at `tests/<ref>.xml`.
  *
  * @param identifier The test's identifier.
+ * @param navigation The part's navigation mode.
  * @param refs The item refs, in document order.
- * @param declarations The test's outcome declarations' text, none by default.
+ * @param declarations The test's outcome declarations' text.
  * @returns The test and its items.
  */
-const linearDelivery = Effect.fnUntraced(function* linearDelivery(
+const onePartDelivery = Effect.fnUntraced(function* onePartDelivery(
   identifier: string,
-  refs: readonly LinearRef[],
-  declarations: readonly string[] = [],
+  navigation: NavigationMode,
+  refs: readonly DefaultedRef[],
+  declarations: readonly string[],
 ) {
   const encoder = new TextEncoder();
   const test = yield* openTest(
     `tests/${identifier}.xml`,
-    encoder.encode(linearTestXml(identifier, refs, declarations)),
+    encoder.encode(onePartTestXml(identifier, navigation, refs, declarations)),
   );
   const items = new Map<string, Accepted>();
   for (const [ref, , xml] of refs) {
@@ -1700,13 +1705,43 @@ const linearDelivery = Effect.fnUntraced(function* linearDelivery(
 });
 
 /**
+ * Open a hand-built test of one linear part and its items, each through `open` on its own and
+ * never as a package ({@link onePartDelivery}).
+ *
+ * @param identifier The test's identifier.
+ * @param refs The item refs, in document order.
+ * @param declarations The test's outcome declarations' text, none by default.
+ * @returns The test and its items.
+ */
+const linearDelivery = (
+  identifier: string,
+  refs: readonly DefaultedRef[],
+  declarations: readonly string[] = [],
+) => onePartDelivery(identifier, "linear", refs, declarations);
+
+/**
+ * Open a hand-built test of one nonlinear part and its items, each through `open` on its own and
+ * never as a package ({@link onePartDelivery}).
+ *
+ * @param identifier The test's identifier.
+ * @param refs The item refs, in document order.
+ * @param declarations The test's outcome declarations' text, none by default.
+ * @returns The test and its items.
+ */
+const nonlinearDelivery = (
+  identifier: string,
+  refs: readonly DefaultedRef[],
+  declarations: readonly string[] = [],
+) => onePartDelivery(identifier, "nonlinear", refs, declarations);
+
+/**
  * Open a hand-built linear test and its items as one package, as {@link linearDelivery} writes
  * them, the test at `package/test.xml` and each item beside it at `package/<ref>.xml`.
  *
  * @param refs The item refs, in document order.
  * @returns The package's verdict.
  */
-const linearPackage = (refs: readonly LinearRef[]) => {
+const linearPackage = (refs: readonly DefaultedRef[]) => {
   const encoder = new TextEncoder();
   const manifest = [
     `<manifest xmlns="${manifestNamespace}" identifier="M"><metadata><schema>QTI Package</schema>`,
@@ -1720,7 +1755,7 @@ const linearPackage = (refs: readonly LinearRef[]) => {
   ].join("");
   const texts: readonly (readonly [path: string, text: string])[] = [
     [manifestFile, manifest],
-    ["package/test.xml", linearTestXml("defaults", refs, [])],
+    ["package/test.xml", onePartTestXml("defaults", "linear", refs, [])],
     ...refs.map(([ref, , xml]) => [`package/${ref}.xml`, xml] as const),
   ];
 
@@ -1898,7 +1933,7 @@ describe("a linear item ref's template defaults", () => {
     "[T-9] returns startTest's OutcomeMismatchError, never a throw, for a test and items checked apart whose first linear item's default gives T a string, which the package of the same documents refuses at open as expression-type",
     () =>
       Effect.gen(function* misfitApart() {
-        const refs: readonly LinearRef[] = [
+        const refs: readonly DefaultedRef[] = [
           [
             "ITEM1",
             defaultXml("T", '<qti-base-value base-type="string">ten</qti-base-value>'),
@@ -1925,7 +1960,7 @@ describe("a linear item ref's template defaults", () => {
     "[T-9] returns startTest's UnknownIdentifierError, holder item, for a test and items checked apart whose default names no template variable of its item, which the package refuses at open",
     () =>
       Effect.gen(function* unknownApart() {
-        const refs: readonly LinearRef[] = [
+        const refs: readonly DefaultedRef[] = [
           [
             "ITEM1",
             defaultXml("NOPE", '<qti-base-value base-type="integer">1</qti-base-value>'),
@@ -2027,6 +2062,210 @@ describe("a linear item ref's template defaults", () => {
         assert.deepStrictEqual(
           templatesAt(presentedAt(delivery, session, 2, after(1000)), 2)["T"],
           integer(0n),
+        );
+      }),
+  );
+});
+
+/**
+ * The `qti-outcome-declaration` of the test outcome `START`, a single integer whose default is 7.
+ */
+const startDeclaration =
+  '<qti-outcome-declaration identifier="START" cardinality="single" base-type="integer"><qti-default-value><qti-value>7</qti-value></qti-default-value></qti-outcome-declaration>';
+
+/**
+ * Give a session whose test outcome `START` is 9, as a later run of the test's outcome processing
+ * could leave it.
+ *
+ * @param session The session.
+ * @returns The session with `START` at 9.
+ */
+const withStartAtNine = (session: TestSession): TestSession => ({
+  ...session,
+  outcomes: { START: integer(9n) },
+});
+
+/**
+ * Give what a stored session's item may hold as its part's template defaults, by template
+ * identifier, as a host could hand it back edited.
+ *
+ * @param session The session.
+ * @param sequenceIndex The item's sequence index.
+ * @param defaults The template defaults the item holds.
+ * @returns The session with the item holding them.
+ */
+const storedDefaults = (
+  session: TestSession,
+  sequenceIndex: number,
+  defaults: Readonly<Record<string, Value>>,
+): TestSession => ({
+  ...session,
+  items: session.items.map((item) =>
+    item.sequenceIndex === sequenceIndex
+      ? { ...item, templateDefaults: Option.some(defaults) }
+      : item,
+  ),
+});
+
+/**
+ * Give what `present` returned for a session's item, failing the test when it throws.
+ *
+ * @param delivery The test and its items.
+ * @param session The session.
+ * @param sequenceIndex The item's sequence index.
+ * @returns What `present` returned.
+ */
+const presentedOrFailed = (delivery: Delivery, session: TestSession, sequenceIndex: number) =>
+  Result.getOrElse(
+    Result.try(() =>
+      present(delivery.test.test, delivery.items, session, sequenceIndex, after(1000)),
+    ),
+    () => assert.fail("present threw instead of returning its failure"),
+  );
+
+describe("a nonlinear item ref's template defaults", () => {
+  it.effect(
+    "[T-9] writes the template defaults of each item of a nonlinear part when its part starts, from each item's own default stream, none on an item ref with no default, and presents an item from them",
+    () =>
+      Effect.gen(function* writesAtStart() {
+        const delivery = yield* nonlinearDelivery(
+          "nonlinear",
+          [
+            ["ITEM1", defaultXml("T", read("START")), doublingXml("ITEM1")],
+            [
+              "ITEM2",
+              defaultXml("T", '<qti-random-integer min="1" max="1000000"/>'),
+              doublingXml("ITEM2"),
+            ],
+            ["ITEM3", "", doublingXml("ITEM3")],
+          ],
+          [startDeclaration],
+        );
+        const session = started(delivery, yield* configure({}), "defaults");
+        const drawn = 1n + drawBelow(drawStream("defaults", defaultLabel(instance, 2)), 1_000_000n);
+        const presented = presentedAt(delivery, session, 2, after(1000));
+
+        assert.deepStrictEqual(
+          session.items.map((item) => item.templateDefaults),
+          [Option.some({ T: integer(7n) }), Option.some({ T: integer(drawn) }), Option.none()],
+        );
+        assert.notStrictEqual(drawn, 1n + drawBelow(drawStream("", ""), 1_000_000n));
+        assert.deepStrictEqual(
+          [templatesAt(session, 1)["T"], templatesAt(session, 1)["DOUBLED"]],
+          [integer(7n), integer(14n)],
+        );
+        assert.deepStrictEqual(templatesAt(session, 2), {});
+        assert.deepStrictEqual(
+          [templatesAt(presented, 2)["T"], templatesAt(presented, 2)["DOUBLED"]],
+          [integer(drawn), integer(drawn * 2n)],
+        );
+        assert.deepStrictEqual(throughHost(delivery.test, session), session);
+      }),
+  );
+
+  it.effect(
+    "[T-9] presents a nonlinear item from the template default computed when its part starts, though the test outcome it read has changed since",
+    () =>
+      Effect.gen(function* keepsStartValue() {
+        const refs: readonly DefaultedRef[] = [
+          ["ITEM1", "", doublingXml("ITEM1")],
+          ["ITEM2", defaultXml("T", read("START")), doublingXml("ITEM2")],
+        ];
+        const nonlinear = yield* nonlinearDelivery("kept", refs, [startDeclaration]);
+        const linear = yield* linearDelivery("kept", refs, [startDeclaration]);
+        assert.deepStrictEqual(
+          templatesAt(
+            presentedAt(
+              nonlinear,
+              withStartAtNine(started(nonlinear, yield* configure({}), "defaults")),
+              2,
+              after(1000),
+            ),
+            2,
+          )["T"],
+          integer(7n),
+        );
+        assert.deepStrictEqual(
+          templatesAt(
+            presentedAt(
+              linear,
+              withStartAtNine(started(linear, yield* configure({}), "defaults")),
+              2,
+              after(1000),
+            ),
+            2,
+          )["T"],
+          integer(9n),
+        );
+      }),
+  );
+
+  it.effect(
+    "[T-9] returns present's EngineFailure, never a throw, for a stored session whose item holds a template default computed when its part starts that its item does not take: another type, or no such variable",
+    () =>
+      Effect.gen(function* storedMisfit() {
+        const delivery = yield* nonlinearDelivery("stored", [
+          ["ITEM1", "", doublingXml("ITEM1")],
+          [
+            "ITEM2",
+            defaultXml("T", '<qti-base-value base-type="integer">10</qti-base-value>'),
+            doublingXml("ITEM2"),
+          ],
+        ]);
+        const session = started(delivery, yield* configure({}), "defaults");
+        const mismatch = failureTagged(
+          presentedOrFailed(
+            delivery,
+            storedDefaults(session, 2, {
+              T: {
+                baseType: "string",
+                cardinality: "single",
+                values: [{ baseType: "string", value: "ten" }],
+              },
+            }),
+            2,
+          ),
+          "OutcomeMismatchError",
+        );
+        const unknown = failureTagged(
+          presentedOrFailed(delivery, storedDefaults(session, 2, { NOPE: integer(1n) }), 2),
+          "UnknownIdentifierError",
+        );
+
+        assert.deepStrictEqual(
+          [mismatch.identifier, mismatch.expected, mismatch.actual],
+          ["T", "integer single", "string single"],
+        );
+        assert.deepStrictEqual(
+          [unknown.holder, unknown.identifier, unknown.role],
+          ["item", "NOPE", "variable"],
+        );
+        assert.deepStrictEqual(
+          templatesAt(presentedAt(delivery, session, 2, after(1000)), 2)["T"],
+          integer(10n),
+        );
+      }),
+  );
+
+  it.effect(
+    "[T-9] returns startTest's OutcomeMismatchError, never a throw, for a test and items each opened alone whose nonlinear part gives its second item's T a string when its part starts",
+    () =>
+      Effect.gen(function* misfitAtStart() {
+        const returned = yield* startedOrFailed(
+          yield* nonlinearDelivery("misfit", [
+            ["ITEM1", "", doublingXml("ITEM1")],
+            [
+              "ITEM2",
+              defaultXml("T", '<qti-base-value base-type="string">ten</qti-base-value>'),
+              doublingXml("ITEM2"),
+            ],
+          ]),
+        );
+        const failure = failureTagged(returned, "OutcomeMismatchError");
+
+        assert.deepStrictEqual(
+          [failure.identifier, failure.expected, failure.actual],
+          ["T", "integer single", "string single"],
         );
       }),
   );

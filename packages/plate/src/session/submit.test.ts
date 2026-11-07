@@ -1963,3 +1963,145 @@ describe("a linear item ref's template defaults at a part's end", () => {
       }),
   );
 });
+
+/**
+ * Write the text of a hand-built item whose template variables a test's template defaults set: the
+ * single float template variable `T`, with no default, and the single duration template variable
+ * `U`, which declares the default 5. Its body is a passage.
+ *
+ * @param identifier The item's identifier.
+ * @returns The item's text.
+ */
+const defaultedItemXml = (identifier: string): string =>
+  [
+    `<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="${identifier}" title="${identifier}" adaptive="false" time-dependent="false">`,
+    '<qti-template-declaration identifier="T" cardinality="single" base-type="float"/>',
+    '<qti-template-declaration identifier="U" cardinality="single" base-type="duration">',
+    "<qti-default-value><qti-value>5</qti-value></qti-default-value></qti-template-declaration>",
+    "<qti-item-body><p>Read this passage.</p></qti-item-body></qti-assessment-item>",
+  ].join("");
+
+/**
+ * The outcomes of a test whose outcome processing sums every item's `SCORE` into `TOTAL`.
+ */
+const totalOutcomes: BuiltOutcomes = {
+  declarations:
+    '<qti-outcome-declaration identifier="TOTAL" cardinality="single" base-type="float"/>',
+  rules:
+    '<qti-set-outcome-value identifier="TOTAL"><qti-sum><qti-test-variables variable-identifier="SCORE"/></qti-sum></qti-set-outcome-value>',
+};
+
+/**
+ * Write a `qti-template-default` that sets a template variable to what a name reads.
+ *
+ * @param target Its `template-identifier`.
+ * @param name The name its `qti-variable` reads.
+ * @returns The element's text.
+ */
+const defaultReading = (target: string, name: string): string =>
+  `<qti-template-default template-identifier="${target}"><qti-variable identifier="${name}"/></qti-template-default>`;
+
+describe("a nonlinear item ref's template defaults when its part starts", () => {
+  it.effect(
+    "[T-9] keeps the template default computed when its part starts, though a later submission's run sets the test outcome it read",
+    () =>
+      Effect.gen(function* keepsAfterRun() {
+        const delivery = yield* builtDelivery(
+          "kept",
+          [partOf("part", ["one", "two"], { defaults: { two: defaultReading("T", "TOTAL") } })],
+          [
+            ["one", choiceItemXml("one")],
+            ["two", defaultedItemXml("two")],
+          ],
+          totalOutcomes,
+        );
+        const session = seeded(delivery, defaults);
+        const submitted = accepted(
+          submitItem(
+            delivery.test,
+            delivery.items,
+            session,
+            stepOf("submit-item", { RESPONSE: chosen("A") }),
+            defaults,
+            { now: after(5) },
+          ),
+        );
+        const reached = shown(delivery, submitted, 2, after(6));
+
+        assert.deepStrictEqual(itemAt(session, 2).templateDefaults, Option.some({ T: scored(0) }));
+        assert.deepStrictEqual(submitted.outcomes, { TOTAL: scored(1) });
+        assert.deepStrictEqual(itemAt(reached, 2).record.templates, {
+          T: scored(0),
+          U: secondsOf(5),
+        });
+      }),
+  );
+
+  it.effect(
+    "[T-9] reads the run a simultaneous part's submission left in the next nonlinear part's template default when its part starts, not the outcome's default",
+    () =>
+      Effect.gen(function* readsPartRun() {
+        const delivery = yield* builtDelivery(
+          "ordered",
+          [
+            partOf("first", ["one"], { submission: "simultaneous" }),
+            partOf("second", ["two"], { defaults: { two: defaultReading("T", "TOTAL") } }),
+          ],
+          [
+            ["one", choiceItemXml("one")],
+            ["two", defaultedItemXml("two")],
+          ],
+          totalOutcomes,
+        );
+        const session = seeded(delivery, defaults);
+        const ended = accepted(
+          submitPart(
+            delivery.test,
+            delivery.items,
+            session,
+            stepOf("submit-part", { RESPONSE: chosen("A") }),
+            { now: after(5) },
+          ),
+        );
+
+        assert.deepStrictEqual(session.outcomes, { TOTAL: scored(0) });
+        assert.deepStrictEqual(ended.outcomes, { TOTAL: scored(1) });
+        assert.strictEqual(ended.position, 1);
+        assert.deepStrictEqual(itemAt(ended, 2).templateDefaults, Option.some({ T: scored(1) }));
+        assert.deepStrictEqual(itemAt(ended, 2).record.templates["T"], scored(1));
+      }),
+  );
+
+  it.effect(
+    "[T-9] reads the test's duration as NULL in a template default when its part starts after an earlier part's end",
+    () =>
+      Effect.gen(function* readsNoTime() {
+        const delivery = yield* builtDelivery(
+          "timeless",
+          [
+            partOf("first", ["one"]),
+            partOf("second", ["two"], { defaults: { two: defaultReading("U", "duration") } }),
+          ],
+          [
+            ["one", choiceItemXml("one")],
+            ["two", defaultedItemXml("two")],
+          ],
+        );
+        const ended = accepted(
+          endPart(delivery.test, delivery.items, seeded(delivery, defaults), stepOf("end-part"), {
+            now: after(60),
+          }),
+        );
+
+        assert.strictEqual(ended.position, 1);
+        assert.deepStrictEqual(
+          itemAt(ended, 2).templateDefaults,
+          Option.some({ U: nullOf("duration", "single") }),
+        );
+        assert.deepStrictEqual(
+          itemAt(ended, 2).record.templates["U"],
+          nullOf("duration", "single"),
+        );
+      }),
+  );
+});

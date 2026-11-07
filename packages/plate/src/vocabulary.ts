@@ -813,10 +813,10 @@ export type AnsweredStatus = (typeof answeredStatuses)[number];
  * names is missing from the delivered sequence. `allow-comment="true"` is a session control that
  * asks for a comment box; `max-attempts:negative` is a negative `max-attempts`, delivered as no
  * limit; `root:<name>` is a section or a stimulus given as a document's root, which is not
- * delivered alone. A test's outcome processing, an item reference's `qti-weight` and its
- * `qti-variable-mapping` are read into the test model, so none of them is a mark here: outcome
- * processing the engine cannot run is marked by what it cannot run (`buildTest` in
- * `#plate/model/test.ts`).
+ * delivered alone. A test's outcome processing, an item reference's `qti-weight`, its
+ * `qti-variable-mapping` and its `qti-template-default` are read into the test model, so none of
+ * them is a mark here: outcome processing or a template default the engine cannot run is marked by
+ * what it cannot run (`buildTest` in `#plate/model/test.ts`).
  */
 export const testMarks = [
   "qti-selection",
@@ -830,7 +830,6 @@ export const testMarks = [
   "qti-assessment-section-ref",
   "qti-stylesheet",
   "qti-context-declaration",
-  "qti-template-default",
   "xi:include",
   'allow-comment="true"',
   "max-attempts:negative",

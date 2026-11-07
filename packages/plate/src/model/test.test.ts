@@ -1065,10 +1065,7 @@ describe("buildTest's template defaults", () => {
           { expression: integerValue(3n), templateIdentifier: "T1" },
         ]);
         assert.deepStrictEqual(nodeNamed(built, "ITEM2", "item-ref").templateDefaults, []);
-        assert.deepStrictEqual(built.unsupported, [
-          mark("qti-template-default", defaultPath(1)),
-          mark("qti-template-default", defaultPath(2)),
-        ]);
+        assert.deepStrictEqual(built.unsupported, []);
       }),
   );
 
@@ -1088,10 +1085,7 @@ describe("buildTest's template defaults", () => {
           { expression: integerValue(2n), templateIdentifier: "T2" },
         ]);
         assert.deepStrictEqual(built.unsupported, [
-          mark("qti-template-default", defaultPath(1)),
           mark("variable:numAttempts", defaultPath(1)),
-          mark("qti-template-default", defaultPath(2)),
-          mark("qti-template-default", defaultPath(3)),
           mark("variable:S1.duration", defaultPath(3)),
         ]);
       }),
@@ -1114,11 +1108,7 @@ describe("buildTest's template defaults", () => {
           { expression: variableRead("SCORE"), templateIdentifier: "T2" },
           { expression: variableRead("duration"), templateIdentifier: "T3" },
         ]);
-        assert.deepStrictEqual(built.unsupported, [
-          mark("qti-template-default", defaultPath(1)),
-          mark("qti-template-default", defaultPath(2)),
-          mark("qti-template-default", defaultPath(3)),
-        ]);
+        assert.deepStrictEqual(built.unsupported, []);
       }),
   );
 
@@ -1140,9 +1130,7 @@ describe("buildTest's template defaults", () => {
           { expression: integerValue(2n), templateIdentifier: "T2" },
         ]);
         assert.deepStrictEqual(built.unsupported, [
-          mark("qti-template-default", defaultPath(1)),
           mark("qti-field-value", `${defaultPath(1)}/qti-field-value`),
-          mark("qti-template-default", defaultPath(2)),
         ]);
       }),
   );

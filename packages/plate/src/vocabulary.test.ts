@@ -697,7 +697,6 @@ describe("M2's closed sets", () => {
         "qti-assessment-section-ref",
         "qti-stylesheet",
         "qti-context-declaration",
-        "qti-template-default",
         "xi:include",
         'allow-comment="true"',
         "max-attempts:negative",
@@ -707,11 +706,15 @@ describe("M2's closed sets", () => {
     );
   });
 
-  it("[T-9] keys neither outcome processing nor a weight nor a variable mapping, which the test model reads", () => {
+  it("[T-9] keys neither outcome processing nor a weight, a variable mapping or a template default, which the test model reads and the session applies", () => {
     const marks: readonly string[] = testMarks;
-    for (const read of ["qti-outcome-processing", "qti-variable-mapping", "qti-weight"]) {
+    for (const read of [
+      "qti-outcome-processing",
+      "qti-template-default",
+      "qti-variable-mapping",
+      "qti-weight",
+    ]) {
       assert.notInclude([...marks], read);
     }
-    assert.include([...testMarks], "qti-template-default");
   });
 });
