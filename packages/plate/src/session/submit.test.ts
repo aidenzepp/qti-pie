@@ -497,6 +497,42 @@ const templatedItemXml = (
     "</qti-assessment-item>",
   ].join("");
 
+/**
+ * A value whose members count each read of them, and a faithful value otherwise.
+ */
+interface CountedValue {
+  /**
+   * How many times the members have been read.
+   */
+  readonly reads: () => number;
+  readonly value: Value;
+}
+
+/**
+ * Wrap a value so each read of its members counts. Printing a variable reads its members, and
+ * deciding which parts the page shows never reads a printed variable's, so the count shows whether
+ * a path printed it.
+ *
+ * @param value The value.
+ * @returns The wrapped value and its count.
+ */
+const counted = (value: Value): CountedValue => {
+  let reads = 0;
+
+  return {
+    reads: () => reads,
+    value: {
+      baseType: value.baseType,
+      cardinality: value.cardinality,
+      get values() {
+        reads += 1;
+
+        return value.values;
+      },
+    },
+  };
+};
+
 describe("submitItem", () => {
   it.effect(
     "[T-4] on CASE's part of max-attempts 2, accepts the second submit and closes the item, then refuses a third: attempts-exhausted",
@@ -999,6 +1035,57 @@ describe("submitItem", () => {
 
         assert.strictEqual(itemAt(answered, 1).record.numAttempts, 1);
         assert.deepStrictEqual(scoreOf(itemAt(answered, 1).record), scored(1));
+      }),
+  );
+
+  it.effect(
+    "[I-5] under allow-skipping false decides skipping without formatting a printed variable: the skip rule reads the walk that prints no text",
+    () =>
+      Effect.gen(function* skippedWithoutPrinting() {
+        const delivery = yield* builtDelivery(
+          "printing",
+          [partOf("part", ["printing"], { control: 'allow-skipping="false"' })],
+          [
+            [
+              "printing",
+              templatedItemXml("printing", "X", {
+                body: `<p><qti-printed-variable identifier="T"/></p>${choiceXml("RESPONSE", ["A", "B"].map(plainChoice).join(""))}`,
+              }),
+            ],
+          ],
+        );
+        const configuration = yield* configure({});
+        const begun = started(delivery, configuration);
+        const printed = counted(chosen("X"));
+        const printing: TestSession = {
+          ...begun,
+          items: begun.items.map((entry) =>
+            entry.sequenceIndex === 1
+              ? {
+                  ...entry,
+                  record: {
+                    ...entry.record,
+                    templates: { ...entry.record.templates, T: printed.value },
+                  },
+                }
+              : entry,
+          ),
+        };
+
+        assert.strictEqual(
+          refusedRule(
+            submitItem(
+              delivery.test,
+              delivery.items,
+              printing,
+              stepOf("submit-item"),
+              configuration,
+              { now: after(5) },
+            ),
+          ),
+          "skipping-not-allowed",
+        );
+        assert.strictEqual(printed.reads(), 0);
       }),
   );
 

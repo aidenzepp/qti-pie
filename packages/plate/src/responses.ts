@@ -22,7 +22,7 @@ import type { Interaction, Item } from "#plate/model/item.ts";
 import type { ResponsesRecord } from "#plate/model/record.ts";
 import { nullOf } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
-import { redactItem } from "#plate/payload.ts";
+import { redactStructure } from "#plate/payload.ts";
 import type { ValidationMessage } from "#plate/payload.ts";
 import type { Accepted } from "#plate/validate/verdict.ts";
 
@@ -99,11 +99,12 @@ const validate = (
 
 /**
  * Give the interactions the page showed, in document order: those of the item redacted under the
- * record (`redactItem`), the walk `render` shows the item by, so a choice its template hides is not
- * among its interaction's choices and an interaction a hidden template block, inline or choice
- * holds is not there at all. With no record the redaction reads the item as it does with none
- * (H3), so an item whose template processing runs shows no template block, inline or choice with
- * a template visibility.
+ * record, by the walk `render` shows the item by (`redactStructure`, which decides what
+ * `redactItem` decides and prints no text, so no printed variable is formatted to judge a
+ * response). So a choice its template hides is not among its interaction's choices and an
+ * interaction a hidden template block, inline or choice holds is not there at all. With no record
+ * the redaction reads the item as it does with none (H3), so an item whose template processing runs
+ * shows no template block, inline or choice with a template visibility.
  *
  * @param item The item.
  * @param record The template values of the attempt shown, if any.
@@ -112,8 +113,8 @@ const validate = (
 const shownInteractions = (item: Item, record?: ResponsesRecord): readonly Interaction[] =>
   interactionsIn(
     (record === undefined
-      ? redactItem(item)
-      : redactItem(item, { outcomes: {}, templates: record.templates })
+      ? redactStructure(item)
+      : redactStructure(item, { outcomes: {}, templates: record.templates })
     ).body,
   );
 

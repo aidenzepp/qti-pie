@@ -7,6 +7,7 @@ import type { Element, Node } from "#plate/emit/node.ts";
 import { shuffleOrder } from "#plate/engine/random.ts";
 import { decode, entryName } from "#plate/form/encoding.ts";
 import { encodeRedacted } from "#plate/codec/redacted.ts";
+import { interactionsIn as bodyInteractions } from "#plate/model/interactions.ts";
 import type {
   BodyNode,
   ChoiceInteraction,
@@ -34,6 +35,7 @@ import {
   payload,
   postings,
   redactItem,
+  redactStructure,
   templateShows,
 } from "#plate/payload.ts";
 import type {
@@ -3525,4 +3527,154 @@ describe("redactItem on a printed variable whose whole text passes 1,000,000 cha
       assert.deepStrictEqual(paragraphOf(shown), texts("Value: ", " 1; 1; 1"));
     }),
   );
+});
+
+/**
+ * Give what a body shows of its interactions: each one's kind, the response it binds and the
+ * identifiers of its choices (none for a text control), in document order.
+ *
+ * @param body The body of a redaction or of a structure.
+ * @returns The interactions, each as its kind, response and choices.
+ */
+const shownParts = (
+  body: readonly BodyNode[],
+): readonly (readonly [string, string, readonly string[]])[] =>
+  bodyInteractions(body).map((interaction) => [
+    interaction.kind,
+    interaction.response,
+    interaction.kind === "choice" || interaction.kind === "inline-choice"
+      ? interaction.choices.map((entry) => entry.identifier)
+      : [],
+  ]);
+
+/**
+ * Give the item `check` accepts from a document, failing the test otherwise.
+ *
+ * @param document The document.
+ * @returns The item.
+ */
+const acceptedFrom = (document: SourceDocument): Item =>
+  Option.getOrElse(acceptedItem(check(document, tables)), () =>
+    assert.fail(`${document.location} is not accepted.`),
+  ).item;
+
+/**
+ * A value whose members count each read of them, and a faithful value otherwise.
+ */
+interface CountedValue {
+  /**
+   * How many times the members have been read.
+   */
+  readonly reads: () => number;
+  readonly value: Value;
+}
+
+/**
+ * Wrap a value so each read of its members counts. Printing a variable reads its members, and
+ * deciding which parts the page shows never reads a printed variable's, so the count shows whether
+ * a path printed it.
+ *
+ * @param value The value.
+ * @returns The wrapped value and its count.
+ */
+const counted = (value: Value): CountedValue => {
+  let reads = 0;
+
+  return {
+    reads: () => reads,
+    value: {
+      baseType: value.baseType,
+      cardinality: value.cardinality,
+      get values() {
+        reads += 1;
+
+        return value.values;
+      },
+    },
+  };
+};
+
+describe("redactStructure", () => {
+  it("[I-5] decides what redactItem decides over the templated fixtures: the same interactions and choices, responses, notices and hidden-only responses", () => {
+    const answers = acceptedFrom(blockAnswers);
+    const parameters = acceptedFrom(parameterDocument);
+    const containers = acceptedFrom(containerParameterDocument);
+    const cases: readonly (readonly [string, Item, RedactRecord | undefined])[] = [
+      ["printed variables under a record", templated, drawn],
+      ["printed variables with no record", templated, undefined],
+      ["printed variables of an item without template processing", untemplated, undefined],
+      ...visibilityCases.map(
+        ({ holds, value }) =>
+          [
+            `template visibility, VISIBLE holding ${holds}`,
+            visibility,
+            holding({ VISIBLE: value }),
+          ] as const,
+      ),
+      ["template visibility with no record", visibility, undefined],
+      ["template visibility with no value of VISIBLE", visibility, holding({})],
+      ["answering blocks, T holding A", answers, holding({ T: identifierValue("A") })],
+      ["answering blocks, T holding B", answers, holding({ T: identifierValue("B") })],
+      ["answering blocks with no record", answers, undefined],
+      ["parameters the record expands", parameters, parameterValues],
+      ["parameters the record withholds", parameters, holding({})],
+      ["container parameters", containers, containerParameterValues],
+    ];
+
+    for (const [label, subject, record] of cases) {
+      const full = redactItem(subject, record);
+      const structure = redactStructure(subject, record);
+
+      assert.deepStrictEqual(shownParts(structure.body), shownParts(full.body), label);
+      assert.deepStrictEqual(structure.responses, full.responses, label);
+      assert.deepStrictEqual(structure.notices, full.notices, label);
+      assert.deepStrictEqual(
+        [...structure.hiddenOnly],
+        [...hiddenOnlyResponses(subject, record)],
+        label,
+      );
+    }
+  });
+
+  it("[I-5] holds no printed text: a printed variable the record covers leaves nothing in its place, one it does not cover keeps its notice, and a param-variable parameter keeps its value as written", () => {
+    const [paragraph] = redactStructure(templated, drawn).body;
+    const [uncovered] = redactStructure(templated).body;
+    const parameters = acceptedFrom(parameterDocument);
+
+    assert.deepStrictEqual(
+      paragraph?.kind === "element" ? paragraph.children : assert.fail("No paragraph."),
+      texts("N ", ", score ", ", member ", ", hex ", ", raw "),
+    );
+    assert.deepStrictEqual(
+      uncovered?.kind === "element" ? uncovered.children : assert.fail("No paragraph."),
+      paragraphOf(redactItem(templated)),
+    );
+    assert.deepStrictEqual(
+      parametersOf(objectChildren(redactStructure(parameters, parameterValues).body)),
+      writtenParameters,
+    );
+  });
+
+  it("[I-5] formats no printed variable or parameter, and neither does hiddenOnlyResponses, where redactItem formats each", () => {
+    const parameters = acceptedFrom(parameterDocument);
+    const list = counted(orderedIntegers([10n, 20n, 30n]));
+    const count = counted(integerValue(255n));
+    const covering: RedactRecord = {
+      ...drawn,
+      templates: { ...drawn.templates, LIST: list.value },
+    };
+    const passing = holding({ ...parameterValues.templates, N: count.value });
+    redactStructure(templated, covering);
+    redactStructure(parameters, passing);
+    hiddenOnlyResponses(templated, covering);
+    hiddenOnlyResponses(parameters, passing);
+
+    assert.deepStrictEqual([list.reads(), count.reads()], [0, 0]);
+
+    redactItem(templated, covering);
+    redactItem(parameters, passing);
+
+    assert.isAbove(list.reads(), 0);
+    assert.isAbove(count.reads(), 0);
+  });
 });
