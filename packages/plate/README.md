@@ -399,12 +399,12 @@ its processing runs, and the operator's value is NULL.
 | A literal `figures` below 1, or below 0 in `decimalPlaces` mode | `attribute-type` | P10 |
 | A literal `n` of `qti-index` below 1 | `attribute-type` | P11 |
 | A declaration named `completionStatus`, `numAttempts` or `duration`, the names of the built-in variables | `attribute-type` | `DeclarationNotReserved` |
-| An outcome declaration named `SCORE` or `MAXSCORE` with a base type other than `float`, or one named `PASSED` with a base type other than `boolean` | `attribute-type` | `ReservedOutcomeTypes` |
 | A `qti-equal` whose `tolerance` holds a token that is neither an `xs:double` nor a variable's name (an NCName), such as `1,5` | `attribute-type` | P6 |
 | A `qti-equal` in `absolute` or `relative` mode that has no `tolerance` | `missing-attribute` | P36 |
 
 The refusals with `expression-type` and `undeclared-variable` judge only inline response processing.
-The refusals of a declaration judge a test's declarations as well as an item's.
+The refusal of a declaration named after a built-in variable judges a test's declarations as
+well as an item's.
 
 Integers are exact. `qti-sum`, `qti-subtract`, `qti-product` and `qti-lcm` give NULL for an
 integer result of more than 1,000,000 bits. `qti-multiple`, `qti-ordered` and `qti-repeat` give

@@ -47,9 +47,6 @@ and both of its entry points are unstable until M3.
   refused none of them.
   - A declaration named `completionStatus`, `numAttempts` or `duration`, the names of the built-in
     variables, in an item or a test (`DeclarationNotReserved`).
-  - An outcome declaration named `SCORE` or `MAXSCORE` with a base type other than `float`, or one
-    named `PASSED` with a base type other than `boolean`, in an item or a test
-    (`ReservedOutcomeTypes`).
   - A `qti-equal` whose `tolerance` holds a token that is neither an `xs:double` nor a variable's
     name (an NCName), such as `1,5` (P6).
 - Where QTI makes an integer a float, an integer beyond the largest finite float becomes the
