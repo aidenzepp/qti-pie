@@ -24,9 +24,14 @@
  * entity reference, since an entity declared only in an external subset no processor here reads
  * leaves no infoset to compare.
  *
- * Budget: a bounded one in every free run, a longer one under `GR8DES_GENETIC=1`. The search's
- * seed is the run's (`TEST_SEED`); rerunning with it breeds the same documents. It writes the
- * documents under a folder of the run's own, `work/genetic-xsd-*`, removed after the file.
+ * The free suite replays, the same on every run: every lawful seed and the drawn seeds of the
+ * suite's floor stream, judged as built, and the kept documents, each a reduced case a ruling or a
+ * record settled, which must still show each known disagreement. A commit that touches nothing the
+ * search reads judges the same documents as the one before it, so a lucky seed never turns it red.
+ * `GR8DES_GENETIC=1` explores: the bred search with the long budget, its seed the run's
+ * (`TEST_SEED`), rerunning with which breeds the same documents; every class it meets is reduced,
+ * reported, and kept. It writes the documents under a folder of the run's own,
+ * `work/genetic-xsd-*`, removed after the file.
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it as unit, layer } from "@effect/vitest";
@@ -37,6 +42,7 @@ import { readXml } from "@qti-pie/crust/read.ts";
 import type { Element } from "@qti-pie/crust/tree.ts";
 import { writeXml } from "@qti-pie/crust/write.ts";
 import { floorSeed, rotatingSeed } from "@grizzle/testing/random";
+import type { Stream } from "@grizzle/testing/random";
 import { sample } from "@grizzle/testing/source";
 import { swarm } from "@grizzle/testing/swarm";
 import { runOfProcess } from "@grizzle/testing/vitest/run";
@@ -123,22 +129,15 @@ const scratchRoot = fileScratchDirectory("genetic-xsd-");
 const oracleRoot = fileScratchDirectory("genetic-xsd-oracle-");
 
 /**
- * The free run's budget: every lawful seed, 64 drawn seeds and two generations of 80, so `xmllint`
- * compiles each version's schema sets three times. `initial` counts the drawn seeds; the run judges
- * the lawful ones beside them.
+ * How many drawn seeds of the floor stream the free suite judges beside the lawful ones.
  */
-const freeBudget: Budget = { candidates: 160, edits: 3, generation: 80, initial: 64 };
+const fixedDrawn = 64;
 
 /**
- * The long budget under `GR8DES_GENETIC=1`: every lawful seed, 96 drawn seeds and 25 generations of
- * 96.
+ * The exploration's budget under `GR8DES_GENETIC=1`: every lawful seed, 96 drawn seeds and 25
+ * generations of 96. `initial` counts the drawn seeds; the run judges the lawful ones beside them.
  */
-const longBudget: Budget = { candidates: 2400, edits: 4, generation: 96, initial: 96 };
-
-/**
- * The budget this run spends.
- */
-const budget = settings.geneticRequested ? longBudget : freeBudget;
+const budget: Budget = { candidates: 2400, edits: 4, generation: 96, initial: 96 };
 
 /**
  * The most reduction proposals one finding is judged on, how many go to `xmllint` at once, how many
@@ -146,21 +145,20 @@ const budget = settings.geneticRequested ? longBudget : freeBudget;
  * are reported as bred. A batch is one `xmllint` process per schema set, so three batches reduce a
  * finding.
  */
-const reduction = {
-  batch: 60,
-  findings: 8,
-  tries: 180,
-  until: settings.geneticRequested ? 6_000_000 : 420_000,
-} as const;
+const reduction = { batch: 60, findings: 8, tries: 180, until: 6_000_000 } as const;
 
 /**
- * The timeout, in milliseconds: the grammar, the seeds, the generations' `xmllint` runs and law
- * judgments, and each finding's reduction. Measured 2026-11-07: 434.3 s at a load average of 68 to
- * 97, a free run that found two disagreement classes (TEST_SEED=2298271331) and reduced them up to
- * {@link reduction}'s 420 s. The free budget is twice that, rounded up to the next minute; the long
- * one is two hours.
+ * The replay's timeout, in milliseconds: the grammar, the seeds and the kept documents, judged once
+ * each in both versions, a hang guard. Measured 2026-11-07: 165.1 s at a load average of 87.8 to
+ * 92.1, the replay of 214 seeds and 8 kept documents; this is over three times that.
  */
-const timeoutMs = settings.geneticRequested ? 7_200_000 : 900_000;
+const replayTimeoutMs = 600_000;
+
+/**
+ * The exploration's timeout under `GR8DES_GENETIC=1`, in milliseconds: two hours, its reductions
+ * until {@link reduction}'s `until`. The long run measures it.
+ */
+const exploreTimeoutMs = 7_200_000;
 
 /**
  * One disagreement: a difference no record matches, in the version it was judged in.
@@ -223,6 +221,21 @@ interface Known {
  * The known disagreements.
  */
 const knownDisagreements: readonly Known[] = [
+  {
+    class: "content",
+    detail:
+      /^Foreign simple content at \/lom:lom\[\d+\]\/foreign-element\[\d+\]\/\S+: a foreign element governed by the simple type xs:\w+ holds an element child/u,
+    direction: "oracle-only",
+    owner: "GEN-B, fixing forward with a libxml2 record",
+    why: "JAN's run (TEST_SEED=2990697775): under a LOM root's lax wildcard, an element whose xsi:type resolves to no type of the document's schema set is laxly assessed and its children in turn (reading 60), so a descendant whose xsi:type names xs:Name and that holds an element child is invalid; libxml2 2.9.13 skips the subtree of an element whose type is absent (xmlschemas.c xmlSchemaValidateElem: XML_SCHEMAV_CVC_TYPE_1, then skipDepth), so xmllint never sees it",
+  },
+  {
+    class: "text-value",
+    detail: /^TextDomain at \/lom:lom\[\d+\]\/foreign-element\[\d+\]\/\S+: .* is outside xs:\w+/su,
+    direction: "oracle-only",
+    owner: "GEN-B, fixing forward with a libxml2 record",
+    why: "CRUST's run (TEST_SEED=2420825299): the same skip, below a foreign element whose xsi:type names no type at all; its no-namespace child's xsi:type names xs:unsignedShort, which its text is not",
+  },
   {
     class: "content",
     detail:
@@ -393,12 +406,23 @@ const judgeAll = Effect.fn("test.geneticXsd.judgeAll")(function* judgeAll(input:
 });
 
 /**
- * The documents every run judges as written, beside the bred ones: the reduced cases a ruling or a
- * record settled, each of which both oracles must judge alike from then on. The template inline's
- * is VD's ruling of 2026-11-07 (an interaction its HTML holds is valid; only a template block
- * refuses one at any depth, §5.145), which disagrees until the grammar's ban comes off the inline.
- * The padded `xsi:type`'s is libxml2's on both sides (`paddedTypeRecord`, `paddedTypeLaw`): a
- * lawful-seed run bred it from a drawn seed, `xsitype:ENTITY ` on a lax foreign element.
+ * The documents the replay judges as written: the reduced cases a ruling or a record settled, each
+ * of which both oracles must judge alike from then on. The template inline's is VD's ruling of
+ * 2026-11-07 (an interaction its HTML holds is valid; only a template block refuses one at any
+ * depth, §5.145), which disagrees until the grammar's ban comes off the inline. The padded
+ * `xsi:type`'s is libxml2's on both sides (`paddedTypeRecord`, `paddedTypeLaw`): a lawful-seed run
+ * bred it from a drawn seed, `xsitype:ENTITY ` on a lax foreign element. The item lacking its
+ * required attributes beside a nested item of its name is VD's run's (TEST_SEED=3143817330, drawn
+ * seed #5, no edit): both oracles refuse the root, and the element grain read xmllint's messages on
+ * the root as the nested item's. The two stimuli holding an item in a math element's lax content
+ * are TD-B's run's (TEST_SEED=2298271331, drawn seed #32, unedited and with two missing required
+ * children): xmllint refuses the nested item's attributes and its text, which reading 6 keeps
+ * foreign, and the element grain named every such message "(foreign)", so reading 6's record could
+ * not see it stood within a nested root. The two LOM roots are JAN's run's (TEST_SEED=2990697775)
+ * and CRUST's (TEST_SEED=2420825299): below an element laxly assessed with an xsi:type that names
+ * no type of the set, a descendant typed by a built-in simple type it breaks, which the law oracle
+ * refuses (reading 60: the children are assessed laxly in turn) and libxml2 never assesses; each
+ * shows a known disagreement until its libxml2 record lands.
  */
 const keptDocuments: readonly { readonly name: string; readonly text: string }[] = [
   {
@@ -408,6 +432,26 @@ const keptDocuments: readonly { readonly name: string; readonly text: string }[]
   {
     name: "an xsi:type padded with a trailing space, on a foreign element a lax wildcard holds",
     text: '<qti-assessment-section xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-selection xmlns:n="urn:n"><config xmlns="urn:w" xmlns:o="urn:w"><widget xmlns:zs="http://www.w3.org/2001/XMLSchema-instance" xmlns="" xmlns:xsitype="http://www.w3.org/2001/XMLSchema" zs:type="xsitype:ENTITY "/></config></qti-selection></qti-assessment-section>',
+  },
+  {
+    name: "an item lacking its required attributes, beside a nested item of its name in a modal feedback's SSML",
+    text: '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-outcome-declaration identifier="O" cardinality="single" base-type="identifier"/><qti-modal-feedback outcome-identifier="O" show-hide="show" identifier="F"><qti-content-body><s xmlns="http://www.w3.org/2001/10/synthesis"><qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" title="t"/></s></qti-content-body></qti-modal-feedback></qti-assessment-item>',
+  },
+  {
+    name: "an item nested in a stimulus's math element, lacking its required attributes",
+    text: '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n<!--&é-->\n<?t dd?>\n<qti-assessment-stimulus xmlns:xsitype="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:zs="http://www.w3.org/2001/XMLSchema-instance" zs:type="xsitype:AssessmentStimulusDType" tool-name="v&amp;&quot;"><a:qti-stimulus-body xmlns:n="urn:n" xmlns:a="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><nav data-a-b=" &amp;é&quot;" data-x="]]>&#x9;"><h5 data-y.z="" aria-invalid="" aria-activedescendant=" \'&#x9;" aria-label="v&amp;&#xD;" data-a-b=""><sub data-y.z="&quot;" data-q_1="&lt;&#x9;&#xD;é">&#xD;&amp;&amp;</sub></h5>&amp;<include xmlns:x="urn:x" xmlns:y="urn:y" xmlns="http://www.w3.org/2001/XInclude" xml:space="&lt;&#xD;é" xml:base="&lt;]]>&quot;" accept="&amp;\'&#xD;" y:a="&#x9;" x:a="a b&#x9;&quot; " parse="&lt;&#xA;&#x9;" x:b="">&#xD;<qti-prompt xmlns="" y:a="&lt;]]>\'é" title="&amp;a bé" data-q_1="" x:b=" v&quot;a b"><div x:b="&amp;&#x9;]]>&amp;" label="a b\' " x:a="">😀\n&lt;😀<phoneme xmlns="http://www.w3.org/2001/10/synthesis" y:a="&#xD;&#xA; \'" x:b="va b\'" x:a="&amp;\'\'"/></div><p data-a-b="\'" data-x="é]]>&#xA;" label="&quot;\'"><qti-prompt xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xl="http://www.w3.org/1999/xlink" zs:schemaLocation="a b" xl:to="]]>&#xD;" xl:href="é&amp;" xml:id=""/></p><b:mi xmlns:b="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:o="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xl="http://www.w3.org/1999/xlink" o:size="" xl:role=" " zs:schemaLocation="v" o:label="&#xA;"><qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xl:role="&#x9;" xl:actuate="&#xD;" xl:type="&amp;&lt;" o:title="]]>&amp;" o:label="a b éé" zs:noNamespaceSchemaLocation="é&lt;">tt<?t?></qti-assessment-item><config xmlns="urn:w" xmlns:o="urn:w" o:title="&amp;&quot;a b" o:label="&lt;"><?t >dd?>é&amp;&amp;\t<?p-q?></config><?p-q d?d?><config xmlns:xsitype="http://www.w3.org/2001/XMLSchema" xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" zs:type="xsitype:ID" zs:schemaLocation=""><?t >?></config></b:mi></qti-prompt></include></nav></a:qti-stimulus-body><!-- --></qti-assessment-stimulus>',
+  },
+  {
+    name: "an item nested in a stimulus's math element, its text in element-only content",
+    text: '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n<!--&é-->\n<?t dd?>\n<qti-assessment-stimulus xmlns:xsitype="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:zs="http://www.w3.org/2001/XMLSchema-instance" zs:type="xsitype:AssessmentStimulusDType" tool-name="v&amp;&quot;"><a:qti-stimulus-body xmlns:n="urn:n" xmlns:a="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><nav data-a-b=" &amp;é&quot;" data-x="]]>&#x9;"><h5 data-y.z="" aria-invalid="" aria-activedescendant=" \'&#x9;" aria-label="v&amp;&#xD;" data-a-b=""><sub data-y.z="&quot;" data-q_1="&lt;&#x9;&#xD;é">&#xD;&amp;&amp;</sub></h5>&amp;<include xmlns:x="urn:x" xmlns:y="urn:y" xmlns="http://www.w3.org/2001/XInclude" xml:space="&lt;&#xD;é" xml:base="&lt;]]>&quot;" accept="&amp;\'&#xD;" y:a="&#x9;" x:a="a b&#x9;&quot; " parse="&lt;&#xA;&#x9;" x:b="">&#xD;<qti-prompt xmlns="" y:a="&lt;]]>\'é" title="&amp;a bé" data-q_1="" x:b=" v&quot;a b"><div x:b="&amp;&#x9;]]>&amp;" label="a b\' " x:a="">😀\n&lt;😀<phoneme xmlns="http://www.w3.org/2001/10/synthesis" y:a="&#xD;&#xA; \'" x:b="va b\'" x:a="&amp;\'\'"/></div><p data-a-b="\'" data-x="é]]>&#xA;" label="&quot;\'"><qti-prompt xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xl="http://www.w3.org/1999/xlink" zs:schemaLocation="a b" xl:to="]]>&#xD;" xl:href="é&amp;" xml:id=""/></p><b:mi xmlns:b="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:o="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xl="http://www.w3.org/1999/xlink" o:size="" xl:role=" " zs:schemaLocation="v" o:label="&#xA;"><qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xl:role="&#x9;" xl:actuate="&#xD;" xl:type="&amp;&lt;" o:title="]]>&amp;" o:label="a b éé" zs:noNamespaceSchemaLocation="é&lt;">tt<?t?></qti-assessment-item><config xmlns="urn:w" xmlns:o="urn:w" o:title="&amp;&quot;a b" o:label="&lt;"><?t >dd?>é&amp;&amp;\t<?p-q?></config><?p-q d?d?><config xmlns:xsitype="http://www.w3.org/2001/XMLSchema" xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" zs:type="xsitype:ID" zs:schemaLocation=""><?t >?></config></b:mi></qti-prompt></include></nav></a:qti-stimulus-body><qti-catalog-info xmlns:n="urn:n" zs:noNamespaceSchemaLocation="v]]>&lt;" zs:schemaLocation="&lt;&#x9;a b]]>"><qti-catalog id="" zs:schemaLocation="&quot;" zs:noNamespaceSchemaLocation=""/><!--&-c--></qti-catalog-info><!-- --></qti-assessment-stimulus>',
+  },
+  {
+    name: "an xs:Name element holding an element, below an element whose xsi:type names no type of a LOM root's set",
+    text: '<?xml version="1.0" encoding="UTF-8"?>\n<a:lom xmlns:a="http://ltsc.ieee.org/xsd/LOM" xmlns:x="urn:x" xmlns:zs="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsitype="http://ltsc.ieee.org/xsd/LOM" xmlns:n="urn:n" zs:type="xsitype:LOM.Type" x:b="" x:a="&#xD;]]>"><a:mi xmlns:a="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><a:small xmlns:xsitype="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" zs:type="xsitype:HTMLTextDType" data-ssml="]]>]]>&quot;"><a:phoneme xmlns:a="http://www.w3.org/2001/10/synthesis">&amp;&lt;<!---->\tt\n<!---->ét😀<!----> &amp;\t&#xD;<!----></a:phoneme><small xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" data-y.z="&lt;" zs:type="xsitype:HTMLTextDType" data-a-b="a b&#xD;"><a:mark xmlns:a="http://www.w3.org/2001/10/synthesis" xmlns:y="urn:y" xmlns:xsitype="http://www.w3.org/2001/10/synthesis" xml:id="&quot;&lt;" zs:noNamespaceSchemaLocation="&amp;&lt;" zs:type="xsitype:mark" y:a="&#xA;]]>&amp;" x:a=" &quot;"><b:qti-prompt xmlns:b="http://www.imsglobal.org/xsd/imsqtiasi_v3p0">&lt;\n<a:widget xmlns:xsitype="http://www.w3.org/2001/XMLSchema" xmlns:a="urn:w" zs:type="xsitype:date">t<!-- --></a:widget><qti-prompt xmlns:xsitype="http://www.w3.org/2001/XMLSchema" zs:noNamespaceSchemaLocation="&amp;&#xD;" zs:type="xsitype:Name" zs:schemaLocation=" ">&amp;t<!--é c--><th xmlns=""/> té</qti-prompt></b:qti-prompt><b:p xmlns:xsitype="http://www.w3.org/2001/XMLSchema" xmlns:b="urn:w" zs:type="xsitype:IDREF">&lt;😀é😀&lt;</b:p></a:mark></small></a:small></a:mi></a:lom>',
+  },
+  {
+    name: "an xs:unsignedShort element of other text, below a foreign element whose xsi:type names no type",
+    text: '<lom xmlns:xl="http://www.w3.org/1999/xlink" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:xsitype="http://ltsc.ieee.org/xsd/LOM" xmlns:x="urn:x" xmlns:y="urn:y" xmlns:zs="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://ltsc.ieee.org/xsd/LOM"><qti-assessment-item xmlns:xsitype="urn:w" xmlns:n="urn:n" xmlns="urn:w" zs:type="xsitype:NoSuchType"><b:div xmlns:b="urn:w"><config xmlns:xsitype="http://www.w3.org/2001/XMLSchema" xmlns="" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" zs:type="xsitype:unsignedShort" zs:nil=" &lt;é " zs:noNamespaceSchemaLocation="&lt;&amp;v" xsi:schemaLocation="&lt;&#xD;&lt;&#x9;">é\né</config>\né&amp;&#xD;</b:div></qti-assessment-item></lom>\n<!---c-c -->\n<!---c&é-->',
   },
   {
     name: "an interaction in a template block's paragraph",
@@ -425,6 +469,25 @@ const shown = (genome: XsdGenome) =>
   Effect.map(Effect.result(writeXml(documentOf(genome))), (text) =>
     Result.getOrElse(text, () => "(unwritable)"),
   );
+
+/**
+ * Write a disagreement as the replay reports it: its version, direction, class, rule and detail.
+ *
+ * @param disagreement - The disagreement.
+ * @returns The line.
+ */
+const shownOf = ({ difference, version }: Disagreement): string =>
+  `in ${version}: ${difference.direction} ${difference.class} ${difference.rule}: ${difference.detail.slice(0, 400)}`;
+
+/**
+ * The kept documents as genomes, read from their text.
+ */
+const keptGenomes = Effect.forEach(
+  keptDocuments,
+  ({ text }) =>
+    Effect.map(Effect.orDie(readXml(new TextEncoder().encode(text))), (doc) => seedGenome(doc, {})),
+  { concurrency: 1 },
+);
 
 /**
  * Whether a root kind's documents are judged: `xmllint` judges every root but one only an included
@@ -455,11 +518,7 @@ interface Seeds {
  * @param count - How many drawn seeds.
  * @returns The seeds.
  */
-const seedsOf = (
-  grammar: ComposedGrammar,
-  stream: ReturnType<typeof rotatingSeed>,
-  count: number,
-): Seeds => {
+const seedsOf = (grammar: ComposedGrammar, stream: Stream, count: number): Seeds => {
   const lawful = lawfulDocuments(grammar, judgedRoot);
   const drawn = sample(
     xdmDocument(grammar, new Set(["doctype", "entityRef"]), judgedRoot),
@@ -486,6 +545,83 @@ const seedsOf = (
 describe.skipIf(!cached)("genetic-xsd.oracle.test.ts", () => {
   layer(TestLayer, { excludeTestServices: true })("the grammar against xmllint, bred", (it) => {
     it.effect(
+      "every lawful seed, every drawn seed of the floor stream and every kept document, in both versions, has one verdict from both but for the recorded classes, and every known disagreement still shows",
+      () =>
+        Effect.gen(function* replayAgainstXmllint() {
+          const grammar = yield* Effect.fromResult(composed()).pipe(Effect.orDie);
+          const laws = lawsOf(grammar);
+          const { names: seedNames, seeds } = seedsOf(
+            grammar,
+            floorSeed("pantry/genetic-xsd"),
+            fixedDrawn,
+          );
+          const oracle = yield* writeXsdOracle(oracleRoot);
+          const judge = (folder: string, genomes: readonly XsdGenome[]) =>
+            judgeAll({
+              folder: `${scratchRoot}/${folder}`,
+              genomes,
+              grammar,
+              laws,
+              oracle,
+              versions: schemaVersions,
+            });
+          const seedJudgments = yield* judge("seeds", seeds);
+          const kept = yield* keptGenomes;
+          // The kept documents run last, so the counts that follow are theirs alone.
+          knownCounts.clear();
+
+          const keptJudgments = yield* judge("kept", kept);
+          const reports: string[] = [
+            ...(yield* Effect.forEach(
+              seedJudgments.entries(),
+              ([at, { disagreements }]) =>
+                Effect.gen(function* seedReports() {
+                  const genome = seeds[at];
+                  if (genome === undefined || disagreements.length === 0) {
+                    return [];
+                  }
+
+                  const text = yield* shown(genome);
+
+                  return disagreements.map(
+                    (disagreement) =>
+                      `${seedNames.get(genome.seed) ?? "a seed"} ${shownOf(disagreement)}\n  document: ${text}`,
+                  );
+                }),
+              { concurrency: 1 },
+            )).flat(),
+            ...keptJudgments.flatMap(({ disagreements }, at) =>
+              disagreements.map(
+                (disagreement) =>
+                  `kept document "${keptDocuments[at]?.name ?? ""}" ${shownOf(disagreement)}`,
+              ),
+            ),
+            ...knownDisagreements.flatMap((entry) =>
+              (knownCounts.get(entry) ?? 0) === 0
+                ? [
+                    `known disagreement of ${entry.owner} is stale: no kept document shows it any more, so its fix has landed and the record goes (${entry.why})`,
+                  ]
+                : [],
+            ),
+          ];
+          yield* Console.log(
+            [
+              `genetic-xsd replay: ${String(seeds.length)} seeds (${String(seeds.length - fixedDrawn)} lawful, ${String(fixedDrawn)} drawn of the floor stream) and ${String(kept.length)} kept documents, judged in ${schemaVersions.join(" and ")}`,
+              `  recorded classes matched: ${[...matchedCounts].map(([reason, count]) => `${reason}… ${String(count)}`).join("; ")}`,
+              ...reports,
+            ].join("\n"),
+          );
+
+          assert.deepStrictEqual(
+            reports,
+            [],
+            "both oracles judge every replayed document alike, but for the recorded classes",
+          );
+        }),
+      { timeout: replayTimeoutMs },
+    );
+
+    it.effect.skipIf(!settings.geneticRequested)(
       "every bred document, in both versions, has one verdict from both but for the recorded classes",
       () =>
         Effect.gen(function* breedAgainstXmllint() {
@@ -570,33 +706,7 @@ describe.skipIf(!cached)("genetic-xsd.oracle.test.ts", () => {
             ].join("\n"),
           );
 
-          const kept = yield* Effect.forEach(
-            keptDocuments,
-            ({ text }) =>
-              Effect.map(Effect.orDie(readXml(new TextEncoder().encode(text))), (doc) =>
-                seedGenome(doc, {}),
-              ),
-            { concurrency: 1 },
-          );
-          // The kept documents run last, so the counts that follow are theirs alone.
-          knownCounts.clear();
-
-          const keptJudgments = yield* judge(kept);
-          const reports: string[] = [
-            ...keptJudgments.flatMap(({ disagreements }, at) =>
-              disagreements.map(
-                ({ difference, version }) =>
-                  `kept document "${keptDocuments[at]?.name ?? ""}" in ${version}: ${difference.direction} ${difference.class} ${difference.rule}: ${difference.detail.slice(0, 400)}`,
-              ),
-            ),
-            ...knownDisagreements.flatMap((entry) =>
-              (knownCounts.get(entry) ?? 0) === 0
-                ? [
-                    `known disagreement of ${entry.owner} is stale: no kept document shows it any more, so its fix has landed and the record goes (${entry.why})`,
-                  ]
-                : [],
-            ),
-          ];
+          const reports: string[] = [];
           for (const [at, [signature, finding]] of found.entries()) {
             const { difference, version } = finding.disagreement;
             // Reduce while the test's budget allows, so every class is reported before its timeout.
@@ -630,7 +740,7 @@ describe.skipIf(!cached)("genetic-xsd.oracle.test.ts", () => {
             "both oracles judge every bred document alike, but for the recorded classes",
           );
         }),
-      { timeout: timeoutMs },
+      { timeout: exploreTimeoutMs },
     );
   });
 });

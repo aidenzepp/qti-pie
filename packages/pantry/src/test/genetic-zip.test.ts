@@ -13,9 +13,12 @@
  * class of refusal with its source (`recorded`). A verdict the policy does not predict is a
  * disagreement, reported reduced by hierarchical delta debugging, with the edits that bred it.
  *
- * Budget: a bounded one in every free run, a longer one under `GR8DES_GENETIC=1`. The search's seed
- * is the run's (`TEST_SEED`). The archives are written under a folder of the run's own,
- * `work/genetic-zip-*`, removed after the file.
+ * The free suite replays, the same on every run: the box, the seeds of the suite's floor stream
+ * judged as drawn, and the writer's archives of its own floor stream, so a commit that touches
+ * nothing the search reads judges the same archives as the one before it. `GR8DES_GENETIC=1`
+ * explores: the bred search, its seed the run's (`TEST_SEED`), and the writer's archives on that
+ * seed, each with the long budget; a class it meets is reduced, reported, and kept. The archives
+ * are written under a folder of the run's own, `work/genetic-zip-*`, removed after the file.
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, layer } from "@effect/vitest";
@@ -23,6 +26,7 @@ import { Console, Effect, FileSystem } from "effect";
 import { array, element, int } from "@grizzle/testing/gen";
 import type { Gen } from "@grizzle/testing/gen";
 import { floorSeed, rotatingSeed } from "@grizzle/testing/random";
+import type { Stream } from "@grizzle/testing/random";
 import { sample } from "@grizzle/testing/source";
 import { runOfProcess } from "@grizzle/testing/vitest/run";
 import { writeZip } from "#pantry/package/zip.ts";
@@ -77,12 +81,18 @@ const pythonAvailable = await Effect.runPromise(
 const scratchRoot = fileScratchDirectory("genetic-zip-");
 
 /**
- * The free run's budget and the long one: seeds, then generations of candidates. A round costs one
- * Python process and a few milliseconds an archive.
+ * The bred search's budget under `GR8DES_GENETIC=1`: seeds, then generations of candidates. A round
+ * costs one Python process and a few milliseconds an archive.
  */
-const budget: Budget = settings.geneticRequested
-  ? { candidates: 20_000, edits: 4, generation: 400, initial: 200 }
-  : { candidates: 1600, edits: 3, generation: 200, initial: 100 };
+const budget: Budget = { candidates: 20_000, edits: 4, generation: 400, initial: 200 };
+
+/**
+ * How many seeds of the floor stream the free suite judges, and how many writer cases: the free
+ * suite's fixed set, and the exploration's larger one.
+ */
+const counts = settings.geneticRequested
+  ? { seeds: budget.initial, writer: 2000 }
+  : { seeds: 100, writer: 200 };
 
 /**
  * The most reduction proposals one finding is judged on, how many go to Python at once, and how
@@ -92,13 +102,25 @@ const budget: Budget = settings.geneticRequested
 const reduction = { batch: 60, kinds: 6, tries: 600 } as const;
 
 /**
- * The timeout, in milliseconds, of each test. Measured 2026-11-07: 18.6 s at a load average of 70
- * to 78 on 10 cores, the slowest bred search of 1,700 archives (9.8 to 18.6 s); the box took 1.4 to
- * 2.5 s and the writer's 200 archives 0.3 to 1.1 s, each with its reductions. The free budget is
- * six times the slowest, rounded up, for a machine loaded further; the long one two hours. Raise it
- * only on a new measurement recorded here.
+ * The timeout, in milliseconds, of each test. Measured 2026-11-07: 1.8 s at a load average of 81.8
+ * to 87.5 on 10 cores, the slowest free test, the writer's 200 archives of the floor stream; the
+ * box took 1.6 s and the 100 fixed seeds 1.1 s. The bred search that ran free before took 18.6 s at
+ * a load average of 70 to 78 for 1,700 archives. The free suite's is over six times that, for a
+ * machine loaded further; the exploration's two hours. Raise it only on a new measurement recorded
+ * here.
  */
 const timeoutMs = settings.geneticRequested ? 7_200_000 : 120_000;
+
+/**
+ * The stream a test draws on: its floor stream in the free suite, the same on every run, and the
+ * run's rotating stream under `GR8DES_GENETIC=1`.
+ *
+ * @param run - The run's seed (`TEST_SEED`).
+ * @param label - The test's floor label.
+ * @returns The stream.
+ */
+const streamOf = (run: number, label: string): Stream =>
+  settings.geneticRequested ? rotatingSeed(run, floorSeed(label)) : floorSeed(label);
 
 /**
  * Count the rounds judged, so each writes its archives to a folder of its own.
@@ -391,6 +413,47 @@ describe.skipIf(!pythonAvailable)("genetic-zip.test.ts", () => {
       );
 
       it.effect(
+        "every seed of the floor stream, as drawn, has the verdict the policy over Python's reading says",
+        () =>
+          Effect.gen(function* fixedSeeds() {
+            const script = yield* writeScript(`${scratchRoot}/script`);
+            const seeds = sample(seedGen, floorSeed("pantry/genetic-zip"), counts.seeds);
+            const judgments = yield* judgeZips(script, seeds);
+            const found = new Map<
+              string,
+              {
+                readonly disagreement: ZipDisagreement;
+                readonly genome: ZipIntent;
+                readonly lineage: readonly string[];
+              }
+            >();
+            for (const [at, { disagreements }] of judgments.entries()) {
+              for (const disagreement of disagreements) {
+                const genome = seeds[at];
+                if (genome !== undefined && !found.has(disagreement.kind)) {
+                  found.set(disagreement.kind, { disagreement, genome, lineage: [] });
+                }
+              }
+            }
+
+            const reports = yield* reportsOf(script, found);
+            yield* Console.log(
+              [
+                `genetic-zip fixed seeds: ${String(seeds.length)} archives, ${String(found.size)} disagreement kinds ${JSON.stringify([...found.keys()])}`,
+                ...reports,
+              ].join("\n"),
+            );
+
+            assert.deepStrictEqual(
+              reports,
+              [],
+              "the reader reads every fixed seed as its policy says",
+            );
+          }),
+        { timeout: timeoutMs },
+      );
+
+      it.effect.skipIf(!settings.geneticRequested)(
         "every bred archive has the verdict the policy over Python's reading says",
         () =>
           Effect.gen(function* breed() {
@@ -437,8 +500,8 @@ describe.skipIf(!pythonAvailable)("genetic-zip.test.ts", () => {
             const run = yield* runOfProcess;
             const cases = sample(
               writerGen,
-              rotatingSeed(run.seed, floorSeed("pantry/genetic-zip-writer")),
-              settings.geneticRequested ? 2000 : 200,
+              streamOf(run.seed, "pantry/genetic-zip-writer"),
+              counts.writer,
             );
             const folder = `${scratchRoot}/writer`;
             yield* fs.makeDirectory(folder, { recursive: true });
@@ -475,7 +538,7 @@ describe.skipIf(!pythonAvailable)("genetic-zip.test.ts", () => {
             }
 
             yield* Console.log(
-              `genetic-zip writer: TEST_SEED=${String(run.seed)}, ${String(cases.length)} archives, ${String(found.size)} disagreement kinds ${JSON.stringify([...found.keys()])}`,
+              `genetic-zip writer: ${settings.geneticRequested ? `TEST_SEED=${String(run.seed)}` : "the floor stream"}, ${String(cases.length)} archives, ${String(found.size)} disagreement kinds ${JSON.stringify([...found.keys()])}`,
             );
 
             assert.deepStrictEqual(
