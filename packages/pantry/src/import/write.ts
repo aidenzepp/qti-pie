@@ -16,7 +16,7 @@
  *
  * No row carries a field grizzle draws or fills, or PostgreSQL generates: each is `Addition<R>`,
  * which omits them, nested at a sequence's count field only. The host writes the fields the
- * amendment's §C gives it, each proved by a law: a node's `state` from `contentStep` (C5, N5), its
+ * amendment's §C gives it, each proved by a law: a node's `state` from `placedStep` (C5, N5), its
  * `ancestry` (`E1_derived`), its nearest interaction (N8), its `chars`, `first`, `last` and
  * `stringPiece` (E1); an attribute's `slot` (AL2's step) and its IDREF pieces, which concatenate
  * to its lexical form.
@@ -26,8 +26,9 @@
  */
 import { Bits, ChangeSet } from "@bjornpagen/grizzle";
 import type { Addition, AnyRelation, Uuid } from "@bjornpagen/grizzle";
-import { Array as Arr, Option, Order } from "effect";
-import { contentStep } from "#pantry/grammar/content.ts";
+import { Array as Arr, Match, Option, Order } from "effect";
+import { placedStep, placementOf } from "#pantry/grammar/content.ts";
+import type { Placement } from "#pantry/grammar/content.ts";
 import {
   attributeRows,
   AttributeSlot,
@@ -430,29 +431,28 @@ const positionHandle = (state: number): PositionHandle => {
 };
 
 /**
- * Read a child's position in its parent's content model, `Admission`'s cell (`ChildGrammar`).
+ * The state a member claims by its placement: an `at` member's one position, a `shared` member's
+ * first, a `carries` member's predecessor's. It is the state written where no position follows, so
+ * that `N5_Follow` refuses the member by name; a `carries` member always steps to it.
  *
- * @param key - The version, the parent's kind and the child's.
- * @param key.child - The child's kind.
- * @param key.parent - The parent's kind.
- * @param key.version - The version.
- * @returns The position, 0 for character data and for a kind several positions name; none where
- *   the parent does not admit the kind.
+ * @param placement - The member's placement.
+ * @param was - Its predecessor's state, 0 for the first member.
+ * @returns The state.
  */
-const admittedAt = (key: {
-  readonly child: string;
-  readonly parent: string;
-  readonly version: Composed["version"];
-}): Option.Option<number> =>
-  Option.map(grammar.admission.lookup(key), ({ position }) => Number(position));
+const claimedState = (placement: Placement, was: number): number =>
+  Match.valueTags(placement, {
+    at: ({ position }) => position,
+    carries: () => was,
+    shared: ({ positions }) => positions[0],
+  });
 
 /**
  * Compute a member's content-automaton state (C5), the value N5 holds it to.
  *
- * `contentStep` gives the lawful state where there is one. Where there is none, the state is still
+ * `placedStep` gives the lawful state where there is one. Where there is none, the state is still
  * written, and a law refuses the node by name: an unadmitted kind keeps its predecessor's state,
- * which `N5_admitted` refuses; a kind whose position does not follow keeps its position, and a
- * shared kind none of whose positions follows its first, each refused by `N5_Follow`.
+ * which `N5_admitted` refuses; a kind whose position does not follow keeps the state its placement
+ * claims ({@link claimedState}), which `N5_Follow` refuses.
  *
  * @param key - The version, the parent's kind and the member's.
  * @param key.child - The member's kind.
@@ -469,17 +469,11 @@ const stateOf = (
   },
   was: number,
 ): number =>
-  Option.match(admittedAt(key), {
+  Option.match(placementOf(grammar, key), {
     onNone: () => was,
-    onSome: (position) =>
-      Option.getOrElse(contentStep(grammar.content, admittedAt, key, was), () =>
-        position === 0
-          ? (grammar.content.sharedPositions({
-              kind: key.child,
-              parent: key.parent,
-              version: key.version,
-            })[0] ?? was)
-          : position,
+    onSome: (placement) =>
+      Option.getOrElse(placedStep(grammar.content, key, placement, was), () =>
+        claimedState(placement, was),
       ),
   });
 
@@ -766,7 +760,7 @@ const memberOf = (
  * No row names `parent`, only the root names `document`, and no row carries a drawn, accumulated
  * or generated field. The host's fields are the ones the laws prove:
  *
- * - `state` by `contentStep` (C5), the document node's 0;
+ * - `state` by `placedStep` (C5), the document node's 0;
  * - `ancestry`, its parent's with the flags its kind enters (`E1_derived`);
  * - `nearest` and `nearestKind`, its parent where the parent is an interaction, else its parent's
  *   (N8), the document node's its document's context's (spec reading 117), itself where no site
