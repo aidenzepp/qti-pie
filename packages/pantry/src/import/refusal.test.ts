@@ -1492,7 +1492,9 @@ const modulesOf = Effect.gen(function* modulesOf() {
 });
 
 /**
- * Every text field of a schema's stored relations, with its pattern law.
+ * Every text field of a schema's stored relations, with its pattern law. A field's type is read as
+ * any value, as {@link generatedLaws} reads it, so a relation with a function-valued type
+ * (`MapKeyFloat`'s `pg["double precision"]`) is read, and a pattern of another shape throws.
  *
  * @param relations - The schema's `relations`.
  * @returns Each relation's text fields.
@@ -1502,17 +1504,26 @@ const patternFields = (
 ): readonly { readonly field: string; readonly law: Law; readonly relation: string }[] => {
   const Pattern = Schema.Struct({ flags: Schema.Literals(["u", "su"]), source: Schema.String });
   const Stored = Schema.Struct({
-    fields: Schema.Record(Schema.String, Schema.Struct({ pattern: Schema.optional(Pattern) })),
+    fields: Schema.Record(Schema.String, Schema.Unknown),
     kind: Schema.Literal("relation"),
     name: Schema.String,
   });
 
   return Object.values(relations).flatMap((value) =>
     Option.toArray(Schema.decodeUnknownOption(Stored)(value)).flatMap(({ fields, name }) =>
-      Object.entries(fields).flatMap(([field, { pattern }]) =>
-        pattern === undefined
-          ? []
-          : [{ field, law: { ...pattern, kind: "pattern" } satisfies Law, relation: name }],
+      Object.entries(fields).flatMap(([field, type]) =>
+        Predicate.hasProperty(type, "pattern") && type.pattern !== undefined
+          ? [
+              {
+                field,
+                law: {
+                  ...Schema.decodeUnknownSync(Pattern)(type.pattern),
+                  kind: "pattern",
+                } satisfies Law,
+                relation: name,
+              },
+            ]
+          : [],
       ),
     ),
   );
