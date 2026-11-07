@@ -17,11 +17,10 @@
  */
 import type { Addition } from "@bjornpagen/grizzle";
 import { Option } from "effect";
-import { booleanTrue } from "#pantry/grammar/domains.ts";
+import { booleanTrue, collapse } from "#pantry/grammar/domains.ts";
 import { attributeRows, ValueIdentity } from "#pantry/grammar/install.ts";
 import type { DocumentContext } from "#pantry/import/context.ts";
 import { foldOf, governorOf, ownContext } from "#pantry/import/fold.ts";
-import { collapse } from "#pantry/import/overlays/metadata.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";

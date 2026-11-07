@@ -37,7 +37,7 @@ import { CnPart } from "#pantry/grammar/install.ts";
 import { cnDefaultType, cnForms } from "#pantry/grammar/expression.ts";
 import type { CnForm } from "#pantry/grammar/expression.ts";
 import { nonElements, writtenOf } from "#pantry/import/overlays/mathml-tree.ts";
-import { collapse } from "#pantry/import/overlays/metadata.ts";
+import { collapse } from "#pantry/grammar/domains.ts";
 import type { NodeIds } from "#pantry/import/write.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";

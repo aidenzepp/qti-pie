@@ -15,10 +15,10 @@ import type { DocumentContext } from "#pantry/import/context.ts";
 import { declaredFieldsOf } from "#pantry/import/overlays/declarations.ts";
 import { foldOf, ownContext } from "#pantry/import/fold.ts";
 import type { Composed } from "#pantry/model/composed.ts";
-import { collapse, lowerAscii } from "#pantry/import/overlays/metadata.ts";
+import { lowerAscii } from "#pantry/import/overlays/metadata.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
-import { booleanTrue } from "#pantry/grammar/domains.ts";
+import { booleanTrue, collapse } from "#pantry/grammar/domains.ts";
 import { floatKeyPattern, pairKeyPattern } from "#pantry/qti/mapping.ts";
 import type {
   AreaMapping,
