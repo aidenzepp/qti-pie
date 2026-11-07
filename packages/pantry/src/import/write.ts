@@ -118,6 +118,7 @@ import {
   MathAlignGroup,
   MathAlignScope,
   MathCell,
+  MathDir,
 } from "#pantry/qti/mathml-align.ts";
 import { MathApply, MathArgument, MathQualifier } from "#pantry/qti/mathml-apply.ts";
 import { CnPartText, MathCn } from "#pantry/qti/mathml-cn.ts";
@@ -1270,6 +1271,7 @@ export const changeSetOf = (author: typeof Author, inputs: PackageInputs) =>
     .insert(MathArgument, [...inputs.MathArgument.values()])
     .insert(MathCell, [...inputs.MathCell.values()])
     .insert(MathCn, [...inputs.MathCn.values()])
+    .insert(MathDir, [...inputs.MathDir.values()])
     .insert(MathQualifier, [...inputs.MathQualifier.values()])
     .insert(MathRank, [...inputs.MathRank.values()])
     .insert(Named, [...inputs.Named.values()])

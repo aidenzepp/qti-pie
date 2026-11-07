@@ -46,6 +46,7 @@ const declared = [
   "MathAlignGroup",
   "MathAlignScope",
   "MathCell",
+  "MathDir",
 ] as const;
 
 /**
@@ -53,7 +54,9 @@ const declared = [
  * refusal table reads them: those whose law names one of the module's stored relations.
  */
 const ownLaws = statedLaws.filter(([law]) =>
-  /"(?:CellLeaf|MathAction|MathAlignGroup|MathAlignScope|MathCell)"/u.test(JSON.stringify(law)),
+  /"(?:CellLeaf|MathAction|MathAlignGroup|MathAlignScope|MathCell|MathDir)"/u.test(
+    JSON.stringify(law),
+  ),
 );
 
 describe("qti/mathml-align.ts, declared", { timeout: buildTimeout }, () => {

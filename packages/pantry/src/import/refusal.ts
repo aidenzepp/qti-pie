@@ -3089,6 +3089,7 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
   [primaryKeyOf("MathAlignGroup", "node"), "E1 derived"],
   [primaryKeyOf("MathAlignScope", "node"), "E1 derived"],
   [primaryKeyOf("MathCell", "node"), "E1 derived"],
+  [primaryKeyOf("MathDir", "node"), "E1 derived"],
   [primaryKeyOf("MathRank", "node"), "E1 derived"],
   [primaryKeyOf("ShareTarget", "node"), "E1 derived"],
 ];

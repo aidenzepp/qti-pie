@@ -330,6 +330,37 @@ describe("import/overlays/mathml-align.ts, the align rows (spec reading 2)", () 
     });
   });
 
+  it("copies every dir an element writes into MathDir as written, in a cell or not", () => {
+    // Nodes: 0 document, 1 math, 2 mrow (dir " rtl ", outside every cell), 3 mtable, 4 mtr, 5 mtd,
+    // 6 mi (dir ltr), 7 mi (dir auto), 8 mi (no dir).
+    const doc = documentOf(
+      elementOf("m:math", [
+        elementOf("m:mrow", [], [attributeOf("dir", " rtl ")]),
+        elementOf("m:mtable", [
+          elementOf("m:mtr", [
+            elementOf("m:mtd", [
+              elementOf("m:mi", [], [attributeOf("dir", "ltr")]),
+              elementOf("m:mi", [], [attributeOf("dir", "auto")]),
+              elementOf("m:mi"),
+            ]),
+          ]),
+        ]),
+      ]),
+    );
+    const rows = rowsOf(doc, ids);
+    assert.deepStrictEqual(
+      [...rows.MathDir.values()],
+      [
+        { lexical: " rtl ", node: idOf(2) },
+        { lexical: "ltr", node: idOf(6) },
+        { lexical: "auto", node: idOf(7) },
+      ],
+    );
+    assert.deepStrictEqual(keysOf(rows.MathDir), [idOf(2), idOf(6), idOf(7)]);
+    assert.strictEqual(rows.MathAlignScope.get(idOf(7))?.dirLexical, "");
+    assert.strictEqual(rows.MathAlignScope.get(idOf(6))?.dirLexical, "ltr");
+  });
+
   it("leaves a group unjudged under an maction child that is not the selected one", () => {
     // Nodes: 0 document, 1 math, 2 mtd, 3 maction, 4 mi, 5 mrow, 6 mi, 7 maligngroup.
     const doc = cellOf([

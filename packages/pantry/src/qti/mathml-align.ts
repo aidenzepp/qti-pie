@@ -196,6 +196,14 @@ export const MathAlignScope = relation(
 export const MathAlignGroup = relation("MathAlignGroup", { cell: uuid, node: uuid }, ["node"]);
 
 /**
+ * One `dir` attribute of any element, in a cell or not, keyed by its node: its lexical form as
+ * written, copied so that a law can compare it in a key. A value over `keyText`'s bound is refused
+ * under "Key text bound", a stated limit, as the `InteractionAttribute` copies are
+ * (`#pantry/qti/interactions.ts`); the schemas enumerate `dir`, so no valid document is refused.
+ */
+export const MathDir = relation("MathDir", { lexical: keyText, node: uuid }, ["node"]);
+
+/**
  * One `m:mtd`, keyed by its node: `groups`, the count of its {@link MathAlignGroup} rows, `leaves`,
  * the count of its {@link CellLeaf} rows, both drawn, and `lastStart`, the greatest `start` among
  * its leaves, which the fold of their starts proves (0 where it has none).
@@ -251,6 +259,7 @@ export const alignRelations = {
   MathAlignGroup,
   MathAlignScope,
   MathCell,
+  MathDir,
 };
 
 /**
@@ -351,6 +360,8 @@ export const leafStartFold = fold(
  *   `dir` it writes or else the one it inherited, and its `passes` closed once it stands where no
  *   group passes through it, and `MathML_align_placement`: an `m:maligngroup`'s state is not
  *   `closed`;
+ * - **the directions:** a {@link MathDir} row for each `dir` attribute and no other (both ways), its
+ *   lexical form the attribute's, and a scope's non-empty `dirLexical` held to its element's row;
  * - **the groups:** a {@link MathAlignGroup} row for each open group and no other (both ways), and
  *   the family;
  * - **the cells:** one row for each `m:mtd` and no other (both ways), and the groups' family;
@@ -397,13 +408,15 @@ export const alignLaws: readonly Statement[] = [
   ),
   contained(on(MathAlignScope, "node", "elements", "elementChildren"), nodeCounts),
   key(on(dirAttributes, "node")),
+  contained(on(dirAttributes, "node", "lexical"), on(MathDir, "node", "lexical")),
+  contained(on(MathDir, "node"), on(dirAttributes, "node")),
   contained(
     on(
       select(MathAlignScope, (s) => s.ne(s.dirLexical, "")),
       "node",
       "dirLexical",
     ),
-    on(dirAttributes, "node", "lexical"),
+    on(MathDir, "node", "lexical"),
   ),
   contained(on(cells, "id"), on(cellScopes, "node")),
   contained(on(cellScopes, "node"), on(cells, "id")),
