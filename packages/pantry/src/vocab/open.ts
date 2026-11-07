@@ -42,7 +42,7 @@
  * kind with their built-in types (spec reading 47). The composition (`src/grammar/compose.ts`)
  * derives those admission rows, since they need every vocabulary's element names.
  */
-import { Match, Result, Schema } from "effect";
+import { Match, Option, Result, Schema } from "effect";
 import type { Attribute } from "@qti-pie/crust/tree.ts";
 import { openClasses } from "#pantry/grammar/kinds.ts";
 import { globalAttributes, openAttribute } from "#pantry/vocab/inventory/attributes.ts";
@@ -152,6 +152,21 @@ const vocabularyOf: ReadonlyMap<string, string> = new Map(
 );
 
 /**
+ * Whether an element of a namespace stands in documents assessed against a schema set: an element
+ * of a vocabulary in those of each set that lists its vocabulary, and a foreign element, of no
+ * vocabulary's namespace, in those of every set (spec reading 81).
+ *
+ * @param namespace - The element's namespace.
+ * @param members - The vocabularies the set lists.
+ * @returns Whether its documents may be assessed against the set.
+ */
+const standsIn = (namespace: string, members: readonly string[]): boolean =>
+  Option.match(Option.fromNullishOr(vocabularyOf.get(namespace)), {
+    onNone: () => true,
+    onSome: (vocabulary) => members.includes(vocabulary),
+  });
+
+/**
  * Whether the schema set of every document an element of `parent`'s namespace stands in may hold
  * a component of `child`'s namespace: some set lists both vocabularies. An element of no
  * vocabulary's namespace, a foreign element, stands in documents of every set (spec reading 81).
@@ -161,17 +176,15 @@ const vocabularyOf: ReadonlyMap<string, string> = new Map(
  * @returns Whether a set the element's documents are assessed against lists the component's
  *   vocabulary.
  */
-const sharesSet = (parent: string, child: string): boolean => {
-  const held = vocabularyOf.get(parent);
-  const other = vocabularyOf.get(child);
-
-  return (
-    other !== undefined &&
-    Object.values(schemaSets).some(
-      (set: readonly string[]) => set.includes(other) && (held === undefined || set.includes(held)),
-    )
-  );
-};
+const sharesSet = (parent: string, child: string): boolean =>
+  Option.match(Option.fromNullishOr(vocabularyOf.get(child)), {
+    // A component of no vocabulary's namespace is in no schema set.
+    onNone: () => false,
+    onSome: (other) =>
+      Object.values(schemaSets).some(
+        (set: readonly string[]) => set.includes(other) && standsIn(parent, set),
+      ),
+  });
 
 /**
  * Whether a `lax` or `strict` element wildcard of a kind reads an element another vocabulary
@@ -269,12 +282,11 @@ export const attributeSchemaSets = {
  * @returns Whether a set the element's documents are assessed against imports it.
  */
 export const holdsGlobals = (host: string, schema: keyof typeof attributeSchemaSets): boolean => {
-  const held = vocabularyOf.get(host);
   const imports: readonly string[] = attributeSchemaSets[schema];
 
   return Object.entries(schemaSets).some(
     ([set, members]: readonly [string, readonly string[]]) =>
-      imports.includes(set) && (held === undefined || members.includes(held)),
+      imports.includes(set) && standsIn(host, members),
   );
 };
 
