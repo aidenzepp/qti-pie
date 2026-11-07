@@ -413,7 +413,13 @@ describe("import/overlays/interactions.ts, choices", () => {
                 interactions.filter(({ name }) => name !== undefined).map(({ id }) => id),
               );
               for (const interaction of interactions) {
-                assert.strictEqual(rows.Binding.get(interaction.id)?.identifier, interaction.name);
+                assert.strictEqual(
+                  [...rows.BindingName.values()].find(
+                    ({ attribute, node }) =>
+                      node === interaction.id && attribute === "response-identifier",
+                  )?.identifier,
+                  interaction.name,
+                );
                 assert.strictEqual(rows.Interaction.get(interaction.id)?.kind, interaction.kind);
                 assert.strictEqual(
                   rows.CountBound.get(interaction.id)?.choices,
