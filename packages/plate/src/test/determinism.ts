@@ -41,7 +41,7 @@ import type { ItemRecord } from "#plate/model/record.ts";
 import type { ModelledBaseType, Value } from "#plate/model/values.ts";
 import { redactItem } from "#plate/payload.ts";
 import { render } from "#plate/render.ts";
-import type { InvalidInstance } from "#plate/render.ts";
+import type { InvalidInstance, OutputTooLarge } from "#plate/render.ts";
 import { float, integer } from "#plate/test/fixtures.ts";
 
 /**
@@ -604,7 +604,10 @@ export const startRecord = (
  */
 export const observe = (
   record: ItemRecord,
-): Result.Result<Observed, EngineFailure | InvalidInstance | PartSwapRefused | UnknownPart> =>
+): Result.Result<
+  Observed,
+  EngineFailure | InvalidInstance | OutputTooLarge | PartSwapRefused | UnknownPart
+> =>
   Result.gen(function* observeFixture() {
     const rendered = yield* render(redactItem(determinismItem, record), determinismConfiguration, {
       instance: determinismInstance,

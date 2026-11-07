@@ -1455,6 +1455,7 @@ describe("the public surface", () => {
         "ItemNotInSession",
         "Malformed",
         "OutcomeMismatchError",
+        "OutputTooLarge",
         "PartSwapRefused",
         "RecordMismatch",
         "RecordRequired",

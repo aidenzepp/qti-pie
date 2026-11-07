@@ -18,7 +18,7 @@ import type {
 } from "#plate/model/item.ts";
 import type { Value } from "#plate/model/values.ts";
 import type { Redacted, RenderMode } from "#plate/payload.ts";
-import { InvalidInstance, redact, render, renderStatus } from "#plate/render.ts";
+import { InvalidInstance, OutputTooLarge, redact, render, renderStatus } from "#plate/render.ts";
 import type { Options, Rendered } from "#plate/render.ts";
 import { checkTree, nameOf, textOf } from "#plate/test/accessibility.ts";
 import { keyboardWalk } from "#plate/test/keyboard.ts";
@@ -1176,6 +1176,128 @@ describe("redact, a printed variable", () => {
 
         assert.include(textOf(rootOf(rendered)), "There are 3 cities.");
         assert.deepStrictEqual(noticesIn(rendered), []);
+      }),
+  );
+});
+
+/**
+ * The length of the string {@link sprawling} prints at each slot: one short of the whole-text
+ * bound a printed variable's text keeps to, so no slot is withheld and only the page passes the
+ * budget.
+ */
+const sprawlingLength = 999_999;
+
+/**
+ * An item whose paragraph prints the string template variable `S` at 40 slots, so a record holding
+ * a {@link sprawlingLength}-character `S` prints about 40,000,000 characters, past the default
+ * output budget of 16,777,216.
+ */
+const sprawling: Item = {
+  ...counting,
+  body: [
+    {
+      attributes: [],
+      children: Array.from({ length: 40 }, (): BodyNode => ({
+        base: { _tag: "literal", value: 10n },
+        delimiter: ";",
+        field: Option.none(),
+        format: Option.none(),
+        identifier: "S",
+        index: Option.none(),
+        kind: "printed-variable",
+        mappingIndicator: "=",
+        path: "qti-assessment-item/qti-item-body/p/qti-printed-variable",
+        powerForm: false,
+      })),
+      kind: "element",
+      path: "qti-assessment-item/qti-item-body/p",
+      tag: "p",
+    },
+  ],
+  identifier: "sprawling",
+  templates: new Map([
+    [
+      "S",
+      {
+        baseType: "string",
+        cardinality: "single",
+        defaultValue: Option.none(),
+        identifier: "S",
+        mathVariable: false,
+        paramVariable: false,
+      },
+    ],
+  ]),
+};
+
+/**
+ * Give the fields of an {@link OutputTooLarge} a render failed with.
+ *
+ * @param result The result of a render.
+ * @returns The failure's budget and item when it is an `OutputTooLarge`, its tag when it is another
+ *   failure, and none when the render succeeded.
+ */
+const budgetFailure = (
+  result: Result.Result<Rendered, { readonly _tag: string }>,
+): Option.Option<string | { budget: number; item: string }> =>
+  Option.map(failureOf(result), (failure) =>
+    failure instanceof OutputTooLarge
+      ? { budget: failure.budget, item: failure.item }
+      : failure._tag,
+  );
+
+describe("render, the output budget", () => {
+  /**
+   * {@link sprawling} redacted under a record whose `S` is {@link sprawlingLength} characters long.
+   */
+  const sprawled = redact(acceptForTest(sprawling), {
+    outcomes: {},
+    templates: { S: one({ baseType: "string", value: "y".repeat(sprawlingLength) }) },
+  });
+
+  it.effect(
+    "[I-5] fails OutputTooLarge, naming the default budget and the item, when 40 printed variables of 999,999 characters pass it",
+    () =>
+      Effect.gen(function* failsPastDefault() {
+        const configuration = yield* defaults;
+
+        assert.strictEqual(configuration.outputBudget, 16_777_216);
+        assert.deepStrictEqual(
+          budgetFailure(render(sprawled, configuration, { instance })),
+          Option.some({ budget: 16_777_216, item: "sprawling" }),
+        );
+      }),
+  );
+
+  it.effect("[I-5] renders the same item once the host raises the budget to 50,000,000", () =>
+    Effect.gen(function* rendersUnderRaised() {
+      const configuration = yield* configure({ outputBudget: 50_000_000 });
+      const rendered = yield* Effect.fromResult(render(sprawled, configuration, { instance }));
+
+      assert.isAbove(rendered.html.length, 40 * sprawlingLength);
+      assert.isAtMost(rendered.html.length, 50_000_000);
+    }),
+  );
+
+  it.effect(
+    "[I-5] renders an item whose HTML is exactly the budget, and fails OutputTooLarge one character under it",
+    () =>
+      Effect.gen(function* boundsExactly() {
+        const { length } = (yield* Effect.fromResult(
+          render(redacted, yield* defaults, { instance }),
+        )).html;
+        const exact = yield* Effect.fromResult(
+          render(redacted, yield* configure({ outputBudget: length }), { instance }),
+        );
+        const under = render(redacted, yield* configure({ outputBudget: length - 1 }), {
+          instance,
+        });
+
+        assert.strictEqual(exact.html.length, length);
+        assert.deepStrictEqual(
+          budgetFailure(under),
+          Option.some({ budget: length - 1, item: "capital" }),
+        );
       }),
   );
 });
