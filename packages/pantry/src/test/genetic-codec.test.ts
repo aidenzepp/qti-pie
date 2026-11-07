@@ -16,9 +16,11 @@
  * Search: GEN-A's engine (`#pantry/test/gen/genetic/engine.ts`), a population seeded by
  * construction (the XDM generator's QTI documents and small generic documents with internal
  * subsets), parents picked by novelty over the features of `codec-genome.ts` and the oracles'
- * outcomes, bred by the edits of `codec-genome.ts` under weights each run draws, swarm-style. Each
- * run searches twice: on a floor stream its label fixes, the same every run, and on a stream the
- * run's seed rotates. `GR8DES_GENETIC=1` multiplies the budget.
+ * outcomes, bred by the edits of `codec-genome.ts` under weights each run draws, swarm-style. A
+ * free run, `pnpm test`, searches the floor stream alone, which its label fixes, so it breeds the
+ * same documents every run and a lucky seed cannot turn it red; it replays every kept and every
+ * fixed document beside. `GR8DES_GENETIC=1` adds the stream the run's seed rotates, which explores,
+ * and multiplies the budget: a class only it finds is recorded or routed from that run.
  *
  * Every disagreement fails the test unless {@link recorded} or {@link open} names its class.
  * {@link recorded} holds the classes where libxml2 2.9.13, not crust, departs from the
@@ -312,9 +314,10 @@ const budget: Budget = {
 const reductionTries = settings.geneticRequested ? 400 : 30;
 
 /**
- * The test's timeout, in milliseconds. Measured on 2026-11-07, the free run (two streams of 432
- * candidates, their reductions and the kept documents) took 50 to 85 s at load averages of 50 to 78
- * on 10 cores, and a run under `GR8DES_GENETIC=1` (two streams of 4,848) 811 s at about 50.
+ * The test's timeout, in milliseconds. Measured on 2026-11-07, a free run of both streams (two of
+ * 432 candidates, their reductions and the kept documents) took 50 to 85 s at load averages of 50
+ * to 78 on 10 cores, and a run under `GR8DES_GENETIC=1` (two streams of 4,848) 811 s at about 50;
+ * a free run now searches the floor stream alone, so the figures bound it from above.
  * Measured 2026-11-07: 99.2 s at a load average of 63 to 73, the free run. The budgets are about
  * six and four times those. Raise them only on a new measurement recorded here.
  */
@@ -444,21 +447,24 @@ describe("genetic-codec.test.ts", () => {
         Effect.gen(function* codecSearch() {
           const run = yield* runOfProcess;
           const floor = yield* searched("floor", floorSeed("pantry/genetic-codec"));
-          const rotating = yield* searched(
-            "rotating",
-            rotatingSeed(run.seed, floorSeed("pantry/genetic-codec")),
-          );
+          const streams = settings.geneticRequested
+            ? [
+                floor,
+                yield* searched(
+                  "rotating",
+                  rotatingSeed(run.seed, floorSeed("pantry/genetic-codec")),
+                ),
+              ]
+            : [floor];
           yield* Console.log(
-            [
-              `genetic-codec: TEST_SEED=${String(run.seed)}`,
-              ...reportOf(floor),
-              ...reportOf(rotating),
-            ].join("\n"),
+            [`genetic-codec: TEST_SEED=${String(run.seed)}`, ...streams.flatMap(reportOf)].join(
+              "\n",
+            ),
           );
 
           const accounted = (signature: string): boolean =>
             [...recorded, ...open].some((entry) => entry.signature.test(signature));
-          const unopened = [floor, rotating].flatMap(({ label, reduced }) =>
+          const unopened = streams.flatMap(({ label, reduced }) =>
             reduced
               .filter(({ signature }) => !accounted(signature))
               .map(
