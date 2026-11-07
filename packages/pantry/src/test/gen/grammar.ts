@@ -29,7 +29,7 @@ import { catalogText } from "#pantry/test/xsd-catalog.ts";
 import { readSource, sourcePaths, sources, xsdDirectory } from "#pantry/vocab/derive/sources.ts";
 import type { SourcePath } from "#pantry/vocab/derive/sources.ts";
 import type { Source, Sources } from "#pantry/vocab/inventory/types.ts";
-import { xmlNamespace } from "#pantry/vocab/namespaces.ts";
+import { namespaceNameOf, xmlNamespace } from "#pantry/vocab/namespaces.ts";
 import { xmllintValidate } from "#pantry/xml/oracle.ts";
 
 /**
@@ -1180,7 +1180,7 @@ export const toyVocabulary = <const K extends string, const D extends string>(in
       ...input.kinds.map((handle) => ({ handle, local: handle })),
     ],
     models: [],
-    namespace: "urn:toy",
+    namespace: namespaceNameOf("urn:toy"),
   }) satisfies Vocabulary;
 
 /**

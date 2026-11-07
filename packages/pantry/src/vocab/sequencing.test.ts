@@ -18,6 +18,8 @@ import type { Letter, MatchScope, Word } from "#pantry/test/gen/vocab.ts";
 import { contentModels } from "#pantry/vocab/inventory/models.ts";
 import type { ContentModel, Occurs, Particle } from "#pantry/vocab/inventory/types.ts";
 import { vocabularies } from "#pantry/vocab/inventory/vocabularies.ts";
+import { nameless, namespaceNameOf } from "#pantry/vocab/namespaces.ts";
+import type { NamespaceOfKind } from "#pantry/vocab/namespaces.ts";
 import { automatonOf } from "#pantry/vocab/sequencing.ts";
 import type { Automaton } from "#pantry/vocab/sequencing.ts";
 
@@ -50,6 +52,18 @@ const namespaces: ReadonlyMap<string, string> = new Map(
  * @returns Its namespace, empty for a kind no roster holds.
  */
 const namespaceOf = (kind: string): string => namespaces.get(kind) ?? "";
+
+/**
+ * A kind's namespace as the automaton reads it.
+ *
+ * @param kind - The kind.
+ * @returns Its roster's namespace, or nameless for a kind no roster holds, which names no element.
+ */
+const namespaceOfKind = (kind: string): NamespaceOfKind =>
+  Option.match(Option.fromNullishOr(namespaces.get(kind)), {
+    onNone: () => nameless,
+    onSome: namespaceNameOf,
+  });
 
 /**
  * The scope the automaton's language is read in: a wildcard takes foreign elements only, as its
@@ -389,7 +403,7 @@ describe("vocab/sequencing.ts", () => {
             Effect.sync(() => {
               const { particle, row } = Arr.getUnsafe(modelled, index);
               const own = namespaceOf(row.kind);
-              const automaton = automatonOf(particle, namespaceOf, own);
+              const automaton = automatonOf(particle, namespaceOfKind, namespaceOfKind(row.kind));
               const tree = relaxed(particle);
               const letters = alphabetOf(automaton, own);
 
@@ -447,7 +461,7 @@ describe("vocab/sequencing.ts", () => {
             Effect.sync(() => {
               const { particle, row } = Arr.getUnsafe(modelled, index);
               const own = namespaceOf(row.kind);
-              const automaton = automatonOf(particle, namespaceOf, own);
+              const automaton = automatonOf(particle, namespaceOfKind, namespaceOfKind(row.kind));
               const tree = relaxed(particle);
 
               for (const word of edits) {
@@ -471,7 +485,7 @@ describe("vocab/sequencing.ts", () => {
 
   it("is deterministic on every model, as Unique Particle Attribution requires", () => {
     const breaches = modelled.flatMap(({ particle, row }) =>
-      automatonOf(particle, namespaceOf, namespaceOf(row.kind)).ambiguous.map(
+      automatonOf(particle, namespaceOfKind, namespaceOfKind(row.kind)).ambiguous.map(
         (ambiguity) => `${named(row)} ${Formatter.format(ambiguity)}`,
       ),
     );
@@ -506,7 +520,11 @@ describe("vocab/sequencing.ts", () => {
               const mutant = doubled(particle, place);
 
               if (Option.isSome(mutant)) {
-                const automaton = automatonOf(mutant.value, namespaceOf, namespaceOf(row.kind));
+                const automaton = automatonOf(
+                  mutant.value,
+                  namespaceOfKind,
+                  namespaceOfKind(row.kind),
+                );
 
                 if (automaton.ambiguous.length === 0) {
                   throw new Error(`${named(row)}: doubling position ${place + 1} went unnoticed`);
@@ -520,7 +538,7 @@ describe("vocab/sequencing.ts", () => {
 
   it("numbers every element particle and wildcard once, densely, in tree order", () => {
     for (const { particle, row } of modelled) {
-      const automaton = automatonOf(particle, namespaceOf, namespaceOf(row.kind));
+      const automaton = automatonOf(particle, namespaceOfKind, namespaceOfKind(row.kind));
       const leaves = leavesOf(particle);
       const counts = new Map<string, number>();
 

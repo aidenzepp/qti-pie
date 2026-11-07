@@ -56,7 +56,7 @@ import { caseHang, featuresOf, idOf, searchTimeout, xdmDocument } from "#pantry/
 import type { XdmFeature } from "#pantry/test/gen/xdm.ts";
 import { lawNames } from "#pantry/test/oracle.ts";
 import { isUriReference } from "#pantry/test/uri-reference.ts";
-import { mathmlNamespace, namespaceClassOf } from "#pantry/vocab/namespaces.ts";
+import { mathmlNamespace, namespaceClassOf, namespaceNameOf } from "#pantry/vocab/namespaces.ts";
 
 /**
  * A text field's pattern compiled as grizzle reads it: `str.regex`'s grammar is ECMAScript's under
@@ -767,7 +767,12 @@ describe("qti/chardata.ts", () => {
                   : kindNamespace.get(parentKind);
                 assert.isDefined(parentNamespace, `the namespace of ${node}'s parent`);
                 assert.strictEqual(
-                  foreignKinds[namespaceClassOf(namespace, parentNamespace ?? "")],
+                  foreignKinds[
+                    namespaceClassOf(
+                      namespaceNameOf(namespace),
+                      namespaceNameOf(parentNamespace ?? ""),
+                    )
+                  ],
                   kindOf.get(node),
                 );
 

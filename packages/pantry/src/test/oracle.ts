@@ -126,7 +126,7 @@ import {
   objectRoots,
 } from "#pantry/test/oracle-laws.ts";
 import { lawTable, precedence } from "#pantry/vocab/laws.ts";
-import { mathmlNamespace, xsNamespace } from "#pantry/vocab/namespaces.ts";
+import { mathmlNamespace, namespaceNameOf, xsNamespace } from "#pantry/vocab/namespaces.ts";
 import { oracleValueOf, resolveAttribute } from "#pantry/test/resolution.ts";
 import {
   ancestorsOf,
@@ -1656,7 +1656,9 @@ const nodeLaws: readonly NodeLaw[] = [
         type === xsNamespace ||
           Option.exists(
             against,
-            (namespace) => !vocabulary(namespace) || typeAvailable(namespace, type),
+            (namespace) =>
+              !vocabulary(namespace) ||
+              typeAvailable(namespaceNameOf(namespace), namespaceNameOf(type)),
           ),
         () => ({
           governs: node.governs,
@@ -5000,7 +5002,10 @@ const packageBreaches = (
           : [
               breach("LomObjectIdentifier", {
                 entries: JSON.stringify(entries),
-                identifier: Option.getOrElse(identifier, () => ""),
+                ...Option.match(identifier, {
+                  onNone: () => ({}),
+                  onSome: (id) => ({ identifier: id }),
+                }),
                 node: pathOf(manifest, lom.id),
               }),
             ];
@@ -6132,11 +6137,15 @@ const ownLaws = {
   },
   LomObjectIdentifier: {
     explain: (keys) =>
-      `the document ${field(keys, "identifier")} is named ${field(keys, "entries")} by its record`,
+      keys["identifier"] === undefined
+        ? `the document writes no identifier, so none of its record's entries ${field(keys, "entries")} names it`
+        : `the document ${field(keys, "identifier")} is named ${field(keys, "entries")} by its record`,
   },
   LomObjectTitle: {
     explain: (keys) =>
-      `the document titled ${JSON.stringify(field(keys, "title"))} is titled ${field(keys, "strings")} by its record in its language`,
+      keys["title"] === undefined
+        ? `the document writes no title, so none of its record's title strings ${field(keys, "strings")} names it`
+        : `the document titled ${JSON.stringify(field(keys, "title"))} is titled ${field(keys, "strings")} by its record in its language`,
   },
   "Lookup table cardinality": {
     explain: (keys) =>

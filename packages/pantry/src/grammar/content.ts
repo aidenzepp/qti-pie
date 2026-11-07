@@ -69,6 +69,7 @@ import type {
   Sources,
 } from "#pantry/vocab/inventory/types.ts";
 import { admitsNamespace, namespaceClassesUnder } from "#pantry/vocab/namespaces.ts";
+import type { NamespaceOfKind } from "#pantry/vocab/namespaces.ts";
 import { automatonOf } from "#pantry/vocab/sequencing.ts";
 import type { Automaton, Position } from "#pantry/vocab/sequencing.ts";
 
@@ -117,9 +118,9 @@ export type ModelEdit =
     };
 
 /**
- * The kinds of one namespace that are its only roots: the only kinds of that namespace a wildcard
- * admits, wherever it stands, and where it comes from (spec reading 2: MathML's one root,
- * `m:math`).
+ * The kinds of one namespace, named by its URI, that are its only roots: the only kinds of that
+ * namespace a wildcard admits, wherever it stands, and where it comes from (spec reading 2:
+ * MathML's one root, `m:math`).
  */
 export interface Roots {
   readonly kinds: readonly [string, ...string[]];
@@ -957,6 +958,7 @@ export const maxOccursOf = (occurs: Occurs): number =>
  * @param input - The models, the vocabularies' readings, and what a wildcard reads.
  * @param input.globalKinds - The kinds a `lax` or `strict` wildcard of a parent reads as their
  *   global declarations in a version: those a schema set of the parent's documents declares.
+ * @param input.namespaceOf - The namespace of each kind's elements.
  * @returns The content grammar and the admitted triples with their positions, or the first model or
  *   reading that has none.
  */
@@ -966,7 +968,7 @@ export const contentOf = (input: {
   readonly globalKinds: (version: SchemaVersion, parent: string) => readonly string[];
   readonly kinds: Roster<string>;
   readonly models: readonly ContentModel[];
-  readonly namespaceOf: (kind: string) => string;
+  readonly namespaceOf: (kind: string) => NamespaceOfKind;
   readonly versions: Roster<SchemaVersion>;
 }): Result.Result<
   {
@@ -984,11 +986,14 @@ export const contentOf = (input: {
     );
     // A namespace a facet states the roots of admits those kinds alone through a wildcard, and any
     // other namespace every kind it declares globally.
-    const rootAdmits = (kind: string): boolean =>
-      Option.match(Option.fromNullishOr(rootsOf.get(input.namespaceOf(kind))), {
-        onNone: () => true,
-        onSome: (roots) => roots.has(kind),
-      });
+    const rootAdmits = (kind: string): boolean => {
+      const namespace = input.namespaceOf(kind);
+
+      return Option.match(
+        namespace._tag === "in" ? Option.fromNullishOr(rootsOf.get(namespace.uri)) : Option.none(),
+        { onNone: () => true, onSome: (roots) => roots.has(kind) },
+      );
+    };
     const installed: Installed[] = [];
     const used = new Set<ModelEdit>();
     for (const model of [...input.models, ...input.facets.flatMap((facet) => facet.models)]) {

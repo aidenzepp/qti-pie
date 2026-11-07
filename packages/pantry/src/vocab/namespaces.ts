@@ -24,6 +24,74 @@ import type { NamespaceConstraint } from "#pantry/vocab/inventory/types.ts";
 export const noNamespace = "";
 
 /**
+ * The namespace name of an element, attribute or type as the grammar reads it: `in` the namespace
+ * `uri`, or `absent`, in no namespace (Namespaces in XML 1.0, §6.2; XML Schema 1.0 Part 1,
+ * §3.15.2's absent target namespace). Crust's tree and the derived leaf spell the second as
+ * {@link noNamespace}; pantry reads that spelling through {@link namespaceNameOf} and writes it
+ * back through {@link spelledNamespace}, so no empty text stands for it here.
+ */
+export type NamespaceName =
+  | { readonly _tag: "absent" }
+  | { readonly _tag: "in"; readonly uri: string };
+
+/**
+ * The namespace of a kind's elements: their {@link NamespaceName}, or `nameless` for a kind that
+ * names no element: the document node, the doctype, character data, and the foreign kinds, whose
+ * element keeps its own name beside its kind (`foreignKinds` of `#pantry/grammar/kinds.ts`). A
+ * kind with no element name is in no namespace of its own, so it is never `absent`, which an
+ * element in no namespace is.
+ */
+export type NamespaceOfKind = NamespaceName | Nameless;
+
+/**
+ * The namespace of a kind that names no element ({@link NamespaceOfKind}).
+ */
+export interface Nameless {
+  readonly _tag: "nameless";
+}
+
+/**
+ * The namespace name of a name in no namespace.
+ */
+const absentNamespace: NamespaceName = { _tag: "absent" };
+
+/**
+ * The namespace of a kind that names no element.
+ */
+export const nameless: Nameless = { _tag: "nameless" };
+
+/**
+ * Read a namespace name as crust's tree and the derived leaf spell it.
+ *
+ * @param spelled - The namespace name, {@link noNamespace} for none.
+ * @returns It, `absent` for {@link noNamespace}.
+ */
+export const namespaceNameOf = (spelled: string): NamespaceName =>
+  spelled === noNamespace ? absentNamespace : { _tag: "in", uri: spelled };
+
+/**
+ * Whether a name is in a kind's namespace: both in one namespace, or both in none. A kind that
+ * names no element has no namespace a name is in.
+ *
+ * @param name - The name's namespace name.
+ * @param kind - The kind's namespace.
+ * @returns Whether they are one.
+ */
+export const inNamespaceOf = (name: NamespaceName, kind: NamespaceOfKind): boolean =>
+  name._tag === "in" ? kind._tag === "in" && kind.uri === name.uri : kind._tag === "absent";
+
+/**
+ * Spell a namespace name as crust's tree does, {@link namespaceNameOf}'s inverse: the spelling the
+ * host's name relations hold (`ElementName`, `KindByNameUnder`), since the codec reads them against
+ * crust's names.
+ *
+ * @param name - The namespace name.
+ * @returns Its URI, or {@link noNamespace} for `absent`.
+ */
+export const spelledNamespace = (name: NamespaceName): string =>
+  name._tag === "in" ? name.uri : noNamespace;
+
+/**
  * The XML Schema namespace, which every XSD construct and every built-in simple type is in.
  */
 export const xsNamespace = "http://www.w3.org/2001/XMLSchema";
@@ -161,19 +229,24 @@ export type NamespaceClass = (typeof namespaceClasses)[number];
  *
  * Every wildcard the IR holds is written in the schema of the element that holds it, in that
  * element's namespace (`src/vocab/derive/models.ts` refuses a model that breaks it), so the target
- * namespace is the namespace name of the element whose content or attributes the wildcard admits.
- * When the target namespace is absent, `own` is empty: a name in no namespace is `absent`.
+ * namespace is the namespace of the element whose content or attributes the wildcard admits, or of
+ * its kind. When the target namespace is absent, `own` is empty: a name in no namespace is
+ * `absent`. A kind that names no element has no namespace a name can share, so against it too no
+ * name is `own`: its one wildcard, a foreign kind's (`xs:anyType`'s `##any`), admits every class.
  *
- * @param namespace - The namespace name of an element or attribute, empty for none.
- * @param target - The wildcard's target namespace, empty when absent.
+ * @param namespace - The namespace name of an element or attribute.
+ * @param target - The wildcard's target namespace: its element's, or its kind's.
  * @returns Its class.
  */
-export const namespaceClassOf = (namespace: string, target: string): NamespaceClass => {
-  if (namespace === noNamespace) {
+export const namespaceClassOf = (
+  namespace: NamespaceName,
+  target: NamespaceOfKind,
+): NamespaceClass => {
+  if (namespace._tag === "absent") {
     return "absent";
   }
 
-  return namespace === target ? "own" : "other";
+  return inNamespaceOf(namespace, target) ? "own" : "other";
 };
 
 /**
@@ -193,16 +266,20 @@ export const namespaceClassesUnder: Readonly<
 };
 
 /**
- * Decide whether a namespace constraint admits a namespace name, whatever the wildcard's
- * processing.
+ * Decide whether a namespace constraint admits a kind's elements by their namespace, whatever the
+ * wildcard's processing. A kind that names no element has no namespace name for a constraint to
+ * admit: a wildcard admits a foreign element as its namespace class's foreign kind
+ * (`#pantry/grammar/content.ts`, `contentOf`), never through this.
  *
  * @param constraint - The wildcard's namespace constraint.
- * @param target - Its target namespace, the namespace name of the element that holds it.
- * @param namespace - The namespace name of the element or attribute, empty for none.
- * @returns Whether the constraint admits it.
+ * @param target - Its target namespace, the namespace of the kind that holds it.
+ * @param namespace - The namespace of the kind's elements.
+ * @returns Whether the constraint admits them.
  */
 export const admitsNamespace = (
   constraint: NamespaceConstraint,
-  target: string,
-  namespace: string,
-): boolean => namespaceClassesUnder[constraint].includes(namespaceClassOf(namespace, target));
+  target: NamespaceOfKind,
+  namespace: NamespaceOfKind,
+): boolean =>
+  namespace._tag !== "nameless" &&
+  namespaceClassesUnder[constraint].includes(namespaceClassOf(namespace, target));

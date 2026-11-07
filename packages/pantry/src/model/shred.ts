@@ -59,6 +59,7 @@ import type {
 import {
   mathmlNamespace,
   namespaceClassOf,
+  namespaceNameOf,
   qti2Namespaces,
   xmlNamespace,
   xmlnsNamespace,
@@ -656,7 +657,7 @@ const governsOf = <V extends XdmVocabulary>(
     : Result.flatMap(qNameOf(typed, element, scope), (name) =>
         Option.match(
           Option.filter(grammar.typeName(version, name), () =>
-            typeAvailable(parent.namespace, name.namespace),
+            typeAvailable(namespaceNameOf(parent.namespace), namespaceNameOf(name.namespace)),
           ),
           { onNone: unassessed, onSome: (handle) => Result.succeed(handle) },
         ),
@@ -733,7 +734,13 @@ const childReadingOf = <V extends XdmVocabulary>(
   grammar: ShredGrammar<V>,
 ): Result.Result<Reading<V>, UnmodeledVocabulary> => {
   const resolved = grammar.resolve(element.namespace, element.local, parent.kind);
-  const foreign = foreignKinds[namespaceClassOf(element.namespace, parent.element.namespace)];
+  const foreign =
+    foreignKinds[
+      namespaceClassOf(
+        namespaceNameOf(element.namespace),
+        namespaceNameOf(parent.element.namespace),
+      )
+    ];
   if (
     !Option.exists(resolved, (kind) => grammar.admitsChild(version, parent.kind, kind)) &&
     grammar.admitsChild(version, parent.kind, foreign)

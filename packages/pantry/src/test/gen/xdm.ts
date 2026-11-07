@@ -72,6 +72,7 @@ import {
   asiNamespace,
   mathmlNamespace,
   namespaceClassOf,
+  namespaceNameOf,
   xlinkNamespace,
   xmlNamespace,
   xsiNamespace,
@@ -400,7 +401,8 @@ const foreignPoolOf = (namespace: string, kind: ForeignKind): readonly ExpandedN
   [...new Set<string>([...foreignNamespaces, namespace])]
     .filter(
       (drawn) =>
-        drawn !== mathmlNamespace && foreignKinds[namespaceClassOf(drawn, namespace)] === kind,
+        drawn !== mathmlNamespace &&
+        foreignKinds[namespaceClassOf(namespaceNameOf(drawn), namespaceNameOf(namespace))] === kind,
     )
     .flatMap((drawn) => foreignLocals.map((local) => ({ local, namespace: drawn })));
 

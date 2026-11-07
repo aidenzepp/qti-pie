@@ -39,7 +39,13 @@ import type {
 } from "#pantry/grammar/closed.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import type { ContentModel, ExpandedName, TypeDerivation } from "#pantry/vocab/inventory/types.ts";
-import { vocabularyNamespaces, xsNamespace } from "#pantry/vocab/namespaces.ts";
+import {
+  inNamespaceOf,
+  namespaceNameOf,
+  vocabularyNamespaces,
+  xsNamespace,
+} from "#pantry/vocab/namespaces.ts";
+import type { NamespaceOfKind } from "#pantry/vocab/namespaces.ts";
 import { typeAvailable } from "#pantry/vocab/open.ts";
 
 /**
@@ -257,8 +263,8 @@ const derivationIndexOf = (derivations: readonly TypeDerivation[]): DerivationIn
  * @param input - The rosters, the models and the derivations.
  * @param input.derivations - The named types validly derived from each type, per version.
  * @param input.kinds - The `NodeKind` roster.
- * @param input.models - The content models, each with its declared type and its kind's namespace,
- *   empty for a kind of no vocabulary.
+ * @param input.models - The content models, each with its declared type and the namespace of its
+ *   kind's elements, in which a derived type stands with no schema set's help.
  * @param input.versions - The `SchemaVersion` roster.
  * @returns The relations, or the first model whose type no derivation lists, or the first row no
  *   constant can hold.
@@ -266,7 +272,7 @@ const derivationIndexOf = (derivations: readonly TypeDerivation[]): DerivationIn
 export const xsiTypesOf = (input: {
   readonly derivations: readonly TypeDerivation[];
   readonly kinds: Roster<string>;
-  readonly models: readonly (ContentModel & { readonly namespace: string })[];
+  readonly models: readonly (ContentModel & { readonly namespace: NamespaceOfKind })[];
   readonly versions: Roster<SchemaVersion>;
 }): Result.Result<XsiTypes, XsiTypeError> =>
   Result.gen(function* generateXsiTypes() {
@@ -294,9 +300,11 @@ export const xsiTypesOf = (input: {
 
           rows.push(
             ...derived
-              .filter(
-                (held) => held.namespace === namespace || typeAvailable(namespace, held.namespace),
-              )
+              .filter((held) => {
+                const name = namespaceNameOf(held.namespace);
+
+                return inNamespaceOf(name, namespace) || typeAvailable(namespace, name);
+              })
               .map((held) => ({ row: { kind, type: typeHandle(held), version }, source })),
           );
         }

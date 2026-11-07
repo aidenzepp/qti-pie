@@ -17,6 +17,7 @@ import {
   resolution,
 } from "#pantry/grammar/kinds.ts";
 import type { KindByNameUnder, KindOf, Vocabulary } from "#pantry/grammar/kinds.ts";
+import { namespaceNameOf } from "#pantry/vocab/namespaces.ts";
 
 /**
  * The search budget of every exploration here; each states its own coverage.
@@ -155,7 +156,7 @@ describe("the kinds generator against a naive model", () => {
               const vocabularies: readonly Vocabulary[] = list.kinds.map((kinds, at) => ({
                 attributes: [...new Set(list.attributes[at])],
                 kinds: kinds.map(({ handle, local }) => ({ handle, local })),
-                namespace: "urn:toy",
+                namespace: namespaceNameOf("urn:toy"),
               }));
               const all = list.kinds.flat();
               const handles = all.map(({ handle }) => handle);
@@ -267,7 +268,11 @@ describe("the kinds generator against a naive model", () => {
 describe("KindByNameUnder's kind payload", () => {
   it("ranges over the NodeKind roster, so a relation whose kind payload is any string is not one", () => {
     const vocabularies = [
-      { attributes: [], kinds: [{ handle: "k1", local: "a" }], namespace: "urn:toy" },
+      {
+        attributes: [],
+        kinds: [{ handle: "k1", local: "a" }],
+        namespace: namespaceNameOf("urn:toy"),
+      },
     ] as const;
     const rosters = Result.getOrThrow(generate({ interactions: [], layer: [], vocabularies }));
     const anyKind: Roster<string> = rosters.nodeKind;
