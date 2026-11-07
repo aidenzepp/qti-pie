@@ -24,7 +24,8 @@
  * {@link recorded} holds the classes where libxml2 2.9.13, not crust, departs from the
  * specification, each with its source. {@link open} holds confirmed defects, each routed to its
  * owner and kept by the reduced documents that show it, which must still show it, so an entry
- * cannot outlive its fix.
+ * cannot outlive its fix. {@link fixed} holds the defects since closed, their documents kept as
+ * planted seeds that every oracle must pass.
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, layer } from "@effect/vitest";
@@ -207,12 +208,6 @@ const open: readonly Open[] = [
     why: "XML 1.0 (Fifth Edition) section 5.1 has a non-validating processor stop processing entity and attribute-list declarations after a parameter entity it has not read, not stop checking them: each must still match its production ([10] AttValue admits no '<', [9] EntityValue no bare '&'); crust's subset lexer accepts '<!ATTLIST r a CDATA \"<\">' and '<!ENTITY e \"x&\">' after an unread '%f;' (dtd.ts), and refuses them before one; libxml2 refuses them",
   },
   {
-    finding: "GEN-B/codec N7: crust's canonical form renders the declaration of the xml prefix",
-    kept: [{ charset: "UTF-8", text: '<r xmlns:xml="http://www.w3.org/XML/1998/namespace"/>' }],
-    signature: /^O[36] (?:references: )?namespace declaration$/u,
-    why: "Canonical XML 1.0 section 2.3, Namespace Axis: \"except omit namespace node with local name xml, which defines the xml prefix, if its string value is http://www.w3.org/XML/1998/namespace\"; crust's canonicalize renders an element's written xmlns:xml declaration (canonical.ts), libxml2's --c14n omits it",
-  },
-  {
     finding: "GEN-B/codec N4: a UTF-16LE or UTF-16BE document is written with a byte order mark",
     kept: [{ charset: "UTF-16BE", text: '<?xml version="1.0" encoding="UTF-16BE"?><r/>' }],
     signature: /^(?:O2 charset changes|O4 rows differ: charset)$/u,
@@ -224,6 +219,34 @@ const open: readonly Open[] = [
     kept: [{ charset: "UTF-8", text: "<!DOCTYPE r [<?XmL d?>]><r/>" }],
     signature: /^O1 crust accepts, libxml2 refuses: (?:.+ \+ )?Invalid PI name(?: \+ .+)?$/u,
     why: "XML 1.0 (Fifth Edition) section 2.6, [17] PITarget ::= Name - (('X' | 'x') ('M' | 'm') ('L' | 'l')): a target spelling xml in any case is no PITarget; crust's internal-subset lexer skips a processing instruction without reading its target (dtd.ts), where the body's reader refuses it; libxml2 refuses it",
+  },
+];
+
+/**
+ * A defect the search found and its fix closed: the finding, the commit that fixed it, and the
+ * reduced documents that showed it, kept as planted seeds, each of which every oracle must now
+ * pass.
+ */
+interface Fixed {
+  readonly commit: string;
+  readonly finding: string;
+  readonly kept: readonly Kept[];
+}
+
+/**
+ * The defects closed since the search found them.
+ */
+const fixed: readonly Fixed[] = [
+  {
+    commit: "the commit that binds xml in canonical.ts's outermost scope",
+    finding: "GEN-B/codec N7: crust's canonical form rendered the declaration of the xml prefix",
+    kept: [
+      { charset: "UTF-8", text: '<r xmlns:xml="http://www.w3.org/XML/1998/namespace"/>' },
+      {
+        charset: "UTF-8",
+        text: '<r xmlns:xml="http://www.w3.org/XML/1998/namespace"><a xml:lang="en"/></r>',
+      },
+    ],
   },
 ];
 
@@ -459,6 +482,24 @@ describe("genetic-codec.test.ts", () => {
             { concurrency: 1 },
           );
           const stale = keptJudged.filter(({ shows }) => !shows);
+          const seeds = fixed.flatMap((entry) => entry.kept.map((held) => ({ entry, held })));
+          const regressed = yield* Effect.forEach(
+            seeds,
+            ({ entry, held }, at) =>
+              judgeBytes(
+                encodedIn(held.text, held.charset),
+                `${scratch}/fixed-${String(at)}.xml`,
+                keptWorld,
+              ).pipe(
+                Effect.map(({ disagreements }) =>
+                  disagreements.map(
+                    ({ signature }) =>
+                      `${entry.finding}: ${JSON.stringify(held.text)} (${held.charset}): ${signature}`,
+                  ),
+                ),
+              ),
+            { concurrency: 1 },
+          );
 
           assert.deepStrictEqual(
             unopened,
@@ -472,6 +513,11 @@ describe("genetic-codec.test.ts", () => {
             ),
             [],
             "every kept document still shows its routed defect",
+          );
+          assert.deepStrictEqual(
+            regressed.flat(),
+            [],
+            "every planted seed of a fixed defect passes every oracle",
           );
         }),
       { timeout: testTimeoutMs },
