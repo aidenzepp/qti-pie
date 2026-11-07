@@ -113,76 +113,6 @@ export const known = {
     fix: "NS1: a variable reference that names no declaration is a row of its own relation, never the nil uuid",
     owner: "NIL",
   },
-  "dangling-uuid: SectionTemplateRef.declaration": {
-    files: [
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-    <metadata>
-        
-        <schemaversion>3.0.0</schemaversion>
-        
-    </metadata>
-    
-    <resources>
-        
-        <resource type="imsqti_item_xmlv3p0" href="rtest01/rtest01-set01.xml">
-            
-        </resource>
-        
-        
-        <resource type="imsqti_fragment_xmlv3p0" href="rtest01/rtest01-fragment.xml">
-            
-        </resource>
-    </resources>
-</manifest>`,
-      ],
-      [
-        "rtest01/rtest01-fragment.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<div xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-    <p><qti-template-inline template-identifier="NONE">t</qti-template-inline></p>
-</div>`,
-      ],
-      [
-        "rtest01/rtest01-set01.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xi="http://www.w3.org/2001/XInclude" xsi:schemaLocation="http://www.imsglobal.org/xsd/imsqtiasi_v3p0 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_asiv3p0_v1p0.xsd" identifier="RTEST-01-SET-01" title="Set Item" adaptive="false" time-dependent="false">
-    
-    
-    <qti-item-body>
-        
-        <xi:include href="rtest01-fragment.xml" parse="xml"/>
-    </qti-item-body>
-    
-</qti-assessment-item>`,
-      ],
-    ],
-    fix: "NS2: a content reference that names no declaration is a row of its own relation, never the nil uuid",
-    owner: "NIL",
-  },
-  "dangling-uuid: TemplateRef.declaration": {
-    files: [
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="items/item.xml"/></resources></manifest>`,
-      ],
-      [
-        "items/item.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-item-body><p><qti-template-inline template-identifier=""/></p></qti-item-body></qti-assessment-item>`,
-      ],
-    ],
-    fix: "NS2: a content reference that names no declaration is a row of its own relation, never the nil uuid",
-    owner: "NIL",
-  },
   "dangling-uuid: VariableRef.declaration": {
     files: [
       [
@@ -398,25 +328,24 @@ export const known = {
     fix: "N8: the oracle states the choice law the schema does, every choice in a choice interaction, so a qti-gap outside every qti-gap-match-interaction breaks N8 beside N6 on both sides",
     owner: "OL",
   },
-  "import-only-law: Template reference, contained TemplateRef(declaration, document, identifier, declarationKind, baseType, cardinality) in Declaration(node, document, identifier, declarationKind, baseType, cardinality)":
-    {
-      files: [
-        [
-          "imsmanifest.xml",
-          "xml",
-          `<?xml version="1.0" encoding="UTF-8"?>
+  "import-only-law: Template reference, contained TemplateRef(node, attribute) in TemplateRefDeclaration(node, attribute)": {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
 <manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="items/item.xml"/></resources></manifest>`,
-        ],
-        [
-          "items/item.xml",
-          "xml",
-          `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-item-body><p><qti-template-inline template-identifier=""/></p></qti-item-body></qti-assessment-item>`,
-        ],
       ],
-      fix: "NS2: a content reference that names no declaration is a row of its own relation, never the nil uuid",
-      owner: "NIL",
-    },
+      [
+        "items/item.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-item-body><p><qti-template-inline template-identifier=""/></p></qti-item-body></qti-assessment-item>`,
+      ],
+    ],
+    fix: "a content reference's value names a variable only where it is an NCName, as the oracle reads a bare reference (oracle.ts referenced.bare): the import and the schema's reference sources read template-identifier=\"\" as a name no declaration holds, which its value domain refuses alone",
+    owner: "FB-INTER",
+  },
   "import-only-law: Test overlay, contained Node(id) in ReferencePath(node)": {
     files: [
       [
@@ -759,6 +688,76 @@ export const fixed = {
       ],
     ],
     fix: "NS4: a placed ID's copy under a test's assembly is its placed document, never the nil uuid",
+    owner: "NIL",
+  },
+  "dangling-uuid: SectionTemplateRef.declaration": {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+    <metadata>
+        
+        <schemaversion>3.0.0</schemaversion>
+        
+    </metadata>
+    
+    <resources>
+        
+        <resource type="imsqti_item_xmlv3p0" href="rtest01/rtest01-set01.xml">
+            
+        </resource>
+        
+        
+        <resource type="imsqti_fragment_xmlv3p0" href="rtest01/rtest01-fragment.xml">
+            
+        </resource>
+    </resources>
+</manifest>`,
+      ],
+      [
+        "rtest01/rtest01-fragment.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<div xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+    <p><qti-template-inline template-identifier="NONE">t</qti-template-inline></p>
+</div>`,
+      ],
+      [
+        "rtest01/rtest01-set01.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xi="http://www.w3.org/2001/XInclude" xsi:schemaLocation="http://www.imsglobal.org/xsd/imsqtiasi_v3p0 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/imsqti_asiv3p0_v1p0.xsd" identifier="RTEST-01-SET-01" title="Set Item" adaptive="false" time-dependent="false">
+    
+    
+    <qti-item-body>
+        
+        <xi:include href="rtest01-fragment.xml" parse="xml"/>
+    </qti-item-body>
+    
+</qti-assessment-item>`,
+      ],
+    ],
+    fix: "NS2: a content reference that names no declaration has no declaration row, its *RefDeclaration relation's, never the nil uuid, so its law refuses it by that row's absence",
+    owner: "NIL",
+  },
+  "dangling-uuid: TemplateRef.declaration": {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="items/item.xml"/></resources></manifest>`,
+      ],
+      [
+        "items/item.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-item-body><p><qti-template-inline template-identifier=""/></p></qti-item-body></qti-assessment-item>`,
+      ],
+    ],
+    fix: "NS2: a content reference that names no declaration has no declaration row, its *RefDeclaration relation's, never the nil uuid, so its law refuses it by that row's absence",
     owner: "NIL",
   },
   "import-only-law: Binding cardinality, contained BindingDeclaration(node) in CountBound(node)": {

@@ -35,7 +35,6 @@ import {
   hotspotKinds,
   hottextKind,
   integerStartPattern,
-  nilUuid,
   readAttributes,
   references,
   referringRoots,
@@ -54,9 +53,11 @@ import type {
   ChoiceInteraction,
   ChoiceVariableName,
   ContextRef,
+  ContextRefDeclaration,
   CountBound,
   CountRange,
   FeedbackRef,
+  FeedbackRefDeclaration,
   Hotspot,
   Hottext,
   Interaction,
@@ -69,18 +70,24 @@ import type {
   PlacedChoice,
   PlacedHottext,
   PrintedVariableRef,
+  PrintedVariableRefDeclaration,
   ReferringDocument,
   SectionContextName,
   SectionContextRef,
+  SectionContextRefDeclaration,
   SectionFeedbackName,
   SectionFeedbackRef,
+  SectionFeedbackRefDeclaration,
   SectionPrintedName,
   SectionPrintedRef,
+  SectionPrintedRefDeclaration,
   SectionScope,
   SectionTemplateName,
   SectionTemplateRef,
+  SectionTemplateRefDeclaration,
   Slider,
   TemplateRef,
+  TemplateRefDeclaration,
 } from "#pantry/qti/interactions.ts";
 
 /**
@@ -117,9 +124,11 @@ export interface InteractionRows {
   readonly ChoiceInteraction: ReadonlyMap<string, Addition<typeof ChoiceInteraction>>;
   readonly ChoiceVariableName: ReadonlyMap<string, Addition<typeof ChoiceVariableName>>;
   readonly ContextRef: ReadonlyMap<string, Addition<typeof ContextRef>>;
+  readonly ContextRefDeclaration: ReadonlyMap<string, Addition<typeof ContextRefDeclaration>>;
   readonly CountBound: ReadonlyMap<string, Addition<typeof CountBound>>;
   readonly CountRange: ReadonlyMap<string, Addition<typeof CountRange>>;
   readonly FeedbackRef: ReadonlyMap<string, Addition<typeof FeedbackRef>>;
+  readonly FeedbackRefDeclaration: ReadonlyMap<string, Addition<typeof FeedbackRefDeclaration>>;
   readonly Hotspot: ReadonlyMap<string, Addition<typeof Hotspot>>;
   readonly Hottext: ReadonlyMap<string, Addition<typeof Hottext>>;
   readonly Interaction: ReadonlyMap<string, Addition<typeof Interaction>>;
@@ -128,6 +137,10 @@ export interface InteractionRows {
   readonly LeastCount: ReadonlyMap<string, Addition<typeof LeastCount>>;
   readonly MostCount: ReadonlyMap<string, Addition<typeof MostCount>>;
   readonly PrintedVariableRef: ReadonlyMap<string, Addition<typeof PrintedVariableRef>>;
+  readonly PrintedVariableRefDeclaration: ReadonlyMap<
+    string,
+    Addition<typeof PrintedVariableRefDeclaration>
+  >;
   readonly ReferringDocument: ReadonlyMap<string, Addition<typeof ReferringDocument>>;
   readonly SectionContextName: ReadonlyMap<string, Addition<typeof SectionContextName>>;
   readonly SectionFeedbackName: ReadonlyMap<string, Addition<typeof SectionFeedbackName>>;
@@ -135,22 +148,23 @@ export interface InteractionRows {
   readonly SectionTemplateName: ReadonlyMap<string, Addition<typeof SectionTemplateName>>;
   readonly Slider: ReadonlyMap<string, Addition<typeof Slider>>;
   readonly TemplateRef: ReadonlyMap<string, Addition<typeof TemplateRef>>;
+  readonly TemplateRefDeclaration: ReadonlyMap<string, Addition<typeof TemplateRefDeclaration>>;
 }
 
 /**
- * A content reference row as each reference relation writes it: the five relations share one
- * heading.
+ * A content reference's declaration row as each reference relation's writes it: the four relations
+ * share one heading.
  */
-type ReferenceRow = Addition<typeof FeedbackRef>;
+type ReferenceDeclarationRow = Addition<typeof FeedbackRefDeclaration>;
 
 /**
  * A declaration as the bindings and references resolve against it: its node, kind as a
  * `DeclarationKind`, identifier collapsed, and the codes its `base-type` and `cardinality` spell.
  */
 interface DeclaredVariable {
-  readonly baseType: ReferenceRow["baseType"];
-  readonly cardinality: ReferenceRow["cardinality"];
-  readonly declarationKind: ReferenceRow["declarationKind"];
+  readonly baseType: ReferenceDeclarationRow["baseType"];
+  readonly cardinality: ReferenceDeclarationRow["cardinality"];
+  readonly declarationKind: ReferenceDeclarationRow["declarationKind"];
   readonly node: NodeId;
 }
 
@@ -481,82 +495,54 @@ const contextOf = (doc: XdmDocument<Composed>, ids: InteractionIds): Context => 
 };
 
 /**
- * The declaration kinds a content reference of each attribute on each kind may name, by
- * `<attribute> <kind>` (`ContentReference`).
+ * The declaration kinds a content reference of each attribute on each kind may name
+ * (`ContentReference`), as `<attribute> <kind> <declaration kind>`.
  */
-const allowedKinds: ReadonlyMap<string, readonly ReferenceRow["declarationKind"][]> = new Map(
-  [...Map.groupBy(ContentReference.rows, ({ attribute, kind }) => `${attribute} ${kind}`)].map(
-    ([key, rows]) => [key, rows.map(({ declaration }) => declaration)],
+const allowedNames: ReadonlySet<string> = new Set(
+  ContentReference.rows.map(
+    ({ attribute, declaration, kind }) => `${attribute} ${kind} ${declaration}`,
   ),
 );
 
 /**
- * Read the declaration kinds a content reference may name.
- *
- * @param attribute - The reference's attribute.
- * @param kind - The kind of the element that carries it.
- * @returns The kinds, in `ContentReference`'s order; none for an attribute no row names on the
- *   kind.
+ * The built-in variables' names, whichever root holds them (`BuiltInVariable`).
  */
-const allowedOf = (attribute: string, kind: string): readonly ReferenceRow["declarationKind"][] =>
-  allowedKinds.get(`${attribute} ${kind}`) ?? [];
+const builtInVariables: ReadonlySet<string> = new Set(builtIns.map(({ variable }) => variable));
 
 /**
- * Resolve a name a binding or a reference makes: a built-in variable to its type under the nil
- * declaration; else a declaration of the name, one of an allowed kind where there is one; else the
- * nil declaration of the first allowed kind, which `declarationRef` refuses.
+ * Find the declaration a content reference names: none for a built-in variable, which stands as a
+ * declaration but has none, whose law reads the installed `BuiltInVariable`; else the first
+ * declaration of the name of a kind `ContentReference` lets the reference name; else none, a name
+ * no declaration the reference may name holds, which its law refuses (lane NIL's NS2: a missing
+ * value is a row of its own relation, never the nil uuid).
  *
  * @param declared - The declarations the name resolves among.
- * @param identifier - The name, collapsed.
- * @param allowed - The declaration kinds the name may resolve to.
- * @returns The variable.
+ * @param reference - The reference.
+ * @param reference.attribute - The attribute it refers by.
+ * @param reference.identifier - The name, collapsed.
+ * @param reference.kind - The kind of the element that carries it.
+ * @returns The declaration, or none.
  */
-const resolveIn = (
+const declarationIn = (
   declared: Context["declared"],
-  identifier: string,
-  allowed: readonly ReferenceRow["declarationKind"][],
-): DeclaredVariable => {
-  const builtIn = builtIns.find(({ variable }) => variable === identifier);
-  if (builtIn !== undefined) {
-    return {
-      baseType: builtIn.baseType,
-      cardinality: builtIn.cardinality,
-      declarationKind: builtIn.declaration,
-      node: nilUuid,
-    };
-  }
-
-  const named = declared.filter((declaration) => declaration.identifier === identifier);
-
-  return (
-    named.find(({ declarationKind }) => allowed.includes(declarationKind)) ??
-    named[0] ?? {
-      baseType: "none",
-      cardinality: "single",
-      declarationKind: allowed[0] ?? "qti-response-declaration",
-      node: nilUuid,
-    }
-  );
-};
+  reference: { readonly attribute: string; readonly identifier: string; readonly kind: string },
+): Option.Option<DeclaredVariable> =>
+  builtInVariables.has(reference.identifier)
+    ? Option.none()
+    : Arr.findFirst(
+        declared,
+        ({ declarationKind, identifier }) =>
+          identifier === reference.identifier &&
+          allowedNames.has(`${reference.attribute} ${reference.kind} ${declarationKind}`),
+      );
 
 /**
- * Resolve a name among one document's own declarations, as {@link resolveIn} does, but for a name
- * only a declaration with no `Declaration` row holds, which nothing references: no row is written
- * for it, and its declaration's own law refuses it alone (lane NIL's audit, B11).
- *
- * @param context - The document.
- * @param identifier - The name, collapsed.
- * @param allowed - The declaration kinds the name may resolve to.
- * @returns The variable, or none for an untyped name.
+ * The rows of one content reference relation and of its declarations, each keyed alike.
  */
-const resolve = (
-  context: Context,
-  identifier: string,
-  allowed: readonly ReferenceRow["declarationKind"][],
-): Option.Option<DeclaredVariable> =>
-  context.untyped.has(identifier)
-    ? Option.none()
-    : Option.some(resolveIn(context.declared, identifier, allowed));
+interface ReferenceRows<Reference, Declared> {
+  readonly declarations: ReadonlyMap<string, Declared>;
+  readonly references: ReadonlyMap<string, Reference>;
+}
 
 /**
  * Find the response declaration a binding names among its item's declarations. A built-in
@@ -1071,51 +1057,65 @@ const ariaOf = (context: Context) => {
 
 /**
  * Build one content reference relation's rows: each read attribute of the relation's names and
- * kinds that names a variable, in an item or a test, resolved among the document's declarations of
- * the kinds `ContentReference` allows there.
+ * kinds that names a variable, in an item or a test, and its declaration row where the name is that
+ * of a declaration of the document of a kind `ContentReference` allows there ({@link
+ * declarationIn}). A name only a declaration with no `Declaration` row holds, which nothing
+ * references, has neither: its declaration's own law refuses it alone (lane NIL's audit, B11).
  *
  * @param context - The document.
  * @param read - The document's read attributes.
  * @param reference - The relation's attributes and kinds.
  * @param names - Whether a value names a variable, rather than being a literal.
- * @returns The rows, keyed by (node, attribute).
+ * @returns The rows, each keyed by (node, attribute).
  */
 const referencesOf = (
   context: Context,
   read: ReturnType<typeof interactionAttributesOf>,
   reference: (typeof references)[keyof typeof references],
   names: (value: string) => boolean,
-): ReadonlyMap<string, ReferenceRow> =>
-  new Map(
-    referringRoots.some((root) => root === context.rootKind)
-      ? [...read.values()]
-          .filter(
-            (row) =>
-              reference.attributes.some((name) => name === row.name) &&
-              reference.kinds.some((kind) => kind === row.kind) &&
-              names(row.value),
-          )
-          .flatMap((row) =>
-            Option.toArray(resolve(context, row.value, allowedOf(row.name, row.kind))).map(
-              (variable) =>
-                [
-                  keyOf([row.node, row.name]),
-                  {
-                    attribute: row.name,
-                    baseType: variable.baseType,
-                    cardinality: variable.cardinality,
-                    declaration: variable.node,
-                    declarationKind: variable.declarationKind,
-                    document: context.document,
-                    identifier: row.value,
-                    kind: row.kind,
-                    node: row.node,
-                  },
-                ] as const,
-            ),
-          )
-      : [],
-  );
+): ReferenceRows<Addition<typeof FeedbackRef>, ReferenceDeclarationRow> => {
+  const named = referringRoots.some((root) => root === context.rootKind)
+    ? [...read.values()]
+        .filter(
+          (row) =>
+            reference.attributes.some((name) => name === row.name) &&
+            reference.kinds.some((kind) => kind === row.kind) &&
+            names(row.value) &&
+            !context.untyped.has(row.value),
+        )
+        .map((row) => ({
+          key: keyOf([row.node, row.name]),
+          reference: {
+            attribute: row.name,
+            document: context.document,
+            identifier: row.value,
+            kind: row.kind,
+            node: row.node,
+          },
+        }))
+    : [];
+
+  return {
+    declarations: new Map(
+      named.flatMap(({ key, reference: referred }) =>
+        Option.toArray(declarationIn(context.declared, referred)).map(
+          (variable) =>
+            [
+              key,
+              {
+                ...referred,
+                baseType: variable.baseType,
+                cardinality: variable.cardinality,
+                declaration: variable.node,
+                declarationKind: variable.declarationKind,
+              },
+            ] as const,
+        ),
+      ),
+    ),
+    references: new Map(named.map(({ key, reference: referred }) => [key, referred] as const)),
+  };
+};
 
 /**
  * Decide that every value names a variable: an `IdentifierDType` attribute always does.
@@ -1211,10 +1211,11 @@ const sectionPrints = [
  *
  * A required attribute that is absent leaves out the row its copy proves (a choice's `identifier`,
  * a hotspot's `shape`), and AL3 refuses the element. A reference whose name no declaration of the
- * document holds is written resolved to the nil declaration, which `declarationRef` refuses; a
- * binding to it has no declaration row, which "Binding declared" refuses; and a binding or a
- * reference to a name only a declaration with no `Declaration` row holds has neither, as that
- * declaration's own law refuses it alone (lane NIL's audit, B11).
+ * document it may name holds, and no built-in variable, has no declaration row, which its law
+ * refuses; a binding to it has no declaration row, which "Binding declared" refuses (lane NIL's
+ * NS2: never the nil uuid); and a binding or a reference to a name only a declaration with no
+ * `Declaration` row holds has neither, as that declaration's own law refuses it alone (lane NIL's
+ * audit, B11).
  *
  * @param doc - The document's tree, as shred gives it.
  * @param ids - The ids its rows are written under.
@@ -1229,6 +1230,13 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: InteractionIds): Interac
   const hottexts = hottextsOf(context);
   const aria = ariaOf(context);
   const counts = boundsOf(context, owned);
+  const contexts = referencesOf(context, read, references.context, always);
+  const feedbacks = referencesOf(context, read, references.feedback, always);
+  const prints = [
+    referencesOf(context, read, references.printed, always),
+    referencesOf(context, read, references.variable, namesVariable),
+  ];
+  const templates = referencesOf(context, read, references.template, always);
 
   return {
     AriaElement: aria.elements,
@@ -1241,10 +1249,12 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: InteractionIds): Interac
     Choice: choices,
     ChoiceInteraction: owned,
     ChoiceVariableName: choiceNamesOf(context, choices, hottexts),
-    ContextRef: referencesOf(context, read, references.context, always),
+    ContextRef: contexts.references,
+    ContextRefDeclaration: contexts.declarations,
     CountBound: counts.bounds,
     CountRange: counts.ranges,
-    FeedbackRef: referencesOf(context, read, references.feedback, always),
+    FeedbackRef: feedbacks.references,
+    FeedbackRefDeclaration: feedbacks.declarations,
     Hotspot: hotspotsOf(context),
     Hottext: hottexts,
     Interaction: interactionsOf(context),
@@ -1256,10 +1266,8 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: InteractionIds): Interac
     ),
     LeastCount: counts.leasts,
     MostCount: counts.mosts,
-    PrintedVariableRef: new Map([
-      ...referencesOf(context, read, references.printed, always),
-      ...referencesOf(context, read, references.variable, namesVariable),
-    ]),
+    PrintedVariableRef: new Map(prints.flatMap(({ references: held }) => [...held])),
+    PrintedVariableRefDeclaration: new Map(prints.flatMap(({ declarations: held }) => [...held])),
     ReferringDocument: new Map(
       referringRoots.every((root) => root !== context.rootKind)
         ? [[context.document, { document: context.document }]]
@@ -1270,7 +1278,8 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: InteractionIds): Interac
     SectionPrintedName: sectionNamesOf(context, read, sectionPrints, referringRoots),
     SectionTemplateName: sectionNamesOf(context, read, sectionTemplates, unfragmentedRoots),
     Slider: slidersOf(context),
-    TemplateRef: referencesOf(context, read, references.template, always),
+    TemplateRef: templates.references,
+    TemplateRefDeclaration: templates.declarations,
   };
 };
 
@@ -1330,10 +1339,26 @@ export const withPackageChoices = (
  */
 export interface SectionRows {
   readonly SectionContextRef: ReadonlyMap<string, Addition<typeof SectionContextRef>>;
+  readonly SectionContextRefDeclaration: ReadonlyMap<
+    string,
+    Addition<typeof SectionContextRefDeclaration>
+  >;
   readonly SectionFeedbackRef: ReadonlyMap<string, Addition<typeof SectionFeedbackRef>>;
+  readonly SectionFeedbackRefDeclaration: ReadonlyMap<
+    string,
+    Addition<typeof SectionFeedbackRefDeclaration>
+  >;
   readonly SectionPrintedRef: ReadonlyMap<string, Addition<typeof SectionPrintedRef>>;
+  readonly SectionPrintedRefDeclaration: ReadonlyMap<
+    string,
+    Addition<typeof SectionPrintedRefDeclaration>
+  >;
   readonly SectionScope: ReadonlyMap<string, Addition<typeof SectionScope>>;
   readonly SectionTemplateRef: ReadonlyMap<string, Addition<typeof SectionTemplateRef>>;
+  readonly SectionTemplateRefDeclaration: ReadonlyMap<
+    string,
+    Addition<typeof SectionTemplateRefDeclaration>
+  >;
 }
 
 /**
@@ -1358,36 +1383,40 @@ const instancesOf = (
 };
 
 /**
- * Resolve each reference of a section document or a fragment under one placement, among its
- * assembly's declarations.
+ * Place each reference of a section document or a fragment under one placement, and resolve it
+ * among its assembly's declarations: each has its placed row, and its declaration row where the
+ * name is that of an assembly's declaration of a kind it may name ({@link declarationIn}).
  *
  * @param names - The document's references of one class.
  * @param declared - The assembly's declarations.
  * @param placement - The placement.
  * @param placement.assembly - The assembly's root document node.
  * @param placement.instance - The placement's instance.
- * @returns The resolved rows, keyed by (instance, node, attribute).
+ * @returns The placed and declaration rows, each keyed by (instance, node, attribute).
  */
 const placedOf = (
   names: readonly Addition<typeof SectionFeedbackName>[],
   declared: Context["declared"],
   placement: { readonly assembly: NodeId; readonly instance: NodeId },
-): readonly (readonly [string, Addition<typeof SectionFeedbackRef>])[] =>
+): readonly {
+  readonly declaration: Option.Option<Addition<typeof SectionFeedbackRefDeclaration>>;
+  readonly key: string;
+  readonly placed: Addition<typeof SectionFeedbackRef>;
+}[] =>
   names.map((name) => {
-    const variable = resolveIn(declared, name.identifier, allowedOf(name.attribute, name.kind));
+    const placed = { ...name, assembly: placement.assembly, instance: placement.instance };
 
-    return [
-      keyOf([placement.instance, name.node, name.attribute]),
-      {
-        ...name,
-        assembly: placement.assembly,
+    return {
+      declaration: Option.map(declarationIn(declared, name), (variable) => ({
+        ...placed,
         baseType: variable.baseType,
         cardinality: variable.cardinality,
         declaration: variable.node,
         declarationKind: variable.declarationKind,
-        instance: placement.instance,
-      },
-    ] as const;
+      })),
+      key: keyOf([placement.instance, name.node, name.attribute]),
+      placed,
+    };
   });
 
 /**
@@ -1406,9 +1435,9 @@ const resolvesUnder = (root: InstanceRoot, instance: InstanceMember | InstanceRo
 /**
  * Build a package's placements: one per instance of a section document or a fragment under a test
  * and of an included fragment under an item, and under it each of the document's references of each
- * class, resolved among the assembly's declarations, a built-in to its type under the nil
- * declaration, and a name no allowed declaration holds to the nil declaration, which
- * `declarationRef` refuses.
+ * class, with its declaration row where the name is that of an assembly's declaration of a kind it
+ * may name: a built-in has none, and its law reads `BuiltInVariable`; a name no allowed declaration
+ * holds has none, and its law refuses it (lane NIL's NS2: never the nil uuid).
  *
  * @param input - The package's rows the placements read.
  * @param input.contexts - Every fragment's context variable references ({@link rowsOf}'s
@@ -1441,29 +1470,45 @@ export const sectionRowsOf = (input: {
     input.declarations,
     ({ document }) => document,
   );
-  const resolvedOf = (names: Iterable<Addition<typeof SectionFeedbackName>>) =>
-    new Map(
-      joinOn(
-        scoped,
-        ([{ instance }]) => instance.document,
-        names,
-        ({ document }) => document,
-      ).flatMap(([[{ assembly, instance }, scope], named]) =>
-        placedOf(named, scope, { assembly, instance: instance.id }),
-      ),
+  const resolvedOf = (names: Iterable<Addition<typeof SectionFeedbackName>>) => {
+    const placed = joinOn(
+      scoped,
+      ([{ instance }]) => instance.document,
+      names,
+      ({ document }) => document,
+    ).flatMap(([[{ assembly, instance }, scope], named]) =>
+      placedOf(named, scope, { assembly, instance: instance.id }),
     );
 
+    return {
+      declarations: new Map(
+        placed.flatMap(({ declaration, key }) =>
+          Option.toArray(declaration).map((row) => [key, row] as const),
+        ),
+      ),
+      references: new Map(placed.map(({ key, placed: row }) => [key, row] as const)),
+    };
+  };
+  const contexts = resolvedOf(input.contexts);
+  const feedbacks = resolvedOf(input.feedbacks);
+  const prints = resolvedOf(input.prints);
+  const templates = resolvedOf(input.templates);
+
   return {
-    SectionContextRef: resolvedOf(input.contexts),
-    SectionFeedbackRef: resolvedOf(input.feedbacks),
-    SectionPrintedRef: resolvedOf(input.prints),
+    SectionContextRef: contexts.references,
+    SectionContextRefDeclaration: contexts.declarations,
+    SectionFeedbackRef: feedbacks.references,
+    SectionFeedbackRefDeclaration: feedbacks.declarations,
+    SectionPrintedRef: prints.references,
+    SectionPrintedRefDeclaration: prints.declarations,
     SectionScope: new Map(
       placements.map(
         ({ assembly, instance }) =>
           [instance.id, { assembly, document: instance.document, instance: instance.id }] as const,
       ),
     ),
-    SectionTemplateRef: resolvedOf(input.templates),
+    SectionTemplateRef: templates.references,
+    SectionTemplateRefDeclaration: templates.declarations,
   };
 };
 
