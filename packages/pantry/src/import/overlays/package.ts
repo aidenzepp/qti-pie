@@ -68,6 +68,24 @@ export interface PackageRows {
 }
 
 /**
+ * The manifest overlays of a document that is not its package's manifest: none. The package's
+ * manifest is its one `imsmanifest.xml` (IMS Content Packaging 1.2), so a `cp:*` element of any
+ * other document describes no part of the package: what refuses it is the content laws over its
+ * own node (its root's resource type, its required attributes), never a manifest overlay's key or
+ * copy, one cause, one rule.
+ */
+export const noPackageRows: PackageRows = {
+  Dependency: new Map(),
+  File: new Map(),
+  FileHref: new Map(),
+  ManifestId: new Map(),
+  NamedHref: new Map(),
+  Resource: new Map(),
+  ResourceFile: new Map(),
+  ResourceHref: new Map(),
+};
+
+/**
  * The `ResourceType` handle a `cp:resource`'s `type` names: every handle but the null object is
  * spelled exactly as its lexical form (C17).
  */

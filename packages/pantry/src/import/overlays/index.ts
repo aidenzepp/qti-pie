@@ -60,6 +60,7 @@ import type { MetadataRows, NamedDocument, ObjectRows } from "#pantry/import/ove
 import { rowsOf as operatorRowsOf } from "#pantry/import/overlays/operators.ts";
 import type { OperatorRows } from "#pantry/import/overlays/operators.ts";
 import {
+  noPackageRows,
   rowsOf as packageRowsOf,
   referenceCensus,
   referenceRowsOf,
@@ -71,6 +72,7 @@ import { assembledRowsOf, rowsOf as testRowsOf } from "#pantry/import/overlays/t
 import type { AssembledRows, TestRows } from "#pantry/import/overlays/tests.ts";
 import type { ListedDocument, NodeIds } from "#pantry/import/write.ts";
 import type { NodeId } from "#pantry/model/xdm.ts";
+import { manifestPath } from "#pantry/qti/package.ts";
 
 /**
  * Every overlay's rows of a package, one keyed set per relation: each document builder's, and the
@@ -118,7 +120,9 @@ interface DocumentRows {
 
 /**
  * Run every document builder over one document: each finds the elements its overlays describe by
- * their kind, so a document that holds none gives it no row.
+ * their kind, so a document that holds none gives it no row. The manifest overlays are the
+ * package manifest's alone (`noPackageRows`): `rowsOf` of `#pantry/import/overlays/package.ts`
+ * reads the manifest's tree, and a `cp:*` element of another document is no part of the package.
  *
  * @param document - The document, listed, under its ids.
  * @param document.ids - Its ids.
@@ -127,7 +131,7 @@ interface DocumentRows {
  */
 const documentRowsOf = ({
   ids,
-  listed: { tree },
+  listed: { path, tree },
 }: {
   readonly ids: NodeIds;
   readonly listed: ListedDocument;
@@ -140,7 +144,7 @@ const documentRowsOf = ({
   mapping: mappingRowsOf(tree, ids),
   metadata: metadataRowsOf(tree, ids),
   operators: operatorRowsOf(tree, ids),
-  package: packageRowsOf(tree, ids),
+  package: path === manifestPath ? packageRowsOf(tree, ids) : noPackageRows,
   quotation: quotationRowsOf(tree, ids),
   references: referenceRowsOf(tree, ids, referenceCensus),
   tests: testRowsOf(tree, ids),
