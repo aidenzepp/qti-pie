@@ -31,7 +31,7 @@ import { listPackage, PackageReadError, readEntry, readPackage } from "#pantry/p
 import type { Entry, PackageFile } from "#pantry/package/read.ts";
 import { packageBudget, readZip, writeZip, ZipRefusal } from "#pantry/package/zip.ts";
 import type { ZipBudget, ZipEntry } from "#pantry/package/zip.ts";
-import { materializeCorpus, materializeZip } from "#pantry/test/fixtures.ts";
+import { materializeCorpus, materializeZip, zipMembers } from "#pantry/test/fixtures.ts";
 import type { ZipName } from "#pantry/test/fixtures.ts";
 
 /**
@@ -1257,38 +1257,10 @@ describe("package/zip.ts writeZip", () => {
 });
 
 /**
- * The 28 QTI 3 zips of the examples tarball, by the name `materializeZip` takes.
+ * Whether a corpus package's name is a row of the fixtures' table of zip members, which
+ * `materializeZip` takes.
  */
-const CORPUS_ZIPS: readonly ZipName[] = [
-  "BBQsTest",
-  "BPIG_22April",
-  "BegGuide_March2025",
-  "CASE",
-  "CASEWithOutcome",
-  "CAT_Test01_Adaptive_EchoAdapt",
-  "basicFeedbackTest",
-  "ccPackage",
-  "englishBasicLevelV2",
-  "englishHighLevelV2",
-  "externalMetadata",
-  "feedbackTest",
-  "interactionMixSaxonyV3",
-  "items",
-  "lti",
-  "maxfiles",
-  "metaData",
-  "pci_item_examples",
-  "pci_simple_example",
-  "sample_pci",
-  "shared-vocabulary-imsmanifest",
-  "sharedMedia",
-  "sharedStimulus",
-  "simple",
-  "svg",
-  "testWithLti",
-  "test_package_minfiles",
-  "usageData",
-];
+const isZipName = (name: string): name is ZipName => Object.hasOwn(zipMembers, name);
 
 /**
  * Whether a path is a macOS Finder `.DS_Store`, which the fixtures' recipe deletes after `unzip`.
@@ -1302,29 +1274,17 @@ const plain = (files: readonly PackageFile[]): readonly PackageFile[] =>
   files.map((file) => ({ ...file, bytes: Uint8Array.from(file.bytes) }));
 
 describe("package/read.ts over the corpus", () => {
-  it.effect("the corpus list names exactly the zips materializeCorpus returns", () =>
-    Effect.gen(function* compareNames() {
-      const corpus = yield* materializeCorpus();
-
-      assert.deepStrictEqual(
-        corpus.map((member) => member.name).toSorted(),
-        CORPUS_ZIPS.toSorted(),
-      );
-    }).pipe(Effect.provide(TestLayer)),
-  );
-
   it.effect(
     "every corpus zip, written by a third-party archiver, reads the files and bytes of its directory form",
     () =>
       Effect.gen(function* compareForms() {
         let files = 0;
 
-        const directories = new Map(
-          (yield* materializeCorpus()).map(({ dir, name }) => [name, dir]),
-        );
+        for (const { dir, name } of yield* materializeCorpus()) {
+          if (!isZipName(name)) {
+            assert.fail(`the corpus zip ${name} has no row in the fixtures' zipMembers`);
+          }
 
-        for (const name of CORPUS_ZIPS) {
-          const dir = directories.get(name) ?? `no directory form of ${name}`;
           const zip = yield* materializeZip(name);
           const fromDirectory = yield* readPackage(dir);
 
@@ -1362,7 +1322,7 @@ describe("package/read.ts over the corpus", () => {
         }
 
         // The examples tarball is pinned by its digest, so its zips' file count is a fact of the
-        // input: 546, one of them a `.DS_Store`.
+        // input: 546, one of them a `.DS_Store`. A zip the corpus lost, or one it gained, moves it.
         assert.strictEqual(files, 546);
       }).pipe(Effect.provide(TestLayer)),
     { timeout: 300_000 },
