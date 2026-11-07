@@ -20,7 +20,8 @@ import { foldAt, foldOf } from "#pantry/import/fold.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
-import { floatKeyPattern, pairKeyPattern } from "#pantry/qti/mapping.ts";
+import { pairKeyPattern } from "#pantry/qti/mapping.ts";
+import { doublePattern } from "#pantry/qti/operators.ts";
 import type {
   AreaMapping,
   LookupValue,
@@ -108,9 +109,10 @@ const copyOf = ({
 });
 
 /**
- * The map keys of a float mapping that hold a typed value, as `floatKeys` selects them.
+ * The map keys of a float mapping, every one of which holds a typed value (reading 154), as
+ * `floatKeys` selects them.
  */
-const floatKey = new RegExp(floatKeyPattern, "u");
+const doubleKey = new RegExp(doublePattern, "u");
 
 /**
  * The map keys of a pair or directed pair mapping that hold a typed value, as `pairKeys` and
@@ -309,8 +311,9 @@ interface TypedEntry {
 
 /**
  * Each base type's typed key, where it has one: the parse of its key, which is the one test that
- * the key holds a typed value, and the relation its row joins. A float key's test is its pattern,
- * since its row holds no split; a pair's is its pattern beside the parse ({@link pairKey}).
+ * the key holds a typed value, and the relation its row joins. A float key's test is its pattern
+ * ({@link doubleKey}), since its row holds no split; a pair's is its pattern beside the parse
+ * ({@link pairKey}).
  */
 const typedKeyAdders: Partial<
   Readonly<Record<BaseTypeHandle, (typed: TypedKeys, entry: TypedEntry) => void>>
@@ -322,7 +325,7 @@ const typedKeyAdders: Partial<
     }
   },
   float: (typed, entry) => {
-    if (floatKey.test(entry.key)) {
+    if (doubleKey.test(entry.key)) {
       typed.MapKeyFloat.set(entry.node, entry);
     }
   },
@@ -348,8 +351,8 @@ const typedKeyAdders: Partial<
 
 /**
  * Add a map key's typed row, where its base type gives it one and its key is of the form the
- * row's mirror selects: an integer's, a float of grizzle's double form, a point's two integers, or
- * a pair's or a directed pair's two items. Every other key has no typed row.
+ * row's mirror selects: an integer's, a float's in `xs:double`'s lexical space, a point's two
+ * integers, or a pair's or a directed pair's two items. Every other key has no typed row.
  *
  * @param typed - The typed rows so far.
  * @param baseType - The key's mapping's base type.

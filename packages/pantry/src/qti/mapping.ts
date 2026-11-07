@@ -77,8 +77,9 @@ import {
 import { Attribute } from "#pantry/qti/attributes.ts";
 import { DeclarationBaseType, declarationRef } from "#pantry/qti/declarations.ts";
 import { BaseTypePattern } from "#pantry/qti/expression-types.ts";
-import { keyText } from "#pantry/qti/limits.ts";
+import { keyText, keyTextBytes } from "#pantry/qti/limits.ts";
 import { Node, nodeRef } from "#pantry/qti/node.ts";
+import { doublePattern } from "#pantry/qti/operators.ts";
 
 /**
  * `xs:integer`'s lexical space, an optional sign and digits: the map keys of an integer mapping
@@ -87,44 +88,6 @@ import { Node, nodeRef } from "#pantry/qti/node.ts";
  * with JavaScript's engine as the oracle.
  */
 export const integerKeyPattern = "^[+-]?[0-9]+$";
-
-/**
- * The most padding zeros a float key's run of them holds where the key has a typed value: one
- * counted repetition, PostgreSQL's `DUPMAX`.
- *
- * Each run is bounded because a key's text sits in a UNIQUE, and grizzle proves the key's cast
- * total only for a pattern whose automaton it can build: at most 2,048 states
- * (`core/limits.ts` `regexDfaMaxStates`; `scalar/regex/inclusion.ts`), and a counted run costs a
- * state a zero. Three runs as long as the key-text bound exceed it, and three of one repetition
- * each stay within it.
- */
-export const floatKeyZeros = 255;
-
-/**
- * Grizzle's lexical form of `double precision` (`lexicalForm(pg["double precision"])`), each run
- * of padding zeros written as at most {@link floatKeyZeros}: the map keys of a float mapping whose
- * value {@link MapKeyFloat} holds. `mapping.oracle.test.ts` holds this literal to
- * {@link floatKeyPatternOf} of {@link floatKeyZeros}.
- */
-export const floatKeyPattern =
-  "^(?:[+-]?(?:0{0,255}(?:0|[1-9][0-9]{0,14})(?:\\.(?:[0-9]{15}0{0,255}|[0-9]{0,14}))?|\\.(?:[0-9]{15}0{0,255}|[0-9]{1,14}))(?:[eE][+-]?0{0,255}(?:0|[1-9][0-9]?|1[0-9]{2}|2[0-8][0-9]|29[0-2]|293))?|-?INF|NaN)$";
-
-/**
- * Write grizzle's `double precision` form with each `0*` bounded to a run of `zeros`, as
- * consecutive repetitions of at most 255, PostgreSQL's `DUPMAX`.
- *
- * @param form - The form, `lexicalForm(pg["double precision"])`.
- * @param zeros - The most padding zeros a run holds.
- * @returns The bounded pattern.
- */
-export const floatKeyPatternOf = (form: string, zeros: number): string => {
-  const parts: string[] = [];
-  for (let left = zeros; left > 0; left -= 255) {
-    parts.push(`0{0,${Math.min(left, 255)}}`);
-  }
-
-  return form.replaceAll("0*", parts.join(""));
-};
 
 /**
  * A point's lexical form as an attribute writes it: two integers and the one whitespace character
@@ -286,31 +249,35 @@ export const MapKeyInteger = relation.generated(
 );
 
 /**
- * The text type of a float map key that has a typed value: {@link floatKeyPattern}, whose
- * language lies inside grizzle's `double precision` form, so its cast is total.
+ * The text type of a float map key: `xs:double`'s lexical space as an attribute writes it
+ * (`doublePattern` of `#pantry/qti/operators.ts`, XML Schema 1.0's, reading 71's edition, so `+INF`
+ * is outside it), every key of which has the value {@link MapKeyFloat} holds (reading 154), and
+ * whose language lies inside grizzle's `doubleText`, so `Compute.parseDouble` reads it total; of at
+ * most {@link keyTextBytes} UTF-8 bytes, as the {@link MapKeyType} copy it mirrors is, since the
+ * key sits in the mirror's UNIQUE. Exported for `src/import/refusal.ts`, which names its pattern
+ * law.
  */
-const FloatKey = str.regex(floatKeyPattern);
+export const FloatKey = str.bytes(keyTextBytes, str.regex(doublePattern));
 
 /**
- * A float map key's typed value, keyed by its entry's node: `value`, the `double precision` its
- * key names, which PostgreSQL generates by casting the key. The cast rounds the decimal once to
- * the nearest double, as XML Schema's lexical mapping does (reading 56), so `1`, `1.0` and `10e-1`
- * are one value.
+ * A float map key's typed value, keyed by its entry's node: `value`, the double its key names,
+ * which PostgreSQL generates by grizzle's `Compute.parseDouble`, XML Schema 1.1's doubleLexicalMap
+ * (Part 2 §3.3.5.2, reading 144): the decimal rounded once to the nearest double, ties to even, of
+ * any digits and any exponent, an infinity of its sign at or past the overflow threshold and a zero
+ * of its sign at or below half the least subnormal.
  *
- * Only a key of grizzle's form has one: at most 15 significant digits on each side of the point
- * (`DBL_DIG`) and an exponent of at most 293, so the value is finite and nonzero unless it is
- * zero (`scalar/lexical.ts` `doubleForm`), with each run of padding zeros at most
- * {@link floatKeyZeros}. A key outside it, such as reading 56's `1e400`, `1e294` or
- * `1.2345678901234567`, has no row here and is distinct from the others by its lexical form alone:
- * grizzle's cast reads its double form only, and qti-pie's upstream ask #8 to grizzle, a total
- * xs:double parse, is what lifts the limit.
+ * Every key of a float mapping in the lexical space has one (reading 154), so `key(mapping, value)`
+ * compares every float key by its value: `1`, `1.0` and `10e-1` are one value, `1e400`, `2e400`
+ * and `INF` another, and `0`, `-0` and `1e-400` a third. PostgreSQL's `float8` equality, which the
+ * key's UNIQUE compares by, holds -0 equal to 0 and NaN equal to NaN, as an identity constraint
+ * compares two keys "equal or identical" (XML Schema 1.1 Part 1 §3.11.4).
  */
 export const MapKeyFloat = relation.generated(
   "MapKeyFloat",
   { key: FloatKey, mapping: uuid, node: uuid },
   ["node"],
   (r) => ({
-    value: generated(pg["double precision"], Compute.cast(r.key, pg["double precision"])),
+    value: generated(pg["double precision"], Compute.parseDouble(r.key)),
   }),
 );
 
@@ -558,11 +525,11 @@ const integerKeys = select(MapKeyType, (k) =>
 );
 
 /**
- * The map keys of float mappings in grizzle's form: each has its {@link MapKeyFloat} row, and no
- * other key does.
+ * The map keys of float mappings in `xs:double`'s lexical space: each has its {@link MapKeyFloat}
+ * row, and no other key does.
  */
 const floatKeys = select(MapKeyType, (k) =>
-  k.and(k.eq(k.baseType, "float"), Compute.matches(k.key, floatKeyPattern)),
+  k.and(k.eq(k.baseType, "float"), Compute.matches(k.key, doublePattern)),
 );
 
 /**

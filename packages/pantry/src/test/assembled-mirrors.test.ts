@@ -62,10 +62,10 @@ const unreadGenerated = (term: string): string =>
   `a field PostgreSQL generates by a term that holds ${term}, which the host's evaluator does not read`;
 
 /**
- * Why a typed map key's value is absent: PostgreSQL generates it from the map key's text by a cast
- * or a conditional (`#pantry/qti/mapping.ts`).
+ * Why a typed map key's value is absent: PostgreSQL generates it from the map key's text by a
+ * conditional, or a float key's by grizzle's `Compute.parseDouble` (`#pantry/qti/mapping.ts`).
  */
-const typedKeyValue = unreadGenerated("a cast or a conditional of the map key's text");
+const typedKeyValue = unreadGenerated("a conditional or a parse of the map key's text");
 
 /**
  * Every value the host does not restore that a law over the every-relation package's rows reads,

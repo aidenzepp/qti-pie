@@ -1671,9 +1671,10 @@ const nodeLaws: readonly NodeLaw[] = [
 ];
 
 /**
- * Read a lexical form as the typed value a bound judges: an `xs:double` or `xs:float` by XML
- * Schema's rules, `INF`, `-INF` and `NaN` included, after the `collapse` class those primitives
- * read their forms under.
+ * Read a lexical form as its typed value, which a bound judges and a float map key is compared by:
+ * an `xs:double` or `xs:float` by XML Schema's rules, `INF`, `-INF` and `NaN` included, after the
+ * `collapse` class those primitives read their forms under, a decimal by JavaScript's `Number`,
+ * which rounds it once to the nearest double (reading 144).
  *
  * @param form - The lexical form, which the domain's pattern has matched.
  * @returns The value; `NaN` for `NaN`, which no bound holds.
@@ -2778,31 +2779,20 @@ const xsDoubleForm =
   /^(?<mantissa>[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+))(?:[eE](?<exponent>[+-]?[0-9]+))?$/u;
 
 /**
- * Decide whether an `xs:double` lexical form has a typed value the schema compares: grizzle's
- * double form, at most 15 significant digits on each side of the point (`DBL_DIG`) and an exponent
- * of at most 293, or a special value (grizzle's `scalar/lexical.ts` `doubleForm`, restated by its
- * bounds rather than its pattern).
+ * `xs:double`'s special values as XML Schema 1.0 spells them, reading 71's edition, in which `+INF`
+ * is no lexical form.
+ */
+const doubleSpecials: ReadonlySet<string> = new Set(["INF", "-INF", "NaN"]);
+
+/**
+ * Decide whether a map key, as written, is in `xs:double`'s lexical space: a special value, or a
+ * decimal mantissa of any digits with an optional exponent of any digits.
  *
  * @param key - The key.
- * @returns Whether it is in the form.
+ * @returns Whether it is a double's lexical form.
+ * @see {@link https://www.w3.org/TR/xmlschema-2/#double | XML Schema Part 2, 3.2.5 double}
  */
-const inDoubleForm = (key: string): boolean => {
-  if (key === "INF" || key === "-INF" || key === "NaN") {
-    return true;
-  }
-
-  const groups = xsDoubleForm.exec(key)?.groups;
-  const mantissa = (groups?.["mantissa"] ?? "").replace(/^[+-]/u, "");
-  const [integer = "", fraction = ""] = mantissa.split(".");
-  const exponent = groups?.["exponent"] ?? "0";
-
-  return (
-    groups !== undefined &&
-    integer.replace(/^0+/u, "").length <= 15 &&
-    fraction.replace(/0+$/u, "").length <= 15 &&
-    Math.abs(Number(exponent)) <= 293
-  );
-};
+const isDoubleKey = (key: string): boolean => doubleSpecials.has(key) || xsDoubleForm.test(key);
 
 /**
  * Two runs of non-space characters with one whitespace character between them and none around: a
@@ -2855,10 +2845,15 @@ const twoItemValueOf = (baseType: string, key: string): string | undefined => {
 
 /**
  * Read a map key as the value its mapping's base type gives it, which two keys of one mapping may
- * not share (Map key): an integer by `BigInt`, a float in grizzle's double form by `Number`, which
- * rounds a decimal once to its nearest double as PostgreSQL's cast does, a point as its two
- * integers, a pair as its two items in code-point order and a directed pair as its two in order;
- * every other key, a float outside the form included, by its lexical form.
+ * not share (Map key): an integer by `BigInt`, a point as its two integers, a pair as its two items
+ * in code-point order and a directed pair as its two in order; a float, every key in `xs:double`'s
+ * lexical space (reading 154), as the double it names under reading 144, {@link numberOf}'s, which
+ * rounds the decimal once to the nearest double, ties to even, at any digits and any exponent, an
+ * infinity of its sign past the greatest finite double and a zero of its sign below half the least
+ * subnormal. `String` writes -0 as 0 and every NaN as `NaN`, so `0` and `-0` repeat, as do two
+ * `NaN`s: an identity constraint holds two keys one where they are "equal or identical" (XML Schema
+ * 1.1 Part 1 §3.11.4), and -0 equals 0 while NaN is identical to itself (Part 2 §3.3.5.1). Every
+ * other key, no value of its base type, is read by its lexical form.
  *
  * @param baseType - The mapping's base type.
  * @param key - The key, as written.
@@ -2875,10 +2870,8 @@ const mapKeyValueOf = (baseType: string, key: string): string => {
     return items;
   }
 
-  const special = key === "INF" || key === "-INF" || key === "NaN";
-
-  return baseType === "float" && !special && inDoubleForm(key)
-    ? `typed ${String(Number(key))}`
+  return baseType === "float" && isDoubleKey(key)
+    ? `typed ${String(numberOf(key))}`
     : `lexical ${key}`;
 };
 

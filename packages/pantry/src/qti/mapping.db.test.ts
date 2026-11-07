@@ -11,12 +11,11 @@
  * UNIQUE finds a key's repeat is outside the contract.
  *
  * The cases over a whole imported item need the importer's ChangeSet (Q5.15), and are stated in
- * Q5.11's report for the network seat's probe: accepted, a string mapping keyed `York` and `york`,
- * a directed pair mapping keyed `A B` and `B A`, and a float mapping keyed `100000000000000e293`
- * and `1e+307` (reading 56's limit); refused, a record's mapping, an integer mapping keyed `1` and
- * `01`, a float mapping keyed `1` and `1.0`, a pair mapping keyed `A B` and `B A`, a point mapping
- * keyed `1 2` and `01 +2`, an integer mapping keyed `abc`, and an integer outcome's match table
- * entry targeting `x`.
+ * Q5.11's report for the network seat's probe: accepted, a string mapping keyed `York` and `york`
+ * and a directed pair mapping keyed `A B` and `B A`; refused, a record's mapping, an integer
+ * mapping keyed `1` and `01`, a float mapping keyed `1` and `1.0`, or `1e400` and `2e400` (reading
+ * 154), a pair mapping keyed `A B` and `B A`, a point mapping keyed `1 2` and `01 +2`, an integer
+ * mapping keyed `abc`, and an integer outcome's match table entry targeting `x`.
  */
 import { ChangeSet, Db } from "@bjornpagen/grizzle";
 import type { Addition, Fact, Law } from "@bjornpagen/grizzle";
@@ -326,9 +325,12 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
         "refuses two float keys of one mapping that name one double, by the key on (mapping, value)",
         () =>
           // Oracle: PostgreSQL, the UNIQUE of key(on(MapKeyFloat, "mapping", "value")) over the
-          // value it generates, the cast that rounds each decimal once to its nearest double
-          // (reading 56).
-          // Bound: 1 and 1.0, 1 and 10e-1, 0 and -0, and 0.1 and .10.
+          // value it generates, grizzle's `Compute.parseDouble`, XML Schema 1.1's doubleLexicalMap
+          // (readings 144 and 154), and `float8` equality, -0 equal to 0 and NaN to NaN.
+          // Bound: 1 and 1.0, 1 and 10e-1, 0 and -0, 0.1 and .10, and past grizzle's former
+          // bounded form: two overflows, an overflow and INF, an underflow and 0, a 17-digit key
+          // and the 18-digit one that rounds with it, a tie to even, a 15-digit mantissa at 293
+          // and the 1e+307 it spells, and two NaNs.
           Effect.gen(function* floatRepeat() {
             const db = yield* Db.open(AuthorApp.roles.author, {});
             for (const [first, second] of [
@@ -336,6 +338,13 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
               ["1", "10e-1"],
               ["0", "-0"],
               ["0.1", ".10"],
+              ["1e400", "2e400"],
+              ["INF", "1e400"],
+              ["0", "1e-400"],
+              ["1.2345678901234567", "1.23456789012345671"],
+              ["9007199254740993", "9007199254740992"],
+              ["100000000000000e293", "1e+307"],
+              ["NaN", "NaN"],
             ] as const) {
               const outcome = yield* db.apply(
                 ChangeSet.empty(Author).insert(MapKeyFloat, [
@@ -360,13 +369,17 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
           // cast it generates, against the doubles each decimal rounds to, which differ: the
           // control of the repeat above. A stray row's deferred containments may still refuse the
           // write at commit, so the key alone is read.
-          // Bound: 1 and 2, 0.1 and 0.100000000000001 (apart in the fifteenth digit, the last the
-          // form holds), and INF and -INF.
+          // Bound: 1 and 2, 0.1 and 0.100000000000001 (apart in the fifteenth digit), 1 and the
+          // double one ulp above it, the greatest finite double and INF, the least subnormal and
+          // 0, and INF and -INF.
           Effect.gen(function* floatDistinct() {
             const db = yield* Db.open(AuthorApp.roles.author, {});
             for (const [first, second] of [
               ["1", "2"],
               ["0.1", "0.100000000000001"],
+              ["1", "1.0000000000000002"],
+              ["1.7976931348623157e308", "1e309"],
+              ["4.9e-324", "0"],
               ["INF", "-INF"],
             ] as const) {
               const outcome = yield* db.apply(

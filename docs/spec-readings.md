@@ -593,13 +593,9 @@ against it. A reading that is not an information-model-over-XSD case says which 
     Schema decides how its own literal maps to a value. (The renderer's phase-3 default, delivery spec section 5.1,
     applied in plate; 2026-11-04.)
 
-    One limit remains in pantry, stated here as a known limit. Two map keys of a float mapping are compared as the
-    doubles they name only where grizzle's lexical form of `double precision` holds the key (`src/qti/mapping.ts`
-    `floatKeyPattern`): at most 15 significant digits on each side of the point, an exponent of at most 293, and each
-    run of padding zeros at most 255. A key outside it, such as `1e400` or `1.7976931348623157e308`, is distinct from
-    every other key by its lexical form alone. So a mapping keyed `1e400` and `2e400`, which name one double, is
-    accepted where comparing the values would refuse it. The corpus holds no float mapping. (Recorded 2026-11-06, from
-    W5 Q5.11.)
+    The limit this reading recorded in pantry on 2026-11-06 (from W5 Q5.11), under which a float map key outside
+    grizzle's bounded lexical form of `double precision` was distinct from every other key by its text alone, is
+    lifted by reading 154, which compares every float key by the double reading 144 maps it to.
 
 57. **In lax wildcard content, every prose rule judges the QTI elements the structural walk checks there, as it judges
     them anywhere else.** Under a `lax` element wildcard, such as the content of `qti-custom-interaction`, XML Schema
@@ -1474,7 +1470,7 @@ against it. A reading that is not an information-model-over-XSD case says which 
     (section 5.88.4, https://www.imsglobal.org/spec/qti/v3p0/info#Data_Mapping, and section 7.21), so a mapping is a
     function of its source value, and two entries of one key would map one value twice. The keys are compared as the
     values section 8.13 gives each base type: an integer by its value (reading 45, at any length); a float as the
-    double it names (reading 56, within that reading's stated limit); a point as its integer tuple; a pair as an
+    double it names (reading 154, under reading 144); a point as its integer tuple; a pair as an
     unordered pair of identifiers ("The association is undirected so (A,B) and (B,A) are equivalent"); a directed pair
     as an ordered one; a boolean as written (reading 34); and a string, an identifier and a URI as written, a string by
     its code points whatever its entry's `case-sensitive` says, since `case-sensitive` governs how a response is matched
@@ -2753,3 +2749,25 @@ against it. A reading that is not an information-model-over-XSD case says which 
      and a record's in its declaration's. This binds pantry and plate alike. This is not a case of documents in
      conflict. (Decided 2026-11-07 by the coordinator, under the operator's standing ruling of 2026-11-05, from seat
      FIX-B12.)
+154. **A float mapping's map keys are compared by the doubles reading 144 maps them to, and every key in the float
+     domain has one: `1e400`, `2e400` and `INF` repeat, as do `0`, `-0` and `1e-400`, and two `NaN`s.** Reading 98
+     makes a mapping's keys distinct as values of its base type, a float's as the double it names, and reading 144
+     settles that double: XML Schema 1.1's doubleLexicalMap (Part 2 §3.3.5.2), the decimal of any digits and any
+     exponent rounded once to the nearest double, ties to even, an infinity of its sign at or past the overflow
+     threshold and a zero of its sign at or below half the least subnormal. A key is in the float domain when it is in
+     `xs:double`'s lexical space as XML Schema 1.0 writes it (reading 71's edition, so `+INF` is no key of a float
+     mapping and is refused under `attribute-lexical`), and every such key has its value, at the database
+     (`MapKeyFloat`, which PostgreSQL generates by grizzle's `Compute.parseDouble`, `src/qti/mapping.ts`) and in the
+     law oracle. Two keys repeat where their values are "pairwise equal or identical", as XML Schema 1.1 compares the
+     values of an identity constraint's keys (Part 1 §3.11.4, Identity-constraint Satisfied): "0 = −0 (although they
+     are not identical) and NaN ≠ NaN (although NaN is of course identical to itself)", so "0 and −0 are thus
+     equivalent for purposes of enumerations, identity constraints, and minimum and maximum values" (Part 2
+     §3.3.5.1). So `0` and `-0` repeat, as reading 144 reads them, and two `NaN` keys repeat, as their one spelling
+     already does by its text; a mapping may hold one `NaN` key. Refusing both is also the stricter reading, since a
+     mapping is a function of its source value. This sets aside reading 56 where it read `1e400` as the largest
+     finite double, and the limit it recorded for pantry, under which a key outside grizzle's former bounded form of
+     `double precision` (15 significant digits on each side of the point, an exponent of at most 293, zero runs of at
+     most 255) had no typed value and was distinct by its text alone, so a mapping keyed `1e400` and `2e400` was
+     accepted. The corpus holds no float mapping, so no verdict moves. This binds pantry and plate alike; plate's own
+     reading of a double is the renderer team's follow-up. This is not a case of documents in conflict. (Decided
+     2026-11-07 by the coordinator, under the operator's standing ruling of 2026-11-05, from seat FIX-FLOATKEY.)

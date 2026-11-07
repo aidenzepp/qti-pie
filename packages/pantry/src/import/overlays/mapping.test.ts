@@ -7,7 +7,6 @@
  * builder, which reads the tree's flat rows (`flatten`). Each typed key's value is PostgreSQL's,
  * generated from the split, so `#pantry/qti/mapping.db.test.ts` judges it.
  */
-import { lexicalForm, pg } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { exhaust } from "@grizzle/testing/explore";
 import { requiredInSpace } from "@grizzle/testing/features";
@@ -42,19 +41,14 @@ import { idOf, searchTimeout } from "#pantry/test/gen/xdm.ts";
 const xsInteger = /^[+-]?[0-9]+$/u;
 
 /**
- * The deleted schema's `xs:double` lexical space (`src/schema/patterns.ts` `xsDouble`).
+ * The deleted schema's `xs:double` lexical space (`src/schema/patterns.ts` `xsDouble`): the float
+ * keys that hold a typed value, every one of them (spec reading 154).
  */
 const xsDouble = /^(?:[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?|-?INF|NaN)$/u;
 
 /**
- * Grizzle's lexical form of `double precision`: with {@link xsDouble}, the float keys that hold a
- * typed value, since every run of zeros a short key holds is within the key-text bound.
- */
-const grizzleDouble = new RegExp(lexicalForm(pg["double precision"]), "u");
-
-/**
  * Read a key as the value its mapping's base type gives it, as the walk compares keys: an integer
- * by `BigInt`, a float in grizzle's form by `Number`, and every other key as written.
+ * by `BigInt`, a float by `Number`, and every other key as written.
  *
  * @param baseType - The mapping's base type.
  * @param key - The key.
@@ -65,9 +59,7 @@ const typedOf = (baseType: string, key: string): string => {
     return String(BigInt(key));
   }
 
-  return baseType === "float" && xsDouble.test(key) && grizzleDouble.test(key)
-    ? String(Number(key))
-    : key;
+  return baseType === "float" && xsDouble.test(key) ? String(Number(key)) : key;
 };
 
 /**
@@ -237,8 +229,7 @@ describe("import/overlays/mapping.ts, map keys", { timeout: searchTimeout }, () 
     (ctx) =>
       // Oracle: a second implementation, a direct walk of the XDM tree that numbers its entries in
       // document order, against the builder's read of the flat rows; each integer key's selection
-      // by the deleted `xsInteger`, and each float key's by the deleted `xsDouble` and grizzle's
-      // double form.
+      // by the deleted `xsInteger`, and each float key's by the deleted `xsDouble`.
       // Bound: every mapping of 3 base types with at most 4 entries over 3 keys and 2 values,
       // 4,665.
       searched(
@@ -298,7 +289,7 @@ describe("import/overlays/mapping.ts, map keys", { timeout: searchTimeout }, () 
                 [...rows.MapKeyFloat].map(([node, row]) => [node, row.key]),
                 input.baseType === "float"
                   ? [...walked].flatMap(([node, { key }]) =>
-                      xsDouble.test(key) && grizzleDouble.test(key) ? [[node, key]] : [],
+                      xsDouble.test(key) ? [[node, key]] : [],
                     )
                   : [],
               );

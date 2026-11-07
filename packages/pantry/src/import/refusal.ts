@@ -149,7 +149,7 @@ import {
 } from "#pantry/qti/interactions.ts";
 import {
   Digits,
-  floatKeyPattern,
+  FloatKey,
   Gap,
   Item,
   LookupValue,
@@ -483,7 +483,8 @@ const testKeyNames = {
  *     reads with saxes's `xmlns` on, which refuses a name that is no QName (Namespaces in XML 1.0,
  *     §4); a foreign namespace name is `Char`s because crust reads no other; an entry path begins
  *     with no `/` because the directory reader lists paths relative to the package root and `zip.ts`
- *     refuses an absolute name;
+ *     refuses an absolute name; a typed float map key is an `xs:double` lexical form because the
+ *     import writes its row only for one (`doublePattern`);
  *   - An unbounded XML production (a comment, an instruction, a doctype, an encoding name, a version
  *     number, an NCName) is "XML production", which crust refuses before any row exists. `Char*`
  *     (`Chars`, an attribute's `Lexical`) has the foreign namespace name's very pattern, so it is
@@ -507,6 +508,7 @@ const writtenLaws: readonly (readonly [WrittenLaw, LawName])[] = [
     [NamespacePrefix, "Key text bound"],
     [ForeignNamespace, "Key text bound"],
     [EntryPath, "Key text bound"],
+    [FloatKey, "Key text bound"],
     [NamespaceUri, "Namespace name"],
     [CommentText, "XML production"],
     [PiTarget, "XML production"],
@@ -517,7 +519,6 @@ const writtenLaws: readonly (readonly [WrittenLaw, LawName])[] = [
     [NcName, "XML production"],
     [EntityName, "XML production"],
     [Space, "E1 derived"],
-    [str.regex(floatKeyPattern), "E1 derived"],
     [str.regex(pointKeyPattern), "E1 derived"],
     [str.regex(pairKeyPattern), "E1 derived"],
     [Sign, "E1 derived"],
@@ -755,8 +756,9 @@ const writtenLaws: readonly (readonly [WrittenLaw, LawName])[] = [
       ] as const,
   ),
   // A typed map key's generated fields read its own split, by concatenation and conditionals, or a
-  // float key's cast, which `floatKeyPattern`'s law above holds to the language the cast reads
-  // total. No term reads a closed relation, so none is NULL and no row breaks these.
+  // float key's `Compute.parseDouble`, which `FloatKey`'s law above holds to `xs:double`'s lexical
+  // space, inside the `doubleText` the parse reads total. No term reads a closed relation, so none
+  // is NULL and no row breaks these.
   [generatedOf(MapKeyInteger, "negative"), "E1 derived"],
   [generatedOf(MapKeyInteger, "value"), "E1 derived"],
   [generatedOf(MapKeyFloat, "value"), "E1 derived"],
