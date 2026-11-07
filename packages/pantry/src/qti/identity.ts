@@ -27,7 +27,9 @@
  *   element's text (C50), is an id of its document. Spec reading 14 follows the XSD, so a
  *   text-entry interaction's `response-identifier` and `string-identifier` are IDREFs, and a
  *   response declaration's `identifier`, an `xs:ID`, is what they name; the grammar's value domains
- *   carry it, and nothing here names a kind.
+ *   carry it, and nothing here names a kind. A MathML `share`'s `src` of the form `#id` is no token
+ *   but names an element of its document all the same (MathML 3 §4.2.7), so each such `src` is a
+ *   {@link ShareFragment}, and its id is an id of its document under this rule.
  * - **{@link DocumentLang}** is the set of a document's `xml:lang` lexical forms, keyed by its whole
  *   heading (sets ruling 2), and **{@link ResourceLomLanguageSet}** the set of the languages each
  *   LOM `general` category lists. The rule they replace, `lang-set-copy`, is each one's two
@@ -155,6 +157,11 @@ const Space = str.regex(spacePattern);
  * attribute, and TextDomain's over the element's text.
  */
 export const idValuePattern = "^[^\\t\\n\\r ]+$";
+
+/**
+ * A same-document fragment reference: `#` and one or more characters (MathML 3 §4.2.7).
+ */
+const shareFragmentPattern = "^#.+$";
 
 /**
  * The nil uuid: the start of the owner-axis copy of `document`, which every member's owner
@@ -445,6 +452,19 @@ export const IdrefTarget = relation(
 );
 
 /**
+ * One `m:share` whose `src` is a fragment of its own document, keyed by the element's node (MathML
+ * 3 §4.2.7; a `src` that is `#` and a name stands in the same document): its document, `src` as
+ * written (C18), and `id`, the text after the `#`, which an {@link IdrefTarget} of the document
+ * names under "Idref target". A `src` with any text before its `#`, or no text after it, is no
+ * same-document fragment and has no row.
+ */
+export const ShareFragment = relation(
+  "ShareFragment",
+  { document: uuid, id: keyText, node: uuid, src: keyText },
+  ["node"],
+);
+
+/**
  * One ID of an instance of an assembly (Q5.13's `Instance`, spec reading 117), keyed by the
  * instance and the element that carries it: a {@link DocumentId} of the instance's document, with
  * the instance's assembly and assembly kind, and its `copy`, the instance, but the nil uuid under a
@@ -605,6 +625,7 @@ export const identityRelations = {
   PlacedIdref,
   PlacedXmlLang,
   ResourceLomLanguageSet,
+  ShareFragment,
   SsmlAttribute,
   SsmlScope,
   TextIdref,
@@ -691,6 +712,18 @@ const textIds = select(DocumentId, (d) => d.ne(d.owner, d.node));
  * Every element's `xml:lang`, the source of {@link XmlLang}.
  */
 const langAttributes = select(Attribute, (a) => a.eq(a.name, "xml:lang"));
+
+/**
+ * Every MathML `share` whose `src` is a fragment of its own document, the source of
+ * {@link ShareFragment}: `#` and one or more characters.
+ */
+const shareSources = select(Attribute, (a) =>
+  a.and(
+    a.eq(a.kind, "m:share"),
+    a.eq(a.name, "src"),
+    Compute.matches(a.lexical, shareFragmentPattern),
+  ),
+);
 
 /**
  * The IDREF targets of documents in no assembly, each an id of its own document; an assembled
@@ -993,6 +1026,25 @@ export const identityLaws = [
 
   contained(on(Idref, "document", "token"), on(IdrefTarget, "document", "id")),
   contained(on(TextIdref, "document", "token"), on(IdrefTarget, "document", "id")),
+
+  key(on(shareSources, "node")),
+  contained(
+    on(shareSources, "node", "document", "lexical"),
+    on(ShareFragment, "node", "document", "src"),
+  ),
+  contained(
+    on(ShareFragment, "node", "document", "src"),
+    on(shareSources, "node", "document", "lexical"),
+  ),
+  check("E1_derived", ShareFragment, (f) =>
+    f.and(
+      f.eq(Compute.startsWith(f.src, "#"), true),
+      f.eq(Compute.endsWith(f.src, f.id), true),
+      f.eq(Compute.charLength(f.src), Compute.add(Compute.charLength(f.id), 1)),
+      Compute.matches(f.src, shareFragmentPattern),
+    ),
+  ),
+  contained(on(ShareFragment, "document", "id"), on(IdrefTarget, "document", "id")),
   contained(on(IdrefTarget, "document", "assembled"), on(Document, "node", "assembled")),
   idrefTargetFamily,
   contained(on(unassembledTargets, "document", "id"), on(IdBinding, "document", "id")),

@@ -94,6 +94,7 @@ import {
   PlacedIdref,
   PlacedXmlLang,
   ResourceLomLanguageSet,
+  ShareFragment,
   SsmlAttribute,
   SsmlScope,
   XmlLang,
@@ -1181,6 +1182,7 @@ export const changeSetOf = (author: typeof Author, inputs: PackageInputs) =>
     .insert(Package, [...inputs.Package.values()])
     .insert(Node, [...inputs.Node.values()])
     .insert(IdrefTarget, [...inputs.IdrefTarget.values()])
+    .insert(ShareFragment, [...inputs.ShareFragment.values()])
     .insert(Inclusion, [...inputs.Inclusion.values()])
     .insert(Instance, [...inputs.Instance.values()])
     .insert(Comment, [...inputs.Comment.values()])
