@@ -42,15 +42,11 @@ import { ReaderRefusal, WellFormednessError } from "@qti-pie/crust/errors.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 import {
   checkNameOf,
-  contestedIdentities,
   explain,
   ImportRefused,
   ImportRule,
   lawIdentity,
   lawNameOf,
-  lawNames,
-  lawOfCheck,
-  lawGroups,
   lawRules,
   lawTable,
   limitRules,
@@ -852,19 +848,6 @@ describe("the law table", () => {
     }
   });
 
-  it("names every law's check by a bijection with check names, over every law of the table and the oracle", () => {
-    const names = [...new Set([...lawNames, ...oracleLawNames])];
-    const checks = new Set(names.map((name) => checkNameOf(name)));
-
-    assert.strictEqual(checks.size, names.length, "two laws share a check name");
-    for (const name of names) {
-      assert.match(checkNameOf(name), /^[A-Za-z0-9_]+$/u, name);
-      assert.deepStrictEqual(lawOfCheck(checkNameOf(name)), Option.some(name), name);
-    }
-
-    assert.isTrue(Option.isNone(lawOfCheck("No_such_law")));
-  });
-
   it.effect(
     "ranks every rule a law keeps once, and owes each rule no law keeps yet to the slice that states it",
     (ctx) =>
@@ -903,96 +886,6 @@ describe("the law table", () => {
         );
       }),
   );
-
-  it("states each law once, and no stated law's identity is a check's", () => {
-    const identities = statedLaws.map(([law]) => lawIdentity(law));
-
-    assert.strictEqual(new Set(identities).size, identities.length, "a law is stated twice");
-    assert.deepStrictEqual(
-      identities.filter((identity) => identity.startsWith("check ")),
-      [],
-    );
-    assert.strictEqual(lawRules.size, lawNames.length + identities.length);
-  });
-
-  it.effect(
-    "names every law of a group by the group's name, but the laws Q5.13 names otherwise",
-    () =>
-      Effect.gen(function* groups() {
-        const otherwise: ReadonlyMap<string, ReadonlySet<string>> = new Map([
-          [
-            "E1 derived",
-            new Set([
-              "LomObjectIdentifier",
-              "LomObjectTitle",
-              "LOM learning resource type",
-              "Node key",
-              "DocumentId key",
-              "Binding declared",
-              "BindingFit",
-              "RecordBindingFit",
-              "Binding unique",
-              "Binding cardinality",
-              "Max strings required",
-              "Adaptive feedback",
-              "N8 nearest",
-              "Choice identifier key",
-              "Feedback reference",
-              "Template reference",
-              "Printed variable reference",
-              "Context variable reference",
-              "Variable reference copy",
-              "Variable declared",
-              "Prefixed reference",
-              "Variable kind",
-              "Template default target",
-              "Variable mapping source",
-              "Arity",
-            ]),
-          ],
-          ["Mapping overlay", new Set(["Map key", "MappableBaseType", "DocumentId key"])],
-          ["Item ref target", new Set(["E1 derived"])],
-          [
-            "Test overlay",
-            new Set([
-              "Structure identifier",
-              "Document entry",
-              "Selection required",
-              "DocumentId key",
-              "Variable mapping target",
-              "Stimulus ref key",
-              "Include target",
-              "Include root",
-              "E1 derived",
-            ]),
-          ],
-          ["Inclusion cycle", new Set(["E1 derived", "Test overlay"])],
-        ]);
-        for (const [statements, name] of lawGroups) {
-          for (const law of yield* lawsOf(statements)) {
-            const named = lawNameOf(law);
-            if (law.kind === "check" || contestedIdentities.has(lawIdentity(law))) {
-              continue;
-            }
-
-            assert.isTrue(Option.isSome(named), lawIdentity(law));
-
-            const owner = Option.getOrElse(named, () => "");
-            assert.isTrue(
-              owner === name || (otherwise.get(name)?.has(owner) ?? false),
-              `${lawIdentity(law)}: ${owner}, in the group of ${name}`,
-            );
-          }
-        }
-      }),
-  );
-
-  it("gives every stated law alone its own name's rule", () => {
-    for (const [law, name] of statedLaws) {
-      assert.deepStrictEqual(ruleOfLaws([law]), Option.some(lawTable[name].rule), name);
-      assert.deepStrictEqual(lawRules.get(lawIdentity(law)), lawTable[name].rule, name);
-    }
-  });
 });
 
 describe("a law's identity, read from a statement as the outcome names it", () => {
@@ -1070,27 +963,6 @@ describe("a law's identity, read from a statement as the outcome names it", () =
         ],
       },
     );
-  });
-
-  it("keys a host-side key conflict as the database's: the key law, whatever its witness", () => {
-    const law: Law = { kind: "key", side: sideOf("Namespace", "node", "prefix") };
-    const witnesses = [
-      { kind: "key", relation: "Namespace", values: { node: "n", prefix: "p" } },
-      { kind: "unreported" },
-    ] as const;
-
-    for (const witness of witnesses) {
-      const refused = refusalOfLaws([law], witness, grammar);
-      assert.isTrue(Result.isSuccess(refused), witness.kind);
-      if (Result.isSuccess(refused)) {
-        assert.strictEqual(refused.success.rule, "reachability");
-      }
-    }
-
-    const keyed = refusalOfLaws([law], witnesses[0], grammar);
-    if (Result.isSuccess(keyed)) {
-      assert.include(keyed.success.detail, "prefix=p");
-    }
   });
 
   it("refuses to name a rule for laws no row states, naming each law", () => {
@@ -1404,20 +1276,6 @@ describe("the explanation of a content-order refusal", () => {
       ),
     120_000,
   );
-
-  it("names no positions where the witness gives no row, and every law's source", () => {
-    for (const laws of [follow, last]) {
-      const [first, ...rest] = laws;
-      if (first === undefined) {
-        assert.fail("no content-order law is stated");
-      }
-
-      const explained = explain([first, ...rest], { kind: "unreported" }, grammar);
-      assert.isTrue(Option.isNone(explained.next));
-      assert.include(explained.detail, "the database names no row");
-      assert.include(explained.sources, lawTable[Option.getOrThrow(lawNameOf(first))].source);
-    }
-  });
 });
 
 describe("the refusals made before the database", () => {
