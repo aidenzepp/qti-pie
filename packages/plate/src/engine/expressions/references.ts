@@ -11,7 +11,7 @@
  * @module
  */
 import { Array as Arr, Option, Result } from "effect";
-import type { Evaluator, FamilyTable, Variables } from "#plate/engine/evaluate.ts";
+import type { Declarations, Evaluator, FamilyTable, Variables } from "#plate/engine/evaluate.ts";
 import { areaHolds } from "#plate/engine/expressions/shapes.ts";
 import { UnknownIdentifierError, UnmappedResponseError } from "#plate/engine/failures.ts";
 import { foldCase } from "#plate/engine/math.ts";
@@ -35,13 +35,7 @@ import {
   variableValue,
 } from "#plate/engine/refs.ts";
 import type { FloatOrRef } from "#plate/model/expression.ts";
-import type {
-  AreaMapping,
-  Item,
-  MapEntry,
-  Mapping,
-  ResponseDeclaration,
-} from "#plate/model/item.ts";
+import type { AreaMapping, MapEntry, Mapping, ResponseDeclaration } from "#plate/model/item.ts";
 import { format, nullOf, sameSingle } from "#plate/model/values.ts";
 import type { Single, Value } from "#plate/model/values.ts";
 
@@ -49,13 +43,14 @@ import type { Single, Value } from "#plate/model/values.ts";
  * Find the response declaration a `qti-correct`, a `qti-map-response` or a
  * `qti-map-response-point` names.
  *
- * @param item The item.
+ * @param item The declarations holder: an item, or a test's outcome declarations, which declare no
+ *   response.
  * @param identifier The response's identifier.
- * @returns The declaration, or an {@link UnknownIdentifierError} when the item declares no
+ * @returns The declaration, or an {@link UnknownIdentifierError} when the holder declares no
  *   modelled response by that name.
  */
 const responseOf = (
-  item: Item,
+  item: Declarations,
   identifier: string,
 ): Result.Result<ResponseDeclaration, UnknownIdentifierError> =>
   Result.fromOption(
@@ -193,7 +188,7 @@ const clamped = (
  * `lower-bound` and `upper-bound` then clamp the sum, a single value's and a NULL's included
  * (reading 9.13).
  *
- * @param item The item, whose declaration gives the mapping.
+ * @param item The declarations holder, whose declaration gives the mapping.
  * @param variables The variables of the attempt.
  * @param identifier The response's identifier.
  * @returns The mapped value; or an {@link UnknownIdentifierError} when the item declares no
@@ -203,7 +198,7 @@ const clamped = (
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#ExpMapResponse
  */
 const mapResponse = (
-  item: Item,
+  item: Declarations,
   variables: Variables,
   identifier: string,
 ): Result.Result<Value, UnknownIdentifierError | UnmappedResponseError> =>
@@ -287,7 +282,7 @@ const areaSum = (mapping: AreaMapping, points: readonly Single[]): number => {
  * clamped to the area mapping's `lower-bound` and `upper-bound`, a NULL's 0 included (9.13's rule,
  * as `qti-map-response` applies it).
  *
- * @param item The item, whose declaration gives the area mapping.
+ * @param item The declarations holder, whose declaration gives the area mapping.
  * @param variables The variables of the attempt.
  * @param identifier The response's identifier.
  * @returns The mapped value; or an {@link UnknownIdentifierError} when the item declares no
@@ -297,7 +292,7 @@ const areaSum = (mapping: AreaMapping, points: readonly Single[]): number => {
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#ExpMapResponsePoint
  */
 const mapResponsePoint = (
-  item: Item,
+  item: Declarations,
   variables: Variables,
   identifier: string,
 ): Result.Result<Value, UnknownIdentifierError | UnmappedResponseError> =>

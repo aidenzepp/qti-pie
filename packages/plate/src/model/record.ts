@@ -72,6 +72,16 @@ export type ResponsesRecord = Pick<ItemRecord, "templates">;
 export type SolutionRecord = Pick<ItemRecord, "correct">;
 
 /**
+ * The part of an {@link ItemRecord} a test's outcome processing reads through the test scope
+ * (`#plate/engine/scope.ts`): the responses, the outcomes and the template values, and the correct
+ * responses and defaults template processing set. It holds no seed.
+ */
+export type ScopeRecord = Pick<
+  ItemRecord,
+  "correct" | "defaults" | "outcomes" | "responses" | "templates"
+>;
+
+/**
  * Give the value an outcome holds before any processing sets it: its declared default, else 0 for
  * a single integer or float, else NULL. An item's and a test's outcomes start alike, so the record
  * and the results report read the same value.
@@ -145,10 +155,14 @@ export const completionValue = (status: CompletionStart): Value => ({
  * `#plate/model/item.ts`), so a rule that reads or sets `completionStatus` past such a declaration
  * never runs; the record then holds the built-in beside it, which only a result reports.
  *
- * @param item The item.
+ * It reads only the item's response and outcome declarations, so the evaluator's declarations
+ * holder (`Declarations` in `#plate/engine/evaluate.ts`), a test's outcome declarations included,
+ * may be passed for the item.
+ *
+ * @param item The item, or a declarations holder.
  * @returns Whether its record's outcomes hold the built-in.
  */
-export const holdsCompletionStatus = (item: Item): boolean =>
+export const holdsCompletionStatus = (item: Pick<Item, "outcomes" | "responses">): boolean =>
   !item.responses.has(completionStatus) && !item.outcomes.has(completionStatus);
 
 /**
