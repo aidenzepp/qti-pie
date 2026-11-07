@@ -1127,14 +1127,20 @@ const modelStates: Arr.NonEmptyReadonlyArray<ModelState> = (() => {
 })();
 
 /**
- * Every content model `Follow` or `Last` holds, with its states: the exhaustion's space, one case
- * per model.
+ * Every content model `Follow` or `Last` holds, with its states in the first family that has it:
+ * the exhaustion's space, one case per model. `Follow` and `Last` are keyed by the model, so a
+ * model's states and the positions they allow are its every family's, and one family of each model
+ * is the small scope (115 models where `ContentModelOf` has 1,288 families); the kinds an
+ * explanation lists at each position are read in that family.
  */
 const models: Arr.NonEmptyReadonlyArray<Arr.NonEmptyReadonlyArray<ModelState>> = nonEmpty(
   "the content models",
-  [...Map.groupBy(modelStates, ({ parent, version }) => `${version} ${parent}`).values()].map(
-    (states) => nonEmpty("a model's states", states),
-  ),
+  [
+    ...Map.groupBy(
+      [...Map.groupBy(modelStates, ({ parent, version }) => `${version} ${parent}`).values()],
+      ([{ parent, version }]) => modelOf.get(`${version} ${parent}`) ?? "",
+    ).values(),
+  ].map(([states]) => nonEmpty("a model's states", states)),
 );
 
 /**
@@ -1198,14 +1204,14 @@ describe("the explanation of a content-order refusal", () => {
         ctx,
         exhaust(
           {
-            box: `every state of every content model Follow or Last holds (${String(models.length)} models, ${String(modelStates.length)} states)`,
+            box: `every state of every content model Follow or Last holds, in one family of each (${String(models.length)} models)`,
             caseHang: Duration.seconds(30),
             coverage: requiredInSpace<"allows next" | "allows nothing">([
               "allows next",
               "allows nothing",
             ]),
             generator: element<Arr.NonEmptyReadonlyArray<ModelState>>(models),
-            limit: 2000,
+            limit: models.length,
             literal: ([{ parent, version }]) => `${version} ${parent}`,
             oracle: { kind: "second-implementation", name: "Follow's rows grouped directly" },
             suite: "import/refusal/explain-follow",
