@@ -2571,16 +2571,24 @@ const referencesOf = (operand: Expression, kindRule: KindRule): readonly NamedRe
 };
 
 /**
+ * The kinds of response and template rule that set a variable, each naming its target in
+ * `identifier`.
+ */
+type SettingKind = Extract<Rule | TemplateRule, { readonly identifier: string }>["kind"];
+
+/**
  * Give each identifier a rule tree names that the engine does not hold, once, in the order the tree
- * first names it.
+ * first names it: a response processing's tree of {@link Rule} or a template processing's tree of
+ * {@link TemplateRule}.
  *
  * The evaluator holds only the item's modelled responses, outcomes and template variables and the
  * built-in `numAttempts` and `completionStatus` ({@link heldBuiltIns}; `Variables` in
  * `#plate/engine/evaluate.ts`) and returns `UnknownIdentifierError` for any other identifier a rule
  * names, so `buildItem` runs no tree this walk finds a name in, and that failure stays
- * unreachable. A template variable is held only beside template processing that runs or is
- * absent: the record then holds its value, as template processing or its declared default left it.
- * The walk reads each expression through its kind's rule in the registry (`kindRules` in
+ * unreachable. A template variable the model holds is held while template processing runs, and
+ * beside response processing only when template processing runs or is absent: the record then
+ * holds its value, as template processing or its declared default left it. The walk reads each
+ * expression through its kind's rule in the registry (`kindRules` in
  * `#plate/model/expressions/read.ts`), in place of a case per kind:
  *
  * - The declaration facet: the `identifier` of a kind that expects a response, such as `qti-correct`,
@@ -2594,18 +2602,23 @@ const referencesOf = (operand: Expression, kindRule: KindRule): readonly NamedRe
  * - The operands, which every kind holds in `operands`, so the walk recurses without a case per
  *   operator.
  *
- * `qti-set-outcome-value` and `qti-lookup-outcome-value` set an outcome, or the built-in
- * `completionStatus` where the engine holds it ({@link settableBuiltIns}), never a template
- * variable, which only template processing sets. The names it finds are valid content, never
- * refused (reading 1): a response, an outcome or a template variable the model does not hold (base
+ * Each setting rule's target is judged as the engine finds it: `qti-set-outcome-value` and
+ * `qti-lookup-outcome-value` set an outcome, or the built-in `completionStatus` where the engine
+ * holds it ({@link settableBuiltIns}), never a template variable, which only template processing
+ * sets; `qti-set-template-value` sets a template variable, `qti-set-correct-response` a response,
+ * and `qti-set-default-value` a response or an outcome (`targetOf` in
+ * `#plate/engine/template.ts`). The names it finds are valid content, never refused (reading 1,
+ * rule `5b8ee08b`): a response, an outcome or a template variable the model does not hold (base
  * type `duration` or `file`, cardinality `record`, or no base type), a template variable beside
  * template processing that does not run, the built-in variable `duration`, read or set, which the
  * engine holds no value for, and the built-in `completionStatus` where a declaration names it.
  * Reading 29 makes an item's `duration` a single float, so it is a valid name in an item's rules.
- * An identifier nothing declares is refused before the model is built when inline rules name it;
- * the walk finds it too. One a built-in template names, such as `MAXSCORE` or `FEEDBACK` in a
- * `CC2_*` template, is not in the document, so nothing refuses it: the walk finds it, and the
- * processing is marked.
+ * In template processing it also finds `QTI_CONTEXT` and each variable a `qti-context-declaration`
+ * declares: template processing may read them (`info.txt:22601`, and a reference to `QTI_CONTEXT`
+ * "must succeed", `info.txt:8454-8456`), and the engine holds no context variable. An identifier
+ * nothing declares is refused before the model is built when inline rules name it; the walk finds
+ * it too. One a built-in template names, such as `MAXSCORE` or `FEEDBACK` in a `CC2_*` template, is
+ * not in the document, so nothing refuses it: the walk finds it, and the processing is marked.
  *
  * @param tree The rule tree.
  * @param responses The responses the model holds.
@@ -2617,7 +2630,7 @@ const referencesOf = (operand: Expression, kindRule: KindRule): readonly NamedRe
  * @returns The identifiers the engine does not hold, empty when it can run the tree.
  */
 const unheldIdentifiers = (
-  tree: readonly Rule[],
+  tree: readonly Rule[] | readonly TemplateRule[],
   responses: ReadonlyMap<string, ResponseDeclaration>,
   outcomes: ReadonlyMap<string, OutcomeDeclaration>,
   heldTemplates: ReadonlyMap<string, TemplateDeclaration>,
@@ -2670,7 +2683,7 @@ const unheldIdentifiers = (
   };
 
   /**
-   * Report whether the engine holds a variable a rule may set by a name: a modelled outcome, or a
+   * Report whether the engine holds an outcome a rule may set by a name: a modelled outcome, or a
    * built-in it holds that a rule may set ({@link settableBuiltIns}).
    *
    * @param identifier The name.
@@ -2680,24 +2693,38 @@ const unheldIdentifiers = (
     outcomes.has(identifier) || (builtIns.has(identifier) && settableBuiltIns.has(identifier));
 
   /**
+   * Whether the engine holds the variable each kind of setting rule sets by a name.
+   */
+  const targets: Readonly<Record<SettingKind, (identifier: string) => boolean>> = {
+    "lookup-outcome": isSettable,
+    "set-correct-response": (identifier) => responses.has(identifier),
+    "set-default-value": (identifier) => responses.has(identifier) || outcomes.has(identifier),
+    "set-outcome": isSettable,
+    "set-template-value": (identifier) => heldTemplates.has(identifier),
+  };
+
+  /**
    * Add each identifier a rule sequence names, nested branches included, that the engine does not
-   * hold: each outcome it sets or looks up, and each identifier its expressions read. An exit
+   * hold: each variable it sets or looks up, and each identifier its expressions read. An exit
    * names none.
    *
    * @param sequence The rules, in order.
    */
-  const run = (sequence: readonly Rule[]): void => {
+  const run = (sequence: readonly (Rule | TemplateRule)[]): void => {
     for (const each of sequence) {
-      if (each.kind === "condition") {
+      if (each.kind === "condition" || each.kind === "template-condition") {
         for (const { then, when } of each.branches) {
           read(when);
           run(then);
         }
-        if (Option.isSome(each.otherwise)) {
-          run(each.otherwise.value);
+        const otherwise: Option.Option<readonly (Rule | TemplateRule)[]> = each.otherwise;
+        if (Option.isSome(otherwise)) {
+          run(otherwise.value);
         }
-      } else if (each.kind !== "exit") {
-        if (!isSettable(each.identifier)) {
+      } else if (each.kind === "template-constraint") {
+        read(each.expression);
+      } else if (each.kind !== "exit" && each.kind !== "exit-template") {
+        if (!targets[each.kind](each.identifier)) {
           unheld.add(each.identifier);
         }
 
@@ -3063,17 +3090,54 @@ interface ReadProcessing extends ProcessingTree {
 }
 
 /**
- * Keep a rule tree the engine can run. Each identifier {@link unheldIdentifiers} finds is the mark
- * `variable:<identifier>` at the processing element's path, each need {@link unmetNeeds} finds is
- * its mark there (`mapping:<identifier>`, `area-mapping:<identifier>` or
- * `outcome-type:<identifier>`), and a tree that maps a point through an area mapping with a `%`
- * coordinate ({@link readsPercentArea}) is the mark `area-coords-percent` there. The marks are
- * placed among the others in document order, and the tree is then none. So a built-in template the
- * item does not provide for, a `CC2_*` one (Q6) or a canonical one whose `SCORE` has the base type
+ * A template processing read into its rules, with where its marks go.
+ */
+interface ReadTemplateProcessing {
+  /**
+   * The number of marks recorded when its rules were read, so the marks it gains later keep
+   * document order.
+   */
+  readonly at: number;
+  /**
+   * The `qti-template-processing` element's path.
+   */
+  readonly path: string;
+  readonly tree: readonly TemplateRule[];
+}
+
+/**
+ * Record marks at a processing element's path, placed among the marks already recorded in document
+ * order: after the first `at`, which precede the element, and before the rest.
+ *
+ * @param build The build.
+ * @param at The number of marks recorded when the element was read.
+ * @param path The element's path.
+ * @param features The features to mark.
+ */
+const markAt = (build: Build, at: number, path: string, features: readonly string[]): void => {
+  const after = build.unsupported.splice(at);
+  for (const feature of features) {
+    build.unsupported.push({ feature, path, shown: "mark" });
+  }
+  for (const entry of after) {
+    build.unsupported.push(entry);
+  }
+};
+
+/**
+ * Keep a response processing's rule tree the engine can run. Each identifier
+ * {@link unheldIdentifiers} finds is the mark `variable:<identifier>` at the processing element's
+ * path, each need {@link unmetNeeds} finds is its mark there (`mapping:<identifier>`,
+ * `area-mapping:<identifier>` or `outcome-type:<identifier>`), and a tree that maps a point through
+ * an area mapping with a `%` coordinate ({@link readsPercentArea}) is the mark
+ * `area-coords-percent` there. The marks are placed among the others in document order
+ * ({@link markAt}), and the tree is then none. So a built-in template the item does not provide
+ * for, a `CC2_*` one (Q6) or a canonical one whose `SCORE` has the base type
  * `template-requirements` asks for and another cardinality, is marked and does not run, and is
  * never refused. Inline rules are walked only for a lookup of an outcome that is not single, which
  * is marked `outcome-type:<identifier>` and never refused, as pantry accepts it; the prose rules
- * refuse the inline rules that have any other need.
+ * refuse the inline rules that have any other need. `buildItem` judges a template processing's
+ * rules by {@link unheldIdentifiers} alone; the other needs here are response processing's.
  *
  * @param build The build.
  * @param read The processing as read.
@@ -3110,13 +3174,7 @@ const runnable = (
     features.push("area-coords-percent");
   }
 
-  const after = build.unsupported.splice(read.at);
-  for (const feature of features) {
-    build.unsupported.push({ feature, path: read.path, shown: "mark" });
-  }
-  for (const entry of after) {
-    build.unsupported.push(entry);
-  }
+  markAt(build, read.at, read.path, features);
 
   return features.length === 0 ? Option.some(read.tree) : Option.none();
 };
@@ -3166,12 +3224,16 @@ const declarationsOf = (document: SourceDocument): ReadonlyMap<string, SourceEle
  * point mapping the mark `area-coords-percent` there, and the processing is then none. Template
  * declarations of modelled types are read into `templates`, and a `qti-template-processing` into
  * `templateProcessing` through `templateRules` in `#plate/model/template.ts`, which marks what the
- * engine does not run as response processing's reader does. A template variable the model holds
- * is one the engine holds, unless the item's `qti-template-processing` does not run: then no
- * template variable is held, so a tree that reads one is marked `variable:<identifier>`, and the
- * item has no processing, whatever the tree, since that template processing may set a template
- * variable, a default value or a correct response, so a score computed without it could be
- * wrong.
+ * engine does not run as response processing's reader does. Its rules are kept only when the
+ * engine holds every name they read and set while they run: each name {@link unheldIdentifiers}
+ * finds, such as `QTI_CONTEXT`, a context variable, or a template variable, response or outcome the
+ * model does not hold, is the mark `variable:<identifier>` at the `qti-template-processing`
+ * element's path, and the template processing is then none. Nothing is refused: such an item is
+ * accepted with that mark. A template variable the model holds is one the engine holds, unless the
+ * item's `qti-template-processing` does not run: then no template variable is held, so a tree that
+ * reads one is marked `variable:<identifier>`, and the item has no processing, whatever the tree,
+ * since that template processing may set a template variable, a default value or a correct
+ * response, so a score computed without it could be wrong.
  *
  * @param source A document the structural validator and the prose rules accepted.
  * @returns The item, or the refusal `value-type` at the first typed value outside its lexical
@@ -3199,7 +3261,7 @@ export const buildItem = (source: SourceDocument): Effect.Effect<Item, Refusal> 
     const templateDeclarations = new Map<string, TemplateDeclaration>();
     const body: BodyNode[] = [];
     let processing: Option.Option<ReadProcessing> = Option.none();
-    let templateProcessing: Option.Option<readonly TemplateRule[]> = Option.none();
+    let templateRead: Option.Option<ReadTemplateProcessing> = Option.none();
 
     for (const part of elementsOf(root).filter((child) => isQti(child))) {
       if (part.local === "qti-item-body") {
@@ -3245,7 +3307,14 @@ export const buildItem = (source: SourceDocument): Effect.Effect<Item, Refusal> 
       } else if (part.local === "qti-template-processing") {
         markElement(build, part, false);
 
-        templateProcessing = yield* templateRules(readingOf(build), part);
+        const parsed = yield* templateRules(readingOf(build), part);
+        templateRead = parsed.pipe(
+          Option.map((tree) => ({
+            at: build.unsupported.length,
+            path: pathOf(build, part),
+            tree,
+          })),
+        );
       } else {
         markElement(build, part, false);
         if (!readElements.has(part.local)) {
@@ -3254,8 +3323,28 @@ export const buildItem = (source: SourceDocument): Effect.Effect<Item, Refusal> 
       }
     }
 
+    // The names template processing reads or sets that the engine does not hold while it runs. It
+    // passes no response or outcome value, but P26 refuses every read of one, and every built-in
+    // but `QTI_CONTEXT`, so on a checked item these are `QTI_CONTEXT`, a context variable, and a
+    // template variable, response or outcome the model does not hold.
+    const templateMarks = Option.match(templateRead, {
+      onNone: () => [],
+      onSome: (read) =>
+        unheldIdentifiers(
+          read.tree,
+          responses,
+          outcomes,
+          templateDeclarations,
+          heldBuiltIns(root),
+          build.names,
+        ).map((name) => `variable:${name}`),
+    });
+    const templateProcessing = templateRead.pipe(
+      Option.filter(() => templateMarks.length === 0),
+      Option.map((read) => read.tree),
+    );
     // A `qti-template-processing` that does not run: its rules hold an element the engine does not
-    // run, which `templateRules` marked.
+    // run, which `templateRules` marked, or name a variable the engine does not hold while they run.
     const stalled =
       childrenNamed(root, "qti-template-processing").length > 0 &&
       Option.isNone(templateProcessing);
@@ -3264,6 +3353,12 @@ export const buildItem = (source: SourceDocument): Effect.Effect<Item, Refusal> 
         runnable(build, read, responses, outcomes, stalled ? new Map() : templateDeclarations),
       ),
     );
+    // Placed after `runnable`'s: a valid item's `qti-template-processing` precedes its
+    // `qti-response-processing`, so these go at a count no greater than response processing's, and
+    // placing them second keeps both in document order.
+    if (Option.isSome(templateRead)) {
+      markAt(build, templateRead.value.at, templateRead.value.path, templateMarks);
+    }
 
     return {
       body,
