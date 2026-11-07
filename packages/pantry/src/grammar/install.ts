@@ -39,6 +39,13 @@ import type { Roster as GeneratedRoster } from "#pantry/grammar/closed.ts";
 import { int8Max } from "#pantry/grammar/closed.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 import type { ComposedGrammar, Kind } from "#pantry/grammar/compose.ts";
+import {
+  cnForms,
+  cnPatternOf,
+  mathArities,
+  mathHeadOperators,
+  mathHeadQualifiers,
+} from "#pantry/grammar/expression.ts";
 import { foreignKinds } from "#pantry/grammar/kinds.ts";
 import { vocabularyNamespacesPattern } from "#pantry/grammar/names.ts";
 import type { SchemaVersion as Version } from "#pantry/grammar/kinds.ts";
@@ -1249,6 +1256,132 @@ export const OperatorArity = closed.relation(
     max,
     min,
   })),
+);
+
+/**
+ * The `CnType` roster: the `type` values of a MathML `cn` whose content takes a form
+ * ({@link cnForms}); every other `type` is text and is no handle.
+ */
+export const CnType = closed("CnType", nonEmpty("CnType", [...cnForms.keys()]));
+
+/**
+ * The `CnPartForm` roster: the forms a part of a `cn`'s content takes ({@link cnForms}), in the
+ * order a type first states them.
+ */
+export const CnPartForm = closed(
+  "CnPartForm",
+  nonEmpty("CnPartForm", [...new Set([...cnForms.values()].flat())]),
+);
+
+/**
+ * The `CnPart` roster: a part's place among the parts of a `cn`'s content, the numerals 0 to the
+ * most any type holds less one ({@link cnForms}).
+ */
+export const CnPart = closed(
+  "CnPart",
+  nonEmpty(
+    "CnPart",
+    Arr.range(0, Math.max(...[...cnForms.values()].map((forms) => forms.length)) - 1).map(String),
+  ),
+);
+
+/**
+ * The `CnBase` roster: the radixes of a `cn`'s digits, the numerals 2 to 36 ({@link cnPatternOf}).
+ */
+export const CnBase = closed("CnBase", nonEmpty("CnBase", Arr.range(2, 36).map(String)));
+
+/**
+ * `MathArity`: Content MathML operator kind → (min, max), the fewest and the most arguments its
+ * `m:apply` takes ({@link mathArities}), `int8Max` for no upper bound.
+ */
+export const MathArity = closed.relation(
+  "MathArity",
+  { kind: closedId(NodeKind), max: natural, min: natural },
+  ["kind"],
+  [...mathArities].map(([kind, { max, min }]) => ({
+    kind: memberOf(grammar.kinds.nodeKind, kind),
+    max: naturalOf(max),
+    min: naturalOf(min),
+  })),
+);
+
+/**
+ * `MathHeadOperator`: the set of operator kinds the head-qualifier law judges
+ * ({@link mathHeadOperators}).
+ */
+export const MathHeadOperator = closed.relation(
+  "MathHeadOperator",
+  { kind: closedId(NodeKind) },
+  ["kind"],
+  [...mathHeadOperators].map((kind) => ({ kind: memberOf(grammar.kinds.nodeKind, kind) })),
+);
+
+/**
+ * `HeadQualifier`: the set of (head, qualifier) where an operator's syntax table lists the
+ * qualifier beside its arguments ({@link mathHeadQualifiers}).
+ */
+export const HeadQualifier = closed.relation(
+  "HeadQualifier",
+  { head: closedId(NodeKind), qualifier: closedId(NodeKind) },
+  ["head", "qualifier"],
+  mathHeadQualifiers.map(({ head, qualifier }) => ({
+    head: memberOf(grammar.kinds.nodeKind, head),
+    qualifier: memberOf(grammar.kinds.nodeKind, qualifier),
+  })),
+);
+
+/**
+ * `CnParts`: type → parts, how many parts a `cn` of the type holds, the count of its {@link CnForm}
+ * rows.
+ */
+export const CnParts = closed.relation(
+  "CnParts",
+  { parts: natural, type: closedId(CnType) },
+  ["type"],
+  [...cnForms].map(([type, forms]) => ({
+    parts: BigInt(forms.length),
+    type: handleIn("CnType", CnType.handles, type),
+  })),
+);
+
+/**
+ * `CnForm`: (type, part) → form, the form of each part of a `cn` of the type, a part's number being
+ * its place among the parts `m:sep` separates ({@link cnForms}).
+ */
+export const CnForm = closed.relation(
+  "CnForm",
+  {
+    form: closedId(CnPartForm),
+    part: slot(closedId(CnPart), fin(CnParts, "parts")),
+    type: closedId(CnType),
+  },
+  ["type", "part"],
+  [...cnForms].flatMap(([type, forms]) =>
+    forms.map((form, part) => ({
+      form: handleIn("CnPartForm", CnPartForm.handles, form),
+      part: String(part),
+      type: handleIn("CnType", CnType.handles, type),
+    })),
+  ),
+);
+
+/**
+ * `CnPattern`: (form, base) → pattern, the lexical space of a part of the form, its digits read in
+ * the base from 2 to 36 ({@link cnPatternOf}); a double's and a hexdouble's pattern reads no base.
+ */
+export const CnPattern = closed.relation(
+  "CnPattern",
+  { base: closedId(CnBase), form: closedId(CnPartForm), pattern: anyText },
+  ["form", "base"],
+  CnPartForm.handles.flatMap((form) =>
+    Arr.range(2, 36).flatMap((base) =>
+      Option.toArray(cnPatternOf(form, base)).map((pattern) => ({
+        base: String(base),
+        form,
+        pattern,
+      })),
+    ),
+  ),
 );
 
 /**

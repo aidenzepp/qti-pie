@@ -5,6 +5,14 @@ import { int } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
 import { Array as Arr, Duration, Effect, Formatter, Option, Predicate, Schema } from "effect";
 import { openDomain } from "#pantry/grammar/attributes.ts";
+import { int8Max } from "#pantry/grammar/closed.ts";
+import {
+  cnForms,
+  cnPatternOf,
+  mathArities,
+  mathHeadOperators,
+  mathHeadQualifiers,
+} from "#pantry/grammar/expression.ts";
 import * as install from "#pantry/grammar/install.ts";
 import { foreignKinds } from "#pantry/grammar/kinds.ts";
 import { noType } from "#pantry/grammar/xsi.ts";
@@ -297,6 +305,47 @@ const comparisons: readonly Comparison[] = [
     name: "KindNamespace",
   },
   { expected: () => grammar.operatorArity.rows, name: "OperatorArity" },
+  {
+    expected: () =>
+      [...mathArities].map(([kind, { max, min }]) => ({
+        kind,
+        max: Number.isFinite(max) ? BigInt(max) : int8Max,
+        min: BigInt(min),
+      })),
+    name: "MathArity",
+  },
+  {
+    expected: () => [...mathHeadOperators].map((kind) => ({ kind })),
+    name: "MathHeadOperator",
+  },
+  {
+    expected: () => mathHeadQualifiers.map(({ head, qualifier }) => ({ head, qualifier })),
+    name: "HeadQualifier",
+  },
+  {
+    expected: () =>
+      [...cnForms].flatMap(([type, forms]) =>
+        forms.map((form, part) => ({ form, part: String(part), type })),
+      ),
+    name: "CnForm",
+  },
+  {
+    expected: () => [...cnForms].map(([type, forms]) => ({ parts: BigInt(forms.length), type })),
+    name: "CnParts",
+  },
+  {
+    expected: () =>
+      [...new Set([...cnForms.values()].flat())].flatMap((form) =>
+        Arr.range(2, 36).flatMap((base) =>
+          Option.toArray(cnPatternOf(form, base)).map((pattern) => ({
+            base: String(base),
+            form,
+            pattern,
+          })),
+        ),
+      ),
+    name: "CnPattern",
+  },
   { expected: () => grammar.bindingFit.rows, name: "BindingFit" },
   { expected: () => grammar.recordBindingFit.rows, name: "RecordBindingFit" },
   { expected: () => grammar.mappableBaseType.rows, name: "MappableBaseType" },
@@ -636,6 +685,38 @@ describe("the installed relations", () => {
       ),
     );
     assert.strictEqual(grammar.barredBy.rows.length, 2);
+  });
+});
+
+describe("the MathML relations", () => {
+  it("state the arity, head qualifier and cn form samples the laws read", () => {
+    const row = (name: string, at: Readonly<Record<string, string | bigint>>) =>
+      Arr.findFirst(relationNamed(name).rows, (candidate) =>
+        Object.entries(at).every(([field, value]) => candidate[field] === value),
+      );
+
+    assert.deepStrictEqual(
+      row("MathArity", { kind: "m:selector" }),
+      Option.some({ kind: "m:selector", max: int8Max, min: 1n }),
+    );
+    assert.isTrue(Option.isSome(row("HeadQualifier", { head: "m:log", qualifier: "m:logbase" })));
+    assert.isTrue(Option.isNone(row("HeadQualifier", { head: "m:sin", qualifier: "m:logbase" })));
+    assert.lengthOf(
+      relationNamed("CnForm").rows.filter(({ type }) => type === "rational"),
+      2,
+    );
+    assert.deepStrictEqual(
+      row("CnParts", { type: "rational" }),
+      Option.some({ parts: 2n, type: "rational" }),
+    );
+    assert.lengthOf(relationNamed("CnPattern").rows, 4 * 35);
+
+    const hexdouble = row("CnPattern", { base: "10", form: "hexdouble" });
+    assert.isTrue(Option.isSome(hexdouble));
+    assert.match(
+      "7ff8000000000000",
+      new RegExp(`^(?:${Option.getOrThrow(hexdouble)["pattern"]})$`, "u"),
+    );
   });
 });
 
