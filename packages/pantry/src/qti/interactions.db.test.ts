@@ -359,7 +359,7 @@ const templateOf = (fields: Partial<Fact<typeof TemplateRef>> = {}) =>
 const templateDeclarationOf = (fields: Partial<Fact<typeof TemplateRefDeclaration>> = {}) =>
   ({
     ...templateOf(),
-    baseType: "identifier",
+    baseTypes: 1n,
     cardinality: "single",
     declaration: stray,
     declarationKind: "qti-template-declaration",
@@ -1032,17 +1032,21 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
         () =>
           // Oracle: PostgreSQL, the `Template_variable_type` check over the declaration rows
           // (reading R15-l), on each of the two relations that hold a template reference's
-          // declaration.
-          // Bound: an integer template named by a choice, refused; an identifier template of
-          // multiple cardinality named by a choice, and an integer template named by a PCI's
-          // qti-template-variable, accepted by this check; the placed section reference of an
-          // integer template, refused.
+          // declaration: it judges a record by its cardinality, and a base type is judged by the
+          // containment into the identifier-typed DeclarationBaseType rows (reading 153), which a
+          // stray row cannot reach, as "Feedback outcome type" is.
+          // Bound: a record template named by a choice, refused; an identifier template of
+          // multiple cardinality named by a choice, and a record template named by a PCI's
+          // qti-template-variable, accepted by this check; the placed section reference of a
+          // record template, refused.
           Effect.gen(function* templateType() {
             const db = yield* Db.open(AuthorApp.roles.author, {});
             const wrong = yield* db.apply(
               ChangeSet.empty(Author)
                 .insert(TemplateRef, [templateOf()])
-                .insert(TemplateRefDeclaration, [templateDeclarationOf({ baseType: "integer" })]),
+                .insert(TemplateRefDeclaration, [
+                  templateDeclarationOf({ baseTypes: 0n, cardinality: "record" }),
+                ]),
               {},
             );
             assert.isTrue(
@@ -1051,7 +1055,11 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
 
             for (const row of [
               templateDeclarationOf({ cardinality: "multiple" }),
-              templateDeclarationOf({ baseType: "integer", kind: "qti-template-variable" }),
+              templateDeclarationOf({
+                baseTypes: 0n,
+                cardinality: "record",
+                kind: "qti-template-variable",
+              }),
             ]) {
               const outcome = yield* db.apply(
                 ChangeSet.empty(Author)
@@ -1061,7 +1069,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
               );
               assert.isFalse(
                 rejectedBy(outcome, checkNamed("TemplateRefDeclaration", "Template_variable_type")),
-                `${row.kind} ${row.baseType} ${row.cardinality}`,
+                `${row.kind} ${row.baseTypes} ${row.cardinality}`,
               );
             }
 
@@ -1081,7 +1089,10 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
                 ])
                 .insert(SectionTemplateRef, [{ ...templateOf(), ...placement }])
                 .insert(SectionTemplateRefDeclaration, [
-                  { ...templateDeclarationOf({ baseType: "integer" }), ...placement },
+                  {
+                    ...templateDeclarationOf({ baseTypes: 0n, cardinality: "record" }),
+                    ...placement,
+                  },
                 ]),
               {},
             );

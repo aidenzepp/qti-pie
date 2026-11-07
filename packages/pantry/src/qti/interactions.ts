@@ -2258,7 +2258,8 @@ const feedbackCardinalities = ["single", "multiple"] as const;
 /**
  * The declarations whose base type is `identifier`, a feedback outcome's, where the declaration has
  * a base type: the target of `Feedback_outcome_type`'s containment over a feedback reference's
- * declaration.
+ * declaration, and of `Template_variable_type`'s over a template reference's that is no template
+ * variable's.
  */
 const identifierTyped = on(
   select(DeclarationBaseType, (b) => b.eq(b.baseType, "identifier")),
@@ -3136,16 +3137,28 @@ export const interactionLawsByName = {
   ],
   "Template variable type": [
     check("Template_variable_type", TemplateRefDeclaration, (r) =>
-      r.or(
-        r.eq(r.kind, templateVariableKind),
-        r.and(r.eq(r.baseType, "identifier"), r.in(r.cardinality, ["single", "multiple"])),
+      r.or(r.eq(r.kind, templateVariableKind), r.in(r.cardinality, feedbackCardinalities)),
+    ),
+    contained(
+      on(
+        select(TemplateRefDeclaration, (r) =>
+          r.and(r.ne(r.kind, templateVariableKind), r.eq(r.baseTypes, 1n)),
+        ),
+        "declaration",
       ),
+      identifierTyped,
     ),
     check("Template_variable_type", SectionTemplateRefDeclaration, (r) =>
-      r.or(
-        r.eq(r.kind, templateVariableKind),
-        r.and(r.eq(r.baseType, "identifier"), r.in(r.cardinality, ["single", "multiple"])),
+      r.or(r.eq(r.kind, templateVariableKind), r.in(r.cardinality, feedbackCardinalities)),
+    ),
+    contained(
+      on(
+        select(SectionTemplateRefDeclaration, (r) =>
+          r.and(r.ne(r.kind, templateVariableKind), r.eq(r.baseTypes, 1n)),
+        ),
+        "declaration",
       ),
+      identifierTyped,
     ),
   ],
   "default hotspot last slot": [check("default_hotspot_last_slot", Hotspot, lastWhere)],
