@@ -49,7 +49,6 @@ import { Declaration } from "#pantry/qti/declarations.ts";
 import { Document } from "#pantry/qti/chardata.ts";
 import {
   AriaRange,
-  Binding,
   BindingDeclaration,
   BoundVariable,
   Choice,
@@ -277,8 +276,8 @@ const choiceOf = (
 ): Fact<typeof Choice> => ({
   document: stray,
   identifier,
-  interaction: stray,
   kind,
+  nearest: stray,
   node: strayNode(at),
   parent: stray,
   start: BigInt(5 + at),
@@ -329,31 +328,6 @@ const strayDocument = {
   version: "3.0.1",
   xmlVersion: "none",
 } as const satisfies Addition<typeof Document>;
-
-/**
- * The bindings of the interactions some stray choices name, each the owner of its choices'
- * family (`Binding.choices`), which a change inserts beside its members: a choice interaction of
- * the stray document, lawful on its own CHECK (`E1_derived`: an interaction's kind), each bound to
- * its own response. Its count is the family's to draw.
- *
- * @param choices - The choices.
- * @returns One binding per interaction they name.
- */
-const bindingsOf = (choices: readonly Fact<typeof Choice>[]) =>
-  [...new Set(choices.map(({ interaction }) => interaction))].map(
-    (interaction, at) =>
-      ({
-        document: stray,
-        identifier: `RESPONSE_${String(at)}`,
-        kind: "qti-choice-interaction",
-        nearest: stray,
-        node: interaction,
-        parent: stray,
-        rootKind: "qti-assessment-item",
-        start: 1n,
-        version: "3.0.1",
-      }) satisfies Addition<typeof Binding>,
-  );
 
 /**
  * A stray hottext of a hottext interaction.
@@ -1193,20 +1167,19 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
             const db = yield* Db.open(AuthorApp.roles.author, {});
             for (const second of [
               choiceOf(1, "A"),
-              { ...choiceOf(1, "A"), interaction: strayNode(98) },
+              { ...choiceOf(1, "A"), nearest: strayNode(98) },
             ]) {
               const pair = [choiceOf(0, "A"), second];
               const choices = yield* db.apply(
                 ChangeSet.empty(Author)
                   .insert(Document, [strayDocument])
-                  .insert(Binding, bindingsOf(pair))
                   .insert(ChoiceVariableName, [nameOf("A")])
                   .insert(Choice, pair),
                 {},
               );
               assert.isTrue(
                 rejectedBy(choices, keyOver("Choice", ["document", "kind", "identifier"])),
-                second.interaction,
+                second.nearest,
               );
             }
 
@@ -1226,7 +1199,6 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
             const classes = yield* db.apply(
               ChangeSet.empty(Author)
                 .insert(Document, [strayDocument])
-                .insert(Binding, bindingsOf(gaps))
                 .insert(ChoiceVariableName, [nameOf("A")])
                 .insert(Choice, gaps),
               {},
@@ -1269,7 +1241,6 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
             const choice = yield* db.apply(
               ChangeSet.empty(Author)
                 .insert(Document, [strayDocument])
-                .insert(Binding, bindingsOf([choiceOf(0, "A")]))
                 .insert(ChoiceVariableName, [nameOf("A")])
                 .insert(Choice, [choiceOf(0, "A")])
                 .insert(Declaration, [declared]),
@@ -1296,7 +1267,6 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
             const builtIn = yield* db.apply(
               ChangeSet.empty(Author)
                 .insert(Document, [strayDocument])
-                .insert(Binding, bindingsOf([choiceOf(0, "numAttempts")]))
                 .insert(ChoiceVariableName, [nameOf("numAttempts")])
                 .insert(Choice, [choiceOf(0, "numAttempts")]),
               {},

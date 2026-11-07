@@ -819,7 +819,11 @@ const plannedAxes = nonEmpty("the planned axes", [
     statedNamed("E1 derived", "fold over Attribute.idrefs"),
   ),
   plannedAxis("Namespace", "reachability", statedNamed("Namespace family", "family")),
-  plannedAxis("Choice", "owner-copy", statedNamed("N8 nearest", "counted family Binding.choices")),
+  plannedAxis(
+    "Choice",
+    "owner-copy",
+    statedNamed("N8 nearest", "counted family Interaction.choices"),
+  ),
 ]);
 
 /**

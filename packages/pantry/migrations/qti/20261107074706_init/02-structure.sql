@@ -172,7 +172,6 @@ CREATE TABLE "qti"."attribute_entity" (
 );
 
 CREATE TABLE "qti"."binding" (
-  "choices" "qti"."__domain_gfw43vigph" NOT NULL,
   "document" "pg_catalog"."uuid" NOT NULL,
   "identifier" "qti"."__text_pwaizaq6lx" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
@@ -185,7 +184,6 @@ CREATE TABLE "qti"."binding" (
   CONSTRAINT "__binding_pk_sxmg35fgob" PRIMARY KEY ("node"),
   CONSTRAINT "e_1_derived" CHECK (("kind" IN (133::smallint, 127::smallint, 18::smallint, 118::smallint, 17::smallint, 131::smallint, 119::smallint, 125::smallint, 121::smallint, 123::smallint, 122::smallint, 129::smallint, 16::smallint, 120::smallint, 128::smallint, 130::smallint, 117::smallint, 187::smallint, 124::smallint, 126::smallint, 10::smallint, 132::smallint)) IS TRUE),
   CONSTRAINT "__binding_key_node_kind_v2dfyie2n7" UNIQUE NULLS DISTINCT ("node", "kind"),
-  CONSTRAINT "__binding_key_node_choices_q47mjnuhot" UNIQUE NULLS DISTINCT ("node", "choices"),
   CONSTRAINT "__binding_key_node_root_kind_identifier_7yqssz554g" UNIQUE NULLS DISTINCT ("node", "root_kind", "identifier")
 );
 
@@ -306,8 +304,8 @@ CREATE TABLE "qti"."cell_headers" (
 CREATE TABLE "qti"."choice" (
   "document" "pg_catalog"."uuid" NOT NULL,
   "identifier" "qti"."__text_pwaizaq6lx" NOT NULL,
-  "interaction" "pg_catalog"."uuid" NOT NULL,
   "kind" "qti"."node_kind" NOT NULL,
+  "nearest" "pg_catalog"."uuid" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   "parent" "pg_catalog"."uuid" NOT NULL,
   "start" "qti"."__domain_gfw43vigph" NOT NULL,
@@ -315,8 +313,15 @@ CREATE TABLE "qti"."choice" (
   CONSTRAINT "__choice_pk_lpz37hc34u" PRIMARY KEY ("node"),
   CONSTRAINT "__choice_key_document_kind_identifier_tm7vc2nvve" UNIQUE NULLS DISTINCT ("document", "kind", "identifier"),
   CONSTRAINT "e_1_derived" CHECK (("kind" IN (155::smallint, 13::smallint, 154::smallint, 153::smallint, 156::smallint, 162::smallint, 114::smallint, 143::smallint)) IS TRUE),
+  CONSTRAINT "__choice_key_node_nearest_bmvx7mkqwl" UNIQUE NULLS DISTINCT ("node", "nearest"),
   CONSTRAINT "__choice_key_node_identifier_tnolxxtt77" UNIQUE NULLS DISTINCT ("node", "identifier"),
   CONSTRAINT "__choice_key_node_document_kind_identifier_xahjwklefv" UNIQUE NULLS DISTINCT ("node", "document", "kind", "identifier")
+);
+
+CREATE TABLE "qti"."choice_interaction" (
+  "interaction" "pg_catalog"."uuid" NOT NULL,
+  "node" "pg_catalog"."uuid" NOT NULL,
+  CONSTRAINT "__choice_interaction_pk_dxmiqmyvgh" PRIMARY KEY ("node")
 );
 
 CREATE TABLE "qti"."choice_variable_name" (
@@ -880,6 +885,21 @@ CREATE TABLE "qti"."instance_name" (
   CONSTRAINT "__instance_name_key_instance_node_assembly_end_kind_dtol5cpobs" UNIQUE NULLS DISTINCT ("instance", "node", "assembly", "end", "kind", "mixes", "part", "replaced", "start"),
   CONSTRAINT "__instance_name_key_instance_node_identifier_tqvhptxx4n" UNIQUE NULLS DISTINCT ("instance", "node", "identifier"),
   CONSTRAINT "__instance_name_key_instance_node_assembly_replaced_5tzwrkwbin" UNIQUE NULLS DISTINCT ("instance", "node", "assembly", "replaced")
+);
+
+CREATE TABLE "qti"."interaction" (
+  "choices" "qti"."__domain_gfw43vigph" NOT NULL,
+  "document" "pg_catalog"."uuid" NOT NULL,
+  "kind" "qti"."node_kind" NOT NULL,
+  "nearest" "pg_catalog"."uuid" NOT NULL,
+  "node" "pg_catalog"."uuid" NOT NULL,
+  "parent" "pg_catalog"."uuid" NOT NULL,
+  "start" "qti"."__domain_gfw43vigph" NOT NULL,
+  "version" "qti"."schema_version" NOT NULL,
+  CONSTRAINT "__interaction_pk_6gsxu3brgo" PRIMARY KEY ("node"),
+  CONSTRAINT "e_1_derived" CHECK (("kind" IN (133::smallint, 127::smallint, 18::smallint, 118::smallint, 17::smallint, 131::smallint, 119::smallint, 125::smallint, 121::smallint, 123::smallint, 122::smallint, 129::smallint, 16::smallint, 120::smallint, 128::smallint, 130::smallint, 117::smallint, 187::smallint, 124::smallint, 126::smallint, 10::smallint, 132::smallint)) IS TRUE),
+  CONSTRAINT "__interaction_key_node_choices_vc3dqacday" UNIQUE NULLS DISTINCT ("node", "choices"),
+  CONSTRAINT "__interaction_key_node_kind_2g42hwgvhy" UNIQUE NULLS DISTINCT ("node", "kind")
 );
 
 CREATE TABLE "qti"."interaction_attribute" (
@@ -2973,10 +2993,6 @@ ALTER TABLE "qti"."attribute_entity" ADD COLUMN "__copy_entities_aycjfcotko" big
 
 ALTER TABLE "qti"."attribute_entity" ADD COLUMN "__pred_at_xktcobhsti" bigint GENERATED ALWAYS AS (CASE WHEN "at" > 0::bigint THEN "at"::numeric - (1::bigint)::numeric END) STORED;
 
-ALTER TABLE "qti"."binding" ADD COLUMN "__node_gfaeb4prff" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "kind" IN (155::smallint, 133::smallint, 127::smallint, 131::smallint, 154::smallint, 119::smallint, 153::smallint, 125::smallint, 121::smallint, 123::smallint, 122::smallint, 129::smallint, 120::smallint, 128::smallint, 130::smallint, 187::smallint, 124::smallint, 114::smallint) THEN "node" END) STORED;
-
-ALTER TABLE "qti"."binding" ADD COLUMN "__pred_choices_w4bygwsb7b" bigint GENERATED ALWAYS AS (CASE WHEN "choices" > 0::bigint THEN "choices"::numeric - (1::bigint)::numeric END) STORED;
-
 ALTER TABLE "qti"."binding_declaration" ADD COLUMN "__tag_max_written_true_6phmyjuam6" boolean GENERATED ALWAYS AS (true) STORED NOT NULL;
 
 ALTER TABLE "qti"."binding_declaration" ADD COLUMN "__tag_most_value_1_potsaavtbt" bigint GENERATED ALWAYS AS (1::bigint) STORED NOT NULL;
@@ -3011,25 +3027,25 @@ ALTER TABLE "qti"."branch_rule" ADD COLUMN "__predecessor_rules_ldzo63rbey" bigi
 
 ALTER TABLE "qti"."cell_headers" ADD COLUMN "__pred_tokens_ip7mlgrtju" bigint GENERATED ALWAYS AS (CASE WHEN "tokens" > 0::bigint THEN "tokens"::numeric - (1::bigint)::numeric END) STORED;
 
-ALTER TABLE "qti"."choice" ADD COLUMN "__copy_choices_om5wepy4n2" bigint NOT NULL;
-
 ALTER TABLE "qti"."choice" ADD COLUMN "__copy_choices_bx73wrsxei" bigint NOT NULL;
 
 ALTER TABLE "qti"."choice" ADD COLUMN "__copy_choices_uz5z265isz" bigint NOT NULL;
 
-ALTER TABLE "qti"."choice" ADD COLUMN "__index_choices_my5axngdyd" bigint NOT NULL;
-
 ALTER TABLE "qti"."choice" ADD COLUMN "__index_choices_tcch7plli5" bigint NOT NULL;
 
 ALTER TABLE "qti"."choice" ADD COLUMN "__index_choices_ae4nhwqbex" bigint NOT NULL;
-
-ALTER TABLE "qti"."choice" ADD COLUMN "__predecessor_choices_44evxe3avx" bigint GENERATED ALWAYS AS (CASE WHEN "__index_choices_my5axngdyd" > 0::bigint THEN "__index_choices_my5axngdyd"::numeric - (1::bigint)::numeric END) STORED;
 
 ALTER TABLE "qti"."choice" ADD COLUMN "__predecessor_choices_s5pq2s6d4y" bigint GENERATED ALWAYS AS (CASE WHEN "__index_choices_tcch7plli5" > 0::bigint THEN "__index_choices_tcch7plli5"::numeric - (1::bigint)::numeric END) STORED;
 
 ALTER TABLE "qti"."choice" ADD COLUMN "__predecessor_choices_ohalg3vnxq" bigint GENERATED ALWAYS AS (CASE WHEN "__index_choices_ae4nhwqbex" > 0::bigint THEN "__index_choices_ae4nhwqbex"::numeric - (1::bigint)::numeric END) STORED;
 
 ALTER TABLE "qti"."choice" ADD COLUMN "__node_gfaeb4prff" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "kind" IN (155::smallint, 133::smallint, 127::smallint, 131::smallint, 154::smallint, 119::smallint, 153::smallint, 125::smallint, 121::smallint, 123::smallint, 122::smallint, 129::smallint, 120::smallint, 128::smallint, 130::smallint, 187::smallint, 124::smallint, 114::smallint) THEN "node" END) STORED;
+
+ALTER TABLE "qti"."choice_interaction" ADD COLUMN "__copy_choices_wtrcebhimo" bigint NOT NULL;
+
+ALTER TABLE "qti"."choice_interaction" ADD COLUMN "__index_choices_frgthpcwrc" bigint NOT NULL;
+
+ALTER TABLE "qti"."choice_interaction" ADD COLUMN "__predecessor_choices_w5y7pq2tln" bigint GENERATED ALWAYS AS (CASE WHEN "__index_choices_frgthpcwrc" > 0::bigint THEN "__index_choices_frgthpcwrc"::numeric - (1::bigint)::numeric END) STORED;
 
 ALTER TABLE "qti"."choice_variable_name" ADD COLUMN "__pred_choices_w4bygwsb7b" bigint GENERATED ALWAYS AS (CASE WHEN "choices" > 0::bigint THEN "choices"::numeric - (1::bigint)::numeric END) STORED;
 
@@ -3378,6 +3394,10 @@ ALTER TABLE "qti"."instance_name" ADD COLUMN "__index_names_rwgwbcw7nk" bigint N
 ALTER TABLE "qti"."instance_name" ADD COLUMN "__predecessor_placements_wksd2bmqp3" bigint GENERATED ALWAYS AS (CASE WHEN "__index_placements_7kchufmvhd" > 0::bigint THEN "__index_placements_7kchufmvhd"::numeric - (1::bigint)::numeric END) STORED;
 
 ALTER TABLE "qti"."instance_name" ADD COLUMN "__predecessor_names_i7opkdat3y" bigint GENERATED ALWAYS AS (CASE WHEN "__index_names_rwgwbcw7nk" > 0::bigint THEN "__index_names_rwgwbcw7nk"::numeric - (1::bigint)::numeric END) STORED;
+
+ALTER TABLE "qti"."interaction" ADD COLUMN "__node_gfaeb4prff" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "kind" IN (155::smallint, 133::smallint, 127::smallint, 131::smallint, 154::smallint, 119::smallint, 153::smallint, 125::smallint, 121::smallint, 123::smallint, 122::smallint, 129::smallint, 120::smallint, 128::smallint, 130::smallint, 187::smallint, 124::smallint, 114::smallint) THEN "node" END) STORED;
+
+ALTER TABLE "qti"."interaction" ADD COLUMN "__pred_choices_w4bygwsb7b" bigint GENERATED ALWAYS AS (CASE WHEN "choices" > 0::bigint THEN "choices"::numeric - (1::bigint)::numeric END) STORED;
 
 ALTER TABLE "qti"."interaction_attribute" ADD COLUMN "__tag_max_written_true_6phmyjuam6" boolean GENERATED ALWAYS AS (true) STORED NOT NULL;
 
@@ -4857,7 +4877,7 @@ ALTER TABLE "qti"."choice" ADD CONSTRAINT "__choice_key_document_identifier_inde
 
 ALTER TABLE "qti"."choice" ADD CONSTRAINT "__choice_key_document_index_choices_skecs7tuze" UNIQUE NULLS DISTINCT ("document", "__index_choices_ae4nhwqbex");
 
-ALTER TABLE "qti"."choice" ADD CONSTRAINT "__choice_key_interaction_index_choices_kdxhikcxq2" UNIQUE NULLS DISTINCT ("interaction", "__index_choices_my5axngdyd");
+ALTER TABLE "qti"."choice_interaction" ADD CONSTRAINT "__choice_interaction_key_interaction_index_choices_lsxx5ixk4j" UNIQUE NULLS DISTINCT ("interaction", "__index_choices_frgthpcwrc");
 
 ALTER TABLE "qti"."declaration" ADD CONSTRAINT "__declaration_key_document_identifier_index_azjcgyfs7y" UNIQUE NULLS DISTINCT ("document", "identifier", "__index_declarations_dueviynmtk");
 
@@ -5071,11 +5091,11 @@ ALTER TABLE "qti"."branch_resolution" ADD CONSTRAINT "__branch_resolution_check_
 
 ALTER TABLE "qti"."branch_rule" ADD CONSTRAINT "__branch_rule_check_branch_rule_counted_test_nhy5gu5v5l" CHECK (("__index_rules_7srobe7smi" >= 0::bigint AND "__index_rules_7srobe7smi" < "__copy_rules_jc3hp3rtp4") IS TRUE);
 
-ALTER TABLE "qti"."choice" ADD CONSTRAINT "__choice_check_choice_counted_binding_choices_gr4qqp5oy6" CHECK (("__index_choices_my5axngdyd" >= 0::bigint AND "__index_choices_my5axngdyd" < "__copy_choices_om5wepy4n2") IS TRUE);
-
 ALTER TABLE "qti"."choice" ADD CONSTRAINT "__choice_check_choice_counted_choice_variable_name_ow3nfi2aaq" CHECK (("__index_choices_tcch7plli5" >= 0::bigint AND "__index_choices_tcch7plli5" < "__copy_choices_bx73wrsxei") IS TRUE);
 
 ALTER TABLE "qti"."choice" ADD CONSTRAINT "__choice_check_choice_counted_document_choices_5pm6evoj5u" CHECK (("__index_choices_ae4nhwqbex" >= 0::bigint AND "__index_choices_ae4nhwqbex" < "__copy_choices_uz5z265isz") IS TRUE);
+
+ALTER TABLE "qti"."choice_interaction" ADD CONSTRAINT "__choice_interaction_check_choice_interaction_icnfyu2frf" CHECK (("__index_choices_frgthpcwrc" >= 0::bigint AND "__index_choices_frgthpcwrc" < "__copy_choices_wtrcebhimo") IS TRUE);
 
 ALTER TABLE "qti"."declaration" ADD CONSTRAINT "__declaration_check_declaration_counted_choice_glrbazvesj" CHECK (("__index_declarations_dueviynmtk" >= 0::bigint AND "__index_declarations_dueviynmtk" < "__copy_declarations_sikndyzo7y") IS TRUE);
 
@@ -5296,6 +5316,10 @@ CREATE TRIGGER "__isolation"
   FOR EACH STATEMENT EXECUTE FUNCTION "qti"."__require_serializable"();
 
 CREATE TRIGGER "__isolation"
+  BEFORE INSERT OR UPDATE OR DELETE OR TRUNCATE ON "qti"."choice_interaction"
+  FOR EACH STATEMENT EXECUTE FUNCTION "qti"."__require_serializable"();
+
+CREATE TRIGGER "__isolation"
   BEFORE INSERT OR UPDATE OR DELETE OR TRUNCATE ON "qti"."choice_variable_name"
   FOR EACH STATEMENT EXECUTE FUNCTION "qti"."__require_serializable"();
 
@@ -5421,6 +5445,10 @@ CREATE TRIGGER "__isolation"
 
 CREATE TRIGGER "__isolation"
   BEFORE INSERT OR UPDATE OR DELETE OR TRUNCATE ON "qti"."instance_name"
+  FOR EACH STATEMENT EXECUTE FUNCTION "qti"."__require_serializable"();
+
+CREATE TRIGGER "__isolation"
+  BEFORE INSERT OR UPDATE OR DELETE OR TRUNCATE ON "qti"."interaction"
   FOR EACH STATEMENT EXECUTE FUNCTION "qti"."__require_serializable"();
 
 CREATE TRIGGER "__isolation"
@@ -6047,11 +6075,9 @@ ALTER TABLE "qti"."attribute_entity" ADD CONSTRAINT "__attribute_entity_fk_node_
 
 ALTER TABLE "qti"."attribute_entity" ADD CONSTRAINT "__attribute_entity_fk_node_attribute_pred_at_gqyykp37bu" FOREIGN KEY ("node", "attribute", "__pred_at_xktcobhsti") REFERENCES "qti"."attribute_entity" ("node", "attribute", "at") MATCH SIMPLE;
 
+ALTER TABLE "qti"."binding" ADD CONSTRAINT "__binding_fk_node_gp5kkqrgir" FOREIGN KEY ("node") REFERENCES "qti"."interaction" ("node") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+
 ALTER TABLE "qti"."binding" ADD CONSTRAINT "__binding_fk_node_document_kind_start_nearest_f3nwllxe5i" FOREIGN KEY ("node", "document", "kind", "start", "nearest", "version", "parent") REFERENCES "qti"."node" ("id", "document", "kind", "start", "nearest", "version", "parent") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
-
-ALTER TABLE "qti"."binding" ADD CONSTRAINT "__binding_fk_node_pred_choices_wzjxqa6ric" FOREIGN KEY ("node", "__pred_choices_w4bygwsb7b") REFERENCES "qti"."choice" ("interaction", "__index_choices_my5axngdyd") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
-
-ALTER TABLE "qti"."binding" ADD CONSTRAINT "__binding_fk_node_xxhavdhtdz" FOREIGN KEY ("__node_gfaeb4prff") REFERENCES "qti"."count_bound" ("node") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."binding_declaration" ADD CONSTRAINT "__binding_declaration_fk_declaration_document_72vmrzu6ky" FOREIGN KEY ("declaration", "document", "identifier", "declaration_kind", "base_type", "cardinality") REFERENCES "qti"."declaration" ("node", "document", "identifier", "declaration_kind", "base_type", "cardinality") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
@@ -6123,13 +6149,17 @@ ALTER TABLE "qti"."choice" ADD CONSTRAINT "__choice_fk_document_copy_choices_jzo
 
 ALTER TABLE "qti"."choice" ADD CONSTRAINT "__choice_fk_document_predecessor_choices_eudbfnev4d" FOREIGN KEY ("document", "__predecessor_choices_ohalg3vnxq") REFERENCES "qti"."choice" ("document", "__index_choices_ae4nhwqbex") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."choice" ADD CONSTRAINT "__choice_fk_interaction_copy_choices_v6szj4p3yf" FOREIGN KEY ("interaction", "__copy_choices_om5wepy4n2") REFERENCES "qti"."binding" ("node", "choices") MATCH SIMPLE ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE "qti"."choice" ADD CONSTRAINT "__choice_fk_node_77is5czwck" FOREIGN KEY ("node") REFERENCES "qti"."choice_interaction" ("node") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."choice" ADD CONSTRAINT "__choice_fk_interaction_predecessor_choices_qxmi53aotg" FOREIGN KEY ("interaction", "__predecessor_choices_44evxe3avx") REFERENCES "qti"."choice" ("interaction", "__index_choices_my5axngdyd") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
-
-ALTER TABLE "qti"."choice" ADD CONSTRAINT "__choice_fk_node_document_kind_start_interaction_vcwohrvgxm" FOREIGN KEY ("node", "document", "kind", "start", "interaction", "version", "parent") REFERENCES "qti"."node" ("id", "document", "kind", "start", "nearest", "version", "parent") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE "qti"."choice" ADD CONSTRAINT "__choice_fk_node_document_kind_start_nearest_version_6qth7ubqa4" FOREIGN KEY ("node", "document", "kind", "start", "nearest", "version", "parent") REFERENCES "qti"."node" ("id", "document", "kind", "start", "nearest", "version", "parent") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."choice" ADD CONSTRAINT "__choice_fk_node_z5qni6n3ot" FOREIGN KEY ("__node_gfaeb4prff") REFERENCES "qti"."count_bound" ("node") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+
+ALTER TABLE "qti"."choice_interaction" ADD CONSTRAINT "__choice_interaction_fk_interaction_copy_choices_pdlyqjxzpe" FOREIGN KEY ("interaction", "__copy_choices_wtrcebhimo") REFERENCES "qti"."interaction" ("node", "choices") MATCH SIMPLE ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED;
+
+ALTER TABLE "qti"."choice_interaction" ADD CONSTRAINT "__choice_interaction_fk_interaction_predecessor_4a7evmykyl" FOREIGN KEY ("interaction", "__predecessor_choices_w5y7pq2tln") REFERENCES "qti"."choice_interaction" ("interaction", "__index_choices_frgthpcwrc") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+
+ALTER TABLE "qti"."choice_interaction" ADD CONSTRAINT "__choice_interaction_fk_node_interaction_qoe46xodxo" FOREIGN KEY ("node", "interaction") REFERENCES "qti"."choice" ("node", "nearest") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."choice_variable_name" ADD CONSTRAINT "__choice_variable_name_fk_document_identifier_pred_nlqtuk3lpz" FOREIGN KEY ("document", "identifier", "__pred_choices_w4bygwsb7b") REFERENCES "qti"."choice" ("document", "identifier", "__index_choices_tcch7plli5") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
@@ -6149,7 +6179,7 @@ ALTER TABLE "qti"."context_ref" ADD CONSTRAINT "__context_ref_fk_declaration_doc
 
 ALTER TABLE "qti"."count_bound" ADD CONSTRAINT "__count_bound_fk_node_document_kind_start_nearest_krmsvewjgn" FOREIGN KEY ("node", "document", "kind", "start", "nearest", "version", "parent") REFERENCES "qti"."node" ("id", "document", "kind", "start", "nearest", "version", "parent") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."count_bound" ADD CONSTRAINT "__count_bound_fk_node_choices_g6dqxluaep" FOREIGN KEY ("__node_oxfetlrikr", "__choices_figr66khyk") REFERENCES "qti"."binding" ("node", "choices") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE "qti"."count_bound" ADD CONSTRAINT "__count_bound_fk_node_choices_i3tl75rqxn" FOREIGN KEY ("__node_oxfetlrikr", "__choices_figr66khyk") REFERENCES "qti"."interaction" ("node", "choices") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."count_bound" ADD CONSTRAINT "__count_bound_fk_node_max_name_most_54ely2yjcp" FOREIGN KEY ("__node_uyvwkuoluo", "__max_name_perr4lpmuf", "__most_gdqaao6iy4") REFERENCES "qti"."interaction_attribute" ("node", "name", "value") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
@@ -6321,7 +6351,7 @@ ALTER TABLE "qti"."hotspot" ADD CONSTRAINT "__hotspot_fk_node_elements_element_c
 
 ALTER TABLE "qti"."hotspot" ADD CONSTRAINT "__hotspot_fk_parent_parent_elements_parent_element_yaqdrqfuf4" FOREIGN KEY ("parent", "parent_elements", "parent_element_children") REFERENCES "qti"."node" ("id", "elements", "element_children") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."hotspot" ADD CONSTRAINT "__hotspot_fk_parent_parent_kind_cbcgehnkzo" FOREIGN KEY ("parent", "parent_kind") REFERENCES "qti"."binding" ("node", "kind") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE "qti"."hotspot" ADD CONSTRAINT "__hotspot_fk_parent_parent_kind_meal7oig5k" FOREIGN KEY ("parent", "parent_kind") REFERENCES "qti"."interaction" ("node", "kind") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."hottext" ADD CONSTRAINT "__hottext_fk_document_identifier_copy_hottexts_5grusocysj" FOREIGN KEY ("document", "identifier", "__copy_hottexts_styrdnfpdm") REFERENCES "qti"."choice_variable_name" ("document", "identifier", "hottexts") MATCH SIMPLE ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED;
 
@@ -6333,7 +6363,7 @@ ALTER TABLE "qti"."hottext" ADD CONSTRAINT "__hottext_fk_document_predecessor_ho
 
 ALTER TABLE "qti"."hottext" ADD CONSTRAINT "__hottext_fk_node_document_kind_start_nearest_zk5vkomkfv" FOREIGN KEY ("node", "document", "kind", "start", "nearest", "version", "parent") REFERENCES "qti"."node" ("id", "document", "kind", "start", "nearest", "version", "parent") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."hottext" ADD CONSTRAINT "__hottext_fk_nearest_nearest_kind_2nvjq2f2o7" FOREIGN KEY ("__nearest_hwydxjcozk", "__nearest_kind_lghm4fk3hv") REFERENCES "qti"."binding" ("node", "kind") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE "qti"."hottext" ADD CONSTRAINT "__hottext_fk_nearest_nearest_kind_qoo52otxmc" FOREIGN KEY ("__nearest_hwydxjcozk", "__nearest_kind_lghm4fk3hv") REFERENCES "qti"."interaction" ("node", "kind") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."id_binding" ADD CONSTRAINT "__id_binding_fk_document_id_owner_pred_carriers_dvuoj3lumr" FOREIGN KEY ("document", "id", "owner", "__pred_carriers_5eaxdkd6g3") REFERENCES "qti"."document_id" ("document", "id", "owner", "__index_carriers_nqygyrljmy") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
@@ -6410,6 +6440,12 @@ ALTER TABLE "qti"."instance_name" ADD CONSTRAINT "__instance_name_fk_instance_co
 ALTER TABLE "qti"."instance_name" ADD CONSTRAINT "__instance_name_fk_instance_predecessor_names_rslplvahty" FOREIGN KEY ("instance", "__predecessor_names_i7opkdat3y") REFERENCES "qti"."instance_name" ("instance", "__index_names_rwgwbcw7nk") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."instance_name" ADD CONSTRAINT "__instance_name_fk_node_end_kind_named_loose_chain_b4phsytmxe" FOREIGN KEY ("node", "end", "kind", "named_loose_chain", "named_mixes", "named_part", "named_replaced", "start") REFERENCES "qti"."named" ("node", "end", "kind", "loose_chain", "mixes", "part", "replaced", "start") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+
+ALTER TABLE "qti"."interaction" ADD CONSTRAINT "__interaction_fk_node_document_kind_start_nearest_3crgcilwt6" FOREIGN KEY ("node", "document", "kind", "start", "nearest", "version", "parent") REFERENCES "qti"."node" ("id", "document", "kind", "start", "nearest", "version", "parent") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+
+ALTER TABLE "qti"."interaction" ADD CONSTRAINT "__interaction_fk_node_pred_choices_6awe7kcoqb" FOREIGN KEY ("node", "__pred_choices_w4bygwsb7b") REFERENCES "qti"."choice_interaction" ("interaction", "__index_choices_frgthpcwrc") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+
+ALTER TABLE "qti"."interaction" ADD CONSTRAINT "__interaction_fk_node_fcoprpi7t6" FOREIGN KEY ("__node_gfaeb4prff") REFERENCES "qti"."count_bound" ("node") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."interaction_attribute" ADD CONSTRAINT "__interaction_attribute_fk_document_root_kind_s4xn62ma6h" FOREIGN KEY ("document", "root_kind") REFERENCES "qti"."document" ("node", "root_kind") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 

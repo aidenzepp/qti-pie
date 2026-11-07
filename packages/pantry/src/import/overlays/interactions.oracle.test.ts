@@ -64,12 +64,14 @@ const specKinds = [
 
 /**
  * One generated element: its kind, whether its name attribute is written with outer whitespace,
- * and its children.
+ * whether it leaves its name attribute out (an interaction's `response-identifier`, B6), and its
+ * children.
  */
 interface Spec {
   readonly children: readonly Spec[];
   readonly kind: (typeof specKinds)[number];
   readonly padded: boolean;
+  readonly unnamed: boolean;
 }
 
 /**
@@ -89,6 +91,7 @@ const specGen =
     children: depth >= maxDepth ? [] : source.draw(array(specGen(depth + 1), { max: 2, min: 0 })),
     kind: source.draw(element(specKinds)),
     padded: source.draw(element([false, true])),
+    unnamed: source.draw(element([false, false, false, true])),
   });
 
 /**
@@ -154,7 +157,7 @@ const attributesOf = (
 ): readonly (readonly [ClosedName<Composed>, string])[] => {
   const name = spec.padded ? ` N${String(index)}\n` : `N${String(index)}`;
   if (isInteraction(spec.kind)) {
-    return [["response-identifier", name]];
+    return spec.unnamed ? [] : [["response-identifier", name]];
   }
 
   return spec.kind === "span" ? [] : [["identifier", name]];
@@ -265,6 +268,7 @@ const walk = (doc: XdmDocument<Composed>): readonly Walked[] => {
 type ChoiceSituation =
   | "choice deep in its interaction"
   | "choice outside any interaction"
+  | "choice of an interaction with no response identifier"
   | "interaction in an interaction"
   | "hottext of a hottext interaction"
   | "hottext of another"
@@ -293,6 +297,14 @@ const situationsOf = (walked: readonly Walked[], body: readonly Spec[]) => {
       walked.some((node) => isChoice(node.kind) && node.nearestKind === "document"),
     ],
     [
+      "choice of an interaction with no response identifier",
+      walked.some(
+        (node) =>
+          isChoice(node.kind) &&
+          walked.some(({ id, name }) => id === node.nearest && name === undefined),
+      ),
+    ],
+    [
       "interaction in an interaction",
       walked.some((node) => isInteraction(node.kind) && isInteraction(node.nearestKind)),
     ],
@@ -312,7 +324,7 @@ const situationsOf = (walked: readonly Walked[], body: readonly Spec[]) => {
 
 describe("import/overlays/interactions.ts, choices", () => {
   it.effect(
-    "writes a Choice row for every choice naming its nearest interaction, and counts each interaction's choices as the walk does",
+    "writes a Choice row for every choice, its ChoiceInteraction only where an interaction encloses it, an Interaction for every interaction, and counts each interaction's choices as the walk does",
     (ctx) =>
       // Oracle: a second implementation, a direct walk of the XDM tree that numbers its nodes in
       // document order and carries each element's nearest interaction down from its ancestors (N8),
@@ -329,6 +341,7 @@ describe("import/overlays/interactions.ts, choices", () => {
               [
                 "choice deep in its interaction",
                 "choice outside any interaction",
+                "choice of an interaction with no response identifier",
                 "interaction in an interaction",
                 "hottext of a hottext interaction",
                 "hottext of another",
@@ -359,9 +372,23 @@ describe("import/overlays/interactions.ts, choices", () => {
               );
               for (const choice of choices) {
                 const row = rows.Choice.get(choice.id);
-                assert.strictEqual(row?.interaction, choice.nearest, choice.id);
+                assert.strictEqual(row?.nearest, choice.nearest, choice.id);
                 assert.strictEqual(row?.identifier, choice.name, choice.id);
                 assert.strictEqual(row?.kind, choice.kind, choice.id);
+              }
+
+              // A choice's interaction is a row only where an interaction encloses it: no stand-in.
+              const owned = choices.filter(({ nearestKind }) => isInteraction(nearestKind));
+              assert.sameMembers(
+                [...rows.ChoiceInteraction.keys()],
+                owned.map(({ id }) => id),
+              );
+              for (const choice of owned) {
+                assert.strictEqual(
+                  rows.ChoiceInteraction.get(choice.id)?.interaction,
+                  choice.nearest,
+                  choice.id,
+                );
               }
 
               const hottexts = walked.filter(({ kind }) => kind === hottextKind);
@@ -375,13 +402,19 @@ describe("import/overlays/interactions.ts, choices", () => {
                 assert.strictEqual(row?.nearestKind, hottext.nearestKind, hottext.id);
               }
 
+              // Every interaction owns its choices, its response identifier written or not (B6).
               const interactions = walked.filter(({ kind }) => isInteraction(kind));
               assert.sameMembers(
-                [...rows.Binding.keys()],
+                [...rows.Interaction.keys()],
                 interactions.map(({ id }) => id),
+              );
+              assert.sameMembers(
+                [...rows.Binding.keys()],
+                interactions.filter(({ name }) => name !== undefined).map(({ id }) => id),
               );
               for (const interaction of interactions) {
                 assert.strictEqual(rows.Binding.get(interaction.id)?.identifier, interaction.name);
+                assert.strictEqual(rows.Interaction.get(interaction.id)?.kind, interaction.kind);
                 assert.strictEqual(
                   rows.CountBound.get(interaction.id)?.choices,
                   BigInt(choices.filter(({ nearest }) => nearest === interaction.id).length),

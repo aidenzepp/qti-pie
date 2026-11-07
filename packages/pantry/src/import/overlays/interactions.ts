@@ -56,12 +56,14 @@ import type {
   BindingName,
   BoundVariable,
   Choice,
+  ChoiceInteraction,
   ChoiceVariableName,
   ContextRef,
   CountBound,
   FeedbackRef,
   Hotspot,
   Hottext,
+  Interaction,
   InteractionAttribute,
   ItemMode,
   PlacedBinding,
@@ -114,12 +116,14 @@ export interface InteractionRows {
   readonly BindingName: ReadonlyMap<string, Addition<typeof BindingName>>;
   readonly BoundVariable: ReadonlyMap<string, Addition<typeof BoundVariable>>;
   readonly Choice: ReadonlyMap<string, Addition<typeof Choice>>;
+  readonly ChoiceInteraction: ReadonlyMap<string, Addition<typeof ChoiceInteraction>>;
   readonly ChoiceVariableName: ReadonlyMap<string, Addition<typeof ChoiceVariableName>>;
   readonly ContextRef: ReadonlyMap<string, Addition<typeof ContextRef>>;
   readonly CountBound: ReadonlyMap<string, Addition<typeof CountBound>>;
   readonly FeedbackRef: ReadonlyMap<string, Addition<typeof FeedbackRef>>;
   readonly Hotspot: ReadonlyMap<string, Addition<typeof Hotspot>>;
   readonly Hottext: ReadonlyMap<string, Addition<typeof Hottext>>;
+  readonly Interaction: ReadonlyMap<string, Addition<typeof Interaction>>;
   readonly InteractionAttribute: ReadonlyMap<string, Addition<typeof InteractionAttribute>>;
   readonly ItemMode: ReadonlyMap<string, Addition<typeof ItemMode>>;
   readonly PrintedVariableRef: ReadonlyMap<string, Addition<typeof PrintedVariableRef>>;
@@ -596,7 +600,23 @@ const bindingsOf = (context: Context) => {
 };
 
 /**
- * Build each choice's row, its interaction its nearest.
+ * Build each interaction's row, every interaction element's, whether or not it writes a
+ * `response-identifier`: the owner of its choices.
+ *
+ * @param context - The document.
+ * @returns The rows, keyed by node.
+ */
+const interactionsOf = (context: Context) =>
+  new Map(
+    context.rows.nodes
+      .filter(({ kind }) => interactions.has(kind))
+      .map(
+        (node) => [node.id, tupleOf(context, node) satisfies Addition<typeof Interaction>] as const,
+      ),
+  );
+
+/**
+ * Build each choice's row.
  *
  * @param context - The document.
  * @returns The rows, keyed by node.
@@ -606,14 +626,38 @@ const choicesOf = (context: Context) =>
     context.rows.nodes
       .filter(({ kind }) => choiceKinds.some((choice) => choice === kind))
       .flatMap((node) =>
-        Option.toArray(valueOf(context, node.id, "identifier")).map((identifier) => {
-          const { nearest, ...tuple } = tupleOf(context, node);
+        Option.toArray(valueOf(context, node.id, "identifier")).map(
+          (identifier) =>
+            [
+              node.id,
+              { ...tupleOf(context, node), identifier } satisfies Addition<typeof Choice>,
+            ] as const,
+        ),
+      ),
+  );
 
-          return [
-            node.id,
-            { ...tuple, identifier, interaction: nearest } satisfies Addition<typeof Choice>,
-          ] as const;
-        }),
+/**
+ * Build each choice's interaction: its nearest, where that is an interaction, in its own document
+ * or the one its fragment is placed in. A choice no interaction encloses has none, and "N8 nearest"
+ * refuses it; a gap among those breaks N6 first.
+ *
+ * @param context - The document.
+ * @param choices - Its choices' rows.
+ * @returns The rows, keyed by the choice's node.
+ */
+const choiceInteractionsOf = (
+  context: Context,
+  choices: ReadonlyMap<string, Addition<typeof Choice>>,
+) =>
+  new Map(
+    [...choices.values()]
+      .filter(({ nearest }) => interactions.has(context.facts.kindOf(nearest)))
+      .map(
+        ({ nearest, node }) =>
+          [
+            node,
+            { interaction: nearest, node } satisfies Addition<typeof ChoiceInteraction>,
+          ] as const,
       ),
   );
 
@@ -732,17 +776,33 @@ const countOf = (context: Context, node: NodeRow<Composed>, name: CountName) => 
 };
 
 /**
- * Build each bound's row, its choices the count of its interaction's choices.
+ * Count the choices each interaction owns: its {@link ChoiceInteraction} rows.
  *
- * @param context - The document.
- * @param choices - The document's choice rows.
- * @returns The rows, keyed by node.
+ * @param owned - Choices' interactions, of one document or of the whole package.
+ * @returns Each interaction's count, by its node.
  */
-const boundsOf = (context: Context, choices: ReadonlyMap<string, Addition<typeof Choice>>) => {
+const choiceCountsOf = (owned: Iterable<Addition<typeof ChoiceInteraction>>) => {
   const counts = new Map<string, bigint>();
-  for (const { interaction } of choices.values()) {
+  for (const { interaction } of owned) {
     counts.set(interaction, (counts.get(interaction) ?? 0n) + 1n);
   }
+
+  return counts;
+};
+
+/**
+ * Build each bound's row, an interaction's choices the count of the choices it owns in its own
+ * document: {@link withPackageChoices} adds those a fragment placed in it holds.
+ *
+ * @param context - The document.
+ * @param owned - The document's choices' interactions.
+ * @returns The rows, keyed by node.
+ */
+const boundsOf = (
+  context: Context,
+  owned: ReadonlyMap<string, Addition<typeof ChoiceInteraction>>,
+) => {
+  const counts = choiceCountsOf(owned.values());
 
   return new Map(
     context.rows.nodes.flatMap((node) =>
@@ -989,6 +1049,7 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: InteractionIds): Interac
   const read = interactionAttributesOf(context);
   const { bindings, bound, declarations, names } = bindingsOf(context);
   const choices = choicesOf(context);
+  const owned = choiceInteractionsOf(context, choices);
   const hottexts = hottextsOf(context);
   const aria = ariaOf(context);
 
@@ -1001,12 +1062,14 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: InteractionIds): Interac
     BindingName: names,
     BoundVariable: bound,
     Choice: choices,
+    ChoiceInteraction: owned,
     ChoiceVariableName: choiceNamesOf(context, choices, hottexts),
     ContextRef: referencesOf(context, read, references.context, always),
-    CountBound: boundsOf(context, choices),
+    CountBound: boundsOf(context, owned),
     FeedbackRef: referencesOf(context, read, references.feedback, always),
     Hotspot: hotspotsOf(context),
     Hottext: hottexts,
+    Interaction: interactionsOf(context),
     InteractionAttribute: read,
     ItemMode: new Map(
       context.rootKind === itemRoot
@@ -1028,6 +1091,38 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: InteractionIds): Interac
     VarRef: referencesOf(context, read, references.variable, namesVariable),
   };
 };
+
+/**
+ * Count the choices each interaction owns across a package: every document's
+ * {@link ChoiceInteraction} rows, a fragment's placed in an interaction among them (spec reading
+ * 117: a fragment's choices are its item's, as its merged document holds them).
+ *
+ * @param parts - Every document's interaction rows.
+ * @returns Each interaction's count, by its node, which `Interaction.choices` draws.
+ */
+export const packageChoicesOf = (parts: Iterable<InteractionRows>): ReadonlyMap<string, bigint> =>
+  choiceCountsOf([...parts].flatMap(({ ChoiceInteraction: owned }) => [...owned.values()]));
+
+/**
+ * Give each interaction's bound in one document's rows its package count of choices, which
+ * `CountBound.choices` copies from `Interaction.choices`.
+ *
+ * @param rows - A document's interaction rows.
+ * @param counts - The package's counts ({@link packageChoicesOf}).
+ * @returns The same rows, each interaction's bound recounted.
+ */
+export const withPackageChoices = (
+  rows: InteractionRows,
+  counts: ReadonlyMap<string, bigint>,
+): InteractionRows => ({
+  ...rows,
+  CountBound: new Map(
+    [...rows.CountBound].map(([key, bound]) => [
+      key,
+      interactions.has(bound.kind) ? { ...bound, choices: counts.get(bound.node) ?? 0n } : bound,
+    ]),
+  ),
+});
 
 /**
  * A package's section and fragment placements and their resolved references, one keyed set per
