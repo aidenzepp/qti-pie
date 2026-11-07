@@ -561,7 +561,7 @@ export const lawTable = {
   "MathML cn form": {
     rule: "attribute-lexical",
     source:
-      "spec readings 2 and R6-hexdouble: https://www.w3.org/TR/MathML3/chapter4.html#contm.cn (MathML 3 §4.2.1: the content of a cn has the form its type implies, integer, real, double, hexdouble, e-notation, rational, complex-cartesian and complex-polar, split at m:sep; every other type is text), digits read in its base from 2 to 36; a part holding an element or an entity reference is not judged, and a base beyond the alphabet leaves the digits application specific (expression.ts cnForms and cnPatternOf)",
+      "spec readings 2 and R6-hexdouble: https://www.w3.org/TR/MathML3/chapter4.html#contm.cn (MathML 3 §4.2.1: the content of a cn has the form its type implies, integer, real, double, hexdouble, e-notation, rational, complex-cartesian and complex-polar, split at m:sep; every other type is text), digits read in its base from 2 to 36; a part holding an element or an entity reference has its digits unjudged, and counts among the parts, and a base beyond the alphabet leaves the digits application specific (expression.ts cnForms and cnPatternOf)",
   },
   "MathML foreign element": {
     rule: "unmodeled-vocabulary",

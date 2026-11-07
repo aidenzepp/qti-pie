@@ -548,10 +548,12 @@ const testKeyNames: ReadonlyMap<string, LawName> = new Map<string, LawName>([
 ]);
 
 /**
- * The two containments that judge a `cn`'s part count: its `(type, parts)` in {@link CnParts}, and
- * each part's `(type, part, form)` in {@link CnForm}. A `cn` of the wrong part count is a `cn` of
- * the wrong form, "MathML cn form" as the oracle names it, so {@link writtenLaws} names them and the
- * MathML group leaves them out.
+ * The containments that judge a `cn`'s part count: its `(type, parts)` in {@link CnParts}, and
+ * each part's `(type, part, form)` in {@link CnForm}, over the judged `cn`s ({@link MathCn},
+ * {@link CnPartText}) and again over every `cn` whose `type` lists a form ({@link CnCount},
+ * {@link CnSlot}), whatever its base and whatever its parts hold. A `cn` of the wrong part count is
+ * a `cn` of the wrong form, "MathML cn form" as the oracle names it, so {@link writtenLaws} names
+ * them and the MathML group leaves them out.
  */
 const cnCountLaws: readonly Law[] = [
   containedIn(sideOf("MathCn", "type", "parts"), sideOf("CnParts", "type", "parts")),
@@ -559,6 +561,8 @@ const cnCountLaws: readonly Law[] = [
     sideOf("CnPartText", "type", "part", "form"),
     sideOf("CnForm", "type", "part", "form"),
   ),
+  containedIn(sideOf("CnCount", "type", "parts"), sideOf("CnParts", "type", "parts")),
+  containedIn(sideOf("CnSlot", "type", "part", "form"), sideOf("CnForm", "type", "part", "form")),
 ];
 
 const cnCountIdentities: ReadonlySet<string> = new Set(cnCountLaws.map(lawIdentity));
@@ -987,14 +991,17 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
     ),
     "MathML head qualifier",
   ],
-  // A cn's part count and a part's place are the oracle's "MathML cn form" (a wrong part count is
-  // a cn of the wrong form), so the group leaves them out as it leaves the head qualifier.
+  // A cn's part count and a part's place, over the judged cns and over every typed cn, are the
+  // oracle's "MathML cn form" (a wrong part count is a cn of the wrong form), so the group leaves
+  // them out as it leaves the head qualifier.
   ...cnCountLaws.map((law) => [law, "MathML cn form"] as const),
   [primaryKeyOf("MathApply", "node"), "E1 derived"],
   [primaryKeyOf("MathArgument", "node"), "E1 derived"],
   [primaryKeyOf("MathQualifier", "node"), "E1 derived"],
   [primaryKeyOf("CnAttribute", "node", "name"), "E1 derived"],
   [primaryKeyOf("CnPartText", "node", "part"), "E1 derived"],
+  [primaryKeyOf("CnCount", "node"), "E1 derived"],
+  [primaryKeyOf("CnSlot", "node", "part"), "E1 derived"],
   [primaryKeyOf("MathCn", "node"), "E1 derived"],
   [primaryKeyOf("CellLeaf", "cell", "at"), "E1 derived"],
   [primaryKeyOf("MathAction", "node"), "E1 derived"],
@@ -1149,8 +1156,8 @@ export const lawsOfStatement = (statement: Statement): readonly Law[] =>
  * - **MathML** (`mathml.ts`, reading 2): each statement of its four families is a restatement, "E1
  *   derived", and a row of {@link writtenLaws} names a law of a group otherwise: the apply family's
  *   head qualifier containment ("MathML head qualifier"; its check is "MathML arity") and a cn's
- *   two part count containments ("MathML cn form"), which the group leaves out, so that every law a
- *   group holds keeps the group's name.
+ *   four part count containments, over the judged cns and over every typed cn ("MathML cn form"),
+ *   which the group leaves out, so that every law a group holds keeps the group's name.
  */
 export const lawGroups: readonly (readonly [readonly Statement[], LawName])[] = [
   [testOverlayLaws, "Test overlay"],

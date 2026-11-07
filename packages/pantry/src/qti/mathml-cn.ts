@@ -18,6 +18,11 @@
  *   `type` and `base` of its `cn`, the part's collapsed `text` (MathML 3 §2.1.7) and its `form`. A
  *   part that holds an element or an entity reference is not judged, so a `cn` with one has no
  *   rows.
+ * - **{@link CnCount}**, one row per `m:cn` whose `type` {@link CnType} lists, whatever its `base`
+ *   and whatever its parts hold, keyed by its node: the `type` with its lexical form, and `parts`,
+ *   the count of its {@link CnSlot} rows.
+ * - **{@link CnSlot}**, one row per part of such a `cn`, judged or not, keyed by `(node, part)`: the
+ *   `type` of its `cn` and the `form` of its place. The slots carry the count, never the digits.
  *
  * `MathML_cn_form` is the law's check over {@link CnPartText}: the text lies in the lexical space
  * of its form in its base. Every other statement is a restatement of the tree, "E1 derived"; the
@@ -28,7 +33,18 @@
  * whose `part` takes only the slots 0 to its count less one, so the rows of a `cn` are exactly its
  * type's slots, each once (the rows' key), and one part of a `rational` is refused. A part beyond
  * the type's places is written at the place no type lists and refused, so three parts of a
- * `rational` are refused as one is.
+ * `rational` are refused as one is. The same count is made again over {@link CnCount} and
+ * {@link CnSlot}, for the `cn`s the digits cannot judge: one whose `base` {@link CnBase} does not
+ * list, and one with a part that holds an element or an entity reference. The oracle counts the
+ * parts of every `cn` whose `type` lists a form, so a `cn` of `base="40"` with three parts of a
+ * `rational` is refused, as it is with a base in range.
+ *
+ * {@link MathCn} is not widened to every base, because {@link CnPartText}`.base` is a
+ * {@link CnBase} handle that {@link CnPattern}`.at("pattern", form, base)` reads, and grizzle's
+ * `C.at` reads NULL at a key the closed relation holds no row for, which its reader refuses (the
+ * engine's `scalar/compute/lower.ts`, `closedAt`). A handle for "beyond 2 to 36" would need a
+ * {@link CnPattern} row for `integer` and `real` at that base, and any pattern in that row would be
+ * one the specification does not state.
  *
  * @see {@link https://www.w3.org/TR/MathML3/chapter4.html#contm.cn | MathML 3 §4.2.1, Numbers}
  */
@@ -164,6 +180,29 @@ export const CnPartText = relation(
 );
 
 /**
+ * One `m:cn` whose `type` {@link CnType} lists (`real` where it writes none), keyed by its node,
+ * whatever its `base` and whatever its parts hold: the `type` and its lexical form as written
+ * (empty where unwritten, as on {@link MathCn}), and `parts`, the count of its {@link CnSlot} rows.
+ * It carries the part count of a `cn` that {@link MathCn} does not judge.
+ */
+export const CnCount = relation(
+  "CnCount",
+  { node: uuid, parts: drawn(natural), type: closedId(CnType), typeLexical: keyText },
+  ["node"],
+);
+
+/**
+ * One part of an `m:cn` that has a {@link CnCount} row, keyed by its node and its place among the
+ * parts `m:sep` separates, judged or not: the `type` of its `cn` and the `form` of its place. A
+ * part beyond its type's places sits at the place no type lists, so it is refused.
+ */
+export const CnSlot = relation(
+  "CnSlot",
+  { form: closedId(CnPartForm), node: uuid, part: closedId(CnPart), type: closedId(CnType) },
+  ["node", "part"],
+);
+
+/**
  * One `type` or `base` attribute of an `m:cn`, keyed by its node and its name: its lexical form as
  * written, whether or not the `cn` is judged, copied so that a law can compare it in a key. A value
  * over `keyText`'s bound is refused under "Key text bound", a stated limit, as the
@@ -181,7 +220,7 @@ export const CnAttribute = relation(
  * The relations the cn laws declare, each under its own name, as `#pantry/qti/schema.ts` composes
  * them.
  */
-export const cnRelations = { CnAttribute, CnPartText, MathCn };
+export const cnRelations = { CnAttribute, CnCount, CnPartText, CnSlot, MathCn };
 
 /**
  * The `m:cn` nodes, each of which may hold a {@link MathCn} row.
@@ -201,6 +240,11 @@ const cnAttributes = select(Attribute, (a) =>
 const typedCns = select(MathCn, (c) => c.ne(c.typeLexical, ""));
 
 /**
+ * The {@link CnCount} rows of a `cn` that writes a `type`.
+ */
+const typedCounts = select(CnCount, (c) => c.ne(c.typeLexical, ""));
+
+/**
  * The {@link MathCn} rows of a `cn` that writes a `base`.
  */
 const basedCns = select(MathCn, (c) => c.ne(c.baseLexical, ""));
@@ -209,6 +253,11 @@ const basedCns = select(MathCn, (c) => c.ne(c.baseLexical, ""));
  * The family of a `cn`'s parts, counted by `MathCn.parts`.
  */
 export const partFamily = counted(on(CnPartText, "node"), fin(MathCn, "parts"));
+
+/**
+ * The family of the parts of a `cn` the digits cannot judge too, counted by `CnCount.parts`.
+ */
+export const slotFamily = counted(on(CnSlot, "node"), fin(CnCount, "parts"));
 
 /**
  * The statements over {@link CnAttribute}, {@link MathCn} and {@link CnPartText}, each `check`
@@ -223,6 +272,11 @@ export const partFamily = counted(on(CnPartText, "node"), fin(MathCn, "parts"));
  * - **the parts:** the family, counted by `MathCn.parts`; each row's `type` and `base` those of its
  *   `cn`, and its `(type, part, form)` a row of {@link CnForm}, so a place beyond the type's parts
  *   is refused;
+ * - **the count:** each {@link CnCount} row's node an `m:cn`, its lexical `type` that of the node's
+ *   {@link CnAttribute} row and the handle the one it spells (`E1_derived`); the family of its
+ *   {@link CnSlot} rows, counted by `CnCount.parts`, its `(type, parts)` in {@link CnParts} and
+ *   each slot's `(type, part, form)` in {@link CnForm}; each {@link MathCn} row's `(node, type)` a
+ *   {@link CnCount} row's, so the two count one `cn` alike;
  * - **`MathML_cn_form`:** each part's text matches the pattern of its form in its base.
  */
 export const cnLaws = [
@@ -270,6 +324,29 @@ export const cnLaws = [
   partFamily,
   contained(on(CnPartText, "node", "type", "base"), on(MathCn, "node", "type", "base")),
   contained(on(CnPartText, "type", "part", "form"), on(CnForm, "type", "part", "form")),
+
+  contained(on(CnCount, "node"), on(cnNodes, "id")),
+  contained(
+    on(typedCounts, "node", "typeLexical"),
+    on(
+      select(CnAttribute, (a) => a.eq(a.name, "type")),
+      "node",
+      "lexical",
+    ),
+  ),
+  check("E1_derived", CnCount, (c) =>
+    c.or(
+      c.and(c.eq(c.typeLexical, ""), c.eq(c.type, "real")),
+      ...typeSpellings.map(([type, spelling]) =>
+        c.and(c.eq(c.type, type), Compute.matches(c.typeLexical, spelling)),
+      ),
+    ),
+  ),
+  slotFamily,
+  contained(on(CnCount, "type", "parts"), on(CnParts, "type", "parts")),
+  contained(on(CnSlot, "node", "type"), on(CnCount, "node", "type")),
+  contained(on(CnSlot, "type", "part", "form"), on(CnForm, "type", "part", "form")),
+  contained(on(MathCn, "node", "type"), on(CnCount, "node", "type")),
   check("MathML_cn_form", CnPartText, (p) =>
     Compute.matches(p.text, CnPattern.at("pattern", p.form, p.base)),
   ),

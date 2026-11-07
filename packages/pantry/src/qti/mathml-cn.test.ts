@@ -24,6 +24,7 @@ import {
   cnLaws,
   cnRelations,
   partFamily,
+  slotFamily,
   typeSpellings,
 } from "#pantry/qti/mathml-cn.ts";
 import { nodeLaws } from "#pantry/qti/node.ts";
@@ -39,14 +40,14 @@ const buildTimeout = 60_000;
 /**
  * The relations the module declares, by name.
  */
-const declared = ["CnAttribute", "CnPartText", "MathCn"] as const;
+const declared = ["CnAttribute", "CnCount", "CnPartText", "CnSlot", "MathCn"] as const;
 
 /**
  * The laws that are no check, among those the module's relations carry, as the census of the
  * refusal table reads them: those whose law names one of the relations.
  */
 const ownLaws = statedLaws.filter(([law]) =>
-  /"(?:CnAttribute|CnPartText|MathCn)"/u.test(JSON.stringify(law)),
+  /"(?:CnAttribute|CnPartText|CnCount|CnSlot|MathCn)"/u.test(JSON.stringify(law)),
 );
 
 describe("qti/mathml-cn.ts, declared", { timeout: buildTimeout }, () => {
@@ -72,9 +73,11 @@ describe("qti/mathml-cn.ts, declared", { timeout: buildTimeout }, () => {
     }
   });
 
-  it("counts a cn's parts with a family of its own, one count for one family", () => {
+  it("counts a cn's parts with a family of its own, one count for one family, and every typed cn's slots with another", () => {
     assert.strictEqual(cnLaws.filter((statement) => statement === partFamily).length, 1);
     assert.strictEqual(partFamily.kind, "counted");
+    assert.strictEqual(cnLaws.filter((statement) => statement === slotFamily).length, 1);
+    assert.strictEqual(slotFamily.kind, "counted");
   });
 
   it("names the form check by its law of the refusal table, spaces written as underscores, so lawOfCheck maps it", () => {
@@ -84,7 +87,7 @@ describe("qti/mathml-cn.ts, declared", { timeout: buildTimeout }, () => {
       statement.kind === "check" ? [statement.name] : [],
     );
 
-    assert.deepStrictEqual(named.toSorted(), ["E1_derived", "MathML_cn_form"]);
+    assert.deepStrictEqual(named.toSorted(), ["E1_derived", "E1_derived", "MathML_cn_form"]);
     assert.isTrue(
       Option.isSome(lawOfCheck("MathML_cn_form")),
       "MathML_cn_form is no law of the refusal table",
@@ -106,9 +109,14 @@ describe("qti/mathml-cn.ts, declared", { timeout: buildTimeout }, () => {
       [
         "contained MathCn(type, parts) in CnParts(type, parts)",
         "contained CnPartText(type, part, form) in CnForm(type, part, form)",
+        "contained CnCount(type, parts) in CnParts(type, parts)",
+        "contained CnSlot(type, part, form) in CnForm(type, part, form)",
       ],
     );
-    assert.isTrue(ownLaws.some(([law]) => lawIdentity(law).startsWith("counted family")));
+    assert.strictEqual(
+      ownLaws.filter(([law]) => lawIdentity(law).startsWith("counted family")).length,
+      2,
+    );
 
     for (const [law, name] of ownLaws) {
       assert.deepStrictEqual(lawNameOf(law), Option.some(name));
