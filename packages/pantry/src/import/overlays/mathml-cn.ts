@@ -14,10 +14,9 @@
  *   form {@link cnForms} gives its place, and the text of its text and whitespace children,
  *   collapsed (§2.1.7: U+0020, U+0009, U+000A and U+000D); comments and instructions add nothing. A
  *   `cn` with a part that holds an element or an entity reference has no rows, as that part is not
- *   judged. A part beyond the places `CnPart` names (a third) gets no row. A part beyond the places
- *   its type lists gets the form `real`, which `CnForm` does not list for it, so the database
- *   refuses a `cn` with more parts than its type lists, except a type that lists every place
- *   `CnPart` names, whose surplus parts are not written.
+ *   judged. A part beyond the places its type lists is written at its place, up to the one place no
+ *   type lists, under the form `real`, which `CnForm` does not list for it, so the database refuses
+ *   a `cn` with more parts than its type lists; a later part adds nothing, as the refusal is made.
  *
  * The rows restate what the tree says and nothing else.
  */
@@ -57,7 +56,8 @@ const nonElements: ReadonlySet<string> = new Set(nonElementKinds);
 const radixes: ReadonlySet<string> = new Set(Array.from({ length: 35 }, (_, at) => String(at + 2)));
 
 /**
- * The places `CnPart` names, the numerals 0 and 1.
+ * The places `CnPart` names: the numerals 0 to the most parts any type holds, the last a place no
+ * type lists.
  */
 const places: ReadonlySet<string> = new Set(CnPart.handles);
 
