@@ -27,7 +27,7 @@ import { requiredInSpace } from "@grizzle/testing/features";
 import { element } from "@grizzle/testing/gen";
 import type { Gen } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
-import { Duration, Effect, Layer, Option } from "effect";
+import { Duration, Effect, Layer, Option, Schema } from "effect";
 import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { importPackage } from "#pantry/import/package.ts";
@@ -37,7 +37,6 @@ import {
   judgedCase,
   loginSession,
   qtiSchema,
-  rowsOf,
   writtenColumnsOf,
 } from "#pantry/test/direct-sql.ts";
 import type { SqlRow } from "#pantry/test/direct-sql.ts";
@@ -200,6 +199,14 @@ const overridesOf = (
 };
 
 /**
+ * A stored copy as node-postgres decodes it, by column: a text, a number or a boolean each.
+ */
+const StoredSchema = Schema.Record(
+  Schema.String,
+  Schema.Union([Schema.String, Schema.Number, Schema.Boolean]),
+);
+
+/**
  * How a foreign key's comment is recognized, as the `LIKE` pattern `constraintDescribed` matches:
  * its start, then the part it holds.
  *
@@ -258,7 +265,15 @@ describe.skipIf(!hasLease)(
                 (of, c) =>
                   Effect.gen(function* oneCase() {
                     const { key, stored: query, table } = copies[of.copy];
-                    const [stored] = yield* rowsOf<SqlRow>(client, query, [id]);
+                    // The login holds no SELECT of its own, so the stored copy is read as the author
+                    // role, a case that writes nothing and reads it.
+                    const { read } = yield* judgedCase(client, {
+                      inserts: [],
+                      reads: [{ text: query, values: [id] }],
+                    });
+                    const [stored] = Schema.decodeUnknownSync(Schema.Array(StoredSchema))(
+                      read[0] ?? [],
+                    );
 
                     assert.isDefined(
                       stored,
