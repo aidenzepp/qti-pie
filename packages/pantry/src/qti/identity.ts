@@ -61,9 +61,11 @@
  *   carries no copy of it. A name is compared by its value, the lexical form collapsed (an
  *   `xs:token`'s or an `xs:ID`'s whiteSpace, SSML 1.1 §3.3.2), which `Compute.collapse` states.
  * - **Label tools** (rule `label-tool`): an item that labels an element of its content names the tool
- *   that labelled it, by both `tool-name` and `tool-version` on its root ({@link LabelUse}); in a
- *   QTI 3.0.1 item the root's own `label` asks for them too (3.0.1's §4.1.3, spec reading 128), and
- *   in a 3.0.0 item it does not (3.0.0's §4.1.3 states no such sentence).
+ *   that labelled it, by both `tool-name` and `tool-version` on its root ({@link LabelUse}), where
+ *   the element's `label` characteristic says so, as BasePromptInteraction's, the BaseSequence
+ *   family's and ItemBody's do ({@link toolLabelKinds}); in a QTI 3.0.1 item the root's own `label`
+ *   asks for them too (3.0.1's §4.1.3, spec reading 128), and in a 3.0.0 item it does not (3.0.0's
+ *   §4.1.3 states no such sentence), nor does an `ItemFileInfo`'s or a printed variable's.
  *
  * **Language equality.** A language is the one a tag names: `xml:lang` is an `xs:language`,
  * compared by its value, its lexical form collapsed (XML Schema 1.0 Part 2 §3.3.3, whiteSpace
@@ -124,6 +126,7 @@ import {
   ResourceType,
   SchemaVersion,
   TextDomain,
+  toolLabelKinds,
   TypeName,
   ValueIdentity,
 } from "#pantry/grammar/install.ts";
@@ -359,9 +362,9 @@ export const GeneralLang = relation(
 );
 
 /**
- * One `label` on an element of a document, keyed by the element's node: every one but a QTI 3.0.0
- * item root's own (spec reading 128), with its document and the document's root kind, which says
- * whether Label tools binds it.
+ * One `label` on an element of a document that asks for its tool, keyed by the element's node
+ * ({@link labelAttributes}, spec reading 128), with its document and the document's root kind,
+ * which says whether Label tools binds it.
  */
 export const LabelUse = relation(
   "LabelUse",
@@ -696,12 +699,21 @@ const langAttributes = select(Attribute, (a) => a.eq(a.name, "xml:lang"));
 const unassembledTargets = select(IdrefTarget, (t) => t.eq(t.assembled, false));
 
 /**
- * Every `label` but a QTI 3.0.0 item root's own, the source of {@link LabelUse}: `version` is the
- * document's schema version, which shred reads from its manifest's `schemaversion` (spec reading
- * 67), so a 3.0.1 item root's own label is a use (spec reading 128).
+ * Every `label` that asks for its tool, the source of {@link LabelUse} (spec reading 128): one of
+ * the kinds whose declared type takes its `label` from a characteristic that states the sentence
+ * ({@link toolLabelKinds}), and a QTI 3.0.1 item root's own. `version` is the document's schema
+ * version, which shred reads from its manifest's `schemaversion` (spec reading 67). An
+ * `ItemFileInfo`'s label (`qti-digital-material`, `qti-calculator-info`, §5.80.2) and a printed
+ * variable's (§7.30.4) are text for a reader, and ask for no tool.
  */
 const labelAttributes = select(Attribute, (a) =>
-  a.and(a.eq(a.name, "label"), a.or(a.ne(a.kind, itemRoot), a.eq(a.version, labelledRootVersion))),
+  a.and(
+    a.eq(a.name, "label"),
+    a.or(
+      a.in(a.kind, toolLabelKinds),
+      a.and(a.eq(a.kind, itemRoot), a.eq(a.version, labelledRootVersion)),
+    ),
+  ),
 );
 
 /**
@@ -921,9 +933,9 @@ export const ssmlLexiconReference = contained(
  *   counted; each scope on its node's {@link nodeRef} tuple, a `speak` its own fragment, a root
  *   that is no `speak` the document's and every other element its parent's; {@link ssmlTrimMark}
  *   and {@link ssmlLexiconReference};
- * - **Label tools:** each `label` but a 3.0.0 item root's own copied into its `LabelUse` row and each
- *   row a label's, its root kind its document's, and in an item each label's document one whose
- *   root carries `tool-name` and `tool-version`.
+ * - **Label tools:** each `label` that asks for its tool copied into its `LabelUse` row and each row
+ *   a label's, its root kind its document's, and in an item each label's document one whose root
+ *   carries `tool-name` and `tool-version`.
  */
 export const identityLaws = [
   key(on(idAttributes, "node")),

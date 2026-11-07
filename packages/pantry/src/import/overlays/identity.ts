@@ -22,6 +22,7 @@ import {
   interactionKinds,
   ResourceType,
   TextDomain,
+  toolLabelKinds,
   ValueIdentity,
 } from "#pantry/grammar/install.ts";
 import { collapse, lowerAscii } from "#pantry/import/overlays/metadata.ts";
@@ -210,6 +211,12 @@ const itemRoot = "qti-assessment-item";
  * §4.1.3), as `#pantry/qti/identity.ts` selects it.
  */
 const labelledRootVersion = "3.0.1";
+
+/**
+ * The kinds whose `label` is a `LabelUse`, as `#pantry/qti/identity.ts` selects them: those whose
+ * label characteristic asks for its tool (spec reading 128).
+ */
+const toolLabelled: ReadonlySet<string> = new Set(toolLabelKinds);
 
 /**
  * Write the key text of a projection's row.
@@ -422,7 +429,7 @@ const documentIdOf = (
 
 /**
  * Build the rows a document's attributes give: each attribute ID's `DocumentId`, each `xml:lang`'s
- * `XmlLang` and form, and each `label`'s `LabelUse`.
+ * `XmlLang` and form, and the `LabelUse` of each `label` that asks for its tool.
  *
  * @param tree - The document's tree.
  * @returns The rows, each by its key text.
@@ -453,7 +460,8 @@ const attributeRowsOf = (
     if (
       element !== undefined &&
       name === "label" &&
-      (element.kind !== itemRoot || element.version === labelledRootVersion)
+      (toolLabelled.has(element.kind) ||
+        (element.kind === itemRoot && element.version === labelledRootVersion))
     ) {
       labels.set(node, { document, node, rootKind });
     }

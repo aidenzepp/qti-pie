@@ -282,12 +282,13 @@ describe(
   { timeout: searchTimeout },
   () => {
     it.effect(
-      "gives each xml:lang form once per document, one XmlLang, DocumentId and LabelUse row per element that carries one, a 3.0.0 item root's own label none, and each ID split around its value",
+      "gives each xml:lang form once per document, one XmlLang, DocumentId and LabelUse row per element that carries one, a stimulus root's and a 3.0.0 item root's own label none, and each ID split around its value",
       (ctx) =>
         // Oracle: the case's own model read as keyed sets: the forms it wrote, each once
         // (sets ruling 2), and the elements it wrote each on, numbered in document order (the root
-        // node 1, its k-th div node k + 2); a label every element's but a 3.0.0 item root's (QTI
-        // 3.0.1 §4.1.3 asks the item's own label for tools, 3.0.0's §4.1.3 does not; reading 128).
+        // node 1, its k-th div node k + 2); a label every div's (a BaseSequence, §5.16.5) and the
+        // root's in a 3.0.1 item alone (QTI 3.0.1 §4.1.3 asks the item's own label for tools,
+        // 3.0.0's §4.1.3 and the stimulus's §4.3.3 do not; reading 128).
         // Bound: every item or stimulus over the root's and at most 2 divs' choices above, in each
         // of 2 versions, 8,232.
         searched(
@@ -338,11 +339,8 @@ describe(
                 const labelled = placed.filter(
                   ({ choice, root: isRoot }) =>
                     choice.label &&
-                    !(
-                      isRoot &&
-                      drawn.rootKind === "qti-assessment-item" &&
-                      drawn.version === "3.0.0"
-                    ),
+                    (!isRoot ||
+                      (drawn.rootKind === "qti-assessment-item" && drawn.version === "3.0.1")),
                 );
 
                 if (new Set(langs).size < langs.length) {

@@ -595,7 +595,7 @@ export const lawSources = {
   "LOM learning resource type":
     "reading 122: https://www.imsglobal.org/sites/default/files/spec/qti/v3/md-bind/index.html (QTI 3.0 Metadata §2.7.5.1, Learning Resource Type: 'the LOM-defined values self assessment and exam are forbidden', normative by its §1.2): a learningResourceType of the LOM vocabulary holds neither, its term the LOM vocabulary's where its source is LOMv1.0, empty, or not written, which the loose binding defaults to LOMv1.0 (imsmd_loose_v1p3p2.xsd:1288); a term of another source is another vocabulary's, which the loose binding does not enforce (§3.6), and is not refused; source and value compared collapsed (metadata.ts LomResourceType, LomResourceTypeSource)",
   "Label tools":
-    "https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_BaseSequence.Attr_label (§5.16.5, and §5.15.5, §5.17.5 to §5.21.5 and §5.79.4: 'If an item uses labels then values for the associated toolName and toolVersion characteristics must also be provided'), of a body element's label in both versions; reading 128: https://www.imsglobal.org/sites/default/files/spec/qti/v3/info/imsqti_asi_v3p0p1_infomodel_v1p0.html (QTI 3.0.1 §4.1.3, the item's label: 'If an item uses labels then values for the associated toolName and toolVersion attributes must also be provided'; ~/.cache/gr8des/qti301/info301.txt:11490) of a 3.0.1 item root's own label, where 3.0.0's §4.1.3 ('A human readable label that can be used to describe the Item', ~/.cache/gr8des/anyuri-specs/qti/info.txt:10162) states none; the version is the manifest's schemaversion (reading 67), and the sentence binds an item, not a stimulus or a test",
+    "https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_BaseSequence.Attr_label (§5.16.5, and §5.15.5, §5.17.5 to §5.21.5 and §5.79.4: 'If an item uses labels then values for the associated toolName and toolVersion characteristics must also be provided'), of the label of each kind whose type takes it from one of those classes, in both versions (labels.ts toolLabelKinds), and not of ItemFileInfo's ('A human readable label/short description for the file', §5.80.2) or PrintedVariable's ('such as would be appropriate for a tooltip', §7.30.4), which state none; reading 128: https://www.imsglobal.org/sites/default/files/spec/qti/v3/info/imsqti_asi_v3p0p1_infomodel_v1p0.html (QTI 3.0.1 §4.1.3, the item's label: 'If an item uses labels then values for the associated toolName and toolVersion attributes must also be provided'; ~/.cache/gr8des/qti301/info301.txt:11490) of a 3.0.1 item root's own label, where 3.0.0's §4.1.3 ('A human readable label that can be used to describe the Item', ~/.cache/gr8des/anyuri-specs/qti/info.txt:10162) states none; the version is the manifest's schemaversion (reading 67), and the sentence binds an item, not a stimulus or a test",
   "Literal lexical":
     "https://www.imsglobal.org/spec/qti/v3p0/info#Data_BaseType (§8.13, BaseTypeEnum, each base type's value set): a qti-base-value's text is a lexical form of its base-type, the same language as Typed value's (expression-types.ts BaseTypePattern; readings 7, 34, 45 and 71)",
   LomObjectIdentifier:
@@ -3792,6 +3792,19 @@ const toleranceSignOf = (value: string): "not positive" | "positive" | "string" 
 const lomForbidden: ReadonlySet<string> = new Set(["exam", "self assessment"]);
 
 /**
+ * The kinds of an item whose `label` is text for a reader and asks for no tool (spec reading 128):
+ * the information model describes `ItemFileInfo`'s, the type of `qti-calculator-info` and
+ * `qti-digital-material`, as "A human readable label/short description for the file" (§5.80.2),
+ * and `PrintedVariable`'s as one "appropriate for a tooltip" (§7.30.4), in both versions, and
+ * neither states the tool sentence the other label characteristics state.
+ */
+const readerLabels: ReadonlySet<string> = new Set([
+  "qti-calculator-info",
+  "qti-digital-material",
+  "qti-printed-variable",
+]);
+
+/**
  * The sources, collapsed, of the LOM vocabulary's terms (reading 122): LOMv1.0, and the empty
  * source, which the loose binding's default="LOMv1.0" fills (imsmd_loose_v1p3p2.xsd:1288). A term
  * that writes no source reads as the empty one.
@@ -4319,8 +4332,9 @@ const overlayBreaches = (view: View, laws: Laws): readonly Breach[] => {
   });
   const ids = Map.groupBy(idsOf(view, laws), ({ id }) => id);
   // Label tools: "If an item uses labels then values for the associated toolName and toolVersion
-  // characteristics must also be provided", of every label but a 3.0.0 item root's own (reading
-  // 128: 3.0.1's §4.1.3 says it of the item's own label, 3.0.0's does not).
+  // characteristics must also be provided", of each label whose characteristic's description says
+  // so (reading 128): every element's but the ones of readerLabels, and the item root's own in
+  // 3.0.1 alone (3.0.1's §4.1.3 says it of the item's own label, 3.0.0's does not).
   const missingTools =
     overlay.isItem && root !== undefined
       ? ["tool-name", "tool-version"].filter((name) => Option.isNone(valueOf(view, root.id, name)))
@@ -4329,8 +4343,9 @@ const overlayBreaches = (view: View, laws: Laws): readonly Breach[] => {
     missingTools.length === 0
       ? []
       : view.members.filter(
-          ({ id, version }) =>
-            (id !== root?.id || version === "3.0.1") && Option.isSome(valueOf(view, id, "label")),
+          ({ id, kind, version }) =>
+            (id === root?.id ? version === "3.0.1" : !readerLabels.has(kind)) &&
+            Option.isSome(valueOf(view, id, "label")),
         );
   // Reading 92: "Each response variable declared may be bound to one and only one interaction",
   // so in an item no two of the interactions Binding declared reads name one response.

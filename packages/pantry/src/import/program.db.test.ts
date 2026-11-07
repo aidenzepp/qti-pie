@@ -21,17 +21,19 @@ import { CommitUnknown, Db, query, uuid, v } from "@bjornpagen/grizzle";
 import type { ApplyOutcome, DbConnection, Law, Plan } from "@bjornpagen/grizzle";
 import { NodeFileSystem, NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
-import { Duration, Effect, FileSystem, Layer, Redacted } from "effect";
+import { Duration, Effect, FileSystem, Layer, Redacted, Result } from "effect";
 import { Client } from "pg";
 import type { QueryResultRow } from "pg";
 import { describe, inject } from "vitest";
 import { loginConnection } from "#pantry/db/connection.ts";
+import { composed } from "#pantry/grammar/compose.ts";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { importPackage } from "#pantry/import/package.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { ImportRefused } from "#pantry/import/refusal.ts";
 import { changeSetOf } from "#pantry/import/write.ts";
 import type { NodeMember, NodeRoot, PackageInputs } from "#pantry/import/write.ts";
+import { readPackage } from "#pantry/package/read.ts";
 import { AuthorApp } from "#pantry/qti/logins.ts";
 import { Package } from "#pantry/qti/package.ts";
 import { Author } from "#pantry/qti/roles.ts";
@@ -39,6 +41,7 @@ import { materialize, materializeSpec } from "#pantry/test/fixtures.ts";
 import type { FixtureName, TextEdit } from "#pantry/test/fixtures.ts";
 import { materializeProcessing, processingFixtureNames } from "#pantry/test/processing-fixtures.ts";
 import { oracleLocate } from "#pantry/test/locate.ts";
+import { judge, lawsOf } from "#pantry/test/oracle.ts";
 import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 
 const fixtures = inject("fixtures");
@@ -507,6 +510,57 @@ describe.skipIf(!hasLease)(
 
           assert.strictEqual(outcome.kind, "accepted");
         }),
+      );
+
+      it.effect(
+        "accepts an item whose digital material, calculator info and printed variable carry labels and whose root names no tool, and refuses it once a paragraph carries one, as the law oracle judges both (label-tool, reading 128)",
+        () =>
+          // Oracle: the law oracle's verdict on the same package (`judge`), and the information
+          // model's label characteristics behind both: an ItemFileInfo's label (§5.80.2) and a
+          // printed variable's (§7.30.4) ask for no tool, a paragraph's (§5.16.5) does. PostgreSQL
+          // judges them through LabelUse's two containments with the selected labels and Label
+          // tools' containment of an item's labels in its root's tool-name.
+          // Bound: simple with the three labels that ask for nothing, then with a labelled paragraph
+          // beside them.
+          Effect.gen(function* labelCharacteristics() {
+            const grammar = Result.getOrThrow(composed());
+            const laws = lawsOf(grammar);
+            const readers = `<qti-companion-materials-info><qti-calculator><qti-calculator-type>basic</qti-calculator-type><qti-description>A calculator</qti-description><qti-calculator-info label="calculator"><qti-file-href>https://example.org/calculator.html</qti-file-href></qti-calculator-info></qti-calculator><qti-digital-material label="table"><qti-file-href>https://example.org/table.html</qti-file-href></qti-digital-material></qti-companion-materials-info><qti-item-body><p>Score: <qti-printed-variable identifier="SCORE" label="score"/></p>`;
+            for (const [name, body, accepted] of [
+              ["label-readers", readers, true],
+              ["label-readers-body", `${readers}<p label="paragraph">Labelled</p>`, false],
+            ] as const) {
+              const dir = yield* editedSimple(name, [
+                {
+                  _tag: "ReplaceText",
+                  file: "choice.xml",
+                  replacement: body,
+                  search: "<qti-item-body>",
+                },
+              ]);
+              const judgment = yield* judge(yield* readPackage(dir), grammar, laws);
+              const { outcome } = yield* applyEdited(dir);
+
+              assert.strictEqual(
+                judgment._tag === "Judged" && judgment.breaches.length === 0,
+                accepted,
+                `${name}: the oracle's verdict`,
+              );
+              if (accepted) {
+                assert.strictEqual(outcome.kind, "accepted", `${name}: ${JSON.stringify(outcome)}`);
+              } else {
+                assert.isTrue(
+                  judgment._tag === "Judged" &&
+                    judgment.breaches.every(({ law }) => law === "Label tools"),
+                  `${name}: the oracle's breaches are Label tools'`,
+                );
+                assert.isTrue(
+                  rejectedBy(outcome, [containedIn("LabelUse", "Attribute")]),
+                  `${name}: ${JSON.stringify(outcome)}`,
+                );
+              }
+            }
+          }),
       );
 
       const cases = [

@@ -40,8 +40,10 @@ import { int8Max } from "#pantry/grammar/closed.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 import type { ComposedGrammar, Kind } from "#pantry/grammar/compose.ts";
 import { foreignKinds } from "#pantry/grammar/kinds.ts";
+import { toolLabelKindsOf } from "#pantry/grammar/labels.ts";
 import { vocabularyNamespacesPattern } from "#pantry/grammar/names.ts";
 import type { SchemaVersion as Version } from "#pantry/grammar/kinds.ts";
+import { typeDerivations } from "#pantry/vocab/inventory/models.ts";
 
 /**
  * The composed grammar of production, every relation below read from it.
@@ -157,6 +159,17 @@ export const openElementClasses = [
   foreignKinds.absent,
   foreignKinds.own,
 ] as const satisfies readonly Kind[];
+
+/**
+ * The kinds whose `label` asks for its tool, the item's `tool-name` and `tool-version` (spec
+ * reading 128): those whose declared type takes its `label` from a type whose characteristic states
+ * the sentence (`labels.ts`), `in(kind, toolLabelKinds)`.
+ */
+export const toolLabelKinds: readonly Kind[] = toolLabelKindsOf({
+  declaredType: grammar.xsi.declaredType,
+  derivations: typeDerivations,
+  kinds: grammar.kinds.nodeKind.handles,
+}).kinds;
 
 // Rosters, each a generator's in code order. Codes are history: a vocabulary appends.
 
