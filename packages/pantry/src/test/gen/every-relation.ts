@@ -496,7 +496,7 @@ const usage = [
   '<usageData xmlns="http://www.imsglobal.org/xsd/imsqti_usagedata_v3p0">',
   '  <ordinaryStatistic name="P-value" context="http://example.org/contexts/every-relation" caseCount="10" stdError="0.01" lastUpdated="2026-11-06">',
   '    <targetObject identifier="item1"/>',
-  '    <value baseType="float">0.5</value>',
+  '    <value fieldIdentifier="F" baseType="float">0.5</value>',
   "  </ordinaryStatistic>",
   "</usageData>",
   "",

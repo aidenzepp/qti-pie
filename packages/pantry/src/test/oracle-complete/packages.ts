@@ -491,9 +491,9 @@ export const packageMutations = {
     '<qti-map-entry map-key="3.5" mapped-value="1"/>',
   ]),
   // Usage typed value (reading 105): the usage statistic's float value written as no float.
-  "Usage typed value": at("usage.xml", '<value baseType="float">0.5</value>', [
-    '<value baseType="float">half</value>',
-    '<value baseType="float">0,5</value>',
+  "Usage typed value": at("usage.xml", '<value fieldIdentifier="F" baseType="float">0.5</value>', [
+    '<value fieldIdentifier="F" baseType="float">half</value>',
+    '<value fieldIdentifier="F" baseType="float">0,5</value>',
   ]),
   // Variable declared (P8): the item's round reading a variable nothing declares.
   "Variable declared": at(item, '<qti-round><qti-variable identifier="SCORE"/></qti-round>', [
