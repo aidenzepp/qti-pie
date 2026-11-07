@@ -1057,7 +1057,7 @@ const nodeCheck = (law: MembershipLaw) =>
  * selection holds, as the host judges it: the one key of `Node` over those two fields.
  */
 const cappedKey = (() => {
-  const [side, ...more] = judgedLaws(Qti.statements).flatMap((law) =>
+  const [side, ...more] = judgedLaws(Qti).flatMap((law) =>
     law.kind === "key" &&
     law.side.relation === "Node" &&
     law.side.law.terms.map(({ field }) => field).join(" ") === "parent state"

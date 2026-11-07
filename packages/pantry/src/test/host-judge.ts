@@ -591,7 +591,7 @@ const foldAll = (rows: ReadonlyMap<string, FilledRow[]>): number => {
 /**
  * Every copy along a family's axis the schema states.
  */
-const copies = axisCopies(judgedLaws(Qti.statements));
+const copies = axisCopies(judgedLaws(Qti));
 
 /**
  * Rebuild a program's rows as the database holds them, every value grizzle fills that the

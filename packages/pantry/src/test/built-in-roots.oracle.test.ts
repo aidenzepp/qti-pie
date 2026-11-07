@@ -311,7 +311,7 @@ const oracleLaws = lawsOf(grammar);
 /**
  * Every law the host judges, read once.
  */
-const hostLaws = judgedLaws(Qti.statements);
+const hostLaws = judgedLaws(Qti);
 
 /**
  * A situation the box must reach: each root's own and placed references resolved and unresolved,

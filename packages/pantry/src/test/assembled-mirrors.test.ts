@@ -222,7 +222,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
             const verdict = yield* oracleVerdict(yield* readPackage(dir));
             const program = yield* readProgram(dir);
             const rows = hostRowsOf(program.inputs);
-            const laws = judgedLaws(Qti.statements);
+            const laws = judgedLaws(Qti);
             const judgment = judge(rows, laws);
             const paths = pathsOf(rows);
 

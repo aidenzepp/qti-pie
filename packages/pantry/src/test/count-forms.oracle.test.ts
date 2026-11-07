@@ -144,7 +144,7 @@ const choice = (row: { readonly kind: string }): boolean => row.kind === "qti-ch
 /**
  * Every law the host judges, read once.
  */
-const laws = judgedLaws(Qti.statements);
+const laws = judgedLaws(Qti);
 
 /**
  * A situation the box must reach.

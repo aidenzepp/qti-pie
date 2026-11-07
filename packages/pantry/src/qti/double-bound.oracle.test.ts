@@ -43,7 +43,7 @@ const laws = lawsOf(grammar);
 /**
  * The laws the host judges, over every statement of the schema.
  */
-const hostLaws = judgedLaws(Qti.statements);
+const hostLaws = judgedLaws(Qti);
 
 /**
  * The forms of the box: zeros of each sign and spelling, magnitudes that round to zero, the least
