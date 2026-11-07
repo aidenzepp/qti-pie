@@ -6,7 +6,7 @@ import type { Expression, ExpressionType, IntOrIdentifier } from "#plate/model/e
 import { nullOf } from "#plate/model/values.ts";
 import type { Single, Value } from "#plate/model/values.ts";
 import { bg007Item, integer } from "#plate/test/fixtures.ts";
-import { assertKindType, evaluateIn, scopeOf } from "#plate/test/processing.ts";
+import { assertKindType, evaluateIn, operandOf, scopeOf } from "#plate/test/processing.ts";
 
 /**
  * The variables of an attempt with no response and no outcome.
@@ -66,14 +66,6 @@ const truth = (held: boolean): Value => ({
  * The single boolean NULL.
  */
 const unknown: Value = nullOf("boolean", "single");
-
-/**
- * Construct the `qti-base-value` operand of a value.
- *
- * @param value The value, NULL included.
- * @returns The operand.
- */
-const operandOf = (value: Value): Expression => ({ kind: "base-value", operands: [], value });
 
 /**
  * Give the type an operand of a value has, as the validator would type it.

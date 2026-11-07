@@ -1,6 +1,6 @@
 /**
- * The evaluator: the engine subset (spec §4.12) run over an item's rule tree, as pure functions of
- * the item and the variables of one attempt.
+ * The evaluator: the response rules and the registry's landed expression kinds run over an item's
+ * rule tree, as pure functions of the item and the variables of one attempt.
  *
  * {@link runRules} runs response rules in order, and {@link evaluateExpression} gives the value of
  * one expression. They take rules the item model ({@link Item}) built and variables that hold a
@@ -228,15 +228,16 @@ const isTrue = (value: Value): boolean => {
 };
 
 /**
- * Give the value of an expression of the engine subset.
+ * Give the value of an expression of a landed kind.
  *
  * Each kind's evaluator in its family's table gives the value, and its doc says what that value
  * is. Operands are evaluated left to right, and the first failure is the result.
  *
- * `typeOf` in `#plate/model/item.ts` gives each kind's base type and cardinality without
- * evaluating it, so the item model marks a tree whose `qti-set-outcome-value` this function would
- * fail; it names the evaluator each of its cases mirrors, so a change to a kind's type changes it
- * too.
+ * `typeOf` in `#plate/model/item.ts` gives each kind's base type and cardinality without evaluating
+ * it, through the kind's rule (`kindRules` in `#plate/model/expressions/read.ts`), so the item
+ * model marks a tree whose `qti-set-outcome-value` this function would fail. Each family's tests
+ * hold its evaluators to its rules (the type invariant in `#plate/test/processing.ts`), so the two
+ * cannot drift apart.
  *
  * @param expression The expression.
  * @param item The item, whose declarations give the correct responses, the mappings and the area

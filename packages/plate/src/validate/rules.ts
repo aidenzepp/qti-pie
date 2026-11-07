@@ -571,8 +571,8 @@ const neededDetail = (element: string, needed: Needed) => ({
  *
  * The correct response `match_correct` needs may also be set by template processing: "The response
  * variable to have its correct value set" is a template rule, `qti-set-correct-response` (the
- * information model, `info-compact.txt:11917`). Phase 1 does not run template processing, and the
- * item model then runs no response processing, but the item is valid, so it is not refused
+ * information model, `info-compact.txt:11917`). The engine does not run template processing, and
+ * the item model then runs no response processing, but the item is valid, so it is not refused
  * (reading 1). So a `RESPONSE` with no `qti-correct-response` child meets the need when
  * {@link setCorrectResponses} finds one set. No template rule sets a mapping or an area mapping,
  * so those needs are met only by the declaration's child.
@@ -1881,9 +1881,9 @@ const holdsUnexpanded = (element: SourceElement): boolean =>
  * Collect the responses whose correct response the item's template processing sets.
  *
  * Each `qti-set-correct-response` counts wherever it sits in the root's `qti-template-processing`,
- * among its rules or in a `qti-template-condition`'s branch, because phase 1 does not run template
- * processing and so cannot tell which branch would set it. Only the elements the rules judge count,
- * as everywhere in these rules.
+ * among its rules or in a `qti-template-condition`'s branch, because the engine does not run
+ * template processing and so cannot tell which branch would set it. Only the elements the rules
+ * judge count, as everywhere in these rules.
  *
  * @param source The document.
  * @param visits The elements the rules judge, in document order, so each parent comes before its

@@ -7,7 +7,7 @@ import { nullOf } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
 import type { AreaShape } from "#plate/vocabulary.ts";
 import { bg007Item, integer } from "#plate/test/fixtures.ts";
-import { assertKindType, evaluateIn, scopeOf } from "#plate/test/processing.ts";
+import { assertKindType, evaluateIn, operandOf, scopeOf } from "#plate/test/processing.ts";
 
 /**
  * The single boolean NULL.
@@ -47,14 +47,6 @@ const string = (value: string): Value => ({
   cardinality: "single",
   values: [{ baseType: "string", value }],
 });
-
-/**
- * Construct the `qti-base-value` operand of a value.
- *
- * @param value The value, NULL included.
- * @returns The operand.
- */
-const operandOf = (value: Value): Expression => ({ kind: "base-value", operands: [], value });
 
 /**
  * Give the value of a text expression through the engine's dispatcher, after checking that it

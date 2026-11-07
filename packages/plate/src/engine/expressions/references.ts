@@ -14,7 +14,7 @@ import { Array as Arr, Option, Result } from "effect";
 import type { Evaluator, FamilyTable, Variables } from "#plate/engine/evaluate.ts";
 import { UnknownIdentifierError, UnmappedResponseError } from "#plate/engine/failures.ts";
 import { foldCase } from "#plate/engine/math.ts";
-import { toFloat } from "#plate/engine/numbers.ts";
+import { floatValue, toFloat } from "#plate/engine/numbers.ts";
 import { builtInValue, own, variableValue } from "#plate/engine/refs.ts";
 import { areaHolds } from "#plate/engine/expressions/shapes.ts";
 import type {
@@ -163,6 +163,24 @@ const mappedValue = (mapping: Mapping, single: Single): number =>
   );
 
 /**
+ * Give the value a mapping or an area mapping gives its sum: a single float, the sum clamped to
+ * the mapping's `lower-bound` and `upper-bound`, each unbounded when absent.
+ *
+ * @param mapping The mapping's bounds.
+ * @param sum The sum of the mapped values.
+ * @returns The single float.
+ */
+const clamped = (
+  mapping: Pick<AreaMapping | Mapping, "lowerBound" | "upperBound">,
+  sum: number,
+): Value => {
+  const lower = Option.getOrElse(mapping.lowerBound, () => Number.NEGATIVE_INFINITY);
+  const upper = Option.getOrElse(mapping.upperBound, () => Number.POSITIVE_INFINITY);
+
+  return floatValue(Math.min(upper, Math.max(lower, sum)));
+};
+
+/**
  * Give the value of a `qti-map-response`: a single float.
  *
  * A value is the sum of the mapped values of the response's distinct values, as {@link distinct}
@@ -200,15 +218,7 @@ const mapResponse = (
       sum += mappedValue(mapping, single);
     }
 
-    const lower = Option.getOrElse(mapping.lowerBound, () => Number.NEGATIVE_INFINITY);
-    const upper = Option.getOrElse(mapping.upperBound, () => Number.POSITIVE_INFINITY);
-    const mapped: Value = {
-      baseType: "float",
-      cardinality: "single",
-      values: [{ baseType: "float", value: Math.min(upper, Math.max(lower, sum)) }],
-    };
-
-    return mapped;
+    return clamped(mapping, sum);
   });
 
 /* oxlint-disable anti-slop/no-shape-in-symbol-names -- `shape` is the QTI attribute of `qti-area-map-entry` and names an area's geometry, not a structure. */
@@ -297,20 +307,8 @@ const mapResponsePoint = (
       own(variables.responses, identifier),
       () => new UnknownIdentifierError({ holder: "record", identifier, role: "response" }),
     );
-    const lower = Option.getOrElse(mapping.lowerBound, () => Number.NEGATIVE_INFINITY);
-    const upper = Option.getOrElse(mapping.upperBound, () => Number.POSITIVE_INFINITY);
-    const mapped: Value = {
-      baseType: "float",
-      cardinality: "single",
-      values: [
-        {
-          baseType: "float",
-          value: Math.min(upper, Math.max(lower, areaSum(mapping, response.values))),
-        },
-      ],
-    };
 
-    return mapped;
+    return clamped(mapping, areaSum(mapping, response.values));
   });
 
 /**

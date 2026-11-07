@@ -49,8 +49,10 @@ export interface ExpressionReading {
    */
   readonly declared: ReadonlySet<string>;
   /**
-   * Record a mark at an element and keep reading, as `qti-equal` does for a tolerance mode the
-   * engine does not run, so its operands are still read and marked.
+   * Record a mark at an element and keep reading, so its operands are still read and marked, as
+   * the text family does for a `qti-pattern-match` literal pattern that `compile` in
+   * `#plate/model/regex.ts` refuses, a `qti-inside` coordinate written with `%` and every
+   * `qti-custom-operator`.
    *
    * @param element The element the mark sits on.
    * @param feature The mark's key.
@@ -102,7 +104,7 @@ export interface UnlandedReader {
 /**
  * The reader spec of a kind that reads itself: its operand count, its attributes, its marks and
  * its operands, in that order, through the context. `qti-base-value` reads its typed text and
- * `qti-equal` marks a tolerance mode and keeps reading.
+ * `qti-custom-operator` marks itself and keeps reading.
  */
 export interface CustomReader<K extends ExpressionKind> {
   readonly _tag: "custom";

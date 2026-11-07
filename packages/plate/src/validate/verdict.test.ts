@@ -731,8 +731,8 @@ describe("check, reading 47: xsi:type", () => {
         [attr("q", qtiNamespace, xmlnsNamespace)],
       ),
     );
-    // A qti-null is outside M1's engine, so the processing may earn its own marks; only the
-    // attribute marks are asserted.
+    // The case is about attribute marks only, so any other mark the processing earns is left
+    // out of the assertion.
     const unsupported =
       verdict.verdict === "accepted" || verdict.verdict === "accepted-with-unsupported"
         ? verdict.accepted.unsupported
@@ -1951,6 +1951,9 @@ describe("describeRefusal", () => {
   it("names which operand of a qti-equal is not a single integer or float", () => {
     const sentence = describeRefusal(
       refusalOf("expression-type", {
+        acceptsBaseTypes: "integer float",
+        acceptsCardinalities: "single",
+        check: "operand",
         element: "qti-equal",
         expressionBaseType: "string",
         expressionCardinality: "single",

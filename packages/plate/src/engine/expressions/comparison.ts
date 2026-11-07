@@ -16,7 +16,7 @@
 import { Option, Result } from "effect";
 import type { Evaluator, FamilyTable, Scope } from "#plate/engine/evaluate.ts";
 import type { EngineFailure } from "#plate/engine/failures.ts";
-import { booleanOf, numberOf, sameNumber, toFloat } from "#plate/engine/numbers.ts";
+import { booleanOf, floatOf, numberOf, sameNumber } from "#plate/engine/numbers.ts";
 import type { NumberSingle } from "#plate/engine/numbers.ts";
 import { referenceValue } from "#plate/engine/refs.ts";
 import type { Expression, FloatOrRef } from "#plate/model/expression.ts";
@@ -213,15 +213,6 @@ const evaluateLt: Evaluator<"lt"> = comparing((order) => order < 0);
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpLTE
  */
 const evaluateLte: Evaluator<"lte"> = comparing((order) => order <= 0);
-
-/**
- * Give the float a number stands for in arithmetic: a float itself, an integer through `toFloat`.
- *
- * @param number The number.
- * @returns The float.
- */
-const floatOf = (number: NumberSingle): number =>
-  number.baseType === "integer" ? toFloat(number.value) : number.value;
 
 /**
  * Give the number one `tolerance` token stands for: its literal, or the value of the float or

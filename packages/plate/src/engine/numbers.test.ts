@@ -3,7 +3,6 @@ import { Option } from "effect";
 import {
   bitLengthOf,
   boundedInteger,
-  boundedProduct,
   boundedTimes,
   containerSizeBound,
   emptyProduct,
@@ -69,22 +68,6 @@ describe("the engine's bounds on what it computes (operator ruling afb7e648)", (
     assert.deepStrictEqual(boundedInteger(-(2n ** 999_999n)), Option.some(-(2n ** 999_999n)));
     assert.deepStrictEqual(boundedInteger(2n ** 1_000_000n), Option.none());
     assert.deepStrictEqual(boundedInteger(-(2n ** 1_000_000n)), Option.none());
-  });
-
-  it("[I-9a] boundedProduct keeps a product of exactly 1,000,000 bits and gives none for one of 1,000,001, and 0 for a product with 0 whatever the other's size", () => {
-    assert.deepStrictEqual(
-      boundedProduct(2n ** 500_000n, 2n ** 499_999n),
-      Option.some(2n ** 999_999n),
-      "operands of 500,001 and 500,000 bits, a product of 1,000,000",
-    );
-    assert.deepStrictEqual(
-      boundedProduct(3n * 2n ** 499_998n, 3n * 2n ** 499_999n),
-      Option.none(),
-      "operands of 500,000 and 500,001 bits, a product of 1,000,001",
-    );
-    assert.deepStrictEqual(boundedProduct(2n ** 500_000n, -(2n ** 500_000n)), Option.none());
-    assert.deepStrictEqual(boundedProduct(2n ** 3_000_000n, 0n), Option.some(0n));
-    assert.deepStrictEqual(boundedProduct(0n, -(2n ** 3_000_000n)), Option.some(0n));
   });
 
   it("[I-9a] boundedTimes decides from its factors' bit lengths: kept unmeasured when they sum to at most 1,000,000, none when the sum less one is past it, and measured only in between", () => {

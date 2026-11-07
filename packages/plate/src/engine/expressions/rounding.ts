@@ -22,13 +22,12 @@
  * @module
  */
 import { Option, Result } from "effect";
-import type { Evaluator, FamilyTable, Scope } from "#plate/engine/evaluate.ts";
-import type { EngineFailure } from "#plate/engine/failures.ts";
+import type { Evaluator, FamilyTable } from "#plate/engine/evaluate.ts";
 import { shortestDecimal } from "#plate/engine/math.ts";
-import { booleanOf, numberOf, toFloat } from "#plate/engine/numbers.ts";
+import { booleanOf, floatValue, integerValue, numberOf, toFloat } from "#plate/engine/numbers.ts";
 import type { NumberSingle } from "#plate/engine/numbers.ts";
-import { referenceValue } from "#plate/engine/refs.ts";
-import type { Expression, IntegerOrRef } from "#plate/model/expression.ts";
+import { referenceInteger } from "#plate/engine/refs.ts";
+import type { Expression } from "#plate/model/expression.ts";
 import { nullOf } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
 
@@ -307,37 +306,11 @@ const truncatedInteger = (single: NumberSingle): Option.Option<bigint> => {
  * @param held The integer, or none.
  * @returns The value.
  */
-const integerValue = (held: Option.Option<bigint>): Value =>
+const integerOrNull = (held: Option.Option<bigint>): Value =>
   Option.match(held, {
     onNone: () => nullOf("integer", "single"),
-    onSome: (value): Value => ({
-      baseType: "integer",
-      cardinality: "single",
-      values: [{ baseType: "integer", value }],
-    }),
+    onSome: integerValue,
   });
-
-/**
- * Give the integer `figures` stands for: its literal, or the value of the variable it names,
- * through the resolver in `#plate/engine/refs.ts` with the kind's checked integer facet.
- *
- * @param scope The item and the variables of the attempt.
- * @param figures The `figures`.
- * @returns The integer; none when the named variable holds NULL or a value that is not a single
- *   integer, which the validator refuses (P24) on a checked item; or an `UnknownIdentifierError`
- *   when it names a variable the variables hold no value of.
- */
-const figuresOf = (
-  scope: Scope,
-  figures: IntegerOrRef,
-): Result.Result<Option.Option<bigint>, EngineFailure> =>
-  Result.map(
-    referenceValue(scope.variables, { baseType: "integer", checked: true, reference: figures }),
-    (value) =>
-      Option.flatMap(numberOf(value), (single) =>
-        single.baseType === "integer" ? Option.some(single.value) : Option.none(),
-      ),
-  );
 
 /**
  * Give the value of a `qti-round`: a single integer, its operand rounded by {@link roundedInteger};
@@ -353,7 +326,7 @@ const evaluateRound: Evaluator<"round"> = (expression, scope, evaluate) => {
   const [operand] = expression.operands;
 
   return Result.map(evaluate(operand, scope), (value) =>
-    integerValue(Option.flatMap(numberOf(value), roundedInteger)),
+    integerOrNull(Option.flatMap(numberOf(value), roundedInteger)),
   );
 };
 
@@ -371,7 +344,7 @@ const evaluateTruncate: Evaluator<"truncate"> = (expression, scope, evaluate) =>
   const [operand] = expression.operands;
 
   return Result.map(evaluate(operand, scope), (value) =>
-    integerValue(Option.flatMap(numberOf(value), truncatedInteger)),
+    integerOrNull(Option.flatMap(numberOf(value), truncatedInteger)),
   );
 };
 
@@ -393,7 +366,7 @@ const evaluateTruncate: Evaluator<"truncate"> = (expression, scope, evaluate) =>
  */
 const evaluateRoundTo: Evaluator<"round-to"> = (expression, scope, evaluate) =>
   Result.gen(function* roundTo() {
-    const figures = yield* figuresOf(scope, expression.figures);
+    const figures = yield* referenceInteger(scope.variables, expression.figures);
     const [operand] = expression.operands;
     const value = yield* evaluate(operand, scope);
     const rounded = Option.flatMap(Option.all([figures, numberOf(value)]), ([held, single]) =>
@@ -402,11 +375,7 @@ const evaluateRoundTo: Evaluator<"round-to"> = (expression, scope, evaluate) =>
 
     return Option.match(rounded, {
       onNone: () => nullOf("float", "single"),
-      onSome: (number): Value => ({
-        baseType: "float",
-        cardinality: "single",
-        values: [{ baseType: "float", value: doubleOf(number) }],
-      }),
+      onSome: (number) => floatValue(doubleOf(number)),
     });
   });
 
@@ -427,7 +396,7 @@ const evaluateRoundTo: Evaluator<"round-to"> = (expression, scope, evaluate) =>
  */
 const evaluateEqualRounded: Evaluator<"equal-rounded"> = (expression, scope, evaluate) =>
   Result.gen(function* equalRounded() {
-    const figures = yield* figuresOf(scope, expression.figures);
+    const figures = yield* referenceInteger(scope.variables, expression.figures);
     const [left, right] = expression.operands;
     const leftValue = yield* evaluate(left, scope);
     const rightValue = yield* evaluate(right, scope);

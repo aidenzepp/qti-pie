@@ -5,7 +5,7 @@ import type { Expression, FloatOrRef } from "#plate/model/expression.ts";
 import { nullOf } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
 import { bg007Item, float, integer } from "#plate/test/fixtures.ts";
-import { assertKindType, evaluateIn, scopeOf } from "#plate/test/processing.ts";
+import { assertKindType, evaluateIn, operandOf, scopeOf } from "#plate/test/processing.ts";
 
 /**
  * The four order comparisons the family runs.
@@ -43,14 +43,6 @@ const floatNull: Value = nullOf("float", "single");
  * 2^53, the least integer above which a double cannot hold every integer.
  */
 const twoTo53 = 2n ** 53n;
-
-/**
- * Construct the `qti-base-value` operand of a value.
- *
- * @param value The value.
- * @returns The operand.
- */
-const operandOf = (value: Value): Expression => ({ kind: "base-value", operands: [], value });
 
 /**
  * Construct an order comparison of two values.

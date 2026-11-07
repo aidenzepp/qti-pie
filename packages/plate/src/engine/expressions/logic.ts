@@ -13,8 +13,8 @@ import { Option, Result } from "effect";
 import type { Evaluate, Evaluator, FamilyTable, Scope } from "#plate/engine/evaluate.ts";
 import type { EngineFailure } from "#plate/engine/failures.ts";
 import { booleanOf } from "#plate/engine/numbers.ts";
-import { referenceValue } from "#plate/engine/refs.ts";
-import type { Expression, IntegerOrRef } from "#plate/model/expression.ts";
+import { referenceInteger } from "#plate/engine/refs.ts";
+import type { Expression } from "#plate/model/expression.ts";
 import { nullOf } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
 
@@ -140,31 +140,6 @@ const evaluateNot: Evaluator<"not"> = (expression, scope, evaluate) => {
 };
 
 /**
- * Give the integer a bound of `qti-any-n` stands for: its literal, or the value of the variable it
- * names, through the resolver in `#plate/engine/refs.ts` with the kind's checked integer facet.
- *
- * @param scope The item and the variables of the attempt.
- * @param bound The `min` or the `max`.
- * @returns The integer; none when the named variable holds NULL or a value that is not a single
- *   integer, which the validator refuses (P24) on a checked item; or an `UnknownIdentifierError`
- *   when it names a variable the variables hold no value of.
- */
-const boundOf = (
-  scope: Scope,
-  bound: IntegerOrRef,
-): Result.Result<Option.Option<bigint>, EngineFailure> =>
-  Result.map(
-    referenceValue(scope.variables, { baseType: "integer", checked: true, reference: bound }),
-    (value) => {
-      const [single, ...rest] = value.values;
-
-      return value.cardinality === "single" && rest.length === 0 && single?.baseType === "integer"
-        ? Option.some(single.value)
-        : Option.none();
-    },
-  );
-
-/**
  * Give the truth of a `qti-any-n` from its operands' counts and its bounds, by the information
  * model's three-valued rule, over `t` true, `f` false and `u` NULL operands of `n`:
  *
@@ -205,8 +180,8 @@ const anyNOf = ({ falses, nulls, trues }: Tally, min: bigint, max: bigint): Valu
  */
 const evaluateAnyN: Evaluator<"any-n"> = (expression, scope, evaluate) =>
   Result.gen(function* countAnyN() {
-    const min = yield* boundOf(scope, expression.min);
-    const max = yield* boundOf(scope, expression.max);
+    const min = yield* referenceInteger(scope.variables, expression.min);
+    const max = yield* referenceInteger(scope.variables, expression.max);
     const tally = yield* tallyOf(expression.operands, scope, evaluate);
 
     return Option.match(Option.all([min, max]), {

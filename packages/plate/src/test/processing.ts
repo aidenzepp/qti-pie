@@ -1,8 +1,9 @@
 /**
  * Test support for response processing: the one builder of the evaluator's {@link Scope}, an
- * evaluator a test passes as an expression's `evaluate`, the hand-built item documents the
- * expression families' tests share, with their model build, their run and their refusals, and the
- * type invariant every family's tests keep ({@link assertKindType}).
+ * evaluator a test passes as an expression's `evaluate`, the operand that gives a value as written
+ * ({@link operandOf}), the hand-built item documents the expression families' tests share, with
+ * their model build, their run and their refusals, and the type invariant every family's tests
+ * keep ({@link assertKindType}).
  *
  * A family test builds a `Scope` only through {@link scopeOf}, never as a literal, so a field the
  * engine adds to it changes this file alone. It is not a browser module: it reads the item model
@@ -16,7 +17,12 @@ import { attr, doc, el, text } from "#plate/document/source.ts";
 import type { SourceAttribute, SourceDocument, SourceElement } from "#plate/document/source.ts";
 import { evaluateExpression, runRules } from "#plate/engine/evaluate.ts";
 import type { EngineFailure, Evaluate, Scope, Variables } from "#plate/engine/evaluate.ts";
-import type { ExpressionKind, ExpressionType, ResultAttributes } from "#plate/model/expression.ts";
+import type {
+  Expression,
+  ExpressionKind,
+  ExpressionType,
+  ResultAttributes,
+} from "#plate/model/expression.ts";
 import { kindRules } from "#plate/model/expressions/read.ts";
 import type { Item } from "#plate/model/item.ts";
 import { buildItem } from "#plate/model/item.ts";
@@ -50,6 +56,19 @@ export const scopeOf = (item: Item, variables: Variables): Scope => ({ item, var
  */
 export const evaluateIn: Evaluate = (expression, scope) =>
   evaluateExpression(expression, scope.item, scope.variables);
+
+/**
+ * Construct the `qti-base-value` operand that gives a value, so a family test passes any value,
+ * NULL included, to the evaluator it calls.
+ *
+ * @param value The value.
+ * @returns The operand.
+ */
+export const operandOf = (value: Value): Expression => ({
+  kind: "base-value",
+  operands: [],
+  value,
+});
 
 /**
  * Construct a response declaration.

@@ -31,10 +31,12 @@ import {
   boundedInteger,
   boundedTimes,
   emptyProduct,
+  floatOf,
+  floatValue,
+  integerValue,
   numberOf,
-  toFloat,
 } from "#plate/engine/numbers.ts";
-import type { NumberSingle, PartialProduct } from "#plate/engine/numbers.ts";
+import type { PartialProduct } from "#plate/engine/numbers.ts";
 import type { Expression } from "#plate/model/expression.ts";
 import { isNull, nullOf } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
@@ -62,39 +64,6 @@ interface Step {
    */
   readonly integer: (values: Array.NonEmptyReadonlyArray<bigint>) => Option.Option<bigint>;
 }
-
-/**
- * Construct a single integer value.
- *
- * @param value The integer.
- * @returns The value.
- */
-const integerValue = (value: bigint): Value => ({
-  baseType: "integer",
-  cardinality: "single",
-  values: [{ baseType: "integer", value }],
-});
-
-/**
- * Construct a single float value.
- *
- * @param value The float.
- * @returns The value.
- */
-const floatValue = (value: number): Value => ({
-  baseType: "float",
-  cardinality: "single",
-  values: [{ baseType: "float", value }],
-});
-
-/**
- * Give the float a single number stands for: a float as it is, an integer through `toFloat`.
- *
- * @param single The number.
- * @returns The float.
- */
-const floatOf = (single: NumberSingle): number =>
-  single.baseType === "integer" ? toFloat(single.value) : single.value;
 
 /**
  * Give the base type of the NULL an arithmetic kind's operands give, the kind's rule over their

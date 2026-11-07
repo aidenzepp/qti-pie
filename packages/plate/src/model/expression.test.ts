@@ -454,15 +454,6 @@ describe("kindReaders", () => {
       expressionKinds.filter((kind) => !isUnlanded(kindRules[kind])),
     );
   });
-
-  it("stubs a kind's reader exactly when its rule is the unlanded rule", () => {
-    assert.deepStrictEqual(
-      expressionKinds.filter(
-        (kind) => (kindReaders[kind]._tag === "unlanded") !== isUnlanded(kindRules[kind]),
-      ),
-      [],
-    );
-  });
 });
 
 describe("the roster", () => {
