@@ -130,7 +130,13 @@ import { keyTextBytes, localNameBytes, namespaceBytes, utf8Length } from "#pantr
 import { datumText, keyCopies } from "#pantry/test/key-copies.ts";
 import type { DocumentRows, KeyCopy } from "#pantry/test/key-copies.ts";
 import { isUriReference } from "#pantry/test/uri-reference.ts";
-import { addedLaws, lawDocumentBreaches, lawPackageBreaches } from "#pantry/test/oracle-laws.ts";
+import {
+  addedLaws,
+  lawDocumentBreaches,
+  lawPackageBreaches,
+  lomNamedTypes,
+  objectRoots,
+} from "#pantry/test/oracle-laws.ts";
 import { lawTable } from "#pantry/vocab/laws.ts";
 import { mathmlNamespace, xsNamespace } from "#pantry/vocab/namespaces.ts";
 import { oracleValueOf, resolveAttribute } from "#pantry/test/resolution.ts";
@@ -4736,13 +4742,6 @@ const inclusionCycles = (
 };
 
 /**
- * The resource types whose LOM record names its document (reading 62): an item's and a test's, as
- * the implementation guide's LOM profile says "the test or item identifier should be present as
- * an identifier in the LOM metadata", a recommendation the operator rules binding.
- */
-const lomNamed: ReadonlySet<string> = new Set([itemType, "imsqti_test_xmlv3p0"]);
-
-/**
  * Whether a `srcset` is one image candidate, its URL alone between any outer whitespace (reading
  * 102, `#pantry/qti/package.ts` `srcsetCandidatePattern`): no comma, and no whitespace between
  * its first and last characters that are not whitespace.
@@ -5425,7 +5424,7 @@ const documentLangBreaches = (
 
   return [
     ...Map.groupBy(
-      documents.filter(({ resource }) => lomNamed.has(resource.type)),
+      documents.filter(({ resource }) => lomNamedTypes.has(resource.type)),
       ({ path }) => path,
     ),
   ].flatMap(([path, listed]) => {
@@ -5634,7 +5633,7 @@ const packageBreaches = (
         : [];
     }),
     ...input.documents.flatMap((document): readonly Breach[] => {
-      if (!lomNamed.has(document.resource.type)) {
+      if (!lomNamedTypes.has(document.resource.type)) {
         return [];
       }
 
@@ -5650,14 +5649,11 @@ const packageBreaches = (
           owner === document.resource.node
         );
       });
-      const identifier = Option.isSome(
-        grammar.package.rootOfType.lookup({
-          root: document.rootKind,
-          type: document.resource.type,
-        }),
-      )
-        ? document.identifier
-        : Option.none();
+      // The record's object is the document its resource names where its root is an item or a
+      // test, whatever the resource's type, which RootOfType judges on its own (QTI 3.0 Metadata
+      // §2.7.1.1: "the identifier of the associated item, test or object bank"; reading 93); a
+      // document of another root is no object, and no entry matches it.
+      const identifier = objectRoots.has(document.rootKind) ? document.identifier : Option.none();
 
       return loms.flatMap((lom) => {
         const entries = manifest.members
