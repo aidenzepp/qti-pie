@@ -3082,6 +3082,7 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
   [primaryKeyOf("MathApply", "node"), "E1 derived"],
   [primaryKeyOf("MathArgument", "node"), "E1 derived"],
   [primaryKeyOf("MathQualifier", "node"), "E1 derived"],
+  [primaryKeyOf("CnAttribute", "node", "name"), "E1 derived"],
   [primaryKeyOf("CnPartText", "node", "part"), "E1 derived"],
   [primaryKeyOf("MathCn", "node"), "E1 derived"],
   [primaryKeyOf("CellLeaf", "cell", "at"), "E1 derived"],

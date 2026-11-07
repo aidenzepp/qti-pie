@@ -117,6 +117,9 @@ that needs one asks the operator first.
      checked, as the oracle's "MathML cn form" checks it (`src/test/oracle.ts`), nor, under a `base` outside 2 to 36,
      are its `double` and `hexdouble` parts, which the oracle reads in any base. A `cn` of any other `type` is text in
      both. A row that carries the part count alone would lift it;
+   - a `cn` whose `type` or `base` is longer than the key-text bound (2,587 UTF-8 bytes, `keyTextBytes`,
+     `src/qti/limits.ts`) is refused under "Key text bound", as every key-text copy is (`CnAttribute`,
+     `src/qti/mathml-cn.ts`; findings row 24), though the XSD bounds neither attribute's length;
    - rows the host states that no statement refutes: a `MathCn` row's empty `typeLexical` or `baseLexical` says the
      attribute is unwritten and nothing refutes it where the node writes one, only a written lexical being proved
      (`cnLaws`, `src/qti/mathml-cn.ts`); a `MathQualifier` row's existence is proved row to node and row to head, so a

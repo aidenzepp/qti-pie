@@ -24,6 +24,7 @@ import type {
   XdmText,
   XdmWhitespace,
 } from "#pantry/model/xdm.ts";
+import { keyTextBytes, utf8Length } from "#pantry/qti/limits.ts";
 import { idOf } from "#pantry/test/gen/xdm.ts";
 
 /**
@@ -34,7 +35,7 @@ const version = "3.0.1";
 /**
  * The kinds the cases' elements are of.
  */
-type CaseKind = "m:apply" | "m:ci" | "m:cn" | "m:math" | "m:mglyph" | "m:plus" | "m:sep";
+type CaseKind = "m:apply" | "m:ci" | "m:cn" | "m:math" | "m:mglyph" | "m:mi" | "m:plus" | "m:sep";
 
 /**
  * Write an element of a kind, which governs no type (`GoverningOf` gives MathML's `none`).
@@ -110,6 +111,15 @@ const ids = { idOf };
  * @returns The key the builder keys it by.
  */
 const partKey = (at: number, part: number): string => JSON.stringify([idOf(at), String(part)]);
+
+/**
+ * The key of an attribute's row.
+ *
+ * @param at - The `cn`'s number in document order.
+ * @param name - The attribute's name.
+ * @returns The key the builder keys it by.
+ */
+const attributeKey = (at: number, name: string): string => JSON.stringify([idOf(at), name]);
 
 /**
  * A whitespace run, which is character data too.
@@ -227,6 +237,53 @@ describe("import/overlays/mathml-cn.ts, the cn rows (spec reading 2)", () => {
     });
     assert.strictEqual(rows.CnPartText.get(partKey(2, 0))?.base, "16");
     assert.strictEqual(rows.CnPartText.get(partKey(2, 0))?.text, "ff");
+  });
+
+  it("copies the type and the base of every cn into CnAttribute as written, judged or not, and of no other element", () => {
+    // Nodes: 0 document, 1 math, 2 cn (judged, both), 3 text, 4 cn (type no form lists), 5 text,
+    // 6 cn (no attribute), 7 text, 8 mi (a type), 9 text, 10 cn (base outside the radixes), 11 text.
+    const rows = rowsOf(
+      documentOf(
+        elementOf("m:math", [
+          elementOf(
+            "m:cn",
+            [text("ff")],
+            [attributeOf("type", " integer\n"), attributeOf("base", " 016 ")],
+          ),
+          elementOf("m:cn", [text("x")], [attributeOf("type", "constant")]),
+          elementOf("m:cn", [text("1")]),
+          elementOf("m:mi", [text("y")], [attributeOf("type", "integer")]),
+          elementOf("m:cn", [text("1")], [attributeOf("base", "37")]),
+        ]),
+      ),
+      ids,
+    );
+
+    assert.deepStrictEqual(Object.fromEntries(rows.CnAttribute), {
+      [attributeKey(2, "base")]: { lexical: " 016 ", name: "base", node: idOf(2) },
+      [attributeKey(2, "type")]: { lexical: " integer\n", name: "type", node: idOf(2) },
+      [attributeKey(4, "type")]: { lexical: "constant", name: "type", node: idOf(4) },
+      [attributeKey(10, "base")]: { lexical: "37", name: "base", node: idOf(10) },
+    });
+    // The judged cns are 2 and the one that writes nothing (6); the unjudged 4 and 10 still have rows.
+    assert.deepStrictEqual(keysOf(rows.MathCn), [idOf(2), idOf(6)]);
+  });
+
+  it("copies a type longer than the key-text bound unchanged, for the database to refuse under Key text bound", () => {
+    // The builder restates the tree; the stated limit (reading 2, findings row 24) is the schema's.
+    const long = "t".repeat(keyTextBytes + 1);
+    const rows = rowsOf(
+      documentOf(
+        elementOf("m:math", [elementOf("m:cn", [text("x")], [attributeOf("type", long)])]),
+      ),
+      ids,
+    );
+
+    const copied = rows.CnAttribute.get(attributeKey(2, "type"));
+    assert.strictEqual(copied?.lexical, long);
+    assert.strictEqual(utf8Length(copied?.lexical ?? ""), 2588);
+    assert.strictEqual(keyTextBytes, 2587);
+    assert.deepStrictEqual(keysOf(rows.MathCn), []);
   });
 
   it("gives a cn of a type no form lists no rows, its content being text", () => {

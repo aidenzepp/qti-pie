@@ -40,6 +40,7 @@ import {
   counted,
   drawn,
   fin,
+  key,
   natural,
   on,
   relation,
@@ -48,6 +49,7 @@ import {
 } from "@bjornpagen/grizzle";
 import type { Statement } from "@bjornpagen/grizzle";
 import {
+  AttributeName,
   CnBase,
   CnForm,
   CnPart,
@@ -163,10 +165,24 @@ export const CnPartText = relation(
 );
 
 /**
+ * One `type` or `base` attribute of an `m:cn`, keyed by its node and its name: its lexical form as
+ * written, whether or not the `cn` is judged, copied so that a law can compare it in a key. A value
+ * over `keyText`'s bound is refused under "Key text bound", a stated limit, as the
+ * `InteractionAttribute` copies and `MathDir` are (`#pantry/qti/interactions.ts`,
+ * `#pantry/qti/mathml-align.ts`); the schemas enumerate `type` and `base` only for the values a
+ * `cn` is judged under, so a `cn` whose `type` is a word the bound excludes is refused too.
+ */
+export const CnAttribute = relation(
+  "CnAttribute",
+  { lexical: keyText, name: closedId(AttributeName), node: uuid },
+  ["node", "name"],
+);
+
+/**
  * The relations the cn laws declare, each under its own name, as `#pantry/qti/schema.ts` composes
  * them.
  */
-export const cnRelations = { CnPartText, MathCn };
+export const cnRelations = { CnAttribute, CnPartText, MathCn };
 
 /**
  * The `m:cn` nodes, each of which may hold a {@link MathCn} row.
@@ -174,14 +190,11 @@ export const cnRelations = { CnPartText, MathCn };
 const cnNodes = select(Node, (n) => n.eq(n.kind, "m:cn"));
 
 /**
- * The `type` attributes of an `m:cn`.
+ * The `type` and `base` attributes of an `m:cn`.
  */
-const typeAttributes = select(Attribute, (a) => a.and(a.eq(a.kind, "m:cn"), a.eq(a.name, "type")));
-
-/**
- * The `base` attributes of an `m:cn`.
- */
-const baseAttributes = select(Attribute, (a) => a.and(a.eq(a.kind, "m:cn"), a.eq(a.name, "base")));
+const cnAttributes = select(Attribute, (a) =>
+  a.and(a.eq(a.kind, "m:cn"), a.in(a.name, ["type", "base"])),
+);
 
 /**
  * The {@link MathCn} rows of a `cn` that writes a `type`.
@@ -199,11 +212,15 @@ const basedCns = select(MathCn, (c) => c.ne(c.baseLexical, ""));
 export const partFamily = counted(on(CnPartText, "node"), fin(MathCn, "parts"));
 
 /**
- * The statements over {@link MathCn} and {@link CnPartText}, each `check` named by its law:
+ * The statements over {@link CnAttribute}, {@link MathCn} and {@link CnPartText}, each `check`
+ * named by its law:
  *
+ * - **the attributes:** a {@link CnAttribute} row for each `type` and `base` of an `m:cn` and no
+ *   other (both ways), its lexical form the attribute's;
  * - **the cn:** each row's node an `m:cn`; where it writes a `type` or a `base`, the lexical form is
- *   an attribute of the node, and the handle is the one the form spells (`real` and `10` where none
- *   is written, `E1_derived`); its `parts` the count {@link CnParts} gives its type;
+ *   that of the node's {@link CnAttribute} row, and the handle is the one the form spells (`real`
+ *   and `10` where none is written, `E1_derived`); its `parts` the count {@link CnParts} gives its
+ *   type;
  * - **the parts:** the family, counted by `MathCn.parts`; each row's `type` and `base` those of its
  *   `cn`, and its `(type, part, form)` a row of {@link CnForm}, so a place beyond the type's parts
  *   is refused;
@@ -211,8 +228,28 @@ export const partFamily = counted(on(CnPartText, "node"), fin(MathCn, "parts"));
  */
 export const cnLaws: readonly Statement[] = [
   contained(on(MathCn, "node"), on(cnNodes, "id")),
-  contained(on(typedCns, "node", "typeLexical"), on(typeAttributes, "node", "lexical")),
-  contained(on(basedCns, "node", "baseLexical"), on(baseAttributes, "node", "lexical")),
+  key(on(cnAttributes, "node", "name")),
+  contained(
+    on(cnAttributes, "node", "name", "lexical"),
+    on(CnAttribute, "node", "name", "lexical"),
+  ),
+  contained(on(CnAttribute, "node", "name"), on(cnAttributes, "node", "name")),
+  contained(
+    on(typedCns, "node", "typeLexical"),
+    on(
+      select(CnAttribute, (a) => a.eq(a.name, "type")),
+      "node",
+      "lexical",
+    ),
+  ),
+  contained(
+    on(basedCns, "node", "baseLexical"),
+    on(
+      select(CnAttribute, (a) => a.eq(a.name, "base")),
+      "node",
+      "lexical",
+    ),
+  ),
   contained(on(MathCn, "type", "parts"), on(CnParts, "type", "parts")),
   check("E1_derived", MathCn, (c) =>
     c.and(
