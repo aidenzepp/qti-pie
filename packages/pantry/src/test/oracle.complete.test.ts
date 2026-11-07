@@ -37,6 +37,7 @@ import { int } from "@grizzle/testing/gen";
 import { everyRelationPackage, memberCounts } from "#pantry/test/gen/every-relation.ts";
 import type { MemberCounts, PackageEntries } from "#pantry/test/gen/every-relation.ts";
 import { documentMutations } from "#pantry/test/oracle-complete/documents.ts";
+import { foreignEdits } from "#pantry/test/oracle-complete/foreign-edits.ts";
 import { expressionMutations } from "#pantry/test/oracle-complete/expressions.ts";
 import { layerMutations } from "#pantry/test/oracle-complete/layer.ts";
 import {
@@ -84,6 +85,7 @@ const mutations: Readonly<Partial<Record<LawName, Mutation>>> = {
   ...rowMutations,
   ...rowEdits,
   ...nodeEdits,
+  ...foreignEdits,
   ...documentMutations,
   ...expressionMutations,
   ...testMutations,
@@ -100,23 +102,16 @@ const owed: Readonly<Partial<Record<LawName, string>>> = {
   "Href form": "its mutation is not written yet",
   "Manifest id space":
     "every resource identifier and the manifest's are xs:ID values of one document, so a resource named as its manifest breaks DocumentId key, which ranks first, and the database names document-key: the law is shadowed (lane OL's finding)",
-  "MathML foreign element": "its mutation is not written yet",
   "N2 mirrors":
     "each of xdm.ts's mirror corruptions (gap, duplicateSlot, countOffByOne) also leaves a family's last slot unread, which N7 last slot (union-count) refuses ahead of reachability; folds.test.ts holds each variant to its law",
   "N7 Last": "its mutation is not written yet",
   "Namespace name": "its mutation is not written yet",
   "Node key":
     "a second row of one id (xdm.ts secondParent) also moves the slots and intervals the fold laws read, N5 fold and N7 last slot among them, which rank ahead of reachability; folds.test.ts holds the variant to its law",
-  OpenElementName: "its mutation is not written yet",
-  "OpenElementName canonical": "its mutation is not written yet",
   "SSML lexicon reference": "its mutation is not written yet",
   "SSML trim mark": "its mutation is not written yet",
-  "Strictly held": "its mutation is not written yet",
   "T2 root":
     "a second self-parented root also breaks E1's derived fields, which rank ahead of reachability; folds.test.ts holds the variant to its law",
-  TextDomain: "its mutation is not written yet",
-  "XsiType available": "its mutation is not written yet",
-  "XsiType derived": "its mutation is not written yet",
   "default hotspot last slot": "its mutation is not written yet",
 };
 
