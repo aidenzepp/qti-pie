@@ -464,6 +464,13 @@ describe("the functions family's evaluators", () => {
     );
   });
 
+  it("[I-9a] qti-stats-operator's popVariance of [1e154, 3e154] is finite, the double after its true 1e308, as no square of a deviation overflows (9.20)", () => {
+    assert.deepStrictEqual(
+      statsOperator("popVariance", floats("multiple", [1e154, 3e154])),
+      float(1.0000000000000002e308),
+    );
+  });
+
   it("[I-9a] qti-stats-operator gives a finite standard deviation whose variance overflows, and keeps the variance's INF (9.20)", () => {
     const inf = Number.POSITIVE_INFINITY;
     const opposite = floats("multiple", [1e200, -1e200]);

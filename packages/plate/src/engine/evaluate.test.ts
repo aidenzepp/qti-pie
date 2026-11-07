@@ -1,7 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Array as Arr, Effect, Option, Result } from "effect";
 import { attr, doc, el, text } from "#plate/document/source.ts";
-import type { SourceElement } from "#plate/document/source.ts";
+import type { SourceDocument, SourceElement } from "#plate/document/source.ts";
 import {
   OutcomeMismatchError,
   UnknownIdentifierError,
@@ -885,6 +885,71 @@ const scoreElement = (value: string): SourceElement =>
     [el("qti-base-value", [attr("base-type", "float")], [text(value)])],
   );
 
+/**
+ * Construct an item whose inline response processing looks its float response up in `BAND`'s
+ * interpolation table, {@link band}'s as written: at or above 7.5 is `HIGH`; above 2, the
+ * boundary excluded, `MID`; at or above 0 `LOW`; anything else `NONE`.
+ *
+ * @param cardinality `BAND`'s cardinality.
+ * @returns The item's document.
+ */
+const bandItem = (cardinality: "multiple" | "ordered" | "single"): SourceDocument =>
+  doc(
+    "items/band.xml",
+    el(
+      "qti-assessment-item",
+      [attr("identifier", "band"), attr("title", "Band")],
+      [
+        el("qti-response-declaration", [
+          attr("base-type", "float"),
+          attr("cardinality", "single"),
+          attr("identifier", "RESPONSE"),
+        ]),
+        el(
+          "qti-outcome-declaration",
+          [
+            attr("base-type", "identifier"),
+            attr("cardinality", cardinality),
+            attr("identifier", "BAND"),
+          ],
+          [
+            el(
+              "qti-interpolation-table",
+              [attr("default-value", "NONE")],
+              [
+                el("qti-interpolation-table-entry", [
+                  attr("source-value", "7.5"),
+                  attr("target-value", "HIGH"),
+                ]),
+                el("qti-interpolation-table-entry", [
+                  attr("include-boundary", "false"),
+                  attr("source-value", "2"),
+                  attr("target-value", "MID"),
+                ]),
+                el("qti-interpolation-table-entry", [
+                  attr("source-value", "0"),
+                  attr("target-value", "LOW"),
+                ]),
+              ],
+            ),
+          ],
+        ),
+        el("qti-item-body"),
+        el(
+          "qti-response-processing",
+          [],
+          [
+            el(
+              "qti-lookup-outcome-value",
+              [attr("identifier", "BAND")],
+              [el("qti-variable", [attr("identifier", "RESPONSE")])],
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
+
 describe("response rules: lookup, exit and a typed NULL", () => {
   it("[I-9a] a lookup maps a value through its outcome's match table by exact integer", () => {
     assert.deepStrictEqual(lookedUp("GRADE", base(integerValue(2n))), identifierValue("B"));
@@ -938,6 +1003,57 @@ describe("response rules: lookup, exit and a typed NULL", () => {
       );
     }
   });
+
+  it.effect(
+    "[I-9a] an inline lookup through an interpolation table runs into a single outcome, and into a multiple or an ordered one is marked with processing none, as a match table's (repair7-1)",
+    () =>
+      Effect.gen(function* looksUpInline() {
+        const single = yield* buildItem(bandItem("single"));
+        const rules = yield* Option.match(single.processing, {
+          onNone: () => Effect.die("the single outcome's lookup does not run"),
+          onSome: Effect.succeed,
+        });
+        const bands = [
+          [7.5, "HIGH"],
+          [2.5, "MID"],
+          [2, "LOW"],
+          [-1, "NONE"],
+        ] as const;
+
+        assert.deepStrictEqual(single.unsupported, []);
+        for (const [index, [answer, expected]] of bands.entries()) {
+          const after = Result.getOrThrow(
+            runRules(rules, single, {
+              outcomes: { BAND: nullOf("identifier", "single") },
+              responses: { RESPONSE: floatValue(answer) },
+            }),
+          );
+
+          assert.deepStrictEqual(
+            after.outcomes["BAND"],
+            identifierValue(expected),
+            `case ${index}`,
+          );
+        }
+
+        for (const cardinality of ["multiple", "ordered"] as const) {
+          const marked = yield* buildItem(bandItem(cardinality));
+
+          assert.deepStrictEqual(marked.processing, Option.none(), cardinality);
+          assert.deepStrictEqual(
+            marked.unsupported,
+            [
+              {
+                feature: "outcome-type:BAND",
+                path: "qti-assessment-item/qti-response-processing",
+                shown: "mark",
+              },
+            ],
+            cardinality,
+          );
+        }
+      }),
+  );
 
   it("[I-9a] an exit ends the run, at any depth, keeping what earlier rules set and skipping later ones", () => {
     const flat = Result.getOrThrow(
