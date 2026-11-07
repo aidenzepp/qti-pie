@@ -263,7 +263,6 @@ export const precedence = [
   "section-identifier-target",
   "branch-target",
   "branch-forward",
-  "section-empty",
   "stimulus-ref-key",
   "variable-mapping-target",
   "variable-mapping-source",
@@ -986,15 +985,10 @@ export const lawTable = {
     source:
       "readings 5 and 86: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_Number.Attr_section-identifier (§7.27.1, and §7.28.1, §7.39.1: 'If specified, only variables from items in the qti-assessment-section with matching identifier are matched', info.txt:69115), resolved over each test that places the document: a section-identifier names exactly one section or section ref of the assembled test (expressions.ts Reading, form name; the UP audit's A61)",
   },
-  "Section parts": {
-    rule: "section-empty",
-    source:
-      "reading 26: https://www.imsglobal.org/spec/qti/v3p0/info#Root_AssessmentSection (§4.2: a section holds 'at least one other Section or Item'): a section holds at least one part, an item ref, section, section ref or include standing for one (references.ts SectionPart; tests.ts Section_parts)",
-  },
   "Selection bound": {
     rule: "selection-bounds",
     source:
-      "reading 79: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_Selection.Attr_select (§5.129.1: 'The number of children to select may exceed the number of child elements defined only if with-replacement is true'; 'Sub-sections always count as 1') (references.ts SectionPart); reading 26",
+      "reading 79: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_Selection.Attr_select (§5.129.1: 'The number of children to select may exceed the number of child elements defined only if with-replacement is true'; 'Sub-sections always count as 1') (references.ts SectionPart)",
   },
   "Selection required": {
     rule: "selection-required",

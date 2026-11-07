@@ -5,10 +5,10 @@
  * over the assembled test `#pantry/test/oracle-laws/assembly.ts` builds.
  *
  * - **One document** (`tests.ts` `testOverlayLaws`): `Structure identifier`, the key `(document,
- *   identifier)` over its names (reading 86); `Section parts`, a section holds a part (reading 26);
- *   `Selection required`, a section selects at least its required parts (§4.2.2); `Stimulus ref
- *   key`, no two stimulus refs of one item share an identifier (§7.6.2); `Variable mapping target`,
- *   the key `(item ref, target)` and no session variable as a target (reading 97).
+ *   identifier)` over its names (reading 86); `Selection required`, a section selects at least its
+ *   required parts (§4.2.2); `Stimulus ref key`, no two stimulus refs of one item share an
+ *   identifier (§7.6.2); `Variable mapping target`, the key `(item ref, target)` and no session
+ *   variable as a target (reading 97).
  * - **The items an item ref names** (`itemRefLaws`, `MappingSource`, `TemplateDefault`): `Item ref
  *   target`, its href names an item or an LTI link of the package (B2, B3); `Variable mapping
  *   source`, a mapping's source is an outcome its item declares (A34); the declared half of
@@ -70,7 +70,6 @@ export const testLaws = [
   "Selection required",
   "Branch target",
   "Branch forward",
-  "Section parts",
   "Stimulus ref key",
   "Variable mapping target",
   "Item ref target",
@@ -195,11 +194,6 @@ const documentLawsOf = (document: TestDocument): readonly Breach[] => {
     ),
   );
   const sections = [...document.sections.values()].flatMap((section): readonly Breach[] => {
-    const identifier = Option.getOrElse(collapsedOf(rows, section.node.id, "identifier"), () => "");
-    const empty =
-      section.parts.length === 0
-        ? [breachAt(rows, section.node, "Section parts", { identifier })]
-        : [];
     const required = section.parts.filter(
       ({ id, kind }) =>
         (kind === testKinds.itemRef || kind === testKinds.section) &&
@@ -231,7 +225,7 @@ const documentLawsOf = (document: TestDocument): readonly Breach[] => {
             ],
     });
 
-    return [...empty, ...selected];
+    return selected;
   });
   const mappings = document.names
     .filter(({ node }) => node.kind === testKinds.itemRef)

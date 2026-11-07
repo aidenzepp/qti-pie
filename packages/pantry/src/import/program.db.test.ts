@@ -36,8 +36,9 @@ import type { NodeMember, NodeRoot, PackageInputs } from "#pantry/import/write.t
 import { readPackage } from "#pantry/package/read.ts";
 import { AuthorApp } from "#pantry/qti/logins.ts";
 import { Package } from "#pantry/qti/package.ts";
+import { Qti } from "#pantry/qti/schema.ts";
 import { Author } from "#pantry/qti/roles.ts";
-import { materialize, materializeSpec } from "#pantry/test/fixtures.ts";
+import { materialize, materializeSpec, specOf } from "#pantry/test/fixtures.ts";
 import type { FixtureName, TextEdit } from "#pantry/test/fixtures.ts";
 import { materializeProcessing, processingFixtureNames } from "#pantry/test/processing-fixtures.ts";
 import { processingVerdicts } from "#pantry/test/processing-verdicts.ts";
@@ -56,6 +57,17 @@ const authorAppRole = "qti__author_app";
  * The PostgreSQL schema of `Qti`'s tables.
  */
 const qtiSchema = "qti";
+
+/**
+ * The table grizzle's migrations record themselves in, one per installation, beside `Qti`'s own.
+ */
+const ledgerTable = "__ledger";
+
+/**
+ * The trigger grizzle installs on each table of an installation, ledger included, that refuses a
+ * write below SERIALIZABLE (`__require_serializable`, `01-setup.sql` of `migrations/qti`).
+ */
+const isolationTrigger = "__isolation";
 
 /**
  * The tarball member `simple` is extracted from.
@@ -440,11 +452,13 @@ describe.skipIf(!hasLease)(
         }),
       );
 
-      it.effect("plans no recursion, and the schema installs no trigger of its own", () =>
-        // Oracle: PostgreSQL's own planner and catalog: no statement of an accepted package's
-        // ChangeSet plans a recursive union or a work-table scan (`db.explain`, estimate only), and
-        // no trigger on `Qti`'s tables is a user trigger (`pg_trigger.tgisinternal`, so the
-        // foreign keys' own triggers are not counted).
+      it.effect("plans no recursion, and its only triggers are grizzle's isolation guards", () =>
+        // Oracle: PostgreSQL's own planner and catalog. No statement of an accepted package's
+        // ChangeSet plans a recursive union or a work-table scan (`db.explain`, estimate only). The
+        // user triggers (`pg_trigger.tgisinternal` false, so the foreign keys' own triggers are not
+        // counted) on the installation's tables and its roles' views are exactly grizzle's
+        // `__isolation`, which refuses a write below SERIALIZABLE, once on each table: a table per
+        // stored relation of `Qti` and grizzle's migration ledger. Qti installs none of its own.
         Effect.gen(function* planAudit() {
           const db = yield* Db.open(AuthorApp.roles.author, {});
           for (const dir of Object.values(yield* acceptedPackages)) {
@@ -458,16 +472,42 @@ describe.skipIf(!hasLease)(
           }
 
           const client = yield* loginSession;
-          const triggers = yield* rowsOf<{ readonly tgname: string }>(
+          const tables = yield* rowsOf<{ readonly relname: string }>(
             client,
-            `SELECT t.tgname FROM pg_trigger t
-               JOIN pg_class c ON c.oid = t.tgrelid
-               JOIN pg_namespace n ON n.oid = c.relnamespace
-              WHERE n.nspname = $1 AND NOT t.tgisinternal`,
+            `SELECT c.relname FROM pg_catalog.pg_class c
+               JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+              WHERE n.nspname = $1 AND c.relkind = 'r'`,
             [qtiSchema],
           );
+          const triggers = yield* rowsOf<{
+            readonly nspname: string;
+            readonly relname: string;
+            readonly tgname: string;
+          }>(
+            client,
+            `SELECT n.nspname, c.relname, t.tgname FROM pg_catalog.pg_trigger t
+               JOIN pg_catalog.pg_class c ON c.oid = t.tgrelid
+               JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+              WHERE (n.nspname = $1 OR n.nspname LIKE $2) AND NOT t.tgisinternal`,
+            [qtiSchema, `${qtiSchema}\\_\\_%`],
+          );
+          const stored = Object.values(Qti.relations).filter(({ kind }) => kind === "relation");
 
-          assert.deepStrictEqual(triggers, []);
+          assert.strictEqual(
+            tables.length,
+            stored.length + 1,
+            "a table per stored relation, and the ledger",
+          );
+          assert.include(
+            tables.map(({ relname }) => relname),
+            ledgerTable,
+          );
+          assert.deepStrictEqual(
+            triggers
+              .map(({ nspname, relname, tgname }) => `${nspname}.${relname} ${tgname}`)
+              .toSorted(),
+            tables.map(({ relname }) => `${qtiSchema}.${relname} ${isolationTrigger}`).toSorted(),
+          );
         }).pipe(Effect.scoped),
       );
 
@@ -534,6 +574,40 @@ describe.skipIf(!hasLease)(
                 );
               }
             }
+          }),
+      );
+
+      it.effect(
+        "accepts a test whose section holds a rubric block and no part, as the law oracle judges it (spec reading 26)",
+        () =>
+          // Oracle: the law oracle's verdict on the same package (`judge`), and the information
+          // model's §4.2.15 behind both: a section's sectionPart is [0..unbounded], as both XSDs'
+          // minOccurs="0" are, so no law counts a section's parts but reading 79's selection.
+          // Bound: test-linear with one more section in its test part, of a rubric block alone.
+          Effect.gen(function* emptySection() {
+            const grammar = Result.getOrThrow(composed());
+            const linear = specOf("test-linear");
+            const dir = yield* materializeSpec({
+              ...linear,
+              edits: [
+                ...linear.edits,
+                {
+                  _tag: "ReplaceText",
+                  file: "rtest13.xml",
+                  replacement: `<qti-assessment-section identifier="bare" title="Bare" visible="true"><qti-rubric-block view="candidate" use="instructions"><qti-content-body><p>Only a rubric</p></qti-content-body></qti-rubric-block></qti-assessment-section></qti-test-part>`,
+                  search: "    </qti-test-part>",
+                },
+              ],
+              name: "empty-section",
+            });
+            const judgment = yield* judge(yield* readPackage(dir), grammar, lawsOf(grammar));
+            const { outcome } = yield* applyEdited(dir);
+
+            assert.isTrue(
+              judgment._tag === "Judged" && judgment.breaches.length === 0,
+              "the oracle's verdict",
+            );
+            assert.strictEqual(outcome.kind, "accepted", JSON.stringify(outcome));
           }),
       );
 
@@ -630,6 +704,9 @@ describe.skipIf(!hasLease)(
           name: "a match table on a multiple-cardinality outcome (lookup-cardinality, Q5.11)",
         },
         {
+          // P2's (resource type, root kind) containment into RootOfType (`qti/package.ts`
+          // packageLaws): of the statements named RootOfType, the one this edit breaks, and the
+          // oracle's one breach.
           apply: () =>
             Effect.flatMap(
               editedSimple("stimulus-root", [
@@ -640,9 +717,21 @@ describe.skipIf(!hasLease)(
                   search: `type="imsqti_item_xmlv3p0" href="choice.xml"`,
                 },
               ]),
-              (dir) => applyEdited(dir),
+              (dir) =>
+                Effect.gen(function* oneLawBroken() {
+                  const grammar = Result.getOrThrow(composed());
+                  const judgment = yield* judge(yield* readPackage(dir), grammar, lawsOf(grammar));
+
+                  assert.deepStrictEqual(
+                    judgment._tag === "Judged" ? judgment.breaches.map(({ law }) => law) : judgment,
+                    ["RootOfType"],
+                    "the oracle finds RootOfType alone broken",
+                  );
+
+                  return yield* applyEdited(dir);
+                }),
             ),
-          laws: [checkNamed("Document", "RootOfType")],
+          laws: [containedIn("Document", "RootOfType")],
           name: "an item named as a stimulus, a root its resource type does not name (root-type-reverse, Q5.06)",
         },
         {

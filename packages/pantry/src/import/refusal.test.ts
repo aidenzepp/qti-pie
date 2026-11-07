@@ -633,7 +633,6 @@ const tiers: readonly (readonly Rule[])[] = [
     "section-identifier-target",
     "branch-target",
     "branch-forward",
-    "section-empty",
     "stimulus-ref-key",
     "variable-mapping-target",
     "variable-mapping-source",

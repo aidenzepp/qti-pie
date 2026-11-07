@@ -336,9 +336,20 @@ against it. A reading that is not an information-model-over-XSD case says which 
     them: its own test rubric class has a printed-variable child, the test profile XSD admits them, and the
     implementation guide's test rubric example prints one. This is the one place the profile XSD is followed.
     (2026-11-04.)
-26. **An assessment section has at least one child.** The information model's prose requires at least one child. The XSD
-    admits an empty `qti-assessment-section`. This follows the information model's prose and sets the XSD aside, with
-    the stricter source deciding where both are normative. (2026-11-04.)
+26. **An assessment section may hold no part.** The information model gives an `AssessmentSection`'s `sectionPart`,
+    its item refs, sections, section refs and includes, the multiplicity "[0.. unbounded]" (section 4.2.15, in both
+    versions, https://www.imsglobal.org/spec/qti/v3p0/info#RootAttribute_AssessmentSection_sectionPart), and both
+    XSDs' choice of a section's parts is `minOccurs="0"` (`AssessmentSectionDType`). Both are normative. The sentence
+    "A Section must contain at least one other Section or Item" stands in section 2.8, Tests, Testparts and
+    Sections, inside section 2, Key Data Model Features, which both information models mark "This Section is NOT
+    NORMATIVE" (`info.txt` lines 8350 and 9122, `info301.txt` lines 8791 and 9927). So it states no requirement, as
+    reading 82 reads the implementation guide's informative text, and a section that holds a rubric block alone, or
+    nothing, is valid under reading 1. No law counts a section's parts but reading 79's selection, which bounds a
+    selection by them, zero included. This binds pantry and plate alike. This is not a case of documents in
+    conflict: the normative sources agree. (2026-11-04; amended 2026-11-06 by RV seat VD (`7858a46c`), on the corpus
+    verdict review, the earlier rule, that a section holds at least one child, withdrawn because its one source is
+    non-normative; under the operator's standing ruling of 2026-11-05 that the spec wins. The earlier rule was
+    upstream's, so the change is recorded in PR #46's decisions for Sterling and Aiden.)
 27. **`count-attempt` is a boolean.** The information model's description of `count-attempt` on
     `qti-end-attempt-interaction` reads as a count of attempts. Its type is boolean in both the XSD and the information
     model's own attribute table. This is not an information-model-over-XSD case: the conflict is inside the information

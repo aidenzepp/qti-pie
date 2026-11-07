@@ -263,27 +263,6 @@ export const testMutations = {
     ]),
     over: "package",
   },
-  // Section parts (reading 26): a section holding no part, written into a drawn section or the
-  // test part of the test or the section document.
-  "Section parts": {
-    mutate: oneOf([
-      drawnIn(test, (text) =>
-        replaceDrawn(
-          text,
-          /<\/qti-assessment-section>|<\/qti-test-part>/u,
-          (match) =>
-            `<qti-assessment-section identifier="hollow" title="Hollow" visible="true"></qti-assessment-section>${match[0]}`,
-        ),
-      ),
-      drawnIn(section, (text) =>
-        inDrawnSection(
-          text,
-          '<qti-assessment-section identifier="hollow" title="Hollow" visible="true"></qti-assessment-section>',
-        ),
-      ),
-    ]),
-    over: "package",
-  },
   // Selection required (§4.2.2): the section `second`, which selects one part, given two or three
   // required item refs.
   "Selection required": {

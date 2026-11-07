@@ -335,7 +335,7 @@ const testNames = [
 ] as const;
 
 /**
- * The names of phase 5's 63 negative fixtures: each a data-only edit set over one of
+ * The names of phase 5's 62 negative fixtures: each a data-only edit set over one of
  * {@link testNames}, a refusal of one rule of the spec's 4.15, bin 1 by the database and bin 2 by
  * the importer. `item-prefixed`, `instance-spelling-canonical`, `section-variable-in-test` and
  * `duration-of-item-ref` are "(direct)" only: their spec is the positive's own, and the leased
@@ -376,7 +376,6 @@ export const negativeNames = [
   "rubric-no-body",
   "rubric-printed-undeclared",
   "section-adaptive-and-selection",
-  "section-empty",
   "section-feedback-undeclared",
   "section-identifier-unknown",
   "section-prefixed-unresolved",
@@ -743,7 +742,7 @@ export const pciVerdicts: readonly (readonly [FixtureName, readonly string[]])[]
  * `end-attempt`, phase 2's hand-written positive, the 19 cut items of {@link cutNames}, the 40
  * hand-written HTML positives of {@link htmlElements}, the 14 XML copies of {@link copyNames}, the
  * packaging phase's metadata and content cuts with their negatives, the 11 positive fixtures of
- * phase 5's tests, sections and stimuli ({@link testNames}) and its 63 negatives ({@link
+ * phase 5's tests, sections and stimuli ({@link testNames}) and its 62 negatives ({@link
  * negativeNames}), the five restored-check fixtures of {@link restoredNames}, the six assembly
  * fixtures of {@link assemblyNames}, the 14 catalog positives of {@link catalogNames}, the four
  * companion-materials positives of {@link companionNames}, the 29 XML-path negatives of
@@ -4326,20 +4325,6 @@ const negativeSpecs: Record<(typeof negativeNames)[number], FixtureSpec> = {
       ),
     ],
   ),
-  "section-empty": negativeOver("section-empty", "test-linear", [
-    replaceIn(
-      "rtest13.xml",
-      "    </qti-test-part>",
-      [
-        '        <qti-assessment-section identifier="bare" title="Bare" visible="true">',
-        '            <qti-rubric-block view="candidate">',
-        "                <qti-content-body><p>Only a rubric</p></qti-content-body>",
-        "            </qti-rubric-block>",
-        "        </qti-assessment-section>",
-        "    </qti-test-part>",
-      ].join("\n"),
-    ),
-  ]),
   "section-feedback-undeclared": negativeOver("section-feedback-undeclared", "test-section-ref", [
     replaceIn(
       "test-b.xml",

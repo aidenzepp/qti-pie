@@ -352,16 +352,6 @@ const mathClassesOf = (
 };
 
 /**
- * A section's parts, of which spec reading 26 requires one.
- */
-const sectionParts: ReadonlySet<string> = new Set([
-  "qti-assessment-item-ref",
-  "qti-assessment-section",
-  "qti-assessment-section-ref",
-  "xi:include",
-]);
-
-/**
  * Every sequence of at most `length` letters of an alphabet, shortest first.
  *
  * @param alphabet - The letters.
@@ -805,11 +795,10 @@ const foreignRuling = (
 
 /**
  * Classify the grammar's verdict on an xmllint probe against xmllint's: they agree, a spec reading
- * rules their difference, or they disagree. Reading 26 and reading 96 rule a family the grammar
- * refuses and xmllint accepts: reading 26 one of a section that holds no part, and reading 96 one
- * only libxml2's widened sequence accepts ({@link widenedOnly}). Spec reading 61
- * rules a family the grammar accepts and xmllint refuses: one of `qti-ordering` holding a child of
- * QTI's namespace or none ({@link reading61}). Spec reading 118 rules a family of `xi:include`
+ * rules their difference, or they disagree. Reading 96 rules a family the grammar refuses and
+ * xmllint accepts: one only libxml2's widened sequence accepts ({@link widenedOnly}). Spec reading
+ * 61 rules a family the grammar accepts and xmllint refuses: one of `qti-ordering` holding a child
+ * of QTI's namespace or none ({@link reading61}). Spec reading 118 rules a family of `xi:include`
  * holding two fallbacks, which XInclude 1.0 §3.1 refuses and `XInclude.xsd` admits.
  *
  * @param input - The probe and both verdicts.
@@ -828,7 +817,7 @@ const xmllintRuling = (input: {
   readonly readings: readonly Content[] | undefined;
   readonly verdict: Validated | undefined;
   readonly version: SchemaVersion;
-}): "agrees" | "disagrees" | "reading 26" | "reading 61" | "reading 118" | "reading 96" => {
+}): "agrees" | "disagrees" | "reading 61" | "reading 118" | "reading 96" => {
   const { expected, probe, verdict } = input;
   if (verdict !== undefined && verdict.refused !== expected) {
     return "agrees";
@@ -851,31 +840,22 @@ const xmllintRuling = (input: {
     return "disagrees";
   }
 
-  if (
-    probe.parentKind === "qti-assessment-section" &&
-    !probe.kinds.some((child) => sectionParts.has(child))
-  ) {
-    return "reading 26";
-  }
-
   return widenedOnly(input.grammar, input.version, input.readings, probe)
     ? "reading 96"
     : "disagrees";
 };
 
 /**
- * Whether a spec reading narrows the XSD to refuse a family it accepts. Reading 26: a section holds
- * at least one part, where its XSD admits none, so a section's family that holds no part. Reading
- * 44: an SSML `token` or `w` holds no `voice` (SSML 1.1 §3.1.8.2), where `tokenType` admits one.
- * Reading 118: an include holds at most one fallback (XInclude 1.0 §3.1), where its XSD admits any
- * number, so an include's family that holds two.
+ * Whether a spec reading narrows the XSD to refuse a family it accepts. Reading 44: an SSML `token`
+ * or `w` holds no `voice` (SSML 1.1 §3.1.8.2), where `tokenType` admits one. Reading 118: an
+ * include holds at most one fallback (XInclude 1.0 §3.1), where its XSD admits any number, so an
+ * include's family that holds two.
  *
  * @param parent - The family's parent.
  * @param children - The family.
  * @returns Whether a reading narrows it.
  */
 const narrowedByReading = (parent: string, children: readonly string[]): boolean =>
-  (parent === "qti-assessment-section" && !children.some((child) => sectionParts.has(child))) ||
   ((parent === "ssml:token" || parent === "ssml:w") && children.includes("ssml:voice")) ||
   (parent === "xi:include" && children.filter((child) => child === "xi:fallback").length > 1);
 
@@ -884,7 +864,7 @@ describe.skipIf(!cached)("the content automata against the XSD", () => {
     "accept exactly the child sequences the independent reading's automaton accepts, every model with one content: every sequence of at most 3 children (4 over an alphabet of at most 4) over at most 4 kinds it names, one only its wildcard admits and one it refuses, drawn from the run seed",
     (ctx) =>
       // Oracle: a second implementation, the tests' own automaton of each XSD particle
-      // (`acceptorOf`), with spec readings 2, 26, 44 and 118 ruled where they narrow the XSD.
+      // (`acceptorOf`), with spec readings 2, 44 and 118 ruled where they narrow the XSD.
       // Bound: namedBound of the kinds a model names (every one where it names at most that many),
       // one kind only its wildcard admits and one element kind it does not admit, each a fresh draw
       // each run (TEST_SEED replays it); every sequence of at most 3 children over that alphabet, 4
@@ -981,7 +961,7 @@ describe.skipIf(!cached)("the content automata against the XSD", () => {
 
         yield* Effect.promise(() =>
           ctx.annotate(
-            `${models} models (${drawnFrom} naming more than ${namedBound} kinds, whose ${namedBound} the run seed drew), ${compared} sequences, ${ruled} ruled by readings 2, 26, 44 and 118; ${skipped} kinds skipped for holding more than one content`,
+            `${models} models (${drawnFrom} naming more than ${namedBound} kinds, whose ${namedBound} the run seed drew), ${compared} sequences, ${ruled} ruled by readings 2, 44 and 118; ${skipped} kinds skipped for holding more than one content`,
             "bound",
           ),
         );
