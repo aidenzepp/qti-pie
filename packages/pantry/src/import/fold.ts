@@ -10,7 +10,10 @@
  *   (N8), the document node's its context's (spec reading 117);
  * - `state`, its content-automaton state (C5, N5), the document node's 0;
  * - `copiesText`, whether its characters are its `stringPiece`: its parent's text is checked or
- *   copied (`inStringValue` of `#pantry/qti/node.ts`).
+ *   copied (`inStringValue` of `#pantry/qti/node.ts`);
+ * - `elements`, the elements among its parent's children up to it, itself included where it is one,
+ *   the document node's 0, and `elementChildren`, the elements among its own children, which an
+ *   overlay copies where `nodeCounts` holds it to `Node`'s fold of them.
  *
  * The law oracle folds the same fields with its own fold (`#pantry/model/folds.ts`), so the two
  * implementations stay apart and a host-against-oracle differential compares them.
@@ -24,6 +27,7 @@ import {
   GoverningOf,
   grammar,
   interactionKinds,
+  nonElementKinds,
   TextDomain,
 } from "#pantry/grammar/install.ts";
 import type { Flag } from "#pantry/grammar/install.ts";
@@ -47,6 +51,8 @@ export interface Folded {
    * (`checkedText`), or copied (`copiedTextKinds`, `copiedUnder`).
    */
   readonly copiesText: boolean;
+  readonly elementChildren: bigint;
+  readonly elements: bigint;
   readonly nearest: NodeId;
   readonly nearestKind: Kind;
   readonly state: number;
@@ -57,7 +63,7 @@ export interface Folded {
  * its parent's kind, `document` for the document node, which its children read as their
  * grandparent's (`copiedUnder`).
  */
-interface Held extends Folded {
+interface Held extends Omit<Folded, "elementChildren"> {
   readonly governs: string;
   readonly kind: Kind;
   readonly parentKind: Kind;
@@ -113,6 +119,11 @@ const entersAt: ReadonlyMap<string, readonly FlagHandle[]> = new Map(
  * The interaction kinds, whose children take them as their nearest interaction (N8).
  */
 const interactions: ReadonlySet<string> = new Set(interactionKinds);
+
+/**
+ * The kinds that are no element, which the element counts step over.
+ */
+const nonElements: ReadonlySet<string> = new Set(nonElementKinds);
 
 /**
  * The domains whose text TextDomain never judges (`universalDomains` of `#pantry/qti/node.ts`).
@@ -190,6 +201,19 @@ const stateOf = (
   });
 
 /**
+ * The context of a document no site names, its fold's seed: no ancestry, and its own document node
+ * as its nearest, of kind `document`.
+ *
+ * @param self - The document node's id.
+ * @returns The context.
+ */
+export const ownContext = (self: NodeId): DocumentContext => ({
+  ancestry: new Set(),
+  nearest: self,
+  nearestKind: "document",
+});
+
+/**
  * Fold a document's nodes under its context.
  *
  * The nodes come in document order, so each node's parent is folded before it, and its siblings
@@ -209,6 +233,7 @@ export const foldOf = (
 ): ReadonlyMap<NodeId, Folded> => {
   const folded = new Map<NodeId, Held>();
   const was = new Map<NodeId, number>();
+  const elementsUnder = new Map<NodeId, bigint>();
 
   for (const node of nodes) {
     const { governs, id, kind, version } = node;
@@ -216,6 +241,7 @@ export const foldOf = (
       folded.set(id, {
         ancestry: context.ancestry,
         copiesText: false,
+        elements: 0n,
         governs,
         kind,
         nearest: context.nearest,
@@ -236,12 +262,16 @@ export const foldOf = (
     const fromInteraction = interactions.has(parent.kind);
     const state = stateOf({ child: kind, parent: parent.kind, version }, was.get(node.parent) ?? 0);
     was.set(node.parent, state);
+
+    const elements = (elementsUnder.get(node.parent) ?? 0n) + (nonElements.has(kind) ? 0n : 1n);
+    elementsUnder.set(node.parent, elements);
     folded.set(id, {
       ancestry: new Set([...parent.ancestry, ...(entersAt.get(kind) ?? [])]),
       copiesText:
         checksText(version, parent.kind, parent.governs) ||
         copied.has(parent.kind) ||
         copiedUnder(parent.kind, parent.parentKind),
+      elements,
       governs,
       kind,
       nearest: fromInteraction ? node.parent : parent.nearest,
@@ -251,5 +281,10 @@ export const foldOf = (
     });
   }
 
-  return folded;
+  return new Map(
+    [...folded].map(([id, held]) => [
+      id,
+      { ...held, elementChildren: elementsUnder.get(id) ?? 0n },
+    ]),
+  );
 };

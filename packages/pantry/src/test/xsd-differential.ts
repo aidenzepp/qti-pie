@@ -726,6 +726,50 @@ export const recorded: readonly Recorded[] = [
     },
     rule: "choice-identifier-distinct",
   },
+  {
+    class: "beyond",
+    direction: "beyond",
+    reason: {
+      _tag: "specification",
+      source:
+        "https://www.imsglobal.org/spec/qti/v3p0/info#Abstract_ExpressionGroup (§6.9, ExpressionGroup: each operator's attribute states its sub-expressions' base types and cardinalities, as §6.9.33, qti-member, 'The first sub-expression must have single cardinality and the second must be a multiple or ordered container', and §6.9.21, qti-match, 'which must both have the same base-type and cardinality')",
+      why: "each operator takes the operand types §6.9 states; the XSD admits any expression as any operand",
+    },
+    rule: "P23",
+  },
+  {
+    class: "beyond",
+    direction: "beyond",
+    reason: {
+      _tag: "specification",
+      source:
+        "https://www.imsglobal.org/spec/qti/v3p0/info#Data_SetValue (§5.130, SetValue, normative, every setter's class: 'floating point values can not be assigned to integer variables and vice-versa'; §5.130.2: 'The expression which must have an effective base-type and cardinality that matches the base-type and cardinality of the outcome variable being set')",
+      why: "a setter's expression has its variable's base type and cardinality; the XSD types no expression",
+    },
+    rule: "P20",
+  },
+  {
+    class: "beyond",
+    direction: "beyond",
+    reason: {
+      _tag: "specification",
+      source:
+        "https://www.imsglobal.org/spec/qti/v3p0/info#Root_OutcomeDeclaration (§4.5, OutcomeDeclaration, normative: 'SCORE needs to be a float.', 'MAXSCORE needs to be a float.', 'PASSED needs to be a boolean.')",
+      why: "SCORE and MAXSCORE are declared float and PASSED boolean; the XSD admits any base type on any outcome declaration",
+    },
+    rule: "reserved-type",
+  },
+  {
+    class: "beyond",
+    direction: "beyond",
+    reason: {
+      _tag: "specification",
+      source:
+        "https://www.imsglobal.org/spec/qti/v3p0/info#Derived_Value (§7.46, Value: 'The base-type is defined by the 'base-type' attribute of the declaration') and https://www.imsglobal.org/spec/qti/v3p0/info#Enumerated_BaseTypeEnum (§8.13, each base type's value set)",
+      why: "a qti-value's text is a lexical form of its declaration's base type; the XSD types qti-value's text as any string",
+    },
+    rule: "typed-copy",
+  },
 ];
 
 /**
@@ -1188,17 +1232,6 @@ export const generatedRecorded: readonly Recorded[] = [
       why: "a condition's expression is boolean and single; the XSD types no expression, so a dropped or swapped child leaves a condition of another type it accepts",
     },
     rule: "P21",
-  },
-  {
-    class: "beyond",
-    direction: "beyond",
-    reason: {
-      _tag: "specification",
-      source:
-        "https://www.imsglobal.org/spec/qti/v3p0/info#Abstract_ExpressionGroup (§6.9, ExpressionGroup: each operator's attribute states its sub-expressions' base types and cardinalities, as §6.9.33, qti-member, 'The first sub-expression must have single cardinality and the second must be a multiple or ordered container', and §6.9.21, qti-match, 'which must both have the same base-type and cardinality')",
-      why: "each operator takes the operand types §6.9 states; the XSD admits any expression as any operand",
-    },
-    rule: "P23",
   },
   {
     class: "beyond",
@@ -1857,8 +1890,13 @@ export const elementGrainDifferences = (
         .filter(([name]) => !refused.has(name))
         .map(([, held]): Difference => ({
           class: cls,
+          // Each message names its own element, never the group's, so a classifier that reads
+          // where a message stands (reading 6's nested roots, reading 81's sets) still can.
           detail: held
-            .map(({ message, name }) => `line ${String(message.line)} ${name}: ${message.text}`)
+            .map(
+              ({ message, name }) =>
+                `line ${String(message.line)} ${Option.getOrElse(message.element, () => name)}: ${message.text}`,
+            )
             .join(" | "),
           direction: "xsd-only",
           rule: "",

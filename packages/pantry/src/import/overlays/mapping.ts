@@ -13,7 +13,7 @@ import type { Addition } from "@bjornpagen/grizzle";
 import { Option } from "effect";
 import type { DocumentContext } from "#pantry/import/context.ts";
 import { declaredFieldsOf } from "#pantry/import/overlays/declarations.ts";
-import { interactionKinds } from "#pantry/grammar/install.ts";
+import { foldOf, ownContext } from "#pantry/import/fold.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { collapse, lowerAscii } from "#pantry/import/overlays/metadata.ts";
 import { flatten } from "#pantry/model/xdm.ts";
@@ -86,11 +86,6 @@ type BaseTypeHandle = Addition<typeof Mapping>["baseType"];
  * A `DeclarationKind` handle.
  */
 type DeclarationKindHandle = Addition<typeof Mapping>["declarationKind"];
-
-/**
- * The interaction kinds, whose children take them as their nearest interaction (N8).
- */
-const interactions: ReadonlySet<string> = new Set(interactionKinds);
 
 /**
  * The map keys of a float mapping that hold a typed value, as `floatKeys` selects them.
@@ -425,39 +420,6 @@ const addTypedKey = (typed: TypedKeys, baseType: BaseTypeHandle, entry: TypedEnt
 };
 
 /**
- * Compute each node's nearest interaction (N8), as the tree's rows hold it: the document node's is
- * itself; a child of an interaction's is that interaction; every other node's is its parent's.
- *
- * @param nodes - A document's node rows, in document order, so each parent precedes its children.
- * @param rootNearest - The document node's own, its context's (spec reading 117); itself where
- *   none is given.
- * @returns Each node's nearest interaction, by its id.
- */
-const nearestOf = (
-  nodes: readonly NodeRow<Composed>[],
-  rootNearest: NodeId | undefined,
-): ReadonlyMap<NodeId, NodeId> => {
-  const kinds = new Map<NodeId, string>();
-  const nearest = new Map<NodeId, NodeId>();
-
-  for (const node of nodes) {
-    kinds.set(node.id, node.kind);
-    if (node.parent === node.id) {
-      nearest.set(node.id, rootNearest ?? node.id);
-      continue;
-    }
-
-    const parentKind = kinds.get(node.parent) ?? "";
-    nearest.set(
-      node.id,
-      interactions.has(parentKind) ? node.parent : (nearest.get(node.parent) ?? node.parent),
-    );
-  }
-
-  return nearest;
-};
-
-/**
  * Build the mapping overlays' rows of one document.
  *
  * A declared overlay copies its parent's declaration fields as `Declaration`'s builder writes them
@@ -483,7 +445,7 @@ const nearestOf = (
 export const rowsOf = (doc: XdmDocument<Composed>, ids: MappingIds): MappingRows => {
   const rows = flatten(doc, ids.idOf);
   const document = rows.document.node;
-  const nearest = nearestOf(rows.nodes, ids.context?.nearest);
+  const folds = foldOf(rows.nodes, ids.context ?? ownContext(rows.document.node));
   const byId = new Map(rows.nodes.map((node) => [node.id, node]));
   const attributes = new Map<NodeId, Map<string, string>>();
   for (const { lexical, name, node } of rows.attributes) {
@@ -497,7 +459,7 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: MappingIds): MappingRows
   const tupleOf = (node: NodeRow<Composed>) => ({
     document,
     kind: node.kind,
-    nearest: nearest.get(node.id) ?? document,
+    nearest: folds.get(node.id)?.nearest ?? document,
     node: node.id,
     start: node.start,
     version: node.version,

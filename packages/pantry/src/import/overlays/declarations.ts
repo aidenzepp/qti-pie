@@ -12,13 +12,9 @@
 import type { Addition } from "@bjornpagen/grizzle";
 import { Option } from "effect";
 import type { DocumentContext } from "#pantry/import/context.ts";
-import {
-  BaseType,
-  Cardinality,
-  DeclarationKind,
-  interactionKinds,
-  nonElementKinds,
-} from "#pantry/grammar/install.ts";
+import { foldOf, ownContext } from "#pantry/import/fold.ts";
+import type { Folded } from "#pantry/import/fold.ts";
+import { BaseType, Cardinality, DeclarationKind } from "#pantry/grammar/install.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { FlatRows, NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
@@ -123,16 +119,6 @@ const declarationKinds: ReadonlyMap<string, DeclarationKindHandle> = new Map(
  * The kinds that hold a declaration's values.
  */
 const valueSetKinds: ReadonlySet<string> = new Set(["qti-default-value", "qti-correct-response"]);
-
-/**
- * The interaction kinds, whose children take them as their nearest interaction (N8).
- */
-const interactions: ReadonlySet<string> = new Set(interactionKinds);
-
-/**
- * The kinds that are no element.
- */
-const nonElements: ReadonlySet<string> = new Set(nonElementKinds);
 
 /**
  * Whether a text is XML whitespace alone, possibly none: the language of an identifier's pieces.
@@ -248,56 +234,31 @@ const charsOf = (rows: FlatRows<Composed>): ReadonlyMap<NodeId, string> =>
   ]);
 
 /**
- * What a node's rows give the overlays besides its own row: its nearest interaction (N8), its
- * element rank among its siblings, its element children, and its string value.
+ * What a node's rows give the overlays besides its own row: its fold (`#pantry/import/fold.ts`),
+ * which holds its nearest interaction (N8) and its element counts, and its children's characters.
  */
 interface Derived {
-  readonly elementChildren: ReadonlyMap<NodeId, bigint>;
-  readonly elements: ReadonlyMap<NodeId, bigint>;
-  readonly nearest: ReadonlyMap<NodeId, NodeId>;
+  readonly folds: ReadonlyMap<NodeId, Folded>;
   readonly text: ReadonlyMap<NodeId, string>;
 }
 
 /**
- * Compute what the tree's folds give each node, as `Node`'s laws hold it: the nearest interaction
- * (N8), the element count fold's `elements` and `elementChildren`, and the string value of each
- * node's children's characters, concatenated in order.
+ * Compute what the tree gives each node, as `Node`'s laws hold it: its fold, and the string value
+ * of its children's characters, concatenated in order.
  *
  * @param rows - A document's flat rows, its nodes in document order, so each parent precedes its
  *   children.
- * @param rootNearest - The document node's nearest interaction, its context's (spec reading 117);
- *   itself where none is given.
+ * @param context - The document's context (spec reading 117), its own where none is given.
  * @returns The derived values, by node id.
  */
-const derivedOf = (rows: FlatRows<Composed>, rootNearest: NodeId | undefined): Derived => {
+const derivedOf = (rows: FlatRows<Composed>, context: DocumentContext | undefined): Derived => {
   const chars = charsOf(rows);
-  const kinds = new Map<NodeId, string>();
-  const nearest = new Map<NodeId, NodeId>();
-  const elements = new Map<NodeId, bigint>();
-  const elementChildren = new Map<NodeId, bigint>();
   const text = new Map<NodeId, string>();
-
-  for (const node of rows.nodes) {
-    kinds.set(node.id, node.kind);
-    if (node.parent === node.id) {
-      nearest.set(node.id, rootNearest ?? node.id);
-      continue;
-    }
-
-    const parentKind = kinds.get(node.parent) ?? "";
-    nearest.set(
-      node.id,
-      interactions.has(parentKind) ? node.parent : (nearest.get(node.parent) ?? node.parent),
-    );
+  for (const node of rows.nodes.filter(({ id, parent }) => parent !== id)) {
     text.set(node.parent, (text.get(node.parent) ?? "") + (chars.get(node.id) ?? ""));
-    if (!nonElements.has(node.kind)) {
-      const rank = (elementChildren.get(node.parent) ?? 0n) + 1n;
-      elementChildren.set(node.parent, rank);
-      elements.set(node.id, rank);
-    }
   }
 
-  return { elementChildren, elements, nearest, text };
+  return { folds: foldOf(rows.nodes, context ?? ownContext(rows.document.node)), text };
 };
 
 /**
@@ -338,7 +299,7 @@ const valueOf = (reading: Reading, node: NodeRow<Composed>, name: string): strin
 const tupleOf = (reading: Reading, node: NodeRow<Composed>) => ({
   document: reading.document,
   kind: node.kind,
-  nearest: reading.derived.nearest.get(node.id) ?? reading.document,
+  nearest: reading.derived.folds.get(node.id)?.nearest ?? reading.document,
   node: node.id,
   parent: node.parent,
   start: node.start,
@@ -413,8 +374,8 @@ const addValueSet = (
     baseType: declaration.baseType,
     cardinality: declaration.cardinality,
     declarationKind: declaration.declarationKind,
-    elementChildren: reading.derived.elementChildren.get(node.id) ?? 0n,
-    elements: reading.derived.elements.get(node.id) ?? 0n,
+    elementChildren: reading.derived.folds.get(node.id)?.elementChildren ?? 0n,
+    elements: reading.derived.folds.get(node.id)?.elements ?? 0n,
     identifier: declaration.identifier,
   });
 };
@@ -472,7 +433,7 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: DocumentIds): Declaratio
   const flat = flatten(doc, ids.idOf);
   const reading: Reading = {
     attributes: attributesOf(flat),
-    derived: derivedOf(flat, ids.context?.nearest),
+    derived: derivedOf(flat, ids.context),
     document: flat.document.node,
     rows: {
       Declaration: new Map(),

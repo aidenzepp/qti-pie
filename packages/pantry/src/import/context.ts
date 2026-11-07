@@ -22,7 +22,7 @@ import { Option } from "effect";
 import type { Kind } from "#pantry/grammar/compose.ts";
 import { includeParentKinds } from "#pantry/grammar/install.ts";
 import type { Flag } from "#pantry/grammar/install.ts";
-import { foldOf } from "#pantry/import/fold.ts";
+import { foldOf, ownContext } from "#pantry/import/fold.ts";
 import { entryPathOf, hrefResolverOf } from "#pantry/import/overlays/package.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
@@ -53,18 +53,6 @@ export interface ListedTarget {
   readonly node: NodeId;
   readonly rootKind: Kind;
 }
-
-/**
- * The context of a document no site names: no ancestry, and its own document node.
- *
- * @param self - The document node's id.
- * @returns The context.
- */
-export const ownContext = (self: NodeId): DocumentContext => ({
-  ancestry: new Set(),
-  nearest: self,
-  nearestKind: "document",
-});
 
 /**
  * The kinds an include is a site under (spec reading 114).

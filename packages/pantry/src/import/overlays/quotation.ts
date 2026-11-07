@@ -8,8 +8,8 @@
  * (`quotationLaws`), so a row this builder gets wrong is refused, never accepted.
  */
 import type { Addition } from "@bjornpagen/grizzle";
-import { interactionKinds } from "#pantry/grammar/install.ts";
 import type { DocumentContext } from "#pantry/import/context.ts";
+import { foldOf, ownContext } from "#pantry/import/fold.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { endsOf } from "#pantry/model/folds.ts";
 import type { Ends } from "#pantry/model/folds.ts";
@@ -42,43 +42,6 @@ export interface QuotationRows {
 }
 
 /**
- * The interaction kinds, whose children take them as their nearest interaction (N8).
- */
-const interactions: ReadonlySet<string> = new Set(interactionKinds);
-
-/**
- * Compute each node's nearest interaction (N8), as the tree's rows hold it: the document node's is
- * its context's; a child of an interaction's is that interaction; every other node's is its
- * parent's.
- *
- * @param nodes - A document's node rows, in document order, so each parent precedes its children.
- * @param rootNearest - The document node's own, its context's; itself where none is given.
- * @returns Each node's nearest interaction, by its id.
- */
-const nearestOf = (
-  nodes: readonly NodeRow<Composed>[],
-  rootNearest: NodeId | undefined,
-): ReadonlyMap<NodeId, NodeId> => {
-  const kinds = new Map<NodeId, string>();
-  const nearest = new Map<NodeId, NodeId>();
-  for (const node of nodes) {
-    kinds.set(node.id, node.kind);
-    if (node.parent === node.id) {
-      nearest.set(node.id, rootNearest ?? node.id);
-      continue;
-    }
-
-    const parentKind = kinds.get(node.parent) ?? "";
-    nearest.set(
-      node.id,
-      interactions.has(parentKind) ? node.parent : (nearest.get(node.parent) ?? node.parent),
-    );
-  }
-
-  return nearest;
-};
-
-/**
  * Build the quotation overlay's rows of one document: a row for each `q`, with the last character
  * of its sibling before it, the first of its sibling after it, and the first and last of its first
  * and last child, each empty where that node does not exist or holds no characters.
@@ -90,7 +53,7 @@ const nearestOf = (
 export const rowsOf = (doc: XdmDocument<Composed>, ids: QuotationIds): QuotationRows => {
   const rows = flatten(doc, ids.idOf);
   const document = rows.document.node;
-  const nearest = nearestOf(rows.nodes, ids.context?.nearest);
+  const folds = foldOf(rows.nodes, ids.context ?? ownContext(rows.document.node));
   const byId = new Map(rows.nodes.map((node) => [node.id, node] as const));
   const chars = new Map<NodeId, string>([
     ...rows.texts.map(({ node, value }) => [node, value] as const),
@@ -127,7 +90,7 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: QuotationIds): Quotation
         firstAt: 0n,
         kind: node.kind,
         last: endsAt(children, children.length - 1).last,
-        nearest: nearest.get(node.id) ?? document,
+        nearest: folds.get(node.id)?.nearest ?? document,
         nextAt: node.at + 1n,
         node: node.id,
         parent: node.parent,

@@ -20,7 +20,6 @@ import { Option } from "effect";
 import {
   attributeRows,
   GoverningOf,
-  interactionKinds,
   ResourceType,
   TextDomain,
   toolLabelKinds,
@@ -28,6 +27,8 @@ import {
 } from "#pantry/grammar/install.ts";
 import { collapse, lowerAscii } from "#pantry/import/overlays/metadata.ts";
 import { resourcePathsOf } from "#pantry/import/overlays/package.ts";
+import { foldOf, ownContext } from "#pantry/import/fold.ts";
+import type { Folded } from "#pantry/import/fold.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { AttributeRow, FlatRows, NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
@@ -401,9 +402,10 @@ interface Tree {
   readonly byId: ReadonlyMap<NodeId, NodeRow<Composed>>;
   readonly document: NodeId;
   /**
-   * The document node's nearest interaction, its context's (spec reading 117).
+   * Each node's fold (`#pantry/import/fold.ts`): its nearest interaction among the rest, the
+   * document node's its context's (spec reading 117).
    */
-  readonly rootNearest: NodeId | undefined;
+  readonly folds: ReadonlyMap<NodeId, Folded>;
   readonly rootKind: Addition<typeof LabelUse>["rootKind"];
   readonly rows: FlatRows<Composed>;
   readonly valueOf: (node: NodeId, name: string) => string | undefined;
@@ -614,44 +616,6 @@ const ssmlReads: ReadonlyMap<
 ]);
 
 /**
- * The interaction kinds, whose children take them as their nearest interaction (N8).
- */
-const interactions: ReadonlySet<string> = new Set(interactionKinds);
-
-/**
- * Compute each node's nearest interaction (N8), as the tree's rows hold it: the document node's is
- * itself; a child of an interaction's is that interaction; every other node's is its parent's.
- *
- * @param nodes - A document's node rows, in document order, so each parent precedes its children.
- * @param rootNearest - The document node's own, its context's; itself where none is given.
- * @returns Each node's nearest interaction, by its id.
- */
-const nearestOf = (
-  nodes: readonly NodeRow<Composed>[],
-  rootNearest: NodeId | undefined,
-): ReadonlyMap<NodeId, NodeId> => {
-  const kinds = new Map<NodeId, string>();
-  const nearest = new Map<NodeId, NodeId>();
-
-  for (const node of nodes) {
-    kinds.set(node.id, node.kind);
-    if (node.parent === node.id) {
-      nearest.set(node.id, rootNearest ?? node.id);
-      continue;
-    }
-
-    nearest.set(
-      node.id,
-      interactions.has(kinds.get(node.parent) ?? "")
-        ? node.parent
-        : (nearest.get(node.parent) ?? node.parent),
-    );
-  }
-
-  return nearest;
-};
-
-/**
  * The walk from an element up to its scope root, the element first, and the scope it ends at: the
  * scope root, or the document node where none holds the element.
  */
@@ -698,7 +662,6 @@ const scopeWalkOf = (tree: Tree, element: NodeRow<Composed>, scopeKind: string):
 const ssmlRowsOf = (
   tree: Tree,
 ): Pick<IdentityRows, "FragmentValue" | "SsmlAttribute" | "SsmlScope"> => {
-  const nearest = nearestOf(tree.rows.nodes, tree.rootNearest);
   const attributes = new Map<string, Addition<typeof SsmlAttribute>>();
   const scopes = new Map<string, Addition<typeof SsmlScope>>();
   const values = new Map<string, Addition<typeof FragmentValue>>();
@@ -737,7 +700,7 @@ const ssmlRowsOf = (
           document: tree.document,
           fragment,
           kind: node.kind,
-          nearest: nearest.get(node.id) ?? tree.document,
+          nearest: tree.folds.get(node.id)?.nearest ?? tree.document,
           node: node.id,
           parent: node.parent,
           start: node.start,
@@ -763,7 +726,6 @@ const langRowsOf = (
   tree: Tree,
 ): Pick<IdentityRows, "BodyXmlLang" | "CatalogScope" | "DocumentLang" | "XmlLang"> => {
   const { document } = tree;
-  const nearest = nearestOf(tree.rows.nodes, tree.rootNearest);
   const scopes = new Map<string, Addition<typeof CatalogScope>>();
   const xmlLangs = new Map<string, Addition<typeof XmlLang>>();
   const bodyLangs = new Map<string, Addition<typeof BodyXmlLang>>();
@@ -786,7 +748,7 @@ const langRowsOf = (
       scopes.set(at.id, {
         document,
         kind: at.kind,
-        nearest: nearest.get(at.id) ?? document,
+        nearest: tree.folds.get(at.id)?.nearest ?? document,
         node: at.id,
         parent: at.parent,
         scope,
@@ -830,8 +792,8 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: IdentityIds): IdentityRo
   const tree: Tree = {
     byId: new Map(rows.nodes.map((node) => [node.id, node] as const)),
     document: rows.document.node,
+    folds: foldOf(rows.nodes, ids.context ?? ownContext(rows.document.node)),
     rootKind: doc.root.kind,
-    rootNearest: ids.context?.nearest,
     rows,
     valueOf: (node, name) => lexicals.get(`${node} ${name}`),
     values: stringValues(rows),

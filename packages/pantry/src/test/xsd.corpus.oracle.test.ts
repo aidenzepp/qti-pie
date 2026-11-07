@@ -26,7 +26,7 @@
 import path from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it as unit, layer } from "@effect/vitest";
-import { Console, Effect, FileSystem, Layer } from "effect";
+import { Console, Effect, FileSystem, Layer, Option, Result } from "effect";
 import { Digest } from "effect/crypto";
 import { composed } from "#pantry/grammar/compose.ts";
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
@@ -42,6 +42,7 @@ import {
   absentTypeRecord,
   base64Record,
   blankListRecord,
+  elementGrainDifferences,
   emptyIdrefsRecord,
   foreignNamesOf,
   isLaxXsiType,
@@ -780,6 +781,63 @@ describe("xsd.corpus.oracle.test.ts, reading 6's class", () => {
       assert.isFalse(
         isNestedRoot({ ...xsdOnly(within), direction: "oracle-only" }, nested),
         "a difference the law oracle refuses",
+      );
+    },
+  );
+
+  unit(
+    "matches the element-grain difference of a nested root's messages, which compares the document's foreign elements as one",
+    () => {
+      // Kept from TD-B's run of the XSD search (TEST_SEED=2298271331): a qti-assessment-item in a
+      // foreign element's lax content, its required attributes missing and its text in
+      // element-only content, under a stimulus whose own refusals of those classes stand
+      // elsewhere. The item is a foreign element by the rows, so the element grain groups its
+      // messages under the foreign elements' one name; the difference must still name the item.
+      const grammar = Result.getOrThrow(composed());
+      const item = "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}qti-assessment-item";
+      const stimulus = "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}qti-assessment-stimulus";
+      const message = (text: string, attribute: Option.Option<string>, element = item) => ({
+        attribute,
+        element: Option.some(element),
+        line: element === item ? 7 : 4,
+        source: "schema" as const,
+        text,
+      });
+      const xsd = {
+        _tag: "Invalid" as const,
+        messages: [
+          message("The attribute 'title' is required but missing.", Option.none(), stimulus),
+          message("Missing child element(s).", Option.none(), stimulus),
+          message("The attribute 'identifier' is required but missing.", Option.none()),
+          message(
+            "Character content other than whitespace is not allowed because the content type is 'element-only'.",
+            Option.none(),
+          ),
+        ],
+      };
+      const law = {
+        refusals: (["attribute-required", "content"] as const).map((cls) => ({
+          class: cls,
+          detail: "elsewhere",
+          law: cls === "content" ? "N7 Last" : "AL3 required",
+          node: "/qti-assessment-stimulus[0]",
+          rule: cls === "content" ? "child-set" : "required-attribute",
+        })),
+        stopped: false,
+      };
+      const differences = elementGrainDifferences(
+        xsd,
+        law,
+        compareJudgments(xsd, law),
+        grammar,
+        new Set([item]),
+      );
+
+      assert.isAbove(differences.length, 0, "the element grain reports the item's messages");
+      assert.deepStrictEqual(
+        differences.filter((difference) => !isNestedRoot(difference, new Set([item]))),
+        [],
+        "every element-grain difference of the nested root is reading 6's",
       );
     },
   );
