@@ -23,7 +23,9 @@
  *   `Variable declared` for an unprefixed one that resolves nowhere (P8 on `Reading`); a braced one
  *   (a string attribute's) that resolves nowhere is a string value, with two readings still refused
  *   (reading R15-k); and `Item duration`, a resolving reading of an untimed item's built-in
- *   `duration` (information model §2.2.2.2).
+ *   `duration` (information model §2.2.2.2); and `Feedback outcome type`, a section document's
+ *   feedback names an outcome its reaching test declares as identifier, single or multiple
+ *   (information model §5.49.1, §5.52.1).
  */
 import { Option, Result } from "effect";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
@@ -71,6 +73,7 @@ export const testLaws = [
   "Variable declared",
   "Variable kind",
   "Item duration",
+  "Feedback outcome type",
 ] as const;
 
 /**
@@ -815,6 +818,64 @@ const readingsOf = (
 };
 
 /**
+ * Judge a section document's feedback reference as the schema's `Feedback_outcome_type` judges the
+ * one `SectionFeedbackRef` resolves under each test that reaches it: an outcome its test declares
+ * has the base type `identifier` and the cardinality `single` or `multiple`. A name no outcome of
+ * the test declares, a built-in session variable and an outcome that writes no cardinality (refused
+ * by `required-attribute` alone) are not judged here.
+ *
+ * @param assembled - The test's assembly.
+ * @param grammar - The composed grammar.
+ * @param rows - The section document.
+ * @param node - The element.
+ * @returns The breaches.
+ */
+const feedbackTypeOf = (
+  assembled: Assembled,
+  grammar: ComposedGrammar,
+  rows: View,
+  node: Row,
+): readonly Breach[] => {
+  const named = collapsedOf(rows, node.id, "outcome-identifier");
+  if (
+    Option.isNone(named) ||
+    sessionVariables.has(named.value) ||
+    !grammar.references.contentReference.rows.some(
+      (row) => row.kind === node.kind && row.attribute === "outcome-identifier",
+    )
+  ) {
+    return [];
+  }
+
+  const declared = assembled.test.listed.rows;
+  const outcome = declared.members.find(
+    ({ id, kind }) =>
+      kind === "qti-outcome-declaration" &&
+      Option.contains(collapsedOf(declared, id, "identifier"), named.value),
+  );
+  const written = Option.flatMap(Option.fromNullishOr(outcome), ({ id }) =>
+    collapsedOf(declared, id, "cardinality"),
+  );
+  if (outcome === undefined || Option.isNone(written)) {
+    return [];
+  }
+
+  const baseType = Option.getOrElse(collapsedOf(declared, outcome.id, "base-type"), () => "");
+  const cardinality = written.value;
+
+  return baseType === "identifier" && (cardinality === "single" || cardinality === "multiple")
+    ? []
+    : [
+        breachAt(rows, node, "Feedback outcome type", {
+          assembly: assembled.test.listed.path,
+          baseType,
+          cardinality,
+          identifier: named.value,
+        }),
+      ];
+};
+
+/**
  * Judge each test-level reference of each document a test places, once per test (reading 5): a
  * `section-identifier` names one section or section ref of the assembly, placed once (A61); a
  * variable reference has exactly one reading that resolves, through a name the test places once
@@ -934,7 +995,12 @@ const referenceLawsOf = (
           }),
         );
 
-      return [...sections, ...variables];
+      const feedbacks =
+        document.rootKind === testKinds.section
+          ? feedbackTypeOf(assembled, grammar, rows, node)
+          : [];
+
+      return [...sections, ...variables, ...feedbacks];
     });
   });
 };
