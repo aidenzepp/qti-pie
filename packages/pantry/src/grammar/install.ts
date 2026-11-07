@@ -1,6 +1,6 @@
 /**
  * The grammar's rosters and closed relations, declared to grizzle (fin.md §17; plan §1.2, and the
- * W5 amendment's C4, C6 to C8, C17 and C24).
+ * W5 amendment's C4, C7, C8, C17 and C24).
  *
  * Every row here is a generator's: {@link grammar} is `composed()`, run once when this module
  * loads, and each declaration states one of its relations as `closed(name, handles)` or
@@ -24,10 +24,10 @@
  * - A generator's dependent `fin` coordinate is a slot, `slot(closedId(Position), fin(O, n))`, over a
  *   count relation O over the model ({@link ModelPositions}, {@link SharedPositions}), so each
  *   model's block holds its own positions and no other's (README, "Closed relations").
- * - A singleton set is a diagonal's row ({@link PositionSelf}, {@link SlotSelf},
- *   {@link AttributeNameSelf}), a lexical form's code a `<Roster>Lexical` payload, and a
- *   one-position law a total function over (version, parent) ({@link CountedOf},
- *   {@link BarredOf}).
+ * - A lexical form's code is a `<Roster>Lexical` payload, and a one-position law a total function
+ *   over (version, parent) ({@link CountedOf}, {@link BarredOf}). A singleton set is no relation's
+ *   row: a schema module writes `Compute.singleton(id)`, and a handle's membership in a set is
+ *   `Compute.subset(Compute.singleton(id), set)` (README, "Tables and types").
  * - An element's attributes and text are read under its governor ({@link GoverningOf}): its kind, or
  *   the type an `xsi:type` makes govern it (spec readings 60 and 84).
  */
@@ -714,16 +714,6 @@ export const StrictlyHeld = closed.relation(
   })),
 );
 
-/**
- * `PositionSelf`: the diagonal of `Position`, so `PositionSelf.row(p)` is the singleton {p} (C6).
- */
-export const PositionSelf = closed.relation(
-  "PositionSelf",
-  { position: closedId(Position), self: closedId(Position) },
-  ["position", "self"],
-  grammar.content.positions.handles.map((position) => ({ position, self: position })),
-);
-
 // Ancestry (N6, C7).
 
 /**
@@ -1056,29 +1046,6 @@ export const Required = closed.relation(
   AttributeGrammar.rows
     .filter(({ use }) => use === "required")
     .map(({ model, slot: at }) => ({ model, slot: at })),
-);
-
-/**
- * `SlotSelf`: the diagonal of `AttributeSlot`, so `SlotSelf.row(s)` is the singleton {s} (C6),
- * AL2's fold step.
- */
-export const SlotSelf = closed.relation(
-  "SlotSelf",
-  { self: closedId(AttributeSlot), slot: closedId(AttributeSlot) },
-  ["slot", "self"],
-  grammar.attributes.positions.handles.map((held) => ({ self: held, slot: held })),
-);
-
-/**
- * `AttributeNameSelf`: the diagonal of `AttributeName`, so `AttributeNameSelf.row(n)` is the
- * singleton {n} (C6), and AL1's admission is `subset(AttributeNameSelf.row(name),
- * AttributeGrammar.row(version, governor))`, a named check.
- */
-export const AttributeNameSelf = closed.relation(
-  "AttributeNameSelf",
-  { name: closedId(AttributeName), self: closedId(AttributeName) },
-  ["name", "self"],
-  grammar.kinds.attributeName.handles.map((name) => ({ name, self: name })),
 );
 
 /**

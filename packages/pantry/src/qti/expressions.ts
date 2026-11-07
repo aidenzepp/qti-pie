@@ -82,7 +82,6 @@ import {
 } from "#pantry/grammar/expression.ts";
 import {
   AttributeName,
-  AttributeNameSelf,
   BaseType,
   BuiltInVariable,
   Cardinality,
@@ -920,7 +919,7 @@ const referringKinds = [...new Set(processingReferences.map(({ kind }) => kind))
 const references = select(Attribute, (a) =>
   a.and(
     a.in(a.kind, referringKinds),
-    a.eq(Compute.subset(AttributeNameSelf.row(a.name), VariableReference.row(a.kind)), true),
+    a.eq(Compute.subset(Compute.singleton(a.name), VariableReference.row(a.kind)), true),
     a.or(
       a.and(
         a.eq(VariableReference.at("spelling", a.kind, a.name), "bare"),
