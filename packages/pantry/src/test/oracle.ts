@@ -126,7 +126,7 @@ import {
   lomNamedTypes,
   objectRoots,
 } from "#pantry/test/oracle-laws.ts";
-import { lawTable } from "#pantry/vocab/laws.ts";
+import { lawTable, precedence } from "#pantry/vocab/laws.ts";
 import { mathmlNamespace, xsNamespace } from "#pantry/vocab/namespaces.ts";
 import { oracleValueOf, resolveAttribute } from "#pantry/test/resolution.ts";
 import {
@@ -6634,18 +6634,35 @@ export const lawSources: Readonly<Record<LawName, string>> = pipe(
 export const ruleOf = (law: LawName): OracleRule => lawTable[law].rule;
 
 /**
- * Name the verdict a judgment predicts.
+ * Each rule's place in the law catalog's precedence, the order a refusal names its rule by.
+ */
+const precedenceRank: ReadonlyMap<string, number> = new Map(
+  precedence.map((rule, at) => [rule, at]),
+);
+
+/**
+ * Name the verdict a judgment predicts: the rule of its breach whose rule the catalog's precedence
+ * ranks first, as the database names the lowest-ranked law its rows break, whatever order the
+ * oracle lists its breaches in. A rule the precedence does not rank stands after every rule it
+ * does, the first listed of them first.
  *
  * @param judgment - The judgment.
  * @returns Accepted when the codec read every document and no law broke; otherwise refused under
- *   the codec's rule or the first breach's.
+ *   the codec's rule or the first-ranked breach's.
  */
 export const verdictOf = (judgment: Judgment): PredictedVerdict => {
   if (judgment._tag === "CodecRefusal") {
     return { rule: judgment.rule, verdict: "refused" };
   }
 
-  const [first] = judgment.breaches;
+  const rankOf = (breach: Breach): number =>
+    precedenceRank.get(ruleOf(breach.law)) ?? Number.POSITIVE_INFINITY;
+  let first: Breach | undefined;
+  for (const breach of judgment.breaches) {
+    if (first === undefined || rankOf(breach) < rankOf(first)) {
+      first = breach;
+    }
+  }
 
   return first === undefined
     ? { verdict: "accepted" }

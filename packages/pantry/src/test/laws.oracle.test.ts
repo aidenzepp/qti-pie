@@ -1190,7 +1190,7 @@ describe("explain", () => {
 });
 
 describe("verdictOf", () => {
-  it("accepts a package no law refuses, and names the first breach's rule otherwise", () => {
+  it("accepts a package no law refuses, and names the first-ranked breach's rule otherwise", () => {
     const breach: Breach = { document: "", keys: {}, law: "N5 Follow" };
 
     assert.deepStrictEqual(verdictOf({ _tag: "Judged", breaches: [], documents: [] }), {
@@ -1204,6 +1204,39 @@ describe("verdictOf", () => {
       }),
       { rule: "ordering", verdict: "refused" },
     );
+  });
+  it("names the rule the catalog's precedence ranks first, whatever order the breaches are listed in", () => {
+    // Oracle: the law catalog's precedence, the order the database names a refusal by: of the
+    // breaches below, RootOfType's root-type-reverse ranks first, then Document entry's entry-kind,
+    // File exists's, N5 Follow's ordering and AL1 admission's attribute-admission. Bound: every
+    // order of the five, 120.
+    const listed: readonly LawName[] = [
+      "AL1 admission",
+      "N5 Follow",
+      "File exists",
+      "RootOfType",
+      "Document entry",
+    ];
+    const orders = (rest: readonly LawName[]): readonly (readonly LawName[])[] =>
+      rest.length === 0
+        ? [[]]
+        : rest.flatMap((law, at) =>
+            orders([...rest.slice(0, at), ...rest.slice(at + 1)]).map((tail) => [law, ...tail]),
+          );
+    const all = orders(listed);
+
+    assert.lengthOf(all, 120);
+    for (const order of all) {
+      assert.deepStrictEqual(
+        verdictOf({
+          _tag: "Judged",
+          breaches: order.map((law) => ({ document: "", keys: {}, law })),
+          documents: [],
+        }),
+        { rule: "root-type-reverse", verdict: "refused" },
+        order.join(", "),
+      );
+    }
   });
 });
 
