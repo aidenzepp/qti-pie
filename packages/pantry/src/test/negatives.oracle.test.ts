@@ -5,10 +5,10 @@
  *
  * Each negative is materialized and read as `importAgreesWithOracle` reads a package
  * (`#pantry/test/locate.ts` `oracleVerdict`), and its verdict is held to {@link expectations}: the
- * rules the oracle's breaches name, or accepted. The oracle judges every breach of a package, so a
- * negative built over `test-mapping` also carries that positive's own two breaches (`prefixed-ref`,
- * `variable-mapping-target`), and the import, which refuses a package under the rule of the first
- * object that fails, may name any of the set. The table also records `main`'s rule for each
+ * rules the oracle's breaches name, or accepted. The oracle judges every breach of a package, so
+ * the import, which refuses a package under the rule of the first object that fails, may name any
+ * of the set. The positives these negatives are built over are accepted ({@link positives}), so a
+ * set holds only the negative's own breaches. The table also records `main`'s rule for each
  * negative (`main:packages/pantry/src/import/tests.db.test.ts:190-325`, at `2b276d76`), the name
  * the database-era suite expected, which several laws have since renamed or retired.
  *
@@ -46,7 +46,9 @@ export interface NegativeExpectation {
 /**
  * The oracle's prediction for each of {@link negativeNames}, keyed by name, for the leased import
  * of them to read. A negative whose `oracle` is `"accepted"` and that is not "(direct)" is a
- * finding: `section-ref-to-item`, whose `main` rule `section-ref-target` no longer exists.
+ * finding: `feedback-outcome-float` and `item-duration-not-timed`, whose breach the oracle once hid
+ * under the noise of a refused positive, and `section-ref-to-item`, whose `main` rule
+ * `section-ref-target` no longer exists.
  */
 export const expectations: Readonly<Record<(typeof negativeNames)[number], NegativeExpectation>> = {
   "branch-backward": { main: ["branch-forward"], oracle: ["branch-forward"] },
@@ -55,41 +57,26 @@ export const expectations: Readonly<Record<(typeof negativeNames)[number], Negat
   "branch-part-to-item": { main: ["branch-target"], oracle: ["branch-target"] },
   "branch-replacement-target": { main: ["branch-forward"], oracle: ["branch-target"] },
   "branch-unknown-target": { main: ["branch-target"], oracle: ["branch-target"] },
-  "duration-of-item-ref": {
-    main: ["prefixed-ref"],
-    oracle: ["prefixed-ref", "variable-mapping-target"],
-  },
-  "feedback-outcome-float": { main: ["feedback-ref"], oracle: ["unmodeled-vocabulary"] },
+  "duration-of-item-ref": { main: ["prefixed-ref"], oracle: "accepted" },
+  "feedback-outcome-float": { main: ["feedback-ref"], oracle: "accepted" },
   "feedback-template": {
     main: ["ancestry-ban", "binding-declared"],
-    oracle: ["unmodeled-vocabulary"],
+    oracle: ["P8", "ancestry-ban", "prefixed-ref"],
   },
-  "include-text": { main: ["include-parse"], oracle: ["attribute-lexical", "include-target"] },
+  "include-text": { main: ["include-parse"], oracle: ["attribute-lexical"] },
   "include-xpointer": { main: ["include-xpointer"], oracle: ["attribute-admission"] },
-  "instance-spelling-canonical": {
-    main: ["value-lexical"],
-    oracle: ["prefixed-ref", "variable-mapping-target"],
-  },
-  "item-duration-in-item": {
-    main: ["item-duration"],
-    oracle: ["item-duration", "prefixed-ref", "variable-mapping-target"],
-  },
-  "item-duration-not-timed": {
-    main: ["item-duration"],
-    oracle: ["prefixed-ref", "variable-mapping-target"],
-  },
+  "instance-spelling-canonical": { main: ["value-lexical"], oracle: "accepted" },
+  "item-duration-in-item": { main: ["item-duration"], oracle: ["item-duration"] },
+  "item-duration-not-timed": { main: ["item-duration"], oracle: "accepted" },
   "item-in-section": { main: ["admission"], oracle: ["unmodeled-vocabulary"] },
-  "item-prefixed": { main: ["prefixed-root"], oracle: ["prefixed-ref", "variable-mapping-target"] },
+  "item-prefixed": { main: ["prefixed-root"], oracle: "accepted" },
   "item-ref-missing": { main: ["item-ref-target"], oracle: ["file-exists", "item-ref-target"] },
   "item-ref-to-stimulus": { main: ["item-ref-target"], oracle: ["item-ref-target"] },
   "mapping-target-twice": {
     main: ["variable-mapping-target"],
-    oracle: ["prefixed-ref", "variable-mapping-target"],
+    oracle: ["variable-mapping-target"],
   },
-  "mapping-undeclared": {
-    main: ["variable-mapping-source"],
-    oracle: ["prefixed-ref", "variable-mapping-source", "variable-mapping-target"],
-  },
+  "mapping-undeclared": { main: ["variable-mapping-source"], oracle: ["variable-mapping-source"] },
   "navigation-misspelled": {
     main: ["attribute-lexical", "value-lexical"],
     oracle: ["attribute-lexical"],
@@ -97,31 +84,22 @@ export const expectations: Readonly<Record<(typeof negativeNames)[number], Negat
   "part-no-section": { main: ["structure-count"], oracle: ["child-set"] },
   "part-order": { main: ["ordering"], oracle: ["ordering"] },
   "precondition-number-correct": { main: ["P25"], oracle: ["P25"] },
-  "prefixed-ambiguous": {
-    main: ["prefixed-ref"],
-    oracle: ["prefixed-ref", "variable-mapping-target"],
-  },
-  "prefixed-undeclared-variable": {
-    main: ["prefixed-ref"],
-    oracle: ["prefixed-ref", "variable-mapping-target"],
-  },
-  "prefixed-unknown-ref": {
-    main: ["prefixed-ref"],
-    oracle: ["prefixed-ref", "variable-mapping-target"],
-  },
-  "rubric-empty-view": { main: ["attribute-lexical"], oracle: ["unmodeled-vocabulary"] },
+  "prefixed-ambiguous": { main: ["prefixed-ref"], oracle: ["prefixed-ref"] },
+  "prefixed-undeclared-variable": { main: ["prefixed-ref"], oracle: ["prefixed-ref"] },
+  "prefixed-unknown-ref": { main: ["prefixed-ref"], oracle: ["prefixed-ref"] },
+  "rubric-empty-view": { main: ["attribute-lexical"], oracle: ["attribute-lexical"] },
   "rubric-in-rubric": {
     main: ["ancestry-ban", "unmodeled-vocabulary"],
     oracle: ["unmodeled-vocabulary"],
   },
-  "rubric-interaction": { main: ["ancestry-ban"], oracle: ["unmodeled-vocabulary"] },
-  "rubric-no-body": { main: ["structure-count"], oracle: ["unmodeled-vocabulary"] },
-  "rubric-printed-undeclared": { main: ["binding-declared"], oracle: ["unmodeled-vocabulary"] },
+  "rubric-interaction": { main: ["ancestry-ban"], oracle: ["ancestry-ban", "idref-target"] },
+  "rubric-no-body": { main: ["structure-count"], oracle: ["child-set"] },
+  "rubric-printed-undeclared": { main: ["binding-declared"], oracle: ["P8", "prefixed-ref"] },
   "section-adaptive-and-selection": { main: ["ordering"], oracle: ["ordering"] },
   "section-feedback-undeclared": { main: ["binding-declared"], oracle: ["P8", "prefixed-ref"] },
   "section-identifier-unknown": {
     main: ["section-identifier-target", "reach-copy"],
-    oracle: ["prefixed-ref", "section-identifier-target", "variable-mapping-target"],
+    oracle: ["section-identifier-target"],
   },
   "section-prefixed-unresolved": { main: ["prefixed-ref"], oracle: ["prefixed-ref"] },
   "section-printed-undeclared": { main: ["binding-declared"], oracle: ["P8", "prefixed-ref"] },
@@ -163,10 +141,10 @@ export const expectations: Readonly<Record<(typeof negativeNames)[number], Negat
     main: ["structure-identifier"],
     oracle: ["structure-identifier", "test-name-key"],
   },
-  "test-identifier-mismatch": { main: ["lom-identifier"], oracle: ["unmodeled-vocabulary"] },
-  "test-lang-no-lom": { main: ["document-lang"], oracle: ["unmodeled-vocabulary"] },
+  "test-identifier-mismatch": { main: ["lom-identifier"], oracle: ["lom-identifier"] },
+  "test-lang-no-lom": { main: ["document-lang"], oracle: ["document-lang"] },
   "test-no-part": { main: ["structure-count"], oracle: ["child-set"] },
-  "test-title-mismatch": { main: ["lom-title"], oracle: ["unmodeled-vocabulary"] },
+  "test-title-mismatch": { main: ["lom-title"], oracle: ["lom-title"] },
   "test-undeclared-variable": { main: ["P8"], oracle: ["P8", "prefixed-ref"] },
 };
 
@@ -180,6 +158,19 @@ const direct = [
   ["item-prefixed", "test-mapping"],
   ["section-variable-in-test", "test-section-ref"],
 ] as const satisfies readonly (readonly [(typeof negativeNames)[number], FixtureName])[];
+
+/**
+ * The five test-layer positives the oracle once refused, because they broke readings 88, 90, 93,
+ * 97, 110 and 115, which landed after them (research 08d145d1). Each is fixed and stays a
+ * positive, and the oracle accepts it.
+ */
+const positives = [
+  "test-content",
+  "test-include",
+  "test-lti",
+  "test-mapping",
+  "stimulus-301",
+] as const satisfies readonly FixtureName[];
 
 /**
  * Materialize a fixture in a root of its own and judge it by the oracle.
@@ -226,6 +217,14 @@ layer(NodeServices.layer, { excludeTestServices: true })(
             oracle === "accepted" ? oracle : [...oracle],
             name,
           );
+        }).pipe(Effect.scoped),
+      );
+    }
+
+    for (const name of positives) {
+      it.effect(`accepts the positive ${name}`, () =>
+        Effect.gen(function* acceptsPositive() {
+          assert.strictEqual(yield* verdictOf(name), "accepted", name);
         }).pipe(Effect.scoped),
       );
     }

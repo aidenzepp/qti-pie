@@ -11,7 +11,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/process";
  * A fix-forward of the materializer that changes what any directory holds bumps it, so the
  * corrected directories appear beside the old ones under new names instead of replacing them.
  */
-export const FIXTURES_VERSION = "2" as const;
+export const FIXTURES_VERSION = "3" as const;
 
 /**
  * A string edit applied to one file of a freshly extracted package, as plain data.
@@ -91,7 +91,9 @@ export interface CutEdit {
  * manifest declaring `schemaversion` with one resource per kept document under its real type
  * (`imsqti_test_xmlv3p0`, `imsqti_section_xmlv3p0`, `imsqti_item_xmlv3p0`,
  * `imsqti_stimulus_xmlv3p0`), each referenced file listed under the resource whose document
- * references it. It applies after the {@link FileEdit}s and {@link TextEdit}s of its spec.
+ * references it. A document an `xi:include` names is kept too, as a resource of its own of type
+ * `imsqti_fragment_xmlv3p0` (readings 93 and 115), not as a file of the including resource. It
+ * applies after the {@link FileEdit}s and {@link TextEdit}s of its spec.
  */
 export interface CutTestEdit {
   readonly _tag: "cutTest";
@@ -106,8 +108,10 @@ export interface CutTestEdit {
  * names it (a member under `qtiv3-examples/tests/`). The edit writes one stub item per distinct
  * item `href` of the test, from `simple`'s item as the template, at that `href`. A stub's
  * identifier is the item ref's identifier and it declares `RESPONSE` (identifier, single),
- * `SCORE` (float, single) and every other variable the test prefixes with that identifier or names
- * in a `qti-variable-mapping` `source-identifier` inside that item ref, as a float single outcome.
+ * `SCORE` (float, single; left out when a `qti-variable-mapping` inside that item ref targets
+ * `SCORE`, which reading 97 forbids an item that declares it) and every other variable the test
+ * prefixes with that identifier or names in a `qti-variable-mapping` `source-identifier` inside
+ * that item ref, as a float single outcome.
  * It writes a manifest declaring `schemaversion` of one test resource and one item resource per
  * stub, and deletes every other entry. It applies last, after the spec's {@link FileEdit}s and
  * {@link TextEdit}s.
@@ -2831,17 +2835,22 @@ const addExample = (file: string, member: string): FileEdit => ({
  *
  * @param identifier - The item's identifier and title.
  * @param outcomes - Each further outcome's identifier and base type, declared single.
+ * @param scored - Whether the stub declares `SCORE`; `false` for an item a mapping targets
+ *   `SCORE` of (reading 97).
  * @returns The item's text.
  */
 const stubItem = (
   identifier: string,
   outcomes: readonly (readonly [string, string])[] = [],
+  scored = true,
 ): string =>
   [
     '<?xml version="1.0" encoding="UTF-8"?>',
     `<qti-assessment-item ${asiRoot} identifier="${identifier}" title="${identifier}" adaptive="false" time-dependent="false">`,
     '  <qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier"/>',
-    '  <qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/>',
+    ...(scored
+      ? ['  <qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/>']
+      : []),
     ...outcomes.map(
       ([name, baseType]) =>
         `  <qti-outcome-declaration identifier="${name}" cardinality="single" base-type="${baseType}"/>`,
@@ -3072,7 +3081,9 @@ const setOutcome = (outcome: string, expression: string): string =>
  * and the non-canonical `I.02.SCORE`; `PART.duration` with `RTEST-26-A` the part; `I.A.B` of a
  * stub declaring a float outcome `A.B` (reading 37); and, of decision 189, the item refs `J` and
  * `J.K` that name one stub declaring `SCORE` and no `K.SCORE`, so that `J.K.SCORE` has one
- * resolving reading, `J.K` with `SCORE`.
+ * resolving reading, `J.K` with `SCORE`. `item034`, whose mapping targets `SCORE`, is a stub that
+ * does not declare it (reading 97), and `I` sits in a section whose selection is with replacement,
+ * the one place a numbered reference `I.2.SCORE` resolves (reading 88).
  */
 const testMappingEdits: readonly Edit[] = [
   replaceIn("rtest26.xml", "Ã¯tem065.xml", "item065.xml"),
@@ -3106,7 +3117,10 @@ const testMappingEdits: readonly Edit[] = [
     '<qti-assessment-item-ref identifier="item063" href="item063.xml"/>',
     [
       '<qti-assessment-item-ref identifier="item063" href="item063.xml"/>',
-      '            <qti-assessment-item-ref identifier="I" href="itemI.xml"/>',
+      '            <qti-assessment-section identifier="sectionI" title="Section I" visible="false">',
+      '                <qti-selection select="2" with-replacement="true"/>',
+      '                <qti-assessment-item-ref identifier="I" href="itemI.xml"/>',
+      "            </qti-assessment-section>",
       '            <qti-assessment-item-ref identifier="J" href="itemJ.xml"/>',
       '            <qti-assessment-item-ref identifier="J.K" href="itemJ.xml"/>',
     ].join("\n"),
@@ -3341,8 +3355,8 @@ const adaptiveFiles: readonly Edit[] = ["engine", "settings", "usagedata", "meta
  * `basicFeedbackTest`'s test with its four items' content removed (`id-a360e0fa63e6` holds
  * MathML, which no language phase has landed), the items kept as stubs of the same identifiers.
  * The test gains a test rubric, part and section rubrics with and without `use`, a stylesheet, a
- * context declaration, a `during` feedback with a `title` and `xml:lang`, and its manifest the test
- * resource's LOM `language`.
+ * context declaration, a `during` feedback with a `title`, and its manifest the test resource's LOM
+ * `language`. The test root states no language: reading 90 refuses an `xml:lang` on it.
  */
 const testContentEdits: readonly Edit[] = [
   ...[
@@ -3352,11 +3366,6 @@ const testContentEdits: readonly Edit[] = [
     ["id-b0dd9e732083/Example02-feedbackInline.xml", "id-b0dd9e732083"],
   ].map(([file, identifier]) => addText(file ?? "", stubItem(identifier ?? ""))),
   addText("styles/test.css", ".qti-test { margin: 0; }\n"),
-  replaceIn(
-    "assessment.xml",
-    'title="Simple Feedback Test" identifier="SPECTATUS-GENERATED-TEST">',
-    'title="Simple Feedback Test" identifier="SPECTATUS-GENERATED-TEST" xml:lang="en">',
-  ),
   replaceIn(
     "assessment.xml",
     '<qti-outcome-declaration base-type="float" cardinality="single" identifier="TEST_total">',
@@ -3748,8 +3757,8 @@ const stimulus301Edits: readonly Edit[] = [
   ),
   replaceIn(
     "imsmanifest.xml",
-    '<file href="passages/stylesheets/unbelievable_night.css"/>',
-    '<file href="passages/stylesheets/unbelievable_night.css"/>\n            <file href="passages/fragment.xml"/>',
+    "</resources>",
+    '    <resource identifier="Fragment1" type="imsqti_fragment_xmlv3p0" href="passages/fragment.xml">\n            <file href="passages/fragment.xml"/>\n        </resource>\n    </resources>',
   ),
   ...["exemplar06.xml", "exemplar04.xml", "exemplar05.xml"].map((file) =>
     replaceIn(file, "imsqti_asiv3p0_v1p0.xsd", "imsqti_asiv3p0p1_v1p0.xsd"),
@@ -3847,7 +3856,7 @@ const testSpecs: Record<(typeof testNames)[number], FixtureSpec> = {
     replaceIn(
       "imsmanifest.xml",
       '<resource identifier="experiment101" type="imslti_xmlv1p1">',
-      '<resource identifier="ltitest" type="imsqti_test_xmlv3p0" href="ltitest.xml">\n            <file href="ltitest.xml"/>\n        </resource>\n        <resource identifier="experiment101" type="imslti_xmlv1p1">',
+      '<resource identifier="ltitest" type="imsqti_test_xmlv3p0" href="ltitest.xml">\n            <file href="ltitest.xml"/>\n        </resource>\n        <resource identifier="experiment101" type="imslti_xmlv1p1" href="links/streaming_video_experiment101.xml">',
     ),
   ]),
   "test-mapping": {
@@ -4022,8 +4031,9 @@ const linearStubs: readonly (readonly [string, string])[] = [
 
 /**
  * The stubs of `test-mapping`, written by hand as its generated ones are: `item034` declares the
- * mapping's source `NOTA`, `I` is time-dependent and declares `A.B`, and `J` declares nothing more
- * (the spec's `time-dependent` and declarations of the positive).
+ * mapping's source `NOTA` and not `SCORE`, its target (reading 97), `I` is time-dependent and
+ * declares `A.B`, and `J` declares nothing more (the spec's `time-dependent` and declarations of
+ * the positive).
  *
  * @param overrides - Stub texts that replace the positive's, by `href`.
  * @returns Each stub's `href` and text.
@@ -4033,7 +4043,7 @@ const mappingStubs = (
 ): readonly (readonly [string, string])[] =>
   (
     [
-      ["item034.xml", stubItem("item034", [["NOTA", "float"]])],
+      ["item034.xml", stubItem("item034", [["NOTA", "float"]], false)],
       ["item160.xml", stubItem("item160")],
       ["item063.xml", stubItem("item063")],
       ["itemI.xml", durationStub("I", [["A.B", "float"]], true)],
@@ -4542,6 +4552,7 @@ const negativeSpecs: Record<(typeof negativeNames)[number], FixtureSpec> = {
     ),
   ]),
   "test-lang-no-lom": negativeOver("test-lang-no-lom", "test-content", [
+    replaceIn("assessment.xml", "<p>Part notes</p>", '<p xml:lang="en">Part notes</p>'),
     replaceIn(
       "imsmanifest.xml",
       testResourceGeneral,
@@ -7529,6 +7540,34 @@ const refsOf = (text: string) =>
   });
 
 /**
+ * One `xi:include` start tag, with its attribute text.
+ */
+const includePattern = /<xi:include\b(?<attrs>[^>]*?)\/?>/gu;
+
+/**
+ * The documents a QTI document's `xi:include` elements name, resolved against its folder.
+ *
+ * @param text - A QTI document, decoded as UTF-8.
+ * @param documentPath - The document's path in the package.
+ * @returns The resolved paths, each once, in document order. They are not checked for existence.
+ */
+const includesOf = (text: string, documentPath: string): string[] => {
+  const folder = path.posix.dirname(documentPath);
+  const targets = new Set<string>();
+
+  for (const match of text.matchAll(includePattern)) {
+    const href = attributesOf(match.groups?.["attrs"] ?? "").get("href") ?? "";
+    const reference = href.replace(/[?#].*$/u, "");
+
+    if (reference !== "" && !externalReference.test(reference)) {
+      targets.add(path.posix.join(folder, reference));
+    }
+  }
+
+  return [...targets];
+};
+
+/**
  * The relative file paths a document references, resolved against the document's folder.
  *
  * Item, section and stimulus refs name documents, not files, so their start tags are left out. The
@@ -7699,10 +7738,21 @@ const cutTestPackage = Effect.fn("fixtures.cutTestPackage")(function* cutTestPac
       }
     }
 
+    const included = includesOf(text, document.path);
+
+    for (const target of included) {
+      if (
+        !documents.some((known) => known.path === target) &&
+        (yield* isPackageFile(pkg, target))
+      ) {
+        documents.push({ path: target, type: "imsqti_fragment_xmlv3p0" });
+      }
+    }
+
     files[at] = [];
 
     for (const reference of fileReferencesOf(text, document.path)) {
-      if (yield* isPackageFile(pkg, reference)) {
+      if (!included.includes(reference) && (yield* isPackageFile(pkg, reference))) {
         files[at]?.push(reference);
       }
     }
@@ -7733,12 +7783,13 @@ const cutTestPackage = Effect.fn("fixtures.cutTestPackage")(function* cutTestPac
  * identifiers both begin a value (`J` and `J.K` for `J.K.SCORE`), the longer names it; a value that
  * is itself an item ref's identifier (`J.K`) names no variable. `duration` is the test's own name
  * for an item's duration, not a declared variable: it makes the item's stub time-dependent.
- * `RESPONSE` and `SCORE` are always there.
+ * `RESPONSE` and `SCORE` are always there, but for `SCORE` of an item whose ref holds a mapping
+ * that targets it.
  *
  * @param test - The test document's text.
- * @returns For each distinct item `href`, the first ref's identifier, whether any ref names its
- *   `duration` and the variables of every ref that names that `href`, besides `RESPONSE` and
- *   `SCORE`.
+ * @returns For each distinct item `href`, the first ref's identifier, whether it declares `SCORE`,
+ *   whether any ref names its `duration` and the variables of every ref that names that `href`,
+ *   besides `RESPONSE` and `SCORE`.
  */
 const stubsOf = (test: string) => {
   const refs = [...test.matchAll(documentRefPattern)].flatMap((match) => {
@@ -7755,6 +7806,7 @@ const stubsOf = (test: string) => {
     }
 
     const mapped: string[] = [];
+    let targetsScore = false;
 
     if (match.groups["self"] !== "/") {
       const start = (match.index ?? 0) + match[0].length;
@@ -7763,15 +7815,20 @@ const stubsOf = (test: string) => {
       for (const mapping of test
         .slice(start, end === -1 ? test.length : end)
         .matchAll(/<qti-variable-mapping\b(?<attrs>[^>]*?)\/?>/gu)) {
-        const source = attributesOf(mapping.groups?.["attrs"] ?? "").get("source-identifier");
+        const mappingAttributes = attributesOf(mapping.groups?.["attrs"] ?? "");
+        const source = mappingAttributes.get("source-identifier");
 
         if (source !== undefined) {
           mapped.push(source);
         }
+
+        if (mappingAttributes.get("target-identifier") === "SCORE") {
+          targetsScore = true;
+        }
       }
     }
 
-    return [{ href, identifier, mapped }];
+    return [{ href, identifier, mapped, targetsScore }];
   });
   const values = [...test.matchAll(attributePattern)]
     .filter((match) => !["href", "xsi:schemaLocation"].includes(match.groups?.["name"] ?? ""))
@@ -7781,14 +7838,22 @@ const stubsOf = (test: string) => {
     identifiers
       .filter((identifier) => value.startsWith(`${identifier}.`))
       .toSorted((left, right) => right.length - left.length)[0];
-  const stubs = new Map<string, { identifier: string; timed: boolean; variables: Set<string> }>();
+  const stubs = new Map<
+    string,
+    { identifier: string; scored: boolean; timed: boolean; variables: Set<string> }
+  >();
 
   for (const ref of refs) {
     const stub = stubs.get(ref.href) ?? {
       identifier: ref.identifier,
+      scored: true,
       timed: false,
       variables: new Set<string>(),
     };
+
+    if (ref.targetsScore) {
+      stub.scored = false;
+    }
 
     for (const mapped of ref.mapped) {
       stub.variables.add(mapped);
@@ -7818,6 +7883,7 @@ const stubsOf = (test: string) => {
   return [...stubs].map(([href, stub]) => ({
     href,
     identifier: stub.identifier,
+    scored: stub.scored,
     timed: stub.timed,
     variables: [...stub.variables].filter(
       (variable) => variable !== "RESPONSE" && variable !== "SCORE",
@@ -7893,6 +7959,10 @@ const packageLooseTest = Effect.fn("fixtures.packageLooseTest")(function* packag
               `identifier="${escapeAttribute(stub.identifier)}" title="${escapeAttribute(stub.identifier)}"`,
             )
             .replace(/<p>\s*<img [^>]*\/>\s*<\/p>\s*/u, "")
+            .replace(
+              /[ \t]*<qti-outcome-declaration identifier="SCORE"[\s\S]*?<\/qti-outcome-declaration>\r?\n/u,
+              stub.scored ? "$&" : "",
+            )
             .replace(
               'time-dependent="false"',
               stub.timed ? 'time-dependent="true"' : 'time-dependent="false"',
