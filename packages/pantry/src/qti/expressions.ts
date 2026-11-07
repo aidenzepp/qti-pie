@@ -155,6 +155,7 @@ import {
   itemResourceType,
   linkResourceTypes,
   Named,
+  nilUuid,
   partKind,
   sectionKind,
   sectionRefKind,
@@ -174,7 +175,7 @@ export const Affix = str.regex("^(?:[\\t\\n\\r ]*|\\{|\\})$");
  * The document the host writes for what no item holds: an LTI link's item, and a missing
  * document, which no `Document` row holds.
  */
-const nilDocument = "00000000-0000-0000-0000-000000000000";
+const nilDocument = nilUuid;
 
 /**
  * XML whitespace `S`, possibly none, as a pattern.

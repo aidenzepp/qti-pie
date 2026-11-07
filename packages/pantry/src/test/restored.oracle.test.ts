@@ -3,8 +3,10 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { Effect } from "effect";
 import { readPackage } from "#pantry/package/read.ts";
+import type { PackageFile } from "#pantry/package/read.ts";
 import { examplesTarball, materialize } from "#pantry/test/fixtures.ts";
 import { judge, verdictOf } from "#pantry/test/oracle.ts";
+import type { Judgment } from "#pantry/test/oracle.ts";
 import {
   asi,
   base,
@@ -93,6 +95,50 @@ const breachesOfLaw = (files: Readonly<Record<string, string>>, law: string) =>
   );
 
 /**
+ * Count the breaches of "Map key" in a string mapping of the given entries.
+ *
+ * @param entries - The mapping's `qti-map-entry` elements, as written.
+ * @returns The number of breaches of "Map key".
+ */
+const mapKeyBreaches = (entries: string) => breachesOfLaw(packageOfMapping(entries), "Map key");
+
+/**
+ * Assert that a judgment holds no breach and accepts the package.
+ *
+ * @param judgment - The judgment.
+ */
+const assertAccepted = (judgment: Judgment) => {
+  assert.deepStrictEqual(breachesOf(judgment), [], shown(breachesOf(judgment)));
+  assert.deepStrictEqual(verdictOf(judgment), { verdict: "accepted" });
+};
+
+/**
+ * Judge a read package with one of its files' texts rewritten.
+ *
+ * @param files - The package's files, as `readPackage` returns them.
+ * @param path - The file to rewrite.
+ * @param rewrite - Maps the file's text to its new text.
+ * @returns The judgment.
+ */
+const judgedWith = (
+  files: readonly PackageFile[],
+  path: string,
+  rewrite: (text: string) => string,
+) =>
+  judge(
+    files.map((file) =>
+      file.path === path
+        ? {
+            ...file,
+            bytes: new TextEncoder().encode(rewrite(new TextDecoder().decode(file.bytes))),
+          }
+        : file,
+    ),
+    grammar,
+    laws,
+  );
+
+/**
  * Judges the restored-check fixtures and the restored laws' cases with the law oracle. The
  * contrast for the first case, `xml:lang="en"` against a LOM `language` of `fr` breaking "Document
  * lang", is already pinned in `oracle.rv-i.test.ts`.
@@ -122,10 +168,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
       "an item body's xi:include of an external href breaks nothing: it is stored and never fetched (reading 115)",
       () =>
         Effect.gen(function* externalInclude() {
-          const judgment = yield* judged(packageOfInclude("https://example.org/f.xml"));
-
-          assert.deepStrictEqual(breachesOf(judgment), [], shown(breachesOf(judgment)));
-          assert.deepStrictEqual(verdictOf(judgment), { verdict: "accepted" });
+          assertAccepted(yield* judged(packageOfInclude("https://example.org/f.xml")));
         }),
     );
 
@@ -146,40 +189,28 @@ layer(NodeServices.layer, { excludeTestServices: true })(
       () =>
         Effect.gen(function* foldedKeys() {
           const clash = (first: string, second: string) =>
-            breachesOfLaw(
-              packageOfMapping(
-                `<qti-map-entry map-key="${first}" mapped-value="1"/><qti-map-entry map-key="${second}" mapped-value="2"/>`,
-              ),
-              "Map key",
+            mapKeyBreaches(
+              `<qti-map-entry map-key="${first}" mapped-value="1"/><qti-map-entry map-key="${second}" mapped-value="2"/>`,
             );
 
           assert.strictEqual(yield* clash("York", "york"), 1, "two default entries fold together");
           assert.strictEqual(
-            yield* breachesOfLaw(
-              packageOfMapping(
-                `<qti-map-entry map-key="York" case-sensitive="true" mapped-value="1"/><qti-map-entry map-key="york" mapped-value="2"/>`,
-              ),
-              "Map key",
+            yield* mapKeyBreaches(
+              `<qti-map-entry map-key="York" case-sensitive="true" mapped-value="1"/><qti-map-entry map-key="york" mapped-value="2"/>`,
             ),
             0,
             "a case-sensitive entry beside a default one is two keys",
           );
           assert.strictEqual(
-            yield* breachesOfLaw(
-              packageOfMapping(
-                `<qti-map-entry map-key="York" case-sensitive="true" mapped-value="1"/><qti-map-entry map-key="york" case-sensitive="true" mapped-value="2"/>`,
-              ),
-              "Map key",
+            yield* mapKeyBreaches(
+              `<qti-map-entry map-key="York" case-sensitive="true" mapped-value="1"/><qti-map-entry map-key="york" case-sensitive="true" mapped-value="2"/>`,
             ),
             0,
             "two case-sensitive entries compare by code points",
           );
           assert.strictEqual(
-            yield* breachesOfLaw(
-              packageOfMapping(
-                `<qti-map-entry map-key="York" case-sensitive="true" mapped-value="1"/><qti-map-entry map-key="York" case-sensitive="1" mapped-value="2"/>`,
-              ),
-              "Map key",
+            yield* mapKeyBreaches(
+              `<qti-map-entry map-key="York" case-sensitive="true" mapped-value="1"/><qti-map-entry map-key="York" case-sensitive="1" mapped-value="2"/>`,
             ),
             1,
             "one string matched the same way twice still clashes",
@@ -193,10 +224,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
       () =>
         Effect.gen(function* unresolvedPattern() {
           for (const files of [packageOfPattern("{NOSUCH}"), packageOfPattern("{NOSUCH.SCORE}")]) {
-            const judgment = yield* judged(files);
-
-            assert.deepStrictEqual(breachesOf(judgment), [], shown(breachesOf(judgment)));
-            assert.deepStrictEqual(verdictOf(judgment), { verdict: "accepted" });
+            assertAccepted(yield* judged(files));
           }
         }),
     );
@@ -207,33 +235,19 @@ layer(NodeServices.layer, { excludeTestServices: true })(
         Effect.gen(function* unresolvedTestPattern() {
           const dir = yield* materialize("pattern-unresolved-test");
           const files = yield* readPackage(dir);
-          const judgment = yield* judge(files, grammar, laws);
 
-          assert.deepStrictEqual(breachesOf(judgment), [], shown(breachesOf(judgment)));
-          assert.deepStrictEqual(verdictOf(judgment), { verdict: "accepted" });
+          assertAccepted(yield* judge(files, grammar, laws));
 
           // The same pattern naming `item034.completionStatus`, which the test declares itself
           // and item034's session variable of that name is too: two readings, so Prefixed
           // reference still refuses it.
-          const ambiguous = yield* judge(
-            files.map((file) =>
-              file.path === "rtest13.xml"
-                ? {
-                    ...file,
-                    bytes: new TextEncoder().encode(
-                      new TextDecoder()
-                        .decode(file.bytes)
-                        .replace("{NOSUCH}", "{item034.completionStatus}")
-                        .replace(
-                          "<qti-test-part ",
-                          '<qti-outcome-declaration identifier="item034.completionStatus" cardinality="single" base-type="string"/><qti-test-part ',
-                        ),
-                    ),
-                  }
-                : file,
-            ),
-            grammar,
-            laws,
+          const ambiguous = yield* judgedWith(files, "rtest13.xml", (xml) =>
+            xml
+              .replace("{NOSUCH}", "{item034.completionStatus}")
+              .replace(
+                "<qti-test-part ",
+                '<qti-outcome-declaration identifier="item034.completionStatus" cardinality="single" base-type="string"/><qti-test-part ',
+              ),
           );
 
           assert.deepStrictEqual(
@@ -281,19 +295,8 @@ layer(NodeServices.layer, { excludeTestServices: true })(
       () =>
         Effect.gen(function* usageValue() {
           const files = yield* readPackage(yield* materialize("usage3-integer-float"));
-          const typed = (text: (original: string) => string) =>
-            judge(
-              files.map((file) =>
-                file.path === "example.xml"
-                  ? {
-                      ...file,
-                      bytes: new TextEncoder().encode(text(new TextDecoder().decode(file.bytes))),
-                    }
-                  : file,
-              ),
-              grammar,
-              laws,
-            ).pipe(
+          const typed = (rewrite: (original: string) => string) =>
+            judgedWith(files, "example.xml", rewrite).pipe(
               Effect.map(
                 (judgment) =>
                   breachesOf(judgment).filter(({ law }) => law === "Usage typed value").length,
@@ -324,10 +327,8 @@ layer(NodeServices.layer, { excludeTestServices: true })(
             `<qti-variable-mapping source-identifier="NOSUCH" target-identifier="SCORE"/>`,
             read,
           );
-          const judgment = yield* judged(mapped);
 
-          assert.deepStrictEqual(breachesOf(judgment), [], shown(breachesOf(judgment)));
-          assert.deepStrictEqual(verdictOf(judgment), { verdict: "accepted" });
+          assertAccepted(yield* judged(mapped));
           assert.strictEqual(
             yield* breachesOfLaw(
               packageOfLtiRef(

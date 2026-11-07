@@ -223,9 +223,10 @@ export const flagCarriers = [
 export type FlagName = (typeof flagCarriers)[number][0];
 
 /**
- * The nil uuid: the start of an accumulated uuid copy, which every member's owner replaces.
+ * The nil uuid: the start of an accumulated uuid copy, which every member's owner replaces, and the
+ * document the host writes for what no item holds, an LTI link's item.
  */
-const nilUuid = "00000000-0000-0000-0000-000000000000";
+export const nilUuid = "00000000-0000-0000-0000-000000000000";
 
 /**
  * A selection's `select` once its whitespace is split off: an integer's lexical form, which
