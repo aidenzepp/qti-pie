@@ -12,7 +12,9 @@
  *   to zero", info §5.47.2 and §5.119.2). `rounding-mode` defaults to `significantFigures` on
  *   `qti-equal-rounded` (§5.47.1) and is required on `qti-round-to` (§5.119.1, AL3's). A `figures`
  *   that names a variable is read at run time, so it is not judged. {@link Rounding} holds each
- *   such element's `figures` and the mode in force.
+ *   such element's {@link RoundingHolds}, which of the two it has, {@link RoundingFigures} its
+ *   `figures`, {@link RoundingMode} the mode in force, and {@link RoundingModeFigures} both
+ *   together, where reading 119 judges them.
  * - **Reading 121** (rule `P36`): under `tolerance-mode` `absolute` or `relative` a `qti-equal`
  *   carries a `tolerance` ("If the tolerance mode is absolute or relative then the tolerance must
  *   be specified", info §5.46.2), and every `tolerance` is one or two values ("The tolerance
@@ -41,6 +43,7 @@
 import {
   accumulated,
   check,
+  closed,
   closedId,
   Compute,
   contained,
@@ -49,6 +52,7 @@ import {
   fold,
   key,
   lexicalForm,
+  mirrors,
   Monoid,
   natural,
   on,
@@ -82,13 +86,15 @@ export const roundingModes = ["decimalPlaces", "significantFigures"] as const;
 export const equalRoundedMode = "significantFigures" satisfies (typeof roundingModes)[number];
 
 /**
- * The null objects of a {@link Rounding} row whose element leaves an attribute unwritten, which AL3
- * refuses alone: `figuresLexical` and `figures` where it writes no `figures`, `mode` where a
- * `qti-round-to` writes no `rounding-mode`, and `figuresValue` where `figures` is no integer.
- * `mode`'s is grizzle-forced (FB-EXPR's report to main of 2026-11-07): `Rounding_figures` reads the
- * mode and the integer in one row, which no outer join builds from two optional rows.
+ * Which of reading 119's two inputs a rounding operator has, its {@link Rounding} row's `holds`:
+ * `both`, a `figures` and a mode in force, written or `qti-equal-rounded`'s default; `figures`, a
+ * `figures` and no mode, a `qti-round-to` that writes no `rounding-mode`; `mode`, a mode and no
+ * `figures`; `neither`, neither. Only `both` is valid: `figures` is required on both kinds
+ * (`EqualRoundedDType`, `RoundToDType`) and `rounding-mode` on `qti-round-to`, so every other value
+ * is an element AL3 refuses alone, which holds no detail row ({@link RoundingModeFigures} is
+ * `both`'s arm alone), never an optional value of the domain.
  */
-export const roundingUnwritten = { figures: "", figuresValue: 0n, mode: "" } as const;
+export const RoundingHolds = closed("RoundingHolds", ["neither", "mode", "figures", "both"]);
 
 /**
  * The tolerance modes under which a `qti-equal` compares within a range, and so carries a
@@ -130,29 +136,18 @@ export const positivePattern =
   "^(?:\\+?(?:[0-9]*[1-9][0-9]*(?:\\.[0-9]*)?|[0-9]*\\.[0-9]*[1-9][0-9]*)(?:[Ee][+-]?[0-9]+)?|INF)$";
 
 /**
- * A rounding operator's `figures` and the mode in force, keyed by its node: one row for every
- * `qti-equal-rounded` and every `qti-round-to`.
- *
- * - **copied from `Node`:** its {@link nodeRef} tuple;
- * - **copied from the attribute:** `figuresLexical`, `figures` as written, and `mode`, its
- *   `rounding-mode`, where `modeWritten`;
- * - **the host's**, each proved by `E1_derived`: `figures`, the lexical form collapsed; `integer`,
- *   whether that is in {@link integerForm}; `figuresValue`, its integer, else 0; and an unwritten
- *   `mode`, `significantFigures` on a `qti-equal-rounded` (§5.47.1) and empty on a `qti-round-to`,
- *   whose mode AL3 requires.
- *
- * An element that writes no `figures` (AL3 refuses it) holds an empty `figures`, no integer.
+ * A rounding operator, keyed by its node: one row for every `qti-equal-rounded` and every
+ * `qti-round-to`, its {@link nodeRef} tuple, whether it writes `rounding-mode` (`modeWritten`), and
+ * its {@link RoundingHolds}, which {@link RoundingFigures} and {@link RoundingMode} prove: it has
+ * the one exactly where its `holds` says, and {@link RoundingModeFigures} exactly where it is
+ * `both`.
  */
 export const Rounding = relation(
   "Rounding",
   {
     document: uuid,
-    figures: keyText,
-    figuresLexical: keyText,
-    figuresValue: pg.bigint,
-    integer: pg.boolean,
+    holds: closedId(RoundingHolds),
     kind: closedId(NodeKind),
-    mode: keyText,
     modeWritten: pg.boolean,
     nearest: uuid,
     node: uuid,
@@ -160,6 +155,38 @@ export const Rounding = relation(
     start: natural,
     version: closedId(SchemaVersion),
   },
+  ["node"],
+);
+
+/**
+ * A rounding operator's `figures`, keyed by its node, where it writes one: `figuresLexical` as
+ * written, copied from the attribute, and `figures`, collapsed (`E1_derived`).
+ */
+export const RoundingFigures = relation(
+  "RoundingFigures",
+  { figures: keyText, figuresLexical: keyText, node: uuid },
+  ["node"],
+);
+
+/**
+ * A rounding operator's mode in force, keyed by its node, where it has one: its `rounding-mode`
+ * where it writes one (`modeWritten`, copied from the attribute), else {@link equalRoundedMode} on a
+ * `qti-equal-rounded`. A `qti-round-to` that writes none has none, which AL3 refuses.
+ */
+export const RoundingMode = relation(
+  "RoundingMode",
+  { kind: closedId(NodeKind), mode: keyText, modeWritten: pg.boolean, node: uuid },
+  ["node"],
+);
+
+/**
+ * A rounding operator that has both a `figures` and a mode in force, keyed by its node: the
+ * `both` arm of its {@link Rounding} row's `holds`, with its {@link RoundingFigures}' `figures` and
+ * its {@link RoundingMode}'s `mode`, the two reading 119 judges together ({@link roundingFigures}).
+ */
+export const RoundingModeFigures = relation(
+  "RoundingModeFigures",
+  { figures: keyText, mode: keyText, node: uuid },
   ["node"],
 );
 
@@ -210,7 +237,15 @@ export const ToleranceToken = relation(
 /**
  * Every relation this module declares, by name, as `schema.ts` composes them.
  */
-export const operatorRelations = { Rounding, Tolerance, ToleranceToken };
+export const operatorRelations = {
+  Rounding,
+  RoundingFigures,
+  RoundingHolds,
+  RoundingMode,
+  RoundingModeFigures,
+  Tolerance,
+  ToleranceToken,
+};
 
 /**
  * Each `tolerance`'s values in order, counted by `Tolerance.tokens`.
@@ -226,14 +261,14 @@ export const toleranceTokenFamily = ordered(
 const roundingNodes = select(Node, (n) => n.in(n.kind, roundingKinds));
 
 /**
- * A rounding operator's `figures`, the source of {@link Rounding}'s `figuresLexical`.
+ * A rounding operator's `figures`, the source of {@link RoundingFigures}.
  */
 const figuresAttributes = select(Attribute, (a) =>
   a.and(a.in(a.kind, roundingKinds), a.eq(a.name, "figures")),
 );
 
 /**
- * A rounding operator's `rounding-mode`, the source of {@link Rounding}'s written `mode`.
+ * A rounding operator's `rounding-mode`, the source of a written {@link RoundingMode}.
  */
 const modeAttributes = select(Attribute, (a) =>
   a.and(a.in(a.kind, roundingKinds), a.eq(a.name, "rounding-mode")),
@@ -243,6 +278,29 @@ const modeAttributes = select(Attribute, (a) =>
  * The rounding operators that write `rounding-mode`.
  */
 const writtenModes = select(Rounding, (r) => r.eq(r.modeWritten, true));
+
+/**
+ * The written modes in force, each its attribute's lexical form.
+ */
+const writtenModesInForce = select(RoundingMode, (m) => m.eq(m.modeWritten, true));
+
+/**
+ * The rounding operators that hold a `figures`.
+ */
+const figuredRoundings = select(Rounding, (r) => r.in(r.holds, ["figures", "both"]));
+
+/**
+ * The rounding operators that hold both a `figures` and a mode in force, each of which has its
+ * {@link RoundingModeFigures} row: the `both` arm, stated as the two containments grizzle's
+ * `alternatives` would state of its one arm, since the importer's refusal tables read no
+ * `alternatives` statement.
+ */
+const bothHeld = select(Rounding, (r) => r.eq(r.holds, "both"));
+
+/**
+ * The rounding operators that hold a mode in force.
+ */
+const modedRoundings = select(Rounding, (r) => r.in(r.holds, ["mode", "both"]));
 
 /**
  * A `qti-equal`'s `tolerance`, the source of {@link Tolerance}.
@@ -260,15 +318,37 @@ const rangeModeAttributes = select(Attribute, (a) =>
 );
 
 /**
- * Reading 119 (law "Rounding figures", rule `P10`; info §5.47.2 and §5.119.2): a `figures` that is
- * an integer is at least 1 under `significantFigures` and at least 0 under `decimalPlaces`. A
- * variable's name is no integer, and a mode outside the enumeration (AL1's) or none (AL3's) binds
- * neither bound.
+ * The least `figures` each rounding mode admits (reading 119; info §5.47.2 and §5.119.2): 1 under
+ * `significantFigures`, "a non-zero positive integer", and 0 under `decimalPlaces`, "an integer
+ * greater than or equal to zero".
  */
-export const roundingFigures = check("Rounding_figures", Rounding, (r) =>
-  r.and(
-    r.or(r.eq(r.integer, false), r.ne(r.mode, "significantFigures"), r.ge(r.figuresValue, 1n)),
-    r.or(r.eq(r.integer, false), r.ne(r.mode, "decimalPlaces"), r.ge(r.figuresValue, 0n)),
+const leastFigures = { decimalPlaces: 0n, significantFigures: 1n } as const;
+
+/**
+ * Reading 119 (law "Rounding figures", rule `P10`; info §5.47.2 and §5.119.2): a `figures` that is
+ * an integer is at least its mode's {@link leastFigures}. A variable's name is no integer, and a
+ * mode outside the enumeration (AL1's) binds no bound; an operator with no `figures` or no mode is
+ * AL3's, and has no {@link RoundingModeFigures} row to judge. The cast reads only an integer's
+ * form, which the guard proves, so its `otherwise` is the least itself, which the bound admits.
+ */
+export const roundingFigures = check("Rounding_figures", RoundingModeFigures, (m) =>
+  m.or(
+    m.not(Compute.matches(m.figures, integerForm)),
+    m.and(
+      ...roundingModes.map((mode) =>
+        m.or(
+          m.ne(m.mode, mode),
+          m.ge(
+            Compute.when(
+              Compute.matches(m.figures, integerForm),
+              (figures) => Compute.cast(figures, pg.bigint),
+              leastFigures[mode],
+            ),
+            leastFigures[mode],
+          ),
+        ),
+      ),
+    ),
   ),
 );
 
@@ -300,9 +380,11 @@ export const tolerancePositive = check("Equal_tolerance", ToleranceToken, (x) =>
  * Every statement over the operator overlays, each `check` named by its oracle law:
  *
  * - **Rounding:** each row on its node's {@link nodeRef} tuple, one for every rounding operator; its
- *   `figures` copied from the attribute where written, and its `rounding-mode` both ways;
- *   `E1_derived` for its kind, its collapsed `figures`, `integer`, `figuresValue` and the default
- *   mode; and reading 119, {@link roundingFigures};
+ *   `holds` proved by its `figures` (both ways) and its mode in force (`E1_derived`), and its
+ *   `modeWritten` by its `rounding-mode` (both ways); its `figures` copied into
+ *   {@link RoundingFigures} and collapsed, its mode in force into {@link RoundingMode}, written or
+ *   the default; its `both` arm, {@link RoundingModeFigures}, copying both; and reading 119,
+ *   {@link roundingFigures};
  * - **Tolerance:** each `tolerance` copied into its row, both ways; its values a family whose
  *   concatenation is the value, or none for a value of whitespace alone, each value a maximal run
  *   of no whitespace (`E1_derived`);
@@ -320,32 +402,47 @@ export const operatorLawsByName = {
       nodeRef,
     ),
     contained(on(roundingNodes, "id"), on(Rounding, "node")),
-    contained(on(figuresAttributes, "node", "lexical"), on(Rounding, "node", "figuresLexical")),
-    contained(on(modeAttributes, "node", "lexical"), on(writtenModes, "node", "mode")),
-    contained(on(writtenModes, "node"), on(modeAttributes, "node")),
+    mirrors(on(modeAttributes, "node"), on(writtenModes, "node")),
     check("E1_derived", Rounding, (r) =>
       r.and(
         r.in(r.kind, roundingKinds),
-        r.eq(r.figures, Compute.collapse(r.figuresLexical)),
         r.or(
-          r.and(r.eq(r.integer, true), Compute.matches(r.figures, integerForm)),
-          r.and(r.eq(r.integer, false), r.not(Compute.matches(r.figures, integerForm))),
-        ),
-        r.eq(
-          r.figuresValue,
-          Compute.when(
-            Compute.matches(r.figures, integerForm),
-            (figures) => Compute.cast(figures, pg.bigint),
-            roundingUnwritten.figuresValue,
+          r.and(
+            r.in(r.holds, ["mode", "both"]),
+            r.or(r.eq(r.modeWritten, true), r.eq(r.kind, "qti-equal-rounded")),
           ),
-        ),
-        r.or(
-          r.eq(r.modeWritten, true),
-          r.and(r.eq(r.kind, "qti-equal-rounded"), r.eq(r.mode, equalRoundedMode)),
-          r.and(r.eq(r.kind, "qti-round-to"), r.eq(r.mode, roundingUnwritten.mode)),
+          r.and(
+            r.in(r.holds, ["neither", "figures"]),
+            r.eq(r.modeWritten, false),
+            r.eq(r.kind, "qti-round-to"),
+          ),
         ),
       ),
     ),
+    contained(
+      on(figuresAttributes, "node", "lexical"),
+      on(RoundingFigures, "node", "figuresLexical"),
+    ),
+    contained(on(RoundingFigures, "node"), on(figuresAttributes, "node")),
+    mirrors(on(RoundingFigures, "node"), on(figuredRoundings, "node")),
+    check("E1_derived", RoundingFigures, (f) =>
+      f.eq(f.figures, Compute.collapse(f.figuresLexical)),
+    ),
+    contained(on(modeAttributes, "node", "lexical"), on(writtenModesInForce, "node", "mode")),
+    mirrors(on(RoundingMode, "node"), on(modedRoundings, "node")),
+    contained(
+      on(RoundingMode, "node", "kind", "modeWritten"),
+      on(Rounding, "node", "kind", "modeWritten"),
+    ),
+    check("E1_derived", RoundingMode, (m) =>
+      m.or(
+        m.eq(m.modeWritten, true),
+        m.and(m.eq(m.kind, "qti-equal-rounded"), m.eq(m.mode, equalRoundedMode)),
+      ),
+    ),
+    mirrors(on(bothHeld, "node"), on(RoundingModeFigures, "node")),
+    contained(on(RoundingModeFigures, "node", "figures"), on(RoundingFigures, "node", "figures")),
+    contained(on(RoundingModeFigures, "node", "mode"), on(RoundingMode, "node", "mode")),
     contained(on(toleranceAttributes, "node", "lexical"), on(Tolerance, "node", "lexical")),
     contained(on(Tolerance, "node"), on(toleranceAttributes, "node")),
     toleranceTokenFamily,

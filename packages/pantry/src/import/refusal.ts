@@ -675,6 +675,9 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
   [primaryKeyOf("HeaderToken", "node", "at"), "E1 derived"],
   [primaryKeyOf("TableHeader", "node"), "E1 derived"],
   [primaryKeyOf("Rounding", "node"), "E1 derived"],
+  [primaryKeyOf("RoundingFigures", "node"), "E1 derived"],
+  [primaryKeyOf("RoundingMode", "node"), "E1 derived"],
+  [primaryKeyOf("RoundingModeFigures", "node"), "E1 derived"],
   [primaryKeyOf("Tolerance", "node"), "E1 derived"],
   [primaryKeyOf("ToleranceToken", "node", "at"), "E1 derived"],
   ...(

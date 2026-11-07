@@ -650,7 +650,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     119,
     {
       owner:
-        "O's `Rounding` and `Rounding_figures`, one row per qti-equal-rounded and qti-round-to (`src/qti/operators.ts`, rows from `src/import/overlays/operators.ts`)",
+        "O's `Rounding` and `Rounding_figures`, one row per qti-equal-rounded and qti-round-to, its shape's `RoundingFigures`, `RoundingMode` and `RoundingModeFigures` where it has them (`src/qti/operators.ts`, rows from `src/import/overlays/operators.ts`)",
       status: "G",
     },
   ],

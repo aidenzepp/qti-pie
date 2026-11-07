@@ -101,7 +101,7 @@ const unjudged = {
   "OutcomeRange: a when term": unreadTerm("when"),
   "Quotation: a base term": unreadTerm("base"),
   "Reference: a base term": unreadTerm("base"),
-  "Rounding: a when term": unreadTerm("when"),
+  "RoundingModeFigures: a when term": unreadTerm("when"),
   "SectionSelection.select": "a field PostgreSQL generates, a cast of `selectForm`",
   "SectionSelection: a base term": unreadTerm("base"),
   "Slider: a when term": unreadTerm("when"),
