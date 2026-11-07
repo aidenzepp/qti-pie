@@ -580,6 +580,10 @@ describe("The whitespace fold", () => {
             draw: drawn(rawCase),
             kept: [],
             literal: Formatter.format,
+            oracle: {
+              kind: "specification",
+              name: "XML Schema Part 2 §4.3.6's normalization, then the domain's exact language (xsdAccepts)",
+            },
             runs: 6000,
             shrink: completeShrink,
             steerEvery: 32,
@@ -908,6 +912,7 @@ describe("Integer intervals", () => {
         ctx,
         exhaust(
           {
+            box: "every interval whose bounds are each none or -11 to 11, inclusive or exclusive: 2,209 intervals, each read at every value -120 to 120 in each of its forms",
             caseHang: Duration.minutes(1),
             coverage: requiredInSpace<"bounded" | "empty" | "half-open" | "unbounded">([
               "bounded",
@@ -928,6 +933,7 @@ describe("Integer intervals", () => {
             },
             limit: 2209,
             literal: Formatter.format,
+            oracle: { kind: "second-implementation", name: "bigint comparison against the bounds" },
             suite: "grammar/domains/integer",
           },
           ({ hi, lo }, c) =>
@@ -1382,17 +1388,15 @@ describe("Length facets", () => {
   it.effect(
     "admit exactly the values of a length every length facet admits, and none where no length is admitted, never writing a quantifier whose least passes its most: every combination of length, minLength and maxLength, each absent or 0 to 3, on a string and on a list of NMTOKENs, exhausted",
     (ctx) =>
-      // Oracle: the specification as a checker, XML Schema Part 2 4.3.1.3 to 4.3.3.3, each facet a
-      // condition on a value's length (`lengthHolds`), every facet holding; JavaScript's regular
-      // expression compiler, which refuses a quantifier such as `{3,2}`, as PostgreSQL's does.
-      // The cases need not satisfy 4.3.1.4 or 4.3.2.4: the deriver refuses those, and the compiler
-      // must read the facets it is given as the language they state, an empty one included.
-      // Bound: 5^3 combinations under each of the 2 varieties, 250 cases, each judged on every
-      // length 0 to 4.
+      // Beside the oracle, JavaScript's regular expression compiler refuses a quantifier such as
+      // `{3,2}`, as PostgreSQL's does. The cases need not satisfy 4.3.1.4 or 4.3.2.4: the deriver
+      // refuses those, and the compiler must read the facets it is given as the language they
+      // state, an empty one included.
       searched(
         ctx,
         exhaust(
           {
+            box: "every combination of length, minLength and maxLength, each absent or 0 to 3, on a string and on a list of NMTOKENs: 250 cases, each judged on every length 0 to 4",
             caseHang: Duration.minutes(1),
             coverage: requiredInSpace<"admitted" | "crossed" | "list" | "length outside">([
               "admitted",
@@ -1414,6 +1418,10 @@ describe("Length facets", () => {
             },
             limit: 250,
             literal: Formatter.format,
+            oracle: {
+              kind: "specification",
+              name: "XML Schema Part 2 4.3.1.3 to 4.3.3.3, each length facet a condition on a value's length (lengthHolds)",
+            },
             suite: "grammar/domains/lengths",
           },
           ({ lengths, variety }, c) =>

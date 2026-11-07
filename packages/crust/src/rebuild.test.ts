@@ -123,17 +123,20 @@ describe("rebuild gives the recursive rebuild's tree", () => {
   it.effect(
     `for every plane tree of 1 to ${BOX_NODES} nodes, labelled, exhausted`,
     (ctx) =>
-      // Oracle: a second implementation, the recursive rebuild. Bound: every plane tree of 1 to 7
-      // nodes, 197 trees, enumerated.
       searched(
         ctx,
         exhaust(
           {
+            box: "every plane tree of 1 to 7 nodes, labelled: 197 trees",
             caseHang,
             coverage: noCoverage,
             generator: planeTreeUpTo(BOX_NODES),
             limit: PLANE_TREES_TO_7,
             literal: Formatter.format,
+            oracle: {
+              kind: "second-implementation",
+              name: "the recursive rebuild of read.ts at 1854123",
+            },
             suite: "crust/rebuild/plane-trees",
           },
           ({ nodes, tree }) =>
@@ -154,9 +157,8 @@ describe("rebuild gives the recursive rebuild's tree", () => {
   it.effect(
     `for swarmed trees, each within ${CASE_BOUNDS.nodes} nodes, depth ${CASE_BOUNDS.depth} and width ${CASE_BOUNDS.width}: ${CASES} rotating cases a run beside the witnesses`,
     (ctx) =>
-      // Oracle: a second implementation, the recursive rebuild. Bound: the drawn trees, each with
-      // its own swarm and bounds within CASE_BOUNDS; the witnesses reach every situation of
-      // `treeSituations`.
+      // Bound: the drawn trees, each with its own swarm and bounds within CASE_BOUNDS; the
+      // witnesses reach every situation of `treeSituations`.
       searched(
         ctx,
         explore(
@@ -167,6 +169,10 @@ describe("rebuild gives the recursive rebuild's tree", () => {
             draw: drawn(generatedTree(CASE_BOUNDS)),
             kept: [],
             literal: Formatter.format,
+            oracle: {
+              kind: "second-implementation",
+              name: "the recursive rebuild of read.ts at 1854123",
+            },
             runs: CASES,
             shrink: completeShrink,
             steerEvery: 16,

@@ -546,6 +546,10 @@ describe("vocab/derive/domains.ts, xs:anyURI", () => {
             draw: drawn(candidate),
             kept: [],
             literal: Formatter.format,
+            oracle: {
+              kind: "specification",
+              name: "an interpreter of RFC 2396's and RFC 2732's URI-reference grammar (specified), not the pattern",
+            },
             runs: 4000,
             shrink: completeShrink,
             steerEvery: 16,

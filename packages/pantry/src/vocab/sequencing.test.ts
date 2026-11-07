@@ -341,6 +341,7 @@ describe("vocab/sequencing.ts", () => {
         ctx,
         exhaust(
           {
+            box: `every element or mixed model of the IR, each on every word of its alphabet up to the longest length (at most 4) whose words number at most 2,500: ${modelled.length} models`,
             caseHang,
             coverage: requiredInSpace<"accepted" | "refused" | "shared" | "wildcard">([
               "accepted",
@@ -351,6 +352,10 @@ describe("vocab/sequencing.ts", () => {
             generator: int(0, modelled.length - 1),
             limit: modelled.length,
             literal: Formatter.format,
+            oracle: {
+              kind: "second-implementation",
+              name: "the relaxed particle tree's own acceptor (admitsWord)",
+            },
             suite: "vocab/sequencing-glushkov-language",
           },
           (index, c) =>
@@ -402,6 +407,10 @@ describe("vocab/sequencing.ts", () => {
             draw: drawn(caseOf),
             kept: [],
             literal: Formatter.format,
+            oracle: {
+              kind: "second-implementation",
+              name: "the relaxed particle tree's own acceptor (admitsWord)",
+            },
             runs: 2000,
             shrink: completeShrink,
             steerEvery: 16,
@@ -452,11 +461,16 @@ describe("vocab/sequencing.ts", () => {
         ctx,
         exhaust(
           {
+            box: "every (model, leaf that may occur) of the IR's element and mixed models",
             caseHang,
             coverage: noCoverage,
             generator: doubledCase,
             limit: 40_000,
             literal: Formatter.format,
+            oracle: {
+              kind: "specification",
+              name: "Unique Particle Attribution (XML Schema 1.0 Part 1 §3.8.6): an element particle in a choice with itself is ambiguous, by construction",
+            },
             suite: "vocab/sequencing-upa-mutants",
           },
           ({ index, place }) =>

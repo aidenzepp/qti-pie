@@ -1971,6 +1971,7 @@ describe.skipIf(!cached)("spec reading 40 in ssml:speak", () => {
           ctx,
           exhaust(
             {
+              box: "every family of at most 4 children over ssml:meta, ssml:p, a foreign element, text and white space: 781 families",
               caseHang: Duration.minutes(1),
               coverage: requiredInSpace<"accepted" | "refused">(["accepted", "refused"]),
               generator: array(
@@ -1979,6 +1980,10 @@ describe.skipIf(!cached)("spec reading 40 in ssml:speak", () => {
               ),
               limit: 1000,
               literal: Formatter.format,
+              oracle: {
+                kind: "specification",
+                name: "the XSD's ssml:speak model by the tests' reader and acceptor, and spec reading 40 as a checker over the text",
+              },
               suite: "grammar/content/reading-40",
             },
             (children, c) =>
@@ -2453,11 +2458,16 @@ describe("the document node's content model (R5)", () => {
         ctx,
         exhaust(
           {
+            box: "every family of at most 4 children over the doctype, two root kinds, an element that is no root, white space and a comment: 1,555 families",
             caseHang: Duration.minutes(1),
             coverage: requiredInSpace<"accepted" | "refused">(["accepted", "refused"]),
             generator: array(element(documentChildren), { max: 4, min: 0 }),
             limit: 2000,
             literal: Formatter.format,
+            oracle: {
+              kind: "specification",
+              name: "XML 1.0's document production as R5 states it, over the guide's stated roots",
+            },
             suite: "grammar/content/document",
           },
           (children, c) =>

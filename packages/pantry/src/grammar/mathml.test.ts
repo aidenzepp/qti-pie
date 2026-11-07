@@ -407,18 +407,20 @@ describe("spec reading 2: MathML's notation types (MathML 3 §2.1.5.1)", () => {
   it.effect(
     "accept exactly what the notation and its type accept: every string of at most 4 characters over 8 classes, and the bounds",
     (ctx) =>
-      // Oracle: the specification as a checker, `notations`, written from §2.1.5.1's text.
-      // Bound: every string of at most 4 of `notationAlphabet` (4,681), each notation and
-      // `scriptlevel`, in both versions; then `boundaries`.
       searched(
         ctx,
         exhaust(
           {
+            box: "every string of at most 4 of notationAlphabet (4,681), each notation and scriptlevel, in both versions, then the boundaries",
             caseHang: Duration.minutes(2),
             coverage: requiredInSpace<"accepted" | "refused">(["accepted", "refused"]),
             generator: array(element(notationAlphabet), { max: 4, min: 0 }),
             limit: 10_000,
             literal: Formatter.format,
+            oracle: {
+              kind: "specification",
+              name: "MathML 3 §2.1.5.1's notations, written from its text (notations)",
+            },
             suite: "grammar/mathml/notations",
           },
           (letters, c) =>

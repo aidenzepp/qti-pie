@@ -2459,6 +2459,7 @@ describe("the laws readings 18, 74, 85 and 92 state, over generated packages", (
         ctx,
         exhaust(
           {
+            box: "every case of 3 interaction kinds, 1 to 3 choices, and a min-choices and a max-choices each unwritten or 0 to 4",
             caseHang: lawCaseHang,
             coverage: requiredInSpace<"held" | "broken" | "zero most" | "beyond choices">([
               "held",
@@ -2469,6 +2470,10 @@ describe("the laws readings 18, 74, 85 and 92 state, over generated packages", (
             generator: boundCase,
             limit: 324,
             literal: Formatter.format,
+            oracle: {
+              kind: "specification",
+              name: "readings 18 and 76, the information model's §5.97.2, §5.97.3, §5.61.1, §5.61.2, §5.30.2 and §5.30.3 restated as boundsBroken",
+            },
             suite: "oracle/choice-bounds-reading-18",
           },
           (bound, c) =>
@@ -2499,6 +2504,7 @@ describe("the laws readings 18, 74, 85 and 92 state, over generated packages", (
         ctx,
         exhaust(
           {
+            box: "every list of 1 to 3 interactions, each binding R0, declared, or R1, not",
             caseHang: lawCaseHang,
             coverage: requiredInSpace<"unique" | "shared" | "undeclared shared">([
               "unique",
@@ -2510,6 +2516,10 @@ describe("the laws readings 18, 74, 85 and 92 state, over generated packages", (
               Array.from({ length: source.draw(int(1, 3)) }, () => source.draw(int(0, 1))),
             limit: 20,
             literal: Formatter.format,
+            oracle: {
+              kind: "specification",
+              name: "reading 92, §2.2.2.2: a response n interactions bind breaks it n − 1 times",
+            },
             suite: "oracle/binding-unique",
           },
           (bound, c) =>
@@ -2556,6 +2566,7 @@ describe("the laws readings 18, 74, 85 and 92 state, over generated packages", (
         ctx,
         exhaust(
           {
+            box: "every cardinality of single and multiple by every max-choices of unwritten, 0, 1 and 2",
             caseHang: lawCaseHang,
             coverage: requiredInSpace<"bound" | "unbound" | "default">([
               "bound",
@@ -2568,6 +2579,10 @@ describe("the laws readings 18, 74, 85 and 92 state, over generated packages", (
             }),
             limit: 8,
             literal: Formatter.format,
+            oracle: {
+              kind: "specification",
+              name: "reading 92, §5.128.2, an unwritten max-choices read as its XSD default, 0",
+            },
             suite: "oracle/binding-cardinality-select-point",
           },
           ({ cardinality, max }, c) =>
@@ -2608,6 +2623,7 @@ describe("the laws readings 18, 74, 85 and 92 state, over generated packages", (
         ctx,
         exhaust(
           {
+            box: "every context identifier of X, intro and RESPONSE",
             caseHang: lawCaseHang,
             coverage: requiredInSpace<"distinct" | "element id" | "response id">([
               "distinct",
@@ -2617,6 +2633,10 @@ describe("the laws readings 18, 74, 85 and 92 state, over generated packages", (
             generator: (source) => source.draw(element(["X", "intro", "RESPONSE"] as const)),
             limit: 3,
             literal: Formatter.format,
+            oracle: {
+              kind: "specification",
+              name: "reading 74, §5.34.1 and §7.43: a context identifier shares no value with an xs:ID of its document",
+            },
             suite: "oracle/document-id-context",
           },
           (context, c) =>
@@ -2657,6 +2677,7 @@ describe("the laws readings 18, 74, 85 and 92 state, over generated packages", (
         ctx,
         exhaust(
           {
+            box: "every graph of a test and two section documents, each of its 6 edges absent, a section ref or an include",
             caseHang: lawCaseHang,
             coverage: requiredInSpace<"acyclic" | "cyclic" | "self" | "shared target" | "include">([
               "acyclic",
@@ -2671,6 +2692,10 @@ describe("the laws readings 18, 74, 85 and 92 state, over generated packages", (
             generator: (source) => Array.from({ length: 6 }, () => source.draw(int(0, 2))),
             limit: 729,
             literal: Formatter.format,
+            oracle: {
+              kind: "specification",
+              name: "reading 85's rule as a naive reachability over the case's references",
+            },
             suite: "oracle/inclusion-cycle",
           },
           (edges, c) =>
@@ -2767,6 +2792,7 @@ describe("the laws readings 18, 74, 85 and 92 state, over generated packages", (
         ctx,
         exhaust(
           {
+            box: "every case of 3 interaction kinds, 1 to 3 hotspots, and the default at none of them or at any one",
             caseHang: lawCaseHang,
             coverage: requiredInSpace<"last" | "not last" | "associable" | "none">([
               "last",
@@ -2791,6 +2817,10 @@ describe("the laws readings 18, 74, 85 and 92 state, over generated packages", (
             },
             limit: 27,
             literal: Formatter.format,
+            oracle: {
+              kind: "specification",
+              name: "reading 80, §5.67, §5.68.6, §5.7 and §5.59.4: a hotspot choice's default stands last, an associable hotspot's anywhere",
+            },
             suite: "oracle/default-hotspot-reading-80",
           },
           ({ at, count, kind }, c) =>

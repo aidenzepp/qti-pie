@@ -29,15 +29,18 @@ import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
 import { drawn, exhaust, explore } from "@grizzle/testing/explore";
 import { noCoverage } from "@grizzle/testing/features";
+import { agree, exact, set, structuralHash } from "@grizzle/testing/oracle";
 import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
-import { Cause, Duration, Effect, Exit, FileSystem, Layer, Redacted, Schema } from "effect";
+import { Cause, Duration, Effect, Exit, FileSystem, Layer, Redacted, Result, Schema } from "effect";
 import net from "node:net";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
+import { grammar } from "#pantry/grammar/install.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { changeSetOf } from "#pantry/import/write.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
+import { readPackage } from "#pantry/package/read.ts";
 import { Author } from "#pantry/qti/roles.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import {
@@ -49,6 +52,7 @@ import {
 } from "#pantry/test/gen/assembly.ts";
 import type { Assembly } from "#pantry/test/gen/assembly.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
+import { judge, lawsOf } from "#pantry/test/oracle.ts";
 
 /**
  * Every generated package's write program, with the package's literal, in the order the searches
@@ -113,18 +117,53 @@ const distinct = (): readonly (readonly [number, (typeof programs)[number]])[] =
 };
 
 /**
- * Import one generated package to its rows and keep its write program.
+ * The law oracle's tables over the installed grammar, built once.
+ */
+const laws = lawsOf(grammar);
+
+/**
+ * Import one generated package to its rows, hold `readProgram` to the law oracle's judgment of
+ * the same entries, and keep its write program. The reader, the container and the codec are the
+ * stages `readProgram` judges, so where the oracle refuses there, `readProgram` refuses under the
+ * oracle's rule; the laws are the database's stage, so wherever the oracle reads every document,
+ * `readProgram` yields a write program over exactly the documents the oracle read.
  *
  * @param assembly - The package.
- * @returns Nothing.
+ * @returns Nothing; fails the case where `readProgram` and the oracle disagree.
  */
 const keep = (assembly: Assembly) =>
   Effect.gen(function* kept() {
-    const program = yield* readProgram(yield* scopedPackage(assemblyPackage(assembly)));
+    const literal = assemblyLiteral(assembly);
+    const dir = yield* scopedPackage(assemblyPackage(assembly));
+    const judgment = yield* judge(yield* readPackage(dir), grammar, laws);
+    const outcome = yield* Effect.result(readProgram(dir));
+    if (judgment._tag === "CodecRefusal") {
+      assert.isTrue(
+        Result.isFailure(outcome) &&
+          outcome.failure._tag === "ImportRefused" &&
+          outcome.failure.rule === judgment.rule,
+        `${literal}: the law oracle refuses it under ${judgment.rule}, and readProgram ${Result.isFailure(outcome) ? `fails with ${outcome.failure.message}` : "yields a write program"}`,
+      );
+
+      return;
+    }
+
+    const program = Result.isSuccess(outcome)
+      ? outcome.success
+      : assert.fail(
+          `${literal}: the law oracle reads every document, and readProgram fails with ${outcome.failure.message}`,
+        );
+    yield* agree(
+      [
+        ["the law oracle", judgment.documents],
+        ["readProgram", [...program.inputs.Document.values()].map(({ path }) => path)],
+      ],
+      set(structuralHash, exact),
+    );
     programs.push({
       change: changeSetOf(Author, program.inputs),
       inserts: insertsOf(program.inputs),
-      literal: assemblyLiteral(assembly),
+      literal,
     });
   }).pipe(Effect.scoped);
 
@@ -186,12 +225,22 @@ const compileKept = Effect.gen(function* compileKept() {
   return yield* Effect.exit(Effect.scoped(Layer.build(built)));
 });
 
+/**
+ * What the collecting searches hold `readProgram` to: the law oracle, a second reading of the
+ * package through its own codec.
+ */
+const compiledOracle = {
+  kind: "second-implementation",
+  name: "the law oracle's judge: its codec refusal's rule, else a write program over exactly the documents it read",
+} as const;
+
 layer(NodeServices.layer, { excludeTestServices: true })("test/gen/assembly.ts, compiled", (it) => {
   it.effect(
     "imports every package of the small box and a swarm's sample to its write program",
     (ctx) =>
-      // Oracle: none; this collects the programs the last test compiles. Bound: the small box's 308
-      // packages, then 60 sampled past it under their own swarms.
+      // Oracle: a second implementation, the law oracle's judgment of each package (`keep`), and
+      // this collects the programs the last test compiles. Bound: the small box's 308 packages,
+      // then 60 sampled past it under their own swarms.
       Effect.gen(function* collect() {
         yield* searched(
           ctx,
@@ -203,6 +252,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/gen/assembly.ts, 
               generator: smallAssembly,
               limit: 400,
               literal: assemblyLiteral,
+              oracle: compiledOracle,
               suite: "pantry/test/gen-assembly-compile-box",
             },
             (assembly) => keep(assembly),
@@ -218,6 +268,7 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/gen/assembly.ts, 
               draw: drawn(swarmedAssembly(sampledBounds)),
               kept: [],
               literal: ({ assembly }) => assemblyLiteral(assembly),
+              oracle: compiledOracle,
               runs: 60,
               shrink: completeShrink,
               steerEvery: 16,

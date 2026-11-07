@@ -215,8 +215,8 @@ CREATE TABLE "qti"."bound_variable" (
   CONSTRAINT "__bound_variable_key_document_identifier_poylxocl4p" UNIQUE NULLS DISTINCT ("document", "identifier"),
   CONSTRAINT "binding_fit" CHECK (("attribute" <> 78::smallint OR "base_type" = 3::smallint) IS TRUE),
   CONSTRAINT "binding_declared" CHECK (("declaration_kind" = 1::smallint) IS TRUE),
-  CONSTRAINT "__bound_variable_check_bound_variable_kind_attribute_4jjaajwa5m" CHECK ((NOT (NOT "kind" IN (18::smallint, 117::smallint) AND "attribute" = 76::smallint AND "cardinality" = 3::smallint) OR "pg_catalog"."substring"("qti"."__constant_xvmgsamjvy"(), "kind" + 1, 1)::integer = 1) IS TRUE),
-  CONSTRAINT "__bound_variable_check_bound_variable_kind_attribute_7zsy2o5xwx" CHECK ((NOT (NOT "kind" IN (18::smallint, 117::smallint) AND "attribute" = 76::smallint AND "cardinality" <> 3::smallint) OR "pg_catalog"."substring"("qti"."__constant_s4yes4w2dp"(), ("base_type" * 4 + "cardinality") * 644 + "kind" + 1, 1)::integer = 1) IS TRUE),
+  CONSTRAINT "__bound_variable_check_bound_variable_kind_attribute_4jjaajwa5m" CHECK ((NOT (NOT "kind" IN (18::smallint, 117::smallint) AND "attribute" = 76::smallint AND "cardinality" = 3::smallint) IS TRUE OR "pg_catalog"."substring"("qti"."__constant_xvmgsamjvy"(), "kind" + 1, 1)::integer = 1) IS TRUE),
+  CONSTRAINT "__bound_variable_check_bound_variable_kind_attribute_7zsy2o5xwx" CHECK ((NOT (NOT "kind" IN (18::smallint, 117::smallint) AND "attribute" = 76::smallint AND "cardinality" <> 3::smallint) IS TRUE OR "pg_catalog"."substring"("qti"."__constant_s4yes4w2dp"(), ("base_type" * 4 + "cardinality") * 644 + "kind" + 1, 1)::integer = 1) IS TRUE),
   CONSTRAINT "__bound_variable_key_node_attribute_kind_document_grf63knftr" UNIQUE NULLS DISTINCT ("node", "attribute", "kind", "document", "identifier")
 );
 
@@ -477,7 +477,7 @@ CREATE TABLE "qti"."document" (
   CONSTRAINT "e_1_derived" CHECK (("context_nearest_kind" IN (133::smallint, 127::smallint, 18::smallint, 118::smallint, 17::smallint, 131::smallint, 119::smallint, 125::smallint, 121::smallint, 123::smallint, 122::smallint, 129::smallint, 16::smallint, 120::smallint, 128::smallint, 130::smallint, 117::smallint, 187::smallint, 124::smallint, 126::smallint, 10::smallint, 132::smallint) AND "targeted_by" > 0::bigint OR "context_nearest" = "node" AND "context_nearest_kind" = 0::smallint) IS TRUE),
   CONSTRAINT "root_of_type" CHECK (("path" = 'imsmanifest.xml'::"pg_catalog"."text" OR "resource_type" <> 0::smallint) IS TRUE),
   CONSTRAINT "__document_key_node_root_kind_cj4wuxmdom" UNIQUE NULLS DISTINCT ("node", "root_kind"),
-  CONSTRAINT "__document_check_document_resource_type_in_root_of_miaqnbawfv" CHECK ((NOT "resource_type" <> 0::smallint OR "pg_catalog"."substring"("qti"."__constant_uwvfzil5rh"(), "resource_type" * 644 + "root_kind" + 1, 1)::integer = 1) IS TRUE),
+  CONSTRAINT "__document_check_document_resource_type_in_root_of_miaqnbawfv" CHECK ((NOT ("resource_type" <> 0::smallint) IS TRUE OR "pg_catalog"."substring"("qti"."__constant_uwvfzil5rh"(), "resource_type" * 644 + "root_kind" + 1, 1)::integer = 1) IS TRUE),
   CONSTRAINT "__document_key_node_idref_targets_assembled_bo6czyldik" UNIQUE NULLS DISTINCT ("node", "idref_targets", "assembled"),
   CONSTRAINT "__document_key_node_ids_idref_targets_choices_mbywmovfuu" UNIQUE NULLS DISTINCT ("node", "ids", "idref_targets", "choices", "hottexts"),
   CONSTRAINT "__document_key_node_bindings_langs_variables_f6674yepot" UNIQUE NULLS DISTINCT ("node", "bindings", "langs", "variables"),
@@ -1479,7 +1479,7 @@ CREATE TABLE "qti"."node" (
   CONSTRAINT "__node_key_id_kind_parent_kind_tn43rs4qml" UNIQUE NULLS DISTINCT ("id", "kind", "parent_kind"),
   CONSTRAINT "__node_key_id_end_fccsn4czp6" UNIQUE NULLS DISTINCT ("id", "end"),
   CONSTRAINT "__node_check_node_in_node_a2p3dbqqpr" CHECK (("children" > 0::bigint OR "last_state" = 0::smallint) IS TRUE),
-  CONSTRAINT "__node_check_node_kind_kind_in_xsi_type_sdppgqgkli" CHECK ((NOT (NOT "kind" IN (7::smallint, 1::smallint, 0::smallint, 9::smallint, 8::smallint, 5::smallint, 6::smallint) AND NOT "kind" IN (2::smallint, 3::smallint, 4::smallint)) OR "pg_catalog"."substring"("qti"."__constant_3t4qepe5jn"(), ("version" * 644 + "kind") * 444 + "governs" + 1, 1)::integer = 1) IS TRUE),
+  CONSTRAINT "__node_check_node_kind_kind_in_xsi_type_sdppgqgkli" CHECK ((NOT (NOT "kind" IN (7::smallint, 1::smallint, 0::smallint, 9::smallint, 8::smallint, 5::smallint, 6::smallint) AND NOT "kind" IN (2::smallint, 3::smallint, 4::smallint)) IS TRUE OR "pg_catalog"."substring"("qti"."__constant_3t4qepe5jn"(), ("version" * 644 + "kind") * 444 + "governs" + 1, 1)::integer = 1) IS TRUE),
   CONSTRAINT "__node_check_node_start_in_node_5h7uutxasb" CHECK (("at" > 0::bigint OR "was" = 0::smallint) IS TRUE),
   CONSTRAINT "__node_key_id_at_children_lghweyjlxr" UNIQUE NULLS DISTINCT ("id", "at", "children"),
   CONSTRAINT "__node_key_id_document_r4xnpqafto" UNIQUE NULLS DISTINCT ("id", "document"),
@@ -1590,8 +1590,8 @@ CREATE TABLE "qti"."placed_binding" (
   CONSTRAINT "__placed_binding_key_assembly_identifier_3sykzofz5f" UNIQUE NULLS DISTINCT ("assembly", "identifier"),
   CONSTRAINT "binding_fit" CHECK (("attribute" <> 78::smallint OR "base_type" = 3::smallint) IS TRUE),
   CONSTRAINT "binding_declared" CHECK (("declaration_kind" = 1::smallint) IS TRUE),
-  CONSTRAINT "__placed_binding_check_placed_binding_kind_attribute_pdxlqzdqni" CHECK ((NOT (NOT "kind" IN (18::smallint, 117::smallint) AND "attribute" = 76::smallint AND "cardinality" = 3::smallint) OR "pg_catalog"."substring"("qti"."__constant_xvmgsamjvy"(), "kind" + 1, 1)::integer = 1) IS TRUE),
-  CONSTRAINT "__placed_binding_check_placed_binding_kind_attribute_ajzarq5qh5" CHECK ((NOT (NOT "kind" IN (18::smallint, 117::smallint) AND "attribute" = 76::smallint AND "cardinality" <> 3::smallint) OR "pg_catalog"."substring"("qti"."__constant_s4yes4w2dp"(), ("base_type" * 4 + "cardinality") * 644 + "kind" + 1, 1)::integer = 1) IS TRUE)
+  CONSTRAINT "__placed_binding_check_placed_binding_kind_attribute_pdxlqzdqni" CHECK ((NOT (NOT "kind" IN (18::smallint, 117::smallint) AND "attribute" = 76::smallint AND "cardinality" = 3::smallint) IS TRUE OR "pg_catalog"."substring"("qti"."__constant_xvmgsamjvy"(), "kind" + 1, 1)::integer = 1) IS TRUE),
+  CONSTRAINT "__placed_binding_check_placed_binding_kind_attribute_ajzarq5qh5" CHECK ((NOT (NOT "kind" IN (18::smallint, 117::smallint) AND "attribute" = 76::smallint AND "cardinality" <> 3::smallint) IS TRUE OR "pg_catalog"."substring"("qti"."__constant_s4yes4w2dp"(), ("base_type" * 4 + "cardinality") * 644 + "kind" + 1, 1)::integer = 1) IS TRUE)
 );
 
 CREATE TABLE "qti"."placed_choice" (
@@ -1683,7 +1683,7 @@ CREATE TABLE "qti"."placed_variable_ref" (
   CONSTRAINT "__placed_variable_ref_pk_raoqh7fl2q" PRIMARY KEY ("instance", "node", "attribute"),
   CONSTRAINT "e_1_derived" CHECK (((NOT "identifier" IN ('QTI_CONTEXT'::"pg_catalog"."text", 'completionStatus'::"pg_catalog"."text", 'duration'::"pg_catalog"."text", 'numAttempts'::"pg_catalog"."text") OR "root_kind" <> 299::smallint) AND (NOT "identifier" IN ('QTI_CONTEXT'::"pg_catalog"."text", 'completionStatus'::"pg_catalog"."text", 'duration'::"pg_catalog"."text", 'numAttempts'::"pg_catalog"."text") OR "root_kind" <> 304::smallint) AND (NOT "identifier" IN ('QTI_CONTEXT'::"pg_catalog"."text", 'duration'::"pg_catalog"."text") OR "root_kind" <> 300::smallint) AND (NOT "identifier" IN ('QTI_CONTEXT'::"pg_catalog"."text", 'duration'::"pg_catalog"."text") OR "root_kind" <> 302::smallint) AND "resolution" = 2::smallint OR ("declaration_kind" = 0::smallint AND "identifier" = 'QTI_CONTEXT'::"pg_catalog"."text" AND "root_kind" = 299::smallint OR "declaration_kind" = 0::smallint AND "identifier" = 'QTI_CONTEXT'::"pg_catalog"."text" AND "root_kind" = 300::smallint OR "declaration_kind" = 0::smallint AND "identifier" = 'QTI_CONTEXT'::"pg_catalog"."text" AND "root_kind" = 302::smallint OR "declaration_kind" = 0::smallint AND "identifier" = 'QTI_CONTEXT'::"pg_catalog"."text" AND "root_kind" = 304::smallint OR "declaration_kind" = 3::smallint AND "identifier" = 'completionStatus'::"pg_catalog"."text" AND "root_kind" = 299::smallint OR "declaration_kind" = 3::smallint AND "identifier" = 'completionStatus'::"pg_catalog"."text" AND "root_kind" = 304::smallint OR "declaration_kind" = 1::smallint AND "identifier" = 'duration'::"pg_catalog"."text" AND "root_kind" = 299::smallint OR "declaration_kind" = 1::smallint AND "identifier" = 'duration'::"pg_catalog"."text" AND "root_kind" = 300::smallint OR "declaration_kind" = 1::smallint AND "identifier" = 'duration'::"pg_catalog"."text" AND "root_kind" = 302::smallint OR "declaration_kind" = 1::smallint AND "identifier" = 'duration'::"pg_catalog"."text" AND "root_kind" = 304::smallint OR "declaration_kind" = 1::smallint AND "identifier" = 'numAttempts'::"pg_catalog"."text" AND "root_kind" = 299::smallint OR "declaration_kind" = 1::smallint AND "identifier" = 'numAttempts'::"pg_catalog"."text" AND "root_kind" = 304::smallint) AND "resolution" = 1::smallint OR "resolution" = 0::smallint) IS TRUE),
   CONSTRAINT "variable_declared" CHECK (("resolution" <> 2::smallint OR "root_kind" <> 299::smallint) IS TRUE),
-  CONSTRAINT "__placed_variable_ref_check_placed_variable_ref_z7wwd3cof4" CHECK ((NOT ("attribute" = 86::smallint AND "resolution" <> 2::smallint) OR "pg_catalog"."substring"("qti"."__constant_aprps52eby"(), ("kind" * 413 + "attribute") * 4 + "declaration_kind" + 1, 1)::integer = 1) IS TRUE)
+  CONSTRAINT "__placed_variable_ref_check_placed_variable_ref_z7wwd3cof4" CHECK ((NOT ("attribute" = 86::smallint AND "resolution" <> 2::smallint) IS TRUE OR "pg_catalog"."substring"("qti"."__constant_aprps52eby"(), ("kind" * 413 + "attribute") * 4 + "declaration_kind" + 1, 1)::integer = 1) IS TRUE)
 );
 
 CREATE TABLE "qti"."placed_xml_lang" (
@@ -1792,7 +1792,7 @@ CREATE TABLE "qti"."reading" (
   CONSTRAINT "reference_type" CHECK ((NOT ((NOT "kind" IN (178::smallint, 217::smallint, 216::smallint, 180::smallint, 213::smallint) OR "form" = 0::smallint) AND ("number" ~ '\A[0-9]*[1-9][0-9]*\Z'::"pg_catalog"."text" AND "replaced" = true OR "form" <> 2::smallint) AND "form" <> 3::smallint AND "source" <> 0::smallint) OR (NULLIF("pg_catalog"."substring"("qti"."__constant_gf6he576t3"(), "decl_cardinality" * 3 + 1, 3)::integer, 0) - 1)::smallint IN (0::smallint, 4::smallint) AND "declaration_kind" IN (3::smallint, 2::smallint) AND "source" IN (1::smallint, 2::smallint) AND ((NULLIF("pg_catalog"."substring"("qti"."__constant_wgtmrsic5c"(), "decl_base_type" * 4 + 1, 4)::integer, 0) - 1)::smallint = (NULLIF("pg_catalog"."substring"("qti"."__constant_exnqxdg5si"(), ("kind" * 413 + "attribute") * 4 + 1, 4)::integer, 0) - 1)::smallint OR (NULLIF("pg_catalog"."substring"("qti"."__constant_wgtmrsic5c"(), "decl_base_type" * 4 + 1, 4)::integer, 0) - 1)::smallint = 12::smallint) OR "attribute" = 86::smallint) IS TRUE),
   CONSTRAINT "section_identifier_target" CHECK (("named_kind" IN (300::smallint, 110::smallint) AND "found" = true AND "placements" = 1::bigint OR "form" <> 3::smallint) IS TRUE),
   CONSTRAINT "variable_declared" CHECK (("identifier" ~ '\A[\u0001-\u0009\u000B\u000C\u000E-\u2027\u202A-\U0010FFFF]*\.[\u0001-\u0009\u000B\u000C\u000E-\u2027\u202A-\U0010FFFF]*\Z'::"pg_catalog"."text" OR "form" <> 0::smallint OR "source" <> 0::smallint) IS TRUE),
-  CONSTRAINT "__reading_check_reading_form_kind_form_number_ypoeobnpdw" CHECK ((NOT ((NOT "kind" IN (178::smallint, 217::smallint, 216::smallint, 180::smallint, 213::smallint) OR "form" = 0::smallint) AND ("number" ~ '\A[0-9]*[1-9][0-9]*\Z'::"pg_catalog"."text" AND "replaced" = true OR "form" <> 2::smallint) AND "attribute" = 86::smallint AND "form" <> 3::smallint AND "source" <> 0::smallint) OR "pg_catalog"."substring"("qti"."__constant_aprps52eby"(), ("kind" * 413 + "attribute") * 4 + "declaration_kind" + 1, 1)::integer = 1) IS TRUE)
+  CONSTRAINT "__reading_check_reading_form_kind_form_number_ypoeobnpdw" CHECK ((NOT ((NOT "kind" IN (178::smallint, 217::smallint, 216::smallint, 180::smallint, 213::smallint) OR "form" = 0::smallint) AND ("number" ~ '\A[0-9]*[1-9][0-9]*\Z'::"pg_catalog"."text" AND "replaced" = true OR "form" <> 2::smallint) AND "attribute" = 86::smallint AND "form" <> 3::smallint AND "source" <> 0::smallint) IS TRUE OR "pg_catalog"."substring"("qti"."__constant_aprps52eby"(), ("kind" * 413 + "attribute") * 4 + "declaration_kind" + 1, 1)::integer = 1) IS TRUE)
 );
 
 CREATE TABLE "qti"."record_field" (
@@ -2294,10 +2294,11 @@ CREATE TABLE "qti"."statistic_date" (
   "lexical" "qti"."__text_pwaizaq6lx" NOT NULL,
   "node" "pg_catalog"."uuid" NOT NULL,
   "trail" "qti"."__text_7dfilirtp3" NOT NULL,
-  "date" "qti"."__domain_jov5z554io" GENERATED ALWAYS AS ("pg_catalog"."make_date"("pg_catalog"."substring"("day", 1, 4)::integer, "pg_catalog"."substring"("day", 6, 2)::integer, "pg_catalog"."substring"("day", 9, 2)::integer)::"qti"."__domain_jov5z554io") STORED NOT NULL,
+  "date" "pg_catalog"."date" GENERATED ALWAYS AS ("pg_catalog"."make_date"("pg_catalog"."substring"("day", 1, 4)::integer, "pg_catalog"."substring"("day", 6, 2)::integer, "pg_catalog"."substring"("day", 9, 2)::integer)) STORED NOT NULL,
   CONSTRAINT "__statistic_date_pk_3dgmy4ney3" PRIMARY KEY ("node"),
   CONSTRAINT "e_1_derived" CHECK (("pg_catalog"."char_length"("lexical") = "pg_catalog"."char_length"("lead" || "day")::bigint + "pg_catalog"."char_length"("trail")::bigint AND "pg_catalog"."starts_with"("lexical", "lead" || "day") AND "pg_catalog"."right"("lexical", "pg_catalog"."char_length"("trail")) = "trail") IS TRUE),
-  CONSTRAINT "__statistic_date_key_node_lexical_edk5tc7c4i" UNIQUE NULLS DISTINCT ("node", "lexical")
+  CONSTRAINT "__statistic_date_key_node_lexical_edk5tc7c4i" UNIQUE NULLS DISTINCT ("node", "lexical"),
+  CONSTRAINT "__statistic_date_range_date_p4xuw4vw4e" CHECK (("date" BETWEEN '0001-01-01'::"pg_catalog"."date" AND '9999-12-31'::"pg_catalog"."date") IS TRUE)
 );
 
 CREATE TABLE "qti"."stimulus_ref" (
@@ -2610,7 +2611,7 @@ CREATE TABLE "qti"."variable_ref" (
   CONSTRAINT "__variable_ref_key_node_attribute_kind_lexical_uxron22eld" UNIQUE NULLS DISTINCT ("node", "attribute", "kind", "lexical"),
   CONSTRAINT "__variable_ref_key_node_attribute_document_tnvc4fgyds" UNIQUE NULLS DISTINCT ("node", "attribute", "document", "identifier", "kind"),
   CONSTRAINT "__variable_ref_key_node_attribute_document_62ilbsg3m2" UNIQUE NULLS DISTINCT ("node", "attribute", "document", "identifier", "kind", "root_kind"),
-  CONSTRAINT "__variable_ref_check_variable_ref_attribute_pxl4ffdo7k" CHECK ((NOT ("attribute" = 86::smallint AND "resolution" <> 2::smallint) OR "pg_catalog"."substring"("qti"."__constant_aprps52eby"(), ("kind" * 413 + "attribute") * 4 + "declaration_kind" + 1, 1)::integer = 1) IS TRUE)
+  CONSTRAINT "__variable_ref_check_variable_ref_attribute_pxl4ffdo7k" CHECK ((NOT ("attribute" = 86::smallint AND "resolution" <> 2::smallint) IS TRUE OR "pg_catalog"."substring"("qti"."__constant_aprps52eby"(), ("kind" * 413 + "attribute") * 4 + "declaration_kind" + 1, 1)::integer = 1) IS TRUE)
 );
 
 CREATE TABLE "qti"."xml_lang" (
@@ -5857,13 +5858,13 @@ ALTER TABLE "qti"."aria_element" ADD CONSTRAINT "__aria_element_fk_node_pred_val
 
 ALTER TABLE "qti"."aria_element" ADD CONSTRAINT "__aria_element_fk_node_hsjnz7lbnx" FOREIGN KEY ("__node_cthk6qaxgo") REFERENCES "qti"."aria_range" ("node") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."aria_range" ADD CONSTRAINT "__aria_range_fk_node_max_tag_name_aria_valuemax_ptxqw5jpmd" FOREIGN KEY ("node", "max", "__tag_name_aria_valuemax_2ml5fnzu5b") REFERENCES "qti"."aria_value" ("node", "value", "name") MATCH SIMPLE;
+ALTER TABLE "qti"."aria_range" ADD CONSTRAINT "__aria_range_fk_node_max_tag_name_aria_valuemax_ptxqw5jpmd" FOREIGN KEY ("node", "max", "__tag_name_aria_valuemax_2ml5fnzu5b") REFERENCES "qti"."aria_value" ("node", "value", "name") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."aria_range" ADD CONSTRAINT "__aria_range_fk_node_min_tag_name_aria_valuemin_kgplejgj34" FOREIGN KEY ("node", "min", "__tag_name_aria_valuemin_cxfsuhktnq") REFERENCES "qti"."aria_value" ("node", "value", "name") MATCH SIMPLE;
+ALTER TABLE "qti"."aria_range" ADD CONSTRAINT "__aria_range_fk_node_min_tag_name_aria_valuemin_kgplejgj34" FOREIGN KEY ("node", "min", "__tag_name_aria_valuemin_cxfsuhktnq") REFERENCES "qti"."aria_value" ("node", "value", "name") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."aria_value" ADD CONSTRAINT "__aria_value_fk_node_name_value_esw2preqzh" FOREIGN KEY ("node", "name", "value") REFERENCES "qti"."interaction_attribute" ("node", "name", "value") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."aria_value" ADD CONSTRAINT "__aria_value_fk_node_copy_values_5iwbc7n4y3" FOREIGN KEY ("node", "__copy_values_fvnmmtuxln") REFERENCES "qti"."aria_element" ("node", "values") MATCH SIMPLE ON UPDATE CASCADE;
+ALTER TABLE "qti"."aria_value" ADD CONSTRAINT "__aria_value_fk_node_copy_values_5iwbc7n4y3" FOREIGN KEY ("node", "__copy_values_fvnmmtuxln") REFERENCES "qti"."aria_element" ("node", "values") MATCH SIMPLE ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."aria_value" ADD CONSTRAINT "__aria_value_fk_node_predecessor_values_msapt5ykmz" FOREIGN KEY ("node", "__predecessor_values_upwifghxgf") REFERENCES "qti"."aria_value" ("node", "__index_values_x5ga4ksltf") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
@@ -5895,7 +5896,7 @@ ALTER TABLE "qti"."assessment_object" ADD CONSTRAINT "__assessment_object_fk_nod
 
 ALTER TABLE "qti"."assessment_object" ADD CONSTRAINT "__assessment_object_fk_node_pred_langs_ouoqrg6ecx" FOREIGN KEY ("node", "__pred_langs_yw2uicm4pt") REFERENCES "qti"."object_lang" ("node", "__index_langs_c35xn3ubfv") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."assessment_object" ADD CONSTRAINT "__assessment_object_fk_node_lang_baxofpld5p" FOREIGN KEY ("__node_6wcvqzkni5", "__lang_vscshxypk3") REFERENCES "qti"."object_lang" ("node", "lang") MATCH SIMPLE;
+ALTER TABLE "qti"."assessment_object" ADD CONSTRAINT "__assessment_object_fk_node_lang_baxofpld5p" FOREIGN KEY ("__node_6wcvqzkni5", "__lang_vscshxypk3") REFERENCES "qti"."object_lang" ("node", "lang") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_id_pred_entities_rssqiasrww" FOREIGN KEY ("node", "id", "__pred_entities_nvm5iwtucq") REFERENCES "qti"."attribute_entity" ("node", "attribute", "at") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
@@ -5903,13 +5904,13 @@ ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_id_pred_idrefs
 
 ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_id_pred_open_name_r5twrp7dwx" FOREIGN KEY ("node", "id", "__pred_open_name_736u424hys") REFERENCES "qti"."open_attribute_name" ("node", "attribute", "at") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_copy_attributes_document_governs_hfqzizqyd4" FOREIGN KEY ("node", "__copy_attributes_6qn3pvdjs3", "document", "governs", "kind", "version") REFERENCES "qti"."node" ("id", "attributes", "document", "governs", "kind", "version") MATCH SIMPLE ON UPDATE CASCADE;
+ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_copy_attributes_document_governs_hfqzizqyd4" FOREIGN KEY ("node", "__copy_attributes_6qn3pvdjs3", "document", "governs", "kind", "version") REFERENCES "qti"."node" ("id", "attributes", "document", "governs", "kind", "version") MATCH SIMPLE ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_pred_at_attrs_was_wwtjh26i6n" FOREIGN KEY ("node", "__pred_at_xktcobhsti", "attrs_was") REFERENCES "qti"."attribute" ("node", "at", "attrs_after") MATCH SIMPLE;
 
 ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_name_lexical_document_kind_q6czk6ohxz" FOREIGN KEY ("__node_r33uye6ksm", "__name_bjcimgcvll", "__lexical_3dmcwkgtws", "__document_ujijvivytq", "__kind_anjyjm4hrl") REFERENCES "qti"."reference" ("node", "name", "lexical", "document", "kind") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_lexical_cgam7qxtil" FOREIGN KEY ("__node_nbhwynzy7f", "__lexical_cwc5un3ikz") REFERENCES "qti"."lom_string_language" ("node", "language") MATCH SIMPLE;
+ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_lexical_cgam7qxtil" FOREIGN KEY ("__node_nbhwynzy7f", "__lexical_cwc5un3ikz") REFERENCES "qti"."lom_string_language" ("node", "language") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_name_kind_lexical_cuoymyrgwh" FOREIGN KEY ("__node_llarbtyebl", "__name_pm5bo6s47u", "__kind_ekvm7ixq3m", "__lexical_lebh7q6d4v") REFERENCES "qti"."variable_ref" ("node", "attribute", "kind", "lexical") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
@@ -5917,7 +5918,7 @@ ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_lexical_oy2lf5
 
 ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_lexical_sbwmb7ifcs" FOREIGN KEY ("__node_56urvx5i6z", "__lexical_4jwtmtf26s") REFERENCES "qti"."assessment_object" ("node", "title") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_lexical_aljnmxnynz" FOREIGN KEY ("__node_lv6ndxfese", "__lexical_4bebdtb5zj") REFERENCES "qti"."object_lang" ("node", "lang") MATCH SIMPLE;
+ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_lexical_aljnmxnynz" FOREIGN KEY ("__node_lv6ndxfese", "__lexical_4bebdtb5zj") REFERENCES "qti"."object_lang" ("node", "lang") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."attribute" ADD CONSTRAINT "__attribute_fk_node_name_lexical_32pyhid2jr" FOREIGN KEY ("__node_zuvdigwypi", "__name_3xv6zipade", "__lexical_l2zzgxpvuk") REFERENCES "qti"."test_token" ("node", "name", "lexical") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
@@ -6019,7 +6020,7 @@ ALTER TABLE "qti"."binding" ADD CONSTRAINT "__binding_fk_node_pred_choices_wzjxq
 
 ALTER TABLE "qti"."binding" ADD CONSTRAINT "__binding_fk_node_xxhavdhtdz" FOREIGN KEY ("__node_gfaeb4prff") REFERENCES "qti"."count_bound" ("node") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."binding_name" ADD CONSTRAINT "__binding_name_fk_document_copy_bindings_f5f6ysw45x" FOREIGN KEY ("document", "__copy_bindings_pble3k2v23") REFERENCES "qti"."document" ("node", "bindings") MATCH SIMPLE ON UPDATE CASCADE;
+ALTER TABLE "qti"."binding_name" ADD CONSTRAINT "__binding_name_fk_document_copy_bindings_f5f6ysw45x" FOREIGN KEY ("document", "__copy_bindings_pble3k2v23") REFERENCES "qti"."document" ("node", "bindings") MATCH SIMPLE ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."binding_name" ADD CONSTRAINT "__binding_name_fk_document_predecessor_bindings_n2gppjob32" FOREIGN KEY ("document", "__predecessor_bindings_o6hyynvl6x") REFERENCES "qti"."binding_name" ("document", "__index_bindings_crowx3f6zn") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
@@ -6061,7 +6062,7 @@ ALTER TABLE "qti"."branch_resolution" ADD CONSTRAINT "__branch_resolution_fk_tar
 
 ALTER TABLE "qti"."branch_resolution" ADD CONSTRAINT "__branch_resolution_fk_via_via_end_via_parent_via_eyjb6lpxkh" FOREIGN KEY ("via", "via_end", "via_parent", "via_site_start", "via_start") REFERENCES "qti"."instance" ("id", "end", "parent", "site_start", "start") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."branch_rule" ADD CONSTRAINT "__branch_rule_fk_document_copy_rules_6257pt3po7" FOREIGN KEY ("document", "__copy_rules_jc3hp3rtp4") REFERENCES "qti"."test_document" ("node", "rules") MATCH SIMPLE ON UPDATE CASCADE;
+ALTER TABLE "qti"."branch_rule" ADD CONSTRAINT "__branch_rule_fk_document_copy_rules_6257pt3po7" FOREIGN KEY ("document", "__copy_rules_jc3hp3rtp4") REFERENCES "qti"."test_document" ("node", "rules") MATCH SIMPLE ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."branch_rule" ADD CONSTRAINT "__branch_rule_fk_document_predecessor_rules_dqo54xa7cy" FOREIGN KEY ("document", "__predecessor_rules_ldzo63rbey") REFERENCES "qti"."branch_rule" ("document", "__index_rules_7srobe7smi") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
@@ -6077,15 +6078,15 @@ ALTER TABLE "qti"."cell_headers" ADD CONSTRAINT "__cell_headers_fk_node_table_zl
 
 ALTER TABLE "qti"."cell_headers" ADD CONSTRAINT "__cell_headers_fk_node_pred_tokens_token_text_bxec4hg53j" FOREIGN KEY ("node", "__pred_tokens_ip7mlgrtju", "token_text") REFERENCES "qti"."header_token" ("node", "at", "pieces_after") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."choice" ADD CONSTRAINT "__choice_fk_document_identifier_copy_choices_t4ivqioejq" FOREIGN KEY ("document", "identifier", "__copy_choices_bx73wrsxei") REFERENCES "qti"."choice_variable_name" ("document", "identifier", "choices") MATCH SIMPLE ON UPDATE CASCADE;
+ALTER TABLE "qti"."choice" ADD CONSTRAINT "__choice_fk_document_identifier_copy_choices_t4ivqioejq" FOREIGN KEY ("document", "identifier", "__copy_choices_bx73wrsxei") REFERENCES "qti"."choice_variable_name" ("document", "identifier", "choices") MATCH SIMPLE ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."choice" ADD CONSTRAINT "__choice_fk_document_identifier_predecessor_choices_tsjd6wkjsn" FOREIGN KEY ("document", "identifier", "__predecessor_choices_s5pq2s6d4y") REFERENCES "qti"."choice" ("document", "identifier", "__index_choices_tcch7plli5") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."choice" ADD CONSTRAINT "__choice_fk_document_copy_choices_jzo346cdbr" FOREIGN KEY ("document", "__copy_choices_uz5z265isz") REFERENCES "qti"."document" ("node", "choices") MATCH SIMPLE ON UPDATE CASCADE;
+ALTER TABLE "qti"."choice" ADD CONSTRAINT "__choice_fk_document_copy_choices_jzo346cdbr" FOREIGN KEY ("document", "__copy_choices_uz5z265isz") REFERENCES "qti"."document" ("node", "choices") MATCH SIMPLE ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."choice" ADD CONSTRAINT "__choice_fk_document_predecessor_choices_eudbfnev4d" FOREIGN KEY ("document", "__predecessor_choices_ohalg3vnxq") REFERENCES "qti"."choice" ("document", "__index_choices_ae4nhwqbex") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."choice" ADD CONSTRAINT "__choice_fk_interaction_copy_choices_v6szj4p3yf" FOREIGN KEY ("interaction", "__copy_choices_om5wepy4n2") REFERENCES "qti"."binding" ("node", "choices") MATCH SIMPLE ON UPDATE CASCADE;
+ALTER TABLE "qti"."choice" ADD CONSTRAINT "__choice_fk_interaction_copy_choices_v6szj4p3yf" FOREIGN KEY ("interaction", "__copy_choices_om5wepy4n2") REFERENCES "qti"."binding" ("node", "choices") MATCH SIMPLE ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."choice" ADD CONSTRAINT "__choice_fk_interaction_predecessor_choices_qxmi53aotg" FOREIGN KEY ("interaction", "__predecessor_choices_44evxe3avx") REFERENCES "qti"."choice" ("interaction", "__index_choices_my5axngdyd") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
@@ -6119,7 +6120,7 @@ ALTER TABLE "qti"."count_bound" ADD CONSTRAINT "__count_bound_fk_node_min_name_l
 
 ALTER TABLE "qti"."declaration" ADD CONSTRAINT "__declaration_fk_document_identifier_node_o2kdvlyo7z" FOREIGN KEY ("document", "identifier", "node", "declaration_kind", "base_type", "cardinality") REFERENCES "qti"."variable_lookup" ("document", "name", "declaration", "declaration_kind", "base_type", "cardinality") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."declaration" ADD CONSTRAINT "__declaration_fk_document_identifier_copy_lqwhv7ymiz" FOREIGN KEY ("document", "identifier", "__copy_declarations_sikndyzo7y") REFERENCES "qti"."choice_variable_name" ("document", "identifier", "declarations") MATCH SIMPLE ON UPDATE CASCADE;
+ALTER TABLE "qti"."declaration" ADD CONSTRAINT "__declaration_fk_document_identifier_copy_lqwhv7ymiz" FOREIGN KEY ("document", "identifier", "__copy_declarations_sikndyzo7y") REFERENCES "qti"."choice_variable_name" ("document", "identifier", "declarations") MATCH SIMPLE ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."declaration" ADD CONSTRAINT "__declaration_fk_document_identifier_predecessor_7zm76nlpw7" FOREIGN KEY ("document", "identifier", "__predecessor_declarations_4bpmrvn66z") REFERENCES "qti"."declaration" ("document", "identifier", "__index_declarations_dueviynmtk") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
@@ -6183,7 +6184,7 @@ ALTER TABLE "qti"."document_id" ADD CONSTRAINT "__document_id_fk_document_id_own
 
 ALTER TABLE "qti"."document_id" ADD CONSTRAINT "__document_id_fk_document_id_owner_predecessor_gmwbzcbiqa" FOREIGN KEY ("document", "id", "owner", "__predecessor_carriers_jsepsp7gmh") REFERENCES "qti"."document_id" ("document", "id", "owner", "__index_carriers_nqygyrljmy") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."document_id" ADD CONSTRAINT "__document_id_fk_document_copy_ids_dq6omhjfoo" FOREIGN KEY ("document", "__copy_ids_q3p3dbhv4y") REFERENCES "qti"."document" ("node", "ids") MATCH SIMPLE ON UPDATE CASCADE;
+ALTER TABLE "qti"."document_id" ADD CONSTRAINT "__document_id_fk_document_copy_ids_dq6omhjfoo" FOREIGN KEY ("document", "__copy_ids_q3p3dbhv4y") REFERENCES "qti"."document" ("node", "ids") MATCH SIMPLE ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."document_id" ADD CONSTRAINT "__document_id_fk_document_predecessor_ids_hpgzm6ndfa" FOREIGN KEY ("document", "__predecessor_ids_jmzkm3uiyz") REFERENCES "qti"."document_id" ("document", "__index_ids_gj3psao7zr") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
@@ -6195,7 +6196,7 @@ ALTER TABLE "qti"."document_lang" ADD CONSTRAINT "__document_lang_fk_document_la
 
 ALTER TABLE "qti"."document_lang" ADD CONSTRAINT "__document_lang_fk_document_lang_pred_generals_bhimivtdql" FOREIGN KEY ("document", "lang", "__pred_generals_yd4ya5jumm") REFERENCES "qti"."general_lang" ("document", "lang", "__index_generals_qvtkp2drbv") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."document_lang" ADD CONSTRAINT "__document_lang_fk_document_generals_sw55alwkbl" FOREIGN KEY ("__document_juyvfcb7ad", "__generals_pdunagxmfe") REFERENCES "qti"."document_generals" ("document", "generals") MATCH SIMPLE;
+ALTER TABLE "qti"."document_lang" ADD CONSTRAINT "__document_lang_fk_document_generals_sw55alwkbl" FOREIGN KEY ("__document_juyvfcb7ad", "__generals_pdunagxmfe") REFERENCES "qti"."document_generals" ("document", "generals") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."entry" ADD CONSTRAINT "__entry_fk_package_copy_entries_msfgnvg5r6" FOREIGN KEY ("package", "__copy_entries_u7kx3iqrnz") REFERENCES "qti"."package" ("id", "entries") MATCH SIMPLE ON UPDATE CASCADE;
 
@@ -6263,7 +6264,7 @@ ALTER TABLE "qti"."general_named" ADD CONSTRAINT "__general_named_fk_record_name
 
 ALTER TABLE "qti"."general_named" ADD CONSTRAINT "__general_named_fk_general_record_7myyi2z6z4" FOREIGN KEY ("__general_f24tz5nizf", "__record_5sk7vx3x55") REFERENCES "qti"."general_object" ("general", "record") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."general_object" ADD CONSTRAINT "__general_object_fk_document_copy_generals_ifbjd6knkq" FOREIGN KEY ("document", "__copy_generals_4rz45dnhb5") REFERENCES "qti"."document_generals" ("document", "generals") MATCH SIMPLE ON UPDATE CASCADE;
+ALTER TABLE "qti"."general_object" ADD CONSTRAINT "__general_object_fk_document_copy_generals_ifbjd6knkq" FOREIGN KEY ("document", "__copy_generals_4rz45dnhb5") REFERENCES "qti"."document_generals" ("document", "generals") MATCH SIMPLE ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."general_object" ADD CONSTRAINT "__general_object_fk_document_predecessor_generals_cdgmpiwhel" FOREIGN KEY ("document", "__predecessor_generals_6vck3z2nxb") REFERENCES "qti"."general_object" ("document", "__index_generals_dnftd5jhxn") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
@@ -6285,11 +6286,11 @@ ALTER TABLE "qti"."hotspot" ADD CONSTRAINT "__hotspot_fk_parent_parent_elements_
 
 ALTER TABLE "qti"."hotspot" ADD CONSTRAINT "__hotspot_fk_parent_parent_kind_cbcgehnkzo" FOREIGN KEY ("parent", "parent_kind") REFERENCES "qti"."binding" ("node", "kind") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."hottext" ADD CONSTRAINT "__hottext_fk_document_identifier_copy_hottexts_5grusocysj" FOREIGN KEY ("document", "identifier", "__copy_hottexts_styrdnfpdm") REFERENCES "qti"."choice_variable_name" ("document", "identifier", "hottexts") MATCH SIMPLE ON UPDATE CASCADE;
+ALTER TABLE "qti"."hottext" ADD CONSTRAINT "__hottext_fk_document_identifier_copy_hottexts_5grusocysj" FOREIGN KEY ("document", "identifier", "__copy_hottexts_styrdnfpdm") REFERENCES "qti"."choice_variable_name" ("document", "identifier", "hottexts") MATCH SIMPLE ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."hottext" ADD CONSTRAINT "__hottext_fk_document_identifier_predecessor_33zdwtfmuh" FOREIGN KEY ("document", "identifier", "__predecessor_hottexts_by6kdhmakv") REFERENCES "qti"."hottext" ("document", "identifier", "__index_hottexts_bkvu3ttxm2") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."hottext" ADD CONSTRAINT "__hottext_fk_document_copy_hottexts_37vrba3gu6" FOREIGN KEY ("document", "__copy_hottexts_usxmqojsu6") REFERENCES "qti"."document" ("node", "hottexts") MATCH SIMPLE ON UPDATE CASCADE;
+ALTER TABLE "qti"."hottext" ADD CONSTRAINT "__hottext_fk_document_copy_hottexts_37vrba3gu6" FOREIGN KEY ("document", "__copy_hottexts_usxmqojsu6") REFERENCES "qti"."document" ("node", "hottexts") MATCH SIMPLE ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."hottext" ADD CONSTRAINT "__hottext_fk_document_predecessor_hottexts_zzfp5kaaev" FOREIGN KEY ("document", "__predecessor_hottexts_5ixih7zmeu") REFERENCES "qti"."hottext" ("document", "__index_hottexts_a2uv6inu6b") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
@@ -6361,7 +6362,7 @@ ALTER TABLE "qti"."instance" ADD CONSTRAINT "__instance_fk_parent_document_site_
 
 ALTER TABLE "qti"."instance" ADD CONSTRAINT "__instance_fk_site_document_io5u5bpp6h" FOREIGN KEY ("__site_hdx6niaggk", "__document_iu7n6ahln3") REFERENCES "qti"."site_target" ("node", "target") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."instance_name" ADD CONSTRAINT "__instance_name_fk_assembly_node_copy_placements_7niy7hrx2e" FOREIGN KEY ("assembly", "node", "__copy_placements_cixok2v7iw", "identifier") REFERENCES "qti"."assembled_name" ("assembly", "node", "placements", "identifier") MATCH SIMPLE ON UPDATE CASCADE;
+ALTER TABLE "qti"."instance_name" ADD CONSTRAINT "__instance_name_fk_assembly_node_copy_placements_7niy7hrx2e" FOREIGN KEY ("assembly", "node", "__copy_placements_cixok2v7iw", "identifier") REFERENCES "qti"."assembled_name" ("assembly", "node", "placements", "identifier") MATCH SIMPLE ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."instance_name" ADD CONSTRAINT "__instance_name_fk_assembly_node_predecessor_x6afhhjr47" FOREIGN KEY ("assembly", "node", "__predecessor_placements_wksd2bmqp3") REFERENCES "qti"."instance_name" ("assembly", "node", "__index_placements_7kchufmvhd") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
@@ -6519,9 +6520,9 @@ ALTER TABLE "qti"."lom_string" ADD CONSTRAINT "__lom_string_fk_node_tag_kind_lom
 
 ALTER TABLE "qti"."lom_string" ADD CONSTRAINT "__lom_string_fk_node_pred_languages_fouwh2wpp7" FOREIGN KEY ("node", "__pred_languages_i7e7rxcgke") REFERENCES "qti"."lom_string_language" ("node", "__index_languages_ft2z7nkccu") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."lom_string" ADD CONSTRAINT "__lom_string_fk_node_language_cyf36v3gna" FOREIGN KEY ("__node_najnjopqcl", "__language_cbidl4nwet") REFERENCES "qti"."lom_string_language" ("node", "language") MATCH SIMPLE;
+ALTER TABLE "qti"."lom_string" ADD CONSTRAINT "__lom_string_fk_node_language_cyf36v3gna" FOREIGN KEY ("__node_najnjopqcl", "__language_cbidl4nwet") REFERENCES "qti"."lom_string_language" ("node", "language") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."lom_string_language" ADD CONSTRAINT "__lom_string_language_fk_node_copy_languages_rwu7ldnfnv" FOREIGN KEY ("node", "__copy_languages_ck534uuvjr") REFERENCES "qti"."lom_string" ("node", "languages") MATCH SIMPLE ON UPDATE CASCADE;
+ALTER TABLE "qti"."lom_string_language" ADD CONSTRAINT "__lom_string_language_fk_node_copy_languages_rwu7ldnfnv" FOREIGN KEY ("node", "__copy_languages_ck534uuvjr") REFERENCES "qti"."lom_string" ("node", "languages") MATCH SIMPLE ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."lom_string_language" ADD CONSTRAINT "__lom_string_language_fk_node_predecessor_languages_vftzduptkl" FOREIGN KEY ("node", "__predecessor_languages_7ndasyhqmc") REFERENCES "qti"."lom_string_language" ("node", "__index_languages_ft2z7nkccu") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
@@ -6623,7 +6624,7 @@ ALTER TABLE "qti"."name_lookup" ADD CONSTRAINT "__name_lookup_fk_node_resource_t
 
 ALTER TABLE "qti"."name_lookup" ADD CONSTRAINT "__name_lookup_fk_node_item_document_bqnquit3n3" FOREIGN KEY ("__node_thfa4gfsui", "__item_document_5xqzpkafzu") REFERENCES "qti"."item_ref_document" ("node", "document") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."named" ADD CONSTRAINT "__named_fk_document_copy_names_44jhxgax6u" FOREIGN KEY ("document", "__copy_names_rrizqpfsoz") REFERENCES "qti"."test_document" ("node", "names") MATCH SIMPLE ON UPDATE CASCADE;
+ALTER TABLE "qti"."named" ADD CONSTRAINT "__named_fk_document_copy_names_44jhxgax6u" FOREIGN KEY ("document", "__copy_names_rrizqpfsoz") REFERENCES "qti"."test_document" ("node", "names") MATCH SIMPLE ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."named" ADD CONSTRAINT "__named_fk_document_predecessor_names_76gf2ogr4u" FOREIGN KEY ("document", "__predecessor_names_6jvoumtmjn") REFERENCES "qti"."named" ("document", "__index_names_mbaffe626y") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
@@ -6731,7 +6732,7 @@ ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_fk_id_vmybur325b" FOREIGN KEY ("
 
 ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_fk_parent_pred_at_chars_was_elements_was_jditgsexpp" FOREIGN KEY ("__parent_l4ckjnvwat", "__pred_at_xktcobhsti", "chars_was", "elements_was", "start", "was", "__before_children_0_nrqam5jjot", "__before_children_0_3b76aq6obl") REFERENCES "qti"."node" ("__parent_l4ckjnvwat", "at", "chars_after", "elements", "end", "state", "__after_children_0_7j24lewpcd", "__after_children_0_wmlhu3albc") MATCH SIMPLE;
 
-ALTER TABLE "qti"."object_lang" ADD CONSTRAINT "__object_lang_fk_node_copy_langs_c7xdvtdhmc" FOREIGN KEY ("node", "__copy_langs_75vki3mroy") REFERENCES "qti"."assessment_object" ("node", "langs") MATCH SIMPLE ON UPDATE CASCADE;
+ALTER TABLE "qti"."object_lang" ADD CONSTRAINT "__object_lang_fk_node_copy_langs_c7xdvtdhmc" FOREIGN KEY ("node", "__copy_langs_75vki3mroy") REFERENCES "qti"."assessment_object" ("node", "langs") MATCH SIMPLE ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."object_lang" ADD CONSTRAINT "__object_lang_fk_node_predecessor_langs_tooego3bwr" FOREIGN KEY ("node", "__predecessor_langs_ijqdbr2nj4") REFERENCES "qti"."object_lang" ("node", "__index_langs_c35xn3ubfv") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
@@ -6753,7 +6754,7 @@ ALTER TABLE "qti"."operand" ADD CONSTRAINT "__operand_fk_node_operator_kind_lang
 
 ALTER TABLE "qti"."operand" ADD CONSTRAINT "__operand_fk_node_rank_children_fzrjwbeyyp" FOREIGN KEY ("node", "rank", "children") REFERENCES "qti"."node" ("id", "elements", "element_children") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."operand" ADD CONSTRAINT "__operand_fk_operator_copy_operands_k3axpbhaae" FOREIGN KEY ("operator", "__copy_operands_o5ii2z4vjn") REFERENCES "qti"."expression" ("node", "operands") MATCH SIMPLE ON UPDATE CASCADE;
+ALTER TABLE "qti"."operand" ADD CONSTRAINT "__operand_fk_operator_copy_operands_k3axpbhaae" FOREIGN KEY ("operator", "__copy_operands_o5ii2z4vjn") REFERENCES "qti"."expression" ("node", "operands") MATCH SIMPLE ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."operand" ADD CONSTRAINT "__operand_fk_operator_predecessor_operands_before_hsvw6jjhkt" FOREIGN KEY ("operator", "__predecessor_operands_ufrqkqfihp", "__before_operands_0_vzhq4hhl5j", "__before_operands_0_hqqzaumtkr", "__before_operands_0_73vrlh74gb", "__before_operands_0_fvi5fp3rey", "__before_operands_0_bsuf4ptnln") REFERENCES "qti"."operand" ("operator", "__index_operands_kqe33i4w6p", "__after_operands_0_ek46mkgf75", "__after_operands_0_neldlhyecj", "__after_operands_0_qu4sone4f2", "__after_operands_0_mi3haeazpz", "__after_operands_0_au2qmzifc2") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
@@ -6889,7 +6890,7 @@ ALTER TABLE "qti"."quotation" ADD CONSTRAINT "__quotation_fk_node_first_at_first
 
 ALTER TABLE "qti"."quotation" ADD CONSTRAINT "__quotation_fk_parent_next_at_after_mnd2ggpbi2" FOREIGN KEY ("__parent_iam5ypvehw", "__next_at_axnykqptgp", "__after_opywcrlnpf") REFERENCES "qti"."node" ("__parent_l4ckjnvwat", "__at_6ewbwmrn5c", "__first_c2z2qcicj5") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."reading" ADD CONSTRAINT "__reading_fk_assembly_node_attribute_copy_readings_zsad7ry5si" FOREIGN KEY ("assembly", "node", "attribute", "__copy_readings_ue6xb5bwc7", "identifier", "kind", "role") REFERENCES "qti"."assembled_reference" ("assembly", "node", "attribute", "readings", "identifier", "kind", "role") MATCH SIMPLE ON UPDATE CASCADE;
+ALTER TABLE "qti"."reading" ADD CONSTRAINT "__reading_fk_assembly_node_attribute_copy_readings_zsad7ry5si" FOREIGN KEY ("assembly", "node", "attribute", "__copy_readings_ue6xb5bwc7", "identifier", "kind", "role") REFERENCES "qti"."assembled_reference" ("assembly", "node", "attribute", "readings", "identifier", "kind", "role") MATCH SIMPLE ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."reading" ADD CONSTRAINT "__reading_fk_assembly_node_attribute_predecessor_wckagswvve" FOREIGN KEY ("assembly", "node", "attribute", "__predecessor_readings_zkgrv2aeqk") REFERENCES "qti"."reading" ("assembly", "node", "attribute", "__index_readings_iia2rmy2kz") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
@@ -6915,7 +6916,7 @@ ALTER TABLE "qti"."record_field" ADD CONSTRAINT "__record_field_fk_node_inezxb7o
 
 ALTER TABLE "qti"."record_field" ADD CONSTRAINT "__record_field_fk_node_document_kind_start_nearest_5qtnaopamh" FOREIGN KEY ("node", "document", "kind", "start", "nearest", "version", "parent") REFERENCES "qti"."node" ("id", "document", "kind", "start", "nearest", "version", "parent") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."record_field" ADD CONSTRAINT "__record_field_fk_parent_copy_fields_vcxxbuwpsu" FOREIGN KEY ("parent", "__copy_fields_bg4vnu42tt") REFERENCES "qti"."value_set" ("node", "fields") MATCH SIMPLE ON UPDATE CASCADE;
+ALTER TABLE "qti"."record_field" ADD CONSTRAINT "__record_field_fk_parent_copy_fields_vcxxbuwpsu" FOREIGN KEY ("parent", "__copy_fields_bg4vnu42tt") REFERENCES "qti"."value_set" ("node", "fields") MATCH SIMPLE ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."record_field" ADD CONSTRAINT "__record_field_fk_parent_predecessor_fields_cs47lrwg4t" FOREIGN KEY ("parent", "__predecessor_fields_gqxqzzn7oq") REFERENCES "qti"."record_field" ("parent", "__index_fields_opv4v3y3hy") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
@@ -6935,7 +6936,7 @@ ALTER TABLE "qti"."reference_path" ADD CONSTRAINT "__reference_path_fk_package_p
 
 ALTER TABLE "qti"."reference_path" ADD CONSTRAINT "__reference_path_fk_package_path_tag_root_kind_qti_zxwc2gu5ix" FOREIGN KEY ("__package_7t2ctw5cbp", "__path_ao7rtnqc22", "__tag_root_kind_qti_assessment_stimulus_2vbuhphhzu") REFERENCES "qti"."document" ("package", "path", "root_kind") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."reference_segment" ADD CONSTRAINT "__reference_segment_fk_assembly_node_attribute_copy_y573hszye5" FOREIGN KEY ("assembly", "node", "attribute", "__copy_segments_ezl7hi4s4a") REFERENCES "qti"."assembled_reference" ("assembly", "node", "attribute", "segments") MATCH SIMPLE ON UPDATE CASCADE;
+ALTER TABLE "qti"."reference_segment" ADD CONSTRAINT "__reference_segment_fk_assembly_node_attribute_copy_y573hszye5" FOREIGN KEY ("assembly", "node", "attribute", "__copy_segments_ezl7hi4s4a") REFERENCES "qti"."assembled_reference" ("assembly", "node", "attribute", "segments") MATCH SIMPLE ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."reference_segment" ADD CONSTRAINT "__reference_segment_fk_assembly_node_attribute_pred_rttpdztwz2" FOREIGN KEY ("assembly", "node", "attribute", "__pred_at_xktcobhsti", "before", "__before_segments_0_we7ytrw2n5") REFERENCES "qti"."reference_segment" ("assembly", "node", "attribute", "at", "after", "__after_segments_0_5r6yknr7n5") MATCH SIMPLE;
 
@@ -6963,7 +6964,7 @@ ALTER TABLE "qti"."resource_href" ADD CONSTRAINT "__resource_href_fk_node_packag
 
 ALTER TABLE "qti"."resource_href" ADD CONSTRAINT "__resource_href_fk_node_scope_path_txhy3mohip" FOREIGN KEY ("node", "scope", "path") REFERENCES "qti"."resource_file" ("resource", "scope", "path") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."resource_href" ADD CONSTRAINT "__resource_href_fk_node_copy_hrefs_rfarony5dz" FOREIGN KEY ("node", "__copy_hrefs_jws23niurk") REFERENCES "qti"."lom_resource" ("node", "hrefs") MATCH SIMPLE ON UPDATE CASCADE;
+ALTER TABLE "qti"."resource_href" ADD CONSTRAINT "__resource_href_fk_node_copy_hrefs_rfarony5dz" FOREIGN KEY ("node", "__copy_hrefs_jws23niurk") REFERENCES "qti"."lom_resource" ("node", "hrefs") MATCH SIMPLE ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."resource_href" ADD CONSTRAINT "__resource_href_fk_node_predecessor_hrefs_gpf7k4yaig" FOREIGN KEY ("node", "__predecessor_hrefs_uzeev7dpi2") REFERENCES "qti"."resource_href" ("node", "__index_hrefs_pdptkuqni7") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
@@ -7037,7 +7038,7 @@ ALTER TABLE "qti"."section_identifier" ADD CONSTRAINT "__section_identifier_fk_n
 
 ALTER TABLE "qti"."section_member" ADD CONSTRAINT "__section_member_fk_node_document_kind_start_nearest_v36s4pvwhc" FOREIGN KEY ("node", "document", "kind", "start", "nearest", "version", "section") REFERENCES "qti"."node" ("id", "document", "kind", "start", "nearest", "version", "parent") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."section_member" ADD CONSTRAINT "__section_member_fk_section_copy_members_wvmj7vdhgi" FOREIGN KEY ("section", "__copy_members_hnhodn5hxa") REFERENCES "qti"."section" ("node", "members") MATCH SIMPLE ON UPDATE CASCADE;
+ALTER TABLE "qti"."section_member" ADD CONSTRAINT "__section_member_fk_section_copy_members_wvmj7vdhgi" FOREIGN KEY ("section", "__copy_members_hnhodn5hxa") REFERENCES "qti"."section" ("node", "members") MATCH SIMPLE ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."section_member" ADD CONSTRAINT "__section_member_fk_section_predecessor_members_tzy7hanbqa" FOREIGN KEY ("section", "__predecessor_members_edkhmty74r", "__before_members_0_jf7y4u2etv") REFERENCES "qti"."section_member" ("section", "__index_members_hhafujf7zb", "__after_members_0_cvqalzqbmx") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
@@ -7109,7 +7110,7 @@ ALTER TABLE "qti"."site" ADD CONSTRAINT "__site_fk_package_path_4zfaxqxety" FORE
 
 ALTER TABLE "qti"."site" ADD CONSTRAINT "__site_fk_parent_part_replaced_parent_mixes_parent_ilvrrp6dxx" FOREIGN KEY ("__parent_zqp2kyzm2y", "__part_kpnf72dr2e", "__replaced_icpgimu5lm", "__parent_mixes_zz36usjkro", "__parent_loose_chain_3w4mtgnsow") REFERENCES "qti"."section" ("node", "part", "replacing", "mixes", "loose_chain") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."site_target" ADD CONSTRAINT "__site_target_fk_document_copy_sites_gsuw7ch3uc" FOREIGN KEY ("document", "__copy_sites_nyxjgjnrfd") REFERENCES "qti"."test_document" ("node", "sites") MATCH SIMPLE ON UPDATE CASCADE;
+ALTER TABLE "qti"."site_target" ADD CONSTRAINT "__site_target_fk_document_copy_sites_gsuw7ch3uc" FOREIGN KEY ("document", "__copy_sites_nyxjgjnrfd") REFERENCES "qti"."test_document" ("node", "sites") MATCH SIMPLE ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."site_target" ADD CONSTRAINT "__site_target_fk_document_predecessor_sites_wqrlg4xl4x" FOREIGN KEY ("document", "__predecessor_sites_llb2m5ae7c") REFERENCES "qti"."site_target" ("document", "__index_sites_ehadpoyrnv") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
@@ -7119,7 +7120,7 @@ ALTER TABLE "qti"."site_target" ADD CONSTRAINT "__site_target_fk_node_package_pa
 
 ALTER TABLE "qti"."site_target" ADD CONSTRAINT "__site_target_fk_package_path_target_target_root_upowqu3pxa" FOREIGN KEY ("package", "path", "target", "target_root", "target_nearest", "target_nearest_kind") REFERENCES "qti"."document" ("package", "path", "node", "root_kind", "context_nearest", "context_nearest_kind") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."site_target" ADD CONSTRAINT "__site_target_fk_target_copy_targeted_by_tehgk5735w" FOREIGN KEY ("target", "__copy_targeted_by_zsgzjeomjt") REFERENCES "qti"."document" ("node", "targeted_by") MATCH SIMPLE ON UPDATE CASCADE;
+ALTER TABLE "qti"."site_target" ADD CONSTRAINT "__site_target_fk_target_copy_targeted_by_tehgk5735w" FOREIGN KEY ("target", "__copy_targeted_by_zsgzjeomjt") REFERENCES "qti"."document" ("node", "targeted_by") MATCH SIMPLE ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."site_target" ADD CONSTRAINT "__site_target_fk_target_predecessor_targeted_by_zp3ajq3swq" FOREIGN KEY ("target", "__predecessor_targeted_by_5qtmyfizt7", "__before_targeted_by_0_zyvcfyriyn") REFERENCES "qti"."site_target" ("target", "__index_targeted_by_3lpr7hj7ks", "__after_targeted_by_0_4cvktz5s3v") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
@@ -7205,7 +7206,7 @@ ALTER TABLE "qti"."test_flag" ADD CONSTRAINT "__test_flag_fk_node_r2ykl3uvaq" FO
 
 ALTER TABLE "qti"."test_flag" ADD CONSTRAINT "__test_flag_fk_node_value_tymem5aioo" FOREIGN KEY ("__node_agrnt4oxfj", "__value_b2u3pnmj35") REFERENCES "qti"."section_selection" ("node", "with_replacement") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."test_reference" ADD CONSTRAINT "__test_reference_fk_document_copy_references_dz5lkwvdv4" FOREIGN KEY ("document", "__copy_references_kghgeq65k4") REFERENCES "qti"."reference_document" ("document", "references") MATCH SIMPLE ON UPDATE CASCADE;
+ALTER TABLE "qti"."test_reference" ADD CONSTRAINT "__test_reference_fk_document_copy_references_dz5lkwvdv4" FOREIGN KEY ("document", "__copy_references_kghgeq65k4") REFERENCES "qti"."reference_document" ("document", "references") MATCH SIMPLE ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."test_reference" ADD CONSTRAINT "__test_reference_fk_document_predecessor_references_zwypmkrhkc" FOREIGN KEY ("document", "__predecessor_references_seniwvt6c2") REFERENCES "qti"."test_reference" ("document", "__index_references_sjnwzeh5ps") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
@@ -7271,7 +7272,7 @@ ALTER TABLE "qti"."variable_mapping" ADD CONSTRAINT "__variable_mapping_fk_node_
 
 ALTER TABLE "qti"."variable_mapping" ADD CONSTRAINT "__variable_mapping_fk_node_tag_kind_qti_variable_7zu2zkphdh" FOREIGN KEY ("node", "__tag_kind_qti_variable_mapping_jzswa3wyza") REFERENCES "qti"."node" ("id", "kind") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."variable_ref" ADD CONSTRAINT "__variable_ref_fk_document_copy_variables_root_kind_5qovrqajvc" FOREIGN KEY ("document", "__copy_variables_27dsvhvwou", "root_kind") REFERENCES "qti"."document" ("node", "variables", "root_kind") MATCH SIMPLE ON UPDATE CASCADE;
+ALTER TABLE "qti"."variable_ref" ADD CONSTRAINT "__variable_ref_fk_document_copy_variables_root_kind_5qovrqajvc" FOREIGN KEY ("document", "__copy_variables_27dsvhvwou", "root_kind") REFERENCES "qti"."document" ("node", "variables", "root_kind") MATCH SIMPLE ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."variable_ref" ADD CONSTRAINT "__variable_ref_fk_document_predecessor_variables_5kianjzpvp" FOREIGN KEY ("document", "__predecessor_variables_no5g634kcf") REFERENCES "qti"."variable_ref" ("document", "__index_variables_vm4lsbbv2b") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
@@ -7293,11 +7294,11 @@ ALTER TABLE "qti"."variable_ref" ADD CONSTRAINT "__variable_ref_fk_node_language
 
 ALTER TABLE "qti"."variable_ref" ADD CONSTRAINT "__variable_ref_fk_node_attribute_llq6f7pdem" FOREIGN KEY ("__node_nv676cv335", "__attribute_gf7boxsvlh") REFERENCES "qti"."test_reference" ("node", "attribute") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."xml_lang" ADD CONSTRAINT "__xml_lang_fk_document_lang_copy_carriers_bhhzcojzi3" FOREIGN KEY ("document", "lang", "__copy_carriers_tdlr6yqgq5") REFERENCES "qti"."document_lang" ("document", "lang", "carriers") MATCH SIMPLE ON UPDATE CASCADE;
+ALTER TABLE "qti"."xml_lang" ADD CONSTRAINT "__xml_lang_fk_document_lang_copy_carriers_bhhzcojzi3" FOREIGN KEY ("document", "lang", "__copy_carriers_tdlr6yqgq5") REFERENCES "qti"."document_lang" ("document", "lang", "carriers") MATCH SIMPLE ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."xml_lang" ADD CONSTRAINT "__xml_lang_fk_document_lang_predecessor_carriers_lnzq5azioq" FOREIGN KEY ("document", "lang", "__predecessor_carriers_rxup7pxfqi") REFERENCES "qti"."xml_lang" ("document", "lang", "__index_carriers_dlfy2lyk5b") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."xml_lang" ADD CONSTRAINT "__xml_lang_fk_document_copy_langs_zih2vbpdtz" FOREIGN KEY ("document", "__copy_langs_cuigztqijb") REFERENCES "qti"."document" ("node", "langs") MATCH SIMPLE ON UPDATE CASCADE;
+ALTER TABLE "qti"."xml_lang" ADD CONSTRAINT "__xml_lang_fk_document_copy_langs_zih2vbpdtz" FOREIGN KEY ("document", "__copy_langs_cuigztqijb") REFERENCES "qti"."document" ("node", "langs") MATCH SIMPLE ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."xml_lang" ADD CONSTRAINT "__xml_lang_fk_document_predecessor_langs_46eyrecf4s" FOREIGN KEY ("document", "__predecessor_langs_2rwlzwin4d") REFERENCES "qti"."xml_lang" ("document", "__index_langs_cayqvcqrd7") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 

@@ -332,6 +332,10 @@ describe("assemble", { timeout: searchTimeout }, () => {
             draw: drawn(documents),
             kept: [],
             literal: Formatter.format,
+            oracle: {
+              kind: "universal",
+              name: "the round trip assemble ∘ flatten = id, to the same canonical bytes",
+            },
             runs: 300,
             shrink: completeShrink,
             steerEvery: 16,
@@ -378,6 +382,10 @@ describe("assemble", { timeout: searchTimeout }, () => {
             draw: drawn(documents),
             kept: [],
             literal: Formatter.format,
+            oracle: {
+              kind: "specification",
+              name: "trees.md §6's one-stack rebuild, each variant's first failing row read off the valid tree's model (expectedFor)",
+            },
             runs: 400,
             shrink: completeShrink,
             steerEvery: 16,
@@ -431,6 +439,10 @@ describe("assemble", { timeout: searchTimeout }, () => {
             draw: drawn(documents),
             kept: [],
             literal: Formatter.format,
+            oracle: {
+              kind: "specification",
+              name: "the rows flatten writes for some tree: a row missing, repeated or misplaced leaves that image",
+            },
             runs: 300,
             shrink: completeShrink,
             steerEvery: 16,

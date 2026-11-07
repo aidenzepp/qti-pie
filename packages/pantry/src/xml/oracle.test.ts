@@ -192,7 +192,16 @@ describe("xmllint's report, read back", () => {
     searched(
       ctx,
       explore(
-        { ...budget, draw: drawn(drawnReport), runs: 400, suite: "xml/oracle/report" },
+        {
+          ...budget,
+          draw: drawn(drawnReport),
+          oracle: {
+            kind: "universal",
+            name: "verdictsOf ∘ reportText = the drawn verdicts, each written as xmllint writes it",
+          },
+          runs: 400,
+          suite: "xml/oracle/report",
+        },
         (report) =>
           verdictsOf(
             report.files.map(({ path }) => path),

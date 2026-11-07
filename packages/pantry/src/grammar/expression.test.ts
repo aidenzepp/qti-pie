@@ -554,7 +554,6 @@ describe("OperatorArity's occurrence arithmetic against a naive count set", () =
   it.effect(
     "gives every content's least and greatest child count, int8Max for none, the brute-force set's",
     (ctx) =>
-      // Oracle: a second implementation, the set of child counts by brute force (`countsOf`).
       // Bound: particle trees 2 groups deep, groups of up to 3, bounds 0 to 2 or unbounded, so
       // every finite count is at most countCap.
       searched(
@@ -570,6 +569,10 @@ describe("OperatorArity's occurrence arithmetic against a naive count set", () =
             draw: drawn(particleGen(2)),
             kept: [],
             literal: Formatter.format,
+            oracle: {
+              kind: "second-implementation",
+              name: "the set of a particle's child counts by brute force (countsOf)",
+            },
             runs: 400,
             shrink: completeShrink,
             steerEvery: 16,

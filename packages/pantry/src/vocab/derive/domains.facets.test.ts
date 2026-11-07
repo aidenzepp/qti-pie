@@ -565,6 +565,10 @@ describe("vocab/derive/domains.ts, restriction by facets", () => {
             draw: drawn(restrictionCase),
             kept: [],
             literal: Formatter.format,
+            oracle: {
+              kind: "specification",
+              name: "XML Schema Part 2 section 4.3's facet rules, each step's read apart from the deriver (stepAdmits)",
+            },
             runs: 300,
             shrink: completeShrink,
             steerEvery: 16,
@@ -1158,6 +1162,10 @@ describe("vocab/derive/domains.ts, length facets", () => {
             draw: drawn(lengthChain),
             kept: [],
             literal: Formatter.format,
+            oracle: {
+              kind: "specification",
+              name: "XML Schema 1.0 Part 2's length-facet rules over the whole chain (brokenBy), and each facet read on its own",
+            },
             runs: 300,
             shrink: completeShrink,
             steerEvery: 16,

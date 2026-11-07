@@ -92,11 +92,16 @@ describe("XsiType", () => {
         ctx,
         exhaust(
           {
+            box: "every assignment of an anonymous type, the base, a type derived from it and an unrelated type to 3 kinds: 64 assignments",
             caseHang: Duration.minutes(1),
             coverage: requiredInSpace<"anonymous" | "typed">(["anonymous", "typed"]),
             generator: array(element([-1, 0, 1, 2] as const), { max: 3, min: 3 }),
             limit: 200,
             literal: Formatter.format,
+            oracle: {
+              kind: "specification",
+              name: "XML Schema 1.0 Part 1 §3.3.4 clause 4 read over the toy derivations by hand",
+            },
             suite: "grammar/xsi/model",
           },
           (declared, c) =>

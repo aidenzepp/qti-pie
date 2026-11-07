@@ -443,17 +443,20 @@ describe("encode gives the recursive writer's bytes", () => {
   it.effect(
     `for every plane tree of 1 to ${BOX_NODES} nodes, labelled, under every encoder class, exhausted`,
     (ctx) =>
-      // Oracle: a second implementation, the recursive writer and encoder. Bound: every plane tree
-      // of 1 to 7 nodes, 197 trees, enumerated, each under every label.
       searched(
         ctx,
         exhaust(
           {
+            box: "every plane tree of 1 to 7 nodes, labelled, under every label: 197 trees",
             caseHang,
             coverage: noCoverage,
             generator: planeTreeUpTo(BOX_NODES),
             limit: PLANE_TREES_TO_7,
             literal: Formatter.format,
+            oracle: {
+              kind: "second-implementation",
+              name: "the recursive writer and encoder of 1854123",
+            },
             suite: "crust/write/plane-trees",
           },
           ({ nodes, tree }) => agrees(bare(labelled(tree)), `a plane tree of ${nodes} nodes`),
@@ -471,9 +474,8 @@ describe("encode gives the recursive writer's bytes", () => {
   it.effect(
     `for swarmed documents, each within ${CASE_BOUNDS.nodes} nodes, depth ${CASE_BOUNDS.depth} and width ${CASE_BOUNDS.width}: ${CASES} rotating cases a run beside the witnesses`,
     (ctx) =>
-      // Oracle: a second implementation, the recursive writer and encoder. Bound: the drawn
-      // documents, each with its own swarm and bounds within CASE_BOUNDS; the witnesses reach every
-      // situation of `documentSituations`.
+      // Bound: the drawn documents, each with its own swarm and bounds within CASE_BOUNDS; the
+      // witnesses reach every situation of `documentSituations`.
       searched(
         ctx,
         explore(
@@ -484,6 +486,10 @@ describe("encode gives the recursive writer's bytes", () => {
             draw: drawn(generatedDocument(CASE_BOUNDS)),
             kept: [],
             literal: Formatter.format,
+            oracle: {
+              kind: "second-implementation",
+              name: "the recursive writer and encoder of 1854123",
+            },
             runs: CASES,
             shrink: completeShrink,
             steerEvery: 16,

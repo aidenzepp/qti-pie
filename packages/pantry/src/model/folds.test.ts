@@ -1,5 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { drawn, explore } from "@grizzle/testing/explore";
+import type { Oracle } from "@grizzle/testing/explore";
 import { rating, required } from "@grizzle/testing/features";
 import type { Pending } from "@grizzle/testing/features";
 import { element, int, shuffled } from "@grizzle/testing/gen";
@@ -147,9 +148,10 @@ const isInteraction = (kind: Kind): boolean =>
  * An exploration of the generator's trees, with the settings every property here shares.
  *
  * @param suite - The suite's label.
+ * @param oracle - What its property is checked against.
  * @returns The exploration's settings.
  */
-const over = (suite: string) =>
+const over = (suite: string, oracle: Oracle) =>
   ({
     caseHang,
     concurrency: 1,
@@ -157,11 +159,76 @@ const over = (suite: string) =>
     draw: drawn(documents),
     kept: [],
     literal: Formatter.format,
+    oracle,
     runs: 300,
     shrink: completeShrink,
     steerEvery: 16,
     suite,
   }) as const;
+
+/**
+ * The node invariants' oracle: the generator's model of where it placed each node.
+ */
+const placedOracle: Oracle = {
+  kind: "second-implementation",
+  name: "the generator's model of the tree, with plan §1.3's N1 to N3 and trees.md's T2",
+};
+
+/**
+ * The identities' oracle: each fold's identity as fin.md §4.3 states it.
+ */
+const identityOracle: Oracle = {
+  kind: "specification",
+  name: "fin.md §4.3's identities, state 0, the empty set and the count 0, and N1's sentinel copies",
+};
+
+/**
+ * The naive recomputation's oracle: each fold computed from the whole tree at once.
+ */
+const naiveOracle: Oracle = {
+  kind: "second-implementation",
+  name: "each fold's meaning recomputed naively from the whole tree",
+};
+
+/**
+ * The count and set folds' oracle: their metamorphic relations.
+ */
+const metamorphicOracle: Oracle = {
+  kind: "universal",
+  name: "elements and attrs fold the same under a permutation, elements counts each element copied, and attrs is idempotent",
+};
+
+/**
+ * The refusals' oracle: the grammar's admission cells, a missing one a refusal.
+ */
+const admissionOracle: Oracle = {
+  kind: "specification",
+  name: "a fold reads one Admission cell per child and one AttributeAdmission cell per attribute, and a missing cell is a refusal",
+};
+
+/**
+ * The valid trees' oracle: the host's law model.
+ */
+const lawModelOracle: Oracle = {
+  kind: "specification",
+  name: "the host's law model (#pantry/test/oracle.ts) over trees built to meet its laws",
+};
+
+/**
+ * N6's oracle: each node's ancestry walked up its parents.
+ */
+const ancestryOracle: Oracle = {
+  kind: "second-implementation",
+  name: "plan §1.3's N6 read off the whole tree, each ancestor's entered flags walked up its parents",
+};
+
+/**
+ * The invalid variants' oracle: each variant's law as `lawOf` names it.
+ */
+const variantOracle: Oracle = {
+  kind: "specification",
+  name: "the host's law model, naming each invalid variant's law as lawOf does",
+};
 
 describe("fold over generated trees", { timeout: searchTimeout }, () => {
   it.effect(
@@ -174,7 +241,7 @@ describe("fold over generated trees", { timeout: searchTimeout }, () => {
       // Bound: the generator's drawn bounds, up to 200 nodes and depth 7 a tree.
       searched(
         ctx,
-        explore(over("model/folds-node-invariants"), ({ document, model }, c) =>
+        explore(over("model/folds-node-invariants", placedOracle), ({ document, model }, c) =>
           Effect.gen(function* nodeInvariants() {
             c.noteAll(featuresOf(document));
             c.noteAll(familiesOf(model));
@@ -229,7 +296,7 @@ describe("fold over generated trees", { timeout: searchTimeout }, () => {
       // Bound: the generator's drawn bounds.
       searched(
         ctx,
-        explore(over("model/folds-identities"), ({ document, model }, c) =>
+        explore(over("model/folds-identities", identityOracle), ({ document, model }, c) =>
           Effect.gen(function* identities() {
             c.noteAll(featuresOf(document));
             c.noteAll(familiesOf(model));
@@ -291,7 +358,7 @@ describe("fold over generated trees", { timeout: searchTimeout }, () => {
     // Bound: the generator's drawn bounds.
     searched(
       ctx,
-      explore(over("model/folds-naive"), ({ document, model }, c) =>
+      explore(over("model/folds-naive", naiveOracle), ({ document, model }, c) =>
         Effect.gen(function* naive() {
           c.noteAll(featuresOf(document));
           c.noteAll(familiesOf(model));
@@ -454,7 +521,7 @@ describe("fold's count and set folds", { timeout: searchTimeout }, () => {
         ctx,
         explore(
           {
-            ...over("model/folds-metamorphic"),
+            ...over("model/folds-metamorphic", metamorphicOracle),
             coverage: required<Edit>(
               ["permuted", "copied once", "copied twice", "attribute copied"],
               { cases: 300, sense: notesOnly },
@@ -551,7 +618,7 @@ describe("fold's refusals", { timeout: searchTimeout }, () => {
         ctx,
         explore(
           {
-            ...over("model/folds-refusals"),
+            ...over("model/folds-refusals", admissionOracle),
             coverage: required<Unadmitted>(["child", "attribute"], {
               cases: 300,
               sense: notesOnly,
@@ -812,7 +879,7 @@ describe("the host's law model over folded rows", { timeout: searchTimeout }, ()
     // Bound: the generator's drawn bounds.
     searched(
       ctx,
-      explore(over("model/folds-laws-valid"), ({ document, model }, c) =>
+      explore(over("model/folds-laws-valid", lawModelOracle), ({ document, model }, c) =>
         Effect.gen(function* valid() {
           c.noteAll(featuresOf(document));
           c.noteAll(familiesOf(model));
@@ -848,7 +915,7 @@ describe("the host's law model over folded rows", { timeout: searchTimeout }, ()
         ctx,
         explore(
           {
-            ...over("model/folds-n6-naive"),
+            ...over("model/folds-n6-naive", ancestryOracle),
             coverage: rating(
               required<N6Situation>(["N6 holds", "N6 refuses", "banned child"], {
                 cases: 300,
@@ -954,7 +1021,7 @@ describe("the host's law model over folded rows", { timeout: searchTimeout }, ()
       ctx,
       explore(
         {
-          ...over("model/folds-laws-variants"),
+          ...over("model/folds-laws-variants", variantOracle),
           coverage: required<VariantSituation>([...invalidVariants, ...variantFields], {
             cases: 400,
             sense: notesOnly,
