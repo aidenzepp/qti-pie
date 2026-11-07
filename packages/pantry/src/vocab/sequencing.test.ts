@@ -147,8 +147,8 @@ const accepts = (automaton: Automaton, own: string, word: Word): boolean => {
   let state = 0;
 
   for (const letter of word) {
-    const next = [...(state === 0 ? automaton.first : (automaton.follow[state - 1] ?? []))].find(
-      (number) => takes(automaton, number, own, letter),
+    const next = [...(automaton.next[state] ?? [])].find((number) =>
+      takes(automaton, number, own, letter),
     );
 
     if (next === undefined) {
@@ -158,7 +158,27 @@ const accepts = (automaton: Automaton, own: string, word: Word): boolean => {
     state = next;
   }
 
-  return state === 0 ? automaton.nullable : automaton.last.has(state);
+  return automaton.ends.has(state);
+};
+
+/**
+ * The kinds two or more of an automaton's positions name, where a child's kind does not decide its
+ * position and the automaton's state does.
+ *
+ * @param automaton - The automaton.
+ * @returns The kinds, sorted.
+ */
+const kindsNamedTwice = (automaton: Automaton): readonly string[] => {
+  const counts = new Map<string, number>();
+  for (const { symbol } of automaton.positions) {
+    if (symbol._tag === "kinds") {
+      for (const kind of new Set(symbol.kinds)) {
+        counts.set(kind, (counts.get(kind) ?? 0) + 1);
+      }
+    }
+  }
+
+  return [...counts].flatMap(([kind, count]) => (count > 1 ? [kind] : [])).toSorted();
 };
 
 /**
@@ -370,7 +390,7 @@ describe("vocab/sequencing.ts", () => {
                 c.note("wildcard");
               }
 
-              if (automaton.shared.length > 0) {
+              if (kindsNamedTwice(automaton).length > 0) {
                 c.note("shared");
               }
 
@@ -511,7 +531,7 @@ describe("vocab/sequencing.ts", () => {
         automaton.positions.length !== leaves.length ||
         automaton.positions.some(({ number }, at) => number !== at + 1) ||
         automaton.positions.some(({ occurs }, at) => occurs !== leaves[at]?.occurs) ||
-        [...automaton.shared].toSorted().join(" ") !== shared.toSorted().join(" ")
+        kindsNamedTwice(automaton).join(" ") !== shared.toSorted().join(" ")
       ) {
         throw new Error(`${named(row)}: the positions are not the tree's leaves in order`);
       }
