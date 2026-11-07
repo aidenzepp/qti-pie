@@ -749,8 +749,8 @@ describe("qti/expressions.ts, an LTI item ref", () => {
         "variable",
         "declaration",
         "declarationKind",
-        "declBaseType",
         "declCardinality",
+        "declBaseTypes",
       ],
       [
         "MappingSourceDeclaration",
@@ -758,8 +758,8 @@ describe("qti/expressions.ts, an LTI item ref", () => {
         "target",
         "declaration",
         "declarationKind",
-        "declBaseType",
         "declCardinality",
+        "declBaseTypes",
       ],
     );
     assert.isDefined(mappedReading, "a mapped reading's source declaration");
