@@ -33,6 +33,12 @@ const item = "items/item.xml";
 const declaring = ["items/item.xml", "items/item2.xml", "items/item3.xml", "test.xml"] as const;
 
 /**
+ * The every-relation items: the declaring documents but the test, where the float rule of SCORE and
+ * MAXSCORE does not bind (§2.2.2.3 says it of items).
+ */
+const declaringItems = ["items/item.xml", "items/item2.xml", "items/item3.xml"] as const;
+
+/**
  * A self-closing outcome declaration, after which a new declaration may be written.
  */
 const outcomeLine = /<qti-outcome-declaration identifier="[^"]+"[^>]*\/>/u;
@@ -73,16 +79,17 @@ const drawnIn =
  * document.
  *
  * @param declaration - The declaration's text.
+ * @param documents - The documents it may be written in, every declaring document by default.
  * @returns The drawn edit of the package.
  */
 const declaredAfterOutcome =
-  (declaration: Gen<string>) =>
+  (declaration: Gen<string>, documents: readonly string[] = declaring) =>
   (entries: PackageEntries): Gen<PackageEntries> =>
   (source) => {
     const written = source.draw(declaration);
 
     return source.draw(
-      editDrawnDocument(entries, declaring, outcomeLine, (text) =>
+      editDrawnDocument(entries, documents, outcomeLine, (text) =>
         replaceDrawn(text, outcomeLine, (match) => `${match[0]}${written}`),
       ),
     );
@@ -293,13 +300,15 @@ export const documentMutations = {
     ]),
     over: "package",
   },
-  // Reserved type (§2.2.2.1, §2.2.2.3): MAXSCORE or PASSED declared of another base type than the
-  // specification gives it, or QTI_CONTEXT declared as an outcome.
+  // Reserved type (§2.2.2.1, §2.2.2.3): MAXSCORE of an item or PASSED declared of another base type
+  // than the specification gives it, or QTI_CONTEXT declared as an outcome. A test's MAXSCORE is
+  // no case, since the float rule is the items' only.
   "Reserved type": {
     mutate: oneOf([
       declaredAfterOutcome(
         (source) =>
           `<qti-outcome-declaration identifier="MAXSCORE" cardinality="single" base-type="${source.draw(element(["integer", "string", "boolean", "identifier"]))}"/>`,
+        declaringItems,
       ),
       declaredAfterOutcome(
         (source) =>

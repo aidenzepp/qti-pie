@@ -120,12 +120,15 @@ describe("qti/declarations.ts, declared", () => {
       assert.notInclude(BuiltIn.handles, alias, alias);
     }
 
+    // §2.2.2.3 says SCORE and MAXSCORE of items ("Items that declare ... SCORE MUST be a float",
+    // "MAXSCORE MUST be a float") and PASSED of "Items or tests": a test's SCORE or MAXSCORE of
+    // another base type is lawful (info.txt:8478, :8480, :8482).
     assert.sameDeepMembers(
-      reservedBaseTypes.map(({ baseType, identifier }) => [identifier, baseType]),
+      reservedBaseTypes.map(({ baseType, identifier, root }) => [identifier, baseType, root]),
       [
-        ["SCORE", "float"],
-        ["MAXSCORE", "float"],
-        ["PASSED", "boolean"],
+        ["SCORE", "float", "item"],
+        ["MAXSCORE", "float", "item"],
+        ["PASSED", "boolean", "any"],
       ],
     );
   });

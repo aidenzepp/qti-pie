@@ -105,12 +105,17 @@ const valueSetKinds: ReadonlySet<string> = new Set(["qti-default-value", "qti-co
 
 /**
  * The outcome names the specification types (§2.2.2.3, Outcomes Variable: "SCORE MUST be a
- * float", "MAXSCORE MUST be a float", "PASSED MUST be a boolean").
+ * float", "MAXSCORE MUST be a float", "PASSED MUST be a boolean"), and whether a test's declaration
+ * is held to the type: SCORE and MAXSCORE are said of items ("Items that declare ... SCORE MUST be
+ * a float"), PASSED of "Items or tests".
  */
-const reservedBaseTypes: ReadonlyMap<string, string> = new Map([
-  ["MAXSCORE", "float"],
-  ["PASSED", "boolean"],
-  ["SCORE", "float"],
+const reservedBaseTypes: ReadonlyMap<
+  string,
+  { readonly baseType: string; readonly testsHeld: boolean }
+> = new Map([
+  ["MAXSCORE", { baseType: "float", testsHeld: false }],
+  ["PASSED", { baseType: "boolean", testsHeld: true }],
+  ["SCORE", { baseType: "float", testsHeld: false }],
 ]);
 
 /**
@@ -279,7 +284,11 @@ const declarationLawsOf = (
   const keys = { baseType, cardinality, identifier };
   const reserved = reservedBaseTypes.get(identifier);
   const reservedBroken =
-    (node.kind === "qti-outcome-declaration" && reserved !== undefined && baseType !== reserved) ||
+    (node.kind === "qti-outcome-declaration" &&
+      reserved !== undefined &&
+      baseType !== reserved.baseType &&
+      (reserved.testsHeld ||
+        !Option.exists(rows.root, ({ kind }) => kind === "qti-assessment-test"))) ||
     (identifier === "QTI_CONTEXT" &&
       (node.kind !== "qti-context-declaration" || cardinality !== "record"));
   const baseBroken = (cardinality === "record") !== (baseType === "none");

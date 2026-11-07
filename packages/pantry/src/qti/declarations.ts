@@ -121,24 +121,30 @@ export const sessionVariables = [
 ];
 
 /**
- * A name the specification types wherever it is declared: the declaration kind a declaration of the
- * name must be, and the base type it must have.
+ * A name the specification types where it is declared: the declaration kind a declaration of the
+ * name must be, the base type it must have, and the documents that type binds, `any` of them or
+ * the items' only.
  */
 interface ReservedBaseType {
   readonly baseType: (typeof BaseType.handles)[number];
   readonly identifier: string;
   readonly kind: (typeof DeclarationKind.handles)[number];
+  readonly root: "any" | "item";
 }
 
 /**
- * The outcome names the specification types (information model §2.2.2.3, Outcomes Variable:
- * "SCORE MUST be a float", "MAXSCORE MUST be a float", "PASSED MUST be a boolean"). An outcome of
- * another name is untyped by them.
+ * The outcome names the specification types (information model §2.2.2.3, Outcomes Variable: "Items
+ * that declare a numeric outcome variable ... should use the outcome name 'SCORE' ... SCORE MUST be
+ * a float", "Items that declare a maximum score ... MAXSCORE MUST be a float", "Items or tests that
+ * want to make the fact that the candidate scored above a predefined threshold available as a
+ * variable should use the 'PASSED' variable. PASSED MUST be a boolean"). SCORE and MAXSCORE are the
+ * items' only (`item`: a test declares either of any base type), PASSED binds an item and a test
+ * alike (`any`). An outcome of another name is untyped by them.
  */
 export const reservedBaseTypes: readonly ReservedBaseType[] = [
-  { baseType: "float", identifier: "SCORE", kind: "qti-outcome-declaration" },
-  { baseType: "float", identifier: "MAXSCORE", kind: "qti-outcome-declaration" },
-  { baseType: "boolean", identifier: "PASSED", kind: "qti-outcome-declaration" },
+  { baseType: "float", identifier: "SCORE", kind: "qti-outcome-declaration", root: "item" },
+  { baseType: "float", identifier: "MAXSCORE", kind: "qti-outcome-declaration", root: "item" },
+  { baseType: "boolean", identifier: "PASSED", kind: "qti-outcome-declaration", root: "any" },
 ];
 
 /**
@@ -469,6 +475,22 @@ const keepsReservedBaseType = (d: DeclarationRow, reserved: ReservedBaseType) =>
   );
 
 /**
+ * The typed names that bind an item only: a declaration of one of another base type is lawful in a
+ * test, so `Reserved type` holds it to a test's root instead of refusing it.
+ */
+const itemOnlyBaseTypes = reservedBaseTypes.filter(({ root }) => root === "item");
+
+/**
+ * The typed names that bind a document of any root.
+ */
+const everyRootBaseTypes = reservedBaseTypes.filter(({ root }) => root === "any");
+
+/**
+ * Each test's root element, the parent of the outcome declarations a test makes.
+ */
+const testRoots = select(Node, (n) => n.eq(n.kind, "qti-assessment-test"));
+
+/**
  * The typed-value patterns, stated once in `#pantry/qti/expression-types.ts` as `BaseTypePattern`'s
  * rows and re-exported here under their names: the base types a value domain judges
  * (`domainValues`), boolean's, point's and the pairs' own patterns, and the base types every text
@@ -520,7 +542,10 @@ const doubleForm = lexicalForm(pg["double precision"]);
  * - **`Declaration not reserved`** (reading 72): no declaration names a built-in session variable, in
  *   any document, an item's, a test's or a section's alike, since every declaration element has its
  *   row whatever its root (information model tables 4.5.1, 5.115.1 and 5.151.1).
- * - **`Reserved type`**: SCORE, MAXSCORE, PASSED and QTI_CONTEXT keep their specified types.
+ * - **`Reserved type`**: SCORE and MAXSCORE of an item, PASSED and QTI_CONTEXT keep their specified
+ *   types. A SCORE or MAXSCORE of another base type is refused unless its declaration is a child of
+ *   a `qti-assessment-test`, since "SCORE MUST be a float" is said of items (§2.2.2.3:
+ *   info.txt:8478, :8480).
  * - **`Declaration base type`**: a record has no base type, and every other variable has one.
  * - **`Value cardinality`**: a single variable's value set holds one value, and a record's set holds
  *   only fields, one per value, distinct by identifier (`Record field key`).
@@ -685,9 +710,18 @@ export const declarationLawsByName = {
   ],
   "Record field key": [key(on(RecordField, "parent", "identifier"))],
   "Reserved type": [
+    contained(
+      on(
+        select(Declaration, (d) =>
+          d.not(d.and(...itemOnlyBaseTypes.map((reserved) => keepsReservedBaseType(d, reserved)))),
+        ),
+        "parent",
+      ),
+      on(testRoots, "id"),
+    ),
     check("Reserved_type", Declaration, (d) =>
       d.and(
-        ...reservedBaseTypes.map((reserved) => keepsReservedBaseType(d, reserved)),
+        ...everyRootBaseTypes.map((reserved) => keepsReservedBaseType(d, reserved)),
         d.or(
           d.ne(d.identifier, contextVariable.identifier),
           d.and(

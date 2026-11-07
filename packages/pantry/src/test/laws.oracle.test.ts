@@ -93,6 +93,44 @@ const testFeedbackPackage = (outcome: string, baseType: string | null) => ({
 });
 
 /**
+ * Write a package whose test declares one outcome, of single cardinality, before its test part.
+ *
+ * @param outcome - The outcome's identifier.
+ * @param baseType - The outcome's base type.
+ * @returns The package.
+ */
+const testOutcomePackage = (outcome: string, baseType: string) => ({
+  "imsmanifest.xml": manifestOf(
+    `${itemResource}<resource identifier="RT" type="imsqti_test_xmlv3p0" href="test.xml"><file href="test.xml"/></resource>`,
+  ),
+  "item.xml": item,
+  "test.xml": edit(
+    test,
+    '<qti-test-part identifier="P"',
+    `<qti-outcome-declaration identifier="${outcome}" cardinality="single" base-type="${baseType}"/><qti-test-part identifier="P"`,
+  ),
+});
+
+/**
+ * Judge a package whose test declares one outcome, and decide whether "Reserved type" refuses it.
+ *
+ * @param identifier - The outcome's identifier.
+ * @param baseType - The outcome's base type.
+ * @returns Whether a breach of the law is among the judgment's, with every breach for a message.
+ */
+const testOutcome = (identifier: string, baseType: string) =>
+  judged(testOutcomePackage(identifier, baseType)).pipe(
+    Effect.map((judgment) => {
+      const breaches = breachesOf(judgment);
+
+      return {
+        breaches: shown(breaches),
+        held: breaches.some(({ law }) => law === "Reserved type"),
+      };
+    }),
+  );
+
+/**
  * Write a package whose tests each declare the outcome the section document's rubric names, in the
  * base type given for them, and reach that document through a section ref; the rubric names it from
  * a `qti-feedback-inline`.
@@ -607,6 +645,39 @@ describe("the information model's rules RD found unowned (unowned-readings.md §
       assert.isTrue(numAttempts.held, numAttempts.breaches);
       assert.isTrue(duration.held, duration.breaches);
     }),
+  );
+
+  it.effect(
+    "Reserved type: SCORE and MAXSCORE are a float in an item (§2.2.2.3: 'Items that declare ... SCORE MUST be a float'), of any base type in a test, and PASSED a boolean in both",
+    () =>
+      Effect.gen(function* reservedType() {
+        const score = `<qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/>`;
+        const itemOutcome = (identifier: string, baseType: string) =>
+          refusedBy("Reserved type", [
+            score,
+            `<qti-outcome-declaration identifier="${identifier}" cardinality="single" base-type="${baseType}"/>`,
+          ]);
+
+        const itemScore = yield* itemOutcome("SCORE", "integer");
+        const itemMaxScore = yield* itemOutcome("MAXSCORE", "integer");
+        const itemPassed = yield* itemOutcome("PASSED", "integer");
+        const itemFloat = yield* itemOutcome("SCORE", "float");
+        const testScore = yield* testOutcome("SCORE", "integer");
+        const testMaxScore = yield* testOutcome("MAXSCORE", "integer");
+        const testFloat = yield* testOutcome("SCORE", "float");
+        const testPassed = yield* testOutcome("PASSED", "integer");
+        const testBoolean = yield* testOutcome("PASSED", "boolean");
+
+        assert.isTrue(itemScore.held, itemScore.breaches);
+        assert.isTrue(itemMaxScore.held, itemMaxScore.breaches);
+        assert.isTrue(itemPassed.held, itemPassed.breaches);
+        assert.isFalse(itemFloat.held, itemFloat.breaches);
+        assert.isFalse(testScore.held, testScore.breaches);
+        assert.isFalse(testMaxScore.held, testMaxScore.breaches);
+        assert.isFalse(testFloat.held, testFloat.breaches);
+        assert.isTrue(testPassed.held, testPassed.breaches);
+        assert.isFalse(testBoolean.held, testBoolean.breaches);
+      }),
   );
 
   it.effect(
