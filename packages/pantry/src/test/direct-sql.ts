@@ -127,8 +127,26 @@ export const writtenColumnsOf = (client: Client, table: string) =>
   );
 
 /**
- * The one constraint of one of `Qti`'s tables whose comment matches a `LIKE` pattern: a key's or a
- * foreign key's, which grizzle names by a digest and describes by its comment.
+ * The constraints of one of `Qti`'s tables whose comment matches a `LIKE` pattern: keys or
+ * foreign keys, which grizzle names by a digest and describes by its comment.
+ *
+ * @param client - The session.
+ * @param table - The table.
+ * @param pattern - The comment's pattern.
+ * @returns The constraints' names.
+ */
+export const constraintsDescribed = (client: Client, table: string, pattern: string) =>
+  rowsOf<{ readonly conname: string }>(
+    client,
+    `SELECT c.conname FROM pg_catalog.pg_constraint c
+      WHERE c.conrelid = pg_catalog.to_regclass($1)
+        AND pg_catalog.obj_description(c.oid, 'pg_constraint') LIKE $2`,
+    [`${qtiSchema}.${table}`, pattern],
+  ).pipe(Effect.map((rows) => rows.map(({ conname }) => conname)));
+
+/**
+ * The one constraint of one of `Qti`'s tables whose comment matches a `LIKE` pattern
+ * ({@link constraintsDescribed}).
  *
  * @param client - The session.
  * @param table - The table.
@@ -136,17 +154,11 @@ export const writtenColumnsOf = (client: Client, table: string) =>
  * @returns The constraint's name; none or several fail the case.
  */
 export const constraintDescribed = (client: Client, table: string, pattern: string) =>
-  rowsOf<{ readonly conname: string }>(
-    client,
-    `SELECT c.conname FROM pg_catalog.pg_constraint c
-      WHERE c.conrelid = pg_catalog.to_regclass($1)
-        AND pg_catalog.obj_description(c.oid, 'pg_constraint') LIKE $2`,
-    [`${qtiSchema}.${table}`, pattern],
-  ).pipe(
-    Effect.map((rows) => {
-      assert.lengthOf(rows, 1, `${table}: one constraint described ${pattern}`);
+  constraintsDescribed(client, table, pattern).pipe(
+    Effect.map((names) => {
+      assert.lengthOf(names, 1, `${table}: one constraint described ${pattern}`);
 
-      return rows[0]?.conname ?? "";
+      return names[0] ?? "";
     }),
   );
 
