@@ -35,7 +35,15 @@ import {
 import type { ExpressionTyping } from "#pantry/grammar/expression.ts";
 import type { NodeId } from "#pantry/model/xdm.ts";
 import { itemRefDocument, testDocumentsOf, testKinds } from "#pantry/test/oracle-laws/assembly.ts";
-import { breachAt, collapsed, collapsedOf, elementsOf, valueOf } from "#pantry/test/oracle-view.ts";
+import {
+  breachAt,
+  collapsed,
+  collapsedOf,
+  elementsOf,
+  typedOr,
+  typedValueOf,
+  valueOf,
+} from "#pantry/test/oracle-view.ts";
 import type { LawBreach, PackageRows, Row, View } from "#pantry/test/oracle-view.ts";
 import { ncNameForm as ncName, typedValueHolds } from "#pantry/test/oracle-laws/typed.ts";
 
@@ -224,9 +232,10 @@ const spelledName = (lexical: string, spelling: string, kind: string): Option.Op
 
 /**
  * Read the base type an attribute-typed expression's attribute gives it: a base value's and a test
- * variables' `base-type`, spelled exactly (`ValueBaseForm`), `unknown` where a test variables
- * writes none; a math operator's `name`, `integer` for `signum`, `floor` and `ceil` and `float` for
- * every other (information model §2.11.3.32).
+ * variables' `base-type` as its type reads it (`typedValueOf`), `unknown` where a test variables
+ * writes none or the form lies outside the type's lexical space, a type no law can know; a math
+ * operator's `name`, `integer` for `signum`, `floor` and `ceil` and `float` for every other
+ * (information model §2.11.3.32).
  *
  * @param rows - The document.
  * @param node - The expression.
@@ -241,7 +250,7 @@ const attributeBaseOf = (rows: View, node: Row): string => {
       : "float";
   }
 
-  return Option.getOrElse(valueOf(rows, node.id, "base-type"), () => "unknown");
+  return Option.getOrElse(typedValueOf(rows, node.id, "base-type"), () => "unknown");
 };
 
 /**
@@ -362,7 +371,7 @@ export const typedOf = (rows: View, grammar: ComposedGrammar): Typed => {
   const declared = new Map<string, Row>();
   for (const node of rows.members) {
     if (grammar.references.declarationKind.has(node.kind)) {
-      for (const identifier of Option.toArray(collapsedOf(rows, node.id, "identifier"))) {
+      for (const identifier of Option.toArray(typedValueOf(rows, node.id, "identifier"))) {
         if (!declared.has(identifier)) {
           declared.set(identifier, node);
         }
@@ -805,11 +814,11 @@ const literalBreachesOf = (typed: Typed, grammar: ComposedGrammar): readonly Bre
     }
 
     if (node.kind === "qti-base-value") {
-      const baseType = Option.getOrElse(valueOf(rows, node.id, "base-type"), () => "");
-
-      return typedValueHolds(grammar, baseType, node.stringValue)
-        ? []
-        : [breachAt(rows, node, "Literal lexical", { baseType, text: node.stringValue })];
+      return Option.toArray(typedOr(rows, node.id, "base-type", "")).flatMap((baseType) =>
+        typedValueHolds(grammar, baseType, node.stringValue)
+          ? []
+          : [breachAt(rows, node, "Literal lexical", { baseType, text: node.stringValue })],
+      );
     }
 
     return [];
@@ -865,7 +874,7 @@ export const expressionPackageBreaches = (
       }
 
       const template = Option.getOrElse(
-        collapsedOf(rows, node.id, "template-identifier"),
+        typedValueOf(rows, node.id, "template-identifier"),
         () => "",
       );
       const declared = Option.flatMap(itemRefDocument(input, document.listed, itemRef), (item) =>
@@ -873,7 +882,7 @@ export const expressionPackageBreaches = (
           item.rows.members.find(
             (held) =>
               grammar.references.declarationKind.has(held.kind) &&
-              Option.contains(collapsedOf(item.rows, held.id, "identifier"), template),
+              Option.contains(typedValueOf(item.rows, held.id, "identifier"), template),
           ),
         ).pipe(
           // A declaration that writes no cardinality is refused by AL3 alone, not compared as the
@@ -906,7 +915,7 @@ export const expressionPackageBreaches = (
                 onSome: ({ base, cardinality }) => `${base} ${cardinality}`,
               }),
               held: `${held.base} ${held.cardinality}`,
-              itemRef: Option.getOrElse(collapsedOf(rows, itemRef.id, "identifier"), () => ""),
+              itemRef: Option.getOrElse(typedValueOf(rows, itemRef.id, "identifier"), () => ""),
               template,
             }),
           ];

@@ -46,7 +46,14 @@ import type {
   Rule,
   TestDocument,
 } from "#pantry/test/oracle-laws/assembly.ts";
-import { breachAt, collapsed, collapsedOf, elementsOf, valueOf } from "#pantry/test/oracle-view.ts";
+import {
+  breachAt,
+  collapsed,
+  elementsOf,
+  typedOr,
+  typedValueOf,
+  valueOf,
+} from "#pantry/test/oracle-view.ts";
 import type { LawBreach, ListedRows, PackageRows, Row, View } from "#pantry/test/oracle-view.ts";
 
 /**
@@ -154,7 +161,7 @@ const declarationsOf = (
   const declared = new Map<string, string[]>();
   for (const node of rows.members) {
     if (grammar.references.declarationKind.has(node.kind)) {
-      for (const identifier of Option.toArray(collapsedOf(rows, node.id, "identifier"))) {
+      for (const identifier of Option.toArray(typedValueOf(rows, node.id, "identifier"))) {
         declared.set(identifier, [...(declared.get(identifier) ?? []), node.kind]);
       }
     }
@@ -190,7 +197,7 @@ const documentLawsOf = (document: TestDocument): readonly Breach[] => {
     const bound = section.selection.pipe(
       Option.flatMap((selection) =>
         Option.map(
-          collapsedOf(rows, selection.id, "select").pipe(
+          typedValueOf(rows, selection.id, "select").pipe(
             Option.filter((form) => integerForm.test(form)),
           ),
           (form) => ({ select: BigInt(form), selection }),
@@ -218,10 +225,12 @@ const documentLawsOf = (document: TestDocument): readonly Breach[] => {
     .flatMap(({ node, identifier }): readonly Breach[] => {
       const targets = elementsOf(rows, node.id)
         .filter(({ kind }) => kind === "qti-variable-mapping")
-        .map((mapping) => ({
-          mapping,
-          target: Option.getOrElse(collapsedOf(rows, mapping.id, "target-identifier"), () => ""),
-        }));
+        .flatMap((mapping) =>
+          Option.toArray(typedOr(rows, mapping.id, "target-identifier", "")).map((target) => ({
+            mapping,
+            target,
+          })),
+        );
       const byTarget = Map.groupBy(targets, ({ target }) => target);
 
       return [
@@ -254,7 +263,7 @@ const stimulusRefKeyOf = (listed: ListedRows): readonly Breach[] => {
   const { rows } = listed;
   const refs = rows.members.flatMap((node) =>
     node.kind === "qti-assessment-stimulus-ref"
-      ? Option.toArray(collapsedOf(rows, node.id, "identifier")).map((identifier) => ({
+      ? Option.toArray(typedValueOf(rows, node.id, "identifier")).map((identifier) => ({
           identifier,
           node,
         }))
@@ -306,11 +315,11 @@ const itemRefLawsOf = (
         .filter(({ kind }) => kind === "qti-variable-mapping")
         .flatMap((mapping): readonly Breach[] => {
           const source = Option.getOrElse(
-            collapsedOf(rows, mapping.id, "source-identifier"),
+            typedValueOf(rows, mapping.id, "source-identifier"),
             () => "",
           );
           const mapped = Option.getOrElse(
-            collapsedOf(rows, mapping.id, "target-identifier"),
+            typedValueOf(rows, mapping.id, "target-identifier"),
             () => "",
           );
           const sourced = kindsOf(source).includes("qti-outcome-declaration")
@@ -332,7 +341,7 @@ const itemRefLawsOf = (
         .filter(({ kind }) => kind === "qti-template-default")
         .flatMap((templated): readonly Breach[] => {
           const template = Option.getOrElse(
-            collapsedOf(rows, templated.id, "template-identifier"),
+            typedValueOf(rows, templated.id, "template-identifier"),
             () => "",
           );
 
@@ -530,7 +539,7 @@ const branchLawsOf = (assembled: Assembled): readonly Breach[] =>
       const { rows } = instance.document.listed;
       const keys = {
         instance: String(instance.start),
-        owner: Option.getOrElse(collapsedOf(rows, rule.owner.id, "identifier"), () => ""),
+        owner: Option.getOrElse(typedValueOf(rows, rule.owner.id, "identifier"), () => ""),
         target: rule.target,
         test: assembled.test.listed.path,
       };
@@ -690,7 +699,7 @@ const readingsOf = (
           const mapping = elementsOf(held.referrer.rows, held.node.id).find(
             ({ id, kind: child }) =>
               child === "qti-variable-mapping" &&
-              Option.contains(collapsedOf(held.referrer.rows, id, "target-identifier"), variable),
+              Option.contains(typedValueOf(held.referrer.rows, id, "target-identifier"), variable),
           );
           if (declared !== undefined) {
             return { declarationKind: declared, source: "declared" };
@@ -699,7 +708,7 @@ const readingsOf = (
           if (mapping !== undefined) {
             // A mapped name stands as its source's declaration, an outcome where it names one.
             const source = Option.getOrElse(
-              collapsedOf(held.referrer.rows, mapping.id, "source-identifier"),
+              typedValueOf(held.referrer.rows, mapping.id, "source-identifier"),
               () => "",
             );
 
@@ -793,7 +802,7 @@ const referenceLawsOf = (
     const { rows } = document.listed;
 
     return rows.members.flatMap((node): readonly Breach[] => {
-      const sections = Option.toArray(collapsedOf(rows, node.id, "section-identifier")).flatMap(
+      const sections = Option.toArray(typedValueOf(rows, node.id, "section-identifier")).flatMap(
         (identifier) => {
           const looked = lookUp(input, assembled, identifier);
           const named = Option.exists(

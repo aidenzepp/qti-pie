@@ -25,7 +25,7 @@ import { Option } from "effect";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
 import { booleanOf } from "#pantry/grammar/domains.ts";
 import type { NodeId } from "#pantry/model/xdm.ts";
-import { collapsedOf, elementsOf, hrefPathOf, valueOf } from "#pantry/test/oracle-view.ts";
+import { elementsOf, hrefPathOf, typedOr, valueOf } from "#pantry/test/oracle-view.ts";
 import type { ListedRows, PackageRows, Row, View } from "#pantry/test/oracle-view.ts";
 
 /**
@@ -273,7 +273,12 @@ export const testDocumentOf = (listed: ListedRows, grammar: ComposedGrammar): Te
 
     const section = sections.get(node.id);
     const scope = parentScope(node);
-    const identifier = Option.getOrElse(collapsedOf(rows, node.id, "identifier"), () => "");
+    const written = typedOr(rows, node.id, "identifier", "");
+    if (Option.isNone(written)) {
+      return [];
+    }
+
+    const identifier = written.value;
 
     if (section !== undefined) {
       return [
@@ -334,11 +339,12 @@ export const testDocumentOf = (listed: ListedRows, grammar: ComposedGrammar): Te
   });
   const rules = rows.members.flatMap((node): readonly Rule[] => {
     const owner = rows.byId.get(node.parent);
-    const target = Option.getOrElse(collapsedOf(rows, node.id, "target"), () => "");
 
-    return node.kind === testKinds.rule && owner !== undefined && !exits.has(target)
-      ? [{ node, owner, target }]
-      : [];
+    return Option.toArray(typedOr(rows, node.id, "target", "")).flatMap((target) =>
+      node.kind === testKinds.rule && owner !== undefined && !exits.has(target)
+        ? [{ node, owner, target }]
+        : [],
+    );
   });
 
   return {
@@ -501,19 +507,20 @@ export const testDocumentsOf = (
 };
 
 /**
- * The resources of a manifest by the path their href resolves to: each `cp:resource`'s type, in
- * manifest order.
+ * The resources of a manifest by the path their href resolves to: each `cp:resource`'s type as its
+ * type reads it, in manifest order, none for a type written outside its lexical space.
  *
  * @param manifest - The manifest.
  * @returns Each resolved href path's resource types.
  */
-export const resourceTypesByPath = (manifest: View): ReadonlyMap<string, readonly string[]> => {
-  const byPath = new Map<string, string[]>();
+export const resourceTypesByPath = (
+  manifest: View,
+): ReadonlyMap<string, readonly Option.Option<string>[]> => {
+  const byPath = new Map<string, Option.Option<string>[]>();
   for (const node of manifest.members) {
     if (node.kind === "cp:resource") {
       for (const path of Option.toArray(hrefPathOf(manifest, node))) {
-        const type = Option.getOrElse(collapsedOf(manifest, node.id, "type"), () => "");
-        byPath.set(path, [...(byPath.get(path) ?? []), type]);
+        byPath.set(path, [...(byPath.get(path) ?? []), typedOr(manifest, node.id, "type", "")]);
       }
     }
   }
@@ -524,27 +531,28 @@ export const resourceTypesByPath = (manifest: View): ReadonlyMap<string, readonl
 /**
  * Name what an item ref's href names (the UP audit's B2 and B3): its resolved path, and the type
  * of the resource whose href resolves there, an item's before an LTI link's before any other,
- * none where no resource does.
+ * none where no resource does. A resource whose type is written outside its lexical space names no
+ * type a law could read, so where no item or link resource stands beside it, the ref names nothing
+ * to judge.
  *
  * @param input - The package.
  * @param referrer - The document that holds the item ref.
  * @param itemRef - The item ref's node.
- * @returns Its path and type, none where it writes no href.
+ * @returns Its path and type, none where it writes no href or its target's type is unread.
  */
 export const itemRefTargetOf = (
   input: PackageRows,
   referrer: ListedRows,
   itemRef: Row,
 ): Option.Option<{ readonly path: string; readonly type: Option.Option<string> }> =>
-  Option.map(hrefPathOf(referrer.rows, itemRef), (path) => {
-    const types = resourceTypesByPath(input.manifest).get(path) ?? [];
+  Option.flatMap(hrefPathOf(referrer.rows, itemRef), (path) => {
+    const held = resourceTypesByPath(input.manifest).get(path) ?? [];
+    const types = held.flatMap((type) => Option.toArray(type));
+    const named = types.find((type) => type === itemResourceType) ?? types.find(isLinkType);
 
-    return {
-      path,
-      type: Option.fromNullishOr(
-        types.find((type) => type === itemResourceType) ?? types.find(isLinkType) ?? types.at(0),
-      ),
-    };
+    return named === undefined && types.length < held.length
+      ? Option.none()
+      : Option.some({ path, type: Option.fromNullishOr(named ?? types.at(0)) });
   });
 
 /**

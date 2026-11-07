@@ -113,6 +113,7 @@ import type {
 import type { PackageFile } from "#pantry/package/read.ts";
 import { builtinDomainOf } from "#pantry/vocab/derive/domains.ts";
 import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
+import type { Domain, WhiteSpace } from "#pantry/vocab/inventory/types.ts";
 import { keyTextBytes, localNameBytes, namespaceBytes, utf8Length } from "#pantry/qti/limits.ts";
 import { splicingParents } from "#pantry/qti/tests.ts";
 import { datumText, keyCopies } from "#pantry/test/key-copies.ts";
@@ -120,7 +121,7 @@ import type { DocumentRows, KeyCopy } from "#pantry/test/key-copies.ts";
 import { isUriReference } from "#pantry/test/uri-reference.ts";
 import { addedLaws, lawDocumentBreaches, lawPackageBreaches } from "#pantry/test/oracle-laws.ts";
 import { mathmlNamespace, xsNamespace } from "#pantry/vocab/namespaces.ts";
-import { resolveAttribute } from "#pantry/test/resolution.ts";
+import { oracleValueOf, resolveAttribute } from "#pantry/test/resolution.ts";
 import {
   ancestorsOf,
   field,
@@ -130,10 +131,11 @@ import {
   pathOf,
   resolvedAt,
   slotKey,
+  typedValueOf,
   valueOf,
   viewOf,
 } from "#pantry/test/oracle-view.ts";
-import type { LawBreach, ResolvedHref, View } from "#pantry/test/oracle-view.ts";
+import type { LawBreach, ResolvedHref, TypedReading, View } from "#pantry/test/oracle-view.ts";
 import type { OracleWhiteSpace } from "#pantry/test/resolution.ts";
 import { typeAvailable } from "#pantry/vocab/open.ts";
 
@@ -606,8 +608,7 @@ export const lawsOf = (grammar: ComposedGrammar): Laws => {
   );
   // The content models a family may end in: every model but that of the families no model holds.
   const ending = new Set(grammar.content.last.rows.map(({ model }) => model));
-
-  return {
+  const laws: Laws = {
     counted: (version, kind) =>
       (counted.get(kindKey(version, kind)) ?? []).map(({ max, min, position }) => ({
         max,
@@ -652,6 +653,8 @@ export const lawsOf = (grammar: ComposedGrammar): Laws => {
       requiredOf(grammar.attributes, grammar.kinds.attributeName, version, kind, governs),
     ),
   };
+
+  return laws;
 };
 
 /**
@@ -1810,6 +1813,114 @@ const compiledOf = (laws: Laws, attribute: FoldedAttribute<Composed>) =>
   );
 
 /**
+ * Each declared attribute's type, by `version kind name`: its definition and its whitespace class.
+ */
+const declaredTypes: ReadonlyMap<
+  string,
+  { readonly domain: Domain; readonly whiteSpace: WhiteSpace }
+> = new Map(
+  attributeDeclarations.flatMap(({ domain, kind, name, type, versions }) =>
+    versions.map(
+      (version) => [`${version} ${kind} ${name}`, { domain, whiteSpace: type.whiteSpace }] as const,
+    ),
+  ),
+);
+
+/**
+ * Each union member's pattern, compiled once, by the member: what decides the member a union's
+ * value is validated against.
+ */
+const memberPatterns = new Map<Domain, Option.Option<RegExp>>();
+
+/**
+ * Decide whether a union member's lexical space holds a form, the form read under the member's own
+ * whitespace class.
+ *
+ * @param member - The member.
+ * @param form - The form as written.
+ * @returns Whether it holds it; false for a member whose definition does not compile.
+ */
+const memberHolds = (member: Domain, form: string): boolean => {
+  const known = memberPatterns.get(member);
+  const pattern =
+    known ??
+    Option.map(
+      Result.getSuccess(compile(member, "xsd")),
+      ({ pattern: text }) => new RegExp(text, patternFlags),
+    );
+  memberPatterns.set(member, pattern);
+
+  return Option.exists(pattern, (regex) => regex.test(form));
+};
+
+/**
+ * Read the whitespace class a value of a definition is normalized under: an atomic type's own, a
+ * list's `collapse`, and a union's the class of its first member whose lexical space holds the
+ * form, the member it is validated against (XSD 1.1 Part 2, §4.3.6: a union's normalization "is
+ * controlled by the value of whiteSpace on that one of the memberTypes against which the union is
+ * successfully validated").
+ *
+ * @param domain - The definition.
+ * @param form - The form as written, one the definition holds.
+ * @returns The class.
+ */
+const whiteSpaceOf = (domain: Domain, form: string): OracleWhiteSpace => {
+  if (domain._tag === "atomic") {
+    const stated = domain.facets.find(({ facet }) => facet === "whiteSpace")?.value;
+
+    return stated === "preserve" || stated === "replace" ? stated : "collapse";
+  }
+
+  if (domain._tag === "list") {
+    return "collapse";
+  }
+
+  return Option.match(
+    Option.fromUndefinedOr(domain.members.find((member) => memberHolds(member, form))),
+    { onNone: () => "preserve", onSome: (member) => whiteSpaceOf(member, form) },
+  );
+};
+
+/**
+ * Read the whitespace class an attribute's form is normalized under: its declared type's, a union's
+ * resolved against the form ({@link whiteSpaceOf}), and `preserve` for a name no declaration
+ * states.
+ *
+ * @param attribute - The attribute row.
+ * @returns The class.
+ */
+const declaredWhiteSpaceOf = (attribute: FoldedAttribute<Composed>): OracleWhiteSpace => {
+  const declared = declaredTypes.get(`${attribute.version} ${attribute.kind} ${attribute.name}`);
+  if (declared === undefined) {
+    return "preserve";
+  }
+
+  return declared.whiteSpace === "union"
+    ? whiteSpaceOf(declared.domain, attribute.lexical)
+    : declared.whiteSpace;
+};
+
+/**
+ * Read an attribute as its type reads it, the one read every law past AL1 makes of a typed
+ * attribute (spec reading 1, XSD 1.1 Part 2, §4.3.6). A form inside its value domain, as AL1 judges
+ * it ({@link inDomain}), is its value after its type's whitespace class: a `preserve` type's as
+ * written, a `replace` type's with each tab, line feed and carriage return a space, a `collapse`
+ * type's collapsed. A form outside its domain, or a name its owner does not admit, has none, so AL1
+ * refuses it alone and no law reads a value the document never wrote.
+ *
+ * @param laws - The grammar's tables.
+ * @returns The reading: each attribute's value, or none.
+ */
+const typedReadingOf =
+  (laws: Laws): TypedReading =>
+  (attribute) =>
+    Option.flatMap(compiledOf(laws, attribute), (held) =>
+      inDomain(held, attribute.lexical)
+        ? Option.some(oracleValueOf(attribute.lexical, declaredWhiteSpaceOf(attribute)))
+        : Option.none(),
+    );
+
+/**
  * Decide whether an attribute is a context declaration's `identifier`, which spec reading 74 counts
  * among its document's IDs: the information model makes it a UniqueIdentifier (§5.34.1), "unique
  * within the scope of the instance" (§7.43), and outranks the XSD, which types it an
@@ -2538,7 +2649,8 @@ interface Finding {
 }
 
 /**
- * Read a node's collapsed attribute.
+ * Read a node's collapsed attribute: a declaration's `cardinality` and `base-type`, which VD's B11
+ * patch reads as written through each type's own domain.
  *
  * @param overlay - The document.
  * @param node - The node.
@@ -3093,7 +3205,7 @@ const overlayLaws: readonly ((
     }
 
     return bindingNames.flatMap((attribute): readonly Finding[] => {
-      const bound = collapsedOf(overlay, node, attribute);
+      const bound = typedValueOf(overlay.view, node.id, attribute);
       if (Option.isNone(bound)) {
         return [];
       }
@@ -3311,7 +3423,7 @@ const overlayLaws: readonly ((
       Option.isSome(overlay.laws.grammar.references.sectionPart.lookup({ kind })),
     ).length;
     const replaced = Option.contains(
-      Option.flatMap(collapsedOf(overlay, node, "with-replacement"), booleanOf),
+      Option.flatMap(typedValueOf(overlay.view, node.id, "with-replacement"), booleanOf),
       true,
     );
 
@@ -3353,7 +3465,9 @@ const overlayLaws: readonly ((
     );
     const least = roundingLeast.get(mode);
 
-    return Option.toArray(Option.flatMap(collapsedOf(overlay, node, "figures"), figuresInteger))
+    return Option.toArray(
+      Option.flatMap(typedValueOf(overlay.view, node.id, "figures"), figuresInteger),
+    )
       .filter((figures) => least !== undefined && figures < least)
       .map((figures): Finding => ({
         keys: { figures: String(figures), least: String(least ?? 0n), mode },
@@ -3403,7 +3517,7 @@ const overlayLaws: readonly ((
     ),
   (node, overlay) => {
     const attribute = cardinalityBounds.get(node.kind);
-    const bound = collapsedOf(overlay, node, "response-identifier");
+    const bound = typedValueOf(overlay.view, node.id, "response-identifier");
     if (!overlay.isItem || attribute === undefined || Option.isNone(bound)) {
       return [];
     }
@@ -3432,7 +3546,7 @@ const overlayLaws: readonly ((
       : [];
   },
   (node, overlay) => {
-    const named = collapsedOf(overlay, node, "outcome-identifier");
+    const named = typedValueOf(overlay.view, node.id, "outcome-identifier");
     if (
       !overlay.isItem ||
       Option.isNone(named) ||
@@ -3472,7 +3586,7 @@ const overlayLaws: readonly ((
   (node, overlay) =>
     node.kind === "qti-associable-hotspot" &&
     node.parentKind === "qti-graphic-gap-match-interaction" &&
-    Option.contains(collapsedOf(overlay, node, "shape"), "default")
+    Option.contains(typedValueOf(overlay.view, node.id, "shape"), "default")
       ? [{ keys: {}, law: "Graphic gap match default hotspot" }]
       : [],
 ];
@@ -3539,11 +3653,12 @@ const overlayBreaches = (view: View, laws: Laws): readonly Breach[] => {
         view.members.flatMap((node) =>
           (Option.isSome(laws.grammar.recordBindingFit.lookup({ kind: node.kind })) ||
             laws.grammar.bindingFit.rows.some(({ kind }) => kind === node.kind)) &&
-          Option.isSome(valueOf(view, node.id, "response-identifier"))
+          Option.isSome(typedValueOf(view, node.id, "response-identifier"))
             ? [
                 {
-                  identifier: collapsed(
-                    Option.getOrElse(valueOf(view, node.id, "response-identifier"), () => ""),
+                  identifier: Option.getOrElse(
+                    typedValueOf(view, node.id, "response-identifier"),
+                    () => "",
                   ),
                   node,
                 },
@@ -3561,7 +3676,7 @@ const overlayBreaches = (view: View, laws: Laws): readonly Breach[] => {
   // no built-in variable.
   const choices = view.members.flatMap((node) =>
     choiceClasses.has(node.kind)
-      ? Option.toArray(collapsedOf(overlay, node, "identifier")).map((identifier) => ({
+      ? Option.toArray(typedValueOf(overlay.view, node.id, "identifier")).map((identifier) => ({
           identifier,
           node,
         }))
@@ -3641,7 +3756,8 @@ export const documentBreaches = (
   rows: FoldedRows<Composed>,
   laws: Laws,
 ): readonly Breach[] => {
-  const view = viewOf(path, rows);
+  const typed = typedReadingOf(laws);
+  const view = viewOf(path, rows, typed);
 
   return [
     ...nodeLaws.flatMap((law) =>
@@ -3663,7 +3779,7 @@ export const documentBreaches = (
     ...attributeBreaches(view, laws),
     ...wholeBreaches(view, laws),
     ...overlayBreaches(view, laws),
-    ...lawDocumentBreaches(path, rows, laws.grammar),
+    ...lawDocumentBreaches(path, rows, laws.grammar, typed),
   ];
 };
 
@@ -3715,20 +3831,17 @@ interface ResourceOf {
 }
 
 /**
- * Each declared attribute's whitespace class, by `version kind name`, a union's read as
- * `preserve`: what an href's value is read under before it resolves.
+ * Read the whitespace class an href's value is read under before it resolves: its declared type's,
+ * a union's read as `preserve`, and `collapse` for an attribute no declaration states.
+ *
+ * @param key - The attribute's `version kind name`.
+ * @returns The class.
  */
-const hrefWhiteSpaces: ReadonlyMap<string, OracleWhiteSpace> = new Map(
-  attributeDeclarations.flatMap(({ kind, name, type, versions }) =>
-    versions.map(
-      (version) =>
-        [
-          `${version} ${kind} ${name}`,
-          type.whiteSpace === "union" ? "preserve" : type.whiteSpace,
-        ] as const,
-    ),
-  ),
-);
+const hrefWhiteSpaceOf = (key: string): OracleWhiteSpace =>
+  Option.match(Option.fromUndefinedOr(declaredTypes.get(key)), {
+    onNone: () => "collapse",
+    onSome: ({ whiteSpace }) => (whiteSpace === "union" ? "preserve" : whiteSpace),
+  });
 
 /**
  * The entry path an href resolves to in the package, none for one outside it.
@@ -3980,8 +4093,7 @@ const referenceBreaches = (
           member,
           resolution: resolvedAt(view, member.id, lexical, {
             srcset: form === "srcset",
-            whiteSpace:
-              hrefWhiteSpaces.get(`${member.version} ${member.kind} ${name}`) ?? "collapse",
+            whiteSpace: hrefWhiteSpaceOf(`${member.version} ${member.kind} ${name}`),
           }).resolution,
         })),
       ),
@@ -4922,6 +5034,7 @@ const refusalBreach = (
  * @param tree - The document.
  * @param idOf - Draws the id of each node, as `fold` reads it.
  * @param grammar - The closed relations the folds read.
+ * @param typed - How an attribute's type reads its value.
  * @returns The view, or the breach of a fold that meets a missing cell and so has no rows.
  */
 const foldedOf = (
@@ -4929,10 +5042,11 @@ const foldedOf = (
   tree: XdmDocument<Composed>,
   idOf: (index: number) => NodeId,
   grammar: FoldGrammar<Composed>,
+  typed: TypedReading,
 ): Result.Result<View, Breach> =>
   Result.mapBoth(fold(tree, idOf, grammar), {
     onFailure: (refusal) => refusalBreach(path, tree, idOf, refusal),
-    onSuccess: (rows) => viewOf(path, rows),
+    onSuccess: (rows) => viewOf(path, rows, typed),
   });
 
 /**
@@ -4990,6 +5104,7 @@ const inPlaceBreaches = (
   foldGrammar: FoldGrammar<Composed>,
   laws: Laws,
 ): readonly Breach[] => {
+  const typed = typedReadingOf(laws);
   const sites = sitesOf(documents, grammar);
   const byPath = new Map(documents.map((listed) => [listed.path, listed] as const).toReversed());
   const placed = new Set(
@@ -5019,7 +5134,7 @@ const inPlaceBreaches = (
       root: splicedElement(grammar, byPath, listed.tree.root, listed.path, [listed.path]),
     };
 
-    return Result.match(foldedOf(listed.path, tree, idsFor(index + 1), foldGrammar), {
+    return Result.match(foldedOf(listed.path, tree, idsFor(index + 1), foldGrammar, typed), {
       onFailure: (breach) => [breach],
       onSuccess: (read) => documentBreaches(read.path, read.rows, laws),
     });
@@ -5049,6 +5164,7 @@ export const judge = Effect.fn("oracle.judge")(function* judge(
 ): Effect.fn.Return<Judgment> {
   const shredGrammar = shredGrammarOf(grammar);
   const foldGrammar = foldGrammarOf(grammar);
+  const typed = typedReadingOf(laws);
   const manifestFile = files.find(({ kind }) => kind === "manifest");
   if (manifestFile === undefined) {
     return {
@@ -5078,7 +5194,7 @@ export const judge = Effect.fn("oracle.judge")(function* judge(
       version,
       shredGrammar,
     );
-    const manifest = foldedOf(manifestFile.path, manifestTree, idsFor(0), foldGrammar);
+    const manifest = foldedOf(manifestFile.path, manifestTree, idsFor(0), foldGrammar, typed);
     const listing = Result.match(manifest, {
       onFailure: () => [],
       onSuccess: (view) => documentsOf(resourcesOf(view, grammar), grammar),
@@ -5094,7 +5210,7 @@ export const judge = Effect.fn("oracle.judge")(function* judge(
         const xml = yield* readDocument(path, file.bytes);
         const tree = yield* shredDocument(path, xml, version, shredGrammar);
         documents.push({
-          folded: foldedOf(path, tree, idsFor(index + 1), foldGrammar),
+          folded: foldedOf(path, tree, idsFor(index + 1), foldGrammar, typed),
           identifier: rootIdentifierOf(tree),
           path,
           resource,
@@ -5142,6 +5258,7 @@ export const judge = Effect.fn("oracle.judge")(function* judge(
             manifest: { path: view.path, rows: view.rows },
           },
           grammar,
+          typed,
         ),
       ],
       documents: [view.path, ...documents.map(({ path }) => path)],

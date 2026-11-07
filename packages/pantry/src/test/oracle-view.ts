@@ -42,8 +42,17 @@ export const field = (keys: Readonly<Record<string, string>>, name: string): str
   keys[name] ?? "";
 
 /**
+ * Read an attribute's value as its type reads it, or none: the oracle's one read of a typed
+ * attribute past AL1. A form inside its value domain is its value after its type's whiteSpace
+ * class, and a form outside it, or a name its owner does not admit, has none. XML Schema judges a
+ * value after its whiteSpace normalization (XSD 1.1 Part 2, §4.3.6), so a form AL1 refuses holds no
+ * value any other law could read.
+ */
+export type TypedReading = (attribute: FoldedAttribute<Composed>) => Option.Option<string>;
+
+/**
  * One folded document with its rows indexed for the laws: by id, by slot, by owner, and each
- * element's closed attribute values by name.
+ * element's closed attribute values by name, as written and as their types read them.
  */
 export interface View {
   readonly attributesOf: ReadonlyMap<NodeId, readonly FoldedAttribute<Composed>[]>;
@@ -97,6 +106,11 @@ export interface View {
    * The character data of each text, whitespace and doctype node, by node.
    */
   readonly textOf: ReadonlyMap<NodeId, string>;
+  /**
+   * Each element's closed attributes that hold a value, by name, each value as its type reads it
+   * ({@link TypedReading}): an attribute whose form lies outside its domain is not here.
+   */
+  readonly typedValuesOf: ReadonlyMap<NodeId, ReadonlyMap<string, string>>;
   readonly valuesOf: ReadonlyMap<NodeId, ReadonlyMap<string, string>>;
 }
 
@@ -208,24 +222,27 @@ const bySlotOrder = (left: Row, right: Row): number => Number(left.at - right.at
  *
  * @param path - The document's path in its package.
  * @param rows - Its folded rows.
+ * @param typed - How an attribute's type reads its value.
  * @returns The view.
  */
-export const viewOf = (path: string, rows: FoldedRows<Composed>): View => {
+export const viewOf = (path: string, rows: FoldedRows<Composed>, typed: TypedReading): View => {
   const self = rows.document.node;
   const members = rows.nodes.filter(({ start }) => start > 0n);
   const attributesOf = grouped(rows.attributes, ({ node }) => node);
-  const valuesOf = new Map(
-    [...attributesOf].map(([node, owned]) => [
-      node,
-      new Map(
-        owned.flatMap((attribute) =>
-          Option.toArray(closedNameOf(attribute.name)).map(
-            (name) => [name, attribute.lexical] as const,
+  const closedValues = (read: TypedReading) =>
+    new Map(
+      [...attributesOf].map(([node, owned]) => [
+        node,
+        new Map(
+          owned.flatMap((attribute) =>
+            Option.toArray(closedNameOf(attribute.name)).flatMap((name) =>
+              Option.toArray(read(attribute)).map((value) => [name, value] as const),
+            ),
           ),
         ),
-      ),
-    ]),
-  );
+      ]),
+    );
+  const valuesOf = closedValues((attribute) => Option.some(attribute.lexical));
   const byId = new Map<NodeId, Row>();
   const repeated = new Set<Row>();
   const starts = new Set<bigint>();
@@ -266,6 +283,7 @@ export const viewOf = (path: string, rows: FoldedRows<Composed>): View => {
     textOf: new Map(
       [...rows.texts, ...rows.whitespace, ...rows.doctypes].map(({ node, value }) => [node, value]),
     ),
+    typedValuesOf: closedValues(typed),
     valuesOf,
   };
 };
@@ -282,8 +300,9 @@ export const valueOf = (view: View, node: NodeId, name: string): Option.Option<s
   Option.fromNullishOr(view.valuesOf.get(node)?.get(name));
 
 /**
- * Read an element's closed attribute collapsed, the form every identifier and number is compared
- * in.
+ * Read an element's closed attribute collapsed: a declaration's `cardinality` and `base-type`,
+ * which VD's B11 patch reads as written through each type's own domain. Every other read is
+ * {@link typedValueOf}'s.
  *
  * @param view - The document.
  * @param node - The element's id.
@@ -292,6 +311,41 @@ export const valueOf = (view: View, node: NodeId, name: string): Option.Option<s
  */
 export const collapsedOf = (view: View, node: NodeId, name: string): Option.Option<string> =>
   Option.map(valueOf(view, node, name), collapsed);
+
+/**
+ * Read an element's closed attribute as its type reads it ({@link TypedReading}): the form every
+ * law past AL1 compares an identifier, a number or a code in.
+ *
+ * @param view - The document.
+ * @param node - The element's id.
+ * @param name - The attribute's closed name.
+ * @returns Its value, or none when the element carries no such attribute or its form lies outside
+ *   its value domain.
+ */
+export const typedValueOf = (view: View, node: NodeId, name: string): Option.Option<string> =>
+  Option.fromNullishOr(view.typedValuesOf.get(node)?.get(name));
+
+/**
+ * Read an element's closed attribute as its type reads it ({@link typedValueOf}), and a value
+ * where the element does not write it: what a law past AL1 reads of an attribute that has a
+ * meaning when unwritten.
+ *
+ * @param view - The document.
+ * @param node - The element's id.
+ * @param name - The attribute's closed name.
+ * @param unwritten - What the law reads where the element writes no such attribute.
+ * @returns Its value, or `unwritten`; none where the element writes it outside its value domain,
+ *   a form no law past AL1 reads.
+ */
+export const typedOr = (
+  view: View,
+  node: NodeId,
+  name: string,
+  unwritten: string,
+): Option.Option<string> =>
+  Option.isNone(valueOf(view, node, name))
+    ? Option.some(unwritten)
+    : typedValueOf(view, node, name);
 
 /**
  * Read an element's text content: its text and whitespace children's characters, in order.
