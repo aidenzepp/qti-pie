@@ -143,7 +143,7 @@ import {
   ValueCardinalityOf,
 } from "#pantry/qti/expression-types.ts";
 import { keyText } from "#pantry/qti/limits.ts";
-import { AreaMapping, InterpolationTable, Mapping, MatchTable } from "#pantry/qti/mapping.ts";
+import { AreaMapping, LookupTable, Mapping } from "#pantry/qti/mapping.ts";
 import { Node, nodeCounts, nodeRef } from "#pantry/qti/node.ts";
 import {
   AssembledName,
@@ -1214,6 +1214,16 @@ const matchedDeclarations = select(DeclarationTable, (d) => d.eq(d.lookup, "qti-
 const interpolatedDeclarations = select(DeclarationTable, (d) =>
   d.eq(d.lookup, "qti-interpolation-table"),
 );
+
+/**
+ * The lookup tables that are match tables, each keyed by its declaration as its slot is.
+ */
+const matchTables = select(LookupTable, (t) => t.eq(t.kind, "qti-match-table"));
+
+/**
+ * The lookup tables that are interpolation tables.
+ */
+const interpolationTables = select(LookupTable, (t) => t.eq(t.kind, "qti-interpolation-table"));
 
 /**
  * The attributes an element writes among those its type follows from.
@@ -2473,8 +2483,7 @@ export const expressionLawsByName = {
     // DeclarationTable: each declaration's tables, both ways, and each table a reference reads.
     key(on(Mapping, "declaration")),
     key(on(AreaMapping, "declaration")),
-    key(on(MatchTable, "declaration")),
-    key(on(InterpolationTable, "declaration")),
+    key(on(LookupTable, "declaration")),
     key(on(mappedDeclarations, "declaration")),
     key(on(areaMappedDeclarations, "declaration")),
     key(on(matchedDeclarations, "declaration")),
@@ -2483,10 +2492,10 @@ export const expressionLawsByName = {
     contained(on(mappedDeclarations, "declaration"), on(Mapping, "declaration")),
     contained(on(AreaMapping, "declaration"), on(areaMappedDeclarations, "declaration")),
     contained(on(areaMappedDeclarations, "declaration"), on(AreaMapping, "declaration")),
-    contained(on(MatchTable, "declaration"), on(matchedDeclarations, "declaration")),
-    contained(on(matchedDeclarations, "declaration"), on(MatchTable, "declaration")),
-    contained(on(InterpolationTable, "declaration"), on(interpolatedDeclarations, "declaration")),
-    contained(on(interpolatedDeclarations, "declaration"), on(InterpolationTable, "declaration")),
+    contained(on(matchTables, "declaration"), on(matchedDeclarations, "declaration")),
+    contained(on(matchedDeclarations, "declaration"), on(matchTables, "declaration")),
+    contained(on(interpolationTables, "declaration"), on(interpolatedDeclarations, "declaration")),
+    contained(on(interpolatedDeclarations, "declaration"), on(interpolationTables, "declaration")),
     check("E1_derived", DeclarationTable, (d) =>
       d.and(
         d.in(d.mapping, ["none", "qti-mapping"]),

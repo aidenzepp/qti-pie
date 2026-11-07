@@ -28,7 +28,6 @@ import { floatValueOf } from "#pantry/import/overlays/mapping.ts";
 import { AuthorApp } from "#pantry/qti/logins.ts";
 import {
   AreaMapping,
-  InterpolationTable,
   LookupValue,
   MapKey,
   MapKeyDirectedPair,
@@ -37,7 +36,7 @@ import {
   MapKeyPair,
   MapKeyPoint,
   Mapping,
-  MatchTable,
+  LookupTable,
 } from "#pantry/qti/mapping.ts";
 import { Author } from "#pantry/qti/roles.ts";
 import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
@@ -409,7 +408,7 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
             for (const cardinality of ["multiple", "ordered", "record"] as const) {
               const baseType = cardinality === "record" ? "none" : "integer";
               const match = yield* db.apply(
-                ChangeSet.empty(Author).insert(MatchTable, [
+                ChangeSet.empty(Author).insert(LookupTable, [
                   declaredRow({
                     baseType,
                     cardinality,
@@ -420,7 +419,7 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
                 {},
               );
               const interpolation = yield* db.apply(
-                ChangeSet.empty(Author).insert(InterpolationTable, [
+                ChangeSet.empty(Author).insert(LookupTable, [
                   declaredRow({
                     baseType,
                     cardinality,
@@ -432,14 +431,11 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
               );
 
               assert.isTrue(
-                rejectedBy(match, checkNamed("MatchTable", "Lookup_table_cardinality")),
+                rejectedBy(match, checkNamed("LookupTable", "Lookup_table_cardinality")),
                 cardinality,
               );
               assert.isTrue(
-                rejectedBy(
-                  interpolation,
-                  checkNamed("InterpolationTable", "Lookup_table_cardinality"),
-                ),
+                rejectedBy(interpolation, checkNamed("LookupTable", "Lookup_table_cardinality")),
                 cardinality,
               );
             }

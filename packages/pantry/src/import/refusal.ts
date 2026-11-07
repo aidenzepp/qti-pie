@@ -673,15 +673,7 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
   [generatedOf(Operand, "baseTypeBit"), "E1 derived"],
   [generatedOf(Operand, "cardinalityBit"), "E1 derived"],
   ...(
-    [
-      "Mapping",
-      "MapKey",
-      "MapKeyInteger",
-      "MapKeyFloat",
-      "AreaMapping",
-      "MatchTable",
-      "InterpolationTable",
-    ] as const
+    ["Mapping", "MapKey", "MapKeyInteger", "MapKeyFloat", "AreaMapping", "LookupTable"] as const
   ).map((overlay) => [primaryKeyOf(overlay, "node"), "Mapping overlay"] as const),
   [keyOver(sideOf("Named", "document", "identifier")), "Structure identifier"],
   [keyOver(sideOf("VariableMapping", "parent", "target")), "Variable mapping target"],

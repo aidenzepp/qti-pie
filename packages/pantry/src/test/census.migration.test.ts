@@ -30,8 +30,8 @@ const measured = {
   live: 7,
   names: 35,
   nodeAxes: 5,
-  nodeKeys: 42,
-  tables: 171,
+  nodeKeys: 41,
+  tables: 170,
 } as const;
 
 /**

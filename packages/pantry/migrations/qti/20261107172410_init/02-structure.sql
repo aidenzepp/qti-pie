@@ -920,24 +920,6 @@ CREATE TABLE "qti"."interaction_attribute" (
   CONSTRAINT "__interaction_attribute_key_node_value_name_beahcsfst3" UNIQUE NULLS DISTINCT ("node", "value", "name")
 );
 
-CREATE TABLE "qti"."interpolation_table" (
-  "base_type" "qti"."base_type" NOT NULL,
-  "cardinality" "qti"."cardinality" NOT NULL,
-  "declaration" "pg_catalog"."uuid" NOT NULL,
-  "declaration_kind" "qti"."declaration_kind" NOT NULL,
-  "document" "pg_catalog"."uuid" NOT NULL,
-  "identifier" "qti"."__text_pwaizaq6lx" NOT NULL,
-  "kind" "qti"."node_kind" NOT NULL,
-  "nearest" "pg_catalog"."uuid" NOT NULL,
-  "node" "pg_catalog"."uuid" NOT NULL,
-  "start" "qti"."__domain_gfw43vigph" NOT NULL,
-  "version" "qti"."schema_version" NOT NULL,
-  CONSTRAINT "__interpolation_table_pk_67y4gy2vl3" PRIMARY KEY ("node"),
-  CONSTRAINT "__interpolation_table_key_declaration_z3qoupdmkc" UNIQUE NULLS DISTINCT ("declaration"),
-  CONSTRAINT "lookup_table_cardinality" CHECK (("cardinality" = 0::smallint) IS TRUE),
-  CONSTRAINT "__interpolation_table_key_node_base_type_6gt3exp3pm" UNIQUE NULLS DISTINCT ("node", "base_type")
-);
-
 CREATE TABLE "qti"."item_mode" (
   "adaptive" boolean NOT NULL,
   "document" "pg_catalog"."uuid" NOT NULL,
@@ -1191,6 +1173,25 @@ CREATE TABLE "qti"."lom_title_string" (
   CONSTRAINT "__lom_title_string_key_node_text_6g2tghu4ae" UNIQUE NULLS DISTINCT ("node", "text")
 );
 
+CREATE TABLE "qti"."lookup_table" (
+  "base_type" "qti"."base_type" NOT NULL,
+  "cardinality" "qti"."cardinality" NOT NULL,
+  "declaration" "pg_catalog"."uuid" NOT NULL,
+  "declaration_kind" "qti"."declaration_kind" NOT NULL,
+  "document" "pg_catalog"."uuid" NOT NULL,
+  "identifier" "qti"."__text_pwaizaq6lx" NOT NULL,
+  "kind" "qti"."node_kind" NOT NULL,
+  "nearest" "pg_catalog"."uuid" NOT NULL,
+  "node" "pg_catalog"."uuid" NOT NULL,
+  "start" "qti"."__domain_gfw43vigph" NOT NULL,
+  "version" "qti"."schema_version" NOT NULL,
+  CONSTRAINT "__lookup_table_pk_l3h5i7omge" PRIMARY KEY ("node"),
+  CONSTRAINT "__lookup_table_key_declaration_rmaxtaajd2" UNIQUE NULLS DISTINCT ("declaration"),
+  CONSTRAINT "lookup_table_cardinality" CHECK (("cardinality" = 0::smallint) IS TRUE),
+  CONSTRAINT "__lookup_table_key_declaration_kind_co6havmbtp" UNIQUE NULLS DISTINCT ("declaration", "kind"),
+  CONSTRAINT "__lookup_table_key_node_base_type_77os5oaxbg" UNIQUE NULLS DISTINCT ("node", "base_type")
+);
+
 CREATE TABLE "qti"."lookup_value" (
   "base_type" "qti"."base_type" NOT NULL,
   "document" "pg_catalog"."uuid" NOT NULL,
@@ -1354,24 +1355,6 @@ CREATE TABLE "qti"."mapping_source_declaration" (
   CONSTRAINT "variable_mapping_source" CHECK (("declaration_kind" = 3::smallint) IS TRUE),
   CONSTRAINT "variable_mapping_target" CHECK (("source" = "target" OR "target_declared" = false) IS TRUE),
   CONSTRAINT "__mapping_source_declaration_key_item_ref_target_r65wbsgb3n" UNIQUE NULLS DISTINCT ("item_ref", "target", "declaration", "declaration_kind", "decl_base_type", "decl_cardinality")
-);
-
-CREATE TABLE "qti"."match_table" (
-  "base_type" "qti"."base_type" NOT NULL,
-  "cardinality" "qti"."cardinality" NOT NULL,
-  "declaration" "pg_catalog"."uuid" NOT NULL,
-  "declaration_kind" "qti"."declaration_kind" NOT NULL,
-  "document" "pg_catalog"."uuid" NOT NULL,
-  "identifier" "qti"."__text_pwaizaq6lx" NOT NULL,
-  "kind" "qti"."node_kind" NOT NULL,
-  "nearest" "pg_catalog"."uuid" NOT NULL,
-  "node" "pg_catalog"."uuid" NOT NULL,
-  "start" "qti"."__domain_gfw43vigph" NOT NULL,
-  "version" "qti"."schema_version" NOT NULL,
-  CONSTRAINT "__match_table_pk_u6pxplfh2b" PRIMARY KEY ("node"),
-  CONSTRAINT "__match_table_key_declaration_ycwum7vr5c" UNIQUE NULLS DISTINCT ("declaration"),
-  CONSTRAINT "lookup_table_cardinality" CHECK (("cardinality" = 0::smallint) IS TRUE),
-  CONSTRAINT "__match_table_key_node_base_type_ichrllhj63" UNIQUE NULLS DISTINCT ("node", "base_type")
 );
 
 CREATE TABLE "qti"."name_lookup" (
@@ -3113,6 +3096,10 @@ ALTER TABLE "qti"."declaration" ADD COLUMN "__predecessor_declarations_4bpmrvn66
 
 ALTER TABLE "qti"."declaration" ADD COLUMN "__node_b36zjq4sbg" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "base_type_lexical" <> ''::"pg_catalog"."text" THEN "node" END) STORED;
 
+ALTER TABLE "qti"."declaration_table" ADD COLUMN "__tag_kind_qti_interpolation_table_eper7c5crl" smallint GENERATED ALWAYS AS (177::smallint) STORED NOT NULL;
+
+ALTER TABLE "qti"."declaration_table" ADD COLUMN "__tag_kind_qti_match_table_rjm3gbrxg5" smallint GENERATED ALWAYS AS (176::smallint) STORED NOT NULL;
+
 ALTER TABLE "qti"."declaration_table" ADD COLUMN "__declaration_gtjngd3k3a" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "area_mapping" = 2::smallint THEN "declaration" END) STORED;
 
 ALTER TABLE "qti"."declaration_table" ADD COLUMN "__declaration_zacr3z2pku" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "lookup" = 4::smallint THEN "declaration" END) STORED;
@@ -3581,10 +3568,6 @@ ALTER TABLE "qti"."interaction_attribute" ADD COLUMN "__value_b2dcpkspbl" "pg_ca
 
 ALTER TABLE "qti"."interaction_attribute" ADD COLUMN "__value_kg73het3zn" "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" GENERATED ALWAYS AS (CASE WHEN "root_kind" IN (299::smallint, 302::smallint) AND (NOT "value" ~ '\A[\+\-0-9]'::"pg_catalog"."text" AND "kind" IN (12::smallint) AND "name" IN (77::smallint, 89::smallint) OR "kind" IN (12::smallint) AND "name" IN (86::smallint)) THEN "value" END) STORED;
 
-ALTER TABLE "qti"."interpolation_table" ADD COLUMN "__tag_lookup_qti_interpolation_table_fk4r4pbzmx" smallint GENERATED ALWAYS AS (4::smallint) STORED NOT NULL;
-
-ALTER TABLE "qti"."interpolation_table" ADD COLUMN "__tag_kind_qti_interpolation_table_4oegrntayq" smallint GENERATED ALWAYS AS (177::smallint) STORED NOT NULL;
-
 ALTER TABLE "qti"."item_mode" ADD COLUMN "__document_gfqaer5w2f" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "adaptive" = true THEN "document" END) STORED;
 
 ALTER TABLE "qti"."item_ref_document" ADD COLUMN "__tag_root_kind_qti_assessment_item_3w5s6t5tqt" smallint GENERATED ALWAYS AS (299::smallint) STORED NOT NULL;
@@ -3667,21 +3650,21 @@ ALTER TABLE "qti"."lom_string_language" ADD COLUMN "__predecessor_languages_7nda
 
 ALTER TABLE "qti"."lom_title" ADD COLUMN "__record_5sk7vx3x55" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "named" <> 0::smallint THEN "record" END) STORED;
 
-ALTER TABLE "qti"."lookup_value" ADD COLUMN "__base_type_d52tussnet" smallint GENERATED ALWAYS AS (CASE WHEN "kind" = 177::smallint THEN "base_type" END) STORED;
+ALTER TABLE "qti"."lookup_table" ADD COLUMN "__tag_lookup_qti_interpolation_table_fk4r4pbzmx" smallint GENERATED ALWAYS AS (4::smallint) STORED NOT NULL;
 
-ALTER TABLE "qti"."lookup_value" ADD COLUMN "__base_type_ktspe5cozk" smallint GENERATED ALWAYS AS (CASE WHEN "kind" = 164::smallint THEN "base_type" END) STORED;
+ALTER TABLE "qti"."lookup_table" ADD COLUMN "__tag_lookup_qti_match_table_fqterovu6f" smallint GENERATED ALWAYS AS (3::smallint) STORED NOT NULL;
 
-ALTER TABLE "qti"."lookup_value" ADD COLUMN "__base_type_ppa4r5t5nu" smallint GENERATED ALWAYS AS (CASE WHEN "kind" = 176::smallint THEN "base_type" END) STORED;
+ALTER TABLE "qti"."lookup_table" ADD COLUMN "__declaration_2lvqlmsloq" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "kind" = 177::smallint THEN "declaration" END) STORED;
 
-ALTER TABLE "qti"."lookup_value" ADD COLUMN "__base_type_jso7dw47qr" smallint GENERATED ALWAYS AS (CASE WHEN "kind" = 170::smallint THEN "base_type" END) STORED;
+ALTER TABLE "qti"."lookup_table" ADD COLUMN "__declaration_3pd2vxtld5" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "kind" = 176::smallint THEN "declaration" END) STORED;
 
-ALTER TABLE "qti"."lookup_value" ADD COLUMN "__node_fbbuogoyzm" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "kind" = 177::smallint THEN "node" END) STORED;
+ALTER TABLE "qti"."lookup_value" ADD COLUMN "__base_type_cyz5isoh5z" smallint GENERATED ALWAYS AS (CASE WHEN "kind" IN (177::smallint, 176::smallint) THEN "base_type" END) STORED;
 
-ALTER TABLE "qti"."lookup_value" ADD COLUMN "__node_jbix5h3gfn" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "kind" = 176::smallint THEN "node" END) STORED;
+ALTER TABLE "qti"."lookup_value" ADD COLUMN "__base_type_twgd5upc66" smallint GENERATED ALWAYS AS (CASE WHEN "kind" IN (164::smallint, 170::smallint) THEN "base_type" END) STORED;
 
-ALTER TABLE "qti"."lookup_value" ADD COLUMN "__parent_3ln3rxcre5" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "kind" = 164::smallint THEN "parent" END) STORED;
+ALTER TABLE "qti"."lookup_value" ADD COLUMN "__node_iqtxzzsjue" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "kind" IN (177::smallint, 176::smallint) THEN "node" END) STORED;
 
-ALTER TABLE "qti"."lookup_value" ADD COLUMN "__parent_dqneb6yn4p" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "kind" = 170::smallint THEN "parent" END) STORED;
+ALTER TABLE "qti"."lookup_value" ADD COLUMN "__parent_pewwtbkfib" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "kind" IN (164::smallint, 170::smallint) THEN "parent" END) STORED;
 
 ALTER TABLE "qti"."manifest_id" ADD COLUMN "__tag_kind_cp_manifest_5ceu2f7cj4" smallint GENERATED ALWAYS AS (315::smallint) STORED NOT NULL;
 
@@ -3758,10 +3741,6 @@ ALTER TABLE "qti"."mapping" ADD COLUMN "__tag_kind_qti_mapping_ircufmby53" small
 ALTER TABLE "qti"."mapping_lookup" ADD COLUMN "__item_ref_m4iqmo4gpd" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "mapped" = true THEN "item_ref" END) STORED;
 
 ALTER TABLE "qti"."mapping_lookup" ADD COLUMN "__name_cym5xpq4f6" "pg_catalog"."text" COLLATE "pg_catalog"."pg_c_utf8" GENERATED ALWAYS AS (CASE WHEN "mapped" = true THEN "name" END) STORED;
-
-ALTER TABLE "qti"."match_table" ADD COLUMN "__tag_lookup_qti_match_table_fqterovu6f" smallint GENERATED ALWAYS AS (3::smallint) STORED NOT NULL;
-
-ALTER TABLE "qti"."match_table" ADD COLUMN "__tag_kind_qti_match_table_3yssxkfsdf" smallint GENERATED ALWAYS AS (176::smallint) STORED NOT NULL;
 
 ALTER TABLE "qti"."name_lookup" ADD COLUMN "__assembly_nu2ggq7tnl" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "found" = true THEN "assembly" END) STORED;
 
@@ -3873,6 +3852,8 @@ ALTER TABLE "qti"."node" ADD COLUMN "__id_ixxzr33747" "pg_catalog"."uuid" GENERA
 
 ALTER TABLE "qti"."node" ADD COLUMN "__id_buqmbkuqrp" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "kind" IN (198::smallint, 214::smallint, 181::smallint, 178::smallint, 182::smallint, 175::smallint, 174::smallint, 173::smallint, 271::smallint, 179::smallint, 196::smallint, 192::smallint, 191::smallint, 190::smallint, 304::smallint, 197::smallint, 217::smallint, 216::smallint, 180::smallint, 213::smallint, 215::smallint, 218::smallint, 212::smallint, 211::smallint, 210::smallint, 91::smallint) THEN "id" END) STORED;
 
+ALTER TABLE "qti"."node" ADD COLUMN "__id_ga3jua4wvx" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "kind" IN (177::smallint, 176::smallint) THEN "id" END) STORED;
+
 ALTER TABLE "qti"."node" ADD COLUMN "__id_2ecax7r3ho" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "parent_kind" IN (223::smallint, 224::smallint, 225::smallint, 226::smallint, 227::smallint, 228::smallint, 230::smallint, 233::smallint, 236::smallint, 237::smallint, 238::smallint, 241::smallint, 243::smallint, 244::smallint, 246::smallint, 247::smallint, 248::smallint, 250::smallint, 251::smallint, 252::smallint, 253::smallint, 254::smallint, 255::smallint, 256::smallint, 257::smallint, 259::smallint, 261::smallint, 262::smallint, 263::smallint, 264::smallint, 265::smallint, 267::smallint, 269::smallint, 270::smallint, 300::smallint, 152::smallint, 171::smallint, 199::smallint, 202::smallint, 208::smallint, 219::smallint, 220::smallint, 14::smallint, 119::smallint, 153::smallint, 11::smallint, 129::smallint, 162::smallint, 184::smallint, 95::smallint, 161::smallint, 175::smallint, 174::smallint, 173::smallint, 271::smallint, 179::smallint, 134::smallint, 192::smallint, 191::smallint, 190::smallint, 304::smallint, 197::smallint, 114::smallint, 143::smallint, 111::smallint, 15::smallint, 201::smallint, 277::smallint, 278::smallint, 279::smallint, 281::smallint, 282::smallint, 283::smallint, 285::smallint, 288::smallint, 291::smallint, 295::smallint, 297::smallint) AND "kind" = 642::smallint THEN "id" END) STORED;
 
 ALTER TABLE "qti"."node" ADD COLUMN "__id_fh4h2bqbbf" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "parent_kind" IN (193::smallint, 149::smallint) AND "kind" = 150::smallint THEN "id" END) STORED;
@@ -3900,10 +3881,6 @@ ALTER TABLE "qti"."node" ADD COLUMN "__id_xzp4ngpydi" "pg_catalog"."uuid" GENERA
 ALTER TABLE "qti"."node" ADD COLUMN "__id_x7b5vg7ebm" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "kind" = 92::smallint THEN "id" END) STORED;
 
 ALTER TABLE "qti"."node" ADD COLUMN "__id_4p3x6fs6ds" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "kind" = 66::smallint THEN "id" END) STORED;
-
-ALTER TABLE "qti"."node" ADD COLUMN "__id_h7qwl2e57a" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "kind" = 177::smallint THEN "id" END) STORED;
-
-ALTER TABLE "qti"."node" ADD COLUMN "__id_ooyrupim4c" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "kind" = 176::smallint THEN "id" END) STORED;
 
 ALTER TABLE "qti"."node" ADD COLUMN "__id_gq6uzbosmd" "pg_catalog"."uuid" GENERATED ALWAYS AS (CASE WHEN "kind" = 107::smallint THEN "id" END) STORED;
 
@@ -4995,6 +4972,8 @@ ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_key_id_6jme3ffklk" UNIQUE NULLS 
 
 ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_key_id_zlofbnqy7x" UNIQUE NULLS DISTINCT ("__id_i3372l665q");
 
+ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_key_id_wbykfyb2sm" UNIQUE NULLS DISTINCT ("__id_ga3jua4wvx");
+
 ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_key_id_tu2lejn7dc" UNIQUE NULLS DISTINCT ("__id_jrir5nld5p");
 
 ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_key_parent_state_ofhdr45dwn" UNIQUE NULLS DISTINCT ("__parent_5vue23yquy", "__state_2t36fyheek");
@@ -5492,10 +5471,6 @@ CREATE TRIGGER "__isolation"
   FOR EACH STATEMENT EXECUTE FUNCTION "qti"."__require_serializable"();
 
 CREATE TRIGGER "__isolation"
-  BEFORE INSERT OR UPDATE OR DELETE OR TRUNCATE ON "qti"."interpolation_table"
-  FOR EACH STATEMENT EXECUTE FUNCTION "qti"."__require_serializable"();
-
-CREATE TRIGGER "__isolation"
   BEFORE INSERT OR UPDATE OR DELETE OR TRUNCATE ON "qti"."item_mode"
   FOR EACH STATEMENT EXECUTE FUNCTION "qti"."__require_serializable"();
 
@@ -5580,6 +5555,10 @@ CREATE TRIGGER "__isolation"
   FOR EACH STATEMENT EXECUTE FUNCTION "qti"."__require_serializable"();
 
 CREATE TRIGGER "__isolation"
+  BEFORE INSERT OR UPDATE OR DELETE OR TRUNCATE ON "qti"."lookup_table"
+  FOR EACH STATEMENT EXECUTE FUNCTION "qti"."__require_serializable"();
+
+CREATE TRIGGER "__isolation"
   BEFORE INSERT OR UPDATE OR DELETE OR TRUNCATE ON "qti"."lookup_value"
   FOR EACH STATEMENT EXECUTE FUNCTION "qti"."__require_serializable"();
 
@@ -5621,10 +5600,6 @@ CREATE TRIGGER "__isolation"
 
 CREATE TRIGGER "__isolation"
   BEFORE INSERT OR UPDATE OR DELETE OR TRUNCATE ON "qti"."mapping_source_declaration"
-  FOR EACH STATEMENT EXECUTE FUNCTION "qti"."__require_serializable"();
-
-CREATE TRIGGER "__isolation"
-  BEFORE INSERT OR UPDATE OR DELETE OR TRUNCATE ON "qti"."match_table"
   FOR EACH STATEMENT EXECUTE FUNCTION "qti"."__require_serializable"();
 
 CREATE TRIGGER "__isolation"
@@ -6251,9 +6226,9 @@ ALTER TABLE "qti"."declaration" ADD CONSTRAINT "__declaration_fk_node_ozaaoxvyso
 
 ALTER TABLE "qti"."declaration_table" ADD CONSTRAINT "__declaration_table_fk_declaration_w3unv6lbwn" FOREIGN KEY ("__declaration_gtjngd3k3a") REFERENCES "qti"."area_mapping" ("declaration") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."declaration_table" ADD CONSTRAINT "__declaration_table_fk_declaration_6ie7qduwd6" FOREIGN KEY ("__declaration_zacr3z2pku") REFERENCES "qti"."interpolation_table" ("declaration") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE "qti"."declaration_table" ADD CONSTRAINT "__declaration_table_fk_declaration_tag_kind_qti_d3tpk22tlp" FOREIGN KEY ("__declaration_zacr3z2pku", "__tag_kind_qti_interpolation_table_eper7c5crl") REFERENCES "qti"."lookup_table" ("declaration", "kind") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."declaration_table" ADD CONSTRAINT "__declaration_table_fk_declaration_3exis6py77" FOREIGN KEY ("__declaration_64mojrkeg7") REFERENCES "qti"."match_table" ("declaration") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE "qti"."declaration_table" ADD CONSTRAINT "__declaration_table_fk_declaration_tag_kind_qti_cigmf24sjw" FOREIGN KEY ("__declaration_64mojrkeg7", "__tag_kind_qti_match_table_rjm3gbrxg5") REFERENCES "qti"."lookup_table" ("declaration", "kind") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."declaration_table" ADD CONSTRAINT "__declaration_table_fk_declaration_qmy72ia7dw" FOREIGN KEY ("__declaration_zixrm6sknj") REFERENCES "qti"."mapping" ("declaration") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
@@ -6551,14 +6526,6 @@ ALTER TABLE "qti"."interaction_attribute" ADD CONSTRAINT "__interaction_attribut
 
 ALTER TABLE "qti"."interaction_attribute" ADD CONSTRAINT "__interaction_attribute_fk_node_name_kind_document_o2y3lzjeq2" FOREIGN KEY ("__node_uuxlnvvdom", "__name_4w2o46ykat", "__kind_ydtwfyasxn", "__document_cro4kuimnk", "__value_kg73het3zn") REFERENCES "qti"."printed_variable_ref" ("node", "attribute", "kind", "document", "identifier") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."interpolation_table" ADD CONSTRAINT "__interpolation_table_fk_declaration_document_nnmi7gtwxf" FOREIGN KEY ("declaration", "document", "identifier", "declaration_kind", "base_type", "cardinality") REFERENCES "qti"."declaration" ("node", "document", "identifier", "declaration_kind", "base_type", "cardinality") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
-
-ALTER TABLE "qti"."interpolation_table" ADD CONSTRAINT "__interpolation_table_fk_declaration_tag_lookup_qti_u42kzwxl2l" FOREIGN KEY ("declaration", "__tag_lookup_qti_interpolation_table_fk4r4pbzmx") REFERENCES "qti"."declaration_table" ("declaration", "lookup") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
-
-ALTER TABLE "qti"."interpolation_table" ADD CONSTRAINT "__interpolation_table_fk_node_document_kind_start_dbfjchhmol" FOREIGN KEY ("node", "document", "kind", "start", "nearest", "version", "declaration") REFERENCES "qti"."node" ("id", "document", "kind", "start", "nearest", "version", "parent") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
-
-ALTER TABLE "qti"."interpolation_table" ADD CONSTRAINT "__interpolation_table_fk_node_tag_kind_qti_y5niazwlqz" FOREIGN KEY ("node", "__tag_kind_qti_interpolation_table_4oegrntayq") REFERENCES "qti"."node" ("id", "kind") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
-
 ALTER TABLE "qti"."item_mode" ADD CONSTRAINT "__item_mode_fk_document_5lytfruxhh" FOREIGN KEY ("__document_gfqaer5w2f") REFERENCES "qti"."interaction_attribute" ("__document_lef635gfp3") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."item_ref_document" ADD CONSTRAINT "__item_ref_document_fk_document_package_path_lpl5pzwin3" FOREIGN KEY ("document", "package", "path") REFERENCES "qti"."document" ("node", "package", "path") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
@@ -6673,17 +6640,23 @@ ALTER TABLE "qti"."lom_title_string" ADD CONSTRAINT "__lom_title_string_fk_node_
 
 ALTER TABLE "qti"."lom_title_string" ADD CONSTRAINT "__lom_title_string_fk_parent_record_4iondah7pa" FOREIGN KEY ("parent", "record") REFERENCES "qti"."lom_title" ("node", "record") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
+ALTER TABLE "qti"."lookup_table" ADD CONSTRAINT "__lookup_table_fk_declaration_document_identifier_xzwme5utq2" FOREIGN KEY ("declaration", "document", "identifier", "declaration_kind", "base_type", "cardinality") REFERENCES "qti"."declaration" ("node", "document", "identifier", "declaration_kind", "base_type", "cardinality") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+
+ALTER TABLE "qti"."lookup_table" ADD CONSTRAINT "__lookup_table_fk_node_zrjkx5s47w" FOREIGN KEY ("node") REFERENCES "qti"."node" ("__id_ga3jua4wvx") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+
+ALTER TABLE "qti"."lookup_table" ADD CONSTRAINT "__lookup_table_fk_node_document_kind_start_nearest_hysbgcnapf" FOREIGN KEY ("node", "document", "kind", "start", "nearest", "version", "declaration") REFERENCES "qti"."node" ("id", "document", "kind", "start", "nearest", "version", "parent") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+
+ALTER TABLE "qti"."lookup_table" ADD CONSTRAINT "__lookup_table_fk_declaration_tag_lookup_qti_edxj2rm76f" FOREIGN KEY ("__declaration_2lvqlmsloq", "__tag_lookup_qti_interpolation_table_fk4r4pbzmx") REFERENCES "qti"."declaration_table" ("declaration", "lookup") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+
+ALTER TABLE "qti"."lookup_table" ADD CONSTRAINT "__lookup_table_fk_declaration_tag_lookup_qti_match_kun6xrasg4" FOREIGN KEY ("__declaration_3pd2vxtld5", "__tag_lookup_qti_match_table_fqterovu6f") REFERENCES "qti"."declaration_table" ("declaration", "lookup") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+
 ALTER TABLE "qti"."lookup_value" ADD CONSTRAINT "__lookup_value_fk_node_jepe7iifa4" FOREIGN KEY ("node") REFERENCES "qti"."attribute" ("__node_liwiwg6km7") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."lookup_value" ADD CONSTRAINT "__lookup_value_fk_node_document_kind_start_nearest_xtl4ozdkon" FOREIGN KEY ("node", "document", "kind", "start", "nearest", "version", "parent") REFERENCES "qti"."node" ("id", "document", "kind", "start", "nearest", "version", "parent") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."lookup_value" ADD CONSTRAINT "__lookup_value_fk_node_base_type_ym6oseezpu" FOREIGN KEY ("__node_fbbuogoyzm", "__base_type_d52tussnet") REFERENCES "qti"."interpolation_table" ("node", "base_type") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE "qti"."lookup_value" ADD CONSTRAINT "__lookup_value_fk_node_base_type_dym4rbt2pz" FOREIGN KEY ("__node_iqtxzzsjue", "__base_type_cyz5isoh5z") REFERENCES "qti"."lookup_table" ("node", "base_type") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
-ALTER TABLE "qti"."lookup_value" ADD CONSTRAINT "__lookup_value_fk_node_base_type_pxgmhaxlbo" FOREIGN KEY ("__node_jbix5h3gfn", "__base_type_ppa4r5t5nu") REFERENCES "qti"."match_table" ("node", "base_type") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
-
-ALTER TABLE "qti"."lookup_value" ADD CONSTRAINT "__lookup_value_fk_parent_base_type_qamhi46qj3" FOREIGN KEY ("__parent_3ln3rxcre5", "__base_type_ktspe5cozk") REFERENCES "qti"."interpolation_table" ("node", "base_type") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
-
-ALTER TABLE "qti"."lookup_value" ADD CONSTRAINT "__lookup_value_fk_parent_base_type_oi4bdsbrof" FOREIGN KEY ("__parent_dqneb6yn4p", "__base_type_jso7dw47qr") REFERENCES "qti"."match_table" ("node", "base_type") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE "qti"."lookup_value" ADD CONSTRAINT "__lookup_value_fk_parent_base_type_kgch7q5jwc" FOREIGN KEY ("__parent_pewwtbkfib", "__base_type_twgd5upc66") REFERENCES "qti"."lookup_table" ("node", "base_type") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."manifest_id" ADD CONSTRAINT "__manifest_id_fk_document_package_bvnezez5s3" FOREIGN KEY ("document", "package") REFERENCES "qti"."document" ("node", "package") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
@@ -6736,14 +6709,6 @@ ALTER TABLE "qti"."mapping_source_declaration" ADD CONSTRAINT "__mapping_source_
 ALTER TABLE "qti"."mapping_source_declaration" ADD CONSTRAINT "__mapping_source_declaration_fk_node_item_ref_source_ehfses4uph" FOREIGN KEY ("node", "item_ref", "source") REFERENCES "qti"."variable_mapping" ("node", "parent", "source") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."mapping_source_declaration" ADD CONSTRAINT "__mapping_source_declaration_fk_node_target_o3uysilzee" FOREIGN KEY ("node", "target") REFERENCES "qti"."variable_mapping" ("node", "target") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
-
-ALTER TABLE "qti"."match_table" ADD CONSTRAINT "__match_table_fk_declaration_document_identifier_upp46byv2y" FOREIGN KEY ("declaration", "document", "identifier", "declaration_kind", "base_type", "cardinality") REFERENCES "qti"."declaration" ("node", "document", "identifier", "declaration_kind", "base_type", "cardinality") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
-
-ALTER TABLE "qti"."match_table" ADD CONSTRAINT "__match_table_fk_declaration_tag_lookup_qti_match_mm7relcrrl" FOREIGN KEY ("declaration", "__tag_lookup_qti_match_table_fqterovu6f") REFERENCES "qti"."declaration_table" ("declaration", "lookup") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
-
-ALTER TABLE "qti"."match_table" ADD CONSTRAINT "__match_table_fk_node_document_kind_start_nearest_pxuia54jsc" FOREIGN KEY ("node", "document", "kind", "start", "nearest", "version", "declaration") REFERENCES "qti"."node" ("id", "document", "kind", "start", "nearest", "version", "parent") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
-
-ALTER TABLE "qti"."match_table" ADD CONSTRAINT "__match_table_fk_node_tag_kind_qti_match_table_6ee67vlks7" FOREIGN KEY ("node", "__tag_kind_qti_match_table_3yssxkfsdf") REFERENCES "qti"."node" ("id", "kind") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."name_lookup" ADD CONSTRAINT "__name_lookup_fk_assembly_name_node_placements_gxl5y4gix7" FOREIGN KEY ("__assembly_nu2ggq7tnl", "__name_viaaky6xuf", "__node_utrygbl66o", "__placements_yafzwo6qto") REFERENCES "qti"."assembled_name" ("assembly", "identifier", "node", "placements") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
@@ -6819,6 +6784,8 @@ ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_fk_id_nrghzju4fc" FOREIGN KEY ("
 
 ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_fk_id_gotnp3sbhf" FOREIGN KEY ("__id_buqmbkuqrp") REFERENCES "qti"."processing" ("node") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
+ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_fk_id_c2ll6sww3h" FOREIGN KEY ("__id_ga3jua4wvx") REFERENCES "qti"."lookup_table" ("node") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
+
 ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_fk_id_nubk24c65l" FOREIGN KEY ("__id_2ecax7r3ho") REFERENCES "qti"."site" ("node") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_fk_id_qvogls2jsx" FOREIGN KEY ("__id_fh4h2bqbbf") REFERENCES "qti"."value" ("node") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
@@ -6848,10 +6815,6 @@ ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_fk_id_kt65otdhvs" FOREIGN KEY ("
 ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_fk_id_npkyiaqskv" FOREIGN KEY ("__id_x7b5vg7ebm") REFERENCES "qti"."stimulus_ref" ("node") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_fk_id_string_value_5ka4srxr3v" FOREIGN KEY ("__id_4p3x6fs6ds", "__string_value_au6fy6olpt") REFERENCES "qti"."literal" ("node", "text") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
-
-ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_fk_id_vghxgicg2k" FOREIGN KEY ("__id_h7qwl2e57a") REFERENCES "qti"."interpolation_table" ("node") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
-
-ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_fk_id_cunvazvf75" FOREIGN KEY ("__id_ooyrupim4c") REFERENCES "qti"."match_table" ("node") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE "qti"."node" ADD CONSTRAINT "__node_fk_id_7p3d4phrus" FOREIGN KEY ("__id_gq6uzbosmd") REFERENCES "qti"."section_ordering" ("node") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED;
 

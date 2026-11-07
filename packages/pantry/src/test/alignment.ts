@@ -491,7 +491,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     100,
     {
       owner:
-        "Q5.11's `Lookup_table_cardinality` check on `MatchTable` and `InterpolationTable`, and `Typed_attribute_value` on `LookupValue` (`src/qti/mapping.ts`); the oracle's `Lookup table cardinality` and `Typed attribute value`",
+        "Q5.11's `Lookup_table_cardinality` check on `LookupTable`, and `Typed_attribute_value` on `LookupValue` (`src/qti/mapping.ts`); the oracle's `Lookup table cardinality` and `Typed attribute value`",
       status: "G",
     },
   ],

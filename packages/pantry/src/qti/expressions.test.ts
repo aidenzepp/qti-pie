@@ -75,7 +75,7 @@ import {
   referenceRelations,
   VariableRef,
 } from "#pantry/qti/expressions.ts";
-import { AreaMapping, InterpolationTable, Mapping, MatchTable } from "#pantry/qti/mapping.ts";
+import { AreaMapping, LookupTable, Mapping } from "#pantry/qti/mapping.ts";
 import { nodeLaws } from "#pantry/qti/node.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 
@@ -136,14 +136,13 @@ describe("qti/expressions.ts, declared", () => {
           Declaration,
           Expression,
           ExpressionAttribute,
-          InterpolationTable,
           ItemTiming,
           Language,
           LeadCardinality,
           Literal,
           LiteralTyped,
+          LookupTable,
           Mapping,
-          MatchTable,
           Operand,
           OperandBase,
           Processing,

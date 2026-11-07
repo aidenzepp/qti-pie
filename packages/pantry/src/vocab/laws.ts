@@ -502,7 +502,7 @@ export const lawTable = {
   "Mapping overlay": {
     rule: "reachability",
     source:
-      "plan §1.7 O5 and the W5 amendment's C18: each O5 overlay (Mapping, MapKey, MapKeyInteger, MapKeyFloat, AreaMapping, MatchTable, InterpolationTable) is its element's row, keyed by its node: it copies its node's nodeRef tuple and its declaration's declarationRef tuple, names a node of its kind, takes its key from its element's map-key attribute, and a typed key is the row of exactly the map keys of its form (Q5.11)",
+      "plan §1.7 O5 and the W5 amendment's C18: each O5 overlay (Mapping, MapKey, MapKeyInteger, MapKeyFloat, AreaMapping, LookupTable) is its element's row, keyed by its node: it copies its node's nodeRef tuple and its declaration's declarationRef tuple, names a node of its kind, takes its key from its element's map-key attribute, and a typed key is the row of exactly the map keys of its form (Q5.11)",
   },
   "Mastery range": {
     rule: "mastery-range",

@@ -712,13 +712,8 @@ describe("import/overlays/mapping.ts, lookup values", { timeout: searchTimeout }
               }
 
               assert.deepStrictEqual(
-                [
-                  ...(input.kind === "qti-match-table"
-                    ? rows.MatchTable
-                    : rows.InterpolationTable
-                  ).keys(),
-                ],
-                [ids.idOf(3)],
+                [...rows.LookupTable].map(([node, { kind }]) => [node, kind]),
+                [[ids.idOf(3), input.kind]],
               );
             }),
         ),

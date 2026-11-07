@@ -29,7 +29,6 @@ import {
   floatKeyPatternOf,
   floatKeyZeros,
   integerKeyPattern,
-  InterpolationTable,
   LookupValue,
   MapKey,
   MapKeyDirectedPair,
@@ -39,7 +38,7 @@ import {
   MapKeyPoint,
   Mapping,
   mappingLaws,
-  MatchTable,
+  LookupTable,
   pairKeyPattern,
   pointKeyPattern,
 } from "#pantry/qti/mapping.ts";
@@ -80,7 +79,7 @@ const floatKey = new RegExp(floatKeyPattern, "u");
  */
 const mappingRelations = {
   AreaMapping,
-  InterpolationTable,
+  LookupTable,
   LookupValue,
   MapKey,
   MapKeyDirectedPair,
@@ -89,7 +88,6 @@ const mappingRelations = {
   MapKeyPair,
   MapKeyPoint,
   Mapping,
-  MatchTable,
 };
 
 describe("qti/mapping.ts, declared", { timeout: searchTimeout }, () => {

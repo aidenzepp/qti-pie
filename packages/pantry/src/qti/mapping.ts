@@ -7,8 +7,8 @@
  * with its parent under its own name, and naming a node of its own kind:
  *
  * - {@link Mapping} (`qti-mapping`) and {@link AreaMapping} (`qti-area-mapping`), under a response
- *   declaration, and {@link MatchTable} (`qti-match-table`) and {@link InterpolationTable}
- *   (`qti-interpolation-table`), under an outcome declaration, each copy their declaration's
+ *   declaration, and {@link LookupTable} (`qti-match-table` and `qti-interpolation-table`, its
+ *   `kind` telling them apart), under an outcome declaration, each copy their declaration's
  *   `declarationRef` tuple, so the base type and cardinality they are read in are the declaration's
  *   codes (C17's proof is the declaration's own);
  * - {@link MapKey} (`qti-map-entry`) copies its mapping's base type and its `map-key` from
@@ -408,34 +408,14 @@ export const AreaMapping = relation(
 );
 
 /**
- * A match table's overlay, keyed by its `qti-match-table` node: its {@link nodeRef} tuple and its
- * outcome declaration's `declarationRef` tuple, whose base type its targets and default value are
- * values of (reading 8).
+ * A lookup table's overlay, keyed by its node: a `qti-match-table` or a `qti-interpolation-table`,
+ * which its {@link nodeRef} tuple's `kind` tells apart, and its outcome declaration's
+ * `declarationRef` tuple, whose base type its targets and default value are values of (reading 8).
+ * The two tables differ in how their entries' sources match, which no law here reads: only each
+ * entry's `target-value` and the table's `default-value` are modeled, so they are one shape.
  */
-export const MatchTable = relation(
-  "MatchTable",
-  {
-    baseType: closedId(BaseType),
-    cardinality: closedId(Cardinality),
-    declaration: uuid,
-    declarationKind: closedId(DeclarationKind),
-    document: uuid,
-    identifier: keyText,
-    kind: closedId(NodeKind),
-    nearest: uuid,
-    node: uuid,
-    start: natural,
-    version: closedId(SchemaVersion),
-  },
-  ["node"],
-);
-
-/**
- * An interpolation table's overlay, keyed by its `qti-interpolation-table` node: its
- * {@link nodeRef} tuple and its outcome declaration's `declarationRef` tuple.
- */
-export const InterpolationTable = relation(
-  "InterpolationTable",
+export const LookupTable = relation(
+  "LookupTable",
   {
     baseType: closedId(BaseType),
     cardinality: closedId(Cardinality),
@@ -470,6 +450,19 @@ type OverlayKind =
  * @returns The selection.
  */
 const nodesOf = (kind: OverlayKind) => select(Node, (n) => n.eq(n.kind, kind));
+
+/**
+ * The lookup tables' kinds, the kinds {@link LookupTable} holds.
+ */
+const lookupTableKinds = [
+  "qti-interpolation-table",
+  "qti-match-table",
+] as const satisfies readonly OverlayKind[];
+
+/**
+ * The lookup table entries' kinds, each a child of its table.
+ */
+const lookupEntryKinds = ["qti-interpolation-table-entry", "qti-match-table-entry"] as const;
 
 /**
  * The `map-key` of each `qti-map-entry`: the source of {@link MapKey}'s copy (C18), beside a key
@@ -631,8 +624,7 @@ export const mappingLawsByName = {
     ),
   ],
   "Lookup table cardinality": [
-    check("Lookup_table_cardinality", MatchTable, (t) => t.eq(t.cardinality, "single")),
-    check("Lookup_table_cardinality", InterpolationTable, (t) => t.eq(t.cardinality, "single")),
+    check("Lookup_table_cardinality", LookupTable, (t) => t.eq(t.cardinality, "single")),
   ],
   "Map key": [
     key(on(MapKey, "mapping", "key")),
@@ -694,39 +686,19 @@ export const mappingLawsByName = {
       declarationRef,
     ),
     contained(
-      on(MatchTable, "node", "document", "kind", "start", "nearest", "version", "declaration"),
+      on(LookupTable, "node", "document", "kind", "start", "nearest", "version", "declaration"),
       nodeRef,
     ),
-    mirrors(on(MatchTable, "node"), on(nodesOf("qti-match-table"), "id")),
-    contained(
+    mirrors(
+      on(LookupTable, "node"),
       on(
-        MatchTable,
-        "declaration",
-        "document",
-        "identifier",
-        "declarationKind",
-        "baseType",
-        "cardinality",
+        select(Node, (n) => n.in(n.kind, lookupTableKinds)),
+        "id",
       ),
-      declarationRef,
     ),
     contained(
       on(
-        InterpolationTable,
-        "node",
-        "document",
-        "kind",
-        "start",
-        "nearest",
-        "version",
-        "declaration",
-      ),
-      nodeRef,
-    ),
-    mirrors(on(InterpolationTable, "node"), on(nodesOf("qti-interpolation-table"), "id")),
-    contained(
-      on(
-        InterpolationTable,
+        LookupTable,
         "declaration",
         "document",
         "identifier",
@@ -744,35 +716,19 @@ export const mappingLawsByName = {
     contained(on(LookupValue, "node"), on(lookupAttributes, "node")),
     contained(
       on(
-        select(LookupValue, (v) => v.eq(v.kind, "qti-match-table-entry")),
+        select(LookupValue, (v) => v.in(v.kind, lookupEntryKinds)),
         "parent",
         "baseType",
       ),
-      on(MatchTable, "node", "baseType"),
+      on(LookupTable, "node", "baseType"),
     ),
     contained(
       on(
-        select(LookupValue, (v) => v.eq(v.kind, "qti-match-table")),
+        select(LookupValue, (v) => v.in(v.kind, lookupTableKinds)),
         "node",
         "baseType",
       ),
-      on(MatchTable, "node", "baseType"),
-    ),
-    contained(
-      on(
-        select(LookupValue, (v) => v.eq(v.kind, "qti-interpolation-table-entry")),
-        "parent",
-        "baseType",
-      ),
-      on(InterpolationTable, "node", "baseType"),
-    ),
-    contained(
-      on(
-        select(LookupValue, (v) => v.eq(v.kind, "qti-interpolation-table")),
-        "node",
-        "baseType",
-      ),
-      on(InterpolationTable, "node", "baseType"),
+      on(LookupTable, "node", "baseType"),
     ),
   ],
   "Typed attribute value": [
