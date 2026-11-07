@@ -242,11 +242,7 @@ const indexRule: KindRule = {
  *
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpRandom
  */
-const randomRule: KindRule = {
-  operandsAccept: everyOperand("any", containers),
-  references: [],
-  resultType: ([operand]) => singleOf(operand?.baseType ?? "unknown"),
-};
+const randomRule: KindRule = { ...indexRule, references: [] };
 
 /**
  * The rule of `qti-member`: a single boolean, of a single value and a container of its base type,
