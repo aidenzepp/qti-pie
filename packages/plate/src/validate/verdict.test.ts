@@ -1061,6 +1061,43 @@ describe("check, the built-in variables' identifiers and qti-equal's tolerance t
   });
 });
 
+describe("check, the base types of SCORE, MAXSCORE and PASSED (pantry ReservedOutcomeTypes)", () => {
+  it("[I-9a] refuses an item whose outcome SCORE is an integer, MAXSCORE a string or PASSED an integer, as attribute-type at its base-type (pantry ReservedOutcomeTypes)", () => {
+    for (const [identifier, baseType] of [
+      ["SCORE", "integer"],
+      ["MAXSCORE", "string"],
+      ["PASSED", "integer"],
+    ] as const) {
+      assert.deepStrictEqual(
+        refusalsOf(verdictOf(declaring("qti-outcome-declaration", identifier, baseType))),
+        [
+          {
+            location: { kind: "path", path: `${root}/qti-outcome-declaration/@base-type` },
+            rule: "attribute-type",
+          },
+        ],
+        identifier,
+      );
+    }
+  });
+
+  it("[I-9a] accepts an item whose outcome SCORE and MAXSCORE are floats, PASSED a boolean, an integer outcome of another name, and an integer response named SCORE", () => {
+    for (const [kind, identifier, baseType] of [
+      ["qti-outcome-declaration", "SCORE", "float"],
+      ["qti-outcome-declaration", "MAXSCORE", "float"],
+      ["qti-outcome-declaration", "PASSED", "boolean"],
+      ["qti-outcome-declaration", "TOTAL", "integer"],
+      ["qti-response-declaration", "SCORE", "integer"],
+    ] as const) {
+      assert.notStrictEqual(
+        verdictOf(declaring(kind, identifier, baseType)).verdict,
+        "refused",
+        `${kind} ${identifier}`,
+      );
+    }
+  });
+});
+
 /**
  * The location of every hand-built test, section and stimulus document in these tests.
  */
@@ -2087,6 +2124,32 @@ describe("describeRefusal", () => {
     assert.include(
       sentence,
       "To make it valid: give `qti-outcome-declaration` another identifier; the built-in variable needs no declaration.",
+    );
+  });
+
+  it("[I-9a] words an outcome SCORE, MAXSCORE or PASSED of another base type, citing the information model's line (pantry ReservedOutcomeTypes)", () => {
+    const sentence = describeRefusal(
+      refusalOf("attribute-type", {
+        attribute: "base-type",
+        baseType: "float",
+        check: "reserved-outcome-type",
+        element: "qti-outcome-declaration",
+        expected: "float, the base type of an outcome named SCORE",
+        identifier: "SCORE",
+        pantry: "ReservedOutcomeTypes",
+        source: "info.txt:8478",
+        value: "integer",
+      }),
+    );
+
+    assert.include(
+      sentence,
+      "`qti-outcome-declaration`'s attribute `base-type` is `integer`, but an outcome named `SCORE` must have the base type `float` (info.txt:8478).",
+    );
+    assert.include(sentence, "Rule `attribute-type`.");
+    assert.include(
+      sentence,
+      "To make it valid: change `base-type` to `float`, or give `qti-outcome-declaration` another identifier.",
     );
   });
 

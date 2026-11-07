@@ -393,7 +393,7 @@ const mapped = (base: string, entry: readonly SourceAttribute[]) =>
 const matched = (base: string, target: string) =>
   el(
     "qti-outcome-declaration",
-    [attr("identifier", "SCORE"), attr("cardinality", "single"), attr("base-type", base)],
+    [attr("identifier", "TOTAL"), attr("cardinality", "single"), attr("base-type", base)],
     [
       el(
         "qti-match-table",
@@ -1144,6 +1144,32 @@ const formatDetail = (format: string) => ({
   source: "info.txt:70323",
   value: format,
 });
+
+/**
+ * Each outcome the information model types, with the base type it must have and the line that says
+ * so: SCORE and MAXSCORE are floats, PASSED is a boolean.
+ */
+const typedOutcomes = [
+  ["SCORE", "float", "info.txt:8478"],
+  ["MAXSCORE", "float", "info.txt:8480"],
+  ["PASSED", "boolean", "info.txt:8482"],
+] as const;
+
+/**
+ * Construct a document whose root is an outcome declaration.
+ *
+ * @param identifier Its `identifier`, as written.
+ * @param base Its `base-type`.
+ * @param cardinality Its `cardinality`, `single` by default.
+ * @returns The document.
+ */
+const outcomeAs = (identifier: string, base: string, cardinality = "single"): SourceDocument =>
+  literal(
+    "qti-outcome-declaration",
+    attr("identifier", identifier),
+    attr("cardinality", cardinality),
+    attr("base-type", base),
+  );
 
 /**
  * The `attribute-type` refusals of a document checked against the generated tables, by
@@ -2401,7 +2427,7 @@ describe("checkStructure", () => {
     it("[I-9a] admits a declaration with any other identifier, a built-in's name in another case and QTI_CONTEXT among them", () => {
       for (const [name] of reservations) {
         for (const identifier of [
-          "SCORE",
+          "TOTAL",
           "Duration",
           "completionstatus",
           "numAttempts2",
@@ -2439,6 +2465,121 @@ describe("checkStructure", () => {
           ),
         ),
         [at("qti-assessment-test/qti-outcome-declaration/@identifier")],
+      );
+    });
+
+    it("[I-9a] refuses an outcome named SCORE or MAXSCORE that is not a float, and one named PASSED that is not a boolean, as attribute-type at its base-type (pantry ReservedOutcomeTypes; info.txt:8478, :8480, :8482)", () => {
+      for (const [identifier, fixed, line] of typedOutcomes) {
+        for (const written of [identifier, ` ${identifier} `]) {
+          for (const wrong of ["integer", "string", "identifier", "float", "boolean"]) {
+            if (wrong === fixed) {
+              continue;
+            }
+
+            const source = outcomeAs(written, wrong);
+            const label = `${written} ${wrong}`;
+
+            assert.deepStrictEqual(
+              found(source, generatedTables),
+              [["attribute-type", at("qti-outcome-declaration/@base-type")]],
+              label,
+            );
+            assert.deepStrictEqual(
+              first(source, generatedTables)?.detail,
+              {
+                attribute: "base-type",
+                baseType: fixed,
+                check: "reserved-outcome-type",
+                element: "qti-outcome-declaration",
+                expected: `${fixed}, the base type of an outcome named ${identifier}`,
+                identifier,
+                pantry: "ReservedOutcomeTypes",
+                source: line,
+                value: wrong,
+              },
+              label,
+            );
+          }
+        }
+      }
+    });
+
+    it("[I-9a] admits SCORE and MAXSCORE as floats and PASSED as a boolean, single, multiple or ordered, and every other outcome of any base type", () => {
+      for (const [identifier, fixed] of typedOutcomes) {
+        for (const cardinality of ["single", "multiple", "ordered"]) {
+          assert.deepStrictEqual(
+            found(outcomeAs(identifier, fixed, cardinality), generatedTables),
+            [],
+            `${identifier} ${cardinality}`,
+          );
+        }
+      }
+      for (const [identifier, fixed] of [
+        ["TOTAL", "integer"],
+        ["Score", "integer"],
+        ["MAXSCORE2", "string"],
+        ["passed", "integer"],
+      ] as const) {
+        assert.deepStrictEqual(
+          found(outcomeAs(identifier, fixed), generatedTables),
+          [],
+          identifier,
+        );
+      }
+    });
+
+    it("[I-9a] admits SCORE, MAXSCORE and PASSED of any base type on a response or template declaration, and on a record outcome, which pantry's ReservedOutcomeTypes does not read (G-R2, pending)", () => {
+      for (const [identifier] of typedOutcomes) {
+        for (const name of ["qti-response-declaration", "qti-template-declaration"]) {
+          assert.deepStrictEqual(
+            found(
+              literal(
+                name,
+                attr("identifier", identifier),
+                attr("cardinality", "single"),
+                attr("base-type", "integer"),
+              ),
+              generatedTables,
+            ),
+            [],
+            `${name} ${identifier}`,
+          );
+        }
+        assert.deepStrictEqual(
+          found(outcomeAs(identifier, "integer", "record"), generatedTables),
+          [],
+          `record ${identifier}`,
+        );
+      }
+    });
+
+    it("[I-9a] refuses a mistyped SCORE inside an item and a mistyped PASSED inside a test (pantry ReservedOutcomeTypes)", () => {
+      const score = el("qti-outcome-declaration", [
+        attr("identifier", "SCORE"),
+        attr("cardinality", "single"),
+        attr("base-type", "integer"),
+      ]);
+      const passed = el("qti-outcome-declaration", [
+        attr("identifier", "PASSED"),
+        attr("cardinality", "single"),
+        attr("base-type", "integer"),
+      ]);
+
+      assert.deepStrictEqual(mistyped(item([score])), [
+        at("qti-assessment-item/qti-outcome-declaration/@base-type"),
+      ]);
+      assert.deepStrictEqual(
+        mistyped(
+          doc(
+            location,
+            el(
+              "qti-assessment-test",
+              [attr("identifier", "test"), attr("title", "Test")],
+              [passed],
+            ),
+          ),
+        ),
+        [at("qti-assessment-test/qti-outcome-declaration/@base-type")],
       );
     });
 

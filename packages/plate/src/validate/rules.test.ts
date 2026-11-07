@@ -1031,13 +1031,13 @@ describe("checkRules", () => {
       );
     });
 
-    it("refuses map_response when SCORE is an integer", () => {
+    it("refuses map_response when SCORE is a record, which has no float base type", () => {
       assert.deepStrictEqual(
         judged(
           item(
             [
               response("RESPONSE", "single", "identifier", [mapping("A")]),
-              outcome("SCORE", "integer"),
+              declaration("qti-outcome-declaration", "SCORE", "record"),
             ],
             [choice("RESPONSE")],
             [processing("map_response")],
@@ -1088,7 +1088,7 @@ describe("checkRules", () => {
         {
           declarations: [
             response("RESPONSE", "single", "identifier", [correct, mapping("A")]),
-            outcome("SCORE", "integer"),
+            declaration("qti-outcome-declaration", "SCORE", "record"),
             outcome("MAXSCORE"),
             outcome("FEEDBACK", "identifier"),
           ],
@@ -1098,7 +1098,7 @@ describe("checkRules", () => {
         {
           declarations: [
             response("RESPONSE", "single", "identifier", [correct]),
-            outcome("SCORE", "integer"),
+            declaration("qti-outcome-declaration", "SCORE", "record"),
           ],
           template: "CC2_match",
           unmet: "a float SCORE",
@@ -1107,7 +1107,7 @@ describe("checkRules", () => {
           declarations: [
             response("RESPONSE", "single", "identifier", [correct]),
             outcome("SCORE"),
-            outcome("MAXSCORE", "integer"),
+            declaration("qti-outcome-declaration", "MAXSCORE", "record"),
             outcome("FEEDBACKBASIC", "identifier"),
           ],
           template: "CC2_match_basic",

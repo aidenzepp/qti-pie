@@ -116,7 +116,7 @@ const scriptPath = "items/<script>.xml";
  * The text of {@link scriptPath}.
  */
 const scriptItem = `<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="script" title="script" adaptive="false" time-dependent="false">
-  <qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="integer">
+  <qti-outcome-declaration identifier="TOTAL" cardinality="single" base-type="integer">
     <qti-default-value><qti-value>&lt;script&gt;</qti-value></qti-default-value>
   </qti-outcome-declaration>
   <qti-item-body><p>x</p></qti-item-body>

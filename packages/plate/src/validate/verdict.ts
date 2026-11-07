@@ -1521,6 +1521,10 @@ const expressionType = (refusal: Refusal): string => {
  *
  * - `reserved-identifier` (pantry's `DeclarationNotReserved`): a declaration whose `identifier` is a
  *   built-in variable's, `completionStatus`, `numAttempts` or `duration`.
+ * - `reserved-outcome-type` (pantry's `ReservedOutcomeTypes`): an outcome declaration named `SCORE`
+ *   or `MAXSCORE` whose `base-type` is not `float`, or named `PASSED` whose `base-type` is not
+ *   `boolean`; the detail names the outcome, `identifier`, and the base type it must have,
+ *   `baseType`.
  * - `tolerance-token` (pantry's P6): a `qti-equal`'s `tolerance` holding a token that is neither an
  *   `xs:double` nor an NCName.
  * - None: a value outside the attribute's type, or outside what a reading or the information model
@@ -1541,6 +1545,15 @@ const attributeType = (refusal: Refusal): string => {
         refusal,
         `${code(element)}'s attribute ${code(attribute)} is ${value}, the identifier of a built-in variable, which no declaration may take${settled(refusal)}.`,
         `give ${code(element)} another identifier; the built-in variable needs no declaration`,
+      );
+    }
+    case "reserved-outcome-type": {
+      const baseType = code(fact(refusal, "baseType", ""));
+
+      return sentence(
+        refusal,
+        `${code(element)}'s attribute ${code(attribute)} is ${value}, but an outcome named ${code(fact(refusal, "identifier", ""))} must have the base type ${baseType}${settled(refusal)}.`,
+        `change ${code(attribute)} to ${baseType}, or give ${code(element)} another identifier`,
       );
     }
     case "tolerance-token": {

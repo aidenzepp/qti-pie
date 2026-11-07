@@ -117,15 +117,15 @@ const scratch = path.resolve(import.meta.dirname, "..", "work", `readme-test-${r
 
 /**
  * The item the server action's recipe runs on, written fresh: a Text Entry that reads `RESPONSE`,
- * a single integer, in base 16, and processing that sets `SCORE`, an integer, to `RESPONSE`.
+ * a single integer, in base 16, and processing that sets `TOTAL`, an integer, to `RESPONSE`.
  */
 const byteItemXml = [
   '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="byte" title="The largest byte" adaptive="false" time-dependent="false">',
   '<qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="integer"/>',
-  '<qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="integer"/>',
+  '<qti-outcome-declaration identifier="TOTAL" cardinality="single" base-type="integer"/>',
   "<qti-item-body><p>The largest byte, in hexadecimal, is ",
   '<qti-text-entry-interaction response-identifier="RESPONSE" base="16"/>.</p></qti-item-body>',
-  '<qti-response-processing><qti-set-outcome-value identifier="SCORE"><qti-variable identifier="RESPONSE"/></qti-set-outcome-value></qti-response-processing>',
+  '<qti-response-processing><qti-set-outcome-value identifier="TOTAL"><qti-variable identifier="RESPONSE"/></qti-set-outcome-value></qti-response-processing>',
   "</qti-assessment-item>",
 ].join("");
 
@@ -585,7 +585,7 @@ describe("README.md", () => {
       const [byte] = ok(decodeSession(stored, test), "decodeSession").items;
 
       assert.deepStrictEqual(byte?.record.responses["RESPONSE"], integer(255n));
-      assert.deepStrictEqual(byte?.record.outcomes["SCORE"], integer(255n));
+      assert.deepStrictEqual(byte?.record.outcomes["TOTAL"], integer(255n));
     }),
   );
 
