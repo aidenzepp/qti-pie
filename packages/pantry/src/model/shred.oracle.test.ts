@@ -2133,6 +2133,20 @@ describe("a MathML element where the parent admits none (p6n-6)", () => {
   );
 });
 
+/**
+ * The refusal of an SSML `role` on an `ssml:` element of a local name.
+ *
+ * @param tag - The local name, `w` or `token`.
+ * @returns The `role-unresolved` refusal naming `ssml:<tag>` as the parent of the attribute.
+ */
+const refusalOfRole = (tag: string): UnmodeledVocabulary =>
+  new UnmodeledVocabulary({
+    kind: "attribute",
+    name: "role",
+    parent: Option.some(`ssml:${tag}`),
+    reason: "role-unresolved",
+  });
+
 describe("an SSML role item whose prefix nothing binds (p7n-6.1)", () => {
   it.effect(
     "refuses an ssml:w or ssml:token role item whose prefix no declaration in scope binds as role-unresolved, and reads a bound prefix, xml:, an unprefixed item and a role on any other element: both versions",
@@ -2157,22 +2171,12 @@ describe("an SSML role item whose prefix nothing binds (p7n-6.1)", () => {
           for (const tag of ["w", "token"]) {
             assert.deepStrictEqual(
               yield* Effect.flip(read(version, tag, "x:noun")),
-              new UnmodeledVocabulary({
-                kind: "attribute",
-                name: "role",
-                parent: Option.some(`ssml:${tag}`),
-                reason: "role-unresolved",
-              }),
+              refusalOfRole(tag),
               `unbound x: on ${tag} in ${version}`,
             );
             assert.deepStrictEqual(
               yield* Effect.flip(read(version, tag, "noun y:verb")),
-              new UnmodeledVocabulary({
-                kind: "attribute",
-                name: "role",
-                parent: Option.some(`ssml:${tag}`),
-                reason: "role-unresolved",
-              }),
+              refusalOfRole(tag),
               `unbound y: after a bare item on ${tag} in ${version}`,
             );
             for (const [role, declaration] of [

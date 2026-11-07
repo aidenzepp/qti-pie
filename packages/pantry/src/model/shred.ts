@@ -529,6 +529,12 @@ const scopeOf = (outer: Scope, declarations: readonly XdmNamespace[]): Scope =>
 const qNameParts = /^(?:(?<prefix>[^\s:]+):)?(?<local>[^\s:]+)$/u;
 
 /**
+ * A value after XML Schema's `collapse` whitespace (Part 2, §4.3.6): each run of tabs, line feeds,
+ * carriage returns and spaces one space, with none at either end.
+ */
+const collapsed = (value: string): string => value.replaceAll(/[\t\n\r ]+/gu, " ").trim();
+
+/**
  * Read an `xsi:type` value as the expanded name it is: a QName resolved against the bindings in
  * scope, an unprefixed name taking the default namespace (XML Schema 1.0 Part 1, §3.15.3; spec
  * reading 83).
@@ -544,7 +550,7 @@ const qNameOf = (
   element: Element,
   scope: Scope,
 ): Result.Result<ExpandedName, UnmodeledVocabulary> => {
-  const parts = qNameParts.exec(typed.value.replaceAll(/[\t\n\r ]+/gu, " ").trim())?.groups;
+  const parts = qNameParts.exec(collapsed(typed.value))?.groups;
   const namespace = scope.get(parts?.["prefix"] ?? "");
 
   return parts === undefined || typed.references.length > 0 || namespace === undefined
@@ -571,21 +577,25 @@ const roleResolved = <V extends XdmVocabulary>(
   const role = reading.element.attributes.find(
     ({ local, namespace }) => namespace === "" && local === "role",
   );
-
-  return role === undefined ||
+  if (
+    role === undefined ||
     reading._tag !== "kind" ||
-    (reading.kind !== "ssml:token" && reading.kind !== "ssml:w") ||
-    !role.value
-      .replaceAll(/[\t\n\r ]+/gu, " ")
-      .trim()
-      .split(" ")
-      .some((item) => {
-        const prefix = qNameParts.exec(item)?.groups?.["prefix"];
+    (reading.kind !== "ssml:token" && reading.kind !== "ssml:w")
+  ) {
+    return Result.void;
+  }
 
-        return prefix !== undefined && prefix !== "xml" && !scope.has(prefix);
-      })
-    ? Result.void
-    : Result.fail(unmodeledAttribute(role, reading.element, "role-unresolved"));
+  const unbound = collapsed(role.value)
+    .split(" ")
+    .some((item) => {
+      const prefix = qNameParts.exec(item)?.groups?.["prefix"];
+
+      return prefix !== undefined && prefix !== "xml" && !scope.has(prefix);
+    });
+
+  return unbound
+    ? Result.fail(unmodeledAttribute(role, reading.element, "role-unresolved"))
+    : Result.void;
 };
 
 /**
