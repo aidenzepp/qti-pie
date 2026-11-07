@@ -271,6 +271,43 @@ const feedback = (local: string, content: readonly SourceChild[]): SourceElement
 const paragraph = el("p", [], [text("Read each question.")]);
 
 /**
+ * Construct a `qti-printed-variable`.
+ *
+ * @param identifier Its `identifier`, as written.
+ * @param attributes Its other attributes, such as `base` and `index`, as written.
+ * @returns The printed variable.
+ */
+const printed = (
+  identifier: string,
+  attributes: Readonly<Record<string, string>> = {},
+): SourceElement =>
+  el("qti-printed-variable", [
+    attr("identifier", identifier),
+    ...Object.entries(attributes).map(([local, value]) => attr(local, value)),
+  ]);
+
+/**
+ * Construct a declaration of a test.
+ *
+ * @param local `qti-outcome-declaration` or `qti-context-declaration`.
+ * @param identifier Its `identifier`.
+ * @param cardinality Its `cardinality`.
+ * @param baseType Its `base-type`.
+ * @returns The declaration.
+ */
+const declaration = (
+  local: string,
+  identifier: string,
+  cardinality: string,
+  baseType: string,
+): SourceElement =>
+  el(local, [
+    attr("base-type", baseType),
+    attr("cardinality", cardinality),
+    attr("identifier", identifier),
+  ]);
+
+/**
  * Reduce refusals to what a test asserts: the rule, the path and the detail.
  *
  * @param source The document to check.
@@ -477,12 +514,9 @@ describe("checkTestRules", () => {
     it("accepts printed variables in a rubric block, and inline and block feedback in test feedback", () => {
       assert.deepStrictEqual(
         judged(
-          oneSection(
-            [
-              rubricBlock(el("p", [], [el("qti-printed-variable", [attr("identifier", "SCORE")])])),
-              itemRef("I1"),
-            ],
-            [
+          assessmentTest([
+            score,
+            part("P", [
               testFeedback(
                 feedback("qti-feedback-block", [
                   el(
@@ -492,8 +526,172 @@ describe("checkTestRules", () => {
                   ),
                 ]),
               ),
-            ],
-          ),
+              section("S", [rubricBlock(el("p", [], [printed("SCORE")])), itemRef("I1")]),
+            ]),
+          ]),
+        ),
+        [],
+      );
+    });
+  });
+
+  describe("a printed variable's references (pantry printed-variable-ref, R37 and R39)", () => {
+    const rubricPath = "qti-assessment-test/qti-rubric-block/qti-content-body/p";
+
+    /**
+     * The declarations every case below may name: a float `SCORE`, an integer `COUNT` and a
+     * multiple integer `M` outcome, and the string context variable `CONTEXT`. A test declares no
+     * template or response variable.
+     */
+    const declared = [
+      declaration("qti-context-declaration", "CONTEXT", "single", "string"),
+      score,
+      declaration("qti-outcome-declaration", "COUNT", "single", "integer"),
+      declaration("qti-outcome-declaration", "M", "multiple", "integer"),
+    ];
+
+    /**
+     * Check a test with {@link declared}'s declarations whose own rubric block holds one paragraph
+     * of the given printed variables.
+     *
+     * @param variables The printed variables, in document order.
+     * @returns The refusals, reduced.
+     */
+    const printing = (...variables: readonly SourceElement[]) =>
+      judged(
+        assessmentTest([
+          ...declared,
+          rubricBlock(el("p", [], variables)),
+          part("P", [section("S", [itemRef("I1")])]),
+        ]),
+      );
+
+    it("[I-5] refuses a test's printed variable whose identifier, base or index names nothing the test declares or builds in, the item built-ins completionStatus and numAttempts among them, at that attribute, expecting an outcome (pantry printed-variable-ref, binding-declared)", () => {
+      assert.deepStrictEqual(
+        printing(
+          printed("NOPE"),
+          printed("SCORE", { base: "RADIX" }),
+          printed("M", { index: "NOPE" }),
+          printed("completionStatus"),
+          printed("SCORE", { base: "numAttempts" }),
+        ),
+        (
+          [
+            ["1", "identifier", "NOPE"],
+            ["2", "base", "RADIX"],
+            ["3", "index", "NOPE"],
+            ["4", "identifier", "completionStatus"],
+            ["5", "base", "numAttempts"],
+          ] as const
+        ).map(([position, attribute, identifier]) => ({
+          detail: {
+            attribute,
+            declarer: "test",
+            element: "qti-printed-variable",
+            expected: "outcome",
+            identifier,
+          },
+          path: `${rubricPath}/qti-printed-variable[${position}]/@${attribute}`,
+          rule: "undeclared-variable",
+        })),
+      );
+    });
+
+    it("[I-5] refuses a test's printed variable whose identifier names a context variable, or the test's built-ins QTI_CONTEXT and duration, with its kind (pantry printed-variable-ref, PrintedVariableRefKind; info.txt:9226)", () => {
+      assert.deepStrictEqual(
+        printing(printed("CONTEXT"), printed("QTI_CONTEXT"), printed("duration")),
+        (
+          [
+            ["1", "CONTEXT", "context"],
+            ["2", "QTI_CONTEXT", "context"],
+            ["3", "duration", "response"],
+          ] as const
+        ).map(([position, identifier, variableKind]) => ({
+          detail: {
+            attribute: "identifier",
+            check: "reference",
+            declarer: "test",
+            element: "qti-printed-variable",
+            identifier,
+            source: "info.txt:70296",
+            variableKind,
+          },
+          path: `${rubricPath}/qti-printed-variable[${position}]/@identifier`,
+          rule: "expression-type",
+        })),
+      );
+    });
+
+    it("[I-5] refuses a test's printed variable whose base names a float outcome or index a multiple integer one, where a single integer outcome is needed (pantry printed-variable-ref, PrintedVariableVarRefType)", () => {
+      assert.deepStrictEqual(
+        printing(printed("COUNT", { base: "SCORE" }), printed("M", { index: "M" })),
+        (
+          [
+            ["1", "base", "SCORE"],
+            ["2", "index", "M"],
+          ] as const
+        ).map(([position, attribute, identifier]) => ({
+          detail: {
+            attribute,
+            check: "reference",
+            declarer: "test",
+            element: "qti-printed-variable",
+            expectedBaseType: "integer",
+            identifier,
+          },
+          path: `${rubricPath}/qti-printed-variable[${position}]/@${attribute}`,
+          rule: "expression-type",
+        })),
+      );
+    });
+
+    it("[I-5] accepts a test's printed variable of a declared outcome of any type, a base or index naming a single integer outcome, and a base or index written as an integer", () => {
+      assert.deepStrictEqual(
+        printing(
+          printed("SCORE", { format: "%.1f" }),
+          printed(" M "),
+          printed("COUNT", { base: "COUNT", format: "%i" }),
+          printed("M", { index: "COUNT" }),
+          printed("COUNT", { base: " 16 ", format: "%i" }),
+          printed("M", { index: "-1" }),
+        ),
+        [],
+      );
+    });
+
+    it("[I-5] judges a printed variable anywhere in a test, in a section's rubric block and in a part's test feedback alike", () => {
+      assert.deepStrictEqual(
+        judged(
+          assessmentTest([
+            score,
+            part("P", [
+              testFeedback(el("p", [], [printed("FEEDBACK_NOPE")])),
+              section("S", [rubricBlock(el("p", [], [printed("SECTION_NOPE")])), itemRef("I1")]),
+            ]),
+          ]),
+        ).map(({ detail, path, rule }) => [rule, path, detail["identifier"]]),
+        [
+          [
+            "undeclared-variable",
+            `${partPath}/qti-test-feedback/qti-content-body/p/qti-printed-variable/@identifier`,
+            "FEEDBACK_NOPE",
+          ],
+          [
+            "undeclared-variable",
+            `${sectionPath}/qti-rubric-block/qti-content-body/p/qti-printed-variable/@identifier`,
+            "SECTION_NOPE",
+          ],
+        ],
+      );
+    });
+
+    it("[I-5] does not judge a printed variable in a section document, which declares no variable (pantry bindsVariables)", () => {
+      assert.deepStrictEqual(
+        judged(
+          sectionDocument("S", [
+            rubricBlock(el("p", [], [printed("NOPE", { base: "RADIX", index: "POSITION" })])),
+            itemRef("I1"),
+          ]),
         ),
         [],
       );

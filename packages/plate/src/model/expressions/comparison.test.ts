@@ -2,8 +2,10 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option } from "effect";
 import { attr, el, text } from "#plate/document/source.ts";
 import type { SourceAttribute, SourceElement } from "#plate/document/source.ts";
+import { runRules } from "#plate/engine/evaluate.ts";
 import type { Expression, ExpressionType, Rule } from "#plate/model/expression.ts";
 import { buildItem } from "#plate/model/item.ts";
+import { outcomeDefaults } from "#plate/model/record.ts";
 import { nullOf } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
 import { float, integer } from "#plate/test/fixtures.ts";
@@ -488,11 +490,15 @@ describe("the comparison family's reader specs and kind rules", () => {
   );
 
   it.effect(
-    "[I-9a] mark a qti-equal whose tolerance token names a template variable variable:<id> and run none",
+    "[I-5] [I-9a] run a qti-equal whose tolerance token names a template variable with the template value, with no mark",
     () =>
-      Effect.gen(function* marksTemplateTolerance() {
+      Effect.gen(function* runsTemplateTolerance() {
         const document = sameItem(
-          equalOfOnes([attr("tolerance", "T"), attr("tolerance-mode", "absolute")]),
+          expressionElement(
+            "equal",
+            [attr("tolerance", "T"), attr("tolerance-mode", "absolute")],
+            [baseValueElement("integer", "1"), baseValueElement("float", "1.5")],
+          ),
           [
             el("qti-template-declaration", [
               attr("base-type", "float"),
@@ -502,17 +508,20 @@ describe("the comparison family's reader specs and kind rules", () => {
           ],
         );
         const built = yield* buildItem(document);
+        const rules = Option.getOrElse(built.processing, () => assert.fail("no processing"));
+        const sameAt = (tolerance: number) =>
+          Effect.fromResult(
+            runRules(rules, built, {
+              outcomes: outcomeDefaults(built),
+              responses: {},
+              templates: { T: float(tolerance) },
+            }),
+          ).pipe(Effect.map((after) => after.outcomes["SAME"]));
 
         assert.deepStrictEqual(refusalsOf(document), []);
-        assert.deepStrictEqual(built.processing, Option.none());
-        assert.deepStrictEqual(built.unsupported, [
-          {
-            feature: "qti-template-declaration",
-            path: "qti-assessment-item/qti-template-declaration",
-            shown: "mark",
-          },
-          { feature: "variable:T", path: processing, shown: "mark" },
-        ]);
+        assert.deepStrictEqual(built.unsupported, []);
+        assert.deepStrictEqual(yield* sameAt(0.5), truth(true));
+        assert.deepStrictEqual(yield* sameAt(0.25), truth(false));
       }),
   );
 

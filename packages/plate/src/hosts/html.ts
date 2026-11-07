@@ -219,7 +219,7 @@ const scoreText = (
  *   is a 404 and any other method a 405.
  */
 const itemHost = (accepted: Accepted, configuration: Configuration): HtmlHost => {
-  const redacted = redact(accepted);
+  const redacted = redact(accepted, undefined, configuration);
   const bindings = postings(redacted, instance);
 
   /**

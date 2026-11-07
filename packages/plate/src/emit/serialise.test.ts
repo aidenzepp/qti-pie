@@ -11,6 +11,7 @@ import {
   RawTextChildren,
   serialise,
   toHtml,
+  toHtmlWithin,
   VoidElementChildren,
 } from "#plate/emit/serialise.ts";
 
@@ -283,5 +284,65 @@ describe("serialise", () => {
     assert.isAbove(chunks.length, 1);
     assert.strictEqual(chunks.join(""), toHtml(tree));
     assert.strictEqual(chunks.join(""), '<label for="c1"><input id="c1" type="checkbox">A</label>');
+  });
+});
+
+/**
+ * A tree whose text nodes count the reads of their text.
+ */
+interface CountedTree {
+  /**
+   * How many distinct text nodes have had their text read.
+   */
+  readonly read: () => number;
+  readonly tree: Node;
+}
+
+/**
+ * Build a `div` of text nodes, each `length` characters long, whose `text` getter records the node
+ * it was read on, so a case can show how far a walk went.
+ *
+ * @param count The number of text nodes.
+ * @param length The characters in each.
+ * @returns The tree and the count of text nodes read.
+ */
+const countedTree = (count: number, length: number): CountedTree => {
+  const read = new Set<number>();
+  const value = "y".repeat(length);
+  const children = Array.from({ length: count }, (_, index): Node => ({
+    kind: "text",
+    get text() {
+      read.add(index);
+
+      return value;
+    },
+  }));
+
+  return { read: () => read.size, tree: h("div", {}, children) };
+};
+
+describe("toHtmlWithin", () => {
+  it("gives none for a tree past the budget, reading no text node after the chunk that passes it", () => {
+    const { read, tree } = countedTree(1000, 1000);
+
+    assert.isTrue(Option.isNone(toHtmlWithin(tree, 10_000)));
+    assert.isBelow(read(), 20);
+  });
+
+  it("gives exactly toHtml's string under a budget at or above its length", () => {
+    const { tree } = countedTree(1000, 1000);
+    const html = toHtml(tree);
+
+    assert.strictEqual(html.length, 1_000_011);
+    assert.deepStrictEqual(toHtmlWithin(tree, html.length), Option.some(html));
+    assert.deepStrictEqual(toHtmlWithin(tree, html.length + 1), Option.some(html));
+    assert.isTrue(Option.isNone(toHtmlWithin(tree, html.length - 1)));
+  });
+
+  it("counts text as escaped, so a budget of its HTML as written holds and one less fails", () => {
+    const tree = h("p", {}, [text("a & b")]);
+
+    assert.deepStrictEqual(toHtmlWithin(tree, 16), Option.some("<p>a &amp; b</p>"));
+    assert.isTrue(Option.isNone(toHtmlWithin(tree, 15)));
   });
 });

@@ -51,6 +51,8 @@ const walks: ReadonlyMap<string, readonly string[]> = new Map([
       "[Q-5] [keyboard] ${essay.label} answered by keys: a line, Enter, a second line, Tab to Submit and Enter record the response, and the restored textarea holds both lines",
       "[Q-5] [keyboard] Tab order: ordered.xml's item form, from its first control to its Submit, is the Node walk's tabOrder",
       "[Q-5] [keyboard] ordered.xml answered by keys: Tab moves through its three Controls in order, two filled, Enter on Submit records the response, and the restored Controls hold the two in order",
+      "[Q-5] [keyboard] Tab order: xhtml.xml's item form, from its first control to its Submit, is the Node walk's tabOrder",
+      "[Q-5] [keyboard] xhtml.xml answered by keys: a line, Enter, a second line, Tab to Submit and Enter record the response, and the restored textarea holds both lines",
       '[Q-20] [keyboard] pattern-mask: ${probe.label} refuses "${probe.mismatch}" typed by keys with its pattern message',
       '[Q-20] [keyboard] pattern-mask: ${probe.label} accepts "${probe.match}" typed by keys',
     ],
@@ -129,7 +131,7 @@ const walks: ReadonlyMap<string, readonly string[]> = new Map([
     "src/witness.test.ts",
     [
       "[Q-20] [keyboard] a Text Entry's pattern-mask refuses a mismatching entry with the author's message, and a matching one is accepted and scores 1",
-      "[Q-5] [keyboard] Item_QTI3_WritingPostcard_02 posts the text typed into each xhtml Extended Text, as typed",
+      "[Q-5] [keyboard] xhtml.xml posts the text typed into each xhtml Extended Text, as typed",
       "[Q-2] [keyboard] shuffled corpus Choices keep their order across a refused post with one instance and seed, and the presented choices post",
       "[Q-2] [I-9b] [keyboard] a shuffled corpus Choice posts the presented choice and scores it by identifier: ChoiceA, presented second, scores 1",
       "[Q-2] [I-9b] [keyboard] a ccPackage CC2_match item scores 1 by keyboard",

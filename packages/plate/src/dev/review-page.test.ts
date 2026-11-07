@@ -1,12 +1,14 @@
+import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { assert, describe, it } from "@effect/vitest";
 import { ConfigProvider, Effect, Option, Result } from "effect";
-import { encodeSession } from "#plate/codec/session.ts";
+import { decodeSession, encodeSession } from "#plate/codec/session.ts";
 import { configure } from "#plate/configuration.ts";
 import type { Configuration } from "#plate/configuration.ts";
 import { pageHtml } from "#plate/dev/frame.ts";
 import type { Page } from "#plate/dev/frame.ts";
-import { packageCache } from "#plate/dev/packages.ts";
+import { openDirectory, packageCache } from "#plate/dev/packages.ts";
+import type { PackageCache, PackageOpener } from "#plate/dev/packages.ts";
 import { reviewPath, routeReview, summaryPage } from "#plate/dev/review-page.ts";
 import type { ReviewPlayground } from "#plate/dev/review-page.ts";
 import { newSessionId, sessionStore } from "#plate/dev/store.ts";
@@ -18,6 +20,7 @@ import { scopedId } from "#plate/emit/parts.ts";
 import { entryName } from "#plate/form/encoding.ts";
 import { message } from "#plate/messages.ts";
 import type { Value } from "#plate/model/values.ts";
+import { openPackage } from "#plate/package/open.ts";
 import type { PackageTest } from "#plate/package/open.ts";
 import { redact, render } from "#plate/render.ts";
 import { advance } from "#plate/session/advance.ts";
@@ -72,6 +75,82 @@ const startedAt = new Date("2026-11-05T10:00:00.000Z");
  * The package cache every test of this file shares, so the fixture package is opened once.
  */
 const cache = Effect.runSync(packageCache());
+
+/**
+ * A hand-built templated item in place of the M2 fixture's item 1, with its identifier: template
+ * processing draws the single integer template variable `T` from 1 to 10^9 and sets `RESPONSE`'s
+ * correct response to `C`, which overrides the declared `B`, and the body prints `T` before a
+ * Choice over `A` to `D`.
+ */
+const templatedItem = [
+  '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="p1-single-choice" title="Drawn number" adaptive="false" time-dependent="false">',
+  '<qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier">',
+  "<qti-correct-response><qti-value>B</qti-value></qti-correct-response></qti-response-declaration>",
+  '<qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float">',
+  "<qti-default-value><qti-value>0</qti-value></qti-default-value></qti-outcome-declaration>",
+  '<qti-template-declaration identifier="T" cardinality="single" base-type="integer"/>',
+  "<qti-template-processing>",
+  '<qti-set-template-value identifier="T"><qti-random-integer min="1" max="1000000000"/></qti-set-template-value>',
+  '<qti-set-correct-response identifier="RESPONSE"><qti-base-value base-type="identifier">C</qti-base-value></qti-set-correct-response>',
+  "</qti-template-processing><qti-item-body>",
+  '<p>The drawn number is <qti-printed-variable identifier="T"/>.</p>',
+  '<qti-choice-interaction response-identifier="RESPONSE" max-choices="1">',
+  "<qti-prompt>Which choice is correct?</qti-prompt>",
+  ...["A", "B", "C", "D"].map(
+    (choice) => `<qti-simple-choice identifier="${choice}">Choice ${choice}</qti-simple-choice>`,
+  ),
+  "</qti-choice-interaction></qti-item-body>",
+  '<qti-response-processing template="https://purl.imsglobal.org/spec/qti/v3p0/rptemplates/match_correct.xml"/>',
+  "</qti-assessment-item>",
+].join("");
+
+/**
+ * Open a package as `openDirectory` does, with the M2 fixture's item 1 replaced by
+ * {@link templatedItem} in memory.
+ *
+ * @param source The package.
+ * @returns Its verdict.
+ */
+const templatedOpener: PackageOpener = (source) =>
+  source.location === fixture.location
+    ? Effect.gen(function* templatedPackage() {
+        const entries = yield* Effect.promise(() =>
+          readdir(source.root, { recursive: true, withFileTypes: true }),
+        );
+        const files = new Map<string, Uint8Array>();
+        for (const entry of entries.filter((each) => each.isFile())) {
+          const full = path.join(entry.parentPath, entry.name);
+          const file = path.relative(source.root, full).split(path.sep).join("/");
+          const bytes = yield* Effect.promise(() => readFile(full));
+          files.set(
+            file,
+            file === "items/p1-single-choice.xml" ? new TextEncoder().encode(templatedItem) : bytes,
+          );
+        }
+
+        return yield* openPackage(source.location, files);
+      })
+    : openDirectory(source);
+
+/**
+ * The package cache of the fixture package with item 1 templated, opened once for the file.
+ */
+const templatedCache = Effect.runSync(packageCache(templatedOpener));
+
+/**
+ * Give the text a single integer value prints in its default form.
+ *
+ * @param value The value.
+ * @returns Its integer, written in decimal.
+ */
+const printedInteger = (value: Value | undefined): string => {
+  const [single, ...rest] = value?.values ?? [];
+  assert.lengthOf(rest, 0, "The value is not single.");
+
+  return single?.baseType === "integer"
+    ? String(single.value)
+    : assert.fail("The value holds no integer.");
+};
 
 /**
  * Read the corpus root from {@link fixturesRoot} while running an effect that reads the packages.
@@ -188,77 +267,91 @@ const checkedValues = (controls: readonly Element[]): readonly string[] =>
   );
 
 /**
- * Deliver the fixture test: start a session, take it through {@link sitting} to its close, start a
- * second session and leave it open, and store both as the playground's session pages do.
+ * Deliver the fixture test from a package cache: start a session, take it through {@link sitting}
+ * to its close, start a second session and leave it open, and store both as the playground's
+ * session pages do.
+ *
+ * @param packages The packages, the fixture package among them.
+ * @returns The delivered test.
  */
-const delivered = Effect.gen(function* delivered() {
-  const configuration = yield* configure({ seed: 7 });
-  const found = yield* provided(cache.packageOf("m2"));
-  const entry = Option.getOrElse(found, () => assert.fail("The fixture package is not listed."));
-  const { verdict } = entry;
-  if (verdict.verdict !== "accepted" && verdict.verdict !== "accepted-with-unsupported") {
-    return assert.fail(`The fixture package is ${verdict.verdict}.`);
-  }
-
-  const test =
-    verdict.accepted.tests.get(`${fixture.location}/${fixture.test}`) ??
-    assert.fail("The fixture package holds no test.xml.");
-  const start = (id: string): TestSession =>
-    Result.getOrElse(
-      startTest(test.test, test.items, configuration, { instance: id, now: startedAt }),
-      (failure) => assert.fail(`startTest refused: ${failure.message}`),
-    );
-  let session = start(closedId);
-  let order: readonly string[] = [];
-  for (const [index, step] of sitting.entries()) {
-    if (session.position === 2) {
-      const view = Result.getOrElse(itemView(test.test, session, configuration, 3), (failure) =>
-        assert.fail(failure.message),
-      );
-      const answering = Result.getOrElse(
-        render(redact(test.items.get(view.ref) ?? assert.fail("No item 3.")), view.configuration, {
-          instance: view.instance,
-        }),
-        (failure) => assert.fail(failure.message),
-      );
-      order = controlsNamed(
-        elementsOf(parseHtml(answering.html)),
-        entryName(view.instance, "RESPONSE"),
-      ).map((control) => String(control.attrs["value"]));
+const deliver = (packages: PackageCache) =>
+  Effect.gen(function* delivered() {
+    const configuration = yield* configure({ seed: "7" });
+    const found = yield* provided(packages.packageOf("m2"));
+    const entry = Option.getOrElse(found, () => assert.fail("The fixture package is not listed."));
+    const { verdict } = entry;
+    if (verdict.verdict !== "accepted" && verdict.verdict !== "accepted-with-unsupported") {
+      return assert.fail(`The fixture package is ${verdict.verdict}.`);
     }
 
-    session = Result.getOrElse(
-      advance(test.test, test.items, session, step, configuration, {
-        now: new Date(startedAt.getTime() + (index + 1) * 10_000),
-      }),
-      (failure) => assert.fail(`advance refused: ${failure.message}`),
-    );
-  }
-  assert.strictEqual(session.status, "closed");
+    const test =
+      verdict.accepted.tests.get(`${fixture.location}/${fixture.test}`) ??
+      assert.fail("The fixture package holds no test.xml.");
+    const start = (id: string): TestSession =>
+      Result.getOrElse(
+        startTest(test.test, test.items, configuration, { instance: id, now: startedAt }),
+        (failure) => assert.fail(`startTest refused: ${failure.message}`),
+      );
+    let session = start(closedId);
+    let order: readonly string[] = [];
+    for (const [index, step] of sitting.entries()) {
+      if (session.position === 2) {
+        const view = Result.getOrElse(itemView(test.test, session, configuration, 3), (failure) =>
+          assert.fail(failure.message),
+        );
+        const answering = Result.getOrElse(
+          render(
+            redact(test.items.get(view.ref) ?? assert.fail("No item 3.")),
+            view.configuration,
+            {
+              instance: view.instance,
+            },
+          ),
+          (failure) => assert.fail(failure.message),
+        );
+        order = controlsNamed(
+          elementsOf(parseHtml(answering.html)),
+          entryName(view.instance, "RESPONSE"),
+        ).map((control) => String(control.attrs["value"]));
+      }
 
-  const sessions = sessionStore();
-  const store = (id: string, held: TestSession): void => {
-    sessions.set(id, {
-      packageLocation: fixture.location,
-      session: Result.getOrElse(encodeSession(held), (failure) => assert.fail(failure.message)),
-      testHref: fixture.test,
-    });
-  };
-  const openId = newSessionId();
-  store(closedId, session);
-  store(openId, start(openId));
+      session = Result.getOrElse(
+        advance(test.test, test.items, session, step, configuration, {
+          now: new Date(startedAt.getTime() + (index + 1) * 10_000),
+        }),
+        (failure) => assert.fail(`advance refused: ${failure.message}`),
+      );
+    }
+    assert.strictEqual(session.status, "closed");
 
-  const result: Delivered = {
-    closed: { id: closedId, session },
-    configuration,
-    open: openId,
-    order,
-    playground: { configuration, packages: cache, sessions },
-    test,
-  };
+    const sessions = sessionStore();
+    const store = (id: string, held: TestSession): void => {
+      sessions.set(id, {
+        packageLocation: fixture.location,
+        session: Result.getOrElse(encodeSession(held), (failure) => assert.fail(failure.message)),
+        testHref: fixture.test,
+      });
+    };
+    const openId = newSessionId();
+    store(closedId, session);
+    store(openId, start(openId));
 
-  return result;
-});
+    const result: Delivered = {
+      closed: { id: closedId, session },
+      configuration,
+      open: openId,
+      order,
+      playground: { configuration, packages, sessions },
+      test,
+    };
+
+    return result;
+  });
+
+/**
+ * The fixture test delivered from {@link cache}.
+ */
+const delivered = deliver(cache);
 
 /**
  * Send a request to the review route.
@@ -393,6 +486,32 @@ describe("routeReview", () => {
     }),
   );
 
+  it.effect(
+    "[I-5] shows a templated item's printed variable from its session item's record in review and solution, and solution its template-set correct response",
+    () =>
+      Effect.gen(function* templatedItemPages() {
+        const { closed, playground } = yield* deliver(templatedCache);
+        const drawn = printedInteger(closed.session.items[0]?.record.templates["T"]);
+        const notice = message("en", "notice", { feature: "qti-printed-variable" });
+        const name = entryName(`${closed.id}.1`, "RESPONSE");
+
+        for (const mode of ["review", "solution"] as const) {
+          const target = `/sessions/${closed.id}/${mode}/1`;
+          const { elements, html, page } = shown(yield* ask(playground, target), target);
+          const pageText = parseHtml(html).map(textOf).join("");
+
+          assert.strictEqual(page.status, 200, target);
+          assert.include(pageText, `The drawn number is ${drawn}.`, target);
+          assert.notInclude(pageText, notice, target);
+          assert.deepStrictEqual(
+            checkedValues(controlsNamed(elements, name)),
+            mode === "review" ? ["A"] : ["C"],
+            target,
+          );
+        }
+      }),
+  );
+
   it.effect("answers 404 for a solution its item's session control forbids, but shows review", () =>
     Effect.gen(function* forbidden() {
       const { closed, playground } = yield* delivered;
@@ -486,6 +605,55 @@ describe("routeReview", () => {
         assert.isTrue(verdict.valid, verdict.messages.join("\n"));
       }),
     { tags: ["qti-xsd"], timeout: oracleTimeoutMs },
+  );
+
+  it.effect(
+    "[I-5] answers 404 for an open session's results, which would report its templated item's template variable, and the results once its test has closed",
+    () =>
+      Effect.gen(function* resultsOnceClosed() {
+        const { configuration, open, playground, test } = yield* deliver(templatedCache);
+        const target = `/sessions/${open}/results.xml`;
+        const held = Option.getOrElse(playground.sessions.get(open), () =>
+          assert.fail("The open session is not stored."),
+        );
+        const opened = Result.getOrElse(decodeSession(held.session, test.test), (failure) =>
+          assert.fail(failure.message),
+        );
+        const refused = shown(yield* ask(playground, target), target);
+
+        assert.strictEqual(opened.status, "interacting");
+        assert.isDefined(opened.items[0]?.record.templates["T"], "item 1 drew T when presented");
+        assert.strictEqual(refused.page.status, 404);
+        assert.notInclude(refused.html, "templateVariable");
+
+        let session = opened;
+        for (const [index, step] of sitting.entries()) {
+          session = Result.getOrElse(
+            advance(test.test, test.items, session, step, configuration, {
+              now: new Date(startedAt.getTime() + (index + 1) * 10_000),
+            }),
+            (failure) => assert.fail(`advance refused: ${failure.message}`),
+          );
+        }
+        assert.strictEqual(session.status, "closed");
+        playground.sessions.set(open, {
+          ...held,
+          session: Result.getOrElse(encodeSession(session), (failure) =>
+            assert.fail(failure.message),
+          ),
+        });
+
+        const answered = yield* ask(playground, target);
+        const outcome =
+          answered instanceof Response
+            ? answered
+            : assert.fail(`The closed session's results answered with a ${answered.status} page.`);
+        const xml = yield* Effect.promise(() => outcome.text());
+
+        assert.strictEqual(outcome.status, 200);
+        assert.strictEqual(outcome.headers.get("content-type"), "application/xml; charset=utf-8");
+        assert.include(xml, '<templateVariable identifier="T"');
+      }),
   );
 });
 

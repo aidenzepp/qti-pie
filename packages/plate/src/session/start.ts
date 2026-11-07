@@ -4,7 +4,8 @@
  * {@link recordStep} saves what one request carries, and {@link current}, {@link itemView} and
  * {@link permits} say what to render.
  *
- * Every function is pure: time is the `now` the host passes, and nothing is kept between calls.
+ * Nothing is kept between calls, and time is the `now` the host passes. Every function is pure but
+ * {@link startTest}, which draws the session's seed (`drawSeed`) when the configuration has none.
  * Item session control, part modes and titles are not stored in the session: each read recomputes
  * them from the accepted test. This is a browser module: it value-imports from `effect` only
  * `Option`, `Array`, `Data` and `Result`.
@@ -14,12 +15,15 @@
 import { Array as Arr, Data, Option, Result } from "effect";
 import type { Configuration } from "#plate/configuration.ts";
 import { appendSegments, decodeSegment } from "#plate/document/href.ts";
+import { firstAttempt } from "#plate/engine/attempt.ts";
+import type { EngineFailure } from "#plate/engine/evaluate.ts";
 import { checkInstance } from "#plate/form/encoding.ts";
 import type { InstanceRequirement } from "#plate/form/encoding.ts";
-import type { Item } from "#plate/model/item.ts";
 import { fresh } from "#plate/model/record.ts";
+import type { ItemRecord } from "#plate/model/record.ts";
 import { itemRefsIn } from "#plate/model/item-refs.ts";
 import type { ItemRef, Test, TestPart } from "#plate/model/test.ts";
+import { drawSeed } from "#plate/seed.ts";
 import { itemConfiguration, sessionControls, UnknownItemRef } from "#plate/session/control.ts";
 import type { SessionControl } from "#plate/session/control.ts";
 import type { Responses, SessionItem, Step, TestSession } from "#plate/session/session.ts";
@@ -133,9 +137,12 @@ export class ItemNotInSession extends Data.TaggedError("ItemNotInSession")<{
  * What a host renders for one item of a test session.
  *
  * The host renders it with exactly these fields:
- * `render(redact(items.get(view.ref)), view.configuration, { instance: view.instance, values:
- * view.values, disabled: view.disabled })`, so a restored session presents the choice order it
- * showed.
+ * `render(redact(items.get(view.ref), view.record, view.configuration), view.configuration, {
+ * instance: view.instance, values: view.values, disabled: view.disabled })`, so a restored session
+ * presents the choice order and the template values it showed.
+ *
+ * The view is server data, since its `record` is: the host reads it on the server and sends the
+ * page only what `render` writes.
  */
 export interface ItemView {
   /**
@@ -144,8 +151,8 @@ export interface ItemView {
   readonly count: number;
   /**
    * The configuration to render and check the item with: the host's, with the item's session
-   * control written in by `itemConfiguration`, and the session's seed in place of the host's, no
-   * seed when the session stores none.
+   * control written in by `itemConfiguration`, and the session's seed in place of the host's, so
+   * the item's shuffle is keyed by the seed its record started under.
    */
   readonly configuration: Configuration;
   /**
@@ -163,6 +170,14 @@ export interface ItemView {
    * The navigation mode of the item's part.
    */
   readonly navigation: NavigationMode;
+  /**
+   * The decoded record of the item it shows: the record its first presentation started, through
+   * `firstAttempt`, and each processed attempt's after it. The host passes it to `redact`,
+   * `checkResponses` and `solution`, so the item shows, checks and solves with the template values
+   * its record holds. It is server data: its template values and correct responses can give the
+   * answers away, so it never reaches the page.
+   */
+  readonly record: ItemRecord;
   /**
    * The item ref's identifier, the key of its accepted item among the items the host passes.
    */
@@ -482,20 +497,27 @@ const datestampOf = (now: Date, argument: TimeArgument): Result.Result<string, I
     : Result.succeed(now.toISOString());
 
 /**
- * Give each declared response default of an item, by response identifier.
+ * An item's first attempt failed at its presentation, a defect of the renderer that no checked
+ * item can cause.
  *
- * @param item The item.
- * @returns The `qti-default-value` of each response declaration that has one.
+ * It cannot occur: `firstAttempt` fails only when template processing reads a variable it holds no
+ * value of, sets a variable the item does not declare in the kind the rule sets, or sets one to a
+ * value of another type, and on an accepted item the validator refuses each of these or the item
+ * model marks the template processing that would cause it, which then does not run. It is thrown,
+ * never returned, so the failures of {@link present} and the moves hold only failures a caller can
+ * cause, and it is not exported.
  */
-const responseDefaults = (item: Item): Responses =>
-  Object.fromEntries(
-    [...item.responses.values()].flatMap((response) =>
-      Option.match(response.defaultValue, {
-        onNone: () => [],
-        onSome: (value) => [[response.identifier, value] as const],
-      }),
-    ),
-  );
+class FirstAttemptDefect extends Data.TaggedError("FirstAttemptDefect")<{
+  readonly failure: EngineFailure;
+  readonly item: string;
+}> {
+  /**
+   * The item, the engine's failure, and what to do with it.
+   */
+  override get message(): string {
+    return `The first attempt of the item ${JSON.stringify(this.item)} failed with ${this.failure._tag}, though the validator refuses, or the item model marks, every cause of that failure on a checked item. This is a defect in the renderer; report it with the item that caused it.`;
+  }
+}
 
 /**
  * Find a session item by its sequence index.
@@ -553,35 +575,51 @@ export const withItem = (
   session.items.map((existing, position) => (position === index ? item : existing));
 
 /**
- * Mark a session item presented and start its first attempt, writing each declared response
- * default into its record.
+ * Mark a session item presented and start its first attempt: its record becomes the one
+ * `firstAttempt` starts for the item's instance under the session's seed, as {@link present}
+ * describes.
  *
  * @param item The session item, not yet presented.
  * @param accepted The item it delivers.
  * @param datestamp The time of the transition, in ISO 8601.
+ * @param seed The session's seed.
  * @returns The item, presented.
+ * @throws {FirstAttemptDefect} When `firstAttempt` fails, which no checked item can cause: the
+ *   validator refuses, or the item model marks, every cause.
  */
-const presented = (item: SessionItem, accepted: Accepted, datestamp: string): SessionItem => ({
-  ...item,
-  datestamp,
-  presented: true,
-  record: {
-    ...item.record,
-    responses: { ...item.record.responses, ...responseDefaults(accepted.item) },
-  },
-});
+const presented = (
+  item: SessionItem,
+  accepted: Accepted,
+  datestamp: string,
+  seed: string,
+): SessionItem => {
+  const started = firstAttempt(accepted.item, { instance: item.record.instance, seed });
+  if (Result.isFailure(started)) {
+    throw new FirstAttemptDefect({ failure: started.failure, item: accepted.item.identifier });
+  }
+
+  return { ...item, datestamp, presented: true, record: started.success };
+};
 
 /**
  * Mark an item of a session presented, starting its first attempt when it was not.
  *
- * An attempt starts when the item's session first enters interacting: at its first presentation
- * in answering mode. That writes each declared response default into the item's record
- * (`info.txt:8462`), so a response with a `qti-default-value` holds it from then on, and an item
- * never presented keeps NULL. Presenting an item already presented changes nothing. The moves and
- * a part's end call this for the item they show.
+ * An attempt starts when the item's session first enters interacting: at its first presentation in
+ * answering mode. Its record becomes the one `firstAttempt` starts: the item's template processing
+ * runs once, drawing from the stream keyed by the session's seed under the template label of the
+ * item's instance and the item, and each response then holds its default (`info.txt:8462`), the one
+ * template processing set, else its `qti-default-value`, else NULL, and each outcome its default,
+ * the one template processing set, else its starting value. Where the item model marks the item's
+ * template processing (it names a variable the engine does not hold, such as `QTI_CONTEXT` or a
+ * context variable, or holds an element the engine does not run), it does not run, and the record
+ * begins with each response and outcome at its declared default and no template value, correct
+ * response or default, as `firstAttempt` starts it; `check`'s verdict, `accepted-with-unsupported`,
+ * names each mark. An item never presented keeps a fresh record, with no template value. Presenting
+ * an item already presented changes nothing. The moves and a part's end call this for the item they
+ * show.
  *
  * @example
- *   present(items, session, 2, new Date()); // item 2 presented, its response defaults written
+ *   present(items, session, 2, new Date()); // item 2 presented, its template values and defaults written
  *
  * @param items The accepted items, keyed by item ref identifier, as {@link startTest} took them.
  * @param session The session.
@@ -606,7 +644,10 @@ export const present = (
 
     const accepted = yield* deliverable(items, session.test, item.ref, item.record.document);
 
-    return { ...session, items: withItem(session, index, presented(item, accepted, datestamp)) };
+    return {
+      ...session,
+      items: withItem(session, index, presented(item, accepted, datestamp, session.seed)),
+    };
   });
 
 /**
@@ -654,8 +695,12 @@ const checkedInstance = (token: string): Result.Result<string, InvalidSessionIns
  * The items are the test's item refs in document order, numbered from 1, each starting from a
  * fresh record whose instance is `<instance>.<sequenceIndex>`. The first part that holds an item
  * is current and its first item is presented, which starts its first attempt as {@link present}
- * does. The session stores `configuration.seed`, so a restored session presents the choice order
- * it showed whatever seed the host passes later. A test with no item at all starts closed.
+ * does. The session stores `configuration.seed`, used as given, or, when the configuration has
+ * none, a seed `startTest` draws: 128 random bits written as 32 lowercase hex digits. Each item's
+ * first attempt draws its template values under it, and each item's shuffle is keyed by it, so a
+ * restored session presents the choice order and the values it showed whatever seed the host
+ * passes later. The seed keys every value processing draws, so the stored session, which holds it,
+ * is server data. A test with no item at all starts closed.
  *
  * @example
  *   startTest(test, items, configuration, { instance: crypto.randomUUID(), now: new Date() });
@@ -663,7 +708,8 @@ const checkedInstance = (token: string): Result.Result<string, InvalidSessionIns
  * @param test The test, as `check` accepted it.
  * @param items The test's items, each as `check` accepted it, keyed by the identifier of the item
  *   ref that names its document.
- * @param configuration The host's configuration, whose `seed` the session keeps.
+ * @param configuration The host's configuration, whose `seed` the session keeps; with none, the
+ *   session keeps a drawn seed.
  * @param context The sitting.
  * @param context.instance The host's name for this sitting, which scopes every item's ids: a token
  *   `checkInstance` passes, such as a lowercase UUID.
@@ -683,6 +729,7 @@ export const startTest = (
     const instance = yield* checkedInstance(context.instance);
     const datestamp = yield* datestampOf(context.now, "context.now");
     const places = placesOf(test.test);
+    const seed = configuration.seed ?? drawSeed();
     const delivered = yield* Result.all(
       places.map(({ ref }, index) =>
         Result.map(
@@ -699,7 +746,7 @@ export const startTest = (
               sequenceIndex: index + 1,
             };
 
-            return index === 0 ? presented(item, accepted, datestamp) : item;
+            return index === 0 ? presented(item, accepted, datestamp, seed) : item;
           },
         ),
       ),
@@ -712,7 +759,7 @@ export const startTest = (
       kind: "test",
       parts: startingParts(test.test.parts, first),
       position: 0,
-      seed: Option.fromUndefinedOr(configuration.seed),
+      seed,
       started: datestamp,
       status: Option.isSome(first) ? "interacting" : "closed",
       test: test.test.identifier,
@@ -814,17 +861,14 @@ const inspect = (
   Result.gen(function* inspectItem() {
     const place = yield* lookUp(index, index.places, item.ref);
     const control = yield* lookUp(index, index.controls, item.ref);
-    const { seed: _hostSeed, ...withControl } = itemConfiguration(configuration, control);
+    const configured = { ...itemConfiguration(configuration, control), seed: session.seed };
     const ended = index.ended.has(place.part.identifier);
-    const limit = withControl.maxAttempts;
+    const limit = configured.maxAttempts;
 
     return {
       closed:
         session.status === "closed" || ended || (limit > 0 && item.record.numAttempts >= limit),
-      configuration: Option.match(session.seed, {
-        onNone: () => withControl,
-        onSome: (seed) => ({ ...withControl, seed }),
-      }),
+      configuration: configured,
       control,
       place,
     };
@@ -864,6 +908,7 @@ const viewOf = (
     instance: `${session.instance}.${item.sequenceIndex}`,
     kind: "item",
     navigation: inspected.place.part.navigation,
+    record: item.record,
     ref: item.ref,
     sequenceIndex: item.sequenceIndex,
     submission: inspected.place.part.submission,
@@ -871,9 +916,9 @@ const viewOf = (
   }));
 
 /**
- * Give what any item of a test session renders with: its instance, configuration, values and
- * disabled state, as it was presented, so a review or a solution page shows the choice order the
- * candidate saw.
+ * Give what any item of a test session renders with: its instance, configuration, values, disabled
+ * state and record, as it was presented, so a review or a solution page shows the choice order and
+ * the template values the candidate saw. The view is server data, as {@link ItemView} says.
  *
  * @param test The test the session was started from.
  * @param session The session.
@@ -956,6 +1001,7 @@ export const readingBase: Configuration = {
   headingLevel: 2,
   locale: "en",
   maxAttempts: 1,
+  outputBudget: 16_777_216,
   showFeedback: false,
   showSolution: false,
   validateResponses: false,
@@ -1000,7 +1046,7 @@ export const permits = (
 
 /**
  * Give what a test session shows now: the current item's view while the test is open, the summary
- * of every item once it is closed.
+ * of every item once it is closed. The item's view is server data, as {@link ItemView} says.
  *
  * @example
  *   const shown = current(test, session, configuration);

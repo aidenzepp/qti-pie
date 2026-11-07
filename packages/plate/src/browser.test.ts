@@ -100,14 +100,17 @@ const roots = selectRoots([...modules.keys()]);
  * top-level module is a root or named here, so a new one is classified when it is added.
  */
 const notRoots = {
+  "src/begin.ts": "the Schema side: encodes the stored record through Schema, beside score",
   "src/configuration.ts": "value-imports Schema, Config and Effect to read the configuration",
   "src/control-cap.ts": "reached from the roots, so the scan checks it",
   "src/count-range.ts":
     "the count range the model builder, the structural walk and decodeRedacted read, kept apart from vocabulary.ts so decodeRedacted loads none of its tables",
   "src/index.ts": "the public entry, which re-exports the Schema side beside the browser modules",
   "src/messages.ts": "reached from the roots, so the scan checks it",
+  "src/output-budget.ts": "reached from the roots, so the scan checks it",
   "src/restore.ts": "the Schema side: decodes the stored record through Schema",
   "src/score.ts": "value-imports Schema to decode and encode the stored record",
+  "src/seed.ts": "reached from the roots, so the scan checks it",
   "src/vocabulary.ts":
     "the tables the validators, the model builders and the package reader read; no root reaches it, since session/control.ts reads sessionControlDefaults from session/control-defaults.ts, which vocabulary.ts re-exports",
 } satisfies Readonly<Record<string, string>>;

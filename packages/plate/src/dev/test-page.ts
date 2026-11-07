@@ -5,15 +5,18 @@
  * the form's posts.
  *
  * The library builds no form and no flow (rule `a9d04969`), so this module composes them, as an
- * example host would. The session page holds `render(redact(item))` with the current item's
- * instance, configuration, values and disabled state, then the playground's Save button, then
- * `renderNavigation` with each navigation button swapped for the playground's own submit button
- * (rule `9af3809b`), so every step is a native post with no script. A post is decoded through the
- * current item's own bindings, its intent through `decodeIntent`, and carried out with `advance`;
- * what `advance` accepts is stored and answered with a 303 back to the page, and what it refuses is
- * answered on the item it was posted from. A closed test's page is the summary `summaryPage`
- * builds. The store holds each session only in its stored form, so every request decodes it
- * against its test, as a host that keeps sessions elsewhere would.
+ * example host would. The session page holds `render(redact(item, view.record,
+ * view.configuration))`, with the current item's instance, configuration, values and disabled
+ * state, then the playground's Save button, then `renderNavigation` with each navigation button
+ * swapped for the playground's own submit button (rule `9af3809b`), so every step is a native post
+ * with no script. The record is the session item's, which its first presentation started, so a
+ * templated item shows the values its template processing drew, and a refused post is checked
+ * against it. A post is decoded through the current item's own bindings, its intent through
+ * `decodeIntent`, and carried out with `advance`; what `advance` accepts is stored and answered
+ * with a 303 back to the page, and what it refuses is answered on the item it was posted from. A
+ * closed test's page is the summary `summaryPage` builds. The store holds each session only in its
+ * stored form, so every request decodes it against its test, as a host that keeps sessions
+ * elsewhere would.
  *
  * Submit part and End part are confirmed first: their post saves the responses with `go` to the
  * current item, a save that stays, and sends the browser to `/sessions/<sid>/confirm`, which lists
@@ -368,12 +371,16 @@ const itemPage = (sitting: Sitting, view: ItemView, shown: Shown): Page => {
         onSome: (input) =>
           Result.map(renderStatus(input, view.configuration), (rendered) => [rendered.html]),
       });
-      const item = yield* render(redact(document), view.configuration, {
-        ...shown.options,
-        assetBase: itemAssetBase(sitting, document),
-        disabled: view.disabled,
-        instance: view.instance,
-      });
+      const item = yield* render(
+        redact(document, view.record, view.configuration),
+        view.configuration,
+        {
+          ...shown.options,
+          assetBase: itemAssetBase(sitting, document),
+          disabled: view.disabled,
+          instance: view.instance,
+        },
+      );
       const form = h(
         "form",
         {
@@ -733,11 +740,14 @@ const postSession = Effect.fn("playground.session.post")(function* postSession(
     return failurePage(document.failure);
   }
 
-  const post = postOf(document.success, view.instance, entries.value);
+  const post = postOf(document.success, view.instance, entries.value, view.record);
   if (post.malformed.size > 0) {
-    const messages = checkResponses(document.success, post.decoded, view.configuration).filter(
-      (said) => post.malformed.has(said.response),
-    );
+    const messages = checkResponses(
+      document.success,
+      post.decoded,
+      view.configuration,
+      view.record,
+    ).filter((said) => post.malformed.has(said.response));
 
     return refusedPage(sitting, view, { messages, posted: Option.some(post.posted) });
   }

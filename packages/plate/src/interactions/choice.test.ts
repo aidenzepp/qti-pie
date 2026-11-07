@@ -11,9 +11,17 @@ import { Malformed, decode, entryName } from "#plate/form/encoding.ts";
 import type { Entry } from "#plate/form/encoding.ts";
 import { renderChoice, validateChoice } from "#plate/interactions/choice.ts";
 import { message } from "#plate/messages.ts";
-import type { BodyNode, ChoiceInteraction, Item } from "#plate/model/item.ts";
+import type {
+  BodyNode,
+  ChoiceInteraction,
+  Item,
+  TemplateContent,
+  TemplateDeclaration,
+  TemplateVisibility,
+} from "#plate/model/item.ts";
+import type { ResponsesRecord } from "#plate/model/record.ts";
 import type { Value } from "#plate/model/values.ts";
-import { payload, redactItem } from "#plate/payload.ts";
+import { payload, postings, redactItem } from "#plate/payload.ts";
 import type {
   ChoicePayload,
   EmitState,
@@ -25,6 +33,9 @@ import type {
 import { checkTree, nameOf, textOf } from "#plate/test/accessibility.ts";
 import { keyboardWalk, tabOrder } from "#plate/test/keyboard.ts";
 import { roundTrips } from "#plate/test/round-trip.ts";
+import { checkResponses } from "#plate/responses.ts";
+import { score } from "#plate/score.ts";
+import { acceptForTest } from "#plate/validate/verdict.ts";
 
 /**
  * The item instance every payload here is built for.
@@ -57,9 +68,9 @@ const colours: ChoiceInteraction = {
   ariaLabelledby: Option.none(),
   cardinality: "single",
   choices: [
-    { content: [words("Red")], fixed: false, identifier: "A" },
-    { content: [words("Green")], fixed: false, identifier: "B" },
-    { content: [words("Blue")], fixed: false, identifier: "C" },
+    { content: [words("Red")], fixed: false, identifier: "A", templateVisibility: Option.none() },
+    { content: [words("Green")], fixed: false, identifier: "B", templateVisibility: Option.none() },
+    { content: [words("Blue")], fixed: false, identifier: "C", templateVisibility: Option.none() },
   ],
   class: "swatches",
   kind: "choice",
@@ -128,6 +139,8 @@ const itemOf = (interaction: ChoiceInteraction): Item => ({
       },
     ],
   ]),
+  templateProcessing: Option.none(),
+  templates: new Map(),
   title: "Colours",
   unsupported: [],
 });
@@ -420,14 +433,25 @@ const decorative = (source: string): BodyNode => contentElement("img", { alt: ""
 const swatches: ChoiceInteraction = {
   ...colours,
   choices: [
-    { content: [words("Red")], fixed: false, identifier: "A" },
-    { content: [decorative("images/green.png")], fixed: false, identifier: "B" },
+    { content: [words("Red")], fixed: false, identifier: "A", templateVisibility: Option.none() },
+    {
+      content: [decorative("images/green.png")],
+      fixed: false,
+      identifier: "B",
+      templateVisibility: Option.none(),
+    },
     {
       content: [contentElement("img", { alt: "A blue swatch", src: "images/blue.png" })],
       fixed: false,
       identifier: "C",
+      templateVisibility: Option.none(),
     },
-    { content: [words("Yellow")], fixed: false, identifier: "D" },
+    {
+      content: [words("Yellow")],
+      fixed: false,
+      identifier: "D",
+      templateVisibility: Option.none(),
+    },
   ],
 };
 
@@ -710,9 +734,9 @@ describe("renderChoice", () => {
           prompt: Option.some([
             words("Pick a colour "),
             {
-              feature: "qti-printed-variable",
+              feature: "qti-feedback-inline",
               kind: "unsupported",
-              path: "qti-assessment-item/qti-item-body/qti-choice-interaction/qti-prompt/qti-printed-variable",
+              path: "qti-assessment-item/qti-item-body/qti-choice-interaction/qti-prompt/qti-feedback-inline",
             },
           ]),
         });
@@ -1020,6 +1044,7 @@ describe("renderChoice", () => {
               ],
               fixed: false,
               identifier: "A",
+              templateVisibility: Option.none(),
             },
             ...colours.choices.slice(1),
           ],
@@ -1081,6 +1106,7 @@ describe("renderChoice", () => {
             content: [contentElement("span", { "aria-label": "A green swatch", role: "img" })],
             fixed: false,
             identifier: "B",
+            templateVisibility: Option.none(),
           },
         ],
       });
@@ -1105,6 +1131,7 @@ describe("renderChoice", () => {
               content: [words(" \n\t"), contentElement("img", { alt: " ", src: "images/red.png" })],
               fixed: false,
               identifier: "A",
+              templateVisibility: Option.none(),
             },
             {
               content: [
@@ -1113,17 +1140,19 @@ describe("renderChoice", () => {
               ],
               fixed: false,
               identifier: "B",
+              templateVisibility: Option.none(),
             },
             {
               content: [
                 {
-                  feature: "qti-printed-variable",
+                  feature: "qti-feedback-inline",
                   kind: "unsupported",
-                  path: `${choicePath}/qti-printed-variable`,
+                  path: `${choicePath}/qti-feedback-inline`,
                 },
               ],
               fixed: false,
               identifier: "C",
+              templateVisibility: Option.none(),
             },
           ],
         });
@@ -1153,6 +1182,7 @@ describe("renderChoice", () => {
             content: [decorative(`images/${colour}.png`)],
             fixed: false,
             identifier: ["A", "B", "C"][index] ?? "",
+            templateVisibility: Option.none(),
           })),
           shuffle: true,
         });
@@ -1195,6 +1225,7 @@ describe("renderChoice", () => {
               ],
               fixed: false,
               identifier: "A",
+              templateVisibility: Option.none(),
             },
             ...colours.choices.slice(1),
           ],
@@ -1459,4 +1490,278 @@ describe("validateChoice", () => {
         );
       }),
   );
+});
+
+/**
+ * Construct a value of identifiers of a cardinality.
+ *
+ * @param cardinality The value's cardinality.
+ * @param identifiers The identifiers it holds, in order.
+ * @returns The value.
+ */
+const identifiersOf = (
+  cardinality: "multiple" | "single",
+  ...identifiers: readonly string[]
+): Value => ({
+  baseType: "identifier",
+  cardinality,
+  values: identifiers.map((value) => ({ baseType: "identifier", value })),
+});
+
+/**
+ * Construct a template visibility by the template variable `VISIBLE`.
+ *
+ * @param showHide Its `show-hide`.
+ * @returns The visibility.
+ */
+const byVisible = (showHide: TemplateVisibility["showHide"]): TemplateVisibility => ({
+  showHide,
+  templateIdentifier: "VISIBLE",
+});
+
+/**
+ * The declaration of `VISIBLE`, a single identifier whose declared default, `Z`, shows nothing a
+ * `show` visibility here names.
+ */
+const visibleDeclaration: TemplateDeclaration = {
+  baseType: "identifier",
+  cardinality: "single",
+  defaultValue: Option.some(identifiersOf("single", "Z")),
+  identifier: "VISIBLE",
+  mathVariable: false,
+  paramVariable: false,
+};
+
+/**
+ * Construct the record part `checkResponses` reads, with `VISIBLE` holding one identifier.
+ *
+ * @param identifier What `VISIBLE` holds.
+ * @returns The record part.
+ */
+const visibleAs = (identifier: string): ResponsesRecord => ({
+  templates: { VISIBLE: identifiersOf("single", identifier) },
+});
+
+/**
+ * The colours with `B` shown by `VISIBLE` (`show`) and `C` hidden by it (`hide`, so shown unless
+ * `VISIBLE` holds `C`); `A` has no template visibility.
+ */
+const templatedColours: ChoiceInteraction = {
+  ...colours,
+  choices: colours.choices.map((choice) =>
+    choice.identifier === "A"
+      ? choice
+      : {
+          ...choice,
+          templateVisibility: Option.some(byVisible(choice.identifier === "B" ? "show" : "hide")),
+        },
+  ),
+};
+
+/**
+ * The path of the template block the block cases hold, at the top of the body.
+ */
+const blockPath = "qti-assessment-item/qti-item-body/qti-template-block";
+
+/**
+ * The colours inside the template block, as `pairs` that needs one choice: `min-choices` 1, which
+ * only `validateResponses` judges.
+ */
+const blockColours: ChoiceInteraction = {
+  ...pairs,
+  minChoices: 1n,
+  path: `${blockPath}/qti-choice-interaction`,
+};
+
+/**
+ * Construct an item that declares `VISIBLE`, with a body of its own around one Choice.
+ *
+ * @param interaction The Choice, which gives the response's cardinality.
+ * @param body The body.
+ * @param runs Whether its template processing runs (an empty `qti-template-processing`).
+ * @returns The item.
+ */
+const templatedOf = (
+  interaction: ChoiceInteraction,
+  body: readonly BodyNode[],
+  runs: boolean,
+): Item => ({
+  ...itemOf(interaction),
+  body,
+  templateProcessing: runs ? Option.some([]) : Option.none(),
+  templates: new Map([["VISIBLE", visibleDeclaration]]),
+});
+
+/**
+ * An item whose template processing runs and whose body is a template block, shown by `VISIBLE`
+ * (`show`) when it holds `X`, around {@link blockColours}.
+ */
+const blockItem: Item = templatedOf(
+  blockColours,
+  [
+    {
+      content: [blockColours],
+      identifier: "X",
+      kind: "template-block",
+      path: blockPath,
+      responses: [blockColours.response],
+      templateVisibility: byVisible("show"),
+    } satisfies TemplateContent,
+  ],
+  true,
+);
+
+describe("checkResponses", () => {
+  it.effect(
+    "[I-5] judges a choice its template hides as absent from the payload and checkResponses, so posting it gives unknownChoice, and a shown one as today",
+    () =>
+      Effect.gen(function* hiddenChoice() {
+        const configuration = yield* configure({});
+        const accepted = acceptForTest(templatedOf(templatedColours, [templatedColours], true));
+        const unknown = { response, text: message("en", "unknownChoice") };
+        const hiding = visibleAs("C");
+        const revealing = visibleAs("B");
+        const redacted = redactItem(accepted.item, { outcomes: {}, ...hiding });
+
+        assert.deepStrictEqual(
+          choiceIn(payload(redacted, answering)).choices.map(({ identifier }) => identifier),
+          ["A"],
+        );
+        assert.deepStrictEqual(
+          postings(redacted, instance).map(({ identifier }) => identifier),
+          [response],
+        );
+        for (const hidden of ["B", "C"]) {
+          assert.deepStrictEqual(
+            checkResponses(
+              accepted,
+              { [response]: identifiersOf("single", hidden) },
+              configuration,
+              hiding,
+            ),
+            [unknown],
+            hidden,
+          );
+        }
+        assert.deepStrictEqual(
+          checkResponses(
+            accepted,
+            { [response]: identifiersOf("single", "A") },
+            configuration,
+            hiding,
+          ),
+          [],
+        );
+        for (const shown of ["A", "B", "C"]) {
+          assert.deepStrictEqual(
+            checkResponses(
+              accepted,
+              { [response]: identifiersOf("single", shown) },
+              configuration,
+              revealing,
+            ),
+            [],
+            shown,
+          );
+        }
+      }),
+  );
+
+  it.effect(
+    "[I-5] with no record, judges every choice with a template visibility of an item whose template processing runs as absent",
+    () =>
+      Effect.gen(function* withheldChoice() {
+        const configuration = yield* configure({});
+        const accepted = acceptForTest(templatedOf(templatedColours, [templatedColours], true));
+
+        assert.deepStrictEqual(
+          checkResponses(accepted, { [response]: identifiersOf("single", "C") }, configuration),
+          [{ response, text: message("en", "unknownChoice") }],
+        );
+        assert.deepStrictEqual(
+          checkResponses(accepted, { [response]: identifiersOf("single", "A") }, configuration),
+          [],
+        );
+      }),
+  );
+
+  it.effect(
+    "[I-5] gives no message for a hidden template block's Choice under min-choices 1 and validateResponses, and atLeast 1 for the block shown",
+    () =>
+      Effect.gen(function* hiddenBlock() {
+        const strict = yield* configure({ validateResponses: true });
+        const accepted = acceptForTest(blockItem);
+
+        assert.deepStrictEqual(checkResponses(accepted, {}, strict, visibleAs("W")), []);
+        assert.deepStrictEqual(checkResponses(accepted, {}, strict, visibleAs("X")), [
+          { response, text: message("en", "atLeast", { n: "1" }) },
+        ]);
+      }),
+  );
+
+  it.effect(
+    "[I-5] ignores a response bound only to a hidden or withheld template block's Choice, whatever it holds, so its stored default passes, and judges the block shown",
+    () =>
+      Effect.gen(function* ignoredHidden() {
+        const configuration = yield* configure({ validateResponses: true });
+        const stored = identifiersOf("multiple", "B");
+        const accepted = acceptForTest({
+          ...blockItem,
+          responses: new Map(
+            Array.from(blockItem.responses, ([identifier, declaration]) => [
+              identifier,
+              { ...declaration, defaultValue: Option.some(stored) },
+            ]),
+          ),
+        });
+        const over = identifiersOf("multiple", "A", "B", "C");
+
+        assert.deepStrictEqual(
+          checkResponses(accepted, { [response]: over }, configuration, visibleAs("W")),
+          [],
+        );
+        assert.deepStrictEqual(checkResponses(accepted, { [response]: over }, configuration), []);
+        assert.deepStrictEqual(
+          checkResponses(accepted, { [response]: over }, configuration, { templates: {} }),
+          [],
+        );
+        assert.deepStrictEqual(
+          checkResponses(
+            accepted,
+            { [response]: new Malformed({ entry: name, reason: "identifier" }) },
+            configuration,
+            visibleAs("W"),
+          ),
+          [],
+        );
+        assert.deepStrictEqual(
+          checkResponses(accepted, { [response]: stored }, configuration, visibleAs("W")),
+          [],
+        );
+        assert.deepStrictEqual(
+          checkResponses(accepted, { [response]: over }, configuration, visibleAs("X")),
+          [{ response, text: message("en", "atMost", { n: "2" }) }],
+        );
+      }),
+  );
+
+  it("[I-5] makes score refuse a hidden choice through ResponsesRefused, and leaves a hidden template block's response unrefused", () => {
+    const outcomeOf = (item: Item, posted: Value) =>
+      Result.match(score(acceptForTest(item), { [response]: posted }), {
+        onFailure: (failure) =>
+          failure._tag === "ResponsesRefused" ? failure.messages : [failure._tag],
+        onSuccess: () => [],
+      });
+    const hiddenByDefault = templatedOf(blockColours, blockItem.body, false);
+    const choicesByDefault = templatedOf(templatedColours, [templatedColours], false);
+
+    assert.deepStrictEqual(outcomeOf(choicesByDefault, identifiersOf("single", "B")), [
+      { response, text: message("en", "unknownChoice") },
+    ]);
+    assert.deepStrictEqual(outcomeOf(choicesByDefault, identifiersOf("single", "A")), []);
+    assert.deepStrictEqual(
+      outcomeOf(hiddenByDefault, identifiersOf("multiple", "A", "B", "C")),
+      [],
+    );
+  });
 });

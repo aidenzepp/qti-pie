@@ -2,9 +2,12 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option } from "effect";
 import { attr, el, text } from "#plate/document/source.ts";
 import type { SourceElement } from "#plate/document/source.ts";
+import { runRules } from "#plate/engine/evaluate.ts";
 import type { Expression } from "#plate/model/expression.ts";
 import { buildItem } from "#plate/model/item.ts";
+import { outcomeDefaults } from "#plate/model/record.ts";
 import type { Value } from "#plate/model/values.ts";
+import { integer } from "#plate/test/fixtures.ts";
 import {
   assertKindType,
   baseValueElement,
@@ -279,9 +282,9 @@ describe("the logic family's reader specs and kind rules", () => {
   );
 
   it.effect(
-    "[I-9a] mark a qti-any-n whose min names a template variable variable:<id> and run none (0.13 decision 7)",
+    "[I-5] [I-9a] run a qti-any-n whose min names a template variable with the template value, with no mark",
     () =>
-      Effect.gen(function* marksTemplateMin() {
+      Effect.gen(function* runsTemplateMin() {
         const document = passedItem(anyNElement("T", "4", [truthElement(true)]), [
           el("qti-template-declaration", [
             attr("base-type", "integer"),
@@ -290,17 +293,20 @@ describe("the logic family's reader specs and kind rules", () => {
           ]),
         ]);
         const built = yield* buildItem(document);
+        const rules = Option.getOrElse(built.processing, () => assert.fail("no processing"));
+        const passedAt = (min: bigint) =>
+          Effect.fromResult(
+            runRules(rules, built, {
+              outcomes: outcomeDefaults(built),
+              responses: {},
+              templates: { T: integer(min) },
+            }),
+          ).pipe(Effect.map((after) => after.outcomes["PASSED"]));
 
         assert.deepStrictEqual(refusalsOf(document), []);
-        assert.deepStrictEqual(built.processing, Option.none());
-        assert.deepStrictEqual(built.unsupported, [
-          {
-            feature: "qti-template-declaration",
-            path: "qti-assessment-item/qti-template-declaration",
-            shown: "mark",
-          },
-          { feature: "variable:T", path: processing, shown: "mark" },
-        ]);
+        assert.deepStrictEqual(built.unsupported, []);
+        assert.deepStrictEqual(yield* passedAt(1n), truth(true));
+        assert.deepStrictEqual(yield* passedAt(2n), truth(false));
       }),
   );
 });

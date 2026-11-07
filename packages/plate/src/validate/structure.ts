@@ -190,6 +190,15 @@ const collapse = (value: string): string => {
 };
 
 /**
+ * Replace a value's XML whitespace, as XSD's `whiteSpace="replace"` does: each tab and line break
+ * becomes a space, and nothing is removed.
+ *
+ * @param value The value as written.
+ * @returns The value with each tab and line break replaced.
+ */
+const replace = (value: string): string => value.replaceAll(/[\t\n\r]/gu, " ");
+
+/**
  * Apply a built-in's whitespace facet to a value: `string` keeps it, `normalizedString` replaces
  * each tab and line break with a space, and every other built-in collapses it.
  *
@@ -202,7 +211,7 @@ const whitespaced = (name: BuiltinName, value: string): string => {
     return value;
   }
 
-  return name === "normalizedString" ? value.replaceAll(/[\t\n\r]/gu, " ") : collapse(value);
+  return name === "normalizedString" ? replace(value) : collapse(value);
 };
 
 /**
@@ -309,25 +318,40 @@ const meetsBound = (name: BuiltinName, value: string, bound: string): boolean =>
 /**
  * What settles a narrowed attribute, which its refusal's detail carries: a shared reading, or a
  * line of the information model with the `check` that names the case and the qti package's rule
- * that refuses the same, `pantry`.
+ * that refuses the same, `pantry`. A typed outcome's row also names the outcome, `identifier`, and
+ * the base type it must have, `baseType`, for the wording.
  */
 type Narrowing =
   | { readonly reading: string }
-  | { readonly check: string; readonly pantry: string; readonly source: string };
+  | { readonly check: string; readonly pantry: string; readonly source: string }
+  | {
+      readonly baseType: string;
+      readonly check: "reserved-outcome-type";
+      readonly identifier: string;
+      readonly pantry: string;
+      readonly source: string;
+    };
 
 /**
  * A reading, or a sentence of the information model, that narrows an attribute: on the named
  * elements, or on every element whose table declares it, a value the XSD's own type admits must
- * also satisfy `holds`, which reads the value collapsed, or it is `attribute-type` with `expected`
- * as the values the row admits and the facts of `settled`.
+ * also satisfy `holds`, which reads the value under `whiteSpace` and, where the narrowing depends
+ * on another attribute or on the document the element sits in, the element and its path, or it is
+ * `attribute-type` with `expected` as the values the row admits and the facts of `settled`.
+ *
+ * `whiteSpace` is how `holds` reads the value: `collapse`d, or with each tab and line break
+ * `replace`d by a space and nothing trimmed, as XSD reads an `xs:normalizedString`. A row that
+ * agrees with a rule of the qti package reads the value as that rule does, so it refuses the
+ * padding the rule refuses, and no more.
  */
 interface NarrowedAttribute {
   readonly attribute: string;
   readonly elements: "declaring" | readonly string[];
   readonly expected: string;
-  readonly holds: (lexical: string) => boolean;
+  readonly holds: (lexical: string, element: SourceElement, path: string) => boolean;
   readonly kind: "narrowed-attribute";
   readonly settled: Narrowing;
+  readonly whiteSpace: "collapse" | "replace";
 }
 
 /**
@@ -529,6 +553,72 @@ const reservingDeclarations = [
 ] as const;
 
 /**
+ * The outcomes whose base type the information model fixes, each with that base type, its line and
+ * whether the type holds in a test too. "SCORE MUST be a float" and "MAXSCORE MUST be a float" are
+ * said of items ("Items that declare a numeric outcome variable", "Items that declare a maximum
+ * score", info.txt:8478, :8480), so they are typed in an item and any base type in a test; "PASSED
+ * MUST be a boolean" is said of "Items or tests" (info.txt:8482), so it is typed in both. The qti
+ * package's `ReservedOutcomeTypes` (`packages/pantry/src/schema/declaration.ts:295`) refuses a
+ * test's SCORE and MAXSCORE of another base type too, so plate accepts such a test where pantry
+ * refuses it, until pantry follows.
+ */
+const typedOutcomes = [
+  ["SCORE", "float", "info.txt:8478", false],
+  ["MAXSCORE", "float", "info.txt:8480", false],
+  ["PASSED", "boolean", "info.txt:8482", true],
+] as const;
+
+/**
+ * Report whether an element sits in a test: its document's root is a QTI `qti-assessment-test`,
+ * whose path step {@link walk} writes as the bare local name, so every descendant's path starts
+ * with it and a `/`.
+ *
+ * @param path The element's path.
+ * @returns Whether the element is below a test's root.
+ */
+const inTest = (path: string): boolean => path.startsWith("qti-assessment-test/");
+
+/**
+ * Report whether an outcome declaration's `base-type` is the one its identifier needs, as the qti
+ * package's `ReservedOutcomeTypes` reads it.
+ *
+ * That rule reads only a typed declaration, one whose `cardinality` is not `record` as written
+ * (`packages/pantry/src/import/item.ts:331`), so a `record` declaration holds whatever it writes.
+ * Whether "SCORE MUST be a float" also refuses a `record` declaration, which has no base type, is
+ * a reading that awaits the operator (G-R2, pending); until it settles, a `record` one is admitted,
+ * as the qti package admits it.
+ *
+ * The identifier is compared exactly after collapse, as {@link reservedIdentifiers} compares it, so
+ * `Score` is another name; one that holds an unexpanded entity reference is unknown and holds.
+ *
+ * A row typed in an item only holds for any base type on a declaration in a test ({@link inTest});
+ * in every other document, an item and a lone declaration included, it keeps the item's type.
+ *
+ * @param identifier The outcome the row types.
+ * @param baseType The base type that outcome must have.
+ * @param inTests Whether that base type holds in a test too.
+ * @returns Whether a collapsed `base-type` meets the row on its declaration at its path.
+ */
+const typedAs =
+  (identifier: string, baseType: string, inTests: boolean) =>
+  (lexical: string, element: SourceElement, path: string): boolean => {
+    const written = (local: string) =>
+      element.attributes.find(
+        (attribute) => attribute.namespace === "" && attribute.local === local,
+      );
+    const named = written("identifier");
+
+    return (
+      lexical === baseType ||
+      (!inTests && inTest(path)) ||
+      written("cardinality")?.value === "record" ||
+      named === undefined ||
+      named.references.length > 0 ||
+      collapse(named.value) !== identifier
+    );
+  };
+
+/**
  * Report whether a collapsed `tolerance` holds only tokens the qti package's `toleranceList`
  * pattern admits (`packages/pantry/src/schema/patterns.ts:401`, refused there as P6): each an
  * `xs:double` or an NCName, one space apart, and the empty list too. The XSD's union of `xs:string`
@@ -542,6 +632,26 @@ const reservingDeclarations = [
 const toleranceTokens = (lexical: string): boolean =>
   lexical === "" ||
   lexical.split(" ").every((token) => doubleLexical.test(token) || isNcName(token));
+
+/**
+ * A printed variable's `format` as the qti package's `printfFormat` pattern admits it
+ * (`packages/pantry/src/schema/patterns.ts:343`, refused there as R38), over the whole attribute:
+ * one conversion, a percent sign, flags from `#`, `0`, space, `+` and `-`, a width, a precision,
+ * and one of `E e f G g r R i o X x`, with nothing around it.
+ *
+ * The precision is a point "followed by zero or more digits" (info.txt:8686), so `%.f` is
+ * admitted. R38 requires a digit after the point and refuses `%.f`; the standard does not refuse
+ * it, so this pattern admits it, a difference from the qti package that awaits the operator (G-R2,
+ * pending). The information model does not address text around the conversion; the pattern
+ * refuses it as R38 does, so when the qti package narrows R38 this pattern follows it.
+ *
+ * The width cannot start with `0`, so no character can end the flags and start the width: R38's
+ * pattern lets both match `0`, and a refused `%`, a run of zeros and a letter that is no code then
+ * backtracks over every split of the run, quadratic time on an untrusted attribute (review
+ * `079e8c44` P2-13). A `0` after the flags is a flag here, so the pattern admits exactly the
+ * strings a width of any digits admits, and checks in linear time.
+ */
+const printfFormat = /^%[#0 +-]*(?:[1-9][0-9]*)?(?:\.[0-9]*)?[EefGgrRioXx]$/u;
 
 /**
  * The shared readings this module applies over the XSD's rules, one row each.
@@ -574,6 +684,7 @@ const readingRows: readonly ReadingRow[] = [
     holds: (lexical) => Option.exists(doubleValue(lexical), (read) => read > 0),
     kind: "narrowed-attribute",
     settled: { reading: "16" },
+    whiteSpace: "collapse",
   },
   // Reading 17 (spec-readings.md:120): a `view` list holds at least one view, where the XSD's list
   // admits none.
@@ -584,6 +695,7 @@ const readingRows: readonly ReadingRow[] = [
     holds: (lexical) => lexical !== "",
     kind: "narrowed-attribute",
     settled: { reading: "17" },
+    whiteSpace: "collapse",
   },
   // Reading 18 (spec-readings.md:123): an order or graphic-order interaction's `min-choices` is at
   // least 1, where the XSD admits 0. `max-choices="0"` means unlimited, and no count is compared.
@@ -594,6 +706,7 @@ const readingRows: readonly ReadingRow[] = [
     holds: (lexical) => integerLexical.test(lexical) && BigInt(lexical) >= 1n,
     kind: "narrowed-attribute",
     settled: { reading: "18" },
+    whiteSpace: "collapse",
   },
   // Reading 20 (spec-readings.md:132): a PCI holds exactly one `qti-interaction-markup`, which may
   // be empty.
@@ -786,6 +899,28 @@ const readingRows: readonly ReadingRow[] = [
     holds: (lexical) => !reservedIdentifiers.has(lexical),
     kind: "narrowed-attribute",
     settled: { check: "reserved-identifier", pantry: "DeclarationNotReserved", source },
+    whiteSpace: "collapse",
+  })),
+  // The information model fixes the base types of three outcomes: an item's SCORE and MAXSCORE are
+  // floats, and an item's or a test's PASSED a boolean (info.txt:8478, :8480, :8482); a test's
+  // SCORE and MAXSCORE may be of any base type. Pantry's `ReservedOutcomeTypes` refuses an outcome
+  // declaration of another base type in an item or a test, so it refuses a test's too, which plate
+  // accepts until pantry follows. A response or template declaration of those names is not an
+  // outcome, and a `record` one has no base type to fix.
+  ...typedOutcomes.map(([identifier, baseType, source, inTests]): NarrowedAttribute => ({
+    attribute: "base-type",
+    elements: ["qti-outcome-declaration"],
+    expected: `${baseType}, the base type of an outcome named ${identifier}`,
+    holds: typedAs(identifier, baseType, inTests),
+    kind: "narrowed-attribute",
+    settled: {
+      baseType,
+      check: "reserved-outcome-type",
+      identifier,
+      pantry: "ReservedOutcomeTypes",
+      source,
+    },
+    whiteSpace: "collapse",
   })),
   // The information model's `tolerance` (info.txt:24946) is two numbers, t0 and t1, or one for
   // both, and a token that is not a number names the variable that holds one. So each token is an
@@ -798,6 +933,23 @@ const readingRows: readonly ReadingRow[] = [
     holds: toleranceTokens,
     kind: "narrowed-attribute",
     settled: { check: "tolerance-token", pantry: "P6", source: "info.txt:24946" },
+    whiteSpace: "collapse",
+  },
+  // The information model's printed variable `format` is "The format conversion specifier"
+  // (info.txt:70323), whose syntax is a C `printf` conversion (info.txt:8686). Pantry's R38 admits
+  // one whole conversion, with codes `E e f G g r R i o X x`, so `%d`, `%u` and `Score: %.1f` are
+  // refused as there. Pantry reads the `xs:normalizedString` with its tabs and line breaks
+  // replaced, not trimmed, so a padded format is refused too. A precision with no digit, `%.f`,
+  // is admitted, as the information model admits it and R38 does not (see printfFormat).
+  {
+    attribute: "format",
+    elements: ["qti-printed-variable"],
+    expected:
+      "one printf conversion and nothing else: %, then any of the flags #, 0, space, + and -, an optional width, an optional precision of a point and zero or more digits, and one of the conversions E, e, f, G, g, r, R, i, o, X and x",
+    holds: (lexical) => printfFormat.test(lexical),
+    kind: "narrowed-attribute",
+    settled: { check: "printf-format", pantry: "R38", source: "info.txt:70323" },
+    whiteSpace: "replace",
   },
   // Single cardinality is "a single value" (info.txt:73049, the information model's
   // `CardinalityEnum`), so the default or correct value of a single declaration holds one
@@ -1594,13 +1746,14 @@ const checkValue = (
   }
 
   const lexical = collapse(attribute.value);
+  const replaced = replace(attribute.value);
   const narrowed = narrowedAttributes
     .filter(
       (row) =>
         local &&
         row.attribute === attribute.local &&
         (row.elements === "declaring" || row.elements.includes(element.local)) &&
-        !row.holds(lexical),
+        !row.holds(row.whiteSpace === "collapse" ? lexical : replaced, element, path),
     )
     .map((row) =>
       refuse(source, "attribute-type", at, { ...detail, expected: row.expected, ...row.settled }),

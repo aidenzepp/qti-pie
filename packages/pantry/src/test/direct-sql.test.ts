@@ -26,10 +26,9 @@ import {
 } from "#pantry/qti/expressions.ts";
 import { Attribute } from "#pantry/qti/attributes.ts";
 import { Document } from "#pantry/qti/chardata.ts";
-import { LomResource } from "#pantry/qti/metadata.ts";
 import { DocumentId, IdBinding } from "#pantry/qti/identity.ts";
 import { Node } from "#pantry/qti/node.ts";
-import { NamedHref, ResourceHref } from "#pantry/qti/package.ts";
+import { NamedHref, TypedHref } from "#pantry/qti/package.ts";
 import { accumulatorOf, columnKeys, pinned, statedInserts } from "#pantry/test/direct-sql.ts";
 import type { Stated } from "#pantry/test/direct-sql.ts";
 
@@ -102,24 +101,20 @@ const chain: readonly Stated[] = [
 ];
 
 /**
- * A resource's href with its two owners, as package.db's containment cases state it.
+ * A typed resource's href with its owner, the (path, type) pair it names, as package.db's
+ * containment cases state it.
  */
 const href: readonly Stated[] = [
   { fact: { package: "P", path: "item.xml", type: "imsqti_item_xmlv3p0" }, relation: NamedHref },
   {
-    fact: { named: "imsqti_item_xmlv3p0", node: "S", type: "imsqti_item_xmlv3p0" },
-    relation: LomResource,
-  },
-  {
     fact: {
-      href: "item.xml",
       node: "S",
       package: "P",
       path: "item.xml",
       scope: "entry",
       type: "imsqti_item_xmlv3p0",
     },
-    relation: ResourceHref,
+    relation: TypedHref,
   },
 ];
 
@@ -148,7 +143,7 @@ describe("the direct writer's order and slots", () => {
   it("writes every owner before its members, whatever order the facts are stated in", () => {
     // Oracle: the schema's own family statements (each member after its owner) and the hand
     // order expressions.db and package.db kept before the writer derived it.
-    // Bound: every permutation of the reference chain (120) and of the href's (6).
+    // Bound: every permutation of the reference chain (120) and of the href's (2).
     for (const order of permutations(chain)) {
       const tables = tablesOf(order);
 
@@ -160,8 +155,7 @@ describe("the direct writer's order and slots", () => {
     for (const order of permutations(href)) {
       const tables = tablesOf(order);
 
-      assert.isBelow(tables.indexOf("named_href"), tables.indexOf("resource_href"));
-      assert.isBelow(tables.indexOf("lom_resource"), tables.indexOf("resource_href"));
+      assert.isBelow(tables.indexOf("named_href"), tables.indexOf("typed_href"));
     }
   });
 
@@ -183,10 +177,8 @@ describe("the direct writer's order and slots", () => {
         "the owner's count of the family AssembledReference.readings": 3,
       })),
     );
-    assert.deepStrictEqual(statedInserts(href)[2]?.hidden, {
-      "the index of the family LomResource.hrefs": 0,
+    assert.deepStrictEqual(statedInserts(href)[1]?.hidden, {
       "the index of the family NamedHref.names": 0,
-      "the owner's count of the family LomResource.hrefs": 1,
       "the owner's count of the family NamedHref.names": 1,
     });
   });

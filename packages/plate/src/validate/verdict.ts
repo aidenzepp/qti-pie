@@ -663,6 +663,14 @@ const placeNode = (
       };
     }
 
+    case "template-block":
+    case "template-inline": {
+      const inner = placeNodes(node.content, drops, placed, inMedia);
+
+      return { lifted: inner.lifted, nodes: [{ ...node, content: inner.nodes }] };
+    }
+
+    case "printed-variable":
     case "text":
     case "text-entry":
     case "unsupported": {
@@ -1249,13 +1257,26 @@ const notQti = (refusal: Refusal, wrong: string, change: string): string =>
 const baseTypeText = (baseType: string): string => (baseType === "" ? "untyped" : code(baseType));
 
 /**
- * Word an `undeclared-variable` refusal's kind of variable.
+ * Word a kind of variable a detail names: an `undeclared-variable` refusal's `expected`, one kind
+ * of a template rule's space-separated `expected` list, or a P20 refusal's `targetKind`.
  *
- * @param expected The kind the detail names: `response`, `outcome` or `variable`.
- * @returns The noun.
+ * @param expected The kind: `response`, `outcome`, `template` or `variable`.
+ * @returns The noun, `variable` for any other kind.
  */
-const variableKind = (expected: string): string =>
-  expected === "response" || expected === "outcome" ? expected : "variable";
+const variableKind = (expected: string): string => {
+  switch (expected) {
+    case "outcome":
+    case "response": {
+      return expected;
+    }
+    case "template": {
+      return "template variable";
+    }
+    default: {
+      return "variable";
+    }
+  }
+};
 
 /**
  * Name the facts most refusals word: the element, the attribute and the reading cited.
@@ -1328,8 +1349,22 @@ const operandType = (refusal: Refusal, element: string, expression: string): str
 };
 
 /**
+ * What a template rule that sets a response's or an outcome's value sets, as a P20 sentence words
+ * it before the variable's name: its correct response or its default value. A rule that sets the
+ * variable itself has no entry.
+ */
+const valuesSet: ReadonlyMap<string, string> = new Map([
+  ["qti-set-correct-response", "the correct response of "],
+  ["qti-set-default-value", "the default value of "],
+]);
+
+/**
  * Word an `expression-type` refusal whose detail names no `check`: a lookup operand against its
- * table (reading 28), or an expression against the outcome it sets.
+ * table (reading 28), or an expression against the variable it sets (pantry's P20).
+ *
+ * The variable's type is the detail's `outcomeCardinality` and `outcomeBaseType` whatever its
+ * kind, and its kind is the `targetKind` a template rule's refusal carries (`template`,
+ * `response` or `outcome`), an outcome when there is none, as for a `qti-set-outcome-value`.
  *
  * @param refusal The refusal.
  * @param element The element's local name.
@@ -1340,12 +1375,17 @@ const uncheckedType = (refusal: Refusal, element: string, expression: string): s
   const identifier = fact(refusal, "identifier", "the outcome");
 
   return Option.match(optionalFact(refusal, "table"), {
-    onNone: () =>
-      sentence(
+    onNone: () => {
+      const variable = withArticle(
+        `${fact(refusal, "outcomeCardinality", "")} ${baseTypeText(fact(refusal, "outcomeBaseType", ""))} ${variableKind(fact(refusal, "targetKind", "outcome"))}`,
+      );
+
+      return sentence(
         refusal,
-        `${code(element)} sets ${code(identifier)}, ${withArticle(`${fact(refusal, "outcomeCardinality", "")} ${baseTypeText(fact(refusal, "outcomeBaseType", ""))}`)} outcome, to ${withArticle(expression)} value${citation(refusal)}.`,
+        `${code(element)} sets ${valuesSet.get(element) ?? ""}${code(identifier)}, ${variable}, to ${withArticle(expression)} value${citation(refusal)}.`,
         `give the expression the base type and cardinality of ${code(identifier)}, or change its declaration`,
-      ),
+      );
+    },
     onSome: (table) =>
       sentence(
         refusal,
@@ -1356,16 +1396,100 @@ const uncheckedType = (refusal: Refusal, element: string, expression: string): s
 };
 
 /**
+ * Word an `expression-type` refusal of a reference attribute (`check: "reference"`, pantry's P24):
+ * an attribute names a variable that is not a single template or outcome variable of the base type
+ * the attribute holds. The facts the detail carries select the sentence, in this order:
+ *
+ * - `expectedCardinalities`: the attribute is a `template-identifier`, which names a template
+ *   variable of base type identifier, single or multiple (pantry's `template-ref`). The sentence
+ *   offers the cardinalities as alternatives and cites the element's line ({@link settled}).
+ * - `declarer` of `test`: the attribute is a test's printed variable's, and a test declares no
+ *   template variable, so the sentence names and offers only an outcome the test declares.
+ * - `variableKind`, in an item or a test: the attribute is a printed variable's `identifier`, which
+ *   may name a template or outcome variable of any type (pantry's `printed-variable-ref`). The
+ *   sentence names the kind the variable has, `response` or `context`, says no base type, and cites
+ *   what settles it ({@link settled}). In an item, for a response, the remedy offers an outcome set
+ *   to its value, as the information model suggests.
+ *
+ * @param refusal The refusal.
+ * @param element The element's local name.
+ * @param identifier The name the attribute gives, in a code span.
+ * @returns The sentence.
+ */
+const referenceType = (refusal: Refusal, element: string, identifier: string): string => {
+  const attribute = code(fact(refusal, "attribute", "the attribute"));
+  const expected = baseTypeText(fact(refusal, "expectedBaseType", ""));
+  const cite = citation(refusal);
+
+  const cardinalities = optionalFact(refusal, "expectedCardinalities");
+  if (Option.isSome(cardinalities)) {
+    const wanted = `a template variable of base type ${expected}, ${alternatives(cardinalities.value, (one) => one)}`;
+
+    return sentence(
+      refusal,
+      `${code(element)}'s attribute ${attribute} names ${identifier}, which is not ${wanted}${settled(refusal)}.`,
+      `name ${wanted}, in ${attribute}`,
+    );
+  }
+
+  if (fact(refusal, "declarer", "item") === "test") {
+    return Option.match(optionalFact(refusal, "variableKind"), {
+      onNone: () =>
+        sentence(
+          refusal,
+          `${code(element)}'s attribute ${attribute} names ${identifier}, which is not a single outcome variable of base type ${expected}${cite}.`,
+          `in ${attribute}, name a single outcome variable of base type ${expected} that the test declares, or write a value of that base type`,
+        ),
+      onSome: (kind) =>
+        sentence(
+          refusal,
+          `${code(element)}'s attribute ${attribute} names ${identifier}, ${withArticle(kind)} variable, which is not an outcome variable${settled(refusal)}.`,
+          `in ${attribute}, name an outcome variable that the test declares`,
+        ),
+    });
+  }
+
+  return Option.match(optionalFact(refusal, "variableKind"), {
+    onNone: () =>
+      sentence(
+        refusal,
+        `${code(element)}'s attribute ${attribute} names ${identifier}, which is not a single template or outcome variable of base type ${expected}${cite}.`,
+        `name a single template or outcome variable of base type ${expected} in ${attribute}, or write a value of that base type there`,
+      ),
+    onSome: (kind) =>
+      sentence(
+        refusal,
+        `${code(element)}'s attribute ${attribute} names ${identifier}, ${withArticle(kind)} variable, which is neither a template nor an outcome variable${settled(refusal)}.`,
+        `name a template or outcome variable in ${attribute}${kind === "response" ? ", such as an outcome that response processing sets to the response's value" : ""}`,
+      ),
+  });
+};
+
+/**
+ * The line of QTI's information model that limits what template processing reads: "An expression
+ * used in a qti-template-rule must not refer to the value of a response variable or outcome
+ * variable. It may only refer to the values of the template variables." Context variables "may be
+ * referenced in template processing" (`info.txt:22601`), so the sentence names them beside
+ * template variables.
+ */
+const templateReadSource = "info.txt:65111";
+
+/**
  * Word an `expression-type` refusal, by the `check` its detail names.
  *
  * - `condition` (pantry's P21): the condition of a rule's branch is not a single `boolean`.
  * - `operand` (P23): an operand the element does not take, and what it takes.
  * - `reference` (P24): an attribute names a variable that is not a single template or outcome
- *   variable of the base type the attribute holds.
- * - `template-read` (P26): template processing reads a response or outcome variable.
+ *   variable of the base type the attribute holds, or a printed variable's `identifier` or a
+ *   `template-identifier` names a variable of another kind or type (see {@link referenceType}).
+ * - `template-read` (P26): template processing reads a variable that is neither a template nor a
+ *   context variable (a response, an outcome or a built-in), by an element or through the reference
+ *   attribute an `attribute` fact names. It cites the information model's line, which allows only
+ *   template variables (`info.txt:65111`), unless the detail names a reading; the remedy offers a
+ *   template variable, never `qti-correct` or `qti-default`, which read the refused variable too.
  * - `weight` (P29): a weighted `qti-test-variables` whose base type is not `float`.
- * - None: an expression against the outcome it sets, or a lookup operand against its table (see
- *   {@link uncheckedType}).
+ * - None: an expression against the variable it sets (P20), or a lookup operand against its table
+ *   (see {@link uncheckedType}).
  *
  * An `expressionBaseType` of `""`, a type with no base type of its own, is worded `untyped`.
  *
@@ -1390,26 +1514,29 @@ const expressionType = (refusal: Refusal): string => {
       return operandType(refusal, element, expression);
     }
     case "reference": {
-      const attribute = code(fact(refusal, "attribute", "the attribute"));
-      const expected = baseTypeText(fact(refusal, "expectedBaseType", ""));
-
-      return sentence(
-        refusal,
-        `${code(element)}'s attribute ${attribute} names ${identifier}, which is not a single template or outcome variable of base type ${expected}${cite}.`,
-        `name a single template or outcome variable of base type ${expected} in ${attribute}, or write a value of that base type there`,
-      );
+      return referenceType(refusal, element, identifier);
     }
     case "template-read": {
       const variable = Option.match(optionalFact(refusal, "variableKind"), {
         onNone: () => "a variable",
         onSome: (kind) => `${withArticle(kind)} variable`,
       });
+      const rule = `in template processing, which may read only template and context variables${cite === "" ? ` (${templateReadSource})` : cite}.`;
 
-      return sentence(
-        refusal,
-        `${code(element)} reads ${identifier}, ${variable}, in template processing, which may read only template variables and correct or default values${cite}.`,
-        `read a template variable instead, or ${identifier}'s correct or default value through ${code("qti-correct")} or ${code("qti-default")}`,
-      );
+      return Option.match(optionalFact(refusal, "attribute"), {
+        onNone: () =>
+          sentence(
+            refusal,
+            `${code(element)} reads ${identifier}, ${variable}, ${rule}`,
+            "read a template variable instead",
+          ),
+        onSome: (attribute) =>
+          sentence(
+            refusal,
+            `${code(element)}'s attribute ${code(attribute)} names ${identifier}, ${variable}, ${rule}`,
+            `name a template variable in ${code(attribute)}, or write a value there`,
+          ),
+      });
     }
     case "weight": {
       const baseType = baseTypeText(fact(refusal, "baseType", ""));
@@ -1431,6 +1558,10 @@ const expressionType = (refusal: Refusal): string => {
  *
  * - `reserved-identifier` (pantry's `DeclarationNotReserved`): a declaration whose `identifier` is a
  *   built-in variable's, `completionStatus`, `numAttempts` or `duration`.
+ * - `reserved-outcome-type` (pantry's `ReservedOutcomeTypes`): an outcome declaration in an item
+ *   named `SCORE` or `MAXSCORE` whose `base-type` is not `float`, or one in an item or a test named
+ *   `PASSED` whose `base-type` is not `boolean`; the detail names the outcome, `identifier`, and
+ *   the base type it must have, `baseType`.
  * - `tolerance-token` (pantry's P6): a `qti-equal`'s `tolerance` holding a token that is neither an
  *   `xs:double` nor an NCName.
  * - None: a value outside the attribute's type, or outside what a reading or the information model
@@ -1451,6 +1582,15 @@ const attributeType = (refusal: Refusal): string => {
         refusal,
         `${code(element)}'s attribute ${code(attribute)} is ${value}, the identifier of a built-in variable, which no declaration may take${settled(refusal)}.`,
         `give ${code(element)} another identifier; the built-in variable needs no declaration`,
+      );
+    }
+    case "reserved-outcome-type": {
+      const baseType = code(fact(refusal, "baseType", ""));
+
+      return sentence(
+        refusal,
+        `${code(element)}'s attribute ${code(attribute)} is ${value}, but an outcome named ${code(fact(refusal, "identifier", ""))} must have the base type ${baseType}${settled(refusal)}.`,
+        `change ${code(attribute)} to ${baseType}, or give ${code(element)} another identifier`,
       );
     }
     case "tolerance-token": {
@@ -1481,7 +1621,11 @@ const attributeType = (refusal: Refusal): string => {
  *   test part or section (reading 48).
  * - `built-in-target` (pantry's P9): a rule other than `qti-set-outcome-value` that sets a built-in,
  *   citing the information model's line its `source` names.
- * - None (P8): a name the item declares no variable for.
+ * - None (P8): a name the item declares no variable of the `expected` kind for. A template rule's
+ *   target lists every kind the rule may set, space-separated, and the sentence offers them as
+ *   alternatives (pantry's `DeclaredRefKind`). A test's printed variable carries `declarer:
+ *   "test"`, and the sentence names the test as what declares no such variable (pantry's
+ *   `binding-declared` for a test).
  *
  * Each names the element, or the element's attribute when a reference attribute names the
  * variable.
@@ -1523,11 +1667,12 @@ const undeclaredVariable = (refusal: Refusal): string => {
       );
     }
     default: {
-      const kind = variableKind(fact(refusal, "expected", "variable"));
+      const kind = alternatives(fact(refusal, "expected", "variable"), variableKind);
+      const declarer = fact(refusal, "declarer", "item") === "test" ? "test" : "item";
 
       return sentence(
         refusal,
-        `${subject} names ${identifier}, and the item declares no ${kind} ${identifier}.`,
+        `${subject} names ${identifier}, and the ${declarer} declares no ${kind} ${identifier}.`,
         `declare ${identifier}, or name a declared ${kind}`,
       );
     }

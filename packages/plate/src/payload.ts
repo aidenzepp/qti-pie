@@ -6,38 +6,55 @@
  * author's {@link View} into the {@link Payload}, the only input the emitter receives. Each copies
  * every field it names one by one and never spreads a model object, so a field the model gains
  * reaches the page only when this file names it. Neither copy holds a correct response, a mapping,
- * a response or outcome default, a processing rule, a template value or feedback content, and the
- * payload holds no seed: the view's seed only orders a shuffled Choice's or Inline Choice's
- * choices. What the page cannot be given, it cannot leak. A `solution` render shows correct
- * responses only when the author passes them as the view's values; nothing here reads them from the
- * item.
+ * a response default, a processing rule, a template rule or feedback content, nor any outcome or
+ * template value but the ones the body's printed variables print, as text, and the ones its
+ * `param-variable` parameters pass, as their `value`, nor a template visibility: a template block,
+ * inline or choice is settled as shown, hidden or withheld before the page sees it. Neither holds a
+ * seed: the view's seed only orders a shuffled Choice's or Inline Choice's choices. What the page
+ * cannot be given, it cannot leak. A `solution` render shows correct responses only when the author
+ * passes them as the view's values; nothing here reads them from the item.
  *
  * @module
  * @see {@link Item} for the model it reads.
  */
 import { Array as Arr, Option } from "effect";
 import type { Brand } from "effect";
+import type { Configuration } from "#plate/configuration.ts";
 import { controlCap, exceedsControlCap } from "#plate/control-cap.ts";
 import { scopedId } from "#plate/emit/parts.ts";
 import type { Resolved } from "#plate/emit/parts.ts";
+import { formatPrinted, textBound } from "#plate/engine/format.ts";
+import type { PrintOptions } from "#plate/engine/format.ts";
+import { integerOf } from "#plate/engine/numbers.ts";
 import { shuffleOrder } from "#plate/engine/random.ts";
+import { own } from "#plate/engine/refs.ts";
 import { entryName, isPosted } from "#plate/form/encoding.ts";
 import type { Binding, DecodeOptions } from "#plate/form/encoding.ts";
 import { authorsLabel, givesText, resolvedLabelledby } from "#plate/interactions/name.ts";
 import type { Locale } from "#plate/messages.ts";
+import type { IntegerOrRef } from "#plate/model/expression.ts";
 import { interactionsIn } from "#plate/model/interactions.ts";
 import type {
+  BodyElement,
   BodyNode,
   ChoiceInteraction,
   ExtendedTextInteraction,
   InlineChoiceInteraction,
   Interaction,
   Item,
+  PrintedVariable,
   SimpleChoice,
+  TemplateContent,
+  TemplateDeclaration,
+  TemplateVisibility,
   TextEntryInteraction,
+  UnsupportedFeature,
 } from "#plate/model/item.ts";
-import { format } from "#plate/model/values.ts";
+import { outcomeDefaults, unrunTemplateProcessing } from "#plate/model/record.ts";
+import type { RedactRecord } from "#plate/model/record.ts";
+import { format, nullOf } from "#plate/model/values.ts";
 import type { ModelledBaseType, Single, Value } from "#plate/model/values.ts";
+import { defaultOutputBudget } from "#plate/output-budget.ts";
 
 /**
  * A message response validation gives one response, in the locale's text or the author's.
@@ -91,10 +108,10 @@ export interface View {
   readonly names: ReadonlyMap<string, string>;
   readonly posted: Option.Option<ReadonlyMap<string, readonly string[]>>;
   /**
-   * The configuration's `seed`, which keys a shuffled Choice's or Inline Choice's order with the
-   * instance and the response; keyed as the empty string when absent.
+   * The configuration's `seed`, a string written as given, which keys a shuffled Choice's or Inline
+   * Choice's order with the instance and the response; keyed as the empty string when absent.
    */
-  readonly seed?: number;
+  readonly seed?: string;
   /**
    * The value each response's controls show, such as its `defaultValue` or a value the author's
    * flow recorded; NULL when absent.
@@ -432,7 +449,8 @@ export interface ResponseBinding {
 /**
  * The fields of an item the page may know, which {@link redactItem} copies by name.
  *
- * `responses` lists the response bindings in document order, and `notices` the features the body
+ * `responses` lists the response bindings in document order, every response but those only content
+ * the page does not see binds ({@link hiddenOnlyResponses}), and `notices` the features the body
  * shows as notices. Exported for the codec of {@link Redacted}'s JSON form, whose Schema's type it
  * is; `src/index.ts` does not export it.
  */
@@ -450,6 +468,19 @@ export interface RedactedFields {
   readonly notices: readonly string[];
   readonly responses: readonly ResponseBinding[];
   readonly title: string;
+  /**
+   * The first printed variable, or `param-variable` parameter, on content the page sees whose text
+   * passed a bound and so printed nothing: the bound in characters, the variable's identifier (a
+   * parameter's template variable) and its path. The bound is 1,000,000, the most one text may
+   * hold, or the output budget the redaction ran under, when the item's printed text passed it at
+   * that variable. None when every text fits. `render` fails `OutputTooLarge` naming it, so no
+   * page shows the slot blank.
+   */
+  readonly unprinted: Option.Option<{
+    readonly bound: number;
+    readonly identifier: string;
+    readonly path: string;
+  }>;
 }
 
 /**
@@ -504,7 +535,7 @@ interface Build {
   /**
    * The view's seed, none when the view has none.
    */
-  readonly seed: Option.Option<number>;
+  readonly seed: Option.Option<string>;
   /**
    * Each interaction the renderer names, with where its first Control stands among the Controls
    * the renderer names ({@link TextName}).
@@ -544,6 +575,11 @@ const authoredIdsIn = (nodes: readonly BodyNode[]): readonly string[] =>
       case "inline-choice": {
         return authoredIdsIn(Option.getOrElse(node.label, () => []));
       }
+      case "template-block":
+      case "template-inline": {
+        return authoredIdsIn(node.content);
+      }
+      case "printed-variable":
       case "text-entry":
       case "text":
       case "unsupported": {
@@ -679,8 +715,9 @@ const copyNodes = (nodes: readonly BodyNode[], build: Build): readonly PayloadNo
   nodes.map((node) => copyNode(node, build));
 
 /**
- * The separator of a shuffle key's three fields, U+001F INFORMATION SEPARATOR ONE, which no number
- * written with `String`, checked instance token or identifier holds.
+ * The separator of a shuffle key's three fields, U+001F INFORMATION SEPARATOR ONE, which no
+ * checked instance token or identifier holds. A seed is the host's string and may hold it, but the
+ * fields after it never do, so a key still splits from the right.
  */
 const keySeparator = "\u001F";
 
@@ -689,16 +726,16 @@ const keySeparator = "\u001F";
  * them: the one function that presents both kinds and reports their order.
  *
  * An interaction with `shuffle` true is presented in {@link shuffleOrder}'s order under the key
- * `<seed>\u001F<instance>\u001F<response>`, where the seed is written with `String` and an absent
- * seed is the empty string: its non-fixed choices are permuted among the non-fixed positions, and
- * each fixed choice keeps its document position. Any other keeps document order. The same
- * interaction, seed and instance always give the same order, the one `render` presents, so a host
- * can report it, such as a result's `choiceSequence`. The order is presentation only: scores,
- * records and validation read identifiers, never positions.
+ * `<seed>\u001F<instance>\u001F<response>`, where the seed is written as given and an absent seed
+ * is the empty string: its non-fixed choices are permuted among the non-fixed positions, and each
+ * fixed choice keeps its document position. Any other keeps document order. The same interaction,
+ * seed and instance always give the same order, the one `render` presents, so a host can report
+ * it, such as a result's `choiceSequence`. The order is presentation only: scores, records and
+ * validation read identifiers, never positions.
  *
  * @example
  *   // A shuffled Choice of choices A, B and C, none fixed, bound to RESPONSE:
- *   choiceOrder(interaction, Option.some(7), "_r_1_"); // ["B", "A", "C"]
+ *   choiceOrder(interaction, Option.some("7"), "_r_1_"); // ["B", "A", "C"]
  *   choiceOrder(interaction, Option.none(), "_r_1_"); // ["A", "C", "B"]
  *
  * @param interaction The Choice or Inline Choice: its choices, its response and its `shuffle`.
@@ -708,16 +745,12 @@ const keySeparator = "\u001F";
  */
 export const choiceOrder = (
   interaction: Pick<ChoiceInteraction, "choices" | "response" | "shuffle">,
-  seed: Option.Option<number>,
+  seed: Option.Option<string>,
   instance: string,
 ): readonly string[] =>
   interaction.shuffle
     ? shuffleOrder(
-        [
-          Option.match(seed, { onNone: () => "", onSome: String }),
-          instance,
-          interaction.response,
-        ].join(keySeparator),
+        [Option.getOrElse(seed, () => ""), instance, interaction.response].join(keySeparator),
         interaction.choices.map((choice) => choice.fixed),
       ).flatMap((index) => interaction.choices[index]?.identifier ?? [])
     : interaction.choices.map((choice) => choice.identifier);
@@ -1044,11 +1077,66 @@ const unnamedPositions = (
 };
 
 /**
+ * The feature a printed variable's notice names: its element's name, as for any `qti-*` element
+ * the body shows as a notice.
+ */
+const printedNotice = "qti-printed-variable";
+
+/**
+ * The feature a template block's or inline's notice names: its element's name, as for a printed
+ * variable.
+ */
+const templateNotice: Readonly<Record<TemplateContent["kind"], string>> = {
+  "template-block": "qti-template-block",
+  "template-inline": "qti-template-inline",
+};
+
+/**
+ * The feature the notices name, once, when a choice is withheld: the attribute that gives a choice
+ * its template visibility, as `string-identifier` names a text interaction's mark. A withheld
+ * choice has no place of its own to show a notice in.
+ */
+const choiceNotice = "template-identifier";
+
+/**
+ * The feature a withheld `param`'s notice names: its element's name, as for a printed variable.
+ */
+const parameterNotice = "param";
+
+/**
+ * What a walk of {@link printBody} writes in place of a printed variable and of a `param-variable`
+ * parameter the values cover: `"text"` writes the text each prints or passes, through
+ * `formatPrinted`, as {@link redactItem} gives the page, at most `budget` characters of it in all;
+ * `"structure"` writes none, for the callers that read only which parts the page shows
+ * ({@link redactStructure}). Either decides every visibility, binding and notice the same way.
+ * Content the page does not see is walked as `"structure"` under either, so it formats nothing and
+ * spends none of the budget.
+ */
+type Writing = { readonly budget: number; readonly kind: "text" } | { readonly kind: "structure" };
+
+/**
+ * The walk that writes no text.
+ */
+const structureOnly: Writing = { kind: "structure" };
+
+/**
+ * The text of one printed variable or `param-variable` parameter, not yet formatted: given the most
+ * characters it may hold, `formatPrinted`'s text, none when it would pass that or {@link textBound}.
+ */
+type Printer = (bound: number) => Option.Option<string>;
+
+/**
  * Copy one body node into its payload node.
+ *
+ * A printed variable becomes its notice. {@link redactItem} leaves none in a redacted body, so the
+ * case is reached only by a body built by hand, which is given the notice the variable stands for.
+ * A template block or inline becomes its notice too ({@link templateNotice}): `redactItem` leaves
+ * none either, and the payload holds no template value to show a hand-built one's content by.
  *
  * @param node The body node.
  * @param build The build.
- * @returns The payload node: an unsupported part becomes its notice.
+ * @returns The payload node: an unsupported part, a printed variable, or a template block or
+ *   inline becomes its notice.
  */
 const copyNode = (node: BodyNode, build: Build): PayloadNode => {
   switch (node.kind) {
@@ -1065,6 +1153,13 @@ const copyNode = (node: BodyNode, build: Build): PayloadNode => {
     }
     case "unsupported": {
       return { feature: node.feature, kind: "notice" };
+    }
+    case "printed-variable": {
+      return { feature: printedNotice, kind: "notice" };
+    }
+    case "template-block":
+    case "template-inline": {
+      return { feature: templateNotice[node.kind], kind: "notice" };
     }
     case "choice": {
       return choicePayload(node, build);
@@ -1085,30 +1180,895 @@ const copyNode = (node: BodyNode, build: Build): PayloadNode => {
 };
 
 /**
+ * A redacted body, the features it shows as notices, and the responses only content the page does
+ * not see binds.
+ */
+interface RedactedBody {
+  readonly body: readonly BodyNode[];
+  /**
+   * The responses some interaction binds that no interaction of `body` binds, in the order the
+   * walk first meets them: {@link hiddenOnlyResponses}' set.
+   */
+  readonly hiddenOnly: ReadonlySet<string>;
+  readonly notices: readonly string[];
+  /**
+   * The first printed variable or `param-variable` parameter on content the page sees whose text
+   * passed its bound: {@link RedactedFields.unprinted}. Always none under `"structure"`.
+   */
+  readonly unprinted: RedactedFields["unprinted"];
+}
+
+/**
+ * One step of {@link printBody}'s walk that bears on the notices: a notice the walk puts in a
+ * withheld part's place on content the page sees (`made`), or the walk reaching the node a listed
+ * notice stands for (`reached`, the notice's index among the item's listed notices).
+ */
+type NoticeStep =
+  | { readonly feature: string; readonly kind: "made" }
+  | { readonly index: number; readonly kind: "reached" };
+
+/**
+ * Decide whether a path sits at or below one of the paths given: whether it equals one, or starts
+ * with one and a `/`. It looks up each of the path's own prefixes that ends before a `/`, so the
+ * cost follows the path's length, not the number of paths given.
+ *
+ * @param path The path.
+ * @param above The paths.
+ * @returns Whether `path` is one of `above` or lies inside one.
+ */
+const beneath = (path: string, above: ReadonlySet<string>): boolean => {
+  if (above.has(path)) {
+    return true;
+  }
+
+  for (let slash = path.indexOf("/"); slash !== -1; slash = path.indexOf("/", slash + 1)) {
+    if (above.has(path.slice(0, slash))) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
+/**
+ * Give the value a record holds for a variable: its template value, else its outcome value (an
+ * item's identifiers are unique across both), read from the record's own keys only.
+ *
+ * @param record The record.
+ * @param identifier The variable's identifier.
+ * @returns The value, or none when the record holds no value by that name.
+ */
+const heldValue = (record: RedactRecord, identifier: string): Option.Option<Value> =>
+  Option.orElse(own(record.templates, identifier), () => own(record.outcomes, identifier));
+
+/**
+ * Resolve a printed variable's `base` or `index`: a literal as written, or the integer the record
+ * holds for the variable it names.
+ *
+ * @param written The attribute's value.
+ * @param record The record.
+ * @returns Some integer; some none when the named variable is NULL or not a single integer, which
+ *   the validator refuses (`printed-variable-ref`) on a checked item, so the formatter's default
+ *   applies; none when the record holds no value by that name.
+ */
+const resolvedInteger = (
+  written: IntegerOrRef,
+  record: RedactRecord,
+): Option.Option<Option.Option<bigint>> =>
+  written._tag === "literal"
+    ? Option.some(Option.some(written.value))
+    : Option.map(heldValue(record, written.identifier), integerOf);
+
+/**
+ * Give a printed variable's attributes as the formatter takes them, its `base` and `index` read
+ * from the record where written as names.
+ *
+ * @param node The printed variable.
+ * @param record The record.
+ * @returns The options, or none when the record holds no value of a name `base` or `index` names.
+ */
+const printOptionsOf = (node: PrintedVariable, record: RedactRecord): Option.Option<PrintOptions> =>
+  Option.map(
+    Option.all([
+      resolvedInteger(node.base, record),
+      Option.match(node.index, {
+        onNone: () => Option.some(Option.none<bigint>()),
+        onSome: (index) => resolvedInteger(index, record),
+      }),
+    ]),
+    ([base, index]): PrintOptions => ({
+      ...Option.match(base, { onNone: () => ({}), onSome: (radix) => ({ base: radix }) }),
+      delimiter: node.delimiter,
+      ...Option.match(node.format, { onNone: () => ({}), onSome: (code) => ({ format: code }) }),
+      ...Option.match(index, { onNone: () => ({}), onSome: (member) => ({ index: member }) }),
+      mappingIndicator: node.mappingIndicator,
+      powerForm: node.powerForm,
+    }),
+  );
+
+/**
+ * Give the text a printed variable prints from a record, unformatted: `formatPrinted` over the
+ * value of the variable it names, through its attributes. The formatter runs only when the walk
+ * calls the printer, which it does only where it writes text.
+ *
+ * @param node The printed variable.
+ * @param record The record.
+ * @returns The printer, whose text is empty for NULL; or none when the record holds no value of
+ *   the variable, or of a name its `base` or `index` names.
+ */
+const printedText = (node: PrintedVariable, record: RedactRecord): Option.Option<Printer> =>
+  Option.flatMap(heldValue(record, node.identifier), (value) =>
+    Option.map(
+      printOptionsOf(node, record),
+      (options): Printer =>
+        (bound) =>
+          formatPrinted(value, options, bound),
+    ),
+  );
+
+/**
+ * Give the values a redaction prints from: the record given; or, with none, for an item whose
+ * template processing does not run, the values its first attempt starts with (H3): each template
+ * variable at its declared default, else NULL, and none where the item has a template processing
+ * the engine does not run; and each outcome at its starting value ({@link outcomeDefaults}). An
+ * item whose template processing runs has no such values without its record.
+ *
+ * @param item The item.
+ * @param record The record, if any.
+ * @returns The values, or none for an item whose template processing runs and no record.
+ */
+const printingOf = (item: Item, record?: RedactRecord): Option.Option<RedactRecord> => {
+  if (record !== undefined) {
+    return Option.some(record);
+  }
+
+  if (Option.isSome(item.templateProcessing)) {
+    return Option.none();
+  }
+
+  const templates: RedactRecord["templates"] = unrunTemplateProcessing(item)
+    ? {}
+    : Object.fromEntries(
+        Array.from(item.templates, ([identifier, declaration]) => [
+          identifier,
+          Option.getOrElse(declaration.defaultValue, () =>
+            nullOf(declaration.baseType, declaration.cardinality),
+          ),
+        ]),
+      );
+
+  return Option.some({ outcomes: outcomeDefaults(item), templates });
+};
+
+/**
+ * Decide whether a template value shows a choice, a template block or a template inline: `show`
+ * shows it when the template variable matches, or contains, its identifier, and `hide` shows it
+ * unless the variable does (the information model's TemplateBlock, `info.txt:44963`, and
+ * SimpleChoice's `template-identifier`, `info.txt:42441-42494`). A NULL value, a value of another
+ * base type, and a variable the values do not hold, match nothing.
+ *
+ * It is the one visibility function: `redactItem` shows the body by it, and a host's report of the
+ * choices shown reads the same answer.
+ *
+ * @example
+ *   // A choice with template-identifier="SHOWN" and show-hide="show", identifier A:
+ *   templateShows({ showHide: "show", templateIdentifier: "SHOWN" }, "A", record.templates);
+ *   // true when SHOWN holds A, or is a multiple value with A among its members
+ *
+ * @param visibility The part's `template-identifier` and `show-hide`.
+ * @param identifier The part's `identifier`.
+ * @param templates The template values, such as a record's `templates`.
+ * @returns Whether the part is shown.
+ */
+export const templateShows = (
+  visibility: TemplateVisibility,
+  identifier: string,
+  templates: RedactRecord["templates"],
+): boolean => {
+  const matches = Option.exists(own(templates, visibility.templateIdentifier), (value) =>
+    value.values.some((single) => single.baseType === "identifier" && single.value === identifier),
+  );
+
+  return visibility.showHide === "show" ? matches : !matches;
+};
+
+/**
+ * Decide what the page sees of a part with a template visibility: whether the values show it, or
+ * none when they cannot say, because there are no values or they hold no value of its template
+ * variable, so the part is withheld.
+ *
+ * @param printing The values the redaction reads, none when it has none.
+ * @param visibility The part's `template-identifier` and `show-hide`.
+ * @param identifier The part's `identifier`.
+ * @returns Some whether the part is shown, or none when it is withheld.
+ */
+const shownBy = (
+  printing: Option.Option<RedactRecord>,
+  visibility: TemplateVisibility,
+  identifier: string,
+): Option.Option<boolean> =>
+  printing.pipe(
+    Option.flatMap((record) =>
+      Option.map(own(record.templates, visibility.templateIdentifier), () =>
+        templateShows(visibility, identifier, record.templates),
+      ),
+    ),
+  );
+
+/**
+ * Give the template variable a body element stands in for as a parameter: the declaration a
+ * `param`'s `value` names, when it is declared `param-variable="true"` (the information model's
+ * Param `value`, `info.txt:69978`, and TemplateDeclaration's `param-variable`, `info.txt:45899`).
+ *
+ * @param item The item, whose template declarations the `value` is looked up among.
+ * @param node The body element.
+ * @returns The declaration; none for an element other than `param`, and for a `param` whose
+ *   `value` names no template variable or one not declared `param-variable`.
+ */
+const parameterOf = (item: Item, node: BodyElement): Option.Option<TemplateDeclaration> =>
+  node.tag === "param"
+    ? Arr.findFirst(node.attributes, (attribute) => attribute.name === "value").pipe(
+        Option.flatMap(({ value }) => Option.fromUndefinedOr(item.templates.get(value))),
+        Option.filter((declaration) => declaration.paramVariable),
+      )
+    : Option.none();
+
+/**
+ * Write a template value as the `value` a parameter passes, converted as the information model's
+ * Param `value` says (`info.txt:69978`): an integer by `%i` and a float by `%G`, both through
+ * `formatPrinted`; a boolean as `true` or `false`; a point as its two coordinates, horizontal
+ * first, and a pair or a directed pair as its two identifiers, each two separated by one space; an
+ * identifier, a string and a URI as they are. A `file` value cannot be expanded, and the value
+ * model holds none. The standard gives no form for a container or for NULL, so they take the
+ * printed variable's default (G-R2, pending): a container's members joined by `;`, and NULL as the
+ * empty string.
+ *
+ * @param value The template variable's value.
+ * @param bound The most characters the text may hold, as `formatPrinted` takes it.
+ * @returns The text the parameter passes, or none when it would pass `bound` or `formatPrinted`'s
+ *   bound ({@link textBound}), so it is not passed.
+ */
+const parameterText = (value: Value, bound: number): Option.Option<string> =>
+  formatPrinted(value, { format: value.baseType === "float" ? "%G" : "%i" }, bound);
+
+/**
+ * A `param-variable` parameter the values expand: the template variable it names, and the value
+ * the values hold for it, whose text ({@link parameterText}) the parameter passes.
+ */
+interface Expanded {
+  readonly identifier: string;
+  readonly value: Value;
+}
+
+/**
+ * Decide what the page sees of a body element's `value` as a parameter: the value the values hold
+ * for the `param-variable` template variable it names ({@link parameterOf}), whose text the walk
+ * writes ({@link parameterText}), or none when they cannot give it, because there are no values or
+ * they hold no value of that variable, so the `param` is withheld. It formats nothing: when the
+ * walk writes no text, a parameter the values expand keeps its `value` as written, the variable's
+ * name, and the formatter never runs.
+ *
+ * @param item The item.
+ * @param printing The values the redaction reads, none when it has none.
+ * @param node The body element.
+ * @returns None for an element that stands in for no template variable, which is copied as written;
+ *   some {@link Expanded} for a parameter the values expand; some none for one they withhold.
+ */
+const expandedParameter = (
+  item: Item,
+  printing: Option.Option<RedactRecord>,
+  node: BodyElement,
+): Option.Option<Option.Option<Expanded>> =>
+  Option.map(parameterOf(item, node), (declaration) =>
+    printing.pipe(
+      Option.flatMap((record) => own(record.templates, declaration.identifier)),
+      Option.map((value): Expanded => ({ identifier: declaration.identifier, value })),
+    ),
+  );
+
+/**
+ * Show an item's body from the values given, and list the features it shows as notices: the
+ * item's notice-shown features in their order, with each notice the walk puts in a withheld part's
+ * place where the item would list it were the notice one of its unsupported features.
+ *
+ * A printed variable whose value, and whose `base`'s and `index`'s where they name variables, the
+ * values hold becomes a text node of what it prints, or nothing when that is empty (a NULL value).
+ * One the values do not cover, and every one when there are no values, is withheld behind its
+ * notice, `qti-printed-variable` at the variable's path.
+ *
+ * A template block or inline the values show ({@link templateShows}) leaves its content in its
+ * place, and one they hide leaves nothing. One whose template variable the values do not hold, and
+ * every one when there are no values, is withheld behind its notice, `qti-template-block` or
+ * `qti-template-inline` at its path. A choice the values show keeps its identifier, its content
+ * and `fixed`, and no template visibility; one they hide is absent from its interaction. One whose
+ * template variable they do not hold, and every choice with a template visibility when there are
+ * no values, is absent too, and the notices name `template-identifier` once for them all, where the
+ * walk meets the first.
+ *
+ * A `param` whose `value` names a `param-variable` template variable the values hold passes that
+ * value, written as {@link parameterText} writes it, in place of the name; its other attributes
+ * stay as written. One whose variable the values do not hold, and every one when there are no
+ * values, is withheld behind its notice, `param` at its path. A `param` naming anything else keeps
+ * its `value` as written.
+ *
+ * The item lists its notices in the order of the elements they sit at: in document order once
+ * `check` has accepted it, and in the order the model read the body when the item was built by
+ * hand. Whether a listed notice is named follows from where it sits, never from when the walk meets
+ * it: one whose path is at or below the path of content the page does not see (a template block or
+ * inline the values hide or withhold, or a `param` withheld behind its notice), or that stands for
+ * a node inside such content or inside a choice the values hide or leave out, is never named, since
+ * the page shows none of it; every other is named once. A path is at or below another when it
+ * equals it or starts with it and a `/`.
+ *
+ * The walk goes through the body, content the page does not see included, and reaches each listed
+ * notice at the node it stands for: a notice node by its feature and path, and an element or an
+ * interaction, on entering it, the notices listed at its own path that no node it holds stands for,
+ * as `check` lists them (the notices of URLs dropped from it, and an Extended Text's notice in
+ * place of its Controls). The named notices keep the item's order: reaching a notice names it after
+ * every listed notice before it that the walk reaches later, so where the walk meets a part before
+ * one the item lists first, as it meets a Choice's prompt written after its choices, both are named
+ * in the item's order. A notice the walk puts in a part's place goes down where the walk stands. A
+ * listed notice no node stands for is named after the rest, in the item's order.
+ *
+ * The same walk tells which responses only content the page does not see binds. A rendered
+ * interaction binds its response on content the page sees or on content it does not; a template
+ * block or inline whose content the page does not see (hidden, withheld, or inside content it does
+ * not see) binds, on content it does not see, every response its source content binds, a notice's
+ * interaction included ({@link TemplateContent.responses}). A response bound on content the page
+ * does not see and by no interaction it sees is hidden-only. A notice's interaction on content the
+ * page sees binds nothing here, so a response only such notices bind, like one no interaction
+ * binds, is never hidden-only.
+ *
+ * Under `"text"`, a printed variable or a `param-variable` parameter on content the page sees whose
+ * text passed `formatPrinted`'s bound ({@link textBound}) leaves its slot empty, as NULL's does:
+ * the printed variable writes nothing and the parameter passes the empty value. The walk records
+ * the first such one it meets, a printed variable by its identifier and a parameter by its template
+ * variable's, with the bound and its path, so `render` fails rather than show the blank. Content
+ * the page does not see is walked as under `"structure"`, so it formats nothing and records
+ * nothing.
+ *
+ * Under `"text"` the walk also counts, in walk order, the characters each printed variable and
+ * `param-variable` parameter on content the page sees writes, against the budget, and gives the
+ * formatter what remains as its bound, so it stops building a text as soon as it would pass it.
+ * The first text that would pass what remains, when less than {@link textBound} remains, leaves
+ * its slot empty and is recorded as above with the budget as its bound; from there the walk
+ * formats nothing more and records nothing more, every later printed variable writing nothing and
+ * every later parameter passing the empty value. A text past {@link textBound} with at least that
+ * much budget left is recorded with {@link textBound}, spends nothing, and the walk goes on. So the
+ * walk builds at most the budget's characters of printed text, and one member more.
+ *
+ * Under `"structure"` the walk writes no text: a printed variable the values cover leaves nothing
+ * in its place, and a `param-variable` parameter they expand keeps its `value` as written. Every
+ * other decision, the notices, the hidden-only responses and every interaction and choice shown, is
+ * the same as under `"text"`, since none of them reads a printed text.
+ *
+ * @param item The item.
+ * @param printing The values the body is shown by, none to withhold every printed variable, every
+ *   template block and inline, every choice with a template visibility and every `param-variable`
+ *   parameter.
+ * @param writing Whether the walk writes each printed variable's and parameter's text (`"text"`),
+ *   within its budget, or none (`"structure"`).
+ * @returns The body, every printed variable its text (nothing under `"structure"`) or its notice,
+ *   every template block and inline its content, nothing or its notice, and every `param-variable`
+ *   parameter its value (as written under `"structure"`) or its notice; the features shown as
+ *   notices; the responses only content the page does not see binds; and the first text on content
+ *   the page sees that passed its bound, none under `"structure"`.
+ */
+const printBody = (
+  item: Item,
+  printing: Option.Option<RedactRecord>,
+  writing: Writing,
+): RedactedBody => {
+  const listed = item.unsupported.filter((entry) => entry.shown === "notice");
+  const listedAt = new Map<string, number[]>();
+  for (const [index, entry] of listed.entries()) {
+    const indices = listedAt.get(entry.path);
+    if (indices === undefined) {
+      listedAt.set(entry.path, [index]);
+    } else {
+      indices.push(index);
+    }
+  }
+
+  // Whether the page sees where each reached listed notice sits, by its index; the paths of the
+  // content it does not see; the walk's steps, in order; and whether the one notice for withheld
+  // choices is down.
+  const seenAt = new Map<number, boolean>();
+  const unseen = new Set<string>();
+  const steps: NoticeStep[] = [];
+  let choiceWithheld = false;
+  // The responses an interaction the page sees binds, and those content it does not see binds.
+  const shownBound = new Set<string>();
+  const unseenBound = new Set<string>();
+  // The first printed variable or parameter on content the page sees whose text passed its bound;
+  // the characters of text the walk has printed there; and whether a text passed what remained of
+  // the budget, after which the walk prints nothing more.
+  let unprinted: RedactedFields["unprinted"] = Option.none();
+  let spent = 0;
+  let exhausted = false;
+
+  /**
+   * Give the text a printed variable or a parameter writes, formatted within what remains of the
+   * budget and spent from it, or the empty text when it passed its bound, recording the first that
+   * did: with the budget as the bound when less than {@link textBound} remained, which ends the
+   * printing, and with {@link textBound} otherwise. The walk asks for text only on content the page
+   * sees, so nothing is formatted, spent or recorded for content it does not see; under
+   * `"structure"`, and once the budget is spent, it gives the empty text without formatting.
+   *
+   * @param print The printer of the text.
+   * @param identifier The printed variable's identifier, or the parameter's template variable's.
+   * @param path The printed variable's or the `param`'s path.
+   * @returns The text, or the empty text past its bound.
+   */
+  const written = (print: Printer, identifier: string, path: string): string => {
+    if (writing.kind === "structure" || exhausted) {
+      return "";
+    }
+
+    const remaining = writing.budget - spent;
+    const text = print(remaining);
+    if (Option.isSome(text)) {
+      spent += text.value.length;
+
+      return text.value;
+    }
+
+    exhausted = remaining < textBound;
+    if (Option.isNone(unprinted)) {
+      unprinted = Option.some({ bound: exhausted ? writing.budget : textBound, identifier, path });
+    }
+
+    return "";
+  };
+
+  /**
+   * Record responses as bound on content the page sees, or on content it does not.
+   *
+   * @param responses The responses.
+   * @param seen Whether the page sees the content that binds them.
+   */
+  const bind = (responses: readonly string[], seen: boolean): void => {
+    for (const response of responses) {
+      (seen ? shownBound : unseenBound).add(response);
+    }
+  };
+
+  /**
+   * Put down a notice the walk makes in a withheld part's place, where the walk stands, when the
+   * page sees that place.
+   *
+   * @param feature The notice's feature.
+   * @param seen Whether the page sees the withheld part's place.
+   */
+  const note = (feature: string, seen: boolean): void => {
+    if (seen) {
+      steps.push({ feature, kind: "made" });
+    }
+  };
+
+  /**
+   * Reach each listed notice at a node's path that the node stands for and the walk has not yet
+   * reached, recording whether the page sees where it sits.
+   *
+   * @param path The node's path.
+   * @param standsFor Whether the node stands for a listed notice at its path.
+   * @param seen Whether the page sees the node.
+   */
+  const reach = (
+    path: string,
+    standsFor: (entry: UnsupportedFeature) => boolean,
+    seen: boolean,
+  ): void => {
+    for (const index of listedAt.get(path) ?? []) {
+      const entry = listed[index];
+      if (entry !== undefined && !seenAt.has(index) && standsFor(entry)) {
+        seenAt.set(index, seen);
+        steps.push({ index, kind: "reached" });
+      }
+    }
+  };
+
+  /**
+   * Show body nodes from the values, walking content the page does not see as well, so its notices
+   * are reached and its responses bound.
+   *
+   * @param nodes The body nodes.
+   * @param seen Whether the page sees them.
+   * @returns The nodes the page is given in their place.
+   */
+  const nodesOf = (nodes: readonly BodyNode[], seen: boolean): readonly BodyNode[] =>
+    nodes.flatMap((node): readonly BodyNode[] => {
+      switch (node.kind) {
+        case "element": {
+          const parameter = expandedParameter(item, printing, node);
+          const withheld = Option.exists(parameter, Option.isNone);
+          const held = new Set(
+            node.children.flatMap((child) =>
+              child.kind === "unsupported" && child.path === node.path ? [child.feature] : [],
+            ),
+          );
+          if (withheld) {
+            unseen.add(node.path);
+          }
+
+          reach(node.path, (entry) => !held.has(entry.feature), seen && !withheld);
+
+          const children = nodesOf(node.children, seen && !withheld);
+          if (withheld) {
+            note(parameterNotice, seen);
+
+            return [{ feature: parameterNotice, kind: "unsupported", path: node.path }];
+          }
+
+          const attributes = Option.match(Option.flatten(parameter), {
+            onNone: () => node.attributes,
+            onSome: (expanded) => {
+              const value =
+                seen && writing.kind === "text"
+                  ? written(
+                      (bound) => parameterText(expanded.value, bound),
+                      expanded.identifier,
+                      node.path,
+                    )
+                  : expanded.identifier;
+
+              return node.attributes.map((attribute) =>
+                attribute.name === "value" ? { name: attribute.name, value } : attribute,
+              );
+            },
+          });
+
+          return [{ ...node, attributes, children }];
+        }
+        case "unsupported": {
+          reach(node.path, (entry) => entry.feature === node.feature, seen);
+
+          return [node];
+        }
+        case "printed-variable": {
+          return Option.match(
+            printing.pipe(Option.flatMap((record) => printedText(node, record))),
+            {
+              onNone: (): readonly BodyNode[] => {
+                note(printedNotice, seen);
+
+                return [{ feature: printedNotice, kind: "unsupported", path: node.path }];
+              },
+              onSome: (print): readonly BodyNode[] => {
+                const printed = seen ? written(print, node.identifier, node.path) : "";
+
+                return printed === "" ? [] : [{ kind: "text", text: printed }];
+              },
+            },
+          );
+        }
+        case "template-block":
+        case "template-inline": {
+          return Option.match(shownBy(printing, node.templateVisibility, node.identifier), {
+            onNone: (): readonly BodyNode[] => {
+              const feature = templateNotice[node.kind];
+              note(feature, seen);
+              unseen.add(node.path);
+              bind(node.responses, false);
+              nodesOf(node.content, false);
+
+              return [{ feature, kind: "unsupported", path: node.path }];
+            },
+            onSome: (visible) => {
+              if (!visible) {
+                unseen.add(node.path);
+              }
+
+              if (!(seen && visible)) {
+                bind(node.responses, false);
+              }
+
+              const content = nodesOf(node.content, seen && visible);
+
+              return visible ? content : [];
+            },
+          });
+        }
+        case "choice": {
+          reach(node.path, () => true, seen);
+          bind([node.response], seen);
+
+          const prompt = node.prompt.pipe(Option.map((lead) => nodesOf(lead, seen)));
+          // oxlint-disable-next-line eslint/no-use-before-define -- `nodesOf` and `choicesOf` are mutually recursive, as a choice's content holds body nodes; the call runs only after both are defined.
+          const choices = choicesOf(node.choices, seen);
+
+          return [{ ...node, choices, prompt }];
+        }
+        case "extended-text": {
+          reach(node.path, () => true, seen);
+          bind([node.response], seen);
+
+          return [{ ...node, prompt: node.prompt.pipe(Option.map((lead) => nodesOf(lead, seen))) }];
+        }
+        case "inline-choice": {
+          reach(node.path, () => true, seen);
+          bind([node.response], seen);
+
+          const label = node.label.pipe(Option.map((lead) => nodesOf(lead, seen)));
+          // oxlint-disable-next-line eslint/no-use-before-define -- `nodesOf` and `choicesOf` are mutually recursive, as a choice's content holds body nodes; the call runs only after both are defined.
+          const choices = choicesOf(node.choices, seen);
+
+          return [{ ...node, choices, label }];
+        }
+        case "text-entry": {
+          bind([node.response], seen);
+
+          return [node];
+        }
+        case "text": {
+          return [node];
+        }
+        default: {
+          return node satisfies never;
+        }
+      }
+    });
+
+  /**
+   * Show a Choice's or an Inline Choice's choices from the values: each one they show, with no
+   * template visibility, and none they hide or withhold. The first choice withheld where the page
+   * sees its interaction puts down the one `template-identifier` notice.
+   *
+   * @param choices The choices.
+   * @param seen Whether the page sees their interaction.
+   * @returns The choices the page is given.
+   */
+  const choicesOf = (choices: readonly SimpleChoice[], seen: boolean): readonly SimpleChoice[] =>
+    choices.flatMap((choice): readonly SimpleChoice[] => {
+      const decided = Option.match(choice.templateVisibility, {
+        onNone: () => Option.some(true),
+        onSome: (visibility) => shownBy(printing, visibility, choice.identifier),
+      });
+      if (Option.isNone(decided) && seen && !choiceWithheld) {
+        choiceWithheld = true;
+        note(choiceNotice, true);
+      }
+
+      const visible = Option.getOrElse(decided, () => false);
+      const content = nodesOf(choice.content, seen && visible);
+
+      return visible
+        ? [
+            {
+              content,
+              fixed: choice.fixed,
+              identifier: choice.identifier,
+              templateVisibility: Option.none(),
+            },
+          ]
+        : [];
+    });
+  const body = nodesOf(item.body, true);
+
+  /**
+   * Decide whether a listed notice is named: it was not reached where the page does not see it,
+   * and it does not sit at or below content the page does not see ({@link beneath}).
+   *
+   * @param index The notice's index among the listed notices.
+   * @param entry The notice.
+   * @returns Whether `notices` names it.
+   */
+  const named = (index: number, entry: UnsupportedFeature): boolean =>
+    seenAt.get(index) !== false && !beneath(entry.path, unseen);
+  const notices: string[] = [];
+  let next = 0;
+  for (const step of steps) {
+    if (step.kind === "made") {
+      notices.push(step.feature);
+    } else {
+      // Name, in the item's order, every reached notice up to this one not yet named.
+      while (next <= step.index) {
+        const entry = listed[next];
+        if (entry !== undefined && seenAt.has(next) && named(next, entry)) {
+          notices.push(entry.feature);
+        }
+
+        next += 1;
+      }
+    }
+  }
+
+  for (const [index, entry] of listed.entries()) {
+    if (!seenAt.has(index) && named(index, entry)) {
+      notices.push(entry.feature);
+    }
+  }
+
+  const hiddenOnly = new Set([...unseenBound].filter((response) => !shownBound.has(response)));
+
+  return { body, hiddenOnly, notices, unprinted };
+};
+
+/**
+ * Give the response bindings a redaction lists: each response the item declares, in document
+ * order, but the hidden-only ones.
+ *
+ * @param item The item.
+ * @param hiddenOnly The responses only content the page does not see binds.
+ * @returns The bindings.
+ */
+const bindingsShown = (item: Item, hiddenOnly: ReadonlySet<string>): readonly ResponseBinding[] =>
+  [...item.responses.values()].flatMap(
+    ({ baseType, cardinality, identifier }): readonly ResponseBinding[] =>
+      hiddenOnly.has(identifier) ? [] : [{ baseType, cardinality, identifier }],
+  );
+
+/**
  * Copy the parts of an item the page may know: the allowlist, and the only way to make a
  * {@link Redacted} from an item.
  *
- * It copies, each by name, the document location, the identifier, the title, `lang`, the body,
- * each response's binding and the features shown as notices. It copies no outcome declaration,
- * correct response, mapping, response default or processing rule, and no field it does not name.
+ * It copies, each by name, the document location, the identifier, the title, `lang`, the body, each
+ * response's binding but the ones {@link hiddenOnlyResponses} gives, the features shown as notices,
+ * and the first text past its bound (`unprinted`). Each printed variable of the body is copied as
+ * the text it prints: the value the record holds for the variable it names, its template value else
+ * its outcome value, written by `formatPrinted` (`#plate/engine/format.ts`) through its `format`,
+ * `base`, `index`, `power-form` and `delimiter`, a `base` or `index` written as a name read from
+ * the record too. A NULL value prints nothing. A printed variable whose value, or whose named
+ * `base`'s or `index`'s, the record does not hold stays its notice, `qti-printed-variable`, which
+ * `notices` names in document order among the item's notice-shown features.
+ *
+ * Each template block and inline, and each choice with a `template-identifier`, is shown or hidden
+ * by the template value the record holds ({@link templateShows}): a block or inline shown leaves
+ * its content in its place, a hidden one nothing; a choice shown keeps its identifier, content and
+ * `fixed`, a hidden one is absent from its interaction, so a shuffled interaction presents the
+ * choices that remain under the same key, and its postings name none of it. One whose template
+ * variable the record does not hold is withheld: a block or inline stays its notice,
+ * `qti-template-block` or `qti-template-inline`, and a choice is absent, `notices` naming
+ * `template-identifier` once for all such choices. Content the page does not see adds no notice:
+ * a notice listed at or below the path of a block or inline hidden or withheld, or inside a choice
+ * hidden or absent, is never named, whatever order the item lists it in, and every other is named
+ * once, in the item's order. Nor does it list a response only such content binds: `responses`
+ * keeps, in document order, every response but those, so a response one interaction binds in a
+ * hidden block and another the page sees binds stays, and so does one only a notice on content the
+ * page sees binds, or no interaction binds.
+ *
+ * Each `param` whose `value` names a template variable declared `param-variable="true"` passes the
+ * value the record holds for it in place of the name, converted as the information model's Param
+ * `value` says: an integer by `%i` and a float by `%G` through `formatPrinted`, a boolean as `true`
+ * or `false`, a point as its coordinates and a pair or a directed pair as its identifiers, each
+ * two separated by one space. One whose variable the record does not hold stays its notice,
+ * `param`, which `notices` names in document order. Any other `param` keeps its `value` as written.
+ *
+ * A printed variable, or a `param-variable` parameter, on content the page sees whose text would
+ * pass `formatPrinted`'s bound of 1,000,000 characters (a conversion wider than that, or a whole
+ * text longer) prints nothing, and `unprinted` names the first the walk meets: the bound, the
+ * printed variable's identifier (a parameter's template variable's) and its path. `render` fails
+ * `OutputTooLarge` on such an item rather than show the slot blank. Content the page does not see
+ * formats nothing and is never named there. `unprinted` is none when every text fits.
+ *
+ * The printed text is held to an output budget: `limits.outputBudget`, else the configuration's
+ * default, 16,777,216 characters, counted as a string's `length` counts them. It counts the text
+ * each printed variable and `param-variable` parameter on content the page sees writes, in
+ * document order, and stops printing at the first whose text would pass what remains: that one and
+ * every one after it print nothing, and `unprinted` names it with the budget as its bound, so
+ * `render` fails `OutputTooLarge` rather than show the page with its slots blank. So a redaction
+ * never builds more printed text than the budget, and one member more, however much the item
+ * would print. Pass the configuration `render` takes, which `configure` holds between 1 and
+ * 536,870,888; the number is used as given.
+ *
+ * With no record, an item whose template processing does not run reads as the record its first
+ * attempt starts with: each template variable at its declared default, else NULL (none where the
+ * item has a `qti-template-processing` the engine does not run, since nothing computed them), and
+ * each outcome at its starting value. An item whose template processing runs has no values
+ * without its record, so each of its printed variables, template blocks, template inlines and
+ * `param-variable` parameters stays its notice and each of its choices with a template visibility
+ * is absent (H3).
+ *
+ * It never copies an outcome declaration, a correct response, a mapping, a response default, a
+ * processing rule, a template rule, a template value or an outcome value it does not print or pass
+ * to a parameter, a block's, inline's or choice's template visibility, the seed or an override
+ * template processing set (the record's part it reads holds neither), or a field it does not name.
  *
  * @param item The item.
+ * @param record The template values and outcome values of the attempt shown, which its printed
+ *   variables print, its `param-variable` parameters pass, and which show or hide its template
+ *   blocks, inlines and choices; none to show the item as it reads with no record.
+ * @param limits The output budget its printed text is held to, such as the configuration `render`
+ *   takes; none for the configuration's default, 16,777,216.
  * @returns The redacted item.
  */
-export const redactItem = (item: Item): Redacted =>
-  brandRedacted({
-    body: item.body,
+export const redactItem = (
+  item: Item,
+  record?: RedactRecord,
+  limits?: Pick<Configuration, "outputBudget">,
+): Redacted => {
+  const { body, hiddenOnly, notices, unprinted } = printBody(item, printingOf(item, record), {
+    budget: limits?.outputBudget ?? defaultOutputBudget,
+    kind: "text",
+  });
+
+  return brandRedacted({
+    body,
     document: item.document,
     identifier: item.identifier,
     lang: item.lang,
-    notices: item.unsupported.flatMap((entry) => (entry.shown === "notice" ? [entry.feature] : [])),
-    responses: Array.from(item.responses.values(), ({ baseType, cardinality, identifier }) => ({
-      baseType,
-      cardinality,
-      identifier,
-    })),
+    notices,
+    responses: bindingsShown(item, hiddenOnly),
     title: item.title,
+    unprinted,
   });
+};
+
+/**
+ * What the page is shown of an item's structure under a record: what {@link redactItem} decides,
+ * with no printed text. Plate's own, for the callers that read only which interactions, choices
+ * and responses the page shows; `src/index.ts` does not export it, and it is no {@link Redacted},
+ * so `payload` and `render` never take one.
+ */
+export interface RedactedStructure {
+  /**
+   * The body as `redactItem` gives it, but that a printed variable the record covers leaves
+   * nothing in its place and a `param-variable` parameter it expands keeps its `value` as written.
+   */
+  readonly body: readonly BodyNode[];
+  /**
+   * The responses only content the page does not see binds: {@link hiddenOnlyResponses}' set.
+   */
+  readonly hiddenOnly: ReadonlySet<string>;
+  /**
+   * The features the body shows as notices, as `redactItem` lists them.
+   */
+  readonly notices: readonly string[];
+  /**
+   * The response bindings, as `redactItem` lists them.
+   */
+  readonly responses: readonly ResponseBinding[];
+}
+
+/**
+ * Decide what the page is shown of an item under a record without printing it: the walk
+ * {@link redactItem} makes, with every visibility, binding and notice decided as it decides them,
+ * that formats no printed variable and no `param-variable` parameter's value. So the interactions
+ * and choices of its body, its responses, its notices and its hidden-only responses are
+ * `redactItem`'s, and its cost does not follow the length of what the item prints.
+ *
+ * It is for plate's own callers that read only what the page shows, such as `checkResponses`,
+ * `results` and a session's skip rule; `src/index.ts` does not export it.
+ *
+ * @example
+ *   interactionsIn(redactStructure(item, record).body);
+ *   // the interactions redactItem(item, record).body holds, each with the same choices
+ *
+ * @param item The item.
+ * @param record The template values and outcome values of the attempt shown, as `redactItem` takes
+ *   them; none to read the item as it reads with no record.
+ * @returns The item's structure as the page is shown it, with no printed text.
+ */
+export const redactStructure = (item: Item, record?: RedactRecord): RedactedStructure => {
+  const { body, hiddenOnly, notices } = printBody(item, printingOf(item, record), structureOnly);
+
+  return { body, hiddenOnly, notices, responses: bindingsShown(item, hiddenOnly) };
+};
+
+/**
+ * Give the responses only content the page does not see binds: those some interaction binds, a
+ * rendered interaction anywhere in the body or any interaction, rendered or a notice, inside a
+ * template block or inline the record hides or withholds (or one inside content the page does not
+ * see), and that no interaction of `redactItem(item, record).body` binds. {@link redactItem} lists
+ * none of them in `responses`.
+ *
+ * A response bound only to a notice on content the page sees, or bound by no interaction, is not
+ * among them, so a caller that passes such a response through keeps doing so (D8-3). The set comes
+ * from the same walk `redactItem` makes, so the two never disagree, made as
+ * {@link redactStructure} makes it: it formats no printed variable and no parameter's value.
+ *
+ * @example
+ *   // A block shown when T holds A binds SHOWN; a block shown when T holds B binds HIDDEN.
+ *   hiddenOnlyResponses(item, { outcomes: {}, templates: { T: identifierA } });
+ *   // Set { "HIDDEN" }
+ *
+ * @param item The item.
+ * @param record The template values and outcome values of the attempt shown, as `redactItem` takes
+ *   them; none to read the item as it reads with no record.
+ * @returns The responses, in the order the walk first meets them.
+ */
+export const hiddenOnlyResponses = (item: Item, record?: RedactRecord): ReadonlySet<string> =>
+  printBody(item, printingOf(item, record), structureOnly).hiddenOnly;
 
 /**
  * How one response travels through a host's form: its identifier, its binding, and the options
@@ -1154,6 +2114,47 @@ const baseOf = (interaction: Interaction): Option.Option<number> => {
 };
 
 /**
+ * Give the postings of a body and its response bindings in one instance, as {@link postings} gives
+ * a redacted item's: plate's own, so a caller that holds a {@link RedactedStructure} learns which
+ * responses a page posts without printing the item. `src/index.ts` does not export it.
+ *
+ * @param redaction The body and the response bindings, of a `Redacted` or a `RedactedStructure`.
+ * @param instance The instance token the render used.
+ * @returns The postings, as `postings` gives them.
+ */
+export const postingsIn = (
+  redaction: Pick<RedactedFields, "body" | "responses">,
+  instance: string,
+): readonly Posting[] => {
+  const byResponse = new Map<string, Interaction[]>();
+  for (const interaction of interactionsIn(redaction.body)) {
+    const others = byResponse.get(interaction.response);
+    if (others === undefined) {
+      byResponse.set(interaction.response, [interaction]);
+    } else {
+      others.push(interaction);
+    }
+  }
+
+  return redaction.responses.flatMap(
+    ({ baseType, cardinality, identifier }): readonly Posting[] => {
+      const bound = byResponse.get(identifier) ?? [];
+      if (!isPosted(baseType) || bound.length === 0) {
+        return [];
+      }
+
+      return [
+        {
+          binding: { baseType, cardinality, name: entryName(instance, identifier) },
+          identifier,
+          options: { base: Option.getOrElse(Arr.findFirst(bound, baseOf), () => 10) },
+        },
+      ];
+    },
+  );
+};
+
+/**
  * Give the postings of a redacted item in one instance: one for each response of a posted base
  * type that an interaction in the body binds, in the order of the item's `responses`, so a host
  * decodes each from its form with the base its interaction declares instead of assuming base 10.
@@ -1177,32 +2178,8 @@ const baseOf = (interaction: Interaction): Option.Option<number> => {
  * @returns The postings: a response no interaction binds, or of a base type no phase-1
  *   interaction posts, has none.
  */
-export const postings = (redacted: Redacted, instance: string): readonly Posting[] => {
-  const byResponse = new Map<string, Interaction[]>();
-  for (const interaction of interactionsIn(redacted.body)) {
-    const others = byResponse.get(interaction.response);
-    if (others === undefined) {
-      byResponse.set(interaction.response, [interaction]);
-    } else {
-      others.push(interaction);
-    }
-  }
-
-  return redacted.responses.flatMap(({ baseType, cardinality, identifier }): readonly Posting[] => {
-    const bound = byResponse.get(identifier) ?? [];
-    if (!isPosted(baseType) || bound.length === 0) {
-      return [];
-    }
-
-    return [
-      {
-        binding: { baseType, cardinality, name: entryName(instance, identifier) },
-        identifier,
-        options: { base: Option.getOrElse(Arr.findFirst(bound, baseOf), () => 10) },
-      },
-    ];
-  });
-};
+export const postings = (redacted: Redacted, instance: string): readonly Posting[] =>
+  postingsIn(redacted, instance);
 
 /**
  * Compute the payload of one render: the allowlist of what the emitter may know about a redacted
