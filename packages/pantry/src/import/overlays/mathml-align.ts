@@ -42,7 +42,7 @@
  */
 import type { Addition } from "@bjornpagen/grizzle";
 import { foldAt, foldOf, ownContext } from "#pantry/import/fold.ts";
-import type { Folded } from "#pantry/import/fold.ts";
+import type { Folds } from "#pantry/import/fold.ts";
 import { nonElements, writtenOf } from "#pantry/import/overlays/mathml-tree.ts";
 import { collapse } from "#pantry/grammar/domains.ts";
 import type { NodeIds } from "#pantry/import/write.ts";
@@ -236,7 +236,7 @@ interface Reading {
    * Each node's fold (`#pantry/import/fold.ts`): its nearest interaction (N8), its element rank
    * among its parent's element children, from 1, and its element children's count.
    */
-  readonly folds: ReadonlyMap<NodeId, Folded>;
+  readonly folds: Folds;
   /**
    * The direction each element holds, the document node's `ltr` above them.
    */
