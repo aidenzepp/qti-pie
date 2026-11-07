@@ -3,7 +3,13 @@
  * tree and the ids its nodes are written under, one `CardSupport` row per `qti-card`'s `support`,
  * one `DefaultEntry` row per `qti-card-entry` whose `default` designates it, one `CatalogRef` row
  * per `data-catalog-idref` that holds a token and one `CatalogId` row per `qti-catalog` that
- * writes an `id`, each keyed by its node.
+ * writes an `id`, each keyed by its node, and one `CatalogTarget` row per distinct token of the
+ * document's references, keyed by its document and token.
+ *
+ * A document in an assembly resolves its references once per instance (spec reading 117), which
+ * {@link placedCatalogRowsOf} writes over the whole package: a `PlacedCatalogRef` for each token of
+ * each instance's document, and an `AssembledCatalog` for each binding of an assembly's ID table
+ * that a catalog owns.
  *
  * The rows restate what the tree says and nothing else: each card overlay's node tuple (C18), its
  * parent, and every attribute as written and that form collapsed. The database proves every one
@@ -19,7 +25,17 @@ import { collapse } from "#pantry/import/overlays/metadata.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
-import type { CardSupport, CatalogId, CatalogRef, DefaultEntry } from "#pantry/qti/catalog.ts";
+import type { InstanceMember, InstanceRoot } from "#pantry/import/overlays/tests.ts";
+import type {
+  AssembledCatalog,
+  CardSupport,
+  CatalogId,
+  CatalogRef,
+  CatalogTarget,
+  DefaultEntry,
+  PlacedCatalogRef,
+} from "#pantry/qti/catalog.ts";
+import type { AssembledId } from "#pantry/qti/identity.ts";
 
 /**
  * The ids a document's rows are written under: each of its tree's nodes', drawn by the number
@@ -29,6 +45,11 @@ import type { CardSupport, CatalogId, CatalogRef, DefaultEntry } from "#pantry/q
  * the tree's rows name each node by one id.
  */
 export interface CatalogIds {
+  /**
+   * Whether the document is in an assembly (`Document.assembled`), so its references resolve per
+   * instance (spec reading 117); none read as no.
+   */
+  readonly assembled?: boolean;
   readonly context?: DocumentContext;
   readonly idOf: (index: number) => NodeId;
 }
@@ -41,8 +62,26 @@ export interface CatalogRows {
   readonly CardSupport: ReadonlyMap<string, Addition<typeof CardSupport>>;
   readonly CatalogId: ReadonlyMap<string, Addition<typeof CatalogId>>;
   readonly CatalogRef: ReadonlyMap<string, Addition<typeof CatalogRef>>;
+  readonly CatalogTarget: ReadonlyMap<string, Addition<typeof CatalogTarget>>;
   readonly DefaultEntry: ReadonlyMap<string, Addition<typeof DefaultEntry>>;
 }
+
+/**
+ * A package's catalog tokens placed under each instance of each assembly, and the catalogs'
+ * bindings of each assembly's ID table (spec reading 117), one keyed set per relation.
+ */
+export interface PlacedCatalogRows {
+  readonly AssembledCatalog: ReadonlyMap<string, Addition<typeof AssembledCatalog>>;
+  readonly PlacedCatalogRef: ReadonlyMap<string, Addition<typeof PlacedCatalogRef>>;
+}
+
+/**
+ * The text of a row's key: its fields, in key order, as one string.
+ *
+ * @param values - The key's values.
+ * @returns The key's text.
+ */
+const headingKey = (values: readonly string[]): string => JSON.stringify(values);
 
 /**
  * The attribute the catalog reference law reads.
@@ -113,6 +152,8 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: CatalogIds): CatalogRows
   const defaults = new Map<string, Addition<typeof DefaultEntry>>();
   const references = new Map<string, Addition<typeof CatalogRef>>();
   const catalogIds = new Map<string, Addition<typeof CatalogId>>();
+  const assembled = ids.assembled ?? false;
+  const targets = new Map<string, Addition<typeof CatalogTarget>>();
 
   for (const { lexical, name, node: id } of rows.attributes) {
     const node = byId.get(id);
@@ -124,6 +165,7 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: CatalogIds): CatalogRows
     if (name === referenceName) {
       if (holdsReference(node, lexical)) {
         references.set(id, { document, lexical, node: id, token: value });
+        targets.set(headingKey([document, value]), { assembled, document, id: value });
       }
 
       continue;
@@ -161,6 +203,72 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: CatalogIds): CatalogRows
     CardSupport: supports,
     CatalogId: catalogIds,
     CatalogRef: references,
+    CatalogTarget: targets,
     DefaultEntry: defaults,
   };
+};
+
+/**
+ * Collect every instance of an assembly's tree, its root's own included.
+ *
+ * @param root - The assembly's root instance.
+ * @returns Each instance.
+ */
+const instancesOf = (root: InstanceRoot): readonly (InstanceMember | InstanceRoot)[] => {
+  const found: (InstanceMember | InstanceRoot)[] = [];
+  const stack: (InstanceMember | InstanceRoot)[] = [root];
+  for (let next = stack.pop(); next !== undefined; next = stack.pop()) {
+    found.push(next);
+    stack.push(...next.children);
+  }
+
+  return found;
+};
+
+/**
+ * Build a package's placed catalog tokens (spec reading 117): under each instance of each
+ * assembly, a `PlacedCatalogRef` for every `CatalogTarget` of the instance's document; and, for
+ * each binding of an assembly's ID table whose owner is a catalog, an `AssembledCatalog` row, one
+ * for each assembly and id.
+ *
+ * @param input - The package's rows the placements read.
+ * @param input.assembledIds - Every assembly's ID bindings ({@link placedIdRowsOf}'s
+ *   `AssembledId`, in `#pantry/import/overlays/identity.ts`).
+ * @param input.catalogs - Every document's catalogs ({@link rowsOf}'s `CatalogId`), whose nodes
+ *   own the ids that are catalog bindings.
+ * @param input.instances - Every assembly's root instance, its tree nested (Q5.13's
+ *   `assembledRowsOf`).
+ * @param input.targets - Every document's catalog tokens ({@link rowsOf}'s `CatalogTarget`).
+ * @returns The rows.
+ */
+export const placedCatalogRowsOf = (input: {
+  readonly assembledIds: Iterable<Addition<typeof AssembledId>>;
+  readonly catalogs: Iterable<Addition<typeof CatalogId>>;
+  readonly instances: Iterable<InstanceRoot>;
+  readonly targets: Iterable<Addition<typeof CatalogTarget>>;
+}): PlacedCatalogRows => {
+  const targetsOf = Map.groupBy(input.targets, ({ document }) => document);
+  const catalogNodes = new Set([...input.catalogs].map(({ node }) => node));
+  const placed = new Map<string, Addition<typeof PlacedCatalogRef>>();
+  for (const root of input.instances) {
+    for (const instance of instancesOf(root)) {
+      for (const { document, id } of targetsOf.get(instance.document) ?? []) {
+        placed.set(headingKey([instance.id, id]), {
+          assembly: root.assembly,
+          document,
+          id,
+          instance: instance.id,
+        });
+      }
+    }
+  }
+
+  const bound = new Map<string, Addition<typeof AssembledCatalog>>();
+  for (const { assembly, id, owner } of input.assembledIds) {
+    if (catalogNodes.has(owner)) {
+      bound.set(headingKey([assembly, id]), { assembly, id, owner });
+    }
+  }
+
+  return { AssembledCatalog: bound, PlacedCatalogRef: placed };
 };

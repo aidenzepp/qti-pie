@@ -13,8 +13,9 @@ import { Effect, Result } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 import type { DocumentContext } from "#pantry/import/context.ts";
-import { rowsOf } from "#pantry/import/overlays/catalog.ts";
+import { placedCatalogRowsOf, rowsOf } from "#pantry/import/overlays/catalog.ts";
 import type { CatalogRows } from "#pantry/import/overlays/catalog.ts";
+import type { InstanceMember, InstanceRoot } from "#pantry/import/overlays/tests.ts";
 import { shredGrammarOf } from "#pantry/model/composed.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { shred } from "#pantry/model/shred.ts";
@@ -266,4 +267,137 @@ describe("import/overlays/catalog.ts, rowsOf, references", () => {
       });
     }),
   );
+});
+
+describe("import/overlays/catalog.ts, rowsOf, targets", () => {
+  it.effect(
+    "gives each distinct token of a document's references one CatalogTarget, its assembled copied",
+    () =>
+      Effect.gen(function* targetRows() {
+        const tree = yield* itemOf(
+          `<qti-catalog id="A"/><qti-catalog id="B"/>`,
+          `<p data-catalog-idref="A">a</p><p data-catalog-idref=" A ">b</p><p data-catalog-idref="B">c</p><p data-catalog-idref=" ">d</p>`,
+        );
+        const document = flatten(tree, idOf).document.node;
+        const targets = (assembled?: boolean) =>
+          [
+            ...rowsOf(
+              tree,
+              assembled === undefined ? { idOf } : { assembled, idOf },
+            ).CatalogTarget.values(),
+          ].toSorted((a, b) => a.id.localeCompare(b.id));
+
+        assert.deepStrictEqual(targets(), [
+          { assembled: false, document, id: "A" },
+          { assembled: false, document, id: "B" },
+        ]);
+        assert.deepStrictEqual(targets(true), [
+          { assembled: true, document, id: "A" },
+          { assembled: true, document, id: "B" },
+        ]);
+      }),
+  );
+
+  it.effect("gives a document with no reference no CatalogTarget", () =>
+    Effect.gen(function* noTargets() {
+      const rows = rowsOf(yield* itemOf(`<qti-catalog id="A"/>`, `<p id="p1">c</p>`), { idOf });
+
+      assert.strictEqual(rows.CatalogTarget.size, 0);
+    }),
+  );
+});
+
+/**
+ * An instance of an assembly, as `assembledRowsOf` writes it, over the fields the placements read.
+ *
+ * @param id - The instance's id.
+ * @param document - Its document.
+ * @param children - Its children.
+ * @returns The member.
+ */
+const memberOf = (
+  id: NodeId,
+  document: NodeId,
+  children: readonly InstanceMember[] = [],
+): InstanceMember => ({
+  assemblyKind: "qti-assessment-item",
+  children,
+  document,
+  id,
+  mixes: false,
+  part: document,
+  replaced: false,
+  rootKind: "qti-assessment-item",
+  site: document,
+  siteLooseChain: false,
+  siteMixes: false,
+  sitePart: document,
+  siteReplaced: false,
+  siteStart: 0n,
+});
+
+describe("import/overlays/catalog.ts, placedCatalogRowsOf", () => {
+  const assembly = idOf(100);
+  const item = idOf(101);
+  const fragment = idOf(102);
+  const catalogNode = idOf(103);
+  const otherNode = idOf(104);
+  const root: InstanceRoot = {
+    ...memberOf(idOf(110), item, [memberOf(idOf(111), item)]),
+    assembly,
+  };
+  const targets = [{ assembled: true, document: item, id: "C" }];
+  const catalogs = [{ document: item, id: "C", node: catalogNode, owner: catalogNode }];
+
+  it("places each token of an instance's document once under each instance", () => {
+    const rows = placedCatalogRowsOf({
+      assembledIds: [],
+      catalogs,
+      instances: [root],
+      targets: [...targets, { assembled: true, document: fragment, id: "Z" }],
+    });
+
+    assert.deepStrictEqual(
+      [...rows.PlacedCatalogRef.values()].map(({ assembly: a, document, id, instance }) => [
+        a,
+        document,
+        id,
+        instance,
+      ]),
+      [
+        [assembly, item, "C", idOf(110)],
+        [assembly, item, "C", idOf(111)],
+      ],
+    );
+  });
+
+  it("writes one AssembledCatalog for an assembly's id a catalog owns, and none for another owner", () => {
+    const rows = placedCatalogRowsOf({
+      assembledIds: [
+        { assembly, copy: idOf(110), id: "C", owner: catalogNode },
+        { assembly, copy: idOf(111), id: "C", owner: catalogNode },
+        { assembly, copy: idOf(110), id: "other", owner: otherNode },
+      ],
+      catalogs,
+      instances: [root],
+      targets,
+    });
+
+    assert.deepStrictEqual(
+      [...rows.AssembledCatalog.values()],
+      [{ assembly, id: "C", owner: catalogNode }],
+    );
+  });
+
+  it("writes nothing for a document in no assembly", () => {
+    const rows = placedCatalogRowsOf({
+      assembledIds: [],
+      catalogs,
+      instances: [],
+      targets: [{ assembled: false, document: item, id: "C" }],
+    });
+
+    assert.strictEqual(rows.PlacedCatalogRef.size, 0);
+    assert.strictEqual(rows.AssembledCatalog.size, 0);
+  });
 });

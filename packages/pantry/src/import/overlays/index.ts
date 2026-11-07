@@ -17,8 +17,8 @@
  */
 /* oxlint-disable unicorn/throw-new-error -- Schema.TaggedError is a schema class factory. */
 import { Equal, Formatter, Result, Schema } from "effect";
-import { rowsOf as catalogRowsOf } from "#pantry/import/overlays/catalog.ts";
-import type { CatalogRows } from "#pantry/import/overlays/catalog.ts";
+import { placedCatalogRowsOf, rowsOf as catalogRowsOf } from "#pantry/import/overlays/catalog.ts";
+import type { CatalogRows, PlacedCatalogRows } from "#pantry/import/overlays/catalog.ts";
 import { rowsOf as declarationRowsOf } from "#pantry/import/overlays/declarations.ts";
 import type { DeclarationRows } from "#pantry/import/overlays/declarations.ts";
 import {
@@ -101,6 +101,7 @@ export type OverlayRows = AssembledExpressionRows &
   OperatorRows &
   PackageRows &
   PlacedBindingRows &
+  PlacedCatalogRows &
   PlacedIdRows &
   PlacedLanguageRows &
   PlacedVariableRows &
@@ -297,6 +298,11 @@ export const overlayPartsOf = (
   }
 
   const manifest = built.find(({ document }) => document.listed.resourceType === "none");
+  const placedIds = placedIdRowsOf({
+    ids: built.flatMap(({ rows }) => [...rows.identity.DocumentId.values()]),
+    instances: assembled.Instance.values(),
+    targets: built.flatMap(({ rows }) => [...rows.identity.IdrefTarget.values()]),
+  });
 
   return [
     ...built.flatMap(({ rows }) => [
@@ -338,10 +344,12 @@ export const overlayPartsOf = (
       instances: assembled.Instance.values(),
       names: built.flatMap(({ rows }) => [...rows.interactions.BindingName.values()]),
     }),
-    placedIdRowsOf({
-      ids: built.flatMap(({ rows }) => [...rows.identity.DocumentId.values()]),
+    placedIds,
+    placedCatalogRowsOf({
+      assembledIds: placedIds.AssembledId.values(),
+      catalogs: built.flatMap(({ rows }) => [...rows.catalog.CatalogId.values()]),
       instances: assembled.Instance.values(),
-      targets: built.flatMap(({ rows }) => [...rows.identity.IdrefTarget.values()]),
+      targets: built.flatMap(({ rows }) => [...rows.catalog.CatalogTarget.values()]),
     }),
     sectionRowsOf({
       contexts: built.flatMap(({ rows }) => [...rows.interactions.SectionContextName.values()]),
