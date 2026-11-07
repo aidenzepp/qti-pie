@@ -2,6 +2,7 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Predicate, Result } from "effect";
 import { configure } from "#plate/configuration.ts";
 import { attr, doc, el, text as sourceText } from "#plate/document/source.ts";
+import type { SourceDocument } from "#plate/document/source.ts";
 import type { Element, Node } from "#plate/emit/node.ts";
 import { shuffleOrder } from "#plate/engine/random.ts";
 import { decode, entryName } from "#plate/form/encoding.ts";
@@ -1525,6 +1526,89 @@ const visibilityCases: readonly VisibilityCase[] = [
   { holds: "NULL", showHide: "hide", shown: true, value: nullOf("identifier", "multiple") },
 ];
 
+/**
+ * Build an item whose template processing sets `T` and whose body holds a Choice with a `mailto:`
+ * link in its prompt and in its first choice, then a template block, shown when `T` holds
+ * `SECRET`, whose content holds a `javascript:` link. `check` lists the three links' notices in
+ * document order, so with the prompt after the choices it lists the choice's link before the
+ * prompt's, where `redactItem`'s walk reaches the prompt first.
+ *
+ * @param promptLast Whether the prompt follows the choices.
+ * @returns The item's document.
+ */
+const linkedItem = (promptLast: boolean): SourceDocument => {
+  const prompt = el(
+    "qti-prompt",
+    [],
+    [el("a", [attr("href", "mailto:prompt@example.com")], [sourceText("prompt link")])],
+  );
+  const choices = [
+    el(
+      "qti-simple-choice",
+      [attr("identifier", "A")],
+      [el("a", [attr("href", "mailto:choice@example.com")], [sourceText("choice link")])],
+    ),
+    el("qti-simple-choice", [attr("identifier", "B")], [sourceText("Bee")]),
+  ];
+
+  return doc(
+    "item.xml",
+    el(
+      "qti-assessment-item",
+      [attr("identifier", "linked"), attr("time-dependent", "false"), attr("title", "Linked")],
+      [
+        el("qti-response-declaration", [
+          attr("base-type", "identifier"),
+          attr("cardinality", "single"),
+          attr("identifier", "RESPONSE"),
+        ]),
+        el("qti-template-declaration", [
+          attr("base-type", "identifier"),
+          attr("cardinality", "single"),
+          attr("identifier", "T"),
+        ]),
+        el(
+          "qti-template-processing",
+          [],
+          [
+            el(
+              "qti-set-template-value",
+              [attr("identifier", "T")],
+              [el("qti-base-value", [attr("base-type", "identifier")], [sourceText("SECRET")])],
+            ),
+          ],
+        ),
+        el(
+          "qti-item-body",
+          [],
+          [
+            el(
+              "qti-choice-interaction",
+              [attr("max-choices", "1"), attr("response-identifier", "RESPONSE")],
+              promptLast ? [...choices, prompt] : [prompt, ...choices],
+            ),
+            el(
+              "qti-template-block",
+              [
+                attr("identifier", "SECRET"),
+                attr("show-hide", "show"),
+                attr("template-identifier", "T"),
+              ],
+              [
+                el(
+                  "qti-content-body",
+                  [],
+                  [el("p", [], [el("a", [attr("href", scriptUrl)], [sourceText("hidden link")])])],
+                ),
+              ],
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
+};
+
 describe("redactItem on template blocks, inlines and choices", () => {
   it.effect(
     "[I-5] copies a choice its template value shows with no template visibility, and the JSON of the redacted item holds no template-identifier, show-hide or template value (R5)",
@@ -1759,6 +1843,33 @@ describe("redactItem on template blocks, inlines and choices", () => {
       noticeOf("qti-feedback-block", `${bodyPath}/qti-feedback-block`),
     ]);
   });
+
+  for (const promptLast of [true, false]) {
+    it(`[I-5] names no notice from inside a template block the page does not see, whatever the order check lists it in, and the rest in document order, with the Choice's prompt ${promptLast ? "after" : "before"} its choices`, () => {
+      const accepted = Option.getOrThrow(acceptedItem(check(linkedItem(promptLast), tables)));
+      const choiceLink = `${bodyPath}/qti-choice-interaction/qti-simple-choice[1]/a`;
+      const promptLink = `${bodyPath}/qti-choice-interaction/qti-prompt/a`;
+      const mailto = "url-scheme:mailto";
+
+      assert.deepStrictEqual(
+        accepted.unsupported.filter((entry) => entry.shown === "notice").map((entry) => entry.path),
+        [
+          ...(promptLast ? [choiceLink, promptLink] : [promptLink, choiceLink]),
+          `${bodyPath}/qti-template-block/qti-content-body/p/a`,
+        ],
+      );
+      assert.deepStrictEqual(redact(accepted, holding({ T: identifierValue("OTHER") })).notices, [
+        mailto,
+        mailto,
+      ]);
+      assert.deepStrictEqual(redact(accepted, holding({ T: identifierValue("SECRET") })).notices, [
+        mailto,
+        mailto,
+        "url-scheme:javascript",
+      ]);
+      assert.deepStrictEqual(redact(accepted).notices, [mailto, mailto, "qti-template-block"]);
+    });
+  }
 
   it("[I-5] gives no posting for the response of an interaction a hidden template block holds", () => {
     const holdingEntry: Item = {

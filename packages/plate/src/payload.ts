@@ -1150,6 +1150,38 @@ interface RedactedBody {
 }
 
 /**
+ * One step of {@link printBody}'s walk that bears on the notices: a notice the walk puts in a
+ * withheld part's place on content the page sees (`made`), or the walk reaching the node a listed
+ * notice stands for (`reached`, the notice's index among the item's listed notices).
+ */
+type NoticeStep =
+  | { readonly feature: string; readonly kind: "made" }
+  | { readonly index: number; readonly kind: "reached" };
+
+/**
+ * Decide whether a path sits at or below one of the paths given: whether it equals one, or starts
+ * with one and a `/`. It looks up each of the path's own prefixes that ends before a `/`, so the
+ * cost follows the path's length, not the number of paths given.
+ *
+ * @param path The path.
+ * @param above The paths.
+ * @returns Whether `path` is one of `above` or lies inside one.
+ */
+const beneath = (path: string, above: ReadonlySet<string>): boolean => {
+  if (above.has(path)) {
+    return true;
+  }
+
+  for (let slash = path.indexOf("/"); slash !== -1; slash = path.indexOf("/", slash + 1)) {
+    if (above.has(path.slice(0, slash))) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
+/**
  * Give the value a record holds for a variable: its template value, else its outcome value (an
  * item's identifiers are unique across both), read from the record's own keys only.
  *
@@ -1393,14 +1425,22 @@ const expandedParameter = (
  *
  * The item lists its notices in the order of the elements they sit at: in document order once
  * `check` has accepted it, and in the order the model read the body when the item was built by
- * hand. The walk goes through the body in document order and passes each listed notice when it
- * reaches the node the notice stands for, so a notice the walk puts in a part's place goes down
- * where the walk stands. Entering an element or an interaction passes first the notices listed at
- * its own path that no node it holds stands for, as `check` lists them: the notices of URLs dropped
- * from it, and an Extended Text's notice in place of its Controls. Content the page does not see, a
- * hidden or withheld template block's, inline's or choice's, is walked too, and its notices are
- * passed without being named, since the page shows none of them. A listed notice no node stands
- * for keeps its place after the rest.
+ * hand. Whether a listed notice is named follows from where it sits, never from when the walk meets
+ * it: one whose path is at or below the path of content the page does not see (a template block or
+ * inline the values hide or withhold, or a `param` withheld behind its notice), or that stands for
+ * a node inside such content or inside a choice the values hide or leave out, is never named, since
+ * the page shows none of it; every other is named once. A path is at or below another when it
+ * equals it or starts with it and a `/`.
+ *
+ * The walk goes through the body, content the page does not see included, and reaches each listed
+ * notice at the node it stands for: a notice node by its feature and path, and an element or an
+ * interaction, on entering it, the notices listed at its own path that no node it holds stands for,
+ * as `check` lists them (the notices of URLs dropped from it, and an Extended Text's notice in
+ * place of its Controls). The named notices keep the item's order: reaching a notice names it after
+ * every listed notice before it that the walk reaches later, so where the walk meets a part before
+ * one the item lists first, as it meets a Choice's prompt written after its choices, both are named
+ * in the item's order. A notice the walk puts in a part's place goes down where the walk stands. A
+ * listed notice no node stands for is named after the rest, in the item's order.
  *
  * @param item The item.
  * @param printing The values the body is shown by, none to withhold every printed variable, every
@@ -1412,18 +1452,38 @@ const expandedParameter = (
  */
 const printBody = (item: Item, printing: Option.Option<RedactRecord>): RedactedBody => {
   const listed = item.unsupported.filter((entry) => entry.shown === "notice");
-  const notices: string[] = [];
-  let next = 0;
+  const listedAt = new Map<string, number[]>();
+  for (const [index, entry] of listed.entries()) {
+    const indices = listedAt.get(entry.path);
+    if (indices === undefined) {
+      listedAt.set(entry.path, [index]);
+    } else {
+      indices.push(index);
+    }
+  }
+
+  // Whether the page sees where each reached listed notice sits, by its index; the paths of the
+  // content it does not see; and the walk's steps, in order.
+  const seenAt = new Map<number, boolean>();
+  const unseen = new Set<string>();
+  const steps: NoticeStep[] = [];
   let choiceWithheld = false;
   const note = (feature: string, seen: boolean): void => {
     if (seen) {
-      notices.push(feature);
+      steps.push({ feature, kind: "made" });
     }
   };
-  const pass = (passes: (entry: UnsupportedFeature) => boolean, seen: boolean): void => {
-    for (let entry = listed[next]; entry !== undefined && passes(entry); entry = listed[next]) {
-      note(entry.feature, seen);
-      next += 1;
+  const reach = (
+    path: string,
+    standsFor: (entry: UnsupportedFeature) => boolean,
+    seen: boolean,
+  ): void => {
+    for (const index of listedAt.get(path) ?? []) {
+      const entry = listed[index];
+      if (entry !== undefined && !seenAt.has(index) && standsFor(entry)) {
+        seenAt.set(index, seen);
+        steps.push({ index, kind: "reached" });
+      }
     }
   };
   const nodesOf = (nodes: readonly BodyNode[], seen: boolean): readonly BodyNode[] =>
@@ -1437,7 +1497,11 @@ const printBody = (item: Item, printing: Option.Option<RedactRecord>): RedactedB
               child.kind === "unsupported" && child.path === node.path ? [child.feature] : [],
             ),
           );
-          pass((entry) => entry.path === node.path && !held.has(entry.feature), seen && !withheld);
+          if (withheld) {
+            unseen.add(node.path);
+          }
+
+          reach(node.path, (entry) => !held.has(entry.feature), seen && !withheld);
 
           const children = nodesOf(node.children, seen && !withheld);
           if (withheld) {
@@ -1457,7 +1521,7 @@ const printBody = (item: Item, printing: Option.Option<RedactRecord>): RedactedB
           return [{ ...node, attributes, children }];
         }
         case "unsupported": {
-          pass((entry) => entry.feature === node.feature && entry.path === node.path, seen);
+          reach(node.path, (entry) => entry.feature === node.feature, seen);
 
           return [node];
         }
@@ -1480,11 +1544,16 @@ const printBody = (item: Item, printing: Option.Option<RedactRecord>): RedactedB
             onNone: (): readonly BodyNode[] => {
               const feature = templateNotice[node.kind];
               note(feature, seen);
+              unseen.add(node.path);
               nodesOf(node.content, false);
 
               return [{ feature, kind: "unsupported", path: node.path }];
             },
             onSome: (visible) => {
+              if (!visible) {
+                unseen.add(node.path);
+              }
+
               const content = nodesOf(node.content, seen && visible);
 
               return visible ? content : [];
@@ -1492,7 +1561,7 @@ const printBody = (item: Item, printing: Option.Option<RedactRecord>): RedactedB
           });
         }
         case "choice": {
-          pass((entry) => entry.path === node.path, seen);
+          reach(node.path, () => true, seen);
 
           const prompt = node.prompt.pipe(Option.map((lead) => nodesOf(lead, seen)));
           // oxlint-disable-next-line eslint/no-use-before-define -- `nodesOf` and `choicesOf` are mutually recursive, as a choice's content holds body nodes; the call runs only after both are defined.
@@ -1501,12 +1570,12 @@ const printBody = (item: Item, printing: Option.Option<RedactRecord>): RedactedB
           return [{ ...node, choices, prompt }];
         }
         case "extended-text": {
-          pass((entry) => entry.path === node.path, seen);
+          reach(node.path, () => true, seen);
 
           return [{ ...node, prompt: node.prompt.pipe(Option.map((lead) => nodesOf(lead, seen))) }];
         }
         case "inline-choice": {
-          pass((entry) => entry.path === node.path, seen);
+          reach(node.path, () => true, seen);
 
           const label = node.label.pipe(Option.map((lead) => nodesOf(lead, seen)));
           // oxlint-disable-next-line eslint/no-use-before-define -- `nodesOf` and `choicesOf` are mutually recursive, as a choice's content holds body nodes; the call runs only after both are defined.
@@ -1531,7 +1600,7 @@ const printBody = (item: Item, printing: Option.Option<RedactRecord>): RedactedB
       });
       if (Option.isNone(decided) && seen && !choiceWithheld) {
         choiceWithheld = true;
-        notices.push(choiceNotice);
+        note(choiceNotice, true);
       }
 
       const visible = Option.getOrElse(decided, () => false);
@@ -1549,8 +1618,33 @@ const printBody = (item: Item, printing: Option.Option<RedactRecord>): RedactedB
         : [];
     });
   const body = nodesOf(item.body, true);
+  const named = (index: number, entry: UnsupportedFeature): boolean =>
+    seenAt.get(index) !== false && !beneath(entry.path, unseen);
+  const notices: string[] = [];
+  let next = 0;
+  for (const step of steps) {
+    if (step.kind === "made") {
+      notices.push(step.feature);
+    } else {
+      // Name, in the item's order, every reached notice up to this one not yet named.
+      while (next <= step.index) {
+        const entry = listed[next];
+        if (entry !== undefined && seenAt.has(next) && named(next, entry)) {
+          notices.push(entry.feature);
+        }
 
-  return { body, notices: [...notices, ...listed.slice(next).map((entry) => entry.feature)] };
+        next += 1;
+      }
+    }
+  }
+
+  for (const [index, entry] of listed.entries()) {
+    if (!seenAt.has(index) && named(index, entry)) {
+      notices.push(entry.feature);
+    }
+  }
+
+  return { body, notices };
 };
 
 /**
@@ -1574,7 +1668,10 @@ const printBody = (item: Item, printing: Option.Option<RedactRecord>): RedactedB
  * choices that remain under the same key, and its postings name none of it. One whose template
  * variable the record does not hold is withheld: a block or inline stays its notice,
  * `qti-template-block` or `qti-template-inline`, and a choice is absent, `notices` naming
- * `template-identifier` once for all such choices. Content the page does not see adds no notice.
+ * `template-identifier` once for all such choices. Content the page does not see adds no notice:
+ * a notice listed at or below the path of a block or inline hidden or withheld, or inside a choice
+ * hidden or absent, is never named, whatever order the item lists it in, and every other is named
+ * once, in the item's order.
  *
  * Each `param` whose `value` names a template variable declared `param-variable="true"` passes the
  * value the record holds for it in place of the name, converted as the information model's Param
