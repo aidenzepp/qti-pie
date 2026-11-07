@@ -162,7 +162,9 @@ type ScoreFailure =
  * Why {@link endPart}, or the end of a part, may fail: a refusal, a stored session that does not
  * fit the test or the items passed, or an invalid `now`. An end that closes the test runs its
  * outcome processing, which fails with an `EngineFailure` over a stored session whose item record
- * lacks a value the processing reads.
+ * lacks a value the processing reads. An end that moves on to a linear part presents its first
+ * item after the item ref's template defaults, which fail with an `EngineFailure` when one does
+ * not fit the item or reads a value the session's records lack.
  */
 export type PartEndFailure =
   | EngineFailure
@@ -523,7 +525,7 @@ const partEnded = (
           () => new UnknownItemRef({ ref, test: test.identifier }),
         ),
         ([position, item]) =>
-          present(items, { ...session, parts, position }, item.sequenceIndex, now),
+          present(test, items, { ...session, parts, position }, item.sequenceIndex, now),
       ),
   });
 };

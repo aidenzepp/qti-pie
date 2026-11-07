@@ -17,12 +17,16 @@ import type { Configuration } from "#plate/configuration.ts";
 import { appendSegments, decodeSegment } from "#plate/document/href.ts";
 import { firstAttempt } from "#plate/engine/attempt.ts";
 import type { EngineFailure } from "#plate/engine/evaluate.ts";
+import { testScopeOf } from "#plate/engine/outcome.ts";
+import { defaultLabel, drawStream } from "#plate/engine/random.ts";
+import { checkTemplateDefaults, evaluateTemplateDefaults } from "#plate/engine/template.ts";
 import { checkInstance } from "#plate/form/encoding.ts";
 import type { InstanceRequirement } from "#plate/form/encoding.ts";
 import { fresh, startingValue } from "#plate/model/record.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
 import { itemRefsIn } from "#plate/model/item-refs.ts";
 import type { ItemRef, Test, TestPart } from "#plate/model/test.ts";
+import type { Value } from "#plate/model/values.ts";
 import { drawSeed } from "#plate/seed.ts";
 import { itemConfiguration, sessionControls, UnknownItemRef } from "#plate/session/control.ts";
 import type { SessionControl } from "#plate/session/control.ts";
@@ -503,12 +507,14 @@ const datestampOf = (now: Date, argument: TimeArgument): Result.Result<string, I
  * An item's first attempt failed at its presentation, a defect of the renderer that no checked
  * item can cause.
  *
- * It cannot occur: `firstAttempt` fails only when template processing reads a variable it holds no
- * value of, sets a variable the item does not declare in the kind the rule sets, or sets one to a
- * value of another type, and on an accepted item the validator refuses each of these or the item
- * model marks the template processing that would cause it, which then does not run. It is thrown,
- * never returned, so the failures of {@link present} and the moves hold only failures a caller can
- * cause, and it is not exported.
+ * It cannot occur: the item ref's template defaults are checked against the item before its first
+ * attempt (`checkTemplateDefaults`), and a default that does not fit is returned, since a test and
+ * its items each pass `check` apart. After that check, `firstAttempt` fails only when the item's
+ * own template processing reads a variable it holds no value of, sets a variable the item does not
+ * declare in the kind the rule sets, or sets one to a value of another type, and on an accepted
+ * item the validator refuses each of these or the item model marks the template processing that
+ * would cause it, which then does not run. It is thrown, never returned, so the failures of
+ * {@link present} and the moves hold only failures a caller can cause, and it is not exported.
  */
 class FirstAttemptDefect extends Data.TaggedError("FirstAttemptDefect")<{
   readonly failure: EngineFailure;
@@ -578,25 +584,80 @@ export const withItem = (
   session.items.map((existing, position) => (position === index ? item : existing));
 
 /**
+ * Give the template defaults the test's item ref gives a session item at its first presentation,
+ * checked against the item they set.
+ *
+ * In a linear part the defaults are evaluated as the candidate meets the item (`info.txt:46025`),
+ * in document order from the stream keyed by the session's processing seed under the default label
+ * of the item's sequence index, never the default key. Each expression reads the test's outcomes
+ * as the session holds them and the test's items through the session's test scope, which holds no
+ * time: the test's own `duration` reads NULL, and so does a variable of an item whose record holds
+ * no value of it, such as one not yet presented. A default the test model marked is not in the
+ * item ref's defaults, so its variable keeps its declared default. A nonlinear part's defaults are
+ * not evaluated here, and an item no item ref of the test names has none.
+ *
+ * @param test The test.
+ * @param items The accepted items, keyed by item ref identifier.
+ * @param session The session, the item not yet presented.
+ * @param item The session item.
+ * @param accepted The item it delivers, whose template variables the defaults set.
+ * @returns The defaults, by template identifier, each a value of its variable's declared type; or
+ *   the {@link EngineFailure} of their evaluation, or of `checkTemplateDefaults`: a key that names
+ *   no template variable of the item, or a value of another type.
+ */
+const templateDefaultsOf = (
+  test: Test,
+  items: ReadonlyMap<string, Accepted>,
+  session: TestSession,
+  item: SessionItem,
+  accepted: Accepted,
+): Result.Result<Readonly<Record<string, Value>>, EngineFailure> =>
+  Option.match(
+    Arr.findFirst(placesOf(test), (place) => place.ref.identifier === item.ref),
+    {
+      onNone: () => Result.succeed({}),
+      onSome: ({ part, ref }) =>
+        part.navigation === "linear"
+          ? Result.flatMap(
+              evaluateTemplateDefaults(
+                ref.templateDefaults,
+                test,
+                session.outcomes,
+                testScopeOf(test, items, session, Option.none()),
+                drawStream(session.seed, defaultLabel(session.instance, item.sequenceIndex)),
+              ),
+              (defaults) => checkTemplateDefaults(accepted.item, defaults),
+            )
+          : Result.succeed({}),
+    },
+  );
+
+/**
  * Mark a session item presented and start its first attempt: its record becomes the one
- * `firstAttempt` starts for the item's instance under the session's seed, as {@link present}
- * describes.
+ * `firstAttempt` starts for the item's instance under the session's seed, from the template
+ * defaults given, as {@link present} describes.
  *
  * @param item The session item, not yet presented.
  * @param accepted The item it delivers.
  * @param datestamp The time of the transition, in ISO 8601.
  * @param seed The session's seed.
+ * @param templateDefaults The item ref's template defaults, already checked against the item.
  * @returns The item, presented.
- * @throws {FirstAttemptDefect} When `firstAttempt` fails, which no checked item can cause: the
- *   validator refuses, or the item model marks, every cause.
+ * @throws {FirstAttemptDefect} When `firstAttempt` fails, which no checked item can cause once its
+ *   defaults are checked: the validator refuses, or the item model marks, every cause.
  */
 const presented = (
   item: SessionItem,
   accepted: Accepted,
   datestamp: string,
   seed: string,
+  templateDefaults: Readonly<Record<string, Value>>,
 ): SessionItem => {
-  const started = firstAttempt(accepted.item, { instance: item.record.instance, seed });
+  const started = firstAttempt(accepted.item, {
+    instance: item.record.instance,
+    seed,
+    templateDefaults,
+  });
   if (Result.isFailure(started)) {
     throw new FirstAttemptDefect({ failure: started.failure, item: accepted.item.identifier });
   }
@@ -605,39 +666,96 @@ const presented = (
 };
 
 /**
+ * Present the item at an index of a session's items: give its template defaults, then start its
+ * first attempt from them.
+ *
+ * @param test The test.
+ * @param items The accepted items, keyed by item ref identifier.
+ * @param session The session.
+ * @param index The item's index in `session.items`.
+ * @param item The session item there, not yet presented.
+ * @param accepted The item it delivers.
+ * @param datestamp The time of the transition, in ISO 8601.
+ * @returns The session with the item presented, or the {@link EngineFailure} of its template
+ *   defaults.
+ */
+const presentedIn = (
+  test: Test,
+  items: ReadonlyMap<string, Accepted>,
+  session: TestSession,
+  index: number,
+  item: SessionItem,
+  accepted: Accepted,
+  datestamp: string,
+): Result.Result<TestSession, EngineFailure> =>
+  Result.map(
+    templateDefaultsOf(test, items, session, item, accepted),
+    (templateDefaults): TestSession => ({
+      ...session,
+      items: withItem(
+        session,
+        index,
+        presented(item, accepted, datestamp, session.seed, templateDefaults),
+      ),
+    }),
+  );
+
+/**
  * Mark an item of a session presented, starting its first attempt when it was not.
  *
  * An attempt starts when the item's session first enters interacting: at its first presentation in
- * answering mode. Its record becomes the one `firstAttempt` starts: the item's template processing
- * runs once, drawing from the stream keyed by the session's processing seed under the template
- * label of the item's instance and the item, and each response then holds its default
- * (`info.txt:8462`), the one template processing set, else its `qti-default-value`, else NULL, and
- * each outcome its default, the one template processing set, else its starting value. Where the
- * item model marks the item's template processing (it names a variable the engine does not hold,
- * such as `QTI_CONTEXT` or a context variable, or holds an element the engine does not run), it
- * does not run, and the record begins with each response and outcome at its declared default and no
- * template value, correct response or default, as `firstAttempt` starts it; `check`'s verdict,
- * `accepted-with-unsupported`, names each mark. An item never presented keeps a fresh record, with
- * no template value. Presenting an item already presented changes nothing. The moves and a part's
- * end call this for the item they show.
+ * answering mode. In a linear part the item ref's template defaults are evaluated first, as the
+ * candidate meets the item: in document order, from the stream keyed by the session's processing
+ * seed under the default label of the item's sequence index, each over the test's outcomes as the
+ * session holds them and the test's items through the session's test scope, in which the test's own
+ * `duration` reads NULL and so does a variable of an item whose record holds no value of it, such
+ * as one not yet presented. Each is checked against the item it sets. A default the test model
+ * marked is not applied, so its variable keeps its declared default. Then the item's record becomes
+ * the one `firstAttempt` starts: its template variables begin at their declared defaults, the
+ * test's defaults in their place, and the item's template processing runs once, drawing from the
+ * stream keyed by the session's processing seed under the template label of the item's instance and
+ * the item, and a constraint's restart returns to the test's defaults. Each response then holds its
+ * default (`info.txt:8462`), the one template processing set, else its `qti-default-value`, else
+ * NULL, and each outcome its default, the one template processing set, else its starting value.
+ * Where the item model marks the item's template processing (it names a variable the engine does
+ * not hold, such as `QTI_CONTEXT` or a context variable, or holds an element the engine does not
+ * run), it does not run, and the record begins with each response and outcome at its declared
+ * default, each template variable at the test's default or else none, and no correct response or
+ * default, as `firstAttempt` starts it; `check`'s verdict, `accepted-with-unsupported`, names each
+ * mark. An item never presented keeps a fresh record, with no template value. Presenting an item
+ * already presented changes nothing. The moves and a part's end call this for the item they show.
+ *
+ * A test and its items each pass `check` apart, so a template default that does not fit its item is
+ * caller input: it is returned, never thrown. A package that holds the test and its items refuses
+ * such a default at `open`.
  *
  * @example
- *   present(items, session, 2, new Date()); // item 2 presented, its template values and defaults written
+ *   present(test.test, items, session, 2, new Date()); // item 2 presented, its template values and defaults written
  *
+ * @param test The model of the test the session was started from, the `test` of the accepted
+ *   test {@link startTest} took.
  * @param items The accepted items, keyed by item ref identifier, as {@link startTest} took them.
  * @param session The session.
  * @param sequenceIndex The item's sequence index, counted from 1.
  * @param now The time of the transition.
  * @returns The session with the item presented; {@link ItemNotInSession} for a sequence index the
  *   session lacks; {@link TestNotDeliverable} when the items have no entry for the item's ref, or
- *   one from another document than its record's; {@link InvalidTime} for an invalid `now`.
+ *   one from another document than its record's; {@link InvalidTime} for an invalid `now`; an
+ *   `EngineFailure` when a template default reads a value the session's records lack (an
+ *   `UnknownIdentifierError`, holder `record`), names no template variable of the item (an
+ *   `UnknownIdentifierError`, holder `item`), or is a value of another type than its variable's (an
+ *   `OutcomeMismatchError`).
  */
 export const present = (
+  test: Test,
   items: ReadonlyMap<string, Accepted>,
   session: TestSession,
   sequenceIndex: number,
   now: Date,
-): Result.Result<TestSession, InvalidTime | ItemNotInSession | TestNotDeliverable> =>
+): Result.Result<
+  TestSession,
+  EngineFailure | InvalidTime | ItemNotInSession | TestNotDeliverable
+> =>
   Result.gen(function* presentItem() {
     const datestamp = yield* datestampOf(now, "now");
     const [index, item] = yield* itemAt(session, sequenceIndex);
@@ -647,10 +765,7 @@ export const present = (
 
     const accepted = yield* deliverable(items, session.test, item.ref, item.record.document);
 
-    return {
-      ...session,
-      items: withItem(session, index, presented(item, accepted, datestamp, session.seed)),
-    };
+    return yield* presentedIn(test, items, session, index, item, accepted, datestamp);
   });
 
 /**
@@ -708,7 +823,9 @@ const checkedInstance = (token: string): Result.Result<string, InvalidSessionIns
  * instance alone. A shuffle's order is on the page, so pass a processing seed apart from the
  * configuration's `seed`, never one string as both. The session starts each of the test's
  * outcomes at its declared default, else its starting value, with no run of the test's outcome
- * processing counted. No item holds template defaults. A test with no item at all starts closed.
+ * processing counted, so the first item's template defaults, which it applies at that item's
+ * presentation, read each test outcome at that value. No session item stores template defaults. A
+ * test with no item at all starts closed.
  *
  * @example
  *   startTest(test, items, configuration, { instance: crypto.randomUUID(), now: new Date() });
@@ -728,14 +845,22 @@ const checkedInstance = (token: string): Result.Result<string, InvalidSessionIns
  * @returns The session; {@link TestNotDeliverable} when the items have no entry for an item ref
  *   (`item-missing`) or hold one from another document than the ref names (`item-mismatch`);
  *   {@link InvalidSessionInstance} for an instance that breaks a requirement; {@link InvalidTime}
- *   for an invalid `now`.
+ *   for an invalid `now`; an `EngineFailure` of the first item's template defaults, in a linear
+ *   part, as {@link present} gives it: a default reads a value the session lacks (an
+ *   `UnknownIdentifierError`, holder `record`), names no template variable of the item (holder
+ *   `item`), or is a value of another type than its variable's (an `OutcomeMismatchError`). A test
+ *   and its items each pass `check` apart, so a default that does not fit is caller input; a
+ *   package that holds them refuses it at `open`.
  */
 export const startTest = (
   test: AcceptedTest,
   items: ReadonlyMap<string, Accepted>,
   configuration: Configuration,
   context: { readonly instance: string; readonly now: Date; readonly seed?: string },
-): Result.Result<TestSession, InvalidSessionInstance | InvalidTime | TestNotDeliverable> =>
+): Result.Result<
+  TestSession,
+  EngineFailure | InvalidSessionInstance | InvalidTime | TestNotDeliverable
+> =>
   Result.gen(function* startSession() {
     const instance = yield* checkedInstance(context.instance);
     const datestamp = yield* datestampOf(context.now, "context.now");
@@ -758,7 +883,7 @@ export const startTest = (
               templateDefaults: Option.none(),
             };
 
-            return index === 0 ? presented(item, accepted, datestamp, seed) : item;
+            return { accepted, item };
           },
         ),
       ),
@@ -767,7 +892,7 @@ export const startTest = (
     const session: TestSession = {
       document: test.test.document,
       instance,
-      items: delivered,
+      items: delivered.map(({ item }) => item),
       kind: "test",
       outcomeRuns: 0,
       outcomes: Object.fromEntries(
@@ -786,7 +911,11 @@ export const startTest = (
       updated: datestamp,
     };
 
-    return session;
+    return yield* Option.match(Arr.head(delivered), {
+      onNone: () => Result.succeed(session),
+      onSome: ({ accepted, item }) =>
+        presentedIn(test.test, items, session, 0, item, accepted, datestamp),
+    });
   });
 
 /**
