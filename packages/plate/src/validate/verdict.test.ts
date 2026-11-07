@@ -2318,6 +2318,51 @@ describe("describeRefusal", () => {
     assert.notInclude(sentence, "outcome, to a");
   });
 
+  it("[I-5] offers a test's printed variable only an outcome the test declares, never a template variable, for its base and for its identifier (pantry printed-variable-ref)", () => {
+    const base = describeRefusal(
+      refusalOf("expression-type", {
+        attribute: "base",
+        check: "reference",
+        declarer: "test",
+        element: "qti-printed-variable",
+        expectedBaseType: "integer",
+        identifier: "SCORE",
+      }),
+    );
+    const named = describeRefusal(
+      refusalOf("expression-type", {
+        attribute: "identifier",
+        check: "reference",
+        declarer: "test",
+        element: "qti-printed-variable",
+        identifier: "duration",
+        source: "info.txt:70296",
+        variableKind: "response",
+      }),
+    );
+
+    assert.include(
+      base,
+      "`qti-printed-variable`'s attribute `base` names `SCORE`, which is not a single outcome variable of base type `integer`.",
+    );
+    assert.include(
+      base,
+      "To make it valid: in `base`, name a single outcome variable of base type `integer` that the test declares, or write a value of that base type.",
+    );
+    assert.include(
+      named,
+      "`qti-printed-variable`'s attribute `identifier` names `duration`, a response variable, which is not an outcome variable (info.txt:70296).",
+    );
+    assert.include(
+      named,
+      "To make it valid: in `identifier`, name an outcome variable that the test declares.",
+    );
+
+    for (const sentence of [base, named]) {
+      assert.notInclude(sentence, "template");
+    }
+  });
+
   it("[I-5] names a printed variable's identifier that names a response as neither a template nor an outcome variable, and says no base type (pantry printed-variable-ref)", () => {
     const sentence = describeRefusal(
       refusalOf("expression-type", {

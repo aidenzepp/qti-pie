@@ -2312,10 +2312,24 @@ const namedVariable = (identifier: string, scope: VariableScope): Option.Option<
 const printable = (kind: NamedKind): boolean => kind === "template" || kind === "outcome";
 
 /**
+ * Add the `declarer` fact to the facts of a printed variable's refusal when the document is a test,
+ * so the verdict's wording names the test and offers only what a test declares, an outcome; an
+ * item's facts are left as they are.
+ *
+ * @param facts The refusal's facts.
+ * @param declarer The kind of document whose declarations the name was looked up in.
+ * @returns The facts, with `declarer: "test"` for a test.
+ */
+const declaredBy = (
+  facts: Readonly<Record<string, string>>,
+  declarer: VariableScope["declarer"],
+): Readonly<Record<string, string>> => (declarer === "item" ? facts : { ...facts, declarer });
+
+/**
  * Construct the `undeclared-variable` refusal of a name a printed variable's attribute gives that
  * nothing declares or builds in. Its `expected` lists the kinds the document declares that a
- * printed variable prints ({@link printedKinds}); a test's refusal also carries `declarer: "test"`,
- * so its wording names the test rather than an item.
+ * printed variable prints ({@link printedKinds}); a test's refusal also carries `declarer: "test"`
+ * ({@link declaredBy}), so its wording names the test rather than an item.
  *
  * @param source The document.
  * @param path The attribute's path.
@@ -2330,21 +2344,16 @@ const printedUndeclared = (
   attribute: string,
   identifier: string,
   declarer: VariableScope["declarer"],
-): Refusal => {
-  const facts = {
-    attribute,
-    element: "qti-printed-variable",
-    expected: printedKinds[declarer],
-    identifier,
-  };
-
-  return refusal(
+): Refusal =>
+  refusal(
     source,
     "undeclared-variable",
     path,
-    declarer === "item" ? facts : { ...facts, declarer },
+    declaredBy(
+      { attribute, element: "qti-printed-variable", expected: printedKinds[declarer], identifier },
+      declarer,
+    ),
   );
-};
 
 /**
  * Judge what a printed variable's `identifier` names: an outcome or a template variable of any
@@ -2369,14 +2378,22 @@ const printedIdentifier = (
       printable(kind)
         ? []
         : [
-            refusal(source, "expression-type", path, {
-              attribute: "identifier",
-              check: "reference",
-              element: "qti-printed-variable",
-              identifier,
-              source: printedSource,
-              variableKind: kind,
-            }),
+            refusal(
+              source,
+              "expression-type",
+              path,
+              declaredBy(
+                {
+                  attribute: "identifier",
+                  check: "reference",
+                  element: "qti-printed-variable",
+                  identifier,
+                  source: printedSource,
+                  variableKind: kind,
+                },
+                scope.declarer,
+              ),
+            ),
           ],
   });
 
@@ -2415,13 +2432,21 @@ const printedInteger = (
       printable(kind) && !Option.exists(type, (known) => !agree(known, singleOf("integer")))
         ? []
         : [
-            refusal(source, "expression-type", path, {
-              attribute: attribute.local,
-              check: "reference",
-              element: "qti-printed-variable",
-              expectedBaseType: "integer",
-              identifier,
-            }),
+            refusal(
+              source,
+              "expression-type",
+              path,
+              declaredBy(
+                {
+                  attribute: attribute.local,
+                  check: "reference",
+                  element: "qti-printed-variable",
+                  expectedBaseType: "integer",
+                  identifier,
+                },
+                scope.declarer,
+              ),
+            ),
           ],
   });
 };
@@ -2449,7 +2474,7 @@ const printedInteger = (
  * model's line as `source`, since any type may be printed; for `base` and `index`, anything but a
  * single integer outcome or template variable, with `expectedBaseType` as P24 words it. A
  * declaration whose own type is not judged ({@link declarationType}) is not refused. Each refusal
- * is at the attribute's path.
+ * is at the attribute's path, and a test's carries `declarer: "test"` ({@link declaredBy}).
  *
  * A printed variable anywhere in the document is judged: in an item's body, a feedback or a rubric
  * block alike, through {@link checkRules}, and in a test's rubric blocks and test feedback, through

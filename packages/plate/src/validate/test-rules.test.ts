@@ -610,6 +610,7 @@ describe("checkTestRules", () => {
           detail: {
             attribute: "identifier",
             check: "reference",
+            declarer: "test",
             element: "qti-printed-variable",
             identifier,
             source: "info.txt:70296",
@@ -633,6 +634,7 @@ describe("checkTestRules", () => {
           detail: {
             attribute,
             check: "reference",
+            declarer: "test",
             element: "qti-printed-variable",
             expectedBaseType: "integer",
             identifier,
