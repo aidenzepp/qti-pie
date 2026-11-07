@@ -1139,7 +1139,7 @@ const formatDetail = (format: string) => ({
   check: "printf-format",
   element: "qti-printed-variable",
   expected:
-    "one printf conversion and nothing else: %, then any of the flags #, 0, space, + and -, an optional width, an optional precision of a point and at least one digit, and one of the conversions E, e, f, G, g, r, R, i, o, X and x",
+    "one printf conversion and nothing else: %, then any of the flags #, 0, space, + and -, an optional width, an optional precision of a point and zero or more digits, and one of the conversions E, e, f, G, g, r, R, i, o, X and x",
   pantry: "R38",
   source: "info.txt:70323",
   value: format,
@@ -2537,8 +2537,10 @@ describe("checkStructure", () => {
       }
     });
 
-    it("[I-5] refuses %.f, a precision with no digit, which the information model's syntax admits (info.txt:8686) and pantry R38 refuses", () => {
-      assert.deepStrictEqual(first(printed("%.f"), generatedTables)?.detail, formatDetail("%.f"));
+    it("[I-5] admits a precision of a point and no digit, %.f and %#8.E among them, which the information model's syntax admits (info.txt:8686) and pantry R38 refuses", () => {
+      for (const format of ["%.f", "%#8.E", "%.i"]) {
+        assert.deepStrictEqual(found(printed(format), generatedTables), [], format);
+      }
     });
 
     it("[I-5] admits one whole printf conversion, %.1f, %i, %08.3e and %-8X among them, and a printed variable with no format (pantry R38)", () => {

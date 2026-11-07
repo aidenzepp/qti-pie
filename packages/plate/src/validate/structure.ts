@@ -561,13 +561,16 @@ const toleranceTokens = (lexical: string): boolean =>
 /**
  * A printed variable's `format` as the qti package's `printfFormat` pattern admits it
  * (`packages/pantry/src/schema/patterns.ts:343`, refused there as R38), over the whole attribute:
- * one conversion, a percent sign, flags from `#`, `0`, space, `+` and `-`, a width, a precision of
- * a point and at least one digit, and one of `E e f G g r R i o X x`, with nothing around it. The
- * information model's syntax (info.txt:8686) also admits a precision with no digit, such as `%.f`,
- * and does not address text around the conversion; the pattern refuses both, and this row refuses
- * what the pattern refuses, so when the qti package narrows R38 this pattern follows it.
+ * one conversion, a percent sign, flags from `#`, `0`, space, `+` and `-`, a width, a precision,
+ * and one of `E e f G g r R i o X x`, with nothing around it.
+ *
+ * The precision is a point "followed by zero or more digits" (info.txt:8686), so `%.f` is
+ * admitted. R38 requires a digit after the point and refuses `%.f`; the standard does not refuse
+ * it, so this pattern admits it, a difference from the qti package that awaits the operator (G-R2,
+ * pending). The information model does not address text around the conversion; the pattern
+ * refuses it as R38 does, so when the qti package narrows R38 this pattern follows it.
  */
-const printfFormat = /^%[#0 +-]*[0-9]*(?:\.[0-9]+)?[EefGgrRioXx]$/u;
+const printfFormat = /^%[#0 +-]*[0-9]*(?:\.[0-9]*)?[EefGgrRioXx]$/u;
 
 /**
  * The shared readings this module applies over the XSD's rules, one row each.
@@ -834,12 +837,13 @@ const readingRows: readonly ReadingRow[] = [
   // (info.txt:70323), whose syntax is a C `printf` conversion (info.txt:8686). Pantry's R38 admits
   // one whole conversion, with codes `E e f G g r R i o X x`, so `%d`, `%u` and `Score: %.1f` are
   // refused as there. Pantry reads the `xs:normalizedString` with its tabs and line breaks
-  // replaced, not trimmed, so a padded format is refused too.
+  // replaced, not trimmed, so a padded format is refused too. A precision with no digit, `%.f`,
+  // is admitted, as the information model admits it and R38 does not (see printfFormat).
   {
     attribute: "format",
     elements: ["qti-printed-variable"],
     expected:
-      "one printf conversion and nothing else: %, then any of the flags #, 0, space, + and -, an optional width, an optional precision of a point and at least one digit, and one of the conversions E, e, f, G, g, r, R, i, o, X and x",
+      "one printf conversion and nothing else: %, then any of the flags #, 0, space, + and -, an optional width, an optional precision of a point and zero or more digits, and one of the conversions E, e, f, G, g, r, R, i, o, X and x",
     holds: (lexical) => printfFormat.test(lexical),
     kind: "narrowed-attribute",
     settled: { check: "printf-format", pantry: "R38", source: "info.txt:70323" },
