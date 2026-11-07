@@ -830,20 +830,19 @@ const feedbackTypeOf = (
   // A built-in session variable's name is declared by no test, and the schema types it by the table
   // `builtInBase` states for its name (the item root's rows): `numAttempts` and `duration` name no
   // identifier outcome, and `completionStatus` is a single identifier.
-  const builtIn = grammar.references.builtIn.lookup({
-    root: "qti-assessment-item",
-    variable: named.value,
-  });
+  const at = { root: "qti-assessment-item", variable: named.value };
+  const baseType = Option.map(grammar.references.builtInBaseType.lookup(at), (row) => row.baseType);
 
-  return Option.toArray(builtIn)
+  return Option.toArray(grammar.references.builtIn.lookup(at))
     .filter(
-      ({ baseType, cardinality }) =>
-        baseType !== "identifier" || (cardinality !== "single" && cardinality !== "multiple"),
+      ({ cardinality }) =>
+        !Option.contains(baseType, "identifier") ||
+        (cardinality !== "single" && cardinality !== "multiple"),
     )
-    .map(({ baseType, cardinality }) =>
+    .map(({ cardinality }) =>
       breachAt(rows, node, "Feedback outcome type", {
         assembly: assembled.test.listed.path,
-        baseType,
+        ...Option.match(baseType, { onNone: () => ({}), onSome: (held) => ({ baseType: held }) }),
         cardinality,
         identifier: named.value,
       }),

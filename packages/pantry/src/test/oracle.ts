@@ -4271,20 +4271,25 @@ const overlayLaws: readonly ((
       // `builtInBase` states for its name, whichever root the document has (an item's `duration` a
       // float, a test's a duration): `numAttempts` and `duration` name no identifier outcome, and
       // `completionStatus` is a single identifier (reading 77).
-      const builtIn = overlay.laws.grammar.references.builtIn.lookup({
-        root: "qti-assessment-item",
-        variable: named.value,
-      });
+      const at = { root: "qti-assessment-item", variable: named.value };
+      const builtIn = overlay.laws.grammar.references.builtIn.lookup(at);
+      const builtInBase = Option.map(
+        overlay.laws.grammar.references.builtInBaseType.lookup(at),
+        ({ baseType }) => baseType,
+      );
 
       return Option.isSome(builtIn) &&
         !(
-          builtIn.value.baseType === "identifier" &&
+          Option.contains(builtInBase, "identifier") &&
           (builtIn.value.cardinality === "single" || builtIn.value.cardinality === "multiple")
         )
         ? [
             {
               keys: {
-                baseType: builtIn.value.baseType,
+                ...Option.match(builtInBase, {
+                  onNone: () => ({}),
+                  onSome: (held) => ({ baseType: held }),
+                }),
                 cardinality: builtIn.value.cardinality,
                 identifier: named.value,
               },
@@ -4358,13 +4363,22 @@ const overlayLaws: readonly ((
       return [];
     }
 
+    // A record is neither, judged by its cardinality alone; a template is judged by its base type
+    // where it has one, and one with none is Declaration base type's alone (lane NIL's audit, B12),
+    // as "Feedback outcome type" reads an outcome.
     const [baseType, cardinality] = typed.value;
 
-    return baseType === "identifier" && (cardinality === "single" || cardinality === "multiple")
+    return (cardinality === "single" || cardinality === "multiple") &&
+      Option.isNone(typeBreach(baseType, (held) => held === "identifier"))
       ? []
       : [
           {
-            keys: { baseType, cardinality, identifier: named.value, kind: node.kind },
+            keys: {
+              ...Option.match(baseType, { onNone: () => ({}), onSome: (held) => ({ baseType: held }) }),
+              cardinality,
+              identifier: named.value,
+              kind: node.kind,
+            },
             law: "Template variable type",
           },
         ];
