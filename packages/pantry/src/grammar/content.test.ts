@@ -13,7 +13,12 @@ import { int8Max } from "#pantry/grammar/closed.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
 import { contentEnds, contentModelOf, contentStep } from "#pantry/grammar/content.ts";
-import { fragmentRoots } from "#pantry/grammar/facets.ts";
+import {
+  documentLayer,
+  fragmentRoots,
+  openVocabulary,
+  vocabularyFacets,
+} from "#pantry/grammar/facets.ts";
 import { foreignKinds, isForeignKind, schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import { checkCache, sourcePaths, xsdDirectory } from "#pantry/vocab/derive/sources.ts";
@@ -750,6 +755,55 @@ const widenedOnly = (
   );
 
 /**
+ * The spec readings each parent's content edits state, in the facets production composes: an edit
+ * whose source cites "spec reading N" states reading N at its parent.
+ */
+const statedReadings: ReadonlyMap<string, ReadonlySet<number>> = (() => {
+  const stated = new Map<string, Set<number>>();
+  for (const facets of [...vocabularyFacets.values(), documentLayer, openVocabulary]) {
+    for (const edit of facets.content.edits) {
+      const cited = /^spec reading (?<reading>\d+)\b/u.exec(edit.source)?.groups?.["reading"];
+      if (cited !== undefined) {
+        const readings = stated.get(edit.parent) ?? new Set<number>();
+        readings.add(Number(cited));
+        stated.set(edit.parent, readings);
+      }
+    }
+  }
+
+  return stated;
+})();
+
+/**
+ * Every exemption the differentials below rule a disagreement by, each keyed to the reading it
+ * cites and the parents it holds at: reading 2 under the MathML models the RelaxNG decides,
+ * reading 44 where `ssml:token` and `ssml:w` drop `voice`, reading 61 at `qti-ordering`'s slot and
+ * reading 118 at an include's fallbacks. Reading 96 is libxml2's departure, not the grammar's, and
+ * its own differential fails once xmllint stops widening ({@link widenedOnly}).
+ */
+const exemptions: readonly { readonly parents: readonly string[]; readonly reading: number }[] = [
+  { parents: [...relaxNgModels.keys()], reading: 2 },
+  { parents: ["ssml:token", "ssml:w"], reading: 44 },
+  { parents: ["qti-ordering"], reading: 61 },
+  { parents: ["xi:include"], reading: 118 },
+];
+
+/**
+ * Whether a differential may set a family of `parent` aside for `reading`: the exemption is
+ * listed, and the facets still state the reading at that parent. A reading withdrawn from the
+ * facets so withdraws its exemption: the differential judges the family again, and the exemptions'
+ * own test fails until the row goes. Reading 26's exemption outlived its edit this way until
+ * 7858a46c.
+ *
+ * @param reading - The spec reading.
+ * @param parent - The family's parent.
+ * @returns Whether the reading exempts the family.
+ */
+const exempts = (reading: number, parent: string): boolean =>
+  statedReadings.get(parent)?.has(reading) === true &&
+  exemptions.some((row) => row.reading === reading && row.parents.includes(parent));
+
+/**
  * Whether spec reading 61 rules a family the grammar accepts and xmllint refuses:
  * a family of `qti-ordering`, whose extension slot the reading widens from the XSD's `##other` to
  * `##any` (information model §5.98.3), that holds a child in QTI's own namespace or in none, which
@@ -760,7 +814,7 @@ const widenedOnly = (
  * @returns Whether the reading rules it.
  */
 const reading61 = (composedGrammar: ComposedGrammar, probe: KindProbe): boolean =>
-  probe.parentKind === "qti-ordering" &&
+  exempts(61, probe.parentKind) &&
   probe.kinds.some((kind) =>
     Option.match(composedGrammar.kinds.elementName.lookup({ kind }), {
       onNone: () => kind === foreignKinds.own || kind === foreignKinds.absent,
@@ -826,7 +880,7 @@ const xmllintRuling = (input: {
   if (
     !expected &&
     verdict?.refused === false &&
-    probe.parentKind === "xi:include" &&
+    exempts(118, probe.parentKind) &&
     probe.kinds.filter((kind) => kind === "xi:fallback").length > 1
   ) {
     return "reading 118";
@@ -856,8 +910,26 @@ const xmllintRuling = (input: {
  * @returns Whether a reading narrows it.
  */
 const narrowedByReading = (parent: string, children: readonly string[]): boolean =>
-  ((parent === "ssml:token" || parent === "ssml:w") && children.includes("ssml:voice")) ||
-  (parent === "xi:include" && children.filter((child) => child === "xi:fallback").length > 1);
+  (exempts(44, parent) && children.includes("ssml:voice")) ||
+  (exempts(118, parent) && children.filter((child) => child === "xi:fallback").length > 1);
+
+describe("the differentials' exemptions", () => {
+  it("are each keyed to a spec reading the composed facets state at every parent it holds at", () => {
+    // Oracle: the facets production composes, read edit by edit. A reading withdrawn from them
+    // leaves its row here naming a parent no edit cites it at, as reading 26's would have.
+    const stale = exemptions.flatMap(({ parents, reading }) =>
+      (parents.length === 0 ? ["no parent"] : parents)
+        .filter((parent) => statedReadings.get(parent)?.has(reading) !== true)
+        .map((parent) => `reading ${String(reading)} at ${parent}`),
+    );
+
+    assert.deepStrictEqual(
+      stale,
+      [],
+      "an exemption the facets no longer state: drop its row and the ruling that reads it",
+    );
+  });
+});
 
 describe.skipIf(!cached)("the content automata against the XSD", () => {
   it.effect(
@@ -935,7 +1007,7 @@ describe.skipIf(!cached)("the content automata against the XSD", () => {
                 const narrowed = xsd && !installed && narrowedByReading(parent, children);
                 // Spec reading 2: under the models it restates or edits, the MathML 3 RelaxNG
                 // decides, in both directions, and where the XSD differs it is the reading's.
-                const rng = relaxNgModels.get(parent);
+                const rng = exempts(2, parent) ? relaxNgModels.get(parent) : undefined;
                 if (rng !== undefined) {
                   if (
                     installed !==
