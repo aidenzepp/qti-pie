@@ -1987,15 +1987,15 @@ against it. A reading that is not an information-model-over-XSD case says which 
      102). `XInclude.xsd` types `href` an optional `xs:anyURI`, which admits all of these; XInclude itself makes them
      fatal errors. An include whose href is external (reading 102: it starts with a scheme or with `/`) names a resource
      the package does not hold, and is admitted: it is stored as written, with its element, and never fetched, and its
-     content is judged by no law, since there is no document to judge. An IDREF of the including document that names an
-     ID only that resource could hold is refused under "Idref target", as one that names no ID is: the merged document
-     holds none of the resource's content, so its assembly binds no such ID (reading 117), and pantry cannot tell an ID
-     the resource holds from one it lacks. That is a recorded over-refusal with the same cause as the under-check below,
-     and the same fetch would lift it. That is a recorded under-check, not a law of the
+     content is judged by no law, since there is no document to judge. That is a recorded under-check, not a law of the
      specification: the information model says an included fragment's content "must satisfy the requirements of the
      specification in the context of the item in which it is being included" (section 2.12, reading 117), which a
      fragment pantry never reads cannot be checked against. What would lift it is a fetch of the resource, which an
-     importer of a package does not do (audit C B2). The corpus holds no external include, so no verdict moves. The
+     importer of a package does not do (audit C B2). An IDREF of the including document that names an ID only that
+     resource could hold is refused under "Idref target", as one that names no ID is: the merged document holds none of
+     the resource's content, so its assembly binds no such ID (reading 117), and pantry cannot tell an ID the resource
+     holds from one it lacks. That is a recorded over-refusal with the same cause as the under-check above, and the same
+     fetch would lift it. The corpus holds no external include, so no verdict moves. The
      schema states it with one cause per fault. A site's href is a row of its own (`SitePath`), written only where the
      href resolves to a path of the package, with `entry`, whether the package holds an entry there, and its target is
      another row (`SiteTarget`):
