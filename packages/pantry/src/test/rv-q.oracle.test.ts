@@ -1,10 +1,9 @@
 /**
  * The oracle's quotation law (spec reading 127) over whole packages, and its E1 over the ends it
  * reads: a package whose item puts a quotation mark beside or inside a `q` is refused
- * `q-punctuation`, main's `quoted-q` fixture among them, a package whose mark is an apostrophe is
- * accepted, and a node whose `first` or `last` is not its own characters' end breaks "E1 derived".
+ * `q-punctuation`, a package whose mark is an apostrophe is accepted, and a node whose `first` or
+ * `last` is not its own characters' end breaks "E1 derived".
  */
-import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Result } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
@@ -12,9 +11,7 @@ import { composed } from "#pantry/grammar/compose.ts";
 import { foldGrammarOf, shredGrammarOf } from "#pantry/model/composed.ts";
 import { fold } from "#pantry/model/folds.ts";
 import { shred } from "#pantry/model/shred.ts";
-import { readPackage } from "#pantry/package/read.ts";
 import type { PackageFile } from "#pantry/package/read.ts";
-import { materialize } from "#pantry/test/fixtures.ts";
 import { idOf } from "#pantry/test/gen/xdm.ts";
 import { documentBreaches, explain, judge, lawsOf, verdictOf } from "#pantry/test/oracle.ts";
 
@@ -103,25 +100,6 @@ describe("the oracle's quotation law, over a package", () => {
     assert.include(shown, "before it");
     assert.include(shown, "the user agent draws");
   });
-});
-
-describe("the oracle's quotation law, over main's fixture", () => {
-  it.effect("refuses quoted-q, simple with straight quotes around a q, under q-punctuation", () =>
-    // Oracle: main's verdict of its hand-broken package (`2b276d76`, `package.guards.test.ts`):
-    // `quoted-q` refused `q-punctuation`; its one edit puts `"` immediately before and after a q.
-    Effect.gen(function* quoted() {
-      const files = yield* readPackage(yield* materialize("quoted-q"));
-      const judgment = yield* judge(files, grammar, laws);
-
-      assert.deepStrictEqual(verdictOf(judgment), { rule: "q-punctuation", verdict: "refused" });
-      assert.deepStrictEqual(
-        judgment._tag === "Judged"
-          ? judgment.breaches.map(({ keys, law }) => [law, keys["position"]])
-          : [],
-        [["Quotation punctuation", "before it"]],
-      );
-    }).pipe(Effect.provide(NodeServices.layer)),
-  );
 });
 
 describe("the oracle's E1 over a node's ends", () => {

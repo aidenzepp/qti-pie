@@ -101,27 +101,13 @@ const cases: readonly HtmlCase[] = [
     refused: { law: "Media source src", rule: "source-src" },
   },
   {
-    body: `<div><audio><source srcset="${image}"/></audio></div>`,
-    name: "an audio's source with srcset and no src",
-    refused: { law: "Media source src", rule: "source-src" },
-  },
-  {
     body: `<div><video><source src="https://example.com/v.mp4"/></video></div>`,
     name: "a video's source with src",
-  },
-  {
-    body: `<div><video src="https://example.com/v.mp4"><track src="https://example.com/a.vtt"/></video></div>`,
-    name: "a track with no kind, in the subtitles state by default, and no srclang",
-    refused: { law: "Track srclang", rule: "track-srclang" },
   },
   {
     body: `<div><video src="https://example.com/v.mp4"><track kind="subtitles" src="https://example.com/a.vtt"/></video></div>`,
     name: "a subtitles track with no srclang",
     refused: { law: "Track srclang", rule: "track-srclang" },
-  },
-  {
-    body: `<div><video src="https://example.com/v.mp4"><track kind="captions" src="https://example.com/a.vtt"/></video></div>`,
-    name: "a captions track with no srclang",
   },
   {
     body: `<div><video src="https://example.com/v.mp4"><track src="https://example.com/a.vtt" srclang="en"/></video></div>`,

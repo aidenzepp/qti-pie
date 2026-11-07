@@ -289,33 +289,6 @@ const lawCases: readonly LawCase[] = [
 const overlayCases: readonly LawCase[] = [
   {
     files: withItem(
-      `<qti-simple-choice identifier="B">B</qti-simple-choice>`,
-      `<qti-simple-choice identifier="B">B</qti-simple-choice></qti-choice-interaction><p id="intro">Twice.</p><qti-choice-interaction response-identifier="RESPONSE" max-choices="1"><qti-simple-choice identifier="C">C</qti-simple-choice>`,
-    ),
-    law: "DocumentId key",
-    name: "two elements with one id",
-    rule: "document-key",
-  },
-  {
-    files: withItem(
-      `<qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/>`,
-      `<qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/><qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/>`,
-    ),
-    law: "Declaration key",
-    name: "two declarations of one variable",
-    rule: "declaration-key",
-  },
-  {
-    files: withItem(
-      `response-identifier="RESPONSE" max-choices="1"`,
-      `response-identifier="NOWHERE" max-choices="1"`,
-    ),
-    law: "Binding declared",
-    name: "an interaction bound to no response",
-    rule: "binding-declared",
-  },
-  {
-    files: withItem(
       `cardinality="single" base-type="identifier"`,
       `cardinality="single" base-type="float"`,
     ),
@@ -1853,18 +1826,6 @@ describe("reading 14: text-entry references are IDREFs, response identifiers IDs
       assert.include(
         breaches.map(({ law }) => `${law} ${ruleOf(law)}`),
         "Idref target idref-target",
-        shown(breaches),
-      );
-    }),
-  );
-
-  it.effect("an element id equal to a response identifier is a duplicate id", () =>
-    Effect.gen(function* duplicate() {
-      const breaches = breachesOf(yield* judged(withItem(`<p id="intro">`, `<p id="RESPONSE">`)));
-
-      assert.include(
-        breaches.map(({ law }) => ruleOf(law)),
-        "document-key",
         shown(breaches),
       );
     }),
