@@ -10,7 +10,7 @@ import { Result } from "effect";
 import { decodeRecord } from "#plate/codec/record.ts";
 import type { InvalidRecord, StoredRecord } from "#plate/codec/record.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
-import { belonging, fitting } from "#plate/score.ts";
+import { belonging, fitting, templatesHeld } from "#plate/score.ts";
 import type { RecordMismatch } from "#plate/score.ts";
 import type { Responses } from "#plate/session/session.ts";
 import type { Accepted } from "#plate/validate/verdict.ts";
@@ -42,7 +42,9 @@ export interface Restored {
  * The record is checked against the item as `results` checks it: it belongs to the item, and each
  * response it holds is one the item scores, and each outcome one the item declares, each of its
  * declaration's base type and cardinality, so another item's record, or values the item's controls
- * cannot hold, are refused rather than given back.
+ * cannot hold, are refused rather than given back. Then, as `score` checks it, a record of an item
+ * whose template processing runs must hold a value for each template variable the item declares,
+ * as every record `begin` or `score` writes for it does (`templatesHeld` in `#plate/score.ts`).
  *
  * The record alone does not say how to render the item again. Its `instance` is the one `begin`
  * started it with, or `""` for a record `score` started for an item scored without one, and need
@@ -60,8 +62,10 @@ export interface Restored {
  *   and handed it back.
  * @returns The decoded record and its responses as {@link Restored}; {@link InvalidRecord} at stage
  *   `decode` for a record the renderer could not have written: the version found when that is what
- *   does not fit, or the first response, then the first outcome, that does not fit its declaration;
- *   or {@link RecordMismatch} for another item's record.
+ *   does not fit, the first response, then the first outcome, then the first template value,
+ *   correct response or default, that does not fit its declaration, or, for an item whose template
+ *   processing runs, the first declared template variable it holds no value for; or
+ *   {@link RecordMismatch} for another item's record.
  */
 export const restore = (
   document: Accepted,
@@ -70,7 +74,10 @@ export const restore = (
   Result.map(
     Result.flatMap(
       Result.flatMap(decodeRecord(record), (decoded) => belonging(document.item, decoded)),
-      (decoded) => fitting(document.item, decoded),
+      (decoded) =>
+        Result.flatMap(fitting(document.item, decoded), (fitted) =>
+          templatesHeld(document.item, fitted),
+        ),
     ),
     (decoded) => ({ record: decoded, values: decoded.responses }),
   );

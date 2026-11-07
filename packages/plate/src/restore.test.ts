@@ -1,6 +1,8 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Option, Result } from "effect";
+import { begin } from "#plate/begin.ts";
 import { decodeRecord, encodeRecord } from "#plate/codec/record.ts";
+import type { StoredRecord } from "#plate/codec/record.ts";
 import { readCorpusFile } from "#plate/document/corpus.ts";
 import { fresh } from "#plate/model/record.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
@@ -109,6 +111,28 @@ describe("restore", { tags: ["corpus"] }, () => {
 
         assert.deepStrictEqual(
           Result.getSuccess(restore(accepted, stored)),
+          Option.some({ record, values: record.responses }),
+        );
+      }),
+  );
+
+  it.effect(
+    "[I-5] refuses begin's record of template_digging with its template values emptied, InvalidRecord at decode, and restores begin's own",
+    () =>
+      Effect.gen(function* refusesTemplateGap() {
+        const accepted = yield* opened(templateDigging);
+        const started = yield* Effect.fromResult(
+          begin(accepted, { instance: "digging", seed: "7" }),
+        );
+        const emptied: StoredRecord = { ...started, templates: {} };
+        const record = yield* Effect.fromResult(decodeRecord(started));
+
+        assert.deepStrictEqual(
+          failureOf(restore(accepted, emptied)),
+          Option.some(["InvalidRecord", "decode"]),
+        );
+        assert.deepStrictEqual(
+          Result.getSuccess(restore(accepted, started)),
           Option.some({ record, values: record.responses }),
         );
       }),

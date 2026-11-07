@@ -18,8 +18,7 @@ import { ValueSchema } from "#plate/codec/values.ts";
 import type { Configuration } from "#plate/configuration.ts";
 import { firstAttempt, runAttempt } from "#plate/engine/attempt.ts";
 import type { EngineFailure } from "#plate/engine/evaluate.ts";
-import { interactionsIn } from "#plate/model/interactions.ts";
-import type { BodyNode, Item, OutcomeDeclaration, ResponseDeclaration } from "#plate/model/item.ts";
+import type { Item, OutcomeDeclaration, ResponseDeclaration } from "#plate/model/item.ts";
 import {
   completionStatus,
   completionStatusType,
@@ -27,7 +26,7 @@ import {
 } from "#plate/model/record.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
 import type { Value } from "#plate/model/values.ts";
-import { redactItem } from "#plate/payload.ts";
+import { hiddenOnlyResponses } from "#plate/payload.ts";
 import type { ValidationMessage } from "#plate/payload.ts";
 import { checkResponses } from "#plate/responses.ts";
 import { drawSeed } from "#plate/seed.ts";
@@ -312,8 +311,11 @@ const responseMisfit = (item: Item, record: ItemRecord): Option.Option<string> =
  * declares, as template processing sets them (`targetOf` in `#plate/engine/template.ts`), each of
  * its declaration's base type and cardinality.
  *
- * A template variable the record lacks is not refused: the record of an item whose
- * `qti-template-processing` the engine does not run holds none.
+ * A template variable the record lacks is not refused here: the record of an item whose
+ * `qti-template-processing` the engine does not run holds none, and `results` and `advance` run
+ * {@link fitting}, which shares this check, over the `fresh` record of an item never presented,
+ * which holds no template value either. {@link templatesHeld} refuses the gap where it matters:
+ * `score` and `restore` run it on the record of an item whose template processing runs.
  *
  * @param item The item.
  * @param record The decoded record, which belongs to the item.
@@ -359,11 +361,60 @@ const unlessMisfit = (
   });
 
 /**
+ * Find the first template variable an item declares that a record holds no value for, where the
+ * item's template processing runs.
+ *
+ * Such an item's response processing reads values its template processing drew when the record
+ * started, and every record `begin` or `score` writes for it holds a value, NULL included, for each
+ * declared template variable. A record without one would be scored against the declarations, the
+ * correct response its template processing overrides among them, so it is not one the renderer
+ * wrote. An item whose template processing does not run is left alone: its record holds the
+ * declared defaults, or, for a `qti-template-processing` the item model marks, no template value.
+ *
+ * @param item The item.
+ * @param record The decoded record, which belongs to the item.
+ * @returns The issue, naming the first such variable in declaration order, or none.
+ */
+const templateGap = (item: Item, record: ItemRecord): Option.Option<string> =>
+  Option.isSome(item.templateProcessing)
+    ? Option.map(
+        Option.fromUndefinedOr(
+          [...item.templates.keys()].find(
+            (identifier) => !Object.hasOwn(record.templates, identifier),
+          ),
+        ),
+        (identifier) =>
+          `it holds no value for the template variable ${JSON.stringify(identifier)}, which the item's template processing sets when its record starts`,
+      )
+    : Option.none();
+
+/**
+ * Check that a decoded record holds a value for every template variable its item declares, where
+ * the item's template processing runs ({@link templateGap}).
+ *
+ * {@link score} runs it on the record it is handed, inside {@link carriedFitting}, and `restore`
+ * after {@link fitting}, so neither scores nor gives back a record that would be scored against the
+ * declared values its template processing replaces. {@link fitting} does not run it: `results` and
+ * `advance` run that over the `fresh` record of an item never presented, which holds no template
+ * value and must still fit.
+ *
+ * @param item The item.
+ * @param record The decoded record, which belongs to the item.
+ * @returns The record, or {@link InvalidRecord} at stage `decode` naming the first declared
+ *   template variable it holds no value for.
+ */
+export const templatesHeld = (
+  item: Item,
+  record: ItemRecord,
+): Result.Result<ItemRecord, InvalidRecord> => unlessMisfit(record, templateGap(item, record));
+
+/**
  * Check what an attempt carries from a decoded record into the rules: each response the record
  * holds is one the item scores, of its declaration's base type and cardinality; the built-in
- * `completionStatus`, where the item holds it, is a single identifier; and the template values,
- * correct responses and defaults fit as {@link templateMisfit} checks them. It is the check
- * {@link score} runs on the record it is handed.
+ * `completionStatus`, where the item holds it, is a single identifier; the template values,
+ * correct responses and defaults fit as {@link templateMisfit} checks them; and, where the item's
+ * template processing runs, it holds a value for each declared template variable
+ * ({@link templatesHeld}). It is the check {@link score} runs on the record it is handed.
  *
  * A declared response the record lacks is left to the engine, which fails `UnknownIdentifierError`
  * if the processing reads it, and the attempt starts the built-in at `unknown` for a record that
@@ -373,7 +424,8 @@ const unlessMisfit = (
  * @param item The item.
  * @param record The decoded record, which belongs to the item.
  * @returns The record, or {@link InvalidRecord} at stage `decode` naming the first response, then
- *   the built-in, then the first template value, correct response or default, that does not fit.
+ *   the built-in, then the first template value, correct response or default, that does not fit,
+ *   then the first declared template variable it holds no value for.
  */
 const carriedFitting = (item: Item, record: ItemRecord): Result.Result<ItemRecord, InvalidRecord> =>
   unlessMisfit(
@@ -387,6 +439,7 @@ const carriedFitting = (item: Item, record: ItemRecord): Result.Result<ItemRecor
           : Option.none(),
       ),
       Option.orElse(() => templateMisfit(item, record)),
+      Option.orElse(() => templateGap(item, record)),
     ),
   );
 
@@ -417,7 +470,10 @@ const outcomeType = (item: Item, identifier: string): Option.Option<Expected> =>
  * `begin` or `score` writes fits, since template processing and the engine set only declared
  * variables and the built-in `completionStatus`, each to a value of its type. A declared variable
  * the record lacks is not refused, nor is a record that lacks `completionStatus`, as one written
- * before the item held the built-in does: the attempt starts it at `unknown`.
+ * before the item held the built-in does: the attempt starts it at `unknown`. A declared template
+ * variable the record of an item whose template processing runs lacks is {@link templatesHeld}'s
+ * to refuse, which `restore` runs after this and `score` runs too; `results` and `advance` do not,
+ * since they fit the `fresh` record of an item never presented.
  *
  * @param item The item.
  * @param record The decoded record, which belongs to the item.
@@ -513,7 +569,8 @@ const checkedResponses = (
  *
  * @param item The item.
  * @returns The record, {@link RecordRequired} for an item whose template processing runs, or the
- *   engine's failure, which the validator refuses every cause of on a checked item.
+ *   engine's failure, every cause of which, on a checked item, the validator refuses or the item
+ *   model marks.
  */
 const unrecorded = (item: Item): Result.Result<ItemRecord, EngineFailure | RecordRequired> =>
   Option.isSome(item.templateProcessing)
@@ -521,42 +578,35 @@ const unrecorded = (item: Item): Result.Result<ItemRecord, EngineFailure | Recor
     : firstAttempt(item, { instance: "", seed: drawSeed() });
 
 /**
- * Give the responses the interactions of some body nodes bind.
- *
- * @param nodes The body nodes.
- * @returns The responses' identifiers.
- */
-const boundIn = (nodes: readonly BodyNode[]): ReadonlySet<string> =>
-  new Set(interactionsIn(nodes).map(({ response }) => response));
-
-/**
- * Leave out the posted value of each response the page showed no control for: a response an
- * interaction of the item binds, but no interaction of the item as `redactItem` in
- * `#plate/payload.ts` shows it under the record's template values, the walk `checkResponses`
- * judges by, such as one only a hidden template block holds.
+ * Leave out the posted value of each response only content the page does not see binds
+ * (`hiddenOnlyResponses` in `#plate/payload.ts`, from the walk `redactItem` makes, which
+ * `checkResponses` judges by): one some interaction binds, a rendered one anywhere in the body or
+ * any one inside a template block or inline the record's template values hide or withhold, and no
+ * interaction the page sees binds. An interaction inside hidden template content is dropped
+ * whether the renderer shows it or a notice in its place: hidden wins.
  *
  * `checkResponses` gives such a response no message, so a session's stored value for it passes
  * that check, and this is the one guard that keeps a posted value from reaching response
  * processing: the attempt reads the record's value instead, which stands even when the value
  * posted is NULL. Every route into an attempt passes it: outside tests, only {@link score} calls
  * `runAttempt`, and `submit` and `advance` in `#plate/session/` score through it. A response no
- * interaction of the item binds is passed on as posted.
+ * interaction of the item binds, or one bound only to a notice on content the page sees, is
+ * passed on as posted (D8-3).
  *
  * @param item The item.
  * @param record The record the attempt scores from.
  * @param responses The responses, each checked against its declaration.
- * @returns The responses an interaction shown binds, and those no interaction binds.
+ * @returns The responses, but those only content the record hides or withholds binds.
  */
 const shownOnly = (
   item: Item,
   record: ItemRecord,
   responses: Readonly<Record<string, Value>>,
 ): Readonly<Record<string, Value>> => {
-  const shown = boundIn(redactItem(item, record).body);
-  const bound = boundIn(item.body);
+  const hidden = hiddenOnlyResponses(item, record);
 
   return Object.fromEntries(
-    Object.entries(responses).filter(([response]) => shown.has(response) || !bound.has(response)),
+    Object.entries(responses).filter(([response]) => !hidden.has(response)),
   );
 };
 
@@ -568,15 +618,17 @@ const shownOnly = (
  * each response it holds is one the item scores, of its declaration's base type and cardinality,
  * that the built-in `completionStatus`, which the attempt carries over, is a single identifier,
  * and that its template values, correct responses and defaults are each of its variable's
- * declared type; it checks each response as a value of its declaration; it refuses responses that
- * break a tier (a) limit, under the default configuration, judging the item as the record it
- * scores from shows it (`checkResponses` with that record), so a choice the record's template
- * values hide is refused `unknownChoice` and one they show is judged as any choice; it leaves out
- * the posted value of a response only content the record hides binds ({@link shownOnly}); then it
- * runs the attempt and writes the record. The record's seed, template values, correct responses
- * and defaults come back unchanged, and the rules read the template values, and the correct
- * responses and defaults template processing set, from it. It sets no attempt limit:
- * `maxAttempts` is the author's flow.
+ * declared type, and, where the item's template processing runs, that it holds a value for each
+ * declared template variable ({@link templatesHeld}); it checks each response as a value of its
+ * declaration; it refuses responses that break a tier (a) limit, under the default configuration,
+ * judging the item as the record it scores from shows it (`checkResponses` with that record), so a
+ * choice the record's template values hide is refused `unknownChoice` and one they show is judged
+ * as any choice; it leaves out the posted value of a response only content the record hides or
+ * withholds binds, whether the renderer shows the interaction there or a notice in its place
+ * ({@link shownOnly}); then it runs the attempt and writes the record. The record's seed, template
+ * values, correct responses and defaults come back unchanged, and the rules read the template
+ * values, and the correct responses and defaults template processing set, from it. It sets no
+ * attempt limit: `maxAttempts` is the author's flow.
  *
  * With no record, an item whose template processing runs fails {@link RecordRequired}: its values
  * are drawn once, by `begin`, and `score` invents none. Any other item starts from the record its
@@ -598,7 +650,8 @@ const shownOnly = (
  * @returns The record after the attempt, in the form the host stores, or {@link InvalidRecord} for
  *   a record the renderer did not write (or could not write), such as one that holds a response the
  *   item does not score, a value of another base type or cardinality than its variable's
- *   declaration, or a `completionStatus` that is not a single identifier, {@link RecordMismatch}
+ *   declaration, a `completionStatus` that is not a single identifier, or, for an item whose
+ *   template processing runs, no value for a declared template variable, {@link RecordMismatch}
  *   for another item's record, {@link RecordRequired} for no record of an item whose template
  *   processing runs, {@link InvalidResponses} for a response that does not fit its declaration,
  *   {@link ResponsesRefused} for responses that break a tier (a) limit, a choice the record hides
