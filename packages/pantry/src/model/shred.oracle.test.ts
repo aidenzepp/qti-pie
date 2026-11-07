@@ -1274,7 +1274,7 @@ describe("a foreign element's governing type (spec readings 60 and 83)", () => {
         assert.strictEqual(compared, 2 * laxArms.length);
         assert.deepStrictEqual(disagreements, []);
       }).pipe(Effect.scoped, Effect.provide(OracleLayer), Effect.provide(XsdOracleLayer)),
-    120_000,
+    150_000,
   );
 });
 
@@ -1527,7 +1527,7 @@ describe("an element under its governing type (spec reading 84)", () => {
 
         assert.deepStrictEqual(disagreements, []);
       }).pipe(Effect.scoped, Effect.provide(OracleLayer), Effect.provide(XsdOracleLayer)),
-    120_000,
+    150_000,
   );
 
   it.effect(
@@ -1655,7 +1655,7 @@ describe("an element under its governing type (spec reading 84)", () => {
         assert.isAbove(governors, 0);
         assert.deepStrictEqual(disagreements, []);
       }).pipe(Effect.scoped, Effect.provide(OracleLayer), Effect.provide(XsdOracleLayer)),
-    300_000,
+    420_000,
   );
 });
 

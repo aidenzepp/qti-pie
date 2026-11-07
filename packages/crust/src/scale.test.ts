@@ -27,10 +27,11 @@ const unbounded: ReadOptions = { elementDepth: Number.POSITIVE_INFINITY };
  * The timeout, in milliseconds, for each scale test. The slowest, the namespaced deep round trip,
  * reads 100,000 levels twice; in three runs of the full crust suite on 2026-11-05 (Node 26.13.0,
  * load averages 41 to 46) it took 8,690, 10,181 and 11,784 ms, and every other scale test under
- * 3 s. The budget is twice the slowest, rounded up to the next 1,000. Raise it only on a new
- * measurement recorded here, never to make a run pass.
+ * 3 s; on 2026-11-07, at load averages near 70, 16.7 and 23.4 s. The hang guard is over twice the
+ * slowest, rounded up to the next 10,000. Raise it only on a new measurement recorded here, never
+ * to make a run pass.
  */
-const SCALE_TIMEOUT_MS = 24_000;
+const SCALE_TIMEOUT_MS = 50_000;
 
 /**
  * A childless element `qname` in no namespace with no attributes.

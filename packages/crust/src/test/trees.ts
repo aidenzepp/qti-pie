@@ -30,11 +30,12 @@ export const caseHang = Duration.seconds(30);
  * steered case), took 1,568 ms beside crust's other suites (2026-11-05, Node 26.13.0, load
  * average 54). The reader's 400 swarmed trees before the search took 5,115 ms at load average 48,
  * so a search of 500 such cases may take some 6.4 s there. The budget is twice that, rounded up to
- * the next 1,000; a search that nears it reports what it found before its test fails, its
- * deadline being the test's. Raise it only on a new measurement recorded here, never to make a run
- * pass.
+ * the next 1,000. On 2026-11-07, at a load average near 70, the slowest search under it took
+ * 1.4 s, and it is the suites' hang guard of 60 s (`packages/pantry/src/test/timeouts.test.ts`),
+ * since a search's timeout is the deadline `searched` stops it at, never its budget. Raise it only
+ * on a new measurement recorded here, never to make a run pass.
  */
-export const GENERATED_TIMEOUT_MS = 13_000;
+export const GENERATED_TIMEOUT_MS = 60_000;
 
 /**
  * The namespace name every namespace declaration's attribute is in.

@@ -241,7 +241,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
             ),
           );
         }),
-      240_000,
+      300_000,
     );
 
     it.effect(

@@ -130,7 +130,7 @@ describe("grammar/labels.ts, the kinds whose label asks for its tool", () => {
  * The timeout, in milliseconds, for reading both versions' ASI XSDs, each hashed against its pin
  * and parsed whole: 20 s on 2026-11-06 at a load of about 40, so twice that and a margin.
  */
-const xsdTimeoutMs = 60_000;
+const xsdTimeoutMs = 90_000;
 
 describe.skipIf(!cached)(
   "grammar/labels.ts, against the pinned XSD",

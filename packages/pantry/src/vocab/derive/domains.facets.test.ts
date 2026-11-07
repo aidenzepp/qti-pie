@@ -641,7 +641,7 @@ describe("vocab/derive/domains.ts, restriction by facets", () => {
             }),
         ),
       ),
-    120_000,
+    180_000,
   );
 });
 
