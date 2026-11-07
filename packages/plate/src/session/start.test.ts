@@ -374,13 +374,59 @@ const startedFromPackage = Effect.fnUntraced(function* startedFromPackage(place:
  *
  * @param delivery The test and its items.
  * @param configuration The host's configuration.
+ * @param seed The processing seed the context gives; with none, `startTest` draws one.
  * @returns The session.
  */
-const started = (delivery: Delivery, configuration: Configuration): TestSession =>
+const started = (delivery: Delivery, configuration: Configuration, seed?: string): TestSession =>
   Result.getOrElse(
-    startTest(delivery.test, delivery.items, configuration, { instance, now: startedAt }),
+    startTest(
+      delivery.test,
+      delivery.items,
+      configuration,
+      seed === undefined ? { instance, now: startedAt } : { instance, now: startedAt, seed },
+    ),
     (failure) => assert.fail(`startTest refused: ${failure.message}`),
   );
+
+/**
+ * Open the one-item hand-built test whose item `shuffled` is a shuffled Choice over `A` to `D`.
+ *
+ * @returns The test and its item.
+ */
+const shuffledDelivery = () =>
+  builtDelivery("shuffle", [
+    [
+      "shuffled",
+      itemXml("shuffled", { choices: ["A", "B", "C", "D"], defaultValue: false, shuffle: true }),
+    ],
+  ]);
+
+/**
+ * Render the item a view shows under the view's configuration, failing the test when `render`
+ * refuses.
+ *
+ * @param delivery The test and its items.
+ * @param view The view.
+ * @param configuration The configuration to render under, the view's when absent.
+ * @returns The HTML.
+ */
+const viewHtml = (
+  delivery: Delivery,
+  view: ItemView,
+  configuration: Configuration = view.configuration,
+): string =>
+  Result.getOrElse(
+    render(
+      redact(
+        delivery.items.get(view.ref) ?? assert.fail(`the delivery has no item ${view.ref}`),
+        view.record,
+        configuration,
+      ),
+      configuration,
+      { disabled: view.disabled, instance: view.instance, values: view.values },
+    ),
+    (failure) => assert.fail(failure.message),
+  ).html;
 
 /**
  * Hand a session through a host's storage: encode it, write it as JSON text, read the text back
@@ -821,13 +867,13 @@ describe("current", () => {
   );
 
   it.effect(
-    "renders with the seed the session started with, not the host's",
+    "renders with the shuffle seed the session started with, not the host's, and never with its processing seed",
     () =>
       Effect.gen(function* storedSeed() {
         const delivery = yield* guideDelivery();
-        const session = started(delivery, yield* configure({ seed: "7" }));
+        const session = started(delivery, yield* configure({ seed: "7" }), "11");
 
-        assert.strictEqual(session.seed, "7");
+        assert.deepStrictEqual([session.seed, session.shuffleSeed], ["11", Option.some("7")]);
         assert.strictEqual(
           currentItem(delivery, session, yield* configure({ seed: "9" })).configuration.seed,
           "7",
@@ -837,7 +883,7 @@ describe("current", () => {
   );
 
   it.effect(
-    "[T-14] renders a shuffled Choice byte-equal after a JSON round trip, in the order of the seed the session stored, whatever seed the host passes",
+    "[T-14] renders a shuffled Choice byte-equal after a JSON round trip, in the order of the shuffle seed the session stored, whatever seed the host passes",
     () =>
       Effect.gen(function* storedSeedRoundTrip() {
         const delivery = yield* builtDelivery("shuffle", [
@@ -869,8 +915,8 @@ describe("current", () => {
         const restoredView = currentItem(delivery, restored, hostConfiguration);
         const underHostSeed = htmlOf({ ...before, configuration: hostConfiguration });
 
-        assert.strictEqual(before.configuration.seed, session.seed);
-        assert.strictEqual(restoredView.configuration.seed, session.seed);
+        assert.strictEqual(before.configuration.seed, "7");
+        assert.strictEqual(restoredView.configuration.seed, "7");
         assert.notStrictEqual(underHostSeed, htmlOf(before), 'seed "9" presents another order');
         assert.strictEqual(htmlOf(restoredView), htmlOf(before));
       }),
@@ -1003,12 +1049,12 @@ describe("present", () => {
 
 describe("a templated item in a session", () => {
   it.effect(
-    "[I-5] presents each item with the record firstAttempt starts under the session's seed and the item's instance, the template-set default first",
+    "[I-5] presents each item with the record firstAttempt starts under the session's processing seed and the item's instance, the template-set default first",
     () =>
       Effect.gen(function* presentsTemplated() {
         const delivery = yield* templatedDelivery();
-        const configuration = yield* configure({ seed: "11" });
-        const session = started(delivery, configuration);
+        const configuration = yield* configure({ seed: "7" });
+        const session = started(delivery, configuration, "11");
         const first = startedRecord(delivery, "first", { instance: `${instance}.1`, seed: "11" });
 
         assert.deepStrictEqual(session.items[0]?.record, first);
@@ -1033,19 +1079,22 @@ describe("a templated item in a session", () => {
       }),
   );
 
-  it.effect("[I-5] gives two sessions started with two seeds two template values", () =>
-    Effect.gen(function* seedsDiffer() {
-      const delivery = yield* templatedDelivery();
-      const eleven = recordUnder(started(delivery, yield* configure({ seed: "11" })));
-      const twelve = recordUnder(started(delivery, yield* configure({ seed: "12" })));
+  it.effect(
+    "[I-5] gives two sessions started with two processing seeds under one configuration seed two template values",
+    () =>
+      Effect.gen(function* seedsDiffer() {
+        const delivery = yield* templatedDelivery();
+        const configuration = yield* configure({ seed: "7" });
+        const eleven = recordUnder(started(delivery, configuration, "11"));
+        const twelve = recordUnder(started(delivery, configuration, "12"));
 
-      assert.notDeepEqual(eleven.templates["T"], twelve.templates["T"]);
-      assert.deepStrictEqual([eleven.seed, twelve.seed], ["11", "12"]);
-    }),
+        assert.notDeepEqual(eleven.templates["T"], twelve.templates["T"]);
+        assert.deepStrictEqual([eleven.seed, twelve.seed], ["11", "12"]);
+      }),
   );
 
   it.effect(
-    "[I-5] draws a seed of 32 lowercase hex digits for a session started with no seed, another each session, which every presented item's record and the item configuration carry",
+    "[I-5] draws a processing seed of 32 lowercase hex digits for a session started with no seed, another each session, which every presented item's record carries and the item configuration does not",
     () =>
       Effect.gen(function* drawsSessionSeed() {
         const delivery = yield* templatedDelivery();
@@ -1068,9 +1117,8 @@ describe("a templated item in a session", () => {
           recordUnder(session),
           startedRecord(delivery, "first", { instance: `${instance}.1`, seed: session.seed }),
         );
-        assert.strictEqual(
-          currentItem(delivery, session, configuration).configuration.seed,
-          session.seed,
+        assert.isFalse(
+          Object.hasOwn(currentItem(delivery, session, configuration).configuration, "seed"),
         );
       }),
   );
@@ -1178,6 +1226,146 @@ describe("a templated item in a session", () => {
         );
 
         assert.propertyVal(thrown, "_tag", "FirstAttemptDefect");
+      }),
+  );
+});
+
+describe("the processing seed (SR-1)", () => {
+  it.effect(
+    "[I-5] keys every item's processing by the processing seed the host gives in startTest's context, and the view's configuration carries the shuffle seed, never it",
+    () =>
+      Effect.gen(function* givenProcessingSeed() {
+        const delivery = yield* templatedDelivery();
+        const configuration = yield* configure({ seed: "7" });
+        const session = started(delivery, configuration, "processing-11");
+        const presented = Result.getOrElse(
+          present(delivery.items, session, 2, after(1000)),
+          (failure) => assert.fail(failure.message),
+        );
+        const view = currentItem(delivery, session, configuration);
+
+        assert.strictEqual(session.seed, "processing-11");
+        assert.deepStrictEqual(session.shuffleSeed, Option.some("7"));
+        assert.deepStrictEqual(
+          presented.items.map((item) => item.record),
+          [1, 2].map((sequenceIndex) =>
+            startedRecord(delivery, sequenceIndex === 1 ? "first" : "second", {
+              instance: `${instance}.${String(sequenceIndex)}`,
+              seed: "processing-11",
+            }),
+          ),
+        );
+        assert.strictEqual(view.configuration.seed, "7");
+        assert.notStrictEqual(view.configuration.seed, view.record.seed);
+      }),
+  );
+
+  it.effect(
+    "[I-5] draws the processing seed when the context gives none, never the configuration's seed, and the view's configuration carries only the shuffle seed",
+    () =>
+      Effect.gen(function* drawnProcessingSeed() {
+        const delivery = yield* templatedDelivery();
+        const configuration = yield* configure({ seed: "7" });
+        const session = started(delivery, configuration);
+        const view = currentItem(delivery, session, configuration);
+
+        assert.match(session.seed, /^[0-9a-f]{32}$/u);
+        assert.deepStrictEqual(session.shuffleSeed, Option.some("7"));
+        assert.deepStrictEqual(
+          view.record,
+          startedRecord(delivery, "first", { instance: `${instance}.1`, seed: session.seed }),
+        );
+        assert.strictEqual(view.configuration.seed, "7");
+        assert.notStrictEqual(view.configuration.seed, view.record.seed);
+      }),
+  );
+
+  it.effect(
+    "orders a shuffle by the configuration's seed only, whatever the processing seed: two processing seeds present one order, two configuration seeds two",
+    () =>
+      Effect.gen(function* shuffleSeedOnly() {
+        const delivery = yield* shuffledDelivery();
+        const seven = yield* configure({ seed: "7" });
+        const nine = yield* configure({ seed: "9" });
+        const htmlUnder = (configuration: Configuration, seed: string): string =>
+          viewHtml(
+            delivery,
+            currentItem(delivery, started(delivery, configuration, seed), configuration),
+          );
+
+        assert.strictEqual(htmlUnder(seven, "processing-a"), htmlUnder(seven, "processing-b"));
+        assert.notStrictEqual(htmlUnder(seven, "processing-a"), htmlUnder(nine, "processing-a"));
+      }),
+  );
+
+  it.effect(
+    "with no configuration seed, gives a view with no seed, so a shuffle follows the instance alone, whatever the processing seed",
+    () =>
+      Effect.gen(function* unseededShuffle() {
+        const delivery = yield* shuffledDelivery();
+        const configuration = yield* configure({});
+        const session = started(delivery, configuration, "processing-11");
+        const view = currentItem(delivery, session, configuration);
+
+        assert.deepStrictEqual(session.shuffleSeed, Option.none());
+        assert.isFalse(Object.hasOwn(view.configuration, "seed"));
+        assert.strictEqual(
+          viewHtml(delivery, view),
+          viewHtml(delivery, view, { ...view.configuration, seed: "" }),
+        );
+        assert.notStrictEqual(
+          viewHtml(delivery, view),
+          viewHtml(delivery, view, { ...view.configuration, seed: session.seed }),
+        );
+      }),
+  );
+
+  it.effect("[T-14] round-trips a stored session's processing seed and its shuffle seed", () =>
+    Effect.gen(function* storedSeeds() {
+      const delivery = yield* shuffledDelivery();
+      const seeded = started(delivery, yield* configure({ seed: "7" }), "processing-11");
+      const unseeded = started(delivery, yield* configure({}), "processing-12");
+      const stored = Result.getOrElse(encodeSession(seeded), (failure) =>
+        assert.fail(failure.message),
+      );
+
+      assert.deepStrictEqual([stored.seed, stored.shuffleSeed], ["processing-11", "7"]);
+      assert.deepStrictEqual(throughHost(delivery.test, seeded), seeded);
+      assert.deepStrictEqual(throughHost(delivery.test, unseeded), unseeded);
+    }),
+  );
+
+  it.effect(
+    "gives a session started with no configured seed, viewed under a configuration that holds one, a view with no seed and the order the instance alone gives, never the processing seed's",
+    () =>
+      Effect.gen(function* viewedUnderHostSeed() {
+        const delivery = yield* shuffledDelivery();
+        const unseeded = yield* configure({});
+        const host = yield* configure({ seed: "9" });
+        const session = started(delivery, unseeded, "processing-11");
+        const view = currentItem(delivery, session, host);
+
+        assert.isFalse(Object.hasOwn(view.configuration, "seed"));
+        assert.strictEqual(
+          viewHtml(delivery, view),
+          viewHtml(delivery, view, { ...view.configuration, seed: "" }),
+        );
+        assert.notStrictEqual(
+          viewHtml(delivery, view),
+          viewHtml(delivery, view, { ...view.configuration, seed: "9" }),
+        );
+      }),
+  );
+
+  it.effect(
+    "gives a session started with a configured seed, viewed under another, its shuffle seed, never the processing seed",
+    () =>
+      Effect.gen(function* viewedUnderOtherSeed() {
+        const delivery = yield* shuffledDelivery();
+        const session = started(delivery, yield* configure({ seed: "7" }), "processing-11");
+        const view = currentItem(delivery, session, yield* configure({ seed: "9" }));
+
+        assert.strictEqual(view.configuration.seed, "7");
       }),
   );
 });

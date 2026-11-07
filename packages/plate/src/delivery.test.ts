@@ -73,7 +73,9 @@ const sessionTimeoutMs = 60_000;
 const instance = "4c7e1a2b-9d3f-4e8a-b6c5-0f1e2d3c4b5a";
 
 /**
- * The seed the host's configuration carries, which a session keeps.
+ * The seed the host's configuration carries, which a session keeps as its shuffle seed. Each
+ * sitting also passes it to `startTest` as the processing seed, so its pinned orders and scores
+ * stay the ones it had when one seed did both; a host passes two seeds apart.
  */
 const hostSeed = "3";
 
@@ -754,7 +756,8 @@ const inspect = (delivery: Delivery, before: TestSession, after: TestSession, st
 };
 
 /**
- * Start a session of a delivery and check its first page.
+ * Start a session of a delivery under the processing seed {@link hostSeed} and check its first
+ * page.
  *
  * @param delivery The delivery.
  * @returns The sitting.
@@ -764,6 +767,7 @@ const begin = (delivery: Delivery): Sitting => {
     startTest(delivery.test, delivery.items, delivery.configuration, {
       instance,
       now: new Date(startedAt),
+      seed: hostSeed,
     }),
     "startTest",
   );

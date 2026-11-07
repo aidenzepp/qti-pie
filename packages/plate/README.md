@@ -323,7 +323,7 @@ session where only your server can change it.
 | Record | Holds | Written by | Read by |
 | --- | --- | --- | --- |
 | `StoredRecord`, `version: 3` | One item's seed, template values, attempts, responses and outcomes, with the correct responses and defaults its template processing set | `begin`, `score` | `score`, `restore`, `results` |
-| `StoredTestSession`, `version: 3` | A test session, with its items' records and saved responses, its position and its parts | `encodeSession` | `decodeSession`, `results` |
+| `StoredTestSession`, `version: 3` | A test session, with its processing seed and its shuffle seed, its items' records, saved responses and template defaults, its position and its parts, and the test's outcomes with the count of its outcome processing runs | `encodeSession` | `decodeSession`, `results` |
 
 plate reads only version 3, and refuses a record of another version with `InvalidRecord` or
 `InvalidSession`. A change to either form is a changelog entry. The TSDoc on each type documents
@@ -356,10 +356,12 @@ A host can rely on these, and [`src/interactions/`](src/interactions/) documents
   `seed` as `""`, so the order then follows the instance alone. Keep the `seed` stable across
   restarts, pass the `instance` you stored, and vary the `seed` per candidate when every candidate
   gets the same instance.
-- A test session keeps the seed it started with. `startTest` draws one, 128 random bits, when the
-  configuration has none, so render a session's item with the configuration `itemView` gives.
-  `begin` and `score` draw a record's seed the same way, but that seed keys the item's processing,
-  never its shuffle.
+- A test session keeps two seeds. Its shuffles follow the configuration's `seed` it started with,
+  or the instance alone when that configuration had none, so render a session's item with the
+  configuration `itemView` gives, whatever `seed` you pass later. Its processing follows a seed of
+  its own: the `seed` in `startTest`'s context, or 128 random bits `startTest` draws when you pass
+  none. `begin` and `score` draw a record's seed the same way, and that seed keys the item's
+  processing, never its shuffle.
 - An Inline Choice is a native `select`. Its first option, the author's `data-prompt` or else
   "Select an answer", posts an empty value, which `decode` reads as NULL.
 - An `option` shows only text, so an Inline Choice renders only when its choices hold nothing but
@@ -505,10 +507,11 @@ place. A test session starts each item's record when it first shows the item, an
 The seed is a string, and it is the record's secret: it keys every value that template and
 response processing draw. A seed someone can guess, such as `"7"` or `""`, lets anyone who sees
 the page and the item work those values out. When you pass no seed, `begin` draws 128 random bits,
-as `startTest` does for a session and `score` does for a record it starts itself. `configure`
-reads a `seed` of `""` as no seed, so `startTest` then draws one, while `begin` uses a given `""`
-as the seed, and `score` uses the seed of the record it is handed. The same document, instance and
-seed give the same record every run. To fix the seed for `score`, start the record with `begin`.
+as `startTest` does for a session's processing seed when its context gives none, and `score` does
+for a record it starts itself. `begin` uses a given `""` as the seed, and `score` uses the seed of
+the record it is handed. `configure` reads a `seed` of `""` as no seed, so a `startTest` session's
+shuffles then follow the instance alone. The same document, instance and seed give the same record
+every run. To fix the seed for `score`, start the record with `begin`.
 
 With no record, plate fills in no value that template processing sets. For an item whose template
 processing runs:
@@ -602,6 +605,10 @@ this split. A host that sends the accepted item to the browser sends what `redac
 - A page that holds a `TestSession` holds every item's outcomes, scores included, and every
   item's record. A page that calls `solution`, `results` or `advance` holds the accepted items,
   correct responses included. Keep the session and those calls on the server.
+- A `TestSession`'s `seed` is its processing seed, which keys every value the session's processing
+  draws, so it is server data, as an item's record is. Pass `startTest` a processing seed apart
+  from the configuration's `seed`, never one string as both: the configuration's `seed` orders the
+  shuffles the page shows, and their order can give it away.
 - An item's record, `ItemView` and `Restored` are server data, as [Records](#records) says. A host
   that sends one to the page sends the seed and the item's answers.
 - `redact`'s copy holds no seed, no template rule, no hidden template content, and no correct

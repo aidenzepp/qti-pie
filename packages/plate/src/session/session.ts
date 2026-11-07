@@ -89,12 +89,14 @@ export interface SessionItem {
  * request to the next.
  *
  * `test` is the test's identifier and `document` the test document's location. `instance` is the
- * host's name for this sitting, which scopes every item's ids. `seed` is the seed the session
- * started with, always present: the host's, used as given, or the one `startTest` drew when the
- * configuration had none. It keys a shuffled Choice's order and every value an item's processing
- * draws, so a restored session presents the order and the values it showed. `shuffleSeed` is the
- * configuration's `seed` the session started under, none when the configuration had none.
- * `started` and `updated` are ISO 8601 UTC times: when the session started and when its last
+ * host's name for this sitting, which scopes every item's ids. `seed` is the session's processing
+ * seed, always present: the one `startTest`'s context gave, used as given, or the one `startTest`
+ * drew when the context gave none, never the configuration's `seed`. It keys every value the
+ * session's processing draws, so a restored session holds the values it showed, and it is server
+ * data: it never reaches the page. `shuffleSeed` is the configuration's `seed` the session started
+ * under, none when the configuration had none; it alone orders a shuffled Choice or Inline Choice,
+ * so a restored session presents the order it showed, and with none a shuffle follows the instance
+ * alone. `started` and `updated` are ISO 8601 UTC times: when the session started and when its last
  * transition happened. `position` is the index into `items` of the item shown now, counted from 0.
  * `parts` lists the test's parts in order, and `items` its items in the order the candidate meets
  * them.
