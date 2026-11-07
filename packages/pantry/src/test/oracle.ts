@@ -134,7 +134,6 @@ import {
   pathOf,
   resolvedAt,
   slotKey,
-  typedOptionalOf,
   typedValueOf,
   valueOf,
   viewOf,
@@ -2744,31 +2743,32 @@ interface Finding {
 const bindingNames = ["response-identifier", "string-identifier"] as const;
 
 /**
- * Read the base type a declaration writes, as its type reads it ({@link typedOptionalOf}): the
- * type every law that reads one judges, a binding's fit, a mapping's or an area mapping's type, a
- * map key's or a table value's form, and a feedback outcome's type. An unwritten `base-type` is no
+ * Read the base type a declaration writes, as its type reads it ({@link typedValueOf}): the type
+ * every law that reads one judges, a binding's fit, a mapping's or an area mapping's type, a map
+ * key's or a table value's form, and a feedback outcome's type. An unwritten `base-type` is no
  * type at all: a record has none ("Variables with record cardinality have no base-type",
  * information model tables 4.5.3 and 5.115.3), so a law about a record's whole value judges its
  * cardinality alone, and any other variable that writes none is refused by Declaration base type
  * alone, never by a law over a type it does not have (the orchestrator's ruling of 2026-11-06: one
  * cause is refused under one rule; lane NIL's audit, B12). One written outside its value domain
- * reads nothing: that domain refuses it alone, and the schema writes no `Declaration` row for it,
- * nor any row below it (lane NIL's audit, B11). Its type enumerates a restriction of `xs:string`,
- * whose whiteSpace is `preserve`, so a padded form lies outside it (`imsqti_asiv3p0_v1p0.xsd`,
- * each declaration's `base-type`).
+ * types nothing either: that domain refuses it alone, and every law over the declaration's type
+ * judges it as one with no base type, as the schema's rows, which hold no `DeclarationBaseType`
+ * for it, judge it (spec reading 158). Its type enumerates a restriction of `xs:string`, whose
+ * whiteSpace is `preserve`, so a padded form lies outside it (`imsqti_asiv3p0_v1p0.xsd`, each
+ * declaration's `base-type`).
  *
  * @param overlay - The item.
  * @param declaration - The declaration, or none where the node it types has no declaration parent.
- * @returns Its base type, none where it writes none or there is no declaration; none at all where
- *   it writes one outside its domain.
+ * @returns Its base type, none where it writes none, writes one outside its domain, or there is no
+ *   declaration.
  */
 const baseTypeOf = (
   overlay: Overlay,
   declaration: FoldedNode<Composed> | undefined,
-): Option.Option<Option.Option<string>> =>
+): Option.Option<string> =>
   declaration === undefined
-    ? Option.some(Option.none())
-    : typedOptionalOf(overlay.view, declaration.id, "base-type");
+    ? Option.none()
+    : typedValueOf(overlay.view, declaration.id, "base-type");
 
 /**
  * Hold a declared type to a law's one admitted base type, where the declaration has a base type:
@@ -2795,9 +2795,10 @@ const typeBreach = (
  * the declaration does not have (the orchestrator's ruling of 2026-11-06: an absent attribute is no
  * empty one, and one cause is refused under one rule). The schema's fit laws read a binding's
  * `BindingDeclaration` (`#pantry/qti/interactions.ts`), which only a declared binding has, and that
- * row's cardinality is the `Declaration` row's, which such a declaration does not have (lane NIL's
- * audit, B11). Its type enumerates a restriction of `xs:string`, whose whiteSpace is `preserve`, so
- * a padded form lies outside it (`imsqti_asiv3p0_v1p0.xsd`, each declaration's `cardinality`).
+ * row's cardinality is the `DeclarationName` row's, which such a declaration does not have (lane
+ * NIL's audit, B11; spec reading 158). Its type enumerates a restriction of `xs:string`, whose
+ * whiteSpace is `preserve`, so a padded form lies outside it (`imsqti_asiv3p0_v1p0.xsd`, each
+ * declaration's `cardinality`).
  *
  * @param overlay - The item.
  * @param declaration - The declaration.
@@ -2807,6 +2808,26 @@ const cardinalityOf = (
   overlay: Overlay,
   declaration: FoldedNode<Composed>,
 ): Option.Option<string> => typedValueOf(overlay.view, declaration.id, "cardinality");
+
+/**
+ * Hold a declaration that holds a mapping or an area mapping to no record (§2.11.1.5: a mapping
+ * "cannot be applied to variables of record cardinality"; §5.5: an area mapping maps "a source set
+ * of point values"): the breach where its cardinality is `record`, none where it is another or
+ * none ({@link cardinalityOf}).
+ *
+ * @param overlay - The item.
+ * @param declaration - The declaration.
+ * @param law - The law the table's kind states it under.
+ * @returns The breach, none where it holds or there is no cardinality to judge.
+ */
+const recordBreach = (
+  overlay: Overlay,
+  declaration: FoldedNode<Composed>,
+  law: "AreaMapping base type" | "MappableBaseType",
+): readonly Finding[] =>
+  Option.toArray(cardinalityOf(overlay, declaration))
+    .filter((cardinality) => cardinality === "record")
+    .map((cardinality): Finding => ({ keys: { cardinality }, law }));
 
 /**
  * `xs:integer`'s lexical space.
@@ -3326,15 +3347,14 @@ const overlayLaws: readonly ((
       }
 
       const cardinality = cardinalityOf(overlay, response);
-      const typedBase = baseTypeOf(overlay, response);
-      if (Option.isNone(cardinality) || Option.isNone(typedBase)) {
+      if (Option.isNone(cardinality)) {
         return [];
       }
 
       // A string identifier's variable is "of base-type string" (§5.48.2, §5.162.3): a record,
       // which has no base type, is not, judged by its cardinality alone; another variable is
       // judged by its base type where it has one.
-      const baseType = typedBase.value;
+      const baseType = baseTypeOf(overlay, response);
       if (attribute === "string-identifier") {
         return cardinality.value === "record"
           ? [{ keys: { attribute, cardinality: cardinality.value, identifier }, law: "BindingFit" }]
@@ -3449,57 +3469,60 @@ const overlayLaws: readonly ((
   (node, overlay) => {
     // Reading 78: a mapping maps "a source set of any base-type (except file and duration)" (§5.88)
     // of a variable that is not a record (§2.11.1.5: "cannot be applied to variables of record
-    // cardinality"). A record has no base type, so it is judged by its cardinality alone; another
-    // variable by its base type where it has one.
-    const typed = Option.all([baseTypeOf(overlay, node), cardinalityOf(overlay, node)]);
+    // cardinality"). A record has no base type, so it is judged by its cardinality alone, and a
+    // variable is judged by its base type where it has one. Each half reads one attribute, so a
+    // declaration whose cardinality or base type is unwritten or outside its domain is judged by
+    // the other half alone, since its own law refuses the attribute (spec reading 158).
     if (
       node.kind !== "qti-response-declaration" ||
-      Option.isNone(typed) ||
       !(overlay.view.childrenOf.get(node.id) ?? []).some(({ kind }) => kind === "qti-mapping")
     ) {
       return [];
     }
 
-    const [baseType, cardinality] = typed.value;
-
-    return cardinality === "record"
-      ? [{ keys: { cardinality }, law: "MappableBaseType" }]
-      : Option.toArray(
-          typeBreach(baseType, (held) =>
-            Option.isSome(overlay.laws.grammar.mappableBaseType.lookup({ baseType: held })),
-          ),
-        ).map((keys): Finding => ({ keys, law: "MappableBaseType" }));
+    return [
+      ...recordBreach(overlay, node, "MappableBaseType"),
+      ...Option.toArray(
+        typeBreach(baseTypeOf(overlay, node), (held) =>
+          Option.isSome(overlay.laws.grammar.mappableBaseType.lookup({ baseType: held })),
+        ),
+      ).map((keys): Finding => ({ keys, law: "MappableBaseType" })),
+    ];
   },
   (node, overlay) => {
     const children = overlay.view.childrenOf.get(node.id) ?? [];
-    const typed = Option.all([baseTypeOf(overlay, node), cardinalityOf(overlay, node)]);
-    // A declaration whose cardinality is unwritten or outside its domain has no `Declaration` row,
-    // nor any table row below it (the declarations overlay's `typedDeclarationOf`; lane NIL's audit,
-    // B11), so its own laws refuse it (AL3's required attribute, the value domain) and Lookup table
-    // cardinality does not again: such a cardinality is read as `single`, which it never judges.
-    const cardinality = Option.getOrElse(cardinalityOf(overlay, node), () => "single");
+    const baseType = baseTypeOf(overlay, node);
+    // A declaration whose cardinality is unwritten or outside its domain has its tables, but no
+    // cardinality for a law over them to read (the declarations overlay's `typedDeclarationOf`;
+    // spec reading 158), so its own laws refuse it (AL3's required attribute, the value domain)
+    // and neither AreaMapping base type nor Lookup table cardinality does again.
+    const cardinality = cardinalityOf(overlay, node);
     const tables = children.filter(
       ({ kind }) => kind === "qti-match-table" || kind === "qti-interpolation-table",
     );
 
     // §5.5: an area mapping maps "a source set of point values": a record, which has no base type,
-    // is judged by its cardinality alone, and another variable by its base type where it has one.
+    // is judged by its cardinality alone, and a variable by its base type where it has one, each
+    // half where its attribute has a value (spec reading 158).
     return [
       ...(node.kind === "qti-response-declaration" &&
       children.some(({ kind }) => kind === "qti-area-mapping")
-        ? Option.toArray(typed).flatMap(([baseType, held]): readonly Finding[] =>
-            held === "record"
-              ? [{ keys: { cardinality: held }, law: "AreaMapping base type" }]
-              : Option.toArray(typeBreach(baseType, (base) => base === "point")).map(
-                  (keys): Finding => ({ keys, law: "AreaMapping base type" }),
-                ),
-          )
+        ? [
+            ...recordBreach(overlay, node, "AreaMapping base type"),
+            ...Option.toArray(typeBreach(baseType, (base) => base === "point")).map(
+              (keys): Finding => ({ keys, law: "AreaMapping base type" }),
+            ),
+          ]
         : []),
-      ...(node.kind === "qti-outcome-declaration" && cardinality !== "single"
-        ? tables.map(({ kind }): Finding => ({
-            keys: { cardinality, kind },
-            law: "Lookup table cardinality",
-          }))
+      ...(node.kind === "qti-outcome-declaration"
+        ? Option.toArray(cardinality)
+            .filter((held) => held !== "single")
+            .flatMap((held) =>
+              tables.map(({ kind }): Finding => ({
+                keys: { cardinality: held, kind },
+                law: "Lookup table cardinality",
+              })),
+            )
         : []),
     ];
   },
@@ -3508,14 +3531,10 @@ const overlayLaws: readonly ((
       return [];
     }
 
-    const typedBase = baseTypeOf(overlay, overlay.view.byId.get(node.parent));
-    if (Option.isNone(typedBase)) {
-      return [];
-    }
-
-    // A mapping of a declaration with no base type, a record's, reads its keys in none: each is
-    // its lexical form alone, and no type judges it (lane NIL's audit, B12).
-    const baseType = typedBase.value;
+    // A mapping of a declaration with no base type, a record's or one whose base type spells
+    // nothing, reads its keys in none: each is its lexical form alone, and no type judges it (lane
+    // NIL's audit, B12; spec reading 158).
+    const baseType = baseTypeOf(overlay, overlay.view.byId.get(node.parent));
     const seen = new Set<string>();
 
     return (overlay.view.childrenOf.get(node.id) ?? [])
@@ -3559,12 +3578,7 @@ const overlayLaws: readonly ((
       return [];
     }
 
-    const typedBase = baseTypeOf(overlay, overlay.view.byId.get(node.parent));
-    if (Option.isNone(typedBase)) {
-      return [];
-    }
-
-    const baseType = typedBase.value;
+    const baseType = baseTypeOf(overlay, overlay.view.byId.get(node.parent));
     const values = [
       ...Option.toArray(valueOf(overlay.view, node.id, "default-value")),
       ...(overlay.view.childrenOf.get(node.id) ?? []).flatMap(({ id }) =>
@@ -3726,20 +3740,20 @@ const overlayLaws: readonly ((
       return [];
     }
 
-    // An outcome that writes no cardinality, or one outside its domain, or a base type outside its
-    // domain, is refused by AL3 ("required-attribute") or that domain alone, as it has no
-    // `Declaration` row for a reference to read (the orchestrator's ruling of 2026-11-06; lane
-    // NIL's audit, B11).
-    const typed = Option.all([baseTypeOf(overlay, outcome), cardinalityOf(overlay, outcome)]);
+    // An outcome that writes no cardinality, or one outside its domain, is refused by AL3
+    // ("required-attribute") or that domain alone, as it has no `DeclarationName` for a reference
+    // to read (the orchestrator's ruling of 2026-11-06; lane NIL's audit, B11; spec reading 158).
+    const typed = cardinalityOf(overlay, outcome);
     if (Option.isNone(typed)) {
       return [];
     }
 
     // §5.49.1: "an outcome variable that must have a base-type of identifier and be of either
     // single or multiple cardinality". A record is neither, judged by its cardinality alone; an
-    // outcome is judged by its base type where it has one, and one with none is Declaration base
-    // type's alone (lane NIL's audit, B12).
-    const [baseType, cardinality] = typed.value;
+    // outcome is judged by its base type where it has one, and one with none, unwritten or spelling
+    // nothing, is Declaration base type's or its value domain's alone (lane NIL's audit, B12).
+    const cardinality = typed.value;
+    const baseType = baseTypeOf(overlay, outcome);
     const typedKeys = Option.match(baseType, {
       onNone: () => ({}),
       onSome: (held) => ({ baseType: held }),

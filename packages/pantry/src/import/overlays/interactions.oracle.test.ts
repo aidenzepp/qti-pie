@@ -785,9 +785,6 @@ const scored: Addition<typeof DeclarationName> = {
   declarationKind: "qti-outcome-declaration",
   document: testDocument,
   identifier: "SCORED",
-  identifierLead: "",
-  identifierLexical: "SCORED",
-  identifierTrail: "",
   node: idOf(1001),
 };
 

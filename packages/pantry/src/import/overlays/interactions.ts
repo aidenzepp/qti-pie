@@ -22,7 +22,7 @@ import { booleanOf, collapse, isNcName } from "#pantry/grammar/domains.ts";
 import type { DocumentContext } from "#pantry/import/context.ts";
 import { foldAt, foldOf } from "#pantry/import/fold.ts";
 import type { Folds } from "#pantry/import/fold.ts";
-import { baseTypesOf, declaredFieldsOf } from "#pantry/import/overlays/declarations.ts";
+import { typedCountOf, declaredFieldsOf } from "#pantry/import/overlays/declarations.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import type { FlatRows, NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
@@ -167,7 +167,7 @@ type ReferenceDeclarationRow = Addition<typeof FeedbackRefDeclaration>;
  * A declaration as the bindings and references resolve against it: its node, kind as a
  * `DeclarationKind`, identifier collapsed, and the codes its `base-type` and `cardinality` spell,
  * its base type none where it writes none, a record's (lane NIL's audit, B12), which a row copies
- * only as its count ({@link baseTypesOf}).
+ * only as its count ({@link typedCountOf}).
  */
 interface DeclaredVariable {
   readonly baseType: Option.Option<Addition<typeof BindingBaseType>["baseType"]>;
@@ -258,8 +258,8 @@ const heldAt = <V>(map: ReadonlyMap<NodeId, V>, key: NodeId, holds: string): V =
  * One document as the builders read it: its flat rows, its document node and root kind, each
  * node's fold (`#pantry/import/fold.ts`), which holds its nearest interaction (N8), that
  * interaction's kind and its element counts, each node's kind, each element's attributes, its
- * declarations that have a `Declaration` row, the names only a declaration with none holds, and,
- * for an item, its mode: whether it is adaptive.
+ * declarations that have a `DeclarationName`, the names only a declaration with no cardinality
+ * holds, and, for an item, its mode: whether it is adaptive.
  */
 interface Context {
   readonly attributes: ReadonlyMap<NodeId, ReadonlyMap<string, string>>;
@@ -338,22 +338,23 @@ const tupleOf = (context: Context, node: NodeRow<Composed>) => ({
 });
 
 /**
- * Read a declaring element's fields as `Declaration`'s builder writes them
+ * Read a declaring element's fields as `DeclarationName`'s builder writes them
  * (`#pantry/import/overlays/declarations.ts` `declaredFieldsOf`).
  *
  * @param context - The document.
  * @param node - The element.
- * @returns Its fields; none for an element that declares nothing or a declaration with no row.
+ * @returns Its fields; none for an element that declares nothing or a declaration with no
+ *   cardinality.
  */
 const declaredFieldsAt = (context: Pick<Context, "attributes">, node: NodeRow<Composed>) =>
   declaredFieldsOf(node.kind, (name) => Option.getOrUndefined(lexicalOf(context, node.id, name)));
 
 /**
  * Read a document's named declarations as their `DeclarationName` rows hold them
- * ({@link declaredFieldsAt}), and the names only a declaration with no row holds, one whose
- * cardinality is unwritten or spells nothing, or whose base type spells nothing, which nothing
- * binds or references (lane NIL's audit, B11). A declaring element whose `identifier` is unwritten
- * or names nothing has no name, so nothing binds or references it (spec reading 157).
+ * ({@link declaredFieldsAt}), and the names only a declaration with no cardinality holds, one
+ * whose cardinality is unwritten or spells nothing, which nothing binds or references (lane NIL's
+ * audit, B11; spec reading 158). A declaring element whose `identifier` is unwritten or names
+ * nothing has no name, so nothing binds or references it (spec reading 157).
  *
  * @param context - The document, its declarations not yet read.
  * @returns The declarations and the untyped names.
@@ -660,8 +661,8 @@ const hottextsOf = (context: Context) =>
  * Build each identifier's {@link ChoiceVariableName} row: one per identifier a choice, a hottext
  * or a declaration of the document bears, each once, with the document's root kind. Its counts are
  * the families' to draw, so the row is the identifier alone. A declaration is read as Q5.08's
- * builder writes its `Declaration` row (`typedDeclarationOf`), so every `Declaration` row has its
- * projection row, and a declaration with none counts toward no name.
+ * builder writes its `DeclarationName` row (`typedDeclarationOf`), so every `DeclarationName` row
+ * has its projection row, and a declaration with none counts toward no name.
  *
  * @param context - The document.
  * @param choices - Its choices' rows.
@@ -806,7 +807,7 @@ const bindingsOf = (context: Context) => {
           for (const variable of Option.toArray(responseIn(context.declared, identifier))) {
             declarations.set(keyOf([node.id, attribute]), {
               ...binding,
-              baseTypes: baseTypesOf(variable.baseType),
+              baseTypes: typedCountOf(variable.baseType),
               cardinality: variable.cardinality,
               declaration: variable.node,
               declarationKind: variable.declarationKind,
@@ -1039,8 +1040,8 @@ const ariaOf = (context: Context) => {
  * declaration of the document of a kind `ContentReference` allows there and no built-in of the root
  * ({@link declarationIn}). A value that is no NCName names nothing and has neither, so its value
  * domain refuses it alone (spec reading 152); so has a name only a declaration with no
- * `Declaration` row holds, which nothing references: its declaration's own law refuses it alone
- * (lane NIL's audit, B11).
+ * cardinality holds, which nothing references: its declaration's own law refuses it alone (lane
+ * NIL's audit, B11; spec reading 158).
  *
  * @param context - The document.
  * @param read - The document's read attributes.
@@ -1083,7 +1084,7 @@ const referencesOf = (
               key,
               {
                 ...referred,
-                baseTypes: baseTypesOf(variable.baseType),
+                baseTypes: typedCountOf(variable.baseType),
                 cardinality: variable.cardinality,
                 declaration: variable.node,
                 declarationKind: variable.declarationKind,
@@ -1170,8 +1171,8 @@ const sectionPrints = [references.printed, references.variable] as const;
  * document it may name holds, and no built-in variable, has no declaration row, which its law
  * refuses; a binding to it has no declaration row, which "Binding declared" refuses (lane NIL's
  * NS2: never the nil uuid); and a binding or a reference to a name only a declaration with no
- * `Declaration` row holds has neither, as that declaration's own law refuses it alone (lane NIL's
- * audit, B11).
+ * cardinality holds has neither, as that declaration's own law refuses it alone (lane NIL's audit,
+ * B11; spec reading 158).
  *
  * @param doc - The document's tree, as shred gives it.
  * @param ids - The ids its rows are written under.
@@ -1384,7 +1385,7 @@ const placedOf = (
     return {
       declaration: Option.map(declarationIn(declared, placed), (variable) => ({
         ...placed,
-        baseTypes: baseTypesOf(variable.baseType),
+        baseTypes: typedCountOf(variable.baseType),
         cardinality: variable.cardinality,
         declaration: variable.node,
         declarationKind: variable.declarationKind,
@@ -1658,7 +1659,7 @@ export const placedBindingRowsOf = (input: {
               key,
               {
                 ...binding,
-                baseTypes: baseTypesOf(variable.baseType),
+                baseTypes: typedCountOf(variable.baseType),
                 cardinality: variable.cardinality,
                 declaration: variable.node,
                 declarationKind: variable.declarationKind,

@@ -1,19 +1,16 @@
 /**
- * Declarations that have no `Declaration` row, on the lease (lane NIL's audit, B11): the
- * database's verdict over the scope of `#pantry/test/declaration-cases.ts`, held to the law
- * oracle's (`importAgreesWithOracle`).
+ * Declarations whose cardinality or base type spells nothing, on the lease (lane NIL's audit, B11;
+ * spec reading 158): the database's verdict over the scope of `#pantry/test/declaration-cases.ts`,
+ * held to the law oracle's (`importAgreesWithOracle`).
  *
- * A declaration whose `cardinality` is unwritten or spells nothing, or whose `base-type` spells
- * nothing, has no `Declaration` row, and nothing binds, references or hangs from it in the
- * importer's rows (`#pantry/import/overlays/declarations.ts` `typedDeclarationOf`); one whose
- * `identifier` is unwritten or names nothing keeps its row and has no name alone (spec reading
- * 157).
+ * A declaration whose `cardinality` or `base-type` is unwritten or spells nothing keeps its
+ * `Declaration` row and every row below it, and has no `DeclarationCardinality` or
+ * `DeclarationBaseType` alone; one with no cardinality has no `DeclarationName` either, so nothing
+ * binds or references it (`#pantry/import/overlays/declarations.ts` `typedDeclarationOf`).
  * Before, it had a row holding `""` and `single`, which its own `E1_derived` refused, and every row
- * that copied it judged the `single`. grizzle writes those flat relations before `Node` and
- * `Attribute`, whose AL3 and value domain are the laws, so such a package was refused under
- * `derived` or a fit law, which the oracle does not name (lane N2's binding-fit tier). Each case
- * is now refused by AL3 or the value domain, or, where its references name no declaration, by one
- * of the laws the oracle names beside them.
+ * that copied it judged the `single`; later it had no row at all, so the copies its children ask
+ * broke beside its own law. Each case is now refused by AL3 or the value domain, or, where its
+ * references name no declaration, by one of the laws the oracle names beside them.
  *
  * The host's guard over the same scope, with the rows, is
  * `src/test/declaration-rows.oracle.test.ts`.
@@ -47,12 +44,12 @@ describe.skipIf(!hasLease)("import/declaration-rows.db.test.ts, on the lease", (
   layer(Layer.mergeAll(AuthorAppLayer, NodeServices.layer), {
     excludeTestServices: true,
     timeout: authorLayerHookTimeoutMs,
-  })("declarations with no Declaration row, judged by PostgreSQL", (it) => {
+  })("declarations whose cardinality or base type spells nothing, judged by PostgreSQL", (it) => {
     it.effect(
       "the database refuses every case under a rule the law oracle predicts",
       (ctx) =>
         // Oracle: a second implementation, the law oracle's verdict over the same entries. Bound: every declaration of the every-relation items
-        // and test, under each state of its cardinality and base type that leaves it no row,
+        // and test, under each state of its cardinality and base type that spells nothing,
         // exhausted, one import each.
         searched(
           ctx,

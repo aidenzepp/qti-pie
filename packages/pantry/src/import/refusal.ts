@@ -675,12 +675,16 @@ const writtenLaws: readonly (readonly [WrittenLaw, LawName])[] = [
   ...(
     [
       "Declaration",
+      "DeclarationCardinality",
       "DeclarationBaseType",
+      "DeclarationIdentifier",
       "DeclarationName",
       "ValueSet",
+      "ValueSetCardinality",
       "Value",
       "DeclaredValue",
       "ValueBaseType",
+      "FieldValue",
       "RecordField",
       "RecordFieldName",
       "MasteryValue",
@@ -701,12 +705,15 @@ const writtenLaws: readonly (readonly [WrittenLaw, LawName])[] = [
     [
       "Mapping",
       "MappingBaseType",
+      "MappingCardinality",
       "MapKey",
       "MapKeyType",
       "MapKeyInteger",
       "MapKeyFloat",
       "AreaMapping",
+      "AreaMappingCardinality",
       "LookupTable",
+      "LookupTableCardinality",
     ] as const
   ).map((overlay) => [primaryKeyOf(overlay, "node"), "Mapping overlay"] as const),
   ...Object.values(testRelations).map(

@@ -373,28 +373,6 @@ export const typedOr = (
     : typedValueOf(view, node, name);
 
 /**
- * Read an optional attribute as its type reads it, where its absence means none at all: none
- * where the element writes it outside its value domain, a form no law past AL1 reads; else its
- * value, none where the element does not write it. A declaration's `base-type` is one: a record
- * has none ("Variables with record cardinality have no base-type", information model tables
- * 4.5.3, 5.34.3, 5.115.3 and 5.151.3), and no value stands for it.
- *
- * @param view - The document.
- * @param node - The element's id.
- * @param name - The attribute's closed name.
- * @returns Its value, or none where unwritten; none where the element writes it outside its value
- *   domain.
- */
-export const typedOptionalOf = (
-  view: View,
-  node: NodeId,
-  name: string,
-): Option.Option<Option.Option<string>> =>
-  Option.isNone(valueOf(view, node, name))
-    ? Option.some(Option.none())
-    : Option.map(typedValueOf(view, node, name), Option.some);
-
-/**
  * Read an element's text content: its text and whitespace children's characters, in order.
  *
  * @param view - The document.

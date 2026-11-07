@@ -25,7 +25,8 @@ import { describe } from "vitest";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import { AuthorApp } from "#pantry/qti/logins.ts";
 import {
-  AreaMapping,
+  AreaMappingCardinality,
+  LookupTableCardinality,
   LookupValueType,
   MapKey,
   MapKeyDirectedPair,
@@ -34,9 +35,8 @@ import {
   MapKeyPair,
   MapKeyPoint,
   MapKeyType,
-  Mapping,
   MappingBaseType,
-  LookupTable,
+  MappingCardinality,
 } from "#pantry/qti/mapping.ts";
 import { Author } from "#pantry/qti/roles.ts";
 import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
@@ -108,25 +108,16 @@ const containedIn =
     law.kind === "contained" && law.from.relation === from && law.to.relation === to;
 
 /**
- * A stray overlay of a declared element: its node tuple and its declaration's tuple, every value
- * lawful on its own row.
+ * A stray table beside its declaration's cardinality, a `MappingCardinality`,
+ * `AreaMappingCardinality` or `LookupTableCardinality` fact: its node and its declaration's, and
+ * the cardinality the case sets (spec reading 158).
  *
- * @param fields - The fields the case sets.
- * @returns The row.
+ * @param cardinality - The declaration's cardinality.
+ * @returns The fact.
  */
-const declaredRow = <const F extends Partial<Fact<typeof AreaMapping>>>(fields: F) => ({
-  baseTypes: 1n,
-  cardinality: "single" as const,
-  declaration: stray,
-  declarationKind: "qti-response-declaration" as const,
-  document: stray,
-  kind: "qti-area-mapping" as const,
-  nearest: stray,
-  node: strayNode(0),
-  start: 3n,
-  version: "3.0.1" as const,
-  ...fields,
-});
+const besideCardinality = (
+  cardinality: "multiple" | "ordered" | "record",
+): Fact<typeof MappingCardinality> => ({ cardinality, declaration: stray, node: strayNode(0) });
 
 /**
  * A stray map key of one mapping, entry `at`, of a mapping whose declaration has a base type.
@@ -176,8 +167,9 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
         "refuses a mapping of a base type MappableBaseType does not hold, by its containment into MappableBaseType, and a record's mapping by its cardinality",
         () =>
           // Oracle: PostgreSQL, the containment of MappingBaseType.baseType into MappableBaseType,
-          // a CHECK on MappingBaseType's table, and the MappableBaseType CHECK on Mapping's
-          // (reading 78: a mapping is of no record, §2.11.1.5).
+          // a CHECK on MappingBaseType's table, and the MappableBaseType CHECK on
+          // MappingCardinality's, the mapping beside its declaration's cardinality (reading 78: a
+          // mapping is of no record, §2.11.1.5; spec reading 158).
           // Bound: every BaseType handle MappableBaseType leaves out, file and duration, and a
           // record's mapping, which has no base type.
           Effect.gen(function* unmappable() {
@@ -197,12 +189,13 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
             }
 
             const record = yield* db.apply(
-              ChangeSet.empty(Author).insert(Mapping, [
-                declaredRow({ baseTypes: 0n, cardinality: "record", kind: "qti-mapping" }),
-              ]),
+              ChangeSet.empty(Author).insert(MappingCardinality, [besideCardinality("record")]),
               {},
             );
-            assert.isTrue(rejectedBy(record, checkNamed("Mapping", "MappableBaseType")), "record");
+            assert.isTrue(
+              rejectedBy(record, checkNamed("MappingCardinality", "MappableBaseType")),
+              "record",
+            );
           }),
       );
 
@@ -400,23 +393,22 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
       it.effect(
         "refuses an area mapping of a record, which has no base type, by AreaMapping_base_type",
         () =>
-          // Oracle: PostgreSQL, the AreaMapping_base_type CHECK, judged as the row is inserted
+          // Oracle: PostgreSQL, the AreaMapping_base_type CHECK on AreaMappingCardinality, the
+          // area mapping beside its declaration's cardinality, judged as the row is inserted
           // (information model §5.5: "a mapping from a source set of point values"; a record has
-          // no base type, so it is judged by its cardinality alone). A typed declaration's base
-          // type is judged by the containment into `DeclarationBaseType`'s point rows, which the
-          // host tier holds (`test/record-declarations.oracle.test.ts`).
+          // no base type, so it is judged by its cardinality alone; spec reading 158). A typed
+          // declaration's base type is judged by the containment into `DeclarationBaseType`'s
+          // point rows, which the host tier holds (`test/record-declarations.oracle.test.ts`).
           // Bound: a record's area mapping.
           Effect.gen(function* areaBaseType() {
             const db = yield* Db.open(AuthorApp.roles.author, {});
             const record = yield* db.apply(
-              ChangeSet.empty(Author).insert(AreaMapping, [
-                declaredRow({ baseTypes: 0n, cardinality: "record" }),
-              ]),
+              ChangeSet.empty(Author).insert(AreaMappingCardinality, [besideCardinality("record")]),
               {},
             );
 
             assert.isTrue(
-              rejectedBy(record, checkNamed("AreaMapping", "AreaMapping_base_type")),
+              rejectedBy(record, checkNamed("AreaMappingCardinality", "AreaMapping_base_type")),
               "record",
             );
           }),
@@ -425,42 +417,23 @@ describe.skipIf(!hasLease)("qti/mapping.db.test.ts, on the lease", () => {
       it.effect(
         "refuses a match or interpolation table of an outcome that is not single, by Lookup_table_cardinality",
         () =>
-          // Oracle: PostgreSQL, the Lookup_table_cardinality CHECK on each table, judged as the
-          // row is inserted (information model §4.5.13).
-          // Bound: each table under a multiple, an ordered and a record outcome.
+          // Oracle: PostgreSQL, the Lookup_table_cardinality CHECK on LookupTableCardinality, a
+          // table beside its outcome's cardinality, judged as the row is inserted (information
+          // model §4.5.13; spec reading 158). A match and an interpolation table are one shape, so
+          // one row stands for both.
+          // Bound: a table under a multiple, an ordered and a record outcome.
           Effect.gen(function* lookupCardinality() {
             const db = yield* Db.open(AuthorApp.roles.author, {});
             for (const cardinality of ["multiple", "ordered", "record"] as const) {
-              const baseTypes = cardinality === "record" ? 0n : 1n;
-              const match = yield* db.apply(
-                ChangeSet.empty(Author).insert(LookupTable, [
-                  declaredRow({
-                    baseTypes,
-                    cardinality,
-                    declarationKind: "qti-outcome-declaration",
-                    kind: "qti-match-table",
-                  }),
-                ]),
-                {},
-              );
-              const interpolation = yield* db.apply(
-                ChangeSet.empty(Author).insert(LookupTable, [
-                  declaredRow({
-                    baseTypes,
-                    cardinality,
-                    declarationKind: "qti-outcome-declaration",
-                    kind: "qti-interpolation-table",
-                  }),
+              const table = yield* db.apply(
+                ChangeSet.empty(Author).insert(LookupTableCardinality, [
+                  besideCardinality(cardinality),
                 ]),
                 {},
               );
 
               assert.isTrue(
-                rejectedBy(match, checkNamed("LookupTable", "Lookup_table_cardinality")),
-                cardinality,
-              );
-              assert.isTrue(
-                rejectedBy(interpolation, checkNamed("LookupTable", "Lookup_table_cardinality")),
+                rejectedBy(table, checkNamed("LookupTableCardinality", "Lookup_table_cardinality")),
                 cardinality,
               );
             }

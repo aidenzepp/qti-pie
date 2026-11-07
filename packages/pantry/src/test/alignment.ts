@@ -914,7 +914,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     153,
     {
       owner:
-        "the import's `DeclarationBaseType`, counted by `Declaration.baseTypes`, which `declarationRef` copies into every row that names a declaration, and the typed rows each law over a base type reads (`DeclaredValue`, `src/qti/declarations.ts`; `BindingBaseType` and `PlacedBindingBaseType`, `src/qti/interactions.ts`; `MappingBaseType`, `MapKeyType` and `LookupValueType`, `src/qti/mapping.ts`), with each record judged by its cardinality (`Reserved_type`, `MappableBaseType`, `AreaMapping_base_type`, `Feedback_outcome_type` and the string binding's `BindingFit`); the oracle's `typedOptionalOf` (`src/test/oracle-view.ts`), read by `baseTypeOf` and the laws over a type (`src/test/oracle.ts`, `src/test/oracle-laws/documents.ts`, `src/test/oracle-laws/expressions.ts`, `src/test/oracle-laws/tests.ts`); held by `src/test/record-declarations.oracle.test.ts`",
+        "the import's `DeclarationBaseType`, counted by `Declaration.baseTypes`, which `declarationRef` copies into every row that names a declaration, and the typed rows each law over a base type reads (`DeclaredValue`, `src/qti/declarations.ts`; `BindingBaseType` and `PlacedBindingBaseType`, `src/qti/interactions.ts`; `MappingBaseType`, `MapKeyType` and `LookupValueType`, `src/qti/mapping.ts`), with each record judged by its cardinality (`Reserved_type`, `MappableBaseType`, `AreaMapping_base_type`, `Feedback_outcome_type` and the string binding's `BindingFit`); the oracle's `typedValueOf` (`src/test/oracle-view.ts`), read by `baseTypeOf` and the laws over a type (`src/test/oracle.ts`, `src/test/oracle-laws/documents.ts`, `src/test/oracle-laws/expressions.ts`, `src/test/oracle-laws/tests.ts`); held by `src/test/record-declarations.oracle.test.ts`",
       status: "G",
     },
   ],
@@ -946,7 +946,15 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     157,
     {
       owner:
-        "the import's `DeclarationName`, a declaration's name as a row of its own beside its `Declaration`, which every reference by name targets through `declarationNameRef` and every row that hangs from a declaration copies without it through `declarationRef` (`src/qti/declarations.ts`; `typedDeclarationOf`, `src/import/overlays/declarations.ts`), so a declaration whose identifier names nothing keeps its rows, values, mapping, map keys and tables (`declarationsOf` and `declarationTablesOf`, `src/import/overlays/expressions.ts`; `declaredFieldsOf`, read by `src/import/overlays/mapping.ts`); the oracle's declaration laws over every declaration, named or not, and its names by their typed value (`declarationLawsOf`, `src/test/oracle-laws/documents.ts`; `overlayBreaches`, `src/test/oracle.ts`); held by `src/import/overlays/unnamed-declarations.oracle.test.ts`",
+        "the import's `DeclarationName`, a declaration's name as a row of its own beside its `Declaration`, which every reference by name targets through `declarationNameRef` and every row that hangs from a declaration copies without it through `declarationRef` (`src/qti/declarations.ts`; `typedDeclarationOf`, `src/import/overlays/declarations.ts`), so a declaration whose identifier names nothing keeps its rows, values, mapping, map keys and tables (`declarationsOf` and `declarationTablesOf`, `src/import/overlays/expressions.ts`; `declarationOf`, read by `src/import/overlays/mapping.ts`); the oracle's declaration laws over every declaration, named or not, and its names by their typed value (`declarationLawsOf`, `src/test/oracle-laws/documents.ts`; `overlayBreaches`, `src/test/oracle.ts`); held by `src/import/overlays/unnamed-declarations.oracle.test.ts`",
+      status: "G",
+    },
+  ],
+  [
+    158,
+    {
+      owner:
+        "the import's `Declaration` row of every declaration element and its `DeclarationCardinality`, counted by `Declaration.cardinalities`, which `declarationRef` copies, beside `DeclarationBaseType` and `DeclarationIdentifier`, each only where its attribute spells or names something (`src/qti/declarations.ts`; `typedDeclarationOf` and `declarationOf`, `src/import/overlays/declarations.ts`), and the rows each law over a cardinality reads beside it (`ValueSetCardinality`, `DeclaredValue`, `FieldValue` and `DeclarationName`, `src/qti/declarations.ts`; `MappingCardinality`, `AreaMappingCardinality` and `LookupTableCardinality`, `src/qti/mapping.ts`), with Declaration base type stated from `DeclarationCardinality`; the oracle's declaration laws each where the attributes it reads spell something (`declarationLawsOf` and `valueSetLawsOf`, `src/test/oracle-laws/documents.ts`; `baseTypeOf`, `cardinalityOf` and `recordBreach`, `src/test/oracle.ts`); held by `src/import/overlays/untyped-declarations.oracle.test.ts`",
       status: "G",
     },
   ],

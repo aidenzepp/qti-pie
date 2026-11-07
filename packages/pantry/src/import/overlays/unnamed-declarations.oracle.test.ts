@@ -45,7 +45,7 @@ const laws = lawsOf(grammar);
  * no case may show whatever `known` records.
  */
 const closed: ReadonlySet<string> = new Set([
-  "import-only-law: Declaration overlay, contained Attribute(node, lexical) in Declaration(node, cardinalityLexical)",
+  "import-only-law: Declaration overlay, contained Node(id) in Declaration(node)",
   "import-only-law: Mapping overlay, contained Attribute(node, lexical) in MapKey(node, key)",
 ]);
 

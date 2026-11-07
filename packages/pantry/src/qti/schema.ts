@@ -108,9 +108,12 @@ import {
 import {
   Declaration,
   DeclarationBaseType,
+  DeclarationCardinality,
+  DeclarationIdentifier,
   declarationLaws,
   DeclarationName,
   DeclaredValue,
+  FieldValue,
   MasteryCeiling,
   MasteryFloor,
   MasteryValue,
@@ -121,12 +124,15 @@ import {
   Value,
   ValueBaseType,
   ValueSet,
+  ValueSetCardinality,
 } from "#pantry/qti/declarations.ts";
 import { htmlLaws, htmlRelations } from "#pantry/qti/html.ts";
 import { identityLaws, identityRelations } from "#pantry/qti/identity.ts";
 import { interactionLaws, interactionRelations } from "#pantry/qti/interactions.ts";
 import {
   AreaMapping,
+  AreaMappingCardinality,
+  LookupTableCardinality,
   LookupValue,
   LookupValueType,
   MapKey,
@@ -138,6 +144,7 @@ import {
   MapKeyType,
   Mapping,
   MappingBaseType,
+  MappingCardinality,
   mappingLaws,
   LookupTable,
 } from "#pantry/qti/mapping.ts";
@@ -352,16 +359,20 @@ const packageRelations = {
 };
 
 /**
- * `declarations.ts`'s relations: each variable's declaration, its base type and its name, its value
- * sets and values, a value's text in its declaration's base type, a value's own base type, a
- * record's fields and their names, and an outcome's mastery value and normal range, each end and
- * each pair of them.
+ * `declarations.ts`'s relations: each variable's declaration, its cardinality, its base type, its
+ * identifier and its name, its value sets and values, each set beside its declaration's
+ * cardinality, a value's text beside its declaration's base type, a value's own base type and its
+ * text beside it, a record's fields and their names, and an outcome's mastery value and normal
+ * range, each end and each pair of them.
  */
 const declarationRelations = {
   Declaration,
   DeclarationBaseType,
+  DeclarationCardinality,
+  DeclarationIdentifier,
   DeclarationName,
   DeclaredValue,
+  FieldValue,
   MasteryCeiling,
   MasteryFloor,
   MasteryValue,
@@ -372,17 +383,21 @@ const declarationRelations = {
   Value,
   ValueBaseType,
   ValueSet,
+  ValueSetCardinality,
 };
 
 /**
  * `mapping.ts`'s relations: each response mapping, its declaration's base type and its map keys,
  * each beside that base type, with the typed values of its integer, float, point, pair and
  * directed pair keys, each area mapping, each outcome's lookup table and its tables' typed values,
- * each beside its declaration's base type.
+ * each beside its declaration's base type, and each mapping, area mapping and lookup table beside
+ * its declaration's cardinality.
  */
 const mappingRelations = {
   AreaMapping,
+  AreaMappingCardinality,
   LookupTable,
+  LookupTableCardinality,
   LookupValue,
   LookupValueType,
   MapKey,
@@ -394,6 +409,7 @@ const mappingRelations = {
   MapKeyType,
   Mapping,
   MappingBaseType,
+  MappingCardinality,
 };
 
 /**
@@ -439,6 +455,53 @@ const expressionRelations = {
 };
 
 /**
+ * One statement of any module, as its module states it. Written as a type, the union is reduced by
+ * identity alone: an array literal of every module's statements would ask the checker to reduce it
+ * by subtype, which past about a thousand statement types it refuses as too complex (TS2590).
+ */
+type QtiStatement =
+  | (typeof nodeLaws)[number]
+  | (typeof chardataLaws)[number]
+  | (typeof attributeLaws)[number]
+  | (typeof packageLaws)[number]
+  | (typeof identityLaws)[number]
+  | (typeof declarationLaws)[number]
+  | (typeof testLaws)[number]
+  | (typeof mappingLaws)[number]
+  | (typeof interactionLaws)[number]
+  | (typeof expressionLaws)[number]
+  | (typeof metadataLaws)[number]
+  | (typeof htmlLaws)[number]
+  | (typeof quotationLaws)[number]
+  | (typeof operatorLaws)[number];
+
+/**
+ * Every module's statements, in module order, each module's list one element: a list of lists
+ * holds fourteen types, where a list literal of every statement would hold them all.
+ */
+const moduleLaws: readonly (readonly QtiStatement[])[] = [
+  nodeLaws,
+  chardataLaws,
+  attributeLaws,
+  packageLaws,
+  identityLaws,
+  declarationLaws,
+  testLaws,
+  mappingLaws,
+  interactionLaws,
+  expressionLaws,
+  metadataLaws,
+  htmlLaws,
+  quotationLaws,
+  operatorLaws,
+];
+
+/**
+ * Every module's statements, in module order.
+ */
+const qtiLaws = moduleLaws.flat();
+
+/**
  * The QTI 3.0 schema: the grammar's rosters and closed relations, then each module's relations,
  * each under its own name, and every module's laws.
  */
@@ -462,20 +525,5 @@ export const Qti = schema(
     ...quotationRelations,
     ...operatorRelations,
   },
-  [
-    ...nodeLaws,
-    ...chardataLaws,
-    ...attributeLaws,
-    ...packageLaws,
-    ...identityLaws,
-    ...declarationLaws,
-    ...testLaws,
-    ...mappingLaws,
-    ...interactionLaws,
-    ...expressionLaws,
-    ...metadataLaws,
-    ...htmlLaws,
-    ...quotationLaws,
-    ...operatorLaws,
-  ],
+  qtiLaws,
 );

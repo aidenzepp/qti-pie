@@ -57,7 +57,6 @@ import {
   contentLawOf,
   elementsOf,
   pathOf,
-  typedOptionalOf,
   typedOr,
   typedValueOf,
   valueOf,
@@ -912,15 +911,17 @@ const contentBreachesOf = (
   // type, and is judged by its cardinality alone, and an outcome is judged by its base type where it
   // has one; one that writes none is Declaration base type's alone (lane NIL's audit, B12). An
   // outcome that writes no cardinality is refused by AL3 alone, and one that writes its cardinality
-  // or base type outside its value domain (empty, spelling nothing, or padded, as the type's
-  // whiteSpace is `preserve`) by that domain alone, never judged as a type the outcome does not have
-  // (the orchestrator's ruling of 2026-11-06; lane NIL's audit, B11).
+  // outside its value domain (empty, spelling nothing, or padded, as the type's whiteSpace is
+  // `preserve`) by that domain alone, never judged as a type the outcome does not have (the
+  // orchestrator's ruling of 2026-11-06; lane NIL's audit, B11); one whose base type spells
+  // nothing has no base type, its domain's alone, and is judged by its cardinality (spec reading
+  // 158).
   const typed = outcome.pipe(
     Option.flatMap((held) =>
-      Option.all({
-        baseType: typedOptionalOf(held.rows, held.node.id, "base-type"),
-        cardinality: typedValueOf(held.rows, held.node.id, "cardinality"),
-      }),
+      Option.map(typedValueOf(held.rows, held.node.id, "cardinality"), (cardinality) => ({
+        baseType: typedValueOf(held.rows, held.node.id, "base-type"),
+        cardinality,
+      })),
     ),
   );
 

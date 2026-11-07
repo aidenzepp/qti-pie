@@ -14,8 +14,8 @@
 import type { Addition } from "@bjornpagen/grizzle";
 import { Option } from "effect";
 import type { DocumentContext } from "#pantry/import/context.ts";
-import { baseTypesOf, declaredFieldsOf } from "#pantry/import/overlays/declarations.ts";
-import type { DeclaredFields } from "#pantry/import/overlays/declarations.ts";
+import { declarationOf, typedCountOf } from "#pantry/import/overlays/declarations.ts";
+import type { TypedDeclaration } from "#pantry/import/overlays/declarations.ts";
 import { foldAt, foldOf } from "#pantry/import/fold.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
@@ -24,6 +24,8 @@ import { pairKeyPattern } from "#pantry/qti/mapping.ts";
 import { doublePattern } from "#pantry/qti/operators.ts";
 import type {
   AreaMapping,
+  AreaMappingCardinality,
+  LookupTableCardinality,
   LookupValue,
   LookupValueType,
   MapKey,
@@ -35,6 +37,7 @@ import type {
   MapKeyType,
   Mapping,
   MappingBaseType,
+  MappingCardinality,
   LookupTable,
 } from "#pantry/qti/mapping.ts";
 
@@ -61,6 +64,7 @@ export interface MappingIds {
  */
 export interface MappingRows {
   readonly AreaMapping: ReadonlyMap<string, Addition<typeof AreaMapping>>;
+  readonly AreaMappingCardinality: ReadonlyMap<string, Addition<typeof AreaMappingCardinality>>;
   readonly LookupValue: ReadonlyMap<string, Addition<typeof LookupValue>>;
   readonly LookupValueType: ReadonlyMap<string, Addition<typeof LookupValueType>>;
   readonly MapKey: ReadonlyMap<string, Addition<typeof MapKey>>;
@@ -72,7 +76,9 @@ export interface MappingRows {
   readonly MapKeyType: ReadonlyMap<string, Addition<typeof MapKeyType>>;
   readonly Mapping: ReadonlyMap<string, Addition<typeof Mapping>>;
   readonly MappingBaseType: ReadonlyMap<string, Addition<typeof MappingBaseType>>;
+  readonly MappingCardinality: ReadonlyMap<string, Addition<typeof MappingCardinality>>;
   readonly LookupTable: ReadonlyMap<string, Addition<typeof LookupTable>>;
+  readonly LookupTableCardinality: ReadonlyMap<string, Addition<typeof LookupTableCardinality>>;
 }
 
 /**
@@ -81,8 +87,14 @@ export interface MappingRows {
  */
 type DeclarationCopy = Pick<
   Addition<typeof Mapping>,
-  "baseTypes" | "cardinality" | "declarationKind"
+  "baseTypes" | "cardinalities" | "declarationKind"
 >;
+
+/**
+ * A declaration as a declared overlay reads it: its kind's `DeclarationKind` and its typed
+ * attributes.
+ */
+type Declared = TypedDeclaration & { readonly declarationKind: DeclarationCopy["declarationKind"] };
 
 /**
  * A `BaseType` handle.
@@ -90,16 +102,17 @@ type DeclarationCopy = Pick<
 type BaseTypeHandle = Addition<typeof MappingBaseType>["baseType"];
 
 /**
- * Read the fields a declared overlay copies from its declaration: its base type only as its count
- * ({@link baseTypesOf}), since a record has none, and never its name, which a declaration may lack
- * (spec reading 157).
+ * Read the fields a declared overlay copies from its declaration: its cardinality and its base
+ * type only as their counts ({@link typedCountOf}), since a declaration may have neither (lane
+ * NIL's audit, B12; spec reading 158), and never its name, which a declaration may lack (spec
+ * reading 157).
  *
- * @param declared - The declaration's fields.
+ * @param declared - The declaration.
  * @returns The copy.
  */
-const copyOf = ({ baseType, cardinality, declarationKind }: DeclaredFields): DeclarationCopy => ({
-  baseTypes: baseTypesOf(baseType),
-  cardinality,
+const copyOf = ({ baseType, cardinality, declarationKind }: Declared): DeclarationCopy => ({
+  baseTypes: typedCountOf(baseType),
+  cardinalities: typedCountOf(cardinality),
   declarationKind,
 });
 
@@ -364,9 +377,9 @@ const addTypedKey = (typed: TypedKeys, baseType: BaseTypeHandle, entry: TypedEnt
  * Build the mapping overlays' rows of one document.
  *
  * A declared overlay copies its parent's declaration fields as `Declaration`'s builder writes them
- * (`#pantry/import/overlays/declarations.ts` `declaredFieldsOf`), and exists only below a
- * declaration with a `Declaration` row: a table below one with no row, or below no declaration,
- * which the content model never admits, has no row, and its parent's own law refuses it.
+ * (`#pantry/import/overlays/declarations.ts` `declarationOf`), and exists below every declaration,
+ * whatever its attributes spell (spec readings 157 and 158): a table below no declaration, which
+ * the content model never admits, has no row, and its parent's own law refuses it.
  *
  * A map entry with no `map-key` has no `MapKey` row, and AL3 refuses the element. A key past the
  * key-text bound keeps its `MapKey` row and its typed row, whose `keyText` fields alone refuse it
@@ -375,7 +388,9 @@ const addTypedKey = (typed: TypedKeys, baseType: BaseTypeHandle, entry: TypedEnt
  * table entry, and a table with a `default-value`, has its `LookupValue` row, with its table's
  * declaration. Each of a mapping, a map key and a lookup value has its row beside its declaration's
  * base type, where the declaration has one, and only there; a record's has none, so its keys and
- * values are read in no base type and have no typed row.
+ * values are read in no base type and have no typed row. Each of a mapping, an area mapping and a
+ * lookup table has its row beside its declaration's cardinality, where the declaration has one,
+ * and only there (spec reading 158).
  *
  * @param doc - The document's tree, as shred gives it.
  * @param ids - The ids its rows are written under.
@@ -402,13 +417,12 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: MappingIds): MappingRows
     start: node.start,
     version: node.version,
   });
-  // Each declaration with a `Declaration` row, named or not (spec reading 157), as that row holds
-  // it (`declaredFieldsOf`): a table hangs only below one, and copies it; one with no row has no
-  // table rows either, as its own law refuses it alone (lane NIL's audit, B11).
+  // Each declaration, as its rows hold it (`declarationOf`), whatever its identifier, cardinality
+  // and base type spell (spec readings 157 and 158): a table hangs below one, and copies it.
   const declarations = new Map(
     rows.nodes.flatMap((node) =>
-      Option.toArray(declaredFieldsOf(node.kind, (name) => valueOf(node.id, name))).map(
-        (declared): readonly [NodeId, DeclaredFields] => [node.id, declared],
+      Option.toArray(declarationOf(node.kind, (name) => valueOf(node.id, name))).map(
+        (declared): readonly [NodeId, Declared] => [node.id, declared],
       ),
     ),
   );
@@ -428,20 +442,49 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: MappingIds): MappingRows
   };
   const mappings = new Map<string, Addition<typeof Mapping>>();
   const lookupTables = new Map<string, Addition<typeof LookupTable>>();
+  const cardinalities = {
+    AreaMappingCardinality: new Map<string, Addition<typeof AreaMappingCardinality>>(),
+    LookupTableCardinality: new Map<string, Addition<typeof LookupTableCardinality>>(),
+    MappingCardinality: new Map<string, Addition<typeof MappingCardinality>>(),
+  };
+  // Each table kind's rows, and its rows beside its declaration's cardinality.
+  const tables: ReadonlyMap<
+    string,
+    {
+      readonly beside: Map<string, Addition<typeof MappingCardinality>>;
+      readonly rows: Map<string, Addition<typeof Mapping>>;
+    }
+  > = new Map([
+    ["qti-area-mapping", { beside: cardinalities.AreaMappingCardinality, rows: areaMappings }],
+    [
+      "qti-interpolation-table",
+      { beside: cardinalities.LookupTableCardinality, rows: lookupTables },
+    ],
+    ["qti-mapping", { beside: cardinalities.MappingCardinality, rows: mappings }],
+    ["qti-match-table", { beside: cardinalities.LookupTableCardinality, rows: lookupTables }],
+  ]);
+  const addTable = (node: NodeRow<Composed>, declaration: Declared): void => {
+    for (const table of Option.toArray(Option.fromUndefinedOr(tables.get(node.kind)))) {
+      table.rows.set(node.id, {
+        ...tupleOf(node),
+        ...copyOf(declaration),
+        declaration: node.parent,
+      });
+      for (const cardinality of Option.toArray(declaration.cardinality)) {
+        table.beside.set(node.id, { cardinality, declaration: node.parent, node: node.id });
+      }
+    }
+
+    for (const baseType of node.kind === "qti-mapping"
+      ? Option.toArray(declaration.baseType)
+      : []) {
+      mappingBaseTypes.set(node.id, { baseType, declaration: node.parent, node: node.id });
+    }
+  };
 
   for (const node of rows.nodes) {
     for (const declaration of Option.toArray(Option.fromNullishOr(declarations.get(node.parent)))) {
-      const declared = { ...tupleOf(node), ...copyOf(declaration), declaration: node.parent };
-      if (node.kind === "qti-mapping") {
-        mappings.set(node.id, declared);
-        for (const baseType of Option.toArray(declaration.baseType)) {
-          mappingBaseTypes.set(node.id, { baseType, declaration: node.parent, node: node.id });
-        }
-      } else if (node.kind === "qti-area-mapping") {
-        areaMappings.set(node.id, declared);
-      } else if (node.kind === "qti-match-table" || node.kind === "qti-interpolation-table") {
-        lookupTables.set(node.id, declared);
-      }
+      addTable(node, declaration);
     }
 
     const lookupAttribute = lookupAttributeOf.get(node.kind);
@@ -452,7 +495,7 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: MappingIds): MappingRows
     if (lookupValue !== undefined && table !== undefined && tableDeclaration !== undefined) {
       lookupValues.set(node.id, {
         ...tupleOf(node),
-        baseTypes: baseTypesOf(tableDeclaration.baseType),
+        baseTypes: typedCountOf(tableDeclaration.baseType),
         declaration: table.parent,
         parent: node.parent,
         value: lookupValue,
@@ -476,7 +519,7 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: MappingIds): MappingRows
 
     mapKeys.set(node.id, {
       ...tupleOf(node),
-      baseTypes: baseTypesOf(mappingDeclaration.baseType),
+      baseTypes: typedCountOf(mappingDeclaration.baseType),
       key,
       mapping: node.parent,
     });
@@ -487,6 +530,7 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: MappingIds): MappingRows
   }
 
   return {
+    ...cardinalities,
     AreaMapping: areaMappings,
     LookupTable: lookupTables,
     LookupValue: lookupValues,

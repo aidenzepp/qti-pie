@@ -39,7 +39,6 @@ import {
   breachAt,
   collapsed,
   elementsOf,
-  typedOptionalOf,
   typedOr,
   typedValueOf,
   valueOf,
@@ -876,15 +875,15 @@ export const expressionPackageBreaches = (
               Option.contains(typedValueOf(item.rows, held.id, "identifier"), template),
           ),
         ).pipe(
-          // A declaration that writes no cardinality, or a cardinality or a base type outside its
-          // domain, is refused by AL3 or that domain alone, as it has no `Declaration` row to
-          // compare against (the orchestrator's ruling of 2026-11-06; lane NIL's audit, B11).
+          // A declaration that writes no cardinality, or one outside its domain, is refused by AL3
+          // or that domain alone, as it has no `DeclarationName` to compare against; a base type
+          // outside its domain types nothing, as an unwritten one does (the orchestrator's ruling
+          // of 2026-11-06; lane NIL's audit, B11; spec reading 158).
           Option.flatMap((declaration) =>
-            Option.zipWith(
-              typedOptionalOf(item.rows, declaration.id, "base-type"),
-              typedValueOf(item.rows, declaration.id, "cardinality"),
-              (base, cardinality) => ({ base: valueBaseOf(base), cardinality }),
-            ),
+            Option.map(typedValueOf(item.rows, declaration.id, "cardinality"), (cardinality) => ({
+              base: valueBaseOf(typedValueOf(item.rows, declaration.id, "base-type")),
+              cardinality,
+            })),
           ),
         ),
       );

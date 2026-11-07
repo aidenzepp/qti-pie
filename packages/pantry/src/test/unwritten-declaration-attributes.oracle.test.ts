@@ -320,7 +320,8 @@ const scaleRow = (value: string | undefined): readonly (readonly string[])[] =>
 /**
  * Hold a case's rows to what its declaration writes: each optional attribute's row exists exactly
  * where the attributes it reads are written (and, for a base type's code, spell one), holding them
- * as written.
+ * as written, and the declaration keeps its row and its cardinality whatever its base type spells
+ * (spec reading 158).
  *
  * @param drawn - The case.
  * @param inputs - The import's rows.
@@ -337,12 +338,11 @@ const assertRows = (drawn: Case, inputs: PackageInputs, label: string): void => 
         drawn.baseType === "spelled" ? [["float", "float"]] : [],
         `${label}: DeclarationBaseType`,
       );
+      assert.strictEqual(inputs.Declaration.size, 1, `${label}: Declaration`);
       assert.deepStrictEqual(
-        [...inputs.Declaration.values()].map(({ cardinality }) => cardinality),
-        { spelled: [drawn.cardinality], unspelled: [], unwritten: [drawn.cardinality] }[
-          drawn.baseType
-        ],
-        `${label}: Declaration`,
+        [...inputs.DeclarationCardinality.values()].map(({ cardinality }) => cardinality),
+        [drawn.cardinality],
+        `${label}: DeclarationCardinality`,
       );
       break;
     }
@@ -357,13 +357,18 @@ const assertRows = (drawn: Case, inputs: PackageInputs, label: string): void => 
         `${label}: RecordField`,
       );
       assert.deepStrictEqual(
-        [...inputs.ValueBaseType.values()].map(({ baseType, cardinality, text }) => [
+        [...inputs.ValueBaseType.values()].map(({ baseType }) => baseType),
+        drawn.baseType === "spelled" ? ["integer"] : [],
+        `${label}: ValueBaseType`,
+      );
+      assert.deepStrictEqual(
+        [...inputs.FieldValue.values()].map(({ baseType, cardinality, text }) => [
           baseType,
           cardinality,
           text,
         ]),
         drawn.baseType === "spelled" ? [["integer", drawn.cardinality, drawn.text]] : [],
-        `${label}: ValueBaseType`,
+        `${label}: FieldValue`,
       );
       break;
     }
@@ -488,21 +493,15 @@ layer(NodeServices.layer, { excludeTestServices: true })(
 
                   // The host judges every law but Mastery range, and its refusal is named by the
                   // rule the catalog's precedence puts first, as the database's is. A declaration
-                  // whose base type spells nothing has no row (B11), so its attributes' copies into
-                  // it break too: deferred keys, which the value domain's immediate CHECK precedes
-                  // in the database, and which the rule's precedence puts after it here.
+                  // whose base type spells nothing keeps its row and has no base type's alone, so
+                  // its value domain is the one law it breaks (spec reading 158).
                   const { broken } = judgeHost(hostRowsOf(inputs), hostLaws);
                   const brokenNames = broken.map(({ law }) =>
                     Option.getOrElse(lawNameOf(law), () => Formatter.format(law)),
                   );
                   const shown =
                     broken.map(({ law }) => Formatter.format(law)).join("; ") || "no law";
-                  const judgedExpected = [
-                    ...[...expected].filter((law) => law !== "Mastery range"),
-                    ...(drawn.kind === "declaration" && drawn.baseType === "unspelled"
-                      ? ["Declaration overlay" as const]
-                      : []),
-                  ];
+                  const judgedExpected = [...expected].filter((law) => law !== "Mastery range");
                   assert.sameMembers(
                     [...new Set(brokenNames)],
                     judgedExpected,

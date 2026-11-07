@@ -1560,17 +1560,20 @@ export const viewOf = (inputs: PackageInputs): View => {
     }
   }
 
-  // A declaration's count of base types is drawn, so the program writes no field of it: it is the
-  // number of its `DeclarationBaseType` rows, as the database draws it, so a containment over
-  // `declarationRef` reads the tuple PostgreSQL holds (lane NIL's audit, B12).
-  const baseTyped = new Set<Value | undefined>(
-    (view.get("DeclarationBaseType") ?? []).map(({ node }) => node),
-  );
+  // A declaration's counts of base types and cardinalities are drawn, so the program writes no
+  // field of them: each is the number of its `DeclarationBaseType` or `DeclarationCardinality`
+  // rows, as the database draws it, so a containment over `declarationRef` reads the tuple
+  // PostgreSQL holds (lane NIL's audit, B12; spec reading 158).
+  const typedNodes = (relation: string) =>
+    new Set<Value | undefined>((view.get(relation) ?? []).map(({ node }) => node));
+  const baseTyped = typedNodes("DeclarationBaseType");
+  const cardinal = typedNodes("DeclarationCardinality");
   view.set(
     "Declaration",
     (view.get("Declaration") ?? []).map((row) => ({
       ...row,
       baseTypes: baseTyped.has(row["node"]) ? 1n : 0n,
+      cardinalities: cardinal.has(row["node"]) ? 1n : 0n,
     })),
   );
 
