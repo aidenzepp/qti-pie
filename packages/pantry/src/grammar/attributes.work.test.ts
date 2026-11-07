@@ -64,10 +64,10 @@ vi.doMock("#pantry/grammar/domains.ts", async (importOriginal) => {
 
 vi.doMock("#pantry/grammar/attributes.ts", async (importOriginal) => {
   const original = await importOriginal<typeof Attributes>();
-  const generate: typeof original.generate = (input) => {
+  const generate: typeof original.generate = (input, readDomain) => {
     work.inputs.push(input);
 
-    return original.generate(input);
+    return original.generate(input, readDomain);
   };
 
   return { ...original, generate };
@@ -78,7 +78,7 @@ vi.doMock("#pantry/grammar/attributes.ts", async (importOriginal) => {
  */
 const { composed } = await import("#pantry/grammar/compose.ts");
 
-const { definitionText, generate, governorHandle, readDefinitionOf, readingsOf } =
+const { definitionText, domainReader, generate, governorHandle, readDefinitionOf, readingsOf } =
   await import("#pantry/grammar/attributes.ts");
 
 const { roster } = await import("#pantry/grammar/closed.ts");
@@ -231,23 +231,25 @@ const oracle = (): Oracle => {
 
 /**
  * Hold a generation's work and domains to the oracle: the definitions compiled during it are
- * exactly the distinct read definitions of its declarations, each once, and every (version,
- * declaration) names the domain its definition compiles to, or an empty domain where its lexical
- * space holds no value.
+ * exactly the distinct read definitions of its declarations its reader had not compiled before,
+ * each once, and every (version, declaration) names the domain its definition compiles to, or an
+ * empty domain where its lexical space holds no value.
  *
  * @param input - The generator's input.
  * @param grammar - The grammar it generated.
  * @param compiled - The definitions compiled while it generated, in call order.
- * @returns The number of definitions compiled.
+ * @param before - The definitions its reader compiled for earlier compositions.
+ * @returns The texts of the definitions compiled.
  */
 const holdToOracle = (
   input: AttributeGrammarInput,
   grammar: AttributeGrammar,
   compiled: readonly { readonly definition: Domain; readonly whiteSpace: Reading }[],
-): number => {
+  before: ReadonlySet<string> = new Set(),
+): ReadonlySet<string> => {
   const read = oracle();
   const texts = compiled.map((unit) => definitionText(unit));
-  const twice = texts.filter((text, at) => texts.indexOf(text) !== at);
+  const twice = texts.filter((text, at) => texts.indexOf(text) !== at || before.has(text));
   assert.deepStrictEqual(
     twice.map((text) => text.slice(0, 200)),
     [],
@@ -255,7 +257,13 @@ const holdToOracle = (
   );
   assert.deepStrictEqual(
     new Set(texts),
-    new Set(declarationsOf(input).map((declared) => read(declared).text)),
+    new Set(
+      declarationsOf(input).flatMap((declared) => {
+        const { text } = read(declared);
+
+        return before.has(text) ? [] : [text];
+      }),
+    ),
     "the definitions compiled are the declarations' distinct read definitions",
   );
 
@@ -282,7 +290,7 @@ const holdToOracle = (
     }
   }
 
-  return texts.length;
+  return new Set(texts);
 };
 
 describe("the attribute grammar's domain work", () => {
@@ -299,7 +307,7 @@ describe("the attribute grammar's domain work", () => {
         const input = work.inputs[0] ?? assert.fail("no attribute grammar was generated");
         const compiles = holdToOracle(input, grammar.attributes, work.compiled);
 
-        assert.isAbove(compiles, 0);
+        assert.isAbove(compiles.size, 0);
       }),
     900_000,
   );
@@ -466,6 +474,29 @@ const situationsOf = (declarations: readonly Declared[]): readonly ToySituation[
 };
 
 /**
+ * A toy generator input over the toy pairs' kinds and names, both versions, no text and no
+ * governor.
+ *
+ * @param declarations - The declarations.
+ * @returns The input.
+ */
+const toyInput = (declarations: readonly Declared[]): AttributeGrammarInput => ({
+  declarations,
+  governed: [],
+  governors: [],
+  kinds: Result.getOrThrow(
+    roster("NodeKind", [...new Set(Object.values(toyPairs).map(({ kind }) => kind))]),
+  ),
+  names: Result.getOrThrow(
+    roster("AttributeName", [...new Set(Object.values(toyPairs).map(({ name }) => name))]),
+  ),
+  texts: [],
+  typeName: Result.getOrThrow(roster("TypeName", ["Toy"])),
+  typeTexts: [],
+  versions: Result.getOrThrow(roster("SchemaVersion", schemaVersions)),
+});
+
+/**
  * Generate a toy grammar from declarations, counting the definitions compiled while it generates,
  * and hold it to the oracle.
  *
@@ -484,23 +515,53 @@ const toyCase = (
     }
 
     const from = work.compiled.length;
-    const input: AttributeGrammarInput = {
-      declarations,
-      governed: [],
-      governors: [],
-      kinds: Result.getOrThrow(
-        roster("NodeKind", [...new Set(Object.values(toyPairs).map(({ kind }) => kind))]),
-      ),
-      names: Result.getOrThrow(
-        roster("AttributeName", [...new Set(Object.values(toyPairs).map(({ name }) => name))]),
-      ),
-      texts: [],
-      typeName: Result.getOrThrow(roster("TypeName", ["Toy"])),
-      typeTexts: [],
-      versions: Result.getOrThrow(roster("SchemaVersion", schemaVersions)),
-    };
+    const input = toyInput(declarations);
     const grammar = Result.getOrThrow(generate(input));
     holdToOracle(input, grammar, work.compiled.slice(from));
+  });
+
+/**
+ * Generate two toy grammars through one shared reader, and hold each to the oracle: the second
+ * compiles only the definitions the first did not.
+ *
+ * @param first - The first composition's declarations.
+ * @param second - The second's.
+ * @param c - The case, which notes the situations reached.
+ * @param c.note - Note a situation.
+ * @returns The check.
+ */
+const sharedCase = (
+  first: readonly Declared[],
+  second: readonly Declared[],
+  c: { readonly note: (situation: ToySituation | "a definition both compositions read") => void },
+): Effect.Effect<void> =>
+  Effect.sync(() => {
+    const read = oracle();
+    const firstTexts = new Set(first.map((declared) => read(declared).text));
+    if (second.some((declared) => firstTexts.has(read(declared).text))) {
+      c.note("a definition both compositions read");
+    }
+
+    for (const situation of situationsOf([...first, ...second])) {
+      c.note(situation);
+    }
+
+    const readDomain = domainReader();
+    const before = work.compiled.length;
+    const firstInput = toyInput(first);
+    const compiled = holdToOracle(
+      firstInput,
+      Result.getOrThrow(generate(firstInput, readDomain)),
+      work.compiled.slice(before),
+    );
+    const middle = work.compiled.length;
+    const secondInput = toyInput(second);
+    holdToOracle(
+      secondInput,
+      Result.getOrThrow(generate(secondInput, readDomain)),
+      work.compiled.slice(middle),
+      compiled,
+    );
   });
 
 /**
@@ -611,6 +672,41 @@ describe("the attribute grammar's domain work on toy declarations", () => {
             suite: "grammar/attributes/work/search",
           },
           (draws, c) => toyCase(toyDeclarations(draws), c),
+        ),
+      ),
+    900_000,
+  );
+});
+
+describe("the attribute grammar's domain work through a shared reader", () => {
+  it.effect(
+    "compiles a definition two compositions share once for both, and reads every declaration of each as the oracle does, searched: two lists of up to eight declarations under swarm weights",
+    (ctx) =>
+      // Oracle: each declaration read alone (`oracle`). The search must reach a definition both
+      // compositions read, which the second must not compile again.
+      searched(
+        ctx,
+        explore(
+          {
+            caseHang: Duration.minutes(2),
+            concurrency: 1,
+            coverage: required<ToySituation | "a definition both compositions read">(
+              ["a definition both compositions read", "one leaf under two sets of readings"],
+              { cases: 80, sense: notesOnly },
+            ),
+            draw: drawn((source) => ({
+              first: source.draw(toyList),
+              second: source.draw(toyList),
+            })),
+            kept: [],
+            literal: Formatter.format,
+            oracle: { kind: "second-implementation", name: "each declaration read alone" },
+            runs: 120,
+            shrink: completeShrink,
+            steerEvery: 16,
+            suite: "grammar/attributes/work/shared",
+          },
+          ({ first, second }, c) => sharedCase(toyDeclarations(first), toyDeclarations(second), c),
         ),
       ),
     900_000,

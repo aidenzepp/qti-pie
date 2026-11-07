@@ -1339,7 +1339,7 @@ export interface ReadDefinition {
 /**
  * A compiled domain with its definition key ({@link definitionKey}), computed once with it.
  */
-interface KeyedDomain {
+export interface KeyedDomain {
   readonly compiled: CompiledDomain;
   readonly key: string;
 }
@@ -1348,7 +1348,7 @@ interface KeyedDomain {
  * One declaration's domain: the spec readings that apply to it, and its read definition compiled,
  * or why that definition does not compile.
  */
-interface DeclarationDomain {
+export interface DeclarationDomain {
   readonly compiled: Result.Result<KeyedDomain, CompileError>;
   readonly readings: readonly SpecReading[];
 }
@@ -1387,7 +1387,7 @@ const domainText = (domain: Domain): string => {
  * @returns The text.
  */
 export const definitionText = ({ definition, whiteSpace }: ReadDefinition): string =>
-  `${whiteSpace} ${domainText(definition)}`;
+  `${whiteSpace}\u0000${domainText(definition)}`;
 
 /**
  * Read a declaration's definition: its leaf definition with each of its spec readings applied, in
@@ -1413,8 +1413,12 @@ export const readDefinitionOf = (
 };
 
 /**
- * A reader of declarations' domains for one composition, which compiles each distinct definition
- * once.
+ * A reader of declarations' domains: a declaration's readings and its compiled domain.
+ */
+export type DomainReader = (declared: DomainDeclaration) => DeclarationDomain;
+
+/**
+ * A reader of declarations' domains, which compiles each distinct definition once.
  *
  * A leaf states each distinct definition once and its declarations share it, so the reader groups
  * declarations by their leaf definition and their spec readings, and reads each group's definition
@@ -1422,9 +1426,13 @@ export const readDefinitionOf = (
  * definition, so the read definitions are told apart by their text ({@link definitionText}), and
  * each distinct one is compiled once.
  *
- * @returns The reader: a declaration's readings and its compiled domain.
+ * Each composition reads through a reader of its own unless its caller hands it one: a caller that
+ * composes many grammars over one leaf, as a test's toy compositions over the document layer do,
+ * gives them one reader, so a definition they share compiles once for all of them.
+ *
+ * @returns The reader.
  */
-const domainReader = (): ((declared: DomainDeclaration) => DeclarationDomain) => {
+export const domainReader = (): DomainReader => {
   const groups = new Map<Domain, Map<string, DeclarationDomain>>();
   const byText = new Map<string, Result.Result<KeyedDomain, CompileError>>();
 
@@ -1615,12 +1623,15 @@ interface Admitted {
  * so an element's `attrs` is a set over its governor's positions as it is over its kind's.
  *
  * @param input - The rosters and the declarations.
+ * @param readDomain - The reader the declarations' domains are read through
+ *   ({@link domainReader}): the composition's own, or one its caller shares among compositions.
  * @returns `AttributeGrammar`, `ValueDomain`, `ValueIdentity`, `TextDomain`, `Governor`,
  *   `GovernedAttribute` and `TypeText`, with the domain and position rosters; or the first
  *   declaration whose domain does not compile, or the first relation that has no constant.
  */
 export const generate = (
   input: AttributeGrammarInput,
+  readDomain: DomainReader = domainReader(),
 ): Result.Result<AttributeGrammar, AttributeGrammarError> =>
   Result.gen(function* generateAttributes() {
     const domains: DomainRoster = {
@@ -1631,7 +1642,6 @@ export const generate = (
     };
     // Every declaration's domain is read before any joins the roster, each distinct definition
     // compiled once; the loops below add them in the roster's order.
-    const readDomain = domainReader();
     const declarations = input.declarations.map((declared) => ({
       declared,
       read: readDomain(declared),

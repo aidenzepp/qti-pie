@@ -8,6 +8,7 @@ import { notesOnly } from "@grizzle/testing/sense";
 import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Formatter, Option, Result } from "effect";
+import { domainReader } from "#pantry/grammar/attributes.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 import { documentRoots } from "#pantry/grammar/facets.ts";
 import { foreignKinds, isForeignKind, schemaVersions } from "#pantry/grammar/kinds.ts";
@@ -337,6 +338,12 @@ describe.skipIf(!cached)("Admission against the XSD", () => {
 const toyKinds = Array.from({ length: 12 }, (_, at) => `e${at + 1}`);
 
 /**
+ * The domain reader every toy composition of this file shares: each composition carries the
+ * document layer's attributes, the same definitions every time, so they compile once for the file.
+ */
+const toyDomains = domainReader();
+
+/**
  * Occurrence bounds in a small box: least 0 to 2, greatest 1 to 2 or unbounded, the least never
  * above the greatest; and, on its own arm so every run reaches it, the named variant the IR finding
  * is about, a greatest of 0 (`maxOccurs="0"`, CP 3.0.1's `cp:resource`).
@@ -577,7 +584,7 @@ describe("Admission projected from content models", () => {
                 facets: toyFacets({}),
                 kinds: ["e0", ...toyKinds],
               });
-              const result = toyGrammar([{ ...toy, models: [model] }]);
+              const result = toyGrammar([{ ...toy, models: [model] }], toyDomains);
               const held = result.pipe(
                 Result.map((composedToy) =>
                   composedToy.admission.rows
@@ -654,22 +661,25 @@ describe("Admission through compose", () => {
               ];
               const [first] = triples;
               const second = restated && first !== undefined ? [first] : [];
-              const result = toyGrammar([
-                toyVocabulary({
-                  admission: triples,
-                  attributes: [],
-                  data: ["ws"],
-                  facets: toyFacets({}),
-                  kinds: restatedKinds,
-                }),
-                toyVocabulary({
-                  admission: second,
-                  attributes: [],
-                  data: [],
-                  facets: toyFacets({}),
-                  kinds: [],
-                }),
-              ]);
+              const result = toyGrammar(
+                [
+                  toyVocabulary({
+                    admission: triples,
+                    attributes: [],
+                    data: ["ws"],
+                    facets: toyFacets({}),
+                    kinds: restatedKinds,
+                  }),
+                  toyVocabulary({
+                    admission: second,
+                    attributes: [],
+                    data: [],
+                    facets: toyFacets({}),
+                    kinds: [],
+                  }),
+                ],
+                toyDomains,
+              );
 
               if (second.length > 0) {
                 assert.strictEqual(
