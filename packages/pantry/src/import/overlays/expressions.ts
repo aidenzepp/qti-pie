@@ -73,6 +73,7 @@ import type {
   Literal,
   LiteralTyped,
   MappingItemRef,
+  MappingItemRefType,
   MappingLookup,
   MappingSourceDeclaration,
   NameLookup,
@@ -1659,6 +1660,7 @@ export interface AssembledExpressionRows {
   readonly ItemRefDocument: ReadonlyMap<string, Addition<typeof ItemRefDocument>>;
   readonly ItemRefTarget: ReadonlyMap<string, Addition<typeof ItemRefTarget>>;
   readonly MappingItemRef: ReadonlyMap<string, Addition<typeof MappingItemRef>>;
+  readonly MappingItemRefType: ReadonlyMap<string, Addition<typeof MappingItemRefType>>;
   readonly MappingLookup: ReadonlyMap<string, Addition<typeof MappingLookup>>;
   readonly MappingSourceDeclaration: ReadonlyMap<string, Addition<typeof MappingSourceDeclaration>>;
   readonly NameLookup: ReadonlyMap<string, Addition<typeof NameLookup>>;
@@ -2339,35 +2341,38 @@ const mappingSourcesOf = (
 };
 
 /**
- * Write what each variable mapping's item ref names, its `ItemRefTarget`'s type, which leaves a
- * mapping under an LTI link unchecked (spec reading 110), or {@link noResource} where the item ref
- * has no target: it writes no href, which AL3 alone refuses (spec reading 155), or its href names
- * no resource, which "Item ref target" refuses over the item ref. "Variable mapping source" judges
- * such a mapping, as `NameLookup` gives such an item ref the type `none`.
+ * Write each variable mapping's item ref, and what it names where it has a target, its
+ * `ItemRefTarget`'s type, which leaves a mapping under an LTI link unchecked (spec reading 110). An
+ * item ref with no target writes no href, which AL3 alone refuses (spec reading 155), or its href
+ * names no resource, which "Item ref target" refuses over the item ref: its mapping has no type
+ * row, so grizzle draws its `types` as 0, and "Variable mapping source" judges it (decision 428).
  *
  * @param documents - Every document of the package.
  * @param lookups - The lookups, which hold each item ref's target.
- * @returns The mappings' item refs, by the mapping's node.
+ * @returns The mappings' item refs and their types, each by the mapping's node.
  */
 const mappingItemRefsOf = (
   documents: readonly AssembledExpressionInput[],
   lookups: Lookups,
-): ReadonlyMap<string, Addition<typeof MappingItemRef>> =>
-  new Map(
-    documents.flatMap((input) =>
-      [...input.tests.VariableMapping.values()].map(
-        (mapping) =>
-          [
-            mapping.node,
-            {
-              itemRef: mapping.parent,
-              node: mapping.node,
-              type: lookups.targets.get(mapping.parent) ?? noResource,
-            },
-          ] as const,
+): Pick<AssembledExpressionRows, "MappingItemRef" | "MappingItemRefType"> => {
+  const mappings = documents.flatMap((input) => [...input.tests.VariableMapping.values()]);
+  const types = mappings.flatMap((mapping) => {
+    const type = lookups.targets.get(mapping.parent);
+
+    return type === undefined
+      ? []
+      : [[mapping.node, { itemRef: mapping.parent, node: mapping.node, type }] as const];
+  });
+
+  return {
+    MappingItemRef: new Map(
+      mappings.map(
+        (mapping) => [mapping.node, { itemRef: mapping.parent, node: mapping.node }] as const,
       ),
     ),
-  );
+    MappingItemRefType: new Map(types),
+  };
+};
 
 /**
  * Force every written element of every test's assembly into the name lookups: its node, kind and
@@ -2549,7 +2554,7 @@ export const assembledExpressionRowsOf = (
     ...placed,
     ItemRefDocument: items.itemRefDocuments,
     ItemRefTarget: items.itemRefTargets,
-    MappingItemRef: mappingItemRefsOf(documents, lookups),
+    ...mappingItemRefsOf(documents, lookups),
     MappingLookup: lookups.mappings,
     MappingSourceDeclaration: sources,
     NameLookup: lookups.names,

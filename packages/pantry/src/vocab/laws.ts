@@ -940,7 +940,7 @@ export const lawTable = {
   "Variable mapping source": {
     rule: "variable-mapping-source",
     source:
-      "the UP audit's A34: https://www.imsglobal.org/spec/qti/v3p0/info#DerivedCharacteristic_VariableMapping.Attr_source-identifier (§7.48.1: 'The identifier of the outcome variable to identify the name of the source identifier during outcome processing variable mapping', info.txt:71657): a mapping's source names an outcome declaration of the item its item ref names, compared collapsed (expressions.ts MappingSourceDeclaration, through tests.ts ItemRefDocument); an item ref that names an LTI link names no item, so no outcome of it, and a mapping under it is accepted unchecked (reading 110, expressions.ts heldMappings leaves out a mapping whose MappingItemRef names an LTI link)",
+      "the UP audit's A34: https://www.imsglobal.org/spec/qti/v3p0/info#DerivedCharacteristic_VariableMapping.Attr_source-identifier (§7.48.1: 'The identifier of the outcome variable to identify the name of the source identifier during outcome processing variable mapping', info.txt:71657): a mapping's source names an outcome declaration of the item its item ref names, compared collapsed (expressions.ts MappingSourceDeclaration, through tests.ts ItemRefDocument); an item ref that names an LTI link names no item, so no outcome of it, and a mapping under it is accepted unchecked (reading 110, expressions.ts heldMappings leaves out a mapping whose MappingItemRefType names an LTI link)",
   },
   "Variable mapping target": {
     rule: "variable-mapping-target",
