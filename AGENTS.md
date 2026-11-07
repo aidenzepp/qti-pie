@@ -13,7 +13,7 @@ is [aidenzepp/qti-pie](https://github.com/aidenzepp/qti-pie) (public, MIT-licens
 
 - Node 26 or later runs TypeScript source directly. There is no build step.
 - pnpm workspace. Effect is pinned to `4.1.2`, and the workspace must keep exactly one copy (`pnpm why effect -r`).
-- grizzle trunk at commit `8c90df1` (`8c90df1177f86bde011cb29cd7506a8e834d7888`) is vendored as tarballs; see
+- grizzle trunk at commit `a49e1cc` (`a49e1cc5087ce18fe6a2b26957d8199d7221eec3`) is vendored as tarballs; see
   `vendor/README.md`.
 - Git LFS holds every `packages/*/migrations/**/snapshot.json` (`.gitattributes`). Install `git-lfs` before cloning;
   without it the snapshot checks out as a pointer file and grizzle refuses it.

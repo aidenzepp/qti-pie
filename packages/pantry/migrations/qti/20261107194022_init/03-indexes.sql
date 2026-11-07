@@ -12,6 +12,8 @@ CREATE INDEX "__assessment_object_ix_node_6_wcvqzkni_5_lang_uhblgy657t" ON "qti"
 
 CREATE INDEX "__attribute_ix_node_6_piwdwr_2_vb_nar3y3mfn6" ON "qti"."attribute" USING btree ("__node_6piwdwr2vb");
 
+CREATE INDEX "__attribute_ix_node_6_qw_4_z_7_l_7_sv_3evoy7v43q" ON "qti"."attribute" USING btree ("__node_6qw4z7l7sv");
+
 CREATE INDEX "__attribute_ix_node_7_iuvvf_6_ijd_767bkvdhgt" ON "qti"."attribute" USING btree ("__node_7iuvvf6ijd");
 
 CREATE INDEX "__attribute_ix_node_iz_4_wh_6_p_7_bb_zjmlxwu56b" ON "qti"."attribute" USING btree ("__node_iz4wh6p7bb");
@@ -70,7 +72,11 @@ CREATE INDEX "__count_bound_ix_node_uyvwkuoluo_max_name_perr_4_n6ow3yqmjw" ON "q
 
 CREATE INDEX "__count_bound_ix_node_wdev_3_ncr_3_a_4r36oaddlg" ON "qti"."count_bound" USING btree ("__node_wdev3ncr3a");
 
-CREATE INDEX "__declaration_ix_node_b_36_zjq_4_sbg_us7lqmuqx7" ON "qti"."declaration" USING btree ("__node_b36zjq4sbg");
+CREATE INDEX "__declaration_ix_node_kuknox_4_dci_base_type_jmtyhi_sasn7hrdgt" ON "qti"."declaration" USING btree ("__node_kuknox4dci", "__base_type_jmtyhi5b7n");
+
+CREATE INDEX "__declaration_ix_node_mp_2_o_432_mbm_nw4kkjnz4t" ON "qti"."declaration" USING btree ("__node_mp2o432mbm");
+
+CREATE INDEX "__declaration_ix_node_ucda_4_beqaz_qhkin6wqsw" ON "qti"."declaration" USING btree ("__node_ucda4beqaz");
 
 CREATE INDEX "__dependency_ix_package_ref_j4wdy5mqkk" ON "qti"."dependency" USING btree ("package", "ref");
 
@@ -546,9 +552,7 @@ CREATE INDEX "__text_idref_ix_document_token_r43v6t4zvp" ON "qti"."text_idref" U
 
 CREATE INDEX "__typed_href_ix_package_tydw_4_wv_6_km_path_kcbijnm_gest4ish2j" ON "qti"."typed_href" USING btree ("__package_tydw4wv6km", "__path_kcbijnm36h", "__type_izv7wmxts7");
 
-CREATE INDEX "__value_ix_node_5_ghh_4_hcv_2_e_base_type_qsgdvyxok_qp72tpyizx" ON "qti"."value" USING btree ("__node_5ghh4hcv2e", "__base_type_qsgdvyxok2");
-
-CREATE INDEX "__value_ix_parent_set_base_type_harkrhetfv" ON "qti"."value" USING btree ("parent", "set_base_type");
+CREATE INDEX "__value_ix_parent_base_type_cardinality_crhdj4hb5x" ON "qti"."value" USING btree ("parent", "base_type", "cardinality");
 
 CREATE INDEX "__value_set_ix_parent_document_identifier_345mkgysll" ON "qti"."value_set" USING btree ("parent", "document", "identifier", "declaration_kind", "base_type", "cardinality");
 
