@@ -2,7 +2,7 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { assert, describe, it } from "@effect/vitest";
 import { ConfigProvider, Effect, Option, Result } from "effect";
-import { encodeSession } from "#plate/codec/session.ts";
+import { decodeSession, encodeSession } from "#plate/codec/session.ts";
 import { configure } from "#plate/configuration.ts";
 import type { Configuration } from "#plate/configuration.ts";
 import { pageHtml } from "#plate/dev/frame.ts";
@@ -605,6 +605,55 @@ describe("routeReview", () => {
         assert.isTrue(verdict.valid, verdict.messages.join("\n"));
       }),
     { tags: ["qti-xsd"], timeout: oracleTimeoutMs },
+  );
+
+  it.effect(
+    "[I-5] answers 404 for an open session's results, which would report its templated item's template variable, and the results once its test has closed",
+    () =>
+      Effect.gen(function* resultsOnceClosed() {
+        const { configuration, open, playground, test } = yield* deliver(templatedCache);
+        const target = `/sessions/${open}/results.xml`;
+        const held = Option.getOrElse(playground.sessions.get(open), () =>
+          assert.fail("The open session is not stored."),
+        );
+        const opened = Result.getOrElse(decodeSession(held.session, test.test), (failure) =>
+          assert.fail(failure.message),
+        );
+        const refused = shown(yield* ask(playground, target), target);
+
+        assert.strictEqual(opened.status, "interacting");
+        assert.isDefined(opened.items[0]?.record.templates["T"], "item 1 drew T when presented");
+        assert.strictEqual(refused.page.status, 404);
+        assert.notInclude(refused.html, "templateVariable");
+
+        let session = opened;
+        for (const [index, step] of sitting.entries()) {
+          session = Result.getOrElse(
+            advance(test.test, test.items, session, step, configuration, {
+              now: new Date(startedAt.getTime() + (index + 1) * 10_000),
+            }),
+            (failure) => assert.fail(`advance refused: ${failure.message}`),
+          );
+        }
+        assert.strictEqual(session.status, "closed");
+        playground.sessions.set(open, {
+          ...held,
+          session: Result.getOrElse(encodeSession(session), (failure) =>
+            assert.fail(failure.message),
+          ),
+        });
+
+        const answered = yield* ask(playground, target);
+        const outcome =
+          answered instanceof Response
+            ? answered
+            : assert.fail(`The closed session's results answered with a ${answered.status} page.`);
+        const xml = yield* Effect.promise(() => outcome.text());
+
+        assert.strictEqual(outcome.status, 200);
+        assert.strictEqual(outcome.headers.get("content-type"), "application/xml; charset=utf-8");
+        assert.include(xml, '<templateVariable identifier="T"');
+      }),
   );
 });
 
