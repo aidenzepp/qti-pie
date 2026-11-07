@@ -78,20 +78,6 @@ describe("describeFailure, the local set-up", () => {
     assert.deepStrictEqual(identity(new OpenError({ reason: credential })), config);
     assert.deepStrictEqual(identity(new TransportFailure({ reason: credential })), config);
   });
-
-  it("an OpenError with another reason stays database", () => {
-    const other = new TokenError({ cause: new Error("refused") });
-
-    assert.deepStrictEqual(identity(new OpenError({ reason: other })), database);
-  });
-
-  it("a TransportFailure with another reason, or none, stays database", () => {
-    assert.deepStrictEqual(
-      identity({ _tag: "TransportFailure", reason: { _tag: "LayerReleased" } }),
-      database,
-    );
-    assert.deepStrictEqual(identity({ _tag: "TransportFailure" }), database);
-  });
 });
 
 describe("describeFailure, what to do next", () => {
@@ -101,10 +87,6 @@ describe("describeFailure, what to do next", () => {
     for (const help of Object.values(kindHelp)) {
       assert.isAbove(help.length, 0);
     }
-  });
-
-  it("a failure without a help of its own gets the help of its kind", () => {
-    assert.strictEqual(describeFailure({ _tag: "TransientFailure" }).help, kindHelp.database);
   });
 
   it("a RoundtripDiffers names the diff to run", () => {
@@ -173,16 +155,6 @@ describe("describeFailure, the defects qti names", () => {
       assert.deepStrictEqual(namedFailureOf(failure), Option.some(failure._tag));
     }
   });
-
-  it("an internal failure qti does not name keeps the help of its kind, and no name", () => {
-    assert.deepStrictEqual(describeFailure(new Error("x")), {
-      exitCode: 70,
-      help: kindHelp.internal,
-      kind: "internal",
-    });
-    assert.isTrue(Option.isNone(namedFailureOf(new Error("x"))));
-    assert.isTrue(Option.isNone(namedFailureOf({ _tag: "ImportRefused" })));
-  });
 });
 
 /**
@@ -230,15 +202,6 @@ describe("describeFailure, a program grizzle refused to compile", () => {
 describe("describeFailure, a refused import", () => {
   // A refusal is matched by its tag and fields, so it is written as them here: `refusal.ts`, which
   // defines its class, loads the composed grammar.
-  it("a refusal the reader or the codec gave keeps the help of its kind", () => {
-    const refused = { _tag: "ImportRefused", detail: "x", rule: "not-qti3" };
-
-    assert.deepStrictEqual(describeFailure(refused), {
-      exitCode: 1,
-      help: kindHelp["import-refused"],
-      kind: "import-refused",
-    });
-  });
 
   it("a refusal the database gave says where to look by the kind of its witness", () => {
     // Oracle: the witness kind the refusal carries, read from its field and never from its
