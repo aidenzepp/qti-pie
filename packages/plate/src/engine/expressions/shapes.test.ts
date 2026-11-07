@@ -36,6 +36,23 @@ describe("areaHolds", () => {
     assert.isTrue(areaHolds.ellipse([50, 50, 20, 10], 50, 60));
   });
 
+  it("[I-9a] ellipse holds a 5-12-13 point on its boundary (reading 52), and not its neighbours outside", () => {
+    assert.isTrue(areaHolds.ellipse([100, 100, 13, 26], 105, 124));
+    assert.isTrue(areaHolds.ellipse([100, 100, 13, 26], 95, 76));
+    assert.isFalse(areaHolds.ellipse([100, 100, 13, 26], 105, 125));
+    assert.isFalse(areaHolds.ellipse([100, 100, 13, 26], 106, 124));
+  });
+
+  it("[I-9a] ellipse and circle of radius 13 at 300,300 hold the boundary point 312,305 (reading 52)", () => {
+    assert.isTrue(areaHolds.ellipse([300, 300, 13, 13], 312, 305));
+    assert.isTrue(areaHolds.ellipse([300, 300, 13, 13], 288, 295));
+    assert.isFalse(areaHolds.ellipse([300, 300, 13, 13], 313, 305));
+    assert.isFalse(areaHolds.ellipse([300, 300, 13, 13], 312, 306));
+    assert.isTrue(areaHolds.circle([300, 300, 13], 312, 305));
+    assert.isTrue(areaHolds.circle([300, 300, 13], 288, 295));
+    assert.isFalse(areaHolds.circle([300, 300, 13], 313, 305));
+  });
+
   it("circle and ellipse hold boundary points at fractional coordinates whose squares are exact", () => {
     assert.isTrue(areaHolds.circle([0.5, 0.5, 0.25], 0.75, 0.5));
     assert.isTrue(areaHolds.ellipse([0.5, 0.5, 0.25, 0.125], 0.5, 0.625));
