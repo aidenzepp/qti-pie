@@ -579,160 +579,191 @@ export const hrefPaths = select(ReferencePath, (p) => p.eq(p.name, "href"));
  *   (IMS Content Packaging 1.2, `dependency`), the resources' identifiers distinct per package; and
  *   **`self-dependency` ("Self dependency"):** never its own resource's (§6.11.5 B ii).
  */
-export const packageLaws = [
-  entryFamily,
-  key(on(Entry, "package", "path")),
-  key(on(Document, "package", "path")),
-  contained(on(Document, "package", "path"), on(Entry, "package", "path")),
-
-  contained(
-    on(ManifestId, "node", "document", "kind", "start", "nearest", "version", "parent"),
-    nodeRef,
-  ),
-  contained(on(ManifestId, "node"), on(nodesOf("cp:manifest"), "id")),
-  contained(on(ManifestId, "document", "package"), on(Document, "node", "package")),
-  key(on(manifestIdentifiers, "node")),
-  contained(on(manifestIdentifiers, "node", "lexical"), on(ManifestId, "node", "identifier")),
-  key(on(ManifestId, "package")),
-
-  contained(
-    on(Resource, "node", "document", "kind", "start", "nearest", "version", "parent"),
-    nodeRef,
-  ),
-  contained(on(Resource, "node"), on(nodesOf("cp:resource"), "id")),
-  contained(on(Resource, "document", "package"), on(Document, "node", "package")),
-  key(on(resourceIdentifiers, "node")),
-  contained(on(resourceIdentifiers, "node", "lexical"), on(Resource, "node", "identifier")),
-  key(on(resourceTypes, "node")),
-  contained(on(resourceTypes, "node", "lexical"), on(Resource, "node", "typeLexical")),
-  check("E1_derived", Resource, (r) =>
-    r.or(r.eq(r.type, "none"), r.eq(ResourceTypeLexical.at("lexical", r.type), r.typeLexical)),
-  ),
-  contained(on(Resource, "package", "manifestIdentifier"), on(ManifestId, "package", "identifier")),
-  check("Manifest_id_space", Resource, (r) => r.ne(r.identifier, r.manifestIdentifier)),
-  key(on(Resource, "package", "identifier")),
-
-  key(on(resourceHrefs, "node")),
-  contained(on(resourceHrefs, "node", "lexical"), on(ResourceHref, "node", "href")),
-  contained(on(ResourceHref, "node", "package", "type"), on(Resource, "node", "package", "type")),
-  check("E1_derived", ResourceHref, (h) =>
-    h.or(h.ne(h.scope, "entry"), Compute.matches(h.path, resolvedPathPattern)),
-  ),
-  check("Href_form", ResourceHref, (h) => h.ne(h.scope, "unresolved")),
-  check("Document_entry", ResourceHref, (h) =>
-    h.or(h.not(h.in(h.type, documentTypes)), h.eq(h.scope, "entry")),
-  ),
-  contained(
-    on(ResourceHref, "node", "scope", "path"),
-    on(ResourceFile, "resource", "scope", "path"),
-  ),
-  namedHrefFamily,
-  check("RootOfType", NamedHref, (h) => h.gt(h.names, 0n)),
-  contained(
-    on(documentHrefs, "package", "path", "type"),
-    on(Document, "package", "path", "resourceType"),
-  ),
-  contained(on(documentHrefs, "package", "path"), on(Entry, "package", "path")),
-  contained(
-    on(
-      select(Document, (d) => d.ne(d.resourceType, "none")),
-      "package",
-      "path",
-      "resourceType",
+export const packageLawsByName = {
+  "Dependency target": [
+    contained(on(Dependency, "package", "ref"), on(Resource, "package", "identifier")),
+  ],
+  "Document entry": [
+    key(on(Document, "package", "path")),
+    contained(on(Document, "package", "path"), on(Entry, "package", "path")),
+    check("Document_entry", ResourceHref, (h) =>
+      h.or(h.not(h.in(h.type, documentTypes)), h.eq(h.scope, "entry")),
     ),
-    on(NamedHref, "package", "path", "type"),
-  ),
-  check("RootOfType", Document, (d) =>
-    d.or(d.ne(d.resourceType, "none"), d.eq(d.path, manifestPath)),
-  ),
-  contained(
-    on(
-      select(Document, (d) => d.ne(d.resourceType, "none")),
-      "resourceType",
-      "rootKind",
+    contained(on(documentHrefs, "package", "path"), on(Entry, "package", "path")),
+    key(on(stimulusDocuments, "package", "path")),
+  ],
+  "DocumentId key": [
+    key(on(manifestIdentifiers, "node")),
+    key(on(resourceIdentifiers, "node")),
+    key(on(resourceTypes, "node")),
+    key(on(Resource, "package", "identifier")),
+    key(on(resourceHrefs, "node")),
+    key(on(fileHrefs, "node")),
+    key(on(dependencyRefs, "node")),
+  ],
+  "E1 derived": [
+    check("E1_derived", Resource, (r) =>
+      r.or(r.eq(r.type, "none"), r.eq(ResourceTypeLexical.at("lexical", r.type), r.typeLexical)),
     ),
-    on(RootOfType, "type", "root"),
-  ),
-
-  contained(
-    on(File, "node", "document", "kind", "start", "nearest", "version", "resource"),
-    nodeRef,
-  ),
-  contained(on(File, "node"), on(nodesOf("cp:file"), "id")),
-  contained(on(File, "resource", "package"), on(Resource, "node", "package")),
-  key(on(fileHrefs, "node")),
-  contained(on(fileHrefs, "node", "lexical"), on(File, "node", "href")),
-  check("E1_derived", File, (f) =>
-    f.or(f.ne(f.scope, "entry"), Compute.matches(f.path, resolvedPathPattern)),
-  ),
-  check("Href_form", File, (f) => f.ne(f.scope, "unresolved")),
-  contained(on(entryFiles, "package", "path"), on(Entry, "package", "path")),
-  fileHrefFamily,
-  resourceFileFamily,
-  check("File_listed", FileHref, (h) => h.gt(h.files, 0n)),
-  check("Href_listed", ResourceFile, (h) => h.gt(h.files, 0n)),
-  key(on(entryFileHrefs, "package", "path")),
-  contained(on(listedEntries, "package", "path"), on(entryFileHrefs, "package", "path")),
-
-  contained(
-    on(Dependency, "node", "document", "kind", "start", "nearest", "version", "resource"),
-    nodeRef,
-  ),
-  contained(on(Dependency, "node"), on(nodesOf("cp:dependency"), "id")),
-  contained(
-    on(Dependency, "resource", "package", "resourceIdentifier"),
-    on(Resource, "node", "package", "identifier"),
-  ),
-  key(on(dependencyRefs, "node")),
-  contained(on(dependencyRefs, "node", "lexical"), on(Dependency, "node", "ref")),
-  contained(on(Dependency, "package", "ref"), on(Resource, "package", "identifier")),
-  check("Self_dependency", Dependency, (d) => d.ne(d.ref, d.resourceIdentifier)),
-
-  key(on(censusAttributes, "node", "name")),
-  contained(
-    on(censusAttributes, "node", "name", "lexical", "document", "kind"),
-    on(Reference, "node", "name", "lexical", "document", "kind"),
-  ),
-  contained(on(Reference, "node", "name"), on(censusAttributes, "node", "name")),
-  check("E1_derived", Reference, (r) =>
-    r.and(
-      r.eq(
-        r.lexical,
-        Compute.concat(
+    check("E1_derived", ResourceHref, (h) =>
+      h.or(h.ne(h.scope, "entry"), Compute.matches(h.path, resolvedPathPattern)),
+    ),
+    check("E1_derived", File, (f) =>
+      f.or(f.ne(f.scope, "entry"), Compute.matches(f.path, resolvedPathPattern)),
+    ),
+    key(on(censusAttributes, "node", "name")),
+    check("E1_derived", Reference, (r) =>
+      r.and(
+        r.eq(
+          r.lexical,
           Compute.concat(
-            Compute.concat(Compute.base(r.lead), Compute.base(r.target)),
-            Compute.base(r.params),
+            Compute.concat(
+              Compute.concat(Compute.base(r.lead), Compute.base(r.target)),
+              Compute.base(r.params),
+            ),
+            Compute.base(r.trail),
           ),
-          Compute.base(r.trail),
         ),
+        Compute.matches(r.target, hrefPathPattern),
+        r.or(r.not(Compute.matches(r.target, externalHrefPattern)), r.eq(r.scope, "external")),
+        r.or(r.ne(r.scope, "document"), r.eq(r.target, "")),
       ),
-      Compute.matches(r.target, hrefPathPattern),
-      r.or(r.not(Compute.matches(r.target, externalHrefPattern)), r.eq(r.scope, "external")),
-      r.or(r.ne(r.scope, "document"), r.eq(r.target, "")),
     ),
-  ),
-  check("Include_fragment_identifier", Reference, (r) =>
-    r.or(r.ne(r.kind, "xi:include"), r.not(Compute.matches(r.params, "#"))),
-  ),
-  check("Href_form", Reference, (r) =>
-    r.and(
-      r.ne(r.scope, "unresolved"),
-      r.or(r.ne(r.name, "srcset"), Compute.matches(r.lexical, srcsetCandidatePattern)),
+    check("E1_derived", ReferencePath, (p) => Compute.matches(p.path, resolvedPathPattern)),
+  ],
+  "Entry family": [entryFamily, key(on(Entry, "package", "path"))],
+  "File exists": [
+    contained(on(entryFiles, "package", "path"), on(Entry, "package", "path")),
+    contained(on(ReferencePath, "package", "path"), on(Entry, "package", "path")),
+  ],
+  "File listed": [
+    fileHrefFamily,
+    check("File_listed", FileHref, (h) => h.gt(h.files, 0n)),
+    key(on(entryFileHrefs, "package", "path")),
+    contained(on(listedEntries, "package", "path"), on(entryFileHrefs, "package", "path")),
+  ],
+  "Href form": [
+    check("Href_form", ResourceHref, (h) => h.ne(h.scope, "unresolved")),
+    check("Href_form", File, (f) => f.ne(f.scope, "unresolved")),
+    check("Href_form", Reference, (r) =>
+      r.and(
+        r.ne(r.scope, "unresolved"),
+        r.or(r.ne(r.name, "srcset"), Compute.matches(r.lexical, srcsetCandidatePattern)),
+      ),
     ),
-  ),
-  key(on(entryReferences, "node", "name")),
-  contained(
-    on(entryReferences, "node", "name", "document", "kind"),
-    on(ReferencePath, "node", "name", "document", "kind"),
-  ),
-  contained(
-    on(ReferencePath, "node", "name", "document", "kind"),
-    on(entryReferences, "node", "name", "document", "kind"),
-  ),
-  key(on(hrefPaths, "node")),
-  contained(on(ReferencePath, "document", "package"), on(Document, "node", "package")),
-  check("E1_derived", ReferencePath, (p) => Compute.matches(p.path, resolvedPathPattern)),
-  contained(on(ReferencePath, "package", "path"), on(Entry, "package", "path")),
-  key(on(stimulusDocuments, "package", "path")),
-  contained(on(stimulusPaths, "package", "path"), on(stimulusDocuments, "package", "path")),
-] as const;
+  ],
+  "Href listed": [
+    contained(
+      on(ResourceHref, "node", "scope", "path"),
+      on(ResourceFile, "resource", "scope", "path"),
+    ),
+    resourceFileFamily,
+    check("Href_listed", ResourceFile, (h) => h.gt(h.files, 0n)),
+  ],
+  "Include fragment identifier": [
+    check("Include_fragment_identifier", Reference, (r) =>
+      r.or(r.ne(r.kind, "xi:include"), r.not(Compute.matches(r.params, "#"))),
+    ),
+  ],
+  "Manifest id space": [
+    contained(
+      on(Resource, "package", "manifestIdentifier"),
+      on(ManifestId, "package", "identifier"),
+    ),
+    check("Manifest_id_space", Resource, (r) => r.ne(r.identifier, r.manifestIdentifier)),
+  ],
+  "Manifest overlay": [
+    contained(
+      on(ManifestId, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      nodeRef,
+    ),
+    contained(on(ManifestId, "node"), on(nodesOf("cp:manifest"), "id")),
+    contained(on(ManifestId, "document", "package"), on(Document, "node", "package")),
+    contained(on(manifestIdentifiers, "node", "lexical"), on(ManifestId, "node", "identifier")),
+    key(on(ManifestId, "package")),
+    contained(
+      on(Resource, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      nodeRef,
+    ),
+    contained(on(Resource, "node"), on(nodesOf("cp:resource"), "id")),
+    contained(on(Resource, "document", "package"), on(Document, "node", "package")),
+    contained(on(resourceIdentifiers, "node", "lexical"), on(Resource, "node", "identifier")),
+    contained(on(resourceTypes, "node", "lexical"), on(Resource, "node", "typeLexical")),
+    contained(on(resourceHrefs, "node", "lexical"), on(ResourceHref, "node", "href")),
+    contained(on(ResourceHref, "node", "package", "type"), on(Resource, "node", "package", "type")),
+    contained(
+      on(File, "node", "document", "kind", "start", "nearest", "version", "resource"),
+      nodeRef,
+    ),
+    contained(on(File, "node"), on(nodesOf("cp:file"), "id")),
+    contained(on(File, "resource", "package"), on(Resource, "node", "package")),
+    contained(on(fileHrefs, "node", "lexical"), on(File, "node", "href")),
+    contained(
+      on(Dependency, "node", "document", "kind", "start", "nearest", "version", "resource"),
+      nodeRef,
+    ),
+    contained(on(Dependency, "node"), on(nodesOf("cp:dependency"), "id")),
+    contained(
+      on(Dependency, "resource", "package", "resourceIdentifier"),
+      on(Resource, "node", "package", "identifier"),
+    ),
+    contained(on(dependencyRefs, "node", "lexical"), on(Dependency, "node", "ref")),
+  ],
+  "Reference overlay": [
+    contained(
+      on(censusAttributes, "node", "name", "lexical", "document", "kind"),
+      on(Reference, "node", "name", "lexical", "document", "kind"),
+    ),
+    contained(on(Reference, "node", "name"), on(censusAttributes, "node", "name")),
+    key(on(entryReferences, "node", "name")),
+    contained(
+      on(entryReferences, "node", "name", "document", "kind"),
+      on(ReferencePath, "node", "name", "document", "kind"),
+    ),
+    contained(
+      on(ReferencePath, "node", "name", "document", "kind"),
+      on(entryReferences, "node", "name", "document", "kind"),
+    ),
+    key(on(hrefPaths, "node")),
+    contained(on(ReferencePath, "document", "package"), on(Document, "node", "package")),
+  ],
+  RootOfType: [
+    namedHrefFamily,
+    check("RootOfType", NamedHref, (h) => h.gt(h.names, 0n)),
+    contained(
+      on(documentHrefs, "package", "path", "type"),
+      on(Document, "package", "path", "resourceType"),
+    ),
+    contained(
+      on(
+        select(Document, (d) => d.ne(d.resourceType, "none")),
+        "package",
+        "path",
+        "resourceType",
+      ),
+      on(NamedHref, "package", "path", "type"),
+    ),
+    check("RootOfType", Document, (d) =>
+      d.or(d.ne(d.resourceType, "none"), d.eq(d.path, manifestPath)),
+    ),
+    contained(
+      on(
+        select(Document, (d) => d.ne(d.resourceType, "none")),
+        "resourceType",
+        "rootKind",
+      ),
+      on(RootOfType, "type", "root"),
+    ),
+  ],
+  "Self dependency": [
+    check("Self_dependency", Dependency, (d) => d.ne(d.ref, d.resourceIdentifier)),
+  ],
+  "Stimulus ref target": [
+    contained(on(stimulusPaths, "package", "path"), on(stimulusDocuments, "package", "path")),
+  ],
+} as const;
+
+/**
+ * {@link packageLawsByName}'s statements in one list, the module's laws as the schema composes them.
+ */
+export const packageLaws = Object.values(packageLawsByName).flat();

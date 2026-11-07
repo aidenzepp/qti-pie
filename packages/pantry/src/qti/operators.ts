@@ -292,66 +292,73 @@ export const tolerancePositive = check("Equal_tolerance", ToleranceToken, (x) =>
  *   of no whitespace (`E1_derived`);
  * - **Reading 121:** {@link toleranceRequired}, {@link toleranceCount} and {@link tolerancePositive}.
  */
-export const operatorLaws = [
-  contained(
-    on(Rounding, "node", "document", "kind", "start", "nearest", "version", "parent"),
-    nodeRef,
-  ),
-  contained(on(roundingNodes, "id"), on(Rounding, "node")),
-  key(on(figuresAttributes, "node")),
-  contained(on(figuresAttributes, "node", "lexical"), on(Rounding, "node", "figuresLexical")),
-  key(on(modeAttributes, "node")),
-  contained(on(modeAttributes, "node", "lexical"), on(writtenModes, "node", "mode")),
-  contained(on(writtenModes, "node"), on(modeAttributes, "node")),
-  check("E1_derived", Rounding, (r) =>
-    r.and(
-      r.in(r.kind, roundingKinds),
-      r.eq(r.figures, Compute.collapse(r.figuresLexical)),
-      r.or(
-        r.and(r.eq(r.integer, true), Compute.matches(r.figures, integerForm)),
-        r.and(r.eq(r.integer, false), r.not(Compute.matches(r.figures, integerForm))),
-      ),
-      r.eq(
-        r.figuresValue,
-        Compute.when(
-          Compute.matches(r.figures, integerForm),
-          (figures) => Compute.cast(figures, pg.bigint),
-          0n,
+export const operatorLawsByName = {
+  "DocumentId key": [
+    key(on(figuresAttributes, "node")),
+    key(on(modeAttributes, "node")),
+    key(on(toleranceAttributes, "node")),
+  ],
+  "E1 derived": [
+    contained(
+      on(Rounding, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      nodeRef,
+    ),
+    contained(on(roundingNodes, "id"), on(Rounding, "node")),
+    contained(on(figuresAttributes, "node", "lexical"), on(Rounding, "node", "figuresLexical")),
+    contained(on(modeAttributes, "node", "lexical"), on(writtenModes, "node", "mode")),
+    contained(on(writtenModes, "node"), on(modeAttributes, "node")),
+    check("E1_derived", Rounding, (r) =>
+      r.and(
+        r.in(r.kind, roundingKinds),
+        r.eq(r.figures, Compute.collapse(r.figuresLexical)),
+        r.or(
+          r.and(r.eq(r.integer, true), Compute.matches(r.figures, integerForm)),
+          r.and(r.eq(r.integer, false), r.not(Compute.matches(r.figures, integerForm))),
+        ),
+        r.eq(
+          r.figuresValue,
+          Compute.when(
+            Compute.matches(r.figures, integerForm),
+            (figures) => Compute.cast(figures, pg.bigint),
+            0n,
+          ),
+        ),
+        r.or(
+          r.eq(r.modeWritten, true),
+          r.and(r.eq(r.kind, "qti-equal-rounded"), r.eq(r.mode, "significantFigures")),
+          r.and(r.eq(r.kind, "qti-round-to"), r.eq(r.mode, "")),
         ),
       ),
-      r.or(
-        r.eq(r.modeWritten, true),
-        r.and(r.eq(r.kind, "qti-equal-rounded"), r.eq(r.mode, "significantFigures")),
-        r.and(r.eq(r.kind, "qti-round-to"), r.eq(r.mode, "")),
+    ),
+    contained(on(toleranceAttributes, "node", "lexical"), on(Tolerance, "node", "lexical")),
+    contained(on(Tolerance, "node"), on(toleranceAttributes, "node")),
+    toleranceTokenFamily,
+    fold(
+      toleranceTokenFamily,
+      Monoid.concat,
+      on(ToleranceToken, "node", "piece", "piecesWas", "piecesAfter"),
+      on(Tolerance, "node", "tokenText"),
+    ),
+    check("E1_derived", Tolerance, (t) =>
+      t.or(
+        t.eq(t.lexical, t.tokenText),
+        t.and(t.eq(t.tokens, 0n), Compute.matches(t.lexical, spacePattern)),
       ),
     ),
-  ),
-  roundingFigures,
+    check("E1_derived", ToleranceToken, (x) =>
+      x.and(
+        x.eq(x.piece, Compute.concat(Compute.concat(x.before, x.token), x.after)),
+        Compute.matches(x.token, idValuePattern),
+        x.or(x.eq(x.at, 0n), x.ne(x.before, "")),
+      ),
+    ),
+  ],
+  "Equal tolerance": [toleranceRequired, toleranceCount, tolerancePositive],
+  "Rounding figures": [roundingFigures],
+} as const;
 
-  key(on(toleranceAttributes, "node")),
-  contained(on(toleranceAttributes, "node", "lexical"), on(Tolerance, "node", "lexical")),
-  contained(on(Tolerance, "node"), on(toleranceAttributes, "node")),
-  toleranceTokenFamily,
-  fold(
-    toleranceTokenFamily,
-    Monoid.concat,
-    on(ToleranceToken, "node", "piece", "piecesWas", "piecesAfter"),
-    on(Tolerance, "node", "tokenText"),
-  ),
-  check("E1_derived", Tolerance, (t) =>
-    t.or(
-      t.eq(t.lexical, t.tokenText),
-      t.and(t.eq(t.tokens, 0n), Compute.matches(t.lexical, spacePattern)),
-    ),
-  ),
-  check("E1_derived", ToleranceToken, (x) =>
-    x.and(
-      x.eq(x.piece, Compute.concat(Compute.concat(x.before, x.token), x.after)),
-      Compute.matches(x.token, idValuePattern),
-      x.or(x.eq(x.at, 0n), x.ne(x.before, "")),
-    ),
-  ),
-  toleranceRequired,
-  toleranceCount,
-  tolerancePositive,
-] as const;
+/**
+ * {@link operatorLawsByName}'s statements in one list, the module's laws as the schema composes
+ * them.
+ */
+export const operatorLaws = Object.values(operatorLawsByName).flat();

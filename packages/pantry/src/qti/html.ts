@@ -320,63 +320,66 @@ export const tableHeaders = contained(
  *   which an ID held twice in a document already breaks;
  * - **Reading 126:** a cell's tokens unique, and {@link tableHeaders}.
  */
-export const htmlLaws = [
-  pictureSourceSrcset,
-  mediaSourceSrc,
-  defaultTrackSrclang,
-  key(on(trackSrclangs, "node")),
-  subtitleTrackSrclang,
-
-  contained(
-    on(TableScope, "node", "document", "kind", "start", "nearest", "version", "parent"),
-    nodeRef,
-  ),
-  check("E1_derived", TableScope, (s) =>
-    s.or(
-      s.and(s.eq(s.kind, "table"), s.eq(s.table, s.node)),
-      s.and(s.ne(s.kind, "table"), s.eq(s.parent, s.document), s.eq(s.table, s.document)),
-      s.and(s.ne(s.kind, "table"), s.ne(s.parent, s.document)),
+export const htmlLawsByName = {
+  "DocumentId key": [
+    key(on(trackSrclangs, "node")),
+    key(on(headersAttributes, "node")),
+    key(on(headerIds, "node")),
+    key(on(tabledHeaders, "table", "id")),
+  ],
+  "E1 derived": [
+    contained(
+      on(TableScope, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      nodeRef,
     ),
-  ),
-  contained(on(inheritedScopes, "parent", "table"), on(TableScope, "node", "table")),
-
-  key(on(headersAttributes, "node")),
-  contained(on(headersAttributes, "node", "lexical"), on(CellHeaders, "node", "lexical")),
-  contained(on(CellHeaders, "node"), on(headersAttributes, "node")),
-  contained(on(CellHeaders, "node", "table"), on(TableScope, "node", "table")),
-  headerTokenFamily,
-  contained(on(HeaderToken, "node", "table"), on(CellHeaders, "node", "table")),
-  fold(
+    check("E1_derived", TableScope, (s) =>
+      s.or(
+        s.and(s.eq(s.kind, "table"), s.eq(s.table, s.node)),
+        s.and(s.ne(s.kind, "table"), s.eq(s.parent, s.document), s.eq(s.table, s.document)),
+        s.and(s.ne(s.kind, "table"), s.ne(s.parent, s.document)),
+      ),
+    ),
+    contained(on(inheritedScopes, "parent", "table"), on(TableScope, "node", "table")),
+    contained(on(headersAttributes, "node", "lexical"), on(CellHeaders, "node", "lexical")),
+    contained(on(CellHeaders, "node"), on(headersAttributes, "node")),
+    contained(on(CellHeaders, "node", "table"), on(TableScope, "node", "table")),
     headerTokenFamily,
-    Monoid.concat,
-    on(HeaderToken, "node", "piece", "piecesWas", "piecesAfter"),
-    on(CellHeaders, "node", "tokenText"),
-  ),
-  check("E1_derived", CellHeaders, (c) =>
-    c.or(
-      c.eq(c.lexical, c.tokenText),
-      c.and(c.eq(c.tokens, 0n), Compute.matches(c.lexical, spacePattern)),
+    contained(on(HeaderToken, "node", "table"), on(CellHeaders, "node", "table")),
+    fold(
+      headerTokenFamily,
+      Monoid.concat,
+      on(HeaderToken, "node", "piece", "piecesWas", "piecesAfter"),
+      on(CellHeaders, "node", "tokenText"),
     ),
-  ),
-  check("E1_derived", HeaderToken, (t) =>
-    t.and(
-      t.eq(t.piece, Compute.concat(Compute.concat(t.before, t.token), t.after)),
-      Compute.matches(t.token, idValuePattern),
-      t.or(t.eq(t.at, 0n), t.ne(t.before, "")),
+    check("E1_derived", CellHeaders, (c) =>
+      c.or(
+        c.eq(c.lexical, c.tokenText),
+        c.and(c.eq(c.tokens, 0n), Compute.matches(c.lexical, spacePattern)),
+      ),
     ),
-  ),
+    check("E1_derived", HeaderToken, (t) =>
+      t.and(
+        t.eq(t.piece, Compute.concat(Compute.concat(t.before, t.token), t.after)),
+        Compute.matches(t.token, idValuePattern),
+        t.or(t.eq(t.at, 0n), t.ne(t.before, "")),
+      ),
+    ),
+    contained(on(headerIds, "node", "document"), on(TableHeader, "node", "document")),
+    contained(on(TableHeader, "node"), on(headerIds, "node")),
+    contained(
+      on(TableHeader, "node", "document", "id", "owner"),
+      on(DocumentId, "node", "document", "id", "owner"),
+    ),
+    check("E1_derived", TableHeader, (h) => h.eq(h.owner, h.node)),
+    contained(on(TableHeader, "node", "table"), on(TableScope, "node", "table")),
+  ],
+  "Media source src": [mediaSourceSrc],
+  "Picture source srcset": [pictureSourceSrcset],
+  "Table headers": [key(on(HeaderToken, "node", "token")), tableHeaders],
+  "Track srclang": [defaultTrackSrclang, subtitleTrackSrclang],
+} as const;
 
-  key(on(headerIds, "node")),
-  contained(on(headerIds, "node", "document"), on(TableHeader, "node", "document")),
-  contained(on(TableHeader, "node"), on(headerIds, "node")),
-  contained(
-    on(TableHeader, "node", "document", "id", "owner"),
-    on(DocumentId, "node", "document", "id", "owner"),
-  ),
-  check("E1_derived", TableHeader, (h) => h.eq(h.owner, h.node)),
-  contained(on(TableHeader, "node", "table"), on(TableScope, "node", "table")),
-  key(on(tabledHeaders, "table", "id")),
-
-  key(on(HeaderToken, "node", "token")),
-  tableHeaders,
-] as const;
+/**
+ * {@link htmlLawsByName}'s statements in one list, the module's laws as the schema composes them.
+ */
+export const htmlLaws = Object.values(htmlLawsByName).flat();
