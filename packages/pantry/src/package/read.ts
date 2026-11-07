@@ -1,7 +1,7 @@
 /* oxlint-disable unicorn/throw-new-error -- Schema.TaggedError is a schema class factory. */
 import { Effect, FileSystem, Schema } from "effect";
 import type { PlatformError } from "effect";
-import { packageBudget, readZip } from "#pantry/package/zip.ts";
+import { packageBudget, readZip, unsafeEntryPath } from "#pantry/package/zip.ts";
 import type { ZipEntry, ZipRefusal } from "#pantry/package/zip.ts";
 
 /**
@@ -19,9 +19,10 @@ const INSPECT_CONCURRENCY = 16;
 /**
  * The directory or an entry path cannot be read as part of a package, under the named rule.
  *
- * `manifest-root` is a directory that has no `imsmanifest.xml` at its root. `entry-path` is an
- * entry path that is not a regular file inside the package directory. `dir` is the package
- * directory and `path` the entry path concerned, `imsmanifest.xml` for `manifest-root`.
+ * `manifest-root` is a directory that has no `imsmanifest.xml` at its root. `entry-path` is a path
+ * that is no entry path by the rule a zip's entry names meet too (`unsafeEntryPath`, reading 138),
+ * or not a regular file inside the package directory. `dir` is the package directory and `path`
+ * the entry path concerned, `imsmanifest.xml` for `manifest-root`.
  */
 export class PackageReadError extends Schema.TaggedError<PackageReadError>()("PackageReadError", {
   dir: Schema.String,
@@ -34,7 +35,7 @@ export class PackageReadError extends Schema.TaggedError<PackageReadError>()("Pa
   override get message(): string {
     return this.rule === "manifest-root"
       ? `${this.dir} has no ${MANIFEST} at its root. A package keeps its manifest in its top directory, so pass the directory that holds ${MANIFEST}.`
-      : `${this.path} is not an entry of the package at ${this.dir} (an entry path is relative, has no .. segment, resolves inside the package directory and names a regular file). Fix the href in the manifest.`;
+      : `${this.path} is not an entry of the package at ${this.dir} (an entry path is relative, begins with no drive prefix, holds no backslash and no .. segment, resolves inside the package directory and names a regular file). Rename the file, or fix the href that names it.`;
   }
 }
 
@@ -142,9 +143,10 @@ const listDirectory = Effect.fn("package.listDirectory")(function* listDirectory
  *
  * @param dir - The package directory.
  * @param path - The file's path relative to `dir`.
- * @returns The file's bytes, or a {@link PackageReadError} with rule `entry-path` when `path` is
- *   absolute, has a `..` segment, does not name a regular file, or resolves, links in its
- *   directories included, outside `dir`. A missing file is a `PlatformError`.
+ * @returns The file's bytes, or a {@link PackageReadError} with rule `entry-path` when `path` is no
+ *   entry path ({@link unsafeEntryPath}, the rule a zip's names meet too), does not name a regular
+ *   file, or resolves, links in its directories included, outside `dir`. A missing file is a
+ *   `PlatformError`.
  */
 const readDirectoryEntry = Effect.fn("package.readDirectoryEntry")(function* readDirectoryEntry(
   dir: string,
@@ -158,7 +160,7 @@ const readDirectoryEntry = Effect.fn("package.readDirectoryEntry")(function* rea
   const refused = new PackageReadError({ dir, path, rule: "entry-path" });
   const target = `${dir}/${path}`;
 
-  if (path.startsWith("/") || path.split("/").includes("..")) {
+  if (unsafeEntryPath(path) !== undefined) {
     return yield* refused;
   }
 
@@ -209,9 +211,9 @@ export const listPackage = Effect.fn("package.listPackage")(function* listPackag
 /**
  * Read one file of a package directory or of a package zip.
  *
- * The path is untrusted: it comes from a manifest `href`. It must be relative, have no `..`
- * segment, name a regular file (not a link or a directory) and resolve, links in its directories
- * included, to a place inside the package directory.
+ * The path is untrusted: it comes from a manifest `href`. It must be an entry path (relative, with
+ * no drive prefix, backslash or `..` segment), name a regular file (not a link or a directory) and
+ * resolve, links in its directories included, to a place inside the package directory.
  *
  * @param dir - The package directory, or a `.zip` file, which is read whole on each call.
  * @param path - A file's path relative to `dir`, as {@link listPackage} returns it.

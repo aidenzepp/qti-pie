@@ -236,12 +236,20 @@ const decodeName = (bytes: Uint8Array, flags: number): string =>
     : Array.from(bytes, (byte) => CP437[byte] ?? "").join("");
 
 /**
- * Why a name cannot be a package path, or `undefined` when it can.
+ * Why a path cannot be a package entry's path, or `undefined` when it can: the one rule a zip's
+ * entry names and a package directory's file paths are both held to (reading 138).
  *
- * @param name - A decoded entry name.
+ * The ZIP format's stored path "MUST NOT contain a drive or device letter, or a leading slash", and
+ * its slashes "MUST be forward slashes" (APPNOTE 6.3.10, section 4.4.17.1); a manifest names an
+ * entry by an RFC 3986 URI reference, which holds no `\` and in which a leading `C:` is a scheme.
+ * So a path that is absolute, begins with a drive prefix, holds a backslash or a `..` segment names
+ * no entry, whichever form the package takes.
+ *
+ * @param name - A decoded entry name, or a file's path relative to the package directory.
  * @returns The refused feature, as a sentence fragment.
+ * @see {@link https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT | APPNOTE 6.3.10, section 4.4.17.1}
  */
-const unsafeName = (name: string): string | undefined => {
+export const unsafeEntryPath = (name: string): string | undefined => {
   if (name.startsWith("/") || /^[A-Za-z]:/u.test(name)) {
     return "the name is an absolute path, and a package entry's path is relative to the package root";
   }
@@ -426,7 +434,7 @@ const readRecord = Effect.fn("package.readRecord")(function* readRecord(
     );
   }
 
-  const unsafe = unsafeName(name);
+  const unsafe = unsafeEntryPath(name);
 
   if (unsafe !== undefined) {
     return yield* refuse("href-path", name, unsafe);
