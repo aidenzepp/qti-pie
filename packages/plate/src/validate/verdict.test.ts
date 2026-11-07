@@ -2198,7 +2198,7 @@ describe("describeRefusal", () => {
     assert.notInclude(sentence, "outcome, to a");
   });
 
-  it("names the response variable a template rule reads", () => {
+  it("[I-5] names the response variable a template rule reads, which may read only template and context variables (pantry P26)", () => {
     const sentence = describeRefusal(
       refusalOf("expression-type", {
         check: "template-read",
@@ -2210,10 +2210,52 @@ describe("describeRefusal", () => {
 
     assert.include(
       sentence,
-      "`qti-variable` reads `RESPONSE`, a response variable, in template processing",
+      "`qti-variable` reads `RESPONSE`, a response variable, in template processing, which may read only template and context variables (info.txt:65111).",
     );
-    assert.include(sentence, "only template variables and correct or default values");
+    assert.include(sentence, "To make it valid: read a template variable instead.");
+    assert.notInclude(sentence, "correct or default");
     assert.notInclude(sentence, "outcome, to a");
+  });
+
+  it("[I-5] words a template rule's qti-correct of a response with a remedy that names neither qti-correct nor qti-default (pantry P26)", () => {
+    const sentence = describeRefusal(
+      refusalOf("expression-type", {
+        check: "template-read",
+        element: "qti-correct",
+        identifier: "RESPONSE",
+        variableKind: "response",
+      }),
+    );
+    const remedy = sentence.slice(sentence.indexOf("To make it valid:"));
+
+    assert.include(
+      sentence,
+      "`qti-correct` reads `RESPONSE`, a response variable, in template processing, which may read only template and context variables (info.txt:65111).",
+    );
+    assert.include(remedy, "a template variable");
+    assert.notInclude(remedy, "qti-correct");
+    assert.notInclude(remedy, "qti-default");
+  });
+
+  it("[I-5] names the attribute through which a template rule reads a response, qti-repeat's number-repeats (pantry P26)", () => {
+    const sentence = describeRefusal(
+      refusalOf("expression-type", {
+        attribute: "number-repeats",
+        check: "template-read",
+        element: "qti-repeat",
+        identifier: "RESPONSE",
+        variableKind: "response",
+      }),
+    );
+    const remedy = sentence.slice(sentence.indexOf("To make it valid:"));
+
+    assert.include(
+      sentence,
+      "`qti-repeat`'s attribute `number-repeats` names `RESPONSE`, a response variable, in template processing, which may read only template and context variables (info.txt:65111).",
+    );
+    assert.include(remedy, "name a template variable in `number-repeats`");
+    assert.notInclude(remedy, "qti-correct");
+    assert.notInclude(remedy, "qti-default");
   });
 
   it("names the base type of a weighted qti-test-variables that is not float", () => {

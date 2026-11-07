@@ -1356,13 +1356,26 @@ const uncheckedType = (refusal: Refusal, element: string, expression: string): s
 };
 
 /**
+ * The line of QTI's information model that limits what template processing reads: "An expression
+ * used in a qti-template-rule must not refer to the value of a response variable or outcome
+ * variable. It may only refer to the values of the template variables." Context variables "may be
+ * referenced in template processing" (`info.txt:22601`), so the sentence names them beside
+ * template variables.
+ */
+const templateReadSource = "info.txt:65111";
+
+/**
  * Word an `expression-type` refusal, by the `check` its detail names.
  *
  * - `condition` (pantry's P21): the condition of a rule's branch is not a single `boolean`.
  * - `operand` (P23): an operand the element does not take, and what it takes.
  * - `reference` (P24): an attribute names a variable that is not a single template or outcome
  *   variable of the base type the attribute holds.
- * - `template-read` (P26): template processing reads a response or outcome variable.
+ * - `template-read` (P26): template processing reads a variable that is neither a template nor a
+ *   context variable (a response, an outcome or a built-in), by an element or through the reference
+ *   attribute an `attribute` fact names. It cites the information model's line, which allows only
+ *   template variables (`info.txt:65111`), unless the detail names a reading; the remedy offers a
+ *   template variable, never `qti-correct` or `qti-default`, which read the refused variable too.
  * - `weight` (P29): a weighted `qti-test-variables` whose base type is not `float`.
  * - None: an expression against the outcome it sets, or a lookup operand against its table (see
  *   {@link uncheckedType}).
@@ -1404,12 +1417,22 @@ const expressionType = (refusal: Refusal): string => {
         onNone: () => "a variable",
         onSome: (kind) => `${withArticle(kind)} variable`,
       });
+      const rule = `in template processing, which may read only template and context variables${cite === "" ? ` (${templateReadSource})` : cite}.`;
 
-      return sentence(
-        refusal,
-        `${code(element)} reads ${identifier}, ${variable}, in template processing, which may read only template variables and correct or default values${cite}.`,
-        `read a template variable instead, or ${identifier}'s correct or default value through ${code("qti-correct")} or ${code("qti-default")}`,
-      );
+      return Option.match(optionalFact(refusal, "attribute"), {
+        onNone: () =>
+          sentence(
+            refusal,
+            `${code(element)} reads ${identifier}, ${variable}, ${rule}`,
+            "read a template variable instead",
+          ),
+        onSome: (attribute) =>
+          sentence(
+            refusal,
+            `${code(element)}'s attribute ${code(attribute)} names ${identifier}, ${variable}, ${rule}`,
+            `name a template variable in ${code(attribute)}, or write a value there`,
+          ),
+      });
     }
     case "weight": {
       const baseType = baseTypeText(fact(refusal, "baseType", ""));
