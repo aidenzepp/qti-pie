@@ -42,11 +42,16 @@ const declared = ["CnAttribute", "CnCount", "CnPartText", "CnSlot", "MathCn"] as
  * refusal table reads them: those whose law names one of the relations. A function, since the
  * first read of `statedLaws` compiles Qti's law model.
  *
+ * Each stored text field's own pattern law, which grizzle states per field and refusal.ts names by
+ * the field's type, is no statement of the module and is left out.
+ *
  * @returns The laws, with their names.
  */
 const ownLaws = () =>
-  statedLaws().filter(([law]) =>
-    /"(?:CnAttribute|CnPartText|CnCount|CnSlot|MathCn)"/u.test(Formatter.format(law)),
+  statedLaws().filter(
+    ([law]) =>
+      law.kind !== "pattern" &&
+      /"(?:CnAttribute|CnPartText|CnCount|CnSlot|MathCn)"/u.test(Formatter.format(law)),
   );
 
 describe("qti/mathml-cn.ts, declared", { timeout: buildTimeout }, () => {
