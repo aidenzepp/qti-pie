@@ -47,6 +47,7 @@ import type { Breach, Judgment, LawName } from "#pantry/test/oracle.ts";
 /**
  * How long building a schema over every relation of `Qti` may take: its statements are planned
  * whole, which takes some seconds beside the composed grammar.
+ * Measured 2026-11-07: 2.8 s at a load average of 63 to 73.
  */
 const buildTimeout = 60_000;
 
@@ -101,6 +102,7 @@ describe("qti/operators.ts, declared", { timeout: buildTimeout }, () => {
 /**
  * How long a search over the patterns may take: the value box is 16,105 cases, about 1.5 ms each
  * under the swarm's load, and the figures box 4,681.
+ * Measured 2026-11-07: 3.6 s at a load average of 63 to 73, the slower box.
  */
 const searchTimeout = 180_000;
 

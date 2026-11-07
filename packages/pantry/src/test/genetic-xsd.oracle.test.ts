@@ -148,10 +148,12 @@ const reduction = {
 
 /**
  * The timeout, in milliseconds: the grammar, the seeds, the generations' `xmllint` runs and law
- * judgments, and each finding's reduction. To be set from a measurement; 600 s until then for
- * the free budget, and two hours for the long one.
+ * judgments, and each finding's reduction. Measured 2026-11-07: 434.3 s at a load average of 68 to
+ * 97, a free run that found two disagreement classes (TEST_SEED=2298271331) and reduced them up to
+ * {@link reduction}'s 420 s. The free budget is twice that, rounded up to the next minute; the long
+ * one is two hours.
  */
-const timeoutMs = settings.geneticRequested ? 7_200_000 : 600_000;
+const timeoutMs = settings.geneticRequested ? 7_200_000 : 900_000;
 
 /**
  * One disagreement: a difference no record matches, in the version it was judged in.

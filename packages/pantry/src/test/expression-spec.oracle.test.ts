@@ -17,15 +17,18 @@
  *   float; the name is written bare, the XSD's `VariableStringDType` (reading 119).
  * - Table 6.9.64 `qti-outcome-maximum` (and 6.9.65 `qti-outcome-minimum`): "can only be used in
  *   outcomes processing" (reading 23) and "the result has cardinality multiple".
+ * - Table 6.9, each leaf's result: its row in {@link leafResults}, with the sentence that types it or
+ *   leaves it open. Both versions' tables say the same of every leaf.
  *
  * Bound: every case {@link cases} lists, exhausted: each n-ary operator over every pair of
  * integer operands of the cardinalities it names and one it does not; each bounded random
  * operator's `min` as a literal and as each variable of the item; each outcome-only expression in
  * response and in outcome processing, and under an operator that takes a single and one that
- * takes a container. Each sits under `qti-is-null`, which takes any type, in a condition, so no
- * other rule reads it. The outcome-only expressions' base type, float by Table 6.9.64, is not
- * held here: the grammar types it unknown, a disagreement routed to the coordinator on 2026-11-07,
- * and its case joins this box with the fix.
+ * takes a container; and each leaf the tables type, matched against a value of its base type and
+ * of another, of its cardinality (`qti-match` takes "the same base-type and cardinality"). Each
+ * sits under `qti-is-null`, which takes any type, in a condition, so no other rule reads it. Kept:
+ * `qti-outcome-maximum` matched against a multiple string, which the grammar accepted while it
+ * typed the leaf's base unknown (GEN-B, 2026-11-07).
  */
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Result } from "effect";
@@ -63,6 +66,8 @@ const variables = {
   IM: { base: "integer", cardinality: "multiple", role: "outcome" },
   IO: { base: "integer", cardinality: "ordered", role: "outcome" },
   RI: { base: "integer", cardinality: "single", role: "response" },
+  RM: { base: "integer", cardinality: "single", role: "response" },
+  RP: { base: "point", cardinality: "single", role: "response" },
   TI: { base: "integer", cardinality: "single", role: "template" },
 } as const;
 
@@ -74,7 +79,16 @@ type Variable = keyof typeof variables;
 /**
  * The variables' names, each once.
  */
-const variableNames = ["F1", "I1", "IM", "IO", "RI", "TI"] as const satisfies readonly Variable[];
+const variableNames = [
+  "F1",
+  "I1",
+  "IM",
+  "IO",
+  "RI",
+  "RM",
+  "RP",
+  "TI",
+] as const satisfies readonly Variable[];
 
 /**
  * An integer operand of each cardinality: a literal for single, a variable for the containers.
@@ -107,6 +121,130 @@ const standsFor = (name: Variable, base: "float" | "integer"): boolean => {
   const { base: held, cardinality, role } = variables[name];
 
   return role !== "response" && held === base && cardinality === "single";
+};
+
+/**
+ * Each leaf's result as Table 6.9 states it, in both versions: its base type and cardinality, or
+ * `open` with the sentence that leaves it open, and the context and attributes it is written
+ * with. A leaf typed by its own attribute or by its variable's declaration (`qti-base-value`,
+ * `qti-correct`, `qti-default`, `qti-variable`) is no leaf of a fixed type, and is not listed.
+ */
+const leafResults: readonly {
+  readonly context: "outcome" | "response";
+  readonly element: string;
+  readonly result:
+    | { readonly _tag: "open"; readonly says: string }
+    | {
+        readonly _tag: "typed";
+        readonly base: "float" | "integer";
+        readonly cardinality: Cardinality;
+        readonly says: string;
+      };
+}[] = [
+  {
+    context: "response",
+    element: `<qti-map-response identifier="RM"/>`,
+    result: {
+      _tag: "typed",
+      base: "float",
+      cardinality: "single",
+      says: "The result is a single float.",
+    },
+  },
+  {
+    context: "response",
+    element: `<qti-map-response-point identifier="RP"/>`,
+    result: {
+      _tag: "typed",
+      base: "float",
+      cardinality: "single",
+      says: "The transformation is similar to mapResponse (whose result is a single float)",
+    },
+  },
+  {
+    context: "response",
+    element: `<qti-math-constant name="pi"/>`,
+    result: {
+      _tag: "typed",
+      base: "float",
+      cardinality: "single",
+      says: "returned as a single float",
+    },
+  },
+  {
+    context: "response",
+    element: `<qti-null/>`,
+    result: {
+      _tag: "open",
+      says: "the null value is treated as if it is of any desired base-type",
+    },
+  },
+  ...["correct", "incorrect", "presented", "responded", "selected"].map((which) => ({
+    context: "outcome" as const,
+    element: `<qti-number-${which}/>`,
+    result: {
+      _tag: "typed" as const,
+      base: "integer" as const,
+      cardinality: "single" as const,
+      says: "The result is an integer with single cardinality.",
+    },
+  })),
+  {
+    context: "outcome",
+    element: `<qti-outcome-maximum outcome-identifier="SCORE"/>`,
+    result: {
+      _tag: "typed",
+      base: "float",
+      cardinality: "multiple",
+      says: "otherwise the result has cardinality multiple and base-type float",
+    },
+  },
+  {
+    context: "outcome",
+    element: `<qti-outcome-minimum outcome-identifier="SCORE"/>`,
+    result: {
+      _tag: "typed",
+      base: "float",
+      cardinality: "multiple",
+      says: "The result has cardinality multiple and base-type float.",
+    },
+  },
+  {
+    context: "response",
+    element: `<qti-random-float min="0" max="1"/>`,
+    result: { _tag: "typed", base: "float", cardinality: "single", says: "Selects a random float" },
+  },
+  {
+    context: "response",
+    element: `<qti-random-integer min="0" max="1"/>`,
+    result: {
+      _tag: "typed",
+      base: "integer",
+      cardinality: "single",
+      says: "Selects a random integer",
+    },
+  },
+  {
+    context: "outcome",
+    element: `<qti-test-variables variable-identifier="SCORE"/>`,
+    result: {
+      _tag: "open",
+      says: "If omitted, variables declared with base-type integer or float are matched. The base-type of the result is integer if all matching values have base-type integer, otherwise it is float (Table 7.39.6)",
+    },
+  },
+];
+
+/**
+ * A value of a base type and a cardinality, written as an operand.
+ *
+ * @param base - The base type.
+ * @param cardinality - The cardinality, single or multiple.
+ * @returns The operand.
+ */
+const valueOf = (base: "float" | "integer" | "string", cardinality: Cardinality): string => {
+  const single = `<qti-base-value base-type="${base}">${{ float: "1.5", integer: "1", string: "a" }[base]}</qti-base-value>`;
+
+  return cardinality === "single" ? single : `<qti-multiple>${single}</qti-multiple>`;
 };
 
 /**
@@ -153,6 +291,24 @@ const cases: readonly Case[] = [
       valid: standsFor(name, base),
     })),
   ]),
+  ...leafResults.flatMap(({ context, element, result }): readonly Case[] =>
+    result._tag === "open"
+      ? []
+      : [
+          {
+            context,
+            expression: `<qti-match>${element}${valueOf(result.base, result.cardinality)}</qti-match>`,
+            name: `${element} matched against its own base`,
+            valid: true,
+          },
+          {
+            context,
+            expression: `<qti-match>${element}${valueOf("string", result.cardinality)}</qti-match>`,
+            name: `${element} matched against a string`,
+            valid: false,
+          },
+        ],
+  ),
   ...["qti-outcome-maximum", "qti-outcome-minimum"].flatMap((kind): readonly Case[] => {
     const leaf = `<${kind} outcome-identifier="SCORE"/>`;
 
@@ -184,11 +340,16 @@ const cases: readonly Case[] = [
  * The item's declarations, each variable of {@link variables} as its role declares it.
  */
 const declarations = Object.entries(variables)
-  .map(([name, { base, cardinality, role }]) =>
-    role === "template"
-      ? `<qti-template-declaration identifier="${name}" cardinality="${cardinality}" base-type="${base}"/>`
-      : `<qti-${role}-declaration identifier="${name}" cardinality="${cardinality}" base-type="${base}"/>`,
-  )
+  .map(([name, { base, cardinality, role }]) => {
+    const element = role === "template" ? "qti-template-declaration" : `qti-${role}-declaration`;
+    const mapping =
+      {
+        RM: `<qti-mapping default-value="0"><qti-map-entry map-key="1" mapped-value="1"/></qti-mapping>`,
+        RP: `<qti-area-mapping default-value="0"><qti-area-map-entry shape="circle" coords="0,0,1" mapped-value="1"/></qti-area-mapping>`,
+      }[name] ?? "";
+
+    return `<${element} identifier="${name}" cardinality="${cardinality}" base-type="${base}">${mapping}</${element}>`;
+  })
   .toSorted(
     (left, right) =>
       ["response", "outcome", "template"].findIndex((role) => left.includes(`qti-${role}-`)) -

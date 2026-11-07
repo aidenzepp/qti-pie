@@ -332,6 +332,7 @@ type DeclarationSituation =
 
 /**
  * How long the declaration box may run: each of its 441 cases reads, shreds and judges a package.
+ * Measured 2026-11-07: 11.3 s at a load average of 63 to 73.
  */
 const boxTimeout = 120_000;
 

@@ -259,6 +259,7 @@ describe("the direct writer's order and slots", () => {
 
 /**
  * The time a search over drawn trees takes, each case a writer run, on a loaded machine.
+ * Measured 2026-11-07: 13.7 s at a load average of 63 to 73, the slower search.
  */
 const searchTimeoutMs = 120_000;
 

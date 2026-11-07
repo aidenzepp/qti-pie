@@ -27,13 +27,13 @@ export const caseHang = Duration.seconds(30);
 /**
  * The timeout, in milliseconds, for each test that searches generated cases or exhausts a box. The
  * slowest, the writer's search over swarmed documents (400 rotating cases, a floor of 100 and no
- * steered case), took 1,568 ms beside crust's other suites (2026-11-05, Node 26.13.0, load
- * average 54). The reader's 400 swarmed trees before the search took 5,115 ms at load average 48,
- * so a search of 500 such cases may take some 6.4 s there. The budget is twice that, rounded up to
- * the next 1,000. On 2026-11-07, at a load average near 70, the slowest search under it took
- * 1.4 s, and it is the suites' hang guard of 60 s (`packages/pantry/src/test/timeouts.test.ts`),
- * since a search's timeout is the deadline `searched` stops it at, never its budget. Raise it only
- * on a new measurement recorded here, never to make a run pass.
+ * steered case), took 1,568 ms beside crust's other suites (2026-11-05, Node 26.13.0, load average
+ * 54). The reader's 400 swarmed trees before the search took 5,115 ms at load average 48, so a
+ * search of 500 such cases may take some 6.4 s there. The budget is twice that, rounded up to the
+ * next 1,000. Measured 2026-11-07: 2.6 s at a load average of 70 to 74, the slowest search under
+ * it, and it is the suites' hang guard of 60 s (`packages/pantry/src/test/timeouts.test.ts`), since
+ * a search's timeout is the deadline `searched` stops it at, never its budget. Raise it only on a
+ * new measurement recorded here, never to make a run pass.
  */
 export const GENERATED_TIMEOUT_MS = 60_000;
 

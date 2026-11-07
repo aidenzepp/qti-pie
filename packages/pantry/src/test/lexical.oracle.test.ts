@@ -66,8 +66,9 @@ import { OracleLayer, xmllintValidate } from "#pantry/xml/oracle.ts";
 
 /**
  * The timeout, in milliseconds, for the one test: one `xmllint` run per version over every probe,
- * after reading both versions' XSDs with the shared reader. To be set from a measurement; 300 s
- * until then. Raise it only on a new measurement recorded here, never to make a run pass.
+ * after reading both versions' XSDs with the shared reader. Measured 2026-11-07: 141.9 s at a load
+ * average of 63 to 73, which the budget, 300 s, is over twice. Raise it only on a new measurement
+ * recorded here, never to make a run pass.
  */
 const testTimeoutMs = 300_000;
 

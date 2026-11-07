@@ -898,9 +898,12 @@ const leaf = (
 const predicate = fixed("boolean", "single");
 
 /**
- * The typing of every QTI expression kind, read against the information model's §2.11 (each
- * operator's "sub-expressions" and "result" paragraphs) and the old checker's P23 table
- * (`docs/goals/qti/phase-3.md` 4.10), which this replaces. `expression.test.ts` holds its kinds to
+ * The typing of every QTI expression kind, read against the information model's normative class
+ * tables (§6.9 and §6.30, each kind's "sub-expressions" and "result" sentences; §2.11 says the
+ * same, and is not normative) and the old checker's P23 table (`docs/goals/qti/phase-3.md` 4.10),
+ * which this replaces. A leaf whose table leaves its type open (`qti-null`, `qti-test-variables`
+ * with no `base-type`) is typed `unknown`; `expression-spec.oracle.test.ts` holds every leaf to its
+ * table. `expression.test.ts` holds its kinds to
  * `OperatorArity`'s, the 64 the ASI XSD's expression group names.
  *
  * @see {@link https://www.imsglobal.org/spec/qti/v3p0/info#Expr3 | QTI 3.0 information model, §2.11.3 Operators}
@@ -1018,8 +1021,10 @@ export const expressionTypings: readonly ExpressionTyping[] = [
     "qti-number-responded",
     "qti-number-selected",
   ].map((kind) => leaf(kind, "integer", "single", true)),
+  // Tables 6.9.64 and 6.9.65 (normative, both versions): "the result has cardinality multiple and
+  // base-type float", NULL where an item declares no maximum.
   ...["qti-outcome-maximum", "qti-outcome-minimum"].map((kind) =>
-    leaf(kind, "unknown", "multiple", true),
+    leaf(kind, "float", "multiple", true),
   ),
   ...["qti-pattern-match", "qti-string-match", "qti-substring"].map((kind) =>
     operator(kind, ["string"], ["single"], predicate),

@@ -69,7 +69,8 @@ export const authorLayerHookTimeoutMs = 20_000;
  * CPUs (merges `8b3f2a65`, `1a3d4f4c`, `998fe309` and `655ddd9f`). Measured on 2026-11-02 at
  * `ae520e6`: fifteen quiet spawns had a median of 3.8 s, and spawns beside six concurrent
  * layer builds had a maximum of 4.5 s at load averages of 4 to 6. The budget is the larger of
- * twice that maximum (9 s) and 10 s, the floor being twice the default.
+ * twice that maximum (9 s) and 10 s, the floor being twice the default. Measured 2026-11-07: 3.0 s
+ * at a load average of 63 to 73, the slowest CLI process test of the free project.
  * A test file whose handlers load the engine loads it first in a `beforeAll` under
  * `engineLoadHookTimeoutMs`, so no test pays that load.
  * Raise it only on a new measurement recorded here, never to make a run pass.
@@ -113,7 +114,8 @@ export const cliProcessTestTimeoutMs = 10_000;
  * processes then took 17442 to 17694 ms at one-minute load averages of 21.5 to 23.4, 12749 to 13229
  * ms at 22.3 to 23.4, and 11972 to 12361 ms at 21.7 to 22.3, each process 597 to 691 MB resident.
  * The rule gives 36 s for that maximum, but at half Q5.18's load, so the budget stays at Q5.18's
- * measurement until one is taken at a load near 44.
+ * measurement. Measured 2026-11-07: 36.9 s at a load average of 80 to 83, `cli/import.test.ts`'s
+ * hook beside one other suite, which the budget is over twice.
  * Raise it only on a new measurement recorded here, never to make a run pass.
  */
 export const engineLoadHookTimeoutMs = 97_000;

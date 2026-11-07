@@ -117,6 +117,7 @@ const cached = await Effect.runPromise(
  * How long one xmllint run over a batch may take: compiling the MathML 3 RelaxNG took 8 s and the
  * MathML XSD 20 s on 2026-11-05 at a load average of about 40, with each instance after that
  * milliseconds. Three times the two compiles, rounded up.
+ * Measured 2026-11-07: 42.1 s at a load average of 63 to 73, the slower of its two tests.
  */
 const xmllintTimeout = 120_000;
 

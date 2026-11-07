@@ -31,7 +31,8 @@ const caseHang = Duration.minutes(1);
 /**
  * How long the search of `compose`'s announcements may take: its 14 cases compose a toy list 34
  * times, 0.15 to 0.4 s each on 2026-11-06 at a load average of about 60, so two minutes bound a
- * hang.
+ * hang. Measured 2026-11-07: 12.8 s at a load average of 75, under V8 coverage, and 3.9 s at 63 to
+ * 73 without it.
  */
 const composeTimeout = 120_000;
 

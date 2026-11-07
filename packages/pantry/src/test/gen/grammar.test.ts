@@ -41,6 +41,8 @@ const xmlAttributes: ReadonlySet<string> = new Set(["base", "id", "lang", "space
 
 /**
  * How long reading the two 18 MB ASI XSDs and walking them may take, beside the swarm's suites.
+ * Measured 2026-11-07: 116.3 s at a load average of 75, under V8 coverage, and 39.6 s at 70 to 74
+ * without it.
  */
 const xsdTimeout = 240_000;
 
