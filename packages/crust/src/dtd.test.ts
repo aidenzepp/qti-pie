@@ -50,7 +50,7 @@ describe("the XML declaration", () => {
       );
       assert.deepStrictEqual(prolog.undeclared, {
         _tag: "refused",
-        why: "the document has no external subset",
+        why: "the document has no external subset and its internal subset references no parameter entity",
       });
     }),
   );
@@ -491,7 +491,7 @@ describe("attribute-list declarations", () => {
         assert.strictEqual(error._tag === "ReaderRefusal" && error.rule, "undeclared-entity");
         assert.include(
           error._tag === "ReaderRefusal" ? error.detail : "",
-          'the entity "e" is referenced in the default of attribute "d" of element "a" but not declared before that attribute-list declaration',
+          'the entity "e" is referenced in the default of attribute "d" of element "a" before the internal subset declares it, so the document is not well-formed',
         );
       }),
   );
