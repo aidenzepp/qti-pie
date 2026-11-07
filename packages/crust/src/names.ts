@@ -37,13 +37,14 @@ export interface QName {
  * @returns The parts; `None` when the name is no QName.
  */
 export const qnameOf = (name: string): Option.Option<QName> => {
-  const parts = name.split(":");
-  const [prefix = "", local = ""] = parts.length === 1 ? ["", name] : parts;
+  const colon = name.indexOf(":");
+  const prefix = colon === -1 ? "" : name.slice(0, colon);
+  const local = colon === -1 ? name : name.slice(colon + 1);
 
-  return parts.length <= 2 &&
+  return !local.includes(":") &&
     local !== "" &&
     nameStart.test(local) &&
-    (parts.length === 1 || prefix !== "")
+    (colon === -1 || prefix !== "")
     ? Option.some({ local, prefix })
     : Option.none();
 };
