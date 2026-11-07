@@ -636,7 +636,7 @@ export const lawTable = {
   "Idref target": {
     rule: "idref-target",
     source:
-      "XML Schema Part 1, Validation Rule: Validation Root (the ID/IDREF table): an IDREF names an ID of its document, an attribute's tokens and an IDREF- or IDREFS-typed element text's alike (§3.15.5; reading 101); reading 14",
+      "XML Schema Part 1, Validation Rule: Validation Root (the ID/IDREF table): an IDREF names an ID of its document, an attribute's tokens and an IDREF- or IDREFS-typed element text's alike (§3.15.5; reading 101); reading 14; reading 2 and https://www.w3.org/TR/MathML3/chapter4.html#contm.share (MathML 3 §4.2.7: a share's src names 'the id attribute of the root node of the expression tree' it stands for): a same-document fragment of an m:share's src, a # and the characters after it, names an ID of its document as an IDREF token does, and a src that is no fragment is reading 103's file reference, which is not read here (operator decision 321)",
   },
   "Include fragment identifier": {
     rule: "include-href",
@@ -777,6 +777,11 @@ export const lawTable = {
     rule: "union-count",
     source:
       "reading 2: https://www.w3.org/TR/MathML3/chapter3.html#presm.maction (MathML 3 §3.7.1.1: 'If the value specified is out of range, it is an error' and 'If no selected sub-expression exists, it is a MathML error'): an maction has at least one element child and its selection, 1 when absent, is at most their number",
+  },
+  "MathML share cycle": {
+    rule: "document-key",
+    source:
+      "reading 2: https://www.w3.org/TR/MathML3/chapter4.html#contm.share (MathML 3 §4.2.7, c4#contm.acyclicity: 'An element may not dominate itself'): an element dominates its children and, where it is an m:share whose src is a same-document fragment, the element that fragment names, so an m:share on a cycle of those edges is refused",
   },
   "Max strings required": {
     rule: "max-strings-required",

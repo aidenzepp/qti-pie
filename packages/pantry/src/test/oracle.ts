@@ -415,6 +415,7 @@ const lawRules = {
   "MathML foreign element": "unmodeled-vocabulary",
   "MathML head qualifier": "admission",
   "MathML maction selection": "union-count",
+  "MathML share cycle": "document-key",
   "Media source src": "source-src",
   "N1 one document node": "reachability",
   "N1 sentinel": "reachability",
@@ -590,7 +591,7 @@ export const lawSources = {
   "Href listed":
     "imscp_infov1p2pd2.txt:770 (IMS Content Packaging 1.2, §6.6.2: 'A file reference declared in a Resource{ Href } shall have an associated declaration in a File object in the same Resource'): a resource href names the file one of its own files names, compared by resolved path in the package and as written outside it, its launch parameters aside (reading 102)",
   "Idref target":
-    "XML Schema Part 1, Validation Rule: Validation Root (the ID/IDREF table): an IDREF names an ID of its document, an attribute's tokens and an IDREF- or IDREFS-typed element text's alike (§3.15.5; reading 101); reading 14",
+    "XML Schema Part 1, Validation Rule: Validation Root (the ID/IDREF table): an IDREF names an ID of its document, an attribute's tokens and an IDREF- or IDREFS-typed element text's alike (§3.15.5; reading 101); reading 14; reading 2 and https://www.w3.org/TR/MathML3/chapter4.html#contm.share (MathML 3 §4.2.7: a share's src names 'the id attribute of the root node of the expression tree' it stands for): a same-document fragment of an m:share's src, a # and the characters after it, names an ID of its document as an IDREF token does, and a src that is no fragment is reading 103's file reference, which is not read here (operator decision 321)",
   "Include fragment identifier":
     "reading 115: https://www.w3.org/TR/xinclude/#include_element (XInclude 1.0 Second Edition §3.1, href: 'Fragment identifiers must not be used; their appearance is a fatal error'): an xi:include's href carries no #, wherever it stands after the path",
   "Include root":
@@ -643,6 +644,8 @@ export const lawSources = {
     "spec reading R6-head-qualifiers (expression.ts mathHeadQualifiers) and MathML 3's §4.4 syntax tables: https://www.w3.org/TR/MathML3/chapter4.html#contm.root (§4.4.2.11), #contm.log (§4.4.7.7) and #contm.moment (§4.4.8.6) list degree, logbase and momentabout beside their operators; an apply whose first child is no built-in operator is not judged",
   "MathML maction selection":
     "reading 2: https://www.w3.org/TR/MathML3/chapter3.html#presm.maction (MathML 3 §3.7.1.1: 'If the value specified is out of range, it is an error' and 'If no selected sub-expression exists, it is a MathML error'): an maction has at least one element child and its selection, 1 when absent, is at most their number",
+  "MathML share cycle":
+    "reading 2: https://www.w3.org/TR/MathML3/chapter4.html#contm.share (MathML 3 §4.2.7, c4#contm.acyclicity: 'An element may not dominate itself'): an element dominates its children and, where it is an m:share whose src is a same-document fragment, the element that fragment names, so an m:share on a cycle of those edges is refused",
   "Media source src":
     "reading 124: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_Source.Attr_src (§5.135.1: 'The value must be a valid non-empty URL potentially surrounded by spaces. This characteristic must be present'), read in a media element as the HTML Standard it restates splits it (https://html.spec.whatwg.org/multipage/embedded-content.html#the-source-element: where 'The source element's parent is a media element', 'This attribute must be present'; where it is a picture element, 'The src attribute must not be present'): a source whose parent is an audio or a video carries src (html.ts Media_source_src)",
   "N1 one document node": "XML 1.0 §2.1, one document entity; fin.md §12, entry 8",
@@ -1424,6 +1427,7 @@ export const otherLawNames = [
   "AL2 fold",
   "value domain",
   "Idref target",
+  "MathML share cycle",
   "N1 one document node",
   "N2 key",
   "text arm",
@@ -3141,6 +3145,89 @@ const idsOf = (
 ];
 
 /**
+ * Read the fragment a `src` names within its own document: the characters after a leading `#`,
+ * one or more of them (MathML 3 §4.2.7). A `src` that is no fragment is a file reference (reading
+ * 103), which no law of this document reads.
+ *
+ * @param src - A `src`, collapsed.
+ * @returns The characters after the `#`, none for any other `src`.
+ */
+const fragmentOfSrc = (src: string): Option.Option<string> =>
+  Option.liftPredicate(src.slice(1), (rest) => src.startsWith("#") && rest !== "");
+
+/**
+ * Read the same-document fragment an `m:share` names.
+ *
+ * @param view - The document.
+ * @param node - The element.
+ * @returns The id its `src` names, none for any other element, for a `share` with no `src`, and
+ *   for one whose `src` is a file reference.
+ */
+const shareFragmentOf = (view: View, node: FoldedNode<Composed>): Option.Option<string> =>
+  node.kind === "m:share"
+    ? Option.flatMap(collapsedValueOf(view, node.id, "src"), fragmentOfSrc)
+    : Option.none();
+
+/**
+ * The `m:share` elements that dominate themselves, by document.
+ */
+const dominatingSharesCache = new WeakMap<View, ReadonlySet<NodeId>>();
+
+/**
+ * Find the `m:share` elements on a cycle of domination: an element dominates its children and, when
+ * it is a `share`, the elements that carry the id its fragment names (MathML 3 §4.2.7, "An element
+ * may not dominate itself"). The ids are the ones an IDREF token resolves against ({@link idsOf}).
+ * Every cycle runs through a `share`, so each is found at one.
+ *
+ * @param view - The document.
+ * @param laws - The grammar's tables.
+ * @returns The ids of the shares from which their own element can be reached.
+ */
+const dominatingSharesOf = (view: View, laws: Laws): ReadonlySet<NodeId> => {
+  const held = dominatingSharesCache.get(view);
+  if (held !== undefined) {
+    return held;
+  }
+
+  const owners = Map.groupBy(idsOf(view, laws), ({ id }) => id);
+  const targetsOf = (node: FoldedNode<Composed>): readonly NodeId[] =>
+    Option.match(shareFragmentOf(view, node), {
+      onNone: () => [],
+      onSome: (fragment) => (owners.get(fragment) ?? []).map(({ owner }) => owner),
+    });
+  const dominates = (share: FoldedNode<Composed>): boolean => {
+    const seen = new Set<NodeId>();
+    const pending = [...targetsOf(share)];
+
+    for (let id = pending.pop(); id !== undefined; id = pending.pop()) {
+      if (id === share.id) {
+        return true;
+      }
+
+      if (!seen.has(id)) {
+        seen.add(id);
+
+        const at = view.byId.get(id);
+        pending.push(
+          ...(view.childrenOf.get(id) ?? []).map((child) => child.id),
+          ...(at === undefined ? [] : targetsOf(at)),
+        );
+      }
+    }
+
+    return false;
+  };
+  const found = new Set(
+    view.members
+      .filter((node) => Option.isSome(shareFragmentOf(view, node)) && dominates(node))
+      .map(({ id }) => id),
+  );
+  dominatingSharesCache.set(view, found);
+
+  return found;
+};
+
+/**
  * Decide whether an attribute's copy of its owner is its owner's fields (AL1).
  *
  * @param attribute - The attribute row.
@@ -3207,6 +3294,24 @@ const prefixAgrees = ({ name, prefix }: { readonly name: string; readonly prefix
 
   return prefix === spelled;
 };
+
+/**
+ * Read the ids an attribute names: an IDREF or IDREFS attribute's tokens, and the fragment of an
+ * `m:share`'s `src` (MathML 3 §4.2.7), which names an id of its document as a token does.
+ *
+ * @param attribute - The attribute row.
+ * @param compiled - Its compiled value domain, none for an attribute with no cell.
+ * @returns The ids it names, in order.
+ */
+const referencesOf = (
+  attribute: FoldedAttribute<Composed>,
+  compiled: Option.Option<{ readonly domain: ValueDomain }>,
+): readonly string[] => [
+  ...(Option.exists(compiled, (held) => isIdref(held.domain)) ? tokensOf(attribute.lexical) : []),
+  ...(attribute.kind === "m:share" && attribute.name === "src"
+    ? Option.toArray(fragmentOfSrc(collapsed(attribute.lexical)))
+    : []),
+];
 
 /**
  * Evaluate the laws of §1.5 over a document's attribute rows: AL1's admission cell and owner copy,
@@ -3289,11 +3394,9 @@ const attributeBreaches = (view: View, laws: Laws): readonly Breach[] => {
         Option.exists(compiled, (held) => !inDomain(held, lexical))
           ? [breach("value domain", { lexical })]
           : [],
-        Option.exists(compiled, (held) => isIdref(held.domain))
-          ? tokensOf(lexical)
-              .filter((token) => !ids.has(token))
-              .map((token) => breach("Idref target", { token }))
-          : [],
+        referencesOf(attribute, compiled)
+          .filter((token) => !ids.has(token))
+          .map((token) => breach("Idref target", { token })),
       ];
     });
 
@@ -3661,6 +3764,16 @@ const wholeBreaches = (view: View, laws: Laws): readonly Breach[] => {
               }),
             )
         : [],
+    ),
+    // MathML 3 §4.2.7: no element dominates itself through its children and its shares' targets.
+    ...view.members.flatMap((node) =>
+      Option.match(shareFragmentOf(view, node), {
+        onNone: () => [],
+        onSome: (target) =>
+          dominatingSharesOf(view, laws).has(node.id)
+            ? [breach("MathML share cycle", { share: pathOf(view, node.id), target })]
+            : [],
+      }),
     ),
     ...keyTexts(view, laws)
       .filter(({ bound, value }) => utf8Length(value) > bound)
@@ -6767,6 +6880,8 @@ const explainers: Readonly<Record<LawName, Explainer>> = {
     field(keys, "children") === "0"
       ? "an m:maction has no child, so no sub-expression is selected (MathML 3 §3.7.1.1)"
       : `an m:maction selects child ${field(keys, "selection")} of its ${field(keys, "children")}, where MathML 3 §3.7.1.1 calls a selection out of range an error`,
+  "MathML share cycle": (keys) =>
+    `the m:share at ${field(keys, "share")} names #${field(keys, "target")}, and that element holds the share, so an element dominates itself (MathML 3 §4.2.7)`,
   "Media source src": (keys) =>
     `a source in ${field(keys, "parentKind") || "a media element"} carries no src, where a source of an audio or a video names its media resource`,
   "N1 one document node": (keys) =>

@@ -107,6 +107,7 @@ const owed: Readonly<Partial<Record<LawName, string>>> = {
   "MathML cn form": "its mutation is not written yet",
   "MathML head qualifier": "its mutation is not written yet",
   "MathML maction selection": "its mutation is not written yet",
+  "MathML share cycle": "its mutation is not written yet",
   "N2 mirrors":
     "each of xdm.ts's mirror corruptions (gap, duplicateSlot, countOffByOne) also leaves a family's last slot unread, which N7 last slot (union-count) refuses ahead of reachability; folds.test.ts holds each variant to its law",
   "N7 Last": "its mutation is not written yet",
