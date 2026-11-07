@@ -28,7 +28,7 @@ import { nullOf } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
 
 /**
- * Look up a variable by identifier among the record's own keys.
+ * Look up a value by identifier among a map's own keys.
  *
  * The variables come from plain objects, which inherit `Object.prototype`, and `constructor` or
  * `toString` is a valid identifier; reading only own keys keeps an inherited member from being
@@ -37,7 +37,7 @@ import type { Value } from "#plate/model/values.ts";
  *
  * @param values The responses, the outcomes, the template values or an override map, if any.
  * @param identifier The identifier.
- * @returns The value, or none when the record holds no value by that name.
+ * @returns The value, or none when the map holds no value by that name.
  */
 export const own = (
   values: Readonly<Record<string, Value>> | undefined,
@@ -49,7 +49,8 @@ export const own = (
 
 /**
  * Give the value of the built-in variable an identifier names that the variables carry apart from
- * the record's responses and outcomes: for `numAttempts`, the attempt count as a single integer.
+ * the responses, outcomes and template values: for `numAttempts`, the attempt count as a single
+ * integer.
  *
  * The built-in outcome `completionStatus` is not among them: the record holds it among its
  * outcomes, where the item holds it (`holdsCompletionStatus` in `#plate/model/record.ts`), so

@@ -100,7 +100,7 @@ type Step =
  * Give the state template processing starts from: each template variable at its declared default,
  * else NULL of its declared base type and cardinality, and no correct response or default set.
  *
- * @param item The item.
+ * @param item The item, whose template declarations give each variable's type and default.
  * @returns The declared state.
  */
 const declaredState = (item: Item): TemplateValues => ({
