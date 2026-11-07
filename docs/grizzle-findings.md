@@ -1923,8 +1923,9 @@ ran 3.5 to 6 times CPU at load 42 to 73.
 
 Each selection was evaluated exactly over the grammar's 78,424 attribute rows: (version, kind, governs, name, slot),
 from each GoverningOf row's model's slots, with the closed reads evaluated from their rows. Script and output:
-`~/.cache/gr8des/lp/tree/packages/pantry/work/lp/attraudit.ts` and `attraudit-exact.out`. Four keys lie inside a
-wider key over the same field, so each is one key stated twice:
+`~/.cache/gr8des/integration/lp-attribute-audit/attraudit.ts` and `attraudit-exact.out`, beside `attr.ts`, `attr.json`
+and `attr.out`, the dump of Attribute's unique objects it reads (it runs from a pantry package directory). Four keys lie
+inside a wider key over the same field, so each is one key stated twice:
 
 | Narrower key                                                                    | Inside                                                                        | Its containment                                                              |
 | ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
