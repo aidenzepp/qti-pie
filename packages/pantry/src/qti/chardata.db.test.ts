@@ -19,198 +19,32 @@
  * checks on `Node`) need a whole valid package written first, and arrive with the importer (Q5.15).
  */
 import { ChangeSet, Db } from "@bjornpagen/grizzle";
-import type { DbConnection, Fact } from "@bjornpagen/grizzle";
-import { NodeFileSystem } from "@effect/platform-node";
+import type { Fact } from "@bjornpagen/grizzle";
 import { assert, layer } from "@effect/vitest";
-import { Effect, Option, Redacted } from "effect";
-import { Client } from "pg";
-import type { DatabaseError, QueryResultRow } from "pg";
+import { Effect, Option } from "effect";
+import type { Client, DatabaseError } from "pg";
 import { describe } from "vitest";
-import { loginConnection } from "#pantry/db/connection.ts";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
-import {
-  Flag,
-  KindByNameUnder,
-  KindNamespace,
-  NodeKind,
-  ResourceType,
-  SchemaVersion,
-  TypeAvailable,
-  TypeName,
-} from "#pantry/grammar/install.ts";
-import { Document, OpenElementName, XmlStandalone } from "#pantry/qti/chardata.ts";
+import { Flag, KindByNameUnder, KindNamespace, TypeAvailable } from "#pantry/grammar/install.ts";
+import { Comment, Doctype, Document, OpenElementName, Pi } from "#pantry/qti/chardata.ts";
 import { AuthorApp } from "#pantry/qti/logins.ts";
 import { manifestPath } from "#pantry/qti/package.ts";
 import { Author } from "#pantry/qti/roles.ts";
 import { bitsText } from "#pantry/test/bits.ts";
+import {
+  authorRole,
+  foreignKeysBetween,
+  isServerError,
+  judged,
+  loginSession,
+  qtiSchema,
+  rowsOf,
+  statedInserts,
+} from "#pantry/test/direct-sql.ts";
+import type { Stated } from "#pantry/test/direct-sql.ts";
 import { authorLayerHookTimeoutMs, hasLease } from "#pantry/test/settings.ts";
 import { isUriReference } from "#pantry/test/uri-reference.ts";
 import { mathmlNamespace } from "#pantry/vocab/namespaces.ts";
-
-/**
- * The author login's PostgreSQL role, `<schema>__<login>`.
- */
-const authorAppRole = "qti__author_app";
-
-/**
- * The author role's PostgreSQL role, which is also the schema of its views.
- */
-const authorRole = "qti__author";
-
-/**
- * The PostgreSQL schema of `Qti`'s tables.
- */
-const qtiSchema = "qti";
-
-/**
- * The password a connection authenticates with, read once.
- *
- * @param password - The connection's password.
- * @returns The password's text.
- */
-const passwordText = (password: DbConnection["password"]) =>
-  (Redacted.isRedacted(password) ? Effect.succeed(password) : password).pipe(
-    Effect.map(Redacted.value),
-  );
-
-/**
- * A session of the author login on the lease, over verify-full TLS against the cluster's CA, closed
- * with its scope: a direct SQL writer.
- */
-const loginSession = Effect.gen(function* loginSession() {
-  const connection = yield* loginConnection(authorAppRole);
-  const password = yield* passwordText(connection.password);
-  const client = new Client({
-    database: connection.database,
-    host: connection.transport.host,
-    password,
-    port: connection.transport.port,
-    ssl: { ca: [connection.transport.ca].flat(), servername: connection.transport.servername },
-    user: authorAppRole,
-  });
-
-  return yield* Effect.acquireRelease(
-    Effect.tryPromise(() => client.connect()).pipe(Effect.as(client)),
-    () => Effect.promise(() => client.end()),
-  );
-}).pipe(Effect.provide(NodeFileSystem.layer));
-
-/**
- * Run one statement on a session and return its rows.
- *
- * @param client - The session.
- * @param text - The statement.
- * @param values - Its parameters.
- * @returns The rows, each as node-postgres decodes it.
- */
-const rowsOf = <R extends QueryResultRow>(
-  client: Client,
-  text: string,
-  values: readonly unknown[] = [],
-) =>
-  Effect.tryPromise(() => client.query<R>(text, [...values])).pipe(Effect.map(({ rows }) => rows));
-
-/**
- * Whether a failure is a server error of node-postgres's, which carries a SQLSTATE and the
- * constraint it names.
- *
- * @param error - The failure's cause.
- * @returns Whether it is one.
- */
-const isServerError = (error: unknown): error is DatabaseError =>
-  error instanceof Error && "code" in error && "constraint" in error;
-
-/**
- * A row a direct writer inserts into one of `Qti`'s tables: every column it fills by name, a closed
- * id by its code.
- */
-type SqlRow = Readonly<Record<string, string | number>>;
-
-/**
- * Read the columns of one of `Qti`'s tables a direct writer fills: every live column PostgreSQL
- * does not generate, a family's hidden ones among them (README, "Direct SQL access": a family's
- * values are a direct writer's to fill).
- *
- * @param client - The session.
- * @param table - The table.
- * @returns The columns' names, none for a table the schema does not hold.
- */
-const writtenColumnsOf = (client: Client, table: string) =>
-  rowsOf<{ readonly name: string }>(
-    client,
-    `SELECT a.attname AS name FROM pg_catalog.pg_attribute a
-      WHERE a.attrelid = pg_catalog.to_regclass($1) AND a.attnum > 0 AND NOT a.attisdropped
-        AND a.attgenerated = ''
-      ORDER BY a.attnum`,
-    [`${qtiSchema}.${table}`],
-  ).pipe(Effect.map((rows) => rows.map(({ name }) => name)));
-
-/**
- * The foreign keys from one of `Qti`'s tables into another, by constraint name, read from the
- * catalogue: the constraints a containment between the two relations installs.
- *
- * @param client - The session, before `SET ROLE`.
- * @param from - The referencing table.
- * @param to - The referenced table.
- * @returns The constraint names.
- */
-const foreignKeys = (client: Client, from: string, to: string) =>
-  rowsOf<{ readonly conname: string }>(
-    client,
-    `SELECT con.conname FROM pg_constraint con
-       JOIN pg_class src ON src.oid = con.conrelid
-       JOIN pg_class dst ON dst.oid = con.confrelid
-       JOIN pg_namespace n ON n.oid = src.relnamespace
-      WHERE con.contype = 'f' AND n.nspname = $1 AND src.relname = $2 AND dst.relname = $3`,
-    [qtiSchema, from, to],
-  ).pipe(Effect.map((rows) => rows.map(({ conname }) => conname)));
-
-/**
- * Insert one row into its table as the author role, every foreign key deferred, then set the given
- * ones immediate, and roll back: the server's verdict on the row by those constraints alone, or
- * none when the row's own laws and those constraints accept it.
- *
- * @param client - The session.
- * @param table - The table to insert into.
- * @param row - The row, exactly the table's written columns; any other row fails the case before
- *   any statement runs.
- * @param immediate - The constraints to check at once after the insert.
- * @returns The server's error, or none when every statement succeeded; fails with any other
- *   failure.
- */
-const deferredInsert = (client: Client, table: string, row: SqlRow, immediate: readonly string[]) =>
-  Effect.gen(function* insertDeferred() {
-    const columns = Object.keys(row);
-    assert.sameMembers(
-      columns,
-      yield* writtenColumnsOf(client, table),
-      `${table}: the row fills every column a direct writer fills`,
-    );
-    yield* rowsOf(client, "BEGIN ISOLATION LEVEL SERIALIZABLE");
-
-    const outcome = yield* Effect.gen(function* statements() {
-      yield* rowsOf(client, `SET ROLE ${authorRole}`);
-      yield* rowsOf(client, "SET CONSTRAINTS ALL DEFERRED");
-      yield* rowsOf(
-        client,
-        `INSERT INTO ${qtiSchema}.${table} (${columns.join(", ")}) VALUES (${columns
-          .map((_, at) => `$${String(at + 1)}`)
-          .join(", ")})`,
-        Object.values(row),
-      );
-      for (const name of immediate) {
-        yield* rowsOf(client, `SET CONSTRAINTS ${qtiSchema}."${name}" IMMEDIATE`);
-      }
-    }).pipe(
-      Effect.as(Option.none<DatabaseError>()),
-      Effect.catch((error) =>
-        isServerError(error.cause) ? Effect.succeed(Option.some(error.cause)) : Effect.fail(error),
-      ),
-    );
-    yield* rowsOf(client, "ROLLBACK");
-
-    return outcome;
-  });
 
 /**
  * Read the type one of `Qti`'s columns casts its values to: a grizzle text domain for a field of a
@@ -334,20 +168,6 @@ const namedUris = [
 const strayNode = "00000000-0000-4000-8000-0000000000f0";
 
 /**
- * The code of a handle in its roster, the value a direct writer stores in its closed-id column.
- *
- * @param handles - The roster's handles.
- * @param handle - The handle.
- * @returns Its code.
- */
-const codeOf = (handles: readonly string[], handle: string): number => {
-  const code = handles.indexOf(handle);
-  assert.isAtLeast(code, 0, `${handle} is a handle of its roster`);
-
-  return code;
-};
-
-/**
  * Each arm and the document row, with a row of it whose node is no stored node, and the table its
  * containment into `Node` is installed on. The document row is the manifest's, lawful on its own
  * CHECKs: every optional field its null object (no declaration, so `none` version and standalone
@@ -356,43 +176,35 @@ const codeOf = (handles: readonly string[], handle: string): number => {
  * empty set and its nearest context the document node, by `E1_derived`), and its node's copied
  * tuple the document node's.
  */
-const arms: readonly { readonly row: SqlRow; readonly table: string }[] = [
-  { row: { node: strayNode, value: "a comment" }, table: "comment" },
-  { row: { data: "", node: strayNode, target: "t" }, table: "pi" },
-  { row: { node: strayNode, value: "<!DOCTYPE r>" }, table: "doctype" },
+const arms: readonly Stated[] = [
+  { fact: { node: strayNode, value: "a comment" }, relation: Comment },
+  { fact: { data: "", node: strayNode, target: "t" }, relation: Pi },
+  { fact: { node: strayNode, value: "<!DOCTYPE r>" }, relation: Doctype },
   {
-    row: {
-      assembled: "false",
-      bindings: 0,
+    fact: {
+      assembled: false,
       charset: "UTF-8",
-      choices: 0,
       context: bitsText(Flag, []),
-      context_nearest: strayNode,
-      context_nearest_kind: codeOf(NodeKind.handles, "document"),
+      contextNearest: strayNode,
+      contextNearestKind: "document",
       encoding: "",
-      export_charset: "UTF-8",
-      hottexts: 0,
-      idref_targets: 0,
-      ids: 0,
-      langs: 0,
+      exportCharset: "UTF-8",
       node: strayNode,
-      node_children: 1,
-      node_document: strayNode,
-      node_governs: codeOf(TypeName.handles, "none"),
-      node_kind: codeOf(NodeKind.handles, "document"),
-      node_parent_kind: codeOf(NodeKind.handles, "document"),
-      node_start: 0,
+      nodeChildren: 1n,
+      nodeDocument: strayNode,
+      nodeGoverns: "none",
+      nodeKind: "document",
+      nodeParentKind: "document",
+      nodeStart: 0n,
       package: strayNode,
       path: manifestPath,
-      resource_type: codeOf(ResourceType.handles, "none"),
-      root_kind: codeOf(NodeKind.handles, "cp:manifest"),
-      standalone: codeOf(XmlStandalone.handles, "none"),
-      targeted_by: 0,
-      variables: 0,
-      version: codeOf(SchemaVersion.handles, "3.0.1"),
-      xml_version: "none",
+      resourceType: "none",
+      rootKind: "cp:manifest",
+      standalone: "none",
+      version: "3.0.1",
+      xmlVersion: "none",
     },
-    table: "document",
+    relation: Document,
   },
 ];
 
@@ -477,27 +289,29 @@ const foreignName = (
  * @returns The row.
  */
 const lawfulNameRow = (fields: {
-  readonly governs: string;
-  readonly kind: string;
+  readonly governs: Fact<typeof OpenElementName>["governs"];
+  readonly kind: Fact<typeof OpenElementName>["kind"];
   readonly local: string;
   readonly namespace: string;
-  readonly parentKind: string;
+  readonly parentKind: Fact<typeof OpenElementName>["parentKind"];
   readonly parentNamespace?: string;
-}) =>
-  ({
+}): Stated => ({
+  fact: {
     document: strayNode,
-    governs: codeOf(TypeName.handles, fields.governs),
-    kind: codeOf(NodeKind.handles, fields.kind),
+    governs: fields.governs,
+    kind: fields.kind,
     local: fields.local,
     namespace: fields.namespace,
     nearest: strayNode,
     node: strayNode,
     parent: strayNode,
-    parent_kind: codeOf(NodeKind.handles, fields.parentKind),
-    parent_namespace: fields.parentNamespace ?? asi,
-    start: 1,
-    version: codeOf(SchemaVersion.handles, "3.0.1"),
-  }) satisfies SqlRow;
+    parentKind: fields.parentKind,
+    parentNamespace: fields.parentNamespace ?? asi,
+    start: 1n,
+    version: "3.0.1",
+  },
+  relation: OpenElementName,
+});
 
 describe.skipIf(!hasLease)("qti/chardata.db.test.ts, on the lease", () => {
   layer(AuthorAppLayer, { timeout: authorLayerHookTimeoutMs })(
@@ -511,13 +325,13 @@ describe.skipIf(!hasLease)("qti/chardata.db.test.ts, on the lease", () => {
           // Bound: every arm and the document row, one stray row each.
           Effect.gen(function* armsIntoNode() {
             const client = yield* loginSession;
-            for (const { row, table } of arms) {
-              const keys = yield* foreignKeys(client, table, "node");
+            for (const arm of arms) {
+              const inserts = statedInserts([arm]);
+              const table = inserts[0]?.table ?? "";
+              const keys = yield* foreignKeysBetween(client, table, "node");
               assert.isNotEmpty(keys, `${table} references node`);
 
-              const refused = Option.getOrUndefined(
-                yield* deferredInsert(client, table, row, keys),
-              );
+              const refused = Option.getOrUndefined(yield* judged(client, inserts, keys));
 
               assert.strictEqual(refused?.code, "23503", table);
               assert.include(keys, refused?.constraint, table);
@@ -534,12 +348,10 @@ describe.skipIf(!hasLease)("qti/chardata.db.test.ts, on the lease", () => {
           // standalone and the empty encoding, and the manifest's `none` resource type.
           Effect.gen(function* nullObjects() {
             const client = yield* loginSession;
-            const document = arms.find(({ table }) => table === "document");
+            const document = arms.find(({ relation }) => relation === Document);
             assert.isDefined(document);
 
-            const refused = Option.getOrUndefined(
-              yield* deferredInsert(client, "document", document.row, []),
-            );
+            const refused = Option.getOrUndefined(yield* judged(client, statedInserts([document])));
 
             assert.isUndefined(refused, refused?.message);
           }).pipe(Effect.scoped),
@@ -858,9 +670,7 @@ describe.skipIf(!hasLease)("qti/chardata.db.test.ts, on the lease", () => {
                 parentNamespace: namespaceOf("drd:accessForAllResource"),
               }),
             ]) {
-              const refused = Option.getOrUndefined(
-                yield* deferredInsert(client, "open_element_name", row, []),
-              );
+              const refused = Option.getOrUndefined(yield* judged(client, statedInserts([row])));
 
               assert.isUndefined(refused, refused?.message);
             }

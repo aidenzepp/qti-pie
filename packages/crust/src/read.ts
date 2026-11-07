@@ -3,8 +3,8 @@ import { SaxesParser } from "saxes";
 import type { SaxesAttributeNS } from "saxes";
 import { decode } from "#crust/decode.ts";
 import type { Decoded } from "#crust/decode.ts";
-import { NAME_CHAR, NAME_START, lexProlog, substitute } from "#crust/dtd.ts";
-import type { AttlistEntry, Prolog, Substituted } from "#crust/dtd.ts";
+import { NAME_CHAR, NAME_START, lexProlog, substitute, undeclaredEntity } from "#crust/dtd.ts";
+import type { AttlistEntry, Prolog, Substituted, ValuePiece } from "#crust/dtd.ts";
 import { ReaderRefusal, WellFormednessError } from "#crust/errors.ts";
 import { rebuild } from "#crust/rebuild.ts";
 import { SENTINEL_FIRST, SENTINEL_LAST, sentinelsWritten } from "#crust/sentinels.ts";
@@ -88,22 +88,12 @@ const scanReferences = (body: string, declared: ReadonlyMap<string, string>): Sc
 };
 
 /**
- * The refusal for a reference to an entity the document never declares and has nowhere to declare.
- */
-const undeclared = (name: string, why: string): ReaderRefusal =>
-  new ReaderRefusal({
-    detail: `the entity "${name}" is referenced but not declared, and ${why}, so no declaration can exist (XML 1.0 section 4.1, Entity Declared).`,
-    rule: "undeclared-entity",
-  });
-
-/**
  * Give each undeclared entity name in the body a stand-in character, or refuse.
  *
- * A document that is `standalone="yes"` or has no external subset declares every entity it may use
- * in its own prolog, so an undeclared reference is a well-formedness error and is refused naming
- * the entity. Otherwise the declaration may sit in the external subset, which is never read: the
- * name gets a private use character that occurs nowhere in the document, and the parser appends it
- * as plain text.
+ * The prolog's {@link Prolog.undeclared} treatment decides, as it decided each attribute default's
+ * references: a refused reference is a well-formedness error, refused naming the entity. A kept one
+ * may be declared in the external subset, which is never read: the name gets a private use
+ * character that occurs nowhere in the body, and the parser appends it as plain text.
  *
  * @returns The stand-in character of each name; the map is empty when the body has no such
  *   reference.
@@ -119,12 +109,8 @@ const assignSentinels = (
       return Effect.succeed(new Map<string, string>());
     }
 
-    if (prolog.standalone) {
-      return Effect.fail(undeclared(firstName, 'the document says standalone="yes"'));
-    }
-
-    if (!prolog.externalSubset) {
-      return Effect.fail(undeclared(firstName, "the document has no external subset"));
+    if (prolog.undeclared._tag === "refused") {
+      return Effect.fail(undeclaredEntity(firstName, prolog.undeclared.why));
     }
 
     const sentinels = new Map<string, string>();
@@ -136,7 +122,10 @@ const assignSentinels = (
 
       if (point > SENTINEL_LAST) {
         return Effect.fail(
-          undeclared(name, "the document leaves no private use character free to stand for it"),
+          undeclaredEntity(
+            name,
+            "the document leaves no private use character free to stand for it",
+          ),
         );
       }
 
@@ -350,115 +339,39 @@ const parse = (
 };
 
 /**
- * The value with leading and trailing spaces removed and each run of spaces made one (XML 1.0
- * section 3.3.3, the second step, which applies to every attribute type but `CDATA`).
- */
-const collapseSpaces = (value: string): string => value.replaceAll(/ +/gu, " ").trim();
-
-/**
- * The `&name;` references in `value`, each as its name and the index of its `&`.
- */
-const referencesIn = (value: string): readonly AttributeReference[] =>
-  [...value.matchAll(/&(?<name>[^\s&;]+);/gu)].map((match) => ({
-    name: match.groups?.["name"] ?? "",
-    offset: match.index,
-  }));
-
-/**
- * The attribute `declared` names with `value`, which is as the ATTLIST declaration supplies it
- * except for the second normalization step a non-`CDATA` type adds; a name in it other than the
- * predefined five is kept as written and recorded as a reference.
- */
-const defaultAttribute = (declared: string, entry: AttlistEntry, value: string): Attribute => {
-  const normalized = entry.type === "CDATA" ? value : collapseSpaces(value);
-
-  return {
-    local: declared,
-    namespace: "",
-    prefix: "",
-    qname: declared,
-    references: referencesIn(normalized),
-    value: normalized,
-  };
-};
-
-/**
- * `element`'s attributes after the ATTLIST table of its name is applied: a non-`CDATA` value is
- * normalized and each declared default the element lacks is appended in declaration order.
- */
-const applyAttlist = (
-  attributes: readonly Attribute[],
-  table: ReadonlyMap<string, AttlistEntry>,
-): readonly Attribute[] => {
-  const written = attributes.map((attribute) => {
-    const entry = table.get(attribute.qname);
-
-    return entry === undefined || entry.type === "CDATA"
-      ? attribute
-      : { ...attribute, value: collapseSpaces(attribute.value) };
-  });
-  const present = new Set(attributes.map((attribute) => attribute.qname));
-  const defaulted = [...table].flatMap(([declared, entry]) =>
-    !present.has(declared) && Option.isSome(entry.default)
-      ? [defaultAttribute(declared, entry, entry.default.value)]
-      : [],
-  );
-
-  return [...written, ...defaulted];
-};
-
-/**
- * `root` and everything below it with the ATTLIST tables applied, without recursion.
+ * A value's pieces after the second normalization step a non-`CDATA` attribute type adds (XML 1.0
+ * section 3.3.3): each run of spaces made one, and a space at either end removed. A reference is
+ * no space, so a run ends at one; only U+0020 counts, so a tab or other white space a character
+ * reference wrote stays.
  *
- * @param root - The root element as `saxes` built it.
- * @param attlists - The ATTLIST table of each element name.
- * @returns The tree with each element's table applied to its attributes.
+ * @param pieces - The value's pieces, text and references alternating.
+ * @returns The normalized pieces, text and references still alternating.
  */
-const applyAttlists = (root: Element, attlists: Prolog["attlists"]): Element =>
-  rebuild(
-    root,
-    (element) => {
-      const table = attlists.get(element.qname);
-
-      return table === undefined ? element.attributes : applyAttlist(element.attributes, table);
-    },
-    (leaf) => [leaf],
-  );
-
-/**
- * An attribute value after its stand-in characters are written back as `&name;`, with where each
- * `&` landed.
- */
-interface Restored {
-  readonly references: readonly AttributeReference[];
-  readonly value: string;
-}
-
-/**
- * `value` with each stand-in character written back as `&name;`.
- */
-const restoreValue = (value: string, names: ReadonlyMap<string, string>): Restored => {
-  const references: AttributeReference[] = [];
-  let restored = "";
-  for (const character of value) {
-    const name = names.get(character);
-    if (name === undefined) {
-      restored += character;
-    } else {
-      references.push({ name, offset: restored.length });
-      restored += `&${name};`;
+const collapsed = (pieces: readonly ValuePiece[]): readonly ValuePiece[] =>
+  pieces.flatMap((piece, at): readonly ValuePiece[] => {
+    if (piece.kind === "reference") {
+      return [piece];
     }
-  }
 
-  return { references, value: restored };
-};
+    const spaced = piece.text.replaceAll(/ +/gu, " ");
+    const start = at === 0 && spaced.startsWith(" ") ? 1 : 0;
+    const end =
+      at === pieces.length - 1 && spaced.endsWith(" ") ? spaced.length - 1 : spaced.length;
+    const text = spaced.slice(start, Math.max(start, end));
+
+    return text === "" ? [] : [{ kind: "text", text }];
+  });
 
 /**
- * `value` split around its stand-in characters: the text between them as `Text` runs and each
- * stand-in as an `EntityRef`.
+ * Split `value` around its stand-in characters: the text between them, and the reference each
+ * stand-in stands for.
+ *
+ * @param value - Text the parser built, holding a stand-in for each undeclared reference.
+ * @param names - The entity name each stand-in character stands for.
+ * @returns The pieces, text and references alternating, no text piece empty.
  */
-const restoreText = (value: string, names: ReadonlyMap<string, string>): readonly Child[] => {
-  const children: Child[] = [];
+const piecesOf = (value: string, names: ReadonlyMap<string, string>): readonly ValuePiece[] => {
+  const pieces: ValuePiece[] = [];
   let run = "";
   for (const character of value) {
     const name = names.get(character);
@@ -466,65 +379,153 @@ const restoreText = (value: string, names: ReadonlyMap<string, string>): readonl
       run += character;
     } else {
       if (run !== "") {
-        children.push({ cdata: false, kind: "text", value: run });
+        pieces.push({ kind: "text", text: run });
       }
 
-      children.push({ kind: "entityRef", name } satisfies EntityRef);
+      pieces.push({ kind: "reference", name });
       run = "";
     }
   }
 
   if (run !== "") {
-    children.push({ cdata: false, kind: "text", value: run });
+    pieces.push({ kind: "text", text: run });
   }
 
-  return children;
+  return pieces;
 };
 
 /**
- * `root` and everything below it, without recursion, with each stand-in character replaced by the
- * reference it stands for: an `EntityRef` among the children, and `&name;` in an attribute value
- * with its offset recorded.
+ * Write a value's pieces as an attribute value: text as itself, each reference as `&name;`, with
+ * where each reference's `&` lands.
  *
- * @param root - The root element with the ATTLIST tables applied.
- * @param names - The entity name each stand-in character stands for.
- * @returns The tree with every stand-in character restored.
+ * @param pieces - The value's pieces.
+ * @returns The value and its references, in order.
  */
-const restoreReferences = (root: Element, names: ReadonlyMap<string, string>): Element =>
-  rebuild(
-    root,
-    (element) =>
-      element.attributes.map((attribute) => {
-        const restored = restoreValue(attribute.value, names);
+const attributeValueOf = (
+  pieces: readonly ValuePiece[],
+): Pick<Attribute, "references" | "value"> => {
+  const references: AttributeReference[] = [];
+  let value = "";
+  for (const piece of pieces) {
+    if (piece.kind === "text") {
+      value += piece.text;
+    } else {
+      references.push({ name: piece.name, offset: value.length });
+      value += `&${piece.name};`;
+    }
+  }
 
-        return restored.references.length === 0
-          ? attribute
-          : { ...attribute, references: restored.references, value: restored.value };
-      }),
-    (leaf) => (leaf.kind === "text" && !leaf.cdata ? restoreText(leaf.value, names) : [leaf]),
+  return { references, value };
+};
+
+/**
+ * Normalize a value's pieces as its declared type asks: as given for `CDATA` or an undeclared
+ * attribute, {@link collapsed} for any other type.
+ *
+ * @param pieces - The value's pieces.
+ * @param entry - The attribute's declaration, when the ATTLIST table has one.
+ * @returns The normalized pieces.
+ */
+const normalizedAs = (
+  pieces: readonly ValuePiece[],
+  entry: AttlistEntry | undefined,
+): readonly ValuePiece[] =>
+  entry === undefined || entry.type === "CDATA" ? pieces : collapsed(pieces);
+
+/**
+ * An element's attributes in the finished tree: each written one with its stand-ins restored as
+ * references and its value normalized by its declared type, then each declared default the element
+ * lacks, in declaration order, built from the default's own pieces.
+ *
+ * A default never holds a stand-in: its references are pieces the prolog's lexer kept, and its text
+ * is the prolog's, which the body's stand-ins are chosen apart from. So a default is appended after
+ * the stand-ins are restored, and no character of its text is read as a reference.
+ *
+ * @param element - The element as `saxes` built it.
+ * @param table - The ATTLIST table of the element's name, if any.
+ * @param names - The entity name each stand-in character stands for.
+ * @returns The attributes.
+ */
+const attributesOf = (
+  element: Element,
+  table: ReadonlyMap<string, AttlistEntry> | undefined,
+  names: ReadonlyMap<string, string>,
+): readonly Attribute[] => {
+  const written = element.attributes.map((attribute): Attribute => ({
+    ...attribute,
+    ...attributeValueOf(
+      normalizedAs(piecesOf(attribute.value, names), table?.get(attribute.qname)),
+    ),
+  }));
+  const present = new Set(element.attributes.map((attribute) => attribute.qname));
+  const defaulted = [...(table ?? [])].flatMap(([declared, entry]): readonly Attribute[] =>
+    !present.has(declared) && Option.isSome(entry.default)
+      ? [
+          {
+            local: declared,
+            namespace: "",
+            prefix: "",
+            qname: declared,
+            ...attributeValueOf(normalizedAs(entry.default.value, entry)),
+          },
+        ]
+      : [],
+  );
+
+  return [...written, ...defaulted];
+};
+
+/**
+ * A text run's nodes once its stand-in characters are restored: the text between them as `Text`
+ * runs and each stand-in as an `EntityRef`.
+ *
+ * @param value - The run's text.
+ * @param names - The entity name each stand-in character stands for.
+ * @returns The nodes, in order.
+ */
+const restoredText = (value: string, names: ReadonlyMap<string, string>): readonly Child[] =>
+  piecesOf(value, names).map((piece): Child =>
+    piece.kind === "text"
+      ? { cdata: false, kind: "text", value: piece.text }
+      : ({ kind: "entityRef", name: piece.name } satisfies EntityRef),
   );
 
 /**
  * Assemble the document from what the earlier stages read and the tree `saxes` built.
+ *
+ * One walk, without recursion, gives every element its {@link attributesOf} and puts every
+ * stand-in character of the content back as the `EntityRef` it stands for; a document with no
+ * ATTLIST table and no stand-in keeps the parser's tree.
+ *
+ * @param decoded - The decoded bytes, for the charset label.
+ * @param prolog - The prolog, for its declaration, DOCTYPE and ATTLIST tables.
+ * @param built - The root element and the comments and processing instructions around it.
+ * @param names - The entity name each stand-in character stands for.
+ * @returns The document.
  */
 const assemble = (
   decoded: Decoded,
   prolog: Prolog,
   built: Built,
   names: ReadonlyMap<string, string>,
-): XmlDocument => {
-  const applied =
-    prolog.attlists.size === 0 ? built.root : applyAttlists(built.root, prolog.attlists);
-
-  return {
-    charset: decoded.label,
-    declaration: prolog.declaration,
-    doctype: prolog.doctype,
-    epilog: built.epilog,
-    prolog: built.prolog,
-    root: names.size === 0 ? applied : restoreReferences(applied, names),
-  };
-};
+): XmlDocument => ({
+  charset: decoded.label,
+  declaration: prolog.declaration,
+  doctype: prolog.doctype,
+  epilog: built.epilog,
+  prolog: built.prolog,
+  root:
+    prolog.attlists.size === 0 && names.size === 0
+      ? built.root
+      : rebuild(
+          built.root,
+          (element) => attributesOf(element, prolog.attlists.get(element.qname), names),
+          (leaf) =>
+            leaf.kind === "text" && !leaf.cdata && names.size > 0
+              ? restoredText(leaf.value, names)
+              : [leaf],
+        ),
+});
 
 /**
  * Read a document's bytes into its tree.

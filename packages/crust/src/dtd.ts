@@ -3,18 +3,46 @@ import { ReaderRefusal, WellFormednessError } from "#crust/errors.ts";
 import type { XmlDeclaration } from "#crust/tree.ts";
 
 /**
+ * One piece of an attribute value as the reader builds it: a run of text, or a reference to a
+ * general entity no readable declaration supplies, kept as written.
+ *
+ * A literal `&` written as `&amp;` or `&#38;` is text, never a reference, so a value's references
+ * are the pieces that say so and nothing a later scan of the text could mistake for one.
+ */
+export type ValuePiece =
+  | { readonly kind: "reference"; readonly name: string }
+  | { readonly kind: "text"; readonly text: string };
+
+/**
  * The type and the default value of one declared attribute.
  *
  * `type` is the type keyword (`CDATA`, `ID`, `NMTOKENS`, `NOTATION`, ...) or, for an enumeration,
- * the parenthesized list as written. `default` is the value the declaration supplies, with its
- * character references, the five predefined entity references and the general entities declared
- * before the list expanded, any other entity reference left as written, and its white space
- * normalized (XML 1.0 section 3.3.3); `#REQUIRED` and `#IMPLIED` supply none.
+ * the parenthesized list as written. `default` is the value the declaration supplies, as pieces
+ * with no two text pieces adjacent and none empty: its character references, the five predefined
+ * entity references and the general entities declared before the list expanded into text, any
+ * other entity reference a reference piece, and its white space normalized (XML 1.0 section
+ * 3.3.3); `#REQUIRED` and `#IMPLIED` supply none.
  */
 export interface AttlistEntry {
-  readonly default: Option.Option<string>;
+  readonly default: Option.Option<readonly ValuePiece[]>;
   readonly type: string;
 }
+
+/**
+ * How a document treats a reference to a general entity that no declaration it can read supplies
+ * (XML 1.0 section 4.1, well-formedness constraint "Entity Declared"), in its body and in its
+ * attribute defaults alike.
+ *
+ * A document that says `standalone="yes"` or has no external subset must declare every entity it
+ * uses before the use, so such a reference is `refused`, with why no declaration can exist. In any
+ * other document the declaration may sit in the external subset, which is never fetched, so the
+ * reference is `kept` as written, unless it stands in an attribute default and the internal subset
+ * declares the entity after it: a declaration must precede a default's reference, so the lexer
+ * refuses that one at the end of the subset.
+ */
+export type Undeclared =
+  | { readonly _tag: "kept" }
+  | { readonly _tag: "refused"; readonly why: string };
 
 /**
  * What the prolog of a document says, read before any of the body is parsed.
@@ -38,12 +66,75 @@ export interface Prolog {
    */
   readonly expanded: number;
   /**
-   * True when the DOCTYPE names a `SYSTEM` or `PUBLIC` identifier. The external subset is never
-   * fetched.
+   * The document's treatment of a reference to an entity it does not declare, decided by its
+   * `standalone` declaration and whether its DOCTYPE names a `SYSTEM` or `PUBLIC` identifier. The
+   * external subset is never fetched.
    */
-  readonly externalSubset: boolean;
-  readonly standalone: boolean;
+  readonly undeclared: Undeclared;
 }
+
+/**
+ * Decide how a document treats a reference to an entity it does not declare.
+ *
+ * @param standalone - Whether the XML declaration says `standalone="yes"`.
+ * @param externalSubset - Whether the DOCTYPE names a `SYSTEM` or `PUBLIC` identifier.
+ * @returns `refused` when no declaration of such an entity can exist, `kept` otherwise.
+ */
+const undeclaredOf = (standalone: boolean, externalSubset: boolean): Undeclared => {
+  if (standalone) {
+    return { _tag: "refused", why: 'the document says standalone="yes"' };
+  }
+
+  return externalSubset
+    ? { _tag: "kept" }
+    : { _tag: "refused", why: "the document has no external subset" };
+};
+
+/**
+ * Build the refusal for a reference to an entity the document never declares, or declares only
+ * after an attribute default that uses it, and has nowhere else to declare.
+ *
+ * @param name - The entity's name.
+ * @param why - Why no declaration can exist, from {@link Undeclared}.
+ * @param owner - The attribute whose default holds the reference; none for the body.
+ * @param owner.attribute - The attribute's name.
+ * @param owner.element - The name of the element the attribute is declared for.
+ * @returns The refusal, under rule `undeclared-entity`.
+ */
+export const undeclaredEntity = (
+  name: string,
+  why: string,
+  owner?: { readonly attribute: string; readonly element: string },
+): ReaderRefusal =>
+  new ReaderRefusal({
+    detail:
+      owner === undefined
+        ? `the entity "${name}" is referenced but not declared, and ${why}, so no declaration can exist (XML 1.0 section 4.1, Entity Declared).`
+        : `the entity "${name}" is referenced in the default of attribute "${owner.attribute}" of element "${owner.element}" but not declared before that attribute-list declaration, and ${why}, so no declaration can exist (XML 1.0 section 4.1, Entity Declared). Declare the entity before the attribute-list declaration, or write its text in the default.`,
+    rule: "undeclared-entity",
+  });
+
+/**
+ * Build the refusal for an attribute default that references an entity the internal subset
+ * declares only after it. A declaration must precede every reference in a default value (XML 1.0
+ * section 4.1, "Entity Declared"): a well-formedness constraint where no external subset or a
+ * `standalone` declaration binds it, and otherwise a validity constraint, which a QTI package
+ * meets too.
+ *
+ * @param name - The entity's name.
+ * @param owner - The attribute whose default holds the reference.
+ * @param owner.attribute - The attribute's name.
+ * @param owner.element - The name of the element the attribute is declared for.
+ * @returns The refusal, under rule `undeclared-entity`.
+ */
+const declaredAfterDefault = (
+  name: string,
+  owner: { readonly attribute: string; readonly element: string },
+): ReaderRefusal =>
+  new ReaderRefusal({
+    detail: `the entity "${name}" is referenced in the default of attribute "${owner.attribute}" of element "${owner.element}" before the internal subset declares it, and a declaration must precede every reference in an attribute default (XML 1.0 section 4.1, Entity Declared). Move the entity's declaration before the attribute-list declaration.`,
+    rule: "undeclared-entity",
+  });
 
 /**
  * The characters that may start an XML name (XML 1.0 section 2.3, `NameStartChar`), as the inside
@@ -268,16 +359,22 @@ export const charge = (
  *
  * `bound` holds `&name` and `%name` for every entity declared, internal or external, because the
  * first declaration of a name is binding (XML 1.0 section 4.2). `stopped` is set at the first
- * parameter-entity reference that cannot be read (section 5.1).
+ * parameter-entity reference that cannot be read (section 5.1). `undeclared` is set when the
+ * DOCTYPE's external identifier is read, which precedes the internal subset, so every attribute
+ * default is judged under the treatment the body is. `kept` lists each reference an attribute
+ * default keeps, with the attribute, so the end of the subset can refuse one the subset declares
+ * after it.
  */
 interface Tables {
   readonly attlists: Map<string, Map<string, AttlistEntry>>;
   readonly bound: Set<string>;
   readonly budget: ExpansionBudget;
   readonly entities: Map<string, string>;
+  readonly kept: { readonly name: string; readonly owner: DefaultOwner }[];
   readonly parameters: Map<string, string>;
   readonly standalone: boolean;
   stopped: boolean;
+  undeclared: Undeclared;
 }
 
 /**
@@ -595,33 +692,34 @@ const characterOf = Effect.fnUntraced(function* characterOfReference(
 });
 
 /**
- * Rebuild the content of a literal by replacing each token `pattern` finds and normalizing the text
- * between them.
+ * Rebuild the content of a literal as pieces, replacing each token `pattern` finds and normalizing
+ * the text between them.
  *
  * @param literal - The literal's content and offset.
  * @param pattern - A global expression for the tokens to replace.
- * @param normalize - What to do to the text between tokens.
- * @param replace - Gives the replacement for a token, given its match and its offset in the text.
- * @returns The rebuilt content.
+ * @param between - Gives the pieces of the text between two tokens.
+ * @param replace - Gives the pieces that replace a token, given its match and its offset in the
+ *   text.
+ * @returns The pieces, in the literal's order.
  */
-const expandLiteral = Effect.fnUntraced(function* expandLiteralContent<E>(
+const expandLiteral = Effect.fnUntraced(function* expandLiteralContent<P, E>(
   literal: Literal,
   pattern: RegExp,
-  normalize: (text: string) => string,
-  replace: (token: RegExpExecArray, offset: number) => Effect.Effect<string, E>,
-): Effect.fn.Return<string, E> {
-  const pieces: string[] = [];
+  between: (text: string) => readonly P[],
+  replace: (token: RegExpExecArray, offset: number) => Effect.Effect<readonly P[], E>,
+): Effect.fn.Return<readonly P[], E> {
+  const pieces: P[] = [];
   let from = 0;
   for (const token of literal.content.matchAll(pattern)) {
     pieces.push(
-      normalize(literal.content.slice(from, token.index)),
-      yield* replace(token, literal.start + token.index),
+      ...between(literal.content.slice(from, token.index)),
+      ...(yield* replace(token, literal.start + token.index)),
     );
     from = token.index + token[0].length;
   }
-  pieces.push(normalize(literal.content.slice(from)));
+  pieces.push(...between(literal.content.slice(from)));
 
-  return pieces.join("");
+  return pieces;
 });
 
 /**
@@ -643,18 +741,18 @@ const expandEntityValue = (tables: Tables, cursor: Cursor, literal: Literal) =>
   expandLiteral(
     literal,
     ENTITY_VALUE_TOKEN,
-    (text) => text.replaceAll(LINE_BREAK, "\n"),
+    (text) => [text.replaceAll(LINE_BREAK, "\n")],
     Effect.fnUntraced(function* replaceEntityToken(
       token: RegExpExecArray,
       offset: number,
-    ): Effect.fn.Return<string, WellFormednessError> {
+    ): Effect.fn.Return<readonly string[], WellFormednessError> {
       const [whole, hex, decimal, general, parameter] = token;
       if (hex !== undefined || decimal !== undefined) {
-        return yield* characterOf(cursor, token, offset);
+        return [yield* characterOf(cursor, token, offset)];
       }
 
       if (general !== undefined) {
-        return whole;
+        return [whole];
       }
 
       if (parameter === undefined) {
@@ -683,46 +781,61 @@ const expandEntityValue = (tables: Tables, cursor: Cursor, literal: Literal) =>
 
       tables.stopped = true;
 
-      return "";
+      return [];
     }),
-  );
+  ).pipe(Effect.map((pieces) => pieces.join("")));
 
 /**
- * Compute the value an attribute declaration supplies: character references, the five predefined
- * entity references and the general entities declared so far expanded, other entity references
- * left as written, and each literal tab and line break turned into a space (XML 1.0 sections 3.3.3
- * and 4.4.5).
+ * The attribute a default is declared for, which a refusal of the default names.
+ */
+interface DefaultOwner {
+  readonly attribute: string;
+  readonly element: string;
+}
+
+/**
+ * Compute the value an attribute declaration supplies, as pieces: character references, the five
+ * predefined entity references and the general entities declared so far expanded into text, other
+ * entity references kept as reference pieces, and each literal tab and line break turned into a
+ * space (XML 1.0 sections 3.3.3 and 4.4.5).
  *
  * A declared entity's replacement text is processed by the same rules, recursively, and each one
  * opened is charged against the subset's budget. A replacement text holding a `<` or a bare `&`
- * is refused (the well-formedness constraint "No `<` in Attribute Values"), at the reference.
+ * is refused (the well-formedness constraint "No `<` in Attribute Values"), at the reference. A
+ * reference to an entity no earlier declaration supplies is kept or refused as the document's
+ * {@link Undeclared} treatment says: a declaration must precede every reference in a default value
+ * (section 4.1, "Entity Declared"), so an entity declared later counts as undeclared here.
  *
- * @param tables - The subset's declarations and budget.
+ * @param tables - The subset's declarations, budget and undeclared-entity treatment.
  * @param cursor - The read position, for failures.
+ * @param owner - The attribute the default is declared for.
  * @param literal - The default's literal, or a replacement text being expanded.
  * @param depth - How many replacement texts are open, `literal`'s own excluded.
  * @param at - The offset to report failures at, when `literal` is a replacement text.
- * @returns The default value.
+ * @returns The default value's pieces, in order, adjacent text pieces not yet joined.
  */
 const expandDefault = (
   tables: Tables,
   cursor: Cursor,
+  owner: DefaultOwner,
   literal: Literal,
   depth = 0,
   at: Option.Option<number> = Option.none(),
-): Effect.Effect<string, WellFormednessError | ReaderRefusal> =>
+): Effect.Effect<readonly ValuePiece[], WellFormednessError | ReaderRefusal> =>
   expandLiteral(
     literal,
     DEFAULT_TOKEN,
-    (text) => text.replaceAll(/\r\n|[\t\n\r]/gu, " "),
+    (text): readonly ValuePiece[] => [
+      { kind: "text", text: text.replaceAll(/\r\n|[\t\n\r]/gu, " ") },
+    ],
     Effect.fnUntraced(function* replaceDefaultToken(
       token: RegExpExecArray,
       offset: number,
-    ): Effect.fn.Return<string, WellFormednessError | ReaderRefusal> {
+    ): Effect.fn.Return<readonly ValuePiece[], WellFormednessError | ReaderRefusal> {
       const [whole, hex, decimal, entity] = token;
       const where = Option.getOrElse(at, () => offset);
       if (hex !== undefined || decimal !== undefined) {
-        return yield* characterOf(cursor, token, where);
+        return [{ kind: "text", text: yield* characterOf(cursor, token, where) }];
       }
 
       if (entity === undefined) {
@@ -735,12 +848,18 @@ const expandDefault = (
 
       const predefined = PREDEFINED.get(entity);
       if (predefined !== undefined) {
-        return predefined;
+        return [{ kind: "text", text: predefined }];
       }
 
       const replacement = tables.entities.get(entity);
       if (replacement === undefined) {
-        return whole;
+        if (tables.undeclared._tag === "refused") {
+          return yield* undeclaredEntity(entity, tables.undeclared.why, owner);
+        }
+
+        tables.kept.push({ name: entity, owner });
+
+        return [{ kind: "reference", name: entity }];
       }
 
       yield* charge(tables.budget, replacement.length, depth + 1, entity);
@@ -748,12 +867,35 @@ const expandDefault = (
       return yield* expandDefault(
         tables,
         cursor,
+        owner,
         { content: replacement, start: where },
         depth + 1,
         Option.some(where),
       );
     }),
   );
+
+/**
+ * Join a value's adjacent text pieces and drop its empty ones, so text and references alternate.
+ *
+ * @param pieces - The pieces, in order.
+ * @returns The same value, with no two text pieces adjacent and none empty.
+ */
+const joined = (pieces: readonly ValuePiece[]): readonly ValuePiece[] => {
+  const out: ValuePiece[] = [];
+  for (const piece of pieces) {
+    const last = out.at(-1);
+    if (piece.kind === "reference") {
+      out.push(piece);
+    } else if (last?.kind === "text") {
+      out[out.length - 1] = { kind: "text", text: last.text + piece.text };
+    } else if (piece.text !== "") {
+      out.push(piece);
+    }
+  }
+
+  return out;
+};
 
 /**
  * Advance past the rest of an external entity declaration, whose identifier says where the entity
@@ -867,14 +1009,17 @@ const lexAttributeType = Effect.fnUntraced(function* lexAttributeTypeDeclaration
 /**
  * Read an attribute's default declaration.
  *
+ * @param tables - The subset's declarations, budget and undeclared-entity treatment.
  * @param cursor - The read position, at the default declaration.
- * @returns The default value, or `None` for `#REQUIRED` and `#IMPLIED`; fails when it is none of
- *   the four forms.
+ * @param owner - The attribute the default is declared for.
+ * @returns The default value as joined pieces, or `None` for `#REQUIRED` and `#IMPLIED`; fails
+ *   when it is none of the four forms, or holds a reference the document's treatment refuses.
  */
 const lexAttributeDefault = Effect.fnUntraced(function* lexAttributeDefaultDeclaration(
   tables: Tables,
   cursor: Cursor,
-): Effect.fn.Return<Option.Option<string>, WellFormednessError | ReaderRefusal> {
+  owner: DefaultOwner,
+): Effect.fn.Return<Option.Option<readonly ValuePiece[]>, WellFormednessError | ReaderRefusal> {
   const context = "attribute-list declaration";
   if (take(cursor, "#REQUIRED") || take(cursor, "#IMPLIED")) {
     return Option.none();
@@ -889,7 +1034,9 @@ const lexAttributeDefault = Effect.fnUntraced(function* lexAttributeDefaultDecla
     );
   }
 
-  return Option.some(yield* expandDefault(tables, cursor, yield* readQuoted(cursor, context)));
+  return Option.some(
+    joined(yield* expandDefault(tables, cursor, owner, yield* readQuoted(cursor, context))),
+  );
 });
 
 /**
@@ -924,7 +1071,10 @@ const lexAttlist = Effect.fnUntraced(function* lexAttlistDeclaration(
     const type = yield* lexAttributeType(cursor);
     yield* expectSpace(cursor, context);
 
-    const entry = { default: yield* lexAttributeDefault(tables, cursor), type };
+    const entry = {
+      default: yield* lexAttributeDefault(tables, cursor, { attribute: name, element }),
+      type,
+    };
     const attributes = tables.attlists.get(element) ?? new Map<string, AttlistEntry>();
     tables.attlists.set(element, attributes);
     if (!attributes.has(name)) {
@@ -1149,18 +1299,17 @@ const lexSubset: (
 /**
  * Read a `<!DOCTYPE>` declaration, its internal subset into `tables`.
  *
+ * The external identifier precedes the internal subset, so `tables.undeclared` is decided from it
+ * before any declaration of the subset is read.
+ *
  * @param tables - The subset's declarations, filled as the subset is read.
  * @param cursor - The read position, at `<!DOCTYPE`.
- * @returns The declaration's text whole and whether it names an external identifier; fails when it
- *   is malformed.
+ * @returns The declaration's text whole; fails when it is malformed.
  */
 const lexDoctype = Effect.fnUntraced(function* lexDoctypeDeclaration(
   tables: Tables,
   cursor: Cursor,
-): Effect.fn.Return<
-  { doctype: string; externalSubset: boolean },
-  WellFormednessError | ReaderRefusal
-> {
+): Effect.fn.Return<string, WellFormednessError | ReaderRefusal> {
   const context = "document type declaration";
   const start = cursor.offset;
   cursor.offset += "<!DOCTYPE".length;
@@ -1169,6 +1318,7 @@ const lexDoctype = Effect.fnUntraced(function* lexDoctypeDeclaration(
   skipSpace(cursor);
 
   const externalSubset = yield* skipExternalId(cursor, context);
+  tables.undeclared = undeclaredOf(tables.standalone, externalSubset);
   skipSpace(cursor);
   if (take(cursor, "[")) {
     yield* lexSubset(tables, cursor, new Set());
@@ -1178,7 +1328,7 @@ const lexDoctype = Effect.fnUntraced(function* lexDoctypeDeclaration(
 
   yield* expect(cursor, ">", context);
 
-  return { doctype: cursor.text.slice(start, cursor.offset), externalSubset };
+  return cursor.text.slice(start, cursor.offset);
 });
 
 /**
@@ -1303,15 +1453,22 @@ export const lexProlog = Effect.fnUntraced(function* lexPrologText(
     bound: new Set(),
     budget: expansionBudget(text.length),
     entities: new Map(),
+    kept: [],
     parameters: new Map(),
     standalone,
     stopped: false,
+    undeclared: undeclaredOf(standalone, false),
   };
   yield* skipMisc(cursor);
 
   const doctype = text.startsWith("<!DOCTYPE", cursor.offset)
     ? Option.some(yield* lexDoctype(tables, cursor))
     : Option.none();
+  const early = tables.kept.find(({ name }) => tables.bound.has(`&${name}`));
+  if (early !== undefined) {
+    return yield* declaredAfterDefault(early.name, early.owner);
+  }
+
   const cycle = findCycle(tables.entities);
   if (Option.isSome(cycle)) {
     return yield* new ReaderRefusal({
@@ -1324,11 +1481,10 @@ export const lexProlog = Effect.fnUntraced(function* lexPrologText(
     attlists: tables.attlists,
     bodyStart: cursor.offset,
     declaration,
-    doctype: doctype.pipe(Option.map((read) => read.doctype)),
+    doctype,
     entities: tables.entities,
     expanded: tables.budget.expanded,
-    externalSubset: Option.exists(doctype, (read) => read.externalSubset),
-    standalone,
+    undeclared: tables.undeclared,
   };
 });
 
