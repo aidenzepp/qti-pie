@@ -3,6 +3,7 @@ import { Effect, Option } from "effect";
 import { landedKinds } from "#plate/model/expressions/read.ts";
 import { packageTables } from "#plate/package/tables.ts";
 import { growthFactor, growthLimit, growthRatio } from "#plate/test/growth.ts";
+import { tables } from "#plate/validate/tables.ts";
 import {
   answeredStatuses,
   // oxlint-disable-next-line anti-slop/no-shape-in-symbol-names -- `shape` is the QTI attribute of `qti-area-map-entry` and names an area's geometry, not a structure.
@@ -173,6 +174,21 @@ describe("the closed value sets", () => {
           "qti-lookup-outcome-value",
           "qti-exit-response",
           "qti-response-processing-fragment",
+        ],
+      ],
+      [
+        "templateRules",
+        renders.templateRules,
+        [
+          "qti-set-template-value",
+          "qti-set-correct-response",
+          "qti-set-default-value",
+          "qti-template-condition",
+          "qti-template-if",
+          "qti-template-else-if",
+          "qti-template-else",
+          "qti-template-constraint",
+          "qti-exit-template",
         ],
       ],
       [
@@ -368,6 +384,21 @@ describe("the closed value sets", () => {
 
   it("has every engine name in elements", () => {
     assert.includeMembers([...renders.elements], [...renders.engine]);
+  });
+
+  it("[I-5] lists the template rules once each, every one an element the XSD declares", () => {
+    assertDistinct(renders.templateRules);
+    for (const name of renders.templateRules) {
+      assert.isTrue(Object.hasOwn(tables.elements, name), name);
+    }
+  });
+
+  it("[I-5] lists exactly the elements the XSD admits in qti-template-processing and in a template condition", () => {
+    const admitted = ["qti-template-processing", "qti-template-condition"].flatMap((parent) =>
+      (tables.elements[parent]?.children ?? []).map((child) => child.local),
+    );
+
+    assert.sameMembers([...renders.templateRules], [...new Set(admitted)]);
   });
 
   it("reads, with the registry's landed kinds, every response-processing element the engine read before the registry", () => {

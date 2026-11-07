@@ -2,10 +2,11 @@
  * The item model: what plate reads from a valid `qti-assessment-item`, typed, with every feature
  * it does not render named as a notice or a mark.
  *
- * {@link buildItem} reads the declarations, the body and the response processing into one
- * {@link Item}. The vocabulary module's `renders` decides what is modelled and what is unsupported,
- * so the verdict, the payload and the emitter meet the same decision. A typed value outside its
- * lexical space is the content refusal `value-type`, so a caller that builds an item stays total.
+ * {@link buildItem} reads the declarations, the template processing (through
+ * `#plate/model/template.ts`), the body and the response processing into one {@link Item}. The
+ * vocabulary module's `renders` decides what is modelled and what is unsupported, so the verdict,
+ * the payload and the emitter meet the same decision. A typed value outside its lexical space is
+ * the content refusal `value-type`, so a caller that builds an item stays total.
  *
  * @module
  */
@@ -56,6 +57,7 @@ import type {
 import { kindRules, landedKinds, readExpression } from "#plate/model/expressions/read.ts";
 import type { ExpressionReading } from "#plate/model/expressions/read.ts";
 import { translate } from "#plate/model/regex.ts";
+import { templateRules } from "#plate/model/template.ts";
 import { isModelled, parseElementText, parseLexical, trimXmlSpace } from "#plate/model/values.ts";
 import type { ModelledBaseType, Single, Value } from "#plate/model/values.ts";
 import type { Refusal } from "#plate/validate/refusal.ts";
@@ -629,7 +631,8 @@ export interface Item {
   readonly responses: ReadonlyMap<string, ResponseDeclaration>;
   /**
    * The template processing's rules in document order: none when the item has no
-   * `qti-template-processing`, so template processing runs exactly when this is some.
+   * `qti-template-processing`, or when it holds anything the engine does not run, which
+   * `unsupported` then marks; so template processing runs exactly when this is some.
    */
   readonly templateProcessing: Option.Option<readonly TemplateRule[]>;
   /**
@@ -1325,6 +1328,34 @@ export const outcomeDeclaration = (
     const lookupTable = yield* lookupTableOf(build, declaration, read.value.baseType);
 
     return Option.some({ ...read.value, ...reporting, defaultValue, lookupTable });
+  });
+
+/**
+ * Read a `qti-template-declaration`, through {@link declared} and {@link optionalValue} as an
+ * outcome declaration is read.
+ *
+ * @param build The build.
+ * @param declaration The declaration.
+ * @returns The model, none when its base type is absent or not modelled or its cardinality is
+ *   `record`; or a refusal when `identifier` or `cardinality` is missing, or when its default value
+ *   or `math-variable` or `param-variable` (each an `xs:boolean`, false when absent) is outside its
+ *   type.
+ */
+const templateDeclaration = (
+  build: ModelWalk,
+  declaration: SourceElement,
+): Effect.Effect<Option.Option<TemplateDeclaration>, Refusal> =>
+  Effect.gen(function* readTemplateDeclaration() {
+    const read = yield* declared(build, declaration);
+    if (Option.isNone(read)) {
+      return Option.none();
+    }
+
+    const mathVariable = yield* xsBoolean(build, declaration, "math-variable", false);
+    const paramVariable = yield* xsBoolean(build, declaration, "param-variable", false);
+    const defaultValue = yield* optionalValue(build, declaration, "qti-default-value", read.value);
+
+    return Option.some({ ...read.value, defaultValue, mathVariable, paramVariable });
   });
 
 /**
@@ -2861,10 +2892,13 @@ const declarationsOf = (document: SourceDocument): ReadonlyMap<string, SourceEle
  * through an area mapping with a `%` coordinate; each identifier it does not hold is the mark
  * `variable:<identifier>` at the processing element's path, each such need unmet its mark there
  * (`mapping:<identifier>`, `area-mapping:<identifier>` or `outcome-type:<identifier>`), such a
- * point mapping the mark `area-coords-percent` there, and the processing is then none. An item
- * whose root has a `qti-template-processing` child keeps that element's mark and has no processing,
- * whatever the tree: template processing may set a template variable, a default value or a correct
- * response, and the engine runs none of it, so a score computed without it could be wrong.
+ * point mapping the mark `area-coords-percent` there, and the processing is then none. Template
+ * declarations of modelled types are read into `templates`, and a `qti-template-processing` into
+ * `templateProcessing` through `templateRules` in `#plate/model/template.ts`, which marks what the
+ * engine does not run as response processing's reader does. Both keep their marks, and an item
+ * whose root has a `qti-template-processing` child has no processing, whatever the tree: template
+ * processing may set a template variable, a default value or a correct response, and the engine
+ * runs none of it yet, so a score computed without it could be wrong.
  *
  * @param source A document the structural validator and the prose rules accepted.
  * @returns The item, or the refusal `value-type` at the first typed value outside its lexical
@@ -2889,8 +2923,10 @@ export const buildItem = (source: SourceDocument): Effect.Effect<Item, Refusal> 
     const title = yield* requiredValue(build, root, "title");
     const responses = new Map<string, ResponseDeclaration>();
     const outcomes = new Map<string, OutcomeDeclaration>();
+    const templateDeclarations = new Map<string, TemplateDeclaration>();
     const body: BodyNode[] = [];
     let processing: Option.Option<ReadProcessing> = Option.none();
+    let templateProcessing: Option.Option<readonly TemplateRule[]> = Option.none();
 
     for (const part of elementsOf(root).filter((child) => isQti(child))) {
       if (part.local === "qti-item-body") {
@@ -2925,6 +2961,23 @@ export const buildItem = (source: SourceDocument): Effect.Effect<Item, Refusal> 
         if (Option.isSome(read)) {
           outcomes.set(read.value.identifier, read.value);
         }
+      } else if (part.local === "qti-template-declaration") {
+        // The vocabulary's `qti-template-declaration` mark stays until the engine runs template
+        // processing (spec D3); `markElement` records it.
+        markElement(build, part, false);
+        markUnreadWithin(build, part);
+
+        const read = yield* templateDeclaration(build, part);
+        if (Option.isSome(read)) {
+          templateDeclarations.set(read.value.identifier, read.value);
+        }
+      } else if (part.local === "qti-template-processing") {
+        // It keeps the mark of an element the model does not read until the engine runs template
+        // processing (spec D3), recorded before the marks its rules add, in document order.
+        markElement(build, part, false);
+        record(build, { feature: part.local, path: pathOf(build, part), shown: "mark" });
+
+        templateProcessing = yield* templateRules(readingOf(build), part);
       } else {
         markElement(build, part, false);
         if (!readElements.has(part.local)) {
@@ -2946,8 +2999,8 @@ export const buildItem = (source: SourceDocument): Effect.Effect<Item, Refusal> 
       outcomes,
       processing: templated ? Option.none() : runs,
       responses,
-      templateProcessing: Option.none(),
-      templates: new Map(),
+      templateProcessing,
+      templates: templateDeclarations,
       title,
       unsupported: build.unsupported,
     };
