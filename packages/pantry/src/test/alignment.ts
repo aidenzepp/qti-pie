@@ -791,6 +791,14 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
       status: "G",
     },
   ],
+  [
+    139,
+    {
+      owner:
+        "the package reader: `locateDirectory` (`src/package/zip.ts`) requires the central directory's offset plus its size to be the end record's offset, refusing a gap under `zip-format` (ZIP64 records there are refused as ZIP64), held by `src/package/zip-gap.test.ts` and GEN-B's `src/test/genetic-zip.test.ts`",
+      status: "G",
+    },
+  ],
 ]);
 
 /**
