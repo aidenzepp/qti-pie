@@ -1379,17 +1379,21 @@ const inlinePath = `${bodyPath}/p/qti-template-inline`;
  * @param kind Which of the two it is.
  * @param visibility Its template visibility.
  * @param content Its content.
+ * @param responses The responses its content binds, as `buildItem` reads them; none by default,
+ *   for content that holds no interaction.
  * @returns The body node, with the identifier `X`, at {@link blockPath} or {@link inlinePath}.
  */
 const templatePart = (
   kind: TemplateContent["kind"],
   visibility: TemplateVisibility,
   content: readonly BodyNode[],
+  responses: readonly string[] = [],
 ): TemplateContent => ({
   content,
   identifier: "X",
   kind,
   path: kind === "template-block" ? blockPath : inlinePath,
+  responses,
   templateVisibility: visibility,
 });
 
@@ -1874,7 +1878,7 @@ describe("redactItem on template blocks, inlines and choices", () => {
   it("[I-5] gives no posting for the response of an interaction a hidden template block holds", () => {
     const holdingEntry: Item = {
       ...visibility,
-      body: [templatePart("template-block", byVisible("show"), [textEntry("FIRST")])],
+      body: [templatePart("template-block", byVisible("show"), [textEntry("FIRST")], ["FIRST"])],
       unsupported: [],
     };
     const postedOf = (value: Value): readonly string[] =>

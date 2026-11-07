@@ -360,6 +360,7 @@ const templateBlock = (name: string, position: number, words: string): BodyNode 
     identifier: name,
     kind: "template-block",
     path,
+    responses: [],
     templateVisibility: shownByChoice,
   };
 };

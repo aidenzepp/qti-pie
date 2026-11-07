@@ -990,6 +990,7 @@ describe("checkResponses", () => {
             identifier: "X",
             kind: "template-inline",
             path: "qti-assessment-item/qti-item-body/p/qti-template-inline",
+            responses: [required.response],
             templateVisibility: byVisible("show"),
           }),
         );

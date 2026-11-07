@@ -397,6 +397,7 @@ const visibleItem: Item = {
       identifier: "C",
       kind: "template-block",
       path: "qti-assessment-item/qti-item-body/qti-template-block",
+      responses: ["HIDDEN"],
       templateVisibility: shownBy,
     },
   ],

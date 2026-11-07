@@ -647,6 +647,15 @@ export interface TemplateContent {
   readonly kind: "template-block" | "template-inline";
   readonly path: string;
   /**
+   * The responses its content binds: the `response-identifier` of every QTI element in its source
+   * content that carries one (every interaction does), each read as `identifierOf` reads it,
+   * whether the element is read as an interaction or replaced by a notice, nested template content
+   * included, each once, in document order. A notice drops its subtree, so `content` alone cannot
+   * tell which responses an unsupported interaction binds; this tells what hiding the content
+   * withholds, a notice's interaction included.
+   */
+  readonly responses: readonly string[];
+  /**
    * Its `template-identifier` and `show-hide`.
    */
   readonly templateVisibility: TemplateVisibility;
@@ -1910,10 +1919,44 @@ const templateBlockContent = (
   );
 
 /**
+ * Name the responses a template block's or inline's source content binds: the
+ * `response-identifier` of every QTI element in it that carries one, each read as `identifierOf`
+ * reads it, each once, in document order. A block's content is its `qti-content-body`'s; an
+ * inline's, its own. It reads the source, not the body nodes, since a notice drops its subtree:
+ * an interaction plate does not render binds its response as surely as one it does. Nested
+ * template content is part of the content. The walk keeps its own stack, as `walk` does, so deep
+ * content cannot exhaust the call stack.
+ *
+ * @param element The template block or inline.
+ * @param kind Which of the two it is.
+ * @returns The responses, in document order.
+ */
+const boundResponses = (
+  element: SourceElement,
+  kind: TemplateContent["kind"],
+): readonly string[] => {
+  const roots = kind === "template-block" ? childrenNamed(element, "qti-content-body") : [element];
+  const pending = roots.flatMap((root) => elementsOf(root)).toReversed();
+  const responses = new Set<string>();
+  for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
+    const written = isQti(next) ? valueOf(next, "response-identifier") : Option.none();
+    if (Option.isSome(written)) {
+      responses.add(identifierOf(written.value));
+    }
+
+    for (const child of elementsOf(next).toReversed()) {
+      pending.push(child);
+    }
+  }
+
+  return [...responses];
+};
+
+/**
  * Read a `qti-template-block` or a `qti-template-inline` into its body node: its `identifier` and
  * `template-identifier`, each read as an identifier, its `show-hide`, `show` when absent, and its
  * content: a block's `qti-content-body`'s ({@link templateBlockContent}), an inline's own, each
- * read as any body content is.
+ * read as any body content is, and the responses that content binds ({@link boundResponses}).
  *
  * @param build The build.
  * @param element The template block or inline.
@@ -1937,7 +1980,14 @@ const templateContent = (
       ? templateBlockContent(build, element)
       : bodyNodes(build, element);
 
-    return { content, identifier, kind, path: pathOf(build, element), templateVisibility };
+    return {
+      content,
+      identifier,
+      kind,
+      path: pathOf(build, element),
+      responses: boundResponses(element, kind),
+      templateVisibility,
+    };
   });
 
 /**

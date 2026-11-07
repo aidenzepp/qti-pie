@@ -982,6 +982,7 @@ describe("the codec on a template block or inline (OD-P8-14)", () => {
             identifier: "SHOWN",
             kind,
             path: templatePath(kind),
+            responses: [],
             templateVisibility: { showHide: "show", templateIdentifier: "VISIBLE" },
           };
           const redacted = redact(acceptForTest(choiceItem));
