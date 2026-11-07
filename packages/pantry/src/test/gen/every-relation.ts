@@ -17,10 +17,11 @@
  *   mapping, outcomes with a normal range, a match table, an interpolation table and a record
  *   default, and templates; it holds a stimulus ref, an identity-typed text whose IDREF names an ID
  *   of its body, a body with a label (its root naming its tool), an open `data-*` attribute, an
- *   ARIA range and an IDREFS, an SSML fragment with a mark, a table whose cell's `headers` names
- *   its header, a printed variable whose base names a variable, a `q` with no quotation mark beside
- *   or inside it, template and feedback content, choice, hottext, hotspot, slider, custom (holding
- *   a foreign element) and portable custom interactions, and response processing that holds a
+ *   ARIA range and an IDREFS, an SSML fragment with a mark, a MathML formula that applies `log` to
+ *   a `logbase` and an argument, a table whose cell's `headers` names its header, a printed
+ *   variable whose base names a variable, a `q` with no quotation mark beside or inside it,
+ *   template and feedback content, choice, hottext, hotspot, slider, custom (holding a foreign
+ *   element) and portable custom interactions, and response processing that holds a
  *   `qti-equal-rounded`, a `qti-round-to` and a `qti-equal` with a `tolerance`;
  * - **a second item** whose response processing is a published template, which the test places three
  *   times;
@@ -225,6 +226,7 @@ const itemOf = (members: MemberCounts): string =>
     '      <img src="media/pic.png" alt="A picture"/>',
     "    </div>",
     '    <p><ssml:speak version="1.1" xml:lang="en"><ssml:mark name="start"/>Read this aloud.</ssml:speak></p>',
+    '    <p>Solve <m:math xmlns:m="http://www.w3.org/1998/Math/MathML"><m:apply><m:log/><m:logbase><m:cn>2</m:cn></m:logbase><m:ci>x</m:ci></m:apply></m:math>.</p>',
     '    <table><tbody><tr><th id="row-head">Row</th><td headers="row-head">Cell</td></tr></tbody></table>',
     '    <p>N is <qti-printed-variable identifier="N" base="DIGITS"/>, and <qti-template-inline template-identifier="SHOWN" identifier="yes" show-hide="show">this shows</qti-template-inline>.</p>',
     "    <p>It says <q>read this</q> and stops.</p>",
