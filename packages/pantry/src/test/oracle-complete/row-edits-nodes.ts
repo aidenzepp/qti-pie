@@ -293,11 +293,22 @@ export const nodeEdits = {
       pis: [...rows.pis, { data: "", node: comment.node, target: "every-relation" }],
     };
   }),
-  // text arm (§1.4): a text node with no Text row.
-  "text arm": editingRows(item, (rows) => (source) => ({
-    ...rows,
-    texts: source.draw(droppedDrawn(rows.texts)),
-  })),
+  // text arm (§1.4): a text node with no Text row, drawn among the texts no m:cn holds. A cn's
+  // text emptied is refused by "MathML cn form" (an empty part is no number of its type, spec
+  // reading 2), a law the oracle raises ahead of text-copy, and that law is not weakened
+  // (decision 355): the arm proves text-copy alone, so it leaves a cn's text to the cn form arm.
+  "text arm": editingRows(item, (rows) => (source) => {
+    const kindOf = new Map(rows.nodes.map((node) => [node.id, node] as const));
+    const candidates = rows.texts.filter(
+      (text) => kindOf.get(kindOf.get(text.node)?.parent ?? text.node)?.kind !== "m:cn",
+    );
+    const dropped = source.draw(droppedDrawn(candidates));
+
+    return {
+      ...rows,
+      texts: rows.texts.filter((text) => !candidates.includes(text) || dropped.includes(text)),
+    };
+  }),
   // ws arm (§1.4): a whitespace node with no Whitespace row.
   "ws arm": editingRows(item, (rows) => (source) => ({
     ...rows,
