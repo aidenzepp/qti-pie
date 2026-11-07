@@ -379,13 +379,14 @@ The verdict marks each of these, and `score` runs no processing that holds one:
 - An `xi:include`, which plate never fetches
 - A `%` coordinate in a `qti-inside`, or in an area mapping that `qti-map-response-point` reads
 - A `qti-pattern-match` pattern that plate cannot translate
+- A `qti-lookup-outcome-value` that sets an outcome of cardinality `multiple` or `ordered`
 - A variable that plate holds no value for, such as a `file` response, a template variable or the
   built-in `duration` of a time-dependent item
 
 The item's outcomes then stay at their defaults. The verdict also marks `qti-custom-operator`, but
 its processing runs, and the operator's value is NULL.
 
-`open` refuses the following, each as pantry's processing checker does:
+`open` refuses the following, each as pantry does:
 
 | Refused | Rule | pantry's rule |
 | --- | --- | --- |
@@ -397,9 +398,13 @@ its processing runs, and the operator's value is NULL.
 | A `qti-lookup-outcome-value` that sets the built-in `completionStatus` | `undeclared-variable` | P9 |
 | A literal `figures` below 1, or below 0 in `decimalPlaces` mode | `attribute-type` | P10 |
 | A literal `n` of `qti-index` below 1 | `attribute-type` | P11 |
+| A declaration named `completionStatus`, `numAttempts` or `duration`, the names of the built-in variables | `attribute-type` | `DeclarationNotReserved` |
+| A `qti-equal` whose `tolerance` holds a token that is neither an `xs:double` nor a variable's name (an NCName), such as `1,5` | `attribute-type` | P6 |
 | A `qti-equal` in `absolute` or `relative` mode that has no `tolerance` | `missing-attribute` | P36 |
 
 The refusals with `expression-type` and `undeclared-variable` judge only inline response processing.
+The refusal of a declaration named after a built-in variable judges a test's declarations as
+well as an item's.
 
 Integers are exact. `qti-sum`, `qti-subtract`, `qti-product` and `qti-lcm` give NULL for an
 integer result of more than 1,000,000 bits. `qti-multiple`, `qti-ordered` and `qti-repeat` give
