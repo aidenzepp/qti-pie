@@ -3547,7 +3547,7 @@ describe("reading 117: an included fragment judged in place", () => {
               const expected: Readonly<Record<typeof variant, LawName | undefined>> = {
                 "choice variable": "Choice not variable",
                 cycle: "Inclusion cycle",
-                external: "Include target",
+                external: undefined,
                 "feedback reference": "Feedback reference",
                 "fragment identifier": "Include fragment identifier",
                 "fragment language": "Document lang",

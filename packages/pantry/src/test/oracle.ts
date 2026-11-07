@@ -5501,10 +5501,12 @@ const standsFor = (
 
 /**
  * One site of a listed document (reading 85): a section ref or an include the information model
- * reads, its href as written, the path it resolves to and the listed document there.
+ * reads, its href as written, whether that href resolves outside the package, the path it resolves
+ * to and the listed document there.
  */
 interface SiteOf {
   readonly document: Listed;
+  readonly external: boolean;
   readonly href: Option.Option<string>;
   readonly node: FoldedNode<Composed>;
   readonly path: Option.Option<string>;
@@ -5533,12 +5535,12 @@ const sitesOf = (documents: readonly Listed[], grammar: ComposedGrammar): readon
       .filter((member) => merges(grammar, member))
       .map((node): SiteOf => {
         const href = valueOf(view, node.id, "href");
-        const path = href.pipe(
-          Option.flatMap((lexical) => entryPathAt(resolvedAt(view, node.id, lexical))),
-        );
+        const resolved = href.pipe(Option.map((lexical) => resolvedAt(view, node.id, lexical)));
+        const path = resolved.pipe(Option.flatMap(entryPathAt));
 
         return {
           document,
+          external: Option.exists(resolved, ({ resolution }) => resolution.scope === "external"),
           href,
           node,
           path,
@@ -5637,7 +5639,9 @@ const sameContexts = (
  * Evaluate the include laws over the listed documents (readings 114, 115 and 117):
  *
  * - **"Include target":** an include the information model reads names, by an href this
- *   representation resolves, a document the manifest lists;
+ *   representation resolves, a document the manifest lists; an href that resolves outside the
+ *   package (a scheme, a leading `/`, a climb above the root) names nothing to list, is stored and
+ *   never fetched, and is judged no further (reading 115);
  * - **"Include root":** that document's root is a kind the include may stand for ({@link standsFor});
  * - **"Include fragment identifier":** no include's href carries a `#` after its path (XInclude 1.0
  *   §3.1), wherever the include stands;
@@ -5703,12 +5707,15 @@ const inclusionBreaches = (
       }
 
       return Option.match(site.target, {
-        onNone: () => [
-          siteBreach(site, "Include target", {
-            href: Option.getOrElse(site.href, () => ""),
-            path: Option.getOrElse(site.path, () => ""),
-          }),
-        ],
+        onNone: () =>
+          site.external
+            ? []
+            : [
+                siteBreach(site, "Include target", {
+                  href: Option.getOrElse(site.href, () => ""),
+                  path: Option.getOrElse(site.path, () => ""),
+                }),
+              ],
         onSome: (target) =>
           standsFor(grammar, site.node.version, site.node.parentKind, target.rootKind)
             ? []
