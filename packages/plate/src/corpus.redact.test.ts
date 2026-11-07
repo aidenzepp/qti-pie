@@ -1,12 +1,34 @@
+import { isDeepStrictEqual } from "node:util";
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Exit, Option, Predicate, Result, Schema } from "effect";
 import { RedactedSchema } from "#plate/codec/redacted.ts";
 import { configure, encodeRedacted, open, redact } from "#plate/index.ts";
 import type { Accepted, Configuration, RedactedJson } from "#plate/index.ts";
-import type { Expression, Item, ResponseDeclaration, Rule } from "#plate/model/item.ts";
+import type {
+  BodyNode,
+  ChoiceInteraction,
+  Expression,
+  ExtendedTextInteraction,
+  InlineChoiceInteraction,
+  Item,
+  ResponseDeclaration,
+  Rule,
+  SimpleChoice,
+  TemplateVisibility,
+} from "#plate/model/item.ts";
+import type { ItemRecord, RedactRecord } from "#plate/model/record.ts";
 import { format } from "#plate/model/values.ts";
-import { acceptedOf, openCorpus, threeStates } from "#plate/test/sweep.ts";
-import type { Member, RenderState } from "#plate/test/sweep.ts";
+import { templateShows } from "#plate/payload.ts";
+import type { RedactedFields } from "#plate/payload.ts";
+import {
+  acceptedOf,
+  noRecord,
+  openCorpus,
+  recordStates,
+  templated,
+  threeStates,
+} from "#plate/test/sweep.ts";
+import type { Member, RecordState, RenderState } from "#plate/test/sweep.ts";
 
 /**
  * Opening the corpus (about 800 members) and rendering every accepted item in three states runs
@@ -27,15 +49,46 @@ const hiddenResponseFields = [
 ] as const satisfies readonly (keyof ResponseDeclaration)[];
 
 /**
- * The fields of an item that hold what the page must not know: its outcome declarations and its
- * response processing.
+ * The fields of an item that hold what the page must not know: its outcome declarations, its
+ * response processing, its template declarations and its template rules.
  */
-const hiddenItemFields = ["outcomes", "processing"] as const satisfies readonly (keyof Item)[];
+const hiddenItemFields = [
+  "outcomes",
+  "processing",
+  "templateProcessing",
+  "templates",
+] as const satisfies readonly (keyof Item)[];
+
+/**
+ * The fields of a record that hold what the page must not know: the seed, the template values, the
+ * correct responses and defaults template processing set, and the outcome values.
+ */
+const hiddenRecordFields = [
+  "correct",
+  "defaults",
+  "outcomes",
+  "seed",
+  "templates",
+] as const satisfies readonly (keyof ItemRecord)[];
+
+/**
+ * The fields that give a template block, a template inline or a choice its template visibility.
+ */
+const hiddenVisibilityFields = [
+  "showHide",
+  "templateIdentifier",
+  "templateVisibility",
+] as const satisfies readonly (keyof SimpleChoice | keyof TemplateVisibility)[];
 
 /**
  * The keys no redacted item's JSON holds at any depth, whatever the field sits under.
  */
-const hiddenKeys: ReadonlySet<string> = new Set([...hiddenItemFields, ...hiddenResponseFields]);
+const hiddenKeys: ReadonlySet<string> = new Set([
+  ...hiddenItemFields,
+  ...hiddenRecordFields,
+  ...hiddenResponseFields,
+  ...hiddenVisibilityFields,
+]);
 
 /**
  * Matches a text of three characters (code points) or more, the shortest secret the sweep looks
@@ -77,7 +130,23 @@ interface Subject {
    * What `encodeRedacted(redact(…))` gave for the item.
    */
   readonly json: RedactedJson;
+  /**
+   * The member's corpus-relative path, with the record state in parentheses when the sweep passed
+   * one, as every problem names the subject.
+   */
   readonly location: string;
+  /**
+   * The record `redact` showed the item by, none when it passed none.
+   */
+  readonly record: Option.Option<ItemRecord>;
+  /**
+   * What `redact(…)` gave for the item.
+   */
+  readonly redacted: RedactedFields;
+  /**
+   * The name of the record state, `no record` when the sweep passed none.
+   */
+  readonly state: string;
   /**
    * The item's three render states.
    */
@@ -368,34 +437,49 @@ const leakProblems = (subject: Subject, secrets: readonly Secret[]): readonly st
 };
 
 /**
- * Make the subject the sweep checks of one member: its accepted item, encoded and rendered in its
- * three states.
+ * Make the subject the sweep checks of one member: its accepted item, redacted by a record or by
+ * none, encoded and rendered in its three states.
  *
  * @param member The opened member.
  * @param configuration The configuration every state renders with.
+ * @param state The record `redact` shows the item by, and the state's name; with none, the item is
+ *   redacted with no record and its location named alone.
  * @returns None when the member is not an accepted item that renders; otherwise the subject, or
  *   a problem when `encodeRedacted` refused the redaction.
  */
 const subjectOf = (
   member: Member,
   configuration: Configuration,
-): Option.Option<Result.Result<Subject, string>> =>
-  Option.flatMap(acceptedOf(member), (accepted: Accepted) =>
-    Option.map(Result.getSuccess(threeStates(accepted, configuration)), (states) =>
-      Result.match(encodeRedacted(redact(accepted)), {
-        onFailure: (error) =>
-          Result.fail(`${member.location}: encodeRedacted refused: ${error.message}`),
-        onSuccess: (json) =>
-          Result.succeed({
-            bodySource: bodySourceOf(member.bytes),
-            item: accepted.item,
-            json,
-            location: member.location,
-            states,
-          }),
-      }),
+  state?: RecordState,
+): Option.Option<Result.Result<Subject, string>> => {
+  const { name, record } = state ?? noRecord;
+  const location = state === undefined ? member.location : `${member.location} (${name})`;
+
+  return Option.flatMap(acceptedOf(member), (accepted: Accepted) =>
+    Option.map(
+      Result.getSuccess(threeStates(accepted, configuration, Option.getOrUndefined(record))),
+      (states) => {
+        const redacted = redact(accepted, Option.getOrUndefined(record));
+
+        return Result.match(encodeRedacted(redacted), {
+          onFailure: (error) =>
+            Result.fail(`${location}: encodeRedacted refused: ${error.message}`),
+          onSuccess: (json) =>
+            Result.succeed({
+              bodySource: bodySourceOf(member.bytes),
+              item: accepted.item,
+              json,
+              location,
+              record,
+              redacted,
+              state: name,
+              states,
+            }),
+        });
+      },
     ),
   );
+};
 
 /**
  * Every corpus member that is an accepted item and renders, made into the subject the sweep
@@ -411,6 +495,522 @@ const corpusSubjects = Effect.gen(function* corpusSubjects() {
     subjects: made.flatMap((result) => (Result.isSuccess(result) ? [result.success] : [])),
   };
 });
+
+/**
+ * Every templated corpus item (one whose template processing runs) made into the subjects the
+ * template sweep checks: one per record state, a record `begin` started under each sweep seed and
+ * no record, with a problem for each item whose record could not be begun or whose redaction
+ * `encodeRedacted` refused.
+ */
+const templatedSubjects = Effect.gen(function* templatedSubjects() {
+  const members = yield* openCorpus;
+  const configuration = yield* configure({});
+  const swept = members.filter((member) => Option.exists(acceptedOf(member), templated));
+  const made = swept.flatMap((member) =>
+    Option.toArray(acceptedOf(member)).flatMap((accepted) =>
+      Result.match(recordStates(accepted), {
+        onFailure: (error) => [
+          Result.fail(`${member.location}: no record could be begun: ${error.message}`),
+        ],
+        onSuccess: (states) =>
+          states.flatMap((state) => Option.toArray(subjectOf(member, configuration, state))),
+      }),
+    ),
+  );
+
+  return {
+    files: swept.length,
+    problems: made.flatMap((result) => (Result.isFailure(result) ? [result.failure] : [])),
+    subjects: made.flatMap((result) => (Result.isSuccess(result) ? [result.success] : [])),
+  };
+});
+
+/**
+ * Decide whether the page sees a part with a template visibility, from the values the redaction
+ * reads: some true when they show it, some false when they hide it, none when there are no values
+ * or they hold no value of its template variable, so the part is withheld.
+ *
+ * @param values The values `redact` showed the item by, none when it had none.
+ * @param visibility The part's `template-identifier` and `show-hide`.
+ * @param identifier The part's `identifier`.
+ * @returns Whether the part is shown, or none when it is withheld.
+ */
+const decided = (
+  values: Option.Option<RedactRecord>,
+  visibility: TemplateVisibility,
+  identifier: string,
+): Option.Option<boolean> =>
+  values.pipe(
+    Option.flatMap((record) =>
+      Object.hasOwn(record.templates, visibility.templateIdentifier)
+        ? Option.some(templateShows(visibility, identifier, record.templates))
+        : Option.none(),
+    ),
+  );
+
+/**
+ * One place in a redacted body, as the item and the values decide it: a node the item writes,
+ * which the page sees as written, its descendants decided again; or a printed variable, which the
+ * page sees as the one text node it prints, as nothing, or as its notice.
+ */
+type Slot =
+  | { readonly kind: "node"; readonly node: BodyNode }
+  | { readonly kind: "printed"; readonly path: string };
+
+/**
+ * Give the places the page may see for a run of the item's body nodes: a printed variable is a
+ * printed place; a template block or inline is its content's places where the values show it,
+ * nothing where they hide it, and its notice where they cannot say; any other node is itself.
+ *
+ * @param nodes The item's body nodes.
+ * @param values The values `redact` showed the item by.
+ * @returns The places, in document order.
+ */
+const slotsOf = (
+  nodes: readonly BodyNode[],
+  values: Option.Option<RedactRecord>,
+): readonly Slot[] =>
+  nodes.flatMap((node): readonly Slot[] => {
+    if (node.kind === "printed-variable") {
+      return [{ kind: "printed", path: node.path }];
+    }
+
+    if (node.kind === "template-block" || node.kind === "template-inline") {
+      return Option.match(decided(values, node.templateVisibility, node.identifier), {
+        onNone: (): readonly Slot[] => [
+          {
+            kind: "node",
+            node: { feature: `qti-${node.kind}`, kind: "unsupported", path: node.path },
+          },
+        ],
+        onSome: (shown) => (shown ? slotsOf(node.content, values) : []),
+      });
+    }
+
+    return [{ kind: "node", node }];
+  });
+
+/**
+ * Report whether a run of redacted body nodes fills the places the item gives, in order: each
+ * written node by a node that {@link nodeFits} it, and each printed place by one text node, by
+ * nothing, or by the printed variable's notice. Every way a printed place may be filled is tried,
+ * so a printed value equal to the text after it is matched either way.
+ *
+ * @param slots The places, from {@link slotsOf}.
+ * @param nodes The redacted nodes.
+ * @param values The values `redact` showed the item by.
+ * @returns Whether the nodes fill the places and hold nothing more.
+ */
+const fits = (
+  slots: readonly Slot[],
+  nodes: readonly BodyNode[],
+  values: Option.Option<RedactRecord>,
+): boolean => {
+  const [slot, ...later] = slots;
+  const [node, ...after] = nodes;
+  if (slot === undefined) {
+    return node === undefined;
+  }
+
+  if (slot.kind === "printed") {
+    const printed =
+      node !== undefined &&
+      (node.kind === "text" ||
+        isDeepStrictEqual(node, {
+          feature: "qti-printed-variable",
+          kind: "unsupported",
+          path: slot.path,
+        }));
+
+    return (printed && fits(later, after, values)) || fits(later, nodes, values);
+  }
+
+  return (
+    node !== undefined &&
+    // oxlint-disable-next-line eslint/no-use-before-define -- `fits` and `nodeFits` are mutually recursive, as an element's children are body nodes; the call runs only after both are defined.
+    nodeFits(slot.node, node, values) &&
+    fits(later, after, values)
+  );
+};
+
+/**
+ * Report whether a redacted Prompt or Label fills the item's: both absent, or both present and
+ * the redacted nodes {@link fits} the item's.
+ *
+ * @param written The item's lead.
+ * @param shown The redacted lead.
+ * @param values The values `redact` showed the item by.
+ * @returns Whether the redacted lead fits.
+ */
+const leadFits = (
+  written: Option.Option<readonly BodyNode[]>,
+  shown: Option.Option<readonly BodyNode[]>,
+  values: Option.Option<RedactRecord>,
+): boolean =>
+  Option.match(written, {
+    onNone: () => Option.isNone(shown),
+    onSome: (nodes) =>
+      Option.exists(shown, (redacted) => fits(slotsOf(nodes, values), redacted, values)),
+  });
+
+/**
+ * Report whether an interaction's redacted choices are the item's choices the values show, in
+ * order: each with the item's identifier and `fixed`, content that {@link fits} the item's, and no
+ * template visibility. A choice with no template visibility is always shown, and one the values
+ * hide or cannot decide is absent.
+ *
+ * @param written The item's choices.
+ * @param shown The redacted choices.
+ * @param values The values `redact` showed the item by.
+ * @returns Whether the redacted choices fit.
+ */
+const choicesFit = (
+  written: readonly SimpleChoice[],
+  shown: readonly SimpleChoice[],
+  values: Option.Option<RedactRecord>,
+): boolean => {
+  const visible = written.filter((choice) =>
+    Option.match(choice.templateVisibility, {
+      onNone: () => true,
+      onSome: (visibility) =>
+        Option.getOrElse(decided(values, visibility, choice.identifier), () => false),
+    }),
+  );
+
+  return (
+    visible.length === shown.length &&
+    visible.every((choice, index) => {
+      const page = shown[index];
+
+      return (
+        page !== undefined &&
+        isDeepStrictEqual(
+          { ...choice, content: page.content, templateVisibility: Option.none() },
+          page,
+        ) &&
+        fits(slotsOf(choice.content, values), page.content, values)
+      );
+    })
+  );
+};
+
+/**
+ * Report whether a redacted interaction is the item's as the page may see it: every field as the
+ * item writes it, and its Prompt, Label or choices fitting the item's again.
+ *
+ * @param written The item's interaction.
+ * @param shown The redacted node.
+ * @param values The values `redact` showed the item by.
+ * @returns Whether the redacted node fits.
+ */
+const interactionFits = (
+  written: ChoiceInteraction | ExtendedTextInteraction | InlineChoiceInteraction,
+  shown: BodyNode,
+  values: Option.Option<RedactRecord>,
+): boolean => {
+  if (written.kind === "choice") {
+    return (
+      shown.kind === "choice" &&
+      isDeepStrictEqual({ ...written, choices: shown.choices, prompt: shown.prompt }, shown) &&
+      leadFits(written.prompt, shown.prompt, values) &&
+      choicesFit(written.choices, shown.choices, values)
+    );
+  }
+
+  if (written.kind === "inline-choice") {
+    return (
+      shown.kind === "inline-choice" &&
+      isDeepStrictEqual({ ...written, choices: shown.choices, label: shown.label }, shown) &&
+      leadFits(written.label, shown.label, values) &&
+      choicesFit(written.choices, shown.choices, values)
+    );
+  }
+
+  return (
+    shown.kind === "extended-text" &&
+    isDeepStrictEqual({ ...written, prompt: shown.prompt }, shown) &&
+    leadFits(written.prompt, shown.prompt, values)
+  );
+};
+
+/**
+ * Report whether a redacted node is the item's node as the page may see it: every field as the
+ * item writes it, and its children, Prompt, Label or choices fitting the item's again. No
+ * redacted node is a printed variable or a template block or inline: {@link slotsOf} gives none
+ * as a written node.
+ *
+ * @param written The item's node.
+ * @param shown The redacted node.
+ * @param values The values `redact` showed the item by.
+ * @returns Whether the redacted node fits.
+ */
+const nodeFits = (
+  written: BodyNode,
+  shown: BodyNode,
+  values: Option.Option<RedactRecord>,
+): boolean => {
+  switch (written.kind) {
+    case "element": {
+      return (
+        shown.kind === "element" &&
+        isDeepStrictEqual({ ...written, children: shown.children }, shown) &&
+        fits(slotsOf(written.children, values), shown.children, values)
+      );
+    }
+    case "choice":
+    case "extended-text":
+    case "inline-choice": {
+      return interactionFits(written, shown, values);
+    }
+    case "printed-variable":
+    case "template-block":
+    case "template-inline": {
+      return false;
+    }
+    case "text":
+    case "text-entry":
+    case "unsupported": {
+      return isDeepStrictEqual(written, shown);
+    }
+    default: {
+      return written satisfies never;
+    }
+  }
+};
+
+/**
+ * The notices a redaction adds in a withheld part's place, beside the item's own: a printed
+ * variable's, a template block's, a template inline's, and the one for withheld choices.
+ */
+const templateNotices = [
+  "qti-printed-variable",
+  "qti-template-block",
+  "qti-template-inline",
+  "template-identifier",
+] as const;
+
+/**
+ * Report whether redacted fields are the item's as the page may see them (P7§4.9): the document,
+ * identifier, `lang`, title and response bindings as the item holds them; a body that
+ * {@link fits} the item's, so a template value shows only as a printed variable's text, and no
+ * hidden template content, template visibility, template-set correct response or default, seed
+ * or template rule shows at all; and notices that name only features.
+ *
+ * @param item The item.
+ * @param fields The redacted fields, as `redact` gave them or as the JSON decodes.
+ * @param values The values `redact` showed the item by.
+ * @returns Whether the fields hold nothing the item's body does not show.
+ */
+const fieldsFit = (
+  item: Item,
+  fields: RedactedFields,
+  values: Option.Option<RedactRecord>,
+): boolean => {
+  const notices = new Set<string>([
+    ...item.unsupported.map((entry) => entry.feature),
+    ...templateNotices,
+  ]);
+
+  return (
+    isDeepStrictEqual(
+      {
+        body: fields.body,
+        document: item.document,
+        identifier: item.identifier,
+        lang: item.lang,
+        notices: fields.notices,
+        responses: Array.from(item.responses.values(), ({ baseType, cardinality, identifier }) => ({
+          baseType,
+          cardinality,
+          identifier,
+        })),
+        title: item.title,
+      },
+      { ...fields },
+    ) &&
+    fits(slotsOf(item.body, values), fields.body, values) &&
+    fields.notices.every((notice) => notices.has(notice))
+  );
+};
+
+/**
+ * Check a templated item's redaction against the exclusion set (P7§4.9): its redacted fields, and
+ * its JSON as decoded, each {@link fieldsFit} the item.
+ *
+ * @param subject The item, its redaction and its JSON.
+ * @returns Each problem, naming the item and its record state; empty when both fit. A JSON that
+ *   does not decode is {@link keyProblems}' to report.
+ */
+const templateProblems = (subject: Subject): readonly string[] => [
+  ...(fieldsFit(subject.item, subject.redacted, subject.record)
+    ? []
+    : [
+        `${subject.location}: the redacted fields hold more than the item's body shows, or not as it writes it`,
+      ]),
+  ...Result.match(decodeStrictly(subject.json), {
+    onFailure: () => [],
+    onSuccess: (fields) =>
+      fieldsFit(subject.item, fields, subject.record)
+        ? []
+        : [
+            `${subject.location}: the JSON holds more than the item's body shows, or not as it writes it`,
+          ],
+  }),
+];
+
+/**
+ * A template block, a template inline or a choice with a template visibility, with the content its
+ * visibility decides.
+ */
+interface TemplatePart {
+  readonly content: readonly BodyNode[];
+  readonly identifier: string;
+  /**
+   * The part as an exclusion names it: its kind and where it sits.
+   */
+  readonly name: string;
+  readonly visibility: TemplateVisibility;
+}
+
+/**
+ * Collect the template parts of an interaction's choices, at any depth: each choice with a
+ * template visibility, then the parts its content holds.
+ *
+ * @param choices The choices.
+ * @param path The interaction's path, which names each choice's part.
+ * @returns The parts, in document order.
+ */
+const choicePartsOf = (choices: readonly SimpleChoice[], path: string): readonly TemplatePart[] =>
+  choices.flatMap((choice) => [
+    ...Option.match(choice.templateVisibility, {
+      onNone: () => [],
+      onSome: (visibility): readonly TemplatePart[] => [
+        {
+          content: choice.content,
+          identifier: choice.identifier,
+          name: `the choice ${choice.identifier} at ${path}`,
+          visibility,
+        },
+      ],
+    }),
+    // oxlint-disable-next-line eslint/no-use-before-define -- `choicePartsOf` and `templatePartsOf` are mutually recursive, as a choice's content holds body nodes; the call runs only after both are defined.
+    ...templatePartsOf(choice.content),
+  ]);
+
+/**
+ * Collect every template part of a run of body nodes, at any depth.
+ *
+ * @param nodes The body nodes.
+ * @returns The parts, in document order.
+ */
+const templatePartsOf = (nodes: readonly BodyNode[]): readonly TemplatePart[] =>
+  nodes.flatMap((node): readonly TemplatePart[] => {
+    switch (node.kind) {
+      case "element": {
+        return templatePartsOf(node.children);
+      }
+      case "template-block":
+      case "template-inline": {
+        return [
+          {
+            content: node.content,
+            identifier: node.identifier,
+            name: `the ${node.kind} at ${node.path}`,
+            visibility: node.templateVisibility,
+          },
+          ...templatePartsOf(node.content),
+        ];
+      }
+      case "choice": {
+        return [
+          ...Option.toArray(node.prompt).flatMap((lead) => templatePartsOf(lead)),
+          ...choicePartsOf(node.choices, node.path),
+        ];
+      }
+      case "inline-choice": {
+        return [
+          ...Option.toArray(node.label).flatMap((lead) => templatePartsOf(lead)),
+          ...choicePartsOf(node.choices, node.path),
+        ];
+      }
+      case "extended-text": {
+        return Option.toArray(node.prompt).flatMap((lead) => templatePartsOf(lead));
+      }
+      case "printed-variable":
+      case "text":
+      case "text-entry":
+      case "unsupported": {
+        return [];
+      }
+      default: {
+        return node satisfies never;
+      }
+    }
+  });
+
+/**
+ * One thing a templated item or its record holds that its page must not see (P7§4.9), named.
+ */
+interface Exclusion {
+  readonly kind:
+    | "hidden template content"
+    | "seed"
+    | "template rules"
+    | "template value"
+    | "template visibility"
+    | "template-set correct response"
+    | "template-set default";
+  readonly name: string;
+}
+
+/**
+ * List what a templated subject must not show (P7§4.9): its template rules; each template part's
+ * visibility; each part's content the values hide or cannot decide; and, under a record, its seed,
+ * each template value (which shows only as a printed variable's text) and each correct response
+ * and default template processing set.
+ *
+ * @param subject The item and its record.
+ * @returns The exclusions, the sweep's check of each being {@link templateProblems} and
+ *   {@link keyProblems}.
+ */
+const exclusionsOf = (subject: Subject): readonly Exclusion[] => {
+  const parts = templatePartsOf(subject.item.body);
+
+  return [
+    ...Option.match(subject.item.templateProcessing, {
+      onNone: () => [],
+      onSome: (rules): readonly Exclusion[] => [
+        { kind: "template rules", name: `${rules.length} rules` },
+      ],
+    }),
+    ...parts.map((part): Exclusion => ({ kind: "template visibility", name: part.name })),
+    ...parts
+      .filter(
+        (part) =>
+          part.content.length > 0 &&
+          !Option.getOrElse(decided(subject.record, part.visibility, part.identifier), () => false),
+      )
+      .map((part): Exclusion => ({ kind: "hidden template content", name: part.name })),
+    ...Option.match(subject.record, {
+      onNone: () => [],
+      onSome: (record): readonly Exclusion[] => [
+        { kind: "seed", name: record.seed },
+        ...Object.keys(record.templates).map((name): Exclusion => ({
+          kind: "template value",
+          name,
+        })),
+        ...Object.keys(record.correct).map((name): Exclusion => ({
+          kind: "template-set correct response",
+          name,
+        })),
+        ...Object.keys(record.defaults).map((name): Exclusion => ({
+          kind: "template-set default",
+          name,
+        })),
+      ],
+    }),
+  ];
+};
 
 /**
  * A node of the body in the JSON form.
@@ -544,6 +1144,209 @@ describe("the allowlist sweep over the corpus", () => {
               `${controlLocation}: the correct response "${controlSecret}" is in the HTML of ${state.name}`,
           ),
         );
+      }),
+  );
+});
+
+/**
+ * The template control's location.
+ */
+const templateControlLocation = "template-control.xml";
+
+/**
+ * The template control, built by hand: template processing sets `SHOWN` to `A` and `NUMBER` to
+ * 123; the body prints `NUMBER`, holds a template inline `SHOWN` shows (`A`) and one it hides
+ * (`B`), and a Choice whose choices `A` and `B` the same variable shows and hides.
+ */
+const templateControlBytes = new TextEncoder().encode(
+  '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="template-control" title="Pick the shown one" adaptive="false" time-dependent="false"><qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="identifier"/><qti-template-declaration identifier="SHOWN" cardinality="single" base-type="identifier"/><qti-template-declaration identifier="NUMBER" cardinality="single" base-type="integer"/><qti-template-processing><qti-set-template-value identifier="SHOWN"><qti-base-value base-type="identifier">A</qti-base-value></qti-set-template-value><qti-set-template-value identifier="NUMBER"><qti-base-value base-type="integer">123</qti-base-value></qti-set-template-value></qti-template-processing><qti-item-body><p>Number <qti-printed-variable identifier="NUMBER"/>: <qti-template-inline template-identifier="SHOWN" show-hide="show" identifier="A">shown words</qti-template-inline><qti-template-inline template-identifier="SHOWN" show-hide="show" identifier="B">hidden words</qti-template-inline></p><qti-choice-interaction response-identifier="RESPONSE" max-choices="1"><qti-simple-choice identifier="A" template-identifier="SHOWN" show-hide="show">Alpha</qti-simple-choice><qti-simple-choice identifier="B" template-identifier="SHOWN" show-hide="show">Beta</qti-simple-choice></qti-choice-interaction></qti-item-body></qti-assessment-item>',
+);
+
+/**
+ * Forge a redacted body: each node, at any depth, as `edit` gives it.
+ *
+ * @param nodes The honest body nodes.
+ * @param edit The forgery of one node, its children already forged.
+ * @returns The forged nodes.
+ */
+const forgeNodes = (
+  nodes: readonly BodyNode[],
+  edit: (node: BodyNode) => BodyNode,
+): readonly BodyNode[] =>
+  nodes.map((node) =>
+    edit(node.kind === "element" ? { ...node, children: forgeNodes(node.children, edit) } : node),
+  );
+
+/**
+ * Forge a subject's redacted fields: each body node as `edit` gives it.
+ *
+ * @param subject The honest subject.
+ * @param edit The forgery of one node.
+ * @returns The subject with the forged fields, its JSON the honest one.
+ */
+const forgeFields = (subject: Subject, edit: (node: BodyNode) => BodyNode): Subject => ({
+  ...subject,
+  redacted: { ...subject.redacted, body: forgeNodes(subject.redacted.body, edit) },
+});
+
+describe("the template sweep over the corpus", () => {
+  it.effect(
+    "[I-5] every templated corpus item, redacted under two seeds and with no record, shows a template value only as a printed variable's text, and no hidden template content, template-set correct response or default, seed, template rule or template visibility, nor any of the core set",
+    () =>
+      Effect.gen(function* templateSweep() {
+        const { files, problems, subjects } = yield* templatedSubjects;
+        const swept: Record<string, number> = {};
+        for (const subject of subjects) {
+          swept[subject.state] = (swept[subject.state] ?? 0) + 1;
+        }
+        const exclusions = subjects.flatMap(exclusionsOf);
+
+        assert.isAbove(files, 0, "no accepted corpus item has template processing");
+        assert.deepStrictEqual(swept, {
+          "no record": files,
+          'seed "1"': files,
+          'seed "2"': files,
+        });
+        assert.isNotEmpty(exclusions, "no templated item holds anything its page must not see");
+        assert.isTrue(
+          exclusions.some((exclusion) => exclusion.kind === "template visibility"),
+          "no templated item has a template block, inline or choice with a template visibility",
+        );
+        assert.deepStrictEqual(
+          [
+            ...problems,
+            ...subjects.flatMap((subject) => [
+              ...keyProblems(subject),
+              ...leakProblems(subject, secretsOf(subject)),
+              ...templateProblems(subject),
+            ]),
+          ],
+          [],
+        );
+      }),
+    { tags: ["corpus"], timeout: sweepTimeoutMs },
+  );
+
+  it.effect(
+    "[I-5] a forged redaction of a hand-built templated item that shows hidden template content, a hidden choice, a template visibility or the seed is caught, and the honest one is not",
+    () =>
+      Effect.gen(function* templateControl() {
+        const verdict = yield* open(templateControlLocation, templateControlBytes);
+        const member: Member = {
+          bytes: templateControlBytes,
+          location: templateControlLocation,
+          verdict: Exit.succeed(verdict),
+        };
+        const accepted = Option.getOrElse(acceptedOf(member), () =>
+          assert.fail(`the template control is ${verdict.verdict}`),
+        );
+        const configuration = yield* configure({});
+        const subjects = Result.getOrThrow(recordStates(accepted)).map((state) => {
+          const made = subjectOf(member, configuration, state);
+          if (Option.isNone(made) || Result.isFailure(made.value)) {
+            assert.fail(`the template control does not render under ${state.name}`);
+          }
+
+          return made.value.success;
+        });
+        const [honest] = subjects;
+        if (honest === undefined) {
+          assert.fail("the template control has no record state");
+        }
+
+        const hiddenShown = forgeFields(honest, (node) =>
+          node.kind === "element" && node.tag === "p"
+            ? { ...node, children: [...node.children, { kind: "text", text: "hidden words" }] }
+            : node,
+        );
+        const choiceShown = forgeFields(honest, (node) =>
+          node.kind === "choice"
+            ? {
+                ...node,
+                choices: [
+                  ...node.choices,
+                  {
+                    content: [{ kind: "text", text: "Beta" }],
+                    fixed: false,
+                    identifier: "B",
+                    templateVisibility: Option.none(),
+                  },
+                ],
+              }
+            : node,
+        );
+        const visibilityKept = forgeFields(honest, (node) =>
+          node.kind === "choice"
+            ? {
+                ...node,
+                choices: node.choices.map((choice) => ({
+                  ...choice,
+                  templateVisibility: Option.some({
+                    showHide: "show" as const,
+                    templateIdentifier: "SHOWN",
+                  }),
+                })),
+              }
+            : node,
+        );
+        const forgedBody = honest.json.body.map((node): BodyNodeJson => {
+          if (node.kind !== "choice") {
+            return node;
+          }
+
+          const forged = {
+            ...node,
+            choices: node.choices.map((choice) => {
+              const kept = {
+                ...choice,
+                templateVisibility: { showHide: "show", templateIdentifier: "SHOWN" },
+              };
+
+              return kept;
+            }),
+          };
+
+          return forged;
+        });
+        const withSeed = { ...honest.json, body: forgedBody, seed: "1" };
+        const forgedJson: Subject = { ...honest, json: withSeed };
+        const inRecord = `${templateControlLocation} (seed "1")`;
+
+        assert.deepStrictEqual(
+          subjects.map((subject) => subject.state),
+          ['seed "1"', 'seed "2"', "no record"],
+        );
+        assert.deepStrictEqual(
+          subjects.flatMap((subject) => [...keyProblems(subject), ...templateProblems(subject)]),
+          [],
+        );
+        assert.deepStrictEqual(
+          exclusionsOf(honest).map((exclusion) => exclusion.kind),
+          [
+            "template rules",
+            "template visibility",
+            "template visibility",
+            "template visibility",
+            "template visibility",
+            "hidden template content",
+            "hidden template content",
+            "seed",
+            "template value",
+            "template value",
+          ],
+        );
+        for (const forged of [hiddenShown, choiceShown, visibilityKept]) {
+          assert.deepStrictEqual(templateProblems(forged), [
+            `${inRecord}: the redacted fields hold more than the item's body shows, or not as it writes it`,
+          ]);
+        }
+        assert.isTrue(Result.isFailure(decodeStrictly(forgedJson.json)));
+        assert.deepStrictEqual(hiddenKeysOf(forgedJson.json), [
+          "seed",
+          "templateVisibility",
+          "showHide",
+          "templateIdentifier",
+        ]);
       }),
   );
 });

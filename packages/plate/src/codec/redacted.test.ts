@@ -25,6 +25,7 @@ import type { Value } from "#plate/model/values.ts";
 import { brandRedacted } from "#plate/payload.ts";
 import type { Redacted, RedactedFields } from "#plate/payload.ts";
 import { redact, render } from "#plate/render.ts";
+import { acceptedOf, openCorpus, recordStates, templated } from "#plate/test/sweep.ts";
 import { open } from "#plate/validate/open.ts";
 import { acceptForTest, acceptedItem } from "#plate/validate/verdict.ts";
 import type { Verdict } from "#plate/validate/verdict.ts";
@@ -993,6 +994,49 @@ describe("the codec on a template block or inline (OD-P8-14)", () => {
         }),
     );
   }
+});
+
+/**
+ * Opening the corpus (about 800 members) and redacting each templated item in three states runs in
+ * seconds here; the bound leaves room for a slow machine without letting a hung run stall the
+ * suite.
+ */
+const corpusTimeoutMs = 600_000;
+
+describe("the codec on the templated corpus items", () => {
+  it.effect(
+    "[I-5] the JSON of each templated corpus item, redacted under two seeds and with no record, round-trips through JSON text to an equal Redacted",
+    () =>
+      Effect.gen(function* templatedRoundTrip() {
+        const members = yield* openCorpus;
+        const swept = members.flatMap((member) =>
+          Option.toArray(acceptedOf(member))
+            .filter(templated)
+            .map((accepted) => ({
+              accepted,
+              location: member.location,
+            })),
+        );
+        const redactions = swept.flatMap(({ accepted, location }) =>
+          Result.getOrThrow(recordStates(accepted)).map((state) => ({
+            name: `${location} (${state.name})`,
+            redacted: redact(accepted, Option.getOrUndefined(state.record)),
+          })),
+        );
+
+        assert.isNotEmpty(swept, "no accepted corpus item has template processing");
+        assert.lengthOf(redactions, swept.length * 3);
+        for (const { name, redacted } of redactions) {
+          // oxlint-disable-next-line unicorn/prefer-structured-clone -- The test proves the item survives JSON text, the form a host sends; `structuredClone` would keep the bigints and Options JSON drops.
+          const handedOver: unknown = JSON.parse(
+            JSON.stringify(Result.getOrThrow(encodeRedacted(redacted))),
+          );
+
+          assert.deepStrictEqual(Result.getOrThrow(decodeRedacted(handedOver)), redacted, name);
+        }
+      }),
+    { tags: ["corpus"], timeout: corpusTimeoutMs },
+  );
 });
 
 describe("decodeRedacted on a deeply nested body", () => {

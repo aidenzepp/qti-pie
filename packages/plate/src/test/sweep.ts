@@ -1,6 +1,6 @@
 /**
- * The corpus sweeps' shared support: every corpus member opened once per test file, and the HTML of
- * an accepted item's three render states.
+ * The corpus sweeps' shared support: every corpus member opened once per test file, the HTML of an
+ * accepted item's three render states, and the records a templated item is redacted under.
  *
  * Test support, outside the core: nothing under `src/index.ts`'s closure imports it
  * (`src/boundary.test.ts`). It reads the corpus through `corpusDocuments` and `readCorpusFile`, so
@@ -10,18 +10,22 @@
  */
 import type { Config } from "effect";
 import { Effect, Exit, Option, Result } from "effect";
+import { decodeRecord } from "#plate/codec/record.ts";
 import { corpusDocuments, readCorpusFile } from "#plate/document/corpus.ts";
 import type { CorpusFileUnreadable, CorpusMissing } from "#plate/document/corpus.ts";
-import { open, redact, render } from "#plate/index.ts";
+import { begin, open, redact, render } from "#plate/index.ts";
 import type {
   Accepted,
   Configuration,
+  EngineFailure,
   InvalidInstance,
+  InvalidRecord,
   Options,
   PartSwapRefused,
   UnknownPart,
   Verdict,
 } from "#plate/index.ts";
+import type { ItemRecord, RedactRecord } from "#plate/model/record.ts";
 import { acceptedItem } from "#plate/validate/verdict.ts";
 
 /**
@@ -150,13 +154,15 @@ const statesOf = (responses: readonly string[]): readonly (readonly [StateName, 
  *
  * @param accepted The accepted document.
  * @param configuration The configuration every state renders with.
+ * @param record The record `redact` shows the item by; none to show it as it reads with no record.
  * @returns The three states with their HTML, or the first `render` error.
  */
 export const threeStates = (
   accepted: Accepted,
   configuration: Configuration,
+  record?: RedactRecord,
 ): Result.Result<readonly RenderState[], InvalidInstance | PartSwapRefused | UnknownPart> => {
-  const redacted = redact(accepted);
+  const redacted = redact(accepted, record);
   const responses = redacted.responses.map((response) => response.identifier);
 
   return Result.all(
@@ -169,3 +175,65 @@ export const threeStates = (
     ),
   );
 };
+
+/**
+ * Report whether an accepted item's template processing runs: the item holds template rules.
+ *
+ * @param accepted The accepted document.
+ * @returns Whether `begin` runs template processing for it, so `redact` needs its record.
+ */
+export const templated = (accepted: Accepted): boolean =>
+  Option.isSome(accepted.item.templateProcessing);
+
+/**
+ * The seeds the template sweeps begin a record under: fixed strings, so a run repeats and a
+ * failure names the seed. `begin` draws a fresh seed when given none, so a sweep never leaves one
+ * out.
+ */
+export const sweepSeeds = ["1", "2"] as const;
+
+/**
+ * One state a templated item is redacted in: a record begun under a sweep seed, or no record.
+ */
+export interface RecordState {
+  /**
+   * The state as a failure names it: `seed "1"`, or `no record`.
+   */
+  readonly name: string;
+  /**
+   * The record `begin` started under the seed, decoded from the form the host stores; none for no
+   * record.
+   */
+  readonly record: Option.Option<ItemRecord>;
+}
+
+/**
+ * The state of an item redacted with no record.
+ */
+export const noRecord: RecordState = { name: "no record", record: Option.none() };
+
+/**
+ * Begin an accepted item's record under each of {@link sweepSeeds}, with the fixed instance
+ * {@link sweepInstance}, and decode it as a host would read it back; then add {@link noRecord}.
+ *
+ * @param accepted The accepted document.
+ * @returns A state per seed, in {@link sweepSeeds}' order, then the state with no record; or the
+ *   first failure of `begin` or of `decodeRecord`.
+ */
+export const recordStates = (
+  accepted: Accepted,
+): Result.Result<readonly RecordState[], EngineFailure | InvalidRecord> =>
+  Result.map(
+    Result.all(
+      sweepSeeds.map((seed) =>
+        Result.map(
+          Result.flatMap(begin(accepted, { instance: sweepInstance, seed }), decodeRecord),
+          (record): RecordState => ({
+            name: `seed ${JSON.stringify(seed)}`,
+            record: Option.some(record),
+          }),
+        ),
+      ),
+    ),
+    (begun): readonly RecordState[] => [...begun, noRecord],
+  );
