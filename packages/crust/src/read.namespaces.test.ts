@@ -258,6 +258,21 @@ const infosetOf = (element: Element): Element => {
   };
 };
 
+/**
+ * Test whether a tree holds an empty plain text run anywhere: the reader never makes one, since
+ * `saxes` emits no empty text (`read.ts`'s text handler), though a written tree may hold one. An
+ * empty CDATA section is a run of its own and stays, as the document wrote it.
+ *
+ * @param root - The tree.
+ * @returns Whether some plain text run below it is empty.
+ */
+const holdsEmptyRun = (root: Element): boolean =>
+  root.children.some((child) =>
+    child.kind === "element"
+      ? holdsEmptyRun(child)
+      : child.kind === "text" && !child.cdata && child.value === "",
+  );
+
 describe("readXml resolves every namespace as saxes does in its namespace mode", () => {
   it.effect(
     `for every chain ${CHAIN_DEPTH} deep over ${DECLARATIONS.length} declarations and ${USES.length} uses, well-formed or not`,
@@ -312,6 +327,10 @@ describe("readXml resolves every namespace as saxes does in its namespace mode",
               const text = yield* writeXml(bare(tree));
               const doc = yield* readXml(new TextEncoder().encode(text));
 
+              assert.isFalse(
+                holdsEmptyRun(doc.root),
+                "the reader puts no empty plain text run in a tree",
+              );
               assert.deepStrictEqual(infosetOf(doc.root), infosetOf(tree));
               assert.deepStrictEqual(bySaxes(text), { kind: "names", names: namesOf(tree) });
             }),

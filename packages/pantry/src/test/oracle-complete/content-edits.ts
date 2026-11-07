@@ -11,7 +11,9 @@
  */
 import { element, int } from "@grizzle/testing/gen";
 import {
+  changeDrawn,
   editText,
+  editingRows,
   passageAt,
   replaceDrawn,
   replaceOnce,
@@ -224,28 +226,24 @@ export const contentEdits = {
       },
     over: "package",
   },
-  // Namespace name (reading 131): an element of the item body declaring a prefix bound to a
-  // namespace name no URI reference spells.
-  "Namespace name": {
-    mutate:
-      ({ entries }) =>
-      (source) => {
-        const value = source.draw(element(unnamedNamespaces));
+  // Namespace name (reading 131): a prefix's declaration in the item's rows bound to a namespace
+  // name no URI reference spells. crust's reader refuses such a declaration in a package as not
+  // well-formed (reading 142), so the law is reached below the reader, on the rows a direct write
+  // could hold; `rv-i.oracle.test.ts` holds the package-level refusal.
+  "Namespace name": editingRows(item, (rows) => (source) => {
+    const value = source.draw(element(unnamedNamespaces));
 
-        return withText(
-          entries,
-          item,
-          source.draw(
-            replaceDrawn(
-              textOf(entries, item),
-              /<(?<tag>div|span|p|table) /u,
-              (match) => `<${match.groups?.["tag"] ?? "p"} xmlns:bad="${value}" `,
-            ),
-          ),
-        );
-      },
-    over: "package",
-  },
+    return {
+      ...rows,
+      namespaces: source.draw(
+        changeDrawn(
+          rows.namespaces,
+          ({ prefix }) => prefix !== "",
+          (row) => ({ ...row, uri: value }),
+        ),
+      ),
+    };
+  }),
   // SSML lexicon reference (reading 3): a lookup naming an id of the item that no lexicon has.
   "SSML lexicon reference": passageAt(item, "Read this aloud.</ssml:speak>", [
     'Read <ssml:lookup ref="caption">this</ssml:lookup> aloud.</ssml:speak>',

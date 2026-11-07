@@ -219,7 +219,7 @@ const refusedBy = Effect.fnUntraced(function* refusedBy(
  *
  * - `every`: for a CHECK, every law of its table's CHECKs a row the ChangeSet states breaks, each
  *   once, in the schema's canonical order; for any other refusal, the laws its one PostgreSQL
- *   object discharges (grizzle-engine `src/types/changeset/changeset.ts:894` at `73360ca`). The
+ *   object discharges (grizzle-engine `src/types/changeset/changeset.ts:895` at `234e398`). The
  *   refusal's rule is the most specific among them (`ruleOfLaws`), whichever CHECK PostgreSQL tried
  *   first. A law another table's row breaks, or another object discharges, is not among them:
  *   PostgreSQL refuses the write at the first statement or constraint that fails, so a breach in a

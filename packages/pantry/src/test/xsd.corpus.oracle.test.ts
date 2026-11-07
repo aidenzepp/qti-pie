@@ -844,6 +844,63 @@ describe("xsd.corpus.oracle.test.ts, reading 6's class", () => {
         );
       }),
   );
+
+  unit.effect(
+    "matches a root's messages by its own refusal where a nested root shares its name",
+    () =>
+      Effect.gen(function* sharedName() {
+        // Kept from VD's run of the XSD search (TEST_SEED=3143817330, lawful seed #5, no edit): an
+        // item root lacking its required attributes, with an item of the same expanded name
+        // nested in a modal feedback's SSML content, lax, which the rows keep foreign (reading
+        // 6). xmllint names both by that name, and refuses both; the law oracle refuses the root.
+        // The element grain read every message of the name as the foreign element's, so the
+        // root's refusal stood unmatched, oracle-only, though xmllint had refused it too.
+        const grammar = Result.getOrThrow(composed());
+        const item = "{http://www.imsglobal.org/xsd/imsqtiasi_v3p0}qti-assessment-item";
+        const file = "shared.xml";
+        const said = (line: number, text: string): string =>
+          `${file}:${String(line)}: Schemas validity error : Element '${item}': ${text}`;
+        const [xsd] = yield* verdictsOf(
+          [file],
+          [
+            said(1, "The attribute 'identifier' is required but missing."),
+            said(1, "The attribute 'title' is required but missing."),
+            said(1, "The attribute 'time-dependent' is required but missing."),
+            said(2, "The attribute 'identifier' is required but missing."),
+            said(2, "The attribute 'time-dependent' is required but missing."),
+            `${file} fails to validate`,
+          ].join("\n"),
+        );
+        assert.isDefined(xsd, "the report's one file has a verdict");
+
+        const law = {
+          refusals: [
+            {
+              class: "attribute-required" as const,
+              detail:
+                "qti-assessment-item lacks {identifier, title, time-dependent}, which Required holds",
+              law: "AL3 required",
+              node: "/qti-assessment-item[0]",
+              rule: "required-attribute",
+            },
+          ],
+          stopped: false,
+        };
+        const differences = elementGrainDifferences(
+          xsd,
+          law,
+          compareJudgments(xsd, law),
+          grammar,
+          new Set([item]),
+        );
+
+        assert.deepStrictEqual(
+          differences,
+          [],
+          "the root's refusal and xmllint's messages on the name match",
+        );
+      }),
+  );
 });
 
 describe("xsd.corpus.oracle.test.ts, reading 60's class of a lax xsi:type", () => {

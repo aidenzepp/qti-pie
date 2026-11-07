@@ -305,10 +305,14 @@ const parse = (
           parent.children.push(element);
         }
       });
+      // `saxes` emits a text event only for text that is not empty: `handleTextInRoot` calls its
+      // handler with the run so far only when that run is non-empty, and `end` only when the
+      // remaining text is (saxes 6.0.0, saxes.js:1625-1700 and :1822-1825), so no empty run is ever
+      // put in the tree.
       parser.on("text", (value) => {
         const parent = open.at(-1);
         const last = parent?.children.at(-1);
-        if (parent === undefined || value === "") {
+        if (parent === undefined) {
           return;
         }
 
