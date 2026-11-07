@@ -1871,10 +1871,24 @@ against it. A reading that is not an information-model-over-XSD case says which 
      15 November 2006, section 3.1). Reading 85 refuses `xpointer`, so an include the information model reads
      (reading 114) whose href is absent or empty, is external, or names no document the manifest lists, is refused under
      "Include target", and one whose href holds a `#` after its path, with or without a query before it, is refused
-     under "Include fragment identifier", wherever the include stands. A query is admitted and names no other file
-     (reading 102). `XInclude.xsd` types `href` an optional `xs:anyURI`, which admits all of these; XInclude itself
-     makes them fatal errors. This binds pantry and plate alike. This is not a case of documents in conflict. (Decided
-     2026-11-06 by W5 seat IN under the operator's standing ruling of 2026-11-05 that the spec wins.)
+     under "Include fragment identifier", wherever the include stands. The schema states it with one cause per fault. A
+     site's href is a row of its own (`SitePath`), written only where the href resolves to a path of the package, with
+     `entry`, whether the package holds an entry there, and its target is another row (`SiteTarget`):
+     - An href naming a path no entry holds breaks `SitePath`'s `File_exists` CHECK, which PostgreSQL meets as the row
+       is inserted, so it is refused under "File exists" alone, whether its site is an include or a section ref. The
+       include's and the section ref's document laws read only paths an entry holds.
+     - An include with no href, an empty one, or an external one has no `SitePath`, and breaks "Include target" alone.
+       So does an include whose path names an entry the manifest lists as no document.
+     - A section ref, which must write an href (AL3 refuses one that doesn't), names a section document the package
+       lists. One that is external, or names an entry that is no section document, breaks "Document entry" alone.
+
+     A query is admitted and names no other file (reading 102). `XInclude.xsd` types `href` an optional `xs:anyURI`,
+     which admits all of these; XInclude itself makes them fatal errors. This binds pantry and plate alike. This is not
+     a case of documents in conflict. (Decided 2026-11-06 by W5 seat IN under the operator's standing ruling of
+     2026-11-05 that the spec wins. Amended 2026-11-07 by the coordinator, under the operator's standing ruling of
+     2026-11-05, from RV seat NIL (`25d16460`), on the review of the import's sentinel values: the schema's statement
+     recorded; nothing it refuses changed.)
+
 116. **A fragment's root is read by its name at its document's root, so the three kinds the composition splits by
      context never root a fragment: a stated limit.** The composition gives three element names two kinds each, by the
      context the XSDs declare them in: `qti-template-block` and `qti-template-block.rubric`, `qti-template-inline` and
