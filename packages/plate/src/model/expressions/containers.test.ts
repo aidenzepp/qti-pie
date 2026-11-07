@@ -1,9 +1,10 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Effect, Option } from "effect";
+import { Effect, Option, Result } from "effect";
 import { attr, el, text } from "#plate/document/source.ts";
 import type { SourceElement } from "#plate/document/source.ts";
 import type { Expression } from "#plate/model/expression.ts";
 import { buildItem } from "#plate/model/item.ts";
+import { nullOf } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
 import {
   assertKindType,
@@ -115,6 +116,23 @@ const truth = (held: boolean): Value => ({
   cardinality: "single",
   values: [{ baseType: "boolean", value: held }],
 });
+
+/**
+ * Construct the `qti-custom-operator` an item's processing may hold, whose value plate never knows
+ * (9.21).
+ *
+ * @returns The element.
+ */
+const customElement = (): SourceElement =>
+  expressionElement("custom-operator", [attr("class", "x")]);
+
+/**
+ * Construct a `qti-base-value` of an integer.
+ *
+ * @param written The integer, as written.
+ * @returns The element.
+ */
+const integerElement = (written: string): SourceElement => baseValueElement("integer", written);
 
 /**
  * The declarations of the item {@link runItem} builds: a multiple identifier response `RESPONSE`,
@@ -326,6 +344,90 @@ describe("the containers family's reader specs and kind rules", () => {
           values: [],
         });
         assert.deepStrictEqual(outcome("EMPTY"), truth(true));
+      }),
+  );
+
+  it.effect(
+    "[I-9a] score an item whose container holds a qti-custom-operator's untyped value beside a typed operand: the container is NULL, so the typed outcome it sets holds its NULL and score never fails (9.21, §4.5)",
+    () =>
+      Effect.gen(function* scoresUntypedContainers() {
+        const cases: readonly (readonly [string, Value, SourceElement])[] = [
+          [
+            "qti-multiple, as the audit found it",
+            nullOf("float", "multiple"),
+            expressionElement("multiple", [], [customElement(), integerElement("1")]),
+          ],
+          [
+            "qti-index of a qti-ordered, as the audit found it",
+            nullOf("float", "single"),
+            expressionElement(
+              "index",
+              [attr("n", "1")],
+              [expressionElement("ordered", [], [customElement(), integerElement("1")])],
+            ),
+          ],
+          [
+            "qti-ordered",
+            nullOf("float", "ordered"),
+            expressionElement("ordered", [], [integerElement("1"), customElement()]),
+          ],
+          [
+            "qti-repeat",
+            nullOf("float", "ordered"),
+            expressionElement(
+              "repeat",
+              [attr("number-repeats", "2")],
+              [customElement(), integerElement("1")],
+            ),
+          ],
+          [
+            "qti-delete of a qti-multiple",
+            nullOf("float", "multiple"),
+            expressionElement(
+              "delete",
+              [],
+              [
+                integerElement("1"),
+                expressionElement("multiple", [], [customElement(), integerElement("2")]),
+              ],
+            ),
+          ],
+          [
+            "qti-multiple of a qti-sum",
+            nullOf("float", "multiple"),
+            expressionElement(
+              "multiple",
+              [],
+              [
+                expressionElement("sum", [], [customElement(), integerElement("1")]),
+                integerElement("2"),
+              ],
+            ),
+          ],
+        ];
+
+        for (const [label, unset, expression] of cases) {
+          const document = outItem(unset.baseType, unset.cardinality, expression);
+          const built = yield* buildItem(document);
+          const ran = yield* Effect.result(processed(document, {}));
+
+          assert.deepStrictEqual(refusalsOf(document), [], label);
+          assert.deepStrictEqual(
+            built.unsupported.map((mark) => mark.feature),
+            ["qti-custom-operator"],
+            label,
+          );
+          assert.isTrue(Option.isSome(built.processing), `${label}: the processing runs`);
+          assert.deepStrictEqual(
+            ran.pipe(
+              Result.map((after) =>
+                Option.flatMapNullishOr(after, (variables) => variables.outcomes["OUT"]),
+              ),
+            ),
+            Result.succeed(Option.some(unset)),
+            label,
+          );
+        }
       }),
   );
 

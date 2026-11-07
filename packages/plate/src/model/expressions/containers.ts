@@ -66,7 +66,10 @@ const concrete = (type: ExpressionType): BaseType | undefined =>
  * Give the base type operands share, as the qti package joins them (`sharedBase` in
  * `packages/pantry/src/processing/types.ts`): `any` for no operands or only `any` ones, which
  * yield to the others; one base type when every other operand has it; `unknown` when any operand
- * is unknown or two differ, which the operand rule refuses on its own.
+ * is unknown or two differ, which the operand rule refuses on its own. So a container beside a
+ * `qti-custom-operator`'s value is unknown, which every rule that takes it accepts, and the engine
+ * gives it NULL, the one value of every type (`untyped` in
+ * `#plate/engine/expressions/containers.ts`).
  *
  * @param operands The operands' types.
  * @returns The shared base type.

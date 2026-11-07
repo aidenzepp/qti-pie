@@ -21,7 +21,9 @@ and both of its entry points are unstable until M3.
   processing, and a `qti-response-processing-fragment`'s rules run where the fragment stands.
 - `qti-equal` runs in its `absolute` and `relative` tolerance modes, as well as in `exact`.
 - The verdict still marks `qti-custom-operator`, but its processing now runs, with the operator's
-  value NULL.
+  value NULL. That NULL stands for a value plate cannot know, so a `qti-multiple`, `qti-ordered`,
+  or `qti-repeat` that holds the operator's value is NULL as well. `qti-container-size` of such a
+  container is 0, and `qti-member` and `qti-contains` of it are NULL.
 - The verdict still marks processing that holds any of these, and `score` does not run it: one of
   the later expressions that an item may hold, an `xi:include`, a `%` coordinate in a `qti-inside`
   or an area mapping, a `qti-pattern-match` pattern that plate cannot translate, or a variable that
