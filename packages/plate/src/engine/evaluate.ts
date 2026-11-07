@@ -57,16 +57,28 @@ export {
 export type { EngineFailure } from "#plate/engine/failures.ts";
 
 /**
- * The variables of one attempt: each response and each outcome by identifier, and the attempt
- * count.
+ * The variables of one attempt: each response, each outcome and each template variable by
+ * identifier, the correct responses and defaults template processing set, and the attempt count.
  *
- * Responses and outcomes share one identifier space, because declaration identifiers are unique
- * together, so a `qti-variable` names at most one of them. The outcomes hold the built-in outcome
- * `completionStatus` beside the declared ones where the item holds it (`holdsCompletionStatus` in
- * `#plate/model/record.ts`), since it is "declared implicitly" (`info.txt:8488`): no response or
- * outcome then shares its name.
+ * Responses, outcomes and template variables share one identifier space, because declaration
+ * identifiers are unique together, so a `qti-variable` names at most one of them. The outcomes hold
+ * the built-in outcome `completionStatus` beside the declared ones where the item holds it
+ * (`holdsCompletionStatus` in `#plate/model/record.ts`), since it is "declared implicitly"
+ * (`info.txt:8488`): no response, outcome or template variable then shares its name.
  */
 export interface Variables {
+  /**
+   * The correct responses template processing set with `qti-set-correct-response`, by the
+   * response's identifier. A `qti-correct` reads a response's value here before its declaration's
+   * correct response; with none, or with no value of that response, it reads the declaration.
+   */
+  readonly correct?: Readonly<Record<string, Value>>;
+  /**
+   * The defaults template processing set with `qti-set-default-value`, by the variable's
+   * identifier. A `qti-default` reads a variable's value here before its declaration's default;
+   * with none, or with no value of that variable, it reads the declaration.
+   */
+  readonly defaults?: Readonly<Record<string, Value>>;
   /**
    * The value of the built-in response variable `numAttempts`: the number of attempts at the
    * item, the one being processed included, because the count "increases by '1' at the start of
@@ -79,6 +91,12 @@ export interface Variables {
   readonly numAttempts?: bigint;
   readonly outcomes: Readonly<Record<string, Value>>;
   readonly responses: Readonly<Record<string, Value>>;
+  /**
+   * The value of each template variable, by identifier, as template processing left it. Without
+   * it, a `qti-variable` of a template variable is the record's gap, as any other variable the
+   * record holds no value of.
+   */
+  readonly templates?: Readonly<Record<string, Value>>;
 }
 
 /**

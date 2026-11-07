@@ -1,9 +1,10 @@
 /**
  * The engine's references to variables: the value a `qti-variable` reads ({@link variableValue}),
- * from the responses and outcomes the record holds ({@link own}) or from a built-in variable
- * ({@link builtInValue}), the type of each built-in the engine holds ({@link builtInType}), and the
- * run-time resolver of an attribute that holds a literal or names a template or outcome variable
- * ({@link referenceValue}, and {@link referenceInteger} for an integer one).
+ * from the responses, outcomes and template values the attempt holds ({@link own}) or from a
+ * built-in variable ({@link builtInValue}), the type of each built-in the engine holds
+ * ({@link builtInType}), and the run-time resolver of an attribute that holds a literal or names a
+ * template or outcome variable ({@link referenceValue}, and {@link referenceInteger} for an integer
+ * one).
  *
  * It value-imports only `effect`'s `Option` and `Result`, `#plate/engine/failures.ts`,
  * `#plate/engine/numbers.ts`, `#plate/model/record.ts` and `#plate/model/values.ts`, and reads
@@ -31,17 +32,20 @@ import type { Single, Value } from "#plate/model/values.ts";
  *
  * The variables come from plain objects, which inherit `Object.prototype`, and `constructor` or
  * `toString` is a valid identifier; reading only own keys keeps an inherited member from being
- * read as a value.
+ * read as a value. A map the variables do not carry, such as the template values of an attempt
+ * given none, holds no value by any name.
  *
- * @param values The responses or the outcomes.
+ * @param values The responses, the outcomes, the template values or an override map, if any.
  * @param identifier The identifier.
  * @returns The value, or none when the record holds no value by that name.
  */
 export const own = (
-  values: Readonly<Record<string, Value>>,
+  values: Readonly<Record<string, Value>> | undefined,
   identifier: string,
 ): Option.Option<Value> =>
-  Object.hasOwn(values, identifier) ? Option.fromUndefinedOr(values[identifier]) : Option.none();
+  values !== undefined && Object.hasOwn(values, identifier)
+    ? Option.fromUndefinedOr(values[identifier])
+    : Option.none();
 
 /**
  * Give the value of the built-in variable an identifier names that the variables carry apart from
@@ -92,26 +96,31 @@ export const builtInType = (
   Option.fromUndefinedOr(builtInTypes.get(identifier));
 
 /**
- * Give the value of a `qti-variable`: the response or the outcome of that identifier, the built-in
- * `completionStatus` among the outcomes, else the built-in variable of that name
- * ({@link builtInValue}).
+ * Give the value of a `qti-variable`: the response, the outcome or the template variable of that
+ * identifier, the built-in `completionStatus` among the outcomes, else the built-in variable of
+ * that name ({@link builtInValue}).
  *
- * A declared variable wins over a built-in of the same name, as the prose rules read a reference
- * (`variableType` in `#plate/validate/rules.ts`).
+ * Declaration identifiers are unique together, so the order responses, outcomes, template values
+ * never decides between two declared variables. A declared variable wins over a built-in of the
+ * same name, as the prose rules read a reference (`variableType` in `#plate/validate/rules.ts`).
+ * With no template values, a template variable is the record's gap.
  *
  * @param variables The variables of the attempt.
  * @param identifier The variable's identifier.
  * @returns Its current value, or an {@link UnknownIdentifierError} when neither the responses, the
- *   outcomes nor the built-in variables hold it.
+ *   outcomes, the template values nor the built-in variables hold it.
  */
 export const variableValue = (
   variables: Variables,
   identifier: string,
 ): Result.Result<Value, UnknownIdentifierError> =>
   Result.fromOption(
-    Option.orElse(own(variables.responses, identifier), () =>
-      Option.orElse(own(variables.outcomes, identifier), () => builtInValue(variables, identifier)),
-    ),
+    Option.firstSomeOf([
+      own(variables.responses, identifier),
+      own(variables.outcomes, identifier),
+      own(variables.templates, identifier),
+      builtInValue(variables, identifier),
+    ]),
     () => new UnknownIdentifierError({ holder: "record", identifier, role: "variable" }),
   );
 
@@ -159,17 +168,16 @@ const singleOf = (single: Single): Value => ({
  *
  * Such an attribute may name only "a template or outcome variable" (`info.txt:9102-9106`). At a
  * checked site the validator holds a reference to that (P24 refuses a response, a context variable
- * and a built-in; P8 a name nothing declares), and the item model marks one to a template or to an
- * outcome the engine does not hold, so the site reads the variable as {@link variableValue} does,
- * and a name the variables hold no value of fails, as `qti-variable` does, which a checked item
- * never reaches.
+ * and a built-in; P8 a name nothing declares), so the site reads the variable as
+ * {@link variableValue} does, a template value among them, and a name the variables hold no value
+ * of fails, as `qti-variable` does, which a checked item never reaches.
  *
  * At an unchecked site, `qti-equal`'s `tolerance`, the validator judges nothing, so the resolver
- * keeps to that rule itself: it reads only the outcomes the record holds, and gives NULL of the
- * site's base type for any other name, a response, the built-in `numAttempts` or a name nothing
- * declares (9.11's default). A template variable never reaches it: the engine holds none, and the
- * item model marks a tolerance that names one. The built-in `completionStatus`, which the record
- * holds among its outcomes, is a single identifier, so the caller's type check gives its NULL.
+ * keeps to that rule itself: it reads only the outcomes and the template values the attempt holds,
+ * and gives NULL of the site's base type for any other name, a response, the built-in
+ * `numAttempts` or a name nothing declares (9.11's default). The built-in `completionStatus`,
+ * which the record holds among its outcomes, is a single identifier, so the caller's type check
+ * gives its NULL.
  *
  * @param variables The variables of the attempt.
  * @param site The attribute's value and its reference facet.
@@ -187,8 +195,11 @@ export const referenceValue = (
     return site.checked
       ? variableValue(variables, identifier)
       : Result.succeed(
-          Option.getOrElse(own(variables.outcomes, identifier), () =>
-            nullOf(site.baseType, "single"),
+          Option.getOrElse(
+            Option.orElse(own(variables.outcomes, identifier), () =>
+              own(variables.templates, identifier),
+            ),
+            () => nullOf(site.baseType, "single"),
           ),
         );
   }

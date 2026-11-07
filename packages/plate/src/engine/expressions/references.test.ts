@@ -269,6 +269,177 @@ describe("the references family's evaluators of qti-default and qti-null", () =>
 });
 
 /**
+ * Construct a template declaration.
+ *
+ * @param named Its `identifier`.
+ * @param baseType Its `base-type`.
+ * @param children Its children, such as a `qti-default-value`.
+ * @returns The `qti-template-declaration`, single cardinality.
+ */
+const templateDeclaration = (
+  named: string,
+  baseType: string,
+  children: readonly SourceElement[] = [],
+): SourceElement =>
+  el(
+    "qti-template-declaration",
+    [attr("base-type", baseType), attr("cardinality", "single"), attr("identifier", named)],
+    children,
+  );
+
+/**
+ * Build the item of {@link declarations} with a single identifier response `KEYED` whose correct
+ * response is `A`, a single integer template variable `T` whose default is 6 and a single float
+ * template variable `TN` with no default.
+ *
+ * @returns The item.
+ */
+const templated = () =>
+  buildItem(
+    processingItem(
+      [
+        ...declarations,
+        responseDeclaration("KEYED", "identifier", "single", [
+          el("qti-correct-response", [], [el("qti-value", [], [text("A")])]),
+        ]),
+        templateDeclaration("T", "integer", [defaultValue("6")]),
+        templateDeclaration("TN", "float"),
+      ],
+      [],
+    ),
+  );
+
+/**
+ * Construct the `qti-correct` of a response.
+ *
+ * @param named The response's identifier.
+ * @returns The expression.
+ */
+const correctOf = (named: string): Expression => ({
+  identifier: named,
+  kind: "correct",
+  operands: [],
+});
+
+describe("the references family's evaluators over template values and the template-set overrides", () => {
+  it.effect("[I-5] qti-variable reads a template value", () =>
+    Effect.gen(function* readsTemplateValue() {
+      const item = yield* templated();
+
+      assert.deepStrictEqual(
+        evaluated(
+          { identifier: "T", kind: "variable", operands: [], weightIdentifier: Option.none() },
+          item,
+          {
+            ...changed,
+            templates: { T: integer(9n) },
+          },
+        ),
+        integer(9n),
+      );
+    }),
+  );
+
+  it.effect(
+    "[I-5] qti-correct reads Variables.correct when it holds the response, the declaration's correct response otherwise",
+    () =>
+      Effect.gen(function* readsCorrectOverride() {
+        const item = yield* templated();
+        const overridden: Variables = {
+          ...changed,
+          correct: { KEYED: identifier("B"), RESPONSE: identifier("C") },
+        };
+        const cases: readonly (readonly [string, Variables, Value])[] = [
+          ["KEYED, overridden", overridden, identifier("B")],
+          ["RESPONSE, overridden", overridden, identifier("C")],
+          ["KEYED, no override map", changed, identifier("A")],
+          ["KEYED, an override map without it", { ...changed, correct: {} }, identifier("A")],
+          ["RESPONSE, no override map", changed, nullOf("identifier", "single")],
+        ];
+
+        for (const [name, variables, expected] of cases) {
+          const named = name.split(",")[0] ?? name;
+          const value = evaluated(correctOf(named), item, variables);
+
+          assert.deepStrictEqual(value, expected, name);
+          assertKindType(value, "correct", [], { baseType: "identifier", cardinality: "single" });
+        }
+      }),
+  );
+
+  it.effect(
+    "[I-5] qti-correct of a response the item does not declare fails UnknownIdentifierError of the item, whatever Variables.correct holds",
+    () =>
+      Effect.gen(function* failsUndeclaredCorrect() {
+        const item = yield* templated();
+        const result = evaluateIn(
+          correctOf("NOPE"),
+          scopeOf(item, { ...changed, correct: { NOPE: identifier("A") } }),
+        );
+
+        assert.deepStrictEqual(
+          Option.map(Result.getFailure(result), (failure) =>
+            failure._tag === "UnknownIdentifierError"
+              ? [failure._tag, failure.holder, failure.identifier, failure.role]
+              : [failure._tag],
+          ),
+          Option.some(["UnknownIdentifierError", "item", "NOPE", "response"]),
+        );
+      }),
+  );
+
+  it.effect(
+    "[I-5] qti-default reads Variables.defaults when it holds the variable, the declaration's default otherwise",
+    () =>
+      Effect.gen(function* readsDefaultOverride() {
+        const item = yield* templated();
+        const overridden: Variables = {
+          ...changed,
+          defaults: { COUNT: integer(8n), RESPONSE: identifier("D"), SCORE: float(9) },
+        };
+        const cases: readonly (readonly [string, Variables, Value])[] = [
+          ["SCORE", overridden, float(9)],
+          ["COUNT", overridden, integer(8n)],
+          ["RESPONSE", overridden, identifier("D")],
+          ["SCORE", changed, float(2.5)],
+          ["SCORE", { ...changed, defaults: {} }, float(2.5)],
+          ["COUNT", changed, nullOf("integer", "single")],
+        ];
+
+        for (const [named, variables, expected] of cases) {
+          assert.deepStrictEqual(evaluated(defaultOf(named), item, variables), expected, named);
+        }
+      }),
+  );
+
+  it.effect(
+    "[I-5] qti-default of a template variable gives its declared default, not its template value, and NULL of its type when it declares none",
+    () =>
+      Effect.gen(function* readsTemplateDefault() {
+        const item = yield* templated();
+        const holding: Variables = {
+          ...changed,
+          templates: { T: integer(9n), TN: float(1.5) },
+        };
+        const cases: readonly (readonly [string, Value])[] = [
+          ["T", integer(6n)],
+          ["TN", nullOf("float", "single")],
+        ];
+
+        for (const [named, expected] of cases) {
+          const value = evaluated(defaultOf(named), item, holding);
+
+          assert.deepStrictEqual(value, expected, named);
+          assertKindType(value, "default", [], {
+            baseType: expected.baseType,
+            cardinality: expected.cardinality,
+          });
+        }
+      }),
+  );
+});
+
+/**
  * A stream that counts its draws: the stream of a key, and how many draws have been taken from it.
  */
 interface Counted {
