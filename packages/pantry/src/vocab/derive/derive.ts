@@ -43,7 +43,7 @@
  *   extends, through the simple content of a complex base ({@link textTypeOf}).
  */
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Array as Arr, Console, Effect, Layer, Match, Option, Result, Schema } from "effect";
+import { Array as Arr, Console, Effect, Layer, Match, Option, pipe, Result, Schema } from "effect";
 import { Argument, Command } from "effect/cli";
 import { Digest } from "effect/crypto";
 import type { Element, XmlDocument } from "@qti-pie/crust/tree.ts";
@@ -62,6 +62,7 @@ import type {
   WhiteSpace,
 } from "#pantry/vocab/inventory/types.ts";
 import {
+  noNamespace,
   xmlNamespace as XML,
   xmlnsNamespace as XMLNS,
   xsNamespace as XS,
@@ -165,8 +166,73 @@ export const firstXs = (node: Element, local: string): Option.Option<Element> =>
 export const attributeOf = (node: Element, name: string): Option.Option<string> =>
   Arr.findFirst(
     node.attributes,
-    (attribute) => attribute.namespace === "" && attribute.local === name,
+    (attribute) => attribute.namespace === noNamespace && attribute.local === name,
   ).pipe(Option.map((attribute) => attribute.value));
+
+/**
+ * The value of an attribute the construct must carry.
+ *
+ * Public, and stable while the vocabularies are derived: other vocabularies' readings share it.
+ *
+ * @param node - The construct.
+ * @param name - The attribute's local name.
+ * @returns The value, or an {@link XsdReadingError} naming the construct when it is absent.
+ */
+export const requireAttribute = (
+  node: Element,
+  name: string,
+): Result.Result<string, XsdReadingError> =>
+  Option.match(attributeOf(node, name), {
+    onNone: () => refuse(`an ${node.qname} has no ${name} attribute`),
+    onSome: (value) => Result.succeed(value),
+  });
+
+/**
+ * The items of a list-valued attribute, such as `memberTypes`, or `substitutionGroup` as XML Schema
+ * 1.1 lists it: its value split at white space. An absent one states no item, as XML Schema 1.0
+ * makes each optional: a union's members are then its anonymous member types alone (Part 2,
+ * §4.1.2), and an element names no substitution group head (Part 1, §3.3.2).
+ *
+ * Public, and stable while the vocabularies are derived: other vocabularies' readings share it.
+ *
+ * @param node - The element.
+ * @param name - The attribute's local name.
+ * @returns The items in order; none when the element has no such attribute.
+ */
+export const listAttributeOf = (node: Element, name: string): readonly string[] =>
+  Option.match(attributeOf(node, name), {
+    onNone: () => [],
+    onSome: (value) => value.split(/\s+/u).filter((item) => item !== ""),
+  });
+
+/**
+ * Group items by a key, as `Map.groupBy` does, each group non-empty by construction.
+ *
+ * Public, and stable while the vocabularies are derived: other vocabularies' readings share it.
+ *
+ * @param items - The items, in order.
+ * @param keyOf - The key of an item.
+ * @returns Each key, in the order it is first met, with its items in order.
+ */
+export const groupedBy = <A, K>(
+  items: Iterable<A>,
+  keyOf: (item: A) => K,
+): ReadonlyMap<K, Arr.NonEmptyReadonlyArray<A>> => {
+  const groups = new Map<K, Arr.NonEmptyArray<A>>();
+
+  for (const item of items) {
+    const key = keyOf(item);
+    const group = groups.get(key);
+
+    if (group === undefined) {
+      groups.set(key, [item]);
+    } else {
+      group.push(item);
+    }
+  }
+
+  return groups;
+};
 
 /**
  * A resolved QName: a namespace name and a local name.
@@ -197,7 +263,7 @@ const resolveIn = (
   return Option.match(Option.fromNullishOr(namespaces.get(prefix)), {
     onNone: () =>
       prefix === ""
-        ? Result.succeed({ local, namespace: "" })
+        ? Result.succeed({ local, namespace: noNamespace })
         : refuse(`the prefix of ${lexical} is not declared on the xs:schema element`),
     onSome: (namespace) => Result.succeed({ local, namespace }),
   });
@@ -210,8 +276,9 @@ const resolveIn = (
  * element declarations and `attributes` the top-level attribute declarations. A valid schema names
  * each component once per kind, and the pinned files hold no named component below the top level.
  * `declarations` holds, per element name, the distinct `type` of its declarations at any depth, in
- * document order; a declaration with an anonymous type adds nothing. `substitutions` holds, per
- * top-level element, the top-level elements whose `substitutionGroup` names it, in document order.
+ * document order; a declaration with an anonymous type adds nothing. `substitutions` holds, for
+ * every top-level element, the top-level elements whose `substitutionGroup` names it, in document
+ * order, none for an element that heads no group.
  * `namespaces` maps each prefix the `xs:schema` element declares, `""` for the default namespace,
  * and `xml`. `qualified` is whether a local element declaration is in the target namespace by
  * default (`elementFormDefault="qualified"`), and `targetPrefix` is the prefix a name in the target
@@ -221,7 +288,7 @@ export interface XsdSchema {
   readonly attributeGroups: ReadonlyMap<string, Element>;
   readonly attributes: ReadonlyMap<string, Element>;
   readonly complexTypes: ReadonlyMap<string, Element>;
-  readonly declarations: ReadonlyMap<string, readonly string[]>;
+  readonly declarations: ReadonlyMap<string, Arr.NonEmptyReadonlyArray<string>>;
   readonly elements: ReadonlyMap<string, Element>;
   readonly groups: ReadonlyMap<string, Element>;
   readonly namespaces: ReadonlyMap<string, string>;
@@ -235,51 +302,64 @@ export interface XsdSchema {
 /**
  * The top-level components of a schema of one kind, by name.
  *
+ * Every top-level component has a `name`: the schema for schemas requires it of `topLevelElement`,
+ * `topLevelAttribute`, `topLevelComplexType`, `topLevelSimpleType`, `namedGroup` and
+ * `namedAttributeGroup` (XML Schema 1.0 Part 1, Appendix A).
+ *
  * @param root - The `xs:schema` element.
  * @param local - The kind's construct, such as `complexType`.
- * @returns Each named component of that kind under its name.
+ * @returns Each component of that kind under its name, or an {@link XsdReadingError} for one with
+ *   no `name`.
  */
-const componentsOf = (root: Element, local: string): ReadonlyMap<string, Element> =>
-  new Map(
-    xsChildren(root, local).flatMap((component) =>
-      Option.match(attributeOf(component, "name"), {
-        onNone: () => [],
-        onSome: (name) => [[name, component] as const],
-      }),
+const componentsOf = (
+  root: Element,
+  local: string,
+): Result.Result<ReadonlyMap<string, Element>, XsdReadingError> =>
+  Result.map(
+    Result.all(
+      xsChildren(root, local).map((component) =>
+        Result.map(requireAttribute(component, "name"), (name) => [name, component] as const),
+      ),
     ),
+    (named) => new Map(named),
   );
 
 /**
- * The distinct declared types of every element name the schema declares, in document order.
+ * Every element declaration below a node, the node included, that states its name and its type, as
+ * the pair of the two, in document order.
  *
- * @param root - The `xs:schema` element.
- * @returns Each element name with the `type` values of its declarations, first-seen first.
+ * @param node - The node.
+ * @returns The pairs.
  */
-const declarationsOf = (root: Element): ReadonlyMap<string, readonly string[]> => {
-  const declared = new Map<string, readonly string[]>();
-  const visit = (node: Element): void => {
-    const declaration = isXs(node, "element")
-      ? Option.all([attributeOf(node, "name"), attributeOf(node, "type")])
-      : Option.none();
+const typedDeclarationsIn = (node: Element): readonly (readonly [string, string])[] => [
+  ...(isXs(node, "element")
+    ? Option.toArray(Option.all([attributeOf(node, "name"), attributeOf(node, "type")]))
+    : []),
+  ...elementsOf(node).flatMap(typedDeclarationsIn),
+];
 
-    if (Option.isSome(declaration)) {
-      const [name, type] = declaration.value;
-      const types = declared.get(name) ?? [];
-
-      if (!types.includes(type)) {
-        declared.set(name, [...types, type]);
-      }
-    }
-
-    for (const child of elementsOf(node)) {
-      visit(child);
-    }
-  };
-
-  visit(root);
-
-  return declared;
-};
+/**
+ * Each element name with the distinct `type` values of its declarations, first-seen first.
+ *
+ * @param pairs - The declarations as name and type pairs, in document order.
+ * @returns The names in the order they are first declared.
+ */
+const typesByName = (
+  pairs: Iterable<readonly [string, string]>,
+): ReadonlyMap<string, Arr.NonEmptyReadonlyArray<string>> =>
+  new Map(
+    [...groupedBy(pairs, ([name]) => name)].map(
+      ([name, declared]) =>
+        [
+          name,
+          pipe(
+            declared,
+            Arr.map(([, type]) => type),
+            Arr.dedupe,
+          ),
+        ] as const,
+    ),
+  );
 
 /**
  * One schema document's part of a schema: everything {@link XsdSchema} holds but the
@@ -288,10 +368,76 @@ const declarationsOf = (root: Element): ReadonlyMap<string, readonly string[]> =
 type DocumentIndex = Omit<XsdSchema, "substitutions">;
 
 /**
+ * What each value of `elementFormDefault` and `form` says of a local element declaration: whether
+ * it is in its schema's target namespace (XML Schema 1.0 Part 1, §3.3.2, `{target namespace}`).
+ */
+const formReadings: ReadonlyMap<string, boolean> = new Map([
+  ["qualified", true],
+  ["unqualified", false],
+]);
+
+/**
+ * `elementFormDefault`'s XSD default, `unqualified`, read through {@link formReadings}: a schema
+ * document that states none puts its local element declarations in no namespace (XML Schema 1.0
+ * Part 1, §3.15.2, `elementFormDefault = (qualified | unqualified) : unqualified`).
+ */
+const elementFormDefault = false;
+
+/**
+ * Read a form attribute, `elementFormDefault` or `form`.
+ *
+ * @param node - The `xs:schema` or the `xs:element`.
+ * @param name - The attribute.
+ * @returns Whether it says `qualified`, `None` when the element does not carry it, or an
+ *   {@link XsdReadingError} for a value that is neither `qualified` nor `unqualified`.
+ */
+const formOf = (
+  node: Element,
+  name: "elementFormDefault" | "form",
+): Result.Result<Option.Option<boolean>, XsdReadingError> =>
+  Option.match(attributeOf(node, name), {
+    onNone: () => Result.succeed(Option.none()),
+    onSome: (value) =>
+      Option.match(Option.fromNullishOr(formReadings.get(value)), {
+        onNone: () =>
+          refuse(
+            `an ${node.qname} has ${name}="${value}", which is neither qualified nor unqualified`,
+          ),
+        onSome: (qualified) => Result.succeed(Option.some(qualified)),
+      }),
+  });
+
+/**
+ * The namespace of the element a declaration declares (XML Schema 1.0 Part 1, §3.3.2,
+ * `{target namespace}`): its schema's target namespace for a top-level declaration, and for a local
+ * one whose `form`, or else whose schema's `elementFormDefault`, is `qualified`; no namespace for
+ * any other local one.
+ *
+ * Public, and stable while the vocabularies are derived: the content-model IR names each
+ * declaration's kind in it.
+ *
+ * @param schema - The schema the declaration is in.
+ * @param declaration - The `xs:element` declaration.
+ * @param global - Whether it is a top-level declaration.
+ * @returns The namespace, or an {@link XsdReadingError} for a `form` that is neither `qualified`
+ *   nor `unqualified`.
+ */
+export const elementNamespaceOf = (
+  schema: XsdSchema,
+  declaration: Element,
+  global: boolean,
+): Result.Result<string, XsdReadingError> =>
+  global
+    ? Result.succeed(schema.targetNamespace)
+    : Result.map(formOf(declaration, "form"), (form) =>
+        Option.getOrElse(form, () => schema.qualified) ? schema.targetNamespace : noNamespace,
+      );
+
+/**
  * The prefix a schema writes names in its target namespace with.
  *
  * @param namespaces - The prefixes the `xs:schema` element declares, with `xml`.
- * @param targetNamespace - The schema's target namespace, `""` for none.
+ * @param targetNamespace - The schema's target namespace, {@link noNamespace} for none.
  * @returns `""` for no namespace or the default one, else the first prefix the element binds to
  *   it, or an {@link XsdReadingError} when it binds none.
  */
@@ -299,7 +445,7 @@ const targetPrefixOf = (
   namespaces: ReadonlyMap<string, string>,
   targetNamespace: string,
 ): Result.Result<string, XsdReadingError> => {
-  if (targetNamespace === "" || namespaces.get("") === targetNamespace) {
+  if (targetNamespace === noNamespace || namespaces.get("") === targetNamespace) {
     return Result.succeed("");
   }
 
@@ -334,18 +480,25 @@ const indexDocument = (document: XmlDocument): Result.Result<DocumentIndex, XsdR
         : [],
     );
     const namespaces: ReadonlyMap<string, string> = new Map([["xml", XML], ...declared]);
-    const targetNamespace = Option.getOrElse(attributeOf(root, "targetNamespace"), () => "");
+    // A document with no `targetNamespace` has an absent `{target namespace}` (§3.15.2).
+    const targetNamespace = Option.getOrElse(
+      attributeOf(root, "targetNamespace"),
+      () => noNamespace,
+    );
 
     return {
-      attributeGroups: componentsOf(root, "attributeGroup"),
-      attributes: componentsOf(root, "attribute"),
-      complexTypes: componentsOf(root, "complexType"),
-      declarations: declarationsOf(root),
-      elements: componentsOf(root, "element"),
-      groups: componentsOf(root, "group"),
+      attributeGroups: yield* componentsOf(root, "attributeGroup"),
+      attributes: yield* componentsOf(root, "attribute"),
+      complexTypes: yield* componentsOf(root, "complexType"),
+      declarations: typesByName(typedDeclarationsIn(root)),
+      elements: yield* componentsOf(root, "element"),
+      groups: yield* componentsOf(root, "group"),
       namespaces,
-      qualified: Option.contains(attributeOf(root, "elementFormDefault"), "qualified"),
-      simpleTypes: componentsOf(root, "simpleType"),
+      qualified: Option.getOrElse(
+        yield* formOf(root, "elementFormDefault"),
+        () => elementFormDefault,
+      ),
+      simpleTypes: yield* componentsOf(root, "simpleType"),
       targetNamespace,
       targetPrefix: yield* targetPrefixOf(namespaces, targetNamespace),
     };
@@ -379,14 +532,14 @@ const mergeComponents = (
 };
 
 /**
- * The substitution groups of a schema: per head, the top-level elements that name it in their
- * `substitutionGroup`, in document order.
+ * The substitution groups of a schema: for every top-level element, the top-level elements that
+ * name it in their `substitutionGroup`, in document order.
  *
  * @param elements - The schema's top-level element declarations, in document order.
  * @param namespaces - The prefixes the schema binds.
  * @param targetNamespace - The schema's target namespace.
- * @returns The members by head, or an {@link XsdReadingError} for a head that is not a top-level
- *   element of the schema.
+ * @returns The members by head, none for an element that heads no group, or an
+ *   {@link XsdReadingError} for a head that is not a top-level element of the schema.
  */
 const substitutionsOf = (
   elements: ReadonlyMap<string, Element>,
@@ -394,24 +547,23 @@ const substitutionsOf = (
   targetNamespace: string,
 ): Result.Result<ReadonlyMap<string, readonly string[]>, XsdReadingError> =>
   Result.gen(function* substitutionsOfBody() {
-    const members = new Map<string, readonly string[]>();
+    const members = new Map<string, string[]>([...elements.keys()].map((name) => [name, []]));
 
     for (const [name, declaration] of elements) {
-      const heads = Option.match(attributeOf(declaration, "substitutionGroup"), {
-        onNone: () => [],
-        onSome: (value) => value.split(/\s+/u).filter((head) => head !== ""),
-      });
-
-      for (const lexical of heads) {
+      for (const lexical of listAttributeOf(declaration, "substitutionGroup")) {
         const head = yield* resolveIn(namespaces, lexical);
+        const group =
+          head.namespace === targetNamespace
+            ? Option.fromNullishOr(members.get(head.local))
+            : Option.none();
 
-        if (head.namespace !== targetNamespace || !elements.has(head.local)) {
+        if (Option.isNone(group)) {
           return yield* refuse(
             `the element ${name} names ${lexical} as its substitution group head, which is no top-level element of this schema`,
           );
         }
 
-        members.set(head.local, [...(members.get(head.local) ?? []), name]);
+        group.value.push(name);
       }
     }
 
@@ -474,16 +626,6 @@ export const indexSchemas = (
       }
     }
 
-    const declarations = new Map<string, readonly string[]>();
-
-    for (const part of parts) {
-      for (const [name, types] of part.declarations) {
-        const known = declarations.get(name) ?? [];
-
-        declarations.set(name, [...known, ...types.filter((type) => !known.includes(type))]);
-      }
-    }
-
     const elements = yield* mergeComponents(
       "element",
       parts.map((part) => part.elements),
@@ -502,7 +644,13 @@ export const indexSchemas = (
         "complexType",
         parts.map((part) => part.complexTypes),
       ),
-      declarations,
+      declarations: typesByName(
+        parts.flatMap((part) =>
+          [...part.declarations].flatMap(([name, types]) =>
+            types.map((type) => [name, type] as const),
+          ),
+        ),
+      ),
       elements,
       groups: yield* mergeComponents(
         "group",
@@ -585,24 +733,6 @@ export const requireComponent = (
       onNone: () => refuse(`no top-level xs:${kind} named ${lexical} is declared in this document`),
       onSome: (component) => Result.succeed(component),
     });
-  });
-
-/**
- * The value of an attribute the construct must carry.
- *
- * Public, and stable while the vocabularies are derived: other vocabularies' readings share it.
- *
- * @param node - The construct.
- * @param name - The attribute's local name.
- * @returns The value, or an {@link XsdReadingError} naming the construct when it is absent.
- */
-export const requireAttribute = (
-  node: Element,
-  name: string,
-): Result.Result<string, XsdReadingError> =>
-  Option.match(attributeOf(node, name), {
-    onNone: () => refuse(`an ${node.qname} has no ${name} attribute`),
-    onSome: (value) => Result.succeed(value),
   });
 
 /**
@@ -694,10 +824,10 @@ const whiteSpaceOf = (
 
     if (isXs(variety, "union")) {
       const members: SimpleTypeRef[] = [
-        ...Option.match(attributeOf(variety, "memberTypes"), {
-          onNone: () => [],
-          onSome: (value) => value.split(/\s+/u).filter((member) => member !== ""),
-        }).map((lexical) => ({ _tag: "Named" as const, lexical })),
+        ...listAttributeOf(variety, "memberTypes").map((lexical) => ({
+          _tag: "Named" as const,
+          lexical,
+        })),
         ...xsChildren(variety, "simpleType").map((definition) => ({
           _tag: "Anonymous" as const,
           definition,
@@ -831,10 +961,7 @@ export const inlineOf = (
     if (isXs(variety, "union")) {
       const members: TypeReading[] = [];
 
-      for (const lexical of Option.match(attributeOf(variety, "memberTypes"), {
-        onNone: () => [],
-        onSome: (value) => value.split(/\s+/u).filter((member) => member !== ""),
-      })) {
+      for (const lexical of listAttributeOf(variety, "memberTypes")) {
         members.push(yield* named(lexical));
       }
 
@@ -930,10 +1057,26 @@ export type AttributeRow = AttributeUse &
   (({ readonly _tag: "declared" } & ValueType) | { readonly _tag: "xml" });
 
 /**
+ * The type of an attribute declared with neither a `type` nor an anonymous type: the simple
+ * ur-type, `xs:anySimpleType` (XML Schema 1.0 Part 1, §3.2.2, `{type definition}`), its value
+ * preserved ({@link builtinWhiteSpace}).
+ */
+const untypedAttribute: ValueType = {
+  inline: Option.none(),
+  type: "xs:anySimpleType",
+  whiteSpace: builtinWhiteSpace("anySimpleType"),
+};
+
+/**
+ * An attribute declaration's `use` when it states none (XML Schema 1.0 Part 1, §3.2.2,
+ * `use = (optional | prohibited | required) : optional`).
+ */
+const attributeUseDefault = "optional";
+
+/**
  * The simple type of a declaration that names its attribute.
  *
- * A declaration with neither a `type` nor an anonymous type has `xs:anySimpleType`, as XML Schema
- * gives it.
+ * A declaration with neither a `type` nor an anonymous type has {@link untypedAttribute}'s.
  *
  * @param schema - The schema the declaration is in.
  * @param declaration - The `xs:attribute` element.
@@ -950,12 +1093,7 @@ export const declaredType = (
   }
 
   return Option.match(firstXs(declaration, "simpleType"), {
-    onNone: () =>
-      Result.succeed({
-        inline: Option.none(),
-        type: "xs:anySimpleType",
-        whiteSpace: builtinWhiteSpace("anySimpleType"),
-      }),
+    onNone: () => Result.succeed(untypedAttribute),
     onSome: (definition) => valueTypeOf(schema, { _tag: "Anonymous", definition }),
   });
 };
@@ -975,7 +1113,7 @@ const attributeRow = (
   Result.gen(function* attributeRowBody() {
     const named = attributeOf(declaration, "name");
     const name = Option.isSome(named) ? named.value : yield* requireAttribute(declaration, "ref");
-    const use = Option.getOrElse(attributeOf(declaration, "use"), () => "optional");
+    const use = Option.getOrElse(attributeOf(declaration, "use"), () => attributeUseDefault);
 
     if (use !== "required" && use !== "optional") {
       return yield* refuse(`the attribute ${name} has use="${use}"`);
@@ -1025,25 +1163,33 @@ const ownAttributes = (
 
 /**
  * The derivation step of a complex type: the `extension` or `restriction` of its
- * `complexContent` or `simpleContent`.
+ * `complexContent` or `simpleContent`, of which a complex type holds at most one (XML Schema 1.0
+ * Part 1, §3.4.2, `(simpleContent | complexContent | ...)`).
+ *
+ * Public, and stable while the vocabularies are derived: the content-model IR reads a type's base
+ * with it.
  *
  * @param complexType - The `xs:complexType` element.
  * @returns The step, `None` for a type with neither content child, or an {@link XsdReadingError}
- *   for a content child with neither step.
+ *   for a type with both, or a content child with neither step.
  */
-const derivationOf = (
+export const derivationOf = (
   complexType: Element,
-): Result.Result<Option.Option<Element>, XsdReadingError> =>
-  Option.match(
-    Option.orElse(firstXs(complexType, "complexContent"), () =>
-      firstXs(complexType, "simpleContent"),
-    ),
-    {
-      onNone: () => Result.succeed(Option.none()),
-      onSome: (content) =>
-        Result.map(requireChild(content, ["extension", "restriction"]), Option.some),
-    },
+): Result.Result<Option.Option<Element>, XsdReadingError> => {
+  const contents = elementsOf(complexType).filter(
+    (child) => isXs(child, "complexContent") || isXs(child, "simpleContent"),
   );
+
+  if (contents.length > 1) {
+    return refuse(`an ${complexType.qname} holds ${contents.length} content children, not one`);
+  }
+
+  return Option.match(Arr.head(contents), {
+    onNone: () => Result.succeed(Option.none()),
+    onSome: (content) =>
+      Result.map(requireChild(content, ["extension", "restriction"]), Option.some),
+  });
+};
 
 /**
  * The complex type of this document a derivation step's base names.
@@ -1114,8 +1260,8 @@ export const attributeRowsOf = (
 export type AttributeWildcardReading = Pick<AttributeWildcard, "namespace" | "processing">;
 
 /**
- * The `namespace` values of an `xs:anyAttribute` the reading covers: every one the pinned XSDs
- * write. A list of namespace names, which no pinned XSD writes, is refused.
+ * The `namespace` values of a wildcard the reading covers: every one the pinned XSDs write. A list
+ * of namespace names, which no pinned XSD writes, is refused.
  */
 const namespaceReadings: ReadonlyMap<string, NamespaceConstraint> = new Map([
   ["##any", "##any"],
@@ -1124,7 +1270,7 @@ const namespaceReadings: ReadonlyMap<string, NamespaceConstraint> = new Map([
 ]);
 
 /**
- * What each `processContents` value of an `xs:anyAttribute` means.
+ * What each `processContents` value of a wildcard means.
  */
 const processingReadings: ReadonlyMap<string, Processing> = new Map([
   ["lax", "lax"],
@@ -1133,45 +1279,52 @@ const processingReadings: ReadonlyMap<string, Processing> = new Map([
 ]);
 
 /**
+ * The XSD defaults of a wildcard's attributes, read when it omits them: `namespace = ... : ##any`
+ * and `processContents = (lax | skip | strict) : strict`, alike for `xs:any` and `xs:anyAttribute`
+ * (XML Schema 1.0 Part 1, §3.10.2 and §3.4.2).
+ */
+const wildcardDefaults = { namespace: "##any", processContents: "strict" } as const;
+
+/**
  * Read a value of a wildcard's attribute through its table of readings.
  *
  * @param node - The wildcard.
  * @param name - The attribute, `namespace` or `processContents`.
- * @param fallback - The attribute's XSD default, read when the wildcard omits it.
  * @param readings - What each value the reading covers means.
- * @returns The value's meaning, or an {@link XsdReadingError} for a value the table lacks.
+ * @returns The value's meaning, its {@link wildcardDefaults} entry's when the wildcard omits it, or
+ *   an {@link XsdReadingError} for a value the table lacks.
  */
 const readWildcardAttribute = <A>(
   node: Element,
-  name: string,
-  fallback: string,
+  name: keyof typeof wildcardDefaults,
   readings: ReadonlyMap<string, A>,
 ): Result.Result<A, XsdReadingError> => {
-  const value = Option.getOrElse(attributeOf(node, name), () => fallback);
+  const value = Option.getOrElse(attributeOf(node, name), () => wildcardDefaults[name]);
 
   return Option.match(Option.fromNullishOr(readings.get(value)), {
-    onNone: () => refuse(`an ${node.qname} has ${name}="${value}", which is not read`),
+    onNone: () => refuse(`an ${node.qname} has ${name}="${value}", which the IR does not read`),
     onSome: (reading) => Result.succeed(reading),
   });
 };
 
 /**
- * Read an attribute wildcard, with the XSD defaults `##any` and `strict`.
+ * Read a wildcard's namespace constraint and processing, with the XSD defaults
+ * ({@link wildcardDefaults}).
  *
- * @param node - An `xs:anyAttribute` element.
+ * Public, and stable while the vocabularies are derived: the content-model IR reads an element
+ * wildcard with it.
+ *
+ * @param node - An `xs:any` or `xs:anyAttribute` element.
  * @returns The wildcard, or an {@link XsdReadingError} for a namespace list or an unknown
  *   `processContents`, which the IR does not hold.
  */
-const wildcardFrom = (node: Element): Result.Result<AttributeWildcardReading, XsdReadingError> =>
-  Result.gen(function* wildcardFromBody() {
+export const wildcardOf = (
+  node: Element,
+): Result.Result<AttributeWildcardReading, XsdReadingError> =>
+  Result.gen(function* wildcardOfBody() {
     return {
-      namespace: yield* readWildcardAttribute(node, "namespace", "##any", namespaceReadings),
-      processing: yield* readWildcardAttribute(
-        node,
-        "processContents",
-        "strict",
-        processingReadings,
-      ),
+      namespace: yield* readWildcardAttribute(node, "namespace", namespaceReadings),
+      processing: yield* readWildcardAttribute(node, "processContents", processingReadings),
     };
   });
 
@@ -1222,7 +1375,7 @@ const completeWildcardOf = (
     for (const holder of holders) {
       for (const node of [holder, ...(yield* attributeGroupsOf(schema, holder))]) {
         for (const wildcard of xsChildren(node, "anyAttribute")) {
-          found.push(yield* wildcardFrom(wildcard));
+          found.push(yield* wildcardOf(wildcard));
         }
       }
     }
@@ -1287,6 +1440,34 @@ export const attributeWildcardOf = (
   });
 
 /**
+ * Read an `xs:boolean` attribute of an XSD construct.
+ *
+ * @param node - The construct.
+ * @param name - The attribute, such as `mixed` or `abstract`.
+ * @returns Its value, `None` when the construct does not carry it, or an {@link XsdReadingError}
+ *   for a value that is no `xs:boolean`.
+ */
+const booleanAttributeOf = (
+  node: Element,
+  name: string,
+): Result.Result<Option.Option<boolean>, XsdReadingError> =>
+  Option.match(attributeOf(node, name), {
+    onNone: () => Result.succeed(Option.none()),
+    onSome: (value) =>
+      Option.match(booleanOf(value), {
+        onNone: () => refuse(`an ${node.qname} has ${name}="${value}", which is no xs:boolean`),
+        onSome: (held) => Result.succeed(Option.some(held)),
+      }),
+  });
+
+/**
+ * `mixed`'s XSD default, read for a type that states it neither on itself nor on its
+ * `complexContent`, and has no base type of the schema to take it from (XML Schema 1.0 Part 1,
+ * §3.4.2, `mixed = boolean : false`).
+ */
+const mixedDefault = false;
+
+/**
  * Whether a complex type admits character data between its children.
  *
  * Public, and stable while the vocabularies are derived: the content-model IR reads a type's
@@ -1294,7 +1475,8 @@ export const attributeWildcardOf = (
  *
  * @param schema - The schema the type is in.
  * @param complexType - The `xs:complexType` element.
- * @returns Its own or its `complexContent`'s `mixed`, else its base type's, else `false`.
+ * @returns Its own or its `complexContent`'s `mixed`, else its base type's, else
+ *   {@link mixedDefault}.
  */
 export const mixedOf = (
   schema: XsdSchema,
@@ -1304,28 +1486,21 @@ export const mixedOf = (
     const content = firstXs(complexType, "complexContent");
 
     for (const holder of [complexType, ...Option.toArray(content)]) {
-      const mixed = attributeOf(holder, "mixed");
+      const mixed = yield* booleanAttributeOf(holder, "mixed");
 
       if (Option.isSome(mixed)) {
-        const value = booleanOf(mixed.value);
-        if (Option.isNone(value)) {
-          return yield* refuse(
-            `an ${holder.qname} has mixed="${mixed.value}", which is no xs:boolean`,
-          );
-        }
-
-        return value.value;
+        return mixed.value;
       }
     }
 
     if (Option.isNone(content)) {
-      return false;
+      return mixedDefault;
     }
 
     const step = yield* requireChild(content.value, ["extension", "restriction"]);
     const base = yield* baseTypeOf(schema, step);
 
-    return Option.isSome(base) ? yield* mixedOf(schema, base.value) : false;
+    return Option.isSome(base) ? yield* mixedOf(schema, base.value) : mixedDefault;
   });
 
 /**
@@ -1371,9 +1546,15 @@ export interface Occurs {
 }
 
 /**
+ * A particle's `minOccurs` and `maxOccurs` when it states neither (XML Schema 1.0 Part 1, §3.9.2,
+ * `maxOccurs = (nonNegativeInteger | unbounded) : 1` and `minOccurs = nonNegativeInteger : 1`).
+ */
+const occursDefault = 1;
+
+/**
  * Exactly one occurrence, the default bounds of a particle.
  */
-const once: Occurs = { max: Option.some(1), min: 1 };
+const once: Occurs = { max: Option.some(occursDefault), min: occursDefault };
 
 /**
  * No occurrence: what a particle that holds nothing counted contributes.
@@ -1410,7 +1591,8 @@ const countOf = (particle: Element, value: string): Result.Result<number, XsdRea
     : refuse(`an ${particle.qname} has the occurrence bound ${value}`);
 
 /**
- * The occurrence a particle's `minOccurs` and `maxOccurs` state, each 1 when absent.
+ * The occurrence a particle's `minOccurs` and `maxOccurs` state, each {@link occursDefault} when
+ * absent.
  *
  * Public, and stable while the vocabularies are derived: the content-model IR (`models.ts`) reads
  * content models' structure with it.
@@ -1421,11 +1603,20 @@ const countOf = (particle: Element, value: string): Result.Result<number, XsdRea
 export const occursOf = (particle: Element): Result.Result<Occurs, XsdReadingError> =>
   Result.gen(function* occursOfBody() {
     const min = attributeOf(particle, "minOccurs");
-    const max = Option.getOrElse(attributeOf(particle, "maxOccurs"), () => "1");
+    const max = attributeOf(particle, "maxOccurs");
 
     return {
-      max: max === "unbounded" ? Option.none() : Option.some(yield* countOf(particle, max)),
-      min: Option.isSome(min) ? yield* countOf(particle, min.value) : 1,
+      max: yield* Option.match(max, {
+        onNone: () => Result.succeed(Option.some(occursDefault)),
+        onSome: (value) =>
+          value === "unbounded"
+            ? Result.succeed(Option.none())
+            : Result.map(countOf(particle, value), Option.some),
+      }),
+      min: yield* Option.match(min, {
+        onNone: () => Result.succeed(occursDefault),
+        onSome: (value) => countOf(particle, value),
+      }),
     };
   });
 
@@ -1440,16 +1631,25 @@ export const qualify = (schema: XsdSchema, local: string): string =>
   schema.targetPrefix === "" ? local : `${schema.targetPrefix}:${local}`;
 
 /**
+ * `abstract`'s XSD default (XML Schema 1.0 Part 1, §3.3.2, `abstract = boolean : false`).
+ */
+const abstractDefault = false;
+
+/**
  * Whether an element declaration is abstract, so that no element of its name is valid.
  *
  * Public, and stable while the vocabularies are derived: the content-model IR skips abstract
  * declarations with it.
  *
  * @param declaration - The `xs:element` element.
- * @returns Whether it says `abstract="true"`.
+ * @returns Its `abstract` read as an `xs:boolean`, {@link abstractDefault} when it states none, or
+ *   an {@link XsdReadingError} for a value that is no `xs:boolean`.
  */
-export const isAbstract = (declaration: Element): boolean =>
-  Option.contains(attributeOf(declaration, "abstract"), "true");
+export const isAbstract = (declaration: Element): Result.Result<boolean, XsdReadingError> =>
+  Result.map(
+    booleanAttributeOf(declaration, "abstract"),
+    Option.getOrElse(() => abstractDefault),
+  );
 
 /**
  * The particles a compositor or a group definition holds, in order.
@@ -1506,17 +1706,16 @@ export const contentParticles = (
 export const soleTypeOf = (
   schema: XsdSchema,
   element: string,
-): Result.Result<string, XsdReadingError> => {
-  const types = schema.declarations.get(element) ?? [];
-
-  return Option.match(types.length === 1 ? Arr.head(types) : Option.none(), {
-    onNone: () =>
-      refuse(
-        `the element ${element} is declared with ${types.length} types (${types.join(", ")}), not one`,
-      ),
-    onSome: (type) => Result.succeed(type),
+): Result.Result<string, XsdReadingError> =>
+  Option.match(Option.fromNullishOr(schema.declarations.get(element)), {
+    onNone: () => refuse(`the element ${element} has no declaration that states its type`),
+    onSome: ([type, ...others]) =>
+      others.length === 0
+        ? Result.succeed(type)
+        : refuse(
+            `the element ${element} is declared with ${others.length + 1} types (${[type, ...others].join(", ")}), not one`,
+          ),
   });
-};
 
 /**
  * A schema read from a pinned XSD and the pinned XSDs it includes: every document, by its path in
@@ -1655,6 +1854,23 @@ const eitherOf = (counts: readonly Occurs[]): Occurs =>
       };
 
 /**
+ * The name an element particle writes: its `name`, or the QName its `ref` names as written, of
+ * which it carries exactly one (XML Schema 1.0 Part 1, §3.3.3, Schema Representation Constraint:
+ * Element Declaration Representation OK, clause 2.1).
+ *
+ * @param particle - The `xs:element` particle.
+ * @returns The name, or an {@link XsdReadingError} for a particle with neither or both.
+ */
+const elementNameOf = (particle: Element): Result.Result<string, XsdReadingError> =>
+  Option.match(attributeOf(particle, "name"), {
+    onNone: () => requireAttribute(particle, "ref"),
+    onSome: (name) =>
+      Option.isSome(attributeOf(particle, "ref"))
+        ? refuse(`an ${particle.qname} particle carries both name and ref`)
+        : Result.succeed(name),
+  });
+
+/**
  * Count the child expressions consecutive particles admit.
  *
  * An element counts once when it is an expression kind and not at all otherwise; a sequence or an
@@ -1665,7 +1881,8 @@ const eitherOf = (counts: readonly Occurs[]): Occurs =>
  * @param schema - The schema the particles are in.
  * @param particles - The particles.
  * @param kinds - The expression kinds.
- * @returns One count per particle, in order.
+ * @returns One count per particle, in order, or an {@link XsdReadingError} for a construct that is
+ *   no particle.
  */
 const countParticles = (
   schema: XsdSchema,
@@ -1679,11 +1896,9 @@ const countParticles = (
       const occurs = yield* occursOf(particle);
 
       if (isXs(particle, "element")) {
-        const name = Option.orElse(attributeOf(particle, "name"), () =>
-          attributeOf(particle, "ref"),
-        );
+        const name = yield* elementNameOf(particle);
 
-        counts.push(times(Option.exists(name, (value) => kinds.has(value)) ? once : none, occurs));
+        counts.push(times(kinds.has(name) ? once : none, occurs));
       } else if (isXs(particle, "group")) {
         const group = yield* requireComponent(
           schema,
@@ -1697,8 +1912,10 @@ const countParticles = (
         const inner = yield* countParticles(schema, particlesOf(particle), kinds);
 
         counts.push(times(isXs(particle, "choice") ? eitherOf(inner) : sumOf(inner), occurs));
-      } else {
+      } else if (isXs(particle, "any")) {
         counts.push(none);
+      } else {
+        return yield* refuse(`an ${particle.qname} stands where a particle is counted`);
       }
     }
 
@@ -1808,18 +2025,20 @@ export const includesOf = (
 
     for (const include of xsChildren(document.root, "include")) {
       const location = yield* requireAttribute(include, "schemaLocation");
-      const url = Option.fromNullishOr(URL.parse(location, sources[path].url)).pipe(
-        Option.map((parsed) => parsed.href),
-      );
-      const pinned = url.pipe(
-        Option.flatMap((href) =>
-          Arr.findFirst(sourcePaths, (candidate) => sources[candidate].url === href),
-        ),
-      );
+      const url = Option.fromNullishOr(URL.parse(location, sources[path].url));
+
+      if (Option.isNone(url)) {
+        return yield* refuse(
+          `${path} includes ${location}, which does not resolve to a URL against ${sources[path].url}`,
+        );
+      }
+
+      const { href } = url.value;
+      const pinned = Arr.findFirst(sourcePaths, (candidate) => sources[candidate].url === href);
 
       if (Option.isNone(pinned)) {
         return yield* refuse(
-          `${path} includes ${location}, which resolves to ${Option.getOrElse(url, () => "no URL")}, a file no pin in src/vocab/derive/sources.ts describes`,
+          `${path} includes ${location}, which resolves to ${href}, a file no pin in src/vocab/derive/sources.ts describes`,
         );
       }
 
@@ -1846,10 +2065,8 @@ export const loadSchemaSet = Effect.fn("vocab.loadSchemaSet")(function* loadSche
   const placed = new Map<SourcePath, Placed>();
   const pending: SourcePath[] = [path];
 
-  while (pending.length > 0) {
-    const next = pending.shift();
-
-    if (next !== undefined && !documents.has(next)) {
+  for (let next = pending.shift(); next !== undefined; next = pending.shift()) {
+    if (!documents.has(next)) {
       const read = yield* readPlaced(next);
 
       documents.set(next, read.document);
