@@ -163,6 +163,7 @@ import {
   branchLaws,
   inclusionLaws,
   itemRefLaws,
+  SectionSelection,
   SelectForm,
   testNameLaws,
   testOverlayLaws,
@@ -1335,6 +1336,20 @@ const primaryKeyOf = (relation: string, ...fields: readonly string[]): Law => ({
 });
 
 /**
+ * Build a generated field's law, which grizzle names when PostgreSQL refuses a row because the
+ * field's column is NULL there (23502). grizzle writes no NULL, so only the field's term can have
+ * no value: a closed read `C.at` at a key its closed relation holds no row at.
+ *
+ * @param relation - The relation.
+ * @param field - Its generated field.
+ * @returns The law.
+ */
+const generatedOf = <R extends { readonly fields: object; readonly name: string }>(
+  relation: R,
+  field: keyof R["fields"] & string,
+): Law => ({ field, kind: "generated", relation: relation.name });
+
+/**
  * Build a family law: an ordered family's members indexed by their own field, a counted family's
  * by a hidden one.
  *
@@ -1445,6 +1460,10 @@ const testKeyNames: ReadonlyMap<string, LawName> = new Map<string, LawName>([
  * - **Identity** (`identity.ts`) and **declarations** (`declarations.ts`), as Q5.07 and Q5.08 state
  *   them: each overlay's row and its copies, its families and keys, and its laws' containments.
  * - **The other overlays**: the keys, families and containments the W5 briefs state exactly.
+ * - **The generated fields**: each one's law, its term's NULL, beside its relation's rows, under the
+ *   law that states its value exists. No term of Qti's reads `C.at`, the one read that can miss, so
+ *   no row breaks one. Each row says which law refuses first, or why none needs to, and is stated
+ *   so an outcome naming it still has a rule.
  */
 const writtenLaws: readonly (readonly [Law, LawName])[] = [
   ...patternLaws([
@@ -2341,6 +2360,11 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
     "Declaration overlay",
   ],
   [familyOf("counted", sideOf("Operand", "operator"), "Expression", "operands"), "Arity"],
+  // An operand's type bits read `ValueBaseBit.row` and `ValueCardinalityBit.row`, closed reads of
+  // a set: ∅ where the diagonal holds no row (`any`, `unknown`), never NULL, so no row breaks
+  // either law. A field a closed relation determines is E1 derived.
+  [generatedOf(Operand, "baseTypeBit"), "E1 derived"],
+  [generatedOf(Operand, "cardinalityBit"), "E1 derived"],
   [
     containedIn(sideOf("Mapping", "baseType"), sideOf("MappableBaseType", "baseType")),
     "MappableBaseType",
@@ -2514,6 +2538,10 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
       ] as const,
   ),
   ...patternLaws([[SelectForm, "E1 derived"]]),
+  // `select` casts `selectForm`, which SelectForm's pattern, the row above, holds to the language
+  // the cast reads total: a form outside it is refused by that law as the statement casts it into
+  // its column, before PostgreSQL computes `select`, so no row breaks this one.
+  [generatedOf(SectionSelection, "select"), "E1 derived"],
   [
     containedIn(
       sideOf("LomObjectIdentifier", "entry", "general", "record", "identifier"),
@@ -2571,6 +2599,11 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
       ] as const,
   ),
   ...patternLaws([[lexical(date), "Calendar date"]]),
+  // `date` casts `day`, which lexical(date)'s pattern, the row above, holds to the days 0001-01-01
+  // to 9999-12-31 the cast reads total: a day outside it is refused by that law as the statement
+  // casts it into its column, before PostgreSQL computes `date`, so no row breaks this one. Its
+  // value is the calendar day `lastUpdated` names, which "Calendar date" states exists.
+  [generatedOf(StatisticDate, "date"), "Calendar date"],
   [
     containedIn(
       sideOf(
