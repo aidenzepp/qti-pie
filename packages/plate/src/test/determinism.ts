@@ -26,6 +26,13 @@
  * stream `outcomeLabel` keys by the seed, and {@link pinnedOutcomeDraws} pins what it gives under
  * {@link determinismSeed}.
  *
+ * {@link pickerRef} is an item ref with two drawing template defaults, `LOW` and `HIGH`, over
+ * {@link pickerItem}, a templated item whose template processing reads them: it draws `PICK`
+ * between them and sets `SPAN` to their difference. {@link observeDefaults} evaluates the defaults
+ * through `evaluateTemplateDefaults` from the stream `defaultLabel` keys by the seed for the
+ * session's first item, then starts the item with them through `firstAttempt`, and
+ * {@link pinnedDefaultDraws} pins what it gives under {@link determinismSeed}.
+ *
  * Test support only, loadable in a page: it value-imports only browser modules and, from `effect`,
  * only `Option` and `Result`.
  *
@@ -38,8 +45,9 @@ import type { PartSwapRefused } from "#plate/emit/swap.ts";
 import { firstAttempt, runAttempt } from "#plate/engine/attempt.ts";
 import type { EngineFailure } from "#plate/engine/evaluate.ts";
 import { runOutcomes } from "#plate/engine/outcome.ts";
-import { drawStream, outcomeLabel } from "#plate/engine/random.ts";
+import { defaultLabel, drawStream, outcomeLabel } from "#plate/engine/random.ts";
 import type { TestScope } from "#plate/engine/scope.ts";
+import { evaluateTemplateDefaults } from "#plate/engine/template.ts";
 import type { Expression, Rule, TemplateRule } from "#plate/model/expression.ts";
 import type {
   BodyNode,
@@ -50,8 +58,9 @@ import type {
   TemplateDeclaration,
   TemplateVisibility,
 } from "#plate/model/item.ts";
+import { startingValue } from "#plate/model/record.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
-import type { Test } from "#plate/model/test.ts";
+import type { ItemRef, Test } from "#plate/model/test.ts";
 import type { ModelledBaseType, Value } from "#plate/model/values.ts";
 import { redactItem } from "#plate/payload.ts";
 import { render } from "#plate/render.ts";
@@ -780,4 +789,156 @@ export const observeOutcomes = (
     );
 
     return [first, second] as const;
+  });
+
+/**
+ * The instance of the record a session starts for its first item: the session's instance
+ * {@link determinismInstance}, a `.` and the item's sequence index, 1.
+ */
+export const pickerInstance = `${determinismInstance}.1`;
+
+/**
+ * The templated item {@link pickerRef} delivers, hand-built (rule `3ad87993`) as a literal so a page
+ * loads it. Its single integers `LOW` and `HIGH` declare defaults 1 and 2, which the item ref's
+ * template defaults replace; `PICK` and `SPAN` declare none. Its template processing reads `LOW`
+ * and `HIGH` before any rule sets them: it draws `PICK` from `LOW` to `HIGH`, the bounds named by
+ * reference, then sets `SPAN` to `HIGH` minus `LOW`. It declares no response or outcome and has no
+ * body or response processing.
+ */
+export const pickerItem: Item = {
+  body: [],
+  document: "items/picker.xml",
+  identifier: "picker",
+  lang: Option.some("en"),
+  outcomes: new Map(),
+  processing: Option.none(),
+  responses: new Map(),
+  templateProcessing: Option.some([
+    setTemplate("PICK", {
+      kind: "random-integer",
+      max: { _tag: "ref", identifier: "HIGH" },
+      min: { _tag: "ref", identifier: "LOW" },
+      operands: [],
+      step: { _tag: "literal", value: 1n },
+    }),
+    setTemplate("SPAN", { kind: "subtract", operands: [variable("HIGH"), variable("LOW")] }),
+  ]),
+  templates: new Map([
+    ["LOW", templateDeclaration("LOW", "integer", Option.some(integer(1n)))],
+    ["HIGH", templateDeclaration("HIGH", "integer", Option.some(integer(2n)))],
+    ["PICK", templateDeclaration("PICK", "integer")],
+    ["SPAN", templateDeclaration("SPAN", "integer")],
+  ]),
+  title: "Picker",
+  unsupported: [],
+};
+
+/**
+ * The item ref through which a test delivers {@link pickerItem} first in its sequence, as much of
+ * it as the template defaults need: its identifier and two drawing template defaults, in document
+ * order, `LOW` from 1 to 9 and then `HIGH` from 10 to 99. Both draw from the one stream an item
+ * ref's defaults share, so `LOW` takes its first draw and `HIGH` its second.
+ */
+export const pickerRef: Pick<ItemRef, "identifier" | "templateDefaults"> = {
+  identifier: "PICKER",
+  templateDefaults: [
+    { expression: randomInteger(1n, 9n), templateIdentifier: "LOW" },
+    { expression: randomInteger(10n, 99n), templateIdentifier: "HIGH" },
+  ],
+};
+
+/**
+ * The test scope {@link pickerRef}'s defaults are evaluated over, as a session presents its first
+ * item: one part `P1` and one section `S1`, each holding `PICKER`, whose item
+ * {@link pickerItem} is not yet presented, has no attempt processed, and holds the record
+ * `fresh` starts. It declares {@link determinismTest}'s outcomes and holds no time, as a template
+ * default's scope holds none.
+ */
+export const pickerScope: TestScope = {
+  declared: new Set(determinismTest.outcomes.keys()),
+  duration: Option.none(),
+  items: [
+    {
+      categories: [],
+      declarations: {
+        outcomes: pickerItem.outcomes,
+        responses: pickerItem.responses,
+        templates: pickerItem.templates,
+      },
+      mappings: new Map(),
+      numAttempts: 0,
+      presented: false,
+      record: {
+        correct: {},
+        defaults: {},
+        outcomes: { completionStatus: identifier("not_attempted") },
+        responses: {},
+        templates: {},
+      },
+      ref: pickerRef.identifier,
+      unheld: new Map(),
+      weights: new Map(),
+    },
+  ],
+  parts: new Map([["P1", [pickerRef.identifier]]]),
+  sections: new Map([["S1", [pickerRef.identifier]]]),
+};
+
+/**
+ * {@link determinismTest}'s outcomes as a session holds them before any outcome processing runs:
+ * each at its starting value. {@link pickerRef}'s defaults are evaluated over them.
+ */
+const startingOutcomes: Readonly<Record<string, Value>> = Object.fromEntries(
+  Array.from(determinismTest.outcomes, ([name, outcome]) => [name, startingValue(outcome)]),
+);
+
+/**
+ * What {@link pickerRef}'s template defaults give as a session presents {@link pickerItem}: the
+ * defaults `evaluateTemplateDefaults` gives, and the template values `firstAttempt` starts from
+ * them.
+ */
+export interface DefaultDraws {
+  readonly defaults: Readonly<Record<string, Value>>;
+  readonly templates: ItemRecord["templates"];
+}
+
+/**
+ * What {@link observeDefaults} gives under {@link determinismSeed}, pinned. `LOW` and `HIGH` are the
+ * defaults' draws, which the template values hold in place of the declared 1 and 2; `PICK` is drawn
+ * between them and `SPAN` is their difference.
+ */
+export const pinnedDefaultDraws: DefaultDraws = {
+  defaults: { HIGH: integer(54n), LOW: integer(4n) },
+  templates: { HIGH: integer(54n), LOW: integer(4n), PICK: integer(23n), SPAN: integer(50n) },
+};
+
+/**
+ * Evaluate {@link pickerRef}'s template defaults and start {@link pickerItem} with them, as a
+ * session does for the first item of its sequence under {@link determinismInstance}: the defaults
+ * through `evaluateTemplateDefaults`, over {@link determinismTest}'s outcomes at their starting
+ * values and {@link pickerScope}, from a fresh `drawStream(seed, defaultLabel(determinismInstance,
+ * 1))`; then the item through `firstAttempt` under {@link pickerInstance}, from those defaults.
+ *
+ * @param seed The processing seed the defaults' stream and the item's template processing are
+ *   keyed by, {@link determinismSeed} by default.
+ * @returns The defaults and the template values, or the first failure.
+ */
+export const observeDefaults = (
+  seed: string = determinismSeed,
+): Result.Result<DefaultDraws, EngineFailure> =>
+  Result.gen(function* observeDefaultDraws() {
+    const defaults = yield* evaluateTemplateDefaults(
+      pickerRef.templateDefaults,
+      determinismTest,
+      startingOutcomes,
+      pickerScope,
+      drawStream(seed, defaultLabel(determinismInstance, 1)),
+    );
+    const record = yield* firstAttempt(pickerItem, {
+      instance: pickerInstance,
+      seed,
+      templateDefaults: defaults,
+    });
+
+    return { defaults, templates: record.templates };
   });
