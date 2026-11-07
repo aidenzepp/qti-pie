@@ -2061,7 +2061,7 @@ const mappingSourcesOf = (
 /**
  * Write what each variable mapping's item ref names, its `ItemRefTarget`'s type, which leaves a
  * mapping under an LTI link unchecked (spec reading 110). A mapping whose item ref has no target
- * has none, and "E1 derived" refuses it.
+ * has none, and "Item ref target" refuses it with its item ref.
  *
  * @param documents - Every document of the package.
  * @param lookups - The lookups, which hold each item ref's target.

@@ -163,9 +163,9 @@ const hostLaws: readonly (readonly [string, LawName | "E1 derived"])[] = [
     "E1 derived",
   ],
   ["contained MappingItemRef(node) in MappingSourceDeclaration(node)", "Variable mapping source"],
-  ["contained VariableMapping(node, parent) in MappingItemRef(node, itemRef)", "E1 derived"],
-  ["contained MappingItemRef(node, itemRef) in VariableMapping(node, parent)", "E1 derived"],
-  ["contained MappingItemRef(itemRef, type) in ItemRefTarget(node, type)", "E1 derived"],
+  ["contained VariableMapping(node, parent) in MappingItemRef(node, itemRef)", "Item ref target"],
+  ["contained MappingItemRef(node, itemRef) in VariableMapping(node, parent)", "Item ref target"],
+  ["contained MappingItemRef(itemRef, type) in ItemRefTarget(node, type)", "Item ref target"],
   [
     "contained MappingSourceDeclaration(itemRef, itemDocument) in ItemRefDocument(node, document)",
     "Variable mapping source",
@@ -551,14 +551,16 @@ const hostBreaches = (inputs: PackageInputs): readonly HostBreach[] => {
       ),
     ),
     ...[...inputs.TemplateDefaultTarget.values()].flatMap((target) => targetBreaches(rows, target)),
+    // A mapping's item ref and what that names hang on the item ref's target, so they are refused
+    // with it under "Item ref target", by the empty name the oracle keys that law by.
     ...rows.mappings.flatMap((mapping) => {
       const itemRef = inputs.MappingItemRef.get(mapping.node);
       const target = inputs.ItemRefTarget.get(mapping.parent);
 
       return unless(
         itemRef?.itemRef === mapping.parent && target !== undefined && itemRef.type === target.type,
-        "E1 derived",
-        mapping.source,
+        "Item ref target",
+        "",
       );
     }),
     ...rows.mappings.flatMap((mapping) => [

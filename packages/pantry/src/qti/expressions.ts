@@ -1805,10 +1805,6 @@ export const referenceLawsByName = {
       on(VariableLookup, "document", "name", "declared"),
     ),
     key(on(mappedNames, "itemRef", "name")),
-    // MappingItemRef: each mapping's item ref and what that names (reading 110).
-    contained(on(VariableMapping, "node", "parent"), on(MappingItemRef, "node", "itemRef")),
-    contained(on(MappingItemRef, "node", "itemRef"), on(VariableMapping, "node", "parent")),
-    contained(on(MappingItemRef, "itemRef", "type"), on(ItemRefTarget, "node", "type")),
     contained(on(VariableMapping, "parent", "target"), on(mappedNames, "itemRef", "name")),
     contained(on(mappedNames, "itemRef", "name"), on(VariableMapping, "parent", "target")),
     contained(
@@ -2134,6 +2130,12 @@ export const referenceLawsByName = {
     // item whose file it lacks, is refused here under the law that refuses the item ref itself.
     contained(on(foundItemRefs, "node", "resourceType"), on(ItemRefTarget, "node", "type")),
     contained(on(heldItemRefs, "node", "itemDocument"), on(ItemRefDocument, "node", "document")),
+    // MappingItemRef: each mapping's item ref and what that names (reading 110), a row only where
+    // the package holds the item ref's target, so a mapping under an item ref with none is refused
+    // here with the item ref.
+    contained(on(VariableMapping, "node", "parent"), on(MappingItemRef, "node", "itemRef")),
+    contained(on(MappingItemRef, "node", "itemRef"), on(VariableMapping, "node", "parent")),
+    contained(on(MappingItemRef, "itemRef", "type"), on(ItemRefTarget, "node", "type")),
   ],
   "Prefixed reference": [
     key(on(resolvingReadings, "assembly", "node", "attribute")),
