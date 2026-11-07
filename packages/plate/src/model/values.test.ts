@@ -275,6 +275,34 @@ describe("parseLexical", () => {
     }),
   );
 
+  it.effect(
+    "[I-9a] reads a duration as its seconds in an xs:double, never truncated, and refuses an ISO 8601 duration",
+    () =>
+      Effect.gen(function* durationLexicalSpace() {
+        const cases: readonly (readonly [string, number, string])[] = [
+          ["90.5", 90.5, "90.5"],
+          ["89.95", 89.95, "89.95"],
+          ["-1.5", -1.5, "-1.5"],
+          ["1E3", 1000, "1000"],
+          ["INF", Number.POSITIVE_INFINITY, "INF"],
+          ["-INF", Number.NEGATIVE_INFINITY, "-INF"],
+          ["NaN", Number.NaN, "NaN"],
+        ];
+        for (const [lexical, seconds, written] of cases) {
+          const single = yield* Effect.fromResult(parseLexical("duration", lexical));
+          assert.strictEqual(single.baseType, "duration", lexical);
+          assert.isTrue(Object.is(single.value, seconds), lexical);
+          assert.strictEqual(format(single), written, lexical);
+        }
+        for (const lexical of ["PT1M30.5S", "P1D", "PT90S", "90s", ""]) {
+          const error = yield* Effect.flip(Effect.fromResult(parseLexical("duration", lexical)));
+          assert.strictEqual(error._tag, "InvalidValue", lexical);
+          assert.strictEqual(error.baseType, "duration", lexical);
+          assert.strictEqual(error.lexical, lexical);
+        }
+      }),
+  );
+
   it.effect("reads a pair as written and refuses one with outer whitespace", () =>
     Effect.gen(function* pairsAsWritten() {
       const directed = yield* Effect.fromResult(parseLexical("directedPair", "A B"));
@@ -368,6 +396,7 @@ describe("format", () => {
         ["pair", "A B", "A B"],
         ["directedPair", "B A", "B A"],
         ["point", "-3 +07", "-3 7"],
+        ["duration", "90.50", "90.5"],
         ["uri", "https://example.org/a b", "https://example.org/a b"],
       ];
       for (const [baseType, lexical, written] of cases) {
@@ -394,7 +423,7 @@ describe("isNcName", () => {
 });
 
 describe("isModelled", () => {
-  it("holds every base type but duration and file", () => {
+  it("holds every base type but file", () => {
     const modelled = [
       "identifier",
       "boolean",
@@ -404,12 +433,13 @@ describe("isModelled", () => {
       "point",
       "pair",
       "directedPair",
+      "duration",
       "uri",
     ];
     for (const baseType of modelled) {
       assert.isTrue(isModelled(baseType), baseType);
     }
-    for (const baseType of ["duration", "file", "record"]) {
+    for (const baseType of ["file", "record"]) {
       assert.isFalse(isModelled(baseType), baseType);
     }
   });

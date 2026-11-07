@@ -111,6 +111,7 @@ export const SingleSchema = Schema.Union([
     baseType: Schema.Literal("directedPair"),
     value: Schema.Tuple([IdentifierText, IdentifierText]),
   }),
+  Schema.Struct({ baseType: Schema.Literal("duration"), value: FloatFromJson }),
   Schema.Struct({ baseType: Schema.Literal("uri"), value: XmlText }),
 ]);
 

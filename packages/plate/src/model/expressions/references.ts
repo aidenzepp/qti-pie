@@ -277,9 +277,9 @@ const nullReader: ReaderSpec<"null"> = {
 };
 
 /**
- * The reader spec of `qti-base-value`: its `base-type` and its text, typed as that base type. A
- * base type the value model does not hold, `duration` or `file`, is the mark
- * `base-type="<type>"` at its path, and builds nothing.
+ * The reader spec of `qti-base-value`: its `base-type` and its text, typed as that base type, a
+ * duration as its seconds. `file`, the base type the value model does not hold, is the mark
+ * `base-type="file"` at its path, and builds nothing.
  *
  * Its read fails with `value-type` for text outside the base type's lexical space, at the
  * element's path. A document the validator refuses first can also fail it with

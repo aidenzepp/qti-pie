@@ -706,7 +706,8 @@ const itemPage = (
 };
 
 /**
- * Write the score a stored record holds, as the candidate reads it in the locale.
+ * Write the score a stored record holds, as the candidate reads it in the locale. A duration is
+ * written as its seconds, as a float is.
  *
  * @param accepted The accepted document.
  * @param stored The record `score` returned.
@@ -725,6 +726,7 @@ const scoreText = (
   }
 
   switch (single.baseType) {
+    case "duration":
     case "float": {
       return Option.map(decodeStoredFloat(single.value), (number) =>
         new Intl.NumberFormat(locale).format(number),

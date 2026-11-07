@@ -59,9 +59,9 @@ const builtInContext = "QTI_CONTEXT";
 const builtInDuration = "duration";
 
 /**
- * The base types of a response the model does not hold.
+ * The base type of a response the model does not hold.
  */
-const unheldBaseTypes: ReadonlySet<string> = new Set(["duration", "file"]);
+const unheldBaseTypes: ReadonlySet<string> = new Set(["file"]);
 
 /**
  * The outcome property 3 orders.
@@ -116,7 +116,7 @@ interface Swept {
   /**
    * The identifiers a `variable:<id>` mark may name: each context variable the root declares,
    * `QTI_CONTEXT`, the built-in `duration`, and each response the root declares with a base type
-   * of `duration` or `file` or a cardinality of `record` that the model does not hold. A template
+   * of `file` or a cardinality of `record` that the model does not hold. A template
    * variable is not among them: the engine holds its value once template processing runs.
    */
   readonly unheld: ReadonlySet<string>;

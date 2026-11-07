@@ -327,7 +327,7 @@ describe("the arithmetic family's reader specs and kind rules", () => {
   );
 
   it("[I-9a] refuse each operand of the arithmetic kinds that is a duration (9.5: not numerical) or a string (expression-type, P23)", () => {
-    const duration = baseValueElement("duration", "PT1S");
+    const duration = baseValueElement("duration", "1");
     const written = baseValueElement("string", "4");
     const cases: readonly (readonly [
       SourceElement,

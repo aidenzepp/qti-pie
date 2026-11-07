@@ -492,7 +492,7 @@ describe("buildTest", () => {
       );
 
       assert.deepStrictEqual(built.outcomes, item.outcomes);
-      assert.deepStrictEqual([...built.outcomes.keys()], ["SCORE", "PASSED", "GRADE"]);
+      assert.deepStrictEqual([...built.outcomes.keys()], ["SCORE", "PASSED", "TIME", "GRADE"]);
       assert.deepStrictEqual(
         built.outcomes.get("GRADE")?.lookupTable,
         Option.some({
@@ -510,9 +510,37 @@ describe("buildTest", () => {
       );
       assert.deepStrictEqual(
         built.unsupported.map((feature) => feature.feature),
-        ['base-type="duration"', 'cardinality="record"'],
+        ['cardinality="record"'],
       );
     }),
+  );
+
+  it.effect(
+    "[T-1] holds a test outcome of base type duration, its default read as seconds, and marks one of base type file",
+    () =>
+      Effect.gen(function* holdsDurationOutcome() {
+        const built = yield* buildTest(
+          test([
+            outcome("TIME", "duration", [defaultValue("90.5")]),
+            outcome("UPLOAD", "file"),
+            part("P1", "linear", "individual", [section("S1", [])]),
+          ]),
+        );
+
+        assert.deepStrictEqual([...built.outcomes.keys()], ["TIME"]);
+        assert.deepStrictEqual(built.outcomes.get("TIME")?.baseType, "duration");
+        assert.deepStrictEqual(
+          built.outcomes.get("TIME")?.defaultValue,
+          Option.some({
+            baseType: "duration",
+            cardinality: "single",
+            values: [{ baseType: "duration", value: 90.5 }],
+          }),
+        );
+        assert.deepStrictEqual(built.unsupported, [
+          mark('base-type="file"', `${root}/qti-outcome-declaration[2]`),
+        ]);
+      }),
   );
 
   it.effect("reads its outcome declarations' six reporting attributes as an item's", () =>

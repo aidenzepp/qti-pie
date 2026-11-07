@@ -293,7 +293,7 @@ describe("the comparison family's reader specs and kind rules", () => {
           expressionElement(
             "match",
             [],
-            [baseValueElement("duration", "PT1S"), baseValueElement("duration", "PT1S")],
+            [baseValueElement("duration", "1"), baseValueElement("duration", "1")],
           ),
         ),
       ),
@@ -419,7 +419,7 @@ describe("the comparison family's reader specs and kind rules", () => {
                 expressionElement(
                   "duration-lt",
                   [],
-                  [baseValueElement("duration", "PT1S"), baseValueElement("duration", "PT2S")],
+                  [baseValueElement("duration", "1"), baseValueElement("duration", "2")],
                 ),
                 baseValueElement("float", "1.0"),
               ],

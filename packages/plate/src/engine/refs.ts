@@ -69,8 +69,9 @@ export const builtInValue = (variables: Variables, identifier: string): Option.O
  * The type of each built-in variable the engine holds: the built-in outcome `completionStatus` a
  * single identifier ({@link completionStatusType}), and `numAttempts` a single integer.
  *
- * `duration` is not among them: the engine holds no value of it, and the item model marks a rule
- * that reads it.
+ * An item's built-in `duration` is not among them: the value model holds the base type duration,
+ * but the engine holds no value of the item's time spent, and the item model marks a rule that
+ * reads it.
  */
 const builtInTypes: ReadonlyMap<string, Pick<Value, "baseType" | "cardinality">> = new Map<
   string,
