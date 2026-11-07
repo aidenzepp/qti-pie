@@ -144,7 +144,7 @@ describe("the MathML fixture data", () => {
   it("pins math-bad-href alone, at phase 6's integration", () => {
     assert.deepStrictEqual(
       mathmlNegatives.filter(({ pinned }) => pinned).map(({ name, rule }) => [name, rule]),
-      [["math-bad-href", "href-form"]],
+      [["math-bad-href", "attribute-lexical"]],
     );
   });
 

@@ -732,9 +732,10 @@ interface NegativeEntry extends PromptEntry {
  * - `owner` is `pr-46` for `math-number-plus`, `math-cn-base-plus` (PR #46's `+0.5` item, expected
  *   `attribute-lexical`) and the 14 negatives PR #46's reply measured as refused today, under the
  *   rules it gives (not main's); every other expectation is phase 6's.
- * - `math-bad-href` is `pinned`: `href-form` is the rule at `90e0bc77`, and the value the integrated
- *   head reports is written in by p6n-24 and p6n-29 as measured. Phase 15 owns the rule an invalid
- *   URI is refused under (its p15-34 updates this entry if its href work moves it, decision 324).
+ * - `math-bad-href` is `pinned`: `href-form` was the rule at `90e0bc77`; since PR #46's `0b4d8ec9`
+ *   names the verdict by the catalog's precedence, it is `attribute-lexical`, ranked ahead of
+ *   `href-form`, as measured. Phase 15 owns the rule an invalid URI is refused under (its p15-34
+ *   updates this entry if its href work moves it, decision 324).
  * - No fixture asserts a rule for `cdgroup="%zz"` or `mglyph src="%zz"`.
  */
 const negativeEntries = [
@@ -911,7 +912,7 @@ const negativeEntries = [
     name: "math-bad-href",
     owner: "pr-46",
     pinned: true,
-    rule: "href-form",
+    rule: "attribute-lexical",
   },
   {
     block: annotationOf("<div><m:math><m:mi>y</m:mi></m:math></div>"),
@@ -925,7 +926,7 @@ const negativeEntries = [
     law: "N6 ancestry",
     name: "math-annotation-xml-nested-interaction",
     owner: "phase-6",
-    rule: "ancestry-ban",
+    rule: "binding-fit",
   },
   {
     block: annotationOf('<div><p><qti-gap identifier="G"/></p></div>'),
