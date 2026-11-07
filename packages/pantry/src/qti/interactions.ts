@@ -111,6 +111,7 @@ import {
   SchemaVersion,
   versions,
 } from "#pantry/grammar/install.ts";
+import { booleanTrue } from "#pantry/grammar/domains.ts";
 import { Attribute } from "#pantry/qti/attributes.ts";
 import { Document } from "#pantry/qti/chardata.ts";
 import { Declaration, declarationRef } from "#pantry/qti/declarations.ts";
@@ -357,13 +358,6 @@ export const ariaNames = ["aria-valuemin", "aria-valuemax"] as const satisfies r
  * The `adaptive` attribute of an item, an `xs:boolean` that defaults to false.
  */
 export const adaptiveName = "adaptive" satisfies Name;
-
-/**
- * The lexical forms of an `xs:boolean` true, collapsed.
- *
- * @see {@link https://www.w3.org/TR/xmlschema-2/#boolean | XML Schema Part 2, §3.2.2 boolean}
- */
-export const booleanTrue = ["true", "1"] as const;
 
 /**
  * The content references, each by the relation that holds it: the attribute it is made by, and the

@@ -23,6 +23,7 @@
  */
 import { Option } from "effect";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
+import { booleanOf } from "#pantry/grammar/domains.ts";
 import type { NodeId } from "#pantry/model/xdm.ts";
 import { collapsedOf, elementsOf, hrefPathOf, valueOf } from "#pantry/test/oracle-view.ts";
 import type { ListedRows, PackageRows, Row, View } from "#pantry/test/oracle-view.ts";
@@ -69,12 +70,6 @@ export const itemResourceType = "imsqti_item_xmlv3p0";
 export const isLinkType = (type: string): boolean => /^ims(?:basic)?ltia?_xmlv/u.test(type);
 
 /**
- * An `xs:boolean` lexical form that is true, its whitespace collapsed (XML Schema 1.0 Part 2,
- * §3.2.2.1): `true` or `1`.
- */
-const truePattern = /^[\t\n\r ]*(?:true|1)[\t\n\r ]*$/u;
-
-/**
  * Read an element's `xs:boolean` attribute.
  *
  * @param rows - The document.
@@ -86,7 +81,7 @@ const truePattern = /^[\t\n\r ]*(?:true|1)[\t\n\r ]*$/u;
 const flagOf = (rows: View, node: NodeId, name: string, otherwise: boolean): boolean =>
   Option.match(valueOf(rows, node, name), {
     onNone: () => otherwise,
-    onSome: (lexical) => truePattern.test(lexical),
+    onSome: (lexical) => Option.contains(booleanOf(lexical), true),
   });
 
 /**

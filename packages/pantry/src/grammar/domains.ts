@@ -1265,9 +1265,63 @@ const ncName = seq(
 const qNameLexical = seq(opt(seq(ncName, literal(":"))), ncName);
 
 /**
- * `xs:boolean`'s lexical space (XML Schema Part 2, 3.2.2.1).
+ * `xs:boolean`'s literals, in its lexical space's production order: `booleanRep ::= 'true' |
+ * 'false' | '1' | '0'` (XSD 1.1 Part 2, §3.3.2.2; XML Schema 1.0 Part 2, §3.2.2.1, lists the same
+ * four).
  */
-const booleanLexical = alt(literal("true"), literal("false"), literal("1"), literal("0"));
+const booleanRep = ["true", "false", "1", "0"] as const;
+
+/**
+ * The literals `booleanLexicalMap` maps to true, `true` and `1`; it maps `false` and `0` to false
+ * (XSD 1.1 Part 2, §3.3.2.2). A collapsed form is true exactly when it is one of these.
+ */
+export const booleanTrue = ["true", "1"] as const satisfies readonly (typeof booleanRep)[number][];
+
+/**
+ * `xs:boolean`'s lexical space (XSD 1.1 Part 2, §3.3.2.2).
+ */
+const booleanLexical = alt(...booleanRep.map(literal));
+
+/**
+ * Write a pattern over an `xs:boolean` form as written that holds exactly where its collapsed form
+ * is one of some literals. `xs:boolean`'s `whiteSpace` is `collapse`, fixed (§3.3.2.3), and
+ * collapse only turns tabs, line feeds and carriage returns into spaces, merges runs of spaces and
+ * drops a space at either end (§4.3.6). No literal holds whitespace, so a form collapses to one
+ * exactly when it is the literal with XML whitespace at either end.
+ *
+ * @param literals - The literals.
+ * @returns The pattern, in the syntax PostgreSQL's and JavaScript's regular expressions share.
+ */
+const booleanFormOf = (literals: readonly string[]): string =>
+  `^[\\t\\n\\r ]*(?:${literals.join("|")})[\\t\\n\\r ]*$`;
+
+/**
+ * The pattern over an `xs:boolean` form as written that holds exactly where it is true: its
+ * collapsed form is one of {@link booleanTrue}. The schema's checks match a written form against it,
+ * and {@link booleanOf} reads a form's truth with it.
+ */
+export const booleanTruePattern = booleanFormOf(booleanTrue);
+
+/**
+ * {@link booleanTruePattern}, compiled.
+ */
+const booleanTrueForm = new RegExp(booleanTruePattern, "u");
+
+/**
+ * A form as written that is an `xs:boolean`: its collapsed form is one of {@link booleanRep}.
+ */
+const booleanForm = new RegExp(booleanFormOf(booleanRep), "u");
+
+/**
+ * Read an `xs:boolean` as written: collapse its whitespace (XSD 1.1 Part 2, §4.3.6), then map the
+ * literal by `booleanLexicalMap` (§3.3.2.2).
+ *
+ * @param lexical - The form as written.
+ * @returns Its value, true for `true` and `1`, false for `false` and `0`; none for a form outside
+ *   the lexical space.
+ */
+export const booleanOf = (lexical: string): Option.Option<boolean> =>
+  booleanForm.test(lexical) ? Option.some(booleanTrueForm.test(lexical)) : Option.none();
 
 /**
  * `xs:base64Binary`'s lexical space, the Second Edition's grammar: groups of four base64

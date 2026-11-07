@@ -582,6 +582,48 @@ describe("vocab/derive/derive.ts over inline schemas", () => {
     }),
   );
 
+  it.effect(
+    "reads mixed as the xs:boolean it is: 1 and 0 too, and a literal its whitespace pads, and refuses a form outside its lexical space",
+    () =>
+      // Oracle: the specification as a checker, XSD 1.1 Part 2 §3.3.2.2 (booleanRep, and
+      // booleanLexicalMap: true for true and 1, false for false and 0) and §3.3.2.3 (whiteSpace
+      // collapse, fixed). Bound: 1 and 0 bare, each literal padded by a space, a tab or a line feed,
+      // and one form outside the lexical space.
+      Effect.gen(function* mixedForms() {
+        const forms = [
+          { form: "1", mixed: true, name: "One" },
+          { form: "0", mixed: false, name: "Zero" },
+          { form: " true&#9;", mixed: true, name: "PaddedTrue" },
+          { form: "&#10;false ", mixed: false, name: "PaddedFalse" },
+          { form: " 1 ", mixed: true, name: "PaddedOne" },
+          { form: "&#9;0", mixed: false, name: "PaddedZero" },
+        ] as const;
+        const schema = valueOf(
+          indexSchema(
+            yield* parse(
+              `${schemaTag()}${forms
+                .map(
+                  ({ form, name }) =>
+                    `<xs:complexType name="${name}" mixed="${form}"><xs:sequence><xs:element name="e"/></xs:sequence></xs:complexType>`,
+                )
+                .join(
+                  "",
+                )}<xs:complexType name="Yes" mixed="yes"><xs:sequence><xs:element name="e"/></xs:sequence></xs:complexType></xs:schema>`,
+            ),
+          ),
+        );
+
+        assert.deepStrictEqual(
+          forms.map(({ name }) => entryOfType(schema, name).content),
+          forms.map(({ mixed }) => (mixed ? { _tag: "mixed" } : { _tag: "element" })),
+        );
+        assert.include(
+          failureOf(entryOf(schema, { element: "Yes", handle: "Yes", type: "t:Yes" })),
+          `an xs:complexType has mixed="yes", which is no xs:boolean`,
+        );
+      }),
+  );
+
   it.effect("refuses an anonymous restriction that holds an element no facet is", () =>
     Effect.gen(function* notAFacet() {
       const schema = valueOf(

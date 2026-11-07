@@ -24,6 +24,7 @@ import { Option } from "effect";
 import { Bits } from "@bjornpagen/grizzle";
 import type { Addition, Uuid } from "@bjornpagen/grizzle";
 import type { Kind } from "#pantry/grammar/compose.ts";
+import { booleanOf } from "#pantry/grammar/domains.ts";
 import { Flag } from "#pantry/grammar/install.ts";
 import { inheritedOf, isSiteKind, ownContext } from "#pantry/import/context.ts";
 import type { DocumentContext, Inherited, ListedTarget } from "#pantry/import/context.ts";
@@ -50,7 +51,6 @@ import {
   sectionParts,
   stimulusRefKind,
   testKind,
-  truePattern,
 } from "#pantry/qti/tests.ts";
 import type {
   AssembledName,
@@ -176,11 +176,6 @@ export const piecesOf = (lexical: string): Pieces => {
     ? { lead, trail, value }
     : { lead: "", trail: "", value: lexical };
 };
-
-/**
- * The value of an `xs:boolean` lexical form, as `TestFlag`'s `E1_derived` reads it.
- */
-const trueForm = new RegExp(truePattern, "u");
 
 /**
  * Whether a kind is one of a list's.
@@ -351,7 +346,7 @@ const flagsOf = (view: View): ReadonlyMap<string, Addition<typeof TestFlag>> =>
                   name,
                   node: node.id,
                   parentKind: kindOf(view, node.parent),
-                  value: trueForm.test(lexical),
+                  value: Option.contains(booleanOf(lexical), true),
                 },
               ] as const,
             ]

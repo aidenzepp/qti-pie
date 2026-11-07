@@ -54,6 +54,7 @@ import { Array as Arr, Console, Effect, Layer, Match, Option, Order, Result, Sch
 import { Argument, Command } from "effect/cli";
 import { Digest } from "effect/crypto";
 import type { Element, XmlDocument } from "@qti-pie/crust/tree.ts";
+import { booleanOf } from "#pantry/grammar/domains.ts";
 import { readPlaced, sourcePaths, sources } from "#pantry/vocab/derive/sources.ts";
 import type { Placed, SourcePath } from "#pantry/vocab/derive/sources.ts";
 import type {
@@ -1360,11 +1361,14 @@ export const mixedOf = (
       const mixed = attributeOf(holder, "mixed");
 
       if (Option.isSome(mixed)) {
-        if (mixed.value !== "true" && mixed.value !== "false") {
-          return yield* refuse(`an ${holder.qname} has mixed="${mixed.value}"`);
+        const value = booleanOf(mixed.value);
+        if (Option.isNone(value)) {
+          return yield* refuse(
+            `an ${holder.qname} has mixed="${mixed.value}", which is no xs:boolean`,
+          );
         }
 
-        return mixed.value === "true";
+        return value.value;
       }
     }
 

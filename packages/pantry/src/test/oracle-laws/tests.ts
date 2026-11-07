@@ -24,7 +24,7 @@
  */
 import { Option, Result } from "effect";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
-import { compile, patternFlags } from "#pantry/grammar/domains.ts";
+import { booleanOf, compile, patternFlags } from "#pantry/grammar/domains.ts";
 import { builtinDomainOf } from "#pantry/vocab/derive/domains.ts";
 import type { NodeId } from "#pantry/model/xdm.ts";
 import {
@@ -185,9 +185,7 @@ const documentLawsOf = (document: TestDocument): readonly Breach[] => {
     const required = section.parts.filter(
       ({ id, kind }) =>
         (kind === testKinds.itemRef || kind === testKinds.section) &&
-        Option.exists(valueOf(rows, id, "required"), (lexical) =>
-          /^[\t\n\r ]*(?:true|1)[\t\n\r ]*$/u.test(lexical),
-        ),
+        Option.contains(Option.flatMap(valueOf(rows, id, "required"), booleanOf), true),
     ).length;
     const bound = section.selection.pipe(
       Option.flatMap((selection) =>
