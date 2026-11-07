@@ -11,7 +11,13 @@ import { buildItem } from "#plate/model/item.ts";
 import type { Rule } from "#plate/model/expression.ts";
 import type { UnsupportedFeature } from "#plate/model/item.ts";
 import { absentControl, buildTest } from "#plate/model/test.ts";
-import type { MarkedFeature, Section, SectionChild, Test } from "#plate/model/test.ts";
+import type {
+  MarkedFeature,
+  Section,
+  SectionChild,
+  TemplateDefault,
+  Test,
+} from "#plate/model/test.ts";
 import { checkStructure } from "#plate/validate/structure.ts";
 import { tables } from "#plate/validate/tables.ts";
 
@@ -944,6 +950,175 @@ describe("buildTest's outcome processing, weights and variable mappings", () => 
         );
         assert.deepStrictEqual([...weighted.mappings], [["RAW", "SCORE"]]);
         assert.deepStrictEqual([plain.weights.size, plain.mappings.size], [0, 0]);
+      }),
+  );
+});
+
+/**
+ * Construct a `qti-template-default`.
+ *
+ * @param identifier The template variable it sets.
+ * @param expression Its expression.
+ * @returns The element.
+ */
+const templateDefault = (identifier: string, expression: SourceElement): SourceElement =>
+  el("qti-template-default", [attr("template-identifier", identifier)], [expression]);
+
+/**
+ * Construct a test of one part `P1` and one section `S1` that holds two item references, `ITEM1`
+ * with the given template defaults and `ITEM2`, with a float `SCORE`.
+ *
+ * @param defaults `ITEM1`'s template defaults, at least two.
+ * @returns The document.
+ */
+const defaulted = (defaults: readonly SourceElement[]): SourceDocument =>
+  test([
+    outcome("SCORE", "float", [defaultValue("0")]),
+    part("P1", "linear", "individual", [
+      section("S1", [
+        itemRef("ITEM1", "items/one.xml", [], defaults),
+        itemRef("ITEM2", "items/two.xml"),
+      ]),
+    ]),
+  ]);
+
+/**
+ * Give the path of one of `ITEM1`'s template defaults in a {@link defaulted} test.
+ *
+ * @param position Its position among them, from 1.
+ * @returns The path.
+ */
+const defaultPath = (position: number): string =>
+  `${firstPart}/qti-assessment-section/qti-assessment-item-ref[1]/qti-template-default[${String(position)}]`;
+
+/**
+ * The integer single value of an integer, as a `qti-base-value` reads.
+ *
+ * @param value The integer.
+ * @returns The expression.
+ */
+const integerValue = (value: bigint) =>
+  ({
+    kind: "base-value",
+    operands: [],
+    value: {
+      baseType: "integer",
+      cardinality: "single",
+      values: [{ baseType: "integer", value }],
+    },
+  }) as const;
+
+/**
+ * Give the template defaults the model read onto `ITEM1`.
+ *
+ * @param built The test.
+ * @returns Them, in order.
+ */
+const defaultsOf = (built: Test): readonly TemplateDefault[] =>
+  nodeNamed(built, "ITEM1", "item-ref").templateDefaults;
+
+describe("buildTest's template defaults", () => {
+  it.effect(
+    "[T-9] reads the template default of each qti-template-default on an item ref, in document order with its expression",
+    () =>
+      Effect.gen(function* readsInOrder() {
+        const document = defaulted([
+          templateDefault(
+            "T2",
+            el("qti-sum", [], [baseValue("integer", "1"), baseValue("integer", "2")]),
+          ),
+          templateDefault("T1", baseValue("integer", "3")),
+        ]);
+        const built = yield* buildTest(document);
+
+        assert.deepStrictEqual(checkStructure(document, tables), []);
+        assert.deepStrictEqual(defaultsOf(built), [
+          {
+            expression: { kind: "sum", operands: [integerValue(1n), integerValue(2n)] },
+            templateIdentifier: "T2",
+          },
+          { expression: integerValue(3n), templateIdentifier: "T1" },
+        ]);
+        assert.deepStrictEqual(nodeNamed(built, "ITEM2", "item-ref").templateDefaults, []);
+        assert.deepStrictEqual(built.unsupported, [
+          mark("qti-template-default", defaultPath(1)),
+          mark("qti-template-default", defaultPath(2)),
+        ]);
+      }),
+  );
+
+  it.effect(
+    "[T-9] reads the template default that reads numAttempts or a section's duration as marked by its name at the default, and leaves it out",
+    () =>
+      Effect.gen(function* marksUnheld() {
+        const document = defaulted([
+          templateDefault("T1", variable("numAttempts")),
+          templateDefault("T2", baseValue("integer", "2")),
+          templateDefault("T3", variable("S1.duration")),
+        ]);
+        const built = yield* buildTest(document);
+
+        assert.deepStrictEqual(checkStructure(document, tables), []);
+        assert.deepStrictEqual(defaultsOf(built), [
+          { expression: integerValue(2n), templateIdentifier: "T2" },
+        ]);
+        assert.deepStrictEqual(built.unsupported, [
+          mark("qti-template-default", defaultPath(1)),
+          mark("variable:numAttempts", defaultPath(1)),
+          mark("qti-template-default", defaultPath(2)),
+          mark("qti-template-default", defaultPath(3)),
+          mark("variable:S1.duration", defaultPath(3)),
+        ]);
+      }),
+  );
+
+  it.effect(
+    "[T-9] reads the template default that reads ITEM2.T, a test outcome or the test's own duration",
+    () =>
+      Effect.gen(function* readsHeld() {
+        const document = defaulted([
+          templateDefault("T1", variable("ITEM2.T")),
+          templateDefault("T2", variable("SCORE")),
+          templateDefault("T3", variable("duration")),
+        ]);
+        const built = yield* buildTest(document);
+
+        assert.deepStrictEqual(checkStructure(document, tables), []);
+        assert.deepStrictEqual(defaultsOf(built), [
+          { expression: variableRead("ITEM2.T"), templateIdentifier: "T1" },
+          { expression: variableRead("SCORE"), templateIdentifier: "T2" },
+          { expression: variableRead("duration"), templateIdentifier: "T3" },
+        ]);
+        assert.deepStrictEqual(built.unsupported, [
+          mark("qti-template-default", defaultPath(1)),
+          mark("qti-template-default", defaultPath(2)),
+          mark("qti-template-default", defaultPath(3)),
+        ]);
+      }),
+  );
+
+  it.effect(
+    "[T-9] reads the template default that holds a kind not landed as marked by the kind at its element, and leaves it out",
+    () =>
+      Effect.gen(function* marksUnlanded() {
+        const document = defaulted([
+          templateDefault(
+            "T1",
+            el("qti-field-value", [attr("field-identifier", "F")], [variable("ITEM2.R")]),
+          ),
+          templateDefault("T2", baseValue("integer", "2")),
+        ]);
+        const built = yield* buildTest(document);
+
+        assert.deepStrictEqual(checkStructure(document, tables), []);
+        assert.deepStrictEqual(defaultsOf(built), [
+          { expression: integerValue(2n), templateIdentifier: "T2" },
+        ]);
+        assert.deepStrictEqual(built.unsupported, [
+          mark("qti-template-default", defaultPath(1)),
+          mark("qti-field-value", `${defaultPath(1)}/qti-field-value`),
+          mark("qti-template-default", defaultPath(2)),
+        ]);
       }),
   );
 });

@@ -3,12 +3,12 @@
  * accepts and does not deliver named as a mark.
  *
  * {@link buildTest} reads the parts, their sections and item references in document order, each
- * `qti-item-session-control` attribute by attribute, each item reference's weights and variable
- * mappings, the test's outcome declarations through the item model's own reader, and its outcome
- * processing into the item model's rules through the registry's expression reader, with the item
- * model's element and attribute readers. The features `testMarks` lists are marks on the verdict,
- * never notices, and the tree leaves them out or holds them inert, so a sequence walked from it
- * ignores them.
+ * `qti-item-session-control` attribute by attribute, each item reference's weights, variable
+ * mappings and template defaults, the test's outcome declarations through the item model's own
+ * reader, and its outcome processing into the item model's rules through the registry's expression
+ * reader, with the item model's element and attribute readers. The features `testMarks` lists are
+ * marks on the verdict, never notices, and the tree leaves them out or holds them inert, so a
+ * sequence walked from it ignores them.
  *
  * @module
  */
@@ -73,6 +73,15 @@ export interface ControlAttributes {
 }
 
 /**
+ * A `qti-template-default` the engine can apply: the template variable of the referenced item it
+ * sets, and the expression the test evaluates for it, over the test's processing names.
+ */
+export interface TemplateDefault {
+  readonly expression: Expression;
+  readonly templateIdentifier: string;
+}
+
+/**
  * A `qti-assessment-item-ref`.
  */
 export interface ItemRef {
@@ -95,6 +104,13 @@ export interface ItemRef {
    */
   readonly mappings: ReadonlyMap<string, string>;
   readonly required: boolean;
+  /**
+   * Each `qti-template-default` the engine can apply, in document order. One whose expression
+   * reads a name the engine does not hold in a test, or holds an element the engine does not
+   * run, is marked at its element and left out, so the template variable starts at the item's
+   * own declared default.
+   */
+  readonly templateDefaults: readonly TemplateDefault[];
   /**
    * Each `qti-weight`'s `identifier`, keyed to its `value`, an `xs:double`.
    */
@@ -423,14 +439,32 @@ const mappingOf = (
   ]);
 
 /**
- * Read a `qti-assessment-item-ref`, its weights and its variable mappings among it. A later weight
- * or mapping of the same identifier replaces an earlier one.
+ * Read a `qti-template-default` into the default the engine applies, none when the engine cannot
+ * apply it. It records its own marks, so the reader that builds the item references stays
+ * unaware of the test's processing names.
+ *
+ * @param element The template default.
+ * @returns The default, none when it is marked, or a refusal at an attribute outside its type.
+ */
+type DefaultReader = (
+  element: SourceElement,
+) => Effect.Effect<Option.Option<TemplateDefault>, Refusal>;
+
+/**
+ * Read a `qti-assessment-item-ref`, its weights, its variable mappings and its template defaults
+ * among it. A later weight or mapping of the same identifier replaces an earlier one; the template
+ * defaults keep document order, each the engine cannot apply left out.
  *
  * @param build The build.
+ * @param readDefault How a template default is read.
  * @param element The item reference.
  * @returns The model, or a refusal at an attribute that is missing or outside its type.
  */
-const itemRef = (build: ModelWalk, element: SourceElement): Effect.Effect<ItemRef, Refusal> =>
+const itemRef = (
+  build: ModelWalk,
+  readDefault: DefaultReader,
+  element: SourceElement,
+): Effect.Effect<ItemRef, Refusal> =>
   Effect.gen(function* readItemRef() {
     const identifier = yield* identifierAttribute(build, element, "identifier");
     const href = yield* requiredValue(build, element, "href");
@@ -442,6 +476,10 @@ const itemRef = (build: ModelWalk, element: SourceElement): Effect.Effect<ItemRe
     );
     const weights = yield* Effect.forEach(childrenNamed(element, "qti-weight"), (each) =>
       weightOf(build, each),
+    );
+    const templateDefaults = yield* Effect.forEach(
+      childrenNamed(element, "qti-template-default"),
+      readDefault,
     );
 
     return {
@@ -456,6 +494,7 @@ const itemRef = (build: ModelWalk, element: SourceElement): Effect.Effect<ItemRe
       kind: "item-ref",
       mappings: new Map(mappings),
       required,
+      templateDefaults: Arr.getSomes(templateDefaults),
       weights: new Map(weights),
     };
   });
@@ -465,10 +504,15 @@ const itemRef = (build: ModelWalk, element: SourceElement): Effect.Effect<ItemRe
  * holds.
  *
  * @param build The build.
+ * @param readDefault How a template default is read.
  * @param element The section.
  * @returns The model, or a refusal at an attribute that is missing or outside its type.
  */
-const section = (build: ModelWalk, element: SourceElement): Effect.Effect<Section, Refusal> =>
+const section = (
+  build: ModelWalk,
+  readDefault: DefaultReader,
+  element: SourceElement,
+): Effect.Effect<Section, Refusal> =>
   Effect.gen(function* readSection() {
     const identifier = yield* identifierAttribute(build, element, "identifier");
     const required = yield* xsBoolean(build, element, "required", false);
@@ -485,7 +529,9 @@ const section = (build: ModelWalk, element: SourceElement): Effect.Effect<Sectio
           (child.local === "qti-assessment-section" || child.local === "qti-assessment-item-ref"),
       ),
       (child): Effect.Effect<SectionChild, Refusal> =>
-        child.local === "qti-assessment-section" ? section(build, child) : itemRef(build, child),
+        child.local === "qti-assessment-section"
+          ? section(build, readDefault, child)
+          : itemRef(build, readDefault, child),
     );
 
     return {
@@ -505,10 +551,15 @@ const section = (build: ModelWalk, element: SourceElement): Effect.Effect<Sectio
  * Read a `qti-test-part` and its sections, in document order.
  *
  * @param build The build.
+ * @param readDefault How a template default is read.
  * @param element The test part.
  * @returns The model, or a refusal at an attribute that is missing or outside its type.
  */
-const testPart = (build: ModelWalk, element: SourceElement): Effect.Effect<TestPart, Refusal> =>
+const testPart = (
+  build: ModelWalk,
+  readDefault: DefaultReader,
+  element: SourceElement,
+): Effect.Effect<TestPart, Refusal> =>
   Effect.gen(function* readTestPart() {
     const identifier = yield* identifierAttribute(build, element, "identifier");
     const navigation = yield* requiredListed(build, element, "navigation-mode", navigationModes);
@@ -516,7 +567,7 @@ const testPart = (build: ModelWalk, element: SourceElement): Effect.Effect<TestP
     const control = yield* controlOf(build, element);
     const children = yield* Effect.forEach(
       childrenNamed(element, "qti-assessment-section"),
-      (child) => section(build, child),
+      (child) => section(build, readDefault, child),
     );
 
     return { children, control, identifier, navigation, submission };
@@ -610,8 +661,9 @@ const controlMarks = (control: SourceElement, path: string): readonly MarkedFeat
  * `qti-item-session-control` gives its own marks. A test-level outcome declaration is marked as the
  * item model marks an item's: the `renders` marks that sit on it, at its path, and each `qti-*`
  * element below it that the model does not read, keyed by its name, its subtree not searched. An
- * element a reader has marked already, the outcome processing, gives the reader's marks where it
- * stands, its subtree not searched, so an `xi:include` in it is marked once.
+ * element a reader has marked already, the outcome processing and each template default, gives its
+ * own mark when it is an element feature, then the reader's marks, where it stands, its subtree not
+ * searched, so an `xi:include` in it is marked once.
  *
  * @param source The test.
  * @param placed The marks a reader gave, keyed by the element they stand at.
@@ -632,6 +684,11 @@ const marksOf = (
     if (parent !== undefined && quiet.has(parent)) {
       quiet.add(element);
     } else if (read !== undefined) {
+      const repeated = read.some((each) => each.feature === feature && each.path === path);
+      if (feature !== undefined && !repeated) {
+        marks.push({ feature, path, shown: "mark" });
+      }
+
       marks.push(...read);
       quiet.add(element);
     } else if (parent !== undefined && declared.has(parent)) {
@@ -686,7 +743,8 @@ const processingBuiltIns: readonly string[] = [
 const durationStep = ".duration";
 
 /**
- * What a test's outcome processing resolves a name against.
+ * What a test's processing, its outcome processing and its template defaults, resolves a name
+ * against.
  */
 interface ProcessingNames {
   /**
@@ -709,25 +767,36 @@ interface ProcessingNames {
 }
 
 /**
- * Give the identifiers of a test's parts, sections and item references, nested sections included.
+ * Give the identifiers of a test's parts, sections and item references, nested sections included,
+ * read from the elements the tree holds as {@link testPart} and {@link section} walk them, so the
+ * names are known before the item references, whose template defaults read them, are built.
  *
- * @param parts The test's parts.
+ * @param root The test's root.
  * @returns Their identifiers.
  */
-const structureOf = (parts: readonly TestPart[]): ReadonlySet<string> => {
+const structureOf = (root: SourceElement): ReadonlySet<string> => {
   const identifiers = new Set<string>();
-  const add = (child: SectionChild): void => {
-    identifiers.add(child.identifier);
-    if (child.kind === "section") {
-      for (const each of child.children) {
-        add(each);
+  const add = (element: SourceElement): void => {
+    for (const identifier of Option.toArray(
+      Option.map(valueOf(element, "identifier"), identifierOf),
+    )) {
+      identifiers.add(identifier);
+    }
+  };
+  const addChild = (element: SourceElement): void => {
+    add(element);
+    if (isQti(element, "qti-assessment-section")) {
+      for (const child of elementsOf(element)) {
+        if (isQti(child, "qti-assessment-section") || isQti(child, "qti-assessment-item-ref")) {
+          addChild(child);
+        }
       }
     }
   };
-  for (const read of parts) {
-    identifiers.add(read.identifier);
-    for (const each of read.children) {
-      add(each);
+  for (const read of childrenNamed(root, "qti-test-part")) {
+    add(read);
+    for (const child of childrenNamed(read, "qti-assessment-section")) {
+      addChild(child);
     }
   }
 
@@ -735,17 +804,15 @@ const structureOf = (parts: readonly TestPart[]): ReadonlySet<string> => {
 };
 
 /**
- * Give what a test's outcome processing resolves a name against.
+ * Give what a test's processing resolves a name against.
  *
  * @param root The test's root.
  * @param outcomes The outcomes the model holds.
- * @param parts The test's parts.
  * @returns The names.
  */
 const processingNamesOf = (
   root: SourceElement,
   outcomes: ReadonlyMap<string, OutcomeDeclaration>,
-  parts: readonly TestPart[],
 ): ProcessingNames => {
   const declared = new Set(
     [
@@ -760,12 +827,12 @@ const processingNamesOf = (
     declared,
     named: new Set([...declared, ...processingBuiltIns]),
     outcomes,
-    structure: structureOf(parts),
+    structure: structureOf(root),
   };
 };
 
 /**
- * Report whether the engine holds a variable a test's outcome processing reads by a name. A name
+ * Report whether the engine holds a variable a test's processing reads by a name. A name
  * the test declares whole is held when the model holds it as an outcome, so a context variable and
  * an outcome the model does not hold are not. A dotted name the test does not declare whole is a
  * prefixed read, which the test scope resolves, held unless it is a part's, a section's or an item
@@ -833,15 +900,46 @@ const referencesOf = (
 };
 
 /**
- * Give each name a test's outcome rules read or set that the engine does not hold, once, in the
- * order the rules first name it, as the item model finds an item's (`unheldIdentifiers` in
- * `#plate/model/item.ts`), each expression through its kind's rule in the registry.
- *
- * A rule sets a name the engine holds only when the model holds it as an outcome. An expression
+ * Add each name an expression and its operands read that the engine does not hold, in the order
+ * they first name it, each expression through its kind's rule in the registry. An expression
  * reads, by its kind's declaration facet, a name {@link isHeld} holds; a kind that expects a
  * response reads only a prefixed one, since a test declares no response. A checked reference reads
  * a name {@link isHeld} holds; an unchecked one is judged only when a declaration or a built-in
  * names it.
+ *
+ * @param operand The expression.
+ * @param names What the processing resolves a name against.
+ * @param unheld Where the names are added.
+ */
+const addUnheldReads = (operand: Expression, names: ProcessingNames, unheld: Set<string>): void => {
+  const kindRule: KindRule = kindRules[operand.kind];
+  if (kindRule.declaration !== undefined && "identifier" in operand) {
+    const { identifier } = operand;
+    const held =
+      kindRule.declaration.expected === "response"
+        ? !names.declared.has(identifier) && identifier.includes(".") && isHeld(names, identifier)
+        : isHeld(names, identifier);
+    if (!held) {
+      unheld.add(identifier);
+    }
+  }
+
+  for (const { checked, identifier } of referencesOf(operand, kindRule)) {
+    if ((checked || names.named.has(identifier)) && !isHeld(names, identifier)) {
+      unheld.add(identifier);
+    }
+  }
+
+  for (const each of operand.operands) {
+    addUnheldReads(each, names, unheld);
+  }
+};
+
+/**
+ * Give each name a test's outcome rules read or set that the engine does not hold, once, in the
+ * order the rules first name it, as the item model finds an item's (`unheldIdentifiers` in
+ * `#plate/model/item.ts`). A rule sets a name the engine holds only when the model holds it as an
+ * outcome; its expressions read as {@link addUnheldReads} judges them.
  *
  * @param rules The rules.
  * @param names What the processing resolves a name against.
@@ -849,35 +947,6 @@ const referencesOf = (
  */
 const unheldNames = (rules: readonly Rule[], names: ProcessingNames): readonly string[] => {
   const unheld = new Set<string>();
-
-  /**
-   * Add each name an expression and its operands read that the engine does not hold.
-   *
-   * @param operand The expression.
-   */
-  const read = (operand: Expression): void => {
-    const kindRule: KindRule = kindRules[operand.kind];
-    if (kindRule.declaration !== undefined && "identifier" in operand) {
-      const { identifier } = operand;
-      const held =
-        kindRule.declaration.expected === "response"
-          ? !names.declared.has(identifier) && identifier.includes(".") && isHeld(names, identifier)
-          : isHeld(names, identifier);
-      if (!held) {
-        unheld.add(identifier);
-      }
-    }
-
-    for (const { checked, identifier } of referencesOf(operand, kindRule)) {
-      if ((checked || names.named.has(identifier)) && !isHeld(names, identifier)) {
-        unheld.add(identifier);
-      }
-    }
-
-    for (const each of operand.operands) {
-      read(each);
-    }
-  };
 
   /**
    * Add each name a rule sequence names, nested branches included, that the engine does not hold.
@@ -888,7 +957,7 @@ const unheldNames = (rules: readonly Rule[], names: ProcessingNames): readonly s
     for (const each of sequence) {
       if (each.kind === "condition") {
         for (const { then, when } of each.branches) {
-          read(when);
+          addUnheldReads(when, names, unheld);
           run(then);
         }
         if (Option.isSome(each.otherwise)) {
@@ -899,7 +968,7 @@ const unheldNames = (rules: readonly Rule[], names: ProcessingNames): readonly s
           unheld.add(each.identifier);
         }
 
-        read(each.expression);
+        addUnheldReads(each.expression, names, unheld);
       }
     }
   };
@@ -1138,6 +1207,35 @@ const outcomeRule = (
 };
 
 /**
+ * Give the marks an element of a test's processing gives: `variable:<name>` at the element's path
+ * for each name the engine does not hold, as the item model marks an item's, then the marks its
+ * reading recorded.
+ *
+ * @param build The build.
+ * @param element The `qti-outcome-processing` or the `qti-template-default`.
+ * @param unheld The names the engine does not hold, in the order they were found.
+ * @param recorded The marks its reading recorded, in reading order.
+ * @returns The marks.
+ */
+const processingMarks = (
+  build: ModelWalk,
+  element: SourceElement,
+  unheld: ReadonlySet<string>,
+  recorded: readonly MarkedFeature[],
+): readonly MarkedFeature[] => {
+  const path = pathOf(build, element);
+
+  return [
+    ...Array.from(unheld, (name): MarkedFeature => ({
+      feature: `variable:${name}`,
+      path,
+      shown: "mark",
+    })),
+    ...recorded,
+  ];
+};
+
+/**
  * A test's outcome processing as read: its state, and the marks it gives, in reading order.
  */
 interface ReadProcessing {
@@ -1178,15 +1276,7 @@ const outcomeProcessingOf = (
       unheld.add("duration");
     }
 
-    const path = pathOf(build, element);
-    const marks: readonly MarkedFeature[] = [
-      ...Array.from(unheld, (name): MarkedFeature => ({
-        feature: `variable:${name}`,
-        path,
-        shown: "mark",
-      })),
-      ...recorded,
-    ];
+    const marks = processingMarks(build, element, unheld, recorded);
 
     return {
       marks,
@@ -1198,17 +1288,82 @@ const outcomeProcessingOf = (
   });
 
 /**
+ * A `qti-template-default` as read: the default the engine applies, none when it is marked, and the
+ * marks it gives, in reading order.
+ */
+interface ReadDefault {
+  readonly marks: readonly MarkedFeature[];
+  readonly templateDefault: Option.Option<TemplateDefault>;
+}
+
+/**
+ * Read a `qti-template-default` into the default the engine applies.
+ *
+ * Its one expression is read through the registry's generic reader, over the names a test's outcome
+ * processing resolves (G-R3, pending: of those, the engine holds in a template default only the
+ * test's declared outcomes, the test's own `duration`, which reads NULL there, and an item's
+ * variables read by a prefixed name, as in outcome processing). It is left out, and nothing is
+ * refused, when the engine cannot apply it: an element the reader marks at its path (an expression
+ * kind the registry has not landed, an `xi:include`, a default that does not hold exactly one
+ * expression), or a name the engine does not hold in a test ({@link addUnheldReads}, and a
+ * `qti-test-variables` that names `duration`, {@link collectsDurations}), each the mark
+ * `variable:<name>` at the default's path.
+ *
+ * @param build The build.
+ * @param names What the test's processing resolves a name against.
+ * @param element The `qti-template-default` element.
+ * @returns The default and its marks, the default's own `variable:` marks first; or the refusal an
+ *   attribute gives, such as `value-type` for a `qti-base-value` outside its lexical space.
+ */
+const templateDefaultOf = (
+  build: ModelWalk,
+  names: ProcessingNames,
+  element: SourceElement,
+): Effect.Effect<ReadDefault, Refusal> =>
+  Effect.gen(function* readTemplateDefault() {
+    const templateIdentifier = yield* identifierAttribute(build, element, "template-identifier");
+    const recorded: MarkedFeature[] = [];
+    const reading = processingReading(build, names.named, recorded);
+    const [operand, ...extra] = elementsOf(element);
+    const expression =
+      operand === undefined || extra.length > 0
+        ? yield* reading.unread(element)
+        : yield* readExpression(reading, operand);
+    const unheld = new Set<string>();
+    if (Option.isSome(expression)) {
+      addUnheldReads(expression.value, names, unheld);
+    }
+
+    if (collectsDurations(element)) {
+      unheld.add("duration");
+    }
+
+    const marks = processingMarks(build, element, unheld, recorded);
+
+    return {
+      marks,
+      templateDefault:
+        marks.length === 0
+          ? expression.pipe(
+              Option.map((read): TemplateDefault => ({ expression: read, templateIdentifier })),
+            )
+          : Option.none(),
+    };
+  });
+
+/**
  * Build the test model of a valid `qti-assessment-test`.
  *
  * The parts, their sections and item references are read in document order; a
  * `qti-assessment-section-ref` and an `xi:include` are marked and left out, and every other
  * `testMarks` feature is marked and left out of the tree or, as `allow-comment` and a negative
  * `max-attempts`, held as written. Each `qti-item-session-control` attribute is held as written or
- * absent, and each item reference's weights and variable mappings are read. The test's outcome
- * declarations are held and marked as the item model holds and marks an item's. Its outcome
- * processing is `absent` when it has none, `marked` when the engine cannot run it
- * ({@link outcomeProcessingOf}), and `runs` with its rules otherwise; nothing in it is refused but
- * an attribute outside its type.
+ * absent, and each item reference's weights, variable mappings and template defaults are read, a
+ * template default the engine cannot apply marked and left out ({@link templateDefaultOf}). The
+ * test's outcome declarations are held and marked as the item model holds and marks an item's. Its
+ * outcome processing is `absent` when it has none, `marked` when the engine cannot run it
+ * ({@link outcomeProcessingOf}), and `runs` with its rules otherwise; nothing in it or in a
+ * template default is refused but an attribute outside its type.
  *
  * @param source A document the structural validator and the prose rules accepted.
  * @returns The test, or the refusal `value-type` at the first typed value outside its lexical
@@ -1229,22 +1384,27 @@ export const buildTest = (source: SourceDocument): Effect.Effect<Test, Refusal> 
       }
     }
 
+    const names = processingNamesOf(root, outcomes);
+    const placed = new Map<SourceElement, readonly MarkedFeature[]>();
+    const readDefault: DefaultReader = (element) =>
+      Effect.gen(function* readPlacedDefault() {
+        const read = yield* templateDefaultOf(build, names, element);
+        placed.set(element, read.marks);
+
+        return read.templateDefault;
+      });
     const parts = yield* Effect.forEach(childrenNamed(root, "qti-test-part"), (part) =>
-      testPart(build, part),
+      testPart(build, readDefault, part),
     );
     const processing = Arr.head(childrenNamed(root, "qti-outcome-processing"));
     const read = yield* Option.match(processing, {
       onNone: () =>
         Effect.succeed<ReadProcessing>({ marks: [], outcomeProcessing: { kind: "absent" } }),
-      onSome: (element) =>
-        outcomeProcessingOf(build, element, processingNamesOf(root, outcomes, parts)),
+      onSome: (element) => outcomeProcessingOf(build, element, names),
     });
-    const placed = new Map<SourceElement, readonly MarkedFeature[]>(
-      Option.match(processing, {
-        onNone: () => [],
-        onSome: (element) => [[element, read.marks]],
-      }),
-    );
+    if (Option.isSome(processing)) {
+      placed.set(processing.value, read.marks);
+    }
 
     return {
       document: source.location,
