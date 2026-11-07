@@ -30,7 +30,8 @@
  *   `data-catalog-idref` names the catalog, and response processing that holds a
  *   `qti-equal-rounded`, a `qti-round-to` and a `qti-equal` with a `tolerance`;
  * - **a second item** whose response processing is a published template, which the test places three
- *   times;
+ *   times, and which holds a catalog `cat2` that the included fragment's `data-catalog-idref`
+ *   names, a reference the schema resolves in each placement;
  * - **the stimulus** has a doctype, a processing instruction, a comment, an `xml:base` and an
  *   unexpanded entity reference in an attribute, and no reference the base would govern;
  * - **the test** has a linear part, a branch rule, a variable mapping, a template default, a
@@ -353,6 +354,11 @@ const templatedItem = [
   "    </qti-choice-interaction>",
   '    <xi:include href="fragment.xml"/>',
   "  </qti-item-body>",
+  "  <qti-catalog-info>",
+  '    <qti-catalog id="cat2">',
+  '      <qti-card support="spoken"><qti-html-content><p>word</p></qti-html-content></qti-card>',
+  "    </qti-catalog>",
+  "  </qti-catalog-info>",
   '  <qti-response-processing template="https://purl.imsglobal.org/spec/qti/v3p0/rptemplates/match_correct.xml"/>',
   "</qti-assessment-item>",
   "",
@@ -369,7 +375,7 @@ const templatedItem = [
 const fragment = [
   declaration,
   `<div xmlns="${asi}" xml:lang="en">`,
-  '  <p id="fragment-note">Type the word.</p>',
+  '  <p id="fragment-note" data-catalog-idref="cat2">Type the word.</p>',
   '  <qti-text-entry-interaction response-identifier="TEXT"/>',
   '  <qti-hottext-interaction response-identifier="WORD" max-choices="1">',
   '    <p>Pick <qti-hottext identifier="W1">this</qti-hottext>.</p>',

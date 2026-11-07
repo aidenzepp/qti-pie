@@ -15,16 +15,23 @@
  *   {@link DefaultEntry} is one row per such entry, keyed by its node, and the key on its `card` is
  *   the law. An entry that writes no `default`, or one whose value is `false` or `0`, has no row;
  *   the XSD's default of `false` designates nothing.
- * - **Catalog reference** (rule `idref-target`; info §5.28.1, §5.15.9): a `data-catalog-idref` names
- *   a `qti-catalog` of its document, not any ID of it. The attribute is typed `xs:IDREF`, so "Idref
- *   target" (`#pantry/qti/identity.ts`) alone refuses a token that names no ID, and accepts one
- *   that names an HTML `id` or a declaration. {@link CatalogRef} is one row per such attribute that
- *   holds a token, as "Idref target" reads only an attribute the schema checks as IDREF and only
- *   its tokens (an unchecked one, or an empty or blank one, names nothing), keyed by its node, its
- *   token the lexical form collapsed (`xs:IDREF`'s whiteSpace `collapse`); {@link CatalogId} is one
- *   row per `qti-catalog` that writes an `id`, copied from the attribute as a `TableHeader` is, its
- *   `id` the value its {@link DocumentId} holds. The law is the containment of every reference's
- *   `(document, token)` in the catalogs' `(document, id)`.
+ * - **Catalog reference** (rule `idref-target`; info §5.28.1, §5.15.9; spec reading 117): a
+ *   `data-catalog-idref` names a `qti-catalog` of its document, not any ID of it. The attribute is
+ *   typed `xs:IDREF`, so "Idref target" (`#pantry/qti/identity.ts`) alone refuses a token that
+ *   names no ID, and accepts one that names an HTML `id` or a declaration. {@link CatalogRef} is
+ *   one row per such attribute that holds a token, as "Idref target" reads only an attribute the
+ *   schema checks as IDREF and only its tokens (an unchecked one, or an empty or blank one, names
+ *   nothing), keyed by its node, its token the lexical form collapsed (`xs:IDREF`'s whiteSpace
+ *   `collapse`); {@link CatalogId} is one row per `qti-catalog` that writes an `id`, copied from
+ *   the attribute as a `TableHeader` is, its `id` the value its {@link DocumentId} holds. A
+ *   document in no assembly resolves each reference among its own catalogs: the containment of
+ *   every reference's `(document, token)` in the catalogs' `(document, id)`, over the tokens
+ *   {@link CatalogTarget} holds. A document in an assembly resolves it once per instance, as "Idref
+ *   target" does its IDREFs ({@link PlacedIdref}): a fragment's reference names a catalog of the
+ *   item it is included in, and a fragment two items include is judged in each.
+ *   {@link PlacedCatalogRef} is one token of an instance's document, which
+ *   {@link AssembledCatalog}, a catalog's binding in its assembly's ID table, must hold under the
+ *   instance's assembly.
  *
  * The card overlays copy their node through {@link nodeRef}, so `catalog` and `card`, each the
  * node's parent, are the parent the tree holds, and both copy their attribute as `identity.ts`
@@ -42,9 +49,13 @@ import {
   closedId,
   Compute,
   contained,
+  counted,
+  drawn,
+  fin,
   key,
   natural,
   on,
+  pg,
   relation,
   select,
   uuid,
@@ -61,9 +72,11 @@ import {
   ValueIdentity,
 } from "#pantry/grammar/install.ts";
 import { Attribute } from "#pantry/qti/attributes.ts";
-import { DocumentId } from "#pantry/qti/identity.ts";
+import { Document } from "#pantry/qti/chardata.ts";
+import { AssembledId, DocumentId, PlacedIdref } from "#pantry/qti/identity.ts";
 import { keyText } from "#pantry/qti/limits.ts";
 import { nodeRef } from "#pantry/qti/node.ts";
+import { TestDocument } from "#pantry/qti/tests.ts";
 
 /**
  * A `qti-card`'s `support`, keyed by the card's node: its {@link nodeRef} tuple, with `catalog` its
@@ -128,9 +141,74 @@ export const CatalogId = relation(
 );
 
 /**
+ * A token a document's `data-catalog-idref`s name, a projection keyed by its heading: one row per
+ * distinct token of a document's {@link CatalogRef}s, with the document's `assembled`. A document in
+ * no assembly resolves each in its own catalogs; one in an assembly, in its assembly's, once per
+ * instance ({@link PlacedCatalogRef}). `carriers` counts the document's references of the token,
+ * and `placements` its {@link PlacedCatalogRef}s.
+ */
+export const CatalogTarget = relation(
+  "CatalogTarget",
+  {
+    assembled: pg.boolean,
+    carriers: drawn(natural),
+    document: uuid,
+    id: keyText,
+    placements: drawn(natural),
+  },
+  ["document", "id"],
+);
+
+/**
+ * One token of an instance's document's catalog references (spec reading 117), keyed by the
+ * instance and the token: a {@link CatalogTarget} of the instance's document, which resolves among
+ * its assembly's catalogs ("Catalog reference").
+ */
+export const PlacedCatalogRef = relation(
+  "PlacedCatalogRef",
+  { assembly: uuid, document: uuid, id: keyText, instance: uuid },
+  ["instance", "id"],
+);
+
+/**
+ * One binding of an assembly's ID table whose owner is a `qti-catalog`, keyed by the assembly and
+ * the id: an {@link AssembledId} of the assembly, the owner a {@link CatalogId}'s node.
+ */
+export const AssembledCatalog = relation(
+  "AssembledCatalog",
+  { assembly: uuid, id: keyText, owner: uuid },
+  ["assembly", "id"],
+);
+
+/**
  * Every relation this module declares, by name, as `schema.ts` composes them.
  */
-export const catalogRelations = { CardSupport, CatalogId, CatalogRef, DefaultEntry };
+export const catalogRelations = {
+  AssembledCatalog,
+  CardSupport,
+  CatalogId,
+  CatalogRef,
+  CatalogTarget,
+  DefaultEntry,
+  PlacedCatalogRef,
+};
+
+/**
+ * Each document's catalog tokens, counted by `CatalogTarget.carriers`.
+ */
+const catalogTargetFamily = counted(
+  on(CatalogRef, "document", "token"),
+  fin(CatalogTarget, "carriers"),
+);
+
+/**
+ * Each document's catalog tokens placed under its instances, counted by
+ * `CatalogTarget.placements`.
+ */
+const placedCatalogFamily = counted(
+  on(PlacedCatalogRef, "document", "id"),
+  fin(CatalogTarget, "placements"),
+);
 
 /**
  * Every card's `support`, the source of {@link CardSupport}.
@@ -201,6 +279,16 @@ const catalogIdAttributes = select(Attribute, (a) =>
 );
 
 /**
+ * The tokens of a document in no assembly, which resolve among its own catalogs.
+ */
+const unassembledTargets = select(CatalogTarget, (t) => t.eq(t.assembled, false));
+
+/**
+ * The tokens of a document in an assembly, each placed under every one of its instances.
+ */
+const assembledTargets = select(CatalogTarget, (t) => t.eq(t.assembled, true));
+
+/**
  * Every statement over the catalog overlays, each `check` named by its oracle law:
  *
  * - **Card support:** a catalog holds one card for each support, the key on {@link CardSupport}'s
@@ -208,20 +296,27 @@ const catalogIdAttributes = select(Attribute, (a) =>
  * - **Card default entry:** a card holds at most one designated entry, the key on
  *   {@link DefaultEntry}'s `card`;
  * - **Catalog reference:** each reference's token is the `id` of a catalog of its document, a
- *   reference being a `data-catalog-idref` that holds an IDREF token, as "Idref target" reads one;
+ *   reference being a `data-catalog-idref` that holds an IDREF token, as "Idref target" reads one:
+ *   a document in no assembly has it among its own catalogs, one in an assembly under each
+ *   instance, among its assembly's catalogs;
  * - **DocumentId key:** one `support` per card, one designating `default` per entry, one
  *   `data-catalog-idref` and one catalog `id` per element, the keys over the attribute selections
  *   the copies read, and {@link CatalogId}'s `(document, id)`, which an ID held twice in a document
  *   already breaks and which the containment of "Catalog reference" needs of its target;
  * - **E1 derived:** each card overlay's node tuple, each overlay's attribute copied into its row both
  *   ways, a collapsed value the lexical form collapsed (a designating one `true` or `1`), and a
- *   catalog's `id` its {@link DocumentId}'s, owned by the catalog itself.
+ *   catalog's `id` its {@link DocumentId}'s, owned by the catalog itself; and the tokens'
+ *   placement: each {@link CatalogTarget} the token of a reference, its `assembled` its document's,
+ *   placed under every instance of an assembled document ({@link PlacedCatalogRef}, each an
+ *   {@link PlacedIdref} of that instance), and each {@link AssembledCatalog} a binding of
+ *   {@link AssembledId} owned by a catalog.
  */
 export const catalogLawsByName = {
   "Card default entry": [key(on(DefaultEntry, "card"))],
   "Card support": [key(on(CardSupport, "catalog", "support"))],
   "Catalog reference": [
-    contained(on(CatalogRef, "document", "token"), on(CatalogId, "document", "id")),
+    contained(on(unassembledTargets, "document", "id"), on(CatalogId, "document", "id")),
+    contained(on(PlacedCatalogRef, "assembly", "id"), on(AssembledCatalog, "assembly", "id")),
   ],
   "DocumentId key": [
     key(on(supportAttributes, "node")),
@@ -263,6 +358,23 @@ export const catalogLawsByName = {
       on(DocumentId, "node", "document", "id", "owner"),
     ),
     check("E1_derived", CatalogId, (c) => c.eq(c.owner, c.node)),
+    catalogTargetFamily,
+    check("E1_derived", CatalogTarget, (t) => t.gt(t.carriers, 0n)),
+    contained(on(CatalogTarget, "document", "assembled"), on(Document, "node", "assembled")),
+    contained(
+      on(PlacedCatalogRef, "instance", "id", "document", "assembly"),
+      on(PlacedIdref, "instance", "id", "document", "assembly"),
+    ),
+    placedCatalogFamily,
+    contained(
+      on(assembledTargets, "document", "placements"),
+      on(TestDocument, "node", "instances"),
+    ),
+    contained(
+      on(AssembledCatalog, "assembly", "id", "owner"),
+      on(AssembledId, "assembly", "id", "owner"),
+    ),
+    contained(on(AssembledCatalog, "owner"), on(CatalogId, "node")),
   ],
 } as const;
 
