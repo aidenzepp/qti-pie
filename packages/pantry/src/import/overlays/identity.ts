@@ -17,6 +17,7 @@
 import type { Addition } from "@bjornpagen/grizzle";
 import type { DocumentContext } from "#pantry/import/context.ts";
 import { Option } from "effect";
+import { collapse } from "#pantry/grammar/domains.ts";
 import {
   attributeRows,
   GoverningOf,
@@ -25,7 +26,7 @@ import {
   toolLabelKinds,
   ValueIdentity,
 } from "#pantry/grammar/install.ts";
-import { collapse, lowerAscii } from "#pantry/import/overlays/metadata.ts";
+import { lowerAscii } from "#pantry/import/overlays/metadata.ts";
 import { resourcePathsOf } from "#pantry/import/overlays/package.ts";
 import { stringValuesOf } from "#pantry/import/overlays/string-values.ts";
 import { foldOf, ownContext } from "#pantry/import/fold.ts";

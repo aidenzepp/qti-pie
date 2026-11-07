@@ -11,7 +11,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import { exhaust } from "@grizzle/testing/explore";
 import { requiredInSpace } from "@grizzle/testing/features";
-import { array, element } from "@grizzle/testing/gen";
+import { array, element, string } from "@grizzle/testing/gen";
 import type { Gen } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Result } from "effect";
@@ -185,6 +185,23 @@ describe("import/overlays/html.ts, headerPiecesOf", () => {
 });
 
 /**
+ * The XML whitespace a `th`'s `id` is padded by on one side: none, or one or two of space, tab,
+ * line feed and carriage return.
+ */
+const padding: Gen<string> = string(element([" ", "\t", "\n", "\r"] as const), { max: 2, min: 0 });
+
+/**
+ * Escape a text for an attribute value written between double quotes, so the reader gives it back
+ * as written: the three whitespace controls as character references, which attribute-value
+ * normalization leaves alone (XML 1.0, §3.3.3).
+ *
+ * @param text - The text, of no `&`, `<` or `"`.
+ * @returns The escaped text.
+ */
+const attributeText = (text: string): string =>
+  text.replaceAll("\t", "&#9;").replaceAll("\n", "&#10;").replaceAll("\r", "&#13;");
+
+/**
  * An item body of two tables, one inside a cell of the other, and a cell no table holds: `c1`
  * names a header of each table, `c2` names both from inside the inner one, and `c3` stands in a
  * custom interaction's open content, which admits a cell outside every table.
@@ -282,6 +299,60 @@ describe("import/overlays/html.ts, rowsOf", () => {
         assert.deepStrictEqual(own.headers, ["c > u: g"]);
         assert.deepStrictEqual(own.tableHeaders, ["g > u: g", "h > t: h"]);
       }),
+  );
+
+  it.effect(
+    "gives a th's id without the whitespace around it, the token a headers value naming it holds, for every padding of the box",
+    (ctx) =>
+      // Oracle: the specification as a checker, `id` an xs:ID, whose whitespace is collapsed
+      // (XML Schema Part 2, §3.3.8 and §4.3.6), so a padded id names the header its token does,
+      // the token `headerPiecesOf` splits from a headers value that names it.
+      // Bound: every padding of at most two of space, tab, line feed and carriage return on each
+      // side, 441.
+      searched(
+        ctx,
+        exhaust(
+          {
+            box: "every padding of a th's id by at most two XML whitespace characters on each side",
+            caseHang: Duration.seconds(10),
+            coverage: requiredInSpace<"bare" | "padded">(["bare", "padded"]),
+            generator: (source) => ({
+              after: source.draw(padding),
+              before: source.draw(padding),
+            }),
+            limit: 500,
+            literal: (drawn) => JSON.stringify(drawn),
+            oracle: {
+              kind: "specification",
+              name: "xs:ID's collapsed value, XML Schema Part 2, §3.3.8",
+            },
+            suite: "import/overlays/html-header-id",
+          },
+          ({ after, before }, c) =>
+            Effect.gen(function* paddedId() {
+              c.note(before === "" && after === "" ? "bare" : "padded");
+
+              const id = `${before}h${after}`;
+              const tree = yield* itemOf(
+                `<table><tbody><tr><th id="${attributeText(id)}">H</th><td headers="${attributeText(id)}">x</td></tr></tbody></table>`,
+              );
+              const rows = rowsOf(tree, { idOf });
+
+              assert.deepStrictEqual(
+                [...rows.TableHeader.values()].map((row) => row.id),
+                ["h"],
+                JSON.stringify(id),
+              );
+              assert.deepStrictEqual(
+                [...rows.CellHeaders.values()].flatMap(({ tokens }) =>
+                  tokens.map(({ token }) => token),
+                ),
+                ["h"],
+                JSON.stringify(id),
+              );
+            }),
+        ),
+      ),
   );
 
   it.effect("gives a document with no table cell no row", () =>

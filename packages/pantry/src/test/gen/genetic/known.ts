@@ -219,28 +219,6 @@ export const known = {
     fix: "C6: a branch rule whose target names nothing writes no target row",
     owner: "NIL",
   },
-  "import-only-law: E1 derived, check E1_derived on CountBound": {
-    files: [
-      [
-        "choice.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><qti-item-body><qti-choice-interaction max-choices="1abc"/></qti-item-body></qti-assessment-item>`,
-      ],
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="choice.xml">
-            
-            
-            
-        </resource></resources></manifest>`,
-      ],
-    ],
-    fix: "NS5: an unspelled count writes no CountBound row",
-    owner: "NIL",
-  },
   "import-only-law: E1 derived, check E1_derived on RecordField": {
     files: [
       [
@@ -669,30 +647,6 @@ export const known = {
     fix: "(6) the absence defaults: an absent required attribute writes no row, never an empty or default value",
     owner: "NIL",
   },
-  "oracle-only-law: Variable declared": {
-    files: [
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="rtest01/rtest01-set01.xml"/><resource type="imsqti_fragment_xmlv3p0" href="rtest01/rtest01-rules.xml"/></resources></manifest>`,
-      ],
-      [
-        "rtest01/rtest01-rules.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-response-condition xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-response-if><qti-set-outcome-value identifier="NOPE"/></qti-response-if></qti-response-condition>`,
-      ],
-      [
-        "rtest01/rtest01-set01.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xi="http://www.w3.org/2001/XInclude"><qti-item-body><xi:include href="rtest01-set01.xml"/></qti-item-body><qti-response-processing><xi:include href="rtest01-rules.xml"/></qti-response-processing></qti-assessment-item>`,
-      ],
-    ],
-    fix: "an item that includes itself and a fragment of rules: the oracle judges the fragment's set-outcome-value where the item includes it, and the import's rows judge it in no assembly (a08e60e5's heads)",
-    owner: "S-ORACLE",
-  },
 } satisfies Entries;
 
 /**
@@ -1040,6 +994,28 @@ export const fixed = {
       fix: "25d16460 (SitePath) writes a site's href as a row of its own, gated on its entry, and removes the containment this class broke, so no package can show it",
       owner: "NIL",
     },
+  "import-only-law: E1 derived, check E1_derived on CountBound": {
+    files: [
+      [
+        "choice.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><qti-item-body><qti-choice-interaction max-choices="1abc"/></qti-item-body></qti-assessment-item>`,
+      ],
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="choice.xml">
+            
+            
+            
+        </resource></resources></manifest>`,
+      ],
+    ],
+    fix: "NS5: a count written as no count has no LeastCount or MostCount row",
+    owner: "NIL",
+  },
   "import-only-law: E1 derived, check E1_derived on Declaration": {
     files: [
       [
@@ -1640,5 +1616,29 @@ export const fixed = {
     ],
     fix: "B11: the oracle reads a record field's base-type by its type's whitespace class (typedValueOf), as the import does",
     owner: "VD",
+  },
+  "oracle-only-law: Variable declared": {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="rtest01/rtest01-set01.xml"/><resource type="imsqti_fragment_xmlv3p0" href="rtest01/rtest01-rules.xml"/></resources></manifest>`,
+      ],
+      [
+        "rtest01/rtest01-rules.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-response-condition xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-response-if><qti-set-outcome-value identifier="NOPE"/></qti-response-if></qti-response-condition>`,
+      ],
+      [
+        "rtest01/rtest01-set01.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xi="http://www.w3.org/2001/XInclude"><qti-item-body><xi:include href="rtest01-set01.xml"/></qti-item-body><qti-response-processing><xi:include href="rtest01-rules.xml"/></qti-response-processing></qti-assessment-item>`,
+      ],
+    ],
+    fix: "an include splices its target only where it may stand for the target's root (Inclusion.splices, IncludeRoot through Compute.singleton), so an item that includes itself in its body still heads its assembly, and its rule fragment's set-outcome-value is judged there",
+    owner: "ASM",
   },
 } satisfies Entries;

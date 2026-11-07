@@ -169,18 +169,21 @@ export const assembledRoots = [testKind, sectionKind] as const satisfies readonl
 /**
  * The include parents whose include splices its fragment in place, the one statement of which
  * documents head an assembly: a document heads its own unless an include under one of these places
- * it, since an included fragment is judged in place, as its merged document holds it, and not alone
- * (spec reading 117). Every parent the information model gives an Include is one but a section,
- * whose includes follow a section document's rule (reading 117: reading 86's rule that a section
- * document a test places twice is written once "is the information model's for section documents in
- * a test's assembly ... and includes in a section follow it"). A section's include stands for an
- * item ref, a section or a section ref alone (`IncludeRoot`), and no other parent's include stands
- * for any of them.
+ * it and may stand for its root (`IncludeRoot`, `Inclusion.splices`), since an included fragment is
+ * judged in place, as its merged document holds it, and not alone (spec reading 117). An include
+ * that may not stand for its target's root places no fragment there: "Include root" refuses it, and
+ * the document it names is judged as its own. Every parent the information model gives an Include
+ * is one but a section, whose includes follow a section document's rule (reading 117: reading 86's
+ * rule that a section document a test places twice is written once "is the information model's for
+ * section documents in a test's assembly ... and includes in a section follow it"). A section's
+ * include stands for an item ref, a section or a section ref alone (`IncludeRoot`), and no other
+ * parent's include stands for any of them.
  *
  * The schema's heads ({@link inclusionLaws}) and the import's (`#pantry/import/overlays/tests.ts`
- * `assembledRowsOf`) read this list, and nothing else of them decides a head. The law oracle, the
- * second implementation, states its own from the grammar (`#pantry/test/oracle.ts`
- * `splicingParentsOf`), and `splicing-parents.oracle.test.ts` holds the two equal.
+ * `assembledRowsOf`) read this list and `IncludeRoot`, through `Inclusion.splices`, and nothing
+ * else of them decides a head. The law oracle, the second implementation, states its own from the
+ * grammar (`#pantry/test/oracle.ts` `splicingParentsOf` and `standsFor`), and
+ * `splicing-parents.oracle.test.ts` holds the two lists equal.
  */
 export const splicingParents = includeParentKinds.filter((kind) => kind !== sectionKind);
 
@@ -563,7 +566,9 @@ export const SitePath = relation(
  * - **the site's copies:** its `document`; its {@link SitePath}'s `package` and `path`; its `kind`,
  *   `parentKind` and `version`; its own context's nearest interaction (`nearest`, `nearestKind`);
  *   and its `ancestry`, its part of the target's context (`Document.context`, the union over the
- *   sites that name a document, spec reading 117).
+ *   sites that name a document, spec reading 117);
+ * - **its include's:** `splices`, whether it splices its target in place, its {@link Inclusion}'s;
+ *   false for a section ref, which places its target whole.
  */
 export const SiteTarget = relation(
   "SiteTarget",
@@ -577,6 +582,7 @@ export const SiteTarget = relation(
     package: uuid,
     parentKind: closedId(NodeKind),
     path: keyText,
+    splices: pg.boolean,
     target: uuid,
     targetNearest: uuid,
     targetNearestKind: closedId(NodeKind),
@@ -588,8 +594,12 @@ export const SiteTarget = relation(
 
 /**
  * An include's site as an include, keyed by its node: its version, its parent's kind and the
- * `IncludeParent` handle that kind is, and its target's root kind, the kind the include stands for
- * (spec reading 114). An optional value is a row of its own: a section ref has none.
+ * `IncludeParent` handle that kind is, its target's root kind, the kind the include stands for
+ * (spec reading 114), and `splices`, whether it splices that document in place: its parent is one
+ * of {@link splicingParents} and it may stand for the root (`IncludeRoot`), as the law oracle's
+ * `standsFor` judges. An include that may not stand for its target's root, which "Include root"
+ * refuses, splices nothing, so its target is judged as no fragment of its document's. An optional
+ * value is a row of its own: a section ref has none.
  */
 export const Inclusion = relation(
   "Inclusion",
@@ -598,6 +608,7 @@ export const Inclusion = relation(
     node: uuid,
     parentKind: closedId(NodeKind),
     root: closedId(NodeKind),
+    splices: pg.boolean,
     version: closedId(SchemaVersion),
   },
   ["node"],
@@ -942,19 +953,18 @@ export const contextFold = fold(
 );
 
 /**
- * The sites that splice their target in place: each include under one of {@link splicingParents}.
+ * The sites that splice their target in place: each include under one of {@link splicingParents}
+ * that may stand for its target's root (`Inclusion.splices`).
  */
-const splicingSites = select(SiteTarget, (s) =>
-  s.and(s.eq(s.kind, includeKind), s.in(s.parentKind, splicingParents)),
-);
+const splicingSites = select(SiteTarget, (s) => s.eq(s.splices, true));
 
 /**
  * The includes that splice each document in place, counted into `Document.spliced`, 0 exactly where
- * the document heads an assembly (spec reading 117, {@link splicingParents}). "No include splices
- * it" is an anti-join, which no grizzle statement is: a statement is conditioned on no row being
- * absent, and there are no outer joins (grizzle's README, Limits; the absence limit lane VD
- * records). The count stands in for it as a fold over keyed `SiteTarget` rows, each a site that
- * exists, so 0 is a count of none and no sentinel.
+ * the document heads an assembly (spec reading 117, {@link splicingParents}, {@link splicingSites}).
+ * "No include splices it" is an anti-join, which no grizzle statement is: a statement is
+ * conditioned on no row being absent, and there are no outer joins (grizzle's README, Limits; the
+ * absence limit lane VD records). The count stands in for it as a fold over keyed `SiteTarget`
+ * rows, each a site that exists, so 0 is a count of none and no sentinel.
  */
 export const splicedFold = fold(
   siteTargetFamily,
@@ -1093,6 +1103,24 @@ const externalHrefs = select(Reference, (r) =>
  * The targets of the sites that are includes, each with its {@link Inclusion}.
  */
 const includeTargets = select(SiteTarget, (s) => s.eq(s.kind, includeKind));
+
+/**
+ * An `Inclusion` row as a row check reads it.
+ */
+type InclusionRow = RowScalars<typeof Inclusion>;
+
+/**
+ * State that an include may stand for its target's root (spec reading 114): the root is among the
+ * kinds `IncludeRoot` gives the include's parent, `{root} ⊆ IncludeRoot.row(version, parent)`.
+ *
+ * @param i - The include's row.
+ * @returns The predicate.
+ */
+const standsFor = (i: InclusionRow) =>
+  i.eq(
+    Compute.subset(Compute.singleton(i.root), IncludeRoot.row(i.version, i.includeParent)),
+    true,
+  );
 
 /**
  * Select the nodes of one kind, a constant selection, whose containments share `Node`'s one
@@ -1466,8 +1494,9 @@ const flagCopies = flagCarriers.map(flagCopy);
  *   sites) ⊆ Instance(document, rootKind, children)`, has no key of `Instance` in its target's
  *   projection, which grizzle refuses, so the count states it.
  *
- * The heads are {@link splicingParents}'s, by `Document.spliced`, mirrored with the roots both
- * ways. Its `E1_derived` pins the root's fields and derives a member's scope.
+ * The heads are {@link splicingParents}'s, through `Inclusion.splices`, by `Document.spliced`,
+ * mirrored with the roots both ways. Its `E1_derived` pins the root's fields and derives a member's
+ * scope.
  *
  * The statements of reading 86's law, "Test name key": each instance of a test's assembly holds
  * one name per name of its document, their projection holds each written element once, so a
@@ -1711,8 +1740,18 @@ export const testLawsByName = {
     contextFold,
     splicedFold,
     check("E1_derived", Inclusion, (i) =>
-      i.eq(IncludeParentKind.at("kind", i.includeParent), i.parentKind),
+      i.and(
+        i.eq(IncludeParentKind.at("kind", i.includeParent), i.parentKind),
+        i.or(
+          i.and(i.eq(i.splices, true), i.in(i.parentKind, splicingParents), standsFor(i)),
+          i.and(
+            i.eq(i.splices, false),
+            i.or(i.not(i.in(i.parentKind, splicingParents)), i.not(standsFor(i))),
+          ),
+        ),
+      ),
     ),
+    check("E1_derived", SiteTarget, (s) => s.or(s.eq(s.kind, includeKind), s.eq(s.splices, false))),
     check("E1_derived", Site, (s) =>
       s.and(
         s.or(
@@ -2169,8 +2208,8 @@ export const testLawsByName = {
     contained(on(nodesOf(sectionRefKind), "id"), on(Site, "node")),
     contained(on(includes, "id"), on(Site, "node")),
     contained(
-      on(Inclusion, "node", "parentKind", "root", "version"),
-      on(SiteTarget, "node", "parentKind", "targetRoot", "version"),
+      on(Inclusion, "node", "parentKind", "root", "splices", "version"),
+      on(SiteTarget, "node", "parentKind", "targetRoot", "splices", "version"),
     ),
     contained(on(includeTargets, "node"), on(Inclusion, "node")),
     contained(

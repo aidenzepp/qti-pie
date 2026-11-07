@@ -367,6 +367,7 @@ export const overlayPartsOf = (
       declarations: built.flatMap(({ rows }) => [...rows.declarations.Declaration.values()]),
       hottexts: built.flatMap(({ rows }) => [...rows.interactions.Hottext.values()]),
       instances: assembled.Instance.values(),
+      mosts: built.flatMap(({ rows }) => [...rows.interactions.MostCount.values()]),
       names: built.flatMap(({ rows }) => [...rows.interactions.BindingName.values()]),
     }),
     placedIds,

@@ -58,8 +58,6 @@ const rootCopy =
 const unjudged = {
   "AriaRange: a when term": unreadTerm("when"),
   "AssembledReference: a base term": unreadTerm("base"),
-  "CountBound: a base term": unreadTerm("base"),
-  "CountBound: a when term": unreadTerm("when"),
   "Expression.leadCardinalities":
     "a Monoid.or fold over Operand.cardinalityBit, a field PostgreSQL generates",
   "Expression.operandBaseTypes":
@@ -72,11 +70,15 @@ const unjudged = {
     "a Monoid.or fold over Operand.cardinalityBit, a field PostgreSQL generates",
   "Expression: a between term": unreadTerm("between"),
   "Idref: a base term": unreadTerm("base"),
+  "LeastCount: a base term": unreadTerm("base"),
+  "LeastCount: a when term": unreadTerm("when"),
   "MapKeyFloat: a cast term": unreadTerm("cast"),
   "MathAction: a base term": unreadTerm("base"),
   "MathAction: a when term": unreadTerm("when"),
   "MathApply: a base term": unreadTerm("base"),
   "MathApply: a between term": unreadTerm("between"),
+  "MostCount: a base term": unreadTerm("base"),
+  "MostCount: a when term": unreadTerm("when"),
   "Node.elements":
     "a tree root's running value of the element fold, the start value grizzle keeps in the field's builder",
   "Node.lastState": "a copy along a last axis, `pred(children)`, which the host does not restore",

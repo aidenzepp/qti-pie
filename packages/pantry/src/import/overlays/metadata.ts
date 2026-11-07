@@ -15,6 +15,7 @@
 import type { Addition, Uuid } from "@bjornpagen/grizzle";
 import { Option } from "effect";
 import { spelledBaseTypes } from "#pantry/grammar/attributes.ts";
+import { collapse } from "#pantry/grammar/domains.ts";
 import { ResourceType } from "#pantry/grammar/install.ts";
 import { resourcePathsOf } from "#pantry/import/overlays/package.ts";
 import { foldOf, ownContext } from "#pantry/import/fold.ts";
@@ -186,20 +187,6 @@ export const piecesOf = (text: string): Pieces => {
  * @see {@link https://www.w3.org/TR/xmlschema-2/#rf-whiteSpace | XML Schema Part 2, whiteSpace}
  */
 export const replaceWhitespace = (text: string): string => text.replaceAll(/[\t\n\r]/gu, " ");
-
-/**
- * Collapse a text, as `Compute.collapse` does: each run of tabs, line feeds, carriage returns and
- * spaces one space, and none at either end. No other character is whitespace to it.
- *
- * @param text - The text.
- * @returns The collapsed text.
- * @see {@link https://www.w3.org/TR/xmlschema-2/#rf-whiteSpace | XML Schema Part 2, whiteSpace}
- */
-export const collapse = (text: string): string =>
-  text
-    .replaceAll(/[\t\n\r ]+/gu, " ")
-    .replace(/^ /u, "")
-    .replace(/ $/u, "");
 
 /**
  * Fold a text's ASCII capitals to small letters, as `Compute.lowerAscii` does, every other

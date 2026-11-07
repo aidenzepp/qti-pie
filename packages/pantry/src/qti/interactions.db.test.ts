@@ -38,14 +38,18 @@ import { Document } from "#pantry/qti/chardata.ts";
 import {
   AriaRange,
   BindingDeclaration,
+  boundKinds,
   BoundVariable,
   Choice,
   ChoiceVariableName,
   CountBound,
+  CountRange,
   FeedbackRef,
   Hotspot,
   Hottext,
   InteractionAttribute,
+  LeastCount,
+  MostCount,
   nilUuid,
   ReferringDocument,
   SectionFeedbackName,
@@ -61,6 +65,7 @@ import { AuthorApp } from "#pantry/qti/logins.ts";
 import { manifestPath } from "#pantry/qti/package.ts";
 import { Author } from "#pantry/qti/roles.ts";
 import {
+  assertVerdict,
   foreignKeysBetween,
   judged,
   loginSession,
@@ -153,14 +158,17 @@ const boundRow = (at: number, fields: Partial<Fact<typeof BoundVariable>> = {}) 
   }) satisfies Fact<typeof BoundVariable>;
 
 /**
- * The declaration row of {@link boundRow}'s binding: a stray single identifier response.
+ * The declaration row of {@link boundRow}'s binding: a stray single identifier response, its
+ * interaction's most a value wherever its kind has counts.
  *
  * @param at - The interaction's number.
  * @param fields - The fields the case sets.
  * @returns The row.
  */
-const declarationRow = (at: number, fields: Partial<Fact<typeof BindingDeclaration>> = {}) =>
-  ({
+const declarationRow = (at: number, fields: Partial<Fact<typeof BindingDeclaration>> = {}) => {
+  const kind = fields.kind ?? "qti-choice-interaction";
+
+  return {
     attribute: "response-identifier",
     baseType: "identifier",
     cardinality: "single",
@@ -168,14 +176,16 @@ const declarationRow = (at: number, fields: Partial<Fact<typeof BindingDeclarati
     declarationKind: "qti-response-declaration",
     document: stray,
     identifier: "RESPONSE",
-    kind: "qti-choice-interaction",
+    kind,
+    mosts: boundKinds.includes(kind) ? 1n : 0n,
     node: strayNode(at),
     ...fields,
-  }) satisfies Fact<typeof BindingDeclaration>;
+  } satisfies Fact<typeof BindingDeclaration>;
+};
 
 /**
- * A stray count bound of an order interaction whose least is written, every field true to
- * `E1_derived`: least 2 and most 3 of 3 choices.
+ * A stray count bound of an order interaction that writes both counts, of 3 choices, each count a
+ * value.
  *
  * @param fields - The fields the case sets.
  * @returns The row.
@@ -185,14 +195,12 @@ const boundOf = (fields: Partial<Fact<typeof CountBound>> = {}) =>
     choices: 3n,
     document: stray,
     kind: "qti-order-interaction",
-    least: "2",
-    leastValue: 2n,
+    leasts: 1n,
     maxName: "max-choices",
     maxWritten: true,
     minName: "min-choices",
     minWritten: true,
-    most: "3",
-    mostValue: 3n,
+    mosts: 1n,
     nearest: stray,
     node: strayNode(0),
     parent: stray,
@@ -200,6 +208,61 @@ const boundOf = (fields: Partial<Fact<typeof CountBound>> = {}) =>
     version: "3.0.1",
     ...fields,
   }) satisfies Fact<typeof CountBound>;
+
+/**
+ * {@link boundOf}'s least, 2, every field true to `E1_derived`.
+ *
+ * @param fields - The fields the case sets.
+ * @returns The row.
+ */
+const leastOf = (fields: Partial<Fact<typeof LeastCount>> = {}) =>
+  ({
+    choices: 3n,
+    kind: "qti-order-interaction",
+    least: "2",
+    leastValue: 2n,
+    minName: "min-choices",
+    minWritten: true,
+    node: strayNode(0),
+    version: "3.0.1",
+    ...fields,
+  }) satisfies Fact<typeof LeastCount>;
+
+/**
+ * {@link boundOf}'s most, 3, every field true to `E1_derived`.
+ *
+ * @param fields - The fields the case sets.
+ * @returns The row.
+ */
+const mostOf = (fields: Partial<Fact<typeof MostCount>> = {}) =>
+  ({
+    choices: 3n,
+    kind: "qti-order-interaction",
+    maxName: "max-choices",
+    maxWritten: true,
+    minWritten: true,
+    most: "3",
+    mostValue: 3n,
+    node: strayNode(0),
+    version: "3.0.1",
+    ...fields,
+  }) satisfies Fact<typeof MostCount>;
+
+/**
+ * {@link boundOf}'s range, its least 2 and its most 3.
+ *
+ * @param fields - The fields the case sets.
+ * @returns The row.
+ */
+const rangeOf = (fields: Partial<Fact<typeof CountRange>> = {}) =>
+  ({
+    kind: "qti-order-interaction",
+    leastValue: 2n,
+    minWritten: true,
+    mostValue: 3n,
+    node: strayNode(0),
+    ...fields,
+  }) satisfies Fact<typeof CountRange>;
 
 /**
  * A stray hotspot choice of a hotspot interaction, the last of its parent's 2 element children.
@@ -552,69 +615,109 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
       );
 
       it.effect(
-        "refuses counts past their bounds and a typed count its lexical form does not spell, by Choice bounds and E1 derived",
+        "refuses counts past their bounds and a count row its lexical form does not give, by Choice bounds and E1 derived, each on the row of the count it reads",
         () =>
-          // Oracle: PostgreSQL, the `Choice_bounds` check (readings 18 and 76) and `E1_derived`'s
-          // G-parse agreement of each count's integer with its lexical form.
-          // Bound: an order interaction's most one past its choices, its least past its choices,
-          // its least past a most of 0 (no exemption, reading 18); a choice interaction's least
-          // past its most; a least whose integer disagrees with its form, and a form no integer
-          // reads.
+          // Oracle: PostgreSQL, the `Choice_bounds` checks (readings 18 and 76) on LeastCount,
+          // MostCount and CountRange, and `E1_derived`'s G-parse agreement of a count's integer
+          // with its form, which must be a count's (lane NIL's audit, B8).
+          // Bound: an order interaction's most one past its choices, its least past its choices, its
+          // least past a most of 0 (no exemption, reading 18); a choice interaction's least past its
+          // most; a least whose integer disagrees with its form, a form no integer reads, a most
+          // written as no count (GEN-A's "1abc"), and an unwritten least with no default.
           Effect.gen(function* choiceBounds() {
-            const db = yield* Db.open(AuthorApp.roles.author, {});
-            const cases = [
-              { name: "Choice_bounds", row: boundOf({ most: "4", mostValue: 4n }) },
-              { name: "Choice_bounds", row: boundOf({ choices: 1n }) },
-              { name: "Choice_bounds", row: boundOf({ most: "0", mostValue: 0n }) },
-              {
-                name: "Choice_bounds",
-                row: boundOf({
-                  choices: 0n,
-                  kind: "qti-choice-interaction",
-                  least: "2",
-                  leastValue: 2n,
-                  most: "1",
-                  mostValue: 1n,
-                }),
-              },
-              { name: "E1_derived", row: boundOf({ least: "02", leastValue: 3n }) },
-              { name: "E1_derived", row: boundOf({ least: "two", leastValue: 2n }) },
+            const client = yield* loginSession;
+            const cases: readonly [string, Stated, string][] = [
+              [
+                "a most past the choices",
+                { fact: mostOf({ most: "4", mostValue: 4n }), relation: MostCount },
+                "choice_bounds",
+              ],
+              [
+                "a least past the choices",
+                { fact: leastOf({ choices: 1n }), relation: LeastCount },
+                "choice_bounds",
+              ],
+              [
+                "a counted least past a most of 0",
+                { fact: rangeOf({ mostValue: 0n }), relation: CountRange },
+                "choice_bounds",
+              ],
+              [
+                "an unbounded least past its most",
+                {
+                  fact: rangeOf({ kind: "qti-choice-interaction", mostValue: 1n }),
+                  relation: CountRange,
+                },
+                "choice_bounds",
+              ],
+              [
+                "a least whose integer is not its form's",
+                { fact: leastOf({ least: "02", leastValue: 3n }), relation: LeastCount },
+                "e1_derived",
+              ],
+              [
+                "a least no integer reads",
+                { fact: leastOf({ least: "two", leastValue: 2n }), relation: LeastCount },
+                "e1_derived",
+              ],
+              [
+                "a most written as no count",
+                { fact: mostOf({ most: "1abc", mostValue: 1n }), relation: MostCount },
+                "e1_derived",
+              ],
+              [
+                "an unwritten least whose kind has no default",
+                {
+                  fact: leastOf({ least: "0", leastValue: 0n, minWritten: false }),
+                  relation: LeastCount,
+                },
+                "e1_derived",
+              ],
             ];
-            for (const { name, row } of cases) {
-              const outcome = yield* db.apply(
-                ChangeSet.empty(Author).insert(CountBound, [row]),
-                {},
-              );
-
-              assert.isTrue(
-                rejectedBy(outcome, checkNamed("CountBound", name)),
-                `${row.kind} ${row.least} ${row.most} ${String(row.choices)}`,
+            for (const [label, stated, constraint] of cases) {
+              assertVerdict(
+                yield* judged(
+                  client,
+                  statedInserts([{ fact: boundOf(), relation: CountBound }, stated]),
+                ),
+                constraint,
+                true,
+                label,
               );
             }
-          }),
+          }).pipe(Effect.scoped),
       );
 
       it.effect(
-        "accepts an order interaction's most equal to its choices, and a choice interaction's most of 0 below its least, by every law of the row itself",
+        "accepts an order interaction's most equal to its choices, and a choice interaction's most of 0 below its least, by every law of the rows themselves",
         () =>
-          // Oracle: PostgreSQL, the row's domains and CHECKs with every foreign key deferred and
+          // Oracle: PostgreSQL, the rows' domains and CHECKs with every foreign key deferred and
           // none set immediate: the edge maxChoices = choices (reading 18), and reading 76's 0.
           // Bound: the two edges.
           Effect.gen(function* choiceEdges() {
             const client = yield* loginSession;
-            for (const row of [
-              boundOf(),
-              boundOf({
-                choices: 0n,
-                kind: "qti-choice-interaction",
-                least: "2",
-                leastValue: 2n,
-                most: "0",
-                mostValue: 0n,
-              }),
-            ]) {
+            const choice = { kind: "qti-choice-interaction" as const };
+            for (const rows of [
+              [
+                { fact: leastOf(), relation: LeastCount },
+                { fact: mostOf(), relation: MostCount },
+                { fact: rangeOf(), relation: CountRange },
+              ],
+              [
+                { fact: leastOf({ ...choice, choices: 0n }), relation: LeastCount },
+                {
+                  fact: mostOf({ ...choice, choices: 0n, most: "0", mostValue: 0n }),
+                  relation: MostCount,
+                },
+                { fact: rangeOf({ ...choice, mostValue: 0n }), relation: CountRange },
+              ],
+            ] satisfies readonly (readonly Stated[])[]) {
               const refused = Option.getOrUndefined(
-                yield* judged(client, statedInserts([{ fact: row, relation: CountBound }]), []),
+                yield* judged(
+                  client,
+                  statedInserts([{ fact: boundOf(), relation: CountBound }, ...rows]),
+                  [],
+                ),
               );
 
               assert.isUndefined(refused, refused?.message);
@@ -623,37 +726,50 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
       );
 
       it.effect(
-        "refuses a single response bound to an interaction whose most is not 1, and accepts a most of 1, by the containment into CountBound",
+        "refuses a single response bound to an interaction whose most is not 1, and accepts a most of 1 and an interaction whose most has no value, by the containment into MostCount",
         () =>
           // Oracle: PostgreSQL, the foreign key of "Binding cardinality" (reading 92): a single
-          // response's interaction is in select(CountBound, mostValue = 1). 23503 on that key.
-          // Bound: a choice interaction's most of 2 and of 0, refused, and of 1, accepted.
+          // response's interaction whose most has a value (`mosts` = 1) is in select(MostCount,
+          // mostValue = 1). 23503 on that key. An interaction whose most has none, written as no
+          // count, has `mosts` = 0, and its value domain is its law (the law oracle's
+          // `countAttribute`).
+          // Bound: a choice interaction's most of 2 and of 0, refused, of 1, accepted, and none,
+          // accepted.
           Effect.gen(function* bindingCardinality() {
             const client = yield* loginSession;
-            const keys = yield* foreignKeysBetween(client, "binding_declaration", "count_bound");
+            const keys = yield* foreignKeysBetween(client, "binding_declaration", "most_count");
             assert.isNotEmpty(keys);
 
             for (const [most, refusedExpected] of [
               [2n, true],
               [0n, true],
               [1n, false],
+              [undefined, false],
             ] as const) {
+              const counted =
+                most === undefined
+                  ? []
+                  : [
+                      {
+                        fact: mostOf({
+                          choices: 0n,
+                          kind: "qti-choice-interaction",
+                          minWritten: false,
+                          most: String(most),
+                          mostValue: most,
+                        }),
+                        relation: MostCount,
+                      },
+                    ];
               const refused = Option.getOrUndefined(
                 yield* judged(
                   client,
                   statedInserts([
-                    { fact: declarationRow(0), relation: BindingDeclaration },
                     {
-                      fact: boundOf({
-                        choices: 0n,
-                        kind: "qti-choice-interaction",
-                        least: "0",
-                        leastValue: 0n,
-                        most: String(most),
-                        mostValue: most,
-                      }),
-                      relation: CountBound,
+                      fact: declarationRow(0, { mosts: most === undefined ? 0n : 1n }),
+                      relation: BindingDeclaration,
                     },
+                    ...counted,
                   ]),
                   keys,
                 ),
@@ -681,6 +797,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
             const client = yield* loginSession;
             const keys = yield* foreignKeysBetween(client, "binding_declaration", "count_bound");
             for (const written of [false, true]) {
+              const mosts = written ? 1n : 0n;
               const refused = Option.getOrUndefined(
                 yield* judged(
                   client,
@@ -690,6 +807,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
                         baseType: "string",
                         cardinality: "multiple",
                         kind: "qti-extended-text-interaction",
+                        mosts,
                       }),
                       relation: BindingDeclaration,
                     },
@@ -697,14 +815,12 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
                       fact: boundOf({
                         choices: 0n,
                         kind: "qti-extended-text-interaction",
-                        least: "0",
-                        leastValue: 0n,
+                        leasts: 1n,
                         maxName: "max-strings",
                         maxWritten: written,
                         minName: "min-strings",
                         minWritten: false,
-                        most: written ? "2" : "0",
-                        mostValue: written ? 2n : 0n,
+                        mosts,
                       }),
                       relation: CountBound,
                     },

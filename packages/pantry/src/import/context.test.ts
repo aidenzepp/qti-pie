@@ -33,25 +33,36 @@ const asi = "http://www.imsglobal.org/xsd/imsqtiasi_v3p0";
 
 /**
  * The places an item includes `f.xml` at, each an item body with `{}` where the include stands,
- * with the flags and the interaction its include stands in, read off the vocabulary by hand:
- * Enters gives a gap match `int` and `gap`, a hottext interaction `int`, a feedback block `fb`.
+ * with whether the include is a site there, and the flags and the interaction a site there stands
+ * in, read off the vocabulary by hand: Enters gives a gap match `int` and `gap`, a hottext
+ * interaction `int`, a feedback block `fb`. An include in a custom interaction's open content is
+ * no site (spec reading 114: a wildcard holds no Include), so it places nothing.
  */
 const positions = {
-  body: { body: "{}", flags: [], interaction: undefined },
+  body: { body: "{}", flags: [], interaction: undefined, site: true },
+  custom: {
+    body: '<qti-custom-interaction response-identifier="R">{}</qti-custom-interaction>',
+    flags: [],
+    interaction: undefined,
+    site: false,
+  },
   feedback: {
     body: '<qti-feedback-block outcome-identifier="FB" identifier="F" show-hide="show"><qti-content-body>{}</qti-content-body></qti-feedback-block>',
     flags: ["fb"],
     interaction: undefined,
+    site: true,
   },
   gapMatch: {
     body: '<qti-gap-match-interaction response-identifier="R" max-associations="1"><qti-gap-text identifier="W" match-max="1">w</qti-gap-text>{}</qti-gap-match-interaction>',
     flags: ["gap", "int"],
     interaction: "qti-gap-match-interaction",
+    site: true,
   },
   hottext: {
     body: '<qti-hottext-interaction response-identifier="R" max-choices="1">{}</qti-hottext-interaction>',
     flags: ["int"],
     interaction: "qti-hottext-interaction",
+    site: true,
   },
 } as const satisfies Readonly<
   Record<
@@ -60,6 +71,7 @@ const positions = {
       readonly body: string;
       readonly flags: readonly FlagHandle[];
       readonly interaction: string | undefined;
+      readonly site: boolean;
     }
   >
 >;
@@ -103,6 +115,7 @@ const idsOf =
 const pairs = (() => {
   const names = [
     "body",
+    "custom",
     "feedback",
     "gapMatch",
     "hottext",
@@ -118,42 +131,48 @@ const pairs = (() => {
 })();
 
 /**
- * Name a case's feature: an include inside an interaction, or both outside, at one position or at
- * two whose flags unite.
+ * A case's feature: a site inside an interaction; sites outside every interaction, at one position
+ * or at two whose flags unite; or no site, both includes in open content.
+ */
+type ContextSituation = "inside" | "no site" | "outside" | "union";
+
+/**
+ * Name a case's feature.
  *
- * @param inside - Whether an include stands inside an interaction.
- * @param same - Whether both includes stand at one position.
+ * @param inside - Whether a site stands inside an interaction.
+ * @param sited - The positions of the includes that are sites.
  * @returns The feature.
  */
-const noteOf = (inside: boolean, same: boolean): "inside" | "outside" | "union" => {
+const noteOf = (inside: boolean, sited: readonly string[]): ContextSituation => {
   if (inside) {
     return "inside";
   }
 
-  return same ? "outside" : "union";
+  const distinct = new Set(sited).size;
+  if (distinct === 0) {
+    return "no site";
+  }
+
+  return distinct === 1 ? "outside" : "union";
 };
 
 describe("contextsOf", () => {
   it.effect(
-    "gives an included fragment the flags and the interaction its includes stand in, the union of its sites' flags, and its own document node where no site stands in an interaction",
+    "gives an included fragment the flags and the interaction its sites stand in, the union of its sites' flags, its own document node where no site stands in an interaction, and its own context where no include of it is a site",
     (ctx) =>
       searched(
         ctx,
         exhaust(
           {
-            box: "every pair of the four positions of one include, and the fragment a second fragment it includes inherits through",
+            box: "every pair of the five positions of one include, and the fragment a second fragment it includes inherits through",
             caseHang,
-            coverage: requiredInSpace<"inside" | "outside" | "union">([
-              "inside",
-              "outside",
-              "union",
-            ]),
+            coverage: requiredInSpace<ContextSituation>(["inside", "no site", "outside", "union"]),
             generator: (source) => source.draw(element(pairs)),
-            limit: 16,
+            limit: 25,
             literal: Formatter.format,
             oracle: {
               kind: "specification",
-              name: "reading 117, the Enters flags and N8's nearest interaction, by hand",
+              name: "readings 114 and 117, the Enters flags and N8's nearest interaction, by hand",
             },
             suite: "import/context",
           },
@@ -178,10 +197,14 @@ describe("contextsOf", () => {
               const itemNodes = flatten(item, idsOf(1)).nodes;
               const interactionOf = (kind: string | undefined) =>
                 kind === undefined ? undefined : itemNodes.find((node) => node.kind === kind)?.id;
-              const inside = [one, two].find(({ interaction }) => interaction !== undefined);
+              const sited = [first, second].filter((name) => positions[name].site);
+              const inside = sited
+                .map((name) => positions[name])
+                .find(({ interaction }) => interaction !== undefined);
               const expectedNearest = interactionOf(inside?.interaction) ?? idsOf(2)(0);
-              const flags = new Set<FlagHandle>([...one.flags, ...two.flags]);
-              c.note(noteOf(inside !== undefined, first === second));
+              const flags = new Set<FlagHandle>(sited.flatMap((name) => positions[name].flags));
+              const placed = sited.length > 0 ? [idsOf(2)(0)] : [];
+              c.note(noteOf(inside !== undefined, sited));
 
               for (const [document, self] of [
                 ["f.xml", idsOf(2)(0)],
@@ -203,8 +226,11 @@ describe("contextsOf", () => {
               }
 
               assert.deepStrictEqual(contexts.get(idsOf(1)(0)), ownContext(idsOf(1)(0)));
-              assert.deepStrictEqual(targeted, new Set([idsOf(2)(0), idsOf(3)(0)]));
-              assert.deepStrictEqual(assembled, new Set([idsOf(1)(0), idsOf(2)(0), idsOf(3)(0)]));
+              assert.deepStrictEqual(targeted, new Set([...placed, idsOf(3)(0)]));
+              assert.deepStrictEqual(
+                assembled,
+                new Set([...(sited.length > 0 ? [idsOf(1)(0)] : []), idsOf(2)(0), idsOf(3)(0)]),
+              );
             }),
         ),
       ),

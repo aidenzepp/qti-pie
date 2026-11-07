@@ -10,8 +10,8 @@
  *   (`#pantry/import/overlays/package.ts`).
  * - {@link assembledRowsOf} reads every document's rows of one package into the assemblies: one
  *   instance tree per document that heads one, every assembled document no include splices in place
- *   (`splicingParents`, spec reading 117), and, under a test, its instances' names, their
- *   projection and the branch rules' resolutions.
+ *   (`splicingParents` and `IncludeRoot`, spec reading 117), and, under a test, its instances'
+ *   names, their projection and the branch rules' resolutions.
  *
  * The rows restate what the documents say and nothing else, and the database proves every one of
  * them (`testLaws`), so a row a builder gets wrong is refused, never accepted. Where a document
@@ -26,7 +26,7 @@ import { Bits } from "@bjornpagen/grizzle";
 import type { Addition, Uuid } from "@bjornpagen/grizzle";
 import type { Kind } from "#pantry/grammar/compose.ts";
 import { booleanOf } from "#pantry/grammar/domains.ts";
-import { Flag } from "#pantry/grammar/install.ts";
+import { Flag, grammar } from "#pantry/grammar/install.ts";
 import { isSiteKind } from "#pantry/import/context.ts";
 import { foldOf, ownContext } from "#pantry/import/fold.ts";
 import type { Folded } from "#pantry/import/fold.ts";
@@ -201,6 +201,30 @@ export const piecesOf = (lexical: string): Pieces => {
  * @returns Whether the list holds it.
  */
 const among = (kinds: readonly string[], kind: string): boolean => kinds.includes(kind);
+
+/**
+ * Decide whether a site splices the document it names in place (`Inclusion.splices`, spec reading
+ * 117): it is an include under one of `splicingParents` that may stand for that document's root
+ * (`IncludeRoot`, reading 114). A section ref places its target whole, and so does an include under
+ * a section; an include that may not stand for its target's root places no fragment there.
+ *
+ * @param site - The site: its kind, its parent's kind and its version.
+ * @param root - The root kind of the document its href names.
+ * @returns Whether it splices it.
+ */
+const splicesAt = (
+  site: Pick<Addition<typeof Site>, "kind" | "parentKind" | "version">,
+  root: string,
+): boolean =>
+  site.kind === includeKind &&
+  among(splicingParents, site.parentKind) &&
+  Option.isSome(
+    grammar.include.includeRoot.lookup({
+      kind: root,
+      parent: site.parentKind,
+      version: site.version,
+    }),
+  );
 
 /**
  * One document as the builders read it: its flat rows and the indexes over them.
@@ -843,6 +867,7 @@ const siteTargetsOf = (
                 package: href.package,
                 parentKind: site.parentKind,
                 path: href.path,
+                splices: splicesAt(site, target.rootKind),
                 target: target.node,
                 targetNearest: target.context.nearest,
                 targetNearestKind: target.context.nearestKind,
@@ -878,6 +903,7 @@ const inclusionsOf = (
                 node: site.node,
                 parentKind: site.parentKind,
                 root: site.targetRoot,
+                splices: site.splices,
                 version: site.version,
               },
             ] as const,
@@ -1356,7 +1382,7 @@ const resolutionOf = (
 /**
  * Build a package's assemblies from its documents' rows: one tree per document that heads one, and,
  * under a test, each instance's names, their projection and its branch rules' resolutions. A
- * document heads an assembly unless an include under one of `splicingParents` names it (spec
+ * document heads an assembly unless an include that splices it names it (`SiteTarget.splices`, spec
  * reading 117): a fragment such an include splices is judged where it is included, in the
  * assemblies of the documents that place it, and never alone.
  *
@@ -1370,11 +1396,7 @@ export const assembledRowsOf = (
 ): AssembledRows => {
   const spliced = new Set(
     documents.flatMap((rows) =>
-      [...rows.SiteTarget.values()]
-        .filter(
-          ({ kind, parentKind }) => kind === includeKind && among(splicingParents, parentKind),
-        )
-        .map(({ target }) => target),
+      [...rows.SiteTarget.values()].filter(({ splices }) => splices).map(({ target }) => target),
     ),
   );
   const heads = documents

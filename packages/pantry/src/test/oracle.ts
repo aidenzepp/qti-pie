@@ -144,6 +144,7 @@ import {
   field,
   collapsed,
   contentOf,
+  integerOf,
   isOpenClass,
   pathOf,
   resolvedAt,
@@ -3224,20 +3225,18 @@ export const contentLawOf = (kind: string, attribute: string): Option.Option<Law
   );
 
 /**
- * The language of a non-negative integer after the `collapse` class: digits, an optional `+`.
- */
-const nonNegative = /^\+?[0-9]+$/u;
-
-/**
- * Read a non-negative integer form.
+ * Read an integer attribute as its type reads it: its form inside its value domain
+ * ({@link typedValueOf}), and the integer that form spells, by XML Schema 1.1 Part 2's lexical
+ * mapping (`integerOf`: §3.3.13 and §3.3.20, so `+0`, `-0` and `00` are all 0). A form
+ * outside its domain, `1abc`, or `-1` for a count, has none.
  *
- * @param form - The form as written.
- * @returns Its value, or none when it is no non-negative integer.
+ * @param view - The document.
+ * @param node - The element's id.
+ * @param name - The attribute's closed name.
+ * @returns Its integer, or none when the element does not write it inside its domain.
  */
-const countOf = (form: string): Option.Option<bigint> =>
-  Option.liftPredicate(collapsed(form), (value) => nonNegative.test(value)).pipe(
-    Option.map(BigInt),
-  );
+const typedIntegerOf = (view: View, node: NodeId, name: string): Option.Option<bigint> =>
+  Option.flatMap(typedValueOf(view, node, name), integerOf);
 
 /**
  * What the overlay laws read of one document beside its rows: its declarations by identifier,
@@ -3569,16 +3568,20 @@ const builtInAs = (overlay: Overlay, identifier: string, kinds: ReadonlySet<stri
  * @param overlay - The document.
  * @param node - The node.
  * @param name - The attribute's closed name.
- * @returns The count, or none when neither is written or the form is no non-negative integer.
+ * @returns The count, or none when neither is written or the written form lies outside its value
+ *   domain.
  */
 const countAttribute = (
   overlay: Overlay,
   node: FoldedNode<Composed>,
   name: string,
 ): Option.Option<bigint> =>
-  Option.orElse(valueOf(overlay.view, node.id, name), () =>
-    Option.fromNullishOr(overlay.laws.defaults.get(`${node.version} ${node.kind} ${name}`)),
-  ).pipe(Option.flatMap(countOf));
+  Option.isSome(valueOf(overlay.view, node.id, name))
+    ? typedIntegerOf(overlay.view, node.id, name)
+    : Option.flatMap(
+        Option.fromNullishOr(overlay.laws.defaults.get(`${node.version} ${node.kind} ${name}`)),
+        integerOf,
+      );
 
 /**
  * Read the variables a node's references name (`VariableReference`), each with the declaration
@@ -4092,7 +4095,7 @@ const overlayLaws: readonly ((
       true,
     );
 
-    return Option.toArray(Option.flatMap(valueOf(overlay.view, node.id, "select"), countOf))
+    return Option.toArray(typedIntegerOf(overlay.view, node.id, "select"))
       .filter((count) => !replaced && count > BigInt(parts))
       .map((count): Finding => ({
         keys: { parts: String(parts), select: String(count) },
