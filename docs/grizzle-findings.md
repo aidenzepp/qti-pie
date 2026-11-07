@@ -1501,6 +1501,17 @@ target's UNIQUE are both representable, and only the source's index is refused.
     `{"X8","XC"}`, so the owner's end matches no member's after.
   - It is a regression from `a2ff5eb`, where hex became the one form. At `f66c05b`, `codec/scalar.ts:51`'s parameter
     text was binary, the same as `bit_out`. A count or sum end is unaffected.
+- **Root cause, confirmed by grizzle-c5 in its own tree:**
+  - **Made at** `edit.ts:916`, where `planEdits`' recount builds its ends with `textOf` = `admittedText`, the parameter
+    text: `"X"` and hex, so {a, b} over [a, b, c] is `"XC"`.
+  - **Misread at** `edit.ts:203`, where `recountValues` reads that text with `scalarCodec(…).convert`, the reader of
+    `bit_out`'s binary text (`convert.ts:60` to `68`). `"XC"` holds no `'1'`, so it reads as ∅, and a hex digit `1`
+    sets the handle at that character's index. That is the CLI tier's "live handles … 23514".
+  - **Reached from** `bind.ts:452` (the owner's insert refilled from the recount), `:499` (a nested owner) and `:556`
+    (other families' views).
+  - **Scope:** since `a2ff5eb`, bits is the only carrier whose parameter text and output text differ. So only
+    `Monoid.or` and `twos` ends over bits come out wrong, and only on the recount path: an owner inserted in the same
+    ChangeSet, or an owner with two families.
 - **Reproduction:** `~/.cache/gr8des/n2/repro/fold-closed-row/` (`run-4b155e8.out`), and the same at `27c4cd2` in
   `fold-closed-row-27c4cd2/run-27c4cd2.out`. A counted family with a `Monoid.or` end over a closed set:
   - **case:** `invariant-rejected`, with nothing written. The server log holds `insert or update on table "owner"
@@ -1512,13 +1523,14 @@ target's UNIQUE are both representable, and only the source's index is refused.
   - **sum control:** the same family with a `Monoid.sum` end, `accepted`, its total `12` over `2` postings.
 - **Effect in qti-pie:** `Expression`'s five `Monoid.or` ends over the counted `Operand` family arrive empty, so
   `E1_derived` refuses the every-relation package's `qti-sum`. The CLI tier's "writes only live handles … bit(112) …
-  a family's insert of Node raised 23514" is probably the same defect.
+  a family's insert of Node raised 23514" is the same defect, as grizzle-c5 confirmed.
 - **Status:** relayed to the grizzle session (grizzle-c5) under the operator's order that it be fixed with a
   search-based guard that keeps it from recurring. grizzle-c5 confirmed the defect, and ruled at 19:25 on 2026-11-06
-  that the repair is by representation:
-  - the recount carries host values end to end and never re-parses a text it wrote;
-  - its lane FOLD audits and deletes every place grizzle reads back its own text;
-  - parameter text and output text become distinct types, so feeding one to the other's reader cannot compile.
+  that the repair is by representation, as its lane FOLD's cutover:
+  - host values only, through the fill and the recount, which never re-parses a text it wrote;
+  - parameter text and output text become distinct branded types, so feeding one to the other's reader cannot
+    compile;
+  - then an audit that deletes every place grizzle reads back its own text, then the guard.
 
   The guard is a round trip over every carrier through PostgreSQL and the fold-end search over monoids, carriers,
   family kinds and write forms, with planted bugs, `edit.ts:203` among them, restored and shown caught. It is being
