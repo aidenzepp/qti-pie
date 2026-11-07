@@ -894,6 +894,14 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
       status: "G",
     },
   ],
+  [
+    151,
+    {
+      owner:
+        "the import's `LomObjectTitle` check, under which an object's `xml:lang` compared form that is no language tag (`languageTagPattern`, `src/qti/metadata.ts`, over the grammar's `languageTag`) states no language, and its witness search (`inLanguage`, `src/import/overlays/metadata.ts`); the oracle's lom-title over the root's `xml:lang` as its own AL1 reading reads it, none where it states none (`statedLanguage`, `lomTitleLawsOf`, `src/test/oracle-laws/documents.ts`); held by `src/import/overlays/object-lang.oracle.test.ts`",
+      status: "G",
+    },
+  ],
 ]);
 
 /**

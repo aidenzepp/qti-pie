@@ -2682,3 +2682,27 @@ against it. A reading that is not an information-model-over-XSD case says which 
      judged a read in the item. This binds pantry and plate alike. This is not a case of documents in conflict: the
      normative sources agree. The earlier rule was upstream's, so the change is recorded in PR #46's decisions. (Decided
      2026-11-07 by the coordinator, under the operator's standing ruling of 2026-11-05, from seat FIX-A1.)
+151. **An item's `xml:lang` outside its value domain states no language, so `lom-title` judges the record's title
+     without one, beside AL1.** QTI 3.0 Metadata says "The title must have a value that matches the value of the
+     title attribute of the associated item, test or object bank. The language used to interpret the title is taken
+     from the language attribute of the associated item, test or object bank" (section 2.7.1.2). Reading 62 reads a
+     root that states no `xml:lang` as admitting a string in any language. An item's `xml:lang` is a BCP 47 tag and
+     never empty (reading 129), and a form outside that domain names no language. Of the empty value, XML 1.0 says
+     "it is considered that there is no language information available, just as if xml:lang had not been
+     specified" (section 2.12). A form RFC 5646's ABNF does not produce is no language tag (sections 2.1 and 2.2.9),
+     so it identifies no language either. Such a form states no language, and `lom-title` reads the item as it reads
+     one that writes none: a string with the title's value names the document, whatever its `language`. That holds
+     for the empty form, one of whitespace alone and an ill-formed tag such as `en_GB`. AL1 (`attribute-lexical`)
+     refuses the attribute under its own rule, and `lom-title` refuses a record none of whose strings holds the
+     title, as reading 148 has AL3 and `lom-title` each refuse under its own. This reading is exact on the unknown
+     language: no record is refused that some tag the item could have written would admit, and a record with no
+     string holding the title is refused under every such tag. It sets aside two readings. The law oracle's
+     (`typedOr`'s none, `lomTitleLawsOf`, `src/test/oracle-laws/documents.ts`) did not judge `lom-title` where the
+     `xml:lang` lay outside its domain, so a record titled otherwise passed beside AL1. The importer's compared an
+     ill-formed tag as written (`LomObjectTitle`'s check, `src/qti/metadata.ts`), so a string in `en` failed against
+     `xml:lang="en_GB"`, a breach no tag the item could have written gives. The importer now reads the compared
+     form as a language only where it matches the tag pattern (`languageTagPattern`); the law oracle reads the
+     attribute through its own AL1 reading (`typedValueOf`). It reads `lom-title` alone: `document-lang`'s reading of
+     the same attribute is reading 134's. This binds pantry and plate alike. This is not a case of documents in
+     conflict. (Decided 2026-11-07 by the coordinator, under the operator's standing ruling of 2026-11-05, from seat
+     FIX-LOMLANG.)

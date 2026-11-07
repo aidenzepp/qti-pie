@@ -15,7 +15,7 @@
 import type { Addition, Uuid } from "@bjornpagen/grizzle";
 import { Array as Arr, Option, pipe } from "effect";
 import { spelledBaseTypes } from "#pantry/grammar/attributes.ts";
-import { collapse } from "#pantry/grammar/domains.ts";
+import { collapse, patternFlags } from "#pantry/grammar/domains.ts";
 import { ResourceType } from "#pantry/grammar/install.ts";
 import { resourcePathsOf } from "#pantry/import/overlays/package.ts";
 import type { DocumentContext, ListedTarget } from "#pantry/import/context.ts";
@@ -24,6 +24,7 @@ import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { FlatRows, NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
 import {
+  languageTagPattern,
   noLanguage,
   objectKinds,
   objectTypes,
@@ -149,6 +150,12 @@ export const namesNoDocument = "none" satisfies ResourceTypeHandle;
  * The kinds of an assessment object's root, as a set.
  */
 const objects: ReadonlySet<string> = new Set(objectKinds);
+
+/**
+ * A well-formed language tag as a whole text, the compared form of an `xml:lang` that states a
+ * language (spec reading 151).
+ */
+const languageTagForm = new RegExp(languageTagPattern, patternFlags);
 
 /**
  * The usage statistics, as a set.
@@ -992,15 +999,16 @@ export const namedDocumentOf = (
 
 /**
  * Decide whether a title string is in an object's language (`lom-title`): the object states no
- * language (an empty `xml:lang`, or one of whitespace alone, states none), the string no `language`
- * (an empty one states none alike), or the two name one tag without regard to case.
+ * language, its `xml:lang`'s compared form being no language tag (spec reading 151: none written,
+ * an empty one, one of whitespace alone, or an ill-formed one), the string no `language` (an empty
+ * one states none alike), or the two name one tag without regard to case.
  *
  * @param string - The title string.
- * @param lang - The object's language, as `lom-title` compares it.
+ * @param lang - The object's `xml:lang`'s compared form, {@link noLanguage} where it writes none.
  * @returns Whether the string's language is the object's.
  */
 const inLanguage = (string: Addition<typeof LomTitleString>, lang: string): boolean =>
-  lang === noLanguage || string.languageTag === noLanguage || string.languageTag === lang;
+  !languageTagForm.test(lang) || string.languageTag === noLanguage || string.languageTag === lang;
 
 /**
  * Build a naming record's {@link LomObjectIdentifier} row: its witness the first general entry of

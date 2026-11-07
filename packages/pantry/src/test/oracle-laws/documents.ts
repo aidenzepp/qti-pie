@@ -526,13 +526,30 @@ const folded = (tag: string): string =>
   tag.replaceAll(/[A-Z]/gu, (capital) => capital.toLowerCase());
 
 /**
+ * Read a language as `lom-title` compares it: its tag folded, or none where it states none. The
+ * empty text states none, "just as if xml:lang had not been specified" (XML 1.0 §2.12), and a LOM
+ * string's empty `language` is read alike.
+ *
+ * @param form - The language's form, none where none is read.
+ * @returns The folded tag, none where it states no language.
+ */
+const statedLanguage = (form: Option.Option<string>): Option.Option<string> =>
+  form.pipe(
+    Option.map(folded),
+    Option.filter((tag) => tag !== ""),
+  );
+
+/**
  * Judge `lom-title` over a package (QTI 3.0 Metadata §2.7.1.2): every record of an item's or a
  * test's resource, a `lom:lom` of the resource's own `cp:metadata` (spec reading 62; a `cp:file`'s
  * record describes the file: "The scope of Metadata is the parent container class only", IMS
  * Content Packaging 1.2 §6.7), whose general category has a title holds a title string whose value
  * is its object's `title`, in the object's language: a string whose `language` is the root's
  * `xml:lang`, without regard to case, or one with no `language`, or any string where the root
- * states no `xml:lang` (an empty or blank one states none, XML 1.0 §2.12). The object is the
+ * states no language. The root's language is its `xml:lang`'s value as its type reads it, and it
+ * states none where it writes none, where the value is empty (XML 1.0 §2.12), and where AL1
+ * refuses the attribute, outside its value domain or on a root that does not admit it, so that no
+ * value is read (spec reading 151): the title is then judged without a language. The object is the
  * document the resource's href names where its root is an item or a test ({@link objectRoots}),
  * whatever the resource's type; a document of another root is no object, and a record with a
  * title breaks the law; so does one whose object writes no `title`, which no string matches.
@@ -561,15 +578,12 @@ const lomTitleLawsOf = (input: PackageRows): readonly Breach[] => {
     // The object's title and language; a root of no object has neither, and no string names it.
     // A root that writes no `title` has no value for a string to match (QTI 3.0 Metadata
     // §2.7.1.2: "The title must have a value that matches the value of the title attribute of the
-    // associated item, test or object bank"), so no string names it either.
+    // associated item, test or object bank"), so no string names it either. An `xml:lang` AL1
+    // refuses has no value to read, so it states no language, as an unwritten one states none
+    // (spec reading 151).
     const object = objectRoots.has(root.kind);
     const title = Option.map(valueOf(document.rows, root.id, "title"), replaced);
-    const written = object ? typedOr(document.rows, root.id, "xml:lang", "") : Option.some("");
-    if (Option.isNone(written)) {
-      return [];
-    }
-
-    const lang = folded(written.value);
+    const lang = statedLanguage(typedValueOf(document.rows, root.id, "xml:lang"));
 
     return manifest.members
       .filter((lom) => {
@@ -599,14 +613,12 @@ const lomTitleLawsOf = (input: PackageRows): readonly Breach[] => {
             ancestorsOf(manifest, held).some(({ id }) => id === lom.id),
         );
         const names = strings.some((string) => {
-          const language = folded(
-            Option.getOrElse(valueOf(manifest, string.id, "language"), () => ""),
-          );
+          const language = statedLanguage(valueOf(manifest, string.id, "language"));
 
           return (
             object &&
             Option.exists(title, (value) => value === replaced(string.stringValue)) &&
-            (lang === "" || language === "" || language === lang)
+            (Option.isNone(lang) || Option.isNone(language) || language.value === lang.value)
           );
         });
 
