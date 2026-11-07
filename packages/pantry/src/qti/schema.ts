@@ -175,11 +175,13 @@ import { Node, nodeLaws } from "#pantry/qti/node.ts";
 import { operatorLaws, operatorRelations } from "#pantry/qti/operators.ts";
 import {
   Dependency,
+  DependencyTarget,
   Entry,
   File,
   FileHref,
   HrefScope,
   ManifestId,
+  ManifestIdSpace,
   NamedHref,
   Package,
   packageLaws,
@@ -188,6 +190,7 @@ import {
   Resource,
   ResourceFile,
   ResourceHref,
+  ResourceId,
   ResourceTyped,
   TypedHref,
 } from "#pantry/qti/package.ts";
@@ -318,11 +321,13 @@ const attributeRelations = {
  */
 const packageRelations = {
   Dependency,
+  DependencyTarget,
   Entry,
   File,
   FileHref,
   HrefScope,
   ManifestId,
+  ManifestIdSpace,
   NamedHref,
   Package,
   Reference,
@@ -330,6 +335,7 @@ const packageRelations = {
   Resource,
   ResourceFile,
   ResourceHref,
+  ResourceId,
   ResourceTyped,
   TypedHref,
 };

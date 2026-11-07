@@ -5,11 +5,14 @@
  * {@link Package} owns its {@link Entry} rows, an ordered family in listing order: every entry's
  * bytes as read, the record the model is rebuildable from. The manifest's elements that a law reads
  * across rows have overlays, each a flat row keyed by its element's node: {@link ManifestId}
- * (`cp:manifest`), {@link Resource} and its optional {@link ResourceHref} (`cp:resource`),
- * {@link File} (`cp:file`) and {@link Dependency} (`cp:dependency`). Each copies its node's
- * {@link nodeRef} tuple, names a node of its own kind, and takes each attribute value it compares
- * from `Attribute` (C18), with the key over that attribute's selection that keeps its lexical form
- * out of every index (the tier-1 addendum's "Text in keys").
+ * (`cp:manifest`), {@link Resource} and its optional {@link ResourceId} and {@link ResourceHref}
+ * (`cp:resource`), {@link File} (`cp:file`) and {@link Dependency} (`cp:dependency`). Each copies
+ * its node's {@link nodeRef} tuple, names a node of its own kind, and takes each attribute value it
+ * compares from `Attribute` (C18), with the key over that attribute's selection that keeps its
+ * lexical form out of every index (the tier-1 addendum's "Text in keys"). An identifier that may be
+ * unwritten is a row of its own, or none (AGENTS.md, Schema intent): a `cp:manifest` that writes no
+ * `identifier` has no {@link ManifestId}, and a `cp:resource` none no {@link ResourceId}, so AL3
+ * refuses the element alone and no law compares an identifier it does not have.
  *
  * Three relations are projections, keyed by their heading, each owning a counted family whose count
  * is above 0, so each holds exactly the values some member row holds: {@link FileHref}, the hrefs a
@@ -125,8 +128,9 @@ export const Entry = relation(
 export const entryFamily = ordered(on(Entry, "package", "at"), fin(Package, "entries"));
 
 /**
- * The manifest's overlay, keyed by the `cp:manifest` node: its {@link nodeRef} tuple, its package,
- * and its `identifier`'s lexical form, which every resource's identifier is compared with.
+ * The manifest's identifier, keyed by the `cp:manifest` node, where the manifest writes one: its
+ * {@link nodeRef} tuple, its package, and its `identifier`'s lexical form, which
+ * {@link ManifestIdSpace} holds beside the resources' identifiers.
  */
 export const ManifestId = relation(
   "ManifestId",
@@ -145,17 +149,21 @@ export const ManifestId = relation(
 );
 
 /**
- * A resource's overlay, keyed by the `cp:resource` node: its {@link nodeRef} tuple, its package, its
- * `identifier`'s and `type`'s lexical forms, and its manifest's identifier, copied so a row check
- * compares the two. The code its `type` spells is its optional part, {@link ResourceTyped}.
+ * A resource's overlay, keyed by the `cp:resource` node: its {@link nodeRef} tuple, its package and
+ * its `type`'s lexical form. Its identifier is its optional part {@link ResourceId}, and the code
+ * its `type` spells {@link ResourceTyped}.
+ *
+ * `typeLexical` is empty where the resource writes no `type`, which AL3 refuses: it is copied onto
+ * {@link ResourceHref}, so a typed resource's href is required to have its {@link TypedHref}
+ * without a join of the two optional parts, which no grizzle law states (README, Limits: no outer
+ * joins). The empty form spells no handle, as a written form that spells none, so no law reads it
+ * as a type.
  */
 export const Resource = relation(
   "Resource",
   {
     document: uuid,
-    identifier: keyText,
     kind: closedId(NodeKind),
-    manifestIdentifier: keyText,
     nearest: uuid,
     node: uuid,
     package: uuid,
@@ -165,6 +173,32 @@ export const Resource = relation(
     version: closedId(SchemaVersion),
   },
   ["node"],
+);
+
+/**
+ * A resource's identifier, keyed by the `cp:resource` node, where the resource writes one: its
+ * package and its `identifier`'s lexical form, which the package's resources hold once each
+ * ("DocumentId key") and a dependency's `identifierref` names ("Dependency target").
+ */
+export const ResourceId = relation(
+  "ResourceId",
+  { identifier: keyText, node: uuid, package: uuid },
+  ["node"],
+);
+
+/**
+ * The identifiers of a package's manifest and its resources, one `xs:ID` space (IMS Content
+ * Packaging 1.2), a projection keyed by its heading: one row per identifier and kind of element
+ * that writes it, `cp:manifest` ({@link ManifestId}) or `cp:resource` ({@link ResourceId}). Two
+ * resources of one identifier are one row, which "DocumentId key" refuses over {@link ResourceId};
+ * a resource of the manifest's identifier is a second row of its (package, identifier), which
+ * "Manifest id space" refuses. A side that writes no identifier has no row, so it is compared
+ * with nothing.
+ */
+export const ManifestIdSpace = relation(
+  "ManifestIdSpace",
+  { identifier: keyText, kind: closedId(NodeKind), package: uuid },
+  ["package", "identifier", "kind"],
 );
 
 /**
@@ -352,9 +386,8 @@ export const ResourceFile = relation(
 
 /**
  * A dependency's overlay, keyed by the `cp:dependency` node: its {@link nodeRef} tuple, its
- * `resource` the node's parent, its resource's package and identifier, and its `identifierref`'s
- * lexical form. The resource's identifier is copied so a row check compares the two: a dependency
- * names a sibling resource, never its own (IMS Content Packaging 1.2, §6.11.5 B ii).
+ * `resource` the node's parent, its resource's package, and its `identifierref`'s lexical form,
+ * which names a resource of its package through its {@link DependencyTarget}.
  */
 export const Dependency = relation(
   "Dependency",
@@ -366,10 +399,23 @@ export const Dependency = relation(
     package: uuid,
     ref: keyText,
     resource: uuid,
-    resourceIdentifier: keyText,
     start: natural,
     version: closedId(SchemaVersion),
   },
+  ["node"],
+);
+
+/**
+ * The resource a dependency names, keyed by the `cp:dependency` node: its {@link Dependency}'s
+ * package, `identifierref` and own resource, and `target`, the resource whose identifier its
+ * `identifierref` is ({@link ResourceId}), its own where its own is one. A dependency whose
+ * `identifierref` names no resource has no row, which "Dependency target" refuses; one that names
+ * its own resource is refused by "Self dependency" (IMS Content Packaging 1.2, §6.11.5 B ii), so a
+ * resource that writes no identifier is named by none.
+ */
+export const DependencyTarget = relation(
+  "DependencyTarget",
+  { node: uuid, package: uuid, ref: keyText, resource: uuid, target: uuid },
   ["node"],
 );
 
@@ -538,6 +584,16 @@ const typedResources = select(Resource, (r) =>
 );
 
 /**
+ * The manifests' identifiers in their package's identifier space.
+ */
+const manifestIdSpaces = select(ManifestIdSpace, (m) => m.eq(m.kind, "cp:manifest"));
+
+/**
+ * The resources' identifiers in their package's identifier space.
+ */
+const resourceIdSpaces = select(ManifestIdSpace, (m) => m.eq(m.kind, "cp:resource"));
+
+/**
  * The hrefs of the resources whose `type` spells a handle: each has its {@link TypedHref}.
  */
 const typedResourceHrefs = select(ResourceHref, (h) =>
@@ -615,7 +671,9 @@ export const hrefPaths = select(ReferencePath, (p) => p.eq(p.name, "href"));
  *   outside it (reading 102); every document-typed href resolves in the package, to an entry, and
  *   names the one document there, of the href's type (reading 93), so a path with no entry, or one
  *   listed under two document types, is refused here and never under `root-type-reverse`.
- * - **P4 `manifest-id-space` ("Manifest id space"):** no resource's identifier is its manifest's.
+ * - **P4 `manifest-id-space` ("Manifest id space"):** no resource's identifier is its manifest's: the
+ *   two are one (package, identifier) of {@link ManifestIdSpace}, each side's rows exactly its
+ *   written identifiers.
  * - **C17 ("E1 derived"):** a resource's type code is the one its lexical form spells, or `none`; a
  *   path resolved in the package holds no dot segment ({@link resolvedPathPattern}); a reference is
  *   its written pieces, external where its target has a scheme or a leading `/`, and its own
@@ -638,13 +696,12 @@ export const hrefPaths = select(ReferencePath, (p) => p.eq(p.name, "href"));
  *   the stimulus file"); an external one is not resolved (reading 35's reading of an absolute
  *   URI).
  * - **a dependency names a resource:** its `identifierref` is a resource identifier of its package
- *   (IMS Content Packaging 1.2, `dependency`), the resources' identifiers distinct per package; and
- *   **`self-dependency` ("Self dependency"):** never its own resource's (§6.11.5 B ii).
+ *   (IMS Content Packaging 1.2, `dependency`), the resources' identifiers distinct per package, so
+ *   it has its {@link DependencyTarget}; and **`self-dependency` ("Self dependency"):** the target
+ *   is never its own resource (§6.11.5 B ii).
  */
 export const packageLawsByName = {
-  "Dependency target": [
-    contained(on(Dependency, "package", "ref"), on(Resource, "package", "identifier")),
-  ],
+  "Dependency target": [contained(on(Dependency, "node"), on(DependencyTarget, "node"))],
   "Document entry": [
     key(on(Document, "package", "path")),
     contained(on(Document, "package", "path"), on(Entry, "package", "path")),
@@ -662,7 +719,7 @@ export const packageLawsByName = {
     key(on(manifestIdentifiers, "node")),
     key(on(resourceIdentifiers, "node")),
     key(on(resourceTypes, "node")),
-    key(on(Resource, "package", "identifier")),
+    key(on(ResourceId, "package", "identifier")),
     key(on(resourceHrefs, "node")),
     key(on(fileHrefs, "node")),
     key(on(dependencyRefs, "node")),
@@ -745,13 +802,7 @@ export const packageLawsByName = {
       r.or(r.ne(r.kind, "xi:include"), r.not(Compute.matches(r.params, "#"))),
     ),
   ],
-  "Manifest id space": [
-    contained(
-      on(Resource, "package", "manifestIdentifier"),
-      on(ManifestId, "package", "identifier"),
-    ),
-    check("Manifest_id_space", Resource, (r) => r.ne(r.identifier, r.manifestIdentifier)),
-  ],
+  "Manifest id space": [key(on(ManifestIdSpace, "package", "identifier"))],
   "Manifest overlay": [
     contained(
       on(ManifestId, "node", "document", "kind", "start", "nearest", "version", "parent"),
@@ -760,14 +811,34 @@ export const packageLawsByName = {
     contained(on(ManifestId, "node"), on(nodesOf("cp:manifest"), "id")),
     contained(on(ManifestId, "document", "package"), on(Document, "node", "package")),
     contained(on(manifestIdentifiers, "node", "lexical"), on(ManifestId, "node", "identifier")),
+    contained(on(ManifestId, "node"), on(manifestIdentifiers, "node")),
     key(on(ManifestId, "package")),
+    contained(
+      on(ManifestId, "package", "identifier"),
+      on(manifestIdSpaces, "package", "identifier"),
+    ),
+    contained(
+      on(manifestIdSpaces, "package", "identifier"),
+      on(ManifestId, "package", "identifier"),
+    ),
+    check("Manifest_overlay", ManifestIdSpace, (m) => m.in(m.kind, ["cp:manifest", "cp:resource"])),
     contained(
       on(Resource, "node", "document", "kind", "start", "nearest", "version", "parent"),
       nodeRef,
     ),
     contained(on(Resource, "node"), on(nodesOf("cp:resource"), "id")),
     contained(on(Resource, "document", "package"), on(Document, "node", "package")),
-    contained(on(resourceIdentifiers, "node", "lexical"), on(Resource, "node", "identifier")),
+    contained(on(resourceIdentifiers, "node", "lexical"), on(ResourceId, "node", "identifier")),
+    contained(on(ResourceId, "node"), on(resourceIdentifiers, "node")),
+    contained(on(ResourceId, "node", "package"), on(Resource, "node", "package")),
+    contained(
+      on(ResourceId, "package", "identifier"),
+      on(resourceIdSpaces, "package", "identifier"),
+    ),
+    contained(
+      on(resourceIdSpaces, "package", "identifier"),
+      on(ResourceId, "package", "identifier"),
+    ),
     contained(on(resourceTypes, "node", "lexical"), on(Resource, "node", "typeLexical")),
     contained(on(resourceHrefs, "node", "lexical"), on(ResourceHref, "node", "href")),
     contained(
@@ -786,11 +857,16 @@ export const packageLawsByName = {
       nodeRef,
     ),
     contained(on(Dependency, "node"), on(nodesOf("cp:dependency"), "id")),
-    contained(
-      on(Dependency, "resource", "package", "resourceIdentifier"),
-      on(Resource, "node", "package", "identifier"),
-    ),
+    contained(on(Dependency, "resource", "package"), on(Resource, "node", "package")),
     contained(on(dependencyRefs, "node", "lexical"), on(Dependency, "node", "ref")),
+    contained(
+      on(DependencyTarget, "node", "package", "ref", "resource"),
+      on(Dependency, "node", "package", "ref", "resource"),
+    ),
+    contained(
+      on(DependencyTarget, "package", "ref", "target"),
+      on(ResourceId, "package", "identifier", "node"),
+    ),
   ],
   "Reference overlay": [
     contained(
@@ -835,7 +911,7 @@ export const packageLawsByName = {
     ),
   ],
   "Self dependency": [
-    check("Self_dependency", Dependency, (d) => d.ne(d.ref, d.resourceIdentifier)),
+    check("Self_dependency", DependencyTarget, (d) => d.ne(d.target, d.resource)),
   ],
   "Stimulus ref target": [
     contained(on(stimulusPaths, "package", "path"), on(stimulusDocuments, "package", "path")),

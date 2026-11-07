@@ -617,9 +617,10 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
   [primaryKeyOf("TextDoubleValue", "node", "at"), "Double value"],
   [primaryKeyOf("Package", "id"), "Package key"],
   [primaryKeyOf("Entry", "package", "at"), "Entry family"],
-  ...(["ManifestId", "Resource", "File", "Dependency"] as const).map(
-    (overlay) => [primaryKeyOf(overlay, "node"), "Manifest overlay"] as const,
-  ),
+  ...(
+    ["ManifestId", "Resource", "ResourceId", "File", "Dependency", "DependencyTarget"] as const
+  ).map((overlay) => [primaryKeyOf(overlay, "node"), "Manifest overlay"] as const),
+  [primaryKeyOf("ManifestIdSpace", "package", "identifier", "kind"), "Manifest overlay"],
   [primaryKeyOf("ResourceHref", "node"), "Manifest overlay"],
   [primaryKeyOf("ResourceTyped", "node"), "E1 derived"],
   [primaryKeyOf("TypedHref", "node"), "E1 derived"],

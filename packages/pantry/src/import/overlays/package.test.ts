@@ -180,13 +180,16 @@ const expectResource = (
 const walk = (doc: XdmDocument<Composed>): Expected => {
   const expected: Expected = {
     Dependency: new Map(),
+    DependencyTarget: new Map(),
     File: new Map(),
     FileHref: new Map(),
     ManifestId: new Map(),
+    ManifestIdSpace: new Map(),
     NamedHref: new Map(),
     Resource: new Map(),
     ResourceFile: new Map(),
     ResourceHref: new Map(),
+    ResourceId: new Map(),
     ResourceTyped: new Map(),
     TypedHref: new Map(),
   };
@@ -194,8 +197,9 @@ const walk = (doc: XdmDocument<Composed>): Expected => {
   const interactions = new Set<string>(interactionKinds);
   const spelled = new Set<string>(ResourceTypeLexical.rows.map(({ lexical }) => lexical));
   let next = 1;
-  let manifestIdentifier = "";
-  const identifiers = new Map<NodeId, string>();
+  const named: { readonly identifier: string; readonly node: NodeId }[] = [];
+  const dependencies: { readonly node: NodeId; readonly ref: string; readonly resource: NodeId }[] =
+    [];
   const visit = (
     child: XdmChild<Composed> | XdmDocument<Composed>["root"],
     parent: {
@@ -223,29 +227,34 @@ const walk = (doc: XdmDocument<Composed>): Expected => {
     const ownBase = valueOf("xml:base");
     const bases = ownBase === undefined ? parent.bases : [...parent.bases, ownBase];
 
-    if (kind === "cp:manifest") {
-      manifestIdentifier = valueOf("identifier") ?? "";
-      expected.ManifestId.set(id, {
-        ...tuple,
-        identifier: manifestIdentifier,
+    const identifier = valueOf("identifier");
+    if (kind === "cp:manifest" && identifier !== undefined) {
+      expected.ManifestId.set(id, { ...tuple, identifier, package: pkg, parent: parent.id });
+      expected.ManifestIdSpace.set(heading([pkg, identifier, kind]), {
+        identifier,
+        kind,
         package: pkg,
-        parent: parent.id,
       });
     }
 
     if (kind === "cp:resource") {
-      identifiers.set(id, valueOf("identifier") ?? "");
-
       const row = {
         ...tuple,
-        identifier: valueOf("identifier") ?? "",
-        manifestIdentifier,
         package: pkg,
         parent: parent.id,
         typeLexical: valueOf("type") ?? "",
       };
 
       expectResource(expected, { bases, href: valueOf("href"), row, spelled });
+      if (identifier !== undefined) {
+        named.push({ identifier, node: id });
+        expected.ResourceId.set(id, { identifier, node: id, package: pkg });
+        expected.ManifestIdSpace.set(heading([pkg, identifier, kind]), {
+          identifier,
+          kind,
+          package: pkg,
+        });
+      }
     }
 
     const fileHref = kind === "cp:file" ? valueOf("href") : undefined;
@@ -269,13 +278,8 @@ const walk = (doc: XdmDocument<Composed>): Expected => {
 
     const ref = kind === "cp:dependency" ? valueOf("identifierref") : undefined;
     if (ref !== undefined) {
-      expected.Dependency.set(id, {
-        ...tuple,
-        package: pkg,
-        ref,
-        resource: parent.id,
-        resourceIdentifier: identifiers.get(parent.id) ?? "",
-      });
+      expected.Dependency.set(id, { ...tuple, package: pkg, ref, resource: parent.id });
+      dependencies.push({ node: id, ref, resource: parent.id });
     }
 
     for (const grandchild of child.children) {
@@ -291,6 +295,20 @@ const walk = (doc: XdmDocument<Composed>): Expected => {
     }
   }
 
+  // A dependency names its own resource where that resource's identifier is its ref, and
+  // otherwise the first resource in document order that writes the ref (IMS Content Packaging
+  // 1.2, `dependency`), none where none does.
+  for (const { node, ref, resource } of dependencies) {
+    const target = named.some(
+      ({ identifier, node: held }) => held === resource && identifier === ref,
+    )
+      ? resource
+      : named.find(({ identifier }) => identifier === ref)?.node;
+    if (target !== undefined) {
+      expected.DependencyTarget.set(node, { node, package: ids.package, ref, resource, target });
+    }
+  }
+
   return expected;
 };
 
@@ -299,13 +317,16 @@ const walk = (doc: XdmDocument<Composed>): Expected => {
  */
 const relationNames = [
   "Dependency",
+  "DependencyTarget",
   "File",
   "FileHref",
   "ManifestId",
+  "ManifestIdSpace",
   "NamedHref",
   "Resource",
   "ResourceFile",
   "ResourceHref",
+  "ResourceId",
 ] as const satisfies readonly (keyof PackageRows)[];
 
 /**
@@ -340,15 +361,28 @@ const assertRows = (rows: PackageRows, expected: Expected, label: string): void 
  */
 interface ManifestCase {
   readonly manifestBase: string | undefined;
+  readonly manifestIdentifier: string | undefined;
   readonly resources: readonly {
     readonly base: string | undefined;
     readonly dependencies: readonly string[];
     readonly files: readonly string[];
     readonly href: string | undefined;
-    readonly type: string;
+    readonly identifier: string | undefined;
+    readonly type: string | undefined;
   }[];
   readonly resourcesBase: string | undefined;
 }
+
+/**
+ * Read the identifier a generated resource writes: `own` is its own `r<n>`, any other drawn value
+ * is written as drawn, and none is written for none.
+ *
+ * @param identifier - The drawn identifier.
+ * @param at - The resource's place among its siblings.
+ * @returns The identifier it writes, none where it writes none.
+ */
+const identifierAt = (identifier: string | undefined, at: number): string | undefined =>
+  identifier === "own" ? `r${String(at)}` : identifier;
 
 /**
  * The `xml:base` values a manifest case draws for its `cp:manifest`, its `cp:resources` and each
@@ -367,6 +401,7 @@ const manifestBases = [undefined, "b/", "../b/", "http://x.org/", "a%zz/"] as co
  */
 const manifests: Gen<ManifestCase> = (source) => ({
   manifestBase: source.draw(element(manifestBases)),
+  manifestIdentifier: source.draw(element(["m", undefined] as const)),
   resources: source.draw(
     array(
       (inner) => ({
@@ -392,7 +427,10 @@ const manifests: Gen<ManifestCase> = (source) => ({
             "http://x.org/a.xml",
           ] as const),
         ),
-        type: inner.draw(element(["imsqti_item_xmlv3p0", "webcontent", "bogus"] as const)),
+        identifier: inner.draw(element(["own", "r0", "m", undefined] as const)),
+        type: inner.draw(
+          element(["imsqti_item_xmlv3p0", "webcontent", "bogus", undefined] as const),
+        ),
       }),
       { max: 3, min: 0 },
     ),
@@ -408,11 +446,15 @@ type Situation =
   | "href-params"
   | "href-resolved"
   | "manifest-base"
+  | "manifest-id-clash"
   | "no-href"
   | "resource-base"
   | "self-dependency"
   | "shared-file"
-  | "unknown-type";
+  | "unknown-type"
+  | "unnamed-manifest"
+  | "unnamed-resource"
+  | "untyped";
 
 /**
  * Name the situations one generated manifest reaches.
@@ -422,10 +464,20 @@ type Situation =
  */
 const situationsOf = (input: ManifestCase): readonly Situation[] => {
   const files = input.resources.flatMap(({ files: listed }) => listed);
+  const identifiers = new Set(
+    input.resources.map(({ identifier }, at) => identifierAt(identifier, at)),
+  );
 
   const reached: [Situation, boolean][] = [
     ["no-href", input.resources.some(({ href }) => href === undefined)],
     ["unknown-type", input.resources.some(({ type }) => type === "bogus")],
+    ["untyped", input.resources.some(({ type }) => type === undefined)],
+    ["unnamed-manifest", input.manifestIdentifier === undefined],
+    ["unnamed-resource", identifiers.has(undefined)],
+    [
+      "manifest-id-clash",
+      input.manifestIdentifier !== undefined && identifiers.has(input.manifestIdentifier),
+    ],
     [
       "file-twice",
       input.resources.some(({ files: listed }) => new Set(listed).size < listed.length),
@@ -434,7 +486,10 @@ const situationsOf = (input: ManifestCase): readonly Situation[] => {
     ["href-params", input.resources.some(({ href }) => href !== undefined && /[?#]/u.test(href))],
     [
       "self-dependency",
-      input.resources.some(({ dependencies }, at) => dependencies.includes(`r${String(at)}`)),
+      input.resources.some(
+        ({ dependencies, identifier }, at) =>
+          identifier !== undefined && dependencies.includes(identifierAt(identifier, at) ?? ""),
+      ),
     ],
     [
       "href-resolved",
@@ -485,29 +540,40 @@ const baseAttribute = (base: string | undefined) =>
   base === undefined ? [] : [["xml:base", base] as const];
 
 /**
- * Write a generated manifest as the tree shred would give: a `cp:manifest` of identifier `m`
- * holding its `cp:resources`, each resource `r<n>` with its files and dependencies, whitespace
- * between them so character data shares the numbering.
+ * Write an attribute that may be unwritten as an element's attribute list.
+ *
+ * @param name - Its name.
+ * @param value - Its lexical form, none where it is unwritten.
+ * @returns The list: the attribute, or nothing.
+ */
+const attributeIf = (name: "href" | "identifier" | "type", value: string | undefined) =>
+  value === undefined ? [] : [[name, value] as const];
+
+/**
+ * Write a generated manifest as the tree shred would give: a `cp:manifest`, of identifier `m` or
+ * none, holding its `cp:resources`, each resource with the identifier and type it draws, if any,
+ * its files and its dependencies, whitespace between them so character data shares the numbering.
  *
  * @param input - The manifest.
  * @returns The tree.
  */
 const treeOf = (input: ManifestCase): XdmDocument<Composed> => {
   const ws: XdmChild<Composed> = { _tag: "ws", value: "\n" };
-  const resources = input.resources.map(({ base, dependencies, files, href, type }, at) =>
-    elementOf(
-      "cp:resource",
-      [
-        ["identifier", `r${String(at)}`],
-        ["type", type],
-        ...(href === undefined ? [] : [["href", href] as const]),
-        ...baseAttribute(base),
-      ],
-      [
-        ...files.flatMap((file) => [ws, elementOf("cp:file", [["href", file]], [])]),
-        ...dependencies.map((ref) => elementOf("cp:dependency", [["identifierref", ref]], [])),
-      ],
-    ),
+  const resources = input.resources.map(
+    ({ base, dependencies, files, href, identifier, type }, at) =>
+      elementOf(
+        "cp:resource",
+        [
+          ...attributeIf("identifier", identifierAt(identifier, at)),
+          ...attributeIf("type", type),
+          ...attributeIf("href", href),
+          ...baseAttribute(base),
+        ],
+        [
+          ...files.flatMap((file) => [ws, elementOf("cp:file", [["href", file]], [])]),
+          ...dependencies.map((ref) => elementOf("cp:dependency", [["identifierref", ref]], [])),
+        ],
+      ),
   );
 
   return {
@@ -520,7 +586,10 @@ const treeOf = (input: ManifestCase): XdmDocument<Composed> => {
     prolog: [{ _tag: "comment", value: " manifest " }],
     root: elementOf(
       "cp:manifest",
-      [["identifier", "m"], ...baseAttribute(input.manifestBase)],
+      [
+        ...attributeIf("identifier", input.manifestIdentifier),
+        ...baseAttribute(input.manifestBase),
+      ],
       [ws, elementOf("cp:resources", baseAttribute(input.resourcesBase), resources)],
     ),
     version: "3.0.1",
@@ -579,9 +648,11 @@ describe("import/overlays/package.ts", () => {
     // Oracle: a second implementation, a direct walk of the XDM document that numbers its nodes in
     // document order and reads each element's attributes, against the builder's read of the tree's
     // flat rows; the type codes against `ResourceTypeLexical`.
-    // Bound: up to 3 resources of 3 types, with or without one of 9 hrefs (3 with a query or a
-    // fragment, 4 that need resolving), listing up to 3 of 5 files and up to 2 dependencies,
-    // under 5 xml:base values on each of the manifest, its resources and each resource, 300 runs.
+    // Bound: a manifest with or without its identifier, up to 3 resources of 3 types or none, each
+    // with its own identifier, another's, the manifest's or none, with or without one of 9 hrefs
+    // (3 with a query or a fragment, 4 that need resolving), listing up to 3 of 5 files and up to
+    // 2 dependencies, under 5 xml:base values on each of the manifest, its resources and each
+    // resource, 300 runs.
     searched(
       ctx,
       explore(
@@ -599,6 +670,10 @@ describe("import/overlays/package.ts", () => {
               "href-resolved",
               "manifest-base",
               "resource-base",
+              "untyped",
+              "unnamed-manifest",
+              "unnamed-resource",
+              "manifest-id-clash",
             ],
             { cases: 200, sense: notesOnly },
           ),
