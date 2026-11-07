@@ -92,23 +92,30 @@ const memberOf = <H extends string>(roster: GeneratedRoster<H>, value: string): 
 };
 
 /**
- * Narrow a generator's value to a handle of a roster this module declares.
+ * Narrow generators' values to the handles of a roster this module declares, through one keyed
+ * lookup of the roster's handles, built once.
  *
  * @param name - The roster's name, for the defect's message.
  * @param handles - The roster's handles.
- * @param value - The value a generated row holds.
- * @returns The value as the roster's handle.
- * @throws {Error} When the roster lacks it, which no generator's row does.
+ * @returns The lookup: a value a generated row holds, as the roster's handle.
+ * @throws {Error} From the lookup, when the roster lacks the value, which no generator's row does.
  */
-const handleIn = <H extends string>(name: string, handles: readonly H[], value: string): H => {
-  const found = handles.find((handle) => handle === value);
-  if (found !== undefined) {
-    return found;
-  }
+const handleLookup = <H extends string>(
+  name: string,
+  handles: readonly H[],
+): ((value: string) => H) => {
+  const byValue = new Map<string, H>(handles.map((handle) => [handle, handle]));
 
-  throw new Error(
-    `A generated row names ${value}, which the ${name} roster this module declares does not hold. Add the handle to the roster, or correct the generator.`,
-  );
+  return (value) => {
+    const found = byValue.get(value);
+    if (found !== undefined) {
+      return found;
+    }
+
+    throw new Error(
+      `A generated row names ${value}, which the ${name} roster this module declares does not hold. Add the handle to the roster, or correct the generator.`,
+    );
+  };
 };
 
 /**
@@ -206,6 +213,11 @@ export const BaseType = closed(
 );
 
 /**
+ * A generated value as a `BaseType` handle ({@link handleLookup}).
+ */
+const asBaseType = handleLookup("BaseType", BaseType.handles);
+
+/**
  * The cardinality of a record variable, whose fields carry their own base types and which has none.
  */
 const recordCardinality = "record";
@@ -219,6 +231,11 @@ export const Cardinality = closed(
   "Cardinality",
   nonEmpty("Cardinality", [...grammar.typedCardinalities.handles, recordCardinality]),
 );
+
+/**
+ * A generated value as a `Cardinality` handle ({@link handleLookup}).
+ */
+const asCardinality = handleLookup("Cardinality", Cardinality.handles);
 
 /**
  * The `ResourceType` roster: `none`, the null object of the manifest's own `Document` row, at code
@@ -265,6 +282,11 @@ export const ValueDomain = closed(
 );
 
 /**
+ * A generated value as a `ValueDomain` handle ({@link handleLookup}).
+ */
+const asValueDomain = handleLookup("ValueDomain", ValueDomain.handles);
+
+/**
  * The `Use` roster: whether an element of a kind must carry an attribute.
  */
 export const Use = closed(
@@ -300,6 +322,11 @@ export const Governor = closed("Governor", [
   ...nonEmpty("NodeKind", grammar.kinds.nodeKind.handles),
   ...grammar.attributes.governor.payload[0].roster.handles,
 ]);
+
+/**
+ * A generated value as a `Governor` handle ({@link handleLookup}).
+ */
+const asGovernor = handleLookup("Governor", Governor.handles);
 
 /**
  * The `DeclarationKind` roster: the kinds that declare a variable (`references.ts`).
@@ -836,7 +863,7 @@ export const GoverningOf = closed.relation(
 export const attributeRows = [
   ...grammar.attributes.admission.rows.map(({ domain, kind, name, position, use, version }) => ({
     domain,
-    governor: handleIn("Governor", Governor.handles, kind),
+    governor: asGovernor(kind),
     name: memberOf(grammar.kinds.attributeName, name),
     position,
     use,
@@ -844,7 +871,7 @@ export const attributeRows = [
   })),
   ...grammar.attributes.governed.rows.map(({ domain, governor, name, position, use, version }) => ({
     domain,
-    governor: handleIn("Governor", Governor.handles, governor),
+    governor: asGovernor(governor),
     name: memberOf(grammar.kinds.attributeName, name),
     position,
     use,
@@ -907,6 +934,11 @@ export const AttributeModel = closed(
 );
 
 /**
+ * A generated value as a `AttributeModel` handle ({@link handleLookup}).
+ */
+const asAttributeModel = handleLookup("AttributeModel", AttributeModel.handles);
+
+/**
  * `AttributeModelOf`: (version, governor) → model, total, the attribute grammar an element under
  * the governor reads in the version, read by AL1 to AL3 as `AttributeModelOf.at("model", version,
  * governor)`.
@@ -922,11 +954,7 @@ export const AttributeModelOf = closed.relation(
   grammar.kinds.versions.handles.flatMap((version) =>
     Governor.handles.map((governor) => ({
       governor,
-      model: handleIn(
-        "AttributeModel",
-        AttributeModel.handles,
-        attributeModels.of.get(`${version} ${governor}`) ?? "",
-      ),
+      model: asAttributeModel(attributeModels.of.get(`${version} ${governor}`) ?? ""),
       version,
     })),
   ),
@@ -941,7 +969,7 @@ export const AttributeSlots = closed.relation(
   { model: closedId(AttributeModel), slots: natural },
   ["model"],
   attributeModels.models.map(({ handle, rows }) => ({
-    model: handleIn("AttributeModel", AttributeModel.handles, handle),
+    model: asAttributeModel(handle),
     slots: BigInt(rows.length),
   })),
 );
@@ -969,7 +997,7 @@ export const AttributeGrammar = closed.relation(
   attributeModels.models.flatMap(({ handle, rows }) =>
     rows.map(({ domain, name, position, use }) => ({
       domain,
-      model: handleIn("AttributeModel", AttributeModel.handles, handle),
+      model: asAttributeModel(handle),
       name,
       slot: position,
       use,
@@ -992,7 +1020,7 @@ export const AttributeSlotOf = closed.relation(
   ["model", "name"],
   attributeModels.models.flatMap(({ handle, rows }) =>
     rows.map(({ name, position }) => ({
-      model: handleIn("AttributeModel", AttributeModel.handles, handle),
+      model: asAttributeModel(handle),
       name,
       slot: position,
     })),
@@ -1067,9 +1095,7 @@ export const ValueDomainOf = closed.relation(
  * since grizzle admits no pattern no text matches (`scalar/regex/admit.ts:121`).
  */
 export const emptyDomains: readonly (typeof ValueDomain.handles)[number][] =
-  grammar.attributes.emptyDomains.map((domain) =>
-    handleIn("ValueDomain", ValueDomain.handles, domain),
-  );
+  grammar.attributes.emptyDomains.map((domain) => asValueDomain(domain));
 
 /**
  * The identity of each domain that has one.
@@ -1406,8 +1432,8 @@ export const BuiltInVariable = closed.relation(
   },
   ["root", "variable"],
   grammar.references.builtIn.rows.map(({ baseType, cardinality, declaration, root, variable }) => ({
-    baseType: handleIn("BaseType", BaseType.handles, baseType),
-    cardinality: handleIn("Cardinality", Cardinality.handles, cardinality),
+    baseType: asBaseType(baseType),
+    cardinality: asCardinality(cardinality),
     declaration,
     root: memberOf(grammar.kinds.nodeKind, root),
     variable,

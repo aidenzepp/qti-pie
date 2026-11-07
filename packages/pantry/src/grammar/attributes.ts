@@ -51,6 +51,7 @@ import {
   openCompiled,
 } from "#pantry/grammar/domains.ts";
 import type {
+  CompileError,
   CompiledDomain,
   DomainPrimitive,
   Identity,
@@ -986,7 +987,7 @@ export const specReadings: readonly SpecReading[] = [
  * @param name - The attribute.
  * @returns The readings that apply.
  */
-const readingsOf = (kind: string, name: string): readonly SpecReading[] =>
+export const readingsOf = (kind: string, name: string): readonly SpecReading[] =>
   specReadings.filter(
     (reading) =>
       reading.name === name &&
@@ -1300,58 +1301,158 @@ const facetsText = (domain: CompiledDomain): string =>
   domain.facets.map(({ facet, value }) => `${facet}=${value}`).join(" ");
 
 /**
- * The definition key of each compiled domain keyed so far ({@link definitionKey}), by the compiled
- * domain's identity.
- */
-const definitionKeys = new WeakMap<CompiledDomain, string>();
-
-/**
  * Key a compiled domain by its definition: two domains are one when their primitive, pattern,
  * residual facets and identity agree.
  *
  * @param domain - The compiled domain.
  * @returns The key.
  */
-const definitionKey = (domain: CompiledDomain): string => {
-  const known = definitionKeys.get(domain);
-  if (known !== undefined) {
-    return known;
-  }
-
-  const key = [
+const definitionKey = (domain: CompiledDomain): string =>
+  [
     domain.primitive,
     domain.pattern,
     facetsText(domain),
     Option.getOrElse(domain.identity, () => ""),
   ].join("\u0000");
-  definitionKeys.set(domain, key);
 
-  return key;
+/**
+ * One declaration as the attribute grammar reads its domain: the declaring kind (a named type's
+ * owner, for that type's text), the attribute (empty for a text), the declared type and that type's
+ * resolved definition.
+ */
+export interface DomainDeclaration {
+  readonly domain: Domain;
+  readonly kind: string;
+  readonly name: string;
+  readonly type: ValueType;
+}
+
+/**
+ * A definition the attribute grammar compiles: a leaf definition with a declaration's spec readings
+ * applied in their order, and how its whitespace is read, exactly where one of them says so.
+ */
+export interface ReadDefinition {
+  readonly definition: Domain;
+  readonly whiteSpace: Reading;
+}
+
+/**
+ * A compiled domain with its definition key ({@link definitionKey}), computed once with it.
+ */
+interface KeyedDomain {
+  readonly compiled: CompiledDomain;
+  readonly key: string;
+}
+
+/**
+ * One declaration's domain: the spec readings that apply to it, and its read definition compiled,
+ * or why that definition does not compile.
+ */
+interface DeclarationDomain {
+  readonly compiled: Result.Result<KeyedDomain, CompileError>;
+  readonly readings: readonly SpecReading[];
+}
+
+/**
+ * Each spec reading's place in {@link specReadings}, which names a declaration's readings in a key.
+ */
+const readingIndex = new Map(specReadings.map((reading, index) => [reading, index] as const));
+
+/**
+ * Spell a definition as text, each of its fields in one order, so two equal definitions spell one
+ * text however each was built.
+ *
+ * @param domain - The definition.
+ * @returns The text.
+ */
+const domainText = (domain: Domain): string => {
+  const facets = JSON.stringify(domain.facets.map(({ facet, value }) => [facet, value]));
+  const patterns = JSON.stringify(domain.patterns);
+  if (domain._tag === "atomic") {
+    return `["atomic",${JSON.stringify(domain.builtin)},${JSON.stringify(domain.primitive)},${facets},${patterns}]`;
+  }
+
+  if (domain._tag === "list") {
+    return `["list",${facets},${patterns},${domainText(domain.item)}]`;
+  }
+
+  return `["union",${facets},${patterns},[${domain.members.map((member) => domainText(member)).join(",")}]]`;
 };
 
 /**
- * Each leaf domain compiled so far with no spec reading, by the domain's identity: every
- * composition reads the one leaf, and every governor of a type reads that type's domains again, so
- * compiling each leaf definition once keeps a composition's cost in its own rows.
+ * Spell a read definition as text: its whitespace reading, then its definition
+ * ({@link domainText}).
+ *
+ * @param read - The read definition.
+ * @returns The text.
  */
-const unreadCompiled = new WeakMap<Domain, ReturnType<typeof compile>>();
+export const definitionText = ({ definition, whiteSpace }: ReadDefinition): string =>
+  `${whiteSpace} ${domainText(definition)}`;
 
 /**
- * Compile a leaf domain no spec reading alters, once per domain.
+ * Read a declaration's definition: its leaf definition with each of its spec readings applied, in
+ * order.
  *
- * @param domain - The leaf's domain.
- * @returns Its compiled form, or why it does not compile.
+ * @param declared - The declaration.
+ * @param readings - The spec readings that apply to it ({@link readingsOf}).
+ * @returns The read definition.
  */
-const compiledUnread = (domain: Domain): ReturnType<typeof compile> => {
-  const known = unreadCompiled.get(domain);
-  if (known !== undefined) {
-    return known;
+export const readDefinitionOf = (
+  declared: DomainDeclaration,
+  readings: readonly SpecReading[],
+): ReadDefinition => {
+  let definition = declared.domain;
+  for (const reading of readings) {
+    definition = reading.read(definition);
   }
 
-  const compiled = compile(domain, "xsd");
-  unreadCompiled.set(domain, compiled);
+  return {
+    definition,
+    whiteSpace: readings.some((reading) => reading.whiteSpace === "exact") ? "exact" : "xsd",
+  };
+};
 
-  return compiled;
+/**
+ * A reader of declarations' domains for one composition, which compiles each distinct definition
+ * once.
+ *
+ * A leaf states each distinct definition once and its declarations share it, so the reader groups
+ * declarations by their leaf definition and their spec readings, and reads each group's definition
+ * once. A reading builds a new definition each time it is applied, and two groups may read to one
+ * definition, so the read definitions are told apart by their text ({@link definitionText}), and
+ * each distinct one is compiled once.
+ *
+ * @returns The reader: a declaration's readings and its compiled domain.
+ */
+const domainReader = (): ((declared: DomainDeclaration) => DeclarationDomain) => {
+  const groups = new Map<Domain, Map<string, DeclarationDomain>>();
+  const byText = new Map<string, Result.Result<KeyedDomain, CompileError>>();
+
+  return (declared) => {
+    const readings = readingsOf(declared.kind, declared.name);
+    const key = readings.map((reading) => readingIndex.get(reading)).join(" ");
+    const byReadings = groups.get(declared.domain) ?? new Map<string, DeclarationDomain>();
+    groups.set(declared.domain, byReadings);
+
+    const known = byReadings.get(key);
+    if (known !== undefined) {
+      return known;
+    }
+
+    const read = readDefinitionOf(declared, readings);
+    const text = definitionText(read);
+    const compiled =
+      byText.get(text) ??
+      compile(read.definition, read.whiteSpace).pipe(
+        Result.map((domain): KeyedDomain => ({ compiled: domain, key: definitionKey(domain) })),
+      );
+    byText.set(text, compiled);
+
+    const domain: DeclarationDomain = { compiled, readings };
+    byReadings.set(key, domain);
+
+    return domain;
+  };
 };
 
 /**
@@ -1417,12 +1518,17 @@ const internEmpty = (domains: DomainRoster, name: string): DomainRef => {
  * another definition holds is followed by a count.
  *
  * @param domains - The roster.
- * @param compiled - The compiled definition.
+ * @param keyed - The compiled definition and its key.
+ * @param keyed.compiled - The compiled definition.
+ * @param keyed.key - Its definition key.
  * @param name - The handle it would take.
  * @returns The roster's domain of that definition.
  */
-const intern = (domains: DomainRoster, compiled: CompiledDomain, name: string): ValueDomain => {
-  const key = definitionKey(compiled);
+const intern = (
+  domains: DomainRoster,
+  { compiled, key }: KeyedDomain,
+  name: string,
+): ValueDomain => {
   const known = domains.byDefinition.get(key);
   if (known !== undefined) {
     return known;
@@ -1458,42 +1564,25 @@ const handleOf = (type: ValueType, anonymous: string, readings: readonly SpecRea
 };
 
 /**
- * Compile one declaration's domain, its spec readings applied.
+ * Add one declaration's domain to the roster, its spec readings applied ({@link domainReader}).
  *
  * @param domains - The roster, which a new domain joins.
  * @param declared - The declaring kind, the attribute's name, and the type with its domain.
- * @param declared.domain - The type's resolved definition.
- * @param declared.kind - The declaring kind.
- * @param declared.name - The attribute's name.
- * @param declared.type - The declared type.
+ * @param read - The declaration's readings and its compiled domain.
  * @param anonymous - The handle an anonymous type's domain would take.
  * @returns The domain, an empty one where its lexical space holds no value, or the declaration's
  *   compile failure.
  */
 const domainOf = (
   domains: DomainRoster,
-  declared: {
-    readonly domain: Domain;
-    readonly kind: string;
-    readonly name: string;
-    readonly type: ValueType;
-  },
+  declared: DomainDeclaration,
+  read: DeclarationDomain,
   anonymous: string,
 ): Result.Result<DomainRef, UncompiledDomain> => {
-  const readings = readingsOf(declared.kind, declared.name);
-  let { domain } = declared;
-  for (const reading of readings) {
-    domain = reading.read(domain);
-  }
+  const handle = handleOf(declared.type, anonymous, read.readings);
 
-  const whiteSpace: Reading = readings.some((reading) => reading.whiteSpace === "exact")
-    ? "exact"
-    : "xsd";
-
-  const handle = handleOf(declared.type, anonymous, readings);
-
-  return (readings.length === 0 ? compiledUnread(domain) : compile(domain, whiteSpace)).pipe(
-    Result.map((compiled): DomainRef => intern(domains, compiled, handle)),
+  return read.compiled.pipe(
+    Result.map((keyed): DomainRef => intern(domains, keyed, handle)),
     Result.orElse((cause) =>
       isEmptyDefinition(cause)
         ? Result.succeed(internEmpty(domains, handle))
@@ -1540,6 +1629,27 @@ export const generate = (
       handles: new Set(),
       ordered: [],
     };
+    // Every declaration's domain is read before any joins the roster, each distinct definition
+    // compiled once; the loops below add them in the roster's order.
+    const readDomain = domainReader();
+    const declarations = input.declarations.map((declared) => ({
+      declared,
+      read: readDomain(declared),
+    }));
+    const textsRead = input.texts.map((text) => {
+      const declared = { ...text, name: "" };
+
+      return { declared, read: readDomain(declared), text };
+    });
+    const governedRead = input.governed.map((declared) => ({
+      declared,
+      read: readDomain(declared),
+    }));
+    const typeTextsRead = input.typeTexts.map((typeText) => {
+      const declared = { ...typeText, kind: typeText.owner, name: "" };
+
+      return { declared, read: readDomain(declared), typeText };
+    });
     const admitted: Admitted[] = [];
     const texts: {
       readonly domain: DomainRef;
@@ -1547,9 +1657,14 @@ export const generate = (
       readonly version: SchemaVersion;
     }[] = [];
     for (const version of input.versions.handles) {
-      for (const declared of input.declarations) {
+      for (const { declared, read } of declarations) {
         if (declared.versions.includes(version)) {
-          const domain = yield* domainOf(domains, declared, `${declared.kind}@${declared.name}`);
+          const domain = yield* domainOf(
+            domains,
+            declared,
+            read,
+            `${declared.kind}@${declared.name}`,
+          );
           admitted.push({
             domain,
             kind: declared.kind,
@@ -1560,14 +1675,10 @@ export const generate = (
         }
       }
 
-      for (const declared of input.texts) {
-        if (declared.versions.includes(version)) {
-          const domain = yield* domainOf(
-            domains,
-            { ...declared, name: "" },
-            `${declared.kind} text`,
-          );
-          texts.push({ domain, kind: declared.kind, version });
+      for (const { declared, read, text } of textsRead) {
+        if (text.versions.includes(version)) {
+          const domain = yield* domainOf(domains, declared, read, `${text.kind} text`);
+          texts.push({ domain, kind: text.kind, version });
         }
       }
     }
@@ -1581,9 +1692,14 @@ export const generate = (
       readonly version: SchemaVersion;
     }[] = [];
     for (const version of input.versions.handles) {
-      for (const declared of input.governed) {
+      for (const { declared, read } of governedRead) {
         if (declared.versions.includes(version)) {
-          const domain = yield* domainOf(domains, declared, `${declared.governs}@${declared.name}`);
+          const domain = yield* domainOf(
+            domains,
+            declared,
+            read,
+            `${declared.governs}@${declared.name}`,
+          );
           governed.push({
             domain,
             governor: governorHandle(declared),
@@ -1595,14 +1711,10 @@ export const generate = (
         }
       }
 
-      for (const declared of input.typeTexts) {
-        if (declared.versions.includes(version)) {
-          const domain = yield* domainOf(
-            domains,
-            { ...declared, kind: declared.owner, name: "" },
-            `${declared.owner} text`,
-          );
-          typeTexts.push({ domain, governs: declared.owner, version });
+      for (const { declared, read, typeText } of typeTextsRead) {
+        if (typeText.versions.includes(version)) {
+          const domain = yield* domainOf(domains, declared, read, `${typeText.owner} text`);
+          typeTexts.push({ domain, governs: typeText.owner, version });
         }
       }
     }
