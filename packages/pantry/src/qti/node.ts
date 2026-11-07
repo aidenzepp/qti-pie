@@ -102,7 +102,13 @@ const ncNameContinuation = `${ncNameStart}\\-.0-9·̀-ͯ‿-⁀`;
  * namespace declaration's prefix, whose key `Namespace(node, prefix)` holds it, so one language
  * holds both.
  */
-export const prefixPattern = `^(?:[${ncNameStart}][${ncNameContinuation}]*)?$`;
+const prefixPattern = `^(?:[${ncNameStart}][${ncNameContinuation}]*)?$`;
+
+/**
+ * The text type of an element's prefix: {@link prefixPattern} at `prefixBytes` UTF-8 bytes.
+ * Exported for `src/import/refusal.ts`, which names its pattern law.
+ */
+export const Prefix = str.bytes(prefixBytes, str.regex(prefixPattern));
 
 /**
  * A node's characters: any run of XML 1.0's Char, tabs, line feeds and carriage returns included.
@@ -194,7 +200,7 @@ export const Node = relation(
     parentNearest: accumulated(uuid, nilUuid),
     parentNearestKind: accumulated(closedId(NodeKind), "document"),
     parentParentKind: accumulated(closedId(NodeKind), "document"),
-    prefix: str.bytes(prefixBytes, str.regex(prefixPattern)),
+    prefix: Prefix,
     start: drawn(natural),
     state: closedId(Position),
     stringValue: accumulated(keyText, ""),

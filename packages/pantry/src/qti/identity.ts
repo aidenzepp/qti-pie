@@ -115,7 +115,6 @@ import {
   pg,
   relation,
   select,
-  str,
   uuid,
 } from "@bjornpagen/grizzle";
 import type { RowScalars } from "@bjornpagen/grizzle";
@@ -134,7 +133,7 @@ import {
   TypeName,
   ValueIdentity,
 } from "#pantry/grammar/install.ts";
-import { Attribute, Idref } from "#pantry/qti/attributes.ts";
+import { Attribute, Idref, Space } from "#pantry/qti/attributes.ts";
 import { Document } from "#pantry/qti/chardata.ts";
 import { keyText } from "#pantry/qti/limits.ts";
 import {
@@ -148,16 +147,12 @@ import { Node, nodeRef } from "#pantry/qti/node.ts";
 import { Instance, itemKind, testKind } from "#pantry/qti/tests.ts";
 
 /**
- * XML whitespace `S`, possibly none: what an ID's lexical form holds around its value.
+ * XML whitespace `S`, possibly none: what an ID's lexical form holds around its value, the
+ * language of `Space` (`#pantry/qti/attributes.ts`), the type its pieces are of.
  *
  * @see {@link https://www.w3.org/TR/xml/#NT-S | XML 1.0, S}
  */
 export const spacePattern = "^[\\t\\n\\r ]*$";
-
-/**
- * The text type of {@link spacePattern}.
- */
-const Space = str.regex(spacePattern);
 
 /**
  * A nonempty run holding no XML whitespace: an ID's value once its lexical form's outer whitespace

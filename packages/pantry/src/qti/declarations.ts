@@ -69,7 +69,6 @@ import {
   pg,
   relation,
   select,
-  str,
   uuid,
 } from "@bjornpagen/grizzle";
 import type { RowScalars } from "@bjornpagen/grizzle";
@@ -86,7 +85,7 @@ import {
   SchemaVersion,
 } from "#pantry/grammar/install.ts";
 import { ncNamePattern } from "#pantry/grammar/domains.ts";
-import { Attribute } from "#pantry/qti/attributes.ts";
+import { Attribute, Space } from "#pantry/qti/attributes.ts";
 import {
   BaseTypePattern,
   unjudgedBaseTypes,
@@ -97,13 +96,6 @@ import { keyText } from "#pantry/qti/limits.ts";
 import { Node, nodeCounts, nodeRef } from "#pantry/qti/node.ts";
 import type { SchemaVersion as Version } from "#pantry/grammar/kinds.ts";
 import { attributeDeclarations } from "#pantry/vocab/inventory/attributes.ts";
-
-/**
- * XML whitespace `S`, possibly none: what an identifier's lexical form holds around its name.
- *
- * @see {@link https://www.w3.org/TR/xml/#NT-S | XML 1.0, S}
- */
-const Space = str.regex("^[\\t\\n\\r ]*$");
 
 /**
  * A collapsed identifier that names something: an NCName (`ncNamePattern`), `IdentifierDType`'s

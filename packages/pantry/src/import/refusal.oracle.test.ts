@@ -31,9 +31,6 @@ import {
   uuid,
 } from "@bjornpagen/grizzle";
 import type { AnySchema, Law, LawSide, LawSourceSide } from "@bjornpagen/grizzle";
-import { globSync } from "node:fs";
-import path from "node:path";
-import { pathToFileURL } from "node:url";
 import { assert, describe, it } from "@effect/vitest";
 import { exhaust } from "@grizzle/testing/explore";
 import { requiredInSpace } from "@grizzle/testing/features";
@@ -63,10 +60,12 @@ import {
   limitRules,
   owedRules,
   patternLawsOf,
+  plainTexts,
   refusalOfLaws,
   ruleOfError,
   ruleOfLaws,
   statedLaws,
+  textLaws,
 } from "#pantry/import/refusal.ts";
 import { readerOrigin } from "#pantry/package/refusal-origin.ts";
 import { lawTable, precedence } from "#pantry/vocab/laws.ts";
@@ -1617,70 +1616,111 @@ describe("the refusals made before the database", () => {
 });
 
 /**
- * The stored relations each module of `src/qti/` exports, by relation name, read from the modules
- * themselves, so the census names the module that owes a pattern's export whatever lands there.
- */
-const modulesOf = Effect.gen(function* modulesOf() {
-  const root = path.resolve(import.meta.dirname, "..");
-  const files = globSync("qti/*.ts", { cwd: root }).filter((file) => !file.endsWith(".test.ts"));
-  const Exported = Schema.Record(Schema.String, Schema.Unknown);
-  const Stored = Schema.Struct({ kind: Schema.Literal("relation"), name: Schema.String });
-  const owners = new Map<string, string>();
-  for (const file of files.toSorted()) {
-    const loaded: unknown = yield* Effect.promise(
-      () => import(pathToFileURL(path.join(root, file)).href),
-    );
-    for (const value of Object.values(
-      Option.getOrElse(Schema.decodeUnknownOption(Exported)(loaded), () => ({})),
-    )) {
-      for (const { name } of Option.toArray(Schema.decodeUnknownOption(Stored)(value))) {
-        if (!owners.has(name)) {
-          owners.set(name, `src/${file}`);
-        }
-      }
-    }
-  }
-
-  return owners;
-});
-
-/**
- * Every text field of a schema's stored relations, with its pattern law. A field's type is read as
- * any value, as {@link generatedLaws} reads it, so a relation with a function-valued type
- * (`MapKeyFloat`'s `pg["double precision"]`) is read, and a pattern of another shape throws.
+ * Every text field of a schema's ordinary relations, a generated or accumulated one included, with
+ * its type and its pattern law, one per field as grizzle states it: its relation and field, and its
+ * type's source and flags. A field's type is the one `generated(type, term)` or `accumulated(type,
+ * start)` declares, or its descriptor itself. A field's descriptor is read as any value, as
+ * {@link generatedLaws} reads it, so a relation with a function-valued type (`MapKeyFloat`'s
+ * `pg["double precision"]`) is read, and a pattern of another shape throws.
  *
  * @param relations - The schema's `relations`.
  * @returns Each relation's text fields.
  */
-const patternFields = (
+const textFields = (
   relations: AnySchema["relations"],
-): readonly { readonly field: string; readonly law: Law; readonly relation: string }[] => {
+): readonly { readonly law: Law; readonly type: unknown }[] => {
   const Pattern = Schema.Struct({ flags: Schema.Literals(["u", "su"]), source: Schema.String });
   const Stored = Schema.Struct({
     fields: Schema.Record(Schema.String, Schema.Unknown),
     kind: Schema.Literal("relation"),
     name: Schema.String,
   });
+  const Written = Schema.Union([
+    Schema.Struct({ type: Schema.Unknown, writing: Schema.Literal("generated") }),
+    Schema.Struct({ field: Schema.Unknown, writing: Schema.Literal("accumulated") }),
+  ]);
 
   return Object.values(relations).flatMap((value) =>
     Option.toArray(Schema.decodeUnknownOption(Stored)(value)).flatMap(({ fields, name }) =>
-      Object.entries(fields).flatMap(([field, type]) =>
-        Predicate.hasProperty(type, "pattern") && type.pattern !== undefined
+      Object.entries(fields).flatMap(([field, descriptor]) => {
+        const type = Option.match(Schema.decodeUnknownOption(Written)(descriptor), {
+          onNone: () => descriptor,
+          onSome: (written) => (written.writing === "generated" ? written.type : written.field),
+        });
+
+        return Predicate.hasProperty(type, "pattern")
           ? [
               {
-                field,
                 law: {
                   ...Schema.decodeUnknownSync(Pattern)(type.pattern),
+                  field,
                   kind: "pattern",
+                  relation: name,
                 } satisfies Law,
-                relation: name,
+                type,
               },
             ]
-          : [],
-      ),
+          : [];
+      }),
     ),
   );
 };
+
+/**
+ * File a law for {@link missingFrom}: a pattern law by its field, any other by its kind.
+ *
+ * @param law - The law.
+ * @returns Its bucket.
+ */
+const censusBucket = (law: Law): string =>
+  law.kind === "pattern" ? `${law.relation}.${law.field}` : law.kind;
+
+/**
+ * Write each law of `laws` that no law of `among` is, by grizzle's `sameLaw`, for a census's
+ * message. Laws are matched within their bucket ({@link censusBucket}), so the scan stays linear.
+ *
+ * @param laws - The laws looked for.
+ * @param among - The laws they are looked for among.
+ * @returns The laws not found, as `Formatter` writes them.
+ */
+const missingFrom = (laws: readonly Law[], among: readonly Law[]): readonly string[] => {
+  const held = Arr.groupBy(among, censusBucket);
+
+  return laws
+    .filter((law) => !(held[censusBucket(law)] ?? []).some((other) => sameLaw(other, law)))
+    .map((law) => Formatter.format(law));
+};
+
+/**
+ * The pattern law of a field of the small schema of the per-field test, `Club`'s, of `^[a-z]*$`.
+ *
+ * @param field - The field.
+ * @returns Its law.
+ */
+const clubLaw = (field: string): Extract<Law, { readonly kind: "pattern" }> => ({
+  field,
+  flags: "u",
+  kind: "pattern",
+  relation: "Club",
+  source: "^[a-z]*$",
+});
+
+/**
+ * The pattern law `Qti` states of one field, as {@link statedLaws} names it.
+ *
+ * @param owner - The field's relation.
+ * @param field - The field.
+ * @returns Its law; a field with none fails the test, naming it.
+ */
+const statedPatternLaw = (owner: string, field: string): Law =>
+  pipe(
+    Arr.findFirst(
+      statedLaws(),
+      ([law]) => law.kind === "pattern" && law.relation === owner && law.field === field,
+    ),
+    Option.map(([law]) => law),
+    Option.getOrThrowWith(() => new Error(`${owner}.${field} states no pattern law`)),
+  );
 
 /**
  * The law of every generated field of a schema's stored relations, which grizzle names when the
@@ -1734,40 +1774,68 @@ const statementLawsOf = Fn.memoize((built: AnySchema): readonly Law[] =>
   lawsOf(built).flatMap(({ laws }) => laws),
 );
 
-describe("the pattern laws, one per pattern", () => {
-  it("names a pattern two types share by one law, and refuses two rows that name it twice", () => {
-    // Oracle: grizzle's report of a domain's CHECK, its pattern's source and flags alone
-    // (docs/grizzle-findings.md, the pattern law's refusal), so a pattern is one law whatever types
-    // carry it. Live: two types of one pattern under one name, and two patterns. Wild: two types of
-    // one pattern under two names, either order, as `Chars` beside the foreign namespace name was.
-    const chars = str.regex("^[a]*$");
-    const sameChars = str.regex("^[a]*$");
-    const bounded = str.regex("^[a]*$", "su");
+describe("the pattern laws, one per field", () => {
+  it("names each text field by its own type's row, a generated field's included, and refuses a field whose type no row holds", () => {
+    // Oracle: grizzle's installation, one pattern law per stored field a text domain types
+    // (`physical/install/compile.ts` `textDomainConstraintLaws` of the vendored engine), a
+    // tautology's field none. Live: two types of one pattern under two names, a generated field
+    // of one of them, a plain field. Wild: a field whose type no row holds.
+    const code = str.regex("^[a-z]*$");
+    const alias = str.regex("^[a-z]*$");
+    const plain = str.regex("^.*$", "su");
+    const Club = relation.generated(
+      "Club",
+      { alias, code, id: uuid, name: plain },
+      ["id"],
+      (r) => ({ joined: generated(code, Compute.concat(r.code, r.alias)) }),
+    );
 
     assert.deepStrictEqual(
-      patternLawsOf([
-        [chars, "Key text bound"],
-        [sameChars, "Key text bound"],
-        [bounded, "XML production"],
-      ]),
+      patternLawsOf(
+        { Club },
+        new Map([
+          [code, "Key text bound"],
+          [alias, "XML production"],
+        ]),
+        new Set([plain]),
+      ),
       Result.succeed([
-        [{ flags: "u", kind: "pattern", source: "^[a]*$" }, "Key text bound"],
-        [{ flags: "su", kind: "pattern", source: "^[a]*$" }, "XML production"],
+        [clubLaw("alias"), "XML production"],
+        [clubLaw("code"), "Key text bound"],
+        [clubLaw("joined"), "Key text bound"],
       ]),
     );
-    for (const [first, second] of [
-      ["Key text bound", "XML production"],
-      ["XML production", "Key text bound"],
-    ] as const) {
-      assert.deepStrictEqual(
-        patternLawsOf([
-          [chars, first],
-          [sameChars, second],
-        ]),
-        Result.fail({ first, law: { flags: "u", kind: "pattern", source: "^[a]*$" }, second }),
-      );
-    }
+    assert.deepStrictEqual(
+      patternLawsOf({ Club }, new Map([[code, "Key text bound"]]), new Set([plain])),
+      Result.fail({ field: "alias", relation: "Club" }),
+    );
   });
+
+  it(
+    "names two fields of one pattern apart: Node.chars an XML production, OpenElementName.namespace a key text's bound",
+    () => {
+      // Oracle: grizzle's per-field pattern law, its relation and field beside the source and flags
+      // the field spells (changeset.ts's Law), and the classes of `textLaws`: a node's characters
+      // and a foreign namespace name are both `Char*`, but only the name is bounded, so a refusal
+      // of the one is crust's production and of the other the stated limit.
+      const chars = statedPatternLaw("Node", "chars");
+      const namespace = statedPatternLaw("OpenElementName", "namespace");
+
+      assert.isTrue(
+        chars.kind === "pattern" &&
+          namespace.kind === "pattern" &&
+          chars.source === namespace.source &&
+          chars.flags === namespace.flags,
+        "the two fields spell one pattern",
+      );
+      assert.isFalse(sameLaw(chars, namespace));
+      assert.deepStrictEqual(
+        [lawNameOf(chars), lawNameOf(namespace)],
+        [Option.some("XML production"), Option.some("Key text bound")],
+      );
+    },
+    testTimeoutMs,
+  );
 });
 
 describe("the census of the composed Qti schema", () => {
@@ -1799,19 +1867,37 @@ describe("the census of the composed Qti schema", () => {
   );
 
   it.effect(
-    "owns the pattern law of every text field of Qti's stored relations, naming the module that owes an export",
+    "states the pattern law of every text field of Qti's ordinary relations, one per field, and no other",
     () =>
+      // Oracle: grizzle's installation, one pattern law per stored field a text domain types, a
+      // generated or accumulated field included, a tautology's field none
+      // (`physical/install/compile.ts` `textDomainConstraintLaws` of the vendored engine), read
+      // here from the schema apart from `refusal.ts`'s reading.
       Effect.gen(function* patterns() {
         const Qti = yield* composedQti;
-        const moduleOf = yield* modulesOf;
-        const unowned = patternFields(Qti.relations)
-          .filter(({ law }) => Option.isNone(lawNameOf(law)))
-          .map(
-            ({ field, relation: owner }) =>
-              `${owner}.${field}, in ${moduleOf.get(owner) ?? "an unlisted module"}: export its text type and give its pattern a row of writtenLaws`,
-          );
+        const fields = textFields(Qti.relations);
+        const plain: ReadonlySet<unknown> = plainTexts;
+        const owed = fields.flatMap(({ law, type }) => (plain.has(type) ? [] : [law]));
+        const stated = statedLaws().flatMap(([law]) => (law.kind === "pattern" ? [law] : []));
+        const typed: ReadonlySet<unknown> = new Set(fields.map(({ type }) => type));
 
-        assert.deepStrictEqual(unowned, [], "text fields whose pattern no row of the table owns");
+        assert.deepStrictEqual(
+          missingFrom(owed, stated),
+          [],
+          "text fields whose pattern law the table states not",
+        );
+        assert.deepStrictEqual(
+          missingFrom(stated, owed),
+          [],
+          "pattern laws the table states of no text field",
+        );
+        assert.deepStrictEqual(
+          [...textLaws.keys(), ...plainTexts]
+            .filter((type) => !typed.has(type))
+            .map(({ pattern }) => Formatter.format(pattern)),
+          [],
+          "rows of textLaws or plainTexts that type no field",
+        );
       }),
     testTimeoutMs,
   );
