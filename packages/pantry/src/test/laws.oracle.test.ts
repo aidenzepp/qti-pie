@@ -72,10 +72,11 @@ const testFeedbackTyped = (breaches: readonly Breach[]) =>
  * Write a package whose test declares one outcome and names it from a `qti-test-feedback`.
  *
  * @param outcome - The outcome's identifier.
- * @param baseType - The outcome's base type, of single cardinality.
+ * @param baseType - The outcome's base type, of single cardinality; null declares no outcome, as a
+ *   built-in session variable's name has none.
  * @returns The package.
  */
-const testFeedbackPackage = (outcome: string, baseType: string) => ({
+const testFeedbackPackage = (outcome: string, baseType: string | null) => ({
   "imsmanifest.xml": manifestOf(
     `${itemResource}<resource identifier="RT" type="imsqti_test_xmlv3p0" href="test.xml"><file href="test.xml"/></resource>`,
   ),
@@ -87,19 +88,21 @@ const testFeedbackPackage = (outcome: string, baseType: string) => ({
       `</qti-test-part><qti-test-feedback access="during" outcome-identifier="${outcome}" show-hide="show" identifier="F"><qti-content-body><p>Seen.</p></qti-content-body></qti-test-feedback>`,
     ),
     '<qti-test-part identifier="P"',
-    `<qti-outcome-declaration identifier="${outcome}" cardinality="single" base-type="${baseType}"/><qti-test-part identifier="P"`,
+    `${baseType === null ? "" : `<qti-outcome-declaration identifier="${outcome}" cardinality="single" base-type="${baseType}"/>`}<qti-test-part identifier="P"`,
   ),
 });
 
 /**
- * Write a package whose tests each declare the outcome `FLAG` in the base type given for them and
- * reach one section document, through a section ref, whose rubric names `FLAG` from a
- * `qti-feedback-inline`.
+ * Write a package whose tests each declare the outcome the section document's rubric names, in the
+ * base type given for them, and reach that document through a section ref; the rubric names it from
+ * a `qti-feedback-inline`.
  *
- * @param baseTypes - Each test's base type for `FLAG`, of single cardinality.
+ * @param baseTypes - Each test's base type for the outcome, of single cardinality; null declares no
+ *   outcome, as a built-in session variable's name has none.
+ * @param outcome - The outcome's identifier.
  * @returns The package.
  */
-const sectionFeedbackPackage = (baseTypes: readonly string[]) => ({
+const sectionFeedbackPackage = (baseTypes: readonly (string | null)[], outcome = "FLAG") => ({
   "imsmanifest.xml": manifestOf(
     `${itemResource}<resource identifier="RS" type="imsqti_section_xmlv3p0" href="section.xml"><file href="section.xml"/></resource>${baseTypes
       .map(
@@ -109,7 +112,7 @@ const sectionFeedbackPackage = (baseTypes: readonly string[]) => ({
       .join("")}`,
   ),
   "item.xml": item,
-  "section.xml": `<qti-assessment-section xmlns="${asi}" identifier="SS" title="Shared" visible="true"><qti-rubric-block view="candidate"><qti-content-body><p><qti-feedback-inline outcome-identifier="FLAG" identifier="ok" show-hide="show">Well done.</qti-feedback-inline></p></qti-content-body></qti-rubric-block><qti-assessment-item-ref identifier="J" href="item.xml"/></qti-assessment-section>`,
+  "section.xml": `<qti-assessment-section xmlns="${asi}" identifier="SS" title="Shared" visible="true"><qti-rubric-block view="candidate"><qti-content-body><p><qti-feedback-inline outcome-identifier="${outcome}" identifier="ok" show-hide="show">Well done.</qti-feedback-inline></p></qti-content-body></qti-rubric-block><qti-assessment-item-ref identifier="J" href="item.xml"/></qti-assessment-section>`,
   ...Object.fromEntries(
     baseTypes.map((baseType, at) => [
       `test${String(at)}.xml`,
@@ -120,7 +123,7 @@ const sectionFeedbackPackage = (baseTypes: readonly string[]) => ({
           `<qti-assessment-section-ref identifier="R" href="section.xml"/></qti-assessment-section>`,
         ),
         '<qti-test-part identifier="P"',
-        `<qti-outcome-declaration identifier="FLAG" cardinality="single" base-type="${baseType}"/><qti-test-part identifier="P"`,
+        `${baseType === null ? "" : `<qti-outcome-declaration identifier="${outcome}" cardinality="single" base-type="${baseType}"/>`}<qti-test-part identifier="P"`,
       ),
     ]),
   ),
@@ -589,9 +592,20 @@ describe("the information model's rules RD found unowned (unowned-readings.md §
         feedback("completionStatus"),
       ]);
 
+      const numAttempts = yield* refusedBy("Feedback outcome type", [
+        `<p id="intro">Pick one.</p>`,
+        feedback("numAttempts"),
+      ]);
+      const duration = yield* refusedBy("Feedback outcome type", [
+        `<p id="intro">Pick one.</p>`,
+        feedback("duration"),
+      ]);
+
       assert.isTrue(float.held, float.breaches);
       assert.isFalse(identifier.held, identifier.breaches);
       assert.isFalse(builtIn.held, builtIn.breaches);
+      assert.isTrue(numAttempts.held, numAttempts.breaches);
+      assert.isTrue(duration.held, duration.breaches);
     }),
   );
 
@@ -628,8 +642,21 @@ describe("the information model's rules RD found unowned (unowned-readings.md §
         breachesOf(yield* judged(testFeedbackPackage("FEEDBACK", "identifier"))),
       );
 
+      const numAttempts = testFeedbackTyped(
+        breachesOf(yield* judged(testFeedbackPackage("numAttempts", null))),
+      );
+      const duration = testFeedbackTyped(
+        breachesOf(yield* judged(testFeedbackPackage("duration", null))),
+      );
+      const completionStatus = testFeedbackTyped(
+        breachesOf(yield* judged(testFeedbackPackage("completionStatus", null))),
+      );
+
       assert.strictEqual(float.length, 1, shown(float));
       assert.strictEqual(identifier.length, 0, shown(identifier));
+      assert.strictEqual(numAttempts.length, 1, shown(numAttempts));
+      assert.strictEqual(duration.length, 1, shown(duration));
+      assert.strictEqual(completionStatus.length, 0, shown(completionStatus));
     }),
   );
 
@@ -647,9 +674,22 @@ describe("the information model's rules RD found unowned (unowned-readings.md §
           breachesOf(yield* judged(sectionFeedbackPackage(["identifier", "float"]))),
         );
 
+        const numAttempts = testFeedbackTyped(
+          breachesOf(yield* judged(sectionFeedbackPackage([null], "numAttempts"))),
+        );
+        const duration = testFeedbackTyped(
+          breachesOf(yield* judged(sectionFeedbackPackage([null], "duration"))),
+        );
+        const completionStatus = testFeedbackTyped(
+          breachesOf(yield* judged(sectionFeedbackPackage([null], "completionStatus"))),
+        );
+
         assert.strictEqual(float.length, 1, shown(float));
         assert.strictEqual(identifier.length, 0, shown(identifier));
         assert.strictEqual(both.length, 1, shown(both));
+        assert.strictEqual(numAttempts.length, 1, shown(numAttempts));
+        assert.strictEqual(duration.length, 1, shown(duration));
+        assert.strictEqual(completionStatus.length, 0, shown(completionStatus));
       }),
   );
 
