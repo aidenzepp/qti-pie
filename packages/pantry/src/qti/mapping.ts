@@ -66,6 +66,7 @@ import {
   NodeKind,
   SchemaVersion,
 } from "#pantry/grammar/install.ts";
+import { booleanTrue } from "#pantry/grammar/domains.ts";
 import { Attribute } from "#pantry/qti/attributes.ts";
 import { declarationRef } from "#pantry/qti/declarations.ts";
 import { BaseTypePattern } from "#pantry/qti/expression-types.ts";
@@ -499,12 +500,6 @@ const caseAttributes = select(Attribute, (a) =>
 );
 
 /**
- * The lexical forms of an `xs:boolean` true, collapsed: an entry so written is matched by code
- * points.
- */
-export const caseSensitiveTrue = ["true", "1"] as const;
-
-/**
  * The map keys of integer mappings: each has its {@link MapKeyInteger} row, and no other key does.
  */
 const integerKeys = select(MapKey, (k) =>
@@ -590,7 +585,7 @@ export const mappingLawsByName = {
     check("E1_derived", MapKey, (k) => {
       const matchedCase = k.and(
         k.eq(k.baseType, "string"),
-        k.not(k.in(Compute.collapse(k.caseText), caseSensitiveTrue)),
+        k.not(k.in(Compute.collapse(k.caseText), booleanTrue)),
       );
 
       return k.or(

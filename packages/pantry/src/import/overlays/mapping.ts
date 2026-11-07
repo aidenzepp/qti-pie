@@ -16,8 +16,8 @@ import type { Composed } from "#pantry/model/composed.ts";
 import { collapse, lowerAscii } from "#pantry/import/overlays/metadata.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
+import { booleanTrue } from "#pantry/grammar/domains.ts";
 import {
-  caseSensitiveTrue,
   floatKeyPattern,
   integerKeyPattern,
   pairKeyPattern,
@@ -589,7 +589,7 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: MappingIds): MappingRows
     const { baseType } = declarationOf(mapping);
     const caseText = valueOf(node.id, "case-sensitive") ?? "";
     const folded =
-      baseType === "string" && !caseSensitiveTrue.some((form) => form === collapse(caseText));
+      baseType === "string" && !booleanTrue.some((form) => form === collapse(caseText));
     mapKeys.set(node.id, {
       ...tupleOf(node),
       baseType,

@@ -3196,7 +3196,8 @@ const matchedKeyOf = (
   key: string,
   caseSensitive: Option.Option<string>,
 ): string =>
-  baseType === "string" && !Option.exists(caseSensitive, (form) => form === "true" || form === "1")
+  baseType === "string" &&
+  !Option.exists(caseSensitive, (form) => Option.contains(booleanOf(form), true))
     ? `folded ${key.replaceAll(/[A-Z]/gu, (letter) => letter.toLowerCase())}`
     : mapKeyValueOf(baseType, key);
 

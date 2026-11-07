@@ -116,12 +116,6 @@ const durationScopes: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * An `xs:boolean` lexical form that is true, its whitespace collapsed (XML Schema 1.0 Part 2,
- * §3.2.2.1): `true` or `1`.
- */
-const truePattern = /^[\t\n\r ]*(?:true|1)[\t\n\r ]*$/u;
-
-/**
  * The positive instance numbers of reading 88: all digits, not all zeros.
  */
 const positiveNumber = /^[0-9]*[1-9][0-9]*$/u;
@@ -647,7 +641,7 @@ interface Read {
  */
 const timeDependentOf = (item: ListedRows): boolean =>
   Option.exists(item.rows.root, ({ id }) =>
-    Option.exists(valueOf(item.rows, id, "time-dependent"), (lexical) => truePattern.test(lexical)),
+    Option.contains(Option.flatMap(valueOf(item.rows, id, "time-dependent"), booleanOf), true),
   );
 
 /**
