@@ -17,6 +17,7 @@ import {
   laws,
   manifestOf,
   shown,
+  withItem,
 } from "#pantry/test/probe.ts";
 
 /**
@@ -49,6 +50,19 @@ const packageOfMapping = (entries: string) => ({
     `</qti-correct-response><qti-mapping default-value="0">${entries}</qti-mapping>`,
   ).replace('base-type="identifier"', 'base-type="string"'),
 });
+
+/**
+ * The base item with its response processing's `qti-match` replaced by a `qti-pattern-match` of the
+ * given `pattern`, over a string literal.
+ *
+ * @param pattern - The `pattern`, as written.
+ * @returns The package's files, by path.
+ */
+const packageOfPattern = (pattern: string) =>
+  withItem(
+    '<qti-match><qti-variable identifier="RESPONSE"/><qti-correct identifier="RESPONSE"/></qti-match>',
+    `<qti-pattern-match pattern="${pattern}"><qti-base-value base-type="string">x</qti-base-value></qti-pattern-match>`,
+  );
 
 /**
  * Count the breaches of one law in a judged package.
@@ -155,6 +169,45 @@ layer(NodeServices.layer, { excludeTestServices: true })(
             "one string matched the same way twice still clashes",
           );
           assert.strictEqual(yield* clash("\u00C9", "\u00E9"), 0, "the fold is ASCII only");
+        }),
+    );
+
+    judging.effect(
+      "a braced qti-pattern-match pattern that names no declared variable is a string value in an item (reading R15-k)",
+      () =>
+        Effect.gen(function* unresolvedPattern() {
+          for (const files of [packageOfPattern("{NOSUCH}"), packageOfPattern("{NOSUCH.SCORE}")]) {
+            const judgment = yield* judged(files);
+
+            assert.deepStrictEqual(breachesOf(judgment), [], shown(breachesOf(judgment)));
+            assert.deepStrictEqual(verdictOf(judgment), { verdict: "accepted" });
+          }
+        }),
+    );
+
+    judging.effect(
+      "a braced pattern that names a variable of the wrong kind or base type still breaks Reference type, and an unresolved bare reference still breaks Variable declared (reading R15-k)",
+      () =>
+        Effect.gen(function* resolvedPattern() {
+          for (const name of ["RESPONSE", "SCORE"]) {
+            assert.strictEqual(
+              yield* breachesOfLaw(packageOfPattern(`{${name}}`), "Reference type"),
+              1,
+              `{${name}} is no string single template or outcome variable`,
+            );
+          }
+
+          assert.strictEqual(
+            yield* breachesOfLaw(
+              withItem(
+                '<qti-variable identifier="RESPONSE"/>',
+                '<qti-variable identifier="NOSUCH"/>',
+              ),
+              "Variable declared",
+            ),
+            1,
+            "a bare unresolved reference names nothing",
+          );
         }),
     );
 

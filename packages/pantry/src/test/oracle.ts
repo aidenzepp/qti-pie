@@ -761,7 +761,7 @@ export const lawSources = {
   "Value cardinality":
     "https://www.imsglobal.org/spec/qti/v3p0/info#Data_Cardinality (§8.16, CardinalityEnum: single 'a single value'; record 'a set of independent values each identified by its own identifier and having its own base-type') and https://www.imsglobal.org/spec/qti/v3p0/info#Data_Value (§7.46.1, §7.46.2: field-identifier and base-type are 'only used for' a value that forms part of a record): a single variable's default or correct value holds one qti-value, and a value is a record's field, with its field-identifier and base-type, exactly when its variable is a record",
   "Variable declared":
-    "https://www.imsglobal.org/spec/qti/v3p0/info#AbstractAttribute_ExpressionGroup_qti-variable (§6.9.40, qti-variable, normative: 'This expression looks up the value of an itemVariable that has been declared in a corresponding variableDeclaration or is one of the built-in variables'), https://www.imsglobal.org/spec/qti/v3p0/info#DerivedCharacteristic_Variable.Attr_identifier (§7.47.1, Variable's identifier: 'The identifier of the item variable that has been declared in a corresponding variable declaration or of the built-in variables') and https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_SetValue.Attr_identifier (§5.130.1, a setter's: 'The identifier of the variable to be set') (references.ts); readings 4, 29 and 48",
+    "https://www.imsglobal.org/spec/qti/v3p0/info#AbstractAttribute_ExpressionGroup_qti-variable (§6.9.40, qti-variable, normative: 'This expression looks up the value of an itemVariable that has been declared in a corresponding variableDeclaration or is one of the built-in variables'), https://www.imsglobal.org/spec/qti/v3p0/info#DerivedCharacteristic_Variable.Attr_identifier (§7.47.1, Variable's identifier: 'The identifier of the item variable that has been declared in a corresponding variable declaration or of the built-in variables') and https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_SetValue.Attr_identifier (§5.130.1, a setter's: 'The identifier of the variable to be set') (references.ts); readings 4, 29 and 48; and reading R15-k (information model §2.7.2 and §9.3.4: 'if a string attribute appears to be a reference to a template or outcome variable but there is no variable with the given name it should be treated simply as string value'): a braced qti-pattern-match pattern that names no variable is a string value, not an undeclared reference",
   "Variable kind":
     "https://www.imsglobal.org/spec/qti/v3p0/info, each processing element's definition of the variable it reads or sets: §7.10.1 Correct ('The identifier of the associated response variable'), §7.22.1 MapResponse ('the associated Response variable'), §6.9.46 MapResponsePoint ('looks up the value of a response variable'), §5.87.1 and §6.32.1 LookupOutcomeValue ('the outcome variable to be set'), §6.32.3 and §6.39.4 SetOutcomeValue ('sets the value of an outcome variable'), §6.50.1 SetTemplateValue ('sets the value of a template variable'), §6.50.4 SetDefaultValue ('The response variable or outcome variable to have its default value set'), §6.50.5 SetCorrectResponse ('The response variable to have its correct value set'), and §7.47.1 Variable and §7.12.1 Default, any item variable (§2.2.2: 'context, response, outcome or template variables'): a reference by identifier names a declaration, or a built-in standing as one (BuiltInVariable), of a kind its element reads or sets; and a setter (§5.130.1 SetValue: 'The identifier of the variable to be set') sets a variable of its own document, which only an unsplit reading names, since an item's variables reach a test only to be looked up (§2.11.1.2: 'values taken from an individual item session can be looked up by prefixing'), reading 112 (expression-types.ts ReferenceDeclaration and setterKinds, over VariableRef and a test's Reading)",
   "Variable mapping source":
@@ -4179,8 +4179,8 @@ const countAttribute = (
  *
  * @param overlay - The document.
  * @param node - The node.
- * @returns Each attribute that names a variable, the identifier it names, and its declaration
- *   kinds.
+ * @returns Each attribute that names a variable, the identifier it names, how it spells it, and
+ *   its declaration kinds.
  */
 const namedBy = (
   overlay: Overlay,
@@ -4188,6 +4188,7 @@ const namedBy = (
 ): readonly {
   readonly attribute: string;
   readonly identifier: string;
+  readonly spelling: Spelling;
   readonly targets: ReadonlySet<string>;
 }[] => {
   const { contentReference, variableReference } = overlay.laws.grammar.references;
@@ -4200,6 +4201,7 @@ const namedBy = (
       ).map((identifier) => ({
         attribute,
         identifier,
+        spelling,
         targets: new Set(
           contentReference.rows
             .filter((row) => row.kind === node.kind && row.attribute === attribute)
@@ -4529,7 +4531,10 @@ const overlayLaws: readonly ((
     overlay.isItem
       ? namedBy(overlay, node)
           .filter(
-            ({ identifier, targets }) =>
+            ({ identifier, spelling, targets }) =>
+              // Reading R15-k: a braced reference, a string attribute's, that names no variable is
+              // a string value (information model §2.7.2 and §9.3.4), so nothing is undeclared.
+              spelling === "bare" &&
               targets.size === 0 &&
               !overlay.declared.has(identifier) &&
               Option.isNone(
