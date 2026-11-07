@@ -299,13 +299,12 @@ export const requiredValue = (
  *
  * Every identifier the item reads is an `xs:NCName`, or an `xs:ID` or `xs:IDREF` derived from it:
  * the root's, a declaration's and a choice's `identifier`, an interaction's `response-identifier`,
- * and the `identifier` of `qti-variable`, `qti-correct`, `qti-map-response` and
- * `qti-set-outcome-value`. Their whitespace facet is `collapse`, and an NCName holds no inner
- * whitespace, so collapsing is removing the outer XML whitespace. Reading 7 keeps an attribute's
- * outer whitespace only for the base-typed attributes the XSD types as strings, which no
- * identifier is, so `" RESPONSE "` names `RESPONSE`, and refusing it would refuse valid content
- * (reading 1). The validators read these attributes the same way (`identifierOf` in
- * `src/validate/rules.ts`).
+ * and the `identifier` an expression or a response rule names. Their whitespace facet is
+ * `collapse`, and an NCName holds no inner whitespace, so collapsing is removing the outer XML
+ * whitespace. Reading 7 keeps an attribute's outer whitespace only for the base-typed attributes
+ * the XSD types as strings, which no identifier is, so `" RESPONSE "` names `RESPONSE`, and
+ * refusing it would refuse valid content (reading 1). The validators read these attributes the
+ * same way (`identifierOf` in `src/validate/rules.ts`).
  *
  * @param written The attribute's value as written.
  * @returns The identifier it names.
@@ -580,20 +579,22 @@ export const floatAttribute = (
 const coordinate = /^(?<digits>[0-9]+)%?$/u;
 
 /**
- * Read a `qti-area-map-entry`'s `coords`, each coordinate's digits as `xs:double` reads them. How
- * many coordinates a value holds is the structure check's, which admits only `CoordsDType`.
+ * Read the required `coords` of a `qti-area-map-entry` or a `qti-inside`, each coordinate's digits
+ * as `xs:double` reads them. How many coordinates a value holds is the structure check's, which
+ * admits only `CoordsDType`.
  *
  * @param build The build.
- * @param entry The entry.
+ * @param element The element that carries the `coords`.
  * @returns Each coordinate's number and whether it is written with `%`, in written order, or the
- *   refusal `attribute-type` when a coordinate is outside `CoordsDType`.
+ *   refusal `missing-attribute` when it is absent or `attribute-type` when a coordinate is outside
+ *   `CoordsDType`.
  */
 export const coordsOf = (
   build: ModelWalk,
-  entry: SourceElement,
+  element: SourceElement,
 ): Effect.Effect<readonly (readonly [number, boolean])[], Refusal> =>
-  Effect.flatMap(requiredAttribute(build, entry, "coords"), (attribute) => {
-    const path = attributePath(pathOf(build, entry), attribute);
+  Effect.flatMap(requiredAttribute(build, element, "coords"), (attribute) => {
+    const path = attributePath(pathOf(build, element), attribute);
 
     return Effect.forEach(attribute.value.split(","), (written) => {
       const digits = coordinate.exec(written)?.groups?.["digits"];

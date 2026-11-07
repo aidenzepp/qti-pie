@@ -124,6 +124,9 @@ const numericalSingle: KindRule["operandsAccept"] = everyOperand(["integer", "fl
  * numbers.
  *
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpGT
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpGTE
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpLT
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpLTE
  */
 const orderRule: KindRule = {
   operandsAccept: numericalSingle,

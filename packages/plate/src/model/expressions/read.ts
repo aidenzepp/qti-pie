@@ -323,14 +323,14 @@ const readGeneric = (
 /**
  * Read an expression element: one in the QTI namespace named `qti-<kind>` for one of the 64 kinds
  * by that kind's reader spec, and any other element as one the engine does not run, marked by its
- * name. A kind whose family has not landed is marked `qti-<kind>` at its path, as before the
- * registry, and nothing in it is read. Operands are read through this reader again.
+ * name. A kind whose family has not landed is marked `qti-<kind>` at its path, and nothing in it
+ * is read. Operands are read through this reader again.
  *
  * @param reading The item's reading context.
  * @param element The expression element.
- * @returns The expression, none when it holds an element or a mode the engine does not run, or the
- *   refusal an attribute gives, such as `value-type` for a `qti-base-value` outside its lexical
- *   space.
+ * @returns The expression, none when it holds anything the engine does not run, each such thing
+ *   marked, or the refusal an attribute gives, such as `value-type` for a `qti-base-value` outside
+ *   its lexical space.
  */
 export const readExpression = (
   reading: ExpressionReading,

@@ -25,6 +25,8 @@ import type { FamilyReaders, ReaderSpec } from "#plate/model/expressions/read.ts
  * `packages/pantry/src/processing/check.ts`).
  *
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpAnd
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpOr
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpNot
  */
 const logicRule: KindRule = {
   operandsAccept: everyOperand(["boolean"], ["single"]),
