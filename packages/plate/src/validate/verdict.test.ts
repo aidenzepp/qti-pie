@@ -2276,6 +2276,32 @@ describe("describeRefusal", () => {
     assert.notInclude(sentence, "base type");
   });
 
+  it("[I-5] names a template-identifier that names a float template variable as not an identifier template variable, single or multiple, citing the element's line (pantry template-ref)", () => {
+    const sentence = describeRefusal(
+      refusalOf("expression-type", {
+        attribute: "template-identifier",
+        check: "reference",
+        element: "qti-simple-choice",
+        expectedBaseType: "identifier",
+        expectedCardinalities: "single multiple",
+        identifier: "F",
+        source: "info.txt:42466",
+      }),
+    );
+    const remedy = sentence.slice(sentence.indexOf("To make it valid:"));
+
+    assert.include(
+      sentence,
+      "`qti-simple-choice`'s attribute `template-identifier` names `F`, which is not a template variable of base type `identifier`, single or multiple (info.txt:42466).",
+    );
+    assert.include(
+      remedy,
+      "name a template variable of base type `identifier`, single or multiple, in `template-identifier`",
+    );
+    assert.notInclude(sentence, "outcome");
+    assert.notInclude(sentence, "a single template");
+  });
+
   it("[I-5] names the response variable a template rule reads, which may read only template and context variables (pantry P26)", () => {
     const sentence = describeRefusal(
       refusalOf("expression-type", {

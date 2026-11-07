@@ -1414,7 +1414,10 @@ const templateReadSource = "info.txt:65111";
  *   printed variable's `identifier`, which may name a template or outcome variable of any type
  *   (pantry's `printed-variable-ref`): the sentence names the kind the variable has, `response` or
  *   `context`, says no base type, and cites what settles it ({@link settled}). For a response, the
- *   remedy offers an outcome set to its value, as the information model suggests.
+ *   remedy offers an outcome set to its value, as the information model suggests. With an
+ *   `expectedCardinalities` fact, the attribute is a `template-identifier`, which names a template
+ *   variable of base type identifier, single or multiple (pantry's `template-ref`): the sentence
+ *   offers the cardinalities as alternatives and cites the element's line ({@link settled}).
  * - `template-read` (P26): template processing reads a variable that is neither a template nor a
  *   context variable (a response, an outcome or a built-in), by an element or through the reference
  *   attribute an `attribute` fact names. It cites the information model's line, which allows only
@@ -1449,6 +1452,17 @@ const expressionType = (refusal: Refusal): string => {
     case "reference": {
       const attribute = code(fact(refusal, "attribute", "the attribute"));
       const expected = baseTypeText(fact(refusal, "expectedBaseType", ""));
+
+      const cardinalities = optionalFact(refusal, "expectedCardinalities");
+      if (Option.isSome(cardinalities)) {
+        const wanted = `a template variable of base type ${expected}, ${alternatives(cardinalities.value, (one) => one)}`;
+
+        return sentence(
+          refusal,
+          `${code(element)}'s attribute ${attribute} names ${identifier}, which is not ${wanted}${settled(refusal)}.`,
+          `name ${wanted}, in ${attribute}`,
+        );
+      }
 
       return Option.match(optionalFact(refusal, "variableKind"), {
         onNone: () =>

@@ -443,6 +443,17 @@ const printed = (
   ]);
 
 /**
+ * Construct the attributes that show an element when a template variable matches it.
+ *
+ * @param template The `template-identifier`, as written.
+ * @returns Its `show-hide` and `template-identifier`.
+ */
+const shownBy = (template: string): readonly SourceAttribute[] => [
+  attr("show-hide", "show"),
+  attr("template-identifier", template),
+];
+
+/**
  * The refusal of a read template processing may not make (P26).
  *
  * @param path The reading element's path.
@@ -2565,6 +2576,204 @@ describe("checkRules", () => {
               "qti-assessment-stimulus",
               [attr("identifier", "stimulus"), attr("title", "Stimulus")],
               [el("qti-stimulus-body", [], [el("p", [], [printed("NOPE")])])],
+            ),
+          ),
+          tables,
+        ),
+        [],
+      );
+    });
+  });
+
+  describe("a template-identifier (pantry template-ref: TemplateContentRefType and ChoiceTemplateRefType; OD-P8-11, OD-P8-19)", () => {
+    const bodyPath = "qti-assessment-item/qti-item-body";
+
+    /**
+     * The declarations every case below may name: the responses its interactions bind, a float
+     * `SCORE` outcome, and the template variables `SHOWN` (single identifier), `PICKS` (multiple
+     * identifier) and `F` (single float).
+     */
+    const declared = [
+      response("RESPONSE", "multiple", "identifier"),
+      response("INLINE", "single", "identifier"),
+      response("GAPS", "multiple", "directedPair"),
+      response("HOT", "multiple", "identifier"),
+      outcome("SCORE"),
+      declaration("qti-template-declaration", "SHOWN", "single", "identifier"),
+      declaration("qti-template-declaration", "PICKS", "multiple", "identifier"),
+      declaration("qti-template-declaration", "F", "single", "float"),
+    ];
+
+    /**
+     * Check an item with {@link declared}'s declarations whose body holds every kind of element
+     * below, each naming the same template variable: a simple choice, an inline choice, a template
+     * inline, a template block, a template block in a rubric block, a gap text and a hottext.
+     *
+     * @param template The `template-identifier` each element carries, as written.
+     * @returns The refusals, reduced.
+     */
+    const naming = (template: string) =>
+      judged(
+        item(declared, [
+          el(
+            "qti-choice-interaction",
+            [attr("response-identifier", "RESPONSE")],
+            [el("qti-simple-choice", [attr("identifier", "A"), ...shownBy(template)], [text("A")])],
+          ),
+          el(
+            "p",
+            [],
+            [
+              el(
+                "qti-inline-choice-interaction",
+                [attr("response-identifier", "INLINE")],
+                [
+                  el(
+                    "qti-inline-choice",
+                    [attr("identifier", "B"), ...shownBy(template)],
+                    [text("B")],
+                  ),
+                ],
+              ),
+              el(
+                "qti-template-inline",
+                [attr("identifier", "TI"), ...shownBy(template)],
+                [text("inline")],
+              ),
+            ],
+          ),
+          el(
+            "qti-template-block",
+            [attr("identifier", "TB"), ...shownBy(template)],
+            [el("qti-content-body", [], [el("p", [], [text("block")])])],
+          ),
+          el(
+            "qti-rubric-block",
+            [attr("view", "candidate")],
+            [
+              el(
+                "qti-content-body",
+                [],
+                [
+                  el(
+                    "qti-template-block",
+                    [attr("identifier", "TR"), ...shownBy(template)],
+                    [el("qti-content-body", [], [el("p", [], [text("rubric")])])],
+                  ),
+                ],
+              ),
+            ],
+          ),
+          el(
+            "qti-gap-match-interaction",
+            [attr("response-identifier", "GAPS")],
+            [
+              el(
+                "qti-gap-text",
+                [attr("identifier", "G"), attr("match-max", "1"), ...shownBy(template)],
+                [text("gap")],
+              ),
+              el("p", [], [el("qti-gap", [attr("identifier", "GAP")])]),
+            ],
+          ),
+          el(
+            "qti-hottext-interaction",
+            [attr("response-identifier", "HOT")],
+            [
+              el(
+                "p",
+                [],
+                [el("qti-hottext", [attr("identifier", "H"), ...shownBy(template)], [text("hot")])],
+              ),
+            ],
+          ),
+        ]),
+      );
+
+    /**
+     * Each element {@link naming} names a template variable on, in document order: its path under
+     * the body, its local name and the line of QTI's information model that types its
+     * `template-identifier`.
+     */
+    const named = [
+      ["qti-choice-interaction/qti-simple-choice", "qti-simple-choice", "info.txt:42466"],
+      ["p/qti-inline-choice-interaction/qti-inline-choice", "qti-inline-choice", "info.txt:31973"],
+      ["p/qti-template-inline", "qti-template-inline", "info.txt:46462"],
+      ["qti-template-block", "qti-template-block", "info.txt:45053"],
+      [
+        "qti-rubric-block/qti-content-body/qti-template-block",
+        "qti-template-block",
+        "info.txt:45053",
+      ],
+      ["qti-gap-match-interaction/qti-gap-text", "qti-gap-text", "info.txt:28161"],
+      ["qti-hottext-interaction/p/qti-hottext", "qti-hottext", "info.txt:30039"],
+    ] as const;
+
+    it("[I-5] refuses a choice, a template inline and a template block, in a rubric block too, whose template-identifier names nothing the item declares, at that attribute (pantry template-ref; OD-P8-11)", () => {
+      assert.deepStrictEqual(
+        naming("NOPE"),
+        named.map(([path, element]) => ({
+          detail: {
+            attribute: "template-identifier",
+            element,
+            expected: "template",
+            identifier: "NOPE",
+          },
+          path: `${bodyPath}/${path}/@template-identifier`,
+          rule: "undeclared-variable",
+        })),
+      );
+    });
+
+    it("[I-5] refuses each of them naming a float template variable or an outcome, where an identifier template variable, single or multiple, is needed; a simple choice too, which the qti package does not check (pantry TemplateContentRefType and ChoiceTemplateRefType; OD-P8-11, OD-P8-19, G-R2, pending)", () => {
+      for (const identifier of ["F", "SCORE"]) {
+        assert.deepStrictEqual(
+          naming(identifier),
+          named.map(([path, element, line]) => ({
+            detail: {
+              attribute: "template-identifier",
+              check: "reference",
+              element,
+              expectedBaseType: "identifier",
+              expectedCardinalities: "single multiple",
+              identifier,
+              source: line,
+            },
+            path: `${bodyPath}/${path}/@template-identifier`,
+            rule: "expression-type",
+          })),
+          identifier,
+        );
+      }
+    });
+
+    it("[I-5] accepts each of them naming an identifier template variable of single or of multiple cardinality, as written with outer whitespace", () => {
+      for (const identifier of ["SHOWN", "PICKS", " SHOWN "]) {
+        assert.deepStrictEqual(naming(identifier), [], identifier);
+      }
+    });
+
+    it("[I-5] does not judge a template block in a stimulus, which declares no variable", () => {
+      assert.deepStrictEqual(
+        checkRules(
+          doc(
+            location,
+            el(
+              "qti-assessment-stimulus",
+              [attr("identifier", "stimulus"), attr("title", "Stimulus")],
+              [
+                el(
+                  "qti-stimulus-body",
+                  [],
+                  [
+                    el(
+                      "qti-template-block",
+                      [attr("identifier", "TB"), ...shownBy("NOPE")],
+                      [el("qti-content-body", [], [el("p", [], [text("block")])])],
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
           tables,
