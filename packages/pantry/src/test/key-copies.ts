@@ -779,10 +779,10 @@ const translated = ([text = "", from = "", to = ""]: readonly string[]): string 
 
 /**
  * The `Compute` functions a predicate reads, by name: grizzle's set algebra over sets of handles
- * (`subset`, `disjoint`, `union`, `difference`, `cardinality`), its text terms (`matches`,
- * `startsWith`, `endsWith`, `concat`, `translate`, `collapse`) and `add` of two naturals, each as
- * grizzle's README states it in SQL. Any other function is unread: a selection or a check that
- * holds one is not judged.
+ * (`subset`, `disjoint`, `union`, `difference`, `cardinality`, and `singleton`, the set holding a
+ * closed id's one handle), its text terms (`matches`, `startsWith`, `endsWith`, `concat`,
+ * `translate`, `collapse`) and `add` of two naturals, each as grizzle states it in SQL. Any other
+ * function is unread: a selection or a check that holds one is not judged.
  */
 const computers: ReadonlyMap<string, (args: readonly Datum[]) => Datum | undefined> = new Map<
   string,
@@ -795,6 +795,7 @@ const computers: ReadonlyMap<string, (args: readonly Datum[]) => Datum | undefin
     "difference",
     (args) => ofSets(args, (left, right) => new Set([...left].filter((at) => !right.has(at)))),
   ],
+  ["singleton", ([id]) => (Predicate.isString(id) ? new Set([id]) : undefined)],
   [
     "cardinality",
     ([set]) =>

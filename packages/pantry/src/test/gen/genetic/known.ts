@@ -647,30 +647,6 @@ export const known = {
     fix: "(6) the absence defaults: an absent required attribute writes no row, never an empty or default value",
     owner: "NIL",
   },
-  "oracle-only-law: Variable declared": {
-    files: [
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="rtest01/rtest01-set01.xml"/><resource type="imsqti_fragment_xmlv3p0" href="rtest01/rtest01-rules.xml"/></resources></manifest>`,
-      ],
-      [
-        "rtest01/rtest01-rules.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-response-condition xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-response-if><qti-set-outcome-value identifier="NOPE"/></qti-response-if></qti-response-condition>`,
-      ],
-      [
-        "rtest01/rtest01-set01.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xi="http://www.w3.org/2001/XInclude"><qti-item-body><xi:include href="rtest01-set01.xml"/></qti-item-body><qti-response-processing><xi:include href="rtest01-rules.xml"/></qti-response-processing></qti-assessment-item>`,
-      ],
-    ],
-    fix: "an item that includes itself and a fragment of rules: the oracle judges the fragment's set-outcome-value where the item includes it, and the import's rows judge it in no assembly (a08e60e5's heads)",
-    owner: "S-ORACLE",
-  },
 } satisfies Entries;
 
 /**
@@ -1640,5 +1616,29 @@ export const fixed = {
     ],
     fix: "B11: the oracle reads a record field's base-type by its type's whitespace class (typedValueOf), as the import does",
     owner: "VD",
+  },
+  "oracle-only-law: Variable declared": {
+    files: [
+      [
+        "imsmanifest.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1"><metadata><schemaversion>3.0.0</schemaversion></metadata><resources><resource type="imsqti_item_xmlv3p0" href="rtest01/rtest01-set01.xml"/><resource type="imsqti_fragment_xmlv3p0" href="rtest01/rtest01-rules.xml"/></resources></manifest>`,
+      ],
+      [
+        "rtest01/rtest01-rules.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-response-condition xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0"><qti-response-if><qti-set-outcome-value identifier="NOPE"/></qti-response-if></qti-response-condition>`,
+      ],
+      [
+        "rtest01/rtest01-set01.xml",
+        "xml",
+        `<?xml version="1.0" encoding="UTF-8"?>
+<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xi="http://www.w3.org/2001/XInclude"><qti-item-body><xi:include href="rtest01-set01.xml"/></qti-item-body><qti-response-processing><xi:include href="rtest01-rules.xml"/></qti-response-processing></qti-assessment-item>`,
+      ],
+    ],
+    fix: "an include splices its target only where it may stand for the target's root (Inclusion.splices, IncludeRoot through Compute.singleton), so an item that includes itself in its body still heads its assembly, and its rule fragment's set-outcome-value is judged there",
+    owner: "ASM",
   },
 } satisfies Entries;
