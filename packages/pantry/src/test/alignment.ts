@@ -783,6 +783,14 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
       status: "G",
     },
   ],
+  [
+    138,
+    {
+      owner:
+        "the package reader: `unsafeEntryPath` (`src/package/zip.ts`), which a zip's entry names and a package directory's file paths both meet (`readZip` under `href-path`, `readDirectoryEntry` under `entry-path`, which the import names `href-path`), held by `src/package/entry-path.test.ts`",
+      status: "G",
+    },
+  ],
 ]);
 
 /**
