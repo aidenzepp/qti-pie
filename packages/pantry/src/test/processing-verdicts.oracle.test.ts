@@ -8,7 +8,7 @@
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, layer } from "@effect/vitest";
-import { Effect, Result } from "effect";
+import { Effect, Option, Result } from "effect";
 import { composed } from "#pantry/grammar/compose.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { readPackage } from "#pantry/package/read.ts";
@@ -43,20 +43,22 @@ layer(NodeServices.layer, { excludeTestServices: true })(
         // codec-refused package before any row under the same rule. Bound: every processing
         // package, 38.
         Effect.gen(function* statedVerdicts() {
-          const verdicts = yield* processingVerdicts;
+          const statedOf = yield* processingVerdicts;
           for (const name of processingFixtureNames) {
             const dir = yield* materializeProcessing(name);
             const judgment = yield* judge(yield* readPackage(dir), grammar, laws);
-            const stated = verdicts.get(name);
+            const held = statedOf(name);
 
             assert.strictEqual(
               judgment._tag === "CodecRefusal",
-              stated?.source === "codec",
+              Option.exists(held, ({ source }) => source === "codec"),
               `${name}: the oracle refuses it by the codec exactly when the verdicts say so`,
             );
-            if (stated === undefined) {
+            if (Option.isNone(held)) {
               continue;
             }
+
+            const stated = held.value;
 
             if (stated.source === "guard" && stated.rule !== "accepted") {
               const broken =

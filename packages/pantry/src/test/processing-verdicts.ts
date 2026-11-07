@@ -7,11 +7,12 @@
  * processing checker run once over every document and frozen): a checker's rule or `accepted`, or a
  * guard's, which the guard's law gives today. The one exception is a package the codec refuses
  * before any row exists ({@link codecRefusals}): no law reads it, so its verdict is the codec's
- * rule. The packages with no frozen row (`processing-item`, `rptemplates`, `template-item` and the
- * two padded ones) are not stated here.
+ * rule. A package with no frozen row (`processing-item`, `rptemplates`, `template-item` and the
+ * two padded ones) has no stated verdict: the lookup answers `None` for it, and
+ * `import/program.oracle.db.test.ts` holds PostgreSQL to the law oracle's verdict on it instead.
  */
 import path from "node:path";
-import { Effect, FileSystem, Schema } from "effect";
+import { Effect, FileSystem, Option, Schema } from "effect";
 import type { Rule } from "#pantry/import/refusal.ts";
 
 /**
@@ -55,8 +56,9 @@ const verdictsFile = path.resolve(import.meta.dirname, "fixtures", "processing",
 const FrozenSource = Schema.Literals(["checker", "guard"]);
 
 /**
- * Read each stated package's verdict, keyed by the package's name: the stem of its document's file
- * under `broken/` or `guards/`.
+ * Read the stated verdicts, as a lookup by the package's name: the stem of its document's file
+ * under `broken/` or `guards/`. It answers `None` for a package with no frozen row, which has no
+ * stated verdict.
  */
 export const processingVerdicts = Effect.gen(function* processingVerdicts() {
   const fs = yield* FileSystem.FileSystem;
@@ -85,5 +87,8 @@ export const processingVerdicts = Effect.gen(function* processingVerdicts() {
     }),
   );
 
-  return new Map(stated.flat());
+  const byName: ReadonlyMap<string, ProcessingVerdict> = new Map(stated.flat());
+
+  return (name: string): Option.Option<ProcessingVerdict> =>
+    Option.fromUndefinedOr(byName.get(name));
 });
