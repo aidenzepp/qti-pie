@@ -700,7 +700,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     128,
     {
       owner:
-        "identity.ts's Label tools (`labelAttributes` keeps a 3.0.1 item root's own label as a `LabelUse`; `itemLabels` contained in `toolNames` and `toolVersions`); the oracle's Label tools",
+        "identity.ts's Label tools (`labelAttributes` keeps the labels of `toolLabelKinds`, the kinds whose declared type states the tool sentence, read from the ASI XSDs by `src/grammar/labels.ts` and installed by `src/grammar/install.ts`, and a 3.0.1 item root's own label, as a `LabelUse`; `itemLabels` contained in `toolNames` and `toolVersions`); the oracle's Label tools",
       status: "G",
     },
   ],
