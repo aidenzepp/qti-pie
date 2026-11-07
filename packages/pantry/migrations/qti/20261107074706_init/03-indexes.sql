@@ -14,8 +14,6 @@ CREATE INDEX "__attribute_ix_node_7_iuvvf_6_ijd_767bkvdhgt" ON "qti"."attribute"
 
 CREATE INDEX "__attribute_ix_node_vakq_25_d_2_th_dq3p5mlkpj" ON "qti"."attribute" USING btree ("__node_vakq25d2th");
 
-CREATE INDEX "__binding_ix_node_gfaeb_4_prff_zsqurefud7" ON "qti"."binding" USING btree ("__node_gfaeb4prff");
-
 CREATE INDEX "__binding_declaration_ix_node_6_hhkc_3_nqmt_kind_wpz_rfgek7meu3" ON "qti"."binding_declaration" USING btree ("__node_6hhkc3nqmt", "__kind_wpz27h2czt");
 
 CREATE INDEX "__binding_declaration_ix_node_zk_4_w_23_iiot_ioynj4fekh" ON "qti"."binding_declaration" USING btree ("__node_zk4w23iiot");
@@ -147,6 +145,8 @@ CREATE INDEX "__instance_ix_document_root_kind_children_2m7u4fydr7" ON "qti"."in
 CREATE INDEX "__instance_name_ix_document_node_identifier_6jlosqls2y" ON "qti"."instance_name" USING btree ("document", "node", "identifier");
 
 CREATE INDEX "__instance_name_ix_node_end_kind_named_loose_chain_mxebuuxbon" ON "qti"."instance_name" USING btree ("node", "end", "kind", "named_loose_chain", "named_mixes", "named_part", "named_replaced", "start");
+
+CREATE INDEX "__interaction_ix_node_gfaeb_4_prff_on3ekn3rtn" ON "qti"."interaction" USING btree ("__node_gfaeb4prff");
 
 CREATE INDEX "__interaction_attribute_ix_node_2_q_2_oae_7_puk_76ppcqtnu5" ON "qti"."interaction_attribute" USING btree ("__node_2q2oae7puk", "__value_oxrxhywfi2");
 

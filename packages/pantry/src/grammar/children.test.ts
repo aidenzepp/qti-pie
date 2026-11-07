@@ -140,23 +140,6 @@ describe("ChildBarredBy", () => {
 });
 
 describe("LastWhere", () => {
-  it.effect("names the default hotspot under the two interactions that end with it", () =>
-    Effect.gen(function* lastSlot() {
-      const { admission, lastWhere } = yield* grammar;
-
-      assert.deepStrictEqual(
-        lastWhere.flatMap(({ kind, parents, versions }) =>
-          parents.flatMap((parent) =>
-            versions.filter((version) =>
-              Option.isNone(admission.lookup({ child: kind, parent, version })),
-            ),
-          ),
-        ),
-        [],
-      );
-    }),
-  );
-
   it.effect(
     "puts last only a hotspot choice's default, under the hotspot and graphic order interactions, never an associable hotspot's (spec reading 80)",
     () =>

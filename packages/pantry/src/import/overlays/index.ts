@@ -45,8 +45,10 @@ import type {
 } from "#pantry/import/overlays/identity.ts";
 import {
   rowsOf as interactionRowsOf,
+  packageChoicesOf,
   placedBindingRowsOf,
   sectionRowsOf,
+  withPackageChoices,
 } from "#pantry/import/overlays/interactions.ts";
 import type {
   InteractionRows,
@@ -259,7 +261,12 @@ export const overlayPartsOf = (
   documents: readonly { readonly ids: NodeIds; readonly listed: ListedDocument }[],
   mint: () => NodeId,
 ): readonly Partial<OverlayRows>[] => {
-  const built = documents.map((document) => ({ document, rows: documentRowsOf(document) }));
+  const documented = documents.map((document) => ({ document, rows: documentRowsOf(document) }));
+  const choices = packageChoicesOf(documented.map(({ rows }) => rows.interactions));
+  const built = documented.map(({ document, rows }) => ({
+    document,
+    rows: { ...rows, interactions: withPackageChoices(rows.interactions, choices) },
+  }));
   const assembled = assembledRowsOf(
     built.map(({ rows }) => rows.tests),
     mint,

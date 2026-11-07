@@ -12,10 +12,12 @@
  * `Attribute` costs one UNIQUE on it (the addendum's "Text in keys"), so the overlays below read
  * `InteractionAttribute` and never `Attribute`.
  *
- * - {@link Binding}: every interaction with a `response-identifier`, in every document, owning its
- *   {@link Choice} rows as a counted family (C15). A stimulus body holds interactions too
- *   (information model §5.137, StimulusBody: "The stimulus body contains the text, graphics, media
- *   objects and interactions"), so the item-only laws read {@link BoundVariable}.
+ * - {@link Interaction}: every interaction element, in every document, owning its choices'
+ *   {@link ChoiceInteraction} rows as a counted family (C15). A stimulus body holds interactions
+ *   too (information model §5.137, StimulusBody: "The stimulus body contains the text, graphics,
+ *   media objects and interactions"), so the item-only laws read {@link BoundVariable}.
+ * - {@link Binding}: every interaction with a `response-identifier`, its optional part: an
+ *   interaction that writes none has no row, and AL3 refuses it.
  * - {@link BoundVariable}: each attribute by which an item's interaction binds a response variable,
  *   its `response-identifier` and its `string-identifier` (§5.48.2, §5.162.3: "binding the
  *   interaction to a second response variable (of base-type string)"), and beside it, where a
@@ -26,11 +28,11 @@
  *   "Binding unique" (reading 92: "Each response variable declared may be bound to one and only one
  *   interaction"), so an interaction whose string identifier is its response identifier, the old
  *   `string-identifier-distinct`, breaks that key.
- * - {@link Choice}: every choice, its `interaction` its nearest interaction (N8), the `Gap` rows
- *   among them, with its identifier distinct among its document's choices of its kind (§5.132.1 and
- *   the other choice classes': "This identifier must not be used by any other choice or item
- *   variable"; spec reading 104: the item is the scope, as §7.16 reads an identifier, "a logical
- *   reference to another object in the item, such as an itemVariable or choice").
+ * - {@link Choice}: every choice, with its identifier distinct among its document's choices of its
+ *   kind, and its {@link ChoiceInteraction}, its nearest interaction (N8) (§5.132.1 and the other
+ *   choice classes': "This identifier must not be used by any other choice or item variable"; spec
+ *   reading 104: the item is the scope, as §7.16 reads an identifier, "a logical reference to
+ *   another object in the item, such as an itemVariable or choice").
  * - {@link Hottext}: every hottext, its nearest interaction's kind, so {@link HottextOwner} is the
  *   hottexts of a hottext interaction; elsewhere a hottext is valid and owned by none (reading 38).
  *   Its identifier is distinct among its document's hottexts (§5.65.1, reading 104).
@@ -532,14 +534,34 @@ export const InteractionAttribute = relation(
 );
 
 /**
- * An interaction with a `response-identifier`, in any document, keyed by its node: its
- * {@link nodeRef} tuple, its document's root kind, the response identifier collapsed, and its
- * count of {@link Choice} rows, which the family draws.
+ * An interaction element, in any document, keyed by its node: its {@link nodeRef} tuple and its
+ * count of {@link ChoiceInteraction} rows, the choices whose nearest interaction it is, which the
+ * family draws. Every interaction has one, whether or not it writes a `response-identifier`, so its
+ * choices' family always has its owner and a missing response identifier is AL3's alone.
+ */
+export const Interaction = relation(
+  "Interaction",
+  {
+    choices: drawn(natural),
+    document: uuid,
+    kind: closedId(NodeKind),
+    nearest: uuid,
+    node: uuid,
+    parent: uuid,
+    start: natural,
+    version: closedId(SchemaVersion),
+  },
+  ["node"],
+);
+
+/**
+ * An interaction's `response-identifier`, keyed by the interaction's node: its {@link nodeRef}
+ * tuple, its document's root kind and the response identifier collapsed. It is the optional part of
+ * the {@link Interaction}: an interaction that writes no `response-identifier` has none.
  */
 export const Binding = relation(
   "Binding",
   {
-    choices: drawn(natural),
     document: uuid,
     identifier: keyText,
     kind: closedId(NodeKind),
@@ -725,17 +747,16 @@ export const placedBindingFamily = counted(
 );
 
 /**
- * A choice of an interaction, keyed by its node: its {@link nodeRef} tuple with its nearest
- * interaction as `interaction`, which the counted family reads as its owner, and its identifier
- * collapsed. It owns no sequence (C15).
+ * A choice, keyed by its node: its {@link nodeRef} tuple and its identifier collapsed. Its nearest
+ * interaction is its {@link ChoiceInteraction}'s. It owns no sequence (C15).
  */
 export const Choice = relation(
   "Choice",
   {
     document: uuid,
     identifier: keyText,
-    interaction: uuid,
     kind: closedId(NodeKind),
+    nearest: uuid,
     node: uuid,
     parent: uuid,
     start: natural,
@@ -745,16 +766,23 @@ export const Choice = relation(
 );
 
 /**
- * Each interaction's choices, counted by `Binding.choices` (C15): a flat row whose group,
- * `interaction`, names its owner.
+ * A choice's interaction, keyed by the choice's node: its nearest interaction (N8), the
+ * {@link Interaction} that counts it. Only a choice an interaction encloses, in its own document or
+ * through the include that places its fragment, has a row; every choice must ("N8 nearest"), and a
+ * gap that no gap-match encloses breaks N6 first. It owns no sequence (C15).
  */
-export const choiceFamily = counted(on(Choice, "interaction"), fin(Binding, "choices"));
+export const ChoiceInteraction = relation("ChoiceInteraction", { interaction: uuid, node: uuid }, [
+  "node",
+]);
 
 /**
- * The gaps, the choices a gap-match interaction's text holds at any depth (reading 38), each
- * naming its nearest interaction, the gap-match it sits in: the old `owner-copy` of `Gap`.
+ * Each interaction's choices, counted by `Interaction.choices` (C15): a flat row whose group,
+ * `interaction`, names its owner.
  */
-export const Gap = select(Choice, (c) => c.eq(c.kind, "qti-gap"));
+export const choiceFamily = counted(
+  on(ChoiceInteraction, "interaction"),
+  fin(Interaction, "choices"),
+);
 
 /**
  * A hottext, keyed by its node: its {@link nodeRef} tuple, its nearest interaction's kind
@@ -1264,12 +1292,14 @@ export const interactionRelations = {
   BindingName,
   BoundVariable,
   Choice,
+  ChoiceInteraction,
   ChoiceVariableName,
   ContextRef,
   CountBound,
   FeedbackRef,
   Hotspot,
   Hottext,
+  Interaction,
   InteractionAttribute,
   ItemMode,
   PlacedBinding,
@@ -1720,20 +1750,23 @@ const sectionPlacements = select(Instance, (i) =>
  *   "BindingFit", "Binding unique" over the assembly (a fragment placed twice in one item binds its
  *   responses twice, as its merged document does), "Binding cardinality" and "AdaptiveFeedback",
  *   whose feedback ancestry an included fragment inherits from its context.
- * - **bindings:** each interaction's {@link Binding} (its node's, of an interaction kind, its
- *   identifier its `response-identifier`'s); each item binding's {@link BoundVariable}, which has
- *   its {@link BindingDeclaration} ("Binding declared", reading 75), a response declaration's,
- *   whose fields are the binding's and back; each declaration of a type `BindingFit` or
- *   `RecordBindingFit` admits, the custom and portable custom interactions of any type, and a
- *   string binding's of base type string ("BindingFit"), each fit law over the declaration rows
- *   alone; "Binding unique" (`key(document, identifier)`); "Binding cardinality" (a single response
- *   takes a most of 1); `max-strings-required`, which carries `kind` beside `node` so that its
- *   containment into `CountBound` is a statement of its own, not "Binding cardinality"'s: a refusal
- *   names a law by its relations and terms, never its selection (C22); and "AdaptiveFeedback", an
- *   interaction inside feedback is in an adaptive item.
- * - **choices:** the counted family under `Binding`, each choice's interaction its nearest; its
- *   identifier distinct among its document's choices of its kind; each hottext's nearest kind, and
- *   its identifier distinct among its document's hottexts (reading 104); and in place (spec reading
+ * - **interactions:** each interaction's {@link Interaction} (its node's, of an interaction kind),
+ *   the owner of its choices.
+ * - **bindings:** each interaction's {@link Binding}, where it writes a `response-identifier` (its
+ *   node's, its identifier that attribute's, the part of its {@link Interaction}); each item
+ *   binding's {@link BoundVariable}, which has its {@link BindingDeclaration} ("Binding declared",
+ *   reading 75), a response declaration's, whose fields are the binding's and back; each
+ *   declaration of a type `BindingFit` or `RecordBindingFit` admits, the custom and portable custom
+ *   interactions of any type, and a string binding's of base type string ("BindingFit"), each fit
+ *   law over the declaration rows alone; "Binding unique" (`key(document, identifier)`); "Binding
+ *   cardinality" (a single response takes a most of 1); `max-strings-required`, which carries
+ *   `kind` beside `node` so that its containment into `CountBound` is a statement of its own, not
+ *   "Binding cardinality"'s: a refusal names a law by its relations and terms, never its selection
+ *   (C22); and "AdaptiveFeedback", an interaction inside feedback is in an adaptive item.
+ * - **choices:** each choice's {@link ChoiceInteraction}, which every choice has ("N8 nearest"), its
+ *   interaction the choice's nearest, the counted family under `Interaction`; its identifier
+ *   distinct among its document's choices of its kind; each hottext's nearest kind, and its
+ *   identifier distinct among its document's hottexts (reading 104); and in place (spec reading
  *   117), under each instance of each assembly, as many {@link PlacedChoice} and
  *   {@link PlacedHottext} rows as its document has choices and hottexts, each its document's, their
  *   identifiers distinct over the assembly.
@@ -1773,9 +1806,15 @@ export const interactionLaws = [
   check("E1_derived", InteractionAttribute, collapsed),
 
   contained(
+    on(Interaction, "node", "document", "kind", "start", "nearest", "version", "parent"),
+    nodeRef,
+  ),
+  check("E1_derived", Interaction, (i) => i.in(i.kind, interactionKinds)),
+  contained(
     on(Binding, "node", "document", "kind", "start", "nearest", "version", "parent"),
     nodeRef,
   ),
+  contained(on(Binding, "node"), on(Interaction, "node")),
   contained(
     on(readOf(["response-identifier"], interactionKinds), "node", "rootKind", "value"),
     on(Binding, "node", "rootKind", "identifier"),
@@ -2041,7 +2080,7 @@ export const interactionLaws = [
   ),
 
   contained(
-    on(Choice, "node", "document", "kind", "start", "interaction", "version", "parent"),
+    on(Choice, "node", "document", "kind", "start", "nearest", "version", "parent"),
     nodeRef,
   ),
   contained(
@@ -2049,6 +2088,8 @@ export const interactionLaws = [
     on(Choice, "node", "identifier"),
   ),
   check("E1_derived", Choice, (c) => c.in(c.kind, choiceKinds)),
+  contained(on(Choice, "node"), on(ChoiceInteraction, "node")),
+  contained(on(ChoiceInteraction, "node", "interaction"), on(Choice, "node", "nearest")),
   choiceFamily,
   key(on(Choice, "document", "kind", "identifier")),
 
@@ -2066,7 +2107,7 @@ export const interactionLaws = [
       "nearest",
       "nearestKind",
     ),
-    on(Binding, "node", "kind"),
+    on(Interaction, "node", "kind"),
   ),
   check("E1_derived", Hottext, (h) =>
     h.and(
@@ -2124,7 +2165,7 @@ export const interactionLaws = [
     nodeRef,
   ),
   contained(on(readOf(["shape"], hotspotKinds), "node", "value"), on(Hotspot, "node", "area")),
-  contained(on(Hotspot, "parent", "parentKind"), on(Binding, "node", "kind")),
+  contained(on(Hotspot, "parent", "parentKind"), on(Interaction, "node", "kind")),
   contained(on(Hotspot, "node", "elements", "elementChildren"), nodeCounts),
   contained(on(Hotspot, "parent", "parentElements", "parentElementChildren"), nodeCounts),
   check("E1_derived", Hotspot, (h) => h.in(h.kind, hotspotKinds)),
@@ -2143,7 +2184,7 @@ export const interactionLaws = [
   ),
   contained(
     on(
-      select(Binding, (b) => b.in(b.kind, boundKinds)),
+      select(Interaction, (i) => i.in(i.kind, boundKinds)),
       "node",
     ),
     on(CountBound, "node"),
@@ -2197,7 +2238,7 @@ export const interactionLaws = [
       "node",
       "choices",
     ),
-    on(Binding, "node", "choices"),
+    on(Interaction, "node", "choices"),
   ),
   check("E1_derived", CountBound, (b) =>
     b.and(

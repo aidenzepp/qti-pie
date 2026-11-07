@@ -3,19 +3,20 @@
  * before any of them is written, evaluated over the rows `readProgram` builds, each named by its
  * law as a refusal names it (`#pantry/import/refusal.ts` `statedLaws`).
  *
- * Three kinds of statement are evaluated, from the statements grizzle keeps for them, never from a
+ * Four kinds of statement are evaluated, from the statements grizzle keeps for them, never from a
  * list written here:
  *
  * - A key over a relation or a selection of one: no two selected rows share the key's fields;
  * - A containment, either way of a mirrors: every selected row's terms are a tuple of the target, a
  *   closed relation's facts or the import's own rows of a stored relation;
+ * - A check: no row of its relation makes its predicate false, as PostgreSQL's CHECK reads it;
  * - A key text's bound: no field of type `keyText` holds more than `keyTextBytes` bytes.
  *
  * A statement is evaluated only where the import writes its relation as rows, every row the
- * selection reads holds every field it reads, and the predicate is of the part of grizzle's
- * language this module reads (fields, literals, comparisons, `in`, `and`, `or`, `not`). Anything
- * else leaves the statement unknown, so a law is held on the host only where every statement of it
- * was evaluated and held and the schema states no check of it.
+ * selection or the check reads holds every field it reads, and the predicate is of the part of
+ * grizzle's language this module reads (fields, literals, comparisons, `in`, `and`, `or`, `not`).
+ * Anything else leaves the statement unknown, so a law is held on the host only where every
+ * statement and every check of it was evaluated and held.
  *
  * The rows also must name no uuid the program did not mint: a row's uuid field that names no id of
  * the program names no row PostgreSQL can hold, as a sentinel standing for an absent target does.
@@ -216,8 +217,8 @@ const StoredSide = Schema.Struct({
 });
 
 /**
- * The schema of the stored statements this module evaluates or names: a key, a containment or a
- * mirrors, and a check by its name.
+ * The schema of the stored statements this module evaluates: a key, a containment or a mirrors,
+ * and a check whose predicate it reads.
  */
 const StoredStatement = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("key"), side: StoredSide }),
@@ -226,8 +227,21 @@ const StoredStatement = Schema.Union([
     left: StoredSide,
     right: StoredSide,
   }),
-  Schema.Struct({ desc: Schema.Struct({ name: Schema.String }), kind: Schema.Literal("check") }),
+  Schema.Struct({
+    desc: Schema.Struct({ name: Schema.String, predicate: StoredTermSchema }),
+    kind: Schema.Literal("check"),
+    relation: Schema.Struct({ name: Schema.String }),
+  }),
 ]);
+
+/**
+ * The schema of any check by its name, whose predicate this module may not read: a law one of
+ * whose checks it cannot evaluate is never held on the host.
+ */
+const StoredCheck = Schema.Struct({
+  desc: Schema.Struct({ name: Schema.String }),
+  kind: Schema.Literal("check"),
+});
 
 /**
  * A side of a statement: its relation, its selection's predicate where it has one, and its terms,
@@ -277,10 +291,17 @@ const sideOf = (side: typeof StoredSide.Type): ReadSide => {
 };
 
 /**
- * A statement this module evaluates, by the identity its law has.
+ * A statement this module evaluates, by the identity its law has: a check's is `check <name> on
+ * <relation>`, since one check may be stated on several relations.
  */
 type Evaluated =
   | { readonly identity: string; readonly kind: "key"; readonly side: Side }
+  | {
+      readonly identity: string;
+      readonly kind: "check";
+      readonly predicate: Term;
+      readonly relation: string;
+    }
   | {
       readonly from: Side;
       readonly identity: string;
@@ -293,11 +314,18 @@ type Evaluated =
  * and both containments of a mirrors.
  *
  * @param read - The stored statement.
- * @returns The statements, none for a check.
+ * @returns The statements.
  */
 const evaluatedOf = (read: typeof StoredStatement.Type): readonly Evaluated[] => {
   if (read.kind === "check") {
-    return [];
+    return [
+      {
+        identity: `check ${read.desc.name} on ${read.relation.name}`,
+        kind: "check",
+        predicate: termOf(read.desc.predicate),
+        relation: read.relation.name,
+      },
+    ];
   }
 
   if (read.kind === "key") {
@@ -337,11 +365,34 @@ const stored = Qti.statements.flatMap((statement) =>
 const evaluated: readonly Evaluated[] = stored.flatMap(evaluatedOf);
 
 /**
- * Every law some check of `Qti` states, whose database verdict the host never knows.
+ * Each check's law, by the check's identity.
  */
-const checked: ReadonlySet<LawName> = new Set(
-  stored.flatMap((read) =>
-    read.kind === "check" ? Option.toArray(lawOfCheck(read.desc.name)) : [],
+const checkLaws: ReadonlyMap<string, LawName> = new Map(
+  evaluated.flatMap((statement) =>
+    statement.kind === "check"
+      ? Option.toArray(
+          Option.map(
+            lawOfCheck(statement.identity.split(" ")[1] ?? ""),
+            (law) => [statement.identity, law] as const,
+          ),
+        )
+      : [],
+  ),
+);
+
+/**
+ * Every law a check of `Qti` states whose predicate this module cannot read, so its database
+ * verdict the host never knows: the checks `Qti` states, less those {@link evaluated} holds.
+ */
+const unreadChecks: ReadonlySet<LawName> = new Set(
+  Qti.statements.flatMap((statement) =>
+    Option.match(Schema.decodeUnknownOption(StoredCheck)(statement), {
+      onNone: () => [],
+      onSome: ({ desc }) =>
+        stored.some((read) => read.kind === "check" && read.desc.name === desc.name)
+          ? []
+          : Option.toArray(lawOfCheck(desc.name)),
+    }),
   ),
 );
 
@@ -619,6 +670,21 @@ const keyVerdictOf = (tuples: readonly string[]): Verdict => {
  * @returns Its verdict, with the tuple that breaks it.
  */
 const verdictOf = (view: View, statement: Evaluated): Verdict => {
+  if (statement.kind === "check") {
+    const rows = view.get(statement.relation);
+    if (rows === undefined) {
+      return { kind: "unknown" };
+    }
+
+    const values = rows.map((row) => evaluate(statement.predicate, row));
+    const at = values.indexOf(false);
+    if (at !== -1) {
+      return { kind: "broken", witness: `row ${String(at)} of ${statement.relation}` };
+    }
+
+    return values.includes(undefined) ? { kind: "unknown" } : { kind: "held" };
+  }
+
   if (statement.kind === "key") {
     return Option.match(tuplesOf(view, statement.side), {
       onNone: (): Verdict => ({ kind: "unknown" }),
@@ -731,8 +797,8 @@ export const viewOf = (inputs: PackageInputs): View => {
  * What the host judges of a program's rows:
  *
  * - `broken`, each law some statement of which the rows break, with the tuple that breaks it;
- * - `held`, each law every statement of which was evaluated and held, of which the schema states no
- *   check, so its database verdict is known;
+ * - `held`, each law every statement and check of which was evaluated and held, so its database
+ *   verdict is known;
  * - `overLong`, each `keyText` field, as `Relation.field`, that holds a text past the bound;
  * - `dangling`, each uuid field, as `Relation.field = value`, that names an id the program did not
  *   mint;
@@ -761,19 +827,25 @@ export const hostVerdictOf = (inputs: PackageInputs, minted: ReadonlySet<string>
   const broken = new Map<LawName, string>();
   for (const statement of evaluated) {
     const verdict = verdicts.get(statement.identity);
-    const name = namesByIdentity.get(statement.identity);
+    const name = namesByIdentity.get(statement.identity) ?? checkLaws.get(statement.identity);
     if (verdict?.kind === "broken" && name !== undefined && !broken.has(name)) {
       broken.set(name, `${statement.identity}: ${verdict.witness}`);
     }
   }
 
+  const checksOf = new Map<LawName, string[]>();
+  for (const [identity, law] of checkLaws) {
+    checksOf.set(law, [...(checksOf.get(law) ?? []), identity]);
+  }
+
   const held = new Set(
-    [...identitiesOf].flatMap(([name, identities]) =>
-      !checked.has(name) &&
-      !broken.has(name) &&
-      identities.every((identity) => verdicts.get(identity)?.kind === "held")
-        ? [name]
-        : [],
+    [...new Set([...identitiesOf.keys(), ...checksOf.keys()])].filter(
+      (name) =>
+        !unreadChecks.has(name) &&
+        !broken.has(name) &&
+        [...(identitiesOf.get(name) ?? []), ...(checksOf.get(name) ?? [])].every(
+          (identity) => verdicts.get(identity)?.kind === "held",
+        ),
     ),
   );
   const overLong = new Set<string>();

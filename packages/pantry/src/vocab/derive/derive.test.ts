@@ -63,11 +63,13 @@ const absence = await Effect.runPromise(
  * The timeout, in milliseconds, for the hook that reads and indexes the pinned XSDs.
  *
  * The two ASI XSDs are 18 MB each and take most of it. Measured on 2026-11-05 on a 10-CPU M2 Max
- * at load averages of 10 to 12, with other suites running: five builds took 2.7 to 3.0 s. The
- * budget is the larger of twice that maximum (6 s) and 20 s, the floor being twice vitest's default
- * hook timeout. Raise it only on a new measurement recorded here, never to make a run pass.
+ * at load averages of 10 to 12, with other suites running: five builds took 2.7 to 3.0 s. Measured
+ * again on 2026-11-07 on a 14-core M4 Pro at a load average of 81: the build took about 42 s, past
+ * the old 20 s budget, so the hook timed out and vitest skipped all five tests that read the
+ * pinned XSDs. The budget is twice the larger measurement. Raise it only on a new measurement
+ * recorded here, never to make a run pass.
  */
-const schemasHookTimeoutMs = 20_000;
+const schemasHookTimeoutMs = 84_000;
 
 /**
  * The pinned XSDs as read once for the suite: every document, the two ASI schemas indexed, and the
