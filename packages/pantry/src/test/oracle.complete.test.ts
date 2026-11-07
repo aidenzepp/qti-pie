@@ -105,7 +105,6 @@ const owed: Readonly<Partial<Record<LawName, string>>> = {
   "MathML align first": "its mutation is not written yet",
   "MathML align placement": "its mutation is not written yet",
   "MathML cn form": "its mutation is not written yet",
-  "MathML foreign element": "its mutation is not written yet",
   "MathML head qualifier": "its mutation is not written yet",
   "MathML maction selection": "its mutation is not written yet",
   "N2 mirrors":
