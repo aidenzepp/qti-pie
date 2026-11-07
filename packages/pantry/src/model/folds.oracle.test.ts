@@ -752,7 +752,6 @@ const unconstructed = {
   "Graphic gap match default hotspot": "the default hotspot's place among its siblings",
   "Href listed": "a package's law",
   "Idref target": "an IDREF's target, over values drawn without reading",
-  "Item duration": "a reference to duration in an item's timing, drawn without reading",
   "Label tools":
     "the item root's tool-name and tool-version, attributes the generator draws a subset of",
   "Literal lexical": "a base value's text against its base type, over text drawn without reading",

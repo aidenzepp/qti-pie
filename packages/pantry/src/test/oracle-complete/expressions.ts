@@ -71,23 +71,6 @@ export const expressionMutations = {
     ]),
     over: "package",
   },
-  // Item duration (A62): the built-in duration read in an item that is not time-dependent, by
-  // the item's round or the included rule.
-  "Item duration": {
-    mutate: replacing([
-      {
-        passage: roundOperand,
-        path: item,
-        replacements: ['<qti-round><qti-variable identifier="duration"/></qti-round>'],
-      },
-      {
-        passage: '<qti-variable identifier="numAttempts"/>',
-        path: "items/rules.xml",
-        replacements: ['<qti-variable identifier="duration"/>'],
-      },
-    ]),
-    over: "package",
-  },
   // Literal lexical (§8.13): a base value whose text is no lexical form of its base type, in the
   // item, its rule, the test or the section document.
   "Literal lexical": {

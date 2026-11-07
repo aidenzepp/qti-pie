@@ -643,12 +643,6 @@ const overlayBreaches = (rows: ExpressionRows): ReadonlySet<Law> => {
     broken.add(law);
   }
 
-  for (const t of rows.ItemTiming.values()) {
-    if (/^[\t\n\r ]*(?:true|1)[\t\n\r ]*$/u.test(t.lexical) !== t.timeDependent) {
-      broken.add("E1_derived");
-    }
-  }
-
   for (const t of rows.ProcessingTemplate.values()) {
     if (t.template !== "none" && !new RegExp(rpTemplatePattern(t.template), "u").test(t.uri)) {
       broken.add("E1_derived");

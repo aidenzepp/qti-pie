@@ -39,16 +39,15 @@
  * The laws, each named by its oracle law with spaces written as underscores, and the rule each
  * keeps: `Arity` (P2); `Operand_fit` and `One_base` (P23); `Condition_type` (P21); `Set_type`
  * (P20); `Lookup_type` (P22); `Reference_type` (P24); `Outcome_only` (P25); `Template_reads` (P26);
- * `Mapped_response` (P27); `Weighted_base` (P29); `Variable_declared` (P8, over an item's names
- * and a test's and a section's unprefixed ones); "Item duration" (item-duration, in an item and
- * through an item ref, a containment into the time-dependent items, `timedItems`);
- * `Literal_lexical` (attribute-lexical); `Prefixed_reference` (prefixed-ref);
- * `Section_identifier_target`; `Template_default_target` and `Template_default_type` (P20);
- * `Variable_mapping_source` and `Variable_mapping_target`; and `E1_derived`, every code the host
- * writes proved from what it is derived from, among them each expression's result type and a
- * response processing's published template (the retired rule `template-derivation`). The old
- * guards P31 (every operand edge has its operand row) and P32 (a copy agrees with its source) hold
- * by construction: the operand rows' existence and every copy are containments.
+ * `Mapped_response` (P27); `Weighted_base` (P29); `Variable_declared` (P8, over an item's names and
+ * a test's and a section's unprefixed ones); `Literal_lexical` (attribute-lexical);
+ * `Prefixed_reference` (prefixed-ref); `Section_identifier_target`; `Template_default_target` and
+ * `Template_default_type` (P20); `Variable_mapping_source` and `Variable_mapping_target`; and
+ * `E1_derived`, every code the host writes proved from what it is derived from, among them each
+ * expression's result type and a response processing's published template (the retired rule
+ * `template-derivation`). The old guards P31 (every operand edge has its operand row) and P32 (a
+ * copy agrees with its source) hold by construction: the operand rows' existence and every copy are
+ * containments.
  */
 import {
   accumulated,
@@ -395,19 +394,6 @@ export const documentVariableFamily = counted(
 export const placedVariableFamily = counted(
   on(PlacedVariableRef, "instance"),
   fin(Instance, "variables"),
-);
-
-/**
- * An item's timing, keyed by its `qti-assessment-item` node: its document, its `time-dependent`'s
- * lexical form, and whether the item is time-dependent (C17; the UP audit's A62). It exists exactly
- * where the item writes `time-dependent`, which every item must (AL3), so a reference to the
- * built-in `duration` reads its item among the time-dependent ones ({@link timedItems}), and an
- * item that writes none is AL3's, and "Item duration"'s where it reads its `duration`.
- */
-export const ItemTiming = relation(
-  "ItemTiming",
-  { document: uuid, lexical: keyText, node: uuid, timeDependent: pg.boolean },
-  ["node"],
 );
 
 /**
@@ -958,35 +944,6 @@ const typingAttributes = select(Attribute, (a) =>
 );
 
 /**
- * The `time-dependent` of each item, `ItemTiming`'s source.
- */
-const itemTimes = select(Attribute, (a) =>
-  a.and(a.eq(a.kind, itemKind), a.eq(a.name, "time-dependent")),
-);
-
-/**
- * The lexical forms of a true `xs:boolean` as written, its whitespace collapse absorbed: `true` and
- * `1`; every other valid form is false.
- */
-const timeDependentForm = "^[\\t\\n\\r ]*(?:true|1)[\\t\\n\\r ]*$";
-
-/**
- * The time-dependent items, by document: the only items whose `duration` an expression may read
- * ("The value of duration for items that are not time dependent must not be used in any item or
- * test-level expression", info §2.2.2.2). An item that writes no `time-dependent` has no
- * {@link ItemTiming} row, so it is none of them.
- */
-const timedItems = select(ItemTiming, (t) => t.eq(t.timeDependent, true));
-
-/**
- * The references an item's own expressions make to its built-in `duration`, each of which its item
- * must be time-dependent to make.
- */
-const itemDurations = select(VariableRef, (v) =>
-  v.and(v.eq(v.rootKind, itemKind), v.eq(v.resolution, "builtIn"), v.eq(v.identifier, "duration")),
-);
-
-/**
  * The `template` of each response processing, `ProcessingTemplate`'s source.
  */
 const templateAttributes = select(Attribute, (a) =>
@@ -1477,16 +1434,6 @@ const resolves = (r: ReadingRow) =>
   );
 
 /**
- * State that a reading reads an item's `duration`, which only a time-dependent item's may be
- * (A62).
- *
- * @param r - The row.
- * @returns The predicate.
- */
-const readsItemDuration = (r: ReadingRow) =>
-  r.and(itemHeld(r), r.eq(r.source, "builtIn"), r.eq(r.variable, "duration"));
-
-/**
  * The readings that resolve: a key over them by their reference is "at most one", and the
  * containment of every variable reference into them "at least one" (M3).
  */
@@ -1522,11 +1469,6 @@ const declaredReadings = select(Reading, (r) => r.eq(r.source, "declared"));
  * The readings whose variable is mapped, with the source declaration's codes.
  */
 const mappedReadings = select(Reading, (r) => r.eq(r.source, "mapped"));
-
-/**
- * The readings of an item's `duration`, each of which its item must be time-dependent to make.
- */
-const timedReadings = select(Reading, readsItemDuration);
 
 /**
  * The split and numbered readings, each at the segment its dot ends.
@@ -1667,9 +1609,8 @@ export const readingFamily = counted(
  *   places its document and read once per test, its name split at every dot (A59's concatenation),
  *   its readings exactly the readings of its name, exactly one of them resolving
  *   (`Prefixed_reference`, M3, the refusal naming both), none through a name two placements give
- *   (reading 86), an unsplit name declared (`Variable_declared`, P8), an item's `duration` only a
- *   time-dependent item's ("Item duration"), a literal's stand-in typed (`Reference_type`, P24),
- *   and a `section-identifier` a section's (`Section_identifier_target`).
+ *   (reading 86), an unsplit name declared (`Variable_declared`, P8), a literal's stand-in typed
+ *   (`Reference_type`, P24), and a `section-identifier` a section's (`Section_identifier_target`).
  */
 export const referenceLawsByName = {
   "DocumentId key": [
@@ -2118,7 +2059,6 @@ export const referenceLawsByName = {
       ),
     ),
   ],
-  "Item duration": [contained(on(timedReadings, "lookupDocument"), on(timedItems, "document"))],
   "Item ref target": [
     // A found item ref's target and item are its `ItemRefTarget`'s and `ItemRefDocument`'s, each a
     // row only where the package holds one, so an item ref naming no resource of the package, or an
@@ -2319,7 +2259,6 @@ export const expressionLawsByName = {
     ),
   ],
   "DocumentId key": [
-    key(on(itemTimes, "node")),
     // ProcessingTemplate: the published template a response processing's URI names.
     key(on(templateAttributes, "node")),
   ],
@@ -2593,17 +2532,6 @@ export const expressionLawsByName = {
         ),
       ),
     ),
-    contained(
-      on(itemTimes, "node", "document", "lexical"),
-      on(ItemTiming, "node", "document", "lexical"),
-    ),
-    key(on(ItemTiming, "document")),
-    check("E1_derived", ItemTiming, (t) =>
-      t.or(
-        t.and(Compute.matches(t.lexical, timeDependentForm), t.eq(t.timeDependent, true)),
-        t.and(t.not(Compute.matches(t.lexical, timeDependentForm)), t.eq(t.timeDependent, false)),
-      ),
-    ),
     // ExpressionAttribute and Literal: the attributes and text an expression's type follows from.
     key(on(typingAttributes, "node", "name")),
     contained(
@@ -2699,7 +2627,6 @@ export const expressionLawsByName = {
       ),
     ),
   ],
-  "Item duration": [contained(on(itemDurations, "document"), on(timedItems, "document"))],
   "Literal lexical": [
     check("Literal_lexical", LiteralTyped, (l) =>
       Compute.matches(l.text, BaseTypePattern.at("pattern", l.typeCode)),

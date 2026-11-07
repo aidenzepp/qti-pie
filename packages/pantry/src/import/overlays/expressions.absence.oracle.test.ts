@@ -2,16 +2,13 @@
  * The expression overlays' rows where an element leaves out an attribute their laws read: the
  * import and the law oracle give one verdict on every package of a small box.
  *
- * Two of these attributes feed the rows. The first is the attribute that types an attribute-typed
- * expression: a base value's `base-type`, a math operator's `name` and a test variables'
- * `base-type`. The second is an item's `time-dependent`, which decides whether the item's
- * `duration` may be read, in the item or through an item ref (info §2.2.2.2).
+ * The attributes are those that type an attribute-typed expression: a base value's `base-type`, a
+ * math operator's `name` and a test variables' `base-type`.
  *
  * A required attribute an element leaves out is AL3's alone. The XSD requires the first two
- * (`BaseValueDType`, `MathOperatorDType`) and an item's `time-dependent`; a test variables'
- * `base-type` is optional, and its absence types the element `unknown`. So the rows must break no
- * law the oracle does not raise. An unwritten typing row, which `E1_derived` refuses, breaks that,
- * as does a copied `timeDependent` with no `ItemTiming` row to copy from.
+ * (`BaseValueDType`, `MathOperatorDType`); a test variables' `base-type` is optional, and its
+ * absence types the element `unknown`. So the rows must break no law the oracle does not raise. An
+ * unwritten typing row, which `E1_derived` refuses, breaks that.
  *
  * Each package is judged both ways by the genetic differential's judge (`judgeOne` of
  * `#pantry/test/gen/genetic/judge.ts`): the law oracle over the documents as written, and
@@ -52,62 +49,36 @@ const asi = "http://www.imsglobal.org/xsd/imsqtiasi_v3p0";
 type Written = "spelled" | "unspelled" | "unwritten";
 
 /**
- * Where a timing case reads its item's `duration`: nowhere, in the item's response processing, or
- * through the item ref in the test's outcome processing.
+ * One package of the box: an attribute-typed expression whose typing attribute is written or not.
  */
-type Reads = "item" | "none" | "test";
-
-/**
- * One package of the box: an attribute-typed expression whose typing attribute is written or not,
- * or an item whose `time-dependent` is written or not, its `duration` read or not.
- */
-type Case =
-  | {
-      readonly _tag: "typing";
-      readonly kind: "qti-base-value" | "qti-math-operator" | "qti-test-variables";
-      readonly written: Written;
-    }
-  | {
-      readonly _tag: "timing";
-      readonly reads: Reads;
-      readonly timeDependent: "false" | "true" | "unwritten";
-    };
+interface Case {
+  readonly kind: "qti-base-value" | "qti-math-operator" | "qti-test-variables";
+  readonly written: Written;
+}
 
 /**
  * Hold a box's cases as the nonempty list a generator draws from.
  *
  * @param listed - The cases.
  * @returns The same cases, typed nonempty.
- * @throws {Error} When the box lists none, which its two products never do.
+ * @throws {Error} When the box lists none, which its product never does.
  */
 const nonEmpty = (listed: readonly Case[]): readonly [Case, ...Case[]] => {
   if (Arr.isReadonlyArrayNonEmpty(listed)) {
     return listed;
   }
 
-  throw new Error("The box lists no case. List each typed kind and each time-dependent.");
+  throw new Error("The box lists no case. List each typed kind under each way of writing it.");
 };
 
 /**
- * Every case of the box: each typed kind under each {@link Written}, and each `time-dependent`
- * under each {@link Reads}.
+ * Every case of the box: each typed kind under each {@link Written}.
  */
-const cases = nonEmpty([
-  ...(["qti-base-value", "qti-math-operator", "qti-test-variables"] as const).flatMap((kind) =>
-    (["unwritten", "spelled", "unspelled"] as const).map((written): Case => ({
-      _tag: "typing",
-      kind,
-      written,
-    })),
+const cases = nonEmpty(
+  (["qti-base-value", "qti-math-operator", "qti-test-variables"] as const).flatMap((kind) =>
+    (["unwritten", "spelled", "unspelled"] as const).map((written): Case => ({ kind, written })),
   ),
-  ...(["unwritten", "true", "false"] as const).flatMap((timeDependent) =>
-    (["none", "item", "test"] as const).map((reads): Case => ({
-      _tag: "timing",
-      reads,
-      timeDependent,
-    })),
-  ),
-]);
+);
 
 /**
  * The box, every case once.
@@ -155,19 +126,6 @@ interface Rules {
  * @returns The two.
  */
 const rulesOf = (input: Case): Rules => {
-  if (input._tag === "timing") {
-    return {
-      item:
-        input.reads === "item"
-          ? '<qti-set-outcome-value identifier="SCORE"><qti-variable identifier="duration"/></qti-set-outcome-value>'
-          : "",
-      test:
-        input.reads === "test"
-          ? '<qti-set-outcome-value identifier="OUT"><qti-variable identifier="a.duration"/></qti-set-outcome-value>'
-          : "",
-    };
-  }
-
   switch (input.kind) {
     case "qti-base-value": {
       return {
@@ -194,21 +152,6 @@ const rulesOf = (input: Case): Rules => {
 };
 
 /**
- * Write the item's `time-dependent` as a case writes it: `false` for a typing case, and as the case
- * says for a timing one.
- *
- * @param input - The case.
- * @returns The attribute's text, with its leading space, or none.
- */
-const timingOf = (input: Case): string => {
-  if (input._tag === "typing") {
-    return ' time-dependent="false"';
-  }
-
-  return input.timeDependent === "unwritten" ? "" : ` time-dependent="${input.timeDependent}"`;
-};
-
-/**
  * Build a case's package: a manifest listing a test and an item, the test placing the item by an
  * item ref `a`, each document's processing the case's.
  *
@@ -217,12 +160,11 @@ const timingOf = (input: Case): string => {
  */
 const entriesOf = (input: Case): PackageEntries => {
   const rules = rulesOf(input);
-  const timing = timingOf(input);
   const text = new TextEncoder();
   const manifest = `<?xml version="1.0" encoding="UTF-8"?>
 <manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" identifier="ABSENCE"><metadata><schema>QTI Package</schema><schemaversion>3.0.1</schemaversion></metadata><organizations/><resources><resource identifier="test" type="imsqti_test_xmlv3p0" href="test.xml"><file href="test.xml"/></resource><resource identifier="item" type="imsqti_item_xmlv3p0" href="items/a.xml"><file href="items/a.xml"/></resource></resources></manifest>`;
   const item = `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="${asi}" identifier="a" title="A" adaptive="false"${timing}><qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/><qti-item-body><p>A.</p></qti-item-body>${rules.item === "" ? "" : `<qti-response-processing>${rules.item}</qti-response-processing>`}</qti-assessment-item>`;
+<qti-assessment-item xmlns="${asi}" identifier="a" title="A" adaptive="false" time-dependent="false"><qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/><qti-item-body><p>A.</p></qti-item-body>${rules.item === "" ? "" : `<qti-response-processing>${rules.item}</qti-response-processing>`}</qti-assessment-item>`;
   const test = `<?xml version="1.0" encoding="UTF-8"?>
 <qti-assessment-test xmlns="${asi}" identifier="TEST" title="TEST"><qti-outcome-declaration identifier="OUT" cardinality="single" base-type="float"/><qti-test-part identifier="P" navigation-mode="linear" submission-mode="individual"><qti-assessment-section identifier="S" title="S" visible="true"><qti-assessment-item-ref identifier="a" href="items/a.xml"/></qti-assessment-section></qti-test-part>${rules.test === "" ? "" : `<qti-outcome-processing>${rules.test}</qti-outcome-processing>`}</qti-assessment-test>`;
 
@@ -247,13 +189,12 @@ layer(NodeServices.layer, { excludeTestServices: true })(
   "import/overlays/expressions.ts, an attribute its laws read left out",
   (it) => {
     it.effect(
-      "gives every attribute-typed expression with its typing attribute written or not, and every item with its time-dependent written or not, read or not, the oracle's verdict",
+      "gives every attribute-typed expression with its typing attribute written or not the oracle's verdict",
       (ctx) =>
         // Oracle: a second implementation, the law oracle, against readProgram's refusal and the
         // laws its rows break on the host, as the genetic differential judges them, over the XSD's
-        // `use` of each attribute (BaseValueDType, MathOperatorDType, TestVariablesDType and
-        // AssessmentItemDType's time-dependent) and info §2.2.2.2's time dependence.
-        // Bound: every case of the box, 18 packages.
+        // `use` of each attribute (BaseValueDType, MathOperatorDType, TestVariablesDType).
+        // Bound: every case of the box, 9 packages.
         searched(
           ctx,
           Effect.gen(function* absence() {
@@ -263,7 +204,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
 
             return yield* exhaust(
               {
-                box: "each typed kind under each way of writing its typing attribute, and each time-dependent under each read of duration",
+                box: "each typed kind under each way of writing its typing attribute",
                 caseHang: Duration.minutes(2),
                 coverage: requiredInSpace<Situation>(["accepted", "refused"]),
                 generator: caseGen,

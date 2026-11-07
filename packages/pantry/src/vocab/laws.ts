@@ -78,7 +78,6 @@ export const precedence = [
   "P26",
   "P27",
   "P29",
-  "item-duration",
   // O5 to O7: mapping, metadata, tests.
   "mapping-base-type",
   "lookup-cardinality",
@@ -433,11 +432,6 @@ export const lawTable = {
     rule: "inclusion-cycle",
     source:
       "reading 85: https://www.w3.org/TR/xinclude-11/#loops (XInclude 1.1 §4.2.7: 'it is a fatal error to process another xi:include element with an include location and xpointer attribute value that have already been processed in the inclusion chain'), the XInclude https://www.imsglobal.org/spec/qti/v3p0/info#Imported_Include (§9.4.1) names, and https://www.imsglobal.org/spec/qti/v3p0/info#Derived_AssessmentSectionRef (§7.5: the section ref 'functions as a facade for the qti-assessment-section to which it refers', the document that holds it, 'with the refered-to section merged in', behaving as 'a document that has all the same sections aggregated in one document', which a chain that returns to its own document has none of): no chain of qti-assessment-section-ref and xi:include hrefs, over the documents the manifest lists, returns to a document already on it",
-  },
-  "Item duration": {
-    rule: "item-duration",
-    source:
-      "https://www.imsglobal.org/spec/qti/v3p0/info#IV_Response (§2.2.2.2: 'The value of duration for items that are not time dependent must not be used in any item or test-level expression', info.txt:8468) (expressions.ts: each reference to an item's duration, and each reading of it through an item ref, contained in the time-dependent ItemTiming rows; the UP audit's A62)",
   },
   "Item ref target": {
     rule: "item-ref-target",

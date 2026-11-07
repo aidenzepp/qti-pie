@@ -70,7 +70,6 @@ import type {
   DeclarationTable,
   Expression,
   ExpressionAttribute,
-  ItemTiming,
   Literal,
   LiteralTyped,
   MappingLookup,
@@ -131,7 +130,6 @@ export interface ExpressionRows {
   readonly DeclarationTable: ReadonlyMap<string, Addition<typeof DeclarationTable>>;
   readonly Expression: ReadonlyMap<string, Addition<typeof Expression>>;
   readonly ExpressionAttribute: ReadonlyMap<string, Addition<typeof ExpressionAttribute>>;
-  readonly ItemTiming: ReadonlyMap<string, Addition<typeof ItemTiming>>;
   readonly Literal: ReadonlyMap<string, Addition<typeof Literal>>;
   readonly LiteralTyped: ReadonlyMap<string, Addition<typeof LiteralTyped>>;
   readonly Operand: ReadonlyMap<string, Addition<typeof Operand>>;
@@ -257,11 +255,6 @@ const spellingOf: ReadonlyMap<string, "bare" | "braced"> = new Map(
  * template defaults name the templates of the items their item refs name.
  */
 const tests: ReadonlySet<string> = new Set(testRoots);
-
-/**
- * A true `xs:boolean`'s lexical forms, its whitespace collapse absorbed.
- */
-const trueForm = /^[\t\n\r ]*(?:true|1)[\t\n\r ]*$/u;
 
 /**
  * A name a reference spells: an NCName.
@@ -1224,34 +1217,6 @@ const expressionRowsOf = (
 };
 
 /**
- * An item's `ItemTiming` row, keyed by its root's node: its `time-dependent` as written and the
- * code it spells; none for a document that is no item, or an item that omits the attribute, which
- * AL3 refuses.
- *
- * @param doc - The document.
- * @returns The row, by its node.
- */
-const itemTimingOf = (doc: Document): Map<string, Addition<typeof ItemTiming>> => {
-  const attribute = doc.rows.attributes.find(
-    ({ name, node }) => name === "time-dependent" && doc.nodeOf(node).kind === itemKind,
-  );
-
-  return attribute === undefined
-    ? new Map<string, Addition<typeof ItemTiming>>()
-    : new Map<string, Addition<typeof ItemTiming>>([
-        [
-          attribute.node,
-          {
-            document: doc.id,
-            lexical: attribute.lexical,
-            node: attribute.node,
-            timeDependent: trueForm.test(attribute.lexical),
-          },
-        ],
-      ]);
-};
-
-/**
  * Fill a reference's element type, an expression's own, and a setter's or a lookup's one
  * expression's type, once every expression is typed.
  *
@@ -1524,7 +1489,6 @@ export const rowsOf = (tree: XdmDocument<Composed>, ids: ExpressionIds): Express
   const built = {
     Expression: new Map<string, Addition<typeof Expression>>(),
     ExpressionAttribute: new Map<string, Addition<typeof ExpressionAttribute>>(),
-    ItemTiming: itemTimingOf(doc),
     Literal: new Map<string, Addition<typeof Literal>>(),
     LiteralTyped: new Map<string, Addition<typeof LiteralTyped>>(),
     Operand: new Map<string, Addition<typeof Operand>>(),

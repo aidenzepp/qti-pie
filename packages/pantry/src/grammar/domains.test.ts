@@ -1607,16 +1607,6 @@ const booleanSpellings = [
   /[=]== "true"|"true" ===/u,
 ] as const;
 
-/**
- * The modules that still read the item's `time-dependent` themselves, each for the Item duration
- * law, which slot 9 deletes whole (A1). The list only shrinks: A1 empties it.
- */
-const pendingBooleanSpellings: readonly string[] = [
-  "import/overlays/expressions.ts",
-  "qti/expressions.ts",
-  "test/oracle-laws/expressions.ts",
-];
-
 describe("xs:boolean", () => {
   it.effect(
     "reads a form as XSD does: valid exactly in the lexical space after collapse, and true exactly for true and 1, in booleanOf, the installed pattern and the collapsed literals alike",
@@ -1712,6 +1702,6 @@ describe("xs:boolean", () => {
       })
       .toSorted();
 
-    assert.deepStrictEqual(readers, pendingBooleanSpellings);
+    assert.deepStrictEqual(readers, []);
   });
 });

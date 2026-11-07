@@ -240,9 +240,11 @@ const positiveVersions: readonly (readonly [FixtureName, "3.0.0" | "3.0.1"])[] =
 const qtiNamespace = "http://www.imsglobal.org/xsd/imsqtiasi_v3p0";
 
 /**
- * The 62 negative fixtures of phase 5, as a literal: the spec's 4.15 last column, less the corpus
- * packages, `stimulus-300-data` (phase 8's) and `section-empty` (spec reading 26: a section may
- * hold no part), plus `prefixed-ambiguous` (decision 189).
+ * The 60 negative fixtures of phase 5, as a literal: the spec's 4.15 last column, less the corpus
+ * packages, `stimulus-300-data` (phase 8's), `section-empty` (spec reading 26: a section may hold
+ * no part), and `item-duration-in-item` and `item-duration-not-timed` (spec reading 150: an item's
+ * `duration` may be read whether or not the item is time dependent), plus `prefixed-ambiguous`
+ * (decision 189).
  */
 const expectedNegativeNames = [
   "branch-backward",
@@ -257,8 +259,6 @@ const expectedNegativeNames = [
   "include-text",
   "include-xpointer",
   "instance-spelling-canonical",
-  "item-duration-in-item",
-  "item-duration-not-timed",
   "item-in-section",
   "item-prefixed",
   "item-ref-missing",
@@ -1035,10 +1035,10 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts", (it
       ),
   );
 
-  it.effect("the 62 negative names are the spec's list, each in the fixture table", () =>
+  it.effect("the 60 negative names are the spec's list, each in the fixture table", () =>
     Effect.sync(() => {
       assert.deepStrictEqual([...negativeNames], [...expectedNegativeNames]);
-      assert.strictEqual(new Set(negativeNames).size, 62);
+      assert.strictEqual(new Set(negativeNames).size, 60);
       assert.includeMembers([...fixtureNames], [...negativeNames]);
 
       for (const name of negativeNames) {
@@ -1157,25 +1157,15 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts", (it
   );
 
   it.effect(
-    "test-mapping's hand-written stubs: J untimed and naming duration, I untimed",
+    "test-mapping's hand-written stubs: J declares K.SCORE beside SCORE",
     () =>
       inFreshRoot(() =>
         Effect.gen(function* handStubs() {
           const fs = yield* FileSystem.FileSystem;
-          const inItem = yield* fs.readFileString(
-            `${yield* materialize("item-duration-in-item")}/itemJ.xml`,
-          );
-          const notTimed = yield* fs.readFileString(
-            `${yield* materialize("item-duration-not-timed")}/itemI.xml`,
-          );
           const ambiguous = yield* fs.readFileString(
             `${yield* materialize("prefixed-ambiguous")}/itemJ.xml`,
           );
 
-          assert.include(inItem, 'time-dependent="false"');
-          assert.include(inItem, '<qti-variable identifier="duration"/>');
-          assert.include(notTimed, 'time-dependent="false"');
-          assert.notInclude(notTimed, '<qti-variable identifier="duration"/>');
           assert.include(ambiguous, 'identifier="K.SCORE" cardinality="single" base-type="float"');
           assert.include(ambiguous, 'identifier="SCORE" cardinality="single" base-type="float"');
         }),

@@ -171,30 +171,6 @@ export const known = {
       fix: "two declarations of one identifier: the oracle raises the VariableLookup containment that breaks beside Declaration key, so precedence sees it",
       owner: "OL",
     },
-  "import-only-law: Item duration, contained Reading(lookupDocument) in ItemTiming(document)": {
-    files: [
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" identifier="ABSENCE"><metadata><schema>QTI Package</schema><schemaversion>3.0.1</schemaversion></metadata><organizations/><resources><resource identifier="test" type="imsqti_test_xmlv3p0" href="test.xml"><file href="test.xml"/></resource><resource identifier="item" type="imsqti_item_xmlv3p0" href="items/a.xml"><file href="items/a.xml"/></resource></resources></manifest>`,
-      ],
-      [
-        "items/a.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="a" title="A" adaptive="false" time-dependent="false"><qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/><qti-item-body><p>A.</p></qti-item-body></qti-assessment-item>`,
-      ],
-      [
-        "test.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="TEST" title="TEST"><qti-outcome-declaration identifier="OUT" cardinality="single" base-type="float"/><qti-test-part identifier="P" navigation-mode="linear" submission-mode="individual"><qti-assessment-section identifier="S" title="S" visible="true"><qti-assessment-item-ref identifier="a" href="items/a.xml"/></qti-assessment-section></qti-test-part><qti-outcome-processing><qti-set-outcome-value identifier="OUT"><qti-variable identifier="a.duration"/></qti-set-outcome-value></qti-outcome-processing></qti-assessment-test>`,
-      ],
-    ],
-    fix: "A1: the oracle states no Item duration through an item ref, and A1 deletes Item duration whole, with ItemTiming and the readings that read it",
-    owner: "OL",
-  },
   "import-only-law: Item ref target, contained Node(id) in ItemRefTarget(node)": {
     files: [
       [
@@ -368,30 +344,6 @@ export const known = {
     ],
     fix: "(6) the absence defaults: an absent required attribute writes no row, never an empty or default value",
     owner: "NIL",
-  },
-  "lone-refusal: AL3 required named item-duration, witness unreported": {
-    files: [
-      [
-        "imsmanifest.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<manifest xmlns="http://www.imsglobal.org/xsd/qti/qtiv3p0/imscp_v1p1" identifier="ABSENCE"><metadata><schema>QTI Package</schema><schemaversion>3.0.1</schemaversion></metadata><organizations/><resources><resource identifier="test" type="imsqti_test_xmlv3p0" href="test.xml"><file href="test.xml"/></resource><resource identifier="item" type="imsqti_item_xmlv3p0" href="items/a.xml"><file href="items/a.xml"/></resource></resources></manifest>`,
-      ],
-      [
-        "items/a.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="a" title="A" adaptive="false"><qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/><qti-item-body><p>A.</p></qti-item-body></qti-assessment-item>`,
-      ],
-      [
-        "test.xml",
-        "xml",
-        `<?xml version="1.0" encoding="UTF-8"?>
-<qti-assessment-test xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="TEST" title="TEST"><qti-outcome-declaration identifier="OUT" cardinality="single" base-type="float"/><qti-test-part identifier="P" navigation-mode="linear" submission-mode="individual"><qti-assessment-section identifier="S" title="S" visible="true"><qti-assessment-item-ref identifier="a" href="items/a.xml"/></qti-assessment-section></qti-test-part><qti-outcome-processing><qti-set-outcome-value identifier="OUT"><qti-variable identifier="a.duration"/></qti-set-outcome-value></qti-outcome-processing></qti-assessment-test>`,
-      ],
-    ],
-    fix: "A1: the oracle states no Item duration through an item ref, and A1 deletes Item duration whole, with ItemTiming and the readings that read it",
-    owner: "OL",
   },
   "lone-refusal: AL3 required named item-ref-target, witness unreported": {
     files: [

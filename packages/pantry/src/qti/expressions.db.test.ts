@@ -45,7 +45,6 @@ import {
   AssembledReference,
   Expression,
   ExpressionAttribute,
-  ItemTiming,
   LiteralTyped,
   MappingSourceDeclaration,
   Operand,
@@ -559,8 +558,7 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
 
       it.effect("refuses each reference row law's breach by its law, and keeps its control", () =>
         // Oracle: PostgreSQL, each CHECK of `VariableRef`, against the old checker's rules (P8,
-        // P20, P22, P24, P26, P27). The UP audit's A62, "Item duration", is a containment into the
-        // time-dependent items, no CHECK of the row.
+        // P20, P22, P24, P26, P27).
         // Bound: one breach of each law, beside the same row with the breach repaired.
         Effect.gen(function* referenceLaws() {
           const db = yield* Db.open(AuthorApp.roles.author, {});
@@ -648,10 +646,10 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
       );
 
       it.effect(
-        "refuses a weighted integer, a base value no lexical form of its base type, and a template or timing whose code its form does not spell",
+        "refuses a weighted integer, a base value no lexical form of its base type, and a template whose code its form does not spell",
         () =>
           // Oracle: PostgreSQL, `Weighted_base` (P29), `Literal_lexical` (`BaseTypePattern`) and
-          // `E1_derived` over `ProcessingTemplate` (template-derivation) and `ItemTiming` (C17).
+          // `E1_derived` over `ProcessingTemplate` (template-derivation).
           // Bound: one breach of each, beside its repair.
           Effect.gen(function* attributeLaws() {
             const db = yield* Db.open(AuthorApp.roles.author, {});
@@ -678,12 +676,6 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
               template: "match_correct",
               uri: "urn:example:template",
             };
-            const timing: Addition<typeof ItemTiming> = {
-              document: strayNode,
-              lexical: "true",
-              node,
-              timeDependent: false,
-            };
             const outcomes = {
               keptLiteral: yield* db.apply(
                 ChangeSet.empty(Author).insert(LiteralTyped, [{ ...literal, text: " 42 " }]),
@@ -698,10 +690,6 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
                 ]),
                 {},
               ),
-              keptTiming: yield* db.apply(
-                ChangeSet.empty(Author).insert(ItemTiming, [{ ...timing, timeDependent: true }]),
-                {},
-              ),
               keptWeighted: yield* db.apply(
                 ChangeSet.empty(Author).insert(ExpressionAttribute, [
                   { ...weighted, baseType: "float" },
@@ -713,7 +701,6 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
                 ChangeSet.empty(Author).insert(ProcessingTemplate, [template]),
                 {},
               ),
-              timing: yield* db.apply(ChangeSet.empty(Author).insert(ItemTiming, [timing]), {}),
               weighted: yield* db.apply(
                 ChangeSet.empty(Author).insert(ExpressionAttribute, [weighted]),
                 {},
@@ -726,8 +713,6 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
             assert.isFalse(names(outcomes.keptLiteral, "LiteralTyped", "Literal_lexical"));
             assert.isTrue(names(outcomes.template, "ProcessingTemplate", "E1_derived"));
             assert.isFalse(names(outcomes.keptTemplate, "ProcessingTemplate", "E1_derived"));
-            assert.isTrue(names(outcomes.timing, "ItemTiming", "E1_derived"));
-            assert.isFalse(names(outcomes.keptTiming, "ItemTiming", "E1_derived"));
           }),
       );
 
@@ -736,8 +721,7 @@ describe.skipIf(!hasLease)("qti/expressions.db.test.ts, on the lease", () => {
         () =>
           // Oracle: PostgreSQL, each CHECK of `Reading`, against spec readings 48 and 88, P24
           // (A66) and §7.27.1's `section-identifier` (A61), here a `qti-number-correct`'s, which
-          // reads a section. The time-dependence sentence of §2.2.2.2 (A62), "Item duration", is a
-          // containment into the time-dependent items, no CHECK of the row.
+          // reads a section.
           // Bound: one breach of each law, beside the same row with the breach repaired, each
           // with its reference's owners.
           Effect.gen(function* readingLaws() {

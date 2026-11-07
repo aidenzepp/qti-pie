@@ -886,6 +886,14 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
       status: "G",
     },
   ],
+  [
+    150,
+    {
+      owner:
+        "no law: an item's `time-dependent` is the XSD's required `xs:boolean`, which the grammar admits and AL3 requires, and no relation reads it, so an item's `duration` is read in the item or through an item ref whatever it says (`src/qti/expressions.ts`; the oracle's `referenceLaws`, `src/test/oracle-laws/expressions.ts`)",
+      status: "G",
+    },
+  ],
 ]);
 
 /**

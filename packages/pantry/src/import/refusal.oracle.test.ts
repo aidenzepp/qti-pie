@@ -634,7 +634,6 @@ const tiers: readonly (readonly Rule[])[] = [
     "P26",
     "P27",
     "P29",
-    "item-duration",
     "mapping-base-type",
     "lookup-cardinality",
     "map-key-unique",
@@ -1169,8 +1168,7 @@ const precedencePairs: readonly (readonly [Rule, Rule, string])[] = [
   ["P25", "P26", "the old processing checker's numbering (Q5.10)"],
   ["P26", "P27", "the old processing checker's numbering (Q5.10)"],
   ["P27", "P29", "the old processing checker's numbering (Q5.10)"],
-  ["P29", "item-duration", "O4: the checker's rules before an item's duration (reading 29)"],
-  ["item-duration", "mapping-base-type", "the tiers: O4 before O5 (plan §1.7)"],
+  ["P29", "mapping-base-type", "the tiers: O4 before O5 (plan §1.7)"],
   [
     "mapping-base-type",
     "lookup-cardinality",

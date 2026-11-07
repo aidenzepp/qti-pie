@@ -197,7 +197,6 @@ export const oracleRules = [
   "include-root",
   "include-target",
   "inclusion-cycle",
-  "item-duration",
   "item-ref-target",
   "key-text-bound",
   "label-tool",
@@ -6110,10 +6109,6 @@ const ownLaws = {
   "Inclusion cycle": {
     explain: (keys) =>
       `the section refs and includes ${inBraces(membersOf(keys["chain"]))} lead from ${field(keys, "path")} back to it, so its merged document never ends`,
-  },
-  "Item duration": {
-    explain: (keys) =>
-      `${field(keys, "kind")} reads duration in an item that is not time-dependent`,
   },
   "Item ref target": {
     explain: (keys) =>

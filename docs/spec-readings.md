@@ -1734,14 +1734,15 @@ against it. A reading that is not an information-model-over-XSD case says which 
      variable of item ref `Q01`'s item, the built-ins the installed `BuiltInVariable` lists under an item's root with
      the types reading 29 gives them, and each counts as a resolving reading under reading 48. The upstream rule set
      this repository ported (the UP audit's A55) reached only the three session variables; `QTI_CONTEXT` is admitted
-     here because section 2.2.2.1 says a reference to it must succeed (reading 1). A `duration` read so stays bound by
-     section 2.2.2.2's sentence on items that are not time dependent (the oracle's Item duration), and an item ref
+     here because section 2.2.2.1 says a reference to it must succeed (reading 1). A `duration` read so is the item's
+     whether or not the item is time dependent (reading 150), and an item ref
      that names an LTI link has no item whose declarations a prefix reads, so through it only a built-in resolves. In
      the corpus, the one test package that prefixes names, `test_package_minfiles`, reads `item034.SCORE`,
      `item063.SCORE`, `item065.SCORE` and `item160.SCORE`, each declared and each resolving once, and every test
      package is refused at the codec today, so no verdict moves. This binds pantry and plate alike. This is not a case
      of documents in conflict. (Decided 2026-11-06 by W5 seat PE under the operator's standing ruling of 2026-11-05 that
-     the spec wins.)
+     the spec wins; amended 2026-11-07 by the coordinator from seat FIX-A1, the bar on a `duration` read so, which
+     section 2.2.2.2 alone carried, withdrawn by reading 150.)
 107. **A variable mapping adds a name for an item's outcome, and the outcome's own name still names it.** The
      information model says "Variable mappings allow outcome variables declared with the name source-identifier in the
      corresponding item to be treated as if they were declared with the name target-identifier during outcome
@@ -2664,3 +2665,20 @@ against it. A reading that is not an information-model-over-XSD case says which 
      zips writes a `mastery-value`. This binds pantry and plate alike: a 3.0.1 outcome that writes no
      `normal-minimum` has 0.0 wherever its minimum is read. This is not a case of documents in conflict. (Decided
      2026-11-07 by the coordinator, under the operator's standing ruling of 2026-11-05, from seat FIX-NORMALMIN.)
+150. **An item's built-in `duration` may be read whether or not the item is time dependent.** The one sentence that bars
+     it, "The value of duration for items that are not time dependent must not be used in any item or test-level
+     expression, though systems should still report it in itemResults when it is known" (section 2.2.2.2, `info.txt`
+     line 8468), stands in section 2, Key Data Model Features, which the information model marks "This Section is NOT
+     NORMATIVE" (`info.txt` line 8350). So it states no requirement, as reading 26 reads section 2.8's sentence on a
+     section's parts. The normative sources require and type the attribute and say nothing of the expressions that read
+     `duration`: the information model's `time-dependent` "Denotes if the Item must be answered within some defined time
+     limit", a Boolean of multiplicity [1] (section 4.1.8, `info.txt` line 10273), and the XSD declares `<xs:attribute
+     name="time-dependent" use="required" type="xs:boolean" />` (`AssessmentItemDType`, `imsqti_asiv3p0_v1p0.xsd`). So
+     no law reads an item's `time-dependent`: its `duration`, read in the item or through an item ref (reading 106), is
+     a single float (reading 29) whatever the attribute says, and `time-dependent` stays an attribute the grammar admits
+     by the XSD and AL3 requires. This sets aside the "Item duration" law (the UP audit's A62), under which a read of
+     the `duration` of an item that is not time dependent was refused: the importer's, which contained each such read,
+     in the item and through an item ref, in the time-dependent items' `ItemTiming` rows, and the law oracle's, which
+     judged a read in the item. This binds pantry and plate alike. This is not a case of documents in conflict: the
+     normative sources agree. The earlier rule was upstream's, so the change is recorded in PR #46's decisions. (Decided
+     2026-11-07 by the coordinator, under the operator's standing ruling of 2026-11-05, from seat FIX-A1.)

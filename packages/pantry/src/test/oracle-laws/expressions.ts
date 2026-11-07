@@ -14,8 +14,8 @@
  * - **Over each expression** (`Expression`): `Operand fit`, `One base`, `Condition type`, `Outcome
  *   only`.
  * - **Over each reference** (`VariableRef`): `Set type`, `Lookup type`, `Reference type`, `Template
- *   reads`, `Mapped response`, `Item duration`, and `Variable kind` (the declaration kind each
- *   element reads or sets, `ReferenceDeclaration`).
+ *   reads`, `Mapped response`, and `Variable kind` (the declaration kind each element reads or
+ *   sets, `ReferenceDeclaration`).
  * - **Over each typing attribute and literal:** `Weighted base`, `Literal lexical`.
  * - **Over each template default of a test** (`TemplateDefault`): `Template default type`, its
  *   expression's type against its item's template declaration's.
@@ -34,7 +34,7 @@ import {
 } from "#pantry/grammar/expression.ts";
 import type { ExpressionTyping } from "#pantry/grammar/expression.ts";
 import type { NodeId } from "#pantry/model/xdm.ts";
-import { itemRefDocument, testDocumentsOf, testKinds } from "#pantry/test/oracle-laws/assembly.ts";
+import { itemRefDocument, testDocumentsOf } from "#pantry/test/oracle-laws/assembly.ts";
 import {
   breachAt,
   collapsed,
@@ -61,7 +61,6 @@ export const expressionLaws = [
   "Mapped response",
   "Weighted base",
   "Literal lexical",
-  "Item duration",
   "Variable kind",
   "Template default type",
 ] as const;
@@ -166,11 +165,6 @@ const tableKinds: ReadonlyMap<string, readonly string[]> = new Map([
   ["qti-map-response", ["qti-mapping"]],
   ["qti-map-response-point", ["qti-area-mapping"]],
 ]);
-
-/**
- * An `xs:boolean` lexical form that is true, its whitespace collapsed: `true` or `1`.
- */
-const truePattern = /^[\t\n\r ]*(?:true|1)[\t\n\r ]*$/u;
 
 /**
  * Read a declaration code as an expression type's: `none`, a record's base type, reads `unknown`
@@ -622,17 +616,14 @@ const referenceBasesOf = (grammar: ComposedGrammar): ReadonlyMap<string, string>
 
 /**
  * What the reference laws read of one reference: its own fields, its element's one expression's
- * type, the table its declaration holds of those its element reads, its element's language, and
- * its document's root and timing.
+ * type, the table its declaration holds of those its element reads, and its element's language.
  */
 interface Read {
   readonly heldType: Type;
   readonly language: string;
   readonly reference: Reference;
   readonly referenceBase: string;
-  readonly rootKind: string;
   readonly table: string;
-  readonly timeDependent: boolean;
 }
 
 /**
@@ -651,7 +642,7 @@ const fits = (held: Type, wanted: Type): boolean =>
 
 /**
  * The reference laws, each a predicate that a read breaks (information model §2.5.1.3, §2.5.1.4,
- * §8.24, §8.25, §8.42, §2.8, §2.11.3.29, §2.11.3.30, §2.2.2.2), by the law it breaks.
+ * §8.24, §8.25, §8.42, §2.8, §2.11.3.29, §2.11.3.30), by the law it breaks.
  */
 const referenceLaws: readonly (readonly [ExpressionLaw, (read: Read) => boolean])[] = [
   [
@@ -714,14 +705,6 @@ const referenceLaws: readonly (readonly [ExpressionLaw, (read: Read) => boolean]
       ),
   ],
   [
-    "Item duration",
-    ({ reference, rootKind, timeDependent }) =>
-      rootKind === testKinds.item &&
-      reference.resolution === "builtIn" &&
-      reference.identifier === "duration" &&
-      !timeDependent,
-  ],
-  [
     "Variable kind",
     ({ reference }) => {
       const allowed = declarationKindsOf(reference.node.kind);
@@ -737,7 +720,7 @@ const referenceLaws: readonly (readonly [ExpressionLaw, (read: Read) => boolean]
 ];
 
 /**
- * Judge each reference of a typed document by the reference laws (P20, P22, P24, P26, P27, A62)
+ * Judge each reference of a typed document by the reference laws (P20, P22, P24, P26, P27)
  * and `Variable kind`.
  *
  * @param typed - The document.
@@ -746,12 +729,6 @@ const referenceLaws: readonly (readonly [ExpressionLaw, (read: Read) => boolean]
  */
 const referenceBreachesOf = (typed: Typed, grammar: ComposedGrammar): readonly Breach[] => {
   const { rows } = typed;
-  const rootKind = Option.match(rows.root, { onNone: () => "", onSome: ({ kind }) => kind });
-  const timeDependent =
-    rootKind === testKinds.item &&
-    Option.exists(rows.root, ({ id }) =>
-      Option.exists(valueOf(rows, id, "time-dependent"), (lexical) => truePattern.test(lexical)),
-    );
   const referenceBases = referenceBasesOf(grammar);
 
   return typed.references.flatMap((reference): readonly Breach[] => {
@@ -768,9 +745,7 @@ const referenceBreachesOf = (typed: Typed, grammar: ComposedGrammar): readonly B
       language: typed.languageOf(node),
       reference,
       referenceBase: referenceBases.get(`${node.kind} ${reference.attribute}`) ?? "",
-      rootKind,
       table,
-      timeDependent,
     };
     const keys = {
       allowed: declarationKindsOf(node.kind).join(" "),
