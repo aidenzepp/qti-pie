@@ -7,11 +7,12 @@
  * It restates `src/qti/tests.ts` on the host, from the information model, never from the
  * importer's overlay (`#pantry/import/overlays/tests.ts`):
  *
- * - **names** (`Named`, reading 86): every test part, section, section ref and item ref, its
- *   identifier collapsed, and its scope in its document: its test part, whether a selection with
- *   replacement above it can repeat it, and, for a section, whether its children's order is drawn
- *   at delivery (a shuffle, or an invisible section not kept together under a parent whose order is
- *   drawn, information model §5.98) and whether that looseness reaches the document's root;
+ * - **names** (`Named`, reading 86): every test part, section, section ref and item ref that writes
+ *   an identifier its type reads (reading 147: one that writes none names nothing), its identifier
+ *   collapsed, and its scope in its document: its test part, whether a selection with replacement
+ *   above it can repeat it, and, for a section, whether its children's order is drawn at delivery
+ *   (a shuffle, or an invisible section not kept together under a parent whose order is drawn,
+ *   information model §5.98) and whether that looseness reaches the document's root;
  * - **sites** (`Site`): each section ref, and each include under a parent whose content model holds
  *   an include particle (reading 114), with the document its href names;
  * - **the assembly** (`Instance`): one tree per document of a test or a section, its root the
@@ -25,7 +26,13 @@ import { Option } from "effect";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
 import { booleanOf } from "#pantry/grammar/domains.ts";
 import type { NodeId } from "#pantry/model/xdm.ts";
-import { elementsOf, hrefPathOf, typedOr, valueOf } from "#pantry/test/oracle-view.ts";
+import {
+  elementsOf,
+  hrefPathOf,
+  typedOr,
+  typedValueOf,
+  valueOf,
+} from "#pantry/test/oracle-view.ts";
 import type { ListedRows, PackageRows, Row, View } from "#pantry/test/oracle-view.ts";
 
 /**
@@ -273,7 +280,9 @@ export const testDocumentOf = (listed: ListedRows, grammar: ComposedGrammar): Te
 
     const section = sections.get(node.id);
     const scope = parentScope(node);
-    const written = typedOr(rows, node.id, "identifier", "");
+    // An element that writes no identifier names nothing (reading 147): the XSD requires it, with
+    // no default, and no identifier is empty, so AL3 alone refuses the element.
+    const written = typedValueOf(rows, node.id, "identifier");
     if (Option.isNone(written)) {
       return [];
     }
