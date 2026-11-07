@@ -547,9 +547,12 @@ and can change.
 - Under `%i`, `%o`, `%x` or `%X`, a float prints its shortest decimal's integer digits
   *(pending)*, a negative under `%o`, `%x` or `%X` writes `-` and its digits *(pending)*, and an
   infinity or NaN prints `inf`, `-inf` or `nan`, in upper case under `%X` *(pending)*. A `base`
-  outside 2 to 36 writes base 10 *(pending)*. A width or precision past 1,000,000 prints nothing
-  *(pending)*, and so does a value whose whole printed text, delimiters included, would pass
-  1,000,000 characters *(pending)*.
+  outside 2 to 36 writes base 10 *(pending)*.
+- A width or precision past 1,000,000 makes `render` fail with `OutputTooLarge`, which names the
+  printed variable and the bound, rather than leave its place blank. So does a value whose whole
+  printed text, delimiters included, would pass 1,000,000 characters, and a `param-variable` value
+  whose text would, named by its template variable. A hidden template block is not printed, so
+  what it holds never fails a render. Scoring is unaffected.
 - With no `format`, it prints an integer as its digits, a float as its shortest decimal and
   negative zero as `-0`. `power-form` writes such a float's exponent as `x 10 to the power n`
   *(pending)*.

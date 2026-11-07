@@ -601,13 +601,17 @@ const withoutPaths = (nodes: readonly BodyNode[]): readonly BodyNode[] =>
   });
 
 /**
- * Give a redacted item as its JSON form decodes: every body node's path `""`.
+ * Give a redacted item as its JSON form decodes: every body node's path `""`, and `unprinted`'s.
  *
  * @param redacted The item `redact` gave.
- * @returns The same item, each path in its body `""`.
+ * @returns The same item, each path in its body, and `unprinted`'s, `""`.
  */
 const pathless = (redacted: Redacted): Redacted =>
-  brandRedacted({ ...redacted, body: withoutPaths(redacted.body) });
+  brandRedacted({
+    ...redacted,
+    body: withoutPaths(redacted.body),
+    unprinted: redacted.unprinted.pipe(Option.map((unprinted) => ({ ...unprinted, path: "" }))),
+  });
 
 /**
  * Collect the path of every body node that has one, at any depth, in document order: an element's
@@ -1225,6 +1229,88 @@ describe("the codec and source paths (review P2-6)", () => {
 });
 
 /**
+ * An item with no template processing whose paragraph prints the string template variable `S`,
+ * declared with a default of 1,000,001 characters, one past the bound a printed text keeps to.
+ */
+const lengthyBytes = new TextEncoder().encode(
+  `<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="lengthy" title="Lengthy" time-dependent="false"><qti-template-declaration identifier="S" cardinality="single" base-type="string"><qti-default-value><qti-value>${"y".repeat(1_000_001)}</qti-value></qti-default-value></qti-template-declaration><qti-item-body><p>Value: <qti-printed-variable identifier="S"/></p></qti-item-body></qti-assessment-item>`,
+);
+
+describe("the codec on a printed text past its bound", () => {
+  it.effect(
+    "[I-5] round-trips unprinted through JSON text, its bound and identifier kept and no path written, so render of the decoded item fails OutputTooLarge naming them",
+    () =>
+      Effect.gen(function* roundTripsUnprinted() {
+        const verdict = yield* open("items/lengthy.xml", lengthyBytes);
+        const accepted = Option.getOrElse(acceptedItem(verdict), () =>
+          assert.fail(`The lengthy item is ${verdict.verdict}, not accepted.`),
+        );
+        const redacted = redact(accepted);
+        const json = Result.getOrThrow(encodeRedacted(redacted));
+        // oxlint-disable-next-line unicorn/prefer-structured-clone -- The test proves the item survives JSON text, the form a host sends; `structuredClone` would keep the bigints and Options JSON drops.
+        const handedOver: unknown = JSON.parse(JSON.stringify(json));
+        const decoded = Result.getOrThrow(decodeRedacted(handedOver));
+        const failed = render(decoded, yield* defaults, { instance });
+
+        assert.deepStrictEqual(
+          redacted.unprinted,
+          Option.some({
+            bound: 1_000_000,
+            identifier: "S",
+            path: "qti-assessment-item/qti-item-body/p/qti-printed-variable",
+          }),
+        );
+        assert.deepStrictEqual(json.unprinted, { bound: 1_000_000, identifier: "S" });
+        assert.deepStrictEqual(decoded, pathless(redacted));
+        assert.deepStrictEqual(
+          decoded.unprinted,
+          Option.some({ bound: 1_000_000, identifier: "S", path: "" }),
+        );
+        assert.deepStrictEqual(
+          Result.getFailure(failed).pipe(
+            Option.map((failure) =>
+              failure._tag === "OutputTooLarge" ? failure.printed : failure._tag,
+            ),
+          ),
+          Option.some(Option.some({ bound: 1_000_000, identifier: "S" })),
+        );
+      }),
+  );
+
+  it("[I-5] writes no unprinted key for an item whose every text fits, and decodes its absence as none", () => {
+    const redacted = redact(acceptForTest(choiceItem));
+    const json = Result.getOrThrow(encodeRedacted(redacted));
+    const decoded = Result.getOrThrow(decodeRedacted(json));
+
+    assert.isTrue(Option.isNone(redacted.unprinted));
+    assert.notProperty(json, "unprinted");
+    assert.isTrue(Option.isNone(decoded.unprinted));
+  });
+
+  it.effect(
+    "[I-5] refuses an unprinted bound that is not a whole number of at least 1: InvalidRedacted at stage decode",
+    () =>
+      Effect.gen(function* refusesBadBound() {
+        const json = Result.getOrThrow(encodeRedacted(redact(acceptForTest(choiceItem))));
+
+        for (const bound of [0, 1.5, "1000000"]) {
+          const error = yield* failureOf(
+            decodeRedacted({ ...json, unprinted: { bound, identifier: "S" } }),
+          );
+
+          assert.strictEqual(error.stage, "decode", String(bound));
+        }
+
+        assert.isTrue(
+          Result.isSuccess(
+            decodeRedacted({ ...json, unprinted: { bound: 1_000_000, identifier: "S" } }),
+          ),
+        );
+      }),
+  );
+});
+
+/**
  * Opening the corpus (about 800 members) and redacting each templated item in three states runs in
  * seconds here; the bound leaves room for a slow machine without letting a hung run stall the
  * suite.
@@ -1535,6 +1621,7 @@ describe("render", () => {
       notices: redacted.notices,
       responses: redacted.responses,
       title: redacted.title,
+      unprinted: redacted.unprinted,
     };
     /**
      * The calls `tsc` judges. They never run: `render` reads `Option`s a `RedactedJson` does not

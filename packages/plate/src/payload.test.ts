@@ -815,7 +815,9 @@ describe("redactItem", () => {
       "notices",
       "responses",
       "title",
+      "unprinted",
     ]);
+    assert.isTrue(Option.isNone(copied.unprinted));
     assert.deepStrictEqual(copied.responses, [
       { baseType: "identifier", cardinality: "single", identifier: "CAPITAL" },
       { baseType: "string", cardinality: "single", identifier: "FIRST" },
@@ -3503,29 +3505,57 @@ const oversizedPrinting: readonly (readonly [SourceDocument, Value])[] = [
   ],
 ];
 
-describe("redactItem on a printed variable whose whole text passes 1,000,000 characters", () => {
+/**
+ * The path of {@link repeatedDocument}'s printed variable, as `check` reads it.
+ */
+const repeatedPath = `${bodyPath}/p/qti-printed-variable`;
+
+describe("redactItem on a printed variable whose text passes 1,000,000 characters", () => {
   it.effect(
-    "[I-5] returns with the printed variable's place empty, for 600 integers under %999999i and for 1,000,000 strings of 600 characters (G-R2, pending)",
+    "[I-5] returns with the printed variable's place empty and records it, the bound 1,000,000 and its path, for 600 integers under %999999i and for 1,000,000 strings of 600 characters, so render fails rather than show the blank",
     () =>
-      Effect.gen(function* emptiesOversizedText() {
+      Effect.gen(function* recordsOversizedText() {
         for (const [document, value] of oversizedPrinting) {
           const accepted = yield* Effect.fromOption(acceptedItem(check(document, tables)));
           const emptied = redactItem(accepted.item, holding({ S: value }));
 
           assert.deepStrictEqual(paragraphOf(emptied), [text("Value: ")]);
           assert.deepStrictEqual(emptied.notices, []);
+          assert.deepStrictEqual(
+            emptied.unprinted,
+            Option.some({ bound: 1_000_000, identifier: "S", path: repeatedPath }),
+          );
         }
       }),
   );
 
-  it.effect("[I-5] prints the same item's text when it stays within the bound", () =>
-    Effect.gen(function* printsWithinBound() {
-      const document = repeatedDocument("integer", "1", 3, [attr("format", "%2i")]);
-      const accepted = yield* Effect.fromOption(acceptedItem(check(document, tables)));
-      const shown = redactItem(accepted.item, holding({ S: orderedIntegers([1n, 1n, 1n]) }));
+  it.effect(
+    "[I-5] records a printed variable under %1000001i, a conversion wider than 1,000,000 characters, and leaves its place empty",
+    () =>
+      Effect.gen(function* recordsWidenedConversion() {
+        const document = repeatedDocument("integer", "5", 1, [attr("format", "%1000001i")]);
+        const accepted = yield* Effect.fromOption(acceptedItem(check(document, tables)));
+        const emptied = redactItem(accepted.item, holding({ S: orderedIntegers([5n]) }));
 
-      assert.deepStrictEqual(paragraphOf(shown), texts("Value: ", " 1; 1; 1"));
-    }),
+        assert.deepStrictEqual(paragraphOf(emptied), [text("Value: ")]);
+        assert.deepStrictEqual(
+          emptied.unprinted,
+          Option.some({ bound: 1_000_000, identifier: "S", path: repeatedPath }),
+        );
+      }),
+  );
+
+  it.effect(
+    "[I-5] prints the same item's text, and records nothing, when it stays within the bound",
+    () =>
+      Effect.gen(function* printsWithinBound() {
+        const document = repeatedDocument("integer", "1", 3, [attr("format", "%2i")]);
+        const accepted = yield* Effect.fromOption(acceptedItem(check(document, tables)));
+        const shown = redactItem(accepted.item, holding({ S: orderedIntegers([1n, 1n, 1n]) }));
+
+        assert.deepStrictEqual(paragraphOf(shown), texts("Value: ", " 1; 1; 1"));
+        assert.isTrue(Option.isNone(shown.unprinted));
+      }),
   );
 });
 
@@ -3676,5 +3706,76 @@ describe("redactStructure", () => {
 
     assert.isAbove(list.reads(), 0);
     assert.isAbove(count.reads(), 0);
+  });
+});
+
+describe("redactItem records the first text past its bound on content the page sees", () => {
+  it("[I-5] records only the first printed variable past the bound, in the order the walk meets them: the Choice's Prompt before its choices", () => {
+    const huge = one({ baseType: "string", value: "y".repeat(1_000_001) });
+    const emptied = redactItem(
+      printing,
+      holding({ ROUND: huge, SCORE: floatValue(1.5), TOTAL: huge }),
+    );
+
+    assert.deepStrictEqual(
+      emptied.unprinted,
+      Option.some({ bound: 1_000_000, identifier: "ROUND", path: printedPaths[1] }),
+    );
+    assert.deepStrictEqual(paragraphOf(emptied), texts("Score: ", "1.5"));
+  });
+
+  it("[I-5] records a param-variable parameter whose value text passes 1,000,000 characters by its template variable, with its value left empty", () => {
+    const containers = acceptedFrom(containerParameterDocument);
+    const [, setParameter] = objectChildren(containers.body);
+    const emptied = redactItem(
+      containers,
+      holding({ ...containerParameterValues.templates, SET: multipleOf("y".repeat(1_000_001)) }),
+    );
+
+    assert.deepStrictEqual(parametersOf(objectChildren(emptied.body)), [
+      ["list", "1;2;3"],
+      ["set", ""],
+      ["none", ""],
+    ]);
+    assert.deepStrictEqual(
+      emptied.unprinted,
+      Option.some({
+        bound: 1_000_000,
+        identifier: "SET",
+        path:
+          setParameter?.kind === "element"
+            ? setParameter.path
+            : assert.fail("The object holds no second parameter."),
+      }),
+    );
+    assert.isTrue(
+      Option.isNone(redactItem(containers, containerParameterValues).unprinted),
+      "within the bound",
+    );
+  });
+
+  it("[I-5] formats nothing and records nothing on content the page does not see: a printed variable past the bound in a template block the record hides", () => {
+    const lengthy = counted(one({ baseType: "string", value: "y".repeat(1_000_001) }));
+    const hidden: Item = {
+      ...visibility,
+      body: [
+        templatePart("template-block", byVisible("show"), [
+          printed("S", `${blockPath}/qti-printed-variable`),
+        ]),
+      ],
+    };
+    const redaction = redactItem(
+      hidden,
+      holding({ S: lengthy.value, VISIBLE: identifierValue("OTHER") }),
+    );
+
+    assert.deepStrictEqual(redaction.body, []);
+    assert.isTrue(Option.isNone(redaction.unprinted));
+    assert.strictEqual(lengthy.reads(), 0);
+    assert.deepStrictEqual(
+      redactItem(hidden, holding({ S: lengthy.value, VISIBLE: identifierValue("X") })).unprinted,
+      Option.some({ bound: 1_000_000, identifier: "S", path: `${blockPath}/qti-printed-variable` }),
+      "shown",
+    );
   });
 });

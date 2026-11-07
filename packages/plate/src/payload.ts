@@ -22,7 +22,7 @@ import type { Brand } from "effect";
 import { controlCap, exceedsControlCap } from "#plate/control-cap.ts";
 import { scopedId } from "#plate/emit/parts.ts";
 import type { Resolved } from "#plate/emit/parts.ts";
-import { formatPrinted } from "#plate/engine/format.ts";
+import { formatPrinted, textBound } from "#plate/engine/format.ts";
 import type { PrintOptions } from "#plate/engine/format.ts";
 import { integerOf } from "#plate/engine/numbers.ts";
 import { shuffleOrder } from "#plate/engine/random.ts";
@@ -466,6 +466,17 @@ export interface RedactedFields {
   readonly notices: readonly string[];
   readonly responses: readonly ResponseBinding[];
   readonly title: string;
+  /**
+   * The first printed variable, or `param-variable` parameter, on content the page sees whose text
+   * passed a bound and so printed nothing: the bound in characters, the variable's identifier (a
+   * parameter's template variable) and its path. None when every text fits. `render` fails
+   * `OutputTooLarge` naming it, so no page shows the slot blank.
+   */
+  readonly unprinted: Option.Option<{
+    readonly bound: number;
+    readonly identifier: string;
+    readonly path: string;
+  }>;
 }
 
 /**
@@ -1093,7 +1104,8 @@ const parameterNotice = "param";
  * parameter the values cover: `"text"` writes the text each prints or passes, through
  * `formatPrinted`, as {@link redactItem} gives the page; `"structure"` writes none, for the callers
  * that read only which parts the page shows ({@link redactStructure}). Either decides every
- * visibility, binding and notice the same way.
+ * visibility, binding and notice the same way. Content the page does not see is walked as
+ * `"structure"` under either, so it formats nothing.
  */
 type Writing = "structure" | "text";
 
@@ -1163,6 +1175,11 @@ interface RedactedBody {
    */
   readonly hiddenOnly: ReadonlySet<string>;
   readonly notices: readonly string[];
+  /**
+   * The first printed variable or `param-variable` parameter on content the page sees whose text
+   * passed its bound: {@link RedactedFields.unprinted}. Always none under `"structure"`.
+   */
+  readonly unprinted: RedactedFields["unprinted"];
 }
 
 /**
@@ -1261,17 +1278,18 @@ const printOptionsOf = (node: PrintedVariable, record: RedactRecord): Option.Opt
  * @param node The printed variable.
  * @param record The record.
  * @param writing Whether the walk writes text (`"text"`) or none (`"structure"`).
- * @returns The text, empty for NULL and always empty under `"structure"`; or none when the record
- *   holds no value of the variable, or of a name its `base` or `index` names, under either.
+ * @returns Some text, empty for NULL and always empty under `"structure"`; some none when the text
+ *   passed `formatPrinted`'s bound ({@link textBound}), so it is not printed; or none when the
+ *   record holds no value of the variable, or of a name its `base` or `index` names, under either.
  */
 const printedText = (
   node: PrintedVariable,
   record: RedactRecord,
   writing: Writing,
-): Option.Option<string> =>
+): Option.Option<Option.Option<string>> =>
   Option.flatMap(heldValue(record, node.identifier), (value) =>
     Option.map(printOptionsOf(node, record), (options) =>
-      writing === "text" ? formatPrinted(value, options) : "",
+      writing === "text" ? formatPrinted(value, options) : Option.some(""),
     ),
   );
 
@@ -1393,10 +1411,20 @@ const parameterOf = (item: Item, node: BodyElement): Option.Option<TemplateDecla
  * empty string.
  *
  * @param value The template variable's value.
- * @returns The text the parameter passes.
+ * @returns The text the parameter passes, or none when it would pass `formatPrinted`'s bound
+ *   ({@link textBound}), so it is not passed.
  */
-const parameterText = (value: Value): string =>
+const parameterText = (value: Value): Option.Option<string> =>
   formatPrinted(value, { format: value.baseType === "float" ? "%G" : "%i" });
+
+/**
+ * A `param-variable` parameter the values expand: the template variable it names, and the text its
+ * `value` passes, none when that text passed `formatPrinted`'s bound ({@link textBound}).
+ */
+interface Expanded {
+  readonly identifier: string;
+  readonly passed: Option.Option<string>;
+}
 
 /**
  * Decide what the page sees of a body element's `value` as a parameter: the text of the value the
@@ -1411,19 +1439,22 @@ const parameterText = (value: Value): string =>
  * @param node The body element.
  * @param writing Whether the walk writes text (`"text"`) or none (`"structure"`).
  * @returns None for an element that stands in for no template variable, which is copied as written;
- *   some text for a parameter the values expand (its `value` as written under `"structure"`); some
- *   none for one they withhold.
+ *   some {@link Expanded} for a parameter the values expand (its `value` as written under
+ *   `"structure"`); some none for one they withhold.
  */
 const expandedParameter = (
   item: Item,
   printing: Option.Option<RedactRecord>,
   node: BodyElement,
   writing: Writing,
-): Option.Option<Option.Option<string>> =>
+): Option.Option<Option.Option<Expanded>> =>
   Option.map(parameterOf(item, node), (declaration) =>
     printing.pipe(
       Option.flatMap((record) => own(record.templates, declaration.identifier)),
-      Option.map((value) => (writing === "text" ? parameterText(value) : declaration.identifier)),
+      Option.map((value): Expanded => ({
+        identifier: declaration.identifier,
+        passed: writing === "text" ? parameterText(value) : Option.some(declaration.identifier),
+      })),
     ),
   );
 
@@ -1480,6 +1511,14 @@ const expandedParameter = (
  * page sees binds nothing here, so a response only such notices bind, like one no interaction
  * binds, is never hidden-only.
  *
+ * Under `"text"`, a printed variable or a `param-variable` parameter on content the page sees whose
+ * text passed `formatPrinted`'s bound ({@link textBound}) leaves its slot empty, as NULL's does:
+ * the printed variable writes nothing and the parameter passes the empty value. The walk records
+ * the first such one it meets, a printed variable by its identifier and a parameter by its template
+ * variable's, with the bound and its path, so `render` fails rather than show the blank. Content
+ * the page does not see is walked as under `"structure"`, so it formats nothing and records
+ * nothing.
+ *
  * Under `"structure"` the walk writes no text: a printed variable the values cover leaves nothing
  * in its place, and a `param-variable` parameter they expand keeps its `value` as written. Every
  * other decision, the notices, the hidden-only responses and every interaction and choice shown, is
@@ -1494,7 +1533,8 @@ const expandedParameter = (
  * @returns The body, every printed variable its text (nothing under `"structure"`) or its notice,
  *   every template block and inline its content, nothing or its notice, and every `param-variable`
  *   parameter its value (as written under `"structure"`) or its notice; the features shown as
- *   notices; and the responses only content the page does not see binds.
+ *   notices; the responses only content the page does not see binds; and the first text on content
+ *   the page sees that passed its bound, none under `"structure"`.
  */
 const printBody = (
   item: Item,
@@ -1522,6 +1562,27 @@ const printBody = (
   // The responses an interaction the page sees binds, and those content it does not see binds.
   const shownBound = new Set<string>();
   const unseenBound = new Set<string>();
+  // The first printed variable or parameter on content the page sees whose text passed its bound.
+  let unprinted: RedactedFields["unprinted"] = Option.none();
+
+  /**
+   * Give the text a printed variable or a parameter writes, or the empty text when it passed its
+   * bound, recording the first that did. The walk asks for text only on content the page sees, so
+   * nothing is recorded for content it does not see.
+   *
+   * @param text The formatter's text, none past its bound.
+   * @param identifier The printed variable's identifier, or the parameter's template variable's.
+   * @param path The printed variable's or the `param`'s path.
+   * @returns The text, or the empty text past the bound.
+   */
+  const written = (text: Option.Option<string>, identifier: string, path: string): string =>
+    Option.getOrElse(text, () => {
+      if (Option.isNone(unprinted)) {
+        unprinted = Option.some({ bound: textBound, identifier, path });
+      }
+
+      return "";
+    });
 
   /**
    * Record responses as bound on content the page sees, or on content it does not.
@@ -1582,7 +1643,7 @@ const printBody = (
     nodes.flatMap((node): readonly BodyNode[] => {
       switch (node.kind) {
         case "element": {
-          const parameter = expandedParameter(item, printing, node, writing);
+          const parameter = expandedParameter(item, printing, node, seen ? writing : "structure");
           const withheld = Option.exists(parameter, Option.isNone);
           const held = new Set(
             node.children.flatMap((child) =>
@@ -1604,10 +1665,13 @@ const printBody = (
 
           const attributes = Option.match(Option.flatten(parameter), {
             onNone: () => node.attributes,
-            onSome: (passed) =>
-              node.attributes.map((attribute) =>
-                attribute.name === "value" ? { name: attribute.name, value: passed } : attribute,
-              ),
+            onSome: ({ identifier, passed }) => {
+              const value = written(passed, identifier, node.path);
+
+              return node.attributes.map((attribute) =>
+                attribute.name === "value" ? { name: attribute.name, value } : attribute,
+              );
+            },
           });
 
           return [{ ...node, attributes, children }];
@@ -1619,14 +1683,20 @@ const printBody = (
         }
         case "printed-variable": {
           return Option.match(
-            printing.pipe(Option.flatMap((record) => printedText(node, record, writing))),
+            printing.pipe(
+              Option.flatMap((record) => printedText(node, record, seen ? writing : "structure")),
+            ),
             {
               onNone: (): readonly BodyNode[] => {
                 note(printedNotice, seen);
 
                 return [{ feature: printedNotice, kind: "unsupported", path: node.path }];
               },
-              onSome: (printed) => (printed === "" ? [] : [{ kind: "text", text: printed }]),
+              onSome: (text): readonly BodyNode[] => {
+                const printed = written(text, node.identifier, node.path);
+
+                return printed === "" ? [] : [{ kind: "text", text: printed }];
+              },
             },
           );
         }
@@ -1769,7 +1839,7 @@ const printBody = (
 
   const hiddenOnly = new Set([...unseenBound].filter((response) => !shownBound.has(response)));
 
-  return { body, hiddenOnly, notices };
+  return { body, hiddenOnly, notices, unprinted };
 };
 
 /**
@@ -1790,15 +1860,15 @@ const bindingsShown = (item: Item, hiddenOnly: ReadonlySet<string>): readonly Re
  * Copy the parts of an item the page may know: the allowlist, and the only way to make a
  * {@link Redacted} from an item.
  *
- * It copies, each by name, the document location, the identifier, the title, `lang`, the body,
- * each response's binding but the ones {@link hiddenOnlyResponses} gives, and the features shown
- * as notices. Each printed variable of the body is copied as the text it prints: the value the
- * record holds for the variable it names, its template value else its outcome value, written by
- * `formatPrinted` (`#plate/engine/format.ts`) through its `format`, `base`, `index`, `power-form`
- * and `delimiter`, a `base` or `index` written as a name read from the record too. A NULL value
- * prints nothing. A printed variable whose value, or whose named `base`'s or `index`'s, the record
- * does not hold stays its notice, `qti-printed-variable`, which `notices` names in document order
- * among the item's notice-shown features.
+ * It copies, each by name, the document location, the identifier, the title, `lang`, the body, each
+ * response's binding but the ones {@link hiddenOnlyResponses} gives, the features shown as notices,
+ * and the first text past its bound (`unprinted`). Each printed variable of the body is copied as
+ * the text it prints: the value the record holds for the variable it names, its template value else
+ * its outcome value, written by `formatPrinted` (`#plate/engine/format.ts`) through its `format`,
+ * `base`, `index`, `power-form` and `delimiter`, a `base` or `index` written as a name read from
+ * the record too. A NULL value prints nothing. A printed variable whose value, or whose named
+ * `base`'s or `index`'s, the record does not hold stays its notice, `qti-printed-variable`, which
+ * `notices` names in document order among the item's notice-shown features.
  *
  * Each template block and inline, and each choice with a `template-identifier`, is shown or hidden
  * by the template value the record holds ({@link templateShows}): a block or inline shown leaves
@@ -1822,6 +1892,13 @@ const bindingsShown = (item: Item, hiddenOnly: ReadonlySet<string>): readonly Re
  * two separated by one space. One whose variable the record does not hold stays its notice,
  * `param`, which `notices` names in document order. Any other `param` keeps its `value` as written.
  *
+ * A printed variable, or a `param-variable` parameter, on content the page sees whose text would
+ * pass `formatPrinted`'s bound of 1,000,000 characters (a conversion wider than that, or a whole
+ * text longer) prints nothing, and `unprinted` names the first the walk meets: the bound, the
+ * printed variable's identifier (a parameter's template variable's) and its path. `render` fails
+ * `OutputTooLarge` on such an item rather than show the slot blank. Content the page does not see
+ * formats nothing and is never named there. `unprinted` is none when every text fits.
+ *
  * With no record, an item whose template processing does not run reads as the record its first
  * attempt starts with: each template variable at its declared default, else NULL (none where the
  * item has a `qti-template-processing` the engine does not run, since nothing computed them), and
@@ -1842,7 +1919,11 @@ const bindingsShown = (item: Item, hiddenOnly: ReadonlySet<string>): readonly Re
  * @returns The redacted item.
  */
 export const redactItem = (item: Item, record?: RedactRecord): Redacted => {
-  const { body, hiddenOnly, notices } = printBody(item, printingOf(item, record), "text");
+  const { body, hiddenOnly, notices, unprinted } = printBody(
+    item,
+    printingOf(item, record),
+    "text",
+  );
 
   return brandRedacted({
     body,
@@ -1852,6 +1933,7 @@ export const redactItem = (item: Item, record?: RedactRecord): Redacted => {
     notices,
     responses: bindingsShown(item, hiddenOnly),
     title: item.title,
+    unprinted,
   });
 };
 

@@ -8,10 +8,12 @@
  * text around a conversion, the base of `index`, an exact tie, a float under an integer
  * conversion, a `base` outside 2 to 36, a negative under `o`, `x` or `X`, an infinity or NaN under
  * an integer conversion, and a width, a precision or a whole text too long to hold. The defaults
- * here are drafted readings, each marked "G-R2, pending" where it is applied. Every float reaches
- * decimal digits through {@link shortestDecimal}, the one approximated step, and is rounded or
- * truncated as that decimal, never as the double's binary expansion, so a page and Node print the
- * same text.
+ * here are drafted readings, each marked "G-R2, pending" where it is applied. The two size bounds
+ * are approved: a text that would pass {@link fieldBound} or {@link textBound} is not printed at
+ * all, and {@link formatPrinted} says so, so its caller can fail rather than show a blank slot.
+ * Every float reaches decimal digits through {@link shortestDecimal}, the one approximated
+ * step, and is rounded or truncated as that decimal, never as the double's binary expansion, so a
+ * page and Node print the same text.
  *
  * @module
  * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#Derived_PrintedVariable
@@ -131,23 +133,26 @@ const conversionPattern =
   /%(?<flags>[#0 +-]*)(?<width>[0-9]*)(?:\.(?<precision>[0-9]*))?(?<code>[EefGgrRioXx])/u;
 
 /**
- * The largest field width or precision the formatter writes, 1,000,000 characters. A specifier
- * past it prints nothing, the format's literal text included, as NULL does (G-R2, pending):
- * `%1000000000i` would ask for a string longer than an engine holds (V8's longest is 2^29 − 24
- * characters), and the engine must not throw. It bounds one conversion; {@link textBound} bounds
- * the text a container's members make together.
- */
-const fieldBound = 1_000_000n;
-
-/**
  * The longest text the formatter writes for one value, 1,000,000 characters (UTF-16 code units, as
  * a string's length counts them), its members' texts and the delimiters between them together. A
- * value whose text would pass it prints nothing, as NULL does (G-R2, pending). {@link fieldBound}
- * holds each member's conversion, but a container holds up to 1,000,000 members, so 600 members of
- * 999,999 characters, or 1,000,000 members of 600, would join past an engine's longest string, and
- * the engine must not throw.
+ * value whose text would pass it is not printed: {@link formatPrinted} gives none, and `render`
+ * fails `OutputTooLarge` naming this bound and the printed variable rather than show its slot
+ * blank. {@link fieldBound} holds each member's conversion, but a container holds up to 1,000,000
+ * members, so 600 members of 999,999 characters, or 1,000,000 members of 600, would join past an
+ * engine's longest string, and the engine must not throw.
  */
-const textBound = 1_000_000;
+export const textBound = 1_000_000;
+
+/**
+ * The largest field width or precision the formatter writes, {@link textBound} (1,000,000
+ * characters), so one number names both bounds. A value under a specifier past it is not printed,
+ * the format's literal text included: {@link formatPrinted} gives none, and `render` fails
+ * `OutputTooLarge` naming the bound and the printed variable. `%1000000000i` would ask for a string
+ * longer than an engine holds (V8's longest is 2^29 − 24 characters), and the engine must not
+ * throw. It bounds one conversion; {@link textBound} bounds the text a container's members make
+ * together.
+ */
+const fieldBound = BigInt(textBound);
 
 /**
  * Zero, as a {@link Decimal}.
@@ -609,8 +614,8 @@ const defaultForm = (single: Single, powerForm: boolean): string => {
  *
  * @param baseType The value's base type.
  * @param options The printed variable's options.
- * @returns The printer, or none when the format's conversion is oversized, so the value prints
- *   nothing.
+ * @returns The printer, or none when the format's conversion is oversized, so the value is not
+ *   printed.
  */
 const printerOf = (
   baseType: ModelledBaseType,
@@ -663,47 +668,56 @@ const shownOf = (value: Value, index: bigint | undefined): readonly Single[] => 
  * @param members The members to print, in order.
  * @param print The printer of one member.
  * @param delimiter The text between two members.
- * @returns The joined text, or empty as soon as it would pass {@link textBound} (G-R2, pending).
+ * @returns The joined text, or none as soon as it would pass {@link textBound}.
  */
 const joinedWithin = (
   members: readonly Single[],
   print: (single: Single) => string,
   delimiter: string,
-): string => {
+): Option.Option<string> => {
   const texts: string[] = [];
   let length = 0;
   for (const member of members) {
     const text = print(member);
     length += (texts.length === 0 ? 0 : delimiter.length) + text.length;
     if (length > textBound) {
-      return "";
+      return Option.none();
     }
 
     texts.push(text);
   }
 
-  return texts.join(delimiter);
+  return Option.some(texts.join(delimiter));
 };
 
 /**
  * Write the text a `qti-printed-variable` shows for a value: each member printed, through `format`
- * when the value is numeric and a format is given, and joined by `delimiter`. NULL prints nothing.
- * It never throws: a conversion wider than 1,000,000 characters, and a whole text that would pass
- * 1,000,000 characters, print nothing (G-R2, pending), so no text past an engine's longest string
- * is built.
+ * when the value is numeric and a format is given, and joined by `delimiter`. NULL prints nothing,
+ * whatever the format. It never throws and never builds a text past an engine's longest string: a
+ * value under a conversion wider than {@link fieldBound}, or whose whole text would pass
+ * {@link textBound}, both 1,000,000 characters, is not printed, and it gives none, so the caller
+ * can tell that from NULL's empty text and fail rather than show a blank slot (`render` fails
+ * `OutputTooLarge`, naming the bound and the printed variable).
  *
  * Records are not modelled, so no record reaches it; `mappingIndicator` waits for them.
  *
  * @example
- *   formatPrinted(floatValue(2.675), { format: "Score: %.2f" }); // "Score: 2.68"
+ *   formatPrinted(floatValue(2.675), { format: "Score: %.2f" }); // Option.some("Score: 2.68")
+ *   formatPrinted(integerValue(5n), { format: "%1000001i" }); // Option.none()
  *
  * @param value The variable's value.
  * @param options The printed variable's resolved attributes.
- * @returns The text, empty for NULL, for a conversion wider than 1,000,000 characters, and for a
- *   text, delimiters included, longer than 1,000,000 characters.
+ * @returns Some text, empty for NULL; or none for a value under a conversion wider than
+ *   1,000,000 characters, and for one whose text, delimiters included, would be longer than
+ *   1,000,000 characters.
  */
-export const formatPrinted = (value: Value, options: PrintOptions = {}): string =>
-  Option.match(printerOf(value.baseType, options), {
-    onNone: () => "",
-    onSome: (print) => joinedWithin(shownOf(value, options.index), print, options.delimiter ?? ";"),
-  });
+export const formatPrinted = (value: Value, options: PrintOptions = {}): Option.Option<string> => {
+  const shown = shownOf(value, options.index);
+  if (shown.length === 0) {
+    return Option.some("");
+  }
+
+  return Option.flatMap(printerOf(value.baseType, options), (print) =>
+    joinedWithin(shown, print, options.delimiter ?? ";"),
+  );
+};

@@ -19,7 +19,7 @@ import { fresh } from "#plate/model/record.ts";
 import type { ItemRecord } from "#plate/model/record.ts";
 import { nullOf } from "#plate/model/values.ts";
 import type { Value } from "#plate/model/values.ts";
-import { render } from "#plate/render.ts";
+import { redact, render } from "#plate/render.ts";
 import { checkResponses } from "#plate/responses.ts";
 import { fitting, score, tierA } from "#plate/score.ts";
 import { float, integer } from "#plate/test/fixtures.ts";
@@ -1230,11 +1230,13 @@ const repeatedItem = (baseType: string, lexical: string, count: number, printing
   `<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" identifier="repeated" title="Repeated" time-dependent="false"><qti-template-declaration identifier="S" cardinality="ordered" base-type="${baseType}"/><qti-template-processing><qti-set-template-value identifier="S"><qti-repeat number-repeats="${String(count)}"><qti-base-value base-type="${baseType}">${lexical}</qti-base-value></qti-repeat></qti-set-template-value></qti-template-processing><qti-item-body><p>Value: <qti-printed-variable identifier="S"${printing}/></p></qti-item-body></qti-assessment-item>`;
 
 /**
- * The items whose printed variable's whole text passes 1,000,000 characters, each with a label and
- * the number of members its template processing sets: 600 integers printed under `%999999i`, and
- * 1,000,000 strings of 600 characters printed in the default form.
+ * The items whose printed variable's text passes 1,000,000 characters, each with a label and the
+ * number of members its template processing sets: one integer under `%1000001i`, a conversion
+ * wider than 1,000,000 characters; and, for the whole text, 600 integers printed under `%999999i`
+ * and 1,000,000 strings of 600 characters printed in the default form.
  */
 const oversizedPrinting: readonly (readonly [string, string, number])[] = [
+  ["one integer under %1000001i", repeatedItem("integer", "5", 1, ' format="%1000001i"'), 1],
   ["600 integers under %999999i", repeatedItem("integer", "1", 600, ' format="%999999i"'), 600],
   [
     "1,000,000 strings of 600 characters",
@@ -1250,10 +1252,10 @@ const oversizedPrinting: readonly (readonly [string, string, number])[] = [
  */
 const oversizedTimeoutMs = 120_000;
 
-describe("score on an item whose printed variable's whole text passes 1,000,000 characters", () => {
+describe("score on an item whose printed variable's text passes 1,000,000 characters", () => {
   for (const [label, document, members] of oversizedPrinting) {
     it.effect(
-      `[I-5] returns a Result over begin's record, which holds every member, for ${label} (G-R2, pending)`,
+      `[I-5] returns a success over begin's record, which holds every member, for ${label}, whose redaction names the variable past the bound for render to fail on`,
       () =>
         Effect.gen(function* scoresBesideOversizedText() {
           const verdict = yield* open("items/repeated.xml", new TextEncoder().encode(document));
@@ -1262,9 +1264,16 @@ describe("score on an item whose printed variable's whole text passes 1,000,000 
           );
           const started = yield* Effect.fromResult(begin(opened, { instance: "q1", seed: "7" }));
           const scored = score(opened, {}, started);
+          const record = yield* Effect.fromResult(decodeRecord(started));
 
           assert.isTrue(Result.isSuccess(scored));
           assert.strictEqual(started.templates["S"]?.values.length, members);
+          assert.deepStrictEqual(
+            redact(opened, record).unprinted.pipe(
+              Option.map(({ bound, identifier }) => ({ bound, identifier })),
+            ),
+            Option.some({ bound: 1_000_000, identifier: "S" }),
+          );
         }),
       oversizedTimeoutMs,
     );
