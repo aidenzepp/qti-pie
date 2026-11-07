@@ -1238,7 +1238,9 @@ const sideText = (side: LawSide): string =>
  * its relation and its terms; its selection is no part of the identity, since no two laws the
  * schema states differ by a selection alone, which the census in `refusal.test.ts` holds. A family
  * and a tree are their slots, since one count counts one family, and a fold is its family's slots,
- * its monoid and its end, since an accumulated end is filled by one statement.
+ * its monoid and its end, since an accumulated end is filled by one statement. A generated field
+ * is its relation and field, since grizzle names one by them where a closed read in its term has
+ * no row and its column's NOT NULL refuses the row.
  *
  * @param law - A law as an `invariant-rejected` outcome names it.
  * @returns Its identity.
@@ -1253,6 +1255,7 @@ export const lawIdentity = (law: Law): string =>
       family: ({ order, slots }) => `${order} family ${slots.owner}.${slots.count}`,
       fold: ({ end, family, monoid }) =>
         `${monoid} fold over ${family.owner}.${family.count} into ${sideText(end)}`,
+      generated: ({ field, relation }) => `generated ${relation}.${field}`,
       key: ({ side }) => `key ${sideText(side)}`,
       pattern: ({ flags, source }) => `pattern /${source}/${flags}`,
       primaryKey: ({ fields, relation }) => `primary key ${relation}(${fields.join(", ")})`,
