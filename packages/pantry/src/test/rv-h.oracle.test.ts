@@ -5,8 +5,8 @@
  * `track-srclang`, and a cell whose `headers` name no `th` of its own table under `table-headers`;
  * each with the nearest valid package beside it, accepted.
  *
- * Each case is the base item of `oracle.test.ts` with one edit of its body, so the case's verdict
- * is its edit's: every other law holds.
+ * Each case is the base item of `laws.oracle.test.ts` with one edit of its body, so the case's
+ * verdict is its edit's: every other law holds.
  */
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Result } from "effect";

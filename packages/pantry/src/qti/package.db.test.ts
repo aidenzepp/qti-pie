@@ -35,7 +35,6 @@ import {
   Dependency,
   File,
   FileHref,
-  HrefScope,
   manifestPath,
   NamedHref,
   Package,
@@ -49,13 +48,13 @@ import { Author } from "#pantry/qti/roles.ts";
 import { bitsText } from "#pantry/test/bits.ts";
 import {
   codeOf,
-  familySlot,
   judged,
   loginSession,
   rowsOf,
   sqlRowOf,
+  statedInserts,
 } from "#pantry/test/direct-sql.ts";
-import type { Insert } from "#pantry/test/direct-sql.ts";
+import type { Stated } from "#pantry/test/direct-sql.ts";
 import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 
 /**
@@ -650,39 +649,25 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
           // counting the one member.
           Effect.gen(function* containments() {
             const client = yield* loginSession;
-            const itemHref: readonly Insert[] = [
+            const itemHref: readonly Stated[] = [
               {
-                row: sqlRowOf(NamedHref, {
-                  names: 1n,
-                  package: stray,
-                  path: "item.xml",
-                  type: "imsqti_item_xmlv3p0",
-                }),
-                table: "named_href",
+                fact: { package: stray, path: "item.xml", type: "imsqti_item_xmlv3p0" },
+                relation: NamedHref,
               },
               {
-                row: sqlRowOf(LomResource, {
-                  hrefs: 1n,
-                  named: "imsqti_item_xmlv3p0",
-                  node: stray,
-                  type: "imsqti_item_xmlv3p0",
-                }),
-                table: "lom_resource",
+                fact: { named: "imsqti_item_xmlv3p0", node: stray, type: "imsqti_item_xmlv3p0" },
+                relation: LomResource,
               },
               {
-                hidden: {
-                  ...familySlot("NamedHref.names", 0, 1),
-                  ...familySlot("LomResource.hrefs", 0, 1),
-                },
-                row: sqlRowOf(ResourceHref, {
+                fact: {
                   href: "item.xml",
                   node: stray,
                   package: stray,
                   path: "item.xml",
                   scope: "entry",
                   type: "imsqti_item_xmlv3p0",
-                }),
-                table: "resource_href",
+                },
+                relation: ResourceHref,
               },
             ];
             const cases = [
@@ -701,12 +686,12 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
                 comment: "foreign key Document(package, path) to Entry(package, path)",
                 inserts: [
                   {
-                    row: documentSqlRow({
+                    fact: documentSqlRow({
                       path: manifestPath,
                       resourceType: "none",
                       rootKind: "cp:manifest",
                     }),
-                    table: "document",
+                    relation: Document,
                   },
                 ],
                 table: "document",
@@ -715,7 +700,7 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
                 comment: "foreign key Dependency(package, ref) to Resource(package, identifier)",
                 inserts: [
                   {
-                    row: {
+                    fact: {
                       document: stray,
                       kind: codeOf(NodeKind.handles, "cp:dependency"),
                       nearest: stray,
@@ -727,7 +712,7 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
                       start: 4,
                       version: codeOf(SchemaVersion.handles, "3.0.1"),
                     },
-                    table: "dependency",
+                    relation: Dependency,
                   },
                 ],
                 table: "dependency",
@@ -736,42 +721,28 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
                 comment: "foreign key File(package where",
                 inserts: [
                   {
-                    row: sqlRowOf(FileHref, {
-                      files: 1n,
-                      package: stray,
-                      path: "missing.png",
-                      scope: "entry",
-                    }),
-                    table: "file_href",
+                    fact: { package: stray, path: "missing.png", scope: "entry" },
+                    relation: FileHref,
                   },
                   {
-                    row: sqlRowOf(ResourceFile, {
-                      files: 1n,
-                      path: "missing.png",
-                      resource: stray,
-                      scope: "entry",
-                    }),
-                    table: "resource_file",
+                    fact: { path: "missing.png", resource: stray, scope: "entry" },
+                    relation: ResourceFile,
                   },
                   {
-                    hidden: {
-                      ...familySlot("FileHref.files", 0, 1),
-                      ...familySlot("ResourceFile.files", 0, 1),
-                    },
-                    row: {
+                    fact: {
                       document: stray,
                       href: "missing.png",
-                      kind: codeOf(NodeKind.handles, "cp:file"),
+                      kind: "cp:file",
                       nearest: stray,
                       node: strayOther,
                       package: stray,
                       path: "missing.png",
                       resource: stray,
-                      scope: codeOf(HrefScope.handles, "entry"),
-                      start: 4,
-                      version: codeOf(SchemaVersion.handles, "3.0.1"),
+                      scope: "entry",
+                      start: 4n,
+                      version: "3.0.1",
                     },
-                    table: "file",
+                    relation: File,
                   },
                 ],
                 table: "file",
@@ -780,7 +751,7 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
                 comment: "foreign key ReferencePath(package, path) to Entry(package, path)",
                 inserts: [
                   {
-                    row: {
+                    fact: {
                       document: stray,
                       kind: codeOf(NodeKind.handles, "img"),
                       name: codeOf(AttributeName.handles, "src"),
@@ -788,7 +759,7 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
                       package: stray,
                       path: "items/missing.png",
                     },
-                    table: "reference_path",
+                    relation: ReferencePath,
                   },
                 ],
                 table: "reference_path",
@@ -797,7 +768,7 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
                 comment: "foreign key ReferencePath(package where",
                 inserts: [
                   {
-                    row: {
+                    fact: {
                       document: stray,
                       kind: codeOf(NodeKind.handles, "qti-assessment-stimulus-ref"),
                       name: codeOf(AttributeName.handles, "href"),
@@ -805,7 +776,7 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
                       package: stray,
                       path: "items/missing.png",
                     },
-                    table: "reference_path",
+                    relation: ReferencePath,
                   },
                 ],
                 table: "reference_path",
@@ -816,7 +787,9 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
               assert.isNotEmpty(keys, comment);
 
               for (const key of keys) {
-                const refused = Option.getOrUndefined(yield* judged(client, inserts, [key]));
+                const refused = Option.getOrUndefined(
+                  yield* judged(client, statedInserts(inserts), [key]),
+                );
 
                 assert.strictEqual(refused?.code, "23503", `${comment} (${key})`);
                 assert.strictEqual(refused?.constraint, key, comment);

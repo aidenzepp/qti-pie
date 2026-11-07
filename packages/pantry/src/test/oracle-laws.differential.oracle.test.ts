@@ -14,7 +14,7 @@
  *
  * No generated package shuffles or selects with replacement, so the model's bullets on those never
  * apply; the oracle's shuffle and replacement arms are held by their mutations in
- * `src/test/oracle.complete.test.ts`.
+ * `src/test/complete.oracle.test.ts`.
  */
 import { assert, describe, it } from "@effect/vitest";
 import { drawn, exhaust, explore } from "@grizzle/testing/explore";

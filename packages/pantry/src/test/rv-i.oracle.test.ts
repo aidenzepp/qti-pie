@@ -13,8 +13,8 @@
  *
  * Oracle: the specifications' sentences turned into packages, each refused one beside the nearest
  * one that keeps the sentence. The search-based guards of the same laws are the boxes in
- * `#pantry/qti/identity.test.ts`, `#pantry/import/overlays/identity.test.ts` and
- * `#pantry/qti/chardata.test.ts`.
+ * `#pantry/qti/identity.oracle.test.ts`, `#pantry/import/overlays/identity.test.ts` and
+ * `#pantry/qti/chardata.oracle.test.ts`.
  */
 import { assert, describe, it } from "@effect/vitest";
 import { exhaust } from "@grizzle/testing/explore";

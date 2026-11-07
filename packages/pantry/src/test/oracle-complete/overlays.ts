@@ -1,7 +1,7 @@
 /**
  * The mutations of the law oracle's laws over the attribute laws (§1.5), the overlays the oracle
  * stated before lane OL (§1.7) and the package laws (§1.6), each drawn to break exactly its law in
- * an accepted package (`src/test/oracle.complete.test.ts`).
+ * an accepted package (`src/test/complete.oracle.test.ts`).
  */
 import { duplicateDrawn, editDrawnDocument } from "#pantry/test/oracle-complete/mutation.ts";
 import type { Mutation } from "#pantry/test/oracle-complete/mutation.ts";

@@ -213,7 +213,7 @@ describe.skipIf(!hasLease)(
         "refuses simple with a quotation mark beside or inside a q under q-punctuation, quoted-q among them, and accepts it with an apostrophe or nothing there",
         () =>
           // Oracle: PostgreSQL, every law of the schema over a whole package, as the oracle predicts
-          // it (`src/test/oracle.rv-q.test.ts`): main's `quoted-q` refused `q-punctuation`.
+          // it (`src/test/rv-q.oracle.test.ts`): main's `quoted-q` refused `q-punctuation`.
           // Bound: quoted-q, a mark at each end, and two lawful q's.
           Effect.gen(function* packages() {
             const cases = [

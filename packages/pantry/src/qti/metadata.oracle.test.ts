@@ -6,7 +6,7 @@
  * Metadata §2.7.5.1 forbids (spec reading 122).
  *
  * The database tests (`metadata.db.test.ts`) judge the laws through PostgreSQL, and the builder's
- * tests (`#pantry/import/overlays/metadata.test.ts`) its rows.
+ * tests (`#pantry/import/overlays/metadata.oracle.test.ts`) its rows.
  */
 import { date, lexicalForm, schema } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";

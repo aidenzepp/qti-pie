@@ -198,7 +198,7 @@ const predict = Effect.fn("prewitness.predict")(function* predict(entry: {
   });
 });
 
-describe.skipIf(!settings.corpusRequested)("prewitness.corpus.test.ts, the corpus", () => {
+describe.skipIf(!settings.corpusRequested)("prewitness.corpus.oracle.test.ts, the corpus", () => {
   layer(NodeServices.layer, { excludeTestServices: true })(
     "the predicted verdict of every corpus package",
     (it) => {

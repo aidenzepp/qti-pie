@@ -74,8 +74,8 @@ import { Node, nodeRef } from "#pantry/qti/node.ts";
 
 /**
  * `xs:integer`'s lexical space, an optional sign and digits: the map keys of an integer mapping
- * whose value {@link MapKeyInteger} holds. Its language is the integer base type's (reading 45:
- * no integer is too long), and `mapping.test.ts` holds it to the deleted schema's `xsInteger`
+ * whose value {@link MapKeyInteger} holds. Its language is the integer base type's (reading 45: no
+ * integer is too long), and `mapping.oracle.test.ts` holds it to the deleted schema's `xsInteger`
  * with JavaScript's engine as the oracle.
  */
 export const integerKeyPattern = "^[+-]?[0-9]+$";
@@ -95,7 +95,7 @@ export const floatKeyZeros = 255;
 /**
  * Grizzle's lexical form of `double precision` (`lexicalForm(pg["double precision"])`), each run
  * of padding zeros written as at most {@link floatKeyZeros}: the map keys of a float mapping whose
- * value {@link MapKeyFloat} holds. `mapping.test.ts` holds this literal to
+ * value {@link MapKeyFloat} holds. `mapping.oracle.test.ts` holds this literal to
  * {@link floatKeyPatternOf} of {@link floatKeyZeros}.
  */
 export const floatKeyPattern =

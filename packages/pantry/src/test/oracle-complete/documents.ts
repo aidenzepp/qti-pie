@@ -1,7 +1,7 @@
 /**
  * The mutations of the law oracle's laws over the declarations, the LOM title and the laws lane OL
  * added (`#pantry/test/oracle-laws/documents.ts`), each drawn to break exactly its law in an
- * accepted package (`src/test/oracle.complete.test.ts`).
+ * accepted package (`src/test/complete.oracle.test.ts`).
  *
  * Each edits the every-relation package's items (`items/item.xml`, `item2.xml`, `item3.xml`), its
  * test, its usage data or its manifest, at a site it draws among those the base holds, writing a

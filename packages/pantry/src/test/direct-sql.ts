@@ -15,6 +15,7 @@ import { Effect, Option, Predicate, Redacted, Schema } from "effect";
 import { Client } from "pg";
 import type { DatabaseError, QueryResultRow } from "pg";
 import { loginConnection } from "#pantry/db/connection.ts";
+import { Qti } from "#pantry/qti/schema.ts";
 
 /**
  * The author login's PostgreSQL role, `<schema>__<login>`.
@@ -280,7 +281,8 @@ const columnOf = (field: string): string =>
 
 /**
  * A fact of a relation as a direct writer's row: each field under its column, a closed id by its
- * code in its roster, a natural as its decimal text and a boolean or a text as itself.
+ * code in its roster, a natural as its decimal text and a boolean or a text as itself. A value
+ * already a code, or a field already a column's name, passes as it is.
  *
  * @param relation - The relation.
  * @param fact - The fact, every field the table's row holds.
@@ -288,7 +290,7 @@ const columnOf = (field: string): string =>
  */
 export const sqlRowOf = (
   relation: AnyRelation,
-  fact: Readonly<Record<string, string | bigint | boolean>>,
+  fact: Readonly<Record<string, string | number | bigint | boolean>>,
 ): SqlRow => {
   const { fields } = Schema.decodeUnknownSync(FieldsSchema)(relation);
 
@@ -302,4 +304,228 @@ export const sqlRowOf = (
       return [columnOf(field), Predicate.isBigInt(value) ? String(value) : value];
     }),
   );
+};
+
+/**
+ * A side of a family statement as grizzle keeps it: its member relation and the terms it names.
+ */
+const FamilySideSchema = Schema.Struct({
+  source: Schema.Union([
+    Schema.Struct({ relation: Schema.Struct({ name: Schema.String }) }),
+    Schema.Struct({ name: Schema.String }),
+  ]),
+  terms: Schema.Array(Schema.Unknown),
+});
+
+/**
+ * A counted or ordered family as grizzle keeps it: its member side, and its owner and count.
+ */
+const FamilySchema = Schema.Struct({
+  family: FamilySideSchema,
+  kind: Schema.Literals(["counted", "ordered"]),
+  slots: Schema.Struct({
+    count: Schema.String,
+    owner: Schema.Struct({ name: Schema.String, primaryKey: Schema.Array(Schema.String) }),
+  }),
+});
+
+/**
+ * A containment as grizzle keeps it, both sides by relation and terms.
+ */
+const ContainmentSchema = Schema.Struct({
+  kind: Schema.Literals(["contained"]),
+  left: FamilySideSchema,
+  right: FamilySideSchema,
+});
+
+/**
+ * A relation as its statements name it.
+ *
+ * @param side - The side.
+ * @returns The relation's name.
+ */
+const sideRelation = (side: typeof FamilySideSchema.Type): string =>
+  "relation" in side.source ? side.source.relation.name : side.source.name;
+
+/**
+ * A side's field terms, a `pred` term as no field.
+ *
+ * @param side - The side.
+ * @returns The fields, in order.
+ */
+const sideFields = (side: typeof FamilySideSchema.Type): readonly string[] =>
+  side.terms.filter(Predicate.isString);
+
+/**
+ * `Qti`'s families, each as a member writes its hidden slot: the member relation, the member's
+ * fields that name its owner, whether its slot is its own `at` (an ordered family) or a hidden
+ * index (a counted one), and the owner, its key and its count.
+ */
+const families = Qti.statements.flatMap((statement) =>
+  Option.match(Schema.decodeUnknownOption(FamilySchema)(statement), {
+    onNone: () => [],
+    onSome: ({ family, kind, slots }) => {
+      const fields = sideFields(family);
+
+      return [
+        {
+          count: slots.count,
+          label: `${slots.owner.name}.${slots.count}`,
+          member: sideRelation(family),
+          ordered: kind === "ordered",
+          owner: slots.owner.name,
+          ownerKey: slots.owner.primaryKey,
+          ownerTerms: kind === "ordered" ? fields.slice(0, -1) : fields,
+        },
+      ];
+    },
+  }),
+);
+
+/**
+ * Record that one relation's rows are written after another's, unless they are one relation.
+ *
+ * @param into - The map, by the later relation.
+ * @param from - The later relation.
+ * @param to - The earlier one.
+ */
+const addAfter = (into: Map<string, Set<string>>, from: string, to: string): void => {
+  if (from !== to) {
+    into.set(from, (into.get(from) ?? new Set()).add(to));
+  }
+};
+
+/**
+ * The relations each relation's row is written after, where both are stated: by its owner axes,
+ * its families' owners (`owners`, which PostgreSQL judges at the member's INSERT, so no order may
+ * break one); and by its containments over every field of their targets (`covered`, which grizzle
+ * installs at the statement unless a cycle defers them, so they order where they can).
+ */
+const writtenAfter = (() => {
+  const owners = new Map<string, Set<string>>();
+  const covered = new Map<string, Set<string>>();
+  for (const { member, owner } of families) {
+    addAfter(owners, member, owner);
+  }
+
+  for (const statement of Qti.statements) {
+    Option.map(Schema.decodeUnknownOption(ContainmentSchema)(statement), ({ left, right }) => {
+      addAfter(covered, sideRelation(left), sideRelation(right));
+    });
+  }
+
+  return { covered, owners } as const;
+})();
+
+/**
+ * A fact a case states, of its relation: the writer derives its table, the order it is written
+ * in and its families' hidden slots, so a case states rows and never their order or slots.
+ * `hidden` overrides a derived slot, for the breach of a slot itself.
+ */
+export interface Stated {
+  readonly fact: Readonly<Record<string, string | number | bigint | boolean>>;
+  readonly hidden?: Readonly<Record<string, number>>;
+  readonly relation: AnyRelation & { readonly name: string };
+}
+
+/**
+ * A relation's table, as grizzle converts a declared name.
+ *
+ * @param relation - The relation's name.
+ * @returns The table.
+ */
+const tableOf = (relation: string): string => columnOf(relation);
+
+/**
+ * The text of a fact's values at some fields, the key a family groups its members by.
+ *
+ * @param fact - The fact.
+ * @param fields - The fields.
+ * @returns The key text.
+ */
+const keyAt = (fact: Stated["fact"], fields: readonly string[]): string =>
+  fields.map((field) => String(fact[field])).join("\u0000");
+
+/**
+ * The rows a case's stated facts are written as:
+ *
+ * - In an order every owner axis between them keeps, and every covering containment where no cycle
+ *   defers it: owners first, the stated order otherwise;
+ * - Each owner with its families' counts, where it states none: the members stated under it;
+ * - Each member with its families' hidden slots: its index, its place among its owner's stated
+ *   members (a counted family's; an ordered one's is its own `at`), and its copy, its owner's
+ *   count.
+ *
+ * @param stated - The facts.
+ * @returns The rows, in writing order.
+ */
+export const statedInserts = (stated: readonly Stated[]): readonly Insert[] => {
+  const membersOf = (family: (typeof families)[number], group: string) =>
+    stated.flatMap((other, at) =>
+      other.relation.name === family.member && keyAt(other.fact, family.ownerTerms) === group
+        ? [at]
+        : [],
+    );
+  const filled = stated.map(({ fact, relation }) => ({
+    ...Object.fromEntries(
+      families
+        .filter(({ owner }) => owner === relation.name)
+        .map((family) => [
+          family.count,
+          BigInt(membersOf(family, keyAt(fact, family.ownerKey)).length),
+        ]),
+    ),
+    ...fact,
+  }));
+  const order: number[] = [];
+  const remaining = stated.map((_, at) => at);
+  const readyBy = (...maps: readonly ReadonlyMap<string, ReadonlySet<string>>[]) =>
+    remaining.findIndex((at) =>
+      maps.every((after) =>
+        [...(after.get(stated[at]?.relation.name ?? "") ?? [])].every(
+          (before) => !remaining.some((other) => stated[other]?.relation.name === before),
+        ),
+      ),
+    );
+  while (remaining.length > 0) {
+    // A cycle of containments, which defers them, gives way to the owner axes alone.
+    const both = readyBy(writtenAfter.owners, writtenAfter.covered);
+    const ready = both === -1 ? readyBy(writtenAfter.owners) : both;
+    order.push(...remaining.splice(ready === -1 ? 0 : ready, 1));
+  }
+
+  return order.flatMap((at) => {
+    const held = stated[at];
+    const fact = filled[at];
+    if (held === undefined || fact === undefined) {
+      return [];
+    }
+
+    const slots = families
+      .filter(({ member }) => member === held.relation.name)
+      .flatMap((family) => {
+        const members = membersOf(family, keyAt(fact, family.ownerTerms));
+        const owner = stated.findIndex(
+          (other, index) =>
+            other.relation.name === family.owner &&
+            keyAt(filled[index] ?? {}, family.ownerKey) === keyAt(fact, family.ownerTerms),
+        );
+        const count = owner === -1 ? members.length : Number(filled[owner]?.[family.count]);
+
+        return [
+          ...(family.ordered
+            ? []
+            : [[`the index of the family ${family.label}`, members.indexOf(at)] as const]),
+          [`the owner's count of the family ${family.label}`, count] as const,
+        ];
+      });
+
+    return [
+      {
+        hidden: { ...Object.fromEntries(slots), ...held.hidden },
+        row: sqlRowOf(held.relation, fact),
+        table: tableOf(held.relation.name),
+      },
+    ];
+  });
 };

@@ -213,7 +213,7 @@ const broken: readonly FixtureName[] = [
  * The refusing fixtures whose law the oracle states no host predicate for (Q5.08's value laws),
  * with the rules the law each breaks keeps: judged against the rule, not the oracle.
  * `title-mismatch`, whose `lom-title` the oracle states none for either, is judged in
- * `program.db.test.ts` with Q5.12's cases.
+ * `program.oracle.db.test.ts` with Q5.12's cases.
  */
 const brokenBeyondOracle: readonly (readonly [FixtureName, readonly string[]])[] = [
   ["two-values-single", ["value-cardinality"]],

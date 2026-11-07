@@ -759,7 +759,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     133,
     {
       owner:
-        "S-ORACLE's `keyText` (`src/qti/limits.ts`: grizzle's `str.bytes(keyTextBytes, …)`, `keyTextBytes` 2,587, what grizzle's `keyTextBytes` leaves beside the widest key, held by `limits.test.ts`), the oracle's Key text bound (rule `key-text-bound`, measured in UTF-8 bytes) over the schema's key copies (`src/test/key-copies.ts`), held to the import's rows by `src/test/oracle.keys.test.ts`. The import writes every copy whatever its length, so the database refuses an over-long one under `key-text-bound`, the oracle's rule",
+        "S-ORACLE's `keyText` (`src/qti/limits.ts`: grizzle's `str.bytes(keyTextBytes, …)`, `keyTextBytes` 2,587, what grizzle's `keyTextBytes` leaves beside the widest key, held by `limits.test.ts`), the oracle's Key text bound (rule `key-text-bound`, measured in UTF-8 bytes) over the schema's key copies (`src/test/key-copies.ts`), held to the import's rows by `src/test/keys.oracle.test.ts`. The import writes every copy whatever its length, so the database refuses an over-long one under `key-text-bound`, the oracle's rule",
       status: "G",
     },
   ],

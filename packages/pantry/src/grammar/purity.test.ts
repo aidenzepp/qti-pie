@@ -88,6 +88,21 @@ const offences = (files: readonly string[], forbidden: readonly string[]): reado
   ),
 ];
 
+/**
+ * The law oracle's module, as a test imports it.
+ */
+const oracleModule = "#pantry/test/oracle.ts";
+
+/**
+ * Decide whether a module may import the law oracle: a test named for it, `*.oracle.test.ts` or
+ * `*.oracle.db.test.ts`, or a module of the test support under `src/test/`.
+ *
+ * @param file - The module's path relative to `src`.
+ * @returns Whether it may import {@link oracleModule}.
+ */
+const mayReachOracle = (file: string): boolean =>
+  file.endsWith(".test.ts") ? /\.oracle(?:\.db)?\.test\.ts$/u.test(file) : file.startsWith("test/");
+
 describe("specifiers", () => {
   it("counts imports of every form, type-only and dynamic ones included", () => {
     const found = specifiers(
@@ -158,75 +173,47 @@ describe("the test helpers", () => {
     assert.deepStrictEqual(offences(files, ["#pantry/test/"]), pending);
   });
 
-  // The law oracle is kept (review T9) for the tests that judge by it, for the XDM generator, which
-  // names its laws so a renamed law breaks the build, and for the importer's test locator
-  // (`test/locate.ts`), which finds the row a refusal breaks by the oracle's verdicts for the tests
-  // that import through it. A test judges by it in one of two ways:
-  // - by its verdicts and tables (`judge`, `documentBreaches`, `lawsOf`): the XSD differential
-  //   (spec-alignment slice A2), the corpus prewitness, the folds' law model, shred's held roots
-  //   under a strict wildcard (C13, which a kept root must leave with no law broken), the database
-  //   witnesses of `Node` and identity, the importer's overlays, which read what the oracle
-  //   reads, and the assembly generator's write programs, which `readProgram` builds only where
-  //   the oracle's codec reads every document, and over exactly those;
-  // - by its law catalog (`lawNames`, `nodeLawNames`, `ruleOf`, `lawSources`, `contentLawOf`):
-  //   each W5 schema module's test checks that every law the module states is an oracle law with
-  //   a rule, so a renamed law breaks the build there as well.
-  // The list changes only with a reason.
-  it("reach the law oracle only from the tests that judge by it, the generator that names its laws and the importer's test locator", () => {
+  // The law oracle is a test's judge, so a test that judges by it says so in its name: it is named
+  // `*.oracle.test.ts`, or `*.oracle.db.test.ts` in the database tier. The support under `src/test/`
+  // may import it as well: the XDM generator names its laws, so a renamed law breaks the build, and
+  // the importer's test locator (`test/locate.ts`) finds the row a refusal breaks by its verdicts.
+  // A rule over names, not a list of files, so a lane that adds an oracle test names it and edits
+  // nothing here.
+  it("reach the law oracle only from tests named for it and from the test support", () => {
     const files = globSync("**/*.ts", { cwd: sourceRoot }).toSorted();
 
-    assert.deepStrictEqual(offences(files, ["#pantry/test/oracle.ts"]), [
-      "import/overlays/interactions.test.ts: #pantry/test/oracle.ts",
-      "import/overlays/metadata.test.ts: #pantry/test/oracle.ts",
-      "import/program.db.test.ts: #pantry/test/oracle.ts",
-      "import/refusal.test.ts: #pantry/test/oracle.ts",
-      "model/folds.test.ts: #pantry/test/oracle.ts",
-      "model/shred.test.ts: #pantry/test/oracle.ts",
-      "qti/attributes.test.ts: #pantry/test/oracle.ts",
-      "qti/chardata.test.ts: #pantry/test/oracle.ts",
-      "qti/declarations.test.ts: #pantry/test/oracle.ts",
-      "qti/html.test.ts: #pantry/test/oracle.ts",
-      "qti/identity.test.ts: #pantry/test/oracle.ts",
-      "qti/interactions.test.ts: #pantry/test/oracle.ts",
-      "qti/mapping.test.ts: #pantry/test/oracle.ts",
-      "qti/metadata.test.ts: #pantry/test/oracle.ts",
-      "qti/node.db.test.ts: #pantry/test/oracle.ts",
-      "qti/node.test.ts: #pantry/test/oracle.ts",
-      "qti/operators.test.ts: #pantry/test/oracle.ts",
-      "qti/package.test.ts: #pantry/test/oracle.ts",
-      "qti/quotation.test.ts: #pantry/test/oracle.ts",
-      "qti/tests.test.ts: #pantry/test/oracle.ts",
-      "test/attribute-order.oracle.test.ts: #pantry/test/oracle.ts",
-      "test/document-roots.oracle.test.ts: #pantry/test/oracle.ts",
-      "test/fixtures.mathml.oracle.test.ts: #pantry/test/oracle.ts",
-      "test/fixtures.ssml.test.ts: #pantry/test/oracle.ts",
-      "test/gen/assembly.compile.test.ts: #pantry/test/oracle.ts",
-      "test/gen/xdm.ts: #pantry/test/oracle.ts",
-      "test/inclusion-cycles.oracle.test.ts: #pantry/test/oracle.ts",
-      "test/key-breaches.oracle.test.ts: #pantry/test/oracle.ts",
-      "test/locate.ts: #pantry/test/oracle.ts",
-      "test/lom-records.oracle.test.ts: #pantry/test/oracle.ts",
-      "test/oracle-laws.differential.test.ts: #pantry/test/oracle.ts",
-      "test/oracle.complete.test.ts: #pantry/test/oracle.ts",
-      "test/oracle.empty-section.test.ts: #pantry/test/oracle.ts",
-      "test/oracle.keys.test.ts: #pantry/test/oracle.ts",
-      "test/oracle.label-tools.test.ts: #pantry/test/oracle.ts",
-      "test/oracle.rv-g.test.ts: #pantry/test/oracle.ts",
-      "test/oracle.rv-h.test.ts: #pantry/test/oracle.ts",
-      "test/oracle.rv-i.test.ts: #pantry/test/oracle.ts",
-      "test/oracle.rv-k.test.ts: #pantry/test/oracle.ts",
-      "test/oracle.rv-m.test.ts: #pantry/test/oracle.ts",
-      "test/oracle.rv-o.test.ts: #pantry/test/oracle.ts",
-      "test/oracle.rv-p.test.ts: #pantry/test/oracle.ts",
-      "test/oracle.rv-q.test.ts: #pantry/test/oracle.ts",
-      "test/oracle.rv-x.test.ts: #pantry/test/oracle.ts",
-      "test/oracle.test.ts: #pantry/test/oracle.ts",
-      "test/prewitness.corpus.test.ts: #pantry/test/oracle.ts",
-      "test/probe.ts: #pantry/test/oracle.ts",
-      "test/processing-verdicts.oracle.test.ts: #pantry/test/oracle.ts",
-      "test/restored.oracle.test.ts: #pantry/test/oracle.ts",
-      "test/statistic-dates.oracle.test.ts: #pantry/test/oracle.ts",
-      "test/xsd.corpus.test.ts: #pantry/test/oracle.ts",
-    ]);
+    assert.deepStrictEqual(
+      offences(files, [oracleModule]).filter(
+        (offence) => !mayReachOracle(offence.split(": ")[0] ?? ""),
+      ),
+      [],
+    );
+  });
+
+  it("name the rule's every case: an oracle test, its database tier, the support, and what it refuses", () => {
+    // Oracle: the rule as the comment above states it, on the named cases. Live: an oracle test in
+    // either tier and a support module; Stale: a test not named for the oracle, as every importer
+    // was before the rule; Wild: a module outside `src/test/`, a name with `oracle` in another
+    // place, and the packaging tier, which no oracle test is in.
+    const cases = [
+      ["qti/metadata.oracle.test.ts", true],
+      ["import/program.oracle.db.test.ts", true],
+      ["test/gen/xdm.ts", true],
+      ["test/locate.ts", true],
+      ["qti/metadata.test.ts", false],
+      ["import/program.db.test.ts", false],
+      ["test/oracle.test.ts", false],
+      ["test/oracle.rv-h.test.ts", false],
+      ["import/refusal.ts", false],
+      ["test/oracle-laws.oracle.ts", true],
+      ["import/oracle.ts", false],
+      ["qti/oracle.test.ts.oracle", false],
+      ["import/refusal.oracle.packaging.test.ts", false],
+    ] as const;
+
+    assert.deepStrictEqual(
+      cases.filter(([file, allowed]) => mayReachOracle(file) !== allowed).map(([file]) => file),
+      [],
+    );
   });
 });

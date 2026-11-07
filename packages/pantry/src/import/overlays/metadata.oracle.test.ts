@@ -1191,7 +1191,7 @@ describe("import/overlays/metadata.ts, learning resource types", { timeout: sear
       // `lom:learningResourceType`'s first `lom:value` and first `lom:source` (the binding caps
       // each at one, so a second is N7's), read as XML 1.0 reads its text through a comment, a
       // CDATA section or a character reference, and no row for a term of another namespace.
-      // Bound: as `oracle.rv-m.test.ts`'s search, under each case's swarm; 150 cases.
+      // Bound: as `rv-m.oracle.test.ts`'s search, under each case's swarm; 150 cases.
       searched(
         ctx,
         explore(

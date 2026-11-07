@@ -107,11 +107,11 @@ const owed: Readonly<Partial<Record<LawName, string>>> = {
   "MathML maction selection": "its mutation is not written yet",
   "MathML share cycle": "its mutation is not written yet",
   "N2 mirrors":
-    "each of xdm.ts's mirror corruptions (gap, duplicateSlot, countOffByOne) also leaves a family's last slot unread, which N7 last slot (union-count) refuses ahead of reachability; folds.test.ts holds each variant to its law",
+    "each of xdm.ts's mirror corruptions (gap, duplicateSlot, countOffByOne) also leaves a family's last slot unread, which N7 last slot (union-count) refuses ahead of reachability; folds.oracle.test.ts holds each variant to its law",
   "Node key":
-    "a second row of one id (xdm.ts secondParent) also moves the slots and intervals the fold laws read, N5 fold and N7 last slot among them, which rank ahead of reachability; folds.test.ts holds the variant to its law",
+    "a second row of one id (xdm.ts secondParent) also moves the slots and intervals the fold laws read, N5 fold and N7 last slot among them, which rank ahead of reachability; folds.oracle.test.ts holds the variant to its law",
   "T2 root":
-    "a second self-parented root also breaks E1's derived fields, which rank ahead of reachability; folds.test.ts holds the variant to its law",
+    "a second self-parented root also breaks E1's derived fields, which rank ahead of reachability; folds.oracle.test.ts holds the variant to its law",
 };
 
 /**

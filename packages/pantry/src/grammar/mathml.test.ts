@@ -653,9 +653,9 @@ const written = (node: Node, root = true): string => {
  * `mathml3-common.rnc` lines 15 and 61). The grammar's root rule leaves a bare `m:mi` under a lax
  * wildcard no MathML kind, and shred refuses it rather than read it as foreign
  * (`#pantry/model/shred.ts`, `childReadingOf`, reason `mathml-foreign`, whose own property is
- * `shred.test.ts`'s "shred's refusals" variant `mathml foreign`; the oracle's law of the same name
- * is `#pantry/test/oracle.ts`'s, in `wholeBreaches`), so the test states that refusal here, and the
- * grammar's share is the rest.
+ * `shred.oracle.test.ts`'s "shred's refusals" variant `mathml foreign`; the oracle's law of the
+ * same name is `#pantry/test/oracle.ts`'s, in `wholeBreaches`), so the test states that refusal
+ * here, and the grammar's share is the rest.
  *
  * @param composedGrammar - The grammar.
  * @param version - The version.

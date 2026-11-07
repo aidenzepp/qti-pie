@@ -4,7 +4,7 @@
  * content references, the last-slot rules, the count pairs and the attributes copied.
  *
  * The database tests (`interactions.db.test.ts`) judge the laws through PostgreSQL; the builder's
- * tests (`#pantry/import/overlays/interactions.test.ts`) check its rows.
+ * tests (`#pantry/import/overlays/interactions.oracle.test.ts`) check its rows.
  */
 import type { Statement } from "@bjornpagen/grizzle";
 import { NodeServices } from "@effect/platform-node";

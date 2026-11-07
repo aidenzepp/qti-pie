@@ -1,7 +1,7 @@
 /**
  * The verdict the import gives each processing package of one hand-written document (Q5.10):
- * `import/program.db.test.ts` holds PostgreSQL to it, and `processing-verdicts.oracle.test.ts`
- * holds the law oracle to it with no database.
+ * `import/program.oracle.db.test.ts` holds PostgreSQL to it, and
+ * `processing-verdicts.oracle.test.ts` holds the law oracle to it with no database.
  *
  * A package takes its document's frozen verdict (`fixtures/processing/verdicts.tsv`, the old
  * processing checker run once over every document and frozen): a checker's rule or `accepted`, or a

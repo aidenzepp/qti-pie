@@ -52,7 +52,7 @@
  * the expressions (O4), the LOM title (O6), the tests and sections (O7), `Adaptive feedback`, `Max
  * strings required`, `Dependency target` and `XML production`. The oracle calls
  * its document laws after its own over each document it judges and its package laws after its
- * own, and `src/test/oracle.complete.test.ts` holds every law the oracle declares to a package
+ * own, and `src/test/complete.oracle.test.ts` holds every law the oracle declares to a package
  * drawn to break it. The overlays' other laws have no statement yet beyond the rule each replaces:
  * `lang-set-copy`, `string-identifier-distinct`, coords by shape, the gap and hottext owners
  * beyond N8, `template-derivation`, the CSM laws, and the typed values a domain derives beyond its

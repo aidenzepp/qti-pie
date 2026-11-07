@@ -1,7 +1,7 @@
 /**
  * The mutations of the law oracle's laws over the tests and sections
  * (`#pantry/test/oracle-laws/tests.ts`), each drawn to break exactly its law in an accepted package
- * (`src/test/oracle.complete.test.ts`).
+ * (`src/test/complete.oracle.test.ts`).
  *
  * Each edits the every-relation package's test (`test.xml`: one part, the sections `first` and
  * `second`, the item refs `ref1` to `ref3`, a branch rule `ref1 → ref2`, a variable mapping and a

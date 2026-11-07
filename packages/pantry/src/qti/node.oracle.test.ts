@@ -2,7 +2,7 @@
  * The free laws of `Node` (Q5.03): its declarations build, its checks are named by the oracle's
  * laws, its write type is the host's fields alone, and its content-order statements (N5) admit
  * exactly the state `contentStep` gives each child, over every family of the installed grammar and
- * over generated documents. PostgreSQL judges the laws themselves in `node.db.test.ts`.
+ * over generated documents. PostgreSQL judges the laws themselves in `node.oracle.db.test.ts`.
  */
 import {
   bits,
@@ -231,7 +231,7 @@ describe("Node's declarations", () => {
     // holds the written fields to exactly this record, a member written without `document` is
     // accepted, and each refusal below is a type error. A member that carries `document` is not one:
     // grizzle checks a nested member's fields by assignability, not for excess keys (the report's
-    // finding), so T0 refuses a wrong one in PostgreSQL (`node.db.test.ts`).
+    // finding), so T0 refuses a wrong one in PostgreSQL (`node.oracle.db.test.ts`).
     const fields = {
       ancestry: true,
       chars: true,
@@ -873,7 +873,7 @@ const editedForeign = (
 
 /**
  * Each foreign law's case: a lawful document, and the corruption of it that breaks the law, a
- * second document or an edit of its rows. `node.db.test.ts` restates the first and the third
+ * second document or an edit of its rows. `node.oracle.db.test.ts` restates the first and the third
  * against PostgreSQL, and `chardata.db.test.ts` the other three's rows.
  */
 const foreignCases: readonly {

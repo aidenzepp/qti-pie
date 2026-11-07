@@ -1232,19 +1232,19 @@ language by the IR's `languageKey`, which re-keys ten byte-bounded fields' type 
 `Qti: ok (1 migration, snapshot 559188a3…)`. `dec8ab3` also adds a law kind, `{kind: "generated", relation, field}`,
 which an outcome names when a generated column is NULL at a row. Lane S-ORACLE gave each of Qti's four generated fields
 a row under an existing law, two under E1 derived for `Operand`'s bits, E1 derived for `SectionSelection.select` and
-Calendar date for `StatisticDate.date`, and the census in `refusal.test.ts` requires one per generated field
-(`42f4f5d0`). Since `67f55500` the date's row is the attribute value domain's, under `attribute-lexical`, on the
-orchestrator's ruling of 2026-11-06: xs:date's lexical space, the month lengths and the leap rule included (XML Schema
-1.1 Part 2 §3.3.9), is one law, and `lexical(date)`'s pattern law on `StatisticDate.day` is that law, so Calendar date
-and its rule `calendar` are gone. Then qti-pie moved to `1bf3dbb` (`1bf3dbb0a625949c086c28785f60b275d758b2b1`), its
-repin `dadbbbd4`, which fixes the `Monoid.or` end (below). Only the engine tarball changed; the grizzle and testing
-tarballs and the skill are `dec8ab3`'s. The fingerprint did not move (`559188a3`), so `migrations/qti` is unchanged.
-Typecheck exits 0, `own` is OK, R87's `compile.ts` gives 152 inserts and none refused in 11 s, and `grizzle check` gives
-`Qti: ok (1 migration, snapshot 559188a3…)`. Then qti-pie moved to `0e4454d`
-(`0e4454d3d35470904cd5eaeb4ea452a90b5ebae7`), its repin F, `b5a4be64`. It carries `e9227af`, where an owner axis counts
-in the deferral rule and plain actions and family statements share one schedule, and three fixes on it: `8310ede`
-(family statements ordered only by their own needs), `d4be74c` (a ChangeSet chain of any length typechecks) and
-`0e4454d` (every domain CHECK admits NULL). All three tarballs changed, and the skill did not. The single `_init`,
+Calendar date for `StatisticDate.date`, and the census in `refusal.test.ts` (now `refusal.oracle.test.ts`) requires one
+per generated field (`42f4f5d0`). Since `67f55500` the date's row is the attribute value domain's, under
+`attribute-lexical`, on the orchestrator's ruling of 2026-11-06: xs:date's lexical space, the month lengths and the leap
+rule included (XML Schema 1.1 Part 2 §3.3.9), is one law, and `lexical(date)`'s pattern law on `StatisticDate.day` is
+that law, so Calendar date and its rule `calendar` are gone. Then qti-pie moved to `1bf3dbb`
+(`1bf3dbb0a625949c086c28785f60b275d758b2b1`), its repin `dadbbbd4`, which fixes the `Monoid.or` end (below). Only the
+engine tarball changed; the grizzle and testing tarballs and the skill are `dec8ab3`'s. The fingerprint did not move
+(`559188a3`), so `migrations/qti` is unchanged. Typecheck exits 0, `own` is OK, R87's `compile.ts` gives 152 inserts and
+none refused in 11 s, and `grizzle check` gives `Qti: ok (1 migration, snapshot 559188a3…)`. Then qti-pie moved to
+`0e4454d` (`0e4454d3d35470904cd5eaeb4ea452a90b5ebae7`), its repin F, `b5a4be64`. It carries `e9227af`, where an owner
+axis counts in the deferral rule and plain actions and family statements share one schedule, and three fixes on it:
+`8310ede` (family statements ordered only by their own needs), `d4be74c` (a ChangeSet chain of any length typechecks)
+and `0e4454d` (every domain CHECK admits NULL). All three tarballs changed, and the skill did not. The single `_init`,
 regenerated from zero, turns 75 domain CHECKs into `VALUE IS NULL OR (…) IS TRUE` and 35 foreign keys
 `DEFERRABLE INITIALLY DEFERRED`, and `StatisticDate.date` becomes a plain date with its own range CHECK. Typecheck has 0
 errors, `own` is OK, R87's `compile.ts` gives 153 inserts and none refused (152, and `73777213`'s `SiteTarget`), and
@@ -1958,7 +1958,8 @@ cannot compile fail at generate, check and startup, never at the first import. T
 rows, `importWork` in `src/qti/logins.ts`.
 
 - The patch is `work/rv/r87/workload-guard.patch`. It holds `logins.ts`, the `schema.test.ts` assertion, and three new
-  test files: `src/qti/logins.test.ts`, `src/test/gen/assembly.compile.test.ts` and `src/test/gen/assembly.db.test.ts`.
+  test files: `src/qti/logins.test.ts`, `src/test/gen/assembly.compile.test.ts` (since `6d835006`,
+  `assembly.compile.oracle.test.ts`) and `src/test/gen/assembly.db.test.ts`.
 - It lands with the repin to `f66c05b`, which fixes 2. Until that repin, generate refuses with 2's text.
 - A cost worth telling grizzle: `workload(role, programs)` takes about 10 s for each ChangeSet program over `Qti`, so a
   workload cannot hold one program per generated package. It took 9.2 s for one program and 72.5 s for five, measured

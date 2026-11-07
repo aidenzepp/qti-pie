@@ -1252,7 +1252,7 @@ const targetOf = (
   return at;
 };
 
-describe.skipIf(!hasLease)("qti/node.db.test.ts, on the lease", () => {
+describe.skipIf(!hasLease)("qti/node.oracle.db.test.ts, on the lease", () => {
   layer(NodeServices.layer, { excludeTestServices: true })(
     "Node's laws, judged by PostgreSQL",
     (it) => {
