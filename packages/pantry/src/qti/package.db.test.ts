@@ -5,11 +5,14 @@
  *
  * A row whose own laws are row CHECKs, or a count grizzle draws, is written through the author role
  * (`db.apply`), and the outcome is `invariant-rejected` with the expected law among its `laws`
- * (membership, since a merged native names several, C22). A row that breaks a foreign key, all of
- * which the package's laws defer, is written by a direct SQL writer: the author login, `SET ROLE`
- * to the author role, at SERIALIZABLE, every foreign key deferred and then the one under test set
- * immediate, found by the law its comment names, so PostgreSQL's SQLSTATE and that constraint are
- * the verdict, and the transaction rolls back.
+ * (membership, since a merged native names several, C22). A row that breaks a deferred foreign key
+ * is written by the direct SQL writer (`#pantry/test/direct-sql.ts`, README "Direct SQL access"):
+ * the author login, `SET ROLE` to the author role, at SERIALIZABLE, the row inserted into its
+ * table, never its view, with every column a writer fills, a family member's hidden index and copy
+ * by grizzle's comment and its owners first (an owner axis is judged at the member's INSERT), every
+ * deferrable foreign key deferred and then the one under test set immediate, found by the law its
+ * comment names. PostgreSQL's SQLSTATE and that constraint are the verdict, and the transaction
+ * rolls back.
  *
  * The cases over a whole imported package (the `lti` fixture refused under `resource-type`, a
  * document whose root its resource type does not name, an href its resource's files do not list, a
@@ -18,19 +21,16 @@
  * Q5.06's report for the network seat's probe.
  */
 import { ChangeSet, Db } from "@bjornpagen/grizzle";
-import type { DbConnection, Fact, Law } from "@bjornpagen/grizzle";
-import { NodeFileSystem } from "@effect/platform-node";
+import type { Fact, Law } from "@bjornpagen/grizzle";
 import { assert, layer } from "@effect/vitest";
-import { Effect, Option, Redacted } from "effect";
-import { Client } from "pg";
-import type { DatabaseError, QueryResultRow } from "pg";
+import { Effect, Option } from "effect";
+import type { Client } from "pg";
 import { describe } from "vitest";
-import { loginConnection } from "#pantry/db/connection.ts";
 import { AuthorAppLayer } from "#pantry/db/layer.ts";
 import {
   AttributeName,
+  Flag,
   NodeKind,
-  ResourceType,
   ResourceTypeOf,
   SchemaVersion,
 } from "#pantry/grammar/install.ts";
@@ -52,17 +52,17 @@ import {
   ResourceHref,
 } from "#pantry/qti/package.ts";
 import { Author } from "#pantry/qti/roles.ts";
+import { bitsText } from "#pantry/test/bits.ts";
+import {
+  codeOf,
+  familySlot,
+  judged,
+  loginSession,
+  rowsOf,
+  sqlRowOf,
+} from "#pantry/test/direct-sql.ts";
+import type { Insert } from "#pantry/test/direct-sql.ts";
 import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
-
-/**
- * The author login's PostgreSQL role, `<schema>__<login>`.
- */
-const authorAppRole = "qti__author_app";
-
-/**
- * The author role's PostgreSQL role, which is also the schema of its views.
- */
-const authorRole = "qti__author";
 
 /**
  * The PostgreSQL schema of `Qti`'s tables.
@@ -121,70 +121,6 @@ const containedIn =
     law.kind === "contained" && law.from.relation === from && law.to.relation === to;
 
 /**
- * The password a connection authenticates with, read once.
- *
- * @param password - The connection's password.
- * @returns The password's text.
- */
-const passwordText = (password: DbConnection["password"]) =>
-  (Redacted.isRedacted(password) ? Effect.succeed(password) : password).pipe(
-    Effect.map(Redacted.value),
-  );
-
-/**
- * A session of the author login on the lease, over verify-full TLS against the cluster's CA, closed
- * with its scope: a direct SQL writer.
- */
-const loginSession = Effect.gen(function* loginSession() {
-  const connection = yield* loginConnection(authorAppRole);
-  const password = yield* passwordText(connection.password);
-  const client = new Client({
-    database: connection.database,
-    host: connection.transport.host,
-    password,
-    port: connection.transport.port,
-    ssl: { ca: [connection.transport.ca].flat(), servername: connection.transport.servername },
-    user: authorAppRole,
-  });
-
-  return yield* Effect.acquireRelease(
-    Effect.tryPromise(() => client.connect()).pipe(Effect.as(client)),
-    () => Effect.promise(() => client.end()),
-  );
-}).pipe(Effect.provide(NodeFileSystem.layer));
-
-/**
- * Run one statement on a session and return its rows.
- *
- * @param client - The session.
- * @param text - The statement.
- * @param values - Its parameters.
- * @returns The rows, each as node-postgres decodes it.
- */
-const rowsOf = <R extends QueryResultRow>(
-  client: Client,
-  text: string,
-  values: readonly unknown[] = [],
-) =>
-  Effect.tryPromise(() => client.query<R>(text, [...values])).pipe(Effect.map(({ rows }) => rows));
-
-/**
- * Whether a failure is a server error of node-postgres's, which carries a SQLSTATE and the
- * constraint it names.
- *
- * @param error - The failure's cause.
- * @returns Whether it is one.
- */
-const isServerError = (error: unknown): error is DatabaseError =>
-  error instanceof Error && "code" in error && "constraint" in error;
-
-/**
- * A row a direct writer inserts into one of the author role's views: its columns as the view names
- * them, a closed id by its code.
- */
-type SqlRow = Readonly<Record<string, string | number>>;
-
-/**
  * The foreign keys on one of `Qti`'s tables whose comment, the law grizzle writes on each
  * constraint, starts with the given text: the constraint that law installs.
  *
@@ -203,67 +139,6 @@ const foreignKeysOf = (client: Client, table: string, comment: string) =>
         AND starts_with(obj_description(con.oid, 'pg_constraint'), $3)`,
     [qtiSchema, table, comment],
   ).pipe(Effect.map((rows) => rows.map(({ conname }) => conname)));
-
-/**
- * Insert rows as the author role, every foreign key deferred, then set the given ones immediate,
- * and roll back: the server's verdict on the rows by those constraints alone, or none when the
- * rows' own laws and those constraints accept them.
- *
- * @param client - The session.
- * @param inserts - The views to insert into, each with its row, in order.
- * @param immediate - The constraints to check at once after the inserts.
- * @returns The server's error, or none when every statement succeeded; fails with any other
- *   failure.
- */
-const deferredInsert = (
-  client: Client,
-  inserts: readonly { readonly row: SqlRow; readonly view: string }[],
-  immediate: readonly string[],
-) =>
-  Effect.gen(function* insertDeferred() {
-    yield* rowsOf(client, "BEGIN ISOLATION LEVEL SERIALIZABLE");
-
-    const outcome = yield* Effect.gen(function* statements() {
-      yield* rowsOf(client, `SET ROLE ${authorRole}`);
-      yield* rowsOf(client, "SET CONSTRAINTS ALL DEFERRED");
-      for (const { row, view } of inserts) {
-        const columns = Object.keys(row);
-        yield* rowsOf(
-          client,
-          `INSERT INTO ${authorRole}.${view} (${columns.join(", ")}) VALUES (${columns
-            .map((_, at) => `$${String(at + 1)}`)
-            .join(", ")})`,
-          Object.values(row),
-        );
-      }
-
-      for (const name of immediate) {
-        yield* rowsOf(client, `SET CONSTRAINTS ${qtiSchema}."${name}" IMMEDIATE`);
-      }
-    }).pipe(
-      Effect.as(Option.none<DatabaseError>()),
-      Effect.catch((error) =>
-        isServerError(error.cause) ? Effect.succeed(Option.some(error.cause)) : Effect.fail(error),
-      ),
-    );
-    yield* rowsOf(client, "ROLLBACK");
-
-    return outcome;
-  });
-
-/**
- * The code of a handle in its roster, the value a direct writer stores in its closed-id column.
- *
- * @param handles - The roster's handles.
- * @param handle - The handle.
- * @returns Its code.
- */
-const codeOf = (handles: readonly string[], handle: string): number => {
-  const code = handles.indexOf(handle);
-  assert.isAtLeast(code, 0, `${handle} is a handle of its roster`);
-
-  return code;
-};
 
 /**
  * A resource row, its node and package stray, every field of it set by `fields`: its own CHECKs
@@ -289,26 +164,45 @@ const resourceRow = (
 });
 
 /**
- * A document row, its node and package stray: the manifest's when `resourceType` is `none`.
+ * A document row, its node and package stray, as a direct writer fills its table: every written
+ * column, the manifest's when `resourceType` is `none`, lawful on its own CHECKs (no declaration,
+ * no site naming it, its context its own node), and its families' counts at 0.
  *
  * @param fields - The fields the case sets.
- * @returns The row as the author role's view names its columns.
+ * @returns The table's row.
  */
 const documentSqlRow = (
   fields: Pick<Fact<typeof Document>, "path" | "resourceType" | "rootKind">,
 ) =>
-  ({
+  sqlRowOf(Document, {
+    assembled: false,
+    bindings: 0n,
     charset: "UTF-8",
+    choices: 0n,
+    context: bitsText(Flag, []),
+    contextNearest: stray,
+    contextNearestKind: "document",
     encoding: "",
-    export_charset: "UTF-8",
+    exportCharset: "UTF-8",
+    hottexts: 0n,
+    idrefTargets: 0n,
+    ids: 0n,
+    langs: 0n,
     node: stray,
+    nodeChildren: 1n,
+    nodeDocument: stray,
+    nodeGoverns: "none",
+    nodeKind: "document",
+    nodeParentKind: "document",
+    nodeStart: 0n,
     package: stray,
-    path: fields.path,
-    resource_type: codeOf(ResourceType.handles, fields.resourceType),
-    root_kind: codeOf(NodeKind.handles, fields.rootKind),
-    standalone: 0,
-    xml_version: "none",
-  }) satisfies SqlRow;
+    standalone: "none",
+    targetedBy: 0n,
+    variables: 0n,
+    version: "3.0.1",
+    xmlVersion: "none",
+    ...fields,
+  });
 
 describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
   layer(AuthorAppLayer, { timeout: authorLayerHookTimeoutMs })(
@@ -774,27 +668,58 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
           //   naming no entry (CP 1.2 InterchangePackage (b) and (d));
           // - stimulus-ref-target: a stimulus ref's resolved href naming no stimulus document
           //   (information model §7.6, the UP audit's B5).
-          // Bound: one stray row per containment.
+          // Bound: one stray row per containment, written to its table with every column a direct
+          // writer fills (README, "Direct SQL access"), after the owners its families' owner axes
+          // read, which PostgreSQL judges at the member's INSERT: an href's NamedHref and
+          // LomResource, a file's FileHref and ResourceFile, each lawful on its own CHECKs and
+          // counting the one member.
           Effect.gen(function* containments() {
             const client = yield* loginSession;
-            const itemHref = {
-              href: "item.xml",
-              node: stray,
-              package: stray,
-              path: "item.xml",
-              scope: codeOf(HrefScope.handles, "entry"),
-              type: codeOf(ResourceType.handles, "imsqti_item_xmlv3p0"),
-            };
+            const itemHref: readonly Insert[] = [
+              {
+                row: sqlRowOf(NamedHref, {
+                  names: 1n,
+                  package: stray,
+                  path: "item.xml",
+                  type: "imsqti_item_xmlv3p0",
+                }),
+                table: "named_href",
+              },
+              {
+                row: sqlRowOf(LomResource, {
+                  hrefs: 1n,
+                  named: "imsqti_item_xmlv3p0",
+                  node: stray,
+                  type: "imsqti_item_xmlv3p0",
+                }),
+                table: "lom_resource",
+              },
+              {
+                hidden: {
+                  ...familySlot("NamedHref.names", 0, 1),
+                  ...familySlot("LomResource.hrefs", 0, 1),
+                },
+                row: sqlRowOf(ResourceHref, {
+                  href: "item.xml",
+                  node: stray,
+                  package: stray,
+                  path: "item.xml",
+                  scope: "entry",
+                  type: "imsqti_item_xmlv3p0",
+                }),
+                table: "resource_href",
+              },
+            ];
             const cases = [
               {
                 comment:
                   "foreign key ResourceHref(node, scope, path) to ResourceFile(resource, scope, path)",
-                inserts: [{ row: itemHref, view: "resource_href" }],
+                inserts: itemHref,
                 table: "resource_href",
               },
               {
                 comment: "foreign key ResourceHref(package where",
-                inserts: [{ row: itemHref, view: "resource_href" }],
+                inserts: itemHref,
                 table: "resource_href",
               },
               {
@@ -806,7 +731,7 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
                       resourceType: "none",
                       rootKind: "cp:manifest",
                     }),
-                    view: "document",
+                    table: "document",
                   },
                 ],
                 table: "document",
@@ -827,7 +752,7 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
                       start: 4,
                       version: codeOf(SchemaVersion.handles, "3.0.1"),
                     },
-                    view: "dependency",
+                    table: "dependency",
                   },
                 ],
                 table: "dependency",
@@ -836,6 +761,28 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
                 comment: "foreign key File(package where",
                 inserts: [
                   {
+                    row: sqlRowOf(FileHref, {
+                      files: 1n,
+                      package: stray,
+                      path: "missing.png",
+                      scope: "entry",
+                    }),
+                    table: "file_href",
+                  },
+                  {
+                    row: sqlRowOf(ResourceFile, {
+                      files: 1n,
+                      path: "missing.png",
+                      resource: stray,
+                      scope: "entry",
+                    }),
+                    table: "resource_file",
+                  },
+                  {
+                    hidden: {
+                      ...familySlot("FileHref.files", 0, 1),
+                      ...familySlot("ResourceFile.files", 0, 1),
+                    },
                     row: {
                       document: stray,
                       href: "missing.png",
@@ -849,7 +796,7 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
                       start: 4,
                       version: codeOf(SchemaVersion.handles, "3.0.1"),
                     },
-                    view: "file",
+                    table: "file",
                   },
                 ],
                 table: "file",
@@ -866,7 +813,7 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
                       package: stray,
                       path: "items/missing.png",
                     },
-                    view: "reference_path",
+                    table: "reference_path",
                   },
                 ],
                 table: "reference_path",
@@ -883,7 +830,7 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
                       package: stray,
                       path: "items/missing.png",
                     },
-                    view: "reference_path",
+                    table: "reference_path",
                   },
                 ],
                 table: "reference_path",
@@ -894,9 +841,7 @@ describe.skipIf(!hasLease)("qti/package.db.test.ts, on the lease", () => {
               assert.isNotEmpty(keys, comment);
 
               for (const key of keys) {
-                const refused = Option.getOrUndefined(
-                  yield* deferredInsert(client, inserts, [key]),
-                );
+                const refused = Option.getOrUndefined(yield* judged(client, inserts, [key]));
 
                 assert.strictEqual(refused?.code, "23503", `${comment} (${key})`);
                 assert.strictEqual(refused?.constraint, key, comment);
