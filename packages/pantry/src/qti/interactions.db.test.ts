@@ -1204,8 +1204,6 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
           Effect.gen(function* choiceNotVariable() {
             const db = yield* Db.open(AuthorApp.roles.author, {});
             const declared = {
-              cardinality: "single",
-              cardinalityLexical: "single",
               declarationKind: "qti-outcome-declaration",
               document: stray,
               kind: "qti-outcome-declaration",
@@ -1222,9 +1220,6 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
               declarationKind: "qti-outcome-declaration",
               document: stray,
               identifier: "A",
-              identifierLead: "",
-              identifierLexical: "A",
-              identifierTrail: "",
               node: strayNode(50),
               parentKind: "qti-assessment-item",
             } satisfies Addition<typeof DeclarationName>;

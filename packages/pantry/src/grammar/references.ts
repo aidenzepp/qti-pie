@@ -1116,7 +1116,12 @@ export const references = (input: {
             stated.map(({ cardinality }) => cardinality),
           ),
         ],
-        rows: stated,
+        rows: stated.map(({ cardinality, declaration: standsAs, root, variable }) => ({
+          cardinality,
+          declaration: standsAs,
+          root,
+          variable,
+        })),
       }),
       builtInBaseType: yield* closed({
         key: [idField("root", input.kinds), idField("variable", builtInVariable)],

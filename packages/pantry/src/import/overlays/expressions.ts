@@ -33,9 +33,9 @@ import { builtInBaseTypes, BuiltInVariable, nonElementKinds } from "#pantry/gram
 import type { BaseType, Cardinality } from "#pantry/grammar/install.ts";
 import { testRoots } from "#pantry/grammar/references.ts";
 import {
-  baseTypesOf,
   piecesOf,
   spelledBaseTypeOf,
+  typedCountOf,
   typedDeclarationOf,
 } from "#pantry/import/overlays/declarations.ts";
 import { charactersIn } from "#pantry/import/overlays/quotation.ts";
@@ -681,8 +681,8 @@ const typeOf = (kind: string, inputs: TypeInputs): Typed => {
 /**
  * One document as the builder reads it: its flat rows indexed by node, each node's attributes,
  * children, fold (`#pantry/import/fold.ts`, its nearest interaction among the rest) and processing
- * language, its root's kind, its declarations that have a `Declaration` row, by name where they
- * have one and all of them by node, and the names only a declaration with none holds.
+ * language, its root's kind, its declarations that have a `DeclarationName`, by name, and the
+ * names only a declaration with no cardinality holds.
  */
 interface Document extends Tree {
   readonly attributes: ReadonlyMap<NodeId, ReadonlyMap<string, AttributeRow<Composed>>>;
@@ -693,10 +693,6 @@ interface Document extends Tree {
   readonly charsOf: (node: NodeRow<Composed>) => string;
   readonly declarations: ReadonlyMap<string, DeclarationEntry>;
   readonly folds: Folds;
-  /**
-   * The nodes of the declarations that have a `Declaration` row, named or not (spec reading 157).
-   */
-  readonly typedNodes: ReadonlySet<NodeId>;
   readonly untyped: ReadonlySet<string>;
   readonly id: NodeId;
   /**
@@ -824,13 +820,14 @@ const languagesOf = (rows: FlatRows<Composed>, tree: Tree): ((node: NodeId) => L
 };
 
 /**
- * The document's declarations: those with a `Declaration` row (`typedDeclarationOf`), by node,
- * and by name, each that has one, the first of a repeated one (which `declaration-key` refuses),
- * with the tables it holds; and the names only declarations with no row hold, whose cardinality is
- * unwritten or spells nothing, or whose base type spells nothing. No reference to such a name is
- * written: AL3 or the value domain refuses its declaration alone, and no law reads a type it does
- * not have (lane NIL's audit, B11). A declaration whose identifier is unwritten or names nothing
- * has its row but no name, so no reference resolves to it (spec reading 157).
+ * The document's declarations by name: each that has a `DeclarationName` (`typedDeclarationOf`),
+ * its identifier naming something and its cardinality spelling a code, the first of a repeated one
+ * (which `declaration-key` refuses), with the tables it holds; and the names only declarations
+ * with no cardinality hold, whose cardinality is unwritten or spells nothing. Such a name types
+ * nothing, so no reference to it is written: AL3 or the value domain refuses its declaration
+ * alone, and no law reads a type it does not have (lane NIL's audit, B11; spec reading 158). A
+ * declaration whose identifier is unwritten or names nothing has its row but no name, so no
+ * reference resolves to it (spec reading 157).
  *
  * @param rows - The document's flat rows.
  * @param attributes - Each element's attributes.
@@ -841,9 +838,8 @@ const declarationsOf = (
   rows: FlatRows<Composed>,
   attributes: Document["attributes"],
   childrenOf: Tree["childrenOf"],
-): Pick<Document, "declarations" | "typedNodes" | "untyped"> => {
+): Pick<Document, "declarations" | "untyped"> => {
   const declarations = new Map<string, DeclarationEntry>();
-  const typedNodes = new Set<NodeId>();
   const unnamed = new Set<string>();
   for (const node of rows.nodes.filter(({ kind }) => declarationKinds.has(kind))) {
     const lexical = (attribute: string) => attributes.get(node.id)?.get(attribute)?.lexical;
@@ -852,32 +848,30 @@ const declarationsOf = (
       cardinality: lexical("cardinality"),
       identifier: lexical("identifier"),
     });
-    for (const declared of Option.toArray(typed)) {
-      typedNodes.add(node.id);
-      for (const { pieces } of Option.toArray(declared.name)) {
-        if (!declarations.has(pieces.name)) {
-          declarations.set(pieces.name, {
-            baseType: declared.baseType,
-            cardinality: declared.cardinality,
-            kind: node.kind,
-            node: node.id,
-            tables: new Set(
-              childrenOf(node.id).flatMap(({ kind }) => (tableKinds.has(kind) ? [kind] : [])),
-            ),
-          });
-        }
+    for (const [{ pieces }, cardinality] of Option.toArray(
+      Option.all([typed.name, typed.cardinality]),
+    )) {
+      if (!declarations.has(pieces.name)) {
+        declarations.set(pieces.name, {
+          baseType: typed.baseType,
+          cardinality,
+          kind: node.kind,
+          node: node.id,
+          tables: new Set(
+            childrenOf(node.id).flatMap(({ kind }) => (tableKinds.has(kind) ? [kind] : [])),
+          ),
+        });
       }
     }
 
     const identifier = lexical("identifier");
-    if (Option.isNone(typed) && identifier !== undefined) {
+    if (Option.isNone(typed.cardinality) && identifier !== undefined) {
       unnamed.add(piecesOf(identifier).name);
     }
   }
 
   return {
     declarations,
-    typedNodes,
     untyped: new Set([...unnamed].filter((name) => !declarations.has(name))),
   };
 };
@@ -978,8 +972,8 @@ const resolve = (doc: Document, name: string) => {
  * @param doc - The document.
  * @param node - The element.
  * @param attribute - The attribute it makes the reference by.
- * @returns The row, or none for a literal value and for a name only a declaration with no row
- *   holds (`declarationsOf`).
+ * @returns The row, or none for a literal value and for a name only a declaration with no
+ *   cardinality holds (`declarationsOf`).
  */
 const referenceOf = (
   doc: Document,
@@ -1314,7 +1308,7 @@ const declaredLookup = (
   name: string,
   declared: DeclarationEntry,
 ): Addition<typeof VariableLookup> => ({
-  baseTypes: baseTypesOf(declared.baseType),
+  baseTypes: typedCountOf(declared.baseType),
   cardinality: declared.cardinality,
   declaration: declared.node,
   declarationKind: declared.kind,
@@ -1405,7 +1399,7 @@ const referenceDeclarationsOf = (
             attribute: reference.attribute,
             baseType: reference.baseType,
             cardinality: reference.cardinality,
-            declBaseTypes: baseTypesOf(declared.baseType),
+            declBaseTypes: typedCountOf(declared.baseType),
             declCardinality: declared.cardinality,
             declaration: declared.node,
             declarationKind: declared.kind,
@@ -1435,9 +1429,9 @@ const lookupOf = (held: ReadonlySet<string>): ReferencedTable => heldTableOf(loo
 const tableReaderKinds: ReadonlySet<string> = new Set(tablesRead.keys());
 
 /**
- * Write a document's declaration tables: a row for every declaration with a `Declaration` row that
- * holds a table, named or not (spec reading 157), and for every such declaration a map response or
- * a lookup names, each slot the table the declaration holds there or `none`.
+ * Write a document's declaration tables: a row for every declaration that holds a table, whatever
+ * its attributes spell (spec readings 157 and 158), and for every declaration a map response or a
+ * lookup names, each slot the table the declaration holds there or `none`.
  *
  * @param doc - The document.
  * @param declared - Its declared references' declarations.
@@ -1455,11 +1449,11 @@ const declarationTablesOf = (
     ),
   );
   const tables = new Map<string, Addition<typeof DeclarationTable>>();
-  for (const node of doc.rows.nodes.filter(({ id }) => doc.typedNodes.has(id))) {
+  for (const node of doc.rows.nodes.filter(({ kind }) => declarationKinds.has(kind))) {
     const held = new Set(
       doc.childrenOf(node.id).flatMap(({ kind }) => (tableKinds.has(kind) ? [kind] : [])),
     );
-    if (declarationKinds.has(node.kind) && (held.size > 0 || named.has(node.id))) {
+    if (held.size > 0 || named.has(node.id)) {
       tables.set(node.id, {
         areaMapping: held.has("qti-area-mapping") ? "qti-area-mapping" : noTable,
         declaration: node.id,
@@ -2623,8 +2617,8 @@ const placedResolutionOf = (
  * item's assembly, every `VariableRef` of the instance's document, its name resolved as an item's
  * own is, among the item's declarations, else to one of an item's built-in variables, else to
  * nothing, which "Variable declared" refuses; and for each name that resolves to no declaration,
- * the item's absent lookup that proves it. A name only an item's declaration with no `Declaration`
- * row holds is placed nowhere, as its own references are written nowhere (`declarationsOf`).
+ * the item's absent lookup that proves it. A name only an item's declaration with no cardinality
+ * holds is placed nowhere, as its own references are written nowhere (`declarationsOf`).
  *
  * @param input - The package's rows the placed references read.
  * @param input.baseTypes - Every declaration's base type, where it has one (Q5.08's
@@ -2634,7 +2628,7 @@ const placedResolutionOf = (
  * @param input.instances - Every assembly's root instance, its tree nested (Q5.13's
  *   `assembledRowsOf`).
  * @param input.references - Every document's references ({@link rowsOf}'s `VariableRef`).
- * @param input.untyped - Every document's names only a declaration with no row holds
+ * @param input.untyped - Every document's names only a declaration with no cardinality holds
  *   (`#pantry/import/overlays/declarations.ts` `untypedNamesOf`).
  * @returns The rows.
  */

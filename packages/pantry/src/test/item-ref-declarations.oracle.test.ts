@@ -240,7 +240,7 @@ const hostLaws: readonly (readonly [Restated, LawName | "E1 derived"])[] = [
       ],
       kind: "contained",
       to: [
-        "Declaration",
+        "DeclarationName",
         "node",
         "document",
         "identifier",
@@ -322,7 +322,7 @@ const hostLaws: readonly (readonly [Restated, LawName | "E1 derived"])[] = [
       ],
       kind: "contained",
       to: [
-        "Declaration",
+        "DeclarationName",
         "node",
         "document",
         "identifier",

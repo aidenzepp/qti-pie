@@ -367,10 +367,13 @@ type PositionHandle = Addition<typeof Node>["state"];
 const keyOf = (...values: readonly string[]): string => values.join(" ");
 
 /**
- * The installed `ValueIdentity`, by domain: total over the domains, `none` for one of no identity.
+ * The domains whose values are `xs:IDREF` tokens: those the installed `ValueIdentity` gives an
+ * `IDREF` or `IDREFS` identity. A domain of no identity has no row there.
  */
-const identityAt: ReadonlyMap<string, string> = new Map(
-  ValueIdentity.rows.map(({ domain, identity }) => [domain, identity]),
+const idrefDomains: ReadonlySet<string> = new Set(
+  ValueIdentity.rows.flatMap(({ domain, identity }) =>
+    identity === "IDREF" || identity === "IDREFS" ? [domain] : [],
+  ),
 );
 
 /**
@@ -441,28 +444,19 @@ interface AdmittedAttribute {
 
 /**
  * The attribute grammar, by `version governor name`, each row as the host writes it.
- *
- * @throws {Error} When `ValueIdentity` holds no row of an admitted attribute's domain: it is total
- *   over the domains (`#pantry/grammar/install.ts`), so a miss is a defect of the grammar.
  */
 const attributeGrammarAt: ReadonlyMap<string, AdmittedAttribute> = new Map(
-  attributeRows.map(({ domain, governor, name, position, version }) => {
-    const identity = identityAt.get(domain);
-    if (identity === undefined) {
-      throw new Error(
-        `ValueIdentity holds no row of the domain ${domain}, and it is total over the domains. Regenerate the grammar's ValueIdentity.`,
-      );
-    }
-
-    return [
-      keyOf(version, governor, name),
-      {
-        idrefs: identity === "IDREF" || identity === "IDREFS",
-        lexicalSpace: Option.fromUndefinedOr(boundedPatterns.get(domain)),
-        position,
-      },
-    ] as const;
-  }),
+  attributeRows.map(
+    ({ domain, governor, name, position, version }) =>
+      [
+        keyOf(version, governor, name),
+        {
+          idrefs: idrefDomains.has(domain),
+          lexicalSpace: Option.fromUndefinedOr(boundedPatterns.get(domain)),
+          position,
+        },
+      ] as const,
+  ),
 );
 
 /**

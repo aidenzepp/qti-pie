@@ -16,7 +16,7 @@ import { foldAt, foldOf } from "#pantry/import/fold.ts";
 import type { Folds } from "#pantry/import/fold.ts";
 import { spelledBaseTypes } from "#pantry/grammar/attributes.ts";
 import { isNcName } from "#pantry/grammar/domains.ts";
-import { recordCardinality, spelledCardinalities } from "#pantry/grammar/compose.ts";
+import { spelledCardinalities } from "#pantry/grammar/compose.ts";
 import { DeclarationKind } from "#pantry/grammar/install.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
@@ -24,8 +24,11 @@ import type { FlatRows, NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.t
 import type {
   Declaration,
   DeclarationBaseType,
+  DeclarationCardinality,
+  DeclarationIdentifier,
   DeclarationName,
   DeclaredValue,
+  FieldValue,
   MasteryCeiling,
   MasteryFloor,
   MasteryValue,
@@ -36,6 +39,7 @@ import type {
   Value,
   ValueBaseType,
   ValueSet,
+  ValueSetCardinality,
 } from "#pantry/qti/declarations.ts";
 import { normalMinimumDefaults } from "#pantry/qti/declarations.ts";
 import { valueBaseOf } from "#pantry/qti/expression-types.ts";
@@ -63,8 +67,11 @@ export interface DocumentIds {
 export interface DeclarationRows {
   readonly Declaration: ReadonlyMap<string, Addition<typeof Declaration>>;
   readonly DeclarationBaseType: ReadonlyMap<string, Addition<typeof DeclarationBaseType>>;
+  readonly DeclarationCardinality: ReadonlyMap<string, Addition<typeof DeclarationCardinality>>;
+  readonly DeclarationIdentifier: ReadonlyMap<string, Addition<typeof DeclarationIdentifier>>;
   readonly DeclarationName: ReadonlyMap<string, Addition<typeof DeclarationName>>;
   readonly DeclaredValue: ReadonlyMap<string, Addition<typeof DeclaredValue>>;
+  readonly FieldValue: ReadonlyMap<string, Addition<typeof FieldValue>>;
   readonly MasteryCeiling: ReadonlyMap<string, Addition<typeof MasteryCeiling>>;
   readonly MasteryFloor: ReadonlyMap<string, Addition<typeof MasteryFloor>>;
   readonly MasteryValue: ReadonlyMap<string, Addition<typeof MasteryValue>>;
@@ -75,6 +82,7 @@ export interface DeclarationRows {
   readonly Value: ReadonlyMap<string, Addition<typeof Value>>;
   readonly ValueBaseType: ReadonlyMap<string, Addition<typeof ValueBaseType>>;
   readonly ValueSet: ReadonlyMap<string, Addition<typeof ValueSet>>;
+  readonly ValueSetCardinality: ReadonlyMap<string, Addition<typeof ValueSetCardinality>>;
 }
 
 /**
@@ -91,7 +99,7 @@ type BaseTypeHandle = Addition<typeof DeclarationBaseType>["baseType"];
 /**
  * A `Cardinality` handle.
  */
-type CardinalityHandle = Addition<typeof Declaration>["cardinality"];
+type CardinalityHandle = Addition<typeof DeclarationCardinality>["cardinality"];
 
 /**
  * A `DeclarationKind` handle.
@@ -101,7 +109,7 @@ type DeclarationKindHandle = Addition<typeof Declaration>["declarationKind"];
 /**
  * The whitespace an identifier's lexical form holds around its name.
  */
-type Space = Addition<typeof DeclarationName>["identifierLead"];
+type Space = Addition<typeof DeclarationIdentifier>["identifierLead"];
 
 /**
  * An identifier's lexical form in its three pieces: the whitespace before its name, the name, and
@@ -222,7 +230,19 @@ export const spelledBaseTypeOf = (lexical: string | undefined): Option.Option<Ba
   lexical !== undefined && spelledBaseTypes.has(lexical) ? Option.some(lexical) : Option.none();
 
 /**
- * The lexical forms of the three attributes a declaration's row reads, each none where unwritten.
+ * Read the code a `cardinality` spells (C17): its lexical form, where that is one of
+ * `CardinalityLexical`'s, compared as written, since the enumeration restricts `xs:string`, whose
+ * whitespace is preserved.
+ *
+ * @param lexical - The lexical form, none where the attribute is unwritten.
+ * @returns The handle it spells, none where it is unwritten or spells none, which AL3 or its value
+ *   domain refuses alone.
+ */
+const spelledCardinalityOf = (lexical: string | undefined): Option.Option<CardinalityHandle> =>
+  lexical !== undefined && spelledCardinalities.has(lexical) ? Option.some(lexical) : Option.none();
+
+/**
+ * The lexical forms of the three attributes a declaration's rows read, each none where unwritten.
  */
 export interface DeclarationLexicals {
   readonly baseType: string | undefined;
@@ -231,8 +251,8 @@ export interface DeclarationLexicals {
 }
 
 /**
- * A declaration's name as its {@link DeclarationName} holds it: its `identifier` as written, and
- * its pieces.
+ * A declaration's name as its {@link DeclarationIdentifier} holds it: its `identifier` as written,
+ * and its pieces.
  */
 export interface DeclaredName {
   readonly lexical: string;
@@ -240,76 +260,63 @@ export interface DeclaredName {
 }
 
 /**
- * A declaration as its rows hold it: the code its `cardinality` spells with its lexical form, the
- * code its `base-type` spells, none where it writes none, each code spelled as its lexical form
- * (`BaseTypeLexical`, `CardinalityLexical`), and its name, none where its identifier names nothing.
+ * A declaration as its rows hold it: the code its `cardinality` spells, the code its `base-type`
+ * spells, each spelled as its lexical form (`BaseTypeLexical`, `CardinalityLexical`), and its
+ * name, each none where its attribute is unwritten or spells or names nothing.
  */
 export interface TypedDeclaration {
   readonly baseType: Option.Option<BaseTypeHandle>;
-  readonly cardinality: CardinalityHandle;
-  readonly cardinalityLexical: string;
+  readonly cardinality: Option.Option<CardinalityHandle>;
   readonly name: Option.Option<DeclaredName>;
 }
 
 /**
- * Read a declaration as its rows hold it, where it has a row: its `cardinality` written and
- * spelling a handle (an enumeration whose whitespace is preserved, so a padded one spells none),
- * and its `base-type` unwritten or spelling one (C17). Its name is its `identifier`'s, where that
- * is written and names something once collapsed ({@link namedPiecesOf}); one that is unwritten or
- * names nothing leaves the declaration its row and everything below it, and no name (spec reading
- * 157).
+ * Read a declaration as its rows hold it: its `cardinality` and its `base-type` each where it is
+ * written and spells a handle (C17; an enumeration whose whitespace is preserved, so a padded one
+ * spells none), and its name, its `identifier`'s, where that is written and names something once
+ * collapsed ({@link namedPiecesOf}).
  *
- * Every other declaration has no row, and no row anywhere stands for its type or cardinality: a
- * missing value is a row of its own relation, never a sentinel (lane NIL's audit, B10 and B11).
- * Each such declaration, and each that names nothing, breaks AL3 (a required `identifier` or
- * `cardinality` unwritten) or its attribute's value domain (written and spelling nothing), the one
- * rule it is refused by (the orchestrator's ruling of 2026-11-06), and no law reads a type or a
- * name it does not have. The overlays that read declarations, the bindings', the references' and
- * the tables', read them through this, so they agree on which have rows and which have names.
+ * Every declaration has its row, and every row below it, whatever the three spell (spec readings
+ * 157 and 158): each that is unwritten or spells nothing is only the absence of its typed row, a
+ * missing value being a row of its own relation, never a sentinel (lane NIL's audit, B10 and B11).
+ * AL3 (a required `identifier` or `cardinality` unwritten) or the attribute's value domain (written
+ * and spelling nothing) refuses it alone (the orchestrator's ruling of 2026-11-06), and no law
+ * reads a type or a name the declaration does not have. The overlays that read declarations, the
+ * bindings', the references', the mappings' and the tables', read them through this, so they agree
+ * on which have which.
  *
  * @param lexical - The lexical forms of its `identifier`, `base-type` and `cardinality`.
- * @returns The declaration, or none where it has no row.
+ * @returns The declaration.
  */
 export const typedDeclarationOf = ({
   baseType,
   cardinality,
   identifier,
-}: DeclarationLexicals): Option.Option<TypedDeclaration> => {
-  const spelled = spelledBaseTypeOf(baseType);
-  if (
-    cardinality === undefined ||
-    !spelledCardinalities.has(cardinality) ||
-    (baseType !== undefined && Option.isNone(spelled))
-  ) {
-    return Option.none();
-  }
-
-  return Option.some({
-    baseType: spelled,
-    cardinality,
-    cardinalityLexical: cardinality,
-    name: Option.flatMap(Option.fromUndefinedOr(identifier), (lexical) =>
-      Option.map(namedPiecesOf(lexical), (pieces) => ({ lexical, pieces })),
-    ),
-  });
-};
+}: DeclarationLexicals): TypedDeclaration => ({
+  baseType: spelledBaseTypeOf(baseType),
+  cardinality: spelledCardinalityOf(cardinality),
+  name: Option.flatMap(Option.fromUndefinedOr(identifier), (lexical) =>
+    Option.map(namedPiecesOf(lexical), (pieces) => ({ lexical, pieces })),
+  ),
+});
 
 /**
- * Count a declaration's base types, the rows of `DeclarationBaseType` it has and the `baseTypes`
- * every row that copies it holds: 1 where its `base-type` spells a code, and 0 where it writes
- * none, a record's (lane NIL's audit, B12).
+ * Count a declaration's typed rows of one attribute, the rows of `DeclarationBaseType` or
+ * `DeclarationCardinality` it has and the `baseTypes` or `cardinalities` every row that copies it
+ * holds: 1 where the attribute spells a code, and 0 where it is unwritten, a record's base type
+ * among them, or spells nothing (lane NIL's audit, B12; spec reading 158).
  *
- * @param baseType - Its base type, none where it writes none.
+ * @param typed - The attribute's code, none where it has none.
  * @returns The count.
  */
-export const baseTypesOf = (baseType: Option.Option<BaseTypeHandle>): bigint =>
-  BigInt(Option.toArray(baseType).length);
+export const typedCountOf = (typed: Option.Option<string>): bigint =>
+  BigInt(Option.toArray(typed).length);
 
 /**
- * The fields a declaration gives every row that copies it, and its kind's `DeclarationKind`: its
- * base type, none where it writes none, a record's, which a row copies only as its count
- * ({@link baseTypesOf}) and reads only from `DeclarationBaseType`; and its name, none where its
- * identifier names nothing, which only a row that references it by name copies.
+ * The fields a declaration gives every row that references it by name, and its kind's
+ * `DeclarationKind`: its cardinality, its base type, none where it has none, which a row copies
+ * only as its count ({@link typedCountOf}) and reads only from `DeclarationBaseType`, and its name,
+ * none where its identifier names nothing.
  */
 export interface DeclaredFields {
   readonly baseType: Option.Option<BaseTypeHandle>;
@@ -319,16 +326,37 @@ export interface DeclaredFields {
 }
 
 /**
- * Read the fields a declaring element gives every row that copies its declaration
- * (`declarationRef`, and `declarationNameRef` where it has a name), as {@link Declaration}'s
- * builder writes them ({@link typedDeclarationOf}): the codes its `base-type` and `cardinality`
- * spell, its kind's `DeclarationKind`, and its name, its identifier without its outer whitespace.
- * Every overlay that resolves against a declaration or copies one reads them here, so the
- * database's containments into either tuple hold by construction.
+ * Read a declaring element as every overlay that copies its declaration reads it: its kind's
+ * `DeclarationKind` and the declaration as its rows hold it ({@link typedDeclarationOf}). An
+ * element that declares nothing has none.
  *
- * An element that declares nothing has none, and so has a declaration with no `Declaration` row,
- * whose cardinality is unwritten or spells nothing, or whose base type spells nothing: no row
- * copies a declaration that has none (lane NIL's audit, B11).
+ * @param kind - The element's kind.
+ * @param attribute - Reads one of its attributes' lexical form, none where it is unwritten.
+ * @returns The declaration, or none.
+ */
+export const declarationOf = (
+  kind: string,
+  attribute: (name: string) => string | undefined,
+): Option.Option<TypedDeclaration & { readonly declarationKind: DeclarationKindHandle }> =>
+  Option.map(Option.fromUndefinedOr(declarationKinds.get(kind)), (declarationKind) => ({
+    ...typedDeclarationOf({
+      baseType: attribute("base-type"),
+      cardinality: attribute("cardinality"),
+      identifier: attribute("identifier"),
+    }),
+    declarationKind,
+  }));
+
+/**
+ * Read the fields a declaring element gives every row that references its declaration
+ * (`declarationNameRef`), as {@link DeclarationName}'s builder writes them: the codes its
+ * `base-type` and `cardinality` spell, its kind's `DeclarationKind`, and its name, its identifier
+ * without its outer whitespace. Every overlay that resolves against a declaration reads them here,
+ * so the database's containments into the tuple hold by construction.
+ *
+ * An element that declares nothing has none, and so has a declaration whose cardinality is
+ * unwritten or spells nothing: its name types nothing, so nothing references it (spec reading
+ * 158).
  *
  * @param kind - The element's kind.
  * @param attribute - Reads one of its attributes' lexical form, none where it is unwritten.
@@ -338,19 +366,14 @@ export const declaredFieldsOf = (
   kind: string,
   attribute: (name: string) => string | undefined,
 ): Option.Option<DeclaredFields> =>
-  Option.flatMap(Option.fromUndefinedOr(declarationKinds.get(kind)), (declarationKind) =>
-    Option.map(
-      typedDeclarationOf({
-        baseType: attribute("base-type"),
-        cardinality: attribute("cardinality"),
-        identifier: attribute("identifier"),
-      }),
-      (declared) => ({
+  Option.flatMap(declarationOf(kind, attribute), (declared) =>
+    declared.cardinality.pipe(
+      Option.map((cardinality) => ({
         baseType: declared.baseType,
-        cardinality: declared.cardinality,
-        declarationKind,
+        cardinality,
+        declarationKind: declared.declarationKind,
         identifier: declared.name.pipe(Option.map(({ pieces }) => pieces.name)),
-      }),
+      })),
     ),
   );
 
@@ -550,11 +573,11 @@ const addScale = (reading: Reading, node: NodeRow<Composed>): void => {
 };
 
 /**
- * Add a declaration's row, its base type's where it writes one, its name's where its identifier
- * names something, and an outcome declaration's scale rows ({@link addScale}), where it has a row
- * ({@link typedDeclarationOf}): one whose cardinality is unwritten or spells nothing has none of
- * them, nor any value set, value or field below it. One whose identifier is unwritten or names
- * nothing has all of them but its name (spec reading 157).
+ * Add a declaration's rows: its row, every declaration's whatever its attributes spell (spec
+ * readings 157 and 158); its cardinality's and its base type's, each where it spells a code; its
+ * identifier's where it names something, and its name's where it names something and the
+ * declaration has a cardinality; and an outcome declaration's scale rows ({@link addScale}). An
+ * attribute that is unwritten or spells nothing has no row, and its own law refuses it alone.
  *
  * @param reading - The document.
  * @param node - The declaration's node.
@@ -570,23 +593,32 @@ const addDeclaration = (
     cardinality: valueOf(reading, node, "cardinality"),
     identifier: valueOf(reading, node, "identifier"),
   });
-  if (Option.isNone(typed)) {
-    return;
+  const counts = {
+    baseTypes: typedCountOf(typed.baseType),
+    cardinalities: typedCountOf(typed.cardinality),
+  };
+  const parentKind = parentKindOf(reading, node);
+  reading.rows.Declaration.set(node.id, { ...tupleOf(reading, node), declarationKind, parentKind });
+  for (const cardinality of Option.toArray(typed.cardinality)) {
+    reading.rows.DeclarationCardinality.set(node.id, {
+      cardinality,
+      cardinalityLexical: cardinality,
+      node: node.id,
+    });
   }
 
-  const declared = typed.value;
-  const parentKind = parentKindOf(reading, node);
-  reading.rows.Declaration.set(node.id, {
-    ...tupleOf(reading, node),
-    cardinality: declared.cardinality,
-    cardinalityLexical: declared.cardinalityLexical,
-    declarationKind,
-    parentKind,
-  });
-  for (const { lexical, pieces } of Option.toArray(declared.name)) {
-    reading.rows.DeclarationName.set(node.id, {
-      baseTypes: baseTypesOf(declared.baseType),
-      cardinality: declared.cardinality,
+  for (const baseType of Option.toArray(typed.baseType)) {
+    reading.rows.DeclarationBaseType.set(node.id, {
+      baseType,
+      baseTypeLexical: baseType,
+      node: node.id,
+      valueBase: valueBaseOf(baseType),
+    });
+  }
+
+  for (const { lexical, pieces } of Option.toArray(typed.name)) {
+    reading.rows.DeclarationIdentifier.set(node.id, {
+      ...counts,
       declarationKind,
       document: reading.document,
       identifier: pieces.name,
@@ -596,14 +628,16 @@ const addDeclaration = (
       node: node.id,
       parentKind,
     });
-  }
-  for (const baseType of Option.toArray(declared.baseType)) {
-    reading.rows.DeclarationBaseType.set(node.id, {
-      baseType,
-      baseTypeLexical: baseType,
-      node: node.id,
-      valueBase: valueBaseOf(baseType),
-    });
+    for (const cardinality of Option.toArray(typed.cardinality)) {
+      reading.rows.DeclarationName.set(node.id, {
+        baseTypes: counts.baseTypes,
+        cardinality,
+        declarationKind,
+        document: reading.document,
+        identifier: pieces.name,
+        node: node.id,
+      });
+    }
   }
 
   if (node.kind === outcomeKind) {
@@ -612,18 +646,27 @@ const addDeclaration = (
 };
 
 /**
- * Read the base type of a declaration of the document: its `DeclarationBaseType`'s, written before
- * any row below it, since a declaration precedes its children in document order.
+ * Read a declaration's typed rows: its `DeclarationBaseType`'s base type and its
+ * `DeclarationCardinality`'s cardinality, written before any row below it, since a declaration
+ * precedes its children in document order.
  *
  * @param reading - The document.
  * @param declaration - The declaration's node.
- * @returns Its base type, none where it writes none, a record's.
+ * @returns Its base type and its cardinality, each none where it has none.
  */
-const baseTypeAt = (reading: Reading, declaration: NodeId): Option.Option<BaseTypeHandle> =>
-  Option.map(
+const typedAt = (
+  reading: Reading,
+  declaration: NodeId,
+): Pick<TypedDeclaration, "baseType" | "cardinality"> => ({
+  baseType: Option.map(
     Option.fromUndefinedOr(reading.rows.DeclarationBaseType.get(declaration)),
     ({ baseType }) => baseType,
-  );
+  ),
+  cardinality: Option.map(
+    Option.fromUndefinedOr(reading.rows.DeclarationCardinality.get(declaration)),
+    ({ cardinality }) => cardinality,
+  ),
+});
 
 /**
  * Add a value set's row: its declaration's fields, through `declarationRef`, and its count of
@@ -638,10 +681,11 @@ const addValueSet = (
   node: NodeRow<Composed>,
   declaration: Addition<typeof Declaration>,
 ): void => {
+  const typed = typedAt(reading, node.parent);
   reading.rows.ValueSet.set(node.id, {
     ...tupleOf(reading, node),
-    baseTypes: baseTypesOf(baseTypeAt(reading, node.parent)),
-    cardinality: declaration.cardinality,
+    baseTypes: typedCountOf(typed.baseType),
+    cardinalities: typedCountOf(typed.cardinality),
     declarationKind: declaration.declarationKind,
     elementChildren: foldAt(reading.derived.folds, node.id).elementChildren,
     elements: foldAt(reading.derived.folds, node.id).elements,
@@ -649,10 +693,11 @@ const addValueSet = (
 };
 
 /**
- * Add a value's row, its text in its declaration's base type where its set is no record's and the
- * declaration has one, its own base type's where it writes one that spells a code, its field's
- * where it writes both a `field-identifier` and a `base-type`, and its field's name where that
- * `field-identifier` names something once collapsed.
+ * Add a value's row, its text beside its declaration's base type and cardinality where the
+ * declaration has both, its own base type's where it writes one that spells a code and its text
+ * beside that where the declaration has a cardinality, its field's where it writes both a
+ * `field-identifier` and a `base-type`, and its field's name where that `field-identifier` names
+ * something once collapsed.
  *
  * A value writes either only as a record's field (information model §7.46.1 and §7.46.2: each "is
  * only used for" a value "that forms part of a record"). The rows hold what it writes and nothing
@@ -673,22 +718,19 @@ const addValue = (
   set: Addition<typeof ValueSet>,
 ): void => {
   const text = reading.derived.text.get(node.id) ?? noCharacters;
+  const typed = typedAt(reading, set.parent);
+  const written = { declaration: set.parent, node: node.id, text };
   reading.rows.Value.set(node.id, {
     ...tupleOf(reading, node),
     baseTypes: set.baseTypes,
-    cardinality: set.cardinality,
+    cardinalities: set.cardinalities,
     declaration: set.parent,
     text,
   });
-  if (set.cardinality !== recordCardinality) {
-    for (const baseType of Option.toArray(baseTypeAt(reading, set.parent))) {
-      reading.rows.DeclaredValue.set(node.id, {
-        baseType,
-        declaration: set.parent,
-        node: node.id,
-        text,
-      });
-    }
+  for (const [baseType, cardinality] of Option.toArray(
+    Option.all([typed.baseType, typed.cardinality]),
+  )) {
+    reading.rows.DeclaredValue.set(node.id, { ...written, baseType, cardinality });
   }
 
   const fieldIdentifier = valueOf(reading, node, "field-identifier");
@@ -697,10 +739,12 @@ const addValue = (
     reading.rows.ValueBaseType.set(node.id, {
       baseType,
       baseTypeLexical: baseType,
-      cardinality: set.cardinality,
+      cardinalities: set.cardinalities,
       node: node.id,
-      text,
     });
+    for (const cardinality of Option.toArray(typed.cardinality)) {
+      reading.rows.FieldValue.set(node.id, { ...written, baseType, cardinality });
+    }
   }
 
   if (fieldIdentifier !== undefined && fieldBaseType !== undefined) {
@@ -723,11 +767,32 @@ const addValue = (
 };
 
 /**
- * Build the O2 overlay rows of a document: a row per declaration that has one
- * ({@link typedDeclarationOf}), per base type it writes and per name it has, per value set of such
- * a declaration,
- * per value of a value set, per value's own base type, per record field and per field name, and
- * per scale attribute of such an outcome declaration and per pair of them it writes.
+ * Add each value set's row beside its declaration's cardinality, where the declaration has one:
+ * its counts of values and of fields, the {@link RecordField} rows whose parent it is, which
+ * `ValueSet.fields` counts.
+ *
+ * @param reading - The document, every value's rows written.
+ */
+const addValueSetCardinalities = (reading: Reading): void => {
+  const fields = [...reading.rows.RecordField.values()];
+  for (const set of reading.rows.ValueSet.values()) {
+    for (const cardinality of Option.toArray(typedAt(reading, set.parent).cardinality)) {
+      reading.rows.ValueSetCardinality.set(set.node, {
+        cardinality,
+        declaration: set.parent,
+        elementChildren: set.elementChildren,
+        fields: BigInt(fields.filter(({ parent }) => parent === set.node).length),
+        node: set.node,
+      });
+    }
+  }
+};
+
+/**
+ * Build the O2 overlay rows of a document: a row per declaration, per cardinality and base type it
+ * spells, per identifier and name it has, per value set of a declaration and per value set beside
+ * its declaration's cardinality, per value and its typed rows, per record field and per field
+ * name, and per scale attribute of an outcome declaration and per pair of them it writes.
  *
  * @param doc - The document's tree, as shred gives it.
  * @param ids - The ids its rows are written under.
@@ -743,8 +808,11 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: DocumentIds): Declaratio
     rows: {
       Declaration: new Map(),
       DeclarationBaseType: new Map(),
+      DeclarationCardinality: new Map(),
+      DeclarationIdentifier: new Map(),
       DeclarationName: new Map(),
       DeclaredValue: new Map(),
+      FieldValue: new Map(),
       MasteryCeiling: new Map(),
       MasteryFloor: new Map(),
       MasteryValue: new Map(),
@@ -755,6 +823,7 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: DocumentIds): Declaratio
       Value: new Map(),
       ValueBaseType: new Map(),
       ValueSet: new Map(),
+      ValueSetCardinality: new Map(),
     },
   };
 
@@ -771,14 +840,16 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: DocumentIds): Declaratio
     }
   }
 
+  addValueSetCardinalities(reading);
+
   return reading.rows;
 };
 
 /**
- * The names a document's declarations hold that only a declaration with no row holds
+ * The names a document's declarations hold that only a declaration with no cardinality holds
  * ({@link typedDeclarationOf}): its identifier naming something, its cardinality unwritten or
- * spelling nothing, or its base type spelling nothing. No reference to such a name is written, in
- * place either: the declaration's own law refuses it alone (lane NIL's audit, B11).
+ * spelling nothing. Such a name types nothing, so no reference to it is written, in place either:
+ * the declaration's own law refuses it alone (lane NIL's audit, B11; spec reading 158).
  *
  * @param doc - The document's tree, as shred gives it.
  * @param ids - The ids its rows are written under.
@@ -794,16 +865,13 @@ export const untypedNamesOf = (
   const untyped = new Set<string>();
   for (const node of flat.nodes.filter(({ kind }) => declarationKinds.has(kind))) {
     const lexical = (name: string) => attributes.get(node.id)?.get(name);
-    const identifier = lexical("identifier");
-    for (const { name } of Option.toArray(
-      Option.flatMap(Option.fromUndefinedOr(identifier), namedPiecesOf),
-    )) {
-      const held = typedDeclarationOf({
-        baseType: lexical("base-type"),
-        cardinality: lexical("cardinality"),
-        identifier,
-      });
-      (Option.isSome(held) ? typed : untyped).add(name);
+    const held = typedDeclarationOf({
+      baseType: lexical("base-type"),
+      cardinality: lexical("cardinality"),
+      identifier: lexical("identifier"),
+    });
+    for (const { pieces } of Option.toArray(held.name)) {
+      (Option.isSome(held.cardinality) ? typed : untyped).add(pieces.name);
     }
   }
 

@@ -5,7 +5,6 @@ import { int } from "@grizzle/testing/gen";
 import { searched } from "@grizzle/testing/vitest";
 import { Array as Arr, Duration, Effect, Formatter, Option, Predicate, Schema } from "effect";
 import { committedRosters, inCommittedOrder } from "#pantry/db/codes.ts";
-import { openDomain } from "#pantry/grammar/attributes.ts";
 import { int8Max } from "#pantry/grammar/closed.ts";
 import {
   cnForms,
@@ -233,36 +232,25 @@ const comparisons: readonly Comparison[] = [
   { expected: () => grammar.xsi.xsiType.rows, name: "XsiType" },
   { expected: () => grammar.attributes.valueDomain.rows, name: "ValueDomainOf" },
   {
-    expected: () => {
-      const identity = new Map(
-        grammar.attributes.identity.rows.map((row) => [row.domain, row.identity]),
-      );
-
-      return [
-        ...grammar.attributes.valueDomain.rows.map(({ domain }) => domain),
-        ...grammar.attributes.emptyDomains,
-      ].map((domain) => ({ domain, identity: identity.get(domain) ?? "none" }));
-    },
+    expected: () =>
+      grammar.attributes.identity.rows.map(({ domain, identity }) => ({ domain, identity })),
     name: "ValueIdentity",
   },
   {
     expected: () =>
       grammar.kinds.versions.handles.flatMap((version) =>
         [
-          ...grammar.kinds.nodeKind.handles.map((kind) => ({
-            domain: Option.match(grammar.attributes.text.lookup({ kind, version }), {
-              onNone: () => openDomain.handle,
-              onSome: ({ domain }) => domain,
-            }),
-            governor: kind,
-          })),
-          ...[...governed].map(([governor, { governs }]) => ({
-            domain: Option.match(grammar.attributes.typeText.lookup({ governs, version }), {
-              onNone: () => openDomain.handle,
-              onSome: ({ domain }) => domain,
-            }),
-            governor,
-          })),
+          ...grammar.kinds.nodeKind.handles.flatMap((kind) =>
+            Option.toArray(grammar.attributes.text.lookup({ kind, version })).map(({ domain }) => ({
+              domain,
+              governor: kind,
+            })),
+          ),
+          ...[...governed].flatMap(([governor, { governs }]) =>
+            Option.toArray(grammar.attributes.typeText.lookup({ governs, version })).map(
+              ({ domain }) => ({ domain, governor }),
+            ),
+          ),
         ].map((row) => ({ ...row, version })),
       ),
     name: "TextDomain",
@@ -612,16 +600,33 @@ describe("the installed relations", () => {
     searchTimeout,
   );
 
-  it("make CountedOf and BarredOf total, their nonzero rows exactly today's Counted but its caps and ChildBarredBy, and Capped exactly Counted's caps", () => {
+  it("make ContentModelOf total, CountedOf and BarredOf exactly today's Counted but its caps and ChildBarredBy, SharedModelOf exactly the shared families, and Capped exactly Counted's caps", () => {
     const keys = new Set(families.map(({ parent, version }) => `${version} ${parent}`));
-    for (const name of ["CountedOf", "BarredOf", "ContentModelOf", "SharedModelOf"]) {
-      const relation = relationNamed(name);
-      assert.deepStrictEqual(
-        new Set(keyedSet(name, relation.key, relation.rows).keys()),
-        new Set([...keys].map((key) => tupleText(key.split(" ")))),
-        name,
-      );
-    }
+    const relation = relationNamed("ContentModelOf");
+    assert.deepStrictEqual(
+      new Set(keyedSet("ContentModelOf", relation.key, relation.rows).keys()),
+      new Set([...keys].map((key) => tupleText(key.split(" ")))),
+    );
+
+    // A family whose kinds each name one position has no SharedModelOf row (README, "Closed
+    // relations": a law reads its absence through `SharedModelOf.has`), so the relation holds the
+    // shared families alone. Oracle: Admission's own rows, where an element kind at position 0 is
+    // one several positions name.
+    const nonElements: ReadonlySet<string> = new Set(install.nonElementKinds);
+    const sharedFamilies = new Set(
+      grammar.admission.rows
+        .filter(({ child, position }) => position === "0" && !nonElements.has(child))
+        .map(({ parent, version }) => tupleText([version, parent])),
+    );
+    assert.isAbove(sharedFamilies.size, 0);
+    assert.deepStrictEqual(
+      new Set(
+        relationNamed("SharedModelOf").rows.map(({ parent, version }) =>
+          tupleText([version, parent]),
+        ),
+      ),
+      sharedFamilies,
+    );
 
     // Oracle: Counted's own rows, split by their bounds. A cap (0 to 1, spec reading 130) is a
     // set row of Capped, which a family may hold several of; every other count is CountedOf's,
@@ -634,11 +639,9 @@ describe("the installed relations", () => {
 
     assert.deepStrictEqual(
       new Set(
-        relationNamed("CountedOf")
-          .rows.filter((row) => row["position"] !== "0")
-          .map(({ max, min, parent, position, version }) =>
-            tupleText([version, parent, position, min, max]),
-          ),
+        relationNamed("CountedOf").rows.map(({ max, min, parent, position, version }) =>
+          tupleText([version, parent, position, min, max]),
+        ),
       ),
       new Set(
         counted.map(({ max, min, parent, position, version }) =>
@@ -667,11 +670,9 @@ describe("the installed relations", () => {
     assert.strictEqual(capped.length, 164);
     assert.deepStrictEqual(
       new Set(
-        relationNamed("BarredOf")
-          .rows.filter((row) => row["position"] !== "0")
-          .map(({ parent, position, slot, version }) =>
-            tupleText([version, parent, position, slot]),
-          ),
+        relationNamed("BarredOf").rows.map(({ parent, position, slot, version }) =>
+          tupleText([version, parent, position, slot]),
+        ),
       ),
       new Set(
         grammar.barredBy.rows.map(({ name, parent, position, version }) =>
@@ -758,10 +759,7 @@ describe("the rosters", () => {
       handlesOf("SchemaVersion"),
       ordered("SchemaVersion", grammar.kinds.versions.handles),
     );
-    assert.deepStrictEqual(
-      handlesOf("BaseType"),
-      ordered("BaseType", [...grammar.baseTypes.handles, "none"]),
-    );
+    assert.deepStrictEqual(handlesOf("BaseType"), ordered("BaseType", grammar.baseTypes.handles));
     assert.deepStrictEqual(
       handlesOf("Cardinality"),
       ordered("Cardinality", [...grammar.typedCardinalities.handles, "record"]),
@@ -778,7 +776,7 @@ describe("the rosters", () => {
     );
     assert.deepStrictEqual(
       handlesOf("Identity"),
-      ordered("Identity", [...grammar.attributes.identity.payload[0].roster.handles, "none"]),
+      ordered("Identity", grammar.attributes.identity.payload[0].roster.handles),
     );
     assert.deepStrictEqual(
       handlesOf("ContentModel"),
@@ -788,10 +786,10 @@ describe("the rosters", () => {
       handlesOf("SharedModel"),
       ordered("SharedModel", grammar.content.sharedModels.handles),
     );
-    assert.strictEqual(handlesOf("SharedModel")[0], "none");
+    assert.notInclude(handlesOf("SharedModel"), "none");
     // Spec reading 118's include model is a model of its own, and names the ignored elements'
     // wildcards at two positions.
-    assert.lengthOf(handlesOf("SharedModel"), 26);
+    assert.lengthOf(handlesOf("SharedModel"), 25);
     assert.lengthOf(handlesOf("ContentModel"), 117);
   });
 

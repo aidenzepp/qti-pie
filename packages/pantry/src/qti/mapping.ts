@@ -9,8 +9,10 @@
  * - {@link Mapping} (`qti-mapping`) and {@link AreaMapping} (`qti-area-mapping`), under a response
  *   declaration, and {@link LookupTable} (`qti-match-table` and `qti-interpolation-table`, its
  *   `kind` telling them apart), under an outcome declaration, each copy their declaration's
- *   `declarationRef` tuple, so the cardinality they are read in is the declaration's code (C17's
- *   proof is the declaration's own), and whether it has a base type, `baseTypes`;
+ *   `declarationRef` tuple, its counts of cardinalities and base types, never either value, and
+ *   each has its row beside the declaration's cardinality, where it has one
+ *   ({@link MappingCardinality}, {@link AreaMappingCardinality}, {@link LookupTableCardinality}),
+ *   the row a law over its cardinality reads (spec reading 158);
  * - {@link MappingBaseType} holds a mapping's declaration's base type, where it has one (a record has
  *   none: lane NIL's audit, B12);
  * - {@link MapKey} (`qti-map-entry`) copies its mapping's `baseTypes` and its `map-key` from
@@ -32,7 +34,8 @@
  *   of record cardinality", information model §2.11.1.5), and its base type is in
  *   `MappableBaseType`, so `file` and `duration` are refused; an area mapping is no record's, and
  *   its base type is `point` (information model §5.5, "a mapping from a source set of point
- *   values"). A record has no base type, so its mapping is judged by its cardinality alone.
+ *   values"). A record has no base type, so its mapping is judged by its cardinality alone, where
+ *   the declaration has one: a record declaration holds no mapping and no area mapping.
  * - **Map keys are distinct** (information model §5.88.4 and §7.21: "a set of mapEntries, each of
  *   which maps a single value from the source set onto a single float", so a mapping is a function
  *   of its source value): by their lexical forms, `key(mapping, key)`, and, for the base types
@@ -76,7 +79,11 @@ import {
 } from "#pantry/grammar/install.ts";
 import { booleanTrue } from "#pantry/grammar/domains.ts";
 import { Attribute } from "#pantry/qti/attributes.ts";
-import { DeclarationBaseType, declarationRef } from "#pantry/qti/declarations.ts";
+import {
+  DeclarationBaseType,
+  DeclarationCardinality,
+  declarationRef,
+} from "#pantry/qti/declarations.ts";
 import { BaseTypePattern } from "#pantry/qti/expression-types.ts";
 import { keyText, keyTextBytes } from "#pantry/qti/limits.ts";
 import { Node, nodeRef } from "#pantry/qti/node.ts";
@@ -124,7 +131,7 @@ export const Mapping = relation(
   "Mapping",
   {
     baseTypes: natural,
-    cardinality: closedId(Cardinality),
+    cardinalities: natural,
     declaration: uuid,
     declarationKind: closedId(DeclarationKind),
     document: uuid,
@@ -432,7 +439,7 @@ export const AreaMapping = relation(
   "AreaMapping",
   {
     baseTypes: natural,
-    cardinality: closedId(Cardinality),
+    cardinalities: natural,
     declaration: uuid,
     declarationKind: closedId(DeclarationKind),
     document: uuid,
@@ -457,7 +464,7 @@ export const LookupTable = relation(
   "LookupTable",
   {
     baseTypes: natural,
-    cardinality: closedId(Cardinality),
+    cardinalities: natural,
     declaration: uuid,
     declarationKind: closedId(DeclarationKind),
     document: uuid,
@@ -467,6 +474,41 @@ export const LookupTable = relation(
     start: natural,
     version: closedId(SchemaVersion),
   },
+  ["node"],
+);
+
+/**
+ * A mapping beside its declaration's cardinality, keyed by its `qti-mapping` node, where the
+ * declaration has one: `declaration`, its {@link Mapping}'s, and `cardinality`, the declaration's
+ * `DeclarationCardinality`'s, which `MappableBaseType` holds to no record. A mapping of a
+ * declaration with no cardinality has no row, and no law reads a cardinality it does not have
+ * (spec reading 158).
+ */
+export const MappingCardinality = relation(
+  "MappingCardinality",
+  { cardinality: closedId(Cardinality), declaration: uuid, node: uuid },
+  ["node"],
+);
+
+/**
+ * An area mapping beside its declaration's cardinality, keyed by its `qti-area-mapping` node, where
+ * the declaration has one, as {@link MappingCardinality} holds a mapping's: `AreaMapping_base_type`
+ * holds it to no record.
+ */
+export const AreaMappingCardinality = relation(
+  "AreaMappingCardinality",
+  { cardinality: closedId(Cardinality), declaration: uuid, node: uuid },
+  ["node"],
+);
+
+/**
+ * A lookup table beside its outcome declaration's cardinality, keyed by its node, where the
+ * declaration has one, as {@link MappingCardinality} holds a mapping's: `Lookup_table_cardinality`
+ * holds it to single.
+ */
+export const LookupTableCardinality = relation(
+  "LookupTableCardinality",
+  { cardinality: closedId(Cardinality), declaration: uuid, node: uuid },
   ["node"],
 );
 
@@ -615,22 +657,26 @@ const lookupAttributes = select(Attribute, (a) =>
  *   and names a node of its kind; a mapping and a map entry exist through the entry's `map-key`
  *   copy (a mapping holds at least one entry, N7), and the area mapping and the two tables through
  *   their kind's selection of `Node`, both ways; the four declared overlays copy their
- *   declaration's `declarationRef` tuple; a mapping's {@link MappingBaseType}, a map key's
+ *   declaration's `declarationRef` tuple; a mapping's, an area mapping's and a lookup table's row
+ *   beside its declaration's cardinality exists exactly where `cardinalities` is 1, copying the
+ *   cardinality from the declaration's typed row; a mapping's {@link MappingBaseType}, a map key's
  *   {@link MapKeyType} and a lookup value's {@link LookupValueType} exist exactly where `baseTypes`
  *   is 1, each copying the base type from the declaration's typed row;
  * - **`mapping-base-type`:** a mapping and an area mapping are no record's (`MappableBaseType`,
- *   `AreaMapping_base_type`), a mapping's base type is in `MappableBaseType`, and an area mapping's
- *   is `point`, each judged where the declaration has one;
+ *   `AreaMapping_base_type`), judged where the declaration has a cardinality; a mapping's base type
+ *   is in `MappableBaseType`, and an area mapping's is `point`, each judged where the declaration
+ *   has one;
  * - **map keys:** the entry's mapping's `baseTypes`, its `map-key` copy, the lexical key, each typed
  *   relation mirrored with its typed keys, `E1_derived` its split, and its typed key over the value
  *   PostgreSQL generates, and `Typed_attribute_value` its lexical form;
- * - **`Lookup_table_cardinality`:** a match or interpolation table's outcome is single;
+ * - **`Lookup_table_cardinality`:** a match or interpolation table's outcome is single, judged where
+ *   it has a cardinality;
  * - **lookup values:** each copies its node's tuple, its attribute and its table's declaration, and
  *   `Typed_attribute_value` judges it where the declaration has a base type.
  */
 export const mappingLawsByName = {
   "AreaMapping base type": [
-    check("AreaMapping_base_type", AreaMapping, (a) => a.ne(a.cardinality, "record")),
+    check("AreaMapping_base_type", AreaMappingCardinality, (a) => a.ne(a.cardinality, "record")),
     contained(
       on(
         select(AreaMapping, (a) => a.eq(a.baseTypes, 1n)),
@@ -686,7 +732,7 @@ export const mappingLawsByName = {
     ),
   ],
   "Lookup table cardinality": [
-    check("Lookup_table_cardinality", LookupTable, (t) => t.eq(t.cardinality, "single")),
+    check("Lookup_table_cardinality", LookupTableCardinality, (t) => t.eq(t.cardinality, "single")),
   ],
   "Map key": [
     key(on(MapKey, "mapping", "folded", "key")),
@@ -697,7 +743,7 @@ export const mappingLawsByName = {
     key(on(MapKeyDirectedPair, "mapping", "value")),
   ],
   MappableBaseType: [
-    check("MappableBaseType", Mapping, (m) => m.ne(m.cardinality, "record")),
+    check("MappableBaseType", MappingCardinality, (m) => m.ne(m.cardinality, "record")),
     contained(on(MappingBaseType, "baseType"), on(MappableBaseType, "baseType")),
   ],
   "Mapping overlay": [
@@ -707,8 +753,20 @@ export const mappingLawsByName = {
     ),
     contained(on(Mapping, "node"), on(nodesOf("qti-mapping"), "id")),
     contained(
-      on(Mapping, "declaration", "document", "declarationKind", "cardinality", "baseTypes"),
+      on(Mapping, "declaration", "document", "declarationKind", "cardinalities", "baseTypes"),
       declarationRef,
+    ),
+    contained(
+      on(
+        select(Mapping, (m) => m.eq(m.cardinalities, 1n)),
+        "node",
+      ),
+      on(MappingCardinality, "node"),
+    ),
+    contained(on(MappingCardinality, "node", "declaration"), on(Mapping, "node", "declaration")),
+    contained(
+      on(MappingCardinality, "declaration", "cardinality"),
+      on(DeclarationCardinality, "node", "cardinality"),
     ),
     contained(
       on(MapKey, "node", "document", "kind", "start", "nearest", "version", "mapping"),
@@ -761,8 +819,23 @@ export const mappingLawsByName = {
     ),
     mirrors(on(AreaMapping, "node"), on(nodesOf("qti-area-mapping"), "id")),
     contained(
-      on(AreaMapping, "declaration", "document", "declarationKind", "cardinality", "baseTypes"),
+      on(AreaMapping, "declaration", "document", "declarationKind", "cardinalities", "baseTypes"),
       declarationRef,
+    ),
+    contained(
+      on(
+        select(AreaMapping, (a) => a.eq(a.cardinalities, 1n)),
+        "node",
+      ),
+      on(AreaMappingCardinality, "node"),
+    ),
+    contained(
+      on(AreaMappingCardinality, "node", "declaration"),
+      on(AreaMapping, "node", "declaration"),
+    ),
+    contained(
+      on(AreaMappingCardinality, "declaration", "cardinality"),
+      on(DeclarationCardinality, "node", "cardinality"),
     ),
     contained(
       on(LookupTable, "node", "document", "kind", "start", "nearest", "version", "declaration"),
@@ -776,8 +849,23 @@ export const mappingLawsByName = {
       ),
     ),
     contained(
-      on(LookupTable, "declaration", "document", "declarationKind", "cardinality", "baseTypes"),
+      on(LookupTable, "declaration", "document", "declarationKind", "cardinalities", "baseTypes"),
       declarationRef,
+    ),
+    contained(
+      on(
+        select(LookupTable, (t) => t.eq(t.cardinalities, 1n)),
+        "node",
+      ),
+      on(LookupTableCardinality, "node"),
+    ),
+    contained(
+      on(LookupTableCardinality, "node", "declaration"),
+      on(LookupTable, "node", "declaration"),
+    ),
+    contained(
+      on(LookupTableCardinality, "declaration", "cardinality"),
+      on(DeclarationCardinality, "node", "cardinality"),
     ),
     contained(
       on(LookupValue, "node", "document", "kind", "start", "nearest", "version", "parent"),

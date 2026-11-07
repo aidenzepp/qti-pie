@@ -170,6 +170,7 @@ type Term =
       readonly relation: string;
     }
   | { readonly args: readonly Term[]; readonly kind: "closedRow"; readonly relation: string }
+  | { readonly args: readonly Term[]; readonly kind: "closedHas"; readonly relation: string }
   | { readonly args: readonly Term[]; readonly fn: string; readonly kind: "compute" }
   | { readonly kind: "unread" };
 
@@ -250,6 +251,13 @@ const termReaders: ReadonlyMap<string, (stored: StoredTerm, read: TermReader) =>
       stored.relation === undefined
         ? unread
         : { args: operandsOf(stored, read), kind: "closedRow", relation: stored.relation },
+  ],
+  [
+    "closedHas",
+    (stored, read) =>
+      stored.relation === undefined
+        ? unread
+        : { args: operandsOf(stored, read), kind: "closedHas", relation: stored.relation },
   ],
   [
     "compute",
@@ -1001,6 +1009,19 @@ const closedRead = (
 };
 
 /**
+ * Read whether a closed relation holds a tuple at a whole key, as grizzle's `C.has(…)` does.
+ *
+ * @param relation - The relation's name.
+ * @param args - The key's values, in key order.
+ * @returns Whether a tuple is there, undefined for a name that is no closed relation.
+ */
+const closedHeld = (relation: string, args: readonly string[]): Datum | undefined => {
+  const facts = closedFacts.get(relation);
+
+  return facts === undefined ? undefined : rowsStarting(relation, facts, args).length > 0;
+};
+
+/**
  * Each pattern a `matches` reads, compiled once: grizzle's `str.regex` grammar under `u`.
  */
 const compiledPatterns = new Map<string, RegExp>();
@@ -1296,6 +1317,13 @@ const evaluate: Evaluate = (term, row) => {
     case "closedRow": {
       return closedValue(term, row, evaluate);
     }
+    case "closedHas": {
+      const values = operandValues(term.args, row, evaluate);
+
+      return values === undefined || values === null
+        ? values
+        : closedHeld(term.relation, values.map(datumText));
+    }
     case "compute": {
       const values = operandValues(term.args, row, evaluate);
 
@@ -1532,17 +1560,20 @@ export const viewOf = (inputs: PackageInputs): View => {
     }
   }
 
-  // A declaration's count of base types is drawn, so the program writes no field of it: it is the
-  // number of its `DeclarationBaseType` rows, as the database draws it, so a containment over
-  // `declarationRef` reads the tuple PostgreSQL holds (lane NIL's audit, B12).
-  const baseTyped = new Set<Value | undefined>(
-    (view.get("DeclarationBaseType") ?? []).map(({ node }) => node),
-  );
+  // A declaration's counts of base types and cardinalities are drawn, so the program writes no
+  // field of them: each is the number of its `DeclarationBaseType` or `DeclarationCardinality`
+  // rows, as the database draws it, so a containment over `declarationRef` reads the tuple
+  // PostgreSQL holds (lane NIL's audit, B12; spec reading 158).
+  const typedNodes = (relation: string) =>
+    new Set<Value | undefined>((view.get(relation) ?? []).map(({ node }) => node));
+  const baseTyped = typedNodes("DeclarationBaseType");
+  const cardinal = typedNodes("DeclarationCardinality");
   view.set(
     "Declaration",
     (view.get("Declaration") ?? []).map((row) => ({
       ...row,
       baseTypes: baseTyped.has(row["node"]) ? 1n : 0n,
+      cardinalities: cardinal.has(row["node"]) ? 1n : 0n,
     })),
   );
 

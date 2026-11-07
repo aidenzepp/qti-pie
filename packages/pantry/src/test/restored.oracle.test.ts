@@ -192,7 +192,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
     );
 
     judging.effect(
-      "a string mapping's keys that differ only in ASCII case are two keys, though the default case-sensitive false matches them both, and one key written twice breaks Map key (readings 98 and 160)",
+      "a string mapping's keys that differ only in ASCII case are two keys, though the default case-sensitive false matches them both, and one key written twice breaks Map key (readings 98 and 161)",
       () =>
         Effect.gen(function* foldedKeys() {
           const clash = (first: string, second: string) =>
@@ -203,7 +203,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
           assert.strictEqual(
             yield* clash("York", "york"),
             0,
-            "case-only duplicates are two keys (reading 160)",
+            "case-only duplicates are two keys (reading 161)",
           );
           assert.strictEqual(yield* clash("york", "york"), 1, "one key written twice is a repeat");
           assert.strictEqual(

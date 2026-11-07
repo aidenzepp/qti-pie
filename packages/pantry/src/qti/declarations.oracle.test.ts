@@ -22,8 +22,11 @@ import {
   contextVariable,
   Declaration,
   DeclarationBaseType,
+  DeclarationCardinality,
+  DeclarationIdentifier,
   declarationLaws,
   domainValues,
+  FieldValue,
   MasteryCeiling,
   MasteryFloor,
   MasteryValue,
@@ -39,6 +42,7 @@ import {
   Value,
   ValueBaseType,
   ValueSet,
+  ValueSetCardinality,
 } from "#pantry/qti/declarations.ts";
 import { nodeLaws } from "#pantry/qti/node.ts";
 import { packageLaws } from "#pantry/qti/package.ts";
@@ -51,6 +55,9 @@ import { lawNames, ruleOf } from "#pantry/test/oracle.ts";
 const overlays = {
   Declaration,
   DeclarationBaseType,
+  DeclarationCardinality,
+  DeclarationIdentifier,
+  FieldValue,
   MasteryCeiling,
   MasteryFloor,
   MasteryValue,
@@ -61,6 +68,7 @@ const overlays = {
   Value,
   ValueBaseType,
   ValueSet,
+  ValueSetCardinality,
 };
 
 describe("qti/declarations.ts, declared", () => {
@@ -107,7 +115,6 @@ describe("qti/declarations.ts, declared", () => {
     }
 
     assert.deepStrictEqual([...new Set(named)].toSorted(), [
-      "Declaration base type",
       "Declaration not reserved",
       "E1 derived",
       "Mastery range",
@@ -115,6 +122,7 @@ describe("qti/declarations.ts, declared", () => {
       "Typed value",
       "Value cardinality",
     ]);
+    assert.include(lawNames, "Declaration base type");
     assert.include(lawNames, "Declaration key");
     assert.include(lawNames, "Record field key");
   });

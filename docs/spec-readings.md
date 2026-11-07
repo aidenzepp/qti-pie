@@ -3080,7 +3080,39 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      audit, B11), and the copies its children ask still break beside its own law; that is a case of its own, which
      `known.ts` records. This binds pantry and plate alike. This is not a case of documents in conflict. (Decided
      2026-11-07 by the coordinator, under the operator's standing ruling of 2026-11-05, from seat FIX-DECLNAME.)
-158. **SCORE's and MAXSCORE's float rule binds items only; PASSED's boolean rule binds items and tests.** The information
+158. **A declaration whose cardinality or base type spells nothing is still a declaration: each law over it judges what
+     it does spell, and the attribute that spells nothing is refused by AL3 or its value domain alone.** The ASI XSD
+     requires a declaration's `cardinality` and types it, and its `base-type`, by enumerations that restrict
+     `xs:string` (`imsqti_asiv3p0_v1p0.xsd`, each declaration kind's `cardinality` and `base-type`), whose whiteSpace
+     is `preserve`, so a `cardinality` left unwritten breaks AL3, and one written empty, padded or as no code (`many`),
+     like such a `base-type`, lies outside its value domain and denotes no cardinality or base type (XML Schema Part 2,
+     §2.3). The information model states the rest of a declaration apart from both (§4.5, §5.34, §5.115, §5.151), and
+     each law over it reads one attribute or neither: Declaration key, Declaration not reserved, Mastery range, Record
+     field key and Map key read neither; Typed attribute value, a reserved name's base type and MappableBaseType's and
+     AreaMapping base type's halves over a base type read the base type alone; Lookup table cardinality, a record's
+     mapping or area mapping, a typed name's cardinality and Value cardinality read the cardinality alone, but for Value
+     cardinality's rule that a value writes a `field-identifier` and a `base-type` both or neither, which reads
+     neither; and Declaration base type and Typed value read both. So each judges a declaration where the attributes it
+     reads spell something, and nowhere else, which is also the stricter reading: a declaration of `cardinality="many"`
+     with a mapping that repeats a key breaks Map key beside its value domain, and one of `base-type="bogus"` whose
+     single correct response holds two values breaks Value cardinality. A base type that spells nothing types nothing, as an
+     unwritten one does, so a value is read in no base type and a reference to the declaration resolves and is judged
+     by its cardinality alone; Declaration base type reads the attribute as written, so a variable of another
+     cardinality than record that writes a `base-type` spelling nothing is its value domain's alone. A cardinality that
+     spells nothing types the declaration's name nothing, so no reference resolves to it, as reading 157 reads a
+     declaration with no name. The importer writes every declaration's row and every row below it, and its cardinality
+     as a row of its own, `DeclarationCardinality`, beside `DeclarationBaseType` and `DeclarationIdentifier`
+     (`src/qti/declarations.ts`), only where it spells a code: a missing value is a row of its own relation, never a
+     sentinel. Each law over a cardinality reads that row, through a row that hangs from the declaration beside it
+     (`ValueSetCardinality`, `DeclaredValue`, `FieldValue`, `MappingCardinality`, `AreaMappingCardinality`,
+     `LookupTableCardinality`, `DeclarationName`), or from it (Declaration base type). This sets aside lane NIL's B11
+     reading, under which such a declaration had no `Declaration` row and nothing below it, so the importer's rows broke
+     "Declaration overlay"'s copy of its cardinality and "Mapping overlay"'s copy of each map key beside the value
+     domain, and judged none of its values, map keys or tables; and it sets aside the law oracle's reading, which
+     judged no law of such a declaration's own, and none of its mapping's but its map keys. This binds pantry and plate
+     alike. This is not a case of documents in conflict. (Decided 2026-11-07 by the coordinator, under the operator's
+     standing ruling of 2026-11-05, from seat FIX-DECLCARD.)
+159. **SCORE's and MAXSCORE's float rule binds items only; PASSED's boolean rule binds items and tests.** The information
      model's section 4.5, OutcomeDeclaration (https://www.imsglobal.org/spec/qti/v3p0/info#Root_OutcomeDeclaration), says
      of SCORE "Items that declare a numeric outcome variable representing the candidate's overall performance on the item
      should use the outcome name 'SCORE' for the variable. SCORE needs to be a float." (`info.txt:11979`), and of
@@ -3095,7 +3127,7 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      reading 1 protects valid content. No corpus test declares a SCORE or MAXSCORE of another base type. This binds
      pantry and plate alike. (Decided 2026-11-07 by the operator, mail `e64ace73` from the renderer; the law `Reserved
      type`. Re-cited 2026-11-07 by the Mind on audit b61b8f14's D2: §4.5 for the non-normative §2.2.2.3.)
-159. **A MathML formula's direction starts at its `m:math`: `ltr`, unless the `math` element writes `rtl`, whatever the
+160. **A MathML formula's direction starts at its `m:math`: `ltr`, unless the `math` element writes `rtl`, whatever the
      HTML around it says.** MathML 3 section 2.2.1, Attributes
      (https://www.w3.org/TR/MathML3/chapter2.html#interf.toplevel.atts), says "Note that the dir attribute defaults to
      "ltr" on the math element (but inherits on all other elements which accept the dir attribute); this provides for
@@ -3112,7 +3144,7 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      direction (MathML 3 lists only those two; the value domain refuses another on a MathML element). This binds pantry
      and plate alike. This is not a case of documents in conflict. (Decided 2026-11-07 by the Mind, decision 416, on
      audit e8db90e1's F6, under the operator's standing ruling of 2026-11-05 that the spec wins; FYI to the operator.)
-160. **Two string map keys that differ only by case are two keys, and a response that matches several entries takes the
+161. **Two string map keys that differ only by case are two keys, and a response that matches several entries takes the
      first one listed.** A string mapping whose entries leave `case-sensitive` at its default writes `York` (mapped to 2)
      and `york` (mapped to 1); the document is accepted, and the response `york` matches both. The standard bans
      nothing here: no XSD carries a uniqueness constraint (no `xs:unique` or `xs:key` in `imsqti_asiv3p0_v1p0.xsd` or

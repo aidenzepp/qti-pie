@@ -37,7 +37,6 @@ import {
 } from "effect";
 import type { ReaderRefusal, WellFormednessError } from "@qti-pie/crust/errors.ts";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
-import { noSharedModel } from "#pantry/grammar/content.ts";
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import type { NotQti3, UnmodeledVocabulary } from "#pantry/model/shred.ts";
@@ -700,12 +699,16 @@ const writtenLaws: readonly (readonly [WrittenLaw, LawName])[] = [
   ...(
     [
       "Declaration",
+      "DeclarationCardinality",
       "DeclarationBaseType",
+      "DeclarationIdentifier",
       "DeclarationName",
       "ValueSet",
+      "ValueSetCardinality",
       "Value",
       "DeclaredValue",
       "ValueBaseType",
+      "FieldValue",
       "RecordField",
       "RecordFieldName",
       "MasteryValue",
@@ -726,12 +729,15 @@ const writtenLaws: readonly (readonly [WrittenLaw, LawName])[] = [
     [
       "Mapping",
       "MappingBaseType",
+      "MappingCardinality",
       "MapKey",
       "MapKeyType",
       "MapKeyInteger",
       "MapKeyFloat",
       "AreaMapping",
+      "AreaMappingCardinality",
       "LookupTable",
+      "LookupTableCardinality",
     ] as const
   ).map((overlay) => [primaryKeyOf(overlay, "node"), "Mapping overlay"] as const),
   ...Object.values(testRelations).map(
@@ -1209,16 +1215,14 @@ const contentIndexOf = (constants: RefusalConstants): ContentIndex => {
         ({ child, parent, position, version }) =>
           [positionKey(version, parent, position), child] as const,
       ),
-      // Each family's shared model's symbols, joined on the model in each side's own order: a
+      // Each shared family's model's symbols, joined on the model in each side's own order: a
       // scan, run once per grammar, so the index holds no lookup that can miss.
       ...content.sharedModelOf.rows.flatMap(({ model, parent, version }) =>
-        model === noSharedModel
-          ? []
-          : content.symbol.rows.flatMap((symbol) =>
-              symbol.model === model
-                ? [[positionKey(version, parent, symbol.position), symbol.kind] as const]
-                : [],
-            ),
+        content.symbol.rows.flatMap((symbol) =>
+          symbol.model === model
+            ? [[positionKey(version, parent, symbol.position), symbol.kind] as const]
+            : [],
+        ),
       ),
     ]),
     models: new Map(

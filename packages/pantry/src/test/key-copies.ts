@@ -216,6 +216,7 @@ type Term =
       readonly kind: "closed";
       readonly relation: string;
     }
+  | { readonly args: readonly Term[]; readonly kind: "closedHas"; readonly relation: string }
   | { readonly arg: Term; readonly kind: "in"; readonly values: readonly Term[] }
   | { readonly arg: Term; readonly kind: "not" }
   | { readonly field: string; readonly kind: "field" }
@@ -369,6 +370,13 @@ const termOf = (stored: StoredTerm): Term => {
             },
     ],
     [
+      "closedHas",
+      () =>
+        relation === undefined
+          ? unread
+          : { args: (stored.args ?? []).map(termOf), kind: "closedHas", relation },
+    ],
+    [
       "compare",
       () =>
         op === undefined || left === undefined || right === undefined
@@ -427,6 +435,7 @@ const operandsOf = (term: Term): readonly Term[] => {
     case "and":
     case "or":
     case "closed":
+    case "closedHas":
     case "compute": {
       return term.args;
     }
@@ -588,6 +597,19 @@ const closedRead = (
     onSome: (payload) => rows[0]?.[payload],
   });
 };
+
+/**
+ * Read whether a closed relation holds a tuple at a whole key, as grizzle's `C.has(…)` does: true
+ * where one does, false where none does.
+ *
+ * @param relation - The relation's name.
+ * @param args - The key's values, in key order.
+ * @returns Whether it holds one, unknown for a name that is no closed relation.
+ */
+const closedHeld = (relation: string, args: readonly Datum[]): Datum | undefined =>
+  Option.getOrUndefined(
+    Option.map(factsOf(relation), (facts) => rowsStarting(facts, args).length > 0),
+  );
 
 /**
  * The patterns `Compute.matches` reads, compiled once each: `str.regex`'s grammar under `u`,
@@ -966,6 +988,11 @@ const evaluate = (term: Term, row: Row, forced: (term: Term) => boolean): Datum 
     case "closed":
     case "compute": {
       return applied(term, allKnown(term.args, value));
+    }
+    case "closedHas": {
+      const args = allKnown(term.args, value);
+
+      return args === undefined ? args : closedHeld(term.relation, args);
     }
     default: {
       return term satisfies never;
@@ -1487,9 +1514,38 @@ export const keyCopies: readonly KeyCopy[] = Result.getOrThrowWith(
 );
 
 /**
- * Judge rows by a check the schema states, read from the predicate grizzle keeps for it, as
- * PostgreSQL's CHECK reads it: a row is refused where the predicate is false and kept where it is
- * true or unknown, a field the row does not hold being unknown.
+ * Read a check the schema states as the value its predicate takes over a row, from the predicate
+ * grizzle keeps for it, in SQL's three-valued logic: true, false, or unknown (`undefined`) where it
+ * reads a field the row does not hold, a closed read at a key no row holds, or a term this module
+ * does not read.
+ *
+ * @param statements - The schema's statements.
+ * @param relation - The check's relation.
+ * @param name - The check's name.
+ * @returns The predicate's value over a row; none where the schema states no such check, or states
+ *   it in a shape this module does not read.
+ */
+export const checkValueOf = (
+  statements: typeof Qti.statements,
+  relation: string,
+  name: string,
+): Option.Option<(row: Readonly<Record<string, Datum>>) => Datum | undefined> =>
+  Arr.findFirst(statements, (statement) =>
+    Option.match(Schema.decodeUnknownOption(StatementSchema)(statement), {
+      onNone: () => Option.none(),
+      onSome: (read) =>
+        read.kind === "check" && read.relation.name === relation && read.desc.name === name
+          ? Option.some((row: Readonly<Record<string, Datum>>) =>
+              evaluate(termOf(read.desc.predicate), row, () => false),
+            )
+          : Option.none(),
+    }),
+  );
+
+/**
+ * Judge rows by a check the schema states ({@link checkValueOf}): a row is refused where the
+ * predicate is false and kept where it is true or unknown, a field the row does not hold being
+ * unknown.
  *
  * @param statements - The schema's statements.
  * @param relation - The check's relation.
@@ -1502,17 +1558,9 @@ export const checkOf = (
   relation: string,
   name: string,
 ): Option.Option<(row: Readonly<Record<string, Datum>>) => boolean> =>
-  Arr.findFirst(statements, (statement) =>
-    Option.match(Schema.decodeUnknownOption(StatementSchema)(statement), {
-      onNone: () => Option.none(),
-      onSome: (read) =>
-        read.kind === "check" && read.relation.name === relation && read.desc.name === name
-          ? Option.some(
-              (row: Readonly<Record<string, Datum>>) =>
-                evaluate(termOf(read.desc.predicate), row, () => false) !== false,
-            )
-          : Option.none(),
-    }),
+  Option.map(
+    checkValueOf(statements, relation, name),
+    (value) => (row: Readonly<Record<string, Datum>>) => value(row) !== false,
   );
 
 /**

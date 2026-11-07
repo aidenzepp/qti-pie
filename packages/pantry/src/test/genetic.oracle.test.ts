@@ -11,6 +11,9 @@
  * - Each known entry's package (`#pantry/test/gen/genetic/known.ts`) must still show its class, so an
  *   entry its owner's fix closed fails as stale until the fix's commit deletes it, and each fixed
  *   entry's must never show its class again;
+ * - Each known and fixed entry's signature names only relations and fields `Qti` has, since one that
+ *   names a relation or a field a later commit removed can never show, and a fixed entry keyed by
+ *   it guards nothing;
  * - Each planted value-domain case (`#pantry/test/gen/genetic/planted.ts`) lies inside its domain's
  *   lexical space and outside its facets, which the oracle refuses and today's database does not,
  *   so the two disagree on it while it waits on its owner's fix, and must agree on it once the fix
@@ -36,6 +39,7 @@ import { boundedShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Option } from "effect";
 import { grammar } from "#pantry/grammar/install.ts";
+import { Qti } from "#pantry/qti/schema.ts";
 import { lawTable } from "#pantry/vocab/laws.ts";
 import { corpusOf } from "#pantry/test/gen/genetic/corpus.ts";
 import { residualsOf } from "#pantry/test/gen/genetic/engine.ts";
@@ -105,6 +109,105 @@ const knownList = [
   ...Object.entries<Known>(known).map(([signature, entry]) => ({ entry, shows: true, signature })),
   ...Object.entries<Known>(fixed).map(([signature, entry]) => ({ entry, shows: false, signature })),
 ];
+
+/**
+ * Each relation of `Qti`, and each field of its heading as `Relation.field`, the names a signature
+ * may hold.
+ */
+const qtiNames: ReadonlySet<string> = new Set(
+  Object.values(Qti.relations).flatMap(({ heading, name }) => [
+    name,
+    ...Object.keys(heading).map((field) => `${name}.${field}`),
+  ]),
+);
+
+/**
+ * A `Relation.field` in a signature: a dangling uuid's field, a field a key text is past its bound
+ * in, or a fold's family.
+ */
+const fieldPattern = /\b[A-Z]\w*\.\w+/gu;
+
+/**
+ * A check's relation in a signature: `check <name> on Relation`.
+ */
+const checkPattern = /\bcheck \w+ on [A-Z]\w*/gu;
+
+/**
+ * A side of a containment or a fold in a signature: `Relation(term, ...)`, each term a field,
+ * `pred(field)` or `constant(value)`, as `#pantry/test/key-copies.ts` `identityOf` writes it.
+ */
+const sidePattern = /\b[A-Z]\w*\((?:[^()]|\([^()]*\))*\)/gu;
+
+/**
+ * Read the relations and fields a side of a containment or a fold names: its relation, and each
+ * term's field as `Relation.field`, a constant naming none.
+ *
+ * @param side - The side, as {@link sidePattern} matches it.
+ * @returns The names.
+ */
+const sideNames = (side: string): readonly string[] => {
+  const open = side.indexOf("(");
+  const relation = side.slice(0, open);
+
+  return [
+    relation,
+    ...side
+      .slice(open + 1, -1)
+      .split(", ")
+      .flatMap((term) => {
+        if (term.startsWith("constant(")) {
+          return [];
+        }
+
+        return [`${relation}.${term.startsWith("pred(") ? term.slice("pred(".length, -1) : term}`];
+      }),
+  ];
+};
+
+/**
+ * Read the relations and fields a signature names, as `#pantry/test/gen/genetic/judge.ts`
+ * `signatureOf` writes them from the host's witnesses: each `Relation.field`, each check's
+ * relation and each side of a containment or a fold with its terms' fields. A signature of a law's
+ * name, a rule or a refusal names none.
+ *
+ * @param signature - The signature.
+ * @returns The names, each once.
+ */
+const namedIn = (signature: string): ReadonlySet<string> =>
+  new Set([
+    ...Array.from(signature.matchAll(fieldPattern), ([named]) => named),
+    ...Array.from(signature.matchAll(checkPattern), ([named]) =>
+      named.slice(named.lastIndexOf(" ") + 1),
+    ),
+    ...Array.from(signature.matchAll(sidePattern), ([side]) => sideNames(side)).flat(),
+  ]);
+
+/**
+ * Read the names a signature holds that `Qti` has no relation or field of.
+ *
+ * @param signature - The signature.
+ * @returns Each such name.
+ */
+const goneIn = (signature: string): readonly string[] =>
+  [...namedIn(signature)].filter((name) => !qtiNames.has(name));
+
+/**
+ * Signatures this file once kept, each naming a relation or a field `Qti` no longer has, one of
+ * each shape {@link namedIn} reads, with the name gone: the guard below must refuse each.
+ */
+const goneSignatures = [
+  ["dangling-uuid: VariableRef.declaration", "VariableRef.declaration"],
+  ["import-only-law: Key text bound, a text past Node.stringPiece's bound", "Node.stringPiece"],
+  [
+    "import-only-law: E1 derived, contained Attribute(node, lexical) in AssessmentObject(node, identifierLexical)",
+    "AssessmentObject.identifierLexical",
+  ],
+  [
+    "import-only-law: E1 derived, contained Expression(parent, baseType, cardinality) in VariableRef(node, heldBase, heldCardinality)",
+    "VariableRef.heldBase",
+  ],
+  ["import-only-law: E1 derived, check E1_derived on MappingSource", "MappingSource"],
+] as const;
 
 /**
  * The signatures the known entries record, which the search reports unreduced and does not fail on.
@@ -209,6 +312,24 @@ layer(NodeServices.layer, { excludeTestServices: true })(
           }).pipe(Effect.scoped),
         ),
       testTimeoutMs,
+    );
+
+    it.effect("names only relations and fields Qti has in every known and fixed signature", () =>
+      // Oracle: Qti's own relations and their fields. Bound: every known and fixed entry's
+      // signature, and one signature of each shape whose name Qti no longer has.
+      Effect.sync(() => {
+        for (const [signature, gone] of goneSignatures) {
+          assert.include(goneIn(signature), gone, `the guard reads no ${gone} in ${signature}`);
+        }
+
+        assert.deepStrictEqual(
+          knownList.flatMap(({ signature }) =>
+            goneIn(signature).map((name) => `${signature}: ${name}`),
+          ),
+          [],
+          "these signatures name a relation or a field Qti no longer has, so they can never show and their entries guard nothing; plant the behaviour each entry's fix removed, judge its package, and rekey it to the signature that shows, or delete it where none can",
+        );
+      }),
     );
 
     it.effect(

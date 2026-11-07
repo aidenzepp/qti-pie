@@ -1,14 +1,15 @@
 /**
- * Declarations that have no `Declaration` row, as packages (lane NIL's audit, B11): every
- * declaration of the every-relation items and test, each with its `cardinality` or `base-type`
- * dropped, emptied or written as no value spells. A declaration whose `identifier` is dropped or
- * names nothing keeps its row and everything below it, and has no name alone (spec reading 157),
- * which `src/import/overlays/unnamed-declarations.oracle.test.ts` holds.
+ * Declarations whose cardinality or base type spells nothing, as packages (lane NIL's audit, B11;
+ * spec reading 158): every declaration of the every-relation items and test, each with its
+ * `cardinality` or `base-type` dropped, emptied or written as no value spells. A declaration whose
+ * `identifier` is dropped or names nothing keeps its row and everything below it, and has no name
+ * alone (spec reading 157), which `src/import/overlays/unnamed-declarations.oracle.test.ts` holds.
  *
- * Such a declaration has no row, and nothing binds, references or hangs from it in the importer's
- * rows (`#pantry/import/overlays/declarations.ts` `typedDeclarationOf`): its own law, AL3's
- * required attribute or the attribute's value domain, refuses it.
- * `src/test/declaration-rows.oracle.test.ts` holds the oracle and the rows to that, and
+ * Such a declaration keeps its row and every row below it, and has no `DeclarationCardinality` or
+ * `DeclarationBaseType` alone; one with no cardinality has no `DeclarationName`, so nothing binds
+ * or references it in the importer's rows (`#pantry/import/overlays/declarations.ts`
+ * `typedDeclarationOf`): its own law, AL3's required attribute or the attribute's value domain,
+ * refuses it. `src/test/declaration-rows.oracle.test.ts` holds the oracle and the rows to that, and
  * `src/import/declaration-rows.db.test.ts` the database.
  */
 import { everyRelationPackage } from "#pantry/test/gen/every-relation.ts";
@@ -112,11 +113,11 @@ export const declarationSites: readonly DeclarationSite[] = declaringPaths.flatM
 });
 
 /**
- * One state that leaves a declaration no row: its name, the attribute it edits, the value it writes
- * there from the one written (none to drop it), and the rule the oracle names it by. `alone` says
- * the oracle names that rule and no other: so where only the cardinality changes, every reference
- * still resolves and types nothing, and where only the base type does, no law reads a type it does
- * not spell.
+ * One state that leaves a declaration's cardinality or base type spelling nothing: its name, the
+ * attribute it edits, the value it writes there from the one written (none to drop it), and the
+ * rule the oracle names it by. `alone` says the oracle names that rule and no other: so where only
+ * the cardinality changes, every reference still resolves and types nothing, and where only the
+ * base type does, no law reads a type it does not spell.
  */
 export interface DeclarationState {
   readonly alone: boolean;
@@ -128,7 +129,7 @@ export interface DeclarationState {
 }
 
 /**
- * Every state that leaves a declaration no row.
+ * Every state that leaves a declaration's cardinality or base type spelling nothing.
  */
 export const declarationStates: readonly DeclarationState[] = [
   {

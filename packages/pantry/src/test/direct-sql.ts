@@ -587,7 +587,8 @@ type Expression =
       readonly field: string;
       readonly kind: "closedAt";
       readonly relation: string;
-    };
+    }
+  | { readonly args: readonly Expression[]; readonly kind: "closedHas"; readonly relation: string };
 
 /**
  * An {@link Expression}.
@@ -622,6 +623,11 @@ const ExpressionSchema: Schema.Codec<Expression> = Schema.Union([
     args: Schema.Array(Schema.suspend((): Schema.Codec<Expression> => ExpressionSchema)),
     field: Schema.String,
     kind: Schema.Literals(["closedAt"]),
+    relation: Schema.String,
+  }),
+  Schema.Struct({
+    args: Schema.Array(Schema.suspend((): Schema.Codec<Expression> => ExpressionSchema)),
+    kind: Schema.Literals(["closedHas"]),
     relation: Schema.String,
   }),
 ]);
@@ -774,6 +780,42 @@ const hiddenFolds = Qti.statements.flatMap((statement) =>
 const closedIndexes = new Map<string, ReadonlyMap<string, ReadonlyMap<string, Scalar>>>();
 
 /**
+ * Read a closed relation's rows by the text of their key, building its index once.
+ *
+ * @param relation - The closed relation's name.
+ * @returns Each row's values by field, by the text of its key.
+ */
+const closedIndexOf = (relation: string): ReadonlyMap<string, ReadonlyMap<string, Scalar>> =>
+  closedIndexes.get(relation) ??
+  Option.match(
+    Schema.decodeUnknownOption(ClosedSchema)(
+      Object.values(Qti.relations).find(({ name }) => name === relation),
+    ),
+    {
+      onNone: () =>
+        assert.fail(`A selection reads ${relation}, which is no closed relation of Qti's.`),
+      onSome: ({ key, rows }) => {
+        const built = new Map(
+          rows.map((row) => [
+            key.map((name) => String(row[name])).join("\u0000"),
+            new Map(
+              Object.entries(row).flatMap(([name, value]) =>
+                Option.match(Schema.decodeUnknownOption(ScalarSchema)(value), {
+                  onNone: () => [],
+                  onSome: (scalar) => [[name, scalar] as const],
+                }),
+              ),
+            ),
+          ]),
+        );
+        closedIndexes.set(relation, built);
+
+        return built;
+      },
+    },
+  );
+
+/**
  * Read one field of the row of a closed relation at a key, as a selection's `closedAt` reads it.
  *
  * @param relation - The closed relation's name.
@@ -781,42 +823,19 @@ const closedIndexes = new Map<string, ReadonlyMap<string, ReadonlyMap<string, Sc
  * @param field - The field.
  * @returns The row's value.
  */
-const closedAt = (relation: string, args: readonly Scalar[], field: string): Scalar => {
-  const index =
-    closedIndexes.get(relation) ??
-    Option.match(
-      Schema.decodeUnknownOption(ClosedSchema)(
-        Object.values(Qti.relations).find(({ name }) => name === relation),
-      ),
-      {
-        onNone: () =>
-          assert.fail(`A selection reads ${relation}, which is no closed relation of Qti's.`),
-        onSome: ({ key, rows }) => {
-          const built = new Map(
-            rows.map((row) => [
-              key.map((name) => String(row[name])).join("\u0000"),
-              new Map(
-                Object.entries(row).flatMap(([name, value]) =>
-                  Option.match(Schema.decodeUnknownOption(ScalarSchema)(value), {
-                    onNone: () => [],
-                    onSome: (scalar) => [[name, scalar] as const],
-                  }),
-                ),
-              ),
-            ]),
-          );
-          closedIndexes.set(relation, built);
+const closedAt = (relation: string, args: readonly Scalar[], field: string): Scalar =>
+  closedIndexOf(relation).get(args.map(String).join("\u0000"))?.get(field) ??
+  assert.fail(`${relation} holds no value of ${field} at (${args.map(String).join(", ")}).`);
 
-          return built;
-        },
-      },
-    );
-
-  return (
-    index.get(args.map(String).join("\u0000"))?.get(field) ??
-    assert.fail(`${relation} holds no value of ${field} at (${args.map(String).join(", ")}).`)
-  );
-};
+/**
+ * Whether a closed relation holds a row at a key, as a selection's `closedHas` reads it.
+ *
+ * @param relation - The closed relation's name.
+ * @param args - The key's values, in its fields' order.
+ * @returns Whether it does.
+ */
+const closedHas = (relation: string, args: readonly Scalar[]): boolean =>
+  closedIndexOf(relation).has(args.map(String).join("\u0000"));
 
 /**
  * A value as a selection compares it: a number as the natural it is.
@@ -868,6 +887,11 @@ const valueOf = (expression: Expression, fact: Stated["fact"]): Scalar =>
           relation,
           args.map((arg) => valueOf(arg, fact)),
           field,
+        ),
+      closedHas: ({ args, relation }) =>
+        closedHas(
+          relation,
+          args.map((arg) => valueOf(arg, fact)),
         ),
       compare: ({ left, op, right }) => compared(op, valueOf(left, fact), valueOf(right, fact)),
       field: ({ field }) =>
@@ -1052,6 +1076,7 @@ const fieldsRead = (expression: Expression): readonly string[] =>
     Match.discriminatorsExhaustive("kind")({
       and: ({ args }) => args.flatMap(fieldsRead),
       closedAt: ({ args }) => args.flatMap(fieldsRead),
+      closedHas: ({ args }) => args.flatMap(fieldsRead),
       compare: ({ left, right }) => [...fieldsRead(left), ...fieldsRead(right)],
       field: ({ field }) => [field],
       in: ({ arg }) => fieldsRead(arg),

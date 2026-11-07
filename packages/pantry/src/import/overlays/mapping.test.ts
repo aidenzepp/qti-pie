@@ -381,8 +381,8 @@ const identityOf = (entries: readonly { caseSensitive?: string; key: string }[])
   ].map((row) => JSON.stringify([row.mapping, row.folded, row.key]));
 
 describe("import/overlays/mapping.ts, which map keys are one key", () => {
-  it("writes the key as written beside how it is matched as a key's identity, so York and york are two keys and york written twice is one (reading 160)", () => {
-    // Oracle: reading 160 (decision 425): two string entries are one key only when they are
+  it("writes the key as written beside how it is matched as a key's identity, so York and york are two keys and york written twice is one (reading 161)", () => {
+    // Oracle: reading 161 (decision 425): two string entries are one key only when they are
     // written identically and matched the same way; the schema's uniqueness is
     // `key(MapKey(mapping, folded, key))`, so the identity read here is that tuple.
     // Bound: the one string mapping, its entries named.

@@ -154,8 +154,8 @@ export const recordCardinality = "record";
  * `xs:string`, whose whitespace is preserved, so a form is compared as written: a padded one spells
  * none, which its value domain refuses. It is the one reading of a cardinality, the importer's
  * (`#pantry/import/overlays/declarations.ts` `typedDeclarationOf`) and the law oracle's, so a
- * declaration whose `cardinality` spells none has no row and no law reads a type of it (lane NIL's
- * audit, B11).
+ * declaration whose `cardinality` spells none has no `DeclarationCardinality` and no law reads a
+ * cardinality of it (lane NIL's audit, B11; spec reading 158).
  */
 export const spelledCardinalities: ReadonlySet<string> = new Set([
   ...typedCardinalities,

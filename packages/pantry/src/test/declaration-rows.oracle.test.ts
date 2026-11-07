@@ -1,27 +1,25 @@
 /**
- * Declarations that have no `Declaration` row (lane NIL's audit, B11), held three ways over every
- * declaration of the every-relation package: the law oracle, the importer's rows, and the families
- * and checks those rows feed.
+ * Declarations whose cardinality or base type spells nothing (lane NIL's audit, B11; spec reading
+ * 158), held three ways over every declaration of the every-relation package: the law oracle, the
+ * importer's rows, and the families and checks those rows feed.
  *
- * A declaration's row is written only where its `cardinality` is written and spells a handle, and
- * its `base-type` is unwritten or spells one (`#pantry/import/overlays/declarations.ts`
- * `typedDeclarationOf`); its identifier is its name's alone (spec reading 157). Before, one whose
- * identifier or cardinality was unwritten or spelled nothing still had a row, holding `""` and
- * `single`: a
- * missing value as a sentinel. Its own `E1_derived` refused that row, and every row that copied it,
- * a binding's declaration row, a reference, a value set, a table, judged the `single`. grizzle
- * writes those flat relations before `Node`, whose AL3 is the law, and `Attribute`, whose value
- * domain is, so the import was refused under `derived` or a fit law where the oracle names AL3 or
- * the value domain alone (the ruling of 2026-11-06; lane N2's binding-fit tier).
+ * A declaration has its row, and every row below it, whatever its attributes spell; its
+ * cardinality and its base type are each a row of its own, written only where the attribute is
+ * written and spells a code (`#pantry/import/overlays/declarations.ts` `typedDeclarationOf`), as
+ * its identifier is (spec reading 157). Before, one whose cardinality was unwritten or spelled
+ * nothing had a row holding `""` and `single`: a missing value as a sentinel, which its own
+ * `E1_derived` refused and every row that copied it judged; then it had no row at all, so the
+ * copies its children ask broke beside its own law.
  *
- * For every declaration of the every-relation items and test, under each state that leaves it no
- * row:
+ * For every declaration of the every-relation items and test, under each state that leaves its
+ * cardinality or its base type spelling nothing:
  *
  * - The oracle raises AL3's required attribute or the attribute's value domain at the declaration,
  *   and where only its cardinality or base type changed, nothing else;
- * - The importer writes no `Declaration` row for it, and no row anywhere names it: no base type,
- *   scale attribute or pair of them, value set, table, declaration table, binding declaration or
- *   reference whose `declaration` is its node;
+ * - The importer writes its `Declaration` row and its value sets, and no typed row of the edited
+ *   attribute: no `DeclarationCardinality`, and so no name, nor any row that reads a cardinality,
+ *   binds or references it, for a cardinality; no `DeclarationBaseType`, nor any row that reads a
+ *   base type of it, for a base type;
  * - No family member names an owner the import writes no row of (`#pantry/test/family-owners.ts`),
  *   and every `ChoiceVariableName` row counts at least one choice, hottext or declaration, as its
  *   `E1_derived` requires, so no row of a relation grizzle writes before `Node` breaks a CHECK.
@@ -80,18 +78,29 @@ const ReadSchema = Schema.Struct({
 const readRow = Schema.decodeUnknownSync(ReadSchema);
 
 /**
- * The relations a declaration's own rows sit in, each keyed by the declaration's node.
+ * The relations whose rows hang from a declaration whatever its cardinality spells, each naming it
+ * by its `declaration`: its values and its tables. Every other row that names it reads its
+ * cardinality, binds or references it.
  */
-const ownRows = [
-  "Declaration",
-  "DeclarationBaseType",
-  "MasteryValue",
-  "NormalMinimum",
-  "NormalMaximum",
-  "MasteryFloor",
-  "MasteryCeiling",
+const hanging: ReadonlySet<string> = new Set([
+  "AreaMapping",
   "DeclarationTable",
-] as const;
+  "LookupTable",
+  "LookupValue",
+  "LookupValueType",
+  "Mapping",
+  "MappingBaseType",
+  "Value",
+]);
+
+/**
+ * The relations whose rows read a declaration's base type, each naming it by its `declaration`.
+ */
+const baseTypeReaders: ReadonlySet<string> = new Set([
+  "DeclaredValue",
+  "LookupValueType",
+  "MappingBaseType",
+]);
 
 /**
  * Hold one case: the oracle's rules at the declaration, and the importer's rows.
@@ -138,29 +147,34 @@ const holds = (at: number) =>
       ({ kind }) => kind === site.kind,
     )[site.ordinal]?.id;
     assert.isDefined(declarationNode, `${label}: its element has no Node row`);
-    for (const relation of ownRows) {
-      assert.isFalse(
-        [...inputs[relation].keys()].includes(declarationNode ?? ""),
-        `${label}: a ${relation} row stands for it`,
-      );
+
+    const node = declarationNode ?? "";
+    const cardinal = state.attribute === "cardinality";
+    assert.isTrue(inputs.Declaration.has(node), `${label}: it has no Declaration row`);
+    assert.isFalse(
+      (cardinal ? inputs.DeclarationCardinality : inputs.DeclarationBaseType).has(node),
+      `${label}: a typed row stands for its ${state.attribute}`,
+    );
+    if (cardinal) {
+      assert.isFalse(inputs.DeclarationName.has(node), `${label}: a name types it`);
     }
 
     for (const [relation, rows] of rowsByRelation(inputs)) {
       for (const row of rows) {
-        const read = readRow(row);
-        assert.notStrictEqual(
-          read.declaration,
-          declarationNode,
-          `${label}: a ${relation} row names it`,
+        const named = readRow(row).declaration === node;
+        assert.isFalse(
+          named && (cardinal ? !hanging.has(relation) : baseTypeReaders.has(relation)),
+          `${label}: a ${relation} row reads what it does not spell`,
         );
-        if (relation === "ValueSet") {
-          assert.notStrictEqual(
-            read.parent,
-            declarationNode,
-            `${label}: a value set hangs below it`,
-          );
-        }
       }
+    }
+
+    const sets = (root === undefined ? [] : flat(root))
+      .filter(({ id }) => id === node)
+      .flatMap(({ children }) => children)
+      .filter(({ kind }) => kind === "qti-default-value" || kind === "qti-correct-response");
+    for (const set of sets) {
+      assert.isTrue(inputs.ValueSet.has(set.id), `${label}: a value set below it has no row`);
     }
 
     const orphans = orphansOf(inputs);
@@ -202,13 +216,13 @@ const holds = (at: number) =>
     }
   }).pipe(Effect.scoped, Effect.provide(NodeServices.layer));
 
-describe("declarations with no Declaration row (lane NIL's audit, B11)", () => {
+describe("declarations whose cardinality or base type spells nothing (spec reading 158)", () => {
   it.effect(
-    "are refused by AL3 or the value domain, and no row stands for them or names them",
+    "keep their rows, are refused by AL3 or the value domain alone, and no row reads what they do not spell",
     (ctx) =>
       // Oracle: the specification as a checker (the law oracle), and the families and checks the
       // importer's rows feed, read over those rows. Bound: every declaration of the every-relation
-      // items and test, under each state of its cardinality and base type that leaves it no row,
+      // items and test, under each state of its cardinality and base type that spells nothing,
       // exhausted.
       searched(
         ctx,

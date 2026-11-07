@@ -5,11 +5,12 @@
  * made lawful.
  *
  * - A key the host finds is written through the author role (`db.apply`): two declarations of one
- *   identifier in one document, inserted with their owner, are refused before any SQL,
- *   `invariant-rejected` with the key law among its `refused.laws` (membership, C22). A
- *   `Declaration` is a member of its identifier's family, `ChoiceVariableName.declarations`, whose
- *   owner is immutable, so the change inserts that owner beside its members (README, "Families":
- *   "An immutable owner's family is fixed when the owner is inserted").
+ *   identifier in one document are refused before any SQL, `invariant-rejected` with the key law
+ *   among its `refused.laws` (membership, C22). Each is written with its identifier alone, a
+ *   `DeclarationIdentifier`, a member of no immutable owner's family (README, "Families": "An
+ *   immutable owner's family is fixed when the owner is inserted").
+ * - A containment a declaration's cardinality states, a foreign key grizzle defers, is judged by the
+ *   same direct SQL writer with that one key set immediate: SQLSTATE 23503 and its name.
  * - A row's own CHECKs are judged by a direct SQL writer, as the rules file's rule 8 and grizzle's
  *   README ("Direct SQL access") state it: the author login, `SET ROLE` to the author role,
  *   SERIALIZABLE, every deferrable foreign key deferred, the row inserted into its table with every
@@ -36,20 +37,30 @@ import {
   contextVariable,
   Declaration,
   DeclarationBaseType,
+  DeclarationCardinality,
+  DeclarationIdentifier,
   declarationKinds,
   DeclarationName,
   DeclaredValue,
+  FieldValue,
   MasteryCeiling,
   MasteryFloor,
   reservedBaseTypes,
   sessionVariables,
   ValueBaseType,
-  ValueSet,
+  ValueSetCardinality,
 } from "#pantry/qti/declarations.ts";
 import { ChoiceVariableName } from "#pantry/qti/interactions.ts";
 import { AuthorApp } from "#pantry/qti/logins.ts";
 import { Author } from "#pantry/qti/roles.ts";
-import { assertVerdict, judged, loginSession, statedInserts } from "#pantry/test/direct-sql.ts";
+import {
+  assertVerdict,
+  constraintDescribed,
+  judged,
+  judgedCase,
+  loginSession,
+  statedInserts,
+} from "#pantry/test/direct-sql.ts";
 import type { Stated } from "#pantry/test/direct-sql.ts";
 import { authorLayerHookTimeoutMs, hasLease, leaseTestTimeoutMs } from "#pantry/test/settings.ts";
 
@@ -68,18 +79,22 @@ const strayNode = (at: number): `${string}-${string}-${string}-${string}-${strin
 const strayDocument = strayNode(255);
 
 /**
- * A declaration's facts: its `Declaration` row's, and its `DeclarationName`'s but the count of
- * base types, which {@link declared} copies from the base type it writes.
+ * A declaration's facts: its `Declaration` row's, its `DeclarationCardinality`'s, and its
+ * `DeclarationIdentifier`'s and `DeclarationName`'s but the count of base types, which
+ * {@link declared} copies from the base type it writes.
  */
 interface DeclarationFacts {
+  readonly cardinality: Stated["fact"];
+  readonly identifier: Stated["fact"];
   readonly name: Stated["fact"];
   readonly row: Stated["fact"];
 }
 
 /**
  * A declaration's facts, lawful on their own beside its base type's row ({@link declared}): an
- * outcome `A` of single cardinality, its lexical forms the handles' own, and its name, which
- * copies its row's document, kind and cardinality (spec reading 157).
+ * outcome `A` of single cardinality, its lexical forms the handles' own, its identifier, which
+ * copies its row's document, kind and counts, and its name, which copies its identifier and its
+ * cardinality (spec readings 157 and 158).
  *
  * @param fields - The fields the case sets.
  * @param fields.cardinality - Its cardinality.
@@ -99,8 +114,13 @@ const declarationRow = (fields: {
   const identifier = fields.identifier ?? "A";
 
   return {
-    name: {
+    cardinality: {
       cardinality,
+      cardinalityLexical: fields.cardinalityLexical ?? cardinality,
+      node: strayNode(1),
+    },
+    identifier: {
+      cardinalities: 1n,
       declarationKind: kind,
       document: strayDocument,
       identifier,
@@ -109,9 +129,14 @@ const declarationRow = (fields: {
       identifierTrail: "",
       node: strayNode(1),
     },
-    row: {
+    name: {
       cardinality,
-      cardinalityLexical: fields.cardinalityLexical ?? cardinality,
+      declarationKind: kind,
+      document: strayDocument,
+      identifier,
+      node: strayNode(1),
+    },
+    row: {
       declarationKind: kind,
       document: strayDocument,
       kind,
@@ -125,13 +150,14 @@ const declarationRow = (fields: {
 };
 
 /**
- * A declaration's rows with its name's owner: its `Declaration`, its `DeclarationName`, which
- * copies the row's document, kind, cardinality and count of base types (spec reading 157), and the
+ * A declaration's rows with its name's owner: its `Declaration`, its `DeclarationCardinality`, its
+ * `DeclarationIdentifier`, which copies the row's document, kind and counts, its `DeclarationName`,
+ * which copies its identifier and its cardinality (spec readings 157 and 158), and the
  * `ChoiceVariableName` row of its document and identifier, which states no choice, hottext or
  * placement and so counts it as its one declaration, and "Choice not variable" holds whatever the
- * identifier. The writer orders them and fills the name's slot in its family
+ * identifier. The writer orders them and fills each member's slot in its family
  * (`#pantry/test/direct-sql.ts` `statedInserts`): a counted family's owner axis is not deferrable,
- * so the name is judged against its owner at its INSERT, and the owner's own foreign keys are
+ * so a member is judged against its owner at its INSERT, and the owner's own foreign keys are
  * deferred.
  *
  * @param facts - The declaration's facts, {@link declarationRow}'s, whose node is `strayNode(1)`.
@@ -140,10 +166,12 @@ const declarationRow = (fields: {
  * @returns The rows, in writing order.
  */
 const declared = (
-  { name, row }: DeclarationFacts,
+  { cardinality, identifier, name, row }: DeclarationFacts,
   baseType: Option.Option<string> = Option.some("float"),
-) =>
-  statedInserts([
+) => {
+  const baseTypes = BigInt(Option.toArray(baseType).length);
+
+  return statedInserts([
     {
       fact: {
         document: name["document"] ?? strayDocument,
@@ -153,24 +181,14 @@ const declared = (
       relation: ChoiceVariableName,
     },
     { fact: row, relation: Declaration },
+    { fact: cardinality, relation: DeclarationCardinality },
     ...Option.toArray(baseType).map((code): Stated => ({
       fact: { baseType: code, baseTypeLexical: code, node: strayNode(1), valueBase: code },
       relation: DeclarationBaseType,
     })),
-    {
-      fact: { ...name, baseTypes: BigInt(Option.toArray(baseType).length) },
-      relation: DeclarationName,
-    },
+    { fact: { ...identifier, baseTypes }, relation: DeclarationIdentifier },
+    { fact: { ...name, baseTypes }, relation: DeclarationName },
   ]);
-
-/**
- * The `ChoiceVariableName` fact of the one identifier a key case's declarations use, the owner the
- * change inserts beside its members: its counts are the family's to draw.
- */
-const declaredName: Addition<typeof ChoiceVariableName> = {
-  document: strayDocument,
-  identifier: "A",
-  rootKind: "qti-assessment-item",
 };
 
 /**
@@ -180,8 +198,6 @@ const declaredName: Addition<typeof ChoiceVariableName> = {
  * @returns The fact.
  */
 const declarationFact = (node: number): Addition<typeof Declaration> => ({
-  cardinality: "single",
-  cardinalityLexical: "single",
   declarationKind: "qti-outcome-declaration",
   document: strayDocument,
   kind: "qti-outcome-declaration",
@@ -194,16 +210,19 @@ const declarationFact = (node: number): Addition<typeof Declaration> => ({
 });
 
 /**
- * A declaration's name fact as the author role writes it, lawful beside {@link declarationFact}'s
- * row of its node, which writes no base type.
+ * A declaration's identifier fact as the author role writes it, lawful beside
+ * {@link declarationFact}'s row of its node, which writes no base type and no cardinality.
  *
  * @param node - Its node.
  * @param identifierLexical - Its identifier as written; its name is that collapsed.
  * @returns The fact.
  */
-const nameFact = (node: number, identifierLexical: string): Addition<typeof DeclarationName> => ({
+const identifierFact = (
+  node: number,
+  identifierLexical: string,
+): Addition<typeof DeclarationIdentifier> => ({
   baseTypes: 0n,
-  cardinality: "single",
+  cardinalities: 0n,
   declarationKind: "qti-outcome-declaration",
   document: strayDocument,
   identifier: identifierLexical.trim(),
@@ -320,25 +339,28 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
         () =>
           // Oracle: the specification as a checker, reading 74: no two declarations of a document
           // share an identifier, compared collapsed (XML Schema Part 2, §4.3.6).
-          // Bound: two declarations, the second's lexical form `A` and ` A`, with the owner of their
-          // identifier's family, which an insert of a member of an immutable owner's family needs
-          // in its own change; the host finds the key, so `laws` holds it whether or not any SQL
-          // ran.
+          // Bound: two declarations, the second's lexical form `A` and ` A`, each with its
+          // identifier and neither a cardinality nor a name, so no family of an immutable owner
+          // holds them; the host finds the key, so `laws` holds it whether or not any SQL ran.
           Effect.gen(function* declarationKey() {
             const db = yield* Db.open(AuthorApp.roles.author, {});
             for (const second of ["A", " A"]) {
               const outcome = yield* db.apply(
                 ChangeSet.empty(Author)
-                  .insert(ChoiceVariableName, [declaredName])
                   .insert(Declaration, [declarationFact(1), declarationFact(2)])
-                  .insert(DeclarationName, [nameFact(1, "A"), nameFact(2, second)]),
+                  .insert(DeclarationIdentifier, [
+                    identifierFact(1, "A"),
+                    identifierFact(2, second),
+                  ]),
                 {},
               );
 
               assert.strictEqual(outcome.kind, "invariant-rejected", second);
               assert.isTrue(
                 outcome.kind === "invariant-rejected" &&
-                  outcome.refused.laws.some(keyOver("DeclarationName", ["document", "identifier"])),
+                  outcome.refused.laws.some(
+                    keyOver("DeclarationIdentifier", ["document", "identifier"]),
+                  ),
                 Formatter.format(second),
               );
             }
@@ -502,13 +524,7 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
                   client,
                   statedInserts([
                     {
-                      fact: {
-                        baseType,
-                        baseTypeLexical,
-                        cardinality: "record",
-                        node: strayNode(3),
-                        text: "1",
-                      },
+                      fact: { baseType, baseTypeLexical, cardinalities: 1n, node: strayNode(3) },
                       relation: ValueBaseType,
                     },
                   ]),
@@ -529,20 +545,30 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
                 refused: true,
               },
               {
-                facts: { ...control, name: { ...control.name, identifierLexical: " A" } },
+                facts: {
+                  ...control,
+                  identifier: { ...control.identifier, identifierLexical: " A" },
+                },
                 label: "identifier padded but written bare",
                 refused: true,
               },
               {
                 facts: {
                   ...control,
-                  name: { ...control.name, identifierLead: " ", identifierLexical: " A" },
+                  identifier: {
+                    ...control.identifier,
+                    identifierLead: " ",
+                    identifierLexical: " A",
+                  },
                 },
                 label: "identifier padded, its lead written",
                 refused: false,
               },
               {
-                facts: { ...padded, name: { ...padded.name, identifierLexical: " A" } },
+                facts: {
+                  ...padded,
+                  identifier: { ...padded.identifier, identifierLexical: " A" },
+                },
                 label: "identifier holding its own whitespace",
                 refused: true,
               },
@@ -559,18 +585,42 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
         () =>
           // Oracle: the specification as a checker, the information model's tables 4.5.3,
           // 5.34.3, 5.115.3 and 5.151.3: "Variables with record cardinality have no base-type",
-          // and every other variable's value space "is identified with a base-type".
-          // Bound: every cardinality (4) without a base type's row and with `float`'s, 8 cases.
+          // and every other variable's value space "is identified with a base-type". Each half is
+          // a containment from the declaration's `DeclarationCardinality`, a deferred foreign key
+          // set immediate: a record's into the declarations with no base type, any other's into
+          // the `base-type` attributes, which no stray row writes (spec reading 158).
+          // Bound: every cardinality (4) without a base type's row and with `float`'s, 8 cases;
+          // the attribute's half is judged where it refuses, since its control writes a `Node`.
           Effect.gen(function* baseTypeLaw() {
             const client = yield* loginSession;
+            const recordHalf = yield* constraintDescribed(
+              client,
+              "declaration_cardinality",
+              "%tag Declaration.baseTypes = 0) to Declaration(node, baseTypes)",
+            );
+            const otherHalf = yield* constraintDescribed(
+              client,
+              "declaration_cardinality",
+              '%"op":"ne"%) to Attribute(%base-type%',
+            );
             for (const cardinality of Cardinality.handles) {
               for (const baseType of [Option.none(), Option.some("float")]) {
-                assertVerdict(
-                  yield* judged(client, declared(declarationRow({ cardinality }), baseType)),
-                  "declaration_base_type",
-                  (cardinality === "record") === Option.isSome(baseType),
-                  `${cardinality} ${Option.getOrElse(baseType, () => "no base type")}`,
-                );
+                const record = cardinality === "record";
+                const label = `${cardinality} ${Option.getOrElse(baseType, () => "no base type")}`;
+                const inserts = declared(declarationRow({ cardinality }), baseType);
+                if (record) {
+                  const { refused } = yield* judgedCase(client, {
+                    immediate: [recordHalf],
+                    inserts,
+                  });
+                  assertVerdict(refused, recordHalf, Option.isSome(baseType), label, "23503");
+                } else if (Option.isNone(baseType)) {
+                  const { refused } = yield* judgedCase(client, {
+                    immediate: [otherHalf],
+                    inserts,
+                  });
+                  assertVerdict(refused, otherHalf, true, label, "23503");
+                }
               }
             }
           }).pipe(Effect.scoped),
@@ -599,21 +649,13 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
                       statedInserts([
                         {
                           fact: {
-                            baseTypes: record ? 0n : 1n,
                             cardinality,
-                            declarationKind: "qti-outcome-declaration",
-                            document: strayDocument,
+                            declaration: strayNode(1),
                             elementChildren: BigInt(values),
-                            elements: 1n,
                             fields: BigInt(fields),
-                            kind: "qti-default-value",
-                            nearest: strayDocument,
                             node: strayNode(2),
-                            parent: strayNode(1),
-                            start: 2n,
-                            version: "3.0.1",
                           },
-                          relation: ValueSet,
+                          relation: ValueSetCardinality,
                         },
                       ]),
                     ),
@@ -635,46 +677,32 @@ describe.skipIf(!hasLease)("qti/declarations.db.test.ts, on the lease", () => {
           // readings 7, 34 and 45, xs:double and §8.13, as the free test's box: PostgreSQL's regex
           // engine judging the same patterns a JavaScript host checks there.
           // Bound: 8 judged base types against 13 texts, 104 cases, and each text under `string`,
-          // which admits every text, 13 more; each as a single set's value in its declaration's
-          // base type (`DeclaredValue`), and as a value's own base type in a record's set, where it
-          // is judged, and in a single set, where it is not (§7.46.2: a value's base-type "is only
-          // used for" a record's field).
+          // which admits every text, 13 more; each in its declaration's base type
+          // (`DeclaredValue`), in a single set, where it is judged, and in a record's, where it is
+          // not, and in its own base type (`FieldValue`), in a record's set, where it is judged,
+          // and in a single set, where it is not (§7.46.2: a value's base-type "is only used for" a
+          // record's field).
           Effect.gen(function* typedValue() {
             const client = yield* loginSession;
             for (const baseType of [...judgedBaseTypes, "string"]) {
               for (const { text, values } of typedTexts) {
                 const refused = baseType !== "string" && !values.includes(baseType);
-                assertVerdict(
-                  yield* judged(
-                    client,
-                    statedInserts([
-                      {
-                        fact: { baseType, declaration: strayNode(1), node: strayNode(3), text },
-                        relation: DeclaredValue,
-                      },
-                    ]),
-                  ),
-                  "typed_value",
-                  refused,
-                  `${baseType} ${JSON.stringify(text)}`,
-                );
                 for (const cardinality of ["record", "single"]) {
+                  const fact = {
+                    baseType,
+                    cardinality,
+                    declaration: strayNode(1),
+                    node: strayNode(3),
+                    text,
+                  };
                   assertVerdict(
-                    yield* judged(
-                      client,
-                      statedInserts([
-                        {
-                          fact: {
-                            baseType,
-                            baseTypeLexical: baseType,
-                            cardinality,
-                            node: strayNode(3),
-                            text,
-                          },
-                          relation: ValueBaseType,
-                        },
-                      ]),
-                    ),
+                    yield* judged(client, statedInserts([{ fact, relation: DeclaredValue }])),
+                    "typed_value",
+                    cardinality !== "record" && refused,
+                    `${baseType} in a ${cardinality} set ${JSON.stringify(text)}`,
+                  );
+                  assertVerdict(
+                    yield* judged(client, statedInserts([{ fact, relation: FieldValue }])),
                     "typed_value",
                     cardinality === "record" && refused,
                     `own ${baseType} in a ${cardinality} set ${JSON.stringify(text)}`,

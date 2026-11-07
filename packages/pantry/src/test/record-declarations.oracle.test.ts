@@ -310,7 +310,7 @@ layer(NodeServices.layer, { excludeTestServices: true })(
       "copies its base type only where it has one, and the law oracle and the import's rows give one verdict over each reference, binding and table",
       (ctx) =>
         // Oracle: a second implementation, the law oracle, which reads each declaration's
-        // `base-type` itself (`typedOptionalOf`), against the import's rows judged on the host by
+        // `base-type` itself (`typedValueOf`), against the import's rows judged on the host by
         // the schema's statements; and the specification by hand for which typed rows exist
         // (information model tables 4.5.3, 5.34.3, 5.115.3 and 5.151.3: a record has no
         // base-type). Bound: 8 referrers (a feedback's, a printed variable's and a template
