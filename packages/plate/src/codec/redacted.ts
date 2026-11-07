@@ -5,7 +5,8 @@
  *
  * A `Redacted` holds Effect `Option`s and `bigint` counts, which `JSON.stringify` cannot write, so
  * this file owns the one wire form: an `Option` is an optional key, absent when none, a count is
- * its decimal digits, and a body node holds no path into its source document ({@link NoPath}).
+ * its decimal digits, and neither a body node nor the record of a text past its bound holds a path
+ * into its source document ({@link NoPath}).
  * `decodeRedacted` is the second way to a `Redacted`, beside `redactItem`'s allowlisted copy, and
  * brands only what its Schema checked.
  *
@@ -415,6 +416,21 @@ const BodyNodeSchema = Schema.Union([
 export type SchemaBodyNode = typeof BodyNodeSchema.Type;
 
 /**
+ * The first printed variable, or `param-variable` parameter, whose text passed its bound, as the
+ * JSON form holds it: an optional key, absent when every text fits. Its `bound` is a whole number
+ * of characters, at least 1, and its `identifier` the variable `render`'s `OutputTooLarge` names.
+ * Like a body node it holds no path ({@link NoPath}): the path of a printed variable inside a
+ * shown template block would tell a page where hidden template content sits.
+ */
+const Unprinted = Schema.OptionFromOptionalKey(
+  Schema.Struct({
+    bound: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
+    identifier: Schema.String,
+    path: NoPath,
+  }),
+);
+
+/**
  * The Schema of a redacted item's fields; its type is {@link RedactedFields}, and its encoded form
  * the {@link RedactedJson} a host sends to a page.
  */
@@ -432,12 +448,13 @@ export const RedactedSchema = Schema.Struct({
     }),
   ),
   title: Schema.String,
+  unprinted: Unprinted,
 });
 
 /**
  * A redacted item in the form a host sends to a page: plain JSON, which `JSON.stringify` writes
  * without loss. An `Option` is an optional key, absent when none, a count is its decimal digits,
- * and a body node holds no path ({@link NoPath}).
+ * and neither a body node nor `unprinted` holds a path ({@link NoPath}).
  */
 export type RedactedJson = typeof RedactedSchema.Encoded;
 
@@ -487,10 +504,9 @@ export class InvalidRedacted extends Data.TaggedError("InvalidRedacted")<{
  * Write a redacted item in the JSON form a host sends to a page.
  *
  * @param item The item `redact` gave.
- * @returns The {@link RedactedJson}, which holds no body node's path ({@link NoPath}), which
- *   `JSON.stringify` writes without loss, and which {@link decodeRedacted} reads back to `item`
- *   with every path `""`; or {@link InvalidRedacted} at stage `encode` naming a field that does
- *   not fit.
+ * @returns The {@link RedactedJson}, which holds no path ({@link NoPath}), which `JSON.stringify`
+ *   writes without loss, and which {@link decodeRedacted} reads back to `item` with every path
+ *   `""`; or {@link InvalidRedacted} at stage `encode` naming a field that does not fit.
  */
 export const encodeRedacted = (item: Redacted): Result.Result<RedactedJson, InvalidRedacted> =>
   Result.mapError(
@@ -724,9 +740,10 @@ const decodeJson = (input: unknown): Result.Result<Redacted, InvalidRedacted> =>
  *   deep, which no item the reader accepts reaches. So is a live object that throws when read,
  *   such as one hiding a deep field in its prototype or a non-enumerable property, or holding a
  *   getter that throws; plain JSON data never does.
- * @returns The redacted item, every body node's path `""` ({@link NoPath}), branded only after
- *   every field passed {@link RedactedSchema} and its body held no interaction where `render`
- *   cannot emit one, or {@link InvalidRedacted} at stage `decode` naming what does not fit.
+ * @returns The redacted item, every body node's path, and `unprinted`'s, `""` ({@link NoPath}),
+ *   branded only after every field passed {@link RedactedSchema} and its body held no interaction
+ *   where `render` cannot emit one, or {@link InvalidRedacted} at stage `decode` naming what does
+ *   not fit.
  */
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- The JSON form arrives from the host as any value, and this is the check that parses it.
 export const decodeRedacted = (input: unknown): Result.Result<Redacted, InvalidRedacted> =>

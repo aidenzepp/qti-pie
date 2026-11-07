@@ -5,10 +5,11 @@
  * The library ends at parts and pure functions (rule `a9d04969`): `render` writes the item Root
  * around its body and nothing else, so the form, its submit control, where the Status part goes
  * and every step of a flow are the author's. Its one input that is not a function of its
- * arguments is the instance a render draws when the author passes none. `render` writes at most
- * the configuration's `outputBudget` characters of HTML: past it, it returns
- * {@link OutputTooLarge} and none of the page, never a part of it. This is a browser module: it
- * value-imports from `effect` only `Option`, `Array`, `pipe`, `Data` and `Result`.
+ * arguments is the instance a render draws when the author passes none. `render` prints everything
+ * or nothing: it writes at most the configuration's `outputBudget` characters of HTML, and an item
+ * with a printed variable or a parameter whose text passed its bound prints nothing; either way it
+ * returns {@link OutputTooLarge} and none of the page, never a part of it. This is a browser
+ * module: it value-imports from `effect` only `Option`, `Array`, `pipe`, `Data` and `Result`.
  *
  * @module
  */
@@ -129,23 +130,34 @@ export class InvalidInstance extends Data.TaggedError("InvalidInstance")<{
 }
 
 /**
- * The HTML of an item that would pass the configuration's `outputBudget`: the host's limit,
- * returned through a `Result`, never thrown.
+ * An item `render` cannot print in full, returned through a `Result`, never thrown: its HTML would
+ * pass the configuration's `outputBudget`, the host's limit, or a printed variable's text passed
+ * its bound, so the page would show its slot blank.
  *
  * {@link render} counts the characters it writes as it writes them, as a string's `length` counts
  * them, and stops at the first chunk that would pass the budget, so it never builds the oversized
  * page and returns none of it. `budget` is the configuration's `outputBudget` and `item` the
- * redacted item's `identifier`.
+ * redacted item's `identifier`. `printed` is none for the budget, and names the bound in characters
+ * and the variable when a printed variable's text, or a `param-variable` parameter's, passed it
+ * (the redacted item's `unprinted`): a conversion wider than 1,000,000 characters, or a whole text
+ * longer, which `redact` does not print. A parameter is named by its template variable.
  */
 export class OutputTooLarge extends Data.TaggedError("OutputTooLarge")<{
   readonly budget: number;
   readonly item: string;
+  readonly printed: Option.Option<{ readonly bound: number; readonly identifier: string }>;
 }> {
   /**
-   * The item, the budget it passed, that nothing was written, and what to change.
+   * The item, the limit it passed (the budget, or the bound and the variable), that nothing was
+   * written, and what to change.
    */
   override get message(): string {
-    return `Item ${JSON.stringify(this.item)} renders to more than ${String(this.budget)} characters of HTML, the configuration's outputBudget, so render wrote none of it. Raise outputBudget, up to 536,870,888, if the host can hold a page that large.`;
+    return Option.match(this.printed, {
+      onNone: () =>
+        `Item ${JSON.stringify(this.item)} renders to more than ${String(this.budget)} characters of HTML, the configuration's outputBudget, so render wrote none of it. Raise outputBudget, up to 536,870,888, if the host can hold a page that large.`,
+      onSome: ({ bound, identifier }) =>
+        `Item ${JSON.stringify(this.item)} would print more than ${String(bound)} characters for the variable ${JSON.stringify(identifier)}, so render wrote none of it. Shorten that variable's value, or the width or precision in its printed variable's format, so its text fits.`,
+    });
   }
 }
 
@@ -178,6 +190,12 @@ const checkedInstance = (
  * variable passes that variable's value. One whose template value `record` does not hold is
  * withheld: a block, an inline or a `param` shows its notice, and a choice is absent, the
  * redacted item's notices naming `template-identifier` once for all such choices.
+ *
+ * A printed variable or a parameter on content the page sees whose text would pass 1,000,000
+ * characters (a conversion wider than that, or a whole text longer) prints nothing, and the
+ * redacted item's `unprinted` names the first, with that bound, so {@link render} fails
+ * {@link OutputTooLarge} rather than show the slot blank. Content the page does not see is never
+ * printed, so it never fails a render.
  *
  * With no record, an item whose template processing does not run reads as the record its first
  * attempt starts with (its declared template defaults and its outcomes' starting values), and an
@@ -289,10 +307,12 @@ const interactionRenderer =
  * names `options.mode`. It writes no form, submit control, title or record. Given the same
  * instance, configuration and inputs, it gives the same HTML, and it returns the instance it used.
  *
- * It counts the characters of HTML as it writes them, as a string's `length` counts them, and
- * stops at the first chunk that would pass the configuration's `outputBudget`: HTML of exactly
- * `outputBudget` characters is returned, and one more fails {@link OutputTooLarge} with none of
- * the page built or returned.
+ * It prints everything or nothing. First, an item whose `unprinted` names a printed variable or a
+ * parameter whose text passed its bound fails {@link OutputTooLarge} naming the bound and the
+ * variable, before anything is built. Then it counts the characters of HTML as it writes them, as
+ * a string's `length` counts them, and stops at the first chunk that would pass the configuration's
+ * `outputBudget`: HTML of exactly `outputBudget` characters is returned, and one more fails
+ * {@link OutputTooLarge} with none of the page built or returned.
  *
  * @example
  *   const rendered = render(redact(accepted), configuration, { instance: "q1" });
@@ -305,7 +325,8 @@ const interactionRenderer =
  * @returns The Root's HTML and the instance token it used, or {@link UnknownPart} for an override
  *   the part table lacks, {@link InvalidInstance} for an instance token that breaks a requirement,
  *   {@link PartSwapRefused} for a replacement that breaks the swap invariant, or
- *   {@link OutputTooLarge} for HTML that would pass the configuration's `outputBudget`.
+ *   {@link OutputTooLarge} for an item with a text past its bound, or HTML that would pass the
+ *   configuration's `outputBudget`.
  */
 export const render = (
   item: Redacted,
@@ -313,6 +334,18 @@ export const render = (
   options: Options = {},
 ): Result.Result<Rendered, InvalidInstance | OutputTooLarge | PartSwapRefused | UnknownPart> =>
   Result.gen(function* renderItem() {
+    if (Option.isSome(item.unprinted)) {
+      const { bound, identifier } = item.unprinted.value;
+
+      return yield* Result.fail(
+        new OutputTooLarge({
+          budget: configuration.outputBudget,
+          item: item.identifier,
+          printed: Option.some({ bound, identifier }),
+        }),
+      );
+    }
+
     const parts = yield* resolveOverrides(options.parts);
     const instance = yield* options.instance === undefined
       ? Result.succeed(crypto.randomUUID())
@@ -323,7 +356,12 @@ export const render = (
     const root = yield* emitItem(built, state, body);
     const html = yield* Result.fromOption(
       toHtmlWithin(root, configuration.outputBudget),
-      () => new OutputTooLarge({ budget: configuration.outputBudget, item: item.identifier }),
+      () =>
+        new OutputTooLarge({
+          budget: configuration.outputBudget,
+          item: item.identifier,
+          printed: Option.none(),
+        }),
     );
 
     return { html, instance };

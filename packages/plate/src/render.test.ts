@@ -14,8 +14,10 @@ import type {
   ChoiceInteraction,
   InlineChoiceInteraction,
   Item,
+  TemplateDeclaration,
   TextEntryInteraction,
 } from "#plate/model/item.ts";
+import type { RedactRecord } from "#plate/model/record.ts";
 import type { Value } from "#plate/model/values.ts";
 import type { Redacted, RenderMode } from "#plate/payload.ts";
 import { InvalidInstance, OutputTooLarge, redact, render, renderStatus } from "#plate/render.ts";
@@ -1231,18 +1233,27 @@ const sprawling: Item = {
 };
 
 /**
+ * The fields of an {@link OutputTooLarge}.
+ */
+interface TooLarge {
+  readonly budget: number;
+  readonly item: string;
+  readonly printed: Option.Option<{ readonly bound: number; readonly identifier: string }>;
+}
+
+/**
  * Give the fields of an {@link OutputTooLarge} a render failed with.
  *
  * @param result The result of a render.
- * @returns The failure's budget and item when it is an `OutputTooLarge`, its tag when it is another
- *   failure, and none when the render succeeded.
+ * @returns The failure's budget, item and printed variable when it is an `OutputTooLarge`, its tag
+ *   when it is another failure, and none when the render succeeded.
  */
 const budgetFailure = (
   result: Result.Result<Rendered, { readonly _tag: string }>,
-): Option.Option<string | { budget: number; item: string }> =>
+): Option.Option<string | TooLarge> =>
   Option.map(failureOf(result), (failure) =>
     failure instanceof OutputTooLarge
-      ? { budget: failure.budget, item: failure.item }
+      ? { budget: failure.budget, item: failure.item, printed: failure.printed }
       : failure._tag,
   );
 
@@ -1264,7 +1275,7 @@ describe("render, the output budget", () => {
         assert.strictEqual(configuration.outputBudget, 16_777_216);
         assert.deepStrictEqual(
           budgetFailure(render(sprawled, configuration, { instance })),
-          Option.some({ budget: 16_777_216, item: "sprawling" }),
+          Option.some({ budget: 16_777_216, item: "sprawling", printed: Option.none() }),
         );
       }),
   );
@@ -1296,8 +1307,256 @@ describe("render, the output budget", () => {
         assert.strictEqual(exact.html.length, length);
         assert.deepStrictEqual(
           budgetFailure(under),
-          Option.some({ budget: length - 1, item: "capital" }),
+          Option.some({ budget: length - 1, item: "capital", printed: Option.none() }),
         );
+      }),
+  );
+});
+
+/**
+ * The path of the printed variable {@link printingParagraph} holds.
+ */
+const printedPath = "qti-assessment-item/qti-item-body/p/qti-printed-variable";
+
+/**
+ * Construct a paragraph that prints one variable after the text `Value: `.
+ *
+ * @param identifier The variable it prints.
+ * @param format Its `format`, none to print in the default form.
+ * @returns The paragraph.
+ */
+const printingParagraph = (identifier: string, format: Option.Option<string>): BodyNode => ({
+  attributes: [],
+  children: [
+    words("Value: "),
+    {
+      base: { _tag: "literal", value: 10n },
+      delimiter: ";",
+      field: Option.none(),
+      format,
+      identifier,
+      index: Option.none(),
+      kind: "printed-variable",
+      mappingIndicator: "=",
+      path: printedPath,
+      powerForm: false,
+    },
+  ],
+  kind: "element",
+  path: "qti-assessment-item/qti-item-body/p",
+  tag: "p",
+});
+
+/**
+ * Construct a single string template declaration with no default, as an item's map holds it.
+ *
+ * @param identifier The variable's identifier.
+ * @param paramVariable Whether it is declared `param-variable="true"`.
+ * @returns The map entry: the identifier and the declaration.
+ */
+const stringTemplate = (
+  identifier: string,
+  paramVariable: boolean,
+): readonly [string, TemplateDeclaration] => [
+  identifier,
+  {
+    baseType: "string",
+    cardinality: "single",
+    defaultValue: Option.none(),
+    identifier,
+    mathVariable: false,
+    paramVariable,
+  },
+];
+
+/**
+ * An item that prints the integer template variable `N` under `%1000001i`, a field width past the
+ * 1,000,000 characters one conversion may write.
+ */
+const widened: Item = {
+  ...counting,
+  body: [printingParagraph("N", Option.some("%1000001i"))],
+  identifier: "widened",
+};
+
+/**
+ * An item that prints the string template variable `S` once, in the default form.
+ */
+const lengthy: Item = {
+  ...counting,
+  body: [printingParagraph("S", Option.none())],
+  identifier: "lengthy",
+  templates: new Map([stringTemplate("S", false)]),
+};
+
+/**
+ * An item whose `object` passes the string `param-variable` template variable `P` as a parameter.
+ */
+const passing: Item = {
+  ...counting,
+  body: [
+    {
+      attributes: [
+        { name: "data", value: "applet.html" },
+        { name: "type", value: "text/html" },
+      ],
+      children: [
+        {
+          attributes: [
+            { name: "name", value: "text" },
+            { name: "value", value: "P" },
+            { name: "valuetype", value: "DATA" },
+          ],
+          children: [],
+          kind: "element",
+          path: "qti-assessment-item/qti-item-body/object/param",
+          tag: "param",
+        },
+      ],
+      kind: "element",
+      path: "qti-assessment-item/qti-item-body/object",
+      tag: "object",
+    },
+  ],
+  identifier: "passing",
+  templates: new Map([stringTemplate("P", true)]),
+};
+
+/**
+ * An item whose template block, shown when `VISIBLE` holds `X`, prints the string template
+ * variable `S`.
+ */
+const hiding: Item = {
+  ...counting,
+  body: [
+    {
+      content: [printingParagraph("S", Option.none())],
+      identifier: "X",
+      kind: "template-block",
+      path: "qti-assessment-item/qti-item-body/qti-template-block",
+      responses: [],
+      templateVisibility: { showHide: "show", templateIdentifier: "VISIBLE" },
+    },
+  ],
+  identifier: "hiding",
+  templates: new Map([
+    stringTemplate("S", false),
+    [
+      "VISIBLE",
+      {
+        baseType: "identifier",
+        cardinality: "single",
+        defaultValue: Option.none(),
+        identifier: "VISIBLE",
+        mathVariable: false,
+        paramVariable: false,
+      },
+    ],
+  ]),
+};
+
+/**
+ * Construct a record whose only values are template values, each a single string.
+ *
+ * @param templates The strings, by template variable.
+ * @returns The record.
+ */
+const strings = (templates: Readonly<Record<string, string>>): RedactRecord => ({
+  outcomes: {},
+  templates: Object.fromEntries(
+    Object.entries(templates).map(([identifier, value]) => [
+      identifier,
+      one({ baseType: "string", value }),
+    ]),
+  ),
+});
+
+describe("render, a printed text past its bound", () => {
+  it.effect(
+    "[I-5] fails OutputTooLarge, naming the bound 1,000,000, the item and the printed variable, for a conversion wider than 1,000,000 characters, where the slot printed blank before",
+    () =>
+      Effect.gen(function* failsPastWidth() {
+        const configuration = yield* defaults;
+        const shown = redact(acceptForTest(widened), {
+          outcomes: {},
+          templates: { N: one({ baseType: "integer", value: 5n }) },
+        });
+
+        assert.deepStrictEqual(
+          budgetFailure(render(shown, configuration, { instance })),
+          Option.some({
+            budget: 16_777_216,
+            item: "widened",
+            printed: Option.some({ bound: 1_000_000, identifier: "N" }),
+          }),
+        );
+      }),
+  );
+
+  it.effect(
+    "[I-5] fails OutputTooLarge, naming the bound 1,000,000 and the printed variable, for a printed variable whose whole text passes 1,000,000 characters",
+    () =>
+      Effect.gen(function* failsPastText() {
+        const configuration = yield* defaults;
+        const shown = redact(acceptForTest(lengthy), strings({ S: "y".repeat(1_000_001) }));
+
+        assert.deepStrictEqual(
+          budgetFailure(render(shown, configuration, { instance })),
+          Option.some({
+            budget: 16_777_216,
+            item: "lengthy",
+            printed: Option.some({ bound: 1_000_000, identifier: "S" }),
+          }),
+        );
+      }),
+  );
+
+  it.effect(
+    "[I-5] fails OutputTooLarge, naming the bound 1,000,000 and the template variable, for a param-variable parameter whose value text passes 1,000,000 characters",
+    () =>
+      Effect.gen(function* failsPastParameter() {
+        const configuration = yield* defaults;
+        const shown = redact(acceptForTest(passing), strings({ P: "y".repeat(1_000_001) }));
+
+        assert.deepStrictEqual(
+          budgetFailure(render(shown, configuration, { instance })),
+          Option.some({
+            budget: 16_777_216,
+            item: "passing",
+            printed: Option.some({ bound: 1_000_000, identifier: "P" }),
+          }),
+        );
+      }),
+  );
+
+  it.effect(
+    "[I-5] renders an item whose printed text is exactly 1,000,000 characters, and one whose over-bound printed variable sits in a template block the record hides",
+    () =>
+      Effect.gen(function* rendersWithinBound() {
+        const configuration = yield* defaults;
+        const longest = yield* Effect.fromResult(
+          render(
+            redact(acceptForTest(lengthy), strings({ S: "y".repeat(1_000_000) })),
+            configuration,
+            { instance },
+          ),
+        );
+        const hidden = yield* Effect.fromResult(
+          render(
+            redact(acceptForTest(hiding), {
+              outcomes: {},
+              templates: {
+                S: one({ baseType: "string", value: "y".repeat(1_000_001) }),
+                VISIBLE: one({ baseType: "identifier", value: "OTHER" }),
+              },
+            }),
+            configuration,
+            { instance },
+          ),
+        );
+
+        assert.include(textOf(rootOf(longest)), `Value: ${"y".repeat(1_000_000)}`);
+        assert.notInclude(hidden.html, "yyy");
       }),
   );
 });

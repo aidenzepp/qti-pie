@@ -96,7 +96,9 @@ and both of its entry points are unstable until M3.
 - `Configuration` gains `outputBudget`, the most characters of HTML one `render` writes,
   16,777,216 by default. `configure` takes an integer from 1 to 536,870,888 and refuses any other
   value. Past the budget, `render` fails with the new `OutputTooLarge`, which names the budget and
-  the item, and returns none of the page. `src/index.ts` exports `OutputTooLarge`.
+  the item, and returns none of the page. `src/index.ts` exports `OutputTooLarge`. Its `printed`
+  is none for the budget. When a printed variable's text passed its bound, `printed` names the
+  bound and the variable, and the redacted item and its JSON form record them as `unprinted`.
 
 ### How plate reads template processing (2026-11-07)
 
@@ -164,9 +166,12 @@ and both of its entry points are unstable until M3.
     of template processing cut the double's binary value and printed `99999999999999991611392`.
     An infinity or NaN prints `inf`, `-inf` or `nan` under those conversions, in upper case under
     `%X` _(pending)_. Under `%o`, `%x` or `%X`, a negative writes `-` and its digits
-    _(pending)_. A `base` outside 2 to 36 writes base 10 _(pending)_, and a width or precision past
-    1,000,000 prints nothing, as NULL does _(pending)_. So does a value whose whole printed text,
-    delimiters included, would pass 1,000,000 characters _(pending)_.
+    _(pending)_. A `base` outside 2 to 36 writes base 10 _(pending)_.
+  - A width or precision past 1,000,000 makes `render` fail with `OutputTooLarge`, which names the
+    printed variable and the bound. So does a value whose whole printed text, delimiters included,
+    would pass 1,000,000 characters, and a `param-variable` value whose text would, named by its
+    template variable. An earlier commit of template processing printed nothing in their place, as
+    for NULL.
   - A `param-variable` that holds a container passes its values joined by `;`, and NULL passes an
     empty value. The standard sets no written form for either, so these follow how a printed
     variable prints a container and NULL by default.

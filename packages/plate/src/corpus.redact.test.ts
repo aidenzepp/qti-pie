@@ -628,8 +628,9 @@ const resolvedInteger = (
  * Give what the page sees in a printed variable's place, decided from the values alone: with none,
  * its notice (H3); with values, one text node of what `formatPrinted` writes for the value they
  * hold for its variable under its `format`, `base`, `index`, `power-form` and `delimiter`, nothing
- * when that text is empty (a NULL value prints nothing), and its notice when they hold no value of
- * its variable or of a name its `base` or `index` gives.
+ * when that text is empty (a NULL value prints nothing) or past the formatter's bound (which
+ * `redact` records, so `render` fails), and its notice when they hold no value of its variable or
+ * of a name its `base` or `index` gives.
  *
  * @param node The printed variable.
  * @param values The values `redact` showed the item by.
@@ -657,14 +658,20 @@ const printedSlots = (
       { feature: printedNotice, kind: "unsupported", path: node.path },
     ],
     onSome: ({ base, index, value }): readonly BodyNode[] => {
-      const text = formatPrinted(value, {
-        ...Option.match(base, { onNone: () => ({}), onSome: (radix) => ({ base: radix }) }),
-        delimiter: node.delimiter,
-        ...Option.match(node.format, { onNone: () => ({}), onSome: (code) => ({ format: code }) }),
-        ...Option.match(index, { onNone: () => ({}), onSome: (member) => ({ index: member }) }),
-        mappingIndicator: node.mappingIndicator,
-        powerForm: node.powerForm,
-      });
+      const text = Option.getOrElse(
+        formatPrinted(value, {
+          ...Option.match(base, { onNone: () => ({}), onSome: (radix) => ({ base: radix }) }),
+          delimiter: node.delimiter,
+          ...Option.match(node.format, {
+            onNone: () => ({}),
+            onSome: (code) => ({ format: code }),
+          }),
+          ...Option.match(index, { onNone: () => ({}), onSome: (member) => ({ index: member }) }),
+          mappingIndicator: node.mappingIndicator,
+          powerForm: node.powerForm,
+        }),
+        () => "",
+      );
 
       return text === "" ? [] : [{ kind: "text", text }];
     },
@@ -696,10 +703,14 @@ const parameterOf = (
  * `value` converts it (`info.txt:69978`): an integer by `%i` and a float by `%G`.
  *
  * @param value The template value.
- * @returns The text the parameter passes.
+ * @returns The text the parameter passes, empty past the formatter's bound (which `redact`
+ *   records, so `render` fails).
  */
 const parameterText = (value: Value): string =>
-  formatPrinted(value, { format: value.baseType === "float" ? "%G" : "%i" });
+  Option.getOrElse(
+    formatPrinted(value, { format: value.baseType === "float" ? "%G" : "%i" }),
+    () => "",
+  );
 
 /**
  * Give what the page sees in a body element's place: the element as written; a `param` standing
@@ -1101,8 +1112,9 @@ const noticesOf = (item: Item, values: Option.Option<RedactRecord>): readonly st
  * identifier, `lang`, title and response bindings as the item holds them; a body that
  * {@link fits} the nodes {@link slotsOf} decides, so a template value shows only as the text a
  * printed variable prints from the values, and no hidden template content, template visibility,
- * template-set correct response or default, seed or template rule shows at all; and notices that
- * are, as a multiset, the ones {@link noticesOf} decides.
+ * template-set correct response or default, seed or template rule shows at all; no record of a
+ * text past its bound, since no corpus item prints one; and notices that are, as a multiset, the
+ * ones {@link noticesOf} decides.
  *
  * @param item The item.
  * @param fields The redacted fields, as `redact` gave them or as the JSON decodes.
@@ -1132,6 +1144,7 @@ const fieldsFit = (
           identifier,
         })),
         title: item.title,
+        unprinted: Option.none(),
       },
       { ...fields },
     ) &&
@@ -1591,6 +1604,33 @@ const printedFilled = (
     : node;
 
 describe("the template sweep over the corpus", () => {
+  it.effect(
+    "[I-5] no accepted corpus item records a printed variable or param-variable parameter past its bound, with no record or under a sweep seed, so none fails render for it",
+    () =>
+      Effect.gen(function* noUnprinted() {
+        const members = yield* openCorpus;
+        const redactions = members.flatMap((member) =>
+          Option.toArray(acceptedOf(member)).flatMap((accepted) =>
+            (templated(accepted)
+              ? Result.getOrElse(recordStates(accepted), (): readonly RecordState[] => [noRecord])
+              : [noRecord]
+            ).map((state) => ({
+              location: `${member.location} (${state.name})`,
+              unprinted: redact(accepted, Option.getOrUndefined(state.record)).unprinted,
+            })),
+          ),
+        );
+
+        assert.isNotEmpty(redactions, "no corpus item is accepted");
+        assert.deepStrictEqual(
+          redactions.flatMap(({ location, unprinted }) =>
+            Option.isSome(unprinted) ? [location] : [],
+          ),
+          [],
+        );
+      }),
+    { tags: ["corpus"], timeout: sweepTimeoutMs },
+  );
   it.effect(
     "[I-5] every templated corpus item, redacted under two seeds and with no record, shows a template value only as a printed variable's text, and no hidden template content, template-set correct response or default, seed, template rule or template visibility, nor any of the core set",
     () =>
