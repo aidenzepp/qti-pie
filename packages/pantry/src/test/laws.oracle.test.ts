@@ -92,6 +92,41 @@ const testFeedbackPackage = (outcome: string, baseType: string) => ({
 });
 
 /**
+ * Write a package whose tests each declare the outcome `FLAG` in the base type given for them and
+ * reach one section document, through a section ref, whose rubric names `FLAG` from a
+ * `qti-feedback-inline`.
+ *
+ * @param baseTypes - Each test's base type for `FLAG`, of single cardinality.
+ * @returns The package.
+ */
+const sectionFeedbackPackage = (baseTypes: readonly string[]) => ({
+  "imsmanifest.xml": manifestOf(
+    `${itemResource}<resource identifier="RS" type="imsqti_section_xmlv3p0" href="section.xml"><file href="section.xml"/></resource>${baseTypes
+      .map(
+        (_, at) =>
+          `<resource identifier="RT${String(at)}" type="imsqti_test_xmlv3p0" href="test${String(at)}.xml"><file href="test${String(at)}.xml"/></resource>`,
+      )
+      .join("")}`,
+  ),
+  "item.xml": item,
+  "section.xml": `<qti-assessment-section xmlns="${asi}" identifier="SS" title="Shared" visible="true"><qti-rubric-block view="candidate"><qti-content-body><p><qti-feedback-inline outcome-identifier="FLAG" identifier="ok" show-hide="show">Well done.</qti-feedback-inline></p></qti-content-body></qti-rubric-block><qti-assessment-item-ref identifier="J" href="item.xml"/></qti-assessment-section>`,
+  ...Object.fromEntries(
+    baseTypes.map((baseType, at) => [
+      `test${String(at)}.xml`,
+      edit(
+        edit(
+          test,
+          "</qti-assessment-section>",
+          `<qti-assessment-section-ref identifier="R" href="section.xml"/></qti-assessment-section>`,
+        ),
+        '<qti-test-part identifier="P"',
+        `<qti-outcome-declaration identifier="FLAG" cardinality="single" base-type="${baseType}"/><qti-test-part identifier="P"`,
+      ),
+    ]),
+  ),
+});
+
+/**
  * The breaches of "Item duration" among a judgment's.
  *
  * @param breaches - The breaches.
@@ -596,6 +631,26 @@ describe("the information model's rules RD found unowned (unowned-readings.md §
       assert.strictEqual(float.length, 1, shown(float));
       assert.strictEqual(identifier.length, 0, shown(identifier));
     }),
+  );
+
+  it.effect(
+    "Feedback outcome type: a section document's feedback names an identifier outcome of each test that reaches it",
+    () =>
+      Effect.gen(function* sectionFeedbackType() {
+        const float = testFeedbackTyped(
+          breachesOf(yield* judged(sectionFeedbackPackage(["float"]))),
+        );
+        const identifier = testFeedbackTyped(
+          breachesOf(yield* judged(sectionFeedbackPackage(["identifier"]))),
+        );
+        const both = testFeedbackTyped(
+          breachesOf(yield* judged(sectionFeedbackPackage(["identifier", "float"]))),
+        );
+
+        assert.strictEqual(float.length, 1, shown(float));
+        assert.strictEqual(identifier.length, 0, shown(identifier));
+        assert.strictEqual(both.length, 1, shown(both));
+      }),
   );
 
   it.effect(
