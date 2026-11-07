@@ -4263,9 +4263,15 @@ const overlayLaws: readonly ((
  *
  * @param view - The document.
  * @param laws - The grammar's tables.
+ * @param assembledCatalogs - The ids of the `qti-catalog`s its assembly places beyond its own
+ *   (spec reading 117), none for a document judged alone.
  * @returns The breaches.
  */
-const overlayBreaches = (view: View, laws: Laws): readonly Breach[] => {
+const overlayBreaches = (
+  view: View,
+  laws: Laws,
+  assembledCatalogs: ReadonlySet<string>,
+): readonly Breach[] => {
   // A declaration without an identifier declares no variable: AL3 refuses it, and it shares no
   // identifier with another declaration that lacks one.
   const declarations = view.members.filter(
@@ -4333,15 +4339,17 @@ const overlayBreaches = (view: View, laws: Laws): readonly Breach[] => {
     ),
     ({ parent }) => parent,
   );
-  // Reading R9-a: a `data-catalog-idref` names a `qti-catalog` of its document (§5.28.1, §5.15.9),
-  // the token compared collapsed, as an IDREF is; an ID of any other element does not serve. Only
-  // an attribute with an IDREF token is read, as "Idref target" reads it: one the schema does not
-  // check, or an empty one, names nothing.
-  const catalogIds = new Set(
-    [...ids].flatMap(([id, held]) =>
+  // Reading R9-a and 117: a `data-catalog-idref` names a `qti-catalog` of its assembly (§5.28.1,
+  // §5.15.9): its document with every fragment spliced in, and every document its assembly places
+  // whole, as "Idref target" resolves a token. The token is compared collapsed, as an IDREF is; an
+  // ID of any other element does not serve. Only an attribute with an IDREF token is read, as
+  // "Idref target" reads it: one the schema does not check, or an empty one, names nothing.
+  const catalogIds = new Set([
+    ...[...ids].flatMap(([id, held]) =>
       held.some(({ node }) => view.byId.get(node)?.kind === "qti-catalog") ? [id] : [],
     ),
-  );
+    ...assembledCatalogs,
+  ]);
   const catalogRefs = view.members.flatMap((node) =>
     (view.attributesOf.get(node.id) ?? [])
       .filter(
@@ -4475,6 +4483,8 @@ const overlayBreaches = (view: View, laws: Laws): readonly Breach[] => {
  * @param laws - The grammar's tables.
  * @param assembled - The ids of the document's assembly beyond its own, which its IDREFs may name
  *   (spec reading 117), none for a document judged alone.
+ * @param assembledCatalogs - Those of `assembled` whose owner is a `qti-catalog`, which its
+ *   `data-catalog-idref`s may name (spec reading 117), none for a document judged alone.
  * @returns The breaches: the node laws in their order, the child sets, the attribute laws, the
  *   laws over the whole document, then the overlays.
  */
@@ -4483,6 +4493,7 @@ export const documentBreaches = (
   rows: FoldedRows<Composed>,
   laws: Laws,
   assembled: ReadonlySet<string> = new Set(),
+  assembledCatalogs: ReadonlySet<string> = new Set(),
 ): readonly Breach[] => {
   const typed = typedReadingOf(laws);
   const view = viewOf(path, rows, typed);
@@ -4506,7 +4517,7 @@ export const documentBreaches = (
     ),
     ...attributeBreaches(view, laws, assembled),
     ...wholeBreaches(view, laws, assembled),
-    ...overlayBreaches(view, laws),
+    ...overlayBreaches(view, laws, assembledCatalogs),
     ...lawDocumentBreaches(path, rows, laws.grammar, typed),
   ];
 };
@@ -6008,12 +6019,15 @@ const declaredVersion = (manifest: XmlDocument): Option.Option<string> =>
 /**
  * One judged document's assembly, as Q5.13's instances place it (spec reading 117): the ids of the
  * documents its section refs and its sections' includes place, at any depth, beyond its own, which
- * its IDREFs may name ("Idref target" over the assembly), and the breaches of "DocumentId key"
+ * its IDREFs may name ("Idref target" over the assembly), those of them whose owner is a
+ * `qti-catalog`, which its `data-catalog-idref`s may name ("Catalog reference" over the assembly),
+ * and the breaches of "DocumentId key"
  * across its instances. A test's assembly writes each element once however often its document is
  * placed (reading 86), and any other's once per placement.
  */
 interface Assembly {
   readonly breaches: readonly Breach[];
+  readonly catalogs: ReadonlySet<string>;
   readonly ids: ReadonlySet<string>;
 }
 
@@ -6133,6 +6147,15 @@ const assembliesOf = (
         head,
         {
           breaches,
+          catalogs: new Set(
+            instances
+              .slice(1)
+              .flatMap((path) =>
+                (ids.get(path) ?? []).flatMap(({ id, owner }) =>
+                  views.get(path)?.byId.get(owner)?.kind === "qti-catalog" ? [id] : [],
+                ),
+              ),
+          ),
           ids: new Set(
             instances.slice(1).flatMap((path) => (ids.get(path) ?? []).map(({ id }) => id)),
           ),
@@ -6215,6 +6238,7 @@ const inPlaceBreaches = (
                 held.rows,
                 laws,
                 assemblies.get(listed.path)?.ids ?? new Set(),
+                assemblies.get(listed.path)?.catalogs ?? new Set(),
               ),
           }),
         ],

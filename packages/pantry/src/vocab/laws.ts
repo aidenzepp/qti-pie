@@ -288,7 +288,7 @@ export const lawTable = {
   "Catalog reference": {
     rule: "idref-target",
     source:
-      "reading R9-a: https://www.imsglobal.org/spec/qti/v3p0/info#Data_Catalog (§5.28.1, a catalog's id, which §5.15.9's data-catalog-idref names): a data-catalog-idref, an xs:IDREF collapsed, is the id of a qti-catalog of its document, and no other ID of it (catalog.ts CatalogRef, CatalogId)",
+      "reading R9-a: https://www.imsglobal.org/spec/qti/v3p0/info#Data_Catalog (§5.28.1, a catalog's id, which §5.15.9's data-catalog-idref names): a data-catalog-idref, an xs:IDREF collapsed, is the id of a qti-catalog of its assembly (reading 117: its document with every fragment spliced in and every document its assembly places whole), and no other ID of it (catalog.ts CatalogRef, CatalogId)",
   },
   "Choice bounds": {
     rule: "choice-bounds",
