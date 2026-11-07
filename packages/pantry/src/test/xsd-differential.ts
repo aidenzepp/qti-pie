@@ -1235,11 +1235,11 @@ export const judgeDocument = Effect.fn("test.judgeDocument")(function* judgeDocu
           case "namespace-entity": {
             return "other";
           }
-          // A role item (xs:QName) whose prefix no declaration binds is a value its attribute's
-          // declaration refuses (cvc-datatype-valid, QName's prefix resolution), on the attribute.
-          case "role-unresolved":
+          case "prefix-unbound":
           case "type-unknown":
           case "type-unresolved": {
+            // A QName value no binding in scope resolves, or that names no type, is a value its
+            // attribute's declaration refuses, which xmllint reports on the attribute.
             return "attribute-value";
           }
           case "strict-undeclared": {

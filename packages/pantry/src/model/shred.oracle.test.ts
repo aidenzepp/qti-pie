@@ -2137,19 +2137,19 @@ describe("a MathML element where the parent admits none (p6n-6)", () => {
  * The refusal of an SSML `role` on an `ssml:` element of a local name.
  *
  * @param tag - The local name, `w` or `token`.
- * @returns The `role-unresolved` refusal naming `ssml:<tag>` as the parent of the attribute.
+ * @returns The `prefix-unbound` refusal naming `ssml:<tag>` as the parent of the attribute.
  */
 const refusalOfRole = (tag: string): UnmodeledVocabulary =>
   new UnmodeledVocabulary({
     kind: "attribute",
     name: "role",
     parent: Option.some(`ssml:${tag}`),
-    reason: "role-unresolved",
+    reason: "prefix-unbound",
   });
 
 describe("an SSML role item whose prefix nothing binds (p7n-6.1)", () => {
   it.effect(
-    "refuses an ssml:w or ssml:token role item whose prefix no declaration in scope binds as role-unresolved, and reads a bound prefix, xml:, an unprefixed item and a role on any other element: both versions",
+    "refuses an ssml:w or ssml:token role item whose prefix no declaration in scope binds as prefix-unbound, and reads a bound prefix, xml:, an unprefixed item and a role on any other element: both versions",
     () =>
       // Oracle: the specification as a checker: SSML's `role` on `token` and `w` is a list of
       // `xsd:QName` (`ssml/synthesis-nonamespace.xsd` line 308), a QName's prefix must resolve in

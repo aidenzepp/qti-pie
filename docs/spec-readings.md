@@ -1236,19 +1236,22 @@ against it. A reading that is not an information-model-over-XSD case says which 
     a row whose prefix resolves to no binding, or to another namespace than its name's, describes no document, and
     the model stores nothing that no valid document is (`docs/qti-intent.md`, "Extremely tight data model").
 
-    One limit remains in pantry, an exception to reading 1, stated here as a known limit: no law over the stored rows
-    holds a QName value's prefix to a binding in scope. A binding is a fact of the element's ancestors, and the rows
-    hold each element's own declarations alone (`Namespace`, keyed by element and prefix), with no relation of the
-    bindings in scope at an element. So the importer refuses an `xsi:type` whose prefix nothing binds (shred's
-    `type-unresolved`, an `unmodeled-vocabulary` refusal), and the importer refuses an SSML `role` item whose prefix no
-    declaration in scope binds, as it refuses such an `xsi:type` (shred's `role-unresolved`, an `unmodeled-vocabulary`
-    refusal); no law over the stored rows holds either, the gap this paragraph states. Nothing refuses an unbound prefix
-    in the text of an element an `xsi:type` of `xs:QName` governs, which is judged by QName's lexical form alone. An element's or an attribute's name has no such law either: its prefix is held by the reader's namespace
-    well-formedness (Namespaces in XML 1.0, section 5, "Namespace constraint: Prefix Declared"), since crust's
-    reader refuses a prefix no declaration in scope binds as a `WellFormednessError` (`packages/crust/src/read.ts`,
-    `saxes` reading with namespaces on), so no stored row holds one. The corpus holds no `xsi:type` and no `role`,
-    so no verdict moves. It is closed when the rows carry each element's bindings in scope. (Recorded 2026-11-06,
-    from W5 seat PN; upstream records the same gap, C48 of `docs/research/up.md`.)
+    A QName value's prefix is bound by the element's ancestors, a fact the rows do not hold (they hold each element's
+    own declarations, `Namespace`, keyed by element and prefix), so the codec reads every value of a QName type with the
+    bindings in scope where it stands, from its domain alone (`Qualified` of `src/grammar/domains.ts`: an `xs:QName`, or
+    a list of them), an attribute's value and an element's text through one check (shred's `resolvesIn`). It refuses a
+    value one of whose QNames has a prefix none binds, as XML Schema 1.0 Part 2, section 3.2.18 says: "The mapping
+    between literals in the lexical space and values in the value space of QName requires a namespace declaration to be
+    in scope for the context in which QName is used". An `xsi:type` is refused as `type-unresolved`; SSML's `role`, a
+    list of `xs:QName`, and the text of an element an `xsi:type` of `xs:QName` governs, as `prefix-unbound`; both are
+    `unmodeled-vocabulary` refusals, so no stored row holds such a value. No kind's own text is of a QName type
+    (`src/model/qname-scope.test.ts` reads every QName site the grammar holds). An element's or an attribute's name is
+    held by the reader's namespace well-formedness (Namespaces in XML 1.0, section 5, "Namespace constraint: Prefix
+    Declared"), since crust's reader refuses a prefix no declaration in scope binds as a `WellFormednessError`
+    (`packages/crust/src/read.ts`, `saxes` reading with namespaces on). The corpus holds no `xsi:type` and no `role`, so
+    no verdict moves. (The limit recorded 2026-11-06 from W5 seat PN, C48 of `docs/research/up.md`, closed 2026-11-07 by
+    GEN-B (`5cdc88e7`), after the lexical differential found `ssml:token`'s `role="a:b"` accepted where xmllint refuses
+    it.)
 
     This binds pantry and plate alike in what they refuse; how each enforces it is its own. This is not a case of
     documents in conflict: Namespaces in XML and XML Schema agree. (Operator ruling "the spec wins", 2026-11-05.)
@@ -2605,3 +2608,14 @@ forbids. So a ChangeSet written without the importer could store a `data-ssml` t
 reading's stated limit, the same shape as the `xsi:type` and SSML `role` values the codec checks and no law over the
 stored rows holds. This binds pantry and plate alike as to what is valid; where it is checked is pantry's. (Decision
 351; 2026-11-06.)
+
+138. **An entry path that holds a backslash or begins with a drive prefix is refused under `href-path`, in a zip and in
+     a directory alike.** The ZIP format's file name field says "The path stored MUST NOT contain a drive or device
+     letter, or a leading slash. All slashes MUST be forward slashes '/'", rather than backslashes (PKWARE APPNOTE
+     6.3.10, section 4.4.17.1). A manifest's `href` is an RFC 3986 URI reference: its grammar has no `\` (section 2),
+     and a reference that begins `C:` parses as one whose scheme is `C` (section 3.1), so neither names an entry of the
+     package. A zip and a directory are read alike: one rule refuses both forms in either, with the reason it gives, and
+     the import names it `href-path`, as it names every entry path outside the package. This binds pantry and plate
+     alike. (Decided 2026-11-07 by the coordinator, ruling P-7, from RV seat REP-B (`5502d569`): the zip reader refused
+     both forms, and the directory reader read a `\` as a character of a file name and a drive prefix as the start of a
+     relative path, so one package was read two ways by its form.)

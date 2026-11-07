@@ -527,171 +527,202 @@ const doubleForm = lexicalForm(pg["double precision"]);
  * - **`Typed value`** (C1, G-match): each value's text is a lexical form of its base type.
  * - **`Mastery range`** (C2, G-parse): the mastery value lies in the normal range.
  */
-export const declarationLaws = [
-  contained(
-    on(Declaration, "node", "document", "kind", "start", "nearest", "version", "parent"),
-    nodeRef,
-  ),
-  contained(on(Declaration, "kind", "declarationKind"), on(Declares, "kind", "declaration")),
-  key(on(identifiers, "node")),
-  contained(on(identifiers, "node", "lexical"), on(Declaration, "node", "identifierLexical")),
-  key(on(cardinalities, "node")),
-  contained(on(cardinalities, "node", "lexical"), on(Declaration, "node", "cardinalityLexical")),
-  key(on(baseTypes, "node")),
-  contained(on(baseTypes, "node", "lexical"), on(Declaration, "node", "baseTypeLexical")),
-  contained(
-    on(
-      select(Declaration, (d) => d.ne(d.baseTypeLexical, "")),
-      "node",
-    ),
-    on(baseTypes, "node"),
-  ),
-  check("E1_derived", Declaration, (d) =>
-    d.and(
-      collapsedDeclared(d),
-      d.eq(CardinalityLexical.at("lexical", d.cardinality), d.cardinalityLexical),
+export const declarationLawsByName = {
+  "Declaration base type": [
+    check("Declaration_base_type", Declaration, (d) =>
       d.or(
-        d.and(d.eq(d.baseType, "none"), d.eq(d.baseTypeLexical, "")),
-        d.eq(BaseTypeLexical.at("lexical", d.baseType), d.baseTypeLexical),
+        d.and(d.eq(d.cardinality, "record"), d.eq(d.baseType, "none")),
+        d.and(d.ne(d.cardinality, "record"), d.ne(d.baseType, "none")),
       ),
     ),
-  ),
-  key(on(Declaration, "document", "identifier")),
-  check("Declaration_not_reserved", Declaration, (d) =>
-    d.not(d.in(d.identifier, sessionVariables)),
-  ),
-  check("Reserved_type", Declaration, (d) =>
-    d.and(
-      ...reservedBaseTypes.map((reserved) => keepsReservedBaseType(d, reserved)),
-      d.or(
-        d.ne(d.identifier, contextVariable.identifier),
-        d.and(
-          d.eq(d.declarationKind, contextVariable.kind),
-          d.eq(d.cardinality, contextVariable.cardinality),
+  ],
+  "Declaration key": [key(on(Declaration, "document", "identifier"))],
+  "Declaration not reserved": [
+    check("Declaration_not_reserved", Declaration, (d) =>
+      d.not(d.in(d.identifier, sessionVariables)),
+    ),
+  ],
+  "Declaration overlay": [
+    contained(
+      on(Declaration, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      nodeRef,
+    ),
+    contained(on(identifiers, "node", "lexical"), on(Declaration, "node", "identifierLexical")),
+    contained(on(cardinalities, "node", "lexical"), on(Declaration, "node", "cardinalityLexical")),
+    contained(on(baseTypes, "node", "lexical"), on(Declaration, "node", "baseTypeLexical")),
+    contained(
+      on(
+        select(Declaration, (d) => d.ne(d.baseTypeLexical, "")),
+        "node",
+      ),
+      on(baseTypes, "node"),
+    ),
+    contained(
+      on(ValueSet, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      nodeRef,
+    ),
+    contained(
+      on(
+        select(Node, (n) =>
+          n.and(n.in(n.kind, valueSetKinds), n.in(n.parentKind, declarationKinds)),
+        ),
+        "id",
+      ),
+      on(ValueSet, "node"),
+    ),
+    contained(
+      on(
+        ValueSet,
+        "parent",
+        "document",
+        "identifier",
+        "declarationKind",
+        "baseType",
+        "cardinality",
+      ),
+      declarationRef,
+    ),
+    contained(
+      on(Value, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      nodeRef,
+    ),
+    contained(
+      on(
+        select(Node, (n) => n.and(n.eq(n.kind, "qti-value"), n.in(n.parentKind, valueSetKinds))),
+        "id",
+      ),
+      on(Value, "node"),
+    ),
+    contained(on(Value, "node", "text"), on(Node, "id", "stringValue")),
+    contained(on(Value, "parent", "setBaseType"), on(ValueSet, "node", "baseType")),
+    contained(
+      on(
+        select(Value, (v) => v.eq(v.setBaseType, "none")),
+        "node",
+        "baseType",
+      ),
+      on(RecordField, "node", "baseType"),
+    ),
+    contained(
+      on(RecordField, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      nodeRef,
+    ),
+    contained(on(OutcomeRange, "node"), on(Declaration, "node")),
+    contained(on(masteryValues, "node", "lexical"), on(OutcomeRange, "node", "masteryValue")),
+    contained(on(normalMinimums, "node", "lexical"), on(OutcomeRange, "node", "normalMinimum")),
+    contained(on(normalMaximums, "node", "lexical"), on(OutcomeRange, "node", "normalMaximum")),
+  ],
+  "DocumentId key": [
+    key(on(identifiers, "node")),
+    key(on(cardinalities, "node")),
+    key(on(baseTypes, "node")),
+    key(on(fieldIdentifiers, "node")),
+    key(on(fieldBaseTypes, "node")),
+    key(on(masteryValues, "node")),
+    key(on(normalMinimums, "node")),
+    key(on(normalMaximums, "node")),
+  ],
+  "E1 derived": [
+    contained(on(Declaration, "kind", "declarationKind"), on(Declares, "kind", "declaration")),
+    check("E1_derived", Declaration, (d) =>
+      d.and(
+        collapsedDeclared(d),
+        d.eq(CardinalityLexical.at("lexical", d.cardinality), d.cardinalityLexical),
+        d.or(
+          d.and(d.eq(d.baseType, "none"), d.eq(d.baseTypeLexical, "")),
+          d.eq(BaseTypeLexical.at("lexical", d.baseType), d.baseTypeLexical),
         ),
       ),
     ),
-  ),
-  check("Declaration_base_type", Declaration, (d) =>
-    d.or(
-      d.and(d.eq(d.cardinality, "record"), d.eq(d.baseType, "none")),
-      d.and(d.ne(d.cardinality, "record"), d.ne(d.baseType, "none")),
+    check("E1_derived", Value, (v) =>
+      v.or(v.eq(v.setBaseType, "none"), v.eq(v.baseType, v.setBaseType)),
     ),
-  ),
-
-  contained(
-    on(ValueSet, "node", "document", "kind", "start", "nearest", "version", "parent"),
-    nodeRef,
-  ),
-  contained(
-    on(
-      select(Node, (n) => n.and(n.in(n.kind, valueSetKinds), n.in(n.parentKind, declarationKinds))),
-      "id",
-    ),
-    on(ValueSet, "node"),
-  ),
-  contained(
-    on(ValueSet, "parent", "document", "identifier", "declarationKind", "baseType", "cardinality"),
-    declarationRef,
-  ),
-  contained(on(ValueSet, "node", "elements", "elementChildren"), nodeCounts),
-  recordFieldFamily,
-  check("Value_cardinality", ValueSet, (s) =>
-    s.and(
-      s.or(s.ne(s.cardinality, "single"), s.eq(s.elementChildren, 1n)),
-      s.or(
-        s.and(s.eq(s.cardinality, "record"), s.eq(s.fields, s.elementChildren)),
-        s.and(s.ne(s.cardinality, "record"), s.eq(s.fields, 0n)),
+    check("E1_derived", RecordField, (f) =>
+      f.and(
+        collapsedField(f),
+        f.ne(f.baseType, "none"),
+        f.eq(BaseTypeLexical.at("lexical", f.baseType), f.baseTypeLexical),
       ),
     ),
-  ),
-
-  contained(
-    on(Value, "node", "document", "kind", "start", "nearest", "version", "parent"),
-    nodeRef,
-  ),
-  contained(
-    on(
-      select(Node, (n) => n.and(n.eq(n.kind, "qti-value"), n.in(n.parentKind, valueSetKinds))),
-      "id",
-    ),
-    on(Value, "node"),
-  ),
-  contained(on(Value, "node", "text"), on(Node, "id", "stringValue")),
-  contained(on(Value, "parent", "setBaseType"), on(ValueSet, "node", "baseType")),
-  contained(
-    on(
-      select(Value, (v) => v.eq(v.setBaseType, "none")),
-      "node",
-      "baseType",
-    ),
-    on(RecordField, "node", "baseType"),
-  ),
-  check("E1_derived", Value, (v) =>
-    v.or(v.eq(v.setBaseType, "none"), v.eq(v.baseType, v.setBaseType)),
-  ),
-  check("Typed_value", Value, valueCheck),
-
-  contained(
-    on(RecordField, "node", "document", "kind", "start", "nearest", "version", "parent"),
-    nodeRef,
-  ),
-  key(on(RecordField, "parent", "identifier")),
-  key(on(fieldIdentifiers, "node")),
-  contained(on(fieldIdentifiers, "node", "lexical"), on(RecordField, "node", "identifierLexical")),
-  contained(on(RecordField, "node"), on(fieldIdentifiers, "node")),
-  key(on(fieldBaseTypes, "node")),
-  contained(on(fieldBaseTypes, "node", "lexical"), on(RecordField, "node", "baseTypeLexical")),
-  contained(on(RecordField, "node"), on(fieldBaseTypes, "node")),
-  check("E1_derived", RecordField, (f) =>
-    f.and(
-      collapsedField(f),
-      f.ne(f.baseType, "none"),
-      f.eq(BaseTypeLexical.at("lexical", f.baseType), f.baseTypeLexical),
-    ),
-  ),
-
-  contained(on(OutcomeRange, "node"), on(Declaration, "node")),
-  key(on(masteryValues, "node")),
-  contained(on(masteryValues, "node", "lexical"), on(OutcomeRange, "node", "masteryValue")),
-  key(on(normalMinimums, "node")),
-  contained(on(normalMinimums, "node", "lexical"), on(OutcomeRange, "node", "normalMinimum")),
-  key(on(normalMaximums, "node")),
-  contained(on(normalMaximums, "node", "lexical"), on(OutcomeRange, "node", "normalMaximum")),
-  check("Mastery_range", OutcomeRange, (r) =>
-    r.and(
-      r.or(
-        r.eq(r.normalMinimum, "NaN"),
-        r.eq(r.masteryValue, "NaN"),
-        r.le(
-          Compute.when(
-            Compute.matches(r.normalMinimum, doubleForm),
-            (low) => Compute.cast(low, pg["double precision"]),
-            Number.NEGATIVE_INFINITY,
-          ),
-          Compute.when(
-            Compute.matches(r.masteryValue, doubleForm),
-            (mastery) => Compute.cast(mastery, pg["double precision"]),
-            Number.POSITIVE_INFINITY,
+  ],
+  "Mastery range": [
+    check("Mastery_range", OutcomeRange, (r) =>
+      r.and(
+        r.or(
+          r.eq(r.normalMinimum, "NaN"),
+          r.eq(r.masteryValue, "NaN"),
+          r.le(
+            Compute.when(
+              Compute.matches(r.normalMinimum, doubleForm),
+              (low) => Compute.cast(low, pg["double precision"]),
+              Number.NEGATIVE_INFINITY,
+            ),
+            Compute.when(
+              Compute.matches(r.masteryValue, doubleForm),
+              (mastery) => Compute.cast(mastery, pg["double precision"]),
+              Number.POSITIVE_INFINITY,
+            ),
           ),
         ),
-      ),
-      r.or(
-        r.eq(r.masteryValue, "NaN"),
-        r.eq(r.normalMaximum, "NaN"),
-        r.le(
-          Compute.when(
-            Compute.matches(r.masteryValue, doubleForm),
-            (mastery) => Compute.cast(mastery, pg["double precision"]),
-            Number.NEGATIVE_INFINITY,
-          ),
-          Compute.when(
-            Compute.matches(r.normalMaximum, doubleForm),
-            (high) => Compute.cast(high, pg["double precision"]),
-            Number.POSITIVE_INFINITY,
+        r.or(
+          r.eq(r.masteryValue, "NaN"),
+          r.eq(r.normalMaximum, "NaN"),
+          r.le(
+            Compute.when(
+              Compute.matches(r.masteryValue, doubleForm),
+              (mastery) => Compute.cast(mastery, pg["double precision"]),
+              Number.NEGATIVE_INFINITY,
+            ),
+            Compute.when(
+              Compute.matches(r.normalMaximum, doubleForm),
+              (high) => Compute.cast(high, pg["double precision"]),
+              Number.POSITIVE_INFINITY,
+            ),
           ),
         ),
       ),
     ),
-  ),
-] as const;
+  ],
+  "Record field key": [key(on(RecordField, "parent", "identifier"))],
+  "Reserved type": [
+    check("Reserved_type", Declaration, (d) =>
+      d.and(
+        ...reservedBaseTypes.map((reserved) => keepsReservedBaseType(d, reserved)),
+        d.or(
+          d.ne(d.identifier, contextVariable.identifier),
+          d.and(
+            d.eq(d.declarationKind, contextVariable.kind),
+            d.eq(d.cardinality, contextVariable.cardinality),
+          ),
+        ),
+      ),
+    ),
+  ],
+  "Typed value": [check("Typed_value", Value, valueCheck)],
+  "Value cardinality": [
+    contained(on(ValueSet, "node", "elements", "elementChildren"), nodeCounts),
+    recordFieldFamily,
+    check("Value_cardinality", ValueSet, (s) =>
+      s.and(
+        s.or(s.ne(s.cardinality, "single"), s.eq(s.elementChildren, 1n)),
+        s.or(
+          s.and(s.eq(s.cardinality, "record"), s.eq(s.fields, s.elementChildren)),
+          s.and(s.ne(s.cardinality, "record"), s.eq(s.fields, 0n)),
+        ),
+      ),
+    ),
+    contained(
+      on(fieldIdentifiers, "node", "lexical"),
+      on(RecordField, "node", "identifierLexical"),
+    ),
+    contained(on(RecordField, "node"), on(fieldIdentifiers, "node")),
+    contained(on(fieldBaseTypes, "node", "lexical"), on(RecordField, "node", "baseTypeLexical")),
+    contained(on(RecordField, "node"), on(fieldBaseTypes, "node")),
+  ],
+} as const;
+
+/**
+ * {@link declarationLawsByName}'s statements in one list, the module's laws as the schema composes
+ * them.
+ */
+export const declarationLaws = Object.values(declarationLawsByName).flat();

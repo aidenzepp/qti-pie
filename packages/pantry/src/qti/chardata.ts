@@ -587,149 +587,187 @@ const rootElements = select(Node, (n) =>
  *   `drd:accessForAllResource`). shred refuses the rest as `strict-undeclared`.
  * - **"MathML foreign element"** (reading 2): no foreign element is in MathML's namespace.
  */
-export const chardataLaws = [
-  check("text_arm", Node, (n) => n.or(n.ne(n.kind, "text"), Compute.matches(n.chars, textChars))),
-  check("ws_arm", Node, (n) => n.or(n.ne(n.kind, "ws"), Compute.matches(n.chars, whitespaceChars))),
-  check("entityRef_arm", Node, (n) =>
-    n.or(n.ne(n.kind, "entityRef"), Compute.matches(n.chars, entityRefChars)),
-  ),
-  mirrors(
-    on(Comment, "node"),
-    on(
-      select(Node, (n) => n.eq(n.kind, "comment")),
-      "id",
-    ),
-  ),
-  mirrors(
-    on(Pi, "node"),
-    on(
-      select(Node, (n) => n.eq(n.kind, "pi")),
-      "id",
-    ),
-  ),
-  mirrors(
-    on(Doctype, "node"),
-    on(
-      select(Node, (n) => n.eq(n.kind, "doctype")),
-      "id",
-    ),
-  ),
-  mirrors(
-    on(Document, "node"),
-    on(
-      select(Node, (n) => n.eq(n.kind, "document")),
-      "id",
-    ),
-  ),
-  contained(on(rootElements, "document", "kind"), on(Document, "node", "rootKind")),
-  check("Document", Document, (d) =>
-    d.or(d.ne(d.xmlVersion, "none"), d.and(d.eq(d.encoding, ""), d.eq(d.standalone, "none"))),
-  ),
-  contained(
-    on(
-      Document,
-      "node",
-      "nodeChildren",
-      "context",
-      "nodeDocument",
-      "nodeGoverns",
-      "nodeKind",
-      "contextNearest",
-      "contextNearestKind",
-      "nodeParentKind",
-      "nodeStart",
-      "version",
-    ),
-    nodeContext,
-  ),
-  check("E1_derived", Document, (d) =>
-    d.or(
-      d.and(d.eq(d.contextNearestKind, "document"), d.eq(d.contextNearest, d.node)),
-      d.and(d.in(d.contextNearestKind, interactionKinds), d.gt(d.targetedBy, 0n)),
-    ),
-  ),
-  namespaceFamily,
-  key(on(Namespace, "node", "prefix")),
-  contained(
-    on(OpenElementName, "node", "document", "kind", "start", "nearest", "version", "parent"),
-    nodeRef,
-  ),
-  contained(
-    on(OpenElementName, "node", "kind", "version", "document", "governs"),
-    on(Node, "id", "kind", "version", "document", "governs"),
-  ),
-  contained(on(OpenElementName, "parent", "parentKind"), on(Node, "id", "kind")),
-  contained(
-    on(
-      select(Node, (n) => n.in(n.kind, openElementClasses)),
-      "id",
-    ),
-    on(OpenElementName, "node"),
-  ),
-  check("Foreign_element_class", OpenElementName, (o) =>
-    o.and(
-      o.or(
-        o.and(o.eq(o.kind, "no-namespace-element"), o.eq(o.namespace, "")),
-        o.and(
-          o.eq(o.kind, "own-namespace-element"),
-          o.ne(o.namespace, ""),
-          o.eq(o.namespace, o.parentNamespace),
-        ),
-        o.and(
-          o.eq(o.kind, "foreign-element"),
-          o.ne(o.namespace, ""),
-          o.ne(o.namespace, o.parentNamespace),
-        ),
-      ),
-      o.or(
-        o.in(o.parentKind, openElementClasses),
-        o.eq(o.parentNamespace, KindNamespace.at("namespace", o.parentKind)),
+export const chardataLawsByName = {
+  Document: [
+    mirrors(
+      on(Document, "node"),
+      on(
+        select(Node, (n) => n.eq(n.kind, "document")),
+        "id",
       ),
     ),
-  ),
-  contained(
-    on(
-      select(OpenElementName, (o) => o.in(o.parentKind, openElementClasses)),
-      "parent",
-      "parentNamespace",
+    contained(on(rootElements, "document", "kind"), on(Document, "node", "rootKind")),
+    check("Document", Document, (d) =>
+      d.or(d.ne(d.xmlVersion, "none"), d.and(d.eq(d.encoding, ""), d.eq(d.standalone, "none"))),
     ),
-    on(OpenElementName, "node", "namespace"),
-  ),
-  check("Foreign_element_class", Node, (n) =>
-    n.or(n.ne(n.kind, "no-namespace-element"), n.eq(n.prefix, "")),
-  ),
-  check("OpenElementName_canonical", OpenElementName, (o) =>
-    o.not(
-      Compute.matches(
-        Compute.concat(Compute.concat(o.namespace, "}"), o.local),
-        KindByNameUnder.at("names", o.version, o.parentKind),
+  ],
+  "E1 derived": [
+    contained(
+      on(
+        Document,
+        "node",
+        "nodeChildren",
+        "context",
+        "nodeDocument",
+        "nodeGoverns",
+        "nodeKind",
+        "contextNearest",
+        "contextNearestKind",
+        "nodeParentKind",
+        "nodeStart",
+        "version",
+      ),
+      nodeContext,
+    ),
+    check("E1_derived", Document, (d) =>
+      d.or(
+        d.and(d.eq(d.contextNearestKind, "document"), d.eq(d.contextNearest, d.node)),
+        d.and(d.in(d.contextNearestKind, interactionKinds), d.gt(d.targetedBy, 0n)),
       ),
     ),
-  ),
-  check("XsiType_available", OpenElementName, (o) =>
-    o.or(
-      Compute.matches(o.parentNamespace, TypeAvailable.at("namespaces", o.governs)),
-      o.not(Compute.matches(o.parentNamespace, vocabularyNamespacePattern)),
+    contained(
+      on(OpenElementName, "node", "kind", "version", "document", "governs"),
+      on(Node, "id", "kind", "version", "document", "governs"),
     ),
-  ),
-  check("Strictly_held", OpenElementName, (o) =>
-    o.or(
-      o.not(o.in(o.kind, openElementClasses)),
-      ...openElementClasses.map((kind) =>
-        o.and(
-          o.eq(o.kind, kind),
-          o.eq(
-            Compute.disjoint(StrictlyHeld.row(o.version, o.parentKind), Bits.of(NodeKind, [kind])),
-            true,
+  ],
+  "Foreign element class": [
+    contained(on(OpenElementName, "parent", "parentKind"), on(Node, "id", "kind")),
+    check("Foreign_element_class", OpenElementName, (o) =>
+      o.and(
+        o.or(
+          o.and(o.eq(o.kind, "no-namespace-element"), o.eq(o.namespace, "")),
+          o.and(
+            o.eq(o.kind, "own-namespace-element"),
+            o.ne(o.namespace, ""),
+            o.eq(o.namespace, o.parentNamespace),
+          ),
+          o.and(
+            o.eq(o.kind, "foreign-element"),
+            o.ne(o.namespace, ""),
+            o.ne(o.namespace, o.parentNamespace),
           ),
         ),
-      ),
-      o.ne(o.governs, "none"),
-      Compute.matches(
-        Compute.concat(Compute.concat(o.namespace, "}"), o.local),
-        HeldRootsUnder.at("names", o.version, o.parentKind),
+        o.or(
+          o.in(o.parentKind, openElementClasses),
+          o.eq(o.parentNamespace, KindNamespace.at("namespace", o.parentKind)),
+        ),
       ),
     ),
-  ),
-  check("MathML_foreign_element", OpenElementName, (o) => o.ne(o.namespace, mathmlNamespace)),
-] as const;
+    contained(
+      on(
+        select(OpenElementName, (o) => o.in(o.parentKind, openElementClasses)),
+        "parent",
+        "parentNamespace",
+      ),
+      on(OpenElementName, "node", "namespace"),
+    ),
+    check("Foreign_element_class", Node, (n) =>
+      n.or(n.ne(n.kind, "no-namespace-element"), n.eq(n.prefix, "")),
+    ),
+  ],
+  "MathML foreign element": [
+    check("MathML_foreign_element", OpenElementName, (o) => o.ne(o.namespace, mathmlNamespace)),
+  ],
+  "Namespace family": [namespaceFamily, key(on(Namespace, "node", "prefix"))],
+  OpenElementName: [
+    contained(
+      on(OpenElementName, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      nodeRef,
+    ),
+    contained(
+      on(
+        select(Node, (n) => n.in(n.kind, openElementClasses)),
+        "id",
+      ),
+      on(OpenElementName, "node"),
+    ),
+  ],
+  "OpenElementName canonical": [
+    check("OpenElementName_canonical", OpenElementName, (o) =>
+      o.not(
+        Compute.matches(
+          Compute.concat(Compute.concat(o.namespace, "}"), o.local),
+          KindByNameUnder.at("names", o.version, o.parentKind),
+        ),
+      ),
+    ),
+  ],
+  "Strictly held": [
+    check("Strictly_held", OpenElementName, (o) =>
+      o.or(
+        o.not(o.in(o.kind, openElementClasses)),
+        ...openElementClasses.map((kind) =>
+          o.and(
+            o.eq(o.kind, kind),
+            o.eq(
+              Compute.disjoint(
+                StrictlyHeld.row(o.version, o.parentKind),
+                Bits.of(NodeKind, [kind]),
+              ),
+              true,
+            ),
+          ),
+        ),
+        o.ne(o.governs, "none"),
+        Compute.matches(
+          Compute.concat(Compute.concat(o.namespace, "}"), o.local),
+          HeldRootsUnder.at("names", o.version, o.parentKind),
+        ),
+      ),
+    ),
+  ],
+  "XsiType available": [
+    check("XsiType_available", OpenElementName, (o) =>
+      o.or(
+        Compute.matches(o.parentNamespace, TypeAvailable.at("namespaces", o.governs)),
+        o.not(Compute.matches(o.parentNamespace, vocabularyNamespacePattern)),
+      ),
+    ),
+  ],
+  "comment arm": [
+    mirrors(
+      on(Comment, "node"),
+      on(
+        select(Node, (n) => n.eq(n.kind, "comment")),
+        "id",
+      ),
+    ),
+  ],
+  "doctype arm": [
+    mirrors(
+      on(Doctype, "node"),
+      on(
+        select(Node, (n) => n.eq(n.kind, "doctype")),
+        "id",
+      ),
+    ),
+  ],
+  "entityRef arm": [
+    check("entityRef_arm", Node, (n) =>
+      n.or(n.ne(n.kind, "entityRef"), Compute.matches(n.chars, entityRefChars)),
+    ),
+  ],
+  "pi arm": [
+    mirrors(
+      on(Pi, "node"),
+      on(
+        select(Node, (n) => n.eq(n.kind, "pi")),
+        "id",
+      ),
+    ),
+  ],
+  "text arm": [
+    check("text_arm", Node, (n) => n.or(n.ne(n.kind, "text"), Compute.matches(n.chars, textChars))),
+  ],
+  "ws arm": [
+    check("ws_arm", Node, (n) =>
+      n.or(n.ne(n.kind, "ws"), Compute.matches(n.chars, whitespaceChars)),
+    ),
+  ],
+} as const;
+
+/**
+ * {@link chardataLawsByName}'s statements in one list, the module's laws as the schema composes
+ * them.
+ */
+export const chardataLaws = Object.values(chardataLawsByName).flat();

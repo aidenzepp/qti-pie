@@ -40,7 +40,13 @@ import { noSharedModel } from "#pantry/grammar/content.ts";
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import type { NotQti3, UnmodeledVocabulary } from "#pantry/model/shred.ts";
-import { EntityName, Lexical, OpenLocal, Space } from "#pantry/qti/attributes.ts";
+import {
+  attributeLawsByName,
+  EntityName,
+  Lexical,
+  OpenLocal,
+  Space,
+} from "#pantry/qti/attributes.ts";
 import {
   Affix,
   AssembledReference,
@@ -70,6 +76,7 @@ import {
   VariableRef,
 } from "#pantry/qti/expressions.ts";
 import {
+  chardataLawsByName,
   CommentText,
   DeclaredEncoding,
   DoctypeText,
@@ -161,8 +168,18 @@ import {
   UsageBaseType,
   UsageValue,
 } from "#pantry/qti/metadata.ts";
-import { Chars, EndCharacter, prefixPattern } from "#pantry/qti/node.ts";
-import { EntryContent, HrefParams, Reference, ReferencePath } from "#pantry/qti/package.ts";
+import { Chars, EndCharacter, nodeLawsByName, prefixPattern } from "#pantry/qti/node.ts";
+import { declarationLawsByName } from "#pantry/qti/declarations.ts";
+import { htmlLawsByName } from "#pantry/qti/html.ts";
+import { identityLawsByName } from "#pantry/qti/identity.ts";
+import { operatorLawsByName } from "#pantry/qti/operators.ts";
+import {
+  EntryContent,
+  HrefParams,
+  packageLawsByName,
+  Reference,
+  ReferencePath,
+} from "#pantry/qti/package.ts";
 import { mathmlLaws } from "#pantry/qti/mathml.ts";
 import { headQualifierLaw } from "#pantry/qti/mathml-apply.ts";
 import { quotationLaws } from "#pantry/qti/quotation.ts";
@@ -1446,11 +1463,6 @@ const patternLaws = (
   );
 
 /**
- * The tree's slots, `fin(Node, "children")`.
- */
-const children = { count: "children", owner: "Node" } as const;
-
-/**
  * The names of the primary keys of `tests.ts`'s relations that are no overlay's: the assembled
  * test's instances, its names and its branch resolutions (Q5.13).
  */
@@ -1479,10 +1491,11 @@ const cnCountLaws: readonly Law[] = [
 const cnCountIdentities: ReadonlySet<string> = new Set(cnCountLaws.map(lawIdentity));
 
 /**
- * The laws written out row by row, each as its outcome names it, with its name in
- * {@link lawTable}: the tree, the families, the folds, the keys and the containments of each
- * `src/qti/` module, in the module order of the plan's §C, after the text types' patterns, each
- * read from the type its module exports, so a bound that moves moves its row.
+ * The laws written out row by row, each as its outcome names it, with its name in {@link lawTable}:
+ * the text types' patterns, each read from the type its module exports, so a bound that moves moves
+ * its row; each relation's primary key; the generated fields' laws; and the laws of the modules
+ * that do not yet name them where they state them ({@link namedLaws} holds those that do), in the
+ * module order of the plan's §C.
  *
  * - **The text patterns**, in three classes (the orchestrator's ruling of 2026-11-06):
  *
@@ -1499,17 +1512,7 @@ const cnCountIdentities: ReadonlySet<string> = new Set(cnCountLaws.map(lawIdenti
  *     which crust does not check, so the domain is the law;
  *   - The whitespace around an IDREF token and an entry's base64 bytes are the host's own split and
  *     encoding, "E1 derived".
- * - **Node** (`node.ts`): the tree; the parent copy on its owner axis, which the oracle checks as
- *   T3's merged copy; the predecessor copy and the last slot (N5, N7); `Follow` and `Last`; the
- *   four folds, the element count read by the default hotspot, the counted and barred positions'
- *   counts and the string value (E1); the capped positions' key (N7, reading 130); `XsiType`.
- * - **Character data** (`chardata.ts`): each arm and `Document` both ways, the root element's kind,
- *   the namespace family and its key, and the foreign names.
- * - **Attributes** (`attributes.ts`): the four families, their owner copies (AL1), AL2's fold, the
- *   open names' key and namespace, and the IDREF tokens' text, a derived value (E1).
- * - **Package** (`package.ts`): the record and P1 to P4, as Q5.06 states them.
- * - **Identity** (`identity.ts`) and **declarations** (`declarations.ts`), as Q5.07 and Q5.08 state
- *   them: each overlay's row and its copies, its families and keys, and its laws' containments.
+ * - **Each relation's primary key**, under the law its module's rows belong to.
  * - **The other overlays**: the keys, families and containments the W5 briefs state exactly.
  * - **The generated fields**: each one's law, its term's NULL, beside its relation's rows, under the
  *   law that states its value exists. No term of Qti's reads `C.at`, the one read that can miss, so
@@ -1553,91 +1556,7 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
     [EntryContent, "E1 derived"],
     [EndCharacter, "E1 derived"],
   ]),
-  [
-    {
-      kind: "tree",
-      member: sideOf("Node", "parent", "at"),
-      root: "document",
-      slots: children,
-    },
-    "N2 tree",
-  ],
   [primaryKeyOf("Node", "id"), "Node key"],
-  [
-    containedIn(
-      sideOf(
-        "Node",
-        "parent",
-        "version",
-        "parentKind",
-        "parentGoverns",
-        "parentAncestry",
-        "parentNearest",
-        "parentNearestKind",
-        "parentParentKind",
-      ),
-      sideOf(
-        "Node",
-        "id",
-        "version",
-        "kind",
-        "governs",
-        "ancestry",
-        "nearest",
-        "nearestKind",
-        "parentKind",
-      ),
-    ),
-    "T3 first child",
-  ],
-  [
-    containedIn(
-      sideOf("Node", "parent", "pred:at", "was"),
-      sideOf("Node", "parent", "at", "state"),
-    ),
-    "N5 fold",
-  ],
-  [
-    containedIn(
-      sideOf("Node", "id", "pred:children", "lastState"),
-      sideOf("Node", "parent", "at", "state"),
-    ),
-    "N7 last slot",
-  ],
-  [
-    foldOf(
-      children,
-      "count",
-      sideOf("Node", "parent", "elementsWas", "elements"),
-      sideOf("Node", "id", "elementChildren"),
-    ),
-    "N5 fold",
-  ],
-  [
-    foldOf(children, "count", sideOf("Node", "parent"), sideOf("Node", "id", "countedChildren")),
-    "N7 Counted",
-  ],
-  [keyOver(sideOf("Node", "parent", "state")), "N7 Counted"],
-  [
-    foldOf(children, "count", sideOf("Node", "parent"), sideOf("Node", "id", "barredChildren")),
-    "N7 barred by",
-  ],
-  [
-    foldOf(
-      children,
-      "concat",
-      sideOf("Node", "parent", "stringPiece", "charsWas", "charsAfter"),
-      sideOf("Node", "id", "stringValue"),
-    ),
-    "E1 derived",
-  ],
-  [
-    containedIn(
-      sideOf("Node", "version", "kind", "governs"),
-      sideOf("XsiType", "version", "kind", "type"),
-    ),
-    "XsiType derived",
-  ],
   ...(
     [
       ["Comment", "comment arm"],
@@ -1645,766 +1564,57 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
       ["Doctype", "doctype arm"],
       ["Document", "Document"],
     ] as const
-  ).flatMap(([relation, name]) =>
-    [
-      primaryKeyOf(relation, "node"),
-      ...mirrored(sideOf(relation, "node"), sideOf("Node", "id")),
-    ].map((law) => [law, name] as const),
-  ),
-  [
-    containedIn(sideOf("Node", "document", "kind"), sideOf("Document", "node", "rootKind")),
-    "Document",
-  ],
-  [
-    familyOf("ordered", sideOf("Namespace", "node", "at"), "Node", "namespaces"),
-    "Namespace family",
-  ],
+  ).map(([relation, name]) => [primaryKeyOf(relation, "node"), name] as const),
   [primaryKeyOf("Namespace", "node", "at"), "Namespace family"],
-  [keyOver(sideOf("Namespace", "node", "prefix")), "Namespace family"],
   [primaryKeyOf("OpenElementName", "node"), "OpenElementName"],
-  [
-    containedIn(
-      sideOf(
-        "OpenElementName",
-        "node",
-        "document",
-        "kind",
-        "start",
-        "nearest",
-        "version",
-        "parent",
-      ),
-      sideOf("Node", "id", "document", "kind", "start", "nearest", "version", "parent"),
-    ),
-    "OpenElementName",
-  ],
-  [containedIn(sideOf("Node", "id"), sideOf("OpenElementName", "node")), "OpenElementName"],
-  [
-    containedIn(sideOf("OpenElementName", "parent", "parentKind"), sideOf("Node", "id", "kind")),
-    "Foreign element class",
-  ],
-  [
-    containedIn(
-      sideOf("OpenElementName", "parent", "parentNamespace"),
-      sideOf("OpenElementName", "node", "namespace"),
-    ),
-    "Foreign element class",
-  ],
-  [familyOf("ordered", sideOf("Attribute", "node", "at"), "Node", "attributes"), "AL2 count"],
   [primaryKeyOf("Attribute", "node", "id"), "AL2 count"],
-  [
-    familyOf(
-      "ordered",
-      sideOf("OpenAttributeName", "node", "attribute", "at"),
-      "Attribute",
-      "openName",
-    ),
-    "AL4 open names",
-  ],
   [primaryKeyOf("OpenAttributeName", "node", "attribute", "at"), "AL4 open names"],
-  [
-    familyOf("ordered", sideOf("Idref", "node", "attribute", "at"), "Attribute", "idrefs"),
-    "E1 derived",
-  ],
   [primaryKeyOf("Idref", "node", "attribute", "at"), "E1 derived"],
-  [
-    familyOf(
-      "ordered",
-      sideOf("AttributeEntity", "node", "attribute", "at"),
-      "Attribute",
-      "entities",
-    ),
-    "AttributeEntity owner",
-  ],
   [primaryKeyOf("AttributeEntity", "node", "attribute", "at"), "AttributeEntity owner"],
-  [
-    containedIn(
-      sideOf("Attribute", "node", "kind", "version", "document", "governs"),
-      sideOf("Node", "id", "kind", "version", "document", "governs"),
-    ),
-    "AL1 owner",
-  ],
-  [
-    containedIn(
-      sideOf("OpenAttributeName", "node", "attribute", "class", "kind", "version", "governs"),
-      sideOf("Attribute", "node", "id", "name", "kind", "version", "governs"),
-    ),
-    "AL1 owner",
-  ],
-  [
-    containedIn(
-      sideOf("Idref", "node", "attribute", "document"),
-      sideOf("Attribute", "node", "id", "document"),
-    ),
-    "AL1 owner",
-  ],
-  [
-    foldOf(
-      { count: "attributes", owner: "Node" },
-      "or",
-      sideOf("Attribute", "node", "slot", "attrsWas", "attrsAfter"),
-      sideOf("Node", "id", "attrs"),
-    ),
-    "AL2 fold",
-  ],
-  [keyOver(sideOf("OpenAttributeName", "node", "uri", "local")), "AL4 open name key"],
-  [
-    containedIn(
-      sideOf("OpenAttributeName", "node", "elementNamespace"),
-      sideOf("OpenElementName", "node", "namespace"),
-    ),
-    "Foreign attribute class",
-  ],
-  [
-    foldOf(
-      { count: "idrefs", owner: "Attribute" },
-      "concat",
-      sideOf("Idref", "node", "attribute", "piece", "piecesWas", "piecesAfter"),
-      sideOf("Attribute", "node", "id", "idrefText"),
-    ),
-    "E1 derived",
-  ],
   [primaryKeyOf("Package", "id"), "Package key"],
-  [familyOf("ordered", sideOf("Entry", "package", "at"), "Package", "entries"), "Entry family"],
   [primaryKeyOf("Entry", "package", "at"), "Entry family"],
-  [keyOver(sideOf("Entry", "package", "path")), "Entry family"],
-  [
-    containedIn(
-      sideOf("ResourceHref", "package", "path", "type"),
-      sideOf("Document", "package", "path", "resourceType"),
-    ),
-    "RootOfType",
-  ],
-  [
-    containedIn(sideOf("Entry", "package", "path"), sideOf("FileHref", "package", "path")),
-    "File listed",
-  ],
-  [
-    containedIn(
-      sideOf("ResourceHref", "node", "scope", "path"),
-      sideOf("ResourceFile", "resource", "scope", "path"),
-    ),
-    "Href listed",
-  ],
-  [
-    containedIn(sideOf("ResourceHref", "package", "path"), sideOf("Entry", "package", "path")),
-    "Document entry",
-  ],
-  [
-    containedIn(sideOf("Document", "package", "path"), sideOf("Entry", "package", "path")),
-    "Document entry",
-  ],
-  [
-    containedIn(
-      sideOf("Dependency", "package", "ref"),
-      sideOf("Resource", "package", "identifier"),
-    ),
-    "Dependency target",
-  ],
-  [keyOver(sideOf("Resource", "package", "identifier")), "DocumentId key"],
-  // The stimulus documents' key (package.ts, B5) shares this identity with every document's: it
-  // holds by that key, so only an importer defect reaches it, under the one name, Document entry.
-  [keyOver(sideOf("Document", "package", "path")), "Document entry"],
-  [
-    containedIn(sideOf("ReferencePath", "package", "path"), sideOf("Document", "package", "path")),
-    "Stimulus ref target",
-  ],
-  ...(
-    [
-      [
-        "ManifestId",
-        "parent",
-        "identifier",
-        ["document", "package"],
-        ["Document", "node", "package"],
-      ],
-      [
-        "Resource",
-        "parent",
-        "identifier",
-        ["document", "package"],
-        ["Document", "node", "package"],
-      ],
-      ["File", "resource", "href", ["resource", "package"], ["Resource", "node", "package"]],
-      [
-        "Dependency",
-        "resource",
-        "ref",
-        ["resource", "package", "resourceIdentifier"],
-        ["Resource", "node", "package", "identifier"],
-      ],
-    ] as const
-  ).flatMap(([overlay, parent, value, [held, ...heldRest], [holder, holds, ...holdsRest]]) =>
-    [
-      primaryKeyOf(overlay, "node"),
-      containedIn(
-        sideOf(overlay, "node", "document", "kind", "start", "nearest", "version", parent),
-        sideOf("Node", "id", "document", "kind", "start", "nearest", "version", "parent"),
-      ),
-      containedIn(sideOf(overlay, "node"), sideOf("Node", "id")),
-      containedIn(sideOf(overlay, held, ...heldRest), sideOf(holder, holds, ...holdsRest)),
-      containedIn(sideOf("Attribute", "node", "lexical"), sideOf(overlay, "node", value)),
-    ].map((law) => [law, "Manifest overlay"] as const),
+  ...(["ManifestId", "Resource", "File", "Dependency"] as const).map(
+    (overlay) => [primaryKeyOf(overlay, "node"), "Manifest overlay"] as const,
   ),
-  [keyOver(sideOf("Attribute", "node")), "DocumentId key"],
-  [keyOver(sideOf("ManifestId", "package")), "Manifest overlay"],
-  [
-    containedIn(sideOf("Attribute", "node", "lexical"), sideOf("Resource", "node", "typeLexical")),
-    "Manifest overlay",
-  ],
   [primaryKeyOf("ResourceHref", "node"), "Manifest overlay"],
-  [
-    containedIn(sideOf("Attribute", "node", "lexical"), sideOf("ResourceHref", "node", "href")),
-    "Manifest overlay",
-  ],
-  [
-    containedIn(
-      sideOf("ResourceHref", "node", "package", "type"),
-      sideOf("Resource", "node", "package", "type"),
-    ),
-    "Manifest overlay",
-  ],
-  [
-    containedIn(
-      sideOf("Resource", "package", "manifestIdentifier"),
-      sideOf("ManifestId", "package", "identifier"),
-    ),
-    "Manifest id space",
-  ],
-  [
-    familyOf("counted", sideOf("ResourceHref", "package", "path", "type"), "NamedHref", "names"),
-    "RootOfType",
-  ],
   [primaryKeyOf("NamedHref", "package", "path", "type"), "RootOfType"],
-  [
-    containedIn(
-      sideOf("Document", "package", "path", "resourceType"),
-      sideOf("NamedHref", "package", "path", "type"),
-    ),
-    "RootOfType",
-  ],
-  [
-    familyOf("counted", sideOf("File", "package", "scope", "path"), "FileHref", "files"),
-    "File listed",
-  ],
   [primaryKeyOf("FileHref", "package", "scope", "path"), "File listed"],
-  [keyOver(sideOf("FileHref", "package", "path")), "File listed"],
-  [
-    familyOf("counted", sideOf("File", "resource", "scope", "path"), "ResourceFile", "files"),
-    "Href listed",
-  ],
   [primaryKeyOf("ResourceFile", "resource", "scope", "path"), "Href listed"],
-  [keyOver(sideOf("IdBinding", "document", "id")), "DocumentId key"],
-  [
-    familyOf("counted", sideOf("DocumentId", "document", "id", "owner"), "IdBinding", "carriers"),
-    "DocumentId key",
-  ],
   [primaryKeyOf("IdBinding", "document", "id", "owner"), "E1 derived"],
-  [
-    containedIn(
-      sideOf("IdentityText", "node", "document", "owner", "lexical"),
-      sideOf("DocumentId", "node", "document", "owner", "lexical"),
-    ),
-    "DocumentId key",
-  ],
-  [containedIn(sideOf("DocumentId", "node"), sideOf("IdentityText", "node")), "DocumentId key"],
-  [keyOver(sideOf("IdentityText", "node")), "DocumentId key"],
-  ...(["Idref", "TextIdref"] as const).map(
-    (idref) =>
-      [
-        containedIn(sideOf(idref, "document", "token"), sideOf("IdrefTarget", "document", "id")),
-        "Idref target",
-      ] as const,
-  ),
-  [
-    containedIn(sideOf("ShareFragment", "document", "id"), sideOf("IdrefTarget", "document", "id")),
-    "Idref target",
-  ],
-  [
-    containedIn(sideOf("IdrefTarget", "document", "id"), sideOf("IdBinding", "document", "id")),
-    "Idref target",
-  ],
-  [
-    containedIn(sideOf("PlacedIdref", "assembly", "id"), sideOf("AssembledId", "assembly", "id")),
-    "Idref target",
-  ],
-  [keyOver(sideOf("AssembledId", "assembly", "id")), "DocumentId key"],
-  ...(
-    [
-      [sideOf("IdrefTarget", "document", "assembled"), sideOf("Document", "node", "assembled")],
-      [
-        sideOf("PlacedId", "instance", "document", "assembly", "assemblyKind"),
-        sideOf("Instance", "id", "document", "assembly", "assemblyKind"),
-      ],
-      [
-        sideOf("PlacedId", "node", "document", "id", "owner"),
-        sideOf("DocumentId", "node", "document", "id", "owner"),
-      ],
-      [
-        sideOf("PlacedIdref", "instance", "document", "assembly"),
-        sideOf("Instance", "id", "document", "assembly"),
-      ],
-      [sideOf("PlacedIdref", "document", "id"), sideOf("IdrefTarget", "document", "id")],
-    ] as const
-  ).map(([from, to]) => [containedIn(from, to), "E1 derived"] as const),
-  ...(
-    [
-      [sideOf("IdrefTarget", "document"), "Document", "idrefTargets"],
-      [sideOf("DocumentId", "document"), "Document", "ids"],
-      [sideOf("PlacedId", "instance"), "Instance", "ids"],
-      [sideOf("PlacedId", "assembly", "id", "owner", "copy"), "AssembledId", "carriers"],
-      [sideOf("PlacedIdref", "instance"), "Instance", "idrefTargets"],
-    ] as const
-  ).map(
-    ([member, owner, count]) => [familyOf("counted", member, owner, count), "E1 derived"] as const,
-  ),
   [primaryKeyOf("IdrefTarget", "document", "id"), "E1 derived"],
   [primaryKeyOf("PlacedId", "instance", "node"), "E1 derived"],
   [primaryKeyOf("AssembledId", "assembly", "id", "owner", "copy"), "E1 derived"],
   [primaryKeyOf("PlacedIdref", "instance", "id"), "E1 derived"],
-  [
-    containedIn(
-      sideOf(
-        "Document",
-        "node",
-        "nodeChildren",
-        "context",
-        "nodeDocument",
-        "nodeGoverns",
-        "nodeKind",
-        "contextNearest",
-        "contextNearestKind",
-        "nodeParentKind",
-        "nodeStart",
-        "version",
-      ),
-      sideOf(
-        "Node",
-        "id",
-        "children",
-        "ancestry",
-        "document",
-        "governs",
-        "kind",
-        "nearest",
-        "nearestKind",
-        "parentKind",
-        "start",
-        "version",
-      ),
-    ),
-    "E1 derived",
-  ],
-  [
-    containedIn(
-      sideOf("Document", "resourceType", "rootKind"),
-      sideOf("RootOfType", "type", "root"),
-    ),
-    "RootOfType",
-  ],
   [primaryKeyOf("IdentityText", "node"), "E1 derived"],
-  [
-    containedIn(
-      sideOf("Node", "id", "document", "parent", "stringValue"),
-      sideOf("IdentityText", "node", "document", "owner", "lexical"),
-    ),
-    "E1 derived",
-  ],
-  ...(["IdentityText", "OpenElementName"] as const).map(
-    (projection) =>
-      [
-        containedIn(
-          sideOf(projection, "node", "kind", "version", "document", "governs"),
-          sideOf("Node", "id", "kind", "version", "document", "governs"),
-        ),
-        "E1 derived",
-      ] as const,
-  ),
-  [familyOf("ordered", sideOf("TextIdref", "node", "at"), "IdentityText", "idrefs"), "E1 derived"],
   [primaryKeyOf("TextIdref", "node", "at"), "E1 derived"],
-  [
-    containedIn(
-      sideOf("TextIdref", "node", "document"),
-      sideOf("IdentityText", "node", "document"),
-    ),
-    "E1 derived",
-  ],
-  [
-    foldOf(
-      { count: "idrefs", owner: "IdentityText" },
-      "concat",
-      sideOf("TextIdref", "node", "piece", "piecesWas", "piecesAfter"),
-      sideOf("IdentityText", "node", "idrefText"),
-    ),
-    "E1 derived",
-  ],
   [primaryKeyOf("DocumentId", "node"), "DocumentId key"],
-  [
-    containedIn(
-      sideOf("Attribute", "node", "document", "lexical"),
-      sideOf("DocumentId", "node", "document", "lexical"),
-    ),
-    "DocumentId key",
-  ],
-  [containedIn(sideOf("DocumentId", "node"), sideOf("Attribute", "node")), "DocumentId key"],
   [primaryKeyOf("XmlLang", "node"), "E1 derived"],
-  [
-    containedIn(
-      sideOf("Attribute", "node", "document", "lexical"),
-      sideOf("XmlLang", "node", "document", "lang"),
-    ),
-    "E1 derived",
-  ],
-  [containedIn(sideOf("XmlLang", "node"), sideOf("Attribute", "node")), "E1 derived"],
-  [
-    familyOf("counted", sideOf("XmlLang", "document", "lang"), "DocumentLang", "carriers"),
-    "E1 derived",
-  ],
   [primaryKeyOf("DocumentLang", "document", "lang"), "E1 derived"],
   [primaryKeyOf("ShareFragment", "node"), "E1 derived"],
-  [
-    containedIn(
-      sideOf("Attribute", "node", "document", "lexical"),
-      sideOf("ShareFragment", "node", "document", "src"),
-    ),
-    "E1 derived",
-  ],
-  [containedIn(sideOf("ShareFragment", "node"), sideOf("Attribute", "node")), "E1 derived"],
-  ...(
-    [
-      [sideOf("GeneralNamed", "general"), sideOf("ResourceLomGeneral", "node")],
-      [sideOf("ResourceLomGeneral", "node"), sideOf("GeneralNamed", "general")],
-      [sideOf("GeneralNamed", "general", "record"), sideOf("LomGeneral", "node", "parent")],
-      [sideOf("GeneralNamed", "record", "named"), sideOf("LomRecord", "node", "named")],
-      [sideOf("GeneralNamed", "general", "record"), sideOf("GeneralObject", "general", "record")],
-      [sideOf("GeneralObject", "general", "record"), sideOf("GeneralNamed", "general", "record")],
-      [sideOf("GeneralObject", "record", "document"), sideOf("LomObject", "record", "document")],
-      [sideOf("DocumentGenerals", "document"), sideOf("Document", "node")],
-      [sideOf("Document", "node"), sideOf("DocumentGenerals", "document")],
-      [
-        sideOf("GeneralLang", "general", "document"),
-        sideOf("GeneralObject", "general", "document"),
-      ],
-    ] as const
-  ).map(([from, to]) => [containedIn(from, to), "E1 derived"] as const),
-  [
-    familyOf("counted", sideOf("GeneralObject", "document"), "DocumentGenerals", "generals"),
-    "E1 derived",
-  ],
-  [
-    familyOf("counted", sideOf("GeneralLang", "document", "lang"), "DocumentLang", "generals"),
-    "E1 derived",
-  ],
   [primaryKeyOf("GeneralNamed", "general"), "E1 derived"],
   [primaryKeyOf("GeneralObject", "general"), "E1 derived"],
   [primaryKeyOf("DocumentGenerals", "document"), "E1 derived"],
   [primaryKeyOf("GeneralLang", "general", "lang"), "E1 derived"],
-  [
-    containedIn(
-      sideOf("GeneralLang", "general", "value"),
-      sideOf("ResourceLomLanguageSet", "general", "lang"),
-    ),
-    "Document lang",
-  ],
-  [
-    containedIn(
-      sideOf("DocumentLang", "document", "generals"),
-      sideOf("DocumentGenerals", "document", "generals"),
-    ),
-    "Document lang",
-  ],
-  [
-    containedIn(
-      sideOf("PlacedGeneralLang", "general", "value"),
-      sideOf("ResourceLomLanguageSet", "general", "lang"),
-    ),
-    "Document lang",
-  ],
-  [
-    containedIn(
-      sideOf("AssembledLang", "assembly", "generals"),
-      sideOf("DocumentGenerals", "document", "generals"),
-    ),
-    "Document lang",
-  ],
-  ...(
-    [
-      [
-        sideOf("PlacedXmlLang", "instance", "document", "assembly"),
-        sideOf("Instance", "id", "document", "assembly"),
-      ],
-      [
-        sideOf("PlacedXmlLang", "node", "document", "lang"),
-        sideOf("XmlLang", "node", "document", "lang"),
-      ],
-      [
-        sideOf("PlacedGeneralLang", "general", "assembly"),
-        sideOf("GeneralObject", "general", "document"),
-      ],
-    ] as const
-  ).map(([from, to]) => [containedIn(from, to), "E1 derived"] as const),
-  ...(
-    [
-      [sideOf("XmlLang", "document"), "Document", "langs"],
-      [sideOf("PlacedXmlLang", "instance"), "Instance", "langs"],
-      [sideOf("PlacedXmlLang", "assembly", "lang"), "AssembledLang", "carriers"],
-      [sideOf("PlacedGeneralLang", "assembly", "lang"), "AssembledLang", "generals"],
-    ] as const
-  ).map(
-    ([member, owner, count]) => [familyOf("counted", member, owner, count), "E1 derived"] as const,
-  ),
   [primaryKeyOf("PlacedXmlLang", "instance", "node"), "E1 derived"],
   [primaryKeyOf("AssembledLang", "assembly", "lang"), "E1 derived"],
   [primaryKeyOf("PlacedGeneralLang", "general", "lang"), "E1 derived"],
-  ...(
-    [
-      [
-        sideOf("Attribute", "node", "name", "kind", "lexical"),
-        sideOf("SsmlAttribute", "node", "name", "kind", "lexical"),
-      ],
-      [sideOf("SsmlAttribute", "node", "name"), sideOf("Attribute", "node", "name")],
-      [sideOf("SsmlAttribute", "node", "fragment"), sideOf("SsmlScope", "node", "fragment")],
-      [
-        sideOf("SsmlScope", "node", "document", "kind", "start", "nearest", "version", "parent"),
-        sideOf("Node", "id", "document", "kind", "start", "nearest", "version", "parent"),
-      ],
-      [sideOf("SsmlScope", "parent", "fragment"), sideOf("SsmlScope", "node", "fragment")],
-    ] as const
-  ).map(([from, to]) => [containedIn(from, to), "E1 derived"] as const),
-  [
-    familyOf(
-      "counted",
-      sideOf("SsmlAttribute", "fragment", "kind", "value"),
-      "FragmentValue",
-      "carriers",
-    ),
-    "E1 derived",
-  ],
-  [
-    containedIn(
-      sideOf("SsmlAttribute", "node", "refers", "value"),
-      sideOf("FragmentValue", "fragment", "kind", "value"),
-    ),
-    "SSML trim mark",
-  ],
-  [
-    containedIn(
-      sideOf("SsmlAttribute", "fragment", "refers", "value"),
-      sideOf("FragmentValue", "fragment", "kind", "value"),
-    ),
-    "SSML lexicon reference",
-  ],
   [primaryKeyOf("SsmlAttribute", "node", "name"), "E1 derived"],
   [primaryKeyOf("SsmlScope", "node"), "E1 derived"],
   [primaryKeyOf("FragmentValue", "fragment", "kind", "value"), "E1 derived"],
-  [keyOver(sideOf("Node", "id")), "Node key"],
   [primaryKeyOf("LomLanguage", "node"), "E1 derived"],
-  [
-    containedIn(
-      sideOf("Node", "id", "parent", "stringValue"),
-      sideOf("LomLanguage", "node", "general", "lang"),
-    ),
-    "E1 derived",
-  ],
-  [containedIn(sideOf("LomLanguage", "node"), sideOf("Node", "id")), "E1 derived"],
-  [
-    familyOf(
-      "counted",
-      sideOf("LomLanguage", "general", "lang"),
-      "ResourceLomLanguageSet",
-      "carriers",
-    ),
-    "E1 derived",
-  ],
   [primaryKeyOf("ResourceLomLanguageSet", "general", "lang"), "E1 derived"],
   [primaryKeyOf("Quotation", "node"), "E1 derived"],
   [primaryKeyOf("LabelUse", "node"), "Label tools"],
-  [
-    containedIn(sideOf("Attribute", "node", "document"), sideOf("LabelUse", "node", "document")),
-    "Label tools",
-  ],
-  [containedIn(sideOf("LabelUse", "node"), sideOf("Attribute", "node")), "Label tools"],
-  [
-    containedIn(sideOf("LabelUse", "document", "rootKind"), sideOf("Document", "node", "rootKind")),
-    "Label tools",
-  ],
-  [keyOver(sideOf("Attribute", "document")), "Label tools"],
-  [containedIn(sideOf("LabelUse", "document"), sideOf("Attribute", "document")), "Label tools"],
-  [containedIn(sideOf("Attribute", "node"), sideOf("Attribute", "node")), "Track srclang"],
   [primaryKeyOf("TableScope", "node"), "E1 derived"],
   [primaryKeyOf("CellHeaders", "node"), "E1 derived"],
   [primaryKeyOf("HeaderToken", "node", "at"), "E1 derived"],
   [primaryKeyOf("TableHeader", "node"), "E1 derived"],
-  ...(
-    [
-      [
-        sideOf("TableScope", "node", "document", "kind", "start", "nearest", "version", "parent"),
-        sideOf("Node", "id", "document", "kind", "start", "nearest", "version", "parent"),
-      ],
-      [sideOf("TableScope", "parent", "table"), sideOf("TableScope", "node", "table")],
-      [sideOf("Attribute", "node", "lexical"), sideOf("CellHeaders", "node", "lexical")],
-      [sideOf("CellHeaders", "node"), sideOf("Attribute", "node")],
-      [sideOf("CellHeaders", "node", "table"), sideOf("TableScope", "node", "table")],
-      [sideOf("HeaderToken", "node", "table"), sideOf("CellHeaders", "node", "table")],
-      [sideOf("Attribute", "node", "document"), sideOf("TableHeader", "node", "document")],
-      [sideOf("TableHeader", "node"), sideOf("Attribute", "node")],
-      [
-        sideOf("TableHeader", "node", "document", "id", "owner"),
-        sideOf("DocumentId", "node", "document", "id", "owner"),
-      ],
-      [sideOf("TableHeader", "node", "table"), sideOf("TableScope", "node", "table")],
-    ] as const
-  ).map(([from, to]) => [containedIn(from, to), "E1 derived"] as const),
-  [familyOf("ordered", sideOf("HeaderToken", "node", "at"), "CellHeaders", "tokens"), "E1 derived"],
-  [
-    foldOf(
-      { count: "tokens", owner: "CellHeaders" },
-      "concat",
-      sideOf("HeaderToken", "node", "piece", "piecesWas", "piecesAfter"),
-      sideOf("CellHeaders", "node", "tokenText"),
-    ),
-    "E1 derived",
-  ],
-  [keyOver(sideOf("TableHeader", "table", "id")), "DocumentId key"],
-  [keyOver(sideOf("HeaderToken", "node", "token")), "Table headers"],
-  [
-    containedIn(sideOf("HeaderToken", "table", "token"), sideOf("TableHeader", "table", "id")),
-    "Table headers",
-  ],
   [primaryKeyOf("Rounding", "node"), "E1 derived"],
   [primaryKeyOf("Tolerance", "node"), "E1 derived"],
   [primaryKeyOf("ToleranceToken", "node", "at"), "E1 derived"],
-  ...(
-    [
-      [
-        sideOf("Rounding", "node", "document", "kind", "start", "nearest", "version", "parent"),
-        sideOf("Node", "id", "document", "kind", "start", "nearest", "version", "parent"),
-      ],
-      [sideOf("Node", "id"), sideOf("Rounding", "node")],
-      [sideOf("Attribute", "node", "lexical"), sideOf("Rounding", "node", "figuresLexical")],
-      [sideOf("Attribute", "node", "lexical"), sideOf("Rounding", "node", "mode")],
-      [sideOf("Rounding", "node"), sideOf("Attribute", "node")],
-      [sideOf("Attribute", "node", "lexical"), sideOf("Tolerance", "node", "lexical")],
-      [sideOf("Tolerance", "node"), sideOf("Attribute", "node")],
-    ] as const
-  ).map(([from, to]) => [containedIn(from, to), "E1 derived"] as const),
-  [
-    familyOf("ordered", sideOf("ToleranceToken", "node", "at"), "Tolerance", "tokens"),
-    "E1 derived",
-  ],
-  [
-    foldOf(
-      { count: "tokens", owner: "Tolerance" },
-      "concat",
-      sideOf("ToleranceToken", "node", "piece", "piecesWas", "piecesAfter"),
-      sideOf("Tolerance", "node", "tokenText"),
-    ),
-    "E1 derived",
-  ],
-  [containedIn(sideOf("Attribute", "node"), sideOf("Tolerance", "node")), "Equal tolerance"],
-  [keyOver(sideOf("Declaration", "document", "identifier")), "Declaration key"],
   ...(["Declaration", "ValueSet", "Value", "RecordField", "OutcomeRange"] as const).map(
     (overlay) => [primaryKeyOf(overlay, "node"), "Declaration overlay"] as const,
   ),
-  ...(["Declaration", "ValueSet", "Value", "RecordField"] as const).map(
-    (overlay) =>
-      [
-        containedIn(
-          sideOf(overlay, "node", "document", "kind", "start", "nearest", "version", "parent"),
-          sideOf("Node", "id", "document", "kind", "start", "nearest", "version", "parent"),
-        ),
-        "Declaration overlay",
-      ] as const,
-  ),
-  [
-    containedIn(
-      sideOf("Declaration", "kind", "declarationKind"),
-      sideOf("Declares", "kind", "declaration"),
-    ),
-    "E1 derived",
-  ],
-  ...(
-    [
-      ["Declaration", "identifierLexical"],
-      ["Declaration", "cardinalityLexical"],
-      ["Declaration", "baseTypeLexical"],
-      ["OutcomeRange", "masteryValue"],
-      ["OutcomeRange", "normalMinimum"],
-      ["OutcomeRange", "normalMaximum"],
-    ] as const
-  ).map(
-    ([overlay, field]) =>
-      [
-        containedIn(sideOf("Attribute", "node", "lexical"), sideOf(overlay, "node", field)),
-        "Declaration overlay",
-      ] as const,
-  ),
-  [containedIn(sideOf("Declaration", "node"), sideOf("Attribute", "node")), "Declaration overlay"],
-  [containedIn(sideOf("Node", "id"), sideOf("ValueSet", "node")), "Declaration overlay"],
-  [
-    containedIn(
-      sideOf(
-        "ValueSet",
-        "parent",
-        "document",
-        "identifier",
-        "declarationKind",
-        "baseType",
-        "cardinality",
-      ),
-      sideOf(
-        "Declaration",
-        "node",
-        "document",
-        "identifier",
-        "declarationKind",
-        "baseType",
-        "cardinality",
-      ),
-    ),
-    "Declaration overlay",
-  ],
-  [
-    containedIn(
-      sideOf("ValueSet", "node", "elements", "elementChildren"),
-      sideOf("Node", "id", "elements", "elementChildren"),
-    ),
-    "Value cardinality",
-  ],
-  [familyOf("counted", sideOf("RecordField", "parent"), "ValueSet", "fields"), "Value cardinality"],
-  [containedIn(sideOf("Node", "id"), sideOf("Value", "node")), "Declaration overlay"],
-  [
-    containedIn(sideOf("Value", "node", "text"), sideOf("Node", "id", "stringValue")),
-    "Declaration overlay",
-  ],
-  [
-    containedIn(sideOf("Value", "parent", "setBaseType"), sideOf("ValueSet", "node", "baseType")),
-    "Declaration overlay",
-  ],
-  [
-    containedIn(sideOf("Value", "node", "baseType"), sideOf("RecordField", "node", "baseType")),
-    "Declaration overlay",
-  ],
-  [keyOver(sideOf("RecordField", "parent", "identifier")), "Record field key"],
-  [
-    containedIn(
-      sideOf("Attribute", "node", "lexical"),
-      sideOf("RecordField", "node", "identifierLexical"),
-    ),
-    "Value cardinality",
-  ],
-  [
-    containedIn(
-      sideOf("Attribute", "node", "lexical"),
-      sideOf("RecordField", "node", "baseTypeLexical"),
-    ),
-    "Value cardinality",
-  ],
-  [containedIn(sideOf("RecordField", "node"), sideOf("Attribute", "node")), "Value cardinality"],
-  [
-    containedIn(sideOf("OutcomeRange", "node"), sideOf("Declaration", "node")),
-    "Declaration overlay",
-  ],
   [familyOf("counted", sideOf("Operand", "operator"), "Expression", "operands"), "Arity"],
   // An operand's type bits read `ValueBaseBit.row` and `ValueCardinalityBit.row`, closed reads of
   // a set keyed by the row's own NOT NULL `baseType` and `cardinality`: ∅ where the diagonal holds
@@ -3107,43 +2317,6 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
         "E1 derived",
       ] as const,
   ),
-  [
-    containedIn(sideOf("File", "package", "path"), sideOf("Entry", "package", "path")),
-    "File exists",
-  ],
-  [
-    containedIn(sideOf("ReferencePath", "package", "path"), sideOf("Entry", "package", "path")),
-    "File exists",
-  ],
-  [
-    containedIn(
-      sideOf("ReferencePath", "document", "package"),
-      sideOf("Document", "node", "package"),
-    ),
-    "Reference overlay",
-  ],
-  ...mirrored(
-    sideOf("Reference", "node", "name", "document", "kind"),
-    sideOf("ReferencePath", "node", "name", "document", "kind"),
-  ).map((law) => [law, "Reference overlay"] as const),
-  [keyOver(sideOf("Reference", "node", "name")), "Reference overlay"],
-  [keyOver(sideOf("ReferencePath", "node")), "Reference overlay"],
-  [
-    containedIn(
-      sideOf("Attribute", "node", "name", "lexical", "document", "kind"),
-      sideOf("Reference", "node", "name", "lexical", "document", "kind"),
-    ),
-    "Reference overlay",
-  ],
-  [
-    containedIn(sideOf("Reference", "node", "name"), sideOf("Attribute", "node", "name")),
-    "Reference overlay",
-  ],
-  // Three keys over Attribute(node, name) share this identity: O3's over the attributes it reads
-  // (interactions.ts), the reference census's (package.ts) and the SSML attributes' (identity.ts).
-  // Each holds because an element holds one attribute of a name (XML 1.0 §3.1, Unique Att Spec),
-  // so only an importer defect reaches one, and the one name all three report is E1 derived.
-  [keyOver(sideOf("Attribute", "node", "name")), "E1 derived"],
   ...[Reference, ReferencePath].map(
     ({ name, primaryKey }) =>
       [
@@ -3257,7 +2430,7 @@ const sideRead = (side: typeof SideValue.Type): LawSide => ({
  * @param statement - A statement of a schema.
  * @returns Its laws, none for a check or a statement value no law reads.
  */
-const lawsOfStatement = (statement: Statement): readonly Law[] =>
+export const lawsOfStatement = (statement: Statement): readonly Law[] =>
   Option.match(Schema.decodeUnknownOption(StatementValue)(statement), {
     onNone: () => [],
     onSome: (read): readonly Law[] => {
@@ -3362,6 +2535,39 @@ export const lawGroups: readonly (readonly [readonly Statement[], LawName])[] = 
 ];
 
 /**
+ * A module's statements by the law each states, the law's name its key: `nodeLawsByName` of
+ * `#pantry/qti/node.ts` and its peers, so a law is named where it is stated and this module reads
+ * the name rather than restating the law.
+ */
+type LawsByName = { readonly [Name in LawName]?: readonly Statement[] };
+
+/**
+ * The modules that name their laws where they state them, each a {@link LawsByName}.
+ */
+export const namedLaws: readonly LawsByName[] = [
+  nodeLawsByName,
+  chardataLawsByName,
+  attributeLawsByName,
+  packageLawsByName,
+  identityLawsByName,
+  declarationLawsByName,
+  htmlLawsByName,
+  operatorLawsByName,
+];
+
+/**
+ * Read the laws a module names: every law of each statement under its law's name, a check by its
+ * own name already.
+ *
+ * @param byName - The module's statements by law.
+ * @returns Its laws, each with its name.
+ */
+const lawsNamedIn = (byName: LawsByName): readonly (readonly [Law, LawName])[] =>
+  lawNames.flatMap((name) =>
+    (byName[name] ?? []).flatMap(lawsOfStatement).map((law) => [law, name] as const),
+  );
+
+/**
  * The identities two statements share while their owners name them by two laws, so no row or group
  * may name them and the census lists them until their sides differ. None stands today: Q5.09 gave
  * the strings a multiple extended text requires (`max-strings-required`) the term `kind`, apart
@@ -3377,6 +2583,7 @@ export const contestedIdentities: ReadonlySet<string> = new Set<string>();
  */
 export const statedLaws: readonly (readonly [Law, LawName])[] = Arr.dedupeWith(
   [
+    ...namedLaws.flatMap(lawsNamedIn),
     ...writtenLaws,
     ...lawGroups.flatMap(([statements, name]) =>
       statements

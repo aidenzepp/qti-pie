@@ -397,8 +397,8 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     83,
     {
       owner:
-        "shred's `type-unresolved` over `xsi:type` values (B2); element and attribute name prefixes held by crust's reader (`WellFormednessError`, Namespaces in XML 1.0 §5 Prefix Declared), with no law over the stored rows; shred's `role-unresolved` over SSML `role` items; an `xs:QName` text's binding in scope, which no law reads, is its recorded limit (C48)",
-      status: "P",
+        "shred's `type-unresolved` over `xsi:type` values (B2) and `prefix-unbound` over every other value of a QName domain, an attribute's and an element's text through one check (`resolvesIn`; `Qualified`, src/grammar/domains.ts; guard src/model/qname-scope.test.ts); element and attribute name prefixes held by crust's reader (`WellFormednessError`, Namespaces in XML 1.0 §5 Prefix Declared), with no law over the stored rows",
+      status: "G",
     },
   ],
   [
@@ -800,6 +800,14 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     {
       owner:
         "the record: `Attribute.at` and `Namespace.at` keep each family's order (shred, `rootInsertOf`), assembly places by `at`, and `unshred` writes declarations then attributes; no law reads either order, shred's `refusalOrder` names a codec refusal by Canonical XML's keys, and the oracle lists an element's breaches law by law (`attribute-order.oracle.test.ts`, `attribute-order.export.test.ts`, `attribute-order.db.test.ts`)",
+      status: "G",
+    },
+  ],
+  [
+    138,
+    {
+      owner:
+        "the package reader: `unsafeEntryPath` (`src/package/zip.ts`), which a zip's entry names and a package directory's file paths both meet (`readZip` under `href-path`, `readDirectoryEntry` under `entry-path`, which the import names `href-path`), held by `src/package/entry-path.test.ts`",
       status: "G",
     },
   ],

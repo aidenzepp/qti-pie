@@ -17,11 +17,15 @@
  *   its bound included, and no row names a uuid the program did not mint.
  * - **The oracle raises only what the rows break.** A law the oracle raises whose every statement the
  *   host evaluated over the rows, and found held, is a law the database would not raise; and a key
- *   text the oracle finds past its bound in a field the import writes is in that field's rows.
+ *   text the oracle finds past its bound in a field of a relation the import writes, no fold's end,
+ *   is in that field's rows.
  */
 import { Cause, Effect, Exit, FileSystem, Option } from "effect";
 import type { Path, PlatformError } from "effect";
+import { admissionOf } from "#pantry/grammar/attributes.ts";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
+import { schemaVersions } from "#pantry/grammar/kinds.ts";
+import { noType } from "#pantry/grammar/xsi.ts";
 import { readProgram } from "#pantry/import/program.ts";
 import { ImportRefused, lawTable } from "#pantry/import/refusal.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
@@ -34,8 +38,9 @@ import { hostVerdictOf } from "#pantry/test/gen/genetic/host-laws.ts";
 import type { HostVerdict } from "#pantry/test/gen/genetic/host-laws.ts";
 import type { Noise } from "#pantry/test/gen/genetic/noise.ts";
 import { writePackage } from "#pantry/test/gen/every-relation.ts";
+import { keyCopies } from "#pantry/test/key-copies.ts";
 import { filesOf } from "#pantry/test/oracle-complete/mutation.ts";
-import { judge, ruleOf } from "#pantry/test/oracle.ts";
+import { facetsBroken, judge, ruleOf } from "#pantry/test/oracle.ts";
 import type { Breach, Judgment as OracleJudgment, Laws } from "#pantry/test/oracle.ts";
 
 /**
@@ -83,8 +88,10 @@ export type Disagreement =
     };
 
 /**
- * Key a disagreement by its class: its kind and the law or rules it names, never its witness, so a
- * run keeps one candidate per class.
+ * Key a disagreement by its class: its kind and the law or rules it names, and for a law the
+ * import's rows break the statement that broke it (one law, `E1 derived` above all, is stated by
+ * many statements, each its own writer), never its witness, so a run keeps one candidate per
+ * class.
  *
  * @param disagreement - The disagreement.
  * @returns Its signature.
@@ -107,7 +114,9 @@ export const signatureOf = (disagreement: Disagreement): string => {
     case "codec-oracle-only": {
       return `${disagreement.kind}: ${disagreement.oracleRule}`;
     }
-    case "import-only-law":
+    case "import-only-law": {
+      return `${disagreement.kind}: ${disagreement.law}, ${disagreement.witness.split(": ")[0] ?? ""}`;
+    }
     case "oracle-only-law": {
       return `${disagreement.kind}: ${disagreement.law}`;
     }
@@ -316,13 +325,43 @@ const importSideOf = (
   });
 
 /**
+ * Name the arm of its domain a value-domain breach broke, the feature the search's domain coverage
+ * counts: the attribute's domain and the facets its value lies outside, or its pattern (or
+ * enumeration) where it breaks no facet.
+ *
+ * @param breach - A value-domain breach.
+ * @param grammar - The composed grammar.
+ * @returns The feature, `o:value domain arm <domain> <facets or pattern>`.
+ */
+const domainArmOf = (breach: Breach, grammar: ComposedGrammar): Feature => {
+  const { governs = noType, kind = "", lexical = "", name = "", version = "3.0.0" } = breach.keys;
+  const admitted = schemaVersions.find((held) => held === version) ?? "3.0.0";
+  const handle = Option.getOrUndefined(
+    Option.map(
+      admissionOf(grammar.attributes, { governs, kind, name, version: admitted }),
+      ({ domain }) => domain,
+    ),
+  );
+  const domain = grammar.attributes.domains.find((held) => held.handle === handle);
+  const broken =
+    domain === undefined ? [] : facetsBroken(domain, lexical).map(({ facet }) => facet);
+
+  return `o:value domain arm ${handle ?? "?"} ${broken.length === 0 ? "pattern" : broken.join(" ")}`;
+};
+
+/**
  * List the features of the oracle's side.
  *
  * @param oracle - The oracle's side.
  * @param roots - Each document's root kind, by path.
+ * @param grammar - The composed grammar, which types each attribute.
  * @returns The features.
  */
-const oracleFeatures = (oracle: OracleSide, roots: ReadonlyMap<string, string>): Feature[] => {
+const oracleFeatures = (
+  oracle: OracleSide,
+  roots: ReadonlyMap<string, string>,
+  grammar: ComposedGrammar,
+): Feature[] => {
   switch (oracle.kind) {
     case "died": {
       return ["o:died"];
@@ -333,7 +372,10 @@ const oracleFeatures = (oracle: OracleSide, roots: ReadonlyMap<string, string>):
     case "judged": {
       return oracle.breaches.length === 0
         ? ["o:accepted"]
-        : oracle.breaches.map((breach): Feature => `o:${breach.law} @ ${placeOf(breach, roots)}`);
+        : oracle.breaches.flatMap((breach): readonly Feature[] => [
+            `o:${breach.law} @ ${placeOf(breach, roots)}`,
+            ...(breach.law === "value domain" ? [domainArmOf(breach, grammar)] : []),
+          ]);
     }
     default: {
       return oracle satisfies never;
@@ -425,6 +467,14 @@ const codecDisagreements = (oracle: OracleSide, side: ImportSide): readonly Disa
 };
 
 /**
+ * The `keyText` fields a fold of the document tree fills, an owner's end the database computes and
+ * the import never writes: a key text the oracle bounds there has no row of the import to be in.
+ */
+const foldFields: ReadonlySet<string> = new Set(
+  keyCopies.flatMap((copy) => (copy.by === "fold" ? [copy.field] : [])),
+);
+
+/**
  * Compare the laws the import's rows break on the host with the laws the oracle raises: each law
  * the rows break that the oracle does not raise, each law the oracle raises whose statements the
  * rows were judged to hold, a key text past its bound on one side alone, and each uuid the rows
@@ -458,7 +508,9 @@ const rowDisagreements = (
     const field = breach.keys["field"] ?? "";
     const bound = breach.law === "Key text bound";
     const held = bound
-      ? host.written.has(field) && !host.overLong.has(field)
+      ? host.written.has(field.split(".")[0] ?? "") &&
+        !foldFields.has(field) &&
+        !host.overLong.has(field)
       : host.held.has(breach.law);
     const key = bound ? `${breach.law} ${field}` : breach.law;
     if (!held || shown.has(key)) {
@@ -558,7 +610,7 @@ export const judgeOne = Effect.fnUntraced(function* judgeOne(
   return {
     disagreements: [...died, ...codecDisagreements(oracle, side), ...rows],
     features: new Set([
-      ...oracleFeatures(oracle, roots),
+      ...oracleFeatures(oracle, roots, bench.grammar),
       ...importFeatures(side),
       verdictFeature(oracle, side),
     ]),

@@ -8,10 +8,11 @@
  * own, so the importer, the export and every test read a document through the same relations.
  */
 import { Array as Arr, Option, Result } from "effect";
-import { admissionOf } from "#pantry/grammar/attributes.ts";
+import { admissionOf, textDomainOf } from "#pantry/grammar/attributes.ts";
 import type { ComposedGrammar, Kind, Name } from "#pantry/grammar/compose.ts";
 import { contentStep } from "#pantry/grammar/content.ts";
 import { patternFlags } from "#pantry/grammar/domains.ts";
+import type { Qualified } from "#pantry/grammar/domains.ts";
 import { expandedText } from "#pantry/grammar/names.ts";
 import { typeHandle } from "#pantry/grammar/xsi.ts";
 import { isForeignKind, openClasses } from "#pantry/grammar/kinds.ts";
@@ -74,13 +75,19 @@ const closedNameOf = (name: Name): Option.Option<ClosedName<Composed>> =>
 /**
  * Read the composed grammar as shred reads a grammar: its kind resolution, the `AttributeName`
  * roster's closed handles, `Admission`'s key set as the children each kind admits,
- * `AttributeAdmission`, `ElementName`'s names, `StrictlyHeld` with `HeldRootsUnder`'s patterns,
- * each compiled once, and the `TypeName` roster with each kind's declared type.
+ * `AttributeAdmission`, and each attribute's and each text's domain's `qualified`, `ElementName`'s
+ * names, `StrictlyHeld` with `HeldRootsUnder`'s patterns, each compiled once, and the `TypeName`
+ * roster with each kind's declared type.
  *
  * @param grammar - The composed grammar.
  * @returns The grammar shred reads documents through.
  */
 export const shredGrammarOf = (grammar: ComposedGrammar): ShredGrammar<Composed> => {
+  const qualifiedOf: ReadonlyMap<string, Qualified> = new Map(
+    grammar.attributes.domains.flatMap(({ handle, qualified }) =>
+      Option.toArray(qualified).map((held) => [handle, held] as const),
+    ),
+  );
   const heldRoots: ReadonlyMap<string, RegExp> = new Map(
     grammar.heldRootsUnder.rows.map(({ names, parent, version }) => [
       `${version} ${parent}`,
@@ -103,6 +110,14 @@ export const shredGrammarOf = (grammar: ComposedGrammar): ShredGrammar<Composed>
     heldRoot: (version, parent, name) =>
       heldRoots.get(`${version} ${parent}`)?.test(expandedText(name)) ?? false,
     named: (namespace, local) => named.has(`${namespace} ${local}`),
+    qualified: (version, kind, governs, site) =>
+      (site._tag === "text"
+        ? textDomainOf(grammar.attributes, { governs, kind, version })
+        : Option.map(
+            admissionOf(grammar.attributes, { governs, kind, name: site.name, version }),
+            ({ domain }) => domain,
+          )
+      ).pipe(Option.flatMap((domain) => Option.fromNullishOr(qualifiedOf.get(domain)))),
     resolve: (namespace, local, parent) =>
       grammar.kinds.resolve(namespace, local, parent).pipe(Option.flatMap(elementKindOf)),
     strictlyHeld: (version, parent, kind) =>

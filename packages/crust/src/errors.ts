@@ -21,7 +21,7 @@ export class ReaderRefusal extends Data.TaggedError("ReaderRefusal")<{
   readonly rule:
     | "decode"
     | "bare-utf16"
-    | "nul-or-surrogate"
+    | "nul"
     | "undeclared-entity"
     | "entity-cycle"
     | "entity-expansion"

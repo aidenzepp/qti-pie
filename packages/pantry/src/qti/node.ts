@@ -572,7 +572,8 @@ const stringValueFold = fold(
 );
 
 /**
- * Every statement over `Node` that Q5.03 owns, each `check` named by its oracle law: the tree, the
+ * Every statement over `Node` that Q5.03 owns, by the law each states, its name the law table's
+ * (`#pantry/import/refusal.ts`), and each `check` named by its oracle law: the tree, the
  * root's sentinel, the three axis copies, content order and its end, the counts beside the
  * automaton, ancestry, the nearest interaction and the governing type.
  *
@@ -611,172 +612,205 @@ const stringValueFold = fold(
  * "Strictly held" (C44, C13) reads the foreign element's expanded name, so it is `chardata.ts`'s,
  * over `OpenElementName`.
  */
-export const nodeLaws = [
-  nodeTree,
-  check("N1_sentinel", Node, (n) =>
-    n.or(
-      n.and(member(n), n.ne(n.kind, "document")),
+export const nodeLawsByName = {
+  "E1 derived": [
+    check("E1_derived", Node, (n) =>
       n.and(
-        n.eq(n.start, 0n),
-        n.eq(n.kind, "document"),
-        n.eq(n.document, n.id),
-        n.eq(n.parentKind, n.kind),
-        n.eq(n.parentGoverns, n.governs),
-        n.eq(n.parentNearest, n.nearest),
-        n.eq(n.parentNearestKind, n.nearestKind),
-        n.eq(n.parentParentKind, n.parentKind),
-        n.eq(n.state, "0"),
-        n.eq(n.governs, "none"),
-      ),
-    ),
-  ),
-  contained(
-    on(
-      members,
-      "parent",
-      "version",
-      "parentKind",
-      "parentGoverns",
-      "parentAncestry",
-      "parentNearest",
-      "parentNearestKind",
-      "parentParentKind",
-    ),
-    on(
-      Node,
-      "id",
-      "version",
-      "kind",
-      "governs",
-      "ancestry",
-      "nearest",
-      "nearestKind",
-      "parentKind",
-    ),
-  ),
-  contained(on(members, "parent", pred("at"), "was"), on(members, "parent", "at", "state")),
-  check("N5_Follow", Node, (n) =>
-    n.or(
-      n.not(member(n)),
-      n.not(positioned(n)),
-      n.eq(
-        Compute.subset(
-          PositionSelf.row(n.state),
-          Follow.row(ContentModelOf.at("model", n.version, n.parentKind), n.was),
+        n.eq(n.ancestry, Compute.union(n.parentAncestry, Enters.row(n.kind))),
+        n.or(n.in(n.kind, ["text", "ws", "entityRef"]), n.eq(n.chars, "")),
+        n.or(
+          n.and(n.eq(n.chars, ""), n.eq(n.first, ""), n.eq(n.last, "")),
+          n.and(
+            n.ne(n.first, ""),
+            n.ne(n.last, ""),
+            n.eq(Compute.startsWith(n.chars, n.first), true),
+            n.eq(Compute.endsWith(n.chars, n.last), true),
+          ),
         ),
-        true,
+        n.or(
+          n.and(inStringValue(n), n.eq(n.stringPiece, n.chars)),
+          n.and(n.not(inStringValue(n)), n.eq(n.stringPiece, "")),
+        ),
       ),
     ),
-  ),
-  check("N5_admitted", Node, (n) =>
-    n.or(
-      n.eq(n.start, 0n),
-      n.and(n.ne(positionOf(n), "0"), n.eq(n.state, positionOf(n))),
-      n.and(n.eq(positionOf(n), "0"), n.not(element(n)), n.eq(n.state, n.was)),
-      n.and(
-        n.eq(positionOf(n), "0"),
-        element(n),
+    stringValueFold,
+  ],
+  "Foreign simple content": [
+    check("Foreign_simple_content", Node, (n) =>
+      n.or(
+        n.not(n.in(n.kind, openElementClasses)),
+        n.not(simplyGoverned(n)),
+        n.eq(n.elementChildren, 0n),
+      ),
+    ),
+  ],
+  "N1 sentinel": [
+    check("N1_sentinel", Node, (n) =>
+      n.or(
+        n.and(member(n), n.ne(n.kind, "document")),
+        n.and(
+          n.eq(n.start, 0n),
+          n.eq(n.kind, "document"),
+          n.eq(n.document, n.id),
+          n.eq(n.parentKind, n.kind),
+          n.eq(n.parentGoverns, n.governs),
+          n.eq(n.parentNearest, n.nearest),
+          n.eq(n.parentNearestKind, n.nearestKind),
+          n.eq(n.parentParentKind, n.parentKind),
+          n.eq(n.state, "0"),
+          n.eq(n.governs, "none"),
+        ),
+      ),
+    ),
+  ],
+  "N2 tree": [nodeTree],
+  "N5 Follow": [
+    check("N5_Follow", Node, (n) =>
+      n.or(
+        n.not(member(n)),
+        n.not(positioned(n)),
         n.eq(
           Compute.subset(
             PositionSelf.row(n.state),
-            ContentSymbol.row(SharedModelOf.at("model", n.version, n.parentKind), n.kind),
+            Follow.row(ContentModelOf.at("model", n.version, n.parentKind), n.was),
           ),
           true,
         ),
       ),
     ),
-  ),
-  check("E1_derived", Node, (n) =>
-    n.and(
-      n.eq(n.ancestry, Compute.union(n.parentAncestry, Enters.row(n.kind))),
-      n.or(n.in(n.kind, ["text", "ws", "entityRef"]), n.eq(n.chars, "")),
+  ],
+  "N5 admitted": [
+    check("N5_admitted", Node, (n) =>
       n.or(
-        n.and(n.eq(n.chars, ""), n.eq(n.first, ""), n.eq(n.last, "")),
+        n.eq(n.start, 0n),
+        n.and(n.ne(positionOf(n), "0"), n.eq(n.state, positionOf(n))),
+        n.and(n.eq(positionOf(n), "0"), n.not(element(n)), n.eq(n.state, n.was)),
         n.and(
-          n.ne(n.first, ""),
-          n.ne(n.last, ""),
-          n.eq(Compute.startsWith(n.chars, n.first), true),
-          n.eq(Compute.endsWith(n.chars, n.last), true),
+          n.eq(positionOf(n), "0"),
+          element(n),
+          n.eq(
+            Compute.subset(
+              PositionSelf.row(n.state),
+              ContentSymbol.row(SharedModelOf.at("model", n.version, n.parentKind), n.kind),
+            ),
+            true,
+          ),
         ),
       ),
+    ),
+  ],
+  "N5 fold": [
+    contained(on(members, "parent", pred("at"), "was"), on(members, "parent", "at", "state")),
+    elementsFold,
+  ],
+  "N6 ancestry": [
+    check("N6_ancestry", Node, (n) =>
+      n.and(
+        n.eq(Compute.disjoint(n.parentAncestry, Banned.row(n.kind)), true),
+        n.eq(Compute.subset(Needs.row(n.kind), n.parentAncestry), true),
+      ),
+    ),
+  ],
+  "N7 Counted": [
+    countedFold,
+    check("N7_Counted", Node, (n) =>
       n.or(
-        n.and(inStringValue(n), n.eq(n.stringPiece, n.chars)),
-        n.and(n.not(inStringValue(n)), n.eq(n.stringPiece, "")),
-      ),
-    ),
-  ),
-  check("N6_ancestry", Node, (n) =>
-    n.and(
-      n.eq(Compute.disjoint(n.parentAncestry, Banned.row(n.kind)), true),
-      n.eq(Compute.subset(Needs.row(n.kind), n.parentAncestry), true),
-    ),
-  ),
-  contained(on(Node, "id", pred("children"), "lastState"), on(members, "parent", "at", "state")),
-  check("N7_Last", Node, (n) =>
-    n.or(
-      n.not(modeled(n)),
-      n.eq(
-        Compute.subset(
-          PositionSelf.row(n.lastState),
-          Last.row(ContentModelOf.at("model", n.version, n.kind)),
+        n.not(modeled(n)),
+        n.eq(CountedOf.at("position", n.version, n.kind), "0"),
+        n.between(
+          n.countedChildren,
+          CountedOf.at("min", n.version, n.kind),
+          CountedOf.at("max", n.version, n.kind),
         ),
-        true,
       ),
     ),
-  ),
-  elementsFold,
-  countedFold,
-  barredFold,
-  check("N7_Counted", Node, (n) =>
-    n.or(
-      n.not(modeled(n)),
-      n.eq(CountedOf.at("position", n.version, n.kind), "0"),
-      n.between(
-        n.countedChildren,
-        CountedOf.at("min", n.version, n.kind),
-        CountedOf.at("max", n.version, n.kind),
+    key(on(cappedChildren, "parent", "state")),
+  ],
+  "N7 Last": [
+    check("N7_Last", Node, (n) =>
+      n.or(
+        n.not(modeled(n)),
+        n.eq(
+          Compute.subset(
+            PositionSelf.row(n.lastState),
+            Last.row(ContentModelOf.at("model", n.version, n.kind)),
+          ),
+          true,
+        ),
       ),
     ),
-  ),
-  key(on(cappedChildren, "parent", "state")),
-  check("N7_barred_by", Node, (n) =>
-    n.or(
-      n.not(modeled(n)),
-      n.eq(BarredOf.at("position", n.version, n.kind), "0"),
-      n.eq(Compute.disjoint(SlotSelf.row(BarredOf.at("slot", n.version, n.kind)), n.attrs), true),
-      n.eq(n.barredChildren, 0n),
-    ),
-  ),
-  stringValueFold,
-  check("N8_nearest", Node, (n) =>
-    n.or(
-      n.eq(n.start, 0n),
-      n.and(
-        n.in(n.parentKind, interactionKinds),
-        n.eq(n.nearest, n.parent),
-        n.eq(n.nearestKind, n.parentKind),
-      ),
-      n.and(
-        n.not(n.in(n.parentKind, interactionKinds)),
-        n.eq(n.nearest, n.parentNearest),
-        n.eq(n.nearestKind, n.parentNearestKind),
+  ],
+  "N7 barred by": [
+    barredFold,
+    check("N7_barred_by", Node, (n) =>
+      n.or(
+        n.not(modeled(n)),
+        n.eq(BarredOf.at("position", n.version, n.kind), "0"),
+        n.eq(Compute.disjoint(SlotSelf.row(BarredOf.at("slot", n.version, n.kind)), n.attrs), true),
+        n.eq(n.barredChildren, 0n),
       ),
     ),
-  ),
-  contained(
-    on(
-      select(Node, (n) => n.and(element(n), n.not(n.in(n.kind, openElementClasses)))),
-      "version",
-      "kind",
-      "governs",
+  ],
+  "N7 last slot": [
+    contained(on(Node, "id", pred("children"), "lastState"), on(members, "parent", "at", "state")),
+  ],
+  "N8 nearest": [
+    check("N8_nearest", Node, (n) =>
+      n.or(
+        n.eq(n.start, 0n),
+        n.and(
+          n.in(n.parentKind, interactionKinds),
+          n.eq(n.nearest, n.parent),
+          n.eq(n.nearestKind, n.parentKind),
+        ),
+        n.and(
+          n.not(n.in(n.parentKind, interactionKinds)),
+          n.eq(n.nearest, n.parentNearest),
+          n.eq(n.nearestKind, n.parentNearestKind),
+        ),
+      ),
     ),
-    on(XsiType, "version", "kind", "type"),
-  ),
-  check("Foreign_simple_content", Node, (n) =>
-    n.or(
-      n.not(n.in(n.kind, openElementClasses)),
-      n.not(simplyGoverned(n)),
-      n.eq(n.elementChildren, 0n),
+  ],
+  "T3 first child": [
+    contained(
+      on(
+        members,
+        "parent",
+        "version",
+        "parentKind",
+        "parentGoverns",
+        "parentAncestry",
+        "parentNearest",
+        "parentNearestKind",
+        "parentParentKind",
+      ),
+      on(
+        Node,
+        "id",
+        "version",
+        "kind",
+        "governs",
+        "ancestry",
+        "nearest",
+        "nearestKind",
+        "parentKind",
+      ),
     ),
-  ),
-] as const;
+  ],
+  "XsiType derived": [
+    contained(
+      on(
+        select(Node, (n) => n.and(element(n), n.not(n.in(n.kind, openElementClasses)))),
+        "version",
+        "kind",
+        "governs",
+      ),
+      on(XsiType, "version", "kind", "type"),
+    ),
+  ],
+} as const;
+
+/**
+ * Every statement over `Node` that Q5.03 owns, {@link nodeLawsByName}'s statements in one list.
+ */
+export const nodeLaws = Object.values(nodeLawsByName).flat();

@@ -52,6 +52,7 @@ import {
 } from "#pantry/test/gen/genetic/document-xsd.ts";
 import type { XsdFeature, XsdGenome } from "#pantry/test/gen/genetic/document-xsd.ts";
 import { evolve, reduce } from "#pantry/test/gen/genetic/engine.ts";
+import type { Breeding } from "#pantry/test/gen/genetic/mutate.ts";
 import type { Budget, Judgment } from "#pantry/test/gen/genetic/engine.ts";
 import { xdmDocument } from "#pantry/test/gen/xdm.ts";
 import { lawsOf } from "#pantry/test/oracle.ts";
@@ -356,12 +357,14 @@ describe.skipIf(!cached)("genetic-xsd.oracle.test.ts", () => {
           const stream = rotatingSeed(run.seed, floorSeed("pantry/genetic-xsd"));
           const seeds = seedsOf(grammar, stream, budget.initial);
           const oracle = yield* writeXsdOracle(oracleRoot);
-          const breeding = {
+          const breeding: Breeding = {
             corpus: corpusFrom(
               grammar,
               seeds.map(({ genome }, at) => ({ genome, name: `seed#${String(at)}` })),
             ),
             grammar,
+            lastEdit: new WeakMap(),
+            rewards: new Map(),
             swarm: {},
           };
           let generation = 0;

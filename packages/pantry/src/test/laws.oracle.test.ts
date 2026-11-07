@@ -1010,6 +1010,7 @@ const bounded = (facet: "maxExclusive" | "maxInclusive" | "minExclusive" | "minI
   identity: Option.none(),
   pattern: "^.*$",
   primitive: "double" as const,
+  qualified: Option.none(),
 });
 
 /**
@@ -2471,7 +2472,7 @@ const unownedBroken: readonly LawCase[] = [
  * Packages whose `xsi:type` breaks XML Schema's clause 4.1 or 4.2 (a value that is no QName in
  * scope, or one that names no type), or whose SSML `role` item names a prefix nothing binds, which
  * shred cannot represent: the codec refuses them before any law reads a row (shred's
- * `type-unresolved`, `type-unknown` and `role-unresolved`; the reason is shred's own test's to
+ * `type-unresolved`, `type-unknown` and `prefix-unbound`; the reason is shred's own test's to
  * assert, and the bound twins in the valid cases show the prefix is the cause).
  */
 const unownedCodec: readonly {

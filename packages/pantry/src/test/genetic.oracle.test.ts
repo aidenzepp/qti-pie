@@ -15,11 +15,16 @@
  * The bounded budget runs here; `GR8DES_GENETIC=1` runs the long one. After the last run, the
  * Good–Turing residual of each feature family over the rotating runs is printed: residual risk of
  * the generator and its features, never proof.
+ *
+ * The planted value-domain cases (`#pantry/test/gen/genetic/planted.ts`) are judged every run on
+ * their own: each value lies inside its domain's lexical space and outside its facets, which the
+ * oracle refuses and today's database does not, so the two must agree on each.
  */
 import { NodeServices } from "@effect/platform-node";
 import { afterAll, assert, layer } from "@effect/vitest";
-import { drawn, explore } from "@grizzle/testing/explore";
+import { drawn, exhaust, explore } from "@grizzle/testing/explore";
 import { noCoverage } from "@grizzle/testing/features";
+import { int } from "@grizzle/testing/gen";
 import { boundedShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Option } from "effect";
@@ -27,7 +32,9 @@ import { grammar } from "#pantry/grammar/install.ts";
 import { corpusOf } from "#pantry/test/gen/genetic/corpus.ts";
 import { residualsOf } from "#pantry/test/gen/genetic/engine.ts";
 import type { Budget } from "#pantry/test/gen/genetic/engine.ts";
-import { familyOf } from "#pantry/test/gen/genetic/judge.ts";
+import { genomeOf } from "#pantry/test/gen/genetic/genome.ts";
+import { familyOf, judgeOne, shownDisagreement } from "#pantry/test/gen/genetic/judge.ts";
+import { plantedCases } from "#pantry/test/gen/genetic/planted.ts";
 import type { Feature } from "#pantry/test/gen/genetic/judge.ts";
 import {
   hunt,
@@ -92,6 +99,56 @@ afterAll(() => {
 layer(NodeServices.layer, { excludeTestServices: true })(
   "the genetic differential of the import's host path and the law oracle",
   (it) => {
+    it.effect(
+      "agrees on every planted value outside its domain's facets",
+      (ctx) =>
+        // Oracle: a second implementation, the law oracle, against the laws the import's rows hold
+        // on the host. Bound: the three planted cases, each judged once.
+        searched(
+          ctx,
+          Effect.gen(function* plantedRuns() {
+            const directory = yield* scratchDirectory("genetic-planted-");
+            const bench = { directory, grammar, laws };
+
+            return yield* exhaust(
+              {
+                box: "the three planted values outside their domain's facets",
+                caseHang: Duration.minutes(5),
+                coverage: noCoverage,
+                generator: int(0, plantedCases.length - 1),
+                limit: plantedCases.length,
+                literal: (at) => plantedCases[at]?.name ?? String(at),
+                oracle: {
+                  kind: "second-implementation",
+                  name: "the law oracle against the laws the import's rows hold on the host",
+                },
+                suite: "pantry/genetic-planted-domains",
+              },
+              (at) =>
+                Effect.gen(function* plantedCase() {
+                  const planted = plantedCases[at];
+                  assert.isDefined(planted, `no planted case ${String(at)}`);
+                  if (planted !== undefined) {
+                    const judged = yield* judgeOne(yield* genomeOf(planted.entries), bench, at);
+                    const domains = judged.disagreements.filter(
+                      (disagreement) =>
+                        (disagreement.kind === "oracle-only-law" ||
+                          disagreement.kind === "import-only-law") &&
+                        disagreement.law === "value domain",
+                    );
+                    assert.deepStrictEqual(
+                      domains.map(shownDisagreement),
+                      [],
+                      `${planted.name}: the oracle says ${judged.summary.oracle}, the import's rows ${judged.summary.import}`,
+                    );
+                  }
+                }),
+            );
+          }).pipe(Effect.scoped),
+        ),
+      600_000,
+    );
+
     it.effect(
       "breeds no package the two judge differently",
       (ctx) =>

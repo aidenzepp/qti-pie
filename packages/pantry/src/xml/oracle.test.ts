@@ -1,12 +1,20 @@
-import { assert, describe, it } from "@effect/vitest";
+import { NodeFileSystem, NodePath } from "@effect/platform-node";
+import { assert, beforeAll, describe, it, layer } from "@effect/vitest";
 import { drawn, explore } from "@grizzle/testing/explore";
 import { noCoverage } from "@grizzle/testing/features";
 import { array, element, int } from "@grizzle/testing/gen";
 import type { Gen } from "@grizzle/testing/gen";
 import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
-import { Duration, Effect, Formatter, Option, Result } from "effect";
-import { verdictsOf } from "#pantry/xml/oracle.ts";
+import { ConfigProvider, Duration, Effect, Formatter, Layer, Option, Result } from "effect";
+import { materialize } from "#pantry/test/fixtures.ts";
+import {
+  OracleError,
+  OracleLayer,
+  OracleUnavailable,
+  verdictsOf,
+  xmllintC14n,
+} from "#pantry/xml/oracle.ts";
 import type { XsdMessage, XsdVerdict } from "#pantry/xml/oracle.ts";
 
 /**
@@ -289,5 +297,51 @@ describe("xmllint's report, read back", () => {
           "work/xsd-report/case-1.xml",
         );
       }),
+  );
+});
+
+/**
+ * What the process tests run on: the process spawner `xmllintC14n` needs and the file system and
+ * path services that spawner and the fixture materializer need.
+ */
+const ProcessLayer = OracleLayer.pipe(
+  Layer.provideMerge(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
+);
+
+/**
+ * The directory `materialize("simple")` returned, set once by `beforeAll`.
+ */
+let simple = "";
+
+beforeAll(() =>
+  Effect.gen(function* materializeSimple() {
+    simple = yield* materialize("simple");
+  }).pipe(Effect.provide(ProcessLayer)),
+);
+
+layer(ProcessLayer)("xmllint as a process", (process) => {
+  process.effect(
+    "a file that does not exist fails as OracleError with xmllint's exit code and message",
+    () =>
+      Effect.gen(function* missingFile() {
+        const failure = yield* Effect.flip(xmllintC14n(`${simple}/missing.xml`));
+
+        assert.instanceOf(failure, OracleError);
+        assert.notStrictEqual(failure.exitCode, 0);
+        assert.include(failure.stderr, "missing.xml");
+      }),
+  );
+
+  process.effect("an executable that does not start fails as OracleUnavailable, naming it", () =>
+    Effect.gen(function* missingExecutable() {
+      const missing = `${simple}/no-such-xmllint`;
+      const failure = yield* Effect.flip(xmllintC14n(`${simple}/choice.xml`)).pipe(
+        Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({ XMLLINT: missing }))),
+      );
+
+      assert.instanceOf(failure, OracleUnavailable);
+      assert.strictEqual(failure.executable, missing);
+      assert.include(failure.message, "set XMLLINT");
+    }),
   );
 });

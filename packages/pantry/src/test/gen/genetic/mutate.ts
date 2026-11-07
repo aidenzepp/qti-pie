@@ -14,18 +14,18 @@
  *   `drop-attribute` and `add-attribute`, an admitted name with a value the corpus writes.
  *
  * Named faults (`faults`): a dangling href (to no entry, to a deleted entry, to the wrong entry,
- * with a fragment), a wrong root type (a resource's type, or a document's root swapped for
- * another kind's), an absent required attribute, a key text at the key-text bound and one byte
- * either side of it, in characters of mixed widths, a cycle of references, a duplicate
- * identifier, a bad lexical form, and a misplaced element (a donor under a parent that does not
- * admit it). The reference graph's shapes (the history's hot spot 6): a diamond (one document
- * placed twice), an `xml:base` on a reference's element, its href rewritten or not, or an href
- * percent-encoded; one path listed under two types; a content packaging element outside the
- * manifest; an include in foreign or wildcard content. And absence (hot spot 8): a present value
- * equal to a sentinel the import or the schema spells (empty, `0`, `none`, `single`, the nil uuid,
- * the document's own identifier). And a wild attribute: one or two names no kind admits, or that
- * name an open class no name of which they are, on one element, the order of whose refusals no
- * law may read (reading 137).
+ * with a fragment), a wrong root type (a resource's type, or a document's root swapped for another
+ * kind's), an absent required attribute, a key text at the key-text bound and one byte either side
+ * of it, in characters of mixed widths, a cycle of references, a duplicate identifier, a bad
+ * lexical form, and a misplaced element (a donor under a parent that does not admit it). The
+ * reference graph's shapes (the history's hot spot 6): a diamond (one document placed twice), an
+ * `xml:base` on a reference's element, its href rewritten or not, or an href percent-encoded; one
+ * path listed under two types, the second a document type `RootOfType` pairs two times in three; a
+ * content packaging element outside the manifest; an include in foreign or wildcard content. And
+ * absence (hot spot 8): a present value equal to a sentinel the import or the schema spells (empty,
+ * `0`, `none`, `single`, the nil uuid, the document's own identifier). And a wild attribute: one or
+ * two names no kind admits, or that name an open class no name of which they are, on one element,
+ * the order of whose refusals no law may read (reading 137).
  *
  * Which operators a run draws, and how often, is its swarm (`@grizzle/testing/swarm`): drawn per
  * run, one operator always on, so no run is left with nothing to breed by.
@@ -37,6 +37,7 @@ import { Option } from "effect";
 import type { Element } from "@qti-pie/crust/tree.ts";
 import { admittedOf } from "#pantry/grammar/attributes.ts";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
+import type { ValueDomain } from "#pantry/grammar/attributes.ts";
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import { keyTextBytes } from "#pantry/qti/limits.ts";
@@ -103,6 +104,7 @@ export const faults = [
   "include-in-wildcard",
   "sentinel-value",
   "wild-attribute",
+  "value-boundary",
 ] as const;
 
 /**
@@ -121,6 +123,14 @@ export type Operator = (typeof operators)[number];
 export interface Breeding {
   readonly corpus: Corpus;
   readonly grammar: ComposedGrammar;
+  /**
+   * The operator of each genome's last edit, which the judge reads to reward it.
+   */
+  readonly lastEdit: WeakMap<Genome, Operator>;
+  /**
+   * Each operator's reward in this run: the new classes of disagreement its candidates showed.
+   */
+  readonly rewards: Map<Operator, number>;
   readonly swarm: Swarm<Operator>;
 }
 
@@ -270,6 +280,37 @@ const lexicalFaults = (held: string): readonly string[] => [
   "..",
   "%zz",
   "\u0001",
+];
+
+/**
+ * The forms at a value domain's edges: each facet's bound, and one under and one over it where it
+ * is a whole number; signed zeros and exponents; the double's special values; each enumeration
+ * member re-cased and padded; the empty and blank forms.
+ *
+ * @param domain - The domain.
+ * @param held - The value as written.
+ * @returns The forms.
+ */
+const boundaryForms = (domain: ValueDomain, held: string): readonly string[] => [
+  ...domain.facets.flatMap(({ value }) =>
+    /^[+-]?\d+$/u.test(value)
+      ? [value, String(BigInt(value) - 1n), String(BigInt(value) + 1n), `${value}.0`]
+      : [value, `-${value}`],
+  ),
+  ...domain.enumeration.flatMap((member) => [member.toUpperCase(), ` ${member}`, `${member} `]),
+  "-1",
+  "-0",
+  "+0",
+  "0",
+  "0.0",
+  "1e3",
+  "1E-3",
+  "INF",
+  "-INF",
+  "NaN",
+  "",
+  " ",
+  ` ${held} `,
 ];
 
 /**
@@ -523,13 +564,29 @@ const operations: Readonly<
     const pool = read.length > 0 && source.pick(0, 2) > 0 ? read : required;
     const name = source.draw(oneOf([...new Set(pool.map(({ qname }) => qname))]));
     const site = source.draw(oneOf(pool.filter(({ qname }) => qname === name)));
+    if (site === undefined) {
+      return Option.none();
+    }
 
-    return site === undefined
-      ? Option.none()
-      : edited(
-          withoutSite(genome, site),
-          `absent-required-attribute: ${site.qname} of ${breeding.corpus.kindOf(site.at.element)} in ${site.document.path}`,
-        );
+    const kind = breeding.corpus.kindOf(site.at.element);
+    if (source.pick(0, 1) === 0) {
+      return edited(
+        withoutSite(genome, site),
+        `absent-required-attribute: ${site.qname} of ${kind} in ${site.document.path}`,
+      );
+    }
+
+    let { root } = site.document;
+    for (const { address, element } of site.document.elements) {
+      if (breeding.corpus.kindOf(element) === kind) {
+        root = editAt(root, address, (held) => [withoutAttribute(held, site.qname)]);
+      }
+    }
+
+    return edited(
+      withDocumentRoot(genome, site.document.path, root),
+      `absent-required-attribute: ${site.qname} of every ${kind} in ${site.document.path}`,
+    );
   },
   "add-attribute": (genome, _mate, breeding) => (source) => {
     const document = source.draw(oneOf(documentsOf(genome)));
@@ -1011,11 +1068,15 @@ const operations: Readonly<
       ),
     );
     const held = resource === undefined ? undefined : attributeValue(resource.element, "type");
+    const documentTypes = [
+      ...new Set(breeding.grammar.package.rootOfType.rows.map(({ type }) => type)),
+    ];
     const type = source.draw(
       oneOf(
-        [...(breeding.corpus.values.get("type") ?? []), ...wildTypes].filter(
-          (other) => other !== held,
-        ),
+        (source.pick(0, 2) > 0
+          ? documentTypes
+          : [...(breeding.corpus.values.get("type") ?? []), ...wildTypes]
+        ).filter((other) => other !== held),
       ),
     );
     if (manifest === undefined || resource === undefined || type === undefined) {
@@ -1035,6 +1096,40 @@ const operations: Readonly<
         editAt(manifest.root, resource.address, (element) => [element, twin]),
       ),
       `two-types: ${attributeValue(resource.element, "href") ?? ""} listed as ${held ?? "no type"} and ${type}`,
+    );
+  },
+  "value-boundary": (genome, _mate, breeding) => (source) => {
+    const version = versionIn(genome);
+    const typed = attributeSites(genome, () => true).flatMap((site) => {
+      const admitted = admittedOf(
+        breeding.grammar.attributes,
+        breeding.grammar.kinds.attributeName,
+        version,
+        breeding.corpus.kindOf(site.at.element),
+      ).find(({ name }) => name === site.qname);
+      const domain = breeding.grammar.attributes.domains.find(
+        ({ handle }) => handle === admitted?.domain,
+      );
+
+      return domain === undefined ? [] : [{ domain, site }];
+    });
+    const faceted = typed.filter(
+      ({ domain }) => domain.facets.length > 0 || domain.enumeration.length > 0,
+    );
+    const chosen = source.draw(
+      oneOf(faceted.length > 0 && source.pick(0, 2) > 0 ? faceted : typed),
+    );
+    const form =
+      chosen === undefined
+        ? undefined
+        : source.draw(oneOf(boundaryForms(chosen.domain, chosen.site.value)));
+    if (chosen === undefined || form === undefined) {
+      return Option.none();
+    }
+
+    return edited(
+      atSite(genome, chosen.site, form),
+      `value-boundary: ${chosen.site.qname}=${JSON.stringify(form)} on ${breeding.corpus.kindOf(chosen.site.at.element)} in ${chosen.site.document.path}, of ${chosen.domain.handle}`,
     );
   },
   "wild-attribute": (genome, _mate, breeding) => (source) => {
@@ -1156,8 +1251,40 @@ const operations: Readonly<
 const attempts = 4;
 
 /**
- * Draw one edit of a genome: an operator by the run's swarm, then its edit, trying another operator
- * where the drawn one has no site.
+ * Draw an operator: one time in three by the rewards of the operators the run's swarm turns on,
+ * each as often as the new classes of disagreement its candidates showed, where any has one; else
+ * by the swarm's weights.
+ *
+ * @param breeding - The breeding context.
+ * @returns The generator.
+ */
+const rewardedChoice =
+  (breeding: Breeding): Gen<Operator> =>
+  (source) => {
+    const rewarded = operators.flatMap((operator) => {
+      const reward = breeding.rewards.get(operator) ?? 0;
+
+      return reward > 0 && (breeding.swarm[operator] ?? 0) > 0 ? [[operator, reward] as const] : [];
+    });
+    const total = rewarded.reduce((sum, [, reward]) => sum + reward, 0);
+    if (total === 0 || source.pick(0, 2) > 0) {
+      return source.draw(swarmChoice(breeding.swarm, operators));
+    }
+
+    let ball = source.pick(0, total - 1);
+    for (const [operator, reward] of rewarded) {
+      ball -= reward;
+      if (ball < 0) {
+        return operator;
+      }
+    }
+
+    return source.draw(swarmChoice(breeding.swarm, operators));
+  };
+
+/**
+ * Draw one edit of a genome: an operator by the run's swarm or its rewards, then its edit, trying
+ * another operator where the drawn one has no site, and record the operator of the genome it gives.
  *
  * @param breeding - The breeding context.
  * @returns The engine's `mutate`.
@@ -1167,9 +1294,11 @@ export const mutationOf =
   (genome: Genome, mate: Genome): Gen<Option.Option<Edited<Genome>>> =>
   (source) => {
     for (let attempt = 0; attempt < attempts; attempt += 1) {
-      const operator = source.draw(swarmChoice(breeding.swarm, operators));
+      const operator = source.draw(rewardedChoice(breeding));
       const result = source.draw(operations[operator](genome, mate, breeding));
       if (Option.isSome(result)) {
+        breeding.lastEdit.set(result.value.genome, operator);
+
         return result;
       }
     }

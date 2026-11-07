@@ -485,158 +485,188 @@ const textDomainOf = (n: NodeRow) => TextDomain.at("domain", n.version, nodeGove
  *   **AL2** the fold and distinctness, **AL3** required, **AL4** open names, their key and the
  *   foreign attribute class, the prefix, and **TextDomain**, as the module's header states them.
  */
-export const attributeLaws = [
-  attributeFamily,
-  openNameFamily,
-  idrefFamily,
-  entityFamily,
-  contained(
-    on(Attribute, "node", "kind", "version", "document", "governs"),
-    on(Node, "id", "kind", "version", "document", "governs"),
-  ),
-  contained(
-    on(OpenAttributeName, "node", "attribute", "class", "kind", "version", "governs"),
-    on(Attribute, "node", "id", "name", "kind", "version", "governs"),
-  ),
-  contained(on(Idref, "node", "attribute", "document"), on(Attribute, "node", "id", "document")),
-  check("AL1_admission", Attribute, admitted),
-  check("value_domain", Attribute, (a) =>
-    a.or(
-      a.not(admitted(a)),
-      a.in(domainOf(a), universalDomains),
-      a.and(
-        a.not(a.in(domainOf(a), emptyDomains)),
-        Compute.matches(a.lexical, ValueDomainOf.at("pattern", domainOf(a))),
+export const attributeLawsByName = {
+  "AL1 admission": [check("AL1_admission", Attribute, admitted)],
+  "AL1 owner": [
+    contained(
+      on(Attribute, "node", "kind", "version", "document", "governs"),
+      on(Node, "id", "kind", "version", "document", "governs"),
+    ),
+    contained(
+      on(OpenAttributeName, "node", "attribute", "class", "kind", "version", "governs"),
+      on(Attribute, "node", "id", "name", "kind", "version", "governs"),
+    ),
+    contained(on(Idref, "node", "attribute", "document"), on(Attribute, "node", "id", "document")),
+  ],
+  "AL2 count": [attributeFamily],
+  "AL2 distinct": [
+    check("AL2_distinct", Attribute, (a) => a.eq(Compute.disjoint(a.attrsWas, a.slot), true)),
+  ],
+  "AL2 fold": [
+    fold(
+      attributeFamily,
+      Monoid.or,
+      on(
+        select(Attribute, (a) => a.not(open(a))),
+        "node",
+        "slot",
+        "attrsWas",
+        "attrsAfter",
+      ),
+      on(Node, "id", "attrs"),
+    ),
+  ],
+  "AL3 required": [
+    check("AL3_required", Node, (n) =>
+      n.eq(
+        Compute.subset(
+          Required.row(AttributeModelOf.at("model", n.version, nodeGovernorOf(n))),
+          n.attrs,
+        ),
+        true,
       ),
     ),
-  ),
-  check("E1_derived", Attribute, (a) =>
-    a.or(
-      a.not(admitted(a)),
-      a.and(
-        a.eq(a.slot, SlotSelf.row(slotOf(a))),
-        a.or(
-          a.and(carriesIdrefs(a), a.eq(a.lexical, a.idrefText)),
-          a.and(a.not(carriesIdrefs(a)), a.eq(a.idrefs, 0n)),
+  ],
+  "AL4 data name": [
+    check("AL4_data_name", OpenAttributeName, (o) =>
+      o.and(
+        o.or(o.ne(o.class, "data-*"), Compute.matches(o.local, dataName.source)),
+        o.or(
+          o.ne(o.class, "no-namespace"),
+          o.in(o.kind, openElementClasses),
+          o.eq(Compute.startsWith(o.local, "data-"), false),
         ),
       ),
     ),
-  ),
-  fold(
-    attributeFamily,
-    Monoid.or,
-    on(
-      select(Attribute, (a) => a.not(open(a))),
-      "node",
-      "slot",
-      "attrsWas",
-      "attrsAfter",
-    ),
-    on(Node, "id", "attrs"),
-  ),
-  check("AL2_distinct", Attribute, (a) => a.eq(Compute.disjoint(a.attrsWas, a.slot), true)),
-  check("AL3_required", Node, (n) =>
-    n.eq(
-      Compute.subset(
-        Required.row(AttributeModelOf.at("model", n.version, nodeGovernorOf(n))),
-        n.attrs,
-      ),
-      true,
-    ),
-  ),
-  check("AL4_open_names", Attribute, (a) =>
-    a.or(a.and(open(a), a.eq(a.openName, 1n)), a.and(a.not(open(a)), a.eq(a.openName, 0n))),
-  ),
-  check("Attribute_prefix", Attribute, (a) =>
-    a.or(
-      a.and(a.in(a.name, xmlNames), a.eq(a.prefix, "xml")),
-      a.and(a.in(a.name, boundNames), a.not(a.in(a.prefix, unboundPrefixes))),
-      a.and(a.not(a.in(a.name, [...xmlNames, ...boundNames])), a.eq(a.prefix, "")),
-    ),
-  ),
-  key(on(OpenAttributeName, "node", "uri", "local")),
-  check("Foreign_attribute_class", OpenAttributeName, (o) =>
-    o.and(
+  ],
+  "AL4 declared data name": [
+    check("AL4_declared_data_name", OpenAttributeName, (o) =>
       o.or(
-        o.and(o.in(o.class, ["data-*", "no-namespace"]), o.eq(o.uri, "")),
-        o.and(o.eq(o.class, "own-namespace"), o.ne(o.uri, ""), o.eq(o.uri, o.elementNamespace)),
-        o.and(o.eq(o.class, "foreign"), o.ne(o.uri, ""), o.ne(o.uri, o.elementNamespace)),
-      ),
-      o.or(
-        o.in(o.kind, openElementClasses),
-        o.eq(o.elementNamespace, KindNamespace.at("namespace", o.kind)),
-      ),
-    ),
-  ),
-  check("AL4_data_name", OpenAttributeName, (o) =>
-    o.and(
-      o.or(o.ne(o.class, "data-*"), Compute.matches(o.local, dataName.source)),
-      o.or(
-        o.ne(o.class, "no-namespace"),
-        o.in(o.kind, openElementClasses),
-        o.eq(Compute.startsWith(o.local, "data-"), false),
-      ),
-    ),
-  ),
-  check("AL4_declared_data_name", OpenAttributeName, (o) =>
-    o.or(
-      o.ne(o.class, "data-*"),
-      o.and(
-        ...declaredDataNames.map((name) =>
-          o.or(
-            o.ne(o.local, name),
-            o.eq(
-              Compute.subset(
-                AttributeNameSelf.row(name),
-                AttributeSlotOf.row(
-                  AttributeModelOf.at(
-                    "model",
-                    o.version,
-                    GoverningOf.at("governor", o.version, o.kind, o.governs),
+        o.ne(o.class, "data-*"),
+        o.and(
+          ...declaredDataNames.map((name) =>
+            o.or(
+              o.ne(o.local, name),
+              o.eq(
+                Compute.subset(
+                  AttributeNameSelf.row(name),
+                  AttributeSlotOf.row(
+                    AttributeModelOf.at(
+                      "model",
+                      o.version,
+                      GoverningOf.at("governor", o.version, o.kind, o.governs),
+                    ),
                   ),
                 ),
+                false,
               ),
-              false,
             ),
           ),
         ),
       ),
     ),
-  ),
-  contained(
-    on(
-      select(OpenAttributeName, (o) => o.in(o.kind, openElementClasses)),
-      "node",
-      "elementNamespace",
+  ],
+  "AL4 open name key": [key(on(OpenAttributeName, "node", "uri", "local"))],
+  "AL4 open names": [
+    openNameFamily,
+    check("AL4_open_names", Attribute, (a) =>
+      a.or(a.and(open(a), a.eq(a.openName, 1n)), a.and(a.not(open(a)), a.eq(a.openName, 0n))),
     ),
-    on(OpenElementName, "node", "namespace"),
-  ),
-  fold(
+  ],
+  "Attribute prefix": [
+    check("Attribute_prefix", Attribute, (a) =>
+      a.or(
+        a.and(a.in(a.name, xmlNames), a.eq(a.prefix, "xml")),
+        a.and(a.in(a.name, boundNames), a.not(a.in(a.prefix, unboundPrefixes))),
+        a.and(a.not(a.in(a.name, [...xmlNames, ...boundNames])), a.eq(a.prefix, "")),
+      ),
+    ),
+  ],
+  "AttributeEntity owner": [entityFamily],
+  "E1 derived": [
     idrefFamily,
-    Monoid.concat,
-    on(Idref, "node", "attribute", "piece", "piecesWas", "piecesAfter"),
-    on(Attribute, "node", "id", "idrefText"),
-  ),
-  check("E1_derived", Idref, (i) =>
-    i.and(
-      i.eq(
-        i.piece,
-        Compute.concat(
-          Compute.concat(Compute.base(i.before), Compute.base(i.token)),
-          Compute.base(i.after),
+    check("E1_derived", Attribute, (a) =>
+      a.or(
+        a.not(admitted(a)),
+        a.and(
+          a.eq(a.slot, SlotSelf.row(slotOf(a))),
+          a.or(
+            a.and(carriesIdrefs(a), a.eq(a.lexical, a.idrefText)),
+            a.and(a.not(carriesIdrefs(a)), a.eq(a.idrefs, 0n)),
+          ),
         ),
       ),
-      Compute.matches(i.token, nonSpacePattern),
-      i.or(i.eq(i.at, 0n), i.ne(i.before, "")),
     ),
-  ),
-  check("TextDomain", Node, (n) =>
-    n.or(
-      n.not(holdsCheckedText(n)),
-      n.and(
-        n.not(n.in(textDomainOf(n), emptyDomains)),
-        Compute.matches(n.stringValue, ValueDomainOf.at("pattern", textDomainOf(n))),
+    fold(
+      idrefFamily,
+      Monoid.concat,
+      on(Idref, "node", "attribute", "piece", "piecesWas", "piecesAfter"),
+      on(Attribute, "node", "id", "idrefText"),
+    ),
+    check("E1_derived", Idref, (i) =>
+      i.and(
+        i.eq(
+          i.piece,
+          Compute.concat(
+            Compute.concat(Compute.base(i.before), Compute.base(i.token)),
+            Compute.base(i.after),
+          ),
+        ),
+        Compute.matches(i.token, nonSpacePattern),
+        i.or(i.eq(i.at, 0n), i.ne(i.before, "")),
       ),
     ),
-  ),
-] as const;
+  ],
+  "Foreign attribute class": [
+    check("Foreign_attribute_class", OpenAttributeName, (o) =>
+      o.and(
+        o.or(
+          o.and(o.in(o.class, ["data-*", "no-namespace"]), o.eq(o.uri, "")),
+          o.and(o.eq(o.class, "own-namespace"), o.ne(o.uri, ""), o.eq(o.uri, o.elementNamespace)),
+          o.and(o.eq(o.class, "foreign"), o.ne(o.uri, ""), o.ne(o.uri, o.elementNamespace)),
+        ),
+        o.or(
+          o.in(o.kind, openElementClasses),
+          o.eq(o.elementNamespace, KindNamespace.at("namespace", o.kind)),
+        ),
+      ),
+    ),
+    contained(
+      on(
+        select(OpenAttributeName, (o) => o.in(o.kind, openElementClasses)),
+        "node",
+        "elementNamespace",
+      ),
+      on(OpenElementName, "node", "namespace"),
+    ),
+  ],
+  TextDomain: [
+    check("TextDomain", Node, (n) =>
+      n.or(
+        n.not(holdsCheckedText(n)),
+        n.and(
+          n.not(n.in(textDomainOf(n), emptyDomains)),
+          Compute.matches(n.stringValue, ValueDomainOf.at("pattern", textDomainOf(n))),
+        ),
+      ),
+    ),
+  ],
+  "value domain": [
+    check("value_domain", Attribute, (a) =>
+      a.or(
+        a.not(admitted(a)),
+        a.in(domainOf(a), universalDomains),
+        a.and(
+          a.not(a.in(domainOf(a), emptyDomains)),
+          Compute.matches(a.lexical, ValueDomainOf.at("pattern", domainOf(a))),
+        ),
+      ),
+    ),
+  ],
+} as const;
+
+/**
+ * {@link attributeLawsByName}'s statements in one list, the module's laws as the schema composes
+ * them.
+ */
+export const attributeLaws = Object.values(attributeLawsByName).flat();

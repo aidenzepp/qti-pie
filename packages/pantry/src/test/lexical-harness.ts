@@ -20,7 +20,7 @@ import { sample } from "@grizzle/testing/source";
 import { Effect, FileSystem, Option, Result } from "effect";
 import type { ValueDomain } from "#pantry/grammar/attributes.ts";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
-import { patternFlags } from "#pantry/grammar/domains.ts";
+import { patternFlags, unboundPrefixesOf } from "#pantry/grammar/domains.ts";
 import type { ValueFacet } from "#pantry/grammar/domains.ts";
 import { openClasses, schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
@@ -377,7 +377,7 @@ export const recorded: readonly Recorded[] = [
       _tag: "reading",
       reading: 47,
       says: "`xsi:type` is valid only when it names the declared type or a type derived from it.",
-      why: "an xsi:type's QName is valid only when its prefix is bound in scope and it names a type: the codec decides it from the element's in-scope bindings (shred's type-unresolved and type-unknown), which no pattern over the value alone can state, and a probe binds no prefix of its value",
+      why: "an xsi:type's QName is valid only when it names a type, which the codec decides (shred's type-unknown) and no pattern over the value states; its prefix's binding the harness judges as the codec does, with the probe's bindings in scope (resolves)",
     },
     subject: /^xsi:type$/u,
     value: /^[\t\n\r ]*(?:[\p{L}_][\p{L}\p{N}._-]*:)?[\p{L}_][\p{L}\p{N}._-]*[\t\n\r ]*$/u,
@@ -1525,6 +1525,66 @@ export interface Judged {
 }
 
 /**
+ * The prefixes bound where a probe's value stands, as {@link probeLine} and its batch write them:
+ * `xml`, by definition; `d`, which the batch's root binds; `e`, where the probe element or its
+ * frame is in a namespace; and the attribute's own prefix, which its element declares.
+ *
+ * @param probe - The probe.
+ * @returns The bound prefixes.
+ */
+export const probeScopeOf = (probe: Probe): ReadonlySet<string> => {
+  const namespaces = ((): readonly string[] => {
+    switch (probe.target._tag) {
+      case "framed": {
+        return [
+          probe.target.child.namespace,
+          probe.target.parent._tag === "global"
+            ? probe.target.parent.name.namespace
+            : driverNamespace,
+        ];
+      }
+      case "global": {
+        return [probe.target.name.namespace];
+      }
+      case "typed": {
+        return [driverNamespace];
+      }
+      default: {
+        return probe.target satisfies never;
+      }
+    }
+  })();
+  const subject = probe.subject._tag === "attribute" ? probe.subject.name : "";
+
+  return new Set([
+    "xml",
+    "d",
+    ...(namespaces.some((namespace) => namespace !== "") ? ["e"] : []),
+    ...(subject.includes(":") ? [subject.slice(0, subject.indexOf(":"))] : []),
+  ]);
+};
+
+/**
+ * Whether a probe's value resolves as the codec reads it: an attribute of a QName domain has every
+ * prefix its QNames name bound in the probe's scope (shred's `prefix-unbound` and, for `xsi:type`,
+ * `type-unresolved`); any other value, and a simple-content kind's text, which the codec reads no
+ * bindings for, always does.
+ *
+ * @param probe - The probe.
+ * @returns Whether it resolves.
+ */
+export const resolves = (probe: Probe): boolean =>
+  probe.subject._tag === "text" ||
+  Option.match(probe.domain.qualified, {
+    onNone: () => true,
+    onSome: (qualified) => {
+      const scope = probeScopeOf(probe);
+
+      return unboundPrefixesOf(qualified, probe.value, (prefix) => scope.has(prefix)).length === 0;
+    },
+  });
+
+/**
  * Judge one version's probes: write them as one batch, every probe of an `xs:ID` domain in a
  * document of its own, validate them in one `xmllint` process, and read each probe's outcome
  * beside the grammar's verdict.
@@ -1599,8 +1659,8 @@ export const judgeProbes = Effect.fn("lexical.judgeProbes")(function* judgeProbe
     const { outcome, said } = outcomeOf(probe, byFile[file]?.get(line) ?? []);
 
     return {
-      folded: accepts(probe.domain, normalized(probe.value, probe.whiteSpace)),
-      grammar: accepts(probe.domain, probe.value),
+      folded: accepts(probe.domain, normalized(probe.value, probe.whiteSpace)) && resolves(probe),
+      grammar: accepts(probe.domain, probe.value) && resolves(probe),
       outcome,
       probe,
       said,

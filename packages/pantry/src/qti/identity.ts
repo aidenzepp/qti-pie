@@ -970,203 +970,215 @@ export const ssmlLexiconReference = contained(
  *   a label's, its root kind its document's, and in an item each label's document one whose root
  *   carries `tool-name` and `tool-version`.
  */
-export const identityLaws = [
-  key(on(idAttributes, "node")),
-  contained(
-    on(idAttributes, "node", "document", "lexical"),
-    on(DocumentId, "node", "document", "lexical"),
-  ),
-  contained(on(attributeIds, "node"), on(idAttributes, "node")),
-  contained(
-    on(idTexts, "node", "document", "owner", "lexical"),
-    on(DocumentId, "node", "document", "owner", "lexical"),
-  ),
-  contained(on(textIds, "node"), on(idTexts, "node")),
-  check("E1_derived", DocumentId, (d) =>
-    d.and(
-      d.eq(d.lexical, Compute.concat(Compute.concat(d.before, d.id), d.after)),
-      Compute.matches(d.id, idValuePattern),
+export const identityLawsByName = {
+  "Document lang": [
+    contained(on(GeneralLang, "general", "value"), on(ResourceLomLanguageSet, "general", "lang")),
+    documentLang,
+    contained(
+      on(PlacedGeneralLang, "general", "value"),
+      on(ResourceLomLanguageSet, "general", "lang"),
     ),
-  ),
-  key(on(idTexts, "node")),
-  idBindingFamily,
-  check("E1_derived", IdBinding, (b) => b.gt(b.carriers, 0n)),
-  key(on(IdBinding, "document", "id")),
-
-  key(on(identityNodes, "id")),
-  contained(
-    on(identityNodes, "id", "document", "parent", "stringValue"),
-    on(IdentityText, "node", "document", "owner", "lexical"),
-  ),
-  contained(
-    on(IdentityText, "node", "kind", "version", "document", "governs"),
-    on(Node, "id", "kind", "version", "document", "governs"),
-  ),
-  textIdrefFamily,
-  contained(on(TextIdref, "node", "document"), on(IdentityText, "node", "document")),
-  fold(
-    textIdrefFamily,
-    Monoid.concat,
-    on(TextIdref, "node", "piece", "piecesWas", "piecesAfter"),
-    on(IdentityText, "node", "idrefText"),
-  ),
-  check("E1_derived", IdentityText, (t) =>
-    t.or(
-      t.and(t.eq(textIdentityOf(t), "ID"), t.eq(t.idrefs, 0n)),
-      t.and(t.in(textIdentityOf(t), ["IDREF", "IDREFS"]), t.eq(t.lexical, t.idrefText)),
+    assembledLang,
+  ],
+  "DocumentId key": [
+    key(on(idAttributes, "node")),
+    contained(
+      on(idAttributes, "node", "document", "lexical"),
+      on(DocumentId, "node", "document", "lexical"),
     ),
-  ),
-  check("E1_derived", TextIdref, (i) =>
-    i.and(
-      i.eq(i.piece, Compute.concat(Compute.concat(i.before, i.token), i.after)),
-      Compute.matches(i.token, idValuePattern),
-      i.or(i.eq(i.at, 0n), i.ne(i.before, "")),
+    contained(on(attributeIds, "node"), on(idAttributes, "node")),
+    contained(
+      on(idTexts, "node", "document", "owner", "lexical"),
+      on(DocumentId, "node", "document", "owner", "lexical"),
     ),
-  ),
-
-  contained(on(Idref, "document", "token"), on(IdrefTarget, "document", "id")),
-  contained(on(TextIdref, "document", "token"), on(IdrefTarget, "document", "id")),
-
-  key(on(shareSources, "node")),
-  contained(
-    on(shareSources, "node", "document", "lexical"),
-    on(ShareFragment, "node", "document", "src"),
-  ),
-  contained(on(ShareFragment, "node"), on(shareSources, "node")),
-  check("E1_derived", ShareFragment, (f) =>
-    f.and(
-      f.eq(Compute.startsWith(f.src, "#"), true),
-      f.eq(Compute.endsWith(f.src, f.id), true),
-      f.eq(Compute.charLength(f.src), Compute.add(Compute.charLength(f.id), 1)),
-      Compute.matches(f.src, shareFragmentPattern),
-    ),
-  ),
-  contained(on(ShareFragment, "document", "id"), on(IdrefTarget, "document", "id")),
-  contained(on(IdrefTarget, "document", "assembled"), on(Document, "node", "assembled")),
-  idrefTargetFamily,
-  contained(on(unassembledTargets, "document", "id"), on(IdBinding, "document", "id")),
-
-  documentIdFamily,
-  placedIdFamily,
-  assembledIdFamily,
-  placedIdrefFamily,
-  contained(
-    on(PlacedId, "instance", "document", "assembly", "assemblyKind"),
-    on(Instance, "id", "document", "assembly", "assemblyKind"),
-  ),
-  contained(
-    on(PlacedId, "node", "document", "id", "owner"),
-    on(DocumentId, "node", "document", "id", "owner"),
-  ),
-  check("E1_derived", PlacedId, (p) =>
-    p.or(
-      p.and(p.eq(p.assemblyKind, testKind), p.eq(p.copy, nilUuid)),
-      p.and(p.ne(p.assemblyKind, testKind), p.eq(p.copy, p.instance)),
-    ),
-  ),
-  check("E1_derived", AssembledId, (a) => a.gt(a.carriers, 0n)),
-  key(on(AssembledId, "assembly", "id")),
-  contained(
-    on(PlacedIdref, "instance", "document", "assembly"),
-    on(Instance, "id", "document", "assembly"),
-  ),
-  contained(on(PlacedIdref, "document", "id"), on(IdrefTarget, "document", "id")),
-  contained(on(PlacedIdref, "assembly", "id"), on(AssembledId, "assembly", "id")),
-
-  key(on(langAttributes, "node")),
-  contained(
-    on(langAttributes, "node", "document", "lexical"),
-    on(XmlLang, "node", "document", "lang"),
-  ),
-  contained(on(XmlLang, "node"), on(langAttributes, "node")),
-  langFamily,
-  check("E1_derived", DocumentLang, (d) => d.gt(d.carriers, 0n)),
-
-  key(on(lomLanguages, "id")),
-  contained(
-    on(lomLanguages, "id", "parent", "stringValue"),
-    on(LomLanguage, "node", "general", "lang"),
-  ),
-  contained(on(LomLanguage, "node"), on(lomLanguages, "id")),
-  check("E1_derived", LomLanguage, (l) => l.eq(l.tag, Compute.lowerAscii(l.lang))),
-  lomLanguageFamily,
-  check("E1_derived", ResourceLomLanguageSet, (s) => s.gt(s.carriers, 0n)),
-
-  mirrors(on(GeneralNamed, "general"), on(ResourceLomGeneral, "node")),
-  contained(on(GeneralNamed, "general", "record"), on(LomGeneral, "node", "parent")),
-  contained(on(GeneralNamed, "record", "named"), on(LomRecord, "node", "named")),
-  contained(on(namingGenerals, "general", "record"), on(GeneralObject, "general", "record")),
-  contained(on(GeneralObject, "general", "record"), on(GeneralNamed, "general", "record")),
-  contained(on(GeneralObject, "record", "document"), on(LomObject, "record", "document")),
-  mirrors(on(DocumentGenerals, "document"), on(Document, "node")),
-  generalObjectFamily,
-  generalLangFamily,
-  contained(on(GeneralLang, "general", "document"), on(GeneralObject, "general", "document")),
-  contained(on(GeneralLang, "general", "value"), on(ResourceLomLanguageSet, "general", "lang")),
-  check("E1_derived", GeneralLang, (g) =>
-    g.and(g.eq(g.value, Compute.lowerAscii(Compute.collapse(g.lang))), g.ne(g.value, "")),
-  ),
-  documentLang,
-  documentLangFamily,
-  placedLangFamily,
-  assembledLangFamily,
-  placedGeneralLangFamily,
-  contained(
-    on(PlacedXmlLang, "instance", "document", "assembly"),
-    on(Instance, "id", "document", "assembly"),
-  ),
-  contained(on(PlacedXmlLang, "node", "document", "lang"), on(XmlLang, "node", "document", "lang")),
-  check("E1_derived", AssembledLang, (a) => a.gt(a.carriers, 0n)),
-  contained(on(PlacedGeneralLang, "general", "assembly"), on(GeneralObject, "general", "document")),
-  contained(
-    on(PlacedGeneralLang, "general", "value"),
-    on(ResourceLomLanguageSet, "general", "lang"),
-  ),
-  check("E1_derived", PlacedGeneralLang, (g) =>
-    g.and(g.eq(g.value, Compute.lowerAscii(Compute.collapse(g.lang))), g.ne(g.value, "")),
-  ),
-  assembledLang,
-
-  key(on(ssmlAttributes, "node", "name")),
-  contained(
-    on(ssmlAttributes, "node", "name", "kind", "lexical"),
-    on(SsmlAttribute, "node", "name", "kind", "lexical"),
-  ),
-  contained(on(SsmlAttribute, "node", "name"), on(ssmlAttributes, "node", "name")),
-  contained(on(SsmlAttribute, "node", "fragment"), on(SsmlScope, "node", "fragment")),
-  check("E1_derived", SsmlAttribute, (s) =>
-    s.and(
-      s.eq(s.value, Compute.collapse(s.lexical)),
-      s.or(
-        s.and(s.eq(s.kind, "ssml:speak"), s.eq(s.refers, "ssml:mark")),
-        s.and(s.eq(s.kind, "ssml:lookup"), s.eq(s.refers, "ssml:lexicon")),
-        s.and(s.in(s.kind, ["ssml:mark", "ssml:lexicon"]), s.eq(s.refers, s.kind)),
+    contained(on(textIds, "node"), on(idTexts, "node")),
+    key(on(idTexts, "node")),
+    idBindingFamily,
+    key(on(IdBinding, "document", "id")),
+    key(on(AssembledId, "assembly", "id")),
+    key(on(langAttributes, "node")),
+    key(on(labelAttributes, "node")),
+    key(on(shareSources, "node")),
+  ],
+  "E1 derived": [
+    check("E1_derived", DocumentId, (d) =>
+      d.and(
+        d.eq(d.lexical, Compute.concat(Compute.concat(d.before, d.id), d.after)),
+        Compute.matches(d.id, idValuePattern),
       ),
     ),
-  ),
-  fragmentValueFamily,
-  check("E1_derived", FragmentValue, (v) => v.gt(v.carriers, 0n)),
-  contained(
-    on(SsmlScope, "node", "document", "kind", "start", "nearest", "version", "parent"),
-    nodeRef,
-  ),
-  check("E1_derived", SsmlScope, (s) =>
-    s.or(
-      s.and(s.eq(s.kind, "ssml:speak"), s.eq(s.fragment, s.node)),
-      s.and(s.ne(s.kind, "ssml:speak"), s.eq(s.parent, s.document), s.eq(s.fragment, s.document)),
-      s.and(s.ne(s.kind, "ssml:speak"), s.ne(s.parent, s.document)),
+    check("E1_derived", IdBinding, (b) => b.gt(b.carriers, 0n)),
+    contained(
+      on(identityNodes, "id", "document", "parent", "stringValue"),
+      on(IdentityText, "node", "document", "owner", "lexical"),
     ),
-  ),
-  contained(on(inheritedScopes, "parent", "fragment"), on(SsmlScope, "node", "fragment")),
-  ssmlTrimMark,
-  ssmlLexiconReference,
+    contained(
+      on(IdentityText, "node", "kind", "version", "document", "governs"),
+      on(Node, "id", "kind", "version", "document", "governs"),
+    ),
+    textIdrefFamily,
+    contained(on(TextIdref, "node", "document"), on(IdentityText, "node", "document")),
+    fold(
+      textIdrefFamily,
+      Monoid.concat,
+      on(TextIdref, "node", "piece", "piecesWas", "piecesAfter"),
+      on(IdentityText, "node", "idrefText"),
+    ),
+    check("E1_derived", IdentityText, (t) =>
+      t.or(
+        t.and(t.eq(textIdentityOf(t), "ID"), t.eq(t.idrefs, 0n)),
+        t.and(t.in(textIdentityOf(t), ["IDREF", "IDREFS"]), t.eq(t.lexical, t.idrefText)),
+      ),
+    ),
+    check("E1_derived", TextIdref, (i) =>
+      i.and(
+        i.eq(i.piece, Compute.concat(Compute.concat(i.before, i.token), i.after)),
+        Compute.matches(i.token, idValuePattern),
+        i.or(i.eq(i.at, 0n), i.ne(i.before, "")),
+      ),
+    ),
+    contained(on(IdrefTarget, "document", "assembled"), on(Document, "node", "assembled")),
+    idrefTargetFamily,
+    documentIdFamily,
+    placedIdFamily,
+    assembledIdFamily,
+    placedIdrefFamily,
+    contained(
+      on(PlacedId, "instance", "document", "assembly", "assemblyKind"),
+      on(Instance, "id", "document", "assembly", "assemblyKind"),
+    ),
+    contained(
+      on(PlacedId, "node", "document", "id", "owner"),
+      on(DocumentId, "node", "document", "id", "owner"),
+    ),
+    check("E1_derived", PlacedId, (p) =>
+      p.or(
+        p.and(p.eq(p.assemblyKind, testKind), p.eq(p.copy, nilUuid)),
+        p.and(p.ne(p.assemblyKind, testKind), p.eq(p.copy, p.instance)),
+      ),
+    ),
+    check("E1_derived", AssembledId, (a) => a.gt(a.carriers, 0n)),
+    contained(
+      on(PlacedIdref, "instance", "document", "assembly"),
+      on(Instance, "id", "document", "assembly"),
+    ),
+    contained(on(PlacedIdref, "document", "id"), on(IdrefTarget, "document", "id")),
+    contained(
+      on(langAttributes, "node", "document", "lexical"),
+      on(XmlLang, "node", "document", "lang"),
+    ),
+    contained(on(XmlLang, "node"), on(langAttributes, "node")),
+    langFamily,
+    check("E1_derived", DocumentLang, (d) => d.gt(d.carriers, 0n)),
+    contained(
+      on(lomLanguages, "id", "parent", "stringValue"),
+      on(LomLanguage, "node", "general", "lang"),
+    ),
+    contained(on(LomLanguage, "node"), on(lomLanguages, "id")),
+    check("E1_derived", LomLanguage, (l) => l.eq(l.tag, Compute.lowerAscii(l.lang))),
+    lomLanguageFamily,
+    check("E1_derived", ResourceLomLanguageSet, (s) => s.gt(s.carriers, 0n)),
+    mirrors(on(GeneralNamed, "general"), on(ResourceLomGeneral, "node")),
+    contained(on(GeneralNamed, "general", "record"), on(LomGeneral, "node", "parent")),
+    contained(on(GeneralNamed, "record", "named"), on(LomRecord, "node", "named")),
+    contained(on(namingGenerals, "general", "record"), on(GeneralObject, "general", "record")),
+    contained(on(GeneralObject, "general", "record"), on(GeneralNamed, "general", "record")),
+    contained(on(GeneralObject, "record", "document"), on(LomObject, "record", "document")),
+    mirrors(on(DocumentGenerals, "document"), on(Document, "node")),
+    generalObjectFamily,
+    generalLangFamily,
+    contained(on(GeneralLang, "general", "document"), on(GeneralObject, "general", "document")),
+    check("E1_derived", GeneralLang, (g) =>
+      g.and(g.eq(g.value, Compute.lowerAscii(Compute.collapse(g.lang))), g.ne(g.value, "")),
+    ),
+    documentLangFamily,
+    placedLangFamily,
+    assembledLangFamily,
+    placedGeneralLangFamily,
+    contained(
+      on(PlacedXmlLang, "instance", "document", "assembly"),
+      on(Instance, "id", "document", "assembly"),
+    ),
+    contained(
+      on(PlacedXmlLang, "node", "document", "lang"),
+      on(XmlLang, "node", "document", "lang"),
+    ),
+    check("E1_derived", AssembledLang, (a) => a.gt(a.carriers, 0n)),
+    contained(
+      on(PlacedGeneralLang, "general", "assembly"),
+      on(GeneralObject, "general", "document"),
+    ),
+    check("E1_derived", PlacedGeneralLang, (g) =>
+      g.and(g.eq(g.value, Compute.lowerAscii(Compute.collapse(g.lang))), g.ne(g.value, "")),
+    ),
+    key(on(ssmlAttributes, "node", "name")),
+    contained(
+      on(ssmlAttributes, "node", "name", "kind", "lexical"),
+      on(SsmlAttribute, "node", "name", "kind", "lexical"),
+    ),
+    contained(on(SsmlAttribute, "node", "name"), on(ssmlAttributes, "node", "name")),
+    contained(on(SsmlAttribute, "node", "fragment"), on(SsmlScope, "node", "fragment")),
+    check("E1_derived", SsmlAttribute, (s) =>
+      s.and(
+        s.eq(s.value, Compute.collapse(s.lexical)),
+        s.or(
+          s.and(s.eq(s.kind, "ssml:speak"), s.eq(s.refers, "ssml:mark")),
+          s.and(s.eq(s.kind, "ssml:lookup"), s.eq(s.refers, "ssml:lexicon")),
+          s.and(s.in(s.kind, ["ssml:mark", "ssml:lexicon"]), s.eq(s.refers, s.kind)),
+        ),
+      ),
+    ),
+    fragmentValueFamily,
+    check("E1_derived", FragmentValue, (v) => v.gt(v.carriers, 0n)),
+    contained(
+      on(SsmlScope, "node", "document", "kind", "start", "nearest", "version", "parent"),
+      nodeRef,
+    ),
+    check("E1_derived", SsmlScope, (s) =>
+      s.or(
+        s.and(s.eq(s.kind, "ssml:speak"), s.eq(s.fragment, s.node)),
+        s.and(s.ne(s.kind, "ssml:speak"), s.eq(s.parent, s.document), s.eq(s.fragment, s.document)),
+        s.and(s.ne(s.kind, "ssml:speak"), s.ne(s.parent, s.document)),
+      ),
+    ),
+    contained(on(inheritedScopes, "parent", "fragment"), on(SsmlScope, "node", "fragment")),
+    contained(
+      on(shareSources, "node", "document", "lexical"),
+      on(ShareFragment, "node", "document", "src"),
+    ),
+    contained(on(ShareFragment, "node"), on(shareSources, "node")),
+    check("E1_derived", ShareFragment, (f) =>
+      f.and(
+        f.eq(Compute.startsWith(f.src, "#"), true),
+        f.eq(Compute.endsWith(f.src, f.id), true),
+        f.eq(Compute.charLength(f.src), Compute.add(Compute.charLength(f.id), 1)),
+        Compute.matches(f.src, shareFragmentPattern),
+      ),
+    ),
+  ],
+  "Idref target": [
+    contained(on(Idref, "document", "token"), on(IdrefTarget, "document", "id")),
+    contained(on(TextIdref, "document", "token"), on(IdrefTarget, "document", "id")),
+    contained(on(ShareFragment, "document", "id"), on(IdrefTarget, "document", "id")),
+    contained(on(unassembledTargets, "document", "id"), on(IdBinding, "document", "id")),
+    contained(on(PlacedIdref, "assembly", "id"), on(AssembledId, "assembly", "id")),
+  ],
+  "Label tools": [
+    contained(on(labelAttributes, "node", "document"), on(LabelUse, "node", "document")),
+    contained(on(LabelUse, "node"), on(labelAttributes, "node")),
+    contained(on(LabelUse, "document", "rootKind"), on(Document, "node", "rootKind")),
+    key(on(toolNames, "document")),
+    key(on(toolVersions, "document")),
+    contained(on(itemLabels, "document"), on(toolNames, "document")),
+    contained(on(itemLabels, "document"), on(toolVersions, "document")),
+  ],
+  "Node key": [key(on(identityNodes, "id")), key(on(lomLanguages, "id"))],
+  "SSML lexicon reference": [ssmlLexiconReference],
+  "SSML trim mark": [ssmlTrimMark],
+} as const;
 
-  key(on(labelAttributes, "node")),
-  contained(on(labelAttributes, "node", "document"), on(LabelUse, "node", "document")),
-  contained(on(LabelUse, "node"), on(labelAttributes, "node")),
-  contained(on(LabelUse, "document", "rootKind"), on(Document, "node", "rootKind")),
-  key(on(toolNames, "document")),
-  key(on(toolVersions, "document")),
-  contained(on(itemLabels, "document"), on(toolNames, "document")),
-  contained(on(itemLabels, "document"), on(toolVersions, "document")),
-] as const;
+/**
+ * {@link identityLawsByName}'s statements in one list, the module's laws as the schema composes
+ * them.
+ */
+export const identityLaws = Object.values(identityLawsByName).flat();

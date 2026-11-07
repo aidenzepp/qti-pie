@@ -284,6 +284,7 @@ const holdToOracle = (
           identity: actual.identity,
           pattern: actual.pattern,
           primitive: actual.primitive,
+          qualified: actual.qualified,
         },
         expected.success,
         where,

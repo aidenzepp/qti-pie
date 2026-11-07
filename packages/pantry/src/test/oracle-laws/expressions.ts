@@ -35,14 +35,8 @@ import {
 import type { ExpressionTyping } from "#pantry/grammar/expression.ts";
 import type { NodeId } from "#pantry/model/xdm.ts";
 import { itemRefDocument, testDocumentsOf, testKinds } from "#pantry/test/oracle-laws/assembly.ts";
-import {
-  breachAt,
-  collapsed,
-  collapsedOf,
-  elementsOf,
-  valueOf,
-} from "#pantry/test/oracle-laws/rows.ts";
-import type { LawBreach, PackageRows, Row, Rows } from "#pantry/test/oracle-laws/rows.ts";
+import { breachAt, collapsed, collapsedOf, elementsOf, valueOf } from "#pantry/test/oracle-view.ts";
+import type { LawBreach, PackageRows, Row, View } from "#pantry/test/oracle-view.ts";
 import { ncNameForm as ncName, typedValueHolds } from "#pantry/test/oracle-laws/typed.ts";
 
 /**
@@ -200,7 +194,7 @@ interface Reference {
 export interface Typed {
   readonly languageOf: (node: Row) => string;
   readonly references: readonly Reference[];
-  readonly rows: Rows;
+  readonly rows: View;
   readonly typeOf: (node: Row) => Type;
 }
 
@@ -238,7 +232,7 @@ const spelledName = (lexical: string, spelling: string, kind: string): Option.Op
  * @param node - The expression.
  * @returns The base type.
  */
-const attributeBaseOf = (rows: Rows, node: Row): string => {
+const attributeBaseOf = (rows: View, node: Row): string => {
   if (node.kind === "qti-math-operator") {
     return new RegExp(integerMathOperators, "u").test(
       Option.getOrElse(valueOf(rows, node.id, "name"), () => ""),
@@ -282,7 +276,7 @@ interface TypingInput {
   readonly declared: Type;
   readonly node: Row;
   readonly operands: readonly Type[];
-  readonly rows: Rows;
+  readonly rows: View;
   readonly typing: ExpressionTyping;
 }
 
@@ -363,7 +357,7 @@ const typers: Readonly<Record<ExpressionTyping["typing"], (input: TypingInput) =
  * @param grammar - The composed grammar.
  * @returns The typed document.
  */
-export const typedOf = (rows: Rows, grammar: ComposedGrammar): Typed => {
+export const typedOf = (rows: View, grammar: ComposedGrammar): Typed => {
   const rootKind = Option.match(rows.root, { onNone: () => "", onSome: ({ kind }) => kind });
   const declared = new Map<string, Row>();
   for (const node of rows.members) {
@@ -830,7 +824,7 @@ const literalBreachesOf = (typed: Typed, grammar: ComposedGrammar): readonly Bre
  * @returns The breaches.
  */
 export const expressionDocumentBreaches = (
-  rows: Rows,
+  rows: View,
   grammar: ComposedGrammar,
 ): readonly Breach[] => {
   const typed = typedOf(rows, grammar);
