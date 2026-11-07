@@ -6,9 +6,10 @@
  * - **`MathAction`**, one row for every `m:maction`: its element rank and element count, the lexical
  *   form of its `selection` (empty where it writes none), that form collapsed, and the integer it
  *   reads as: 1 where none is written, the value where the collapsed form is `xs:integer`'s within
- *   the signed 64-bit range, 0 for any other form, which no child numbers (so a non-integer
- *   selection is refused under "MathML maction selection", where the oracle skips it: a difference
- *   of the law's name only, the document is refused either way).
+ *   the signed 64-bit range, 0 for any other form and for a negative integer, which no child
+ *   numbers (so a non-integer or negative selection is refused under "MathML maction selection",
+ *   where the oracle skips it: a difference of the law's name only, the document is refused either
+ *   way).
  * - **`MathCell`**, one row for every `m:mtd`; the counts and the greatest start are drawn by the
  *   database from the group and leaf families.
  * - **`MathAlignScope`**, one row for every `m:mtd`, the root of its cell's scope (open, its own
@@ -175,7 +176,8 @@ const dirLexicalOf = (lexical: string | undefined): string =>
  * Read a `selection`'s lexical form as the integer `MathAction.selection` holds.
  *
  * @param lexical - The attribute's lexical form, none where the action writes none.
- * @returns 1 where none is written, the integer where the collapsed form is one, 0 otherwise.
+ * @returns 1 where none is written, the integer where the collapsed form is one and is not negative
+ *   (the column is a `natural`), 0 otherwise.
  */
 const selectionOf = (lexical: string | undefined): bigint => {
   if (lexical === undefined) {
@@ -184,7 +186,13 @@ const selectionOf = (lexical: string | undefined): bigint => {
 
   const text = collapse(lexical);
 
-  return integerSpelling.test(text) ? BigInt(text) : 0n;
+  if (!integerSpelling.test(text)) {
+    return 0n;
+  }
+
+  const value = BigInt(text);
+
+  return value < 0n ? 0n : value;
 };
 
 /**

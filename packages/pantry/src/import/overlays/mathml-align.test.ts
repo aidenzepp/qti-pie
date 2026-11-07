@@ -463,6 +463,17 @@ describe("import/overlays/mathml-align.ts, the align rows (spec reading 2)", () 
     assert.strictEqual(readSelection("99999999999999999999")?.selection, 0n);
   });
 
+  it("reads a negative selection as 0, the natural column's floor", () => {
+    // Nodes: 0 document, 1 math, 2 maction, 3 mi.
+    assert.strictEqual(readSelection("-1")?.selection, 0n);
+    assert.strictEqual(readSelection(" -7 ")?.selection, 0n);
+    assert.strictEqual(readSelection("-9223372036854775808")?.selection, 0n);
+    assert.strictEqual(readSelection("-0")?.selection, 0n);
+    assert.strictEqual(readSelection("+0")?.selection, 0n);
+    assert.strictEqual(readSelection("+2")?.selection, 2n);
+    assert.strictEqual(readSelection("-1")?.selectionLexical, "-1");
+  });
+
   it("gives a group outside every cell no scope row, and counts no cell", () => {
     // Nodes: 0 document, 1 math, 2 mrow, 3 maligngroup, 4 mi.
     const doc = documentOf(
