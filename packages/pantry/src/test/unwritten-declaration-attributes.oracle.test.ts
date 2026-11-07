@@ -16,7 +16,9 @@
  *
  * Now `DeclarationBaseType`, `ValueBaseType`, `RecordField`, `MasteryValue`, `NormalMinimum`,
  * `NormalMaximum`, `MasteryFloor` and `MasteryCeiling` each hold a row exactly where the attributes
- * it reads are written (`#pantry/qti/declarations.ts`). A record's base type `none` is the one
+ * it reads are written (`#pantry/qti/declarations.ts`), but that a normal minimum unwritten in this
+ * box's 3.0.1 package is its XSD default, `0.0` (spec reading 149, held across both versions by
+ * `#pantry/test/normal-minimum-default.oracle.test.ts`). A record's base type `none` is the one
  * sentinel left, which `declarationRef` copies (B12).
  *
  * The host does not read a `Compute.when` term (`#pantry/test/assembled-mirrors.test.ts`), so it
@@ -209,6 +211,20 @@ const packageOf = (drawn: Case): PackageEntries =>
   );
 
 /**
+ * The normal minimum of a scale case that writes none: QTI 3.0.1's XSD default, the version of the
+ * box's manifest (information model §4.5.8: "Default = "0.0""; spec reading 149).
+ */
+const minimumDefault = "0.0";
+
+/**
+ * A scale case's normal minimum: the one it writes, or else {@link minimumDefault}.
+ *
+ * @param drawn - The case.
+ * @returns The minimum's lexical form.
+ */
+const minimumOf = (drawn: ScaleCase): string => drawn.minimum ?? minimumDefault;
+
+/**
  * Whether a scale text is a double, the language `Mastery_range` orders: every text of the box but
  * `x`.
  *
@@ -245,9 +261,10 @@ const disordered = (low: string | undefined, high: string | undefined): boolean 
  *   base type spelling nothing breaks its value domain; the text breaks Typed value where it is no
  *   integer and the type it is read in, the set's, or a record's field's own where that spells one,
  *   is integer;
- * - **an outcome's scale** (reading 9: the Schematron's OUTCOMEDEC 1, each pair judged where both are
- *   written, as `xs:double` values): a written mastery value below a written minimum or above a
- *   written maximum breaks Mastery range; a text that is no double breaks its value domain.
+ * - **an outcome's scale** (reading 9: the Schematron's OUTCOMEDEC 1, each pair judged where both
+ *   have a value, as `xs:double` values): a written mastery value below the minimum, written or
+ *   3.0.1's default (reading 149), or above a written maximum breaks Mastery range; a text that is
+ *   no double breaks its value domain.
  *
  * @param drawn - The case.
  * @returns The laws, empty where the case is lawful.
@@ -280,7 +297,7 @@ const expectedOf = (drawn: Case): ReadonlySet<LawName> => {
 
       return new Set<LawName>([
         ...(texts.includes("x") ? ["value domain" as const] : []),
-        ...(disordered(drawn.minimum, drawn.mastery) || disordered(drawn.mastery, drawn.maximum)
+        ...(disordered(minimumOf(drawn), drawn.mastery) || disordered(drawn.mastery, drawn.maximum)
           ? ["Mastery range" as const]
           : []),
       ]);
@@ -355,8 +372,8 @@ const assertRows = (drawn: Case, inputs: PackageInputs, label: string): void => 
         `${label}: MasteryValue`,
       );
       assert.deepStrictEqual(
-        [...inputs.NormalMinimum.values()].map(({ lexical }) => [lexical]),
-        scaleRow(drawn.minimum),
+        [...inputs.NormalMinimum.values()].map(({ lexical, written }) => [lexical, written]),
+        [[minimumOf(drawn), drawn.minimum !== undefined]],
         `${label}: NormalMinimum`,
       );
       assert.deepStrictEqual(
@@ -369,9 +386,7 @@ const assertRows = (drawn: Case, inputs: PackageInputs, label: string): void => 
           normalMinimum,
           masteryValue,
         ]),
-        drawn.minimum === undefined || drawn.mastery === undefined
-          ? []
-          : [[drawn.minimum, drawn.mastery]],
+        drawn.mastery === undefined ? [] : [[minimumOf(drawn), drawn.mastery]],
         `${label}: MasteryFloor`,
       );
       assert.deepStrictEqual(

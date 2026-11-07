@@ -878,6 +878,14 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
       status: "G",
     },
   ],
+  [
+    149,
+    {
+      owner:
+        "the import's `NormalMinimum`, written for an outcome declaration where it writes a `normal-minimum` or its version's XSD defaults one, from the inventory leaf (`normalMinimumDefaults`, `src/qti/declarations.ts`; `minimumOf`, `src/import/overlays/declarations.ts`), under \"E1 derived\"'s check of an unwritten one against its version's default and \"Declaration overlay\"'s containment of each 3.0.1 outcome declaration in it, so `MasteryFloor` and Mastery range read it; the oracle's `normalMinimumByDefault` (`src/test/oracle-laws/documents.ts`), held by `src/test/normal-minimum-default.oracle.test.ts`",
+      status: "G",
+    },
+  ],
 ]);
 
 /**

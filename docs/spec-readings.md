@@ -2637,3 +2637,30 @@ against it. A reading that is not an information-model-over-XSD case says which 
      empty default, `src/test/oracle-laws/documents.ts`), under which an empty title string matched an unwritten
      title. This binds pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-07 by the
      coordinator, under the operator's standing ruling of 2026-11-05, from seat FB-META.)
+149. **An outcome declaration's `normal-minimum` is 0.0 where a QTI 3.0.1 document writes none, and has no value where a
+     QTI 3.0 document writes none, so `Mastery range` judges a 3.0.1 mastery value against 0.0.** QTI 3.0.1's
+     information model gives the characteristic a default: its value space reads "See Appendix A1.3. Default =
+     "0.0".", and its description "It is set to 0 by default" (section 4.5.8, Table 4.5.8). Its ASI XSD agrees:
+     `<xs:attribute name="normal-minimum" use="optional" default="0.0" type="xs:double" />`
+     (`imsqti_asiv3p0p1_v1p0.xsd` line 30137). QTI 3.0's states none: its value space is "See Appendix A1.3." alone,
+     its description "The normalMinimum characteristic optionally defines the minimum value of numeric outcome
+     variables, it may be negative" (section 4.5.8), and its XSD declares `<xs:attribute name="normal-minimum"
+     use="optional" type="xs:double" />` (`imsqti_asiv3p0_v1p0.xsd` line 29989). Neither version gives
+     `normal-maximum` or `mastery-value` a default: each table states none, and each XSD declares both
+     `use="optional"` with no `default` (3.0.0 lines 29988 and 29990, 3.0.1 lines 30136 and 30138). The versions
+     differ, so each follows its own document; within each, the information model and the XSD agree, so neither is
+     the stricter. A 3.0.1 outcome declaration that writes a `mastery-value` and no `normal-minimum` has 0.0 as the
+     floor of its normal range, and the Schematron's RULE SPECIFIC CLASS OUTCOMEDEC 1, "The mastery-value attribute
+     value must not be less than the normal-minimum value" (reading 9), judges it: `mastery-value="-1"` with no
+     `normal-minimum` is refused under `mastery-range` in 3.0.1 and admitted in 3.0.0. No source orders
+     `normal-minimum` against `normal-maximum`, so the default reaches no other law. The importer writes a
+     `NormalMinimum` row for every 3.0.1 outcome declaration that has a row, the form it writes or else the
+     inventory leaf's default (`normalMinimumDefaults`, `src/qti/declarations.ts`), with whether it is written, and
+     `E1_derived` holds one not written to its version's default; `MasteryFloor` is written where the declaration has
+     a normal minimum and a mastery value. The law oracle states the default in its own words
+     (`normalMinimumByDefault`, `src/test/oracle-laws/documents.ts`). This sets aside, for the floor in 3.0.1, the law
+     catalog's reading of reading 9, "each pair judged where both are written", under which the importer and the law
+     oracle admitted a 3.0.1 mastery value below its default floor. The corpus moves no verdict: no document of its 29
+     zips writes a `mastery-value`. This binds pantry and plate alike: a 3.0.1 outcome that writes no
+     `normal-minimum` has 0.0 wherever its minimum is read. This is not a case of documents in conflict. (Decided
+     2026-11-07 by the coordinator, under the operator's standing ruling of 2026-11-05, from seat FIX-NORMALMIN.)

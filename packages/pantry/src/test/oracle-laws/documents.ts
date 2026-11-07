@@ -131,10 +131,18 @@ const scaleOf = (lexical: string, otherwise: number): number => {
 };
 
 /**
- * Order two scale attributes where both are written: `NaN` ordered against nothing, and a form
+ * The normal minimum of an outcome declaration that writes no `normal-minimum`, by its document's
+ * version (reading 149): QTI 3.0.1's information model gives it "Default = "0.0"" and says "It is
+ * set to 0 by default" (§4.5.8), and its ASI XSD declares it `default="0.0"`. QTI 3.0's §4.5.8 and
+ * XSD state no default, so a 3.0.0 declaration that writes none has no normal minimum.
+ */
+const normalMinimumByDefault: ReadonlyMap<string, string> = new Map([["3.0.1", "0.0"]]);
+
+/**
+ * Order two scale values where both are present: `NaN` ordered against nothing, and a form
  * outside {@link doubleForm} read as the bound that holds the order.
  *
- * @param left - The lower attribute, none where unwritten.
+ * @param left - The lower value, none where absent.
  * @param right - The upper one.
  * @returns Whether the order holds or is not judged.
  */
@@ -148,7 +156,9 @@ const below = (left: Option.Option<string>, right: Option.Option<string>): boole
 /**
  * Judge `Mastery_range` over an outcome declaration's scale (reading 9, the Schematron's RULE
  * SPECIFIC CLASS OUTCOMEDEC 1): its mastery value lies in its normal range, each pair judged where
- * both are written, `NaN` ordered against nothing, a form outside {@link doubleForm} not judged.
+ * both are present, `NaN` ordered against nothing, a form outside {@link doubleForm} not judged.
+ * Its normal minimum is the one it writes, or else its version's default (reading 149,
+ * {@link normalMinimumByDefault}).
  *
  * @param rows - The document.
  * @param node - The declaration.
@@ -156,7 +166,9 @@ const below = (left: Option.Option<string>, right: Option.Option<string>): boole
  */
 const masteryRangeOf = (rows: View, node: Row): readonly Breach[] => {
   const mastery = valueOf(rows, node.id, "mastery-value");
-  const low = valueOf(rows, node.id, "normal-minimum");
+  const low = Option.orElse(valueOf(rows, node.id, "normal-minimum"), () =>
+    Option.fromUndefinedOr(normalMinimumByDefault.get(node.version)),
+  );
   const high = valueOf(rows, node.id, "normal-maximum");
 
   return below(low, mastery) && below(mastery, high)
