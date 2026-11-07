@@ -24,7 +24,6 @@ import { resolveOverrides } from "#plate/emit/parts.ts";
 import type { PartOverrides, Resolved, UnknownPart } from "#plate/emit/parts.ts";
 import { toHtml, toHtmlWithin } from "#plate/emit/serialise.ts";
 import type { PartSwapRefused } from "#plate/emit/swap.ts";
-import { textBound } from "#plate/engine/format.ts";
 import { checkInstance } from "#plate/form/encoding.ts";
 import type { InstanceRequirement } from "#plate/form/encoding.ts";
 import { renderChoice } from "#plate/interactions/choice.ts";
@@ -140,28 +139,34 @@ export class InvalidInstance extends Data.TaggedError("InvalidInstance")<{
  * {@link render} counts the characters it writes as it writes them, as a string's `length` counts
  * them, and stops at the first chunk that would pass the budget, so it never builds the oversized
  * page and returns none of it. `budget` is the configuration's `outputBudget` and `item` the
- * redacted item's `identifier`. `printed` is none for the budget, and names the bound in characters
- * and the variable when a printed variable's text, or a `param-variable` parameter's, passed it
- * (the redacted item's `unprinted`), which `redact` does not print: 1,000,000 for a conversion
- * wider than that or a whole text longer, or the output budget `redact` was given, when the item's
- * printed text passed it at that variable, where `redact` stopped printing. A parameter is named
- * by its template variable.
+ * redacted item's `identifier`. `printed` is none for the budget, and names the bound in
+ * characters, which limit it is and the variable when a printed variable's text, or a
+ * `param-variable` parameter's, passed it (the redacted item's `unprinted`), which `redact` does
+ * not print: `limit` `"text"` with the bound 1,000,000, the most one text may hold, for a
+ * conversion wider than that or a whole text longer; or `limit` `"budget"` with the output budget
+ * `redact` ran under, when the item's printed text passed it at that variable, where `redact`
+ * stopped printing. `limit` names the limit, not the cause, and tells the two apart when both are
+ * 1,000,000. A parameter is named by its template variable.
  */
 export class OutputTooLarge extends Data.TaggedError("OutputTooLarge")<{
   readonly budget: number;
   readonly item: string;
-  readonly printed: Option.Option<{ readonly bound: number; readonly identifier: string }>;
+  readonly printed: Option.Option<{
+    readonly bound: number;
+    readonly identifier: string;
+    readonly limit: "budget" | "text";
+  }>;
 }> {
   /**
-   * The item, the limit it passed (the budget, or the bound and the variable), that nothing was
-   * written, and what to change.
+   * The item, the limit it passed (the budget, or the bound and the variable, as `limit` names
+   * it), that nothing was written, and what to change.
    */
   override get message(): string {
     return Option.match(this.printed, {
       onNone: () =>
         `Item ${JSON.stringify(this.item)} renders to more than ${String(this.budget)} characters of HTML, the configuration's outputBudget, so render wrote none of it. Raise outputBudget, up to 536,870,888, if the host can hold a page that large.`,
-      onSome: ({ bound, identifier }) =>
-        bound === textBound
+      onSome: ({ bound, identifier, limit }) =>
+        limit === "text"
           ? `Item ${JSON.stringify(this.item)} would print more than ${String(bound)} characters for the variable ${JSON.stringify(identifier)}, so render wrote none of it. Shorten that variable's value, or the width or precision in its printed variable's format, so its text fits.`
           : `Item ${JSON.stringify(this.item)} prints more than ${String(bound)} characters of variables, the outputBudget redact was given, by the variable ${JSON.stringify(identifier)}, so redact stopped printing there and render wrote none of it. Raise outputBudget, up to 536,870,888, in the configuration you pass to both redact and render, if the host can hold that much text.`,
     });
@@ -200,18 +205,19 @@ const checkedInstance = (
  *
  * A printed variable or a parameter on content the page sees whose text would pass 1,000,000
  * characters (a conversion wider than that, or a whole text longer) prints nothing, and the
- * redacted item's `unprinted` names the first, with that bound, so {@link render} fails
- * {@link OutputTooLarge} rather than show the slot blank. Content the page does not see is never
- * printed, so it never fails a render.
+ * redacted item's `unprinted` names the first, with that bound and the limit `"text"`, so
+ * {@link render} fails {@link OutputTooLarge} rather than show the slot blank. Content the page
+ * does not see is never printed, so it never fails a render.
  *
  * The printed text is held to `limits.outputBudget`, the budget `render` holds its HTML to:
  * `redact` counts the characters each printed variable and parameter on content the page sees
  * prints, in document order, and stops printing at the first whose text would pass what remains.
- * That one and every later one print nothing, and `unprinted` names it with the budget as its
- * bound, so `render` fails {@link OutputTooLarge} naming the variable. So `redact` never builds
- * more printed text than the budget, however much the item would print. Pass the configuration
- * you pass to `render`; with none, the configuration's default, 16,777,216, applies. The number is
- * used as given, so pass one `configure` decoded, which holds it between 1 and 536,870,888.
+ * That one and every later one print nothing, and `unprinted` names it with the budget as its bound
+ * and the limit `"budget"`, so `render` fails {@link OutputTooLarge} naming the variable. So
+ * `redact` never builds more printed text than the budget, however much the item would print. Pass
+ * the configuration you pass to `render`; with none, the configuration's default, 16,777,216,
+ * applies. The number is used as given, so pass one `configure` decoded, which holds it between 1
+ * and 536,870,888.
  *
  * With no record, an item whose template processing does not run reads as the record its first
  * attempt starts with (its declared template defaults and its outcomes' starting values), and an
@@ -333,7 +339,8 @@ const interactionRenderer =
  *
  * It prints everything or nothing. First, an item whose `unprinted` names a printed variable or a
  * parameter whose text passed its bound, 1,000,000 or the budget `redact` was given, fails
- * {@link OutputTooLarge} naming the bound and the variable, before anything is built. Then it counts
+ * {@link OutputTooLarge} naming the bound, which limit it is and the variable, before anything is
+ * built. Then it counts
  * the characters of HTML as it writes them, as a string's `length` counts them, and stops at the
  * first chunk that would pass the configuration's `outputBudget`: HTML of exactly `outputBudget`
  * characters is returned, and one more fails {@link OutputTooLarge} with none of the page built or
@@ -362,13 +369,13 @@ export const render = (
 ): Result.Result<Rendered, InvalidInstance | OutputTooLarge | PartSwapRefused | UnknownPart> =>
   Result.gen(function* renderItem() {
     if (Option.isSome(item.unprinted)) {
-      const { bound, identifier } = item.unprinted.value;
+      const { bound, identifier, limit } = item.unprinted.value;
 
       return yield* Result.fail(
         new OutputTooLarge({
           budget: configuration.outputBudget,
           item: item.identifier,
-          printed: Option.some({ bound, identifier }),
+          printed: Option.some({ bound, identifier, limit }),
         }),
       );
     }

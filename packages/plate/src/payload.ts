@@ -471,14 +471,16 @@ export interface RedactedFields {
   /**
    * The first printed variable, or `param-variable` parameter, on content the page sees whose text
    * passed a bound and so printed nothing: the bound in characters, the variable's identifier (a
-   * parameter's template variable) and its path. The bound is 1,000,000, the most one text may
-   * hold, or the output budget the redaction ran under, when the item's printed text passed it at
-   * that variable. None when every text fits. `render` fails `OutputTooLarge` naming it, so no
-   * page shows the slot blank.
+   * parameter's template variable), which limit the bound is, and its path. `limit` is `"text"`
+   * with the bound 1,000,000, the most one text may hold, or `"budget"` with the output budget the
+   * redaction ran under, when the item's printed text passed it at that variable. It names the
+   * limit, not the cause, so it tells the two apart when the budget is 1,000,000 too. None when
+   * every text fits. `render` fails `OutputTooLarge` naming it, so no page shows the slot blank.
    */
   readonly unprinted: Option.Option<{
     readonly bound: number;
     readonly identifier: string;
+    readonly limit: "budget" | "text";
     readonly path: string;
   }>;
 }
@@ -1523,19 +1525,20 @@ const expandedParameter = (
  * text passed `formatPrinted`'s bound ({@link textBound}) leaves its slot empty, as NULL's does:
  * the printed variable writes nothing and the parameter passes the empty value. The walk records
  * the first such one it meets, a printed variable by its identifier and a parameter by its template
- * variable's, with the bound and its path, so `render` fails rather than show the blank. Content
- * the page does not see is walked as under `"structure"`, so it formats nothing and records
- * nothing.
+ * variable's, with the bound, the limit `"text"` and its path, so `render` fails rather than show
+ * the blank. Content the page does not see is walked as under `"structure"`, so it formats nothing
+ * and records nothing.
  *
  * Under `"text"` the walk also counts, in walk order, the characters each printed variable and
  * `param-variable` parameter on content the page sees writes, against the budget, and gives the
- * formatter what remains as its bound, so it stops building a text as soon as it would pass it.
- * The first text that would pass what remains, when less than {@link textBound} remains, leaves
- * its slot empty and is recorded as above with the budget as its bound; from there the walk
- * formats nothing more and records nothing more, every later printed variable writing nothing and
- * every later parameter passing the empty value. A text past {@link textBound} with at least that
- * much budget left is recorded with {@link textBound}, spends nothing, and the walk goes on. So the
- * walk builds at most the budget's characters of printed text, and one member more.
+ * formatter what remains as its bound, so it stops building a text as soon as it would pass it. The
+ * first text that would pass what remains, when less than {@link textBound} remains, leaves its
+ * slot empty and is recorded as above with the budget as its bound and the limit `"budget"`; from
+ * there the walk formats nothing more and records nothing more, every later printed variable
+ * writing nothing and every later parameter passing the empty value. A text past {@link textBound}
+ * with at least that much budget left is recorded with {@link textBound}, spends nothing, and the
+ * walk goes on. So the walk builds at most the budget's characters of printed text, and one member
+ * more.
  *
  * Under `"structure"` the walk writes no text: a printed variable the values cover leaves nothing
  * in its place, and a `param-variable` parameter they expand keeps its `value` as written. Every
@@ -1590,10 +1593,11 @@ const printBody = (
   /**
    * Give the text a printed variable or a parameter writes, formatted within what remains of the
    * budget and spent from it, or the empty text when it passed its bound, recording the first that
-   * did: with the budget as the bound when less than {@link textBound} remained, which ends the
-   * printing, and with {@link textBound} otherwise. The walk asks for text only on content the page
-   * sees, so nothing is formatted, spent or recorded for content it does not see; under
-   * `"structure"`, and once the budget is spent, it gives the empty text without formatting.
+   * did: with the budget as the bound and the limit `"budget"` when less than {@link textBound}
+   * remained, which ends the printing, and with {@link textBound} and the limit `"text"` otherwise.
+   * The walk asks for text only on content the page sees, so nothing is formatted, spent or
+   * recorded for content it does not see; under `"structure"`, and once the budget is spent, it
+   * gives the empty text without formatting.
    *
    * @param print The printer of the text.
    * @param identifier The printed variable's identifier, or the parameter's template variable's.
@@ -1615,7 +1619,12 @@ const printBody = (
 
     exhausted = remaining < textBound;
     if (Option.isNone(unprinted)) {
-      unprinted = Option.some({ bound: exhausted ? writing.budget : textBound, identifier, path });
+      unprinted = Option.some({
+        bound: exhausted ? writing.budget : textBound,
+        identifier,
+        limit: exhausted ? "budget" : "text",
+        path,
+      });
     }
 
     return "";
@@ -1937,18 +1946,19 @@ const bindingsShown = (item: Item, hiddenOnly: ReadonlySet<string>): readonly Re
  * A printed variable, or a `param-variable` parameter, on content the page sees whose text would
  * pass `formatPrinted`'s bound of 1,000,000 characters (a conversion wider than that, or a whole
  * text longer) prints nothing, and `unprinted` names the first the walk meets: the bound, the
- * printed variable's identifier (a parameter's template variable's) and its path. `render` fails
- * `OutputTooLarge` on such an item rather than show the slot blank. Content the page does not see
- * formats nothing and is never named there. `unprinted` is none when every text fits.
+ * printed variable's identifier (a parameter's template variable's), the limit `"text"` and its
+ * path. `render` fails `OutputTooLarge` on such an item rather than show the slot blank. Content
+ * the page does not see formats nothing and is never named there. `unprinted` is none when every
+ * text fits.
  *
  * The printed text is held to an output budget: `limits.outputBudget`, else the configuration's
  * default, 16,777,216 characters, counted as a string's `length` counts them. It counts the text
- * each printed variable and `param-variable` parameter on content the page sees writes, in
- * document order, and stops printing at the first whose text would pass what remains: that one and
- * every one after it print nothing, and `unprinted` names it with the budget as its bound, so
- * `render` fails `OutputTooLarge` rather than show the page with its slots blank. So a redaction
- * never builds more printed text than the budget, and one member more, however much the item
- * would print. Pass the configuration `render` takes, which `configure` holds between 1 and
+ * each printed variable and `param-variable` parameter on content the page sees writes, in document
+ * order, and stops printing at the first whose text would pass what remains: that one and every one
+ * after it print nothing, and `unprinted` names it with the budget as its bound and the limit
+ * `"budget"`, so `render` fails `OutputTooLarge` rather than show the page with its slots blank. So
+ * a redaction never builds more printed text than the budget, and one member more, however much the
+ * item would print. Pass the configuration `render` takes, which `configure` holds between 1 and
  * 536,870,888; the number is used as given.
  *
  * With no record, an item whose template processing does not run reads as the record its first
