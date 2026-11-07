@@ -317,7 +317,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     67,
     {
       owner:
-        "shred's `versionOf` from the manifest's `schemaversion` (`not-qti3`, reason `schema-version`); P1 `ResourceTypeOf` per version and E1_derived over `ResourceTypeLexical` (`src/qti/package.ts`); the per-version `cp:resource` model (`cpx:variant` 0..0 in 3.0.1)",
+        "shred's `versionOf` from the manifest's `schemaversion` (`not-qti3`, reason `schema-version`); the value domain of `cp:resource`'s `type`, each version's XSD enumeration (`attribute-lexical`), and E1_derived over `ResourceTypeLexical` (`src/qti/package.ts`); the per-version `cp:resource` model (`cpx:variant` 0..0 in 3.0.1)",
       status: "G",
     },
   ],
@@ -369,7 +369,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     82,
     {
       owner:
-        "ResourceTypeOf and RootOfType (facets.ts `package.roots`): `imsqti_resprocessing_xmlv3p0` admitted, the guide's spelling refused",
+        "the value domain of `cp:resource`'s `type` and RootOfType (facets.ts `package.roots`): `imsqti_resprocessing_xmlv3p0` admitted, the guide's spelling refused",
       status: "G",
     },
   ],
