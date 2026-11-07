@@ -1159,7 +1159,9 @@ const referenceLawsOf = (
           }),
         );
 
-      const feedbacks = sectionPaths.has(path) ? feedbackTypeOf(assembled, grammar, rows, node) : [];
+      const feedbacks = sectionPaths.has(path)
+        ? feedbackTypeOf(assembled, grammar, rows, node)
+        : [];
 
       return [...sections, ...variables, ...feedbacks];
     }),
