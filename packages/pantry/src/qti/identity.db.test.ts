@@ -10,9 +10,10 @@
  * the members the case states under it (unless the case states one) and each member's hidden
  * index and copy of its owner's count from `Qti`'s family statements. It then sets the one
  * deferred constraint under test immediate, and rolls back. A row's CHECKs, keys and non-deferrable
- * foreign keys (a counted family's owner axis, and a key whose target holds no field beyond the
- * ones it names) are judged at its INSERT's end: a `DocumentId`'s and an `XmlLang`'s document is a
- * `Document` row (`Document.ids`, `Document.langs`). A refused case's verdict is its SQLSTATE and
+ * foreign keys (a key whose target holds no field beyond the ones it names) are judged at its
+ * INSERT's end. A family's owner axis is deferred, so a case that judges one sets it immediate: a
+ * `DocumentId`'s and an `XmlLang`'s document is a `Document` row (`Document.ids`,
+ * `Document.langs`), stated beside them. A refused case's verdict is its SQLSTATE and
  * the constraint that states the law, and a control's is that the same constraint passes.
  *
  * The cases that need a whole stored document arrive with the importer (Q5.15), and probe P2
@@ -561,8 +562,8 @@ describe.skipIf(!hasLease)("qti/identity.db.test.ts, on the lease", () => {
   it.effect(
     "refuses each projection's member whose value its owner lacks, and an owner value no member carries, and accepts one value carried twice as one row",
     () =>
-      // Oracle: PostgreSQL, each counted family's owner-axis foreign key (not deferrable, so judged
-      // at its INSERT) and the owner's `E1_derived` CHECK, `carriers > 0`, against the
+      // Oracle: PostgreSQL, each counted family's owner-axis foreign key (deferred, set immediate)
+      // and the owner's `E1_derived` CHECK, `carriers > 0`, against the
       // specification of a projection (sets ruling 2): its rows are exactly the values its members
       // carry, each once. These are the `lang-set-copy` fixtures, both ways. Each case states the
       // projection's other owners (`beside`), holding the case's members, so the one owner axis
@@ -583,6 +584,7 @@ describe.skipIf(!hasLease)("qti/identity.db.test.ts, on the lease", () => {
             yield* judged(
               client,
               statedInserts([...projection.beside, projection.member(3, first, "fr")]),
+              [ownerAxis],
             ),
             ownerAxis,
             true,
@@ -607,6 +609,7 @@ describe.skipIf(!hasLease)("qti/identity.db.test.ts, on the lease", () => {
                 projection.member(3, first, "fr"),
                 projection.member(4, first, "fr"),
               ]),
+              [ownerAxis],
             ),
             ownerAxis,
             false,

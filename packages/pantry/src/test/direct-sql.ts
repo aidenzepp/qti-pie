@@ -5,8 +5,9 @@
  * writer fills, the hidden ones among them by the comment grizzle installs on each, and a rollback.
  * A role writes a table, never its own view of it, which it holds SELECT on alone (README,
  * "Security model"). So a case's verdict is the server's judgment of its rows by their own CHECKs,
- * keys, domains and non-deferrable foreign keys: a family's owner axis among them, which is judged
- * at the end of the member's INSERT, so the writer sends the owner first.
+ * keys, domains and non-deferrable foreign keys: a family's owner axis among them where grizzle
+ * does not defer it, judged at the end of the member's INSERT, so the writer sends the owner first.
+ * An owner axis grizzle defers is judged only where a case sets it immediate.
  */
 import type { AnyRelation, DbConnection } from "@bjornpagen/grizzle";
 import { NodeFileSystem } from "@effect/platform-node";
@@ -857,10 +858,11 @@ const addAfter = (into: Map<string, Set<string>>, from: string, to: string): voi
 };
 
 /**
- * The relations each relation's row is written after, where both are stated: by its owner axes,
- * its families' owners (`owners`, which PostgreSQL judges at the member's INSERT, so no order may
- * break one); and by its containments over every field of their targets (`covered`, which grizzle
- * installs at the statement unless a cycle defers them, so they order where they can).
+ * The relations each relation's row is written after, where both are stated: by its owner axes, its
+ * families' owners (`owners`, which PostgreSQL judges at the member's INSERT where grizzle does not
+ * defer them, so no order may break one); and by its containments over every field of their targets
+ * (`covered`, which grizzle installs at the statement unless a cycle defers them, so they order
+ * where they can).
  */
 const writtenAfter = (() => {
   const owners = new Map<string, Set<string>>();
