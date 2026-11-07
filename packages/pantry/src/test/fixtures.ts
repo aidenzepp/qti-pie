@@ -222,6 +222,7 @@ const cutNames = [
 const corpusMembers = {
   BBQsTest: "qtiv3-examples/packaging/BBQsTest/BBQsTest.zip",
   BPIG_22April: "QTI3_BPIG_Examples/BPIG_22April.zip",
+  items: "qtiv3-examples/packaging/items/items.zip",
   sharedStimulus: "qtiv3-examples/packaging/sharedStimulus/sharedStimulus.zip",
   testWithLti: "qtiv3-examples/packaging/testWithLti/testWithLti.zip",
 } as const;
@@ -631,6 +632,26 @@ const ssmlNames = [
 ] as const;
 
 /**
+ * The names of the eight `data-*` fixtures of phase 8's stage N (spec 5.3): five positives and
+ * three negatives. `cut-data-dash` and `cut-data-attributes` are the corpus's two items with custom
+ * `data-*` attributes, cut; `data-custom` puts the name class through `simple` (every host kind,
+ * every name shape, every value shape); `data-entity` holds an entity reference in a value;
+ * `data-non-ascii` is a name with a non-ASCII letter, which reading 13 admits. The negatives break
+ * the name language, `data-uppercase` and `data-bare-prefix`, or name a host that does not admit
+ * the class, `data-item-body`.
+ */
+const dataNames = [
+  "cut-data-dash",
+  "cut-data-attributes",
+  "data-custom",
+  "data-entity",
+  "data-non-ascii",
+  "data-uppercase",
+  "data-bare-prefix",
+  "data-item-body",
+] as const;
+
+/**
  * The names of phase 10's ten PCI positives, from the corpus packages `pci_simple_example` and
  * `pci_item_examples` and hand-edited items of the first: `pci-simple` (the `module` attribute,
  * markup of HTML and ARIA, the module files as bytes), `pci-modules` (two PCIs of four modules
@@ -769,14 +790,16 @@ export const pciVerdicts: readonly (readonly [FixtureName, readonly string[]])[]
  * `end-attempt`, phase 2's hand-written positive, the 19 cut items of {@link cutNames}, the 40
  * hand-written HTML positives of {@link htmlElements}, the 14 XML copies of {@link copyNames}, the
  * packaging phase's metadata and content cuts with their negatives, the 11 positive fixtures of
- * phase 5's tests, sections and stimuli ({@link testNames}) and its 62 negatives ({@link
- * negativeNames}), the five restored-check fixtures of {@link restoredNames}, the six assembly
- * fixtures of {@link assemblyNames}, the 14 catalog positives of {@link catalogNames}, the four
- * companion-materials positives of {@link companionNames}, the 29 XML-path negatives of
+ * phase 5's tests, sections and stimuli ({@link testNames}) and its 62 negatives
+ * ({@link
+ * negativeNames}), the five restored-check fixtures of {@link restoredNames}, the six
+ * assembly fixtures of {@link assemblyNames}, the 14 catalog positives of {@link catalogNames}, the
+ * four companion-materials positives of {@link companionNames}, the 29 XML-path negatives of
  * {@link catalogNegativeNames}, the ten PCI positives of {@link pciNames}, the 28 PCI negatives of
  * {@link pciNegativeNames}, the ten wildcard fixtures of {@link wildcardNames}, the nine SSML and
- * `data-ssml` positives of {@link ssmlNames}, and `rtest01`, the
- * examples' included fragment in place (spec reading 117), with one negative per include law.
+ * `data-ssml` positives of {@link ssmlNames}, the eight `data-*` fixtures of {@link dataNames}, and
+ * `rtest01`, the examples' included fragment in place (spec reading 117), with one negative per
+ * include law.
  */
 export const fixtureNames = [
   "simple",
@@ -882,6 +905,7 @@ export const fixtureNames = [
   "usage3-bad-name",
   ...wildcardNames,
   ...ssmlNames,
+  ...dataNames,
 ] as const;
 
 /**
@@ -6373,6 +6397,142 @@ const pciNegativeSpecs: Record<(typeof pciNegativeNames)[number], FixtureSpec> =
 };
 
 /**
+ * The edits of `doctype`: a document type declaration with a general entity, `org`, and an
+ * `ATTLIST` default for `adaptive`, the attribute dropped from the root, and a reference to the
+ * entity in the prompt. `data-entity` extends them.
+ */
+const doctypeEdits: readonly Edit[] = [
+  {
+    _tag: "InsertAfterLine",
+    file: "choice.xml",
+    line: 1,
+    text: '<!DOCTYPE qti-assessment-item [<!ENTITY org "1EdTech &amp; friends"><!ATTLIST qti-assessment-item adaptive CDATA "false">]>',
+  },
+  replaceIn("choice.xml", ' adaptive="false"', ""),
+  replaceIn("choice.xml", prompt, "<qti-prompt>What does it say? &org;</qti-prompt>"),
+];
+
+/**
+ * `data_dash.xml` of `BPIG_22April`, the corpus's item with `data-*` attributes at 3.0.1.
+ */
+const dataDashItem = "items/data_dash.xml";
+
+/**
+ * `data-attributes.xml` of the corpus's `items.zip`, the corpus's item with `data-*` attributes at
+ * 3.0.0.
+ */
+const dataAttributesItem = "data-attributes.xml";
+
+/**
+ * A `data-` name with `é` in it, which a latin1 edit writes as the two bytes of its UTF-8 form:
+ * the escapes are `Ã` and `©`, the latin1 reading of U+00E9's bytes `C3 A9`.
+ */
+const dataAcute = "data-Ã©";
+
+/**
+ * The paragraph `data-custom` puts in `simple`'s item body, after the first, which holds the
+ * names and values the class has to read: digits, `_`, `.` and `-` in names; and values that are
+ * empty, that hold `<`, `&`, `"`, a tab and a line feed as character data, outer spaces and a
+ * non-ASCII letter (the bytes of `é`, as {@link dataAcute}).
+ */
+const dataCustomValues = [
+  '<p data-empty="" data-lt="a&lt;b" data-amp="a&amp;b" data-quot=\'say "x"\' data-quot-ref="say &quot;x&quot;"',
+  ' data-tab="a&#9;b" data-newline="a&#10;b" data-padded="  x  " data-acute="cafÃ©"',
+  ' data-n1="1" data-a_b="2" data-a.b="3" data-a-b="4" data-9="5" data-_="6">values</p>',
+].join("");
+
+/**
+ * Ten names on one element, `data-k0` to `data-k9`.
+ */
+const dataTen = `<p ${Array.from({ length: 10 }, (_, index) => `data-k${String(index)}="${String(index)}"`).join(" ")}>ten</p>`;
+
+/**
+ * The eight `data-*` fixtures of phase 8's stage N (spec 5.3), keyed by name.
+ *
+ * - `cut-data-dash` is `BPIG_22April`'s `data_dash.xml`, cut: three custom names on a
+ *   `qti-hottext-interaction`.
+ * - `cut-data-attributes` is `items.zip`'s `data-attributes.xml`, cut: the same names on the
+ *   `qti-hottext`s of its interaction. The item's `qti-rubric-block` has no `use`, which
+ *   `rubric-block-use` refuses, so the edit adds `use="instructions"` (the rule the cut would
+ *   otherwise break).
+ * - `data-custom` is `simple` with custom names on the root (`data-qti-suppress-tts`, which no
+ *   element declares), `p`, `img`, `qti-choice-interaction`, `qti-prompt` and `qti-simple-choice`;
+ *   `data-prompt` on `p` and `data-ssml` on a `li`, declared names where an element declares them
+ *   and custom where it does not; ten names on one element; and {@link dataCustomValues}.
+ * - `data-entity` is `doctype` with `data-org="&org;"` on the prompt, the entity declared in the
+ *   internal subset.
+ * - `data-non-ascii` is `data-é="x"` on a `p`, a name HTML's rule and reading 13 admit.
+ * - `data-uppercase` is `data-Group="g"` on `qti-choice-interaction`, `data-bare-prefix` is
+ *   `data-="x"` on a `p`, and `data-item-body` is `data-x="1"` on `qti-item-body`.
+ */
+const dataSpecs: Record<(typeof dataNames)[number], FixtureSpec> = {
+  "cut-data-attributes": {
+    ...cutItem("cut-data-attributes", "items", dataAttributesItem, "3.0.0"),
+    edits: [
+      replaceIn(
+        dataAttributesItem,
+        '<qti-rubric-block view="candidate">',
+        '<qti-rubric-block use="instructions" view="candidate">',
+      ),
+      { _tag: "cut", item: dataAttributesItem, schemaversion: "3.0.0" },
+    ],
+  },
+  "cut-data-dash": cutItem("cut-data-dash", "BPIG_22April", dataDashItem, "3.0.1"),
+  "data-bare-prefix": overSimple("data-bare-prefix", [
+    replaceIn(
+      "choice.xml",
+      simpleOpeningParagraph,
+      '<p data-="x">Look at the text in the picture.</p>',
+    ),
+  ]),
+  "data-custom": overSimple("data-custom", [
+    replaceIn(
+      "choice.xml",
+      ' time-dependent="false">',
+      ' time-dependent="false" data-qti-suppress-tts="true">',
+    ),
+    replaceIn(
+      "choice.xml",
+      simpleOpeningParagraph,
+      `<p data-prompt="p" data-a="1">Look at the text in the picture.</p>${dataCustomValues}${dataTen}<ul><li data-ssml="anything">one</li></ul>`,
+    ),
+    replaceIn(
+      "choice.xml",
+      '<img src="images/sign.png"',
+      '<img data-img="i" src="images/sign.png"',
+    ),
+    replaceIn("choice.xml", 'max-choices="1">', 'max-choices="1" data-group="g">'),
+    replaceIn("choice.xml", prompt, '<qti-prompt data-p="x">What does it say?</qti-prompt>'),
+    replaceIn(
+      "choice.xml",
+      '<qti-simple-choice identifier="ChoiceA">',
+      '<qti-simple-choice identifier="ChoiceA" data-c="a">',
+    ),
+  ]),
+  "data-entity": overSimple("data-entity", [
+    ...doctypeEdits,
+    replaceIn(
+      "choice.xml",
+      "<qti-prompt>What does it say? &org;</qti-prompt>",
+      '<qti-prompt data-org="&org;">What does it say? &org;</qti-prompt>',
+    ),
+  ]),
+  "data-item-body": overSimple("data-item-body", [
+    replaceIn("choice.xml", "<qti-item-body>", '<qti-item-body data-x="1">'),
+  ]),
+  "data-non-ascii": overSimple("data-non-ascii", [
+    replaceIn(
+      "choice.xml",
+      simpleOpeningParagraph,
+      `<p ${dataAcute}="x">Look at the text in the picture.</p>`,
+    ),
+  ]),
+  "data-uppercase": overSimple("data-uppercase", [
+    replaceIn("choice.xml", 'max-choices="1">', 'max-choices="1" data-Group="g">'),
+  ]),
+};
+
+/**
  * The spec table: one row per {@link FixtureName}, so adding a name without its row does not
  * compile.
  *
@@ -6432,6 +6592,7 @@ const specs: Record<FixtureName, FixtureSpec> = {
   ...pciNegativeSpecs,
   ...wildcardSpecs,
   ...ssmlSpecs,
+  ...dataSpecs,
   "bad-identifier-value": {
     edits: [
       replaceIn("choice.xml", "<qti-value>ChoiceA</qti-value>", "<qti-value>Choice A</qti-value>"),
@@ -6524,16 +6685,7 @@ const specs: Record<FixtureName, FixtureSpec> = {
     ),
   ]),
   doctype: {
-    edits: [
-      {
-        _tag: "InsertAfterLine",
-        file: "choice.xml",
-        line: 1,
-        text: '<!DOCTYPE qti-assessment-item [<!ENTITY org "1EdTech &amp; friends"><!ATTLIST qti-assessment-item adaptive CDATA "false">]>',
-      },
-      replaceIn("choice.xml", ' adaptive="false"', ""),
-      replaceIn("choice.xml", prompt, "<qti-prompt>What does it say? &org;</qti-prompt>"),
-    ],
+    edits: doctypeEdits,
     member: simpleMember,
     name: "doctype",
   },
