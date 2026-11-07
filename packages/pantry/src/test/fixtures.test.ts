@@ -19,6 +19,7 @@ import {
   materializePackage,
   materializeSpec,
   negativeNames,
+  pciNames,
   restoredNames,
   specOf,
   transformHash,
@@ -522,6 +523,116 @@ const catalogPresent: readonly (readonly [(typeof catalogNames)[number], string,
   ["card-gap-inside", "items/gap-match-example-1.xml", '<qti-gap identifier="G3"/>'],
   ["card-empty", "items/CatalogWithMultipleSupports.xml", '<qti-card support="spoken"/>'],
   ["entry-empty", "items/CatalogWithMultipleSupports.xml", '<qti-card-entry xml:lang="en"/>'],
+];
+
+/**
+ * The `schemaversion` each PCI positive's manifest declares: 3.0.1 for the five that use what 3.0.1
+ * adds (the built-in `QTI_CONTEXT`, a `qti-stylesheet`, a `qti-catalog-info` or a custom
+ * interaction), 3.0.0 for the corpus's own and the three hand-written packages that need no more.
+ */
+const pciVersions: readonly (readonly [(typeof pciNames)[number], "3.0.0" | "3.0.1"])[] = [
+  ["pci-simple", "3.0.0"],
+  ["pci-modules", "3.0.0"],
+  ["pci-configurations", "3.0.0"],
+  ["pci-variables", "3.0.0"],
+  ["pci-3-0-1", "3.0.1"],
+  ["pci-context-3-0-1", "3.0.1"],
+  ["pci-catalog-3-0-1", "3.0.1"],
+  ["pci-markup-content", "3.0.0"],
+  ["template-foreign", "3.0.0"],
+  ["custom-3-0-1", "3.0.1"],
+];
+
+/**
+ * The item of each PCI positive, and the files its package holds beside the manifest, sorted.
+ */
+const pciPackages: readonly (readonly [(typeof pciNames)[number], string, readonly string[]])[] = [
+  [
+    "pci-simple",
+    "measuring_ph.xml",
+    [
+      "ammonia.svg",
+      "baking_soda.svg",
+      "measuring_ph.xml",
+      "modules/module_resolution.js",
+      "modules/tap.js",
+      "vinegar.svg",
+    ],
+  ],
+  [
+    "pci-modules",
+    "fractions_deps.xml",
+    [
+      "fractions_deps.xml",
+      "modules/lib/eve.js",
+      "modules/lib/handlebars.min-latest.js",
+      "modules/shading_deps.js",
+    ],
+  ],
+  [
+    "pci-configurations",
+    "fractions_deps_2.xml",
+    [
+      "fractions_deps_2.xml",
+      "modules/hmh_co_com.js",
+      "modules/hmh_co_com_fallback.json",
+      "modules/lib/eve.js",
+      "modules/lib/jquery-2.2.2.min.js",
+      "modules/shading_deps.js",
+    ],
+  ],
+  ...(
+    [
+      "pci-variables",
+      "pci-3-0-1",
+      "pci-context-3-0-1",
+      "pci-catalog-3-0-1",
+      "pci-markup-content",
+      "template-foreign",
+      "custom-3-0-1",
+    ] as const
+  ).map((name): readonly [(typeof pciNames)[number], string, readonly string[]] => [
+    name,
+    "measuring_ph.xml",
+    [
+      "ammonia.svg",
+      "baking_soda.svg",
+      "measuring_ph.xml",
+      ...(name === "pci-3-0-1" ? ["pci.css"] : []),
+      "modules/module_resolution.js",
+      "modules/tap.js",
+      "vinegar.svg",
+    ].toSorted(),
+  ]),
+];
+
+/**
+ * For each of the PCI positives, a text its item holds, which its edit put there or the corpus
+ * wrote.
+ */
+const pciPresent: readonly (readonly [(typeof pciNames)[number], string])[] = [
+  ["pci-simple", '<qti-portable-custom-interaction response-identifier="RESPONSE" module="tap"'],
+  ["pci-simple", '<div role="grid">'],
+  ["pci-modules", '<qti-interaction-module id="shadingD" primary-path="modules/shading_deps.js"/>'],
+  ["pci-configurations", 'primary-configuration="modules/hmh_co_com.js"'],
+  ["pci-configurations", 'secondary-configuration="modules/hmh_co_com_fallback.json"'],
+  ["pci-variables", '<qti-response-declaration identifier="RECORD" cardinality="record"/>'],
+  [
+    "pci-variables",
+    '<qti-response-declaration identifier="PICKED" cardinality="multiple" base-type="identifier"/>',
+  ],
+  ["pci-variables", "<qti-prompt><p>Tap</p></qti-prompt>"],
+  ["pci-variables", '<qti-template-variable template-identifier="T"/>'],
+  ["pci-variables", '<qti-context-variable identifier="CTX"/>'],
+  ["pci-3-0-1", '<qti-context-variable identifier="QTI_CONTEXT"/>'],
+  ["pci-3-0-1", '<qti-stylesheet href="pci.css" type="text/css"/>'],
+  ["pci-context-3-0-1", '<qti-context-declaration identifier="QTI_CONTEXT" cardinality="record"/>'],
+  ["pci-context-3-0-1", '<qti-context-variable identifier="LEVEL"/>'],
+  ["pci-catalog-3-0-1", '<qti-catalog id="tap-help">'],
+  ["pci-markup-content", '<qti-printed-variable identifier="SCORE"/>'],
+  ["pci-markup-content", "<template/><template/></qti-interaction-markup>"],
+  ["template-foreign", '<template><x:widget xmlns:x="urn:example:widget" size="3"/></template>'],
+  ["custom-3-0-1", '<qti-custom-interaction response-identifier="RESPONSE"/>'],
 ];
 
 /**
@@ -1997,6 +2108,185 @@ layer(NodeServices.layer, { excludeTestServices: true })("test/fixtures.ts", (it
                 yield* fs.exists(`${dir}/${(match.groups?.["href"] ?? "").trim()}`),
                 name,
               );
+            }
+          }
+        }),
+      ),
+  );
+
+  it.effect("the PCI names are the brief's list, each in the fixture table and no negative", () =>
+    Effect.sync(() => {
+      assert.deepStrictEqual(
+        [...pciNames],
+        [
+          "pci-simple",
+          "pci-modules",
+          "pci-configurations",
+          "pci-variables",
+          "pci-3-0-1",
+          "pci-context-3-0-1",
+          "pci-catalog-3-0-1",
+          "pci-markup-content",
+          "template-foreign",
+          "custom-3-0-1",
+        ],
+      );
+      assert.strictEqual(new Set(pciNames).size, 10);
+      assert.deepStrictEqual(
+        pciVersions.map(([name]) => name),
+        [...pciNames],
+      );
+      assert.deepStrictEqual(
+        pciPackages.map(([name]) => name),
+        [...pciNames],
+      );
+      assert.includeMembers([...fixtureNames], [...pciNames]);
+
+      for (const name of pciNames) {
+        assert.notInclude(
+          [
+            ...negativeNames,
+            ...restoredNames,
+            ...assemblyNames,
+            ...catalogNames,
+            ...companionNames,
+            ...catalogNegativeNames,
+          ],
+          name,
+        );
+      }
+    }),
+  );
+
+  it.effect(
+    "each PCI positive materializes under 2 MB, holds the files its row lists, lists every one, carries its edit and no custom data attribute",
+    () =>
+      inFreshRoot(() =>
+        Effect.gen(function* pciFixtures() {
+          const fs = yield* FileSystem.FileSystem;
+
+          for (const [name, version] of pciVersions) {
+            const dir = yield* materialize(name);
+            const entries = yield* fs.readDirectory(dir, { recursive: true });
+            const files: string[] = [];
+            let size = 0;
+
+            for (const entry of entries) {
+              const info = yield* fs.stat(`${dir}/${entry}`);
+
+              if (info.type === "File") {
+                files.push(entry);
+                size += Number(info.size);
+              }
+            }
+
+            const manifest = yield* fs.readFileString(`${dir}/imsmanifest.xml`);
+            const held = files.filter((file) => file !== "imsmanifest.xml").toSorted();
+
+            assert.include(manifest, `<schemaversion>${version}</schemaversion>`, name);
+            assert.deepStrictEqual(held, listedFilesOf(manifest), name);
+            assert.deepStrictEqual(held, pciPackages.find(([row]) => row === name)?.[2], name);
+            assert.isBelow(size, 2 * 1024 * 1024, name);
+
+            const item = pciPackages.find(([row]) => row === name)?.[1] ?? "";
+            const text = yield* fs.readFileString(`${dir}/${item}`);
+            const document = yield* readXml(yield* fs.readFile(`${dir}/${item}`));
+
+            assert.strictEqual(document.root.namespace, qtiNamespace, name);
+            assert.notMatch(text, /\sdata-(?!catalog-idref)/u, name);
+
+            for (const [row, needle] of pciPresent) {
+              if (row === name) {
+                assert.include(text, needle, `${name}: ${needle}`);
+              }
+            }
+          }
+        }),
+      ),
+    180_000,
+  );
+
+  it.effect(
+    "pci-modules holds two PCIs of the same four modules, whitespace-only markup, the listed handlebars file and no raphael",
+    () =>
+      inFreshRoot(() =>
+        Effect.gen(function* pciModules() {
+          const fs = yield* FileSystem.FileSystem;
+          const dir = yield* materialize("pci-modules");
+          const text = yield* fs.readFileString(`${dir}/fractions_deps.xml`);
+          const manifest = yield* fs.readFileString(`${dir}/imsmanifest.xml`);
+
+          assert.strictEqual(occurrences(text, "<qti-portable-custom-interaction "), 2);
+          assert.strictEqual(occurrences(text, "<qti-interaction-modules>"), 2);
+          assert.strictEqual(occurrences(text, "<qti-interaction-module "), 8);
+
+          for (const id of ["jquery", "eve", "raphael", "shadingD"]) {
+            assert.strictEqual(occurrences(text, `<qti-interaction-module id="${id}" `), 2, id);
+          }
+
+          assert.match(
+            text,
+            /<qti-interaction-markup>\s*<\/qti-interaction-markup>[\s\S]*<qti-interaction-markup>\s*<\/qti-interaction-markup>/u,
+          );
+          assert.include(manifest, '<file href="modules/lib/handlebars.min-latest.js"/>');
+          assert.notInclude(manifest, "raphael");
+          assert.isFalse(yield* fs.exists(`${dir}/modules/lib/raphael.js`));
+        }),
+      ),
+  );
+
+  it.effect(
+    "pci-configurations names two configuration files its package holds and lists, one PCI with both module forms and three shapes of module",
+    () =>
+      inFreshRoot(() =>
+        Effect.gen(function* pciConfigurations() {
+          const fs = yield* FileSystem.FileSystem;
+          const dir = yield* materialize("pci-configurations");
+          const text = yield* fs.readFileString(`${dir}/fractions_deps_2.xml`);
+          const manifest = yield* fs.readFileString(`${dir}/imsmanifest.xml`);
+
+          assert.notInclude(text, "fallback-configuration");
+
+          for (const file of ["modules/hmh_co_com.js", "modules/hmh_co_com_fallback.json"]) {
+            assert.isTrue(yield* fs.exists(`${dir}/${file}`), file);
+            assert.include(manifest, `<file href="${file}"/>`, file);
+          }
+
+          assert.strictEqual(occurrences(text, "<qti-portable-custom-interaction "), 2);
+          assert.include(text, '        module="shadingD"\n        response-identifier="EXAMPLE">');
+          assert.include(text, '<qti-interaction-module id="eve"/>');
+          assert.include(
+            text,
+            '<qti-interaction-module id="raphael" fallback-path="modules/lib/raphael.js"/>',
+          );
+          assert.include(
+            text,
+            '<qti-interaction-module id="shadingD" primary-path="modules/shading_depsXX.js" fallback-path="modules/shading_deps.js"/>',
+          );
+        }),
+      ),
+  );
+
+  it.effect(
+    "the PCI positives self-close every template and custom interaction but template-foreign's",
+    () =>
+      inFreshRoot(() =>
+        Effect.gen(function* pciSelfClosed() {
+          const fs = yield* FileSystem.FileSystem;
+
+          for (const name of pciNames) {
+            const dir = yield* materialize(name);
+            const item = pciPackages.find(([row]) => row === name)?.[1] ?? "";
+            const text = yield* fs.readFileString(`${dir}/${item}`);
+            const opened = occurrences(text, "<template") - occurrences(text, "<template-");
+
+            if (name === "template-foreign") {
+              assert.strictEqual(opened, 1);
+              assert.include(text, "</template>");
+            } else {
+              assert.notInclude(text, "</template>", name);
+              assert.notInclude(text, "</qti-custom-interaction>", name);
+              assert.strictEqual(opened, occurrences(text, "<template/>"), name);
             }
           }
         }),

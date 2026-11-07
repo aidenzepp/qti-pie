@@ -605,6 +605,35 @@ const wildcardNames = [
 ] as const;
 
 /**
+ * The names of phase 10's ten PCI positives, from the corpus packages `pci_simple_example` and
+ * `pci_item_examples` and hand-edited items of the first: `pci-simple` (the `module` attribute,
+ * markup of HTML and ARIA, the module files as bytes), `pci-modules` (two PCIs of four modules
+ * each with repeated module ids and whitespace-only markup), `pci-configurations` (the two
+ * configuration attributes as file references, a PCI with both module forms and the three
+ * path shapes of a module), `pci-variables` (a prompt, a template variable, a context variable, a
+ * record binding and an `identifier multiple` binding, at 3.0.0), `pci-3-0-1` (an undeclared
+ * `QTI_CONTEXT` and a `qti-stylesheet`), `pci-context-3-0-1` (a declared `QTI_CONTEXT` record and a
+ * second context declaration), `pci-catalog-3-0-1` (a `qti-catalog-info` of one catalog of one
+ * card), `pci-markup-content` (the QTI content a PCI's markup holds, then two `template`
+ * elements), `template-foreign` (foreign content in a `template`) and `custom-3-0-1` (a custom
+ * interaction at 3.0.1, bound to a record). Every `template` and custom interaction is
+ * self-closed except `template-foreign`'s. The corpus PCIs' custom `data-*` attributes are
+ * dropped: phase 8's law for them has not landed.
+ */
+export const pciNames = [
+  "pci-simple",
+  "pci-modules",
+  "pci-configurations",
+  "pci-variables",
+  "pci-3-0-1",
+  "pci-context-3-0-1",
+  "pci-catalog-3-0-1",
+  "pci-markup-content",
+  "template-foreign",
+  "custom-3-0-1",
+] as const;
+
+/**
  * The names `materialize` accepts: `simple`, its seven variants and the eleven hand-edited
  * packages, each the same package with the edits of its row in the spec table, `sharedMedia`, the
  * examples' shared-media package unedited, `quoted-q`, phase 2's hand-broken package,
@@ -615,7 +644,7 @@ const wildcardNames = [
  * ({@link negativeNames}), the five restored-check fixtures of {@link restoredNames}, the six
  * assembly fixtures of {@link assemblyNames}, the 14 catalog positives of {@link catalogNames}, the
  * four companion-materials positives of {@link companionNames}, the 29 XML-path negatives of
- * {@link catalogNegativeNames}, the
+ * {@link catalogNegativeNames}, the ten PCI positives of {@link pciNames}, the
  * ten wildcard fixtures of {@link wildcardNames}, and `rtest01`, the
  * examples' included fragment in place (spec reading 117), with one negative per include law.
  */
@@ -652,6 +681,7 @@ export const fixtureNames = [
   ...catalogNames,
   ...companionNames,
   ...catalogNegativeNames,
+  ...pciNames,
   "lomrest",
   "lomrest-two-titles",
   "lomrest-two-purposes",
@@ -5332,6 +5362,356 @@ const wildcardSpecs: Record<(typeof wildcardNames)[number], FixtureSpec> = {
 };
 
 /**
+ * The tarball member of `pci_simple_example`, the corpus package of one item whose PCI names its
+ * module by the `module` attribute. It is written out here because {@link zipMembers} is defined
+ * after the specs that read it.
+ */
+const pciSimpleMember = "qtiv3-examples/packaging/pci-simple/pci_simple_example.zip";
+
+/**
+ * The tarball member of `pci_item_examples`, the corpus package of four items with PCIs and the
+ * modules and configuration files they name.
+ */
+const pciItemsMember = "qtiv3-examples/packaging/pci/pci_item_examples.zip";
+
+/**
+ * The item of `pci_simple_example`, whose text the hand-written PCI positives replace.
+ */
+const pciSimpleItem = "measuring_ph.xml";
+
+/**
+ * Write the item of a hand-written PCI positive, in the corpus items' form.
+ *
+ * @param version - The version the item's schema location names.
+ * @param declarations - The item's declarations, as written.
+ * @param body - The content of the item body, as written.
+ * @returns The item's text.
+ */
+const pciItemText = (
+  version: CutEdit["schemaversion"],
+  declarations: string,
+  body: string,
+): string =>
+  [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<qti-assessment-item xmlns="http://www.imsglobal.org/xsd/imsqtiasi_v3p0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"',
+    `  xsi:schemaLocation="http://www.imsglobal.org/xsd/imsqtiasi_v3p0 https://purl.imsglobal.org/spec/qti/v3p0/schema/xsd/${version === "3.0.0" ? "imsqti_asiv3p0_v1p0.xsd" : "imsqti_asiv3p0p1_v1p0.xsd"}"`,
+    '  identifier="pci-item" title="A PCI" adaptive="false" time-dependent="false">',
+    declarations,
+    `  <qti-item-body>${body}</qti-item-body>`,
+    "</qti-assessment-item>",
+    "",
+  ].join("\n");
+
+/**
+ * The spec of a hand-written PCI positive: `pci_simple_example` with its item replaced by one the
+ * given declarations and body make, and its manifest at `version`.
+ *
+ * @param name - The fixture's name.
+ * @param version - The version the manifest and the item declare.
+ * @param declarations - The item's declarations, as written.
+ * @param body - The content of the item body, as written.
+ * @param files - Files to add to the package, each listed in the manifest after the corpus's own.
+ * @returns The spec.
+ */
+const overPciSimple = (
+  name: (typeof pciNames)[number],
+  version: CutEdit["schemaversion"],
+  declarations: string,
+  body: string,
+  files: Readonly<Record<string, string>> = {},
+): FixtureSpec => ({
+  edits: [
+    {
+      _tag: "addFile",
+      path: pciSimpleItem,
+      source: { text: pciItemText(version, declarations, body) },
+    },
+    ...Object.entries(files).map(([file, text]): Edit => ({
+      _tag: "addFile",
+      path: file,
+      source: { text },
+    })),
+    ...(version === "3.0.0"
+      ? []
+      : [
+          replaceIn(
+            "imsmanifest.xml",
+            "<schemaversion>3.0.0</schemaversion>",
+            "<schemaversion>3.0.1</schemaversion>",
+          ),
+        ]),
+    ...Object.keys(files).map((file) =>
+      replaceIn(
+        "imsmanifest.xml",
+        '<file href="vinegar.svg" />',
+        `<file href="vinegar.svg" />\n            <file href="${file}" />`,
+      ),
+    ),
+  ],
+  member: pciSimpleMember,
+  name,
+});
+
+/**
+ * A PCI of the hand-written items: bound to `response`, naming the module `tap` that the package
+ * holds, with the given children.
+ *
+ * @param response - The response the PCI binds.
+ * @param children - The PCI's children, as written.
+ * @returns The element's text.
+ */
+const pciOf = (response: string, children: string): string =>
+  `<qti-portable-custom-interaction response-identifier="${response}" module="tap" custom-interaction-type-identifier="urn-fdc-hmhco.com-pci-tapToReveal">${children}</qti-portable-custom-interaction>`;
+
+/**
+ * The declaration of an integer response `RESPONSE`, and of the `SCORE` outcome.
+ */
+const pciScored =
+  '<qti-response-declaration identifier="RESPONSE" cardinality="single" base-type="integer"/><qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/>';
+
+/**
+ * The file edits that keep only `kept` of `pci_item_examples`: every other file of the package is
+ * deleted, and a manifest of one item resource and one `webcontent` resource of the module and
+ * configuration files takes the corpus manifest's place.
+ *
+ * @param name - The fixture's name, which names the manifest.
+ * @param item - The item the package keeps.
+ * @param modules - The module and configuration files it keeps, listed in one resource.
+ * @returns The edits, deletions first.
+ */
+const pciItemsKept = (name: string, item: string, modules: readonly string[]): readonly Edit[] => [
+  ...[
+    "ammonia.svg",
+    "baking_soda.svg",
+    "fractions1.xml",
+    "fractions_deps.xml",
+    "fractions_deps_2.xml",
+    "measuring_ph.xml",
+    "modules/hmh_co_com.js",
+    "modules/hmh_co_com_fallback.json",
+    "modules/lib/eve.js",
+    "modules/lib/handlebars.min-latest.js",
+    "modules/lib/jquery-2.2.2.min.js",
+    "modules/module_resolution.js",
+    "modules/shading.js",
+    "modules/shading_deps.js",
+    "modules/tap.js",
+    "vinegar.svg",
+  ]
+    .filter((file) => file !== item && !modules.includes(file))
+    .map((file): Edit => ({ _tag: "deleteFile", path: file })),
+  {
+    _tag: "addFile",
+    path: "imsmanifest.xml",
+    source: {
+      text: manifestText(name, "3.0.0", [
+        { files: [item], href: item, identifier: `${name}-item`, type: "imsqti_item_xmlv3p0" },
+        {
+          files: modules,
+          href: modules[0] ?? item,
+          identifier: `${name}-modules`,
+          type: "webcontent",
+        },
+      ]),
+    },
+  },
+];
+
+/**
+ * The edit that drops the custom `data-*` attributes of a corpus PCI's opening tag.
+ *
+ * @param file - The item the tag is in.
+ * @param kept - The tag's lines up to the last attribute that stays, the first line the element's
+ *   name.
+ * @param data - The lines that carry the `data-*` attributes and the tag's end.
+ * @param replacementKept - The lines that take `kept`'s place, when the edit changes them too.
+ * @returns The edit as plain data.
+ */
+const withoutData = (
+  file: string,
+  kept: readonly string[],
+  data: readonly string[],
+  replacementKept: readonly string[] = kept,
+): TextEdit => replaceIn(file, [...kept, ...data].join("\n"), `${replacementKept.join("\n")}>`);
+
+/**
+ * The lines of `fractions_deps.xml`'s two PCIs that `pci-modules` keeps and drops.
+ */
+const depsFirstKept = [
+  '<qti-portable-custom-interaction custom-interaction-type-identifier="urn:fdc:hmhco.com:2019:pci:shading_deps"',
+  '        response-identifier="EXAMPLE"',
+] as const;
+
+const depsFirstData = [
+  '        data-controls="none" data-render="grid" data-selected="0.0,1.0" data-selected_color="green"',
+  '        data-unselected_color="white" data-dimension1_initial="3" data-dimension2_initial="2" ',
+  '        data-element_diameter="60" data-value="numShaded" data-active="0">',
+] as const;
+
+const depsSecondKept = [
+  '<qti-portable-custom-interaction custom-interaction-type-identifier="urn:fdc:hmhco.com:2019:pci:shading_deps"',
+  '        response-identifier="RESPONSE"',
+] as const;
+
+const depsSecondData = [
+  '        data-controls="full" data-render="grid" data-selected_color="green"',
+  '        data-unselected_color="white" data-dimension1_initial="2" data-dimension2_initial="2" ',
+  '        data-element_diameter="60" data-value="numShaded" >',
+] as const;
+
+/**
+ * The lines of `fractions_deps_2.xml`'s two PCIs that `pci-configurations` keeps and drops.
+ */
+const configurationsFirstKept = [
+  '<qti-portable-custom-interaction custom-interaction-type-identifier="urn:fdc:hmhco.com:2019:pci:shading"',
+  '        response-identifier="EXAMPLE"',
+] as const;
+
+const configurationsFirstData = [
+  '        data-controls="none" data-render="grid" data-selected="0.0,1.0" data-selected_color="blue"',
+  '        data-unselected_color="white" data-dimension1_initial="3" data-dimension2_initial="2" ',
+  '        data-element_diameter="60" data-value="numShaded" data-active="0">',
+] as const;
+
+const configurationsSecondKept = [
+  '<qti-portable-custom-interaction custom-interaction-type-identifier="urn:fdc:hmhco.com:2019:pci:shading" ',
+  '        module="shadingD"',
+  '        response-identifier="RESPONSE"',
+] as const;
+
+const configurationsSecondData = [
+  '        data-controls="full" data-render="grid" data-selected_color="blue"',
+  '        data-unselected_color="white" data-dimension1_initial="2" data-dimension2_initial="2" ',
+  '        data-element_diameter="60" data-value="numShaded" >',
+] as const;
+
+/**
+ * The specs of {@link pciNames}.
+ */
+const pciSpecs: Record<(typeof pciNames)[number], FixtureSpec> = {
+  "custom-3-0-1": overPciSimple(
+    "custom-3-0-1",
+    "3.0.1",
+    '<qti-response-declaration identifier="RESPONSE" cardinality="record"/>',
+    '<div><qti-custom-interaction response-identifier="RESPONSE"/></div>',
+  ),
+  "pci-3-0-1": overPciSimple(
+    "pci-3-0-1",
+    "3.0.1",
+    pciScored,
+    pciOf(
+      "RESPONSE",
+      '<qti-interaction-markup><p>Tap</p></qti-interaction-markup><qti-context-variable identifier="QTI_CONTEXT"/><qti-stylesheet href="pci.css" type="text/css"/>',
+    ),
+    { "pci.css": "p { color: green; }\n" },
+  ),
+  "pci-catalog-3-0-1": overPciSimple(
+    "pci-catalog-3-0-1",
+    "3.0.1",
+    pciScored,
+    pciOf(
+      "RESPONSE",
+      '<qti-interaction-markup><p data-catalog-idref="tap-help">Tap</p></qti-interaction-markup><qti-catalog-info><qti-catalog id="tap-help"><qti-card support="linguistic-guidance"><qti-html-content><p>To tap is to touch lightly.</p></qti-html-content></qti-card></qti-catalog></qti-catalog-info>',
+    ),
+  ),
+  "pci-configurations": {
+    edits: [
+      ...pciItemsKept("pci-configurations", "fractions_deps_2.xml", [
+        "modules/hmh_co_com.js",
+        "modules/hmh_co_com_fallback.json",
+        "modules/shading_deps.js",
+        "modules/lib/eve.js",
+        "modules/lib/jquery-2.2.2.min.js",
+      ]),
+      withoutData("fractions_deps_2.xml", configurationsFirstKept, configurationsFirstData, [
+        configurationsFirstKept[0],
+        '        module="shadingD"',
+        configurationsFirstKept[1],
+      ]),
+      withoutData("fractions_deps_2.xml", configurationsSecondKept, configurationsSecondData),
+      replaceIn(
+        "fractions_deps_2.xml",
+        "the primary-configuration URL is deliberately incorrect to \n            demonstrate the use of fallback-configuration -->",
+        "the primary-configuration and the secondary-configuration are files this package holds -->",
+      ),
+      replaceIn(
+        "fractions_deps_2.xml",
+        '<qti-interaction-modules primary-configuration="modules/hmh_co_comXX.js" fallback-configuration="modules/hmh_co_com.js">',
+        '<qti-interaction-modules primary-configuration="modules/hmh_co_com.js" secondary-configuration="modules/hmh_co_com_fallback.json">',
+      ),
+      replaceIn(
+        "fractions_deps_2.xml",
+        '<qti-interaction-module id="raphael"/>',
+        '<qti-interaction-module id="raphael" fallback-path="modules/lib/raphael.js"/>',
+      ),
+    ],
+    member: pciItemsMember,
+    name: "pci-configurations",
+  },
+  "pci-context-3-0-1": overPciSimple(
+    "pci-context-3-0-1",
+    "3.0.1",
+    `<qti-context-declaration identifier="QTI_CONTEXT" cardinality="record"/><qti-context-declaration identifier="LEVEL" cardinality="single" base-type="integer"/>${pciScored}`,
+    pciOf(
+      "RESPONSE",
+      '<qti-interaction-markup><p>Tap</p></qti-interaction-markup><qti-context-variable identifier="QTI_CONTEXT"/><qti-context-variable identifier="LEVEL"/>',
+    ),
+  ),
+  "pci-markup-content": overPciSimple(
+    "pci-markup-content",
+    "3.0.0",
+    `${pciScored}<qti-outcome-declaration identifier="FEEDBACK" cardinality="single" base-type="identifier"/>${templateDeclaration}`,
+    pciOf(
+      "RESPONSE",
+      '<qti-interaction-markup><p>Score <qti-printed-variable identifier="SCORE"/></p><qti-feedback-block outcome-identifier="FEEDBACK" identifier="fb" show-hide="show"><qti-content-body><p>Shown</p></qti-content-body></qti-feedback-block><p>See <qti-feedback-inline outcome-identifier="FEEDBACK" identifier="fi" show-hide="show">this</qti-feedback-inline></p><qti-template-block template-identifier="T" identifier="tb" show-hide="show"><qti-content-body><p>Block</p></qti-content-body></qti-template-block><p><qti-template-inline template-identifier="T" identifier="ti" show-hide="show">inline</qti-template-inline></p><template/><template/></qti-interaction-markup>',
+    ),
+  ),
+  "pci-modules": {
+    edits: [
+      ...pciItemsKept("pci-modules", "fractions_deps.xml", [
+        "modules/shading_deps.js",
+        "modules/lib/eve.js",
+        "modules/lib/handlebars.min-latest.js",
+      ]),
+      withoutData("fractions_deps.xml", depsFirstKept, depsFirstData),
+      withoutData("fractions_deps.xml", depsSecondKept, depsSecondData),
+    ],
+    member: pciItemsMember,
+    name: "pci-modules",
+  },
+  "pci-simple": {
+    edits: [
+      replaceIn(
+        pciSimpleItem,
+        '            data-toggle="true" data-tap-message="Tap to reveal the color of the solution"\n',
+        "",
+      ),
+    ],
+    member: pciSimpleMember,
+    name: "pci-simple",
+  },
+  "pci-variables": overPciSimple(
+    "pci-variables",
+    "3.0.0",
+    `<qti-context-declaration identifier="CTX" cardinality="single" base-type="integer"/><qti-response-declaration identifier="RECORD" cardinality="record"/><qti-response-declaration identifier="PICKED" cardinality="multiple" base-type="identifier"/><qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/>${templateDeclaration}`,
+    `${pciOf(
+      "RECORD",
+      '<qti-prompt><p>Tap</p></qti-prompt><qti-interaction-markup><p>Tap</p></qti-interaction-markup><qti-template-variable template-identifier="T"/><qti-context-variable identifier="CTX"/>',
+    )}${pciOf("PICKED", "<qti-interaction-markup><p>Pick</p></qti-interaction-markup>")}`,
+  ),
+  "template-foreign": overPciSimple(
+    "template-foreign",
+    "3.0.0",
+    pciScored,
+    pciOf(
+      "RESPONSE",
+      '<qti-interaction-markup><p>Tap</p><template><x:widget xmlns:x="urn:example:widget" size="3"/></template></qti-interaction-markup>',
+    ),
+  ),
+};
+
+/**
  * The spec table: one row per {@link FixtureName}, so adding a name without its row does not
  * compile.
  *
@@ -5387,6 +5767,7 @@ const specs: Record<FixtureName, FixtureSpec> = {
   ...catalogSpecs,
   ...companionSpecs,
   ...catalogNegativeSpecs,
+  ...pciSpecs,
   ...wildcardSpecs,
   "bad-identifier-value": {
     edits: [
