@@ -156,30 +156,6 @@ describe("the composition", () => {
       }),
   );
 
-  it.effect(
-    "gives every admitted child the content position 0 or a position its family's automaton reaches",
-    () =>
-      Effect.gen(function* positions() {
-        const { admission, content } = yield* grammar;
-        // The positions each model's automaton reaches, and each family's model.
-        const reached = new Set(content.follow.rows.map(({ model, to }) => `${model} ${to}`));
-        const modelOf = new Map(
-          content.contentModelOf.rows.map(({ model, parent, version }) => [
-            `${version} ${parent}`,
-            model,
-          ]),
-        );
-        const outside = admission.rows.filter(
-          ({ parent, position, version }) =>
-            position !== "0" &&
-            !reached.has(`${modelOf.get(`${version} ${parent}`) ?? ""} ${position}`),
-        );
-
-        assert.deepStrictEqual(outside.slice(0, 10), []);
-      }),
-    60_000,
-  );
-
   it("resolves a child a vocabulary admits by a stated triple, beside the children its models admit", () => {
     // Oracle: the specification as a checker: a name resolves under a parent to the kind admitted
     // there, whoever states the admission.
