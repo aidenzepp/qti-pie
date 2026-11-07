@@ -100,6 +100,34 @@ const seeded: TestSession = {
 const unseeded: TestSession = { ...seeded, seed: Option.none() };
 
 /**
+ * The template value {@link templated}'s first item holds: an integer beyond 2^53.
+ */
+const drawn = integer(2n ** 60n + 3n);
+
+/**
+ * {@link seeded} with its first item's record started by template processing under the seed `7`:
+ * the template variable `T` at {@link drawn}, `RESPONSE`'s correct response and `SCORE`'s default
+ * set, as `firstAttempt` writes a templated item's record.
+ */
+const templated: TestSession = {
+  ...seeded,
+  items: seeded.items.map((item) =>
+    item.sequenceIndex === 1
+      ? {
+          ...item,
+          record: {
+            ...item.record,
+            correct: { RESPONSE: drawn },
+            defaults: { SCORE: float(0.5) },
+            seed: "7",
+            templates: { T: drawn },
+          },
+        }
+      : item,
+  ),
+};
+
+/**
  * Pass a session through a host: encode it, write it as JSON text, read the text back and decode
  * what the host hands back.
  *
@@ -169,6 +197,27 @@ describe("encodeSession and decodeSession", () => {
       assert.isFalse("seed" in stored);
       assert.deepStrictEqual(yield* Effect.fromResult(throughHost(unseeded)), unseeded);
     }),
+  );
+
+  it.effect(
+    "[I-5] [T-14] round-trip a session whose item record holds its seed, template values, correct responses and defaults",
+    () =>
+      Effect.gen(function* roundTripsTemplated() {
+        const stored = yield* Effect.fromResult(encodeSession(templated));
+        const restored = yield* Effect.fromResult(throughHost(templated));
+        const [first] = stored.items;
+
+        assert.strictEqual(first?.record.seed, "7");
+        assert.strictEqual(first?.record.templates["T"]?.values[0]?.value, "1152921504606846979");
+        assert.deepStrictEqual(restored, templated);
+        assert.deepStrictEqual(
+          restored.items.map((item) => [item.record.templates, item.record.correct]),
+          [
+            [{ T: drawn }, { RESPONSE: drawn }],
+            [{}, {}],
+          ],
+        );
+      }),
   );
 
   it.effect("store each item's record as a stored record, version and all", () =>
