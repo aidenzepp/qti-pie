@@ -131,7 +131,7 @@ const directedKinds = ["m:mrow", "m:mstyle"] as const;
  *   which `nodeCounts` proves; `selectionLexical` and `selectionWritten`, the lexical form of the
  *   `selection` attribute and whether the node writes one, which the attribute proves; and
  *   `selectionText`, the form collapsed, and `selection`, its integer (1 where none is written, 0
- *   where it is no integer), which `E1_derived` proves.
+ *   where it is no integer or a negative one), which `E1_derived` proves.
  *
  * Its fields are declared in key order, which the lint's `sort-keys` holds and which is column
  * order.
@@ -385,12 +385,18 @@ export const alignLaws = [
         m.and(m.eq(m.selectionWritten, false), m.eq(m.selectionLexical, ""), m.eq(m.selection, 1n)),
         m.and(
           m.eq(m.selectionWritten, true),
-          m.eq(
-            Compute.base(m.selection),
-            Compute.when(
-              Compute.matches(m.selectionText, integerForm),
-              (text) => Compute.cast(text, pg.bigint),
-              0n,
+          m.or(
+            m.and(m.eq(Compute.startsWith(m.selectionText, "-"), true), m.eq(m.selection, 0n)),
+            m.and(
+              m.eq(Compute.startsWith(m.selectionText, "-"), false),
+              m.eq(
+                Compute.base(m.selection),
+                Compute.when(
+                  Compute.matches(m.selectionText, integerForm),
+                  (text) => Compute.cast(text, pg.bigint),
+                  0n,
+                ),
+              ),
             ),
           ),
         ),

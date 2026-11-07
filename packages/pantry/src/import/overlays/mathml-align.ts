@@ -25,9 +25,8 @@
  * - **`CellLeaf`**, one row for every complete element of a cell, an element with no element child,
  *   in document order within its cell, nested in its cell's `MathCell` row as `leaves`, which the
  *   database numbers by the order they are nested in. An `m:mtd` is no leaf: an empty cell nested
- *   in another is its own cell with no leaf, not a leaf of the outer one, though the oracle counts
- *   it as one (`contentOfCell` in `#pantry/test/oracle.ts`; the phase-6 audit list's third item,
- *   left as the oracle has it).
+ *   in another is its own cell with no leaf, not a leaf of the outer one, as the oracle's
+ *   `contentOfCell` (`#pantry/test/oracle.ts`) reads it too.
  *
  * A direction is the `dir` an element writes where its collapsed form is `ltr` or `rtl`, and else
  * the one its parent holds, `ltr` above every element (MathML 3 §3.1.5.1). A `dir` of any other
