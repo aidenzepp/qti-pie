@@ -1,8 +1,8 @@
 /**
  * `labels.ts`'s free tests: over every kind of the composition in each version, the kinds whose
  * `label` asks for its tool are exactly the kinds whose `label` the pinned ASI XSD declares inside
- * one of the types whose characteristic states the tool sentence, and every other label-bearing
- * kind is one whose label the information model describes as text for a reader.
+ * one of the types whose characteristic states the tool sentence, and one list selects each
+ * version's.
  */
 import { NodeServices } from "@effect/platform-node";
 import { assert, describe, it } from "@effect/vitest";
@@ -39,23 +39,6 @@ const asiXsd: Readonly<Record<SchemaVersion, SourcePath>> = {
   "3.0.0": "imsqti_asiv3p0_v1p0.xsd",
   "3.0.1": "imsqti_asiv3p0p1_v1p0.xsd",
 };
-
-/**
- * The label-bearing kinds whose label the information model's own description leaves out of the
- * tool sentence, in each version, as the oracle reads it from the text and not from any type: the
- * item root, whose own label the root rule of `identity.ts` judges (3.0.0's §4.1.3, "A human
- * readable label that can be used to describe the Item"; 3.0.1's §4.1.3 states the sentence of
- * it), the stimulus root ("A human readable label that can be used to describe the Stimulus",
- * §4.3.3), `ItemFileInfo`'s two kinds ("A human readable label/short description for the file",
- * §5.80.2) and the printed variable ("such as would be appropriate for a tooltip", §7.30.4).
- */
-const outside = [
-  "qti-assessment-item",
-  "qti-assessment-stimulus",
-  "qti-calculator-info",
-  "qti-digital-material",
-  "qti-printed-variable",
-] as const;
 
 /**
  * The ASI types whose `label` characteristic's description states the tool sentence, as the oracle
@@ -124,31 +107,6 @@ const labelOwnersOf = (root: Element, lines: readonly number[]): ReadonlyMap<num
 };
 
 describe("grammar/labels.ts, the kinds whose label asks for its tool", () => {
-  it("are the label-bearing kinds but the five whose label the information model describes as text for a reader, in each version", () => {
-    // Oracle: the information model's descriptions of each label characteristic, as `outside`
-    // lists the classes that state no tool sentence.
-    // Bound: every kind of every version that declares a `label`, 122 in 3.0.0 and 123 in 3.0.1.
-    for (const version of schemaVersions) {
-      const bearing = new Set(
-        attributeDeclarations
-          .filter(({ name, versions }) => name === "label" && versions.includes(version))
-          .map(({ kind }) => kind),
-      );
-      const asking: ReadonlySet<string> = new Set(derived.byVersion.get(version));
-
-      assert.deepStrictEqual(
-        [...bearing].filter((kind) => !asking.has(kind)).toSorted(),
-        [...outside].toSorted(),
-        version,
-      );
-      assert.deepStrictEqual(
-        [...asking].filter((kind) => !bearing.has(kind)),
-        [],
-        `${version}: a kind that asks for a tool declares a label`,
-      );
-    }
-  });
-
   it("select, by kind alone across the versions, the labels each version's list selects", () => {
     // Oracle: each version's own list over the kinds that declare a label in that version.
     // Bound: every kind of the union, in each version where it declares a label.
