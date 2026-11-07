@@ -1,17 +1,17 @@
 /**
  * The containers family of the item model: the kind rules and reader specs of `qti-is-null`,
- * `qti-multiple`, `qti-ordered`, `qti-repeat`, `qti-container-size`, `qti-index`, `qti-member`,
- * `qti-delete` and `qti-contains`, and the unlanded rule and stub reader spec of `qti-random` and
- * `qti-field-value`, which later slices replace.
+ * `qti-multiple`, `qti-ordered`, `qti-repeat`, `qti-container-size`, `qti-index`, `qti-random`,
+ * `qti-member`, `qti-delete` and `qti-contains`, and the unlanded rule and stub reader spec of
+ * `qti-field-value`, which a later slice replaces.
  *
  * The constructors (`qti-multiple`, `qti-ordered`, `qti-repeat`) give a container of the base type
- * their operands share; the readers (`qti-container-size`, `qti-index`) take a container of any
- * base type; and `qti-member`, `qti-delete` and `qti-contains` relate their two operands. A rule
- * that relates its operands judges each against the base type the first operand that says one
- * sets, as the qti package's operand rules do (P23, `operandRules` in
- * `packages/pantry/src/processing/check.ts`). `qti-index`'s `n` and `qti-repeat`'s
- * `number-repeats` may name an integer variable, so their rules declare them in their reference
- * facet, and the validator, the walks and the engine check and resolve them from there.
+ * their operands share; the readers (`qti-container-size`, `qti-index`, `qti-random`) take a
+ * container of any base type; and `qti-member`, `qti-delete` and `qti-contains` relate their two
+ * operands. A rule that relates its operands judges each against the base type the first operand
+ * that says one sets, as the qti package's operand rules do (P23, `operandRules` in
+ * `packages/pantry/src/processing/check.ts`). `qti-index`'s `n` and `qti-repeat`'s `number-repeats`
+ * may name an integer variable, so their rules declare them in their reference facet, and the
+ * validator, the walks and the engine check and resolve them from there.
  *
  * It value-imports only `effect`, `#plate/model/expression.ts`, the leaf
  * `#plate/model/attributes.ts` and `#plate/vocabulary.ts`, and names the registry's reader types
@@ -235,6 +235,20 @@ const indexRule: KindRule = {
 };
 
 /**
+ * The rule of `qti-random`: a single value of its operand's base type, of a container of any base
+ * type, typed as `qti-index` is. The information model takes "a sub-expression with a multiple or
+ * ordered container value and any base-type", and the qti package accepts the same (its container
+ * readers' operand rule) and types the result by its operand's base type.
+ *
+ * @see https://www.imsglobal.org/spec/qti/v3p0/info/index.html#OpRandom
+ */
+const randomRule: KindRule = {
+  operandsAccept: everyOperand("any", containers),
+  references: [],
+  resultType: ([operand]) => singleOf(operand?.baseType ?? "unknown"),
+};
+
+/**
  * The rule of `qti-member`: a single boolean, of a single value and a container of its base type,
  * neither of base type `duration`.
  *
@@ -276,8 +290,7 @@ const containsRule: KindRule = {
 };
 
 /**
- * The containers family's kind rules by kind, and the unlanded rule for `random` and
- * `field-value`.
+ * The containers family's kind rules by kind, and the unlanded rule for `field-value`.
  */
 export const containersRules: FamilyRules<
   | "container-size"
@@ -301,7 +314,7 @@ export const containersRules: FamilyRules<
   member: memberRule,
   multiple: multipleRule,
   ordered: orderedRule,
-  random: unlandedRule,
+  random: randomRule,
   repeat: repeatRule,
 };
 
@@ -385,6 +398,15 @@ const indexReader: ReaderSpec<"index"> = {
 };
 
 /**
+ * The reader spec of `qti-random`: its one operand, and no attribute.
+ */
+const randomReader: ReaderSpec<"random"> = {
+  _tag: "generic",
+  arity: "one",
+  attributes: () => Effect.succeed((operands) => ({ kind: "random", operands })),
+};
+
+/**
  * The reader spec of `qti-member`: its two operands, and no attribute.
  */
 const memberReader: ReaderSpec<"member"> = {
@@ -418,7 +440,7 @@ const containsReader: ReaderSpec<"contains"> = {
 const unlanded: UnlandedReader = { _tag: "unlanded" };
 
 /**
- * The containers family's reader specs by kind, and the stub for `random` and `field-value`.
+ * The containers family's reader specs by kind, and the stub for `field-value`.
  */
 export const containersReaders: FamilyReaders<
   | "container-size"
@@ -442,6 +464,6 @@ export const containersReaders: FamilyReaders<
   member: memberReader,
   multiple: multipleReader,
   ordered: orderedReader,
-  random: unlanded,
+  random: randomReader,
   repeat: repeatReader,
 };
