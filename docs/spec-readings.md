@@ -2403,3 +2403,24 @@ against it. A reading that is not an information-model-over-XSD case says which 
      reading 1 protects valid content, and these bytes make the file no valid package interchange file. This binds
      pantry and plate alike. (Decided 2026-11-07 by the coordinator, on GEN-B/zip's finding, from RV seat REP-B
      (`8558cbaa`, its comments renumbered in `bcafe951`).)
+140. **A reader refuses where the infoset the specification defines is undetermined.** crust checks no DTD validity in
+     general, since QTI validity is XSD validity, but a default that references a general entity the internal subset
+     declares only after the attribute-list declaration is refused everywhere:
+     - In WFC Entity Declared's scope, the document is not well-formed. That scope is a document with no DTD, one whose
+       internal subset references no parameter entity, or one with `standalone='yes'`. XML 1.0 (Fifth Edition) section
+       4.1 says: "The declaration of a general entity MUST precede any reference to it which appears in a default value
+       in an attribute-list declaration."
+     - Outside that scope, the same rule is VC Entity Declared ("the declaration of a general entity MUST precede any
+       attribute-list declaration containing a default value with a direct or indirect reference to that general
+       entity"), so the document is not valid.
+     - There, too, the default's value is undetermined. A reader taking the subset in order has not seen the entity at
+       the attribute-list declaration, and neither section 4.4 nor 5.1 fixes what a reader that does not validate
+       supplies. libxml2 2.9.13 supplies the empty string.
+     - Refusing is the one choice that neither invents an infoset nor follows one implementation. Reading 1 ("Content
+       that is not valid is refused") covers it.
+     - The same scope decides an undeclared reference elsewhere: refused inside the WFC's scope, kept as an unexpanded
+       reference outside it. A parameter-entity reference in the internal subset takes a document out of the scope, as
+       an external subset does.
+
+     This binds pantry and plate alike. (Operator ruling of 2026-11-07, through the coordinator's ruling 5, from
+     RV seat GEN-B/codec (`3fe6a888`, `bb71b197`; its guard `2e4d053b`).)
