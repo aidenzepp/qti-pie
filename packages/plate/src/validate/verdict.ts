@@ -1417,7 +1417,9 @@ const templateReadSource = "info.txt:65111";
  *   remedy offers an outcome set to its value, as the information model suggests. With an
  *   `expectedCardinalities` fact, the attribute is a `template-identifier`, which names a template
  *   variable of base type identifier, single or multiple (pantry's `template-ref`): the sentence
- *   offers the cardinalities as alternatives and cites the element's line ({@link settled}).
+ *   offers the cardinalities as alternatives and cites the element's line ({@link settled}). With a
+ *   `declarer` of `test`, the attribute is a test's printed variable's, and a test declares no
+ *   template variable: the sentence names and offers only an outcome the test declares.
  * - `template-read` (P26): template processing reads a variable that is neither a template nor a
  *   context variable (a response, an outcome or a built-in), by an element or through the reference
  *   attribute an `attribute` fact names. It cites the information model's line, which allows only
@@ -1462,6 +1464,23 @@ const expressionType = (refusal: Refusal): string => {
           `${code(element)}'s attribute ${attribute} names ${identifier}, which is not ${wanted}${settled(refusal)}.`,
           `name ${wanted}, in ${attribute}`,
         );
+      }
+
+      if (fact(refusal, "declarer", "item") === "test") {
+        return Option.match(optionalFact(refusal, "variableKind"), {
+          onNone: () =>
+            sentence(
+              refusal,
+              `${code(element)}'s attribute ${attribute} names ${identifier}, which is not a single outcome variable of base type ${expected}${cite}.`,
+              `in ${attribute}, name a single outcome variable of base type ${expected} that the test declares, or write a value of that base type`,
+            ),
+          onSome: (kind) =>
+            sentence(
+              refusal,
+              `${code(element)}'s attribute ${attribute} names ${identifier}, ${withArticle(kind)} variable, which is not an outcome variable${settled(refusal)}.`,
+              `in ${attribute}, name an outcome variable that the test declares`,
+            ),
+        });
       }
 
       return Option.match(optionalFact(refusal, "variableKind"), {
@@ -1586,7 +1605,9 @@ const attributeType = (refusal: Refusal): string => {
  *   citing the information model's line its `source` names.
  * - None (P8): a name the item declares no variable of the `expected` kind for. A template rule's
  *   target lists every kind the rule may set, space-separated, and the sentence offers them as
- *   alternatives (pantry's `DeclaredRefKind`).
+ *   alternatives (pantry's `DeclaredRefKind`). A test's printed variable carries `declarer:
+ *   "test"`, and the sentence names the test as what declares no such variable (pantry's
+ *   `binding-declared` for a test).
  *
  * Each names the element, or the element's attribute when a reference attribute names the
  * variable.
@@ -1629,10 +1650,11 @@ const undeclaredVariable = (refusal: Refusal): string => {
     }
     default: {
       const kind = alternatives(fact(refusal, "expected", "variable"), variableKind);
+      const declarer = fact(refusal, "declarer", "item") === "test" ? "test" : "item";
 
       return sentence(
         refusal,
-        `${subject} names ${identifier}, and the item declares no ${kind} ${identifier}.`,
+        `${subject} names ${identifier}, and the ${declarer} declares no ${kind} ${identifier}.`,
         `declare ${identifier}, or name a declared ${kind}`,
       );
     }
