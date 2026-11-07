@@ -153,11 +153,12 @@ interface Recorded {
 /**
  * A dangling `xs:IDREF`: libxml2 2.9.13 never resolves an `xs:IDREF` under `--schema`, so a
  * dangling one, which XML Schema refuses (Part 1, 3.3.4 and the ID/IDREF table, cvc-id.1),
- * validates; it does refuse a repeated `xs:ID`.
+ * validates; it does refuse a repeated `xs:ID`. A dangling `m:share` `src` is no `xs:IDREF` (the
+ * XSD types it `xs:anyURI`), so it is left to its own reading-2 record, not to libxml2.
  */
 const idrefRecord: Recorded = {
   class: "identity",
-  detail: /^Idref target /u,
+  detail: /^Idref target (?!at \S+\/m:share\[\d+\]: src names )/u,
   direction: "oracle-only",
   reason: { _tag: "libxml2", why: "libxml2 never resolves IDREF targets under --schema" },
   rule: "idref-target",
@@ -780,6 +781,117 @@ const generatedRecorded: readonly Recorded[] = [
       why: "a MathML operator takes the arguments its class states (MathML 3, 4.3.4); the XSD's apply takes any number",
     },
     rule: "math-arity",
+  },
+  {
+    class: "content",
+    detail:
+      /^N5 Follow at \S+: (?:m:\S+ follows state \d+, after which m:\S+'s content model in \S+ admits |no position of m:\S+'s content model that names m:\S+ follows its predecessor in )/u,
+    direction: "oracle-only",
+    reason: {
+      _tag: "reading",
+      reading: 2,
+      why: "MathML's qualifiers stand in the order bvar, lowlimit, uplimit, interval, condition, domainofapplication, degree, momentabout, logbase, a condition only after a bvar (MathML 3, 4.3.3 and 4.3.3.2), and a bind's bound variables come before its body (4.2.6.1); the XSD's apply and bind take their qualifiers in any order",
+    },
+    rule: "ordering",
+  },
+  {
+    class: "content",
+    detail: /^N7 Last at \S+: m:(?:bind|mlongdiv|mstack) holds /u,
+    direction: "oracle-only",
+    reason: {
+      _tag: "reading",
+      reading: 2,
+      why: "an mscarries is not the last element of an mstack or an mlongdiv, and a bind holds at least one bvar (MathML 3, 3.6.1 and 4.2.6.1); both schemas repeat those children in any order, so the automaton's last-position law states it",
+    },
+    rule: "child-set",
+  },
+  {
+    class: "content",
+    detail: /^MathML head qualifier at \S+: m:apply applies /u,
+    direction: "oracle-only",
+    reason: {
+      _tag: "reading",
+      reading: 2,
+      why: "spec reading R6-head-qualifiers: an apply's operator takes only the qualifiers its MathML 3 syntax table lists (degree with root, logbase with log, momentabout with moment, 4.4); the XSD's apply takes any qualifier beside any operator",
+    },
+    rule: "admission",
+  },
+  {
+    class: "attribute-value",
+    detail: /^MathML cn form at \S+: (?:a cn of type|part \d+ of a cn of type) /u,
+    direction: "oracle-only",
+    reason: {
+      _tag: "reading",
+      reading: 2,
+      why: "spec reading R6-hexdouble: a cn's content has the form its type implies, split at m:sep, with digits read in its base (MathML 3, 4.2.1); the XSD types the content as mixed text",
+    },
+    rule: "attribute-lexical",
+  },
+  {
+    class: "content",
+    detail: /^MathML maction selection at \S+: an m:maction /u,
+    direction: "oracle-only",
+    reason: {
+      _tag: "reading",
+      reading: 2,
+      why: "an maction's selection names one of its children, and one with no child selects none (MathML 3, 3.7.1.1: 'If the value specified is out of range, it is an error'); the XSD types selection a positive integer and counts no children",
+    },
+    rule: "union-count",
+  },
+  {
+    class: "content",
+    detail: /^MathML align placement at \S+: an m:maligngroup /u,
+    direction: "oracle-only",
+    reason: {
+      _tag: "reading",
+      reading: 2,
+      why: "an maligngroup in a table cell stands only where MathML 3, 3.5.5.2 lets it (an mrow or mstyle that changes no direction, mphantom, mfenced, the selected child of an maction, semantics); the XSD admits it under any presentation element",
+    },
+    rule: "admission",
+  },
+  {
+    class: "content",
+    detail: /^MathML align first at \S+: the table cell at /u,
+    direction: "oracle-only",
+    reason: {
+      _tag: "reading",
+      reading: 2,
+      why: "a table cell holding an alignment group starts with one (MathML 3, 3.5.5.2: 'the first complete element must be an maligngroup element'); the XSD's mtd takes its children in any order",
+    },
+    rule: "ordering",
+  },
+  {
+    class: "identity",
+    detail: /^MathML share cycle at \S+: the m:share at /u,
+    direction: "oracle-only",
+    reason: {
+      _tag: "reading",
+      reading: 2,
+      why: "no element dominates itself, and a share's same-document src names the element it stands for (MathML 3, 4.2.7: 'An element may not dominate itself'); the XSD types src xs:anyURI and follows no reference",
+    },
+    rule: "document-key",
+  },
+  {
+    class: "identity",
+    detail: /^Idref target at \S+\/m:share\[\d+\]: src names /u,
+    direction: "oracle-only",
+    reason: {
+      _tag: "reading",
+      reading: 2,
+      why: "a share's src, a same-document fragment '#id', names an element of its document (MathML 3, 4.2.7); the XSD types src xs:anyURI and resolves it nowhere",
+    },
+    rule: "idref-target",
+  },
+  {
+    class: "content",
+    detail:
+      /^line \d+ \{http:\/\/www\.w3\.org\/1998\/Math\/MathML\}\S+: Character content is not allowed, because the content type is empty\.(?: \| line \d+ \{http:\/\/www\.w3\.org\/1998\/Math\/MathML\}\S+: Character content is not allowed, because the content type is empty\.)*$/u,
+    direction: "xsd-only",
+    reason: {
+      _tag: "reading",
+      reading: 2,
+      why: "a MathML element whose RelaxNG content is empty admits whitespace-only text, as RELAX NG matches it against empty; the normative MathML 3 RelaxNG is followed over QTI's bundled XSD, whose empty types refuse it (xmllint's XSD validator)",
+    },
   },
   {
     class: "beyond",
