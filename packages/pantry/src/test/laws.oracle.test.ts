@@ -417,6 +417,15 @@ const contextPci = (identifier: string): string =>
   `<qti-portable-custom-interaction response-identifier="RESPONSE" module="m" custom-interaction-type-identifier="t"><qti-interaction-modules><qti-interaction-module id="m" primary-path="m.js"/></qti-interaction-modules><qti-context-variable identifier="${identifier}"/><qti-interaction-markup/></qti-portable-custom-interaction>`;
 
 /**
+ * A portable custom interaction that passes one template variable to its module (§7.38.1).
+ *
+ * @param identifier - The template variable it names.
+ * @returns The interaction.
+ */
+const templatePci = (identifier: string): string =>
+  `<qti-portable-custom-interaction response-identifier="RESPONSE" module="m" custom-interaction-type-identifier="t"><qti-interaction-modules><qti-interaction-module id="m" primary-path="m.js"/></qti-interaction-modules><qti-template-variable template-identifier="${identifier}"/><qti-interaction-markup/></qti-portable-custom-interaction>`;
+
+/**
  * The base item's paragraph with inline feedback on an outcome.
  *
  * @param outcome - The outcome the feedback names.
@@ -484,6 +493,59 @@ describe("the information model's rules RD found unowned (unowned-readings.md §
       assert.isFalse(identifier.held, identifier.breaches);
       assert.isFalse(builtIn.held, builtIn.breaches);
     }),
+  );
+
+  it.effect(
+    "Template variable type: a choice or template element names an identifier template variable, and a PCI's template variable may name any",
+    () =>
+      Effect.gen(function* templateType() {
+        const outcome = `<qti-outcome-declaration identifier="SCORE" cardinality="single" base-type="float"/>`;
+        const declared = (cardinality: string, baseType: string): readonly [string, string] => [
+          outcome,
+          `${outcome}<qti-template-declaration identifier="T" cardinality="${cardinality}" base-type="${baseType}"/>`,
+        ];
+        const choice = [
+          `<qti-simple-choice identifier="A">A</qti-simple-choice>`,
+          `<qti-simple-choice identifier="A" template-identifier="T" show-hide="show">A</qti-simple-choice>`,
+        ] as const;
+        const inline = [
+          `<p id="intro">Pick one.</p>`,
+          `<p id="intro">Pick <qti-template-inline template-identifier="T" identifier="ti" show-hide="show">one</qti-template-inline>.</p>`,
+        ] as const;
+        const pci = [choiceInteraction, `${choiceInteraction}${templatePci("T")}`] as const;
+
+        const integer = yield* refusedBy(
+          "Template variable type",
+          declared("single", "integer"),
+          choice,
+        );
+        const ordered = yield* refusedBy(
+          "Template variable type",
+          declared("ordered", "identifier"),
+          inline,
+        );
+        const single = yield* refusedBy(
+          "Template variable type",
+          declared("single", "identifier"),
+          choice,
+        );
+        const multiple = yield* refusedBy(
+          "Template variable type",
+          declared("multiple", "identifier"),
+          choice,
+        );
+        const variable = yield* refusedBy(
+          "Template variable type",
+          declared("single", "integer"),
+          pci,
+        );
+
+        assert.isTrue(integer.held, integer.breaches);
+        assert.isTrue(ordered.held, ordered.breaches);
+        assert.isFalse(single.held, single.breaches);
+        assert.isFalse(multiple.held, multiple.breaches);
+        assert.isFalse(variable.held, variable.breaches);
+      }),
   );
 
   it.effect(

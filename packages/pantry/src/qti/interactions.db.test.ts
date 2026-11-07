@@ -63,7 +63,10 @@ import {
   SectionFeedbackName,
   SectionFeedbackRef,
   SectionScope,
+  SectionTemplateName,
+  SectionTemplateRef,
   Slider,
+  TemplateRef,
 } from "#pantry/qti/interactions.ts";
 import { AuthorApp } from "#pantry/qti/logins.ts";
 import { manifestPath } from "#pantry/qti/package.ts";
@@ -260,6 +263,26 @@ const feedbackOf = (fields: Partial<Fact<typeof FeedbackRef>> = {}) =>
     node: strayNode(0),
     ...fields,
   }) satisfies Fact<typeof FeedbackRef>;
+
+/**
+ * A stray choice's template reference, resolved to a declared single identifier template.
+ *
+ * @param fields - The fields the case sets.
+ * @returns The row.
+ */
+const templateOf = (fields: Partial<Fact<typeof TemplateRef>> = {}) =>
+  ({
+    attribute: "template-identifier",
+    baseType: "identifier",
+    cardinality: "single",
+    declaration: stray,
+    declarationKind: "qti-template-declaration",
+    document: stray,
+    identifier: "T",
+    kind: "qti-simple-choice",
+    node: strayNode(0),
+    ...fields,
+  }) satisfies Fact<typeof TemplateRef>;
 
 /**
  * A stray choice of one interaction.
@@ -1113,6 +1136,58 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
             );
             assert.isTrue(
               rejectedBy(placed, checkNamed("SectionFeedbackRef", "Feedback_outcome_type")),
+            );
+          }),
+      );
+
+      it.effect(
+        "refuses a choice's or template element's template variable of another type, in an item's or a section's placement, and accepts a portable custom interaction's, by Template variable type",
+        () =>
+          // Oracle: PostgreSQL, the `Template_variable_type` check (reading R15-l), on each of the
+          // two relations that hold a template reference.
+          // Bound: an integer template named by a choice, refused; an identifier template of
+          // multiple cardinality named by a choice, and an integer template named by a PCI's
+          // qti-template-variable, accepted by this check; the placed section reference of an
+          // integer template, refused.
+          Effect.gen(function* templateType() {
+            const db = yield* Db.open(AuthorApp.roles.author, {});
+            const wrong = yield* db.apply(
+              ChangeSet.empty(Author).insert(TemplateRef, [templateOf({ baseType: "integer" })]),
+              {},
+            );
+            assert.isTrue(rejectedBy(wrong, checkNamed("TemplateRef", "Template_variable_type")));
+
+            for (const row of [
+              templateOf({ cardinality: "multiple" }),
+              templateOf({ baseType: "integer", kind: "qti-template-variable" }),
+            ]) {
+              const outcome = yield* db.apply(
+                ChangeSet.empty(Author).insert(TemplateRef, [row]),
+                {},
+              );
+              assert.isFalse(
+                rejectedBy(outcome, checkNamed("TemplateRef", "Template_variable_type")),
+                `${row.kind} ${row.baseType} ${row.cardinality}`,
+              );
+            }
+
+            const { attribute, document, identifier, kind, node } = templateOf();
+            const placed = yield* db.apply(
+              ChangeSet.empty(Author)
+                .insert(ReferringDocument, [{ document }])
+                .insert(SectionTemplateName, [{ attribute, document, identifier, kind, node }])
+                .insert(SectionScope, [{ assembly: stray, document, instance: strayNode(1) }])
+                .insert(SectionTemplateRef, [
+                  {
+                    ...templateOf({ baseType: "integer" }),
+                    assembly: stray,
+                    instance: strayNode(1),
+                  },
+                ]),
+              {},
+            );
+            assert.isTrue(
+              rejectedBy(placed, checkNamed("SectionTemplateRef", "Template_variable_type")),
             );
           }),
       );

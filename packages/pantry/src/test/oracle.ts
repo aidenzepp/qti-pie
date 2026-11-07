@@ -478,6 +478,7 @@ const lawRules = {
   "Template default type": "P20",
   "Template reads": "P26",
   "Template reference": "template-ref",
+  "Template variable type": "template-ref",
   "Test name key": "test-name-key",
   TextDomain: "text-copy",
   "Track srclang": "track-srclang",
@@ -746,6 +747,8 @@ export const lawSources = {
     "https://www.imsglobal.org/spec/qti/v3p0/info#TemplateProcessing (§2.8: template processing sets template variables and default and correct values, and reads no response or outcome variable; QTI_CONTEXT is a context variable) (expressions.ts Template_reads; the old checker's P26)",
   "Template reference":
     "https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_TemplateBlock.Attr_template-identifier (§5.145.1, §5.155.1; §2.7.2: 'A references must match the identifier in a corresponding template declaration') (references.ts ContentReference)",
+  "Template variable type":
+    "reading R15-l: https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_TemplateBlock.Attr_template-identifier (§5.145.1, and §5.7.2, §5.67.2, §5.122.1, §5.124.1, §5.155.1: 'The identifier of a template variable that must have a base-type of identifier and be of either single or multiple cardinality') and #DataCharacteristic_SimpleChoice.Attr_template-identifier (§5.132.3, and §5.55.2, §5.56.2, §5.58.2, §5.65.2, §5.73.3, §5.131.3: the same rule, written 'be either single of multiple cardinality'); a portable custom interaction's template variable (§7.38.1) states no type (interactions.ts Template_variable_type)",
   "Test name key":
     "reading 86: https://www.imsglobal.org/spec/qti/v3p0/info#RootCharacteristic_AssessmentSection.Attr_identifier (§4.2.1) and §5.159.1, read over the assembled test (reading 5): the test document and every section document its section refs and includes place; and §7.5.3 ('A test may refer to the same section multiple times within a test'), so a section document placed twice is one document and names nothing twice: no two written elements of one test share an identifier (tests.ts InstanceName, AssembledName)",
   TextDomain:
@@ -1492,6 +1495,7 @@ export const otherLawNames = [
   "Aria value range",
   "Binding cardinality",
   "Feedback outcome type",
+  "Template variable type",
   "Graphic gap match default hotspot",
   "Context variable reference",
   "Quotation punctuation",
@@ -4851,6 +4855,45 @@ const overlayLaws: readonly ((
           },
         ];
   },
+  (node, overlay) => {
+    const named = collapsedOf(overlay, node, "template-identifier");
+    if (
+      !overlay.isItem ||
+      node.kind === "qti-template-variable" ||
+      Option.isNone(named) ||
+      !overlay.laws.grammar.references.contentReference.rows.some(
+        (row) => row.kind === node.kind && row.attribute === "template-identifier",
+      )
+    ) {
+      return [];
+    }
+
+    const template = (overlay.declared.get(named.value) ?? []).find(
+      ({ kind }) => kind === "qti-template-declaration",
+    );
+    if (template === undefined) {
+      return [];
+    }
+
+    // A template that writes no cardinality is refused by AL3 ("required-attribute") alone, as an
+    // outcome is under "Feedback outcome type".
+    const written = collapsedOf(overlay, template, "cardinality");
+    if (Option.isNone(written)) {
+      return [];
+    }
+
+    const baseType = Option.getOrElse(collapsedOf(overlay, template, "base-type"), () => "");
+    const cardinality = written.value;
+
+    return baseType === "identifier" && (cardinality === "single" || cardinality === "multiple")
+      ? []
+      : [
+          {
+            keys: { baseType, cardinality, identifier: named.value, kind: node.kind },
+            law: "Template variable type",
+          },
+        ];
+  },
   (node, overlay) =>
     node.kind === "qti-associable-hotspot" &&
     node.parentKind === "qti-graphic-gap-match-interaction" &&
@@ -7205,6 +7248,8 @@ const explainers: Readonly<Record<LawName, Explainer>> = {
   "Template reads": (keys) =>
     `template processing's ${field(keys, "kind")} reads ${field(keys, "identifier")}, a response or outcome variable or a built-in but QTI_CONTEXT`,
   "Template reference": (keys, grammar) => referenceExplained(keys, grammar),
+  "Template variable type": (keys) =>
+    `${field(keys, "kind")} names the template variable ${field(keys, "identifier")}, of base type ${JSON.stringify(field(keys, "baseType"))} and cardinality ${JSON.stringify(field(keys, "cardinality"))}, where a template element's or a choice's template variable is an identifier of single or multiple cardinality`,
   "Test name key": (keys) =>
     `${field(keys, "kind")} and ${field(keys, "other")} of the test ${field(keys, "test")}'s assembled documents share the identifier ${field(keys, "identifier")}`,
   TextDomain: (keys, grammar) =>

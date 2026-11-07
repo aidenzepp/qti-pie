@@ -802,6 +802,7 @@ const unconstructed = {
     "a cell's header tokens against its table's th ids (reading 126), over identifiers drawn without reading",
   "Template reads": "what template processing reads, over identifiers drawn without reading",
   "Template reference": "a reference, over identifiers drawn without reading",
+  "Template variable type": "a reference's declared type, over identifiers drawn without reading",
   TextDomain: "an element's value domain, over text drawn without reading",
   "Typed value": "a value's text against its base type, over text drawn without reading",
   "Usage typed value":
