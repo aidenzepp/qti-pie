@@ -28,6 +28,7 @@ import {
   processingRoots,
   referenceBaseRows,
   referencedTables,
+  tableReaders,
   resolutions,
   resultBaseRows,
   resultCardinalityRows,
@@ -142,6 +143,17 @@ export const ReferenceResolution = closed("ReferenceResolution", resolutions);
  * The `ReferencedTable` roster: the table a reference needs its declaration to hold.
  */
 export const ReferencedTable = closed("ReferencedTable", referencedTables);
+
+/**
+ * `TableReader`: (kind, table), the table a processing reference of each kind reads of its
+ * variable's declaration (`tableReaders` of `#pantry/grammar/expression.ts`).
+ */
+export const TableReader = closed.relation(
+  "TableReader",
+  { kind: closedId(NodeKind), table: closedId(ReferencedTable) },
+  ["kind", "table"],
+  tableReaders.map(({ kind, table }) => ({ kind: kindOf(kind), table })),
+);
 
 /**
  * The `RpTemplate` roster: the response processing templates 1EdTech publishes, and `none`.

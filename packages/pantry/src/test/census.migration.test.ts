@@ -26,7 +26,7 @@ import { censusOf, qtiMigrations } from "#pantry/test/census.ts";
  *   selections.
  */
 const measured = {
-  constants: 99,
+  constants: 100,
   live: 7,
   names: 35,
   nodeAxes: 5,
