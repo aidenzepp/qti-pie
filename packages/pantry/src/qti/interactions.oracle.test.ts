@@ -484,3 +484,119 @@ describe("qti/interactions.ts, Custom interaction version", () => {
     assert.strictEqual(ruleOf("Custom interaction version"), "admission");
   });
 });
+
+/**
+ * A portable custom interaction that reads one context variable, with the markup it holds; the
+ * variable follows the markup, as the content model orders them.
+ *
+ * @param identifier - The context variable it names.
+ * @param markup - What its `qti-interaction-markup` holds, as written.
+ * @returns The interaction's text.
+ */
+const contextPci = (identifier: string, markup = ""): string =>
+  `<qti-portable-custom-interaction response-identifier="RESPONSE" module="m" custom-interaction-type-identifier="t"><qti-interaction-modules><qti-interaction-module id="m" primary-path="m.js"/></qti-interaction-modules><qti-interaction-markup>${markup}</qti-interaction-markup><qti-context-variable identifier="${identifier}"/></qti-portable-custom-interaction>`;
+
+/**
+ * The laws a package breaches, in the base item with its choice interaction replaced.
+ *
+ * @param version - The `schemaversion` the package's manifest declares.
+ * @param interaction - The text that replaces the choice interaction.
+ * @param declarations - Text inserted before the item's first declaration.
+ * @returns The distinct names of the laws breached.
+ */
+const lawsBreachedBy = (version: string, interaction: string, declarations = "") =>
+  Effect.map(
+    judged({
+      "imsmanifest.xml": manifestOf(itemResource, version),
+      "item.xml": edit(
+        edit(item, choiceInteraction, interaction),
+        "<qti-response-declaration",
+        `${declarations}<qti-response-declaration`,
+      ),
+    }),
+    (judgment) => [...new Set(breachesOf(judgment).map(({ law }) => law))],
+  );
+
+describe("qti/interactions.ts, the context variable and the markup's content", () => {
+  it.effect(
+    "refuses QTI_CONTEXT undeclared in a 3.0.0 item by Idref target, and admits it in 3.0.1",
+    () =>
+      // Oracle: the information model's §7.37 and the XSD, a 3.0.0 `qti-context-variable`'s
+      // `identifier` is an `xs:IDREF` naming a context declaration, and the 3.0.1 text admits
+      // `QTI_CONTEXT` as built in (goal 3.2).
+      Effect.gen(function* undeclared() {
+        const old = yield* lawsBreachedBy("3.0.0", contextPci("QTI_CONTEXT"));
+        assert.include(old, "Idref target", old.join(", "));
+        assert.strictEqual(ruleOf("Idref target"), "idref-target");
+
+        const current = yield* lawsBreachedBy("3.0.1", contextPci("QTI_CONTEXT"));
+        assert.notInclude(current, "Idref target", current.join(", "));
+        assert.notInclude(current, "Context variable reference", current.join(", "));
+      }),
+  );
+
+  it.effect("admits a 3.0.0 item that declares a record context QTI_CONTEXT and names it", () =>
+    Effect.gen(function* declared() {
+      const found = yield* lawsBreachedBy(
+        "3.0.0",
+        contextPci("QTI_CONTEXT"),
+        '<qti-context-declaration identifier="QTI_CONTEXT" cardinality="record"/>',
+      );
+      assert.notInclude(found, "Idref target", found.join(", "));
+      assert.notInclude(found, "Context variable reference", found.join(", "));
+    }),
+  );
+
+  it.effect("admits a foreign element in a markup's template", () =>
+    // Oracle: reading 57 and reading 6, a `template` of the markup holds foreign content, which
+    // lax processing does not assess.
+    Effect.gen(function* foreignTemplate() {
+      const found = yield* lawsBreachedBy(
+        "3.0.0",
+        contextPci(
+          "QTI_CONTEXT",
+          '<p>Tap</p><template><x:widget xmlns:x="urn:example:widget" size="3"/></template>',
+        ),
+        '<qti-context-declaration identifier="QTI_CONTEXT" cardinality="record"/>',
+      );
+      assert.deepStrictEqual(found, [], found.join(", "));
+    }),
+  );
+
+  it.effect(
+    "judges a custom interaction by Binding declared, and passes over the choice interaction in its content",
+    () =>
+      // Oracle: reading 57: a custom interaction's content is lax, and a `qti-choice-interaction`,
+      // declared only locally, has no declaration lax processing finds, so the walk passes it over
+      // and "Binding declared" does not judge its response (the custom interaction's own binding is
+      // judged: the control).
+      Effect.gen(function* customContent() {
+        const inside = yield* lawsBreachedBy(
+          "3.0.1",
+          `<qti-custom-interaction response-identifier="RESPONSE">${choiceInteraction.replace(
+            'response-identifier="RESPONSE"',
+            'response-identifier="NOWHERE"',
+          )}</qti-custom-interaction>`,
+        );
+        assert.notInclude(inside, "Binding declared", inside.join(", "));
+
+        const outside = yield* lawsBreachedBy(
+          "3.0.1",
+          '<qti-custom-interaction response-identifier="NOWHERE"/>',
+        );
+        assert.include(outside, "Binding declared", outside.join(", "));
+      }),
+  );
+
+  it.effect("refuses a choice interaction in a div of a PCI's markup by N6 ancestry", () =>
+    Effect.gen(function* nested() {
+      const found = yield* lawsBreachedBy(
+        "3.0.0",
+        contextPci("QTI_CONTEXT", `<div>${choiceInteraction}</div>`),
+        '<qti-context-declaration identifier="QTI_CONTEXT" cardinality="record"/>',
+      );
+      assert.include(found, "N6 ancestry", found.join(", "));
+      assert.strictEqual(ruleOf("N6 ancestry"), "ancestry-ban");
+    }),
+  );
+});
