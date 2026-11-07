@@ -13,6 +13,7 @@
     "./errors.ts": "./src/errors.ts",
     "./read.ts": "./src/read.ts",
     "./tree.ts": "./src/tree.ts",
+    "./uri.ts": "./src/uri.ts",
     "./write.ts": "./src/write.ts"
   },
   "scripts": {

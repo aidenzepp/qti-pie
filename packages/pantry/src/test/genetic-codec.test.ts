@@ -132,6 +132,13 @@ const recorded: readonly Recorded[] = [
     why: "crust refuses a forward reference in a default everywhere: inside the WFC's scope as not well-formed, outside it as an invalid document whose default has no value the specification fixes (the coordinator's ruling 5: refuse where the infoset is undetermined); libxml2 2.9.13 reads such a default as the empty string, its own choice",
   },
   {
+    signature:
+      /^O1 crust refused-well-formedness \(the (?:prefix \S+|default namespace) is bound to "_", which is no URI reference.*, libxml2 accepts$/u,
+    source:
+      'RFC 3986 section 4.2: "A path segment that contains a colon character (e.g., "this:that") cannot be used as the first segment of a relative-path reference, as it would be mistaken for a scheme name", and section 3.1, a scheme begins with a letter; Namespaces in XML 1.0 (Third Edition) section 3 asks a declaration\'s normalized value to be a URI reference (reading 142)',
+    why: "libxml2 2.9.13's URI parser admits some values RFC 3986's grammar does not, such as `&f;http://x` (written `&#38;f;http://x`), whose first segment holds a colon and which no scheme can begin with `&`; crust refuses each under reading 142, where libxml2 reads it without the namespace error it reports for other values that are no URI",
+  },
+  {
     signature: /^O1 crust refused-element-depth, libxml2 accepts$/u,
     source:
       "crust's reader bound, read.ts defaultElementDepth (256), which XML 1.0 leaves to the processor (section 5.1 sets no limit); libxml2 2.9.13's xmlParserMaxDepth of 256 is checked after the 257th element is pushed, so it reads 257 levels and refuses 258",
@@ -156,14 +163,7 @@ interface Open {
  * The confirmed defects whose classes the search finds today, each routed to its owner through
  * GEN-B's report; none is harmless.
  */
-const open: readonly Open[] = [
-  {
-    finding: "GEN-B/codec N2: a namespace name that is no URI reference is accepted",
-    kept: [{ charset: "UTF-8", text: '<r xmlns:p="&quot;"/>' }],
-    signature: /^O1 crust accepts, libxml2 refuses: (?:.+ \+ )?xmlns(?::\S+)?: '.*$/u,
-    why: "Namespaces in XML 1.0 (Third Edition) section 2.2: \"The attribute's normalized value MUST be either a URI reference ... or an empty string\"; crust admits any string, libxml2 reports a namespace error (a spec question for the coordinator: pantry may read Namespaces 1.1's IRIs, which still exclude a quote)",
-  },
-];
+const open: readonly Open[] = [];
 
 /**
  * A defect the search found and its fix closed: the finding, the commit that fixed it, and the
@@ -180,6 +180,12 @@ interface Fixed {
  * The defects closed since the search found them.
  */
 const fixed: readonly Fixed[] = [
+  {
+    commit:
+      "the commit that holds a namespace declaration's value to RFC 3986's URI-reference, or to RFC 3987's IRI-reference in an XML 1.1 document",
+    finding: "GEN-B/codec N2: a namespace name that was no URI reference was accepted",
+    kept: [{ charset: "UTF-8", text: '<r xmlns:p="&quot;"/>' }],
+  },
   {
     commit:
       "the commit that resolves namespaces in crust after the attribute-list defaults are added",

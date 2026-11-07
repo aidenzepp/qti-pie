@@ -5,7 +5,7 @@ import type { Decoded } from "#crust/decode.ts";
 import { NAME_CHAR, NAME_START, lexProlog, substitute, undeclaredEntity } from "#crust/dtd.ts";
 import type { AttlistEntry, Prolog, Substituted, ValuePiece } from "#crust/dtd.ts";
 import { ReaderRefusal, WellFormednessError } from "#crust/errors.ts";
-import { isNCName, resolved, rootScope } from "#crust/namespaces.ts";
+import { isNCName, namespacesVersionOf, resolved, rootScope } from "#crust/namespaces.ts";
 import type { Scope } from "#crust/namespaces.ts";
 import { rebuild } from "#crust/rebuild.ts";
 import { SENTINEL_FIRST, SENTINEL_LAST, sentinelsWritten } from "#crust/sentinels.ts";
@@ -531,10 +531,12 @@ const assemble = (
   built: Built,
   names: ReadonlyMap<string, string>,
 ): Effect.Effect<XmlDocument, WellFormednessError> => {
-  const version = Option.match(prolog.declaration, {
-    onNone: () => "1.0",
-    onSome: (declaration) => declaration.version,
-  });
+  const namespaces = namespacesVersionOf(
+    Option.match(prolog.declaration, {
+      onNone: () => "1.0",
+      onSome: (declaration) => declaration.version,
+    }),
+  );
   // Every element of the built tree has its start tag, set when it closed.
   const documentStart: StartTag = { column: 0, line: 1, position: 0 };
   const root = rebuild<Scope, WellFormednessError>(
@@ -548,7 +550,7 @@ const assemble = (
             attributes: attributesOf(element, prolog.attlists.get(element.qname), names),
           },
           scope,
-          version,
+          namespaces,
         ),
         (message) => violationAt(substituted, built.starts.get(element) ?? documentStart, message),
       ),

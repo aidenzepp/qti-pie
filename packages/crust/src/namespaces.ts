@@ -1,6 +1,7 @@
 import { Option, Result } from "effect";
 import { NAME_START } from "#crust/dtd.ts";
 import type { Attribute, Element } from "#crust/tree.ts";
+import { isNamespaceName } from "#crust/uri.ts";
 
 /**
  * The namespace name the `xml` prefix is bound to by definition (Namespaces in XML 1.0, section 3).
@@ -12,6 +13,27 @@ const XML_NAMESPACE = "http://www.w3.org/XML/1998/namespace";
  * to by definition (Namespaces in XML 1.0, section 3).
  */
 const XMLNS_NAMESPACE = "http://www.w3.org/2000/xmlns/";
+
+/**
+ * The edition of Namespaces in XML a document is held to: 1.1 for an XML 1.1 document, 1.0 for any
+ * other.
+ */
+export type NamespacesVersion = "1.0" | "1.1";
+
+/**
+ * Give the edition of Namespaces in XML that governs a document of an XML version.
+ *
+ * Namespaces in XML 1.0 "applies to XML 1.0 documents" and Namespaces in XML 1.1 "applies to XML
+ * 1.1 documents" (each section 7). XML 1.1's [26] VersionNum is `1.1` alone, and XML 1.0 section
+ * 2.8 has an XML 1.0 processor read a document that "specifies a 1.x version number other than
+ * '1.0'" as a 1.0 document; a document that declares no version is 1.0.
+ *
+ * @param xmlVersion - The XML declaration's version, `1.0` when there is none.
+ * @returns `1.1` for version `1.1`, `1.0` for every other.
+ * @see {@link https://www.w3.org/TR/2006/REC-xml11-20060816/#NT-VersionNum | XML 1.1 (Second Edition), [26] VersionNum}
+ */
+export const namespacesVersionOf = (xmlVersion: string): NamespacesVersion =>
+  xmlVersion === "1.1" ? "1.1" : "1.0";
 
 /**
  * The namespace bindings in scope at an element, from prefix to namespace name, the empty prefix
@@ -76,30 +98,52 @@ const qnameOf = (name: string): Option.Option<QName> => {
 export const isNCName = (name: string): boolean => !name.includes(":");
 
 /**
- * Check a namespace declaration's binding against Namespaces in XML 1.0's constraint Reserved
- * Prefixes and Namespace Names (section 3) and, in an XML 1.0 document, No Prefix Undeclaring
- * (section 5).
+ * Check a namespace declaration's binding against Namespaces in XML's constraint Reserved Prefixes
+ * and Namespace Names (section 3), its namespace name against the grammar section 3 asks of it,
+ * and, under Namespaces in XML 1.0, the constraint No Prefix Undeclaring (section 5).
+ *
+ * The normalized value must be "either a URI reference — the namespace name identifying the
+ * namespace — or an empty string" (Namespaces in XML 1.0, section 3; RFC 3986's `URI-reference`,
+ * section 2.1), or an IRI reference (Namespaces in XML 1.1, section 3; RFC 3987's `IRI-reference`).
+ * The value is the one attribute-value normalization leaves (section 2.3: "replacement of XML
+ * character and entity references has already been done"), so a space a character reference writes
+ * is kept, and refused. A value holding a reference the reader did not expand names a namespace no
+ * reader knows (XML 1.0 section 4.4.3); its grammar is not judged here.
  *
  * @param prefix - The prefix declared, empty for the default namespace.
- * @param name - The declaration's normalized value.
- * @param version - The document's XML version.
+ * @param attribute - The declaration.
+ * @param attribute.references - The references its value keeps unexpanded.
+ * @param attribute.value - Its normalized value.
+ * @param namespaces - The edition of Namespaces in XML the document is held to.
  * @returns The violation's description; `None` when the binding is allowed.
+ * @see {@link https://www.w3.org/TR/2009/REC-xml-names-20091208/#ns-decl | Namespaces in XML 1.0 (Third Edition), section 3}
+ * @see {@link https://www.w3.org/TR/2006/REC-xml-names11-20060816/#ns-decl | Namespaces in XML 1.1 (Second Edition), section 3}
  */
-const bindingViolation = (prefix: string, name: string, version: string): Option.Option<string> => {
+const bindingViolation = (
+  prefix: string,
+  { references, value }: Pick<Attribute, "references" | "value">,
+  namespaces: NamespacesVersion,
+): Option.Option<string> => {
   const declaring = prefix === "" ? "the default namespace" : `the prefix ${prefix}`;
-  if (prefix === "xmlns" || name === XMLNS_NAMESPACE) {
+  if (prefix === "xmlns" || value === XMLNS_NAMESPACE) {
     return Option.some(
-      `${declaring} is bound to ${JSON.stringify(name)}, but neither the prefix xmlns nor its namespace name may be declared (Namespaces in XML section 3)`,
+      `${declaring} is bound to ${JSON.stringify(value)}, but neither the prefix xmlns nor its namespace name may be declared (Namespaces in XML section 3)`,
     );
   }
 
-  if ((prefix === "xml") !== (name === XML_NAMESPACE)) {
+  if ((prefix === "xml") !== (value === XML_NAMESPACE)) {
     return Option.some(
-      `${declaring} is bound to ${JSON.stringify(name)}, but the prefix xml and the namespace name ${XML_NAMESPACE} are bound only to each other (Namespaces in XML section 3)`,
+      `${declaring} is bound to ${JSON.stringify(value)}, but the prefix xml and the namespace name ${XML_NAMESPACE} are bound only to each other (Namespaces in XML section 3)`,
     );
   }
 
-  return prefix !== "" && name === "" && version === "1.0"
+  if (value !== "" && references.length === 0 && !isNamespaceName(value, namespaces)) {
+    return Option.some(
+      `${declaring} is bound to ${JSON.stringify(value)}, which is no ${namespaces === "1.0" ? "URI reference (Namespaces in XML 1.0 section 3, RFC 3986)" : "IRI reference (Namespaces in XML 1.1 section 3, RFC 3987)"}; percent-encode its spaces, quotes and other characters a reference may not hold`,
+    );
+  }
+
+  return prefix !== "" && value === "" && namespaces === "1.0"
     ? Option.some(
         `the prefix ${prefix} is declared empty, but an XML 1.0 document may not undeclare a prefix (Namespaces in XML 1.0 section 5)`,
       )
@@ -146,19 +190,20 @@ const bound = (scope: Scope, prefix: string, name: string): Scope =>
  *
  * @param attributes - The element's attributes.
  * @param scope - The parent's scope.
- * @param version - The document's XML version.
+ * @param namespaces - The edition of Namespaces in XML the document is held to.
  * @returns The scope, or the first declaration's violation.
  */
 const declared = (
   attributes: readonly Attribute[],
   scope: Scope,
-  version: string,
+  namespaces: NamespacesVersion,
 ): Result.Result<Scope, string> => {
   let next = scope;
-  for (const { qname, value } of attributes) {
-    const prefix = declaredPrefix(qname);
+  for (const attribute of attributes) {
+    const prefix = declaredPrefix(attribute.qname);
     if (Option.isSome(prefix)) {
-      const violation = bindingViolation(prefix.value, value, version);
+      const { value } = attribute;
+      const violation = bindingViolation(prefix.value, attribute, namespaces);
       if (Option.isSome(violation)) {
         return Result.fail(violation.value);
       }
@@ -205,7 +250,7 @@ const namespaceOf = (name: QName, scope: Scope, unprefixed: string): Option.Opti
  * @param element - The element as the parser read it, its names unresolved and its attributes
  *   complete.
  * @param scope - The scope its parent gives it.
- * @param version - The document's XML version, `1.0` when it declares none.
+ * @param namespaces - The edition of Namespaces in XML the document is held to.
  * @returns The element with its names resolved and the scope its children see, or the first
  *   violation's description.
  * @see {@link https://www.w3.org/TR/2009/REC-xml-names-20091208/#ns-decl | Namespaces in XML 1.0 (Third Edition), section 3}
@@ -213,9 +258,9 @@ const namespaceOf = (name: QName, scope: Scope, unprefixed: string): Option.Opti
 export const resolved = (
   element: Element,
   scope: Scope,
-  version: string,
+  namespaces: NamespacesVersion,
 ): Result.Result<{ readonly element: Element; readonly scope: Scope }, string> =>
-  Result.flatMap(declared(element.attributes, scope, version), (inner) => {
+  Result.flatMap(declared(element.attributes, scope, namespaces), (inner) => {
     const name = qnameOf(element.qname);
     if (Option.isNone(name)) {
       return Result.fail(
