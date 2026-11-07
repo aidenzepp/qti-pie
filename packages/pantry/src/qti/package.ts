@@ -185,6 +185,12 @@ export const ResourceId = relation(
  * a resource of the manifest's identifier is a second row of its (package, identifier), which
  * "Manifest id space" refuses. A side that writes no identifier has no row, so it is compared
  * with nothing.
+ *
+ * Its kind is `cp:manifest` or `cp:resource` by its containments and its key alone, with no check:
+ * every check is named by an oracle law, and these rows are "Manifest overlay"'s, a law the law
+ * oracle does not state (`hostlessLaws`). A row that is not the manifest's names a
+ * {@link ResourceId}'s (package, identifier), that resource's own `cp:resource` row is in the space,
+ * and the key over (package, identifier) leaves that row alone of its pair, so the row is it.
  */
 export const ManifestIdSpace = relation(
   "ManifestIdSpace",
@@ -585,6 +591,12 @@ const manifestIdSpaces = select(ManifestIdSpace, (m) => m.eq(m.kind, "cp:manifes
 const resourceIdSpaces = select(ManifestIdSpace, (m) => m.eq(m.kind, "cp:resource"));
 
 /**
+ * The identifiers in their package's identifier space that are not its manifest's: each is a
+ * resource's, so the space holds the manifest's and the resources' alone ({@link ManifestIdSpace}).
+ */
+const nonManifestIdSpaces = select(ManifestIdSpace, (m) => m.ne(m.kind, "cp:manifest"));
+
+/**
  * The hrefs of the resources whose `type` spells a handle: each has its {@link TypedHref}.
  */
 const typedResourceHrefs = select(ResourceHref, (h) =>
@@ -664,7 +676,7 @@ export const hrefPaths = select(ReferencePath, (p) => p.eq(p.name, "href"));
  *   listed under two document types, is refused here and never under `root-type-reverse`.
  * - **P4 `manifest-id-space` ("Manifest id space"):** no resource's identifier is its manifest's: the
  *   two are one (package, identifier) of {@link ManifestIdSpace}, each side's rows exactly its
- *   written identifiers.
+ *   written identifiers, and every row but the manifest's a resource's.
  * - **C17 ("E1 derived"):** a resource's type code is the one its lexical form spells, or `none`; a
  *   path resolved in the package holds no dot segment ({@link resolvedPathPattern}); a reference is
  *   its written pieces, external where its target has a scheme or a leading `/`, and its own
@@ -812,7 +824,6 @@ export const packageLawsByName = {
       on(manifestIdSpaces, "package", "identifier"),
       on(ManifestId, "package", "identifier"),
     ),
-    check("Manifest_overlay", ManifestIdSpace, (m) => m.in(m.kind, ["cp:manifest", "cp:resource"])),
     contained(
       on(Resource, "node", "document", "kind", "start", "nearest", "version", "parent"),
       nodeRef,
@@ -827,7 +838,7 @@ export const packageLawsByName = {
       on(resourceIdSpaces, "package", "identifier"),
     ),
     contained(
-      on(resourceIdSpaces, "package", "identifier"),
+      on(nonManifestIdSpaces, "package", "identifier"),
       on(ResourceId, "package", "identifier"),
     ),
     contained(on(resourceTypes, "node", "lexical"), on(Resource, "node", "typeLexical")),

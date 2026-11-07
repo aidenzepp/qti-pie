@@ -1,8 +1,9 @@
 /**
  * The package, its record and the manifest's overlays, as declarations and as the record the
- * importer writes: the declarations admit and name their checks by the oracle's laws, a package's
- * record is the same keyed set from a directory and from its zip, and the record keeps the
- * listing's order and bytes.
+ * importer writes: the declarations admit and name their checks by the oracle's laws, hold the
+ * package's ID space to the manifest's and the resources' identifiers alone, a package's record is
+ * the same keyed set from a directory and from its zip, and the record keeps the listing's order
+ * and bytes.
  */
 import path from "node:path";
 import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node";
@@ -31,6 +32,10 @@ import {
 } from "#pantry/qti/package.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import { materialize, materializeZip } from "#pantry/test/fixtures.ts";
+import { judge } from "#pantry/test/host-judge.ts";
+import type { HostRows } from "#pantry/test/host-judge.ts";
+import { judgedLaws } from "#pantry/test/key-copies.ts";
+import type { JudgedLaw } from "#pantry/test/key-copies.ts";
 import { lawNames } from "#pantry/test/oracle.ts";
 
 /**
@@ -260,6 +265,97 @@ const verdictsBy = (
  */
 const RecordProbe = schema("QtiRecordProbe", { Entry, Package }, [entryFamily]);
 
+/**
+ * The identifiers the ID-space box draws from.
+ */
+const spaceIdentifiers = ["a", "b"] as const;
+
+/**
+ * The kinds a row of the ID space may claim in the box: the manifest's, a resource's, and a third,
+ * a `cp:file`, which writes no identifier.
+ */
+const spaceKinds = ["cp:manifest", "cp:resource", "cp:file"] as const;
+
+/**
+ * One package's ID space and the identifiers it copies: the manifest's identifier where it writes
+ * one, the identifiers its resources write, and the rows of `ManifestIdSpace`, each an identifier
+ * and the kind of element it claims to be written by.
+ */
+interface SpaceState {
+  readonly manifest: readonly string[];
+  readonly resources: readonly string[];
+  readonly space: readonly (readonly [string, string])[];
+}
+
+/**
+ * Every state of one package over {@link spaceIdentifiers}: no manifest identifier, `a` or `b`;
+ * each identifier a resource's or not; each (identifier, kind) of {@link spaceKinds} a row of the
+ * space or not.
+ */
+const spaceStates: Gen<SpaceState> = (source) => {
+  const manifest = source.draw(element([[], ["a"], ["b"]] as const));
+  const resources = spaceIdentifiers.flatMap((at) => (source.draw(int(0, 1)) === 1 ? [at] : []));
+  const space = spaceIdentifiers.flatMap((at) =>
+    spaceKinds.flatMap((kind) => (source.draw(int(0, 1)) === 1 ? [[at, kind] as const] : [])),
+  );
+
+  return { manifest, resources, space };
+};
+
+/**
+ * A situation the ID-space box must reach: a state the specification admits, one it refuses, and a
+ * row of a third kind, with and without a resource of its identifier.
+ */
+type SpaceSituation =
+  | "admitted"
+  | "refused"
+  | "third kind, a resource of its identifier"
+  | "third kind, no resource of its identifier";
+
+/**
+ * The relations a law the host judges reads: a containment's two sides, a check's relation, and a
+ * key's side.
+ *
+ * @param law - The law.
+ * @returns Its relations.
+ */
+const relationsOf = (law: JudgedLaw): readonly string[] => {
+  if (law.kind === "contained") {
+    return [law.from.relation, law.to.relation];
+  }
+
+  if (law.kind === "check") {
+    return [law.relation];
+  }
+
+  return [law.side.relation];
+};
+
+/**
+ * Every law the schema states over `ManifestIdSpace`, as the host judges it.
+ *
+ * @returns The laws, each a containment or a key with `ManifestIdSpace` on a side, or a check of
+ *   it.
+ */
+const spaceLaws = (): readonly JudgedLaw[] =>
+  judgedLaws(Qti).filter((law) => relationsOf(law).includes("ManifestIdSpace"));
+
+/**
+ * A state's rows as the database holds them, each relation with the fields its ID-space laws read.
+ *
+ * @param state - The state.
+ * @returns `ManifestId`, `ResourceId` and `ManifestIdSpace`'s rows.
+ */
+const spaceRowsOf = (state: SpaceState): HostRows =>
+  new Map([
+    ["ManifestId", state.manifest.map((identifier) => ({ identifier, package: packageId }))],
+    ["ResourceId", state.resources.map((identifier) => ({ identifier, package: packageId }))],
+    [
+      "ManifestIdSpace",
+      state.space.map(([identifier, kind]) => ({ identifier, kind, package: packageId })),
+    ],
+  ]);
+
 describe("qti/package.ts", () => {
   it("names every check of the package's laws by an oracle law, and the laws compose with the schema's relations", () => {
     // Oracle: the specification as a checker, the oracle's law names (`src/test/oracle.ts`), each
@@ -280,6 +376,76 @@ describe("qti/package.ts", () => {
     const scratch = schema("QtiPackageProbe", Qti.relations, packageLaws);
     assert.strictEqual(scratch.statements.length, packageLaws.length);
   });
+
+  it.effect(
+    "holds the package's ID space to the manifest's and the resources' identifiers, each of its own kind, with no check",
+    (ctx) =>
+      // Oracle: the specification as a checker, by hand: IMS Content Packaging 1.2 gives the
+      // manifest's and its resources' identifiers one xs:ID space, so the space is the manifest's
+      // identifier as a cp:manifest row and each resource's as a cp:resource row, no other row, and
+      // no identifier twice; against the host's judgment of every law the schema states over
+      // `ManifestIdSpace`.
+      // Bound: every state of one package over identifiers a and b, the manifest's identifier none,
+      // a or b, each a resource's or not, each of its six rows of kind cp:manifest, cp:resource or
+      // cp:file in the space or not, 768.
+      Effect.gen(function* idSpaceBox() {
+        const laws = spaceLaws();
+
+        yield* searched(
+          ctx,
+          exhaust(
+            {
+              box: "every ID space of one package over two identifiers and three kinds",
+              caseHang: Duration.seconds(10),
+              coverage: requiredInSpace<SpaceSituation>([
+                "admitted",
+                "refused",
+                "third kind, a resource of its identifier",
+                "third kind, no resource of its identifier",
+              ]),
+              generator: spaceStates,
+              limit: 1000,
+              literal: (state) => JSON.stringify(state),
+              oracle: {
+                kind: "specification",
+                name: "IMS Content Packaging 1.2's one xs:ID space of the manifest and its resources, by hand",
+              },
+              suite: "qti/package-id-space",
+            },
+            (state: SpaceState, c) =>
+              Effect.sync(() => {
+                const written = new Set([
+                  ...state.manifest.map((identifier) => `${identifier} cp:manifest`),
+                  ...state.resources.map((identifier) => `${identifier} cp:resource`),
+                ]);
+                const held = new Set(
+                  state.space.map(([identifier, kind]) => `${identifier} ${kind}`),
+                );
+                const expected =
+                  held.size === written.size &&
+                  [...held].every((row) => written.has(row)) &&
+                  state.manifest.every((identifier) => !state.resources.includes(identifier));
+                const judgment = judge(spaceRowsOf(state), laws);
+
+                c.note(expected ? "admitted" : "refused");
+                for (const [identifier, kind] of state.space) {
+                  if (kind === "cp:file") {
+                    c.note(
+                      state.resources.includes(identifier)
+                        ? "third kind, a resource of its identifier"
+                        : "third kind, no resource of its identifier",
+                    );
+                  }
+                }
+
+                assert.deepStrictEqual(judgment.skipped, [], JSON.stringify(state));
+                assert.strictEqual(judgment.broken.length === 0, expected, JSON.stringify(state));
+              }),
+          ),
+        );
+      }),
+    testTimeoutMs,
+  );
 
   it.effect(
     "reads every path of the box as RFC 3986 and the HTML Standard state it, and tells each mutant of the patterns apart",
