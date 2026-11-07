@@ -2262,9 +2262,9 @@ against it. A reading that is not an information-model-over-XSD case says which 
      every text the schema copies into a keyText field counts against it, so a `<p id>` past 2,587 bytes is refused just
      as a resource identifier past it is, by the oracle's "Key text bound" (rule `key-text-bound`) and by the database
      under the same rule: the import writes the copy's row whatever its length, as it writes every copy (no host-side
-     pre-filter leaves an over-long copy out), and keyText's own check refuses it. `src/test/oracle.keys.test.ts` holds
+     pre-filter leaves an over-long copy out), and keyText's own check refuses it. `src/test/keys.oracle.test.ts` holds
      the database's rule, read from the import's rows, to the oracle's. The law oracle reads the list of such copies
-     from the schema's statements (`src/test/key-copies.ts`), and `src/test/oracle.keys.test.ts` holds its verdict to
+     from the schema's statements (`src/test/key-copies.ts`), and `src/test/keys.oracle.test.ts` holds its verdict to
      the import's rows in 1-, 2-, 3- and 4-byte scripts. The bound is no part of the text's type, as a pattern isn't, so
      the copy of an unbounded attribute value meets it in a containment. An entry path holds the key text's 2,587 bytes.
      An open attribute's local name and its namespace name share their key, `(node, uri, local)`, evenly: 1,329 bytes
