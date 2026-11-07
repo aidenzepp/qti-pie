@@ -25,8 +25,9 @@ and both of its entry points are unstable until M3.
   response started at NULL, so a response the post left out scored as NULL. It now scores as its
   default.
 - `restore`'s `Restored` gains `record`, the decoded record, beside `values`, and `restore` refuses
-  another item's record with `RecordMismatch`, as `score` does. `ItemView`, and so the item that
-  `current` gives, gains `record` too.
+  another item's record with `RecordMismatch`, as `score` does. `score` and `restore` refuse with
+  `InvalidRecord` a record of an item whose template processing runs that holds no value for one of
+  its template variables. `ItemView`, and so the item that `current` gives, gains `record` too.
 - `redact`, `checkResponses` and `solution` take the item's record as an optional last argument.
   With a record:
   - `redact` prints each printed variable, shows or hides each template block, template inline and
@@ -41,13 +42,20 @@ and both of its entry points are unstable until M3.
   `qti-set-correct-response` sets. plate fills in no value from a declaration.
 - A redacted item's `notices` can name `qti-printed-variable`, `qti-template-block`,
   `qti-template-inline` and `param` for a part plate shows as a notice, and `template-identifier`,
-  once, for the choices it leaves out with no record.
+  once, for the choices it leaves out with no record. They name no feature inside content the page
+  does not see: a template block or inline that the record hides or plate withholds, a withheld
+  `param`, or a choice that is hidden or left out. A redacted item's `responses` leave out each
+  response that only content the page does not see binds.
+- `encodeRedacted`'s JSON holds no `path`, so it does not say where hidden template content sits,
+  and `decodeRedacted` gives every node the path `""`. It drops a `path` that older JSON holds.
+  `redact`'s own result keeps its paths. Before, the JSON held each node's path.
 - A printed variable prints. Before, it showed a notice, and the verdict listed
   `qti-printed-variable` as unsupported. With no record, an item whose template processing does not
   run prints its declared template defaults and its outcomes' starting values.
 - `score` judges a post as the page its record showed. It refuses a choice that the record hides,
   with `ResponsesRefused`, and keeps the record's value for a response that only hidden template
-  content binds. A response that no interaction on the page binds is scored as the host posts it.
+  content binds, whether the page would show its interaction or a notice. A response that no
+  interaction binds, or that only a notice in shown content binds, is scored as the host posts it.
 - `qti-random`, `qti-random-integer` and `qti-random-float` run, so plate runs 53 of the 64
   expressions. A `qti-repeat` whose operands draw evaluates them once per pass, and gives NULL for
   more than 1,000,000 repeats.
@@ -73,9 +81,14 @@ and both of its entry points are unstable until M3.
   no type error to warn it. Keep them where only your server reads them.
 - A test session starts each item's record when it first shows the item, so a templated item in a
   test shows its template values. A session checks each post, and the skip rule, against the
-  item's record.
+  item's record. The skip rule, and the answered status `results` reports, take a response's
+  default to be the one template processing set for it, else its declared one. So the
+  `skipping-not-allowed` message says each response posted is "NULL or the default it started
+  with", where it said "NULL or its declared default".
 - `results` writes a `templateVariable` for each template declaration, and a shuffled interaction's
-  `choiceSequence` lists only the choices the page showed.
+  `choiceSequence` lists only the choices the page showed. For a response that only hidden template
+  content binds, it reports the value the item's record holds, as `score` keeps it, not the value a
+  step saved for it.
 - The plain-HTML host, `src/hosts/html.ts`, and the Astro host keep no record, so neither can
   score an item whose template processing runs.
 - `Accepted`'s `item` holds `templates` and `templateProcessing`, its body holds printed
@@ -98,7 +111,10 @@ and both of its entry points are unstable until M3.
 - The verdict marks a template declaration of base type `duration` or `file`, of cardinality
   `record`, or with no base type, as it marks such a response or outcome declaration. Template
   processing that holds a marked feature does not run.
-- `open` refuses each of the following, as pantry does. No corpus document breaks one.
+- The verdict marks template processing that reads `QTI_CONTEXT` or a context variable, or that
+  reads or sets a variable plate does not model, and that processing does not run. Nothing is
+  refused: the item is `accepted-with-unsupported`, and its record starts with no template value.
+- `open` refuses each of the following, as pantry does.
   - With `expression-type`: a `qti-set-template-value`, `qti-set-correct-response` or
     `qti-set-default-value` whose expression is not of its variable's type (P20), a
     `qti-template-if`, `qti-template-else-if` or `qti-template-constraint` whose condition is not a
@@ -114,8 +130,13 @@ and both of its entry points are unstable until M3.
     `%d`, `%u` or `Score: %.1f` (R38).
   - With `undeclared-variable` or `expression-type`: a printed variable whose `identifier`, or
     whose `base` or `index` written as a name, names no variable of the kind and type it needs
-    (`printed-variable-ref`), and a `template-identifier` that names no template variable of base
-    type `identifier`, single or multiple (`template-ref`).
+    (`printed-variable-ref`), which in a test is an outcome the test declares, and a
+    `template-identifier` that names no template variable of base type `identifier`, single or
+    multiple (`template-ref`).
+- `qtiv3-examples/packaging/items/template.xml` and its copy inside `items.zip` are now `refused`
+  with `expression-type`. They were `accepted-with-unsupported`. Their `qti-set-correct-response`
+  sets the `float` `RESPONSE` to a `qti-integer-divide`, an `integer` (P20). `items.zip` itself
+  was already `refused`, so plate still agrees with pantry.
 - plate and pantry differ in three places until pantry follows. plate accepts a `format` whose
   precision has no digits, such as `%.f`, and a printed variable that names the built-in
   `completionStatus`. It refuses a wrong `template-identifier` on a `qti-simple-choice`, which
@@ -131,9 +152,19 @@ and both of its entry points are unstable until M3.
     gives no value.
   - A printed tie rounds half away from zero on the shortest decimal, so 0.25 at `%.1f` prints
     `0.3`. Negative zero prints as `-0`. `index` counts from 1 _(pending)_, and `power-form`
-    applies only with no `format` _(pending)_.
+    applies only with no `format` _(pending)_. `power-form` writes an ASCII `x`, as the information
+    model writes it, so 1.5e21 prints `1.5 x 10 to the power 21`. An earlier commit of template
+    processing wrote `×`.
+  - Under `%i`, `%o`, `%x` or `%X`, a float prints its shortest decimal's integer part, truncated
+    toward zero _(pending)_, so `%i` of `1e23` prints `100000000000000000000000`. An earlier commit
+    of template processing cut the double's binary value and printed `99999999999999991611392`.
+    An infinity or NaN prints `inf`, `-inf` or `nan` under those conversions, in upper case under
+    `%X` _(pending)_. Under `%o`, `%x` or `%X`, a negative writes `-` and its digits
+    _(pending)_. A `base` outside 2 to 36 writes base 10 _(pending)_, and a width or precision past
+    1,000,000 prints nothing, as NULL does _(pending)_.
   - A `param-variable` that holds a container passes its values joined by `;`, and NULL passes an
-    empty value _(pending)_.
+    empty value. The standard sets no written form for either, so these follow how a printed
+    variable prints a container and NULL by default.
 
 ### How plate reads SCORE, MAXSCORE and PASSED (2026-11-07)
 
