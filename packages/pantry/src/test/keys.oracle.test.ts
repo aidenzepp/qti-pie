@@ -34,6 +34,7 @@ import { keyText, keyTextBytes, utf8Length } from "#pantry/qti/limits.ts";
 import { Qti } from "#pantry/qti/schema.ts";
 import { scopedPackage } from "#pantry/test/gen/every-relation.ts";
 import {
+  generatedFields,
   identityOf,
   judgedSideOf,
   keyCopies,
@@ -550,19 +551,33 @@ const WrittenMap = Schema.ReadonlyMap(Schema.String, WrittenRow);
 type Written = typeof WrittenRow.Type;
 
 /**
+ * A written row's scalar fields as a selection reads them: its texts and its integers.
+ *
+ * @param row - The row.
+ * @returns Its scalars.
+ */
+const scalarsOf = (row: Written): Readonly<Record<string, Datum>> =>
+  Object.fromEntries(
+    Object.entries(row).flatMap(([field, value]) =>
+      Predicate.isString(value) || Predicate.isBigInt(value) ? [[field, value] as const] : [],
+    ),
+  );
+
+/**
  * Read a text field of a written row.
  *
  * @param row - The row.
  * @param field - The field.
  * @returns Its text.
- * @throws {Error} When the row holds no text there: the import writes every field of a generated
- *   term's, so a row without one is a defect of this restatement, never of the package.
+ * @throws {Error} When the row holds no text there: the import writes every text a fold steps by
+ *   and a tree's copy reads, so a row without one is a defect of this file's reading, never of the
+ *   package.
  */
 const writtenText = (row: Written, field: string): string => {
   const value = row[field];
   if (!Predicate.isString(value)) {
     throw new TypeError(
-      `A written row holds no text at ${field}, which a generated term reads. Restate the term over the fields its relation writes.`,
+      `A written row holds no text at ${field}, which a fold's step or a tree's copy reads. Read the field its relation writes.`,
     );
   }
 
@@ -570,72 +585,52 @@ const writtenText = (row: Written, field: string): string => {
 };
 
 /**
- * Restate `before ‖ token ‖ after`, the generated piece of an IDREF token, a header's and a
- * tolerance value's.
+ * Read a generated key text of a written row at the value PostgreSQL computes: its term, as
+ * grizzle keeps it in its relation's description (`#pantry/test/key-copies.ts`
+ * `generatedFields`), over the row's written scalars ({@link scalarsOf}). Its type is `keyText`,
+ * whose domain refuses a value past the bound as a written key text's does.
  *
- * @param row - The member's written row.
- * @returns Its piece.
+ * @param relation - The row's relation.
+ * @param field - The generated field.
+ * @param valueOf - Its value over a row.
+ * @param row - The row as the import writes it.
+ * @returns The text.
+ * @throws {Error} When the term is unknown over the row: it reads a field the row does not write,
+ *   or a term the host's evaluator does not read, so the bound the text must meet goes unchecked.
  */
-const spacedToken = (row: Written): string =>
-  `${writtenText(row, "before")}${writtenText(row, "token")}${writtenText(row, "after")}`;
+const generatedText = (
+  relation: string,
+  field: string,
+  valueOf: (row: Readonly<Record<string, Datum>>) => Datum | undefined,
+  row: Written,
+): string => {
+  const value = valueOf(scalarsOf(row));
+  if (!Predicate.isString(value)) {
+    throw new TypeError(
+      `The generated key text ${relation}.${field} is unknown over a written row: its term reads a field the row does not write, or a term the host's evaluator does not read. Teach key-copies.ts's evaluator the term, so the text's bound is checked.`,
+    );
+  }
+
+  return value;
+};
 
 /**
- * Every generated step of a concat fold into a `keyText` end, by `Relation.field`, its term
- * restated over its row's written fields: PostgreSQL computes each (`relation.generated`), so no
- * written row holds one, and grizzle keeps the term on no value the host can read. Each is itself
- * a `keyText`, whose domain refuses a value past the bound as a written key text's does.
- */
-const generatedTexts: ReadonlyMap<string, (row: Written) => string> = new Map([
-  ["HeaderToken.piece", spacedToken],
-  ["Idref.piece", spacedToken],
-  [
-    "ReferenceSegment.token",
-    (row) => `${writtenText(row, "separator")}${writtenText(row, "piece")}`,
-  ],
-  ["TextIdref.piece", spacedToken],
-  ["ToleranceToken.piece", spacedToken],
-]);
-
-/**
- * A relation of the schema as grizzle keeps it, for its generated fields: each field's writing.
- */
-const WritingRead = Schema.Struct({
-  fields: Schema.Record(Schema.String, Schema.Unknown),
-  kind: Schema.Literal("relation"),
-  name: Schema.String,
-});
-
-/**
- * Every generated field of the schema, as `Relation.field`.
- */
-const generatedFields: ReadonlySet<string> = new Set(
-  Object.values(Qti.relations).flatMap((member) =>
-    Option.match(Schema.decodeUnknownOption(WritingRead)(member), {
-      onNone: () => [],
-      onSome: ({ fields, name }) =>
-        Object.entries(fields).flatMap(([field, type]) =>
-          Predicate.hasProperty(type, "writing") && type.writing === "generated"
-            ? [`${name}.${field}`]
-            : [],
-        ),
-    }),
-  ),
-);
-
-/**
- * A row's generated key texts, by field, each its restated term's value.
+ * A row's generated key texts, by field, each at the value PostgreSQL computes
+ * ({@link generatedText}).
  *
  * @param relation - The row's relation.
  * @param row - The row as the import writes it.
  * @returns The generated texts.
  */
-const generatedOf = (relation: string, row: Written): ReadonlyMap<string, string> =>
+const generatedTextsOf = (relation: string, row: Written): ReadonlyMap<string, string> =>
   new Map(
-    [...generatedTexts].flatMap(([held, term]) => {
-      const [owner = "", field = ""] = held.split(".");
-
-      return owner === relation ? [[field, term(row)] as const] : [];
-    }),
+    Option.toArray(Option.fromUndefinedOr(generatedFields.get(relation))).flatMap((generated) =>
+      [...generated].flatMap(([field, valueOf]) =>
+        isKeyText(relation, field)
+          ? [[field, generatedText(relation, field, valueOf, row)] as const]
+          : [],
+      ),
+    ),
   );
 
 /**
@@ -647,11 +642,11 @@ const generatedOf = (relation: string, row: Written): ReadonlyMap<string, string
  * @param field - The step's field.
  * @returns The step's text.
  */
-const stepOf = (relation: string, row: Written, field: string): string => {
-  const term = generatedTexts.get(`${relation}.${field}`);
-
-  return term === undefined ? writtenText(row, field) : term(row);
-};
+const stepOf = (relation: string, row: Written, field: string): string =>
+  Option.match(Option.fromUndefinedOr(generatedFields.get(relation)?.get(field)), {
+    onNone: () => writtenText(row, field),
+    onSome: (valueOf) => generatedText(relation, field, valueOf, row),
+  });
 
 /**
  * A concat fold as grizzle keeps it: its family's owner and count, its monoid, its step side, the
@@ -704,19 +699,6 @@ const concatEnds: ReadonlyMap<
 );
 
 /**
- * A written row's scalar fields as a selection reads them: its texts and its integers.
- *
- * @param row - The row.
- * @returns Its scalars.
- */
-const scalarsOf = (row: Written): Readonly<Record<string, Datum>> =>
-  Object.fromEntries(
-    Object.entries(row).flatMap(([field, value]) =>
-      Predicate.isString(value) || Predicate.isBigInt(value) ? [[field, value] as const] : [],
-    ),
-  );
-
-/**
  * The parent copies a tree's member reads, as grizzle fills them along the owner axis from the row
  * it nests in: its parent's kind and governing type, and its grandparent's kind, the parent's own
  * `parentKind`; and its `start`, past the root's 0.
@@ -756,7 +738,7 @@ const treeCopies = (owner: Written, copies: Readonly<Record<string, Datum>>) => 
 const refusedFields = (inputs: PackageInputs): ReadonlySet<string> => {
   const refused = new Set<string>();
   const visit = (relation: string, row: Written, copies: Readonly<Record<string, Datum>>): void => {
-    for (const [field, text] of generatedOf(relation, row)) {
+    for (const [field, text] of generatedTextsOf(relation, row)) {
       if (!admitsKeyText(text)) {
         refused.add(`${relation}.${field}`);
       }
@@ -1001,20 +983,50 @@ const swarmedSketch: Gen<{ readonly sketch: Sketch; readonly swarm: Swarm<Script
   return { sketch, swarm: drawnSwarm };
 };
 
+/**
+ * A stored relation of the schema as grizzle keeps it, for its fields' names.
+ */
+const FieldsRead = Schema.Struct({
+  fields: Schema.Record(Schema.String, Schema.Unknown),
+  kind: Schema.Literal("relation"),
+  name: Schema.String,
+});
+
 describe("the import's key texts as the database computes them", () => {
-  it("restates the term of every generated step of a concat fold into a key text, so the database's end is judged at its value", () => {
-    // Oracle: the schema's own statements and field types: every concat fold into a keyText end
-    // whose step PostgreSQL generates is one `generatedTexts` restates, and no other.
+  it("evaluates the term of every generated step of a concat fold into a key text, so the database's end is judged at its value", () => {
+    // Oracle: the schema's own statements and the terms grizzle keeps in each relation's
+    // description: every concat fold into a keyText end whose step PostgreSQL generates has a term
+    // the host evaluates to a text, over a row holding a text at each of its relation's fields, so
+    // no package that writes the step's relation meets a generated text it cannot check.
     // Bound: the composed schema's concat folds.
+    const steps = new Set(
+      [...concatEnds].flatMap(([family, { step }]) =>
+        Option.toArray(Option.fromUndefinedOr(memberOf.get(family))).map(
+          (member) => `${member}.${step}`,
+        ),
+      ),
+    );
+    const evaluated = Object.values(Qti.relations).flatMap((member) =>
+      Option.match(Schema.decodeUnknownOption(FieldsRead)(member), {
+        onNone: () => [],
+        onSome: ({ fields, name }) => {
+          const row = Object.fromEntries(Object.keys(fields).map((field) => [field, `<${field}>`]));
+
+          return Option.toArray(Option.fromUndefinedOr(generatedFields.get(name))).flatMap(
+            (generated) =>
+              [...generated].flatMap(([field, valueOf]) =>
+                steps.has(`${name}.${field}`) ? [[`${name}.${field}`, valueOf(row)] as const] : [],
+              ),
+          );
+        },
+      }),
+    );
+
+    assert.isAbove(evaluated.length, 0, "a generated step of a concat fold into a key text");
     assert.deepStrictEqual(
-      [...concatEnds]
-        .flatMap(([family, { step }]) =>
-          Option.toArray(Option.fromUndefinedOr(memberOf.get(family))).flatMap((member) =>
-            generatedFields.has(`${member}.${step}`) ? [`${member}.${step}`] : [],
-          ),
-        )
-        .toSorted(),
-      [...generatedTexts.keys()].toSorted(),
+      evaluated.flatMap(([step, value]) => (Predicate.isString(value) ? [] : [step])),
+      [],
+      "a generated step whose term the host does not evaluate to a text",
     );
   });
 });

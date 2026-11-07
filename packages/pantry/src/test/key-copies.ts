@@ -1527,11 +1527,52 @@ export const checkOf = (
  *   the description's shape before it restores the field.
  */
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- A description's term is read here, by its shape.
-export const generatedValueOf = (expr: unknown): ((row: Row) => Datum | undefined) => {
+const generatedValueOf = (expr: unknown): ((row: Row) => Datum | undefined) => {
   const term = termOf(Schema.decodeUnknownSync(StoredTermSchema)(expr));
 
   return (row) => evaluate(term, row, () => false);
 };
+
+/**
+ * A stored relation's description as grizzle keeps it, for its generated fields: each field's
+ * writing, a generated field's with the term PostgreSQL computes it by.
+ */
+const DescribedSchema = Schema.Struct({
+  desc: Schema.Struct({
+    fields: Schema.Record(
+      Schema.String,
+      Schema.Struct({
+        writing: Schema.Struct({ expr: Schema.optionalKey(Schema.Unknown), kind: Schema.String }),
+      }),
+    ),
+  }),
+  name: Schema.String,
+});
+
+/**
+ * Every field PostgreSQL generates of each stored relation of the composed schema, by relation and
+ * then field: its value over a row ({@link generatedValueOf}), from the term grizzle keeps in the
+ * relation's description. A relation that generates no field has no entry. A stored relation's
+ * description is read strictly, so a shape grizzle changes fails here, by its decode, rather than
+ * leaving a generated field unrestored without a word.
+ */
+export const generatedFields: ReadonlyMap<
+  string,
+  ReadonlyMap<string, (row: Row) => Datum | undefined>
+> = new Map(
+  Object.values(Qti.relations).flatMap((member) => {
+    if (!Predicate.hasProperty(member, "kind") || member.kind !== "relation") {
+      return [];
+    }
+
+    const { desc, name } = Schema.decodeUnknownSync(DescribedSchema)(member);
+    const generated = Object.entries(desc.fields).flatMap(([field, { writing }]) =>
+      writing.kind === "generated" ? [[field, generatedValueOf(writing.expr)] as const] : [],
+    );
+
+    return generated.length === 0 ? [] : [[name, new Map(generated)] as const];
+  }),
+);
 
 /**
  * One side of a statement as the host judges it: its relation and its terms as an outcome names
