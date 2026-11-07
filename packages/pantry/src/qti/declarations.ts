@@ -65,6 +65,7 @@ import {
   check,
   closedId,
   Compute,
+  constant,
   contained,
   counted,
   drawn,
@@ -215,7 +216,7 @@ export const contextVariable = {
  * - The node's {@link nodeRef} tuple: `node`, `document`, `kind`, `start`, `nearest`, `version` and
  *   `parent`;
  * - `parentKind`, its parent's kind, copied from `Node`: `Reserved type` reads it, since a test's
- *   SCORE and MAXSCORE, a `qti-assessment-test`'s children, may be of any base type (reading 159);
+ *   SCORE and MAXSCORE, a `qti-assessment-test`'s children, may be of any base type (reading 160);
  * - `declarationKind`, its kind as a `DeclarationKind`, `Declares` of `kind`;
  * - `cardinalities` and `baseTypes`, drawn: its counts of {@link DeclarationCardinality} and
  *   {@link DeclarationBaseType} rows, each 1 where its attribute spells a code and 0 where it does
@@ -295,7 +296,7 @@ export const DeclarationBaseType = relation(
  * `identifierTrail`, the whitespace written around it, which `E1_derived` proves concatenate to
  * `identifierLexical`, the lexical form as written (C18's copy), as {@link RecordFieldName} holds a
  * field's; and its {@link Declaration}'s {@link declarationRef} tuple and its `parentKind`, which
- * `Reserved type` reads (reading 159). The laws over a declared name read it: `Declaration key`,
+ * `Reserved type` reads (reading 160). The laws over a declared name read it: `Declaration key`,
  * `Declaration not reserved` and `Reserved type`.
  *
  * An `identifier` that is unwritten, or no NCName once collapsed, whitespace alone among them,
@@ -327,7 +328,7 @@ export const DeclarationIdentifier = relation(
  * `identifier`, document, declaration kind and count of base types, and its
  * {@link DeclarationCardinality}'s `cardinality`, the fields every reference copies through
  * {@link declarationNameRef}, and the type a reference reads; and `parentKind`, its
- * {@link Declaration}'s, which `Reserved type` reads where it reads the cardinality (reading 159).
+ * {@link Declaration}'s, which `Reserved type` reads where it reads the cardinality (reading 160).
  *
  * A named declaration whose cardinality is unwritten or spells nothing has no row: its name types
  * nothing, so no reference resolves to it and no law reads a type it does not have, and AL3 or its
@@ -362,6 +363,26 @@ export const declarationRef = on(
   Declaration,
   "node",
   "document",
+  "declarationKind",
+  "cardinalities",
+  "baseTypes",
+);
+
+/**
+ * The one tuple of a named declaration every row that resolves a name to its declaration copies,
+ * whatever the declaration's cardinality spells: its node, document, name, declaration kind, and
+ * counts of cardinalities and base types, so `DeclarationIdentifier` carries one superkey UNIQUE
+ * for them all ({@link DeclarationName} copies it too). Neither the cardinality nor the base type
+ * is a field of it: a law over the named declaration's cardinality reads a row of the resolving
+ * row's own, copied from {@link DeclarationCardinality} only where `cardinalities` is 1, and one
+ * over its base type reads {@link DeclarationBaseType} where `baseTypes` is 1. A declaration whose
+ * identifier names nothing has no row here, and nothing resolves to it (spec readings 157 and 159).
+ */
+export const declarationIdentifierRef = on(
+  DeclarationIdentifier,
+  "node",
+  "document",
+  "identifier",
   "declarationKind",
   "cardinalities",
   "baseTypes",
@@ -1119,7 +1140,7 @@ const ceilingCheck = (r: MasteryCeilingRow) =>
  *   context, and, where it has a cardinality, a typed outcome name is no record and QTI_CONTEXT is
  *   one (reading 153). A SCORE or MAXSCORE whose declaration is a child of a `qti-assessment-test`
  *   (`parentKind`) is held to neither, since "SCORE needs to be a float" is said of items (§4.5,
- *   reading 159).
+ *   reading 160).
  * - **`Declaration base type`**: a record has no base type, and every declaration of another
  *   cardinality writes one; one that spells nothing is its value domain's alone (spec reading
  *   158).
@@ -1202,8 +1223,16 @@ export const declarationLawsByName = {
       on(DeclarationName, "node"),
     ),
     contained(
-      on(DeclarationName, "node", "document", "identifier", "declarationKind", "baseTypes"),
-      on(DeclarationIdentifier, "node", "document", "identifier", "declarationKind", "baseTypes"),
+      on(
+        DeclarationName,
+        "node",
+        "document",
+        "identifier",
+        "declarationKind",
+        constant(1n),
+        "baseTypes",
+      ),
+      declarationIdentifierRef,
     ),
     contained(
       on(DeclarationName, "node", "cardinality"),

@@ -3112,7 +3112,30 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      judged no law of such a declaration's own, and none of its mapping's but its map keys. This binds pantry and plate
      alike. This is not a case of documents in conflict. (Decided 2026-11-07 by the coordinator, under the operator's
      standing ruling of 2026-11-05, from seat FIX-DECLCARD.)
-159. **SCORE's and MAXSCORE's float rule binds items only; PASSED's boolean rule binds items and tests.** The information
+159. **A binding or a reference resolves by name to every declaration whose identifier names something, whatever its
+     cardinality spells, and each law over it judges what the declaration does spell.** The information model reads a
+     binding and a reference by the variable's name and kind: "Response variables are declared by response
+     declarations and bound to interactions in the itemBody" (section 2.2.2.2, reading 75), and a feedback element or
+     a printed variable names "an outcome variable" or "a template variable" (reading 77). A response declaration whose
+     `cardinality` is unwritten or spells nothing still declares its name (reading 158: it is still a declaration, and
+     AL3 or its value domain refuses the attribute alone). So each law over a binding or a reference reads the
+     declaration's name and kind, its cardinality, or its base type, and judges it where what it reads spells
+     something, as reading 158 has each law over the declaration itself do: Binding declared, Binding unique and every
+     reference's existence and kind laws read the name and the kind, so a binding to such a response declaration is
+     declared, and a feedback element naming such a response declaration still breaks Feedback reference; BindingFit,
+     RecordBindingFit, Binding cardinality, Max strings required and the laws over a referenced variable's type read
+     its cardinality, and judge nothing where it has none. This is also the stricter reading, since every law that does
+     not read the cardinality judges the binding or the reference as any other. It narrows reading 158's "no reference
+     resolves to it" to the type: such a name types nothing, so no law over a type reads one from it. The importer
+     resolves a name through `DeclarationIdentifier` (`declarationIdentifierRef`, `src/qti/declarations.ts`), and a law
+     over the referenced declaration's cardinality reads a row of the resolving row's own, copied from
+     `DeclarationCardinality` and written only where the declaration has one: a missing value is a row of its own
+     relation, never a sentinel. This sets aside lane NIL's B11 reading, under which a binding or a reference to a name
+     only such a declaration holds resolved to nothing, so the importer's rows broke Binding declared, or held no
+     reference row and broke "E1 derived"'s copy of the attribute, beside the AL3 or value domain the law oracle alone
+     raised. This binds pantry and plate alike. This is not a case of documents in conflict. (Decided 2026-11-07 by the
+     coordinator, under the operator's standing ruling of 2026-11-05, from seat FIX-BINDCARD.)
+160. **SCORE's and MAXSCORE's float rule binds items only; PASSED's boolean rule binds items and tests.** The information
      model's section 4.5, OutcomeDeclaration (https://www.imsglobal.org/spec/qti/v3p0/info#Root_OutcomeDeclaration), says
      of SCORE "Items that declare a numeric outcome variable representing the candidate's overall performance on the item
      should use the outcome name 'SCORE' for the variable. SCORE needs to be a float." (`info.txt:11979`), and of
@@ -3127,7 +3150,7 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      reading 1 protects valid content. No corpus test declares a SCORE or MAXSCORE of another base type. This binds
      pantry and plate alike. (Decided 2026-11-07 by the operator, mail `e64ace73` from the renderer; the law `Reserved
      type`. Re-cited 2026-11-07 by the Mind on audit b61b8f14's D2: §4.5 for the non-normative §2.2.2.3.)
-160. **A MathML formula's direction starts at its `m:math`: `ltr`, unless the `math` element writes `rtl`, whatever the
+161. **A MathML formula's direction starts at its `m:math`: `ltr`, unless the `math` element writes `rtl`, whatever the
      HTML around it says.** MathML 3 section 2.2.1, Attributes
      (https://www.w3.org/TR/MathML3/chapter2.html#interf.toplevel.atts), says "Note that the dir attribute defaults to
      "ltr" on the math element (but inherits on all other elements which accept the dir attribute); this provides for
@@ -3144,7 +3167,7 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      direction (MathML 3 lists only those two; the value domain refuses another on a MathML element). This binds pantry
      and plate alike. This is not a case of documents in conflict. (Decided 2026-11-07 by the Mind, decision 416, on
      audit e8db90e1's F6, under the operator's standing ruling of 2026-11-05 that the spec wins; FYI to the operator.)
-161. **Two string map keys that differ only by case are two keys, and a response that matches several entries takes the
+162. **Two string map keys that differ only by case are two keys, and a response that matches several entries takes the
      first one listed.** A string mapping whose entries leave `case-sensitive` at its default writes `York` (mapped to 2)
      and `york` (mapped to 1); the document is accepted, and the response `york` matches both. The standard bans
      nothing here: no XSD carries a uniqueness constraint (no `xs:unique` or `xs:key` in `imsqti_asiv3p0_v1p0.xsd` or

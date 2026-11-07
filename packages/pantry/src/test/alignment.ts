@@ -495,7 +495,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     98,
     {
       owner:
-        "Q5.11's map keys (`src/qti/mapping.ts`): `key(MapKey(mapping, folded, key))` (reading 161 narrows it: a key's identity is the key as written), where `E1_derived` sets `folded` for a string key whose entry is not `case-sensitive=\"true\"` and `matched` to its ASCII lowercase (`Compute.lowerAscii`, grizzle offering no Unicode fold) and otherwise to the key as written, so a case-sensitive entry never meets a case-insensitive one, and `key(mapping, value)` over each typed relation, `MapKeyInteger`, `MapKeyFloat` (reading 154), `MapKeyPoint`, `MapKeyPair` and `MapKeyDirectedPair`; the oracle's `Map key` (`keyIdentityOf`, `src/test/oracle.ts`)",
+        "Q5.11's map keys (`src/qti/mapping.ts`): `key(MapKey(mapping, folded, key))` (reading 162 narrows it: a key's identity is the key as written), where `E1_derived` sets `folded` for a string key whose entry is not `case-sensitive=\"true\"` and `matched` to its ASCII lowercase (`Compute.lowerAscii`, grizzle offering no Unicode fold) and otherwise to the key as written, so a case-sensitive entry never meets a case-insensitive one, and `key(mapping, value)` over each typed relation, `MapKeyInteger`, `MapKeyFloat` (reading 154), `MapKeyPoint`, `MapKeyPair` and `MapKeyDirectedPair`; the oracle's `Map key` (`keyIdentityOf`, `src/test/oracle.ts`)",
       status: "G",
     },
   ],
@@ -975,12 +975,20 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     159,
     {
       owner:
+        "`declarationIdentifierRef` (`src/qti/declarations.ts`), the one tuple a name resolves to, which `DeclarationName` copies; the bindings' resolution through it and their cardinality rows (seat FIX-BINDCARD), and the references' (seat FIX-REFCARD); the oracle's binding and reference laws, which resolve a name whatever the declaration's cardinality (`src/test/oracle.ts`)",
+      status: "P",
+    },
+  ],
+  [
+    160,
+    {
+      owner:
         "the law `Reserved type` (`reservedBaseTypes`' `root` and the containment of a non-float SCORE or MAXSCORE into a test's root, `src/qti/declarations.ts`; the oracle producer in `src/test/oracle-laws/documents.ts`), held by `Reserved type` in `src/test/laws.oracle.test.ts`",
       status: "G",
     },
   ],
   [
-    160,
+    161,
     {
       owner:
         "the law oracle's direction (`inheritedDirectionOf` and `changesDirection`, `src/test/oracle.ts`) and the builder's (`reading.owns`, `src/import/overlays/mathml-align.ts`): a formula's direction starts at its `m:math`, `ltr` unless it writes `rtl`, and an HTML ancestor's `dir` is not read; held by `src/test/align-direction.test.ts`",
@@ -988,7 +996,7 @@ export const readings: ReadonlyMap<number, ReadingEntry> = new Map<number, Readi
     },
   ],
   [
-    161,
+    162,
     {
       owner:
         "Q5.11's map keys (`src/qti/mapping.ts`): `key(MapKey(mapping, folded, key))`, the key as written beside how it is matched, so `York` and `york` are two keys and one key written twice is a repeat (`MapKey.matched` stays for matching, set by `E1_derived`); the oracle's `Map key` (`keyIdentityOf`, `src/test/oracle.ts`), the same identity; held by `src/qti/mapping.oracle.test.ts` and `src/import/overlays/mapping.test.ts`",
