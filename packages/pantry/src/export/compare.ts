@@ -10,7 +10,7 @@
  * keyed by path, so an entry only the export writes, and a path either side holds twice, differ
  * too.
  */
-import { Effect } from "effect";
+import { Array as Arr, Effect, Option } from "effect";
 import type { FileSystem, PlatformError } from "effect";
 import { readPackage } from "#pantry/package/read.ts";
 import type { PackageReadError } from "#pantry/package/read.ts";
@@ -25,7 +25,7 @@ import { readXml } from "@qti-pie/crust/read.ts";
  * XML entry whose bytes differ but whose canonical forms agree. `differs` says where in `at`:
  * `missing` for an entry the export lacks, `extra` for one only the export writes, `repeated` for a
  * path either side holds twice, otherwise `byte <offset>` and, for an XML entry, `, line <n>` with
- * both canonical lines.
+ * both canonical lines, `ends` for a side whose form has no line `<n>`.
  */
 export type Outcome =
   | { kind: "canonical-equal" }
@@ -65,8 +65,22 @@ const firstDifference = (left: Uint8Array, right: Uint8Array): number | undefine
 };
 
 /**
+ * Quote a form's line for {@link describeCanonical}, or say the form ends before it, which an empty
+ * line does not: `""` is a line that holds nothing.
+ *
+ * @param lines - The form's lines.
+ * @param at - The line's index.
+ * @returns The line as JSON, or `ends` when the form has no such line.
+ */
+const lineAt = (lines: readonly string[], at: number): string =>
+  Option.match(Arr.get(lines, at), {
+    onNone: () => "ends",
+    onSome: (text) => JSON.stringify(text),
+  });
+
+/**
  * Describe where two canonical forms first differ: the byte offset and the first differing line of
- * each.
+ * each, or `ends` for a form that has no such line.
  *
  * @param recorded - The record's canonical form.
  * @param exported - The export's canonical form.
@@ -80,7 +94,7 @@ const describeCanonical = (recorded: Uint8Array, exported: Uint8Array, offset: n
   const line = left.findIndex((text, index) => text !== right[index]);
   const at = line === -1 ? left.length : line;
 
-  return `byte ${String(offset)}, line ${String(at + 1)}: record ${JSON.stringify(left[at] ?? "")}, export ${JSON.stringify(right[at] ?? "")}`;
+  return `byte ${String(offset)}, line ${String(at + 1)}: record ${lineAt(left, at)}, export ${lineAt(right, at)}`;
 };
 
 /**
