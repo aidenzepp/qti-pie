@@ -432,20 +432,28 @@ its processing runs, and the operator's value is NULL.
 | A literal `figures` below 1, or below 0 in `decimalPlaces` mode | `attribute-type` | P10 |
 | A literal `n` of `qti-index` below 1 | `attribute-type` | P11 |
 | A declaration named `completionStatus`, `numAttempts` or `duration`, the names of the built-in variables | `attribute-type` | `DeclarationNotReserved` |
-| An outcome declaration named `SCORE` or `MAXSCORE` whose base type is not `float`, or one named `PASSED` whose base type is not `boolean`. A `record` one is accepted *(pending)* | `attribute-type` | `ReservedOutcomeTypes` |
+| An item's outcome declaration named `SCORE` or `MAXSCORE` whose base type is not `float`, or an item's or a test's named `PASSED` whose base type is not `boolean`. A `record` one is accepted *(pending)* | `attribute-type` | `ReservedOutcomeTypes` |
 | A `qti-equal` whose `tolerance` holds a token that is neither an `xs:double` nor a variable's name (an NCName), such as `1,5` | `attribute-type` | P6 |
 | A `qti-equal` in `absolute` or `relative` mode that has no `tolerance` | `missing-attribute` | P36 |
 
 The refusals with `expression-type` and `undeclared-variable` judge inline response processing and
 template processing. [Template processing](#template-processing) lists the refusals that only
 template processing meets. The refusals of a declaration named after a built-in variable, and of
-a mistyped `SCORE`, `MAXSCORE` or `PASSED`, judge a test's declarations as well as an item's.
+a mistyped `PASSED`, judge a test's declarations as well as an item's. A test's `SCORE` and
+`MAXSCORE` may have any base type, since QTI 3.0 types only an item's. pantry refuses them in a
+test too, so there plate accepts what pantry refuses until pantry follows.
 
 Integers are exact. `qti-sum`, `qti-subtract`, `qti-product` and `qti-lcm` give NULL for an
 integer result of more than 1,000,000 bits. `qti-multiple`, `qti-ordered` and `qti-repeat` give
 NULL for a container of more than 1,000,000 values. Values written in an item or stored in a
-record are never bounded. These bounds limit size, not time. To score items you do not trust, call
-`begin`, `score` and `advance` under a time limit, for example in a worker that you can stop.
+record are never bounded. These bounds limit size, not time.
+
+To score items you do not trust, call `begin`, `score` and `advance` under a time limit, for
+example in a worker that you can stop. `render` writes at most the configuration's `outputBudget`
+characters of HTML, counted as a string's `length` counts them. `outputBudget` is 16,777,216 by
+default, and you can set it from 1 to 536,870,888. Past it, `render` returns `OutputTooLarge`,
+which names the budget and the item, and writes nothing, so a page never shows an item with a part
+left out.
 
 Where QTI makes an integer a float, an integer beyond the largest finite float becomes the largest
 finite float of its sign, not an infinity ([reading 45](../../docs/spec-readings.md)). The math

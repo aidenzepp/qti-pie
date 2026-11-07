@@ -634,6 +634,38 @@ describe("README.md", () => {
     );
   });
 
+  it("names outputBudget and OutputTooLarge in the paragraph of Scoring that advises a time limit", () => {
+    const paragraphs = sectionOf("## Scoring")
+      .split(/\n{2,}/u)
+      .map((paragraph) => paragraph.replaceAll("\n", " "));
+
+    assert.isTrue(
+      paragraphs.some(
+        (paragraph) =>
+          paragraph.includes("time limit") &&
+          paragraph.includes("`outputBudget`") &&
+          paragraph.includes("`OutputTooLarge`"),
+      ),
+      "the paragraph of Scoring that advises a time limit names outputBudget and OutputTooLarge",
+    );
+  });
+
+  it("says in Scoring that a test's SCORE and MAXSCORE may have any base type", () => {
+    const paragraphs = sectionOf("## Scoring")
+      .split(/\n{2,}/u)
+      .map((paragraph) => paragraph.replaceAll("\n", " "));
+
+    assert.isTrue(
+      paragraphs.some(
+        (paragraph) =>
+          paragraph.includes("`SCORE`") &&
+          paragraph.includes("`MAXSCORE`") &&
+          paragraph.includes("any base type"),
+      ),
+      "a paragraph of Scoring says a test's SCORE and MAXSCORE may have any base type",
+    );
+  });
+
   it.effect("runs the plain server action on a base-16 Text Entry, which scores ff as 255", () =>
     Effect.gen(function* runsServerAction() {
       const step = yield* serverAction();
