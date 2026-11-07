@@ -38,13 +38,15 @@ const buildTimeout = 60_000;
 /**
  * The relations the module declares, by name.
  */
-const declared = ["CnPartText", "MathCn"] as const;
+const declared = ["CnAttribute", "CnPartText", "MathCn"] as const;
 
 /**
  * The laws that are no check, among those the module's relations carry, as the census of the
  * refusal table reads them: those whose law names one of the relations.
  */
-const ownLaws = statedLaws.filter(([law]) => /"(?:CnPartText|MathCn)"/u.test(JSON.stringify(law)));
+const ownLaws = statedLaws.filter(([law]) =>
+  /"(?:CnAttribute|CnPartText|MathCn)"/u.test(JSON.stringify(law)),
+);
 
 describe("qti/mathml-cn.ts, declared", { timeout: buildTimeout }, () => {
   it("declares the judged cn and its parts, composed into Qti under their own names", () => {

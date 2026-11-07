@@ -17,6 +17,9 @@
  *   judged. A part beyond the places its type lists is written at its place, up to the one place no
  *   type lists, under the form `real`, which `CnForm` does not list for it, so the database refuses
  *   a `cn` with more parts than its type lists; a later part adds nothing, as the refusal is made.
+ * - **`CnAttribute`**, one row for every `type` and every `base` an `m:cn` writes, whatever its type
+ *   and whether or not it is judged: the node, the attribute's name and its lexical form as
+ *   written. A `type` on another element has no row.
  *
  * The rows restate what the tree says and nothing else.
  */
@@ -29,13 +32,15 @@ import type { NodeIds } from "#pantry/import/write.ts";
 import type { Composed } from "#pantry/model/composed.ts";
 import { flatten } from "#pantry/model/xdm.ts";
 import type { FlatRows, NodeId, NodeRow, XdmDocument } from "#pantry/model/xdm.ts";
-import type { CnPartText, MathCn } from "#pantry/qti/mathml-cn.ts";
+import type { CnAttribute, CnPartText, MathCn } from "#pantry/qti/mathml-cn.ts";
 
 /**
- * A document's cn rows, one keyed set per relation: a `MathCn` row by its node's id, a `CnPartText`
- * row by the JSON of its node's id and its part.
+ * A document's cn rows, one keyed set per relation: a `CnAttribute` row by the JSON of its node's
+ * id and its name, a `MathCn` row by its node's id, a `CnPartText` row by the JSON of its node's id
+ * and its part.
  */
 export interface MathmlCnRows {
+  readonly CnAttribute: ReadonlyMap<string, Addition<typeof CnAttribute>>;
   readonly CnPartText: ReadonlyMap<string, Addition<typeof CnPartText>>;
   readonly MathCn: ReadonlyMap<string, Addition<typeof MathCn>>;
 }
@@ -214,6 +219,18 @@ export const rowsOf = (tree: XdmDocument<Composed>, ids: Pick<NodeIds, "idOf">):
   }
 
   const written = writtenOf(flat.attributes);
+  const attributes = new Map<string, Addition<typeof CnAttribute>>();
+  for (const [node, values] of written) {
+    if (cnIds.has(node)) {
+      for (const name of ["base", "type"] as const) {
+        const lexical = values.get(name);
+        if (lexical !== undefined) {
+          attributes.set(JSON.stringify([node, name]), { lexical, name, node });
+        }
+      }
+    }
+  }
+
   const cns = new Map<string, Addition<typeof MathCn>>();
   const parts = new Map<string, Addition<typeof CnPartText>>();
   for (const node of flat.nodes) {
@@ -237,5 +254,5 @@ export const rowsOf = (tree: XdmDocument<Composed>, ids: Pick<NodeIds, "idOf">):
     }
   }
 
-  return { CnPartText: parts, MathCn: cns };
+  return { CnAttribute: attributes, CnPartText: parts, MathCn: cns };
 };

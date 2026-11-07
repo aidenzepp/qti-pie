@@ -292,6 +292,10 @@ const mergedOf = (
       "ChoiceVariableName",
       parts.map(({ ChoiceVariableName: rows }) => rows),
     ),
+    CnAttribute: unionOf(
+      "CnAttribute",
+      parts.map(({ CnAttribute: rows }) => rows),
+    ),
     CnPartText: unionOf(
       "CnPartText",
       parts.map(({ CnPartText: rows }) => rows),
