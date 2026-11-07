@@ -611,7 +611,7 @@ describe("import/overlays/mathml-align.ts, the align rows (spec reading 2)", () 
     assert.deepStrictEqual(keysOf(rows.MathAlignGroup), [idOf(6)]);
   });
 
-  it("takes ltr at m:math whatever an HTML ancestor's dir (spec reading 144)", () => {
+  it("takes ltr at m:math whatever an HTML ancestor's dir (spec reading 146)", () => {
     // Nodes: 0 document, 1 div (dir rtl), 2 math, 3 mtd, 4 mrow (dir ltr), 5 maligngroup.
     const doc = documentOf(
       elementOf(

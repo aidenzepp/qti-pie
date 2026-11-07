@@ -2744,7 +2744,48 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      coordinator, under the operator's standing ruling of 2026-11-05, from RV seat CRUST (`daed3e96`), on GEN-B/codec's
      finding N2.)
 
-143. **SCORE's and MAXSCORE's float rule binds items only; PASSED's boolean rule binds items and tests.** The information
+143. **An interaction is banned at any depth of a template block, and in a template inline only as its own content model
+     bans it, so the four inline interactions are admitted inside a template inline's HTML.** The information model says
+     "A qti-template-block must not contain any interactions, either directly or indirectly" (section 5.145,
+     TemplateBlock, in both versions). That is stricter than its own class tables and the XSD, which reach the four
+     inline interactions through the HTML of a template block's content body (sections 5.147, 6.10, 6.14 and 5.64
+     HTMLText, whose children are inlineGroup, section 6.26; the XSD's HTMLTextDType), so the stricter source is the
+     rule (readings 16 and 17). The information model states no such rule of a template inline (section 5.155). Its own
+     content, InlineStaticGroup (section 6.27), holds no interaction, and neither does the XSD's TemplateInlineDType, so
+     the content model refuses an interaction as its child. Its HTML, span and its kin of HTMLText (section 6.25), holds
+     inlineGroup's four interactions, which are admitted there. So the grammar's `tmpl` ancestry flag, which carries the
+     ban, is entered under the template block and its rubric variant alone (`templateBlockKinds`), and every other
+     template facet still reads all four template kinds. Lane GEN-B's XSD search found the grammar refusing an XSD-valid
+     interaction inside a template inline's span. This is a case of documents in conflict: the information model's prose
+     against its tables and the XSD, for the template block. (Decided 2026-11-07 by the coordinator, under the
+     operator's standing ruling of 2026-11-05, from seat FIX-TMPL, on lane VD's ruling.)
+
+144. **A bounded `xs:double` is judged on its IEEE value: a `NonNegativeDoubleDType` value is not below 0, and a
+     `normal-maximum` is above 0, each as XML Schema's value bound states it, held by a typed value beside the lexical
+     form.** Both QTI 3.0 XSDs derive `NonNegativeDoubleDType` from `xs:double` by `<xs:minInclusive value="0.0" />`
+     (`imsqti_asiv3p0_v1p0.xsd` lines 24034 to 24038, `imsqti_asiv3p0p1_v1p0.xsd` lines 24120 to 24124). They type with
+     it `qti-time-limits`' `min-time` and `max-time`, the slider interaction's `lower-bound`, `upper-bound` and `step`,
+     and the outcome declaration's `normal-maximum` (v3p0 lines 34627, 34628, 31838 to 31840 and 29988; v3p0p1 lines
+     34861, 34862, 31988 to 31990 and 30136), and an `xsi:type` may give the type to a foreign element's text. The
+     information model types each as NonNegativeDouble, "the data-type for numbers that are of the data-type 'double'
+     but must not be negative i.e. the minimum value is 0.0" (sections 7.26, 7.40.1 and 5.134.3). Of `normal-maximum`
+     it says further "it must be a positive value" (section 4.5.7), the stricter source, which reading 16 follows over
+     the XSD's `minInclusive`. A bound judges the value, and a literal's value is its IEEE double, rounded to nearest
+     (XML Schema 1.1 Part 2 §3.3.5.2, doubleLexicalMap), a magnitude below 2^-1075 rounding to a zero of its sign; -0
+     equals 0. So `-0` and `-1e-400` meet `minInclusive 0.0`, `1e-400` and `-0` fail reading 16's `minExclusive 0`,
+     `4.9e-324` meets both, and `-1`, `-INF` and `NaN` (which meets no bound) are refused under `attribute-lexical`.
+     Whether a literal clears a bound turns on that rounding, which no regular language decides, so the domain's
+     pattern states the lexical space alone, XML Schema 1.0's (reading 71's edition, in which `+INF` is outside it)
+     less `NaN`, since a datatype's lexical space is "the prescribed set of strings which the lexical mapping for that
+     datatype maps to values of that datatype" (XML Schema 1.1 Part 2 §2.3) and NaN meets no bound, so it is no value
+     of the bounded type; the value is a row of its own: the import reads the double once from the lexical form or the
+     text (`DoubleValue`, `TextDoubleValue`), where the form is in the lexical space, and the bound is a check on that
+     value (`Double bound`), read from the domain's `DoubleBound`. grizzle stores a `float8` with one zero, `-0` as 0,
+     which no bound tells apart. G1-2 found the database accepting `min-time="-1"`, `step="-1"` and
+     `normal-maximum="0"` while the law oracle refused them: the bound had been an unread `facets` column. (Decided
+     2026-11-07 by the coordinator, under the operator's standing ruling of 2026-11-05, from seat FIX-G12.)
+
+145. **SCORE's and MAXSCORE's float rule binds items only; PASSED's boolean rule binds items and tests.** The information
      model's section 2.2.2.3, Outcomes Variable (https://www.imsglobal.org/spec/qti/v3p0/info#IV_Outcome), says of SCORE
      "Items that declare a numeric outcome variable representing the candidate's overall performance on the item should
      use the outcome name 'SCORE' for the variable. SCORE MUST be a float." (`info.txt:8478`), and of MAXSCORE "Items that
@@ -2759,7 +2800,7 @@ stored rows holds. This binds pantry and plate alike as to what is valid; where 
      pantry and plate alike. (Decided 2026-11-07 by the operator, mail `e64ace73` from the renderer; the law `Reserved
      type`.)
 
-144. **A MathML formula's direction starts at its `m:math`: `ltr`, unless the `math` element writes `rtl`, whatever the
+146. **A MathML formula's direction starts at its `m:math`: `ltr`, unless the `math` element writes `rtl`, whatever the
      HTML around it says.** MathML 3 section 2.2.1, Attributes
      (https://www.w3.org/TR/MathML3/chapter2.html#interf.toplevel.atts), says "Note that the dir attribute defaults to
      "ltr" on the math element (but inherits on all other elements which accept the dir attribute); this provides for

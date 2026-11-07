@@ -94,9 +94,21 @@ const isAttributeField = (name: string): name is AttributeField => knownNames.At
 const isNodeField = (name: string): name is NodeField => knownNames.Node.has(name);
 
 /**
- * One value a predicate reads: a text, a natural, a boolean, or a set of a roster's handles.
+ * One value a predicate reads: a text, a natural, a float, a boolean, or a set of a roster's
+ * handles. A float has grizzle's one zero: `float8` stores -0 as 0 (`codec/scalar.ts` and
+ * `scalar/values/convert.ts` of grizzle-engine at the vendored commit), so {@link floatDatum}
+ * normalizes it.
  */
-export type Datum = bigint | boolean | ReadonlySet<string> | string;
+export type Datum = bigint | boolean | number | ReadonlySet<string> | string;
+
+/**
+ * Read a float as the datum a `float8` column holds: -0 as 0, grizzle's one zero, every other
+ * number as it is.
+ *
+ * @param value - The float.
+ * @returns The datum.
+ */
+export const floatDatum = (value: number): number => (Object.is(value, -0) ? 0 : value);
 
 /**
  * The schema of a {@link Datum}, which reads a closed relation's facts and a literal's value.
@@ -104,6 +116,7 @@ export type Datum = bigint | boolean | ReadonlySet<string> | string;
 const DatumSchema = Schema.Union([
   Schema.String,
   Schema.BigInt,
+  Schema.Number,
   Schema.Boolean,
   Schema.ReadonlySet(Schema.String),
 ]);
@@ -466,8 +479,8 @@ const factsOf = (relation: string): Option.Option<ClosedFacts> => {
 };
 
 /**
- * Write a datum as a key's text: a text as itself, a natural or a boolean as it prints, a set as
- * its members, and an absent value as nothing.
+ * Write a datum as a key's text: a text as itself, a natural, a float or a boolean as it prints, a
+ * set as its members, and an absent value as nothing.
  *
  * @param datum - The datum.
  * @returns Its text.
@@ -477,7 +490,7 @@ export const datumText = (datum: Datum | undefined): string => {
     return datum ?? "";
   }
 
-  return Predicate.isBigInt(datum) || Predicate.isBoolean(datum)
+  return Predicate.isBigInt(datum) || Predicate.isNumber(datum) || Predicate.isBoolean(datum)
     ? String(datum)
     : [...datum].join(" ");
 };
@@ -580,16 +593,42 @@ const matches = (text: string, pattern: string): boolean => {
 };
 
 /**
+ * Order two floats as PostgreSQL's `float8` operators do: a total order in which NaN equals NaN and
+ * follows every other value, +Infinity included ("PostgreSQL treats NaN values as equal, and
+ * greater than all non-NaN values", PostgreSQL's manual, Floating-Point Types), -0 equal to 0.
+ *
+ * @param left - One float.
+ * @param right - The other.
+ * @returns Negative, zero or positive as `left` sorts before, with or after `right`.
+ */
+const floatOrder = (left: number, right: number): number => {
+  if (Number.isNaN(left) || Number.isNaN(right)) {
+    return Number(Number.isNaN(left)) - Number(Number.isNaN(right));
+  }
+
+  if (left < right) {
+    return -1;
+  }
+
+  return left > right ? 1 : 0;
+};
+
+/**
  * Whether two data are equal: texts, naturals and booleans by value, sets by their members.
  *
  * @param left - One datum.
  * @param right - The other.
  * @returns Whether they are equal.
  */
-const equal = (left: Datum, right: Datum): boolean =>
-  left instanceof Set && right instanceof Set
+const equal = (left: Datum, right: Datum): boolean => {
+  if (Predicate.isNumber(left) && Predicate.isNumber(right)) {
+    return floatOrder(left, right) === 0;
+  }
+
+  return left instanceof Set && right instanceof Set
     ? left.size === right.size && [...left].every((member) => right.has(member))
     : left === right;
+};
 
 /**
  * Order two data that are both texts or both naturals.
@@ -625,6 +664,17 @@ const orderTests = new Map<string, (order: number) => boolean>([
 ]);
 
 /**
+ * The order comparisons a `compare` term makes of two floats, by operator, over
+ * {@link floatOrder}'s sign.
+ */
+const floatTests = new Map<string, (left: number, right: number) => boolean>([
+  ["ge", (left, right) => floatOrder(left, right) >= 0],
+  ["gt", (left, right) => floatOrder(left, right) > 0],
+  ["le", (left, right) => floatOrder(left, right) <= 0],
+  ["lt", (left, right) => floatOrder(left, right) < 0],
+]);
+
+/**
  * Compare two data as a `compare` term's operator does.
  *
  * @param op - The operator: `eq`, `ne`, `lt`, `le`, `gt` or `ge`.
@@ -635,6 +685,10 @@ const orderTests = new Map<string, (order: number) => boolean>([
 const compared = (op: string, left: Datum, right: Datum): boolean | undefined => {
   if (op === "eq" || op === "ne") {
     return equal(left, right) === (op === "eq");
+  }
+
+  if (Predicate.isNumber(left) && Predicate.isNumber(right)) {
+    return floatTests.get(op)?.(left, right);
   }
 
   const order = ordered(left, right);

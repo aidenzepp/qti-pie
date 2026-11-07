@@ -286,20 +286,16 @@ const lexicalFaults = (held: string): readonly string[] => [
 ];
 
 /**
- * The forms at a value domain's edges: each facet's bound, and one under and one over it where it
- * is a whole number; signed zeros and exponents; the double's special values; each enumeration
- * member re-cased and padded; the empty and blank forms.
+ * The forms at a value domain's edges: its bound, and the bound's negation; signed zeros and
+ * exponents; the double's special values; each enumeration member re-cased and padded; the empty
+ * and blank forms.
  *
  * @param domain - The domain.
  * @param held - The value as written.
  * @returns The forms.
  */
 const boundaryForms = (domain: ValueDomain, held: string): readonly string[] => [
-  ...domain.facets.flatMap(({ value }) =>
-    /^[+-]?\d+$/u.test(value)
-      ? [value, String(BigInt(value) - 1n), String(BigInt(value) + 1n), `${value}.0`]
-      : [value, `-${value}`],
-  ),
+  ...Option.toArray(domain.bound).flatMap(({ value }) => [String(value), `-${String(value)}`]),
   ...domain.enumeration.flatMap((member) => [member.toUpperCase(), ` ${member}`, `${member} `]),
   "-1",
   "-0",
@@ -1209,7 +1205,7 @@ const operations: Readonly<
       return domain === undefined ? [] : [{ domain, site }];
     });
     const faceted = typed.filter(
-      ({ domain }) => domain.facets.length > 0 || domain.enumeration.length > 0,
+      ({ domain }) => Option.isSome(domain.bound) || domain.enumeration.length > 0,
     );
     const chosen = source.draw(
       oneOf(faceted.length > 0 && source.pick(0, 2) > 0 ? faceted : typed),

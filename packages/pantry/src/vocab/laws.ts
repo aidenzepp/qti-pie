@@ -363,6 +363,16 @@ export const lawTable = {
     source:
       "XML Schema Part 1, Validation Rule: Validation Root (the ID/IDREF table): no id's [binding] has more than one member, an attribute's binding its element, an ID-typed element text's its parent (§3.15.5; reading 101; identity.ts IdBinding); reading 14; reading 74: a context declaration's identifier, a UniqueIdentifier (https://www.imsglobal.org/spec/qti/v3p0/info#DataCharacteristic_ContextDeclaration.Attr_identifier, §5.34.1), is one of the document's IDs, though the 3.0.1 XSD types it an IdentifierDType",
   },
+  "Double bound": {
+    rule: "attribute-lexical",
+    source:
+      "XML Schema Part 2's minInclusive and minExclusive on a double's value (XML Schema 1.1 Part 2 §3.3.5.2, doubleLexicalMap: a literal rounds to its IEEE value, a magnitude below 2^-1075 to a zero of its sign, and -0 equals 0): NonNegativeDoubleDType's minInclusive 0.0 (imsqti_asiv3p0_v1p0.xsd:24034-24038, imsqti_asiv3p0p1_v1p0.xsd:24120-24124) and reading 16's minExclusive 0 for normal-maximum; reading 144",
+  },
+  "Double value": {
+    rule: "attribute-lexical",
+    source:
+      "reading 144: a bounded double's value is a row of its own, DoubleValue, where its lexical form is in xs:double's lexical space (XML Schema 1.0 Part 2 §3.2.5.1, reading 71's edition), read once by the import (write.ts doubleOf)",
+  },
   "E1 derived": {
     rule: "derived",
     source:
@@ -550,7 +560,7 @@ export const lawTable = {
   "MathML align placement": {
     rule: "admission",
     source:
-      "reading 2: https://www.w3.org/TR/MathML3/chapter3.html#presm.malign.group (MathML 3 §3.5.5.2: an maligngroup in a table cell stands in the cell directly or inside an mrow or mstyle that changes no direction, mphantom, mfenced, the selected sub-expression of an maction, or semantics) and #presm.malign.mtable (§3.5.5.9); a group with no cell above it is ignored, only an maction's selected sub-expression is checked, and a change of direction is a dir other than the one the element inherits, so mrow dir='ltr' in a formula that reads left to right changes none (operator decision 321); m:math inherits none, since 'the dir attribute defaults to \"ltr\" on the math element' (MathML 3 §2.2.1, reading 144)",
+      "reading 2: https://www.w3.org/TR/MathML3/chapter3.html#presm.malign.group (MathML 3 §3.5.5.2: an maligngroup in a table cell stands in the cell directly or inside an mrow or mstyle that changes no direction, mphantom, mfenced, the selected sub-expression of an maction, or semantics) and #presm.malign.mtable (§3.5.5.9); a group with no cell above it is ignored, only an maction's selected sub-expression is checked, and a change of direction is a dir other than the one the element inherits, so mrow dir='ltr' in a formula that reads left to right changes none (operator decision 321); m:math inherits none, since 'the dir attribute defaults to \"ltr\" on the math element' (MathML 3 §2.2.1, reading 146)",
   },
   "MathML arity": {
     rule: "math-arity",
@@ -990,7 +1000,7 @@ export const lawTable = {
   "value domain": {
     rule: "attribute-lexical",
     source:
-      "XML Schema Part 2, each attribute's simple type compiled with its whiteSpace and residual facets (domains.ts); readings 7, 45, 46, 56 and 71; and the readings that hold a type to its stricter source (attributes.ts specReadings): 2 (MathML's number without a plus, and cn's base a positive integer), 9 (h1's role heading, tab or presentation, the Schematron's RULE ARIA ROLE 1b), 120 (qti-index's n at least 1), 123 (bdo's dir without auto), 124 and 125 (a media URL non-empty), 129 (xml:lang, lang and srclang BCP 47 language tags), 132 (a printed variable's format a printf format string of at most one conversion) and 135 (a MIME type RFC 2045's two tokens and a slash); and a usage statistic's lastUpdated, the usage data's DateDType (usagedata/imsqti_usagedatav3p0_v1p0.xsd:127-131, xs:date restricted by the pattern [0-9]{4}-[0-9]{2}-[0-9]{2}), the month lengths and the leap rule included (XML Schema 1.1 Part 2 §3.3.9, Day-of-month Representations), which StatisticDate.day restates as grizzle's lexical(date), whose pattern makes the generated date's cast total (Q5.12)",
+      "XML Schema Part 2, each attribute's simple type compiled with its whiteSpace into its lexical space, a double's lower bound left to its typed value (domains.ts, Double bound); readings 7, 45, 46, 56 and 71; and the readings that hold a type to its stricter source (attributes.ts specReadings): 2 (MathML's number without a plus, and cn's base a positive integer), 9 (h1's role heading, tab or presentation, the Schematron's RULE ARIA ROLE 1b), 120 (qti-index's n at least 1), 123 (bdo's dir without auto), 124 and 125 (a media URL non-empty), 129 (xml:lang, lang and srclang BCP 47 language tags), 132 (a printed variable's format a printf format string of at most one conversion) and 135 (a MIME type RFC 2045's two tokens and a slash); and a usage statistic's lastUpdated, the usage data's DateDType (usagedata/imsqti_usagedatav3p0_v1p0.xsd:127-131, xs:date restricted by the pattern [0-9]{4}-[0-9]{2}-[0-9]{2}), the month lengths and the leap rule included (XML Schema 1.1 Part 2 §3.3.9, Day-of-month Representations), which StatisticDate.day restates as grizzle's lexical(date), whose pattern makes the generated date's cast total (Q5.12)",
   },
   "ws arm": {
     rule: "text-copy",

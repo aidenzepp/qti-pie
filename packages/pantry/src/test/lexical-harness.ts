@@ -21,7 +21,7 @@ import { Effect, FileSystem, Option, Result } from "effect";
 import type { ValueDomain } from "#pantry/grammar/attributes.ts";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
 import { patternFlags, unboundPrefixesOf } from "#pantry/grammar/domains.ts";
-import type { ValueFacet } from "#pantry/grammar/domains.ts";
+import type { DoubleBound } from "#pantry/grammar/domains.ts";
 import { openClasses, schemaVersions } from "#pantry/grammar/kinds.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
 import { loadXsd, nameKey, xsdContents } from "#pantry/test/gen/grammar.ts";
@@ -423,16 +423,6 @@ export const recorded: readonly Recorded[] = [
     },
     value: /^[\t\n\r ]*[+-][\t\n\r ]+$/u,
     xsd: "valid",
-  },
-  {
-    builtin: /^(?:double|float)$/u,
-    reason: {
-      _tag: "libxml2",
-      proof: "specialPadded",
-      why: "libxml2 refuses INF, -INF and NaN followed by whitespace, though it collapses a padded numeral and whiteSpace is collapse, fixed, for xs:double and xs:float (Part 2, 3.2.4 and 3.2.5)",
-    },
-    value: /^[\t\n\r ]*-?(?:INF|NaN)[\t\n\r ]+$/u,
-    xsd: "invalid",
   },
   {
     builtin: /^(?:double|float)$/u,
@@ -855,38 +845,29 @@ export const numberOf = (text: string): number => {
 };
 
 /**
- * Whether a value holds a domain's residual facets, the bounds on a float, double or non-integer
- * decimal the pattern does not state: compared as numbers, `INF`, `-INF` and `NaN` as JavaScript
- * reads them, so `NaN` holds no bound.
+ * Whether a value holds a domain's bound, a double's or a float's lower bound the pattern does not
+ * state: compared as numbers, `INF`, `-INF` and `NaN` as JavaScript reads them, so `NaN` holds no
+ * bound.
  *
- * @param facets - The residual facets.
+ * @param bound - The domain's bound, none for an unbounded domain.
  * @param raw - The value as written.
- * @returns Whether every facet holds.
+ * @returns Whether the bound holds.
  */
-export const facetsHold = (facets: readonly ValueFacet[], raw: string): boolean => {
-  const value = numberOf(raw);
-
-  return facets.every(({ facet, value: bound }) => {
-    const limit = numberOf(bound);
+export const boundHolds = (bound: Option.Option<DoubleBound>, raw: string): boolean =>
+  !Option.exists(bound, ({ facet, value: limit }) => {
+    const value = numberOf(raw);
     switch (facet) {
-      case "maxExclusive": {
-        return value < limit;
-      }
-      case "maxInclusive": {
-        return value <= limit;
-      }
       case "minExclusive": {
-        return value > limit;
+        return !(value > limit);
       }
       case "minInclusive": {
-        return value >= limit;
+        return !(value >= limit);
       }
       default: {
         return facet satisfies never;
       }
     }
   });
-};
 
 /**
  * The compiled regex of each domain's pattern, by handle: a pattern that spells the XML name
@@ -913,14 +894,14 @@ export const regexOf = (domain: ValueDomain): RegExp => {
 };
 
 /**
- * Whether the grammar accepts a raw value under a domain: its pattern, then its residual facets.
+ * Whether the grammar accepts a raw value under a domain: its pattern, then its bound.
  *
  * @param domain - The domain.
  * @param raw - The value as written.
  * @returns Whether it is accepted.
  */
 export const accepts = (domain: ValueDomain, raw: string): boolean =>
-  regexOf(domain).test(raw) && facetsHold(domain.facets, raw);
+  regexOf(domain).test(raw) && boundHolds(domain.bound, raw);
 
 /**
  * The whitespace class a resolved XSD domain states, `preserve` for a union, which states none.
@@ -1753,10 +1734,6 @@ export const proofs = {
   signAlone: {
     accepted: ["-&#10;", "- ", "+ ", " -&#9;"],
     type: "xs:decimal",
-  },
-  specialPadded: {
-    refused: ["INF ", "-INF ", "&#13;INF&#13;", "NaN "],
-    type: "xs:double",
   },
   whitespace: {
     refused: [" 0 ", "&#9;0"],

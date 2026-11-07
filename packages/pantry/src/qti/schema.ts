@@ -22,6 +22,7 @@ import {
   BaseType,
   BaseTypeLexical,
   BindingFit,
+  BoundFacet,
   BoundZero,
   BuiltIn,
   BuiltInVariable,
@@ -45,11 +46,12 @@ import {
   DeclarationKind,
   Declares,
   DomainPrimitive,
+  DoubleBound,
   Enters,
   Flag,
   Follow,
-  Governor,
   GoverningOf,
+  Governor,
   HeadQualifier,
   HeldRootsUnder,
   Identity,
@@ -97,9 +99,11 @@ import {
 import {
   Attribute,
   AttributeEntity,
+  DoubleValue,
   attributeLaws,
   Idref,
   OpenAttributeName,
+  TextDoubleValue,
 } from "#pantry/qti/attributes.ts";
 import {
   Comment,
@@ -209,6 +213,7 @@ const grammarRosters = {
   AttributeName,
   AttributeSlot,
   BaseType,
+  BoundFacet,
   BoundZero,
   BuiltIn,
   Cardinality,
@@ -262,6 +267,7 @@ const grammarRelations = {
   ContentReference,
   CountedOf,
   Declares,
+  DoubleBound,
   Enters,
   Follow,
   GoverningOf,
@@ -317,10 +323,17 @@ const chardataRelations = {
 };
 
 /**
- * `attributes.ts`'s relations: every attribute, its IDREF tokens, its entity references and its
- * open name.
+ * `attributes.ts`'s relations: every attribute, its IDREF tokens, its entity references, its open
+ * name and its typed value.
  */
-const attributeRelations = { Attribute, AttributeEntity, Idref, OpenAttributeName };
+const attributeRelations = {
+  Attribute,
+  AttributeEntity,
+  DoubleValue,
+  Idref,
+  OpenAttributeName,
+  TextDoubleValue,
+};
 
 /**
  * `package.ts`'s relations: the package, its entries, the manifest's resources, files and

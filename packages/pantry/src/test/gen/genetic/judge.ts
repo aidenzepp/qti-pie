@@ -42,7 +42,7 @@ import type { Noise } from "#pantry/test/gen/genetic/noise.ts";
 import { writePackage } from "#pantry/test/gen/every-relation.ts";
 import { keyCopies } from "#pantry/test/key-copies.ts";
 import { filesOf } from "#pantry/test/oracle-complete/mutation.ts";
-import { facetsBroken, judge, ruleOf } from "#pantry/test/oracle.ts";
+import { boundBroken, judge, ruleOf } from "#pantry/test/oracle.ts";
 import type { Breach, Judgment as OracleJudgment, Laws } from "#pantry/test/oracle.ts";
 
 /**
@@ -363,7 +363,9 @@ const domainArmOf = (breach: Breach, grammar: ComposedGrammar): Feature => {
   );
   const domain = grammar.attributes.domains.find((held) => held.handle === handle);
   const broken =
-    domain === undefined ? [] : facetsBroken(domain, lexical).map(({ facet }) => facet);
+    domain === undefined
+      ? []
+      : Option.toArray(boundBroken(domain, lexical)).map(({ facet }) => facet);
 
   return `o:value domain arm ${handle ?? "?"} ${broken.length === 0 ? "pattern" : broken.join(" ")}`;
 };

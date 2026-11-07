@@ -89,7 +89,7 @@ import {
   mathQualifiers,
 } from "#pantry/grammar/expression.ts";
 import { booleanOf, compile, patternFlags } from "#pantry/grammar/domains.ts";
-import type { ValueFacet } from "#pantry/grammar/domains.ts";
+import type { DoubleBound } from "#pantry/grammar/domains.ts";
 import { foreignKinds, isForeignKind, openClasses } from "#pantry/grammar/kinds.ts";
 import { textReferenceKinds } from "#pantry/grammar/references.ts";
 import type { SchemaVersion } from "#pantry/grammar/kinds.ts";
@@ -954,7 +954,7 @@ const cnPartsOf = (
  * `rtl`, `ltr` once the walk passes an `m:math` that writes neither. MathML 3 §2.2.1 says "the dir
  * attribute defaults to "ltr" on the math element (but inherits on all other elements which accept
  * the dir attribute)", and §3.1.5.1 sets a formula's direction by its `math` element, so an HTML
- * ancestor's `dir` above it is not read (reading 144).
+ * ancestor's `dir` above it is not read (reading 146).
  *
  * @param view - The document.
  * @param node - The element.
@@ -978,7 +978,7 @@ const inheritedDirectionOf = (view: View, node: FoldedNode<Composed>): string =>
 /**
  * Tell whether an element writes a `dir` other than the one it inherits, so `mrow dir="ltr"` in a
  * left-to-right formula changes none (operator decision 321). A `dir` that spells neither `ltr` nor
- * `rtl` changes nothing (MathML 3 §2.2.1 lists only those two; reading 144).
+ * `rtl` changes nothing (MathML 3 §2.2.1 lists only those two; reading 146).
  *
  * @param view - The document.
  * @param node - The element.
@@ -2065,9 +2065,9 @@ const nodeLaws: readonly NodeLaw[] = [
 ];
 
 /**
- * Read a lexical form as the typed value a residual facet bounds: an `xs:double` or `xs:float` by
- * XML Schema's rules, `INF`, `-INF` and `NaN` included, or an `xs:decimal`, after the `collapse`
- * class those primitives read their forms under.
+ * Read a lexical form as the typed value a bound judges: an `xs:double` or `xs:float` by XML
+ * Schema's rules, `INF`, `-INF` and `NaN` included, after the `collapse` class those primitives
+ * read their forms under.
  *
  * @param form - The lexical form, which the domain's pattern has matched.
  * @returns The value; `NaN` for `NaN`, which no bound holds.
@@ -2117,46 +2117,36 @@ const decimalBelow = (a: string, b: string): boolean => {
 };
 
 /**
- * Find the residual facets a lexical form's typed value breaks: the bounds on a float, a double or
- * a non-integer decimal that a domain's pattern cannot state (`#pantry/grammar/domains.ts`). `NaN`
- * fails every bound.
+ * Find the bound a lexical form's typed value breaks: a double's or a float's lower bound, which no
+ * pattern states (`#pantry/grammar/domains.ts`). The oracle reads the value with its own
+ * `numberOf`, apart from the import's reader, so `-0` and `-1e-400` are zero and meet
+ * `minInclusive 0`, `1e-400` is zero and fails `minExclusive 0`, and `NaN` fails every bound.
  *
  * @param domain - The domain, whose pattern the form matches.
  * @param form - The lexical form as written.
- * @returns Each facet the value lies outside, in the domain's order.
+ * @returns The bound the value lies outside, none where it meets it or the domain has none.
  */
-export const facetsBroken = (domain: ValueDomain, form: string): readonly ValueFacet[] => {
-  if (domain.facets.length === 0) {
-    return [];
-  }
-
-  const value = numberOf(form);
-
-  return domain.facets.filter(({ facet, value: bound }) => {
-    const limit = numberOf(bound);
-    switch (facet) {
-      case "maxExclusive": {
-        return !(value < limit);
+export const boundBroken = (domain: ValueDomain, form: string): Option.Option<DoubleBound> =>
+  domain.bound.pipe(
+    Option.filter(({ facet, value: bound }) => {
+      const value = numberOf(form);
+      switch (facet) {
+        case "minExclusive": {
+          return !(value > bound);
+        }
+        case "minInclusive": {
+          return !(value >= bound);
+        }
+        default: {
+          return facet satisfies never;
+        }
       }
-      case "maxInclusive": {
-        return !(value <= limit);
-      }
-      case "minExclusive": {
-        return !(value > limit);
-      }
-      case "minInclusive": {
-        return !(value >= limit);
-      }
-      default: {
-        return facet satisfies never;
-      }
-    }
-  });
-};
+    }),
+  );
 
 /**
  * Decide whether a lexical form lies in its value domain: it matches the domain's pattern as
- * written, and its typed value meets every residual facet.
+ * written, and its typed value meets the domain's bound.
  *
  * @param compiled - The domain and its compiled pattern.
  * @param compiled.domain - The domain.
@@ -2167,7 +2157,7 @@ export const facetsBroken = (domain: ValueDomain, form: string): readonly ValueF
 const inDomain = (
   compiled: { readonly domain: ValueDomain; readonly regex: RegExp },
   form: string,
-): boolean => compiled.regex.test(form) && facetsBroken(compiled.domain, form).length === 0;
+): boolean => compiled.regex.test(form) && Option.isNone(boundBroken(compiled.domain, form));
 
 /**
  * Whether a domain's identity type is an identifier a document declares: `ID`.
@@ -2355,7 +2345,7 @@ const checkedTextOf = (laws: Laws, node: FoldedNode<Composed>) => {
     version: node.version,
   }).pipe(
     Option.flatMap((domain) => Option.fromNullishOr(laws.domains.get(domain))),
-    Option.filter(({ domain }) => domain.pattern !== universal || domain.facets.length > 0),
+    Option.filter(({ domain }) => domain.pattern !== universal || Option.isSome(domain.bound)),
   );
 };
 
@@ -2667,9 +2657,20 @@ const attributeBreaches = (
                 predecessorAttrs: spaced(before?.derived.attrs ?? new Set()),
               }),
             ],
-        Option.exists(compiled, (held) => !inDomain(held, lexical))
+        Option.exists(compiled, (held) => !held.regex.test(lexical))
           ? [breach("value domain", { lexical })]
           : [],
+        Option.match(
+          Option.flatMap(compiled.pipe(Option.filter((held) => held.regex.test(lexical))), (held) =>
+            boundBroken(held.domain, lexical),
+          ),
+          {
+            onNone: () => [],
+            onSome: ({ facet, value }) => [
+              breach("Double bound", { bound: String(value), facet, lexical }),
+            ],
+          },
+        ),
         referencesOf(attribute, compiled)
           .filter((token) => !ids.has(token))
           .map((token) => breach("Idref target", { token })),
@@ -3086,7 +3087,7 @@ const wholeBreaches = (
       return emptyTextOf(laws, node) ||
         Option.exists(
           compiled,
-          (held) => !overKeyText(node.stringValue) && !inDomain(held, node.stringValue),
+          (held) => !overKeyText(node.stringValue) && !held.regex.test(node.stringValue),
         )
         ? [
             breach("TextDomain", {
@@ -3097,7 +3098,23 @@ const wholeBreaches = (
               version: node.version,
             }),
           ]
-        : [];
+        : Option.match(
+            Option.flatMap(
+              compiled.pipe(Option.filter((held) => held.regex.test(node.stringValue))),
+              (held) => boundBroken(held.domain, node.stringValue),
+            ),
+            {
+              onNone: () => [],
+              onSome: ({ facet, value }) => [
+                breach("Double bound", {
+                  bound: String(value),
+                  facet,
+                  lexical: node.stringValue,
+                  node: pathOf(view, node.id),
+                }),
+              ],
+            },
+          );
     }),
     // C50: an IDREF or IDREFS element text's tokens name ids of its document, as an attribute's do.
     ...rows.nodes.flatMap((node) =>
@@ -6496,7 +6513,7 @@ const kindsAt = (
 
 /**
  * Explain a value against the domain it is read under: the values an enumeration admits where it
- * is outside them, the pattern it misses, or the residual facets its typed value lies outside.
+ * is outside them, the pattern it misses, or the bound its typed value lies outside.
  *
  * @param grammar - The composed grammar.
  * @param handle - The domain's handle, none when no cell gives one.
@@ -6523,9 +6540,10 @@ const domainExplained = (
           : `${JSON.stringify(form)} is read under no value domain`,
       onSome: (domain) => {
         if (new RegExp(domain.pattern, patternFlags).test(form)) {
-          return `${JSON.stringify(form)} is outside ${domain.handle}'s ${facetsBroken(domain, form)
-            .map(({ facet, value }) => `${facet} ${value}`)
-            .join(", ")}`;
+          return `${JSON.stringify(form)} is outside ${domain.handle}'s ${Option.match(
+            boundBroken(domain, form),
+            { onNone: () => "", onSome: ({ facet, value }) => `${facet} ${String(value)}` },
+          )}`;
         }
 
         return domain.enumeration.length > 0
@@ -6820,6 +6838,14 @@ const ownLaws = {
   "DocumentId key": {
     explain: (keys) =>
       `a second element purports the id ${field(keys, "id")}, which ${field(keys, "first")} already holds`,
+  },
+  "Double bound": {
+    explain: (keys) =>
+      `${field(keys, "lexical")} is a double whose value lies outside its domain's ${field(keys, "facet")} ${field(keys, "bound")}`,
+  },
+  "Double value": {
+    explain: () =>
+      "a bounded double's typed value is written where its lexical form is in xs:double's lexical space",
   },
   "E1 derived": {
     explain: (keys) =>

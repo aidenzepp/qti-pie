@@ -58,13 +58,14 @@ const same = (left: ReadonlySet<Flag>, right: ReadonlySet<Flag>): boolean =>
  */
 const referenceOf = (kind: string, interaction: boolean): FlagSets => {
   const template = kind.startsWith("qti-template-block") || kind.startsWith("qti-template-inline");
+  const templateBlock = kind.startsWith("qti-template-block");
   const enters = new Set<Flag>([
     ...(interaction ? ["int" as const] : []),
     ...(kind === "qti-gap-match-interaction" ? ["gap" as const] : []),
     ...(choiceLike.has(kind) ? ["choice" as const] : []),
     ...(kind === "qti-hottext" ? ["htx" as const] : []),
     ...(kind === "qti-rubric-block" ? ["rubric" as const] : []),
-    ...(template ? ["tmpl" as const] : []),
+    ...(templateBlock ? ["tmpl" as const] : []),
     ...(kind === "qti-modal-feedback" ? ["modal" as const] : []),
     ...(kind.startsWith("qti-feedback-block") || kind === "qti-feedback-inline"
       ? ["fb" as const]

@@ -21,9 +21,9 @@
  *
  * What it does not restore stays absent: a tree root's copies along the axis, whose start values
  * grizzle keeps in its own field builders; a copy along a last or a predecessor axis; a field
- * PostgreSQL generates; and a value no datum of `#pantry/test/key-copies.ts` is, a float. A law
- * that reads an absent value on a row it reads is not judged, and {@link judge} names it with every
- * absent value, so a skip is always named by its cause.
+ * PostgreSQL generates. A float is read as grizzle's `float8` stores it, -0 as 0. A law that reads
+ * an absent value on a row it reads is not judged, and {@link judge} names it with every absent
+ * value, so a skip is always named by its cause.
  */
 import type { Law } from "@bjornpagen/grizzle";
 import { Option, Order, Predicate, Schema } from "effect";
@@ -32,6 +32,7 @@ import { Qti } from "#pantry/qti/schema.ts";
 import {
   closedRows,
   datumText,
+  floatDatum,
   judgedLaws,
   judgedSideOf,
   SideSchema,
@@ -54,45 +55,103 @@ type FilledRow = Record<string, Datum>;
 export type HostRows = ReadonlyMap<string, readonly HostRow[]>;
 
 /**
- * A stored relation as its descriptor holds it: its primary key, and each field's writing where
- * grizzle or PostgreSQL writes it.
+ * A stored relation as its descriptor holds it: its primary key, and each field's descriptor, whose
+ * writing grizzle or PostgreSQL writes it by ({@link writingOf}). A field's descriptor is any
+ * value: a `pg` scalar such as `pg.float8` is a function as well as a descriptor.
  */
 const RelationSchema = Schema.Struct({
-  heading: Schema.Record(
-    Schema.String,
-    Schema.Struct({ writing: Schema.optionalKey(Schema.String) }),
-  ),
+  heading: Schema.Record(Schema.String, Schema.Unknown),
   kind: Schema.Literal("relation"),
   name: Schema.String,
   primaryKey: Schema.Array(Schema.String),
 });
 
 /**
+ * Read how a field is written, where grizzle or PostgreSQL writes it: its descriptor's `writing`.
+ *
+ * @param descriptor - The field's descriptor.
+ * @returns The writing, none for a field its caller writes.
+ */
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- A heading's descriptor is any value; this reads the one property it may hold.
+const writingOf = (descriptor: unknown): Option.Option<string> =>
+  Predicate.hasProperty(descriptor, "writing") && Predicate.isString(descriptor.writing)
+    ? Option.some(descriptor.writing)
+    : Option.none();
+
+/**
+ * The kinds of schema member the host reads elsewhere than as a stored relation, each with why: a
+ * roster and a closed relation are constants, read by `closedRows` of `#pantry/test/key-copies.ts`.
+ */
+const readElsewhere: ReadonlyMap<string, string> = new Map([
+  ["closed", "a roster, whose handles a closed relation's rows hold"],
+  ["closedRelation", "a closed relation, read by closedRows"],
+]);
+
+/**
+ * A stored relation as the host models it: its primary key and its fields' writings.
+ */
+interface Modelled {
+  readonly key: readonly string[];
+  readonly writing: ReadonlyMap<string, string>;
+}
+
+/**
+ * Read every member of a schema the host models: each stored relation's primary key and its
+ * fields' writings, by name. A member the host can read neither as a stored relation nor as a kind
+ * it reads elsewhere ({@link readElsewhere}) fails loudly, by name, since a relation that vanished
+ * from the host's model would leave every law over it unjudged without a word.
+ *
+ * @param members - The schema's members, `Qti.relations`' values.
+ * @returns The stored relations by name.
+ * @throws {Error} Naming each member the host cannot read: a defect of the host judge, which must
+ *   learn the member's shape before it judges a schema that holds it.
+ */
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- A schema's members are read here, by their shape.
+export const modelledRelations = (members: readonly unknown[]): ReadonlyMap<string, Modelled> => {
+  const modelled = new Map<string, Modelled>();
+  const unread: string[] = [];
+  for (const member of members) {
+    const decoded = Schema.decodeUnknownOption(RelationSchema)(member);
+    if (Option.isSome(decoded)) {
+      const { heading, name, primaryKey } = decoded.value;
+      modelled.set(name, {
+        key: primaryKey,
+        writing: new Map(
+          Object.entries(heading).flatMap(([field, descriptor]) =>
+            Option.match(writingOf(descriptor), {
+              onNone: () => [],
+              onSome: (writing) => [[field, writing] as const],
+            }),
+          ),
+        ),
+      });
+      continue;
+    }
+
+    const kind =
+      Predicate.hasProperty(member, "kind") && Predicate.isString(member.kind) ? member.kind : "";
+    if (!readElsewhere.has(kind)) {
+      unread.push(
+        Predicate.hasProperty(member, "name") && Predicate.isString(member.name)
+          ? `${member.name} (${kind === "" ? "no kind" : kind})`
+          : `a member of no name (${kind === "" ? "no kind" : kind})`,
+      );
+    }
+  }
+
+  if (unread.length > 0) {
+    throw new Error(
+      `The host judge cannot read ${unread.join(", ")}: each is neither a stored relation it models nor a kind it reads elsewhere, so every law over it would go unjudged. Teach host-judge.ts the member's shape, or name its kind in readElsewhere with why.`,
+    );
+  }
+
+  return modelled;
+};
+
+/**
  * Each stored relation's primary key and its fields' writings, by name.
  */
-const relations: ReadonlyMap<
-  string,
-  { readonly key: readonly string[]; readonly writing: ReadonlyMap<string, string> }
-> = new Map(
-  Object.values(Qti.relations).flatMap((member) =>
-    Option.match(Schema.decodeUnknownOption(RelationSchema)(member), {
-      onNone: () => [],
-      onSome: ({ heading, name, primaryKey }) => [
-        [
-          name,
-          {
-            key: primaryKey,
-            writing: new Map(
-              Object.entries(heading).flatMap(([field, { writing }]) =>
-                writing === undefined ? [] : [[field, writing] as const],
-              ),
-            ),
-          },
-        ] as const,
-      ],
-    }),
-  ),
-);
+const relations = modelledRelations(Object.values(Qti.relations));
 
 /**
  * Read a relation's primary key.
@@ -235,7 +294,8 @@ const foldFilled: ReadonlySet<string> = new Set(
 );
 
 /**
- * Whether a value is a datum the host judges: a text, a natural, a truth value or a set of handles.
+ * Whether a value is a datum the host judges: a text, a natural, a float, a truth value or a set
+ * of handles.
  *
  * @param value - The value.
  * @returns Whether it is a datum.
@@ -243,6 +303,7 @@ const foldFilled: ReadonlySet<string> = new Set(
 const isDatum = (value: unknown): value is Datum =>
   Predicate.isString(value) ||
   Predicate.isBigInt(value) ||
+  Predicate.isNumber(value) ||
   Predicate.isBoolean(value) ||
   (value instanceof Set && [...value].every(Predicate.isString));
 
@@ -571,7 +632,7 @@ export const hostRowsOf = (inputs: PackageInputs): HostRows => {
   ): void => {
     for (const [field, value] of Object.entries(written)) {
       if (isDatum(value) && row[field] === undefined) {
-        row[field] = value;
+        row[field] = Predicate.isNumber(value) ? floatDatum(value) : value;
       }
     }
 

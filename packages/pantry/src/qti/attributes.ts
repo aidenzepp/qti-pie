@@ -90,6 +90,7 @@ import {
   natural,
   on,
   ordered,
+  pg,
   relation,
   select,
   str,
@@ -103,6 +104,8 @@ import {
   AttributeNameSelf,
   AttributeSlot,
   AttributeSlotOf,
+  boundedDomains,
+  DoubleBound,
   emptyDomains,
   GoverningOf,
   KindNamespace,
@@ -201,7 +204,8 @@ const nilUuid = "00000000-0000-0000-0000-000000000000";
  *   but `xml` is one a declaration in scope binds), `lexical` (the record) and `slot` (`{position}`
  *   of its name under its element's governor);
  * - **the family's group:** `node`, its element's id, which the nesting supplies;
- * - **drawn:** `at`, and the counts of its three families, `openName`, `idrefs` and `entities`;
+ * - **drawn:** `at`, and the counts of its four families, `openName`, `idrefs`, `entities` and
+ *   `doubleValue`;
  * - **accumulated** by grizzle: `kind`, `version`, `document`, `governs` and `documentType`, its
  *   element's, along the owner axis; `attrsWas` and `attrsAfter`, AL2's fold before and after this
  *   attribute; and `idrefText`, the end of its `Idref` pieces' concatenation.
@@ -214,6 +218,7 @@ export const Attribute = relation(
     attrsWas: accumulated(bits(AttributeSlot), Bits.of(AttributeSlot, [])),
     document: accumulated(uuid, nilUuid),
     documentType: accumulated(closedId(ResourceType), "none"),
+    doubleValue: drawn(natural),
     entities: drawn(natural),
     governs: accumulated(closedId(TypeName), "none"),
     id: uuid,
@@ -259,6 +264,69 @@ export const OpenAttributeName = relation(
     version: accumulated(closedId(SchemaVersion), "3.0.0"),
   },
   ["node", "attribute", "at"],
+);
+
+/**
+ * The typed value of an attribute whose domain bounds its value (`DoubleBound`), an ordered family
+ * of at most one member under its `Attribute`: the IEEE double its lexical form maps to, which its
+ * domain's bound judges, since whether a literal clears a bound turns on that rounding and no
+ * pattern states it (XML Schema 1.1 Part 2, §3.3.5.2).
+ *
+ * - **the host's:** `value`, the double the import's reader of an attribute's or a text's double
+ *   parses from the lexical form (`doubleOf` of `#pantry/import/write.ts`), written only where the
+ *   form is in the domain's lexical space;
+ * - **the family's group:** `node` and `attribute`, its attribute's key;
+ * - **drawn:** `at`, always 0;
+ * - **accumulated** along the owner axis: `governs`, `kind`, `name` and `version`, its attribute's,
+ *   which read its domain.
+ *
+ * It holds a double's value for its bound alone. grizzle's `float8` has one zero: it writes -0 as 0
+ * and reads -0 as +0 (`codec/scalar.ts` and `scalar/values/convert.ts` of grizzle-engine at the
+ * vendored commit), so `-0` is stored as 0. No law reads a zero's sign: XML Schema orders -0 equal
+ * to 0, so a bound judges them alike, and the lexical form keeps the sign for export.
+ */
+export const DoubleValue = relation(
+  "DoubleValue",
+  {
+    at: drawn(natural),
+    attribute: uuid,
+    governs: accumulated(closedId(TypeName), "none"),
+    kind: accumulated(closedId(NodeKind), "document"),
+    name: accumulated(closedId(AttributeName), "data-*"),
+    node: uuid,
+    value: pg.float8,
+    version: accumulated(closedId(SchemaVersion), "3.0.0"),
+  },
+  ["node", "attribute", "at"],
+);
+
+/**
+ * The typed value of an element's text whose domain bounds its value (`DoubleBound`), the text an
+ * `xsi:type` naming `NonNegativeDoubleDType` gives a foreign element: an ordered family of at most
+ * one member under its `Node`, the text's twin of {@link DoubleValue}, held to the same bound law.
+ *
+ * - **the host's:** `value`, the double the import's reader of an attribute's or a text's double
+ *   parses from the element's string value (`doubleOf` of `#pantry/import/write.ts`), written only
+ *   where the string value is in the domain's lexical space;
+ * - **the family's group:** `node`, its element's id;
+ * - **drawn:** `at`, always 0;
+ * - **accumulated** along the owner axis: `governs`, `kind` and `version`, its element's, which read
+ *   its text's domain.
+ *
+ * Its value is a double's for its bound alone, -0 stored as 0 under grizzle's one-zero `float8`, as
+ * {@link DoubleValue}'s is.
+ */
+export const TextDoubleValue = relation(
+  "TextDoubleValue",
+  {
+    at: drawn(natural),
+    governs: accumulated(closedId(TypeName), "none"),
+    kind: accumulated(closedId(NodeKind), "document"),
+    node: uuid,
+    value: pg.float8,
+    version: accumulated(closedId(SchemaVersion), "3.0.0"),
+  },
+  ["node", "at"],
 );
 
 /**
@@ -351,9 +419,47 @@ const declaredDataNames = AttributeName.handles.filter(
 );
 
 /**
+ * Each bounded attribute's typed value, counted by `Attribute.doubleValue`: one member where the
+ * attribute's domain is bounded and its lexical form is in the domain's lexical space, none
+ * elsewhere (`Double_value`).
+ */
+export const doubleValueFamily = ordered(
+  on(DoubleValue, "node", "attribute", "at"),
+  fin(Attribute, "doubleValue"),
+);
+
+/**
+ * Each bounded text's typed value, counted by `Node.doubleValue`: one member where the element's
+ * text domain is bounded and its string value is in the domain's lexical space, none elsewhere
+ * (`Double_value`).
+ */
+export const textDoubleValueFamily = ordered(
+  on(TextDoubleValue, "node", "at"),
+  fin(Node, "doubleValue"),
+);
+
+/**
+ * Read the domain a typed text's element reads its text in, from the element's copies
+ * (`TextDomain` under `GoverningOf`'s governor).
+ *
+ * @param t - The row.
+ * @returns The closed read.
+ */
+const typedTextDomainOf = (t: RowScalars<typeof TextDoubleValue>) =>
+  TextDomain.at("domain", t.version, GoverningOf.at("governor", t.version, t.kind, t.governs));
+
+/**
  * An `Attribute` row as a row check or a selection reads it.
  */
 type AttributeRow = RowScalars<typeof Attribute>;
+
+/**
+ * What an attribute's domain is read by: its name, and its element's version, kind and governing
+ * type, which an `Attribute` row holds and a `DoubleValue` row copies.
+ */
+type NamedRow =
+  | Pick<AttributeRow, "governs" | "kind" | "name" | "version">
+  | Pick<RowScalars<typeof DoubleValue>, "governs" | "kind" | "name" | "version">;
 
 /**
  * Read an attribute's governor: what its element reads its attributes by, under the element's
@@ -362,7 +468,7 @@ type AttributeRow = RowScalars<typeof Attribute>;
  * @param a - The row.
  * @returns The closed read.
  */
-const governorOf = (a: AttributeRow) => GoverningOf.at("governor", a.version, a.kind, a.governs);
+const governorOf = (a: NamedRow) => GoverningOf.at("governor", a.version, a.kind, a.governs);
 
 /**
  * Read an attribute's attribute model: its governor's in the version (`AttributeModelOf`, total).
@@ -370,8 +476,7 @@ const governorOf = (a: AttributeRow) => GoverningOf.at("governor", a.version, a.
  * @param a - The row.
  * @returns The closed read.
  */
-const attributeModelOf = (a: AttributeRow) =>
-  AttributeModelOf.at("model", a.version, governorOf(a));
+const attributeModelOf = (a: NamedRow) => AttributeModelOf.at("model", a.version, governorOf(a));
 
 /**
  * Read an admitted attribute's slot under its element's governor (`AttributeSlotOf`).
@@ -379,7 +484,7 @@ const attributeModelOf = (a: AttributeRow) =>
  * @param a - The row.
  * @returns The closed read, absent for an unadmitted name.
  */
-const slotOf = (a: AttributeRow) => AttributeSlotOf.at("slot", attributeModelOf(a), a.name);
+const slotOf = (a: NamedRow) => AttributeSlotOf.at("slot", attributeModelOf(a), a.name);
 
 /**
  * State that an attribute's name is one its element's governor admits: the singleton of the name
@@ -401,7 +506,7 @@ const admitted = (a: AttributeRow) =>
  * @param a - The row.
  * @returns The closed read, absent for an unadmitted name.
  */
-const domainOf = (a: AttributeRow) => AttributeGrammar.at("domain", attributeModelOf(a), slotOf(a));
+const domainOf = (a: NamedRow) => AttributeGrammar.at("domain", attributeModelOf(a), slotOf(a));
 
 /**
  * State that an attribute's name is an open class's.
@@ -499,6 +604,14 @@ export const attributeLawsByName = {
       on(Attribute, "node", "id", "name", "kind", "version", "governs"),
     ),
     contained(on(Idref, "node", "attribute", "document"), on(Attribute, "node", "id", "document")),
+    contained(
+      on(DoubleValue, "node", "attribute", "governs", "kind", "name", "version"),
+      on(Attribute, "node", "id", "governs", "kind", "name", "version"),
+    ),
+    contained(
+      on(TextDoubleValue, "node", "governs", "kind", "version"),
+      on(Node, "id", "governs", "kind", "version"),
+    ),
   ],
   "AL2 count": [attributeFamily],
   "AL2 distinct": [
@@ -585,6 +698,60 @@ export const attributeLawsByName = {
     ),
   ],
   "AttributeEntity owner": [entityFamily],
+  "Double bound": [
+    check("Double_bound", DoubleValue, (d) =>
+      d.or(
+        d.and(
+          d.eq(DoubleBound.at("facet", domainOf(d)), "minInclusive"),
+          d.ge(d.value, DoubleBound.at("value", domainOf(d))),
+        ),
+        d.and(
+          d.eq(DoubleBound.at("facet", domainOf(d)), "minExclusive"),
+          d.gt(d.value, DoubleBound.at("value", domainOf(d))),
+        ),
+      ),
+    ),
+    check("Double_bound", TextDoubleValue, (t) =>
+      t.or(
+        t.and(
+          t.eq(DoubleBound.at("facet", typedTextDomainOf(t)), "minInclusive"),
+          t.ge(t.value, DoubleBound.at("value", typedTextDomainOf(t))),
+        ),
+        t.and(
+          t.eq(DoubleBound.at("facet", typedTextDomainOf(t)), "minExclusive"),
+          t.gt(t.value, DoubleBound.at("value", typedTextDomainOf(t))),
+        ),
+      ),
+    ),
+  ],
+  "Double value": [
+    doubleValueFamily,
+    check("Double_value", Attribute, (a) => {
+      const typed = a.and(
+        admitted(a),
+        a.in(domainOf(a), boundedDomains),
+        Compute.matches(a.lexical, ValueDomainOf.at("pattern", domainOf(a))),
+      );
+
+      return a.or(
+        a.and(typed, a.eq(a.doubleValue, 1n)),
+        a.and(a.not(typed), a.eq(a.doubleValue, 0n)),
+      );
+    }),
+    textDoubleValueFamily,
+    check("Double_value", Node, (n) => {
+      const typed = n.and(
+        holdsCheckedText(n),
+        n.in(textDomainOf(n), boundedDomains),
+        Compute.matches(n.stringValue, ValueDomainOf.at("pattern", textDomainOf(n))),
+      );
+
+      return n.or(
+        n.and(typed, n.eq(n.doubleValue, 1n)),
+        n.and(n.not(typed), n.eq(n.doubleValue, 0n)),
+      );
+    }),
+  ],
   "E1 derived": [
     idrefFamily,
     check("E1_derived", Attribute, (a) =>

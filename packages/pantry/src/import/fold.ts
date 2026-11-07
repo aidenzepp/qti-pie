@@ -136,6 +136,24 @@ const universal: ReadonlySet<string> = new Set(universalDomains);
 const copied: ReadonlySet<string> = new Set(copiedTextKinds);
 
 /**
+ * Read the domain an element reads its text in: `TextDomain` under the governor `GoverningOf`
+ * gives it.
+ *
+ * @param version - The element's version.
+ * @param kind - Its kind.
+ * @param governs - Its governing type.
+ * @returns The domain, none where `GoverningOf` or `TextDomain` holds no row.
+ */
+export const textDomainOf = (
+  version: string,
+  kind: string,
+  governs: string,
+): Option.Option<string> =>
+  Option.flatMap(governorOf(version, kind, governs), (governor) =>
+    Option.fromNullishOr(textDomainAt.get(keyOf(version, governor))),
+  );
+
+/**
  * Decide whether an element's text is one TextDomain judges: its domain under its governor is
  * none of the universal domains (`checkedText` of `#pantry/qti/node.ts`, on the host).
  *
@@ -146,12 +164,7 @@ const copied: ReadonlySet<string> = new Set(copiedTextKinds);
  *   which PostgreSQL reads as NULL and so passes.
  */
 const checksText = (version: string, kind: string, governs: string): boolean =>
-  Option.exists(
-    Option.flatMap(governorOf(version, kind, governs), (governor) =>
-      Option.fromNullishOr(textDomainAt.get(keyOf(version, governor))),
-    ),
-    (domain) => !universal.has(domain),
-  );
+  Option.exists(textDomainOf(version, kind, governs), (domain) => !universal.has(domain));
 
 /**
  * The state a member claims by its placement: an `at` member's one position, a `shared` member's

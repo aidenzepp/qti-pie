@@ -1,16 +1,16 @@
 /**
  * The planted value-domain cases (REP-B's and N2's G1-2 finding): three packages of the
- * every-relation package, each with one attribute written outside its value domain's facets though
- * inside its lexical space, which the law oracle refuses under the value domain (attribute-lexical)
- * and today's database lets through, since no law of `Qti` reads `ValueDomainOf`'s facets:
+ * every-relation package, each with one attribute written inside its lexical space but outside its
+ * value domain's bound, which the law oracle and the database both refuse under `Double bound`
+ * (attribute-lexical), the bound judged on the attribute's typed value (`DoubleValue`):
  *
- * - A test part's `qti-time-limits` with `min-time="-1"`, under `xs:double`'s non-negative facet;
- * - A slider's `step="-1"`, under the positive integer `step` is;
- * - An outcome's `normal-maximum="0"`, under the positive double the normal maximum is.
+ * - A test part's `qti-time-limits` with `min-time="-1"`, under `NonNegativeDoubleDType`'s
+ *   `minInclusive="0.0"`;
+ * - A slider's `step="-1"`, under the same bound;
+ * - An outcome's `normal-maximum="0"`, under reading 16's `minExclusive="0"`.
  *
- * They are judged every run (`src/test/genetic.oracle.test.ts`): each disagrees while it waits on
- * its owner's fix, the import refusing a value outside its domain's facets, and must agree once the
- * fix lands, whose commit drops the wait.
+ * They are judged every run (`src/test/genetic.oracle.test.ts`), and the two sides agree on each:
+ * none waits on a fix.
  */
 import { Option } from "effect";
 import { everyRelationPackage } from "#pantry/test/gen/every-relation.ts";
@@ -49,14 +49,6 @@ const editedBase = (path: string, passage: string, replacement: string): Package
 };
 
 /**
- * The fix the three cases wait on.
- */
-const facets = Option.some({
-  fix: "G1-2: the import refuses an attribute value outside its value domain's facets",
-  owner: "REP-B",
-});
-
-/**
  * The three planted cases.
  */
 export const plantedCases: readonly Planted[] = [
@@ -67,7 +59,7 @@ export const plantedCases: readonly Planted[] = [
       '<qti-test-part identifier="part1" navigation-mode="linear" submission-mode="individual"><qti-time-limits min-time="-1"/>',
     ),
     name: 'a test part\'s qti-time-limits min-time="-1"',
-    waits: facets,
+    waits: Option.none(),
   },
   {
     entries: editedBase(
@@ -76,11 +68,11 @@ export const plantedCases: readonly Planted[] = [
       'upper-bound="10" step="-1"',
     ),
     name: 'a slider\'s step="-1"',
-    waits: facets,
+    waits: Option.none(),
   },
   {
     entries: editedBase("items/item.xml", 'normal-maximum="10"', 'normal-maximum="0"'),
     name: 'an outcome\'s normal-maximum="0"',
-    waits: facets,
+    waits: Option.none(),
   },
 ];

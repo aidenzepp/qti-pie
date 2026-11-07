@@ -22,9 +22,10 @@
  *
  * The rest of a type's facets fold into the same pattern where they are lexical: its primitive's
  * lexical space, its `pattern` facets (one set per derivation step, each set an alternation, every
- * set holding), its enumeration, its lengths, and an integer type's bounds, which are a set of
- * digit strings. A bound on a float, double or non-integer decimal needs the typed value, so it
- * stays data, the domain's residual `facets`, which a law column per primitive reads.
+ * set holding), its enumeration, its lengths, an integer type's bounds, which are a set of digit
+ * strings, and a decimal's `minInclusive="0"`, the unsigned decimals and the zeros after a minus.
+ * A double's or a float's one lower bound needs the typed value, so it is the domain's
+ * {@link DoubleBound}, which the typed value's law reads; any other bound is refused.
  *
  * The pattern is written in the syntax PostgreSQL's advanced regular expressions, JavaScript's
  * `u`-flag regular expressions and grizzle's `str.regex` grammar share: bracket expressions of code
@@ -1250,6 +1251,19 @@ const doubleLexical = alt(
 );
 
 /**
+ * The lexical space of a bounded double or float: the primitive's but `NaN`. A datatype's lexical
+ * space is "the prescribed set of strings which the lexical mapping for that datatype maps to
+ * values of that datatype" (XML Schema 1.1 Part 2, §2.3), and NaN meets no bound, so it is no value
+ * of a bounded type; the bound itself judges every other value ({@link DoubleBound}). It also keeps
+ * NaN from the typed value, which PostgreSQL would order after every other float and so let meet
+ * `>= 0` and `> 0`.
+ */
+const boundedDoubleLexical = alt(
+  seq(decimalLexical, opt(seq(cls("Ee"), sign, plus(digit)))),
+  seq(opt(literal("-")), literal("INF")),
+);
+
+/**
  * An `NCName`: a name start character other than the colon, then name characters other than the
  * colon (Namespaces in XML, `NCName`).
  */
@@ -1711,13 +1725,21 @@ const nonNegativeDecimal = alt(
 );
 
 /**
- * A facet on a typed value that no pattern states, so a law column per primitive reads it: a bound
- * on a float, a double or a non-integer decimal.
+ * A lower bound on a double's or a float's value, which no pattern states: a value's literal rounds
+ * to its IEEE value (XML Schema 1.1 Part 2, §3.3.5.2 and §3.3.4.2), and whether a literal clears a
+ * bound turns on that rounding, which no regular language decides (a mantissa's digits against its
+ * exponent). So the bound is the typed value's law, read once on the host's parse of the literal,
+ * and the pattern states the lexical space alone.
  */
-export interface ValueFacet {
-  readonly facet: "maxExclusive" | "maxInclusive" | "minExclusive" | "minInclusive";
-  readonly value: string;
+export interface DoubleBound {
+  readonly facet: (typeof boundFacets)[number];
+  readonly value: number;
 }
+
+/**
+ * The facets a {@link DoubleBound} is, the `BoundFacet` roster in code order.
+ */
+export const boundFacets = ["minExclusive", "minInclusive"] as const;
 
 /**
  * The `ValueDomain` primitive of a compiled domain: an atomic domain's XSD primitive, or `list` or
@@ -1776,6 +1798,22 @@ export const identities = ["ID", "IDREF", "IDREFS"] as const satisfies readonly 
 export type Qualified = "QName" | "QNames";
 
 /**
+ * Collapse a text, as XML Schema's `collapse` whitespace class does and `Compute.collapse` does:
+ * each run of tabs, line feeds, carriage returns and spaces one space, and none at either end (XSD
+ * 1.1 Part 2, §4.3.6). No other character is whitespace to it: a no-break space, an ideographic
+ * space or a byte order mark stays, where `String.prototype.trim` would drop it.
+ *
+ * @param text - The text.
+ * @returns The collapsed text.
+ * @see {@link https://www.w3.org/TR/xmlschema11-2/#rf-whiteSpace | XSD 1.1 Part 2, whiteSpace}
+ */
+export const collapse = (text: string): string =>
+  text
+    .replaceAll(/[\t\n\r ]+/gu, " ")
+    .replace(/^ /u, "")
+    .replace(/ $/u, "");
+
+/**
  * A QName's two parts once its whitespace is collapsed: its prefix, empty for an unprefixed name,
  * and its local name, each with no colon and no whitespace (Namespaces in XML 1.0, section 4).
  */
@@ -1797,10 +1835,10 @@ export const qNamePartsOf = (
 
 /**
  * The prefixes a value of a QName domain names that no binding in scope declares: of each QName
- * the value holds, once its whitespace is collapsed (a list's items split at its spaces), the
- * prefix where it has one and `bound` refuses it. A token that is no QName names none: the
- * domain's pattern refuses it. An unprefixed QName always has a value, in the default namespace or
- * in none.
+ * the value holds, once its whitespace is collapsed ({@link collapse}; a list's items split at its
+ * spaces), the prefix where it has one and `bound` refuses it. A token that is no QName names none:
+ * the domain's pattern refuses it. An unprefixed QName always has a value, in the default namespace
+ * or in none.
  *
  * @param qualified - How the domain's values name namespaces.
  * @param value - The value as written.
@@ -1813,7 +1851,7 @@ export const unboundPrefixesOf = (
   value: string,
   bound: (prefix: string) => boolean,
 ): readonly string[] => {
-  const collapsed = value.replaceAll(/[\t\n\r ]+/gu, " ").trim();
+  const collapsed = collapse(value);
   const names = qualified === "QName" ? [collapsed] : collapsed.split(" ");
 
   return [
@@ -1830,7 +1868,7 @@ export const unboundPrefixesOf = (
 
 /**
  * A compiled value domain: the pattern its lexical forms match as written, the primitive its typed
- * value is derived in, the facets a typed-value law reads, the identity type it is, if any, the
+ * value is derived in, the bound its typed value's law reads, the identity type it is, if any, the
  * values its enumeration keeps, and whether its values are QNames read with their bindings.
  */
 export interface CompiledDomain {
@@ -1839,8 +1877,11 @@ export interface CompiledDomain {
    * pattern matches: what an explanation lists of a value outside them. Empty for a definition
    * that states no enumeration, and for a list or a union.
    */
+  /**
+   * A double's or a float's lower bound, none for any other domain and for an unbounded one.
+   */
+  readonly bound: Option.Option<DoubleBound>;
   readonly enumeration: readonly string[];
-  readonly facets: readonly ValueFacet[];
   readonly identity: Option.Option<Identity>;
   readonly pattern: string;
   readonly primitive: DomainPrimitive;
@@ -2021,33 +2062,33 @@ const isIntegerPattern = (set: readonly string[]): boolean =>
   set.length === 1 && set[0] === integerPattern;
 
 /**
- * The bounds a definition states, as residual facets.
+ * The bounds a definition states.
  *
  * @param facets - Its facets.
- * @returns Each bound.
+ * @returns Each bound, by its facet and its value as written.
  */
-const boundsOf = (facets: readonly Facet[]): readonly ValueFacet[] =>
-  facets.flatMap(({ facet, value }): ValueFacet[] =>
-    facet === "maxExclusive" ||
-    facet === "maxInclusive" ||
-    facet === "minExclusive" ||
-    facet === "minInclusive"
-      ? [{ facet, value }]
-      : [],
+const boundsOf = (facets: readonly Facet[]): readonly Facet[] =>
+  facets.filter(
+    ({ facet }) =>
+      facet === "maxExclusive" ||
+      facet === "maxInclusive" ||
+      facet === "minExclusive" ||
+      facet === "minInclusive",
   );
 
 /**
  * The lexical space an atomic definition's primitive and bounds give it: an integer's interval for
  * an `xs:integer`, the non-negative decimals for a decimal of `minInclusive="0"`, else the
- * primitive's lexical space with its bounds left to the typed value.
+ * primitive's lexical space, with a double's or a float's one lower bound left to its typed value
+ * ({@link DoubleBound}).
  *
  * @param domain - The atomic definition.
- * @returns The language, and the bounds it does not state.
+ * @returns The language, and the bound it does not state; or the refusal of any other bound.
  */
 const lexicalOf = (
   domain: Extract<Domain, { readonly _tag: "atomic" }>,
 ): Result.Result<
-  { readonly facets: readonly ValueFacet[]; readonly tree: Regex },
+  { readonly bound: Option.Option<DoubleBound>; readonly tree: Regex },
   UnreadDefinition
 > =>
   Result.gen(function* lexicalOfBody() {
@@ -2069,7 +2110,7 @@ const lexicalOf = (
 
       return yield* Option.match(integerIn(lo, hi), {
         onNone: () => refuse("an integer interval with no member"),
-        onSome: (tree) => Result.succeed({ facets: [], tree }),
+        onSome: (tree) => Result.succeed({ bound: Option.none(), tree }),
       });
     }
 
@@ -2079,7 +2120,7 @@ const lexicalOf = (
     }
 
     if (bounds.length === 0) {
-      return { facets: [], tree: lexical.value };
+      return { bound: Option.none(), tree: lexical.value };
     }
 
     if (
@@ -2088,12 +2129,26 @@ const lexicalOf = (
       bounds[0]?.facet === "minInclusive" &&
       Number(bounds[0].value) === 0
     ) {
-      return { facets: [], tree: nonNegativeDecimal };
+      return { bound: Option.none(), tree: nonNegativeDecimal };
     }
 
-    return primitive === "decimal" || primitive === "double" || primitive === "float"
-      ? { facets: bounds, tree: lexical.value }
-      : yield* refuse(`a bound on ${primitive}`);
+    const [only, ...more] = bounds;
+    if (
+      (primitive === "double" || primitive === "float") &&
+      only !== undefined &&
+      more.length === 0 &&
+      (only.facet === "minInclusive" || only.facet === "minExclusive") &&
+      Number.isFinite(Number(only.value))
+    ) {
+      return {
+        bound: Option.some({ facet: only.facet, value: Number(only.value) }),
+        tree: boundedDoubleLexical,
+      };
+    }
+
+    return yield* refuse(
+      `${bounds.map(({ facet, value }) => `${facet}="${value}"`).join(" and ")} on ${primitive}, which only one finite lower bound on a double or a float is read as`,
+    );
   });
 
 /**
@@ -3047,11 +3102,14 @@ const intersection = (arms: readonly Regex[]): Result.Result<Regex, UnreadDefini
  * integer's interval implies the integer built-in's own set.
  *
  * @param domain - The atomic definition, its enumeration aside.
- * @returns The tree and the residual facets.
+ * @returns The tree and the bound its typed value keeps.
  */
 const atomicCore = (
   domain: Extract<Domain, { readonly _tag: "atomic" }>,
-): Result.Result<{ readonly facets: readonly ValueFacet[]; readonly tree: Regex }, CompileError> =>
+): Result.Result<
+  { readonly bound: Option.Option<DoubleBound>; readonly tree: Regex },
+  CompileError
+> =>
   Result.gen(function* atomicCoreBody() {
     const { facets } = domain;
     const lexical = yield* lexicalOf(domain);
@@ -3082,7 +3140,7 @@ const atomicCore = (
       ...lengths,
     ];
 
-    return { facets: lexical.facets, tree: yield* intersection(arms) };
+    return { bound: lexical.bound, tree: yield* intersection(arms) };
   });
 
 /**
@@ -3600,12 +3658,15 @@ type Context = { readonly _tag: "token" } | { readonly _tag: "value"; readonly e
  *
  * @param domain - The definition.
  * @param context - Where its value stands.
- * @returns The tree as written, and its residual facets.
+ * @returns The tree as written, and the bound its typed value keeps.
  */
 const compileAtomic = (
   domain: Extract<Domain, { readonly _tag: "atomic" }>,
   context: Context,
-): Result.Result<{ readonly facets: readonly ValueFacet[]; readonly tree: Regex }, CompileError> =>
+): Result.Result<
+  { readonly bound: Option.Option<DoubleBound>; readonly tree: Regex },
+  CompileError
+> =>
   Result.gen(function* compileAtomicBody() {
     const whiteSpace = yield* classOf(domain.facets);
     const values = valuesOf(domain.facets, "enumeration");
@@ -3637,18 +3698,18 @@ const compileAtomic = (
     }
 
     if (context._tag === "token") {
-      return { facets: core.facets, tree: asToken(tree) };
+      return { bound: core.bound, tree: asToken(tree) };
     }
 
     if (context.exact || whiteSpace === "preserve") {
-      return { facets: core.facets, tree };
+      return { bound: core.bound, tree };
     }
 
     if (whiteSpace === "replace") {
-      return { facets: core.facets, tree: foldReplace(tree) };
+      return { bound: core.bound, tree: foldReplace(tree) };
     }
 
-    return { facets: core.facets, tree: yield* foldCollapse(tree) };
+    return { bound: core.bound, tree: yield* foldCollapse(tree) };
   });
 
 /**
@@ -3668,12 +3729,15 @@ const varietyFacets: ReadonlySet<FacetName> = new Set([
  *
  * @param domain - The definition.
  * @param context - Where its value stands.
- * @returns The tree as written, and its residual facets.
+ * @returns The tree as written, and the bound its typed value keeps.
  */
 const compileIn = (
   domain: Domain,
   context: Context,
-): Result.Result<{ readonly facets: readonly ValueFacet[]; readonly tree: Regex }, CompileError> =>
+): Result.Result<
+  { readonly bound: Option.Option<DoubleBound>; readonly tree: Regex },
+  CompileError
+> =>
   Result.gen(function* compileInBody() {
     if (domain._tag === "atomic") {
       return yield* compileAtomic(domain, context);
@@ -3690,14 +3754,14 @@ const compileIn = (
       const arms: Regex[] = [];
       for (const member of domain.members) {
         const compiled = yield* compileIn(member, context);
-        if (compiled.facets.length > 0) {
-          return yield* refuse("a value bound inside a union, which no one law column reads");
+        if (Option.isSome(compiled.bound)) {
+          return yield* refuse("a value bound inside a union, which no one typed value carries");
         }
 
         arms.push(compiled.tree);
       }
 
-      return { facets: [], tree: alt(...arms) };
+      return { bound: Option.none(), tree: alt(...arms) };
     }
 
     if (context._tag === "token") {
@@ -3705,8 +3769,8 @@ const compileIn = (
     }
 
     const item = yield* compileIn(domain.item, { _tag: "token" });
-    if (item.facets.length > 0) {
-      return yield* refuse("a value bound on a list's item, which no one law column reads");
+    if (Option.isSome(item.bound)) {
+      return yield* refuse("a value bound on a list's item, which no one typed value carries");
     }
 
     const { max, min } = lengthBounds(domain.facets);
@@ -3717,7 +3781,10 @@ const compileIn = (
     // leaves the list nothing (`repeat`).
     const items = min === 0 ? opt(seq(item.tree, more(0))) : seq(item.tree, more(min - 1));
 
-    return { facets: [], tree: context.exact ? items : seq(anyWhitespace, items, anyWhitespace) };
+    return {
+      bound: Option.none(),
+      tree: context.exact ? items : seq(anyWhitespace, items, anyWhitespace),
+    };
   });
 
 /**
@@ -3829,7 +3896,7 @@ export const compile = (
       return yield* refuse("a QName member of a union");
     }
 
-    const { facets, tree } = yield* compileIn(domain, {
+    const { bound, tree } = yield* compileIn(domain, {
       _tag: "value",
       exact: reading === "exact",
     });
@@ -3841,11 +3908,11 @@ export const compile = (
     const matches = new RegExp(pattern, patternFlags);
 
     return {
+      bound,
       enumeration:
         domain._tag === "atomic"
           ? valuesOf(domain.facets, "enumeration").filter((value) => matches.test(value))
           : [],
-      facets,
       identity: identityOf(domain),
       pattern,
       primitive: domain._tag === "atomic" ? domain.primitive : domain._tag,
@@ -3858,8 +3925,8 @@ export const compile = (
  * an open name's value is read under, which a declaration of that type compiles to alike.
  */
 export const openCompiled: CompiledDomain = {
+  bound: Option.none(),
   enumeration: [],
-  facets: [],
   identity: Option.none(),
   pattern: emitWhole(anything),
   primitive: "anySimpleType",
