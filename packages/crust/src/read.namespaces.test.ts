@@ -1,6 +1,8 @@
 import { assert, describe, it } from "@effect/vitest";
-import { drawn, explore } from "@grizzle/testing/explore";
-import { required } from "@grizzle/testing/features";
+import { drawn, exhaust, explore } from "@grizzle/testing/explore";
+import { required, requiredInSpace } from "@grizzle/testing/features";
+import { element as oneOf } from "@grizzle/testing/gen";
+import type { Gen } from "@grizzle/testing/gen";
 import { notesOnly } from "@grizzle/testing/sense";
 import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
@@ -14,21 +16,32 @@ import { writeXml } from "#crust/write.ts";
 
 /**
  * What a parse resolved, in document order: each element's name and namespace, then each of its
- * attributes', or the first well-formedness error's message, which carries its line and column.
+ * attributes', or where its first well-formedness error stands, as the line and column its message
+ * opens with. The two readers word an error differently; they must refuse at the same place.
  */
 type Resolved =
   | { readonly kind: "names"; readonly names: readonly string[] }
-  | { readonly kind: "error"; readonly message: string };
+  | { readonly kind: "error"; readonly at: string };
 
 /**
- * The oracle: the namespaces `saxes` resolves with nothing seeded, its own walk over the open
- * elements answering every prefix. The reader at 1854123 copied exactly these into its tree, so
- * the property proves the seed changes no name the reader resolves and no error it raises.
+ * The `line:column` a well-formedness message opens with, as `saxes` and crust's namespace pass
+ * both write it.
+ *
+ * @param message - The message.
+ * @returns Its position, or the whole message when it opens with none.
+ */
+const positionIn = (message: string): string => /^\d+:\d+/u.exec(message)?.[0] ?? message;
+
+/**
+ * The oracle: the namespaces `saxes` resolves in its own namespace mode, a second
+ * implementation of Namespaces in XML. crust reads with `saxes`'s namespaces off and resolves every
+ * name in its own pass, after the attribute-list defaults are added (`#crust/namespaces.ts`); on a
+ * document with no default, the two must resolve the same names and refuse at the same place.
  *
  * @param text - The document.
  * @returns What `saxes` resolved.
  */
-const unseeded = (text: string): Resolved => {
+const bySaxes = (text: string): Resolved => {
   const parser = new SaxesParser({ position: true, xmlns: true });
   const names: string[] = [];
   const errors: string[] = [];
@@ -45,14 +58,14 @@ const unseeded = (text: string): Resolved => {
 
   const [first] = errors;
 
-  return first === undefined ? { kind: "names", names } : { kind: "error", message: first };
+  return first === undefined ? { kind: "names", names } : { at: positionIn(first), kind: "error" };
 };
 
 /**
  * Each element's name and namespace in document order, then each of its attributes'.
  *
  * @param root - The tree.
- * @returns The names, as {@link unseeded} lists them.
+ * @returns The names, as {@link bySaxes} lists them.
  */
 const namesOf = (root: Element): readonly string[] => [
   `${root.qname} ${root.namespace}`,
@@ -70,8 +83,8 @@ const read = (text: string): Effect.Effect<Resolved> =>
   readXml(new TextEncoder().encode(text)).pipe(
     Effect.match({
       onFailure: (error): Resolved => ({
+        at: error._tag === "WellFormednessError" ? positionIn(error.message) : error.detail,
         kind: "error",
-        message: error._tag === "WellFormednessError" ? error.message : error.detail,
       }),
       onSuccess: (doc): Resolved => ({ kind: "names", names: namesOf(doc.root) }),
     }),
@@ -245,7 +258,7 @@ const infosetOf = (element: Element): Element => {
   };
 };
 
-describe("readXml resolves every namespace as saxes does unseeded", () => {
+describe("readXml resolves every namespace as saxes does in its namespace mode", () => {
   it.effect(
     `for every chain ${CHAIN_DEPTH} deep over ${DECLARATIONS.length} declarations and ${USES.length} uses, well-formed or not`,
     () =>
@@ -253,7 +266,7 @@ describe("readXml resolves every namespace as saxes does unseeded", () => {
         const documents = chains(CHAIN_DEPTH);
         let refused = 0;
         for (const text of documents) {
-          const oracle = unseeded(text);
+          const oracle = bySaxes(text);
           assert.deepStrictEqual(yield* read(text), oracle, text);
           refused += oracle.kind === "error" ? 1 : 0;
         }
@@ -285,7 +298,7 @@ describe("readXml resolves every namespace as saxes does unseeded", () => {
             literal: Formatter.format,
             oracle: {
               kind: "universal",
-              name: "read ∘ write = id in the information set's form (infosetOf), and saxes unseeded resolving the generator's names",
+              name: "read ∘ write = id in the information set's form (infosetOf), and saxes's namespace mode resolving the generator's names",
             },
             runs: CASES,
             shrink: completeShrink,
@@ -300,8 +313,173 @@ describe("readXml resolves every namespace as saxes does unseeded", () => {
               const doc = yield* readXml(new TextEncoder().encode(text));
 
               assert.deepStrictEqual(infosetOf(doc.root), infosetOf(tree));
-              assert.deepStrictEqual(unseeded(text), { kind: "names", names: namesOf(tree) });
+              assert.deepStrictEqual(bySaxes(text), { kind: "names", names: namesOf(tree) });
             }),
+        ),
+      ),
+    GENERATED_TIMEOUT_MS,
+  );
+});
+
+/**
+ * The attribute names an attribute-list default is declared under: a name in the `xml` namespace,
+ * two prefixed names, the default and two prefixed namespace declarations, the two reserved
+ * declarations, a plain name and one that is no qualified name.
+ */
+const DEFAULT_NAMES = [
+  "xml:space",
+  "p:a",
+  "q:a",
+  "xmlns",
+  "xmlns:p",
+  "xmlns:q",
+  "xmlns:xml",
+  "xmlns:xmlns",
+  "a",
+  "a:b:c",
+] as const;
+
+/**
+ * The values a default gives: two namespace names, the empty value, the `xml` namespace's name and
+ * a plain token.
+ */
+const DEFAULT_VALUES = [
+  "urn:p",
+  "urn:q",
+  "",
+  "http://www.w3.org/XML/1998/namespace",
+  "preserve",
+] as const;
+
+/**
+ * What the root writes beside the default: nothing, a declaration of `p` or of `q` to the name
+ * `urn:p` or of both, an attribute named `p:a` or `q:a`, the default namespace, or `q:a` beside the
+ * declarations that give it the expanded name a default `p:a` would have.
+ */
+const WRITTEN = [
+  "",
+  ' xmlns:p="urn:p"',
+  ' xmlns:q="urn:p"',
+  ' xmlns:p="urn:p" xmlns:q="urn:p"',
+  ' p:a="1"',
+  ' q:a="1"',
+  ' xmlns="urn:x"',
+  ' xmlns:q="urn:p" q:a="1"',
+  ' xmlns:p="urn:p" xmlns:q="urn:p" q:a="1"',
+] as const;
+
+/**
+ * The root's names: unprefixed, and prefixed `p`.
+ */
+const ROOTS = ["r", "p:r"] as const;
+
+/**
+ * What the root holds: nothing, an unprefixed child, or a child prefixed `p`.
+ */
+const CHILDREN = ["", "<c/>", "<p:c/>"] as const;
+
+/**
+ * One case of the box: a root that is given one attribute-list default and writes some attributes
+ * and a child of its own.
+ */
+interface Defaulted {
+  readonly child: (typeof CHILDREN)[number];
+  readonly name: (typeof DEFAULT_NAMES)[number];
+  readonly root: (typeof ROOTS)[number];
+  readonly value: (typeof DEFAULT_VALUES)[number];
+  readonly written: (typeof WRITTEN)[number];
+}
+
+/**
+ * Every case: each default name and value, root, written set and child.
+ */
+const defaulted: Gen<Defaulted> = (source) => ({
+  child: source.draw(oneOf(CHILDREN)),
+  name: source.draw(oneOf(DEFAULT_NAMES)),
+  root: source.draw(oneOf(ROOTS)),
+  value: source.draw(oneOf(DEFAULT_VALUES)),
+  written: source.draw(oneOf(WRITTEN)),
+});
+
+/**
+ * The size of {@link defaulted}'s box.
+ */
+const DEFAULTED =
+  DEFAULT_NAMES.length * DEFAULT_VALUES.length * ROOTS.length * WRITTEN.length * CHILDREN.length;
+
+/**
+ * Write a case twice: with the default declared and left to the reader, and with the same
+ * attribute written last in the root's start tag, unless the root writes it already, where XML 1.0
+ * section 3.3.2 adds no default.
+ *
+ * @param cased - The case.
+ * @param cased.child - The root's child.
+ * @param cased.name - The default's attribute name.
+ * @param cased.root - The root's name.
+ * @param cased.value - The default's value.
+ * @param cased.written - The attributes the root writes.
+ * @returns The two documents.
+ */
+const documentsOf = ({ child, name, root, value, written }: Defaulted) => {
+  const doctype = `<!DOCTYPE ${root} [<!ATTLIST ${root} ${name} CDATA "${value}">]>`;
+  const writes = written.includes(` ${name}=`);
+  const end = child === "" ? "/>" : `>${child}</${root}>`;
+
+  return {
+    defaulted: `${doctype}<${root}${written}${end}`,
+    explicit: `${doctype}<${root}${written}${writes ? "" : ` ${name}="${value}"`}${end}`,
+  };
+};
+
+describe("readXml resolves namespaces over the attributes it defaults", () => {
+  it.effect(
+    `as saxes resolves the same attributes written, for every default name, value, root, written set and child, exhausted: ${String(DEFAULTED)} documents`,
+    (ctx) =>
+      // Oracle: XML 1.0 section 3.3.2 ("the processor MUST behave as though the attribute were
+      // present with the declared default value") with Namespaces in XML section 3 (declarations
+      // "may be provided directly or by default"): the defaulted document resolves as `saxes`'s
+      // namespace mode, a second implementation, resolves the document with the default written.
+      // The written form is longer, so a refusal is compared as a refusal, not by position.
+      searched(
+        ctx,
+        exhaust(
+          {
+            box: "every default of 10 names and 5 values, on 2 roots writing 9 attribute sets around 3 children",
+            caseHang,
+            coverage: requiredInSpace<(typeof DEFAULT_NAMES)[number] | "refused" | "read">([
+              "refused",
+              "read",
+              ...DEFAULT_NAMES,
+            ]),
+            generator: defaulted,
+            limit: DEFAULTED,
+            literal: Formatter.format,
+            oracle: {
+              kind: "second-implementation",
+              name: "saxes's namespace mode on the document with the default written, by XML 1.0 section 3.3.2",
+            },
+            suite: "crust/read/namespaces-defaulted",
+          },
+          (cased, c) =>
+            Effect.gen(function* resolvesAsWritten() {
+              const { defaulted: text, explicit } = documentsOf(cased);
+              const expected = bySaxes(explicit);
+              const actual = yield* read(text);
+              c.note(cased.name);
+              c.note(expected.kind === "error" ? "refused" : "read");
+
+              assert.deepStrictEqual(
+                actual.kind === "error" ? "refused" : actual,
+                expected.kind === "error" ? "refused" : expected,
+                `${text} against ${explicit}`,
+              );
+            }),
+        ),
+      ).pipe(
+        Effect.tap((done) =>
+          Effect.sync(() => {
+            assert.strictEqual(done.cases, DEFAULTED);
+          }),
         ),
       ),
     GENERATED_TIMEOUT_MS,

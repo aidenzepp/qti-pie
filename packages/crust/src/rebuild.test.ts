@@ -4,8 +4,9 @@ import { noCoverage, required } from "@grizzle/testing/features";
 import { notesOnly } from "@grizzle/testing/sense";
 import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
-import { Effect, Formatter } from "effect";
+import { Effect, Formatter, Result } from "effect";
 import { rebuild } from "#crust/rebuild.ts";
+import type { Opened } from "#crust/rebuild.ts";
 import type { Leaf } from "#crust/tour.ts";
 import {
   caseHang,
@@ -18,62 +19,112 @@ import {
   treeSituations,
 } from "#crust/test/trees.ts";
 import type { Bounds } from "#crust/test/trees.ts";
-import type { Attribute, Child, Element } from "#crust/tree.ts";
+import type { Child, Element } from "#crust/tree.ts";
 
 /**
  * The oracle: the recursive rebuild that `read.ts`'s `applyAttlists` and `restoreReferences` each
- * were at 1854123, with their two per-node rules made parameters. It overflows the stack within a
- * few thousand levels, so the trees below stay far shallower.
+ * were at 1854123, with their two per-node rules made parameters, a context threaded down and the
+ * first failure in document order kept. It overflows the stack within a few thousand levels, so the
+ * trees below stay far shallower.
  *
  * @param element - The element to rebuild.
- * @param attributesOf - Gives the attributes of an element's rebuilt counterpart.
- * @param leaf - Gives the nodes that stand in a leaf's place.
- * @returns The rebuilt element.
+ * @param scope - The context it is opened in.
+ * @param open - Gives an element's counterpart and its children's context, or a failure.
+ * @param leaf - Gives the nodes that stand in a leaf's place, or a failure.
+ * @returns The rebuilt element, or the first failure.
  */
-const recursiveRebuild = (
+const recursiveRebuild = <S, E>(
   element: Element,
-  attributesOf: (element: Element) => readonly Attribute[],
-  leaf: (node: Leaf) => readonly Child[],
-): Element => ({
-  ...element,
-  attributes: attributesOf(element),
-  children: element.children.flatMap((child): readonly Child[] =>
-    child.kind === "element" ? [recursiveRebuild(child, attributesOf, leaf)] : leaf(child),
-  ),
-});
+  scope: S,
+  open: (element: Element, scope: S) => Result.Result<Opened<S>, E>,
+  leaf: (node: Leaf) => Result.Result<readonly Child[], E>,
+): Result.Result<Element, E> => {
+  const opened = open(element, scope);
+  if (Result.isFailure(opened)) {
+    return Result.fail(opened.failure);
+  }
+
+  const children: Child[] = [];
+  for (const child of element.children) {
+    const nodes =
+      child.kind === "element"
+        ? Result.map(recursiveRebuild(child, opened.success.scope, open, leaf), (held) => [held])
+        : leaf(child);
+    if (Result.isFailure(nodes)) {
+      return Result.fail(nodes.failure);
+    }
+
+    children.push(...nodes.success);
+  }
+
+  return Result.succeed({ ...opened.success.element, children });
+};
 
 /**
- * An attribute rule whose result shows which element it was given and the order of that
- * element's own attributes.
+ * An open rule whose result shows which element it was given, the order of that element's own
+ * attributes and the depth its context carries: its attributes reversed, then one naming the
+ * element and its depth, the children's context one deeper.
  *
  * @param element - The original element.
- * @returns Its attributes reversed, then one naming the element.
+ * @param depth - The context, the element's depth.
+ * @returns The counterpart and the children's depth.
  */
-const marked = (element: Element): readonly Attribute[] => [
-  ...element.attributes.toReversed(),
-  { local: "of", namespace: "", prefix: "", qname: "of", references: [], value: element.qname },
-];
+const marked = (element: Element, depth: number): Result.Result<Opened<number>> =>
+  Result.succeed({
+    element: {
+      ...element,
+      attributes: [
+        ...element.attributes.toReversed(),
+        {
+          local: "of",
+          namespace: "",
+          prefix: "",
+          qname: "of",
+          references: [],
+          value: `${element.qname}@${String(depth)}`,
+        },
+      ],
+    },
+    scope: depth + 1,
+  });
+
+/**
+ * An open rule that fails at the third element in document order, naming it and its depth, and
+ * marks every other as {@link marked} does: the rebuild must stop at the same element as the
+ * oracle, and before any later leaf.
+ *
+ * @returns The rule, with its own count of the elements it has opened.
+ */
+const failingAtThird = () => {
+  let opened = 0;
+
+  return (element: Element, depth: number): Result.Result<Opened<number>, string> => {
+    opened += 1;
+
+    return opened === 3 ? Result.fail(`${element.qname}@${String(depth)}`) : marked(element, depth);
+  };
+};
 
 /**
  * A leaf rule that gives each kind a different number of stand-ins: a text run becomes two, a
  * processing instruction stays twice, a comment is dropped, and an entity reference becomes text.
  *
  * @param node - The original leaf.
- * @returns The nodes that stand in its place.
+ * @returns The nodes that stand in its place; it never fails.
  */
-const replaced = (node: Leaf): readonly Child[] => {
+const replaced = (node: Leaf): Result.Result<readonly Child[], string> => {
   switch (node.kind) {
     case "text": {
-      return [node, { ...node, value: `${node.value}+` }];
+      return Result.succeed([node, { ...node, value: `${node.value}+` }]);
     }
     case "pi": {
-      return [node, node];
+      return Result.succeed([node, node]);
     }
     case "comment": {
-      return [];
+      return Result.succeed([]);
     }
     case "entityRef": {
-      return [{ cdata: false, kind: "text", value: node.name }];
+      return Result.succeed([{ cdata: false, kind: "text", value: node.name }]);
     }
     default: {
       return node satisfies never;
@@ -92,16 +143,22 @@ const agrees = (root: Element, name: string): void => {
   assert.deepStrictEqual(
     rebuild(
       root,
-      (element) => element.attributes,
-      (node) => [node],
+      undefined,
+      (element) => Result.succeed({ element, scope: undefined }),
+      (node) => Result.succeed([node]),
     ),
-    root,
+    Result.succeed(root),
     `${name}, identity`,
   );
   assert.deepStrictEqual(
-    rebuild(root, marked, replaced),
-    recursiveRebuild(root, marked, replaced),
+    rebuild(root, 0, marked, replaced),
+    recursiveRebuild(root, 0, marked, replaced),
     `${name}, marked and replaced`,
+  );
+  assert.deepStrictEqual(
+    rebuild(root, 0, failingAtThird(), replaced),
+    recursiveRebuild(root, 0, failingAtThird(), replaced),
+    `${name}, failing at the third element`,
   );
 };
 
