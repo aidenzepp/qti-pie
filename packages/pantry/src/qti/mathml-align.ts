@@ -367,10 +367,7 @@ export const alignLaws: readonly Statement[] = [
     on(selectionAttributes, "node", "lexical"),
     on(writtenSelections, "node", "selectionLexical"),
   ),
-  contained(
-    on(writtenSelections, "node", "selectionLexical"),
-    on(selectionAttributes, "node", "lexical"),
-  ),
+  contained(on(writtenSelections, "node"), on(selectionAttributes, "node")),
   check("E1_derived", MathAction, (m) =>
     m.and(
       m.eq(m.selectionText, Compute.collapse(m.selectionLexical)),
@@ -379,7 +376,7 @@ export const alignLaws: readonly Statement[] = [
         m.and(
           m.eq(m.selectionWritten, true),
           m.eq(
-            m.selection,
+            Compute.base(m.selection),
             Compute.when(
               Compute.matches(m.selectionText, integerForm),
               (text) => Compute.cast(text, pg.bigint),
@@ -483,6 +480,7 @@ export const alignLaws: readonly Statement[] = [
     nodeRef,
   ),
   contained(on(CellLeaf, "node", "cell"), on(leafScopes, "node", "cell")),
+  key(on(CellLeaf, "node")),
   contained(on(leafScopes, "node"), on(CellLeaf, "node")),
   contained(on(CellLeaf, "cell", "groups"), on(MathCell, "node", "groups")),
   leafFamily,

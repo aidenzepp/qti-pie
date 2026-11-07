@@ -1032,10 +1032,7 @@ export const identityLaws = [
     on(shareSources, "node", "document", "lexical"),
     on(ShareFragment, "node", "document", "src"),
   ),
-  contained(
-    on(ShareFragment, "node", "document", "src"),
-    on(shareSources, "node", "document", "lexical"),
-  ),
+  contained(on(ShareFragment, "node"), on(shareSources, "node")),
   check("E1_derived", ShareFragment, (f) =>
     f.and(
       f.eq(Compute.startsWith(f.src, "#"), true),

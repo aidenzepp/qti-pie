@@ -2049,13 +2049,7 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
     ),
     "E1 derived",
   ],
-  [
-    containedIn(
-      sideOf("ShareFragment", "node", "document", "src"),
-      sideOf("Attribute", "node", "document", "lexical"),
-    ),
-    "E1 derived",
-  ],
+  [containedIn(sideOf("ShareFragment", "node"), sideOf("Attribute", "node")), "E1 derived"],
   ...(
     [
       [sideOf("GeneralNamed", "general"), sideOf("ResourceLomGeneral", "node")],
@@ -2470,9 +2464,11 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
     containedIn(sideOf("Attribute", "node", "lexical"), sideOf("MapKey", "node", "key")),
     "Mapping overlay",
   ],
-  ...mirrored(sideOf("Attribute", "node", "lexical"), sideOf("MapKey", "node", "caseText")).map(
-    (law) => [law, "Mapping overlay"] as const,
-  ),
+  [
+    containedIn(sideOf("Attribute", "node", "lexical"), sideOf("MapKey", "node", "caseText")),
+    "Mapping overlay",
+  ],
+  [containedIn(sideOf("MapKey", "node"), sideOf("Attribute", "node")), "Mapping overlay"],
   [keyOver(sideOf("MapKey", "mapping", "folded", "matched")), "Map key"],
   ...(["MapKeyInteger", "MapKeyFloat"] as const).flatMap((typed) => [
     ...mirrored(
