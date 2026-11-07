@@ -11,11 +11,11 @@
  * accepted.
  */
 import type { Addition } from "@bjornpagen/grizzle";
-import { Option } from "effect";
+import { Array as Arr, Option } from "effect";
 import { ChoiceBound, ContentReference, interactionKinds } from "#pantry/grammar/install.ts";
 import { booleanOf } from "#pantry/grammar/domains.ts";
 import type { DocumentContext } from "#pantry/import/context.ts";
-import { foldOf, ownContext } from "#pantry/import/fold.ts";
+import { foldAt, foldOf } from "#pantry/import/fold.ts";
 import type { Folded } from "#pantry/import/fold.ts";
 import { declaredFieldsOf } from "#pantry/import/overlays/declarations.ts";
 import { flatten } from "#pantry/model/xdm.ts";
@@ -92,10 +92,11 @@ import type {
  */
 export interface InteractionIds {
   /**
-   * The document's context (spec reading 117), its own where none is given: an included
-   * fragment's nodes take the interaction their includes stand in as their nearest.
+   * The document's context (spec reading 117), `ownContext` of its document node for a document no
+   * site names: an included fragment's nodes take the interaction their includes stand in as their
+   * nearest.
    */
-  readonly context?: DocumentContext;
+  readonly context: DocumentContext;
   readonly idOf: (index: number) => NodeId;
 }
 
@@ -195,11 +196,14 @@ const countMost = 2n ** 63n - 1n;
  * @param form - The count's collapsed form.
  * @returns Its value, or none.
  */
-const countValueOf = (form: string): Option.Option<bigint> =>
-  Option.fromNullishOr(integerParts.exec(form)?.groups).pipe(
-    Option.map(({ digits = "", sign }) => (sign === "-" ? -BigInt(digits) : BigInt(digits))),
+const countValueOf = (form: string): Option.Option<bigint> => {
+  const groups = integerParts.exec(form)?.groups;
+
+  return Option.fromNullishOr(groups?.["digits"]).pipe(
+    Option.map((digits) => (groups?.["sign"] === "-" ? -BigInt(digits) : BigInt(digits))),
     Option.filter((value) => value >= 0n && value <= countMost),
   );
+};
 
 /**
  * A printed variable's `base` or `index` that is an integer, not a variable's name
@@ -215,10 +219,32 @@ type Space = Addition<typeof InteractionAttribute>["lead"];
 /**
  * Decide whether a text is XML whitespace, possibly none.
  *
- * @param text - The text.
+ * @param text - The text, none where a pattern matched nothing.
  * @returns Whether it is a {@link Space}.
  */
-const isSpace = (text: string): text is Space => /^[\t\n\r ]*$/u.test(text);
+const isSpace = (text: string | undefined): text is Space =>
+  text !== undefined && /^[\t\n\r ]*$/u.test(text);
+
+/**
+ * Take the whitespace a pattern anchors at one end of a text: {@link leading} or {@link trailing},
+ * each of which matches every text, its run possibly empty.
+ *
+ * @param pattern - The pattern.
+ * @param text - The text.
+ * @returns The run.
+ * @throws {Error} When the pattern matches no whitespace run, which both patterns rule out: a
+ *   defect of this splitter, never of the document.
+ */
+const spaceAt = (pattern: RegExp, text: string): Space => {
+  const run = pattern.exec(text)?.[0];
+  if (!isSpace(run)) {
+    throw new Error(
+      `The whitespace pattern ${String(pattern)} took no run of XML whitespace from ${JSON.stringify(text)}, but it matches every text. Correct the pattern pieces splits by.`,
+    );
+  }
+
+  return run;
+};
 
 /**
  * A lexical form's pieces: its outer whitespace and its collapsed value.
@@ -235,17 +261,15 @@ export interface Pieces {
  *
  * @param lexical - The lexical form as written.
  * @returns Its pieces.
+ * @throws {Error} When a whitespace pattern takes no run ({@link spaceAt}): a defect of this
+ *   splitter, never of the document.
  */
 export const pieces = (lexical: string): Pieces => {
-  const lead = leading.exec(lexical)?.[0] ?? "";
+  const lead = spaceAt(leading, lexical);
   const rest = lexical.slice(lead.length);
-  const trail = trailing.exec(rest)?.[0] ?? "";
+  const trail = spaceAt(trailing, rest);
 
-  return {
-    lead: isSpace(lead) ? lead : "",
-    trail: isSpace(trail) ? trail : "",
-    value: rest.slice(0, rest.length - trail.length),
-  };
+  return { lead, trail, value: rest.slice(0, rest.length - trail.length) };
 };
 
 /**
@@ -262,45 +286,46 @@ const keyOf = (values: readonly string[]): string => JSON.stringify(values);
 type KindOfNode = NodeRow<Composed>["kind"];
 
 /**
- * What the tree's rows say of each node beside its own row: its fold (`#pantry/import/fold.ts`),
- * which holds its nearest interaction (N8) and its element counts, and each node's kind by id.
- */
-interface TreeFacts {
-  readonly folds: ReadonlyMap<NodeId, Folded>;
-  readonly kindOf: (id: NodeId) => KindOfNode;
-}
-
-/**
- * Compute a document's {@link TreeFacts}.
+ * Read a map at a key it holds by construction: a document's node kinds at a node of the document
+ * (every attribute's element and every element's parent is a node `flatten` writes), the counted
+ * bounds at a bound of the rows counted ({@link choiceCountsOf}), the package's item modes at an
+ * item's assembly, whose root is an item document with its `ItemMode`.
  *
- * @param nodes - A document's node rows, in document order, so each parent precedes its children.
- * @param context - The document's context, whose nearest the document node's is (spec reading
- *   117), and whose kind an interaction of another document has.
- * @returns The facts.
+ * @param map - The map.
+ * @param key - A key it holds.
+ * @param holds - What the map holds, for the defect.
+ * @returns The value at the key.
+ * @throws {Error} When the map holds no value at the key: a defect of the caller, which read a key
+ *   of other rows than the map was built from.
  */
-const treeFactsOf = (nodes: readonly NodeRow<Composed>[], context: DocumentContext): TreeFacts => {
-  const kinds = new Map(nodes.map((node) => [node.id, node.kind] as const));
+const heldAt = <V>(map: ReadonlyMap<NodeId, V>, key: NodeId, holds: string): V => {
+  const value = map.get(key);
+  if (value === undefined) {
+    throw new Error(
+      `${key} is none of ${holds}, which hold every key the builder reads in them. Read each key in the rows the map was built from.`,
+    );
+  }
 
-  return {
-    folds: foldOf(nodes, context),
-    kindOf: (id) => kinds.get(id) ?? (id === context.nearest ? context.nearestKind : "document"),
-  };
+  return value;
 };
 
 /**
- * One document as the builders read it: its flat rows, its document node and root kind, the tree's
- * facts, each element's attributes, its declarations that have a `Declaration` row, the names only
- * a declaration with none holds, and whether it is an adaptive item.
+ * One document as the builders read it: its flat rows, its document node and root kind, each
+ * node's fold (`#pantry/import/fold.ts`), which holds its nearest interaction (N8), that
+ * interaction's kind and its element counts, each node's kind, each element's attributes, its
+ * declarations that have a `Declaration` row, the names only a declaration with none holds, and,
+ * for an item, its mode: whether it is adaptive.
  */
 interface Context {
-  readonly adaptive: boolean;
   readonly attributes: ReadonlyMap<NodeId, ReadonlyMap<string, string>>;
   readonly declared: readonly (DeclaredVariable & { readonly identifier: string })[];
   readonly document: NodeId;
-  readonly untyped: ReadonlySet<string>;
-  readonly facts: TreeFacts;
+  readonly folds: ReadonlyMap<NodeId, Folded>;
+  readonly itemMode: Option.Option<boolean>;
+  readonly kinds: ReadonlyMap<NodeId, KindOfNode>;
   readonly rootKind: KindOfNode;
   readonly rows: FlatRows<Composed>;
+  readonly untyped: ReadonlySet<string>;
 }
 
 /**
@@ -342,7 +367,7 @@ const valueOf = (
 const tupleOf = (context: Context, node: NodeRow<Composed>) => ({
   document: context.document,
   kind: node.kind,
-  nearest: context.facts.folds.get(node.id)?.nearest ?? context.document,
+  nearest: foldAt(context.folds, node.id).nearest,
   node: node.id,
   parent: node.parent,
   start: node.start,
@@ -370,7 +395,7 @@ const declaredFieldsAt = (context: Pick<Context, "attributes">, node: NodeRow<Co
  * @returns The declarations and the untyped names.
  */
 const declaredOf = (
-  context: Omit<Context, "adaptive" | "declared" | "untyped">,
+  context: Omit<Context, "declared" | "itemMode" | "untyped">,
 ): Pick<Context, "declared" | "untyped"> => {
   const read = context.rows.nodes.flatMap((node) =>
     declarationKinds.some((kind) => kind === node.kind)
@@ -397,6 +422,29 @@ const declaredOf = (
 };
 
 /**
+ * The `adaptive` of an item that writes none: its XSD default (the QTI 3.0 ASI schema,
+ * `imsqti_asiv3p0_v1p0.xsd`, `qti-assessment-item`: `<xs:attribute name="adaptive" use="optional"
+ * default="false" type="xs:boolean" />`).
+ */
+const adaptiveDefault = false;
+
+/**
+ * Read whether an item is adaptive: its `adaptive` where written, true where its value is one of
+ * `xs:boolean`'s true forms, as `ItemMode` mirrors them; else its XSD default,
+ * {@link adaptiveDefault}. A written form that is no boolean is no true form, and its attribute's
+ * value domain refuses it.
+ *
+ * @param context - The document, its attributes read.
+ * @param item - The item's element.
+ * @returns Whether the item is adaptive.
+ */
+const adaptiveOf = (context: Pick<Context, "attributes">, item: NodeId): boolean =>
+  Option.match(valueOf(context, item, adaptiveName), {
+    onNone: () => adaptiveDefault,
+    onSome: (form) => Option.contains(booleanOf(form), true),
+  });
+
+/**
  * Read a document for the builders.
  *
  * @param doc - The document's tree.
@@ -405,27 +453,29 @@ const declaredOf = (
  */
 const contextOf = (doc: XdmDocument<Composed>, ids: InteractionIds): Context => {
   const rows = flatten(doc, ids.idOf);
-  const attributes = new Map<NodeId, Map<string, string>>();
-  for (const { lexical, name, node } of rows.attributes) {
-    const named = attributes.get(node) ?? new Map<string, string>();
-    named.set(name, lexical);
-    attributes.set(node, named);
-  }
-
   const base = {
-    attributes,
+    attributes: new Map(
+      [...Map.groupBy(rows.attributes, ({ node }) => node)].map(
+        ([node, held]) =>
+          [node, new Map(held.map(({ lexical, name }) => [name, lexical]))] as const,
+      ),
+    ),
     document: rows.document.node,
-    facts: treeFactsOf(rows.nodes, ids.context ?? ownContext(rows.document.node)),
+    folds: foldOf(rows.nodes, ids.context),
+    kinds: new Map(rows.nodes.map((node) => [node.id, node.kind] as const)),
     rootKind: doc.root.kind,
     rows,
   };
-  const item = rows.nodes.find((node) => node.kind === itemKind);
 
   return {
     ...base,
-    adaptive:
-      item !== undefined &&
-      Option.contains(Option.flatMap(valueOf(base, item.id, adaptiveName), booleanOf), true),
+    itemMode: Option.map(
+      Option.filter(
+        Arr.findFirst(rows.nodes, ({ kind }) => kind === itemKind),
+        () => doc.root.kind === itemKind,
+      ),
+      (item) => adaptiveOf(base, item.id),
+    ),
     ...declaredOf(base),
   };
 };
@@ -530,6 +580,13 @@ const responseIn = (
   );
 
 /**
+ * The attributes O3 reads on each kind ({@link readAttributes}), as `<name> <kind>`.
+ */
+const readOnKinds: ReadonlySet<string> = new Set(
+  [...readAttributes].flatMap(([name, kinds]) => kinds.map((kind) => `${name} ${kind}`)),
+);
+
+/**
  * Build the read attributes: each attribute O3 reads, its lexical form and its pieces.
  *
  * @param context - The document.
@@ -538,10 +595,8 @@ const responseIn = (
 const interactionAttributesOf = (context: Context) =>
   new Map(
     context.rows.attributes.flatMap(({ lexical, name, node }) => {
-      const kind = context.facts.kindOf(node);
-      const read =
-        ariaNames.some((aria) => aria === name) ||
-        (readAttributes.get(name) ?? []).some((held) => held === kind);
+      const kind = heldAt(context.kinds, node, "the document's nodes");
+      const read = ariaNames.some((aria) => aria === name) || readOnKinds.has(`${name} ${kind}`);
 
       return read
         ? [
@@ -614,7 +669,7 @@ const choiceInteractionsOf = (
 ) =>
   new Map(
     [...choices.values()]
-      .filter(({ nearest }) => interactions.has(context.facts.kindOf(nearest)))
+      .filter(({ node }) => interactions.has(foldAt(context.folds, node).nearestKind))
       .map(
         ({ nearest, node }) =>
           [
@@ -635,18 +690,17 @@ const hottextsOf = (context: Context) =>
     context.rows.nodes
       .filter(({ kind }) => kind === hottextKind)
       .flatMap((node) =>
-        Option.toArray(valueOf(context, node.id, "identifier")).map((identifier) => {
-          const tuple = tupleOf(context, node);
-
-          return [
-            node.id,
-            {
-              ...tuple,
-              identifier,
-              nearestKind: context.facts.kindOf(tuple.nearest),
-            } satisfies Addition<typeof Hottext>,
-          ] as const;
-        }),
+        Option.toArray(valueOf(context, node.id, "identifier")).map(
+          (identifier) =>
+            [
+              node.id,
+              {
+                ...tupleOf(context, node),
+                identifier,
+                nearestKind: foldAt(context.folds, node.id).nearestKind,
+              } satisfies Addition<typeof Hottext>,
+            ] as const,
+        ),
       ),
   );
 
@@ -703,11 +757,11 @@ const hotspotsOf = (context: Context) =>
               {
                 ...tupleOf(context, node),
                 area,
-                elementChildren: context.facts.folds.get(node.id)?.elementChildren ?? 0n,
-                elements: context.facts.folds.get(node.id)?.elements ?? 0n,
-                parentElementChildren: context.facts.folds.get(node.parent)?.elementChildren ?? 0n,
-                parentElements: context.facts.folds.get(node.parent)?.elements ?? 0n,
-                parentKind: context.facts.kindOf(node.parent),
+                elementChildren: foldAt(context.folds, node.id).elementChildren,
+                elements: foldAt(context.folds, node.id).elements,
+                parentElementChildren: foldAt(context.folds, node.parent).elementChildren,
+                parentElements: foldAt(context.folds, node.parent).elements,
+                parentKind: heldAt(context.kinds, node.parent, "the document's nodes"),
               } satisfies Addition<typeof Hotspot>,
             ] as const,
         ),
@@ -727,7 +781,7 @@ const hotspotsOf = (context: Context) =>
  */
 const countOf = (context: Context, node: NodeRow<Composed>, name: CountName) => {
   const written = valueOf(context, node.id, name);
-  const form = Option.isSome(written) ? written : countDefault(node.version, node.kind, name);
+  const form = Option.orElse(written, () => countDefault(node.version, node.kind, name));
 
   return {
     value: form.pipe(
@@ -756,8 +810,8 @@ const mostsOf = (context: Context, node: NodeRow<Composed>): bigint =>
     : 0n;
 
 /**
- * Build each interaction's binding, and in an item each of its bound variables and the response
- * declaration each names, where one does.
+ * Build each interaction's binding, and in an item, under its mode, each of its bound variables
+ * and the response declaration each names, where one does.
  *
  * @param context - The document.
  * @returns The `Binding` rows, keyed by node, and the `BindingName` rows of every document and
@@ -785,25 +839,27 @@ const bindingsOf = (context: Context) => {
       }
     }
 
-    for (const attribute of context.rootKind === itemKind ? bindingAttributes : []) {
-      for (const identifier of Option.toArray(valueOf(context, node.id, attribute))) {
-        const binding = {
-          attribute,
-          document: context.document,
-          identifier,
-          kind: node.kind,
-          node: node.id,
-        };
-        bound.set(keyOf([node.id, attribute]), { ...binding, adaptive: context.adaptive });
-        for (const variable of Option.toArray(responseIn(context.declared, identifier))) {
-          declarations.set(keyOf([node.id, attribute]), {
-            ...binding,
-            baseType: variable.baseType,
-            cardinality: variable.cardinality,
-            declaration: variable.node,
-            declarationKind: variable.declarationKind,
-            mosts: mostsOf(context, node),
-          });
+    for (const adaptive of Option.toArray(context.itemMode)) {
+      for (const attribute of bindingAttributes) {
+        for (const identifier of Option.toArray(valueOf(context, node.id, attribute))) {
+          const binding = {
+            attribute,
+            document: context.document,
+            identifier,
+            kind: node.kind,
+            node: node.id,
+          };
+          bound.set(keyOf([node.id, attribute]), { ...binding, adaptive });
+          for (const variable of Option.toArray(responseIn(context.declared, identifier))) {
+            declarations.set(keyOf([node.id, attribute]), {
+              ...binding,
+              baseType: variable.baseType,
+              cardinality: variable.cardinality,
+              declaration: variable.node,
+              declarationKind: variable.declarationKind,
+              mosts: mostsOf(context, node),
+            });
+          }
         }
       }
     }
@@ -813,19 +869,69 @@ const bindingsOf = (context: Context) => {
 };
 
 /**
- * Count the choices each interaction owns: its {@link ChoiceInteraction} rows.
+ * Join two row sets on a key: each left row, in its order, with every right row whose key is its
+ * own, none where no right row's is; a right row whose key no left row has joins nothing. Both
+ * sides are grouped under the one key and each group is read whole, so no lookup by key can miss.
  *
- * @param owned - Choices' interactions, of one document or of the whole package.
- * @returns Each interaction's count, by its node.
+ * @param left - The left rows.
+ * @param leftKey - A left row's key.
+ * @param right - The right rows.
+ * @param rightKey - A right row's key.
+ * @returns Each left row with its right rows.
  */
-const choiceCountsOf = (owned: Iterable<Addition<typeof ChoiceInteraction>>) => {
-  const counts = new Map<string, bigint>();
-  for (const { interaction } of owned) {
-    counts.set(interaction, (counts.get(interaction) ?? 0n) + 1n);
-  }
+const joinOn = <L, R>(
+  left: Iterable<L>,
+  leftKey: (row: L) => string,
+  right: Iterable<R>,
+  rightKey: (row: R) => string,
+): readonly (readonly [L, readonly R[]])[] => {
+  const sides: readonly (
+    | { readonly at: number; readonly row: L; readonly side: "left" }
+    | { readonly row: R; readonly side: "right" }
+  )[] = [
+    ...Array.from(left, (row, at) => ({ at, row, side: "left" as const })),
+    ...Array.from(right, (row) => ({ row, side: "right" as const })),
+  ];
 
-  return counts;
+  return [
+    ...Map.groupBy(sides, (side) =>
+      side.side === "left" ? leftKey(side.row) : rightKey(side.row),
+    ).values(),
+  ]
+    .flatMap((group) => {
+      const rights = group.flatMap((side) => (side.side === "right" ? [side.row] : []));
+
+      return group.flatMap((side) =>
+        side.side === "left" ? [{ at: side.at, joined: [side.row, rights] as const }] : [],
+      );
+    })
+    .toSorted((a, b) => a.at - b.at)
+    .map(({ joined }) => joined);
 };
+
+/**
+ * Count the choices each of some bounds' nodes owns: its {@link ChoiceInteraction} rows among
+ * `owned`, which `CountBound.choices` holds, an interaction's `Interaction.choices`. A node no row
+ * names owns none: an interaction with no choice, and every choice, which encloses no choice as its
+ * interaction (`CountBound`'s `E1_derived`). A row whose interaction is none of the nodes, a
+ * fragment's choice in the interaction of the item that includes it, counts toward none of them.
+ *
+ * @param nodes - The bounds' nodes, of one document or of the whole package.
+ * @param owned - Choices' interactions, of the same.
+ * @returns Each node's count.
+ */
+const choiceCountsOf = (
+  nodes: Iterable<NodeId>,
+  owned: Iterable<Addition<typeof ChoiceInteraction>>,
+): ReadonlyMap<NodeId, bigint> =>
+  new Map(
+    joinOn(
+      nodes,
+      (node) => node,
+      owned,
+      ({ interaction }) => interaction,
+    ).map(([node, choices]) => [node, BigInt(choices.length)] as const),
+  );
 
 /**
  * Build each bound's rows, an interaction's choices the count of the choices it owns in its own
@@ -842,57 +948,63 @@ const boundsOf = (
   context: Context,
   owned: ReadonlyMap<string, Addition<typeof ChoiceInteraction>>,
 ) => {
-  const counts = choiceCountsOf(owned.values());
+  const bounded = context.rows.nodes.flatMap((node) =>
+    ChoiceBound.rows
+      .filter(({ kind }) => kind === node.kind)
+      .map(({ max, min }) => ({ max, min, node })),
+  );
+  const counts = choiceCountsOf(
+    bounded.map(({ node }) => node.id),
+    owned.values(),
+  );
   const bounds = new Map<string, Addition<typeof CountBound>>();
   const leasts = new Map<string, Addition<typeof LeastCount>>();
   const mosts = new Map<string, Addition<typeof MostCount>>();
   const ranges = new Map<string, Addition<typeof CountRange>>();
-  for (const node of context.rows.nodes) {
-    for (const { max, min } of ChoiceBound.rows.filter(({ kind }) => kind === node.kind)) {
-      const least = countOf(context, node, min);
-      const most = countOf(context, node, max);
-      const choices = interactions.has(node.kind) ? (counts.get(node.id) ?? 0n) : 0n;
-      const copied = { choices, kind: node.kind, node: node.id, version: node.version };
-      bounds.set(node.id, {
-        ...tupleOf(context, node),
-        choices,
-        maxName: max,
-        maxWritten: most.written,
+  for (const { max, min, node } of bounded) {
+    const least = countOf(context, node, min);
+    const most = countOf(context, node, max);
+    const choices = heldAt(counts, node.id, "the counted bounds");
+    const copied = { choices, kind: node.kind, node: node.id, version: node.version };
+    bounds.set(node.id, {
+      ...tupleOf(context, node),
+      choices,
+      maxName: max,
+      maxWritten: most.written,
+      minName: min,
+      minWritten: least.written,
+    });
+    for (const { form, integer } of Option.toArray(least.value)) {
+      leasts.set(node.id, {
+        ...copied,
+        least: form,
+        leastValue: integer,
         minName: min,
         minWritten: least.written,
       });
-      for (const { form, integer } of Option.toArray(least.value)) {
-        leasts.set(node.id, {
-          ...copied,
-          least: form,
-          leastValue: integer,
-          minName: min,
-          minWritten: least.written,
-        });
-      }
+    }
 
-      for (const { form, integer } of Option.toArray(most.value)) {
-        mosts.set(node.id, {
-          ...copied,
-          maxName: max,
-          maxWritten: most.written,
-          minWritten: least.written,
-          most: form,
-          mostValue: integer,
-        });
-      }
+    for (const { form, integer } of Option.toArray(most.value)) {
+      mosts.set(node.id, {
+        ...copied,
+        maxName: max,
+        maxWritten: most.written,
+        minWritten: least.written,
+        most: form,
+        mostValue: integer,
+      });
+    }
 
-      for (const [leastValue, mostValue] of Option.toArray(
-        Option.all([least.value, most.value]),
-      ).map(([lower, upper]) => [lower.integer, upper.integer] as const)) {
-        ranges.set(node.id, {
-          kind: node.kind,
-          leastValue,
-          minWritten: least.written,
-          mostValue,
-          node: node.id,
-        });
-      }
+    for (const [leastValue, mostValue] of Option.toArray(Option.all([least.value, most.value])).map(
+      ([lower, upper]) => [lower.integer, upper.integer] as const,
+    )) {
+      ranges.set(node.id, {
+        kind: node.kind,
+        leastValue,
+        minWritten: least.written,
+        mostValue,
+        node: node.id,
+      });
     }
   }
 
@@ -1138,9 +1250,9 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: InteractionIds): Interac
     Interaction: interactionsOf(context),
     InteractionAttribute: read,
     ItemMode: new Map(
-      context.rootKind === itemKind
-        ? [[context.document, { adaptive: context.adaptive, document: context.document }]]
-        : [],
+      Option.toArray(context.itemMode).map(
+        (adaptive) => [context.document, { adaptive, document: context.document }] as const,
+      ),
     ),
     LeastCount: counts.leasts,
     MostCount: counts.mosts,
@@ -1163,36 +1275,44 @@ export const rowsOf = (doc: XdmDocument<Composed>, ids: InteractionIds): Interac
 };
 
 /**
- * Count the choices each interaction owns across a package: every document's
+ * Count the choices each bound's node owns across a package: every document's
  * {@link ChoiceInteraction} rows, a fragment's placed in an interaction among them (spec reading
  * 117: a fragment's choices are its item's, as its merged document holds them).
  *
  * @param parts - Every document's interaction rows.
- * @returns Each interaction's count, by its node, which `Interaction.choices` draws.
+ * @returns Each bound's count, by its node, an interaction's the count `Interaction.choices`
+ * draws.
  */
-export const packageChoicesOf = (parts: Iterable<InteractionRows>): ReadonlyMap<string, bigint> =>
-  choiceCountsOf([...parts].flatMap(({ ChoiceInteraction: owned }) => [...owned.values()]));
+export const packageChoicesOf = (parts: Iterable<InteractionRows>): ReadonlyMap<NodeId, bigint> => {
+  const read = [...parts];
+
+  return choiceCountsOf(
+    read.flatMap(({ CountBound: bounds }) => [...bounds.values()].map(({ node }) => node)),
+    read.flatMap(({ ChoiceInteraction: owned }) => [...owned.values()]),
+  );
+};
 
 /**
- * Give each interaction's bound in one document's rows its package count of choices, which
- * `CountBound.choices` copies from `Interaction.choices`, and its `LeastCount` and `MostCount`
- * from `CountBound`.
+ * Give each bound in one document's rows its package count of choices, which `CountBound.choices`
+ * copies from `Interaction.choices` for an interaction, and its `LeastCount` and `MostCount` from
+ * `CountBound`.
  *
  * @param rows - A document's interaction rows.
- * @param counts - The package's counts ({@link packageChoicesOf}).
- * @returns The same rows, each interaction's bound and counts recounted.
+ * @param counts - The package's counts ({@link packageChoicesOf}), whose bounds hold the
+ *   document's.
+ * @returns The same rows, each bound and count recounted.
  */
 export const withPackageChoices = (
   rows: InteractionRows,
-  counts: ReadonlyMap<string, bigint>,
+  counts: ReadonlyMap<NodeId, bigint>,
 ): InteractionRows => {
-  const recounted = <Row extends Pick<Addition<typeof CountBound>, "choices" | "kind" | "node">>(
+  const recounted = <Row extends Pick<Addition<typeof CountBound>, "choices" | "node">>(
     bounds: ReadonlyMap<string, Row>,
   ): ReadonlyMap<string, Row> =>
     new Map(
       [...bounds].map(([key, bound]) => [
         key,
-        interactions.has(bound.kind) ? { ...bound, choices: counts.get(bound.node) ?? 0n } : bound,
+        { ...bound, choices: heldAt(counts, bound.node, "the package's counted bounds") },
       ]),
     );
 
@@ -1312,46 +1432,38 @@ export const sectionRowsOf = (input: {
   readonly prints: Iterable<Addition<typeof SectionPrintedName>>;
   readonly templates: Iterable<Addition<typeof SectionTemplateName>>;
 }): SectionRows => {
-  const declared = Map.groupBy(input.declarations, ({ document }) => document);
-  const classes = {
-    contexts: Map.groupBy(input.contexts, ({ document }) => document),
-    feedbacks: Map.groupBy(input.feedbacks, ({ document }) => document),
-    prints: Map.groupBy(input.prints, ({ document }) => document),
-    templates: Map.groupBy(input.templates, ({ document }) => document),
-  };
-  const scopes = new Map<string, Addition<typeof SectionScope>>();
-  const resolved = {
-    contexts: new Map<string, Addition<typeof SectionContextRef>>(),
-    feedbacks: new Map<string, Addition<typeof SectionFeedbackRef>>(),
-    prints: new Map<string, Addition<typeof SectionPrintedRef>>(),
-    templates: new Map<string, Addition<typeof SectionTemplateRef>>(),
-  };
-  for (const root of input.instances) {
-    for (const { assembly, instance } of instancesOf(root)) {
-      if (resolvesUnder(root, instance)) {
-        scopes.set(instance.id, { assembly, document: instance.document, instance: instance.id });
-
-        const placement = { assembly, instance: instance.id };
-        const scope = declared.get(assembly) ?? [];
-        for (const name of ["contexts", "feedbacks", "prints", "templates"] as const) {
-          for (const [key, row] of placedOf(
-            classes[name].get(instance.document) ?? [],
-            scope,
-            placement,
-          )) {
-            resolved[name].set(key, row);
-          }
-        }
-      }
-    }
-  }
+  const placements = [...input.instances].flatMap((root) =>
+    instancesOf(root).filter(({ instance }) => resolvesUnder(root, instance)),
+  );
+  const scoped = joinOn(
+    placements,
+    ({ assembly }) => assembly,
+    input.declarations,
+    ({ document }) => document,
+  );
+  const resolvedOf = (names: Iterable<Addition<typeof SectionFeedbackName>>) =>
+    new Map(
+      joinOn(
+        scoped,
+        ([{ instance }]) => instance.document,
+        names,
+        ({ document }) => document,
+      ).flatMap(([[{ assembly, instance }, scope], named]) =>
+        placedOf(named, scope, { assembly, instance: instance.id }),
+      ),
+    );
 
   return {
-    SectionContextRef: resolved.contexts,
-    SectionFeedbackRef: resolved.feedbacks,
-    SectionPrintedRef: resolved.prints,
-    SectionScope: scopes,
-    SectionTemplateRef: resolved.templates,
+    SectionContextRef: resolvedOf(input.contexts),
+    SectionFeedbackRef: resolvedOf(input.feedbacks),
+    SectionPrintedRef: resolvedOf(input.prints),
+    SectionScope: new Map(
+      placements.map(
+        ({ assembly, instance }) =>
+          [instance.id, { assembly, document: instance.document, instance: instance.id }] as const,
+      ),
+    ),
+    SectionTemplateRef: resolvedOf(input.templates),
   };
 };
 
@@ -1399,85 +1511,99 @@ export const placedBindingRowsOf = (input: {
   readonly names: Iterable<Addition<typeof BindingName>>;
 }): PlacedBindingRows => {
   const counted = new Set([...input.mosts].map(({ node }) => node));
-  const declared = Map.groupBy(input.declarations, ({ document }) => document);
-  const names = Map.groupBy(input.names, ({ document }) => document);
-  const adaptive = new Map([...input.adaptive].map((row) => [row.document, row.adaptive] as const));
-  const choicesByDocument = Map.groupBy(input.choices, ({ document }) => document);
-  const hottextsByDocument = Map.groupBy(input.hottexts, ({ document }) => document);
-  const placed = new Map<string, Addition<typeof PlacedBinding>>();
-  const placedDeclarations = new Map<string, Addition<typeof PlacedBindingDeclaration>>();
-  const choices = new Map<string, Addition<typeof PlacedChoice>>();
-  const hottexts = new Map<string, Addition<typeof PlacedHottext>>();
-  const named = new Map<string, Addition<typeof ChoiceVariableName>>();
-  const roots = [...input.instances];
-  for (const root of roots) {
-    const nameOf = (identifier: string) => {
-      named.set(keyOf([root.assembly, identifier]), {
-        document: root.assembly,
-        identifier,
-        rootKind: root.assemblyKind,
-      });
-    };
-    for (const { assembly, instance } of instancesOf(root)) {
-      for (const { document, identifier, kind, node } of choicesByDocument.get(instance.document) ??
-        []) {
-        choices.set(keyOf([instance.id, node]), {
-          assembly,
-          document,
-          identifier,
-          instance: instance.id,
-          kind,
-          node,
-        });
-        nameOf(identifier);
-      }
-
-      for (const { document, identifier, node } of hottextsByDocument.get(instance.document) ??
-        []) {
-        hottexts.set(keyOf([instance.id, node]), {
-          assembly,
-          document,
-          identifier,
-          instance: instance.id,
-          node,
-        });
-        nameOf(identifier);
-      }
-    }
-  }
-
-  for (const root of roots) {
-    for (const { assembly, instance } of root.assemblyKind === itemKind ? instancesOf(root) : []) {
-      for (const name of names.get(instance.document) ?? []) {
-        const binding = {
-          ...name,
-          assembly,
-          document: instance.document,
-          instance: instance.id,
-        };
-        const key = keyOf([instance.id, name.node, name.attribute]);
-        placed.set(key, { ...binding, adaptive: adaptive.get(assembly) ?? false });
-        for (const variable of Option.toArray(
-          responseIn(declared.get(assembly) ?? [], name.identifier),
-        )) {
-          placedDeclarations.set(key, {
-            ...binding,
-            baseType: variable.baseType,
-            cardinality: variable.cardinality,
-            declaration: variable.node,
-            declarationKind: variable.declarationKind,
-            mosts: counted.has(name.node) ? 1n : 0n,
-          });
-        }
-      }
-    }
-  }
+  const modes = new Map([...input.adaptive].map((row) => [row.document, row.adaptive] as const));
+  const placements = [...input.instances].flatMap((root) =>
+    instancesOf(root).map((placement) => ({ ...placement, assemblyKind: root.assemblyKind })),
+  );
+  const placedOfDocument = <Row extends { readonly document: NodeId }>(rows: Iterable<Row>) =>
+    joinOn(
+      placements,
+      ({ instance }) => instance.document,
+      rows,
+      ({ document }) => document,
+    ).flatMap(([placement, held]) => held.map((row) => ({ placement, row })));
+  const choices = placedOfDocument(input.choices);
+  const hottexts = placedOfDocument(input.hottexts);
+  const bound = joinOn(
+    joinOn(
+      placements.filter(({ assemblyKind }) => assemblyKind === itemKind),
+      ({ assembly }) => assembly,
+      input.declarations,
+      ({ document }) => document,
+    ),
+    ([{ instance }]) => instance.document,
+    input.names,
+    ({ document }) => document,
+  ).flatMap(([[placement, declared], names]) =>
+    names.map((name) => ({
+      binding: {
+        ...name,
+        assembly: placement.assembly,
+        document: placement.instance.document,
+        instance: placement.instance.id,
+      },
+      declared,
+      key: keyOf([placement.instance.id, name.node, name.attribute]),
+    })),
+  );
 
   return {
-    ChoiceVariableName: named,
-    PlacedBinding: placed,
-    PlacedBindingDeclaration: placedDeclarations,
-    PlacedChoice: choices,
-    PlacedHottext: hottexts,
+    ChoiceVariableName: new Map(
+      [...choices, ...hottexts].map(
+        ({ placement: { assembly, assemblyKind }, row: { identifier } }) =>
+          [
+            keyOf([assembly, identifier]),
+            { document: assembly, identifier, rootKind: assemblyKind },
+          ] as const,
+      ),
+    ),
+    PlacedBinding: new Map(
+      bound.map(
+        ({ binding, key }) =>
+          [
+            key,
+            {
+              ...binding,
+              adaptive: heldAt(modes, binding.assembly, "the package's item modes"),
+            },
+          ] as const,
+      ),
+    ),
+    PlacedBindingDeclaration: new Map(
+      bound.flatMap(({ binding, declared, key }) =>
+        Option.toArray(responseIn(declared, binding.identifier)).map(
+          (variable) =>
+            [
+              key,
+              {
+                ...binding,
+                baseType: variable.baseType,
+                cardinality: variable.cardinality,
+                declaration: variable.node,
+                declarationKind: variable.declarationKind,
+                mosts: counted.has(binding.node) ? 1n : 0n,
+              },
+            ] as const,
+        ),
+      ),
+    ),
+    PlacedChoice: new Map(
+      choices.map(
+        ({ placement: { assembly, instance }, row: { document, identifier, kind, node } }) =>
+          [
+            keyOf([instance.id, node]),
+            { assembly, document, identifier, instance: instance.id, kind, node },
+          ] as const,
+      ),
+    ),
+    PlacedHottext: new Map(
+      hottexts.map(
+        ({ placement: { assembly, instance }, row: { document, identifier, node } }) =>
+          [
+            keyOf([instance.id, node]),
+            { assembly, document, identifier, instance: instance.id, node },
+          ] as const,
+      ),
+    ),
   };
 };
