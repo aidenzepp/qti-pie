@@ -60,6 +60,58 @@ export const OracleLayer = NodeChildProcessSpawner.layer;
 const xmllintPath = Config.String("XMLLINT").pipe(Config.withDefault("xmllint"));
 
 /**
+ * How one `xmllint` run ended: its exit status, what it wrote to standard output as bytes, and what
+ * it wrote to standard error.
+ */
+export interface XmllintRun {
+  readonly code: ChildProcessSpawner.ExitCode;
+  readonly stderr: string;
+  readonly stdout: Uint8Array;
+}
+
+/**
+ * Run `xmllint` once and collect how it ended: every oracle of this module and of the tests runs
+ * libxml2 through it.
+ *
+ * Standard input is closed and `env` is laid over this process's environment. An executable that
+ * does not start is an {@link OracleUnavailable}, which names it; a process whose output cannot be
+ * read, or a `XMLLINT` setting that cannot be read, is a defect, because it says nothing about the
+ * files.
+ *
+ * @param args - The arguments after the executable.
+ * @param env - Variables to set for the run, such as `XML_CATALOG_FILES`.
+ * @returns The run's exit status and output, whatever the status.
+ */
+export const xmllintRun = Effect.fn("oracle.xmllintRun")(function* xmllintRun(
+  args: readonly string[],
+  env: Readonly<Record<string, string>> = {},
+): Effect.fn.Return<XmllintRun, OracleUnavailable, ChildProcessSpawner.ChildProcessSpawner> {
+  const xmllint = yield* Effect.orDie(xmllintPath);
+  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+
+  return yield* Effect.scoped(
+    Effect.gen(function* collectRun() {
+      const handle = yield* spawner
+        .spawn(ChildProcess.make(xmllint, args, { env, extendEnv: true, stdin: "ignore" }))
+        .pipe(
+          Effect.mapError(
+            (error) => new OracleUnavailable({ executable: xmllint, reason: error.message }),
+          ),
+        );
+
+      return yield* Effect.all(
+        {
+          code: handle.exitCode,
+          stderr: Stream.mkString(Stream.decodeText(handle.stderr)),
+          stdout: Stream.mkUint8Array(handle.stdout),
+        },
+        { concurrency: "unbounded" },
+      ).pipe(Effect.orDie);
+    }),
+  );
+});
+
+/**
  * Canonicalize a file with `xmllint --c14n --nonet` and return what it wrote to standard output.
  *
  * `xmllint` is the oracle the canonicalizer is compared against, so its bytes are returned
@@ -79,28 +131,7 @@ export const xmllintC14n = Effect.fn("oracle.xmllintC14n")(function* xmllintC14n
   OracleError | OracleUnavailable,
   ChildProcessSpawner.ChildProcessSpawner
 > {
-  const xmllint = yield* Effect.orDie(xmllintPath);
-  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  const result = yield* Effect.scoped(
-    Effect.gen(function* collectOutput() {
-      const handle = yield* spawner
-        .spawn(ChildProcess.make(xmllint, ["--c14n", "--nonet", path], { stdin: "ignore" }))
-        .pipe(
-          Effect.mapError(
-            (error) => new OracleUnavailable({ executable: xmllint, reason: error.message }),
-          ),
-        );
-
-      return yield* Effect.all(
-        {
-          code: handle.exitCode,
-          stderr: Stream.mkString(Stream.decodeText(handle.stderr)),
-          stdout: Stream.mkUint8Array(handle.stdout),
-        },
-        { concurrency: "unbounded" },
-      ).pipe(Effect.orDie);
-    }),
-  );
+  const result = yield* xmllintRun(["--c14n", "--nonet", path]);
 
   if (result.code !== ChildProcessSpawner.ExitCode(0)) {
     return yield* new OracleError({ exitCode: result.code, stderr: result.stderr });
@@ -140,10 +171,13 @@ export class OracleUnreadable extends Schema.TaggedError<OracleUnreadable>()("Or
  * - `text` is the message proper, after `Element '…', attribute '…': ` for a schema message. A
  *   message whose value holds a line break goes on over the report's following lines, which are
  *   appended to it.
+ * - `level` is `warning` for a message libxml2 writes as a warning, which judges nothing, and `error`
+ *   for every other.
  */
 export interface XsdMessage {
   readonly attribute: Option.Option<string>;
   readonly element: Option.Option<string>;
+  readonly level: "error" | "warning";
   readonly line: number;
   readonly source: "parser" | "schema";
   readonly text: string;
@@ -172,7 +206,13 @@ export type XsdVerdict =
  * @see {@link https://gitlab.gnome.org/GNOME/libxml2/-/blob/v2.12.0/error.c#L289-290 | libxml2 2.12.0, error.c, xmlReportError}
  */
 const schemaMessage =
-  /^(?:element [^:]+: )?Schemas validity (?:error|warning) : Element '(?<element>[^']+)'(?:, attribute '(?<attribute>[^']+)')?: (?<text>.*)$/su;
+  /^(?:element [^:]+: )?Schemas validity (?<level>error|warning) : Element '(?<element>[^']+)'(?:, attribute '(?<attribute>[^']+)')?: (?<text>.*)$/su;
+
+/**
+ * A parser message libxml2 writes as a warning: `warning: ` itself, or a domain's warning, as
+ * `namespace warning : `, after an optional `element NAME: `.
+ */
+const parserWarning = /^(?:element [^:]+: )?(?:warning: |[A-Za-z][\w -]* warning : )/u;
 
 /**
  * The most files one `xmllint` process is given, so its argument list stays far below the
@@ -195,6 +235,7 @@ const messageOf = (line: number, body: string): XsdMessage => {
     ? {
         attribute: Option.none(),
         element: Option.none(),
+        level: parserWarning.test(body) ? "warning" : "error",
         line,
         source: "parser",
         text: body,
@@ -202,6 +243,7 @@ const messageOf = (line: number, body: string): XsdMessage => {
     : {
         attribute: Option.fromNullishOr(groups["attribute"]),
         element: Option.fromNullishOr(groups["element"]),
+        level: groups["level"] === "warning" ? "warning" : "error",
         line,
         source: "schema",
         text: groups["text"] ?? "",
@@ -284,23 +326,24 @@ export const verdictsOf = (
   });
 
 /**
- * Validate files against an XML Schema with `xmllint --schema --nonet`, the XSD's own validator,
- * and return each file's verdict.
+ * Validate files against a schema with `xmllint --nonet`, libxml2's own validator, and return each
+ * file's verdict: an XML Schema (`--schema`) unless `input.language` is `relax-ng` (`--relaxng`).
  *
  * Libxml2 judges the files in one process (one compile of the schema) per thousand files.
  * `--nonet` forbids every network fetch, so each `schemaLocation` the schema reaches resolves
  * through `catalog` (an OASIS XML catalog, passed as `XML_CATALOG_FILES`) to a file on disk, or is
  * not read at all, which the report shows and this refuses rather than judge against a partial
- * schema. An instance's own `xsi:schemaLocation` hints are not read: `--schema` names the schema.
+ * schema. An instance's own `xsi:schemaLocation` hints are not read: the argument names the schema.
  *
  * Exit status 0, 1 (a file not well-formed or not found) and 3 (a file invalid) are reports; any
  * other is an {@link OracleError}, the schema not compiling (5) among them. A process whose output
  * cannot be read, or a `XMLLINT` setting that cannot be read, is a defect, as for
- * {@link xmllintC14n}.
+ * {@link xmllintRun}.
  *
  * @param input - What to validate.
  * @param input.schema - The schema document to validate against.
- * @param input.catalog - The XML catalog that maps the schema's imports onto files.
+ * @param input.catalog - The XML catalog that maps the schema's imports onto files, if it has any.
+ * @param input.language - The schema's language, `xsd` unless given.
  * @param input.paths - The files to judge.
  * @returns Each file's verdict, in `paths` order; an {@link OracleError} when `xmllint` exits with a
  *   status that is not a report, an {@link OracleUnreadable} when its report holds a line no file
@@ -308,7 +351,8 @@ export const verdictsOf = (
  */
 export const xmllintValidate = Effect.fn("oracle.xmllintValidate")(
   function* xmllintValidate(input: {
-    readonly catalog: string;
+    readonly catalog?: string;
+    readonly language?: "relax-ng" | "xsd";
     readonly paths: readonly string[];
     readonly schema: string;
   }): Effect.fn.Return<
@@ -316,43 +360,15 @@ export const xmllintValidate = Effect.fn("oracle.xmllintValidate")(
     OracleError | OracleUnavailable | OracleUnreadable,
     ChildProcessSpawner.ChildProcessSpawner
   > {
-    const xmllint = yield* Effect.orDie(xmllintPath);
-    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     yield* Effect.annotateCurrentSpan({ files: input.paths.length, schema: input.schema });
 
+    const mode = input.language === "relax-ng" ? "--relaxng" : "--schema";
+    const env: Readonly<Record<string, string>> =
+      input.catalog === undefined ? {} : { XML_CATALOG_FILES: input.catalog };
     const chunks = yield* Effect.forEach(Arr.chunksOf(input.paths, filesPerProcess), (chunk) =>
       Effect.gen(function* validateChunk() {
-        const result = yield* Effect.scoped(
-          Effect.gen(function* collectReport() {
-            const handle = yield* spawner
-              .spawn(
-                ChildProcess.make(
-                  xmllint,
-                  ["--nonet", "--noout", "--schema", input.schema, ...chunk],
-                  {
-                    env: { XML_CATALOG_FILES: input.catalog },
-                    extendEnv: true,
-                    stdin: "ignore",
-                  },
-                ),
-              )
-              .pipe(
-                Effect.mapError(
-                  (error) => new OracleUnavailable({ executable: xmllint, reason: error.message }),
-                ),
-              );
-
-            return yield* Effect.all(
-              {
-                code: handle.exitCode,
-                stderr: Stream.mkString(Stream.decodeText(handle.stderr)),
-                stdout: Stream.mkString(Stream.decodeText(handle.stdout)),
-              },
-              { concurrency: "unbounded" },
-            ).pipe(Effect.orDie);
-          }),
-        );
-        const report = `${result.stdout}${result.stderr}`;
+        const result = yield* xmllintRun(["--nonet", "--noout", mode, input.schema, ...chunk], env);
+        const report = `${new TextDecoder().decode(result.stdout)}${result.stderr}`;
 
         if (![0, 1, 3].some((code) => result.code === ChildProcessSpawner.ExitCode(code))) {
           return yield* new OracleError({ exitCode: result.code, stderr: report });
