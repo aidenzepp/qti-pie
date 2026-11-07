@@ -822,10 +822,10 @@ describe("import/overlays/expressions.ts, a braced pattern that names no variabl
   it.effect(
     "is a string value in an item, while a name of the wrong kind or base type and an unresolved bare reference stay refused",
     () =>
-      // Oracle: information model §2.7.2 and §9.3.4, "if a string attribute appears to be a
-      // reference to a template or outcome variable but there is no variable with the given name it
-      // should be treated simply as string value", and §2.11.3's base type for a name that is one
-      // (P24). Bound: the item's one reference, each of the four spellings.
+      // Oracle: information model §9.3.4, "if a string appears to be a reference to a template or
+      // outcome variable but there is no variable with the given name it should be treated simply
+      // as string value", and §2.11.3's base type for a name that is one (P24). Bound: the item's
+      // one reference, each of the four spellings.
       Effect.gen(function* braced() {
         assert.deepStrictEqual(
           yield* breachesUnder(patternMatch("{NOSUCH}")),

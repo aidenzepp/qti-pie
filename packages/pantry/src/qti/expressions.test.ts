@@ -615,9 +615,9 @@ const CheckSchema = Schema.Struct({
 });
 
 describe("qti/expressions.ts, a test's braced reference that names no variable (reading R15-k)", () => {
-  // Oracle: information model §2.7.2 and §9.3.4, "if a string attribute appears to be a reference
-  // to a template or outcome variable but there is no variable with the given name it should be
-  // treated simply as string value", over the stored statements, evaluated on a row each.
+  // Oracle: information model §9.3.4, "if a string appears to be a reference to a template or
+  // outcome variable but there is no variable with the given name it should be treated simply as
+  // string value", over the stored statements, evaluated on a row each.
   const pattern = { attribute: "pattern", kind: "qti-pattern-match" } as const;
   const bare = { attribute: "identifier", kind: "qti-variable" } as const;
   const unresolved = { form: "unsplit", identifier: "NOSUCH", source: "none" } as const;
