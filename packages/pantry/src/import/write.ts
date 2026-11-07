@@ -112,6 +112,7 @@ import {
   MatchTable,
 } from "#pantry/qti/mapping.ts";
 import { MathApply, MathArgument, MathQualifier } from "#pantry/qti/mathml-apply.ts";
+import { CnPartText, MathCn } from "#pantry/qti/mathml-cn.ts";
 import { copiedTextKinds, copiedUnder, Node, universalDomains } from "#pantry/qti/node.ts";
 import { Rounding, Tolerance } from "#pantry/qti/operators.ts";
 import {
@@ -1196,6 +1197,7 @@ export const changeSetOf = (author: typeof Author, inputs: PackageInputs) =>
     .insert(CellHeaders, [...inputs.CellHeaders.values()])
     .insert(Choice, [...inputs.Choice.values()])
     .insert(ChoiceVariableName, [...inputs.ChoiceVariableName.values()])
+    .insert(CnPartText, [...inputs.CnPartText.values()])
     .insert(ContextRef, [...inputs.ContextRef.values()])
     .insert(CountBound, [...inputs.CountBound.values()])
     .insert(Declaration, [...inputs.Declaration.values()])
@@ -1251,6 +1253,7 @@ export const changeSetOf = (author: typeof Author, inputs: PackageInputs) =>
     .insert(MatchTable, [...inputs.MatchTable.values()])
     .insert(MathApply, [...inputs.MathApply.values()])
     .insert(MathArgument, [...inputs.MathArgument.values()])
+    .insert(MathCn, [...inputs.MathCn.values()])
     .insert(MathQualifier, [...inputs.MathQualifier.values()])
     .insert(Named, [...inputs.Named.values()])
     .insert(NamedHref, [...inputs.NamedHref.values()])

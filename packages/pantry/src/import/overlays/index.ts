@@ -284,6 +284,10 @@ const mergedOf = (
       "ChoiceVariableName",
       parts.map(({ ChoiceVariableName: rows }) => rows),
     ),
+    CnPartText: unionOf(
+      "CnPartText",
+      parts.map(({ CnPartText: rows }) => rows),
+    ),
     ContextRef: unionOf(
       "ContextRef",
       parts.map(({ ContextRef: rows }) => rows),
@@ -527,6 +531,10 @@ const mergedOf = (
     MathArgument: unionOf(
       "MathArgument",
       parts.map(({ MathArgument: rows }) => rows),
+    ),
+    MathCn: unionOf(
+      "MathCn",
+      parts.map(({ MathCn: rows }) => rows),
     ),
     MathQualifier: unionOf(
       "MathQualifier",
