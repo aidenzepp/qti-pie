@@ -1853,3 +1853,124 @@ messages, but nothing raises either one.
   escapes before calling `matching`. The probes come out byte-identical.
 - **Classification:** not triaged against grizzle's source; a performance note, not a correctness defect. A refusal
   that needs no class could be checked before the classes are built.
+
+## LP: AuthorAppLayer's startup, split (grizzle `4b155e8`, rechecked at `27c4cd2`)
+
+Lane LP measured `AuthorAppLayer`'s build on scratch copies of qti-pie `ddeb5147` and `984453d7`, with no database:
+the port is 1, and the pool opens no session while the layer is built. Each figure is process CPU seconds. Wall time
+ran 3.5 to 6 times CPU at load 42 to 73.
+
+| Stage                                                                               | CPU s        |
+| ----------------------------------------------------------------------------------- | ------------ |
+| `logins.ts` import, which is the Qti schema module (before `ef7423f0`)              | 10.5 to 13.5 |
+| `artifactsUnder`, the base artifacts                                                | 24.1         |
+| `loginAccess(importWork)`: the write front end, to compare access with the snapshot | 7.8          |
+| `compileRoleWorkload(importWork)`: the whole write, one variant                     | 8.0          |
+| every `db.apply` compile of the import ChangeSet                                    | 7.9          |
+| the same compile of a ChangeSet of one insert                                       | 8.2          |
+| whole layer build with `importWork`                                                 | 48.5         |
+| whole layer build without it (dropped in scratch, snapshot regenerated)             | 30.1         |
+
+### LP-1. The write front end decides every relation's unique objects on every compile (grizzle cost)
+
+- **Cause:** 96% of a write compile is one line.
+  - `compile`'s `writable` map (`packages/engine/src/write/frontend/compile.ts:730-732`) calls `relationUniques`
+    (`write/insert/unique.ts:220-222`) for every ordinary relation of the base, written or not.
+  - That calls `beyondPrimary` (`laws/model/uniques.ts:320-325`).
+  - It compares unique objects pairwise through `subsumes` (`uniques.ts:303-312`).
+  - `subsumes` calls `canonicalEquals` (`core/canonical.ts:692-699`), which encodes both guard predicates on every
+    comparison.
+- **Where the time goes in Qti:** one relation, `Attribute`, takes 8.25 CPU s. It has 57 unique objects beyond its
+  primary key, carrying 97 guards. The other 161 relations together take under 0.03 s.
+- **Every other phase is small.** In a profile of the import's write compile:
+  - strata scheduling: 0.1%;
+  - member classes: 0.5%;
+  - families (`familyProgram`): 0.4%;
+  - lowering: `optimizedArtifact` 1.7%, conservative realization and artifact 0.7%, `writeFacts` 0.1%.
+- **The same work repeats around startup:**
+  - The law model already runs it for every relation in `#refuseGeneratedKeys` (`laws/model/model.ts:898-917`, at
+    `:902`).
+  - `compileLaws` runs `specialize` twice (`model.ts:1552-1565`, at `:1555` and `:1561`).
+  - So a layer build pays it four times: twice in `compileLaws`, once in `loginAccess`
+    (`program/workload/compile.ts:187`) and once in `compileRoleWorkload` (`adapter/db/workload.ts:136-137`).
+  - Every `db.apply` pays it again, because "grizzle keeps no cache of programs" (`adapter/apply/compile.ts:26-27`;
+    `apply/index.ts:134`). qti never runs the layer's compiled form.
+- **Check:** the same subsumption with each predicate encoded once takes 0.10 CPU s, against 7.90, and it matches
+  `beyondPrimary` object for object on all 162 relations. It measures the redundancy only. The ruling is to delete
+  work, not to cache it.
+- **Work that can be deleted:**
+  - Record each relation's objects beyond its primary key in `RelationLaws` when the law model decides them
+    (`model.ts:902`), and read them in `relationUniques`.
+  - Drop the provisional `specialize`'s `#refuseGeneratedKeys` and `relationLaws` pass (`model.ts:1555`).
+  - Compare guards without re-encoding them pair by pair.
+- **Reproduction:** `~/.cache/gr8des/integration/grizzle-repros/layer-workload/` (`run.sh`, with output in `run.out`).
+  - It builds a schema of r relations, each with k `key(on(select(Ti, φj), "a"))` guarded keys, and a lawless `U`.
+    Guards may read a closed relation of w rows.
+  - The login's workload is one of: none, a ChangeSet of one insert into `U`, or one into `U` and every Ti.
+  - `DbLayer.make` is built with no database.
+  - At r=4, k=32 under the one-insert workload: `compileLaws` is 83% `beyondPrimary`, `loginAccess` 96-99%, and
+    `compileRoleWorkload` 94-99%, though the ChangeSet writes only `U`.
+  - The hot files are byte-identical from `4b155e8` to `27c4cd2`, and `run.out` holds both pins.
+
+### LP-2. A closed-id literal carries its roster into every canonical encode (grizzle cost)
+
+- Attribute's guard predicates encode to 23,000-62,000 characters each, some to 100,000-392,000.
+- interactions.ts:1709's encodes to 2,979,763 characters.
+- Each comparison of a closed-id field with a literal carries the whole roster, so every canonical encode of such a
+  predicate costs as much as the roster. That bears on every canonical encode, not only `beyondPrimary`.
+
+### LP-3. Four of Attribute's keys are implied by wider ones (qti, after the database tier)
+
+Each selection was evaluated exactly over the grammar's 78,424 attribute rows: (version, kind, governs, name, slot),
+from each GoverningOf row's model's slots, with the closed reads evaluated from their rows. Script and output:
+`~/.cache/gr8des/lp/tree/packages/pantry/work/lp/attraudit.ts` and `attraudit-exact.out`. Four keys lie inside a
+wider key over the same field, so each is one key stated twice:
+
+| Narrower key                                                                    | Inside                                                                        | Its containment                                                              |
+| ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| metadata.ts:935 `key(on(objectIdentifiers, "node"))`, item and test `xml:lang`  | identity.ts:1015 `key(on(langAttributes, "node"))`, `xml:lang` everywhere     | copy-back beside it; grizzle's `beyondPrimary` already drops 935 as subsumed |
+| package.ts:600 `key(on(manifestIdentifiers, "node"))`, `cp:manifest@identifier` | identity.ts:929 `key(on(idAttributes, "node"))`, one ID attribute per element | copy-back at :601 into `ManifestId`                                          |
+| package.ts:610 `key(on(resourceIdentifiers, "node"))`, `cp:resource@identifier` | identity.ts:929                                                               | copy-back at :611 into `Resource`                                            |
+| html.ts:369 `key(on(headerIds, "node"))`, `th@id`                               | identity.ts:929                                                               | `contained(on(TableHeader, "node"), on(headerIds, "node"))` at :371          |
+
+- **Ruling (the Mind, 2026-11-06):** they go by the one-way rule. Removing them restates their containments, which is
+  a schema change, so it lands after the database tier is green, like GoverningOf.
+- **Plan, for each one:**
+  1. Retarget its copy-back or containment onto the wider selection.
+  2. Prove the old and new laws equal by exhaustion over the 78,424 rows, as `ace0abd1` did for the copy-backs.
+  3. Delete the narrower key.
+- **Open question:** grizzle requires a containment's target to hold "a key over the same selection among its terms"
+  (README, Rules). That rule may be what forced these keys. If grizzle accepts the wider key for the narrower target,
+  that settles it. If it refuses, it is a grizzle question, which the Mind will ask.
+- declarations.ts:536 `key(on(identifiers, "node"))` and identity.ts:929 overlap on `qti-context-declaration` and
+  `qti-response-declaration`'s `identifier`, but neither lies inside the other. They are two keys, and both stay.
+- Every other pair of Attribute's 52 keys over one field list is disjoint.
+
+### LP-4. The Qti import's repeated domain compiles (qti, fixed in `ef7423f0`)
+
+- **Split of the import before the fix** (10.5 CPU s, profile at `ddeb5147`):
+
+  | CPU s | What                                 | Owner   |
+  | ----- | ------------------------------------ | ------- |
+  | 3.86  | grammar/domains.ts `compileUncached` | qti     |
+  | 1.26  | schema builders                      | grizzle |
+  | 1.18  | closed relation admission            | grizzle |
+  | 0.91  | grammar/content.ts `installContent`  | qti     |
+  | 0.90  | grammar/install.ts `handleIn`        | qti     |
+  | 0.78  | GC                                   |         |
+  | 0.54  | other grammar                        | qti     |
+  | 0.41  | other                                | grizzle |
+  | 0.36  | module load                          | node    |
+
+- **Cause:**
+  - `compileUncached` ran 1692 times for 252 distinct definitions. Spec readings built a new definition per (version,
+    declaration), and `compile`'s cache was keyed by object identity. The language tags of reading 129 alone
+    recompiled 551, 368 and 337 times.
+  - `handleIn` searched a roster with `find` for every generated row.
+- **Fix:**
+  - `domainReader` compiles each distinct read definition once, in one pass, and `compile`'s memo is deleted.
+  - `handleLookup` builds one Map per roster.
+- **Result:**
+  - Qti's import fell from 12.3-13.5 to 5.4-6.6 CPU s.
+  - Its fingerprint is unchanged: `f5cbad00e2e3f5f51b42387a6bac9e28992e37c8ab7d910fff4bdd2686400d85`.
+- **Guard:** `src/grammar/attributes.work.test.ts`, with planted bugs shown failing.
