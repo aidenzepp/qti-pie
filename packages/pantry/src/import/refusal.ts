@@ -159,6 +159,7 @@ import {
 import { Chars, EndCharacter, prefixPattern } from "#pantry/qti/node.ts";
 import { EntryContent, HrefParams, Reference, ReferencePath } from "#pantry/qti/package.ts";
 import { mathmlLaws } from "#pantry/qti/mathml.ts";
+import { headQualifierLaw } from "#pantry/qti/mathml-apply.ts";
 import { quotationLaws } from "#pantry/qti/quotation.ts";
 import {
   branchLaws,
@@ -3016,6 +3017,19 @@ const writtenLaws: readonly (readonly [Law, LawName])[] = [
         "Reference overlay",
       ] as const,
   ),
+  // The one MathML statement that reads as its own law: an application's head qualifier is a pair
+  // MathML 3's §4.4 syntax tables list (`mathml-apply.ts`, reading R6-head-qualifiers). The rest of the
+  // module is a restatement of the tree, "E1 derived", through lawGroups.
+  [
+    containedIn(
+      sideOf("MathQualifier", "head", "kind"),
+      sideOf("HeadQualifier", "head", "qualifier"),
+    ),
+    "MathML head qualifier",
+  ],
+  [primaryKeyOf("MathApply", "node"), "E1 derived"],
+  [primaryKeyOf("MathArgument", "node"), "E1 derived"],
+  [primaryKeyOf("MathQualifier", "node"), "E1 derived"],
 ];
 
 /**
@@ -3172,9 +3186,10 @@ const lawsOfStatement = (statement: Statement): readonly Law[] =>
  * - **Quotation** (`quotation.ts`, reading 127): every copy, key and containment is a restatement of
  *   the `q`'s node, its slot and its neighbours' ends, "E1 derived"; its law is its check,
  *   "Quotation punctuation".
- * - **MathML** (`mathml.ts`, reading 2): none yet, since its four families are empty; each statement
- *   a family gains is a restatement, "E1 derived", and a row of {@link writtenLaws} names a law of
- *   a group otherwise.
+ * - **MathML** (`mathml.ts`, reading 2): each statement of its four families is a restatement, "E1
+ *   derived", and a row of {@link writtenLaws} names a law of a group otherwise: the apply family's
+ *   head qualifier containment ("MathML head qualifier"; its check is "MathML arity"), which the
+ *   group leaves out, so that every law a group holds keeps the group's name.
  */
 export const lawGroups: readonly (readonly [readonly Statement[], LawName])[] = [
   [testOverlayLaws, "Test overlay"],
@@ -3187,7 +3202,7 @@ export const lawGroups: readonly (readonly [readonly Statement[], LawName])[] = 
   [mappingLaws, "Mapping overlay"],
   [expressionLaws, "E1 derived"],
   [quotationLaws, "E1 derived"],
-  [mathmlLaws, "E1 derived"],
+  [mathmlLaws.filter((statement) => statement !== headQualifierLaw), "E1 derived"],
 ];
 
 /**
