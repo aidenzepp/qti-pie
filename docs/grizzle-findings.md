@@ -1843,6 +1843,35 @@ PostgreSQL's DETAIL, in its lane OPEN as "witness a CHECK refusal on the host". 
   took the fix at repin G, `9b3a28a1`, with no change to its code. `src/import/package.large.db.test.ts`'s run at
   `9b3a28a1` is to come, and is recorded here when it lands.
 
+### A containment side holds fields only, so a row copies its target's constants (a documented limit; lane REP-A)
+
+- **Classified:** a documented limit, not a defect. Checked at grizzle trunk `72f7d03`, `origin/main` on 2026-11-07
+  and the vendored pin.
+- **What grizzle states:**
+  - Of `on(source, ...terms)`: "A side reads at least one term of its source, each once (ir/desc.ts SideDesc): a field,
+    or pred of a natural field" (`packages/engine/src/schema/api.ts:317`).
+  - The IR has no other term: `TermDesc` is `{ kind: "field" }` or `{ kind: "pred" }`
+    (`packages/engine/src/ir/desc.ts:610` to `616`).
+  - A containment states that its left side's tuples are among its right side's (`desc.ts:730` to `731`), so each
+    term the target side reads needs a field of the source row, a distinct one for each term.
+- **Where pantry meets it:** `Document` carries six copies of its document node, `nodeChildren`, `nodeDocument`,
+  `nodeGoverns`, `nodeKind`, `nodeParentKind` and `nodeStart` (`src/qti/chardata.ts:444` to `471`), so that one
+  containment, `Document(node, nodeChildren, context, …) ⊆ nodeContext` (`chardata.ts:628` to `644`), lands on the
+  owner axis's own UNIQUE over `Node` and needs no other index on `Node`. Four of the six are the same for every
+  document node, and the host writes them as constants (`src/import/write.ts`, `documentRowsOf`): `nodeKind`
+  `"document"`, `nodeGoverns` `"none"`, `nodeParentKind` `"document"` and `nodeStart` `0n`. A fifth, `nodeDocument`,
+  repeats the row's own `node`, because a side reads each field once. `nodeChildren` is a real copy, the document
+  node's child count.
+- **Reproduction:** nothing to run, since the term has no spelling. Take `A(id)` and `B(id, kind)` and the law "every
+  `A` is a `B` of kind `x`". No side term is the literal `"x"`, so the law is stated in one of two ways:
+  - `contained(on(A, "id", "kind"), on(B, "id", "kind"))`, with `A` carrying a `kind` that is always `"x"`;
+  - `contained(on(A, "id"), on(select(B, kind = "x"), "id"))`, a selection with an index of its own.
+- **What would lift it:** a constant term in a side, such as `on(A, "id", constant("x"))`, read as a literal where the
+  containment's SQL compares its terms; and a side that may read one field twice.
+- **Workaround in pantry:** the copied columns, pinned by the containment itself. `Node`'s key is `id`, and
+  `Document`'s `node` mirrors the document-kind nodes (`chardata.ts:617` to `623`), so each copy equals its node's
+  value.
+
 ## A role lacked EXECUTE on what its CHECKs cast to (grizzle defect, fixed in `f66c05b`)
 
 - **Found by:** seat N1's database tier on server A at `64f0427` (`docs/rfc/swarm-ledger.md`, 14:05 on 2026-11-06).

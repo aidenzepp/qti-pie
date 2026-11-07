@@ -1,5 +1,7 @@
 import { Effect, Option } from "effect";
 import { EncodeError } from "#crust/errors.ts";
+import { preorder, tour } from "#crust/tour.ts";
+import type { Step } from "#crust/tour.ts";
 import type { Attribute, Child, Element, XmlDocument, XmlDeclaration } from "#crust/tree.ts";
 
 /**
@@ -165,47 +167,39 @@ const renderAttributes = (element: Element, threshold: number): string =>
     .join("");
 
 /**
- * The end tag of an element whose children are still being written.
+ * Render one step of a tour: an element's start tag with its attributes in stored order, as `<x/>`
+ * when it has no children and with nothing at its close, else its end tag at its close; or a leaf.
+ *
+ * @param step - The step.
+ * @param threshold - The highest code point a text run or an attribute value writes as itself.
+ * @returns The step's markup.
  */
-interface EndTag {
-  readonly kind: "end";
-  readonly qname: string;
-}
+const renderStep = (step: Step, threshold: number): string => {
+  if (step.kind === "leaf") {
+    return renderLeaf(step.node, threshold);
+  }
+
+  const { element } = step;
+  if (step.kind === "close") {
+    return element.children.length === 0 ? "" : `</${element.qname}>`;
+  }
+
+  return `<${element.qname}${renderAttributes(element, threshold)}${element.children.length === 0 ? "/" : ""}>`;
+};
 
 /**
- * Render a node and everything below it: an element with its attributes in stored order, as
- * `<x/>` when it has no children, or one of the leaf kinds.
- *
- * The walk keeps its own stack of what is still to write, so a tree of any depth or width renders
- * without recursion. An element's end tag goes on the stack beneath its children, which go on last
- * first, so each child's whole subtree leaves the stack before its next sibling and the end tag
- * after the last, which keeps the output in document order.
+ * Render a node and everything below it, in document order, by its {@link tour}, so a tree of any
+ * depth or width renders without recursion.
  *
  * @param node - The node to render.
  * @param threshold - The highest code point a text run or an attribute value writes as itself.
  * @returns The node's markup.
  */
-const renderNode = (node: Child, threshold: number): string => {
-  const rendered: string[] = [];
-  const pending: (Child | EndTag)[] = [node];
-  for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
-    if (next.kind === "end") {
-      rendered.push(`</${next.qname}>`);
-    } else if (next.kind !== "element") {
-      rendered.push(renderLeaf(next, threshold));
-    } else if (next.children.length === 0) {
-      rendered.push(`<${next.qname}${renderAttributes(next, threshold)}/>`);
-    } else {
-      rendered.push(`<${next.qname}${renderAttributes(next, threshold)}>`);
-      pending.push({ kind: "end", qname: next.qname });
-      for (const child of next.children.toReversed()) {
-        pending.push(child);
-      }
-    }
-  }
-
-  return rendered.join("");
-};
+const renderNode = (node: Child, threshold: number): string =>
+  tour(node)
+    .map((step) => renderStep(step, threshold))
+    .toArray()
+    .join("");
 
 /**
  * Render the XML declaration with only the pseudo-attributes it has, in the order version,
@@ -301,25 +295,18 @@ const findInOwn = (node: Child, threshold: number): EncodeError | undefined => {
  * The first construct under `node`, itself included, that cannot carry a character reference and
  * holds a code point above `threshold`, in document order.
  *
- * The walk keeps its own stack, children pushed last first, so it visits a tree of any depth or
- * width in document order without recursion and stops at the first failure.
+ * The node is visited by its {@link preorder}, so a tree of any depth or width is searched without
+ * recursion, and the search stops at the first failure.
  *
  * @param node - The node to search.
  * @param threshold - The highest code point the encoder carries as itself.
  * @returns The failure for the first such construct, or `undefined` when there is none.
  */
 const findInNode = (node: Child, threshold: number): EncodeError | undefined => {
-  const pending: Child[] = [node];
-  for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
-    const found = findInOwn(next, threshold);
+  for (const visited of preorder(node)) {
+    const found = findInOwn(visited, threshold);
     if (found !== undefined) {
       return found;
-    }
-
-    if (next.kind === "element") {
-      for (const child of next.children.toReversed()) {
-        pending.push(child);
-      }
     }
   }
 

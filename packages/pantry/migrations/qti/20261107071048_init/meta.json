@@ -6071,6 +6071,10 @@
 					},
 					{
 						"kind": "statement",
+						"statement": "ALTER TABLE \"qti\".\"test_document\" ADD COLUMN \"__node_nv676cv335\" \"pg_catalog\".\"uuid\" GENERATED ALWAYS AS (CASE WHEN \"root_kind\" IN (300::smallint, 302::smallint) THEN \"node\" END) STORED"
+					},
+					{
+						"kind": "statement",
 						"statement": "ALTER TABLE \"qti\".\"test_document\" ADD COLUMN \"__package_wmb66a5rru\" \"pg_catalog\".\"uuid\" GENERATED ALWAYS AS (CASE WHEN \"root_kind\" = 300::smallint THEN \"package\" END) STORED"
 					},
 					{
@@ -7068,6 +7072,10 @@
 					{
 						"kind": "statement",
 						"statement": "ALTER TABLE \"qti\".\"table_header\" ADD CONSTRAINT \"__table_header_key_table_id_zjvfdq3rsz\" UNIQUE NULLS DISTINCT (\"__table_3gcg6j4d37\", \"__id_lmaiziq5mc\")"
+					},
+					{
+						"kind": "statement",
+						"statement": "ALTER TABLE \"qti\".\"test_document\" ADD CONSTRAINT \"__test_document_key_node_ar4zzngp5d\" UNIQUE NULLS DISTINCT (\"__node_nv676cv335\")"
 					},
 					{
 						"kind": "statement",
@@ -10235,7 +10243,7 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "ALTER TABLE \"qti\".\"reference_document\" ADD CONSTRAINT \"__reference_document_fk_document_dsl4oq6e33\" FOREIGN KEY (\"document\") REFERENCES \"qti\".\"test_document\" (\"node\") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED"
+						"statement": "ALTER TABLE \"qti\".\"reference_document\" ADD CONSTRAINT \"__reference_document_fk_document_ti5hcpt6mf\" FOREIGN KEY (\"document\") REFERENCES \"qti\".\"test_document\" (\"__node_nv676cv335\") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED"
 					},
 					{
 						"kind": "statement",
@@ -10735,10 +10743,6 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "ALTER TABLE \"qti\".\"test_document\" ADD CONSTRAINT \"__test_document_fk_node_2fjzxhogz7\" FOREIGN KEY (\"node\") REFERENCES \"qti\".\"reference_document\" (\"document\") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED"
-					},
-					{
-						"kind": "statement",
 						"statement": "ALTER TABLE \"qti\".\"test_document\" ADD CONSTRAINT \"__test_document_fk_node_package_path_root_kind_6qoyqsjydy\" FOREIGN KEY (\"node\", \"package\", \"path\", \"root_kind\") REFERENCES \"qti\".\"document\" (\"node\", \"package\", \"path\", \"root_kind\") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED"
 					},
 					{
@@ -10756,6 +10760,10 @@
 					{
 						"kind": "statement",
 						"statement": "ALTER TABLE \"qti\".\"test_document\" ADD CONSTRAINT \"__test_document_fk_node_pred_sites_7abk5yodfe\" FOREIGN KEY (\"node\", \"__pred_sites_62entkrpk5\") REFERENCES \"qti\".\"site_target\" (\"document\", \"__index_sites_ehadpoyrnv\") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED"
+					},
+					{
+						"kind": "statement",
+						"statement": "ALTER TABLE \"qti\".\"test_document\" ADD CONSTRAINT \"__test_document_fk_node_o3z4xfnvo2\" FOREIGN KEY (\"__node_nv676cv335\") REFERENCES \"qti\".\"reference_document\" (\"document\") MATCH SIMPLE DEFERRABLE INITIALLY DEFERRED"
 					},
 					{
 						"kind": "statement",
@@ -20289,6 +20297,10 @@
 					},
 					{
 						"kind": "statement",
+						"statement": "COMMENT ON COLUMN \"qti\".\"test_document\".\"__node_nv676cv335\" IS 'node where {\"arg\":{\"field\":\"rootKind\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"qti-assessment-section\",\"qti-assessment-test\"]}'"
+					},
+					{
+						"kind": "statement",
 						"statement": "COMMENT ON COLUMN \"qti\".\"test_document\".\"__package_wmb66a5rru\" IS 'package where {\"kind\":\"compare\",\"left\":{\"field\":\"rootKind\",\"kind\":\"field\"},\"op\":\"eq\",\"right\":{\"kind\":\"literal\",\"value\":\"qti-assessment-section\"}}'"
 					},
 					{
@@ -21286,6 +21298,10 @@
 					{
 						"kind": "statement",
 						"statement": "COMMENT ON CONSTRAINT \"__table_header_key_table_id_zjvfdq3rsz\" ON \"qti\".\"table_header\" IS 'key TableHeader(table where {\"kind\":\"compare\",\"left\":{\"field\":\"document\",\"kind\":\"field\"},\"op\":\"ne\",\"right\":{\"field\":\"table\",\"kind\":\"field\"}}, id where {\"kind\":\"compare\",\"left\":{\"field\":\"document\",\"kind\":\"field\"},\"op\":\"ne\",\"right\":{\"field\":\"table\",\"kind\":\"field\"}})'"
+					},
+					{
+						"kind": "statement",
+						"statement": "COMMENT ON CONSTRAINT \"__test_document_key_node_ar4zzngp5d\" ON \"qti\".\"test_document\" IS 'key TestDocument(node where {\"arg\":{\"field\":\"rootKind\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"qti-assessment-section\",\"qti-assessment-test\"]})'"
 					},
 					{
 						"kind": "statement",
@@ -23801,7 +23817,7 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "COMMENT ON CONSTRAINT \"__reference_document_fk_document_dsl4oq6e33\" ON \"qti\".\"reference_document\" IS 'foreign key ReferenceDocument(document) to TestDocument(node)'"
+						"statement": "COMMENT ON CONSTRAINT \"__reference_document_fk_document_ti5hcpt6mf\" ON \"qti\".\"reference_document\" IS 'foreign key ReferenceDocument(document) to TestDocument(node where {\"arg\":{\"field\":\"rootKind\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"qti-assessment-section\",\"qti-assessment-test\"]})'"
 					},
 					{
 						"kind": "statement",
@@ -24301,10 +24317,6 @@
 					},
 					{
 						"kind": "statement",
-						"statement": "COMMENT ON CONSTRAINT \"__test_document_fk_node_2fjzxhogz7\" ON \"qti\".\"test_document\" IS 'foreign key TestDocument(node) to ReferenceDocument(document)'"
-					},
-					{
-						"kind": "statement",
 						"statement": "COMMENT ON CONSTRAINT \"__test_document_fk_node_package_path_root_kind_6qoyqsjydy\" ON \"qti\".\"test_document\" IS 'foreign key TestDocument(node, package, path, rootKind) to Document(node, package, path, rootKind)'"
 					},
 					{
@@ -24322,6 +24334,10 @@
 					{
 						"kind": "statement",
 						"statement": "COMMENT ON CONSTRAINT \"__test_document_fk_node_pred_sites_7abk5yodfe\" ON \"qti\".\"test_document\" IS 'foreign key TestDocument(node, pred(sites)) to SiteTarget(document, the index of the family TestDocument.sites)'"
+					},
+					{
+						"kind": "statement",
+						"statement": "COMMENT ON CONSTRAINT \"__test_document_fk_node_o3z4xfnvo2\" ON \"qti\".\"test_document\" IS 'foreign key TestDocument(node where {\"arg\":{\"field\":\"rootKind\",\"kind\":\"field\"},\"kind\":\"in\",\"values\":[\"qti-assessment-section\",\"qti-assessment-test\"]}) to ReferenceDocument(document)'"
 					},
 					{
 						"kind": "statement",
@@ -25698,7 +25714,7 @@
 		"schema": "qti",
 		"schemaName": "Qti",
 		"source": "f9ad291b6fb76264456bfb9f9a7ac9ab3581ddbfc7f2181a3b6e22961ea38b1b",
-		"target": "f56e9243a8fee9081f9850fe93bdb0f522dce36946423be0731a5eeac61a3846"
+		"target": "fa83e7645d7f7855285866a72841cdbdf64ccd39e6139c5a7e900129b567127a"
 	},
-	"seal": "42ebc0ead7b37c24947098c2a7737dff34028157991d3cf2cca0d997b6a17770"
+	"seal": "1a87a716d17d4dc7ded85577d8cd648119cd4715b5389e4d3646a946e81a0ea7"
 }

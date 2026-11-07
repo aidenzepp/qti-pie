@@ -1,11 +1,13 @@
 import { assert, describe, it } from "@effect/vitest";
 import { drawn, explore } from "@grizzle/testing/explore";
-import type { Oracle } from "@grizzle/testing/explore";
+import type { Kept, Oracle } from "@grizzle/testing/explore";
 import { rating, required } from "@grizzle/testing/features";
 import type { Pending } from "@grizzle/testing/features";
 import { element, int, shuffled } from "@grizzle/testing/gen";
 import { notesOnly } from "@grizzle/testing/sense";
 import { completeShrink } from "@grizzle/testing/shrink";
+import { forcedChooser, generate } from "@grizzle/testing/source";
+import { valuesFromToken } from "@grizzle/testing/tape";
 import { searched } from "@grizzle/testing/vitest";
 import { Array as Arr, Effect, Formatter, Option, Result } from "effect";
 import { rowOf } from "#pantry/grammar/ancestry.ts";
@@ -796,6 +798,8 @@ const unconstructed = {
   "Selection bound": "a selection's count, a value drawn without reading",
   "Set type": "a setter's expression type, over expressions drawn without typing",
   "Slider bounds": "a slider's bounds, values drawn without reading",
+  "Table headers":
+    "a cell's header tokens against its table's th ids (reading 126), over identifiers drawn without reading",
   "Template reads": "what template processing reads, over identifiers drawn without reading",
   "Template reference": "a reference, over identifiers drawn without reading",
   TextDomain: "an element's value domain, over text drawn without reading",
@@ -880,6 +884,31 @@ const placedAlone: ReadonlyMap<string, readonly ElementKind<Composed>[]> = new M
   ].map(([key, held]) => [key, held.flatMap(({ child }) => (isClosedKind(child) ? [child] : []))]),
 );
 
+/**
+ * The tape of the tree that broke "Table headers" in a search that held it to every generated tree:
+ * a td that no table holds, so takes part in none, whose headers name `v` (reading 126). It was the
+ * free suite's red at 9b3a28a1 (TEST_SEED=2144430066, the rotating stream's case 199, shrunk), from
+ * 4d7eed2f, which stated the law without naming it among the {@link unconstructed}.
+ */
+const headersOutsideTableTape = valuesFromToken(
+  "0.2.0.3.3.0.0.3.3.3.d.3.d.0.0.0.1.0.0.4.3.1.0.e.0.2.0.a3.0.0.4.0.0.0.0.0.0.0.0.0.0.0.0.0.0.gw.0.2.0.0.1.0.0.0.0.0.0.0.0.1.p.1.0.0.2.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.57b.0.2.0.0.1.0.0.0.0.0.0.0.0.0.0.0.2.0.0.0.0.0.0.2.0.0.2.0.3.0.0.0.0.0.0.0.4.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.1dk.0.2.0.0.0.0.0.0.0.2.0.0.0.2.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.2.0.1.1j.1.0.0.0.0.0.0",
+);
+
+/**
+ * That tree, drawn again from its tape: a kept case of the search below, which must still meet
+ * every constructed law and still break "Table headers", so the law stays stated and stays
+ * unconstructed.
+ */
+const headersOutsideTable: Kept<GeneratedXdm, Situation> = {
+  draws: "",
+  note: "a td no table holds names a header: Table headers falls where it falls",
+  reaches: ["Table headers refuses"],
+  sketch: generate(
+    documents,
+    forcedChooser(headersOutsideTableTape, headersOutsideTableTape.length),
+  ).value,
+};
+
 describe("the host's law model over folded rows", { timeout: searchTimeout }, () => {
   it.effect("holds every law a generated tree is built to meet", (ctx) =>
     // Oracle: the specification as a checker, the host's law model (`#pantry/test/oracle.ts`),
@@ -889,20 +918,22 @@ describe("the host's law model over folded rows", { timeout: searchTimeout }, ()
     // Bound: the generator's drawn bounds.
     searched(
       ctx,
-      explore(over("model/folds-laws-valid", lawModelOracle), ({ document, model }, c) =>
-        Effect.gen(function* valid() {
-          c.noteAll(featuresOf(document));
-          c.noteAll(familiesOf(model));
+      explore(
+        { ...over("model/folds-laws-valid", lawModelOracle), kept: [headersOutsideTable] },
+        ({ document, model }, c) =>
+          Effect.gen(function* valid() {
+            c.noteAll(featuresOf(document));
+            c.noteAll(familiesOf(model));
 
-          const rows = yield* foldedOf(document);
-          const breaches = documentBreaches("generated.xml", rows, laws);
-          c.noteAll(breaches.map(({ law }): LawVerdict => `${law} refuses`));
+            const rows = yield* foldedOf(document);
+            const breaches = documentBreaches("generated.xml", rows, laws);
+            c.noteAll(breaches.map(({ law }): LawVerdict => `${law} refuses`));
 
-          assert.deepStrictEqual(
-            breaches.filter(({ law }) => constructed.has(law)),
-            [],
-          );
-        }),
+            assert.deepStrictEqual(
+              breaches.filter(({ law }) => constructed.has(law)),
+              [],
+            );
+          }),
       ),
     ),
   );

@@ -1266,3 +1266,47 @@ export const checkOf = (
           : Option.none(),
     }),
   );
+
+/**
+ * One side of a `mirrors` the schema states, as the host judges it: its relation, its fields in
+ * pairing order, whether it holds a `pred` term, and its selection as a test of a row.
+ */
+export interface MirrorSide {
+  readonly fields: readonly string[];
+  readonly pred: boolean;
+  readonly relation: string;
+  readonly selects: (row: Readonly<Record<string, Datum>>) => boolean;
+}
+
+/**
+ * Read a stored side of a `mirrors` as the host judges it.
+ *
+ * @param side - The side.
+ * @returns Its relation, fields, `pred` terms and selection.
+ */
+const mirrorSideOf = (side: StoredSide): MirrorSide => ({
+  fields: fieldsOf(side),
+  pred: side.terms.some((term) => !Predicate.isString(term)),
+  relation: sourceOf(side).name,
+  selects: selectedBy(sourceOf(side).predicate),
+});
+
+/**
+ * Every `mirrors` the schema states, each its two sides: each side's selected rows, projected on
+ * its fields, are the other's.
+ *
+ * @param statements - The schema's statements.
+ * @returns The mirrors, in statement order.
+ */
+export const mirrorsOf = (
+  statements: typeof Qti.statements,
+): readonly (readonly [MirrorSide, MirrorSide])[] =>
+  statements.flatMap((statement) =>
+    Option.match(Schema.decodeUnknownOption(StatementSchema)(statement), {
+      onNone: () => [],
+      onSome: (read) =>
+        read.kind === "mirrors"
+          ? [[mirrorSideOf(read.left), mirrorSideOf(read.right)] as const]
+          : [],
+    }),
+  );

@@ -1,4 +1,6 @@
-import type { Attribute, Child, Element, Misc, XmlDocument } from "#crust/tree.ts";
+import { tour } from "#crust/tour.ts";
+import type { Leaf } from "#crust/tour.ts";
+import type { Attribute, Element, Misc, XmlDocument } from "#crust/tree.ts";
 
 /**
  * The namespace name that every namespace declaration's attribute is in.
@@ -126,7 +128,7 @@ const renderMisc = (item: Misc): string =>
  * @param node - The node to render.
  * @returns The node's canonical form.
  */
-const renderLeaf = (node: Exclude<Child, Element>): string => {
+const renderLeaf = (node: Leaf): string => {
   if (node.kind === "text") {
     return escapeText(node.value);
   }
@@ -139,52 +141,38 @@ const renderLeaf = (node: Exclude<Child, Element>): string => {
 };
 
 /**
- * A node still to render, with the scope its parent's declarations make.
+ * The scope above the root element: no namespace declared.
  */
-interface PendingNode {
-  readonly kind: "node";
-  readonly node: Child;
-  readonly parent: Scope;
-}
-
-/**
- * The end tag of an element whose children are still being rendered.
- */
-interface EndTag {
-  readonly kind: "end";
-  readonly qname: string;
-}
+const outermost: Scope = new Map();
 
 /**
  * Render an element, its namespace axis, its attribute axis and its children, always with a
  * separate end tag.
  *
- * The walk keeps its own stack, so a tree of any depth or width renders without recursion. Each
- * element's end tag goes on the stack beneath its children, which go on last first with the scope
- * the element makes, so each child's whole subtree leaves the stack before its next sibling and the
- * end tag after the last, which keeps the output in document order.
+ * The element is rendered by its {@link tour}, so a tree of any depth or width renders without
+ * recursion. Each open pushes the scope the element makes and each close pops it, so every element
+ * renders its namespace axis against the scope its parent makes; opens and closes pair, so the
+ * stack holds the outermost scope at every step.
  *
  * @param root - The element to render.
  * @returns The element's canonical form.
  */
 const renderElement = (root: Element): string => {
   const rendered: string[] = [];
-  const pending: (PendingNode | EndTag)[] = [{ kind: "node", node: root, parent: new Map() }];
-  for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
-    if (next.kind === "end") {
-      rendered.push(`</${next.qname}>`);
-    } else if (next.node.kind === "element") {
-      const element = next.node;
-      const scope = scopeOf(element, next.parent);
-      rendered.push(
-        `<${element.qname}${renderNamespaces(scope, next.parent)}${renderAttributes(element)}>`,
-      );
-      pending.push({ kind: "end", qname: element.qname });
-      for (const node of element.children.toReversed()) {
-        pending.push({ kind: "node", node, parent: scope });
-      }
+  const scopes: Scope[] = [outermost];
+  for (const step of tour(root)) {
+    if (step.kind === "leaf") {
+      rendered.push(renderLeaf(step.node));
+    } else if (step.kind === "close") {
+      scopes.pop();
+      rendered.push(`</${step.element.qname}>`);
     } else {
-      rendered.push(renderLeaf(next.node));
+      const parent = scopes.at(-1) ?? outermost;
+      const scope = scopeOf(step.element, parent);
+      scopes.push(scope);
+      rendered.push(
+        `<${step.element.qname}${renderNamespaces(scope, parent)}${renderAttributes(step.element)}>`,
+      );
     }
   }
 
