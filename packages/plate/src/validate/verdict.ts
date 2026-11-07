@@ -1249,13 +1249,26 @@ const notQti = (refusal: Refusal, wrong: string, change: string): string =>
 const baseTypeText = (baseType: string): string => (baseType === "" ? "untyped" : code(baseType));
 
 /**
- * Word an `undeclared-variable` refusal's kind of variable.
+ * Word a kind of variable a detail names: an `undeclared-variable` refusal's `expected`, one kind
+ * of a template rule's space-separated `expected` list, or a P20 refusal's `targetKind`.
  *
- * @param expected The kind the detail names: `response`, `outcome` or `variable`.
- * @returns The noun.
+ * @param expected The kind: `response`, `outcome`, `template` or `variable`.
+ * @returns The noun, `variable` for any other kind.
  */
-const variableKind = (expected: string): string =>
-  expected === "response" || expected === "outcome" ? expected : "variable";
+const variableKind = (expected: string): string => {
+  switch (expected) {
+    case "outcome":
+    case "response": {
+      return expected;
+    }
+    case "template": {
+      return "template variable";
+    }
+    default: {
+      return "variable";
+    }
+  }
+};
 
 /**
  * Name the facts most refusals word: the element, the attribute and the reading cited.
@@ -1328,8 +1341,22 @@ const operandType = (refusal: Refusal, element: string, expression: string): str
 };
 
 /**
+ * What a template rule that sets a response's or an outcome's value sets, as a P20 sentence words
+ * it before the variable's name: its correct response or its default value. A rule that sets the
+ * variable itself has no entry.
+ */
+const valuesSet: ReadonlyMap<string, string> = new Map([
+  ["qti-set-correct-response", "the correct response of "],
+  ["qti-set-default-value", "the default value of "],
+]);
+
+/**
  * Word an `expression-type` refusal whose detail names no `check`: a lookup operand against its
- * table (reading 28), or an expression against the outcome it sets.
+ * table (reading 28), or an expression against the variable it sets (pantry's P20).
+ *
+ * The variable's type is the detail's `outcomeCardinality` and `outcomeBaseType` whatever its
+ * kind, and its kind is the `targetKind` a template rule's refusal carries (`template`,
+ * `response` or `outcome`), an outcome when there is none, as for a `qti-set-outcome-value`.
  *
  * @param refusal The refusal.
  * @param element The element's local name.
@@ -1340,12 +1367,17 @@ const uncheckedType = (refusal: Refusal, element: string, expression: string): s
   const identifier = fact(refusal, "identifier", "the outcome");
 
   return Option.match(optionalFact(refusal, "table"), {
-    onNone: () =>
-      sentence(
+    onNone: () => {
+      const variable = withArticle(
+        `${fact(refusal, "outcomeCardinality", "")} ${baseTypeText(fact(refusal, "outcomeBaseType", ""))} ${variableKind(fact(refusal, "targetKind", "outcome"))}`,
+      );
+
+      return sentence(
         refusal,
-        `${code(element)} sets ${code(identifier)}, ${withArticle(`${fact(refusal, "outcomeCardinality", "")} ${baseTypeText(fact(refusal, "outcomeBaseType", ""))}`)} outcome, to ${withArticle(expression)} value${citation(refusal)}.`,
+        `${code(element)} sets ${valuesSet.get(element) ?? ""}${code(identifier)}, ${variable}, to ${withArticle(expression)} value${citation(refusal)}.`,
         `give the expression the base type and cardinality of ${code(identifier)}, or change its declaration`,
-      ),
+      );
+    },
     onSome: (table) =>
       sentence(
         refusal,
@@ -1377,8 +1409,8 @@ const templateReadSource = "info.txt:65111";
  *   template variables (`info.txt:65111`), unless the detail names a reading; the remedy offers a
  *   template variable, never `qti-correct` or `qti-default`, which read the refused variable too.
  * - `weight` (P29): a weighted `qti-test-variables` whose base type is not `float`.
- * - None: an expression against the outcome it sets, or a lookup operand against its table (see
- *   {@link uncheckedType}).
+ * - None: an expression against the variable it sets (P20), or a lookup operand against its table
+ *   (see {@link uncheckedType}).
  *
  * An `expressionBaseType` of `""`, a type with no base type of its own, is worded `untyped`.
  *
@@ -1504,7 +1536,9 @@ const attributeType = (refusal: Refusal): string => {
  *   test part or section (reading 48).
  * - `built-in-target` (pantry's P9): a rule other than `qti-set-outcome-value` that sets a built-in,
  *   citing the information model's line its `source` names.
- * - None (P8): a name the item declares no variable for.
+ * - None (P8): a name the item declares no variable of the `expected` kind for. A template rule's
+ *   target lists every kind the rule may set, space-separated, and the sentence offers them as
+ *   alternatives (pantry's `DeclaredRefKind`).
  *
  * Each names the element, or the element's attribute when a reference attribute names the
  * variable.
@@ -1546,7 +1580,7 @@ const undeclaredVariable = (refusal: Refusal): string => {
       );
     }
     default: {
-      const kind = variableKind(fact(refusal, "expected", "variable"));
+      const kind = alternatives(fact(refusal, "expected", "variable"), variableKind);
 
       return sentence(
         refusal,
