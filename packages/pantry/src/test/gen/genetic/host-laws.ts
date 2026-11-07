@@ -27,7 +27,7 @@
  * the program names no row PostgreSQL can hold, as a sentinel standing for an absent target does.
  */
 import { Array as Arr, Option, pipe, Predicate, Schema } from "effect";
-import type { LawSide } from "@bjornpagen/grizzle";
+import type { Law, LawSide } from "@bjornpagen/grizzle";
 import { lawIdentity, lawOfCheck, statedLaws } from "#pantry/import/refusal.ts";
 import type { LawName } from "#pantry/import/refusal.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
@@ -474,6 +474,24 @@ const namesByIdentity: ReadonlyMap<string, LawName> = new Map(
 );
 
 /**
+ * Each statement's law, by its identity: every law of `statedLaws`, and each check as its outcome
+ * names it, by its name alone.
+ */
+const lawsByIdentity: ReadonlyMap<string, Law> = new Map<string, Law>([
+  ...statedLaws.map(([law]): readonly [string, Law] => [lawIdentity(law), law]),
+  ...stored.flatMap((read): readonly (readonly [string, Law])[] =>
+    read.kind === "check"
+      ? [
+          [
+            `check ${read.desc.name} on ${read.relation.name}`,
+            { kind: "check", name: read.desc.name, relation: read.relation.name },
+          ],
+        ]
+      : [],
+  ),
+]);
+
+/**
  * Each law the schema states that is no check, by name, with the identities of its statements.
  */
 const identitiesOf: ReadonlyMap<LawName, readonly string[]> = new Map(
@@ -547,6 +565,15 @@ const patternFields: ReadonlyMap<string, readonly (readonly [string, string])[]>
 
   return byIdentity;
 })();
+
+/**
+ * Each field's type's pattern law, by `Relation.field`.
+ */
+const fieldPatterns: ReadonlyMap<string, string> = new Map(
+  [...patternFields].flatMap(([identity, fields]) =>
+    fields.map(([relation, field]) => [`${relation}.${field}`, identity] as const),
+  ),
+);
 
 /**
  * Each generated field's law identity, with its relation.
@@ -1396,7 +1423,8 @@ export const viewOf = (inputs: PackageInputs): View => {
 /**
  * What the host judges of a program's rows:
  *
- * - `broken`, each law some statement of which the rows break, with the tuple that breaks it;
+ * - `broken`, each law some statement of which the rows break, with the tuple that breaks it, and
+ *   `brokenLaws`, those statements as laws;
  * - `held`, each law every statement and check of which was evaluated and held, so its database
  *   verdict is known;
  * - `overLong`, each `keyText` field, as `Relation.field`, that holds a text past the bound;
@@ -1406,6 +1434,11 @@ export const viewOf = (inputs: PackageInputs): View => {
  */
 export interface HostVerdict {
   readonly broken: ReadonlyMap<LawName, string>;
+  /**
+   * Each statement the rows break, as an `invariant-rejected` outcome would name its law, a key
+   * text past its bound as its field type's pattern law: what `ruleOfLaws` names the refusal by.
+   */
+  readonly brokenLaws: readonly Law[];
   readonly dangling: readonly string[];
   readonly held: ReadonlySet<LawName>;
   readonly overLong: ReadonlySet<string>;
@@ -1458,6 +1491,7 @@ export const hostVerdictOf = (inputs: PackageInputs, minted: ReadonlySet<string>
     ),
   );
   const overLong = new Set<string>();
+  const boundLaws = new Set<string>();
   const dangling = new Set<string>();
   for (const [relation, rows] of view) {
     const uuids = uuidFields.get(relation) ?? [];
@@ -1469,6 +1503,11 @@ export const hostVerdictOf = (inputs: PackageInputs, minted: ReadonlySet<string>
           utf8Length(value) > keyTextBytes
         ) {
           overLong.add(`${relation}.${field}`);
+
+          const bound = fieldPatterns.get(`${relation}.${field}`);
+          if (bound !== undefined) {
+            boundLaws.add(bound);
+          }
         }
       }
 
@@ -1481,5 +1520,19 @@ export const hostVerdictOf = (inputs: PackageInputs, minted: ReadonlySet<string>
     }
   }
 
-  return { broken, dangling: [...dangling], held, overLong, written: new Set(view.keys()) };
+  const brokenLaws = [
+    ...[...verdicts].flatMap(([identity, verdict]) =>
+      verdict.kind === "broken" ? [identity] : [],
+    ),
+    ...boundLaws,
+  ].flatMap((identity) => Option.toArray(Option.fromUndefinedOr(lawsByIdentity.get(identity))));
+
+  return {
+    broken,
+    brokenLaws,
+    dangling: [...dangling],
+    held,
+    overLong,
+    written: new Set(view.keys()),
+  };
 };

@@ -99,10 +99,23 @@ export interface Reduced {
 }
 
 /**
- * What one run found: the engine's report, and each class of disagreement, reduced.
+ * What a run learned of each law the oracle raised (the history's 5.1, a law broken alone): the
+ * candidates that raised it, whether one raised it alone, and the laws every candidate that raised
+ * it raised beside it, the evidence that a law no candidate broke alone is subsumed by another.
+ */
+export interface Isolation {
+  readonly alone: ReadonlySet<string>;
+  readonly beside: ReadonlyMap<string, ReadonlySet<string>>;
+  readonly raised: ReadonlyMap<string, number>;
+}
+
+/**
+ * What one run found: the engine's report, each class of disagreement reduced, and what it learned
+ * of each law's isolation.
  */
 export interface HuntReport {
   readonly evolved: Evolved<Genome, Feature, Disagreement>;
+  readonly isolation: Isolation;
   readonly reduced: readonly Reduced[];
 }
 
@@ -146,8 +159,35 @@ export const hunt = Effect.fnUntraced(function* hunt(
     rewards: new Map(),
     swarm: sketch.swarm,
   };
+  const raised = new Map<string, number>();
+  const beside = new Map<string, Set<string>>();
+  const alone = new Set<string>();
+  const isolate = (judgment: Judged): void => {
+    const laws = judgment.summary.oracle.startsWith("laws ")
+      ? judgment.summary.oracle
+          .slice("laws ".length)
+          .split(", ")
+          .filter((law) => law !== "")
+      : [];
+    if (laws.length === 1) {
+      alone.add(laws[0] ?? "");
+    }
+
+    for (const law of laws) {
+      raised.set(law, (raised.get(law) ?? 0) + 1);
+
+      const others = laws.filter((other) => other !== law);
+      const held = beside.get(law);
+      beside.set(
+        law,
+        new Set(held === undefined ? others : others.filter((other) => held.has(other))),
+      );
+    }
+  };
   const rewarded = new Set<string>();
   const reward = (genome: Genome, judgment: Judged): Judged => {
+    isolate(judgment);
+
     const operator = breeding.lastEdit.get(genome);
     for (const disagreement of judgment.disagreements) {
       const signature = signatureOf(disagreement);
@@ -211,7 +251,7 @@ export const hunt = Effect.fnUntraced(function* hunt(
     }),
   );
 
-  return { evolved, reduced } satisfies HuntReport;
+  return { evolved, isolation: { alone, beside, raised }, reduced } satisfies HuntReport;
 });
 
 /**

@@ -29,6 +29,7 @@ import { boundedShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
 import { Duration, Effect, Option } from "effect";
 import { grammar } from "#pantry/grammar/install.ts";
+import { lawTable } from "#pantry/import/refusal.ts";
 import { corpusOf } from "#pantry/test/gen/genetic/corpus.ts";
 import { residualsOf } from "#pantry/test/gen/genetic/engine.ts";
 import type { Budget } from "#pantry/test/gen/genetic/engine.ts";
@@ -87,6 +88,29 @@ const acrossRuns = new Map<Feature, number>();
  * The rotating runs counted into {@link acrossRuns}.
  */
 let rotatingRuns = 0;
+
+/**
+ * Each law the oracle raised in any run, with the candidates that raised it, whether one raised it
+ * alone, and the laws every candidate that raised it raised beside it.
+ */
+const isolation = {
+  alone: new Set<string>(),
+  beside: new Map<string, ReadonlySet<string>>(),
+  raised: new Map<string, number>(),
+};
+
+afterAll(() => {
+  const never = Object.keys(lawTable).filter((law) => !isolation.raised.has(law));
+  const together = [...isolation.raised.keys()]
+    .filter((law) => !isolation.alone.has(law))
+    .map(
+      (law) =>
+        `${law} (${String(isolation.raised.get(law) ?? 0)} raised, always beside ${[...(isolation.beside.get(law) ?? [])].join(", ") || "no one law"})`,
+    );
+  console.log(
+    `genetic differential, laws broken alone: ${String(isolation.alone.size)} of ${String(Object.keys(lawTable).length)} stated\nraised, never alone: ${together.join("; ") || "none"}\nnever raised: ${never.join(", ") || "none"}`,
+  );
+});
 
 afterAll(() => {
   const lines = residualsOf(acrossRuns, rotatingRuns, familyOf).map(
@@ -184,6 +208,22 @@ layer(NodeServices.layer, { excludeTestServices: true })(
                 Effect.gen(function* oneRun() {
                   const report = yield* hunt(corpus, bench, chosen.budget, chosen.tries, sketch);
                   c.noteAll(report.evolved.features.keys());
+                  for (const law of report.isolation.alone) {
+                    isolation.alone.add(law);
+                  }
+
+                  for (const [law, count] of report.isolation.raised) {
+                    isolation.raised.set(law, (isolation.raised.get(law) ?? 0) + count);
+
+                    const now = report.isolation.beside.get(law) ?? new Set<string>();
+                    const held = isolation.beside.get(law);
+                    isolation.beside.set(
+                      law,
+                      new Set(
+                        held === undefined ? now : [...now].filter((other) => held.has(other)),
+                      ),
+                    );
+                  }
                   if (Option.isNone(c.steering)) {
                     rotatingRuns += 1;
                     for (const feature of report.evolved.features.keys()) {

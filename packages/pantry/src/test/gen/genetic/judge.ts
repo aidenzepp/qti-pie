@@ -20,14 +20,14 @@
  *   text the oracle finds past its bound in a field of a relation the import writes, no fold's end,
  *   is in that field's rows.
  */
-import { Cause, Effect, Exit, FileSystem, Option } from "effect";
+import { Cause, Effect, Exit, FileSystem, Option, Result } from "effect";
 import type { Path, PlatformError } from "effect";
 import { admissionOf } from "#pantry/grammar/attributes.ts";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
 import { schemaVersions } from "#pantry/grammar/kinds.ts";
 import { noType } from "#pantry/grammar/xsi.ts";
 import { readProgram } from "#pantry/import/program.ts";
-import { ImportRefused, lawTable } from "#pantry/import/refusal.ts";
+import { ImportRefused, lawIdentity, lawTable, refusalOfLaws } from "#pantry/import/refusal.ts";
 import type { PackageInputs } from "#pantry/import/write.ts";
 import type { NodeId } from "#pantry/model/xdm.ts";
 import { kindNamer } from "#pantry/test/gen/genetic/corpus.ts";
@@ -54,9 +54,20 @@ import type { Breach, Judgment as OracleJudgment, Laws } from "#pantry/test/orac
  * - `oracle-only-law`: the oracle raises a law the import's rows were judged to hold;
  * - `dangling-uuid`: a row names a uuid the program did not mint;
  * - `noise-moved`: a side's verdict moved when the package took a noise no law reads
- *   (`#pantry/test/gen/genetic/noise.ts`).
+ *   (`#pantry/test/gen/genetic/noise.ts`);
+ * - `lone-refusal`: the oracle breaks one law alone, and the refusal the import names over the laws
+ *   its rows break (`refusalOfLaws`, as the database's outcome names it) is under another rule than
+ *   that law's, or carries another witness than the outcome's.
  */
 export type Disagreement =
+  | {
+      readonly importRule: string;
+      readonly kind: "lone-refusal";
+      readonly law: string;
+      readonly laws: string;
+      readonly rule: string;
+      readonly witness: string;
+    }
   | {
       readonly after: string;
       readonly before: string;
@@ -123,6 +134,9 @@ export const signatureOf = (disagreement: Disagreement): string => {
     case "noise-moved": {
       return `${disagreement.kind}: the ${disagreement.side}'s verdict under ${disagreement.noise}`;
     }
+    case "lone-refusal": {
+      return `${disagreement.kind}: ${disagreement.law} named ${disagreement.importRule}, witness ${disagreement.witness}`;
+    }
     default: {
       return disagreement satisfies never;
     }
@@ -161,6 +175,9 @@ export const shownDisagreement = (disagreement: Disagreement): string => {
     }
     case "noise-moved": {
       return `noise-moved: under ${disagreement.noise} (salt ${String(disagreement.salt)}), the ${disagreement.side}'s verdict moved from ${disagreement.before} to ${disagreement.after}`;
+    }
+    case "lone-refusal": {
+      return `lone-refusal: the oracle breaks ${disagreement.law} (${disagreement.rule}) alone; the import's refusal over the laws its rows break (${disagreement.laws}) is under ${disagreement.importRule}, witness ${disagreement.witness}`;
     }
     default: {
       return disagreement satisfies never;
@@ -350,6 +367,19 @@ const domainArmOf = (breach: Breach, grammar: ComposedGrammar): Feature => {
 };
 
 /**
+ * Name the law a package breaks alone, the feature the per-law isolation search steers by
+ * (the history's 5.1): one breach set, of one law.
+ *
+ * @param breaches - The oracle's breaches.
+ * @returns `o:alone <law>`, none where the breaches name no law or more than one.
+ */
+const aloneOf = (breaches: readonly Breach[]): readonly Feature[] => {
+  const laws = [...new Set(breaches.map(({ law }) => law))];
+
+  return laws.length === 1 ? [`o:alone ${laws[0] ?? ""}`] : [];
+};
+
+/**
  * List the features of the oracle's side.
  *
  * @param oracle - The oracle's side.
@@ -372,10 +402,13 @@ const oracleFeatures = (
     case "judged": {
       return oracle.breaches.length === 0
         ? ["o:accepted"]
-        : oracle.breaches.flatMap((breach): readonly Feature[] => [
-            `o:${breach.law} @ ${placeOf(breach, roots)}`,
-            ...(breach.law === "value domain" ? [domainArmOf(breach, grammar)] : []),
-          ]);
+        : [
+            ...oracle.breaches.flatMap((breach): readonly Feature[] => [
+              `o:${breach.law} @ ${placeOf(breach, roots)}`,
+              ...(breach.law === "value domain" ? [domainArmOf(breach, grammar)] : []),
+            ]),
+            ...aloneOf(oracle.breaches),
+          ];
     }
     default: {
       return oracle satisfies never;
@@ -540,6 +573,64 @@ const rowDisagreements = (
 };
 
 /**
+ * The witness a refusal of a law over no key's rows carries: PostgreSQL names a foreign key's, a
+ * check's and a domain's violating row by none.
+ */
+const unreported = { kind: "unreported" } as const;
+
+/**
+ * Judge the refusal the import names for a package whose oracle breaks one law alone: the import's
+ * rows break laws on the host, and `refusalOfLaws` names the refusal over them as it names the
+ * database's outcome. Its rule must be the lone law's, and its witness the outcome's.
+ *
+ * @param breaches - The oracle's breaches.
+ * @param host - The host's verdict over the import's rows.
+ * @param grammar - The installed grammar's rows an explanation reads.
+ * @returns The disagreement, none where the oracle breaks other than one law or the rows break
+ *   none.
+ */
+const loneRefusal = (
+  breaches: readonly Breach[],
+  host: HostVerdict,
+  grammar: ComposedGrammar,
+): readonly Disagreement[] => {
+  const [lone, ...others] = [...new Set(breaches.map(({ law }) => law))];
+  const [first, ...rest] = host.brokenLaws;
+  if (lone === undefined || others.length > 0 || first === undefined) {
+    return [];
+  }
+
+  const rule = ruleOf(lone);
+  const laws = [first, ...rest] as const;
+
+  return Result.match(refusalOfLaws(laws, unreported, grammar), {
+    onFailure: (unowned): readonly Disagreement[] => [
+      {
+        importRule: "none",
+        kind: "lone-refusal",
+        law: lone,
+        laws: unowned.laws.join("; "),
+        rule,
+        witness: "none",
+      },
+    ],
+    onSuccess: (refused): readonly Disagreement[] =>
+      refused.rule === rule && refused.witness === unreported.kind
+        ? []
+        : [
+            {
+              importRule: refused.rule,
+              kind: "lone-refusal",
+              law: lone,
+              laws: laws.map(lawIdentity).join("; "),
+              rule,
+              witness: refused.witness ?? "none",
+            },
+          ],
+  });
+};
+
+/**
  * Write each side's verdict for the metamorphic relation.
  *
  * @param oracle - The oracle's side.
@@ -604,7 +695,10 @@ export const judgeOne = Effect.fnUntraced(function* judgeOne(
   ];
   const rows =
     side.kind === "built" && oracle.kind === "judged"
-      ? rowDisagreements(oracle.breaches, side.host)
+      ? [
+          ...rowDisagreements(oracle.breaches, side.host),
+          ...loneRefusal(oracle.breaches, side.host, bench.grammar),
+        ]
       : [];
 
   return {
