@@ -3793,6 +3793,11 @@ const overlayLaws: readonly ((
         : [{ keys: { baseType, cardinality: cardinality.value, identifier }, law: "BindingFit" }];
     });
   },
+  (node) =>
+    // R10-b: a 3.0.0 document holds no custom interaction; a 3.0.1 document may.
+    node.kind === "qti-custom-interaction" && node.version === "3.0.0"
+      ? [{ keys: {}, law: "Custom interaction version" }]
+      : [],
   (node, overlay) =>
     // R10-a: a portable custom interaction names its module by `module`, by a
     // `qti-interaction-modules` child, or by both; one with neither names none.
@@ -6376,6 +6381,10 @@ const ownLaws = {
   },
   "Context variable reference": {
     explain: (keys, grammar) => referenceExplained(keys, grammar),
+  },
+  "Custom interaction version": {
+    explain: (keys) =>
+      `the custom interaction ${field(keys, "node")} stands in a 3.0.0 document, which holds none: portable custom interactions take their place`,
   },
   "Declaration base type": {
     explain: (keys) =>

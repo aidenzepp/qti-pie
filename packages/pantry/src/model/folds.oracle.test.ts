@@ -744,6 +744,7 @@ const unconstructed = {
     "a choice's identifier against its document's declarations, values drawn without reading",
   "Condition type": "a condition's type, over expressions drawn without typing",
   "Context variable reference": "a reference, over identifiers drawn without reading",
+  "Custom interaction version": "an interaction's version, drawn without reading",
   "Declaration base type":
     "a declaration's base type against its cardinality, values drawn without reading",
   "Declaration key": "a declaration's identifier, a value drawn without reading",

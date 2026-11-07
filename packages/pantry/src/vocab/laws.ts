@@ -315,6 +315,11 @@ export const lawTable = {
     source:
       "https://www.imsglobal.org/spec/qti/v3p0/info#DataAttribute_PortableCustomInteraction_qti-context-variable (§5.106.6: 'This allows an item author to bind a context variable to the PCI instance'), https://www.imsglobal.org/spec/qti/v3p0/info#Data_ContextDeclaration (§5.34: 'Context variables, variables declared by context declarations', and 'There is one built-in context variable named \"QTI_CONTEXT\" with record cardinality') and the Schematron's rule 20Ba (reading 9): a PCI's qti-context-variable names QTI_CONTEXT or a declared context variable (references.ts ContentReference)",
   },
+  "Custom interaction version": {
+    rule: "admission",
+    source:
+      "R10-b: https://www.imsglobal.org/spec/qti/v3p0/info#Data_PortableCustomInteraction (§5.106, 3.0.0: 'PCIs MUST be used instead of custom interactions (the latter have been deprecated)', a sentence the 3.0.1 text drops): a 3.0.0 document holds no qti-custom-interaction, and a 3.0.1 document may (interactions.ts Custom_interaction_version)",
+  },
   "Declaration base type": {
     rule: "declaration-type",
     source:
