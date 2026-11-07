@@ -696,11 +696,17 @@ const unconstructed = {
   MappableBaseType: "a declaration's base type, a value drawn without reading",
   "Mapped response": "a mapped response's declaration and tables, drawn without reading",
   "Mastery range": "a declaration's mastery and normal bounds, values drawn without reading",
+  "MathML align first":
+    "an alignment group's place in a table cell, which a generated tree draws without reading §3.5.5.2",
+  "MathML align placement":
+    "an alignment group's place in a table cell, which a generated tree draws without reading §3.5.5.2",
   "MathML arity": "an operator's arity, a count of children the content automaton relaxes",
   "MathML cn form":
     "a cn's type, base and text, values a generated tree draws without reading them",
   "MathML head qualifier":
     "an operator's qualifier children, which a generated tree draws without reading the operator's syntax table",
+  "MathML maction selection":
+    "an maction's selection and children, values a generated tree draws without reading them",
   "Max strings required":
     "an extended text interaction's binding, over identifiers drawn without reading",
   "N6 ancestry":
