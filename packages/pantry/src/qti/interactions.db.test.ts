@@ -718,8 +718,9 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
           // binding has its BindingDeclaration, and each BindingDeclaration names a Declaration.
           // 23503 on those keys alone.
           // Bound: a binding alone, refused; a binding with its declaration row, accepted by the
-          // first key; and the old host's nil sentinel, a declaration row of the nil uuid, refused
-          // by the second.
+          // first key; and the old host's nil sentinel, the lawful declaration row with its
+          // declaration the nil uuid alone, refused by the second (a row of another base type would
+          // break BindingFit's row CHECK at the insert, ahead of the deferred key).
           Effect.gen(function* bindingDeclaredRows() {
             const client = yield* loginSession;
             const existence = yield* foreignKeys(client, "bound_variable", "binding_declaration");
@@ -747,9 +748,7 @@ describe.skipIf(!hasLease)("qti/interactions.db.test.ts, on the lease", () => {
                 [
                   bound,
                   {
-                    row: declarationSql(
-                      declarationRow(0, { baseType: "none", declaration: nilUuid }),
-                    ),
+                    row: declarationSql(declarationRow(0, { declaration: nilUuid })),
                     table: "binding_declaration",
                   },
                 ],
