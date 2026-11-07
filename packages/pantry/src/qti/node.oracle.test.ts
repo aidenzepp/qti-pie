@@ -1,7 +1,7 @@
 /**
  * The free laws of `Node` (Q5.03): its declarations build, its checks are named by the oracle's
  * laws, its write type is the host's fields alone, and its content-order statements (N5) admit
- * exactly the state `contentStep` gives each child, over every family of the installed grammar and
+ * exactly the state `stepOf` gives each child, over every family of the installed grammar and
  * over generated documents. PostgreSQL judges the laws themselves in `node.oracle.db.test.ts`.
  */
 import {
@@ -31,7 +31,7 @@ import { completeShrink } from "@grizzle/testing/shrink";
 import { searched } from "@grizzle/testing/vitest";
 import { Effect, Formatter, Option } from "effect";
 import { readXml } from "@qti-pie/crust/read.ts";
-import { contentStep } from "#pantry/grammar/content.ts";
+import { stepOf } from "#pantry/grammar/content.ts";
 import * as install from "#pantry/grammar/install.ts";
 import type { SchemaVersion as Version } from "#pantry/grammar/kinds.ts";
 import { foldGrammarOf, shredGrammarOf } from "#pantry/model/composed.ts";
@@ -409,22 +409,6 @@ const lawfulStates = (
 };
 
 /**
- * Read a child's position as `contentStep` reads it: its `Admission` cell in the composed grammar.
- *
- * @param key - The family and the child.
- * @param key.child - The child's kind.
- * @param key.parent - The parent's kind.
- * @param key.version - The version.
- * @returns The position, or none where the parent does not admit the kind.
- */
-const admittedPosition = (key: {
-  readonly child: string;
-  readonly parent: string;
-  readonly version: Version;
-}): Option.Option<number> =>
-  Option.map(grammar.admission.lookup(key), ({ position }) => Number(position));
-
-/**
  * A family of the installed grammar: a version and a parent kind `ChildGrammar` admits a child
  * under.
  */
@@ -492,9 +476,9 @@ const keyOf = (node: FoldedNode<Composed>) => ({
 
 describe("N5, content order", { timeout: searchTimeout }, () => {
   it.effect(
-    "admits exactly contentStep's state for every child kind of every family from every state",
+    "admits exactly stepOf's state for every child kind of every family from every state",
     (ctx) =>
-      // Oracle: a second implementation. `contentStep` steps the composed grammar's automata,
+      // Oracle: a second implementation. `stepOf` steps the composed grammar's automata,
       // keyed by (version, parent); the N5 statements (`lawfulStates`) read `install.ts`'s rows,
       // keyed by content model. They agree exactly when N5_admitted and N5_Follow leave each child
       // one lawful state, the host's, and none where the host has none, which Unique Particle
@@ -517,7 +501,7 @@ describe("N5, content order", { timeout: searchTimeout }, () => {
             generator: elementOf(families),
             limit: 2000,
             literal: Formatter.format,
-            oracle: { kind: "second-implementation", name: "content.ts contentStep" },
+            oracle: { kind: "second-implementation", name: "content.ts stepOf" },
             suite: "qti/node-n5-families",
           },
           ({ parent, version }, c) =>
@@ -535,12 +519,7 @@ describe("N5, content order", { timeout: searchTimeout }, () => {
 
                 for (let was = 0; was < positions; was += 1) {
                   const lawful = lawfulStates({ kind, parent, version }, String(was));
-                  const stepped = contentStep(
-                    grammar.content,
-                    admittedPosition,
-                    { child: kind, parent, version },
-                    was,
-                  );
+                  const stepped = stepOf(grammar, { child: kind, parent, version }, was);
                   if (lawful.length === 0) {
                     c.note("unfollowed step");
                   } else if (nonElements.has(kind) && position === "0") {
@@ -552,7 +531,7 @@ describe("N5, content order", { timeout: searchTimeout }, () => {
                     String(Option.getOrElse(stepped, () => -1)) !== (lawful[0] ?? "-1")
                   ) {
                     assert.fail(
-                      `${kind} under ${parent} in ${version} from state ${String(was)}: N5 admits [${lawful.join(", ")}], contentStep gives ${Formatter.format(stepped)}`,
+                      `${kind} under ${parent} in ${version} from state ${String(was)}: N5 admits [${lawful.join(", ")}], stepOf gives ${Formatter.format(stepped)}`,
                     );
                   }
                 }
@@ -568,7 +547,7 @@ describe("N5, content order", { timeout: searchTimeout }, () => {
     (ctx) =>
       // Oracle: the specification as a checker, the N5 statements of `node.ts` (`lawfulStates`
       // over the installed rows, and the predecessor copy) over the rows `fold` writes through
-      // `contentStep`; the brief's split by kind (`¬element ∨ state = was`) is counted beside it,
+      // `stepOf`; the brief's split by kind (`¬element ∨ state = was`) is counted beside it,
       // since it refuses the state of every doctype and of SSML's text in `ssml:speak`.
       // Bound: the generator's drawn bounds, up to 200 nodes and depth 7 a tree, 300 runs.
       searched(

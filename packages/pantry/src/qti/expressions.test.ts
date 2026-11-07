@@ -10,7 +10,7 @@
 import { schema } from "@bjornpagen/grizzle";
 import { assert, describe, it } from "@effect/vitest";
 import { Option } from "effect";
-import { contentEnds, contentStep } from "#pantry/grammar/content.ts";
+import { contentEnds, stepOf } from "#pantry/grammar/content.ts";
 import { int8Max } from "#pantry/grammar/closed.ts";
 import {
   builtInTypes,
@@ -392,17 +392,10 @@ const admits = (
   kind: string,
   count: number,
 ) => {
-  const positionOf = (key: {
-    readonly child: string;
-    readonly parent: string;
-    readonly version: typeof version;
-  }) => Option.map(grammar.admission.lookup(key), ({ position }) => Number(position));
   let state: Option.Option<number> = Option.some(0);
   for (let at = 0; at < count; at += 1) {
     state = state.pipe(
-      Option.flatMap((was) =>
-        contentStep(grammar.content, positionOf, { child: "qti-null", parent: kind, version }, was),
-      ),
+      Option.flatMap((was) => stepOf(grammar, { child: "qti-null", parent: kind, version }, was)),
     );
   }
 

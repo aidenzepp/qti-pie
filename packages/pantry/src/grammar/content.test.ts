@@ -12,7 +12,7 @@ import { Array as Arr, Duration, Effect, FileSystem, Formatter, Option, Result }
 import { int8Max } from "#pantry/grammar/closed.ts";
 import { composed } from "#pantry/grammar/compose.ts";
 import type { ComposedGrammar } from "#pantry/grammar/compose.ts";
-import { contentEnds, contentModelOf, contentStep } from "#pantry/grammar/content.ts";
+import { accepts, contentModelOf } from "#pantry/grammar/content.ts";
 import {
   documentLayer,
   fragmentRoots,
@@ -61,45 +61,6 @@ import type { MathClasses } from "#pantry/test/gen/relaxng.ts";
  * The composed grammar of production, failing the test that reads it when a generator refuses.
  */
 const grammar = Effect.fromResult(composed());
-
-/**
- * Judge a family of child kinds by the installed automaton, as the database does: each child steps
- * from its predecessor's state (0 for the first), and the last state must be one `Last` holds.
- *
- * @param composedGrammar - The grammar.
- * @param version - The version.
- * @param parent - The parent's kind.
- * @param children - The children's kinds, in order.
- * @returns Whether the family's content is the model's.
- */
-const accepts = (
-  composedGrammar: Pick<ComposedGrammar, "admission" | "content">,
-  version: SchemaVersion,
-  parent: string,
-  children: readonly string[],
-): boolean => {
-  const positionOf = (key: {
-    readonly child: string;
-    readonly parent: string;
-    readonly version: SchemaVersion;
-  }) => Option.map(composedGrammar.admission.lookup(key), ({ position }) => Number(position));
-  let state = 0;
-  for (const child of children) {
-    const next = contentStep(
-      composedGrammar.content,
-      positionOf,
-      { child, parent, version },
-      state,
-    );
-    if (Option.isNone(next)) {
-      return false;
-    }
-
-    state = next.value;
-  }
-
-  return contentEnds(composedGrammar.content, version, parent, state);
-};
 
 /**
  * Whether a family's counted positions hold their bounds: `Counted`'s law, beside the automaton.
